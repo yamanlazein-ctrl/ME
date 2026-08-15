@@ -122,27 +122,26 @@
   width: 100%;
   background: #ffffff;
   color: var(--mf-black);
-  padding: 0;            /* full-bleed so the dark band reaches page edge */
+  padding: 0;            /* full-bleed header so the brand band reaches page edge */
 }
 
-/* ── DARK HEADER BAND (the signature move of the reference layout) ──
-   The header is now a solid black band that spans the full page width
-   with a 3px gold rule below it. The brand sits on the right (in RTL),
-   the title is large and white in the middle, and the page marker is
-   on the left. The whole band renders with `print-color-adjust: exact`
-   so the background reliably prints on B&W devices too. */
+/* ── CLEAN HEADER: white background, logo without box, black text, gold divider ──
+   The header is a clean white band with the brand identity on the right
+   (RTL), logo next to company name (once only), and a clean gold divider
+   separating the identity from the document data below. No dark backgrounds,
+   no watermarks, no logo boxes. */
 .print-header {
   display: flex;
   flex-direction: row-reverse;
-  align-items: stretch;
+  align-items: center;
   justify-content: space-between;
   gap: 16pt;
-  background: var(--mf-black);
-  color: #ffffff;
-  padding: 16pt 18pt 14pt;
-  border-bottom: 3px solid var(--mf-gold);
+  background: #ffffff;
+  color: var(--mf-black);
+  padding: 10pt 18pt 8pt;
+  border-bottom: 2px solid var(--mf-gold);
   margin-bottom: 14pt;
-  min-height: 80pt;
+  min-height: 60pt;
   -webkit-print-color-adjust: exact;
   print-color-adjust: exact;
 }
@@ -156,16 +155,16 @@
   flex: 1 1 auto;
 }
 
-/* White card behind the logo so the dark-on-gold mark stays legible
-   on the black band. */
+/* Logo — clean, no background box, no padding, no border-radius. */
 .print-logo {
-  max-height: 60px;
-  max-width: 86px;
+  max-height: 50px;
+  max-width: 70px;
   object-fit: contain;
   flex: 0 0 auto;
-  background: #ffffff;
-  padding: 5pt;
-  border-radius: 2pt;
+  background: transparent;
+  padding: 0;
+  border-radius: 0;
+  border: none;
 }
 
 .print-brand-text {
@@ -174,11 +173,11 @@
   min-width: 0;
 }
 
-/* In the dark band: company name flips to white, English line to soft gold */
+/* Company name: dark text on white background. English line in muted gray. */
 .print-company-name {
   font-size: 14pt;
   font-weight: 700;
-  color: #ffffff;
+  color: var(--mf-black);
   line-height: 1.2;
   letter-spacing: -0.005em;
 }
@@ -186,7 +185,7 @@
 .print-company-name-en {
   font-size: 9pt;
   font-weight: 400;
-  color: var(--mf-gold-soft);
+  color: var(--mf-gray);
   margin-top: 1pt;
   letter-spacing: 0.05em;
   text-transform: uppercase;
@@ -215,17 +214,17 @@
   justify-content: center;
 }
 
-/* Type badge: solid gold pill with black text — pops on the dark band */
+/* Type badge: clean gold border on white background, no fill. */
 .print-type-badge {
   display: inline-block;
   font-size: 7pt;
   font-weight: 700;
   letter-spacing: 0.18em;
-  padding: 3pt 10pt;
+  padding: 2pt 8pt;
   border: 1px solid var(--mf-gold);
-  color: var(--mf-black);
-  background: var(--mf-gold);
-  margin-bottom: 6pt;
+  color: var(--mf-gold-dark);
+  background: transparent;
+  margin-bottom: 4pt;
   text-transform: uppercase;
   font-family:
     "IBM Plex Sans",
@@ -236,22 +235,22 @@
 }
 
 .print-doc-title {
-  font-size: 19pt;
+  font-size: 18pt;
   font-weight: 700;
-  color: #ffffff;
+  color: var(--mf-black);
   letter-spacing: -0.01em;
   line-height: 1.15;
 }
 
 .print-doc-subtitle {
   font-size: 8.5pt;
-  color: rgba(255, 255, 255, 0.78);
+  color: var(--mf-gray);
   margin-top: 2pt;
 }
 
 .print-page-marker {
   font-size: 8.5pt;
-  color: rgba(255, 255, 255, 0.78);
+  color: var(--mf-gray);
   font-variant-numeric: tabular-nums;
   direction: ltr;
   text-align: left;
@@ -261,9 +260,8 @@
   padding-top: 4pt;
 }
 
-/* ── Meta grid (number / date / status / currency) — "Total Due" style ──
-   Acts as the "Total Due / date" info block of the reference layout.
-   A 1.5px gold top rule ties it visually to the dark header above. */
+/* ── Meta grid (number / date / status / currency) — clean info block ──
+   A 1.5px gold top rule ties it visually to the header divider above. */
 .print-meta {
   display: grid;
   grid-template-columns: repeat(4, 1fr);

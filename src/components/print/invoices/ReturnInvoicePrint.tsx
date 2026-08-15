@@ -29,10 +29,11 @@ import {
 } from "@/components/print/PrintDocument";
 import { currencySymbol, currencyState, useCurrencies } from "@/presentation/hooks/useCurrency";
 import { colorById, fabricById, rollById, type Color } from "@/presentation/hooks/useInventory";
+import { formatMoney, formatQuantity } from "@/shared/utils/formatNumber";
+import type { ReturnDTO, ReturnReason } from "@/application/ports/IReturnRepository";
 import { customerById, supplierById } from "@/presentation/hooks/useParties";
 import { useInvoiceVisibility } from "./visibility";
 import { useVouchersList } from "@/presentation/hooks/useVouchers";
-import type { ReturnDTO, ReturnReason } from "@/application/ports/IReturnRepository";
 
 type ReturnInvoicePrintProps = {
   returnDoc: ReturnDTO;
@@ -65,9 +66,8 @@ const KIND_BADGE: Record<ReturnDTO["kind"], "RETURN_IN" | "RETURN_OUT"> = {
   sale: "RETURN_OUT",
 };
 
-function fmtNumber(n: number): string {
-  return n.toLocaleString("en-US");
-}
+const fmtNumber = (n: number): string => formatMoney(n);
+const fmtQty = (n: number): string => formatQuantity(n);
 
 function renderRollColorCell(rollId: string) {
   const roll = rollById(rollId);
@@ -81,7 +81,6 @@ function renderRollColorCell(rollId: string) {
     </div>
   );
 }
-
 export function ReturnInvoicePrint({
   returnDoc,
   originalInvoiceNumber,
@@ -94,7 +93,6 @@ export function ReturnInvoicePrint({
   const isSupplierReturn = r.kind === "entry";
   const party = isSupplierReturn ? supplierById(r.partyId) : customerById(r.partyId);
   const sym = currencySymbol(r.currency as "SYP" | "USD" | "EUR");
-
   // Pull vouchers to show payment method when linked
   const { data: vouchersData } = useVouchersList();
   const allVouchers = useMemo(
@@ -106,12 +104,9 @@ export function ReturnInvoicePrint({
     [allVouchers, r.partyId],
   );
   const paymentMethod = linkedVouchers[0]?.method;
-
   const total = r.lines.reduce((s, l) => s + l.quantityKg * l.pricePerKg, 0);
-
   const isCancelled = r.status === "cancelled";
   const statusLabel = isCancelled ? "ملغى" : "نشط";
-
   // ── Meta grid (visibility-aware) ──
   const meta: PrintMetaItem[] = [];
   if (vis.showInvoiceNumber) meta.push({ label: "رقم المرتجع", value: r.number });
@@ -144,7 +139,6 @@ export function ReturnInvoicePrint({
       value: originalInvoiceNumber ?? r.originalInvoiceId,
     });
   }
-
   // ── Items table — all columns
   const allColumns: { key: string; cfg: PrintColumn; on?: boolean }[] = [
     { key: "idx", cfg: { key: "idx", label: "#", align: "center", width: "5%" }, on: vis.showLineIndex },
@@ -156,7 +150,6 @@ export function ReturnInvoicePrint({
     { key: "gross", cfg: { key: "gross", label: "الإجمالي", align: "left", amount: true, width: "11%" }, on: vis.showLineTotal },
   ];
   const columns = allColumns.filter((c) => c.on !== false).map((c) => c.cfg);
-
   const rows = r.lines.map((l, i) => {
     const roll = rollById(l.rollId);
     const col = roll ? colorById(roll.colorId) : null;
@@ -173,12 +166,10 @@ export function ReturnInvoicePrint({
     };
     return columns.map((c) => cell[c.key] ?? "—");
   });
-
   const totals: PrintTotal[] = [];
   if (vis.showGrandTotal) {
     totals.push({ label: "إجمالي المرتجع", value: `${fmtNumber(total)} ${sym}`, grand: true });
   }
-
   const partyBlock: PrintParty | undefined = vis.showPartyName
     ? {
         label: isSupplierReturn ? "المورّد" : "العميل",
@@ -192,7 +183,6 @@ export function ReturnInvoicePrint({
           : {}),
       }
     : undefined;
-
   return (
     <PrintDocument
       title={KIND_TITLE[r.kind]}

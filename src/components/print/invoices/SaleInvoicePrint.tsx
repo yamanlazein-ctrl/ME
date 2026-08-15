@@ -34,12 +34,12 @@ import {
 import { customerById } from "@/presentation/hooks/useParties";
 import { useVouchersList } from "@/presentation/hooks/useVouchers";
 import { useInvoiceVisibility } from "./visibility";
+import { formatMoney, formatQuantity } from "@/shared/utils/formatNumber";
+import type { Invoice, InvoiceLineData } from "@/domain/entities/Invoice";
 import { parseLineDetails } from "./lineDetails";
 
 const DETAILS_TITLE = String.fromCharCode(0x62a, 0x641, 0x627, 0x635, 0x64a, 0x644, 0x20, 0x625, 0x636, 0x627, 0x641, 0x64a, 0x629);
 const BAND_LABEL = String.fromCharCode(0x628, 0x646, 0x62f);
-
-import type { Invoice, InvoiceLineData } from "@/domain/entities/Invoice";
 
 type SaleInvoicePrintProps = {
   invoice: Invoice;
@@ -47,9 +47,8 @@ type SaleInvoicePrintProps = {
   pageNumber?: number;
 };
 
-function fmtNumber(n: number): string {
-  return n.toLocaleString("en-US");
-}
+const fmtNumber = (n: number): string => formatMoney(n);
+const fmtQty = (n: number): string => formatQuantity(n);
 
 function renderColorCell(line: InvoiceLineData) {
   const col = colorById(line.colorId) as Pick<Color, "code" | "name"> | null;
@@ -61,7 +60,6 @@ function renderColorCell(line: InvoiceLineData) {
     </div>
   );
 }
-
 export function SaleInvoicePrint({
   invoice,
   totalPages,
@@ -71,7 +69,6 @@ export function SaleInvoicePrint({
   useCurrencies();
   const vis = useInvoiceVisibility("sale");
   const customer = customerById(inv.partyId);
-
   const { data: vouchersData } = useVouchersList();
   const allVouchers = useMemo(
     () => (vouchersData?.data ?? []) as Array<{ invoiceId: string; status: string; amount: number; number: string; date: string; method: string }>,
@@ -83,14 +80,12 @@ export function SaleInvoicePrint({
   );
   const paid = linkedVouchers.reduce((s, v) => s + v.amount, 0);
   const paymentMethod = linkedVouchers[0]?.method;
-
   const subtotal = inv.total();
   const discount = inv.discount ?? 0;
   const tax = inv.tax ?? 0;
   const grand = subtotal - discount + tax;
   const remaining = Math.max(0, grand - paid);
   const sym = currencySymbol(inv.currency);
-
   const isCancelled = inv.status === "cancelled";
   const statusLabel = isCancelled
     ? "ملغاة"
@@ -99,7 +94,6 @@ export function SaleInvoicePrint({
       : remaining > 0
         ? "مفتوحة (متبقي)"
         : "مدفوعة بالكامل";
-
   const meta: PrintMetaItem[] = [];
   if (vis.showInvoiceNumber) meta.push({ label: "رقم الفاتورة", value: inv.number });
   if (vis.showDate) meta.push({ label: "التاريخ", value: inv.date });
@@ -122,7 +116,6 @@ export function SaleInvoicePrint({
       value: String(inv.cancelledAt).slice(0, 19).replace("T", " "),
     });
   }
-
   const allColumns: { key: string; cfg: PrintColumn; on?: boolean }[] = [
     { key: "idx", cfg: { key: "idx", label: "#", align: "center", width: "4%" }, on: vis.showLineIndex },
     { key: "fabric", cfg: { key: "fabric", label: "القماش", width: "18%" }, on: vis.showFabric },
@@ -135,7 +128,6 @@ export function SaleInvoicePrint({
     { key: "gross", cfg: { key: "gross", label: "الإجمالي", align: "left", amount: true, width: "10%" }, on: vis.showLineTotal },
   ];
   const columns = allColumns.filter((c) => c.on !== false).map((c) => c.cfg);
-
   const rows = inv.lines.map((l, i) => {
     const fab = fabricById(l.fabricId);
     const roll = rollById(l.rollId);
@@ -154,7 +146,6 @@ export function SaleInvoicePrint({
     };
     return columns.map((c) => cell[c.key] ?? "—");
   });
-
   const totals: PrintTotal[] = [];
   if (vis.showSubtotal) {
     totals.push({ label: "المجموع", value: `${fmtNumber(subtotal)} ${sym}` });
@@ -172,7 +163,6 @@ export function SaleInvoicePrint({
       grand: true,
     });
   }
-
   const party: PrintParty | undefined = vis.showPartyName
     ? {
         label: "العميل",
@@ -186,7 +176,6 @@ export function SaleInvoicePrint({
           : {}),
       }
     : undefined;
-
   const payment = vis.showPaymentSummary
     ? [
         { label: "الإجمالي", value: `${fmtNumber(grand)} ${sym}` },
@@ -194,7 +183,6 @@ export function SaleInvoicePrint({
         { label: "الباقي", value: `${fmtNumber(remaining)} ${sym}` },
       ]
     : undefined;
-
   return (
     <PrintDocument
       title="فاتورة بيع"
@@ -236,7 +224,6 @@ export function SaleInvoicePrint({
           </div>
         );
       })}
-
     </PrintDocument>
   );
 }
