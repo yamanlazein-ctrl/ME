@@ -22,6 +22,15 @@ export interface CreateRollData {
   entryDate: string;
   widthCm?: number;
   weightGsm?: number;
+  /**
+   * Fix H-5 (forensic audit 2026-08-15): optimistic-concurrency token for
+   * update(). Optional so existing callers that don't send it yet keep
+   * working (blind write, unchanged behavior) — but when a caller DOES
+   * send the version it last read, the repository enforces it with a
+   * real compare-and-swap instead of the version column being merely
+   * incremented and never checked.
+   */
+  expectedVersion?: number;
 }
 
 export interface IRollRepository {
