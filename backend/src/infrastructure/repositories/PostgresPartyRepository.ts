@@ -121,10 +121,33 @@ export class PostgresPartyRepository implements IPartyRepository {
         .returning();
 
       // Record the opening balance as a ledger entry so it is reflected in the
-      // party statement and balance. Convention: a customer's opening balance is
-      // a DEBIT (they owe us), a supplier's is a CREDIT (we owe them).
+      // party statement and balance.
+      //
+      // Fix C-8 (forensic audit 2026-08-15, verified by hand across 5
+      // scenarios before touching this code): this used to flip
+      // debit/credit by isCustomer ("customer's opening balance is a
+      // DEBIT, a supplier's is a CREDIT"). That was the ONLY sign-flipping
+      // write path in the whole ledger — purchase invoices ALWAYS debit
+      // the party leg (PostgresInvoiceRepository.ts, same code for sale
+      // and purchase), and payment/receipt vouchers ALWAYS credit the
+      // party leg (PostgresVoucherRepository.ts, same code for both
+      // kinds) — regardless of customer vs supplier. Hand-computed
+      // ground truth for a supplier opening at 1000, then +500 purchase,
+      // -300 payment, +200 purchase, -100 payment: true running balance
+      // is 1000 -> 1500 -> 1200 -> 1400 -> 1300. With the OLD flipped
+      // opening convention plus the statement's supplier mult=-1, the
+      // system computed 1000 -> 500 -> 800 -> 600 -> 700 — every single
+      // post-opening movement ran in the OPPOSITE direction from reality.
+      // Debit uniformly = "obligation increases" and credit uniformly =
+      // "obligation decreases", for both party kinds — matching what
+      // invoices and vouchers already do everywhere else — makes the
+      // hand-computed sequence come out exactly right (see
+      // PostgresStatementRepository.ts's matching mult fix, and
+      // PostgresLedgerRepository.getBalance()/getBalanceByDate(), which
+      // already compute plain debit-credit with no kind-based flip at all
+      // and therefore become correct for suppliers too once this write
+      // path stops flipping).
       if (openingBalance > 0) {
-        const isCustomer = data.kind === "customer";
         // C4 fix: double-entry — balance the opening balance with an equity leg.
         await tx.insert(ledgerEntries).values([
           {
@@ -132,8 +155,8 @@ export class PostgresPartyRepository implements IPartyRepository {
             partyId: row.id,
             date: new Date().toISOString().slice(0, 10),
             type: "opening",
-            debit: isCustomer ? openingBalance : 0,
-            credit: isCustomer ? 0 : openingBalance,
+            debit: openingBalance,
+            credit: 0,
             currency,
             cashImpact: "none",
             referenceType: "opening",
@@ -147,8 +170,8 @@ export class PostgresPartyRepository implements IPartyRepository {
             partyId: null,
             date: new Date().toISOString().slice(0, 10),
             type: "opening_equity",
-            debit: isCustomer ? 0 : openingBalance,
-            credit: isCustomer ? openingBalance : 0,
+            debit: 0,
+            credit: openingBalance,
             currency,
             cashImpact: "none",
             referenceType: "opening",
