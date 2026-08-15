@@ -7,6 +7,7 @@ import type {
 import { invoices } from "../orm/schemas/invoice.table.js";
 import { invoiceLines } from "../orm/schemas/invoice-line.table.js";
 import { rolls } from "../orm/schemas/roll.table.js";
+import { colors } from "../orm/schemas/color.table.js";
 import { orders } from "../orm/schemas/order.table.js";
 import { orderItems } from "../orm/schemas/order-item.table.js";
 import { ledgerEntries } from "../orm/schemas/ledger-entry.table.js";
@@ -167,6 +168,7 @@ export class PostgresInvoiceRepository implements IInvoiceRepository {
               version: rolls.version,
               status: rolls.status,
               pricePerKg: rolls.pricePerKg,
+              colorId: rolls.colorId,
             })
             .from(rolls)
             .where(and(eq(rolls.id, line.rollId), eq(rolls.tenantId, ctx.tenantId)))
@@ -175,6 +177,28 @@ export class PostgresInvoiceRepository implements IInvoiceRepository {
           if (!r || Number(r.kg) < line.quantityKg) {
             throw new Error(
               `Roll ${line.rollId} has insufficient stock (${Number(r?.kg ?? 0)}kg < ${line.quantityKg}kg)`,
+            );
+          }
+          // Fix BUG-04 / H-2 (forensic audit 2026-08-15, live-reproduced): the
+          // roll was locked and validated for stock/status only — the
+          // client-supplied line.colorId/fabricId were stored verbatim with
+          // no check against the roll's real color. PostgresOrderRepository
+          // already enforces this exact invariant for reservations
+          // (`if (it.colorId && rollRow.colorId !== it.colorId) throw`); this
+          // is the same check, applied where the audit found it missing.
+          if (line.colorId !== r.colorId) {
+            throw new Error(
+              `اللون المحدد للبند لا يطابق لون اللفافة ${line.rollId} الفعلي`,
+            );
+          }
+          const [rollColor] = await tx
+            .select({ fabricId: colors.fabricId })
+            .from(colors)
+            .where(and(eq(colors.id, r.colorId), eq(colors.tenantId, ctx.tenantId)))
+            .limit(1);
+          if (!rollColor || line.fabricId !== rollColor.fabricId) {
+            throw new Error(
+              `القماش المحدد للبند لا يطابق قماش لون اللفافة ${line.rollId} الفعلي`,
             );
           }
           if (r.status === "reserved" && !(reservationOwners?.has(line.rollId) ?? false)) {
@@ -285,13 +309,37 @@ export class PostgresInvoiceRepository implements IInvoiceRepository {
       if (!isSale) {
         for (const line of input.lines) {
           const [before] = await tx
-            .select({ remainingKg: rolls.remainingKg })
+            .select({ remainingKg: rolls.remainingKg, colorId: rolls.colorId })
             .from(rolls)
             .where(
               and(eq(rolls.id, line.rollId), eq(rolls.tenantId, ctx.tenantId)),
             )
             .for("update")
             .limit(1);
+          // Fix BUG-04 / H-2: the entry-invoice increment path had NO
+          // existence check at all — a nonexistent rollId silently defaulted
+          // to `remainingKg ?? 0`, so the subsequent UPDATE matched zero rows
+          // while recordStockMovement below still wrote a movement claiming
+          // success. It also never checked line.colorId/fabricId against the
+          // roll's real color, same gap as the sale path above.
+          if (!before) {
+            throw new Error(`اللفافة ${line.rollId} غير موجودة`);
+          }
+          if (line.colorId !== before.colorId) {
+            throw new Error(
+              `اللون المحدد للبند لا يطابق لون اللفافة ${line.rollId} الفعلي`,
+            );
+          }
+          const [rollColor] = await tx
+            .select({ fabricId: colors.fabricId })
+            .from(colors)
+            .where(and(eq(colors.id, before.colorId), eq(colors.tenantId, ctx.tenantId)))
+            .limit(1);
+          if (!rollColor || line.fabricId !== rollColor.fabricId) {
+            throw new Error(
+              `القماش المحدد للبند لا يطابق قماش لون اللفافة ${line.rollId} الفعلي`,
+            );
+          }
           const newKg = Number(before?.remainingKg ?? 0) + line.quantityKg;
           await tx
             .update(rolls)
