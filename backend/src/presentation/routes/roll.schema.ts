@@ -35,6 +35,11 @@ export const updateRollSchema = createRollSchema
   .omit({ colorId: true })
   .extend({
     remainingKg: z.number().positive().max(100000).optional(),
+    // Fix H-5: optional optimistic-concurrency token. When sent, the
+    // repository enforces it with a real compare-and-swap; omitted means
+    // the caller hasn't adopted it yet and gets the legacy blind-write
+    // behavior, unchanged.
+    expectedVersion: z.number().int().nonnegative().optional(),
   });
 
 export const listRollsSchema = z.object({

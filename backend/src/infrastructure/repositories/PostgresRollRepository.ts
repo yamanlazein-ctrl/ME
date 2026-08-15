@@ -128,6 +128,45 @@ export class PostgresRollRepository implements IRollRepository {
     if (data.widthCm !== undefined) values.widthCm = data.widthCm ? String(data.widthCm) : null;
     if (data.weightGsm !== undefined)
       values.weightGsm = data.weightGsm ? String(data.weightGsm) : null;
+
+    // Fix H-5 (forensic audit 2026-08-15, live-reproduced): `version` was
+    // incremented on every update but never COMPARED — a blind
+    // last-writer-wins write with no real optimistic lock, despite the
+    // column existing for exactly this purpose (decrement()/increment()
+    // below already enforce it correctly). A roll edit issued concurrently
+    // with a sale could overwrite the sale's just-deducted remainingKg with
+    // the editor's stale figure, silently erasing the sale.
+    //
+    // `expectedVersion` is optional (see IRollRepository.ts) so callers
+    // that haven't adopted it yet keep the previous blind-write behavior
+    // unchanged. When it IS sent, the WHERE clause below makes the
+    // check-and-set a single atomic statement: a version mismatch (someone
+    // else updated the row since it was read) affects 0 rows, and that is
+    // now a clear "modified concurrently" error instead of a silent
+    // overwrite.
+    if (data.expectedVersion !== undefined) {
+      const [row] = await this.db
+        .update(rolls)
+        .set(values)
+        .where(
+          and(
+            eq(rolls.id, id),
+            eq(rolls.tenantId, ctx.tenantId),
+            eq(rolls.version, data.expectedVersion),
+          ),
+        )
+        .returning();
+      if (!row) {
+        const stillExists = await this.findById(id, ctx);
+        throw new Error(
+          stillExists
+            ? "تم تعديل اللفافة بواسطة عملية أخرى — أعد التحميل والمحاولة مرة أخرى"
+            : "Roll not found",
+        );
+      }
+      return this.toDomain(row);
+    }
+
     const [row] = await this.db
       .update(rolls)
       .set(values)
