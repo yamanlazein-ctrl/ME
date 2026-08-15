@@ -6,8 +6,10 @@ import {
   type PrintMetaItem,
 } from "@/components/print/PrintDocument";
 import { LEDGER_TYPE_LABEL } from "@/presentation/hooks/useLedger";
+import { formatMoney, formatQuantity } from "@/shared/utils/formatNumber";
 
-const fmt = (n: number) => Math.round(n).toLocaleString("en-US");
+const fmtMoney = (n: number) => formatMoney(n);
+const fmtQty = (n: number) => formatQuantity(n);
 
 export type StatementRow = {
   seq: number;
@@ -60,7 +62,7 @@ export function PartyStatementDocument({
     { key: "bal", label: "الرصيد", align: "left", amount: true, width: "12%" },
   ];
 
-  const fmt = (n: number) => Math.round(n).toLocaleString("en-US");
+
 
   const tableRows: (string | ReactNode)[][] = [];
   if (previousBalance !== 0 || rows.length > 0) {
@@ -74,7 +76,7 @@ export function PartyStatementDocument({
       "—",
       "—",
       "—",
-      fmt(previousBalance),
+      fmtMoney(previousBalance),
     ]);
   }
 
@@ -97,19 +99,19 @@ export function PartyStatementDocument({
       ),
       cell(r.referenceNumber ?? "—", m),
       cell(r.description, m),
-      cell(r.quantityKg ? `${fmt(r.quantityKg)} كجم` : "—", m),
-      cell(r.pricePerKg ? fmt(r.pricePerKg) : "—", m),
-      cell(r.debit ? fmt(r.debit) : "—", m),
-      cell(r.credit ? fmt(r.credit) : "—", m),
-      cell(fmt(r.runningBalance), m),
+      cell(r.quantityKg ? `${fmtQty(r.quantityKg)} كجم` : "—", m),
+      cell(r.pricePerKg ? fmtMoney(r.pricePerKg) : "—", m),
+      cell(r.debit ? fmtMoney(r.debit) : "—", m),
+      cell(r.credit ? fmtMoney(r.credit) : "—", m),
+      cell(fmtMoney(r.runningBalance), m),
     ]);
   });
 
   const totalsList = [
-    { label: "رصيد سابق", value: `${fmt(previousBalance)} ${currency}`, grand: false },
-    { label: "إجمالي مدين", value: `${fmt(totals.debit)} ${currency}`, grand: false },
-    { label: "إجمالي دائن", value: `${fmt(totals.credit)} ${currency}`, grand: false },
-    { label: "الرصيد النهائي", value: `${fmt(totals.running)} ${currency}`, grand: true },
+    { label: "رصيد سابق", value: `${fmtMoney(previousBalance)} ${currency}`, grand: false },
+    { label: "إجمالي مدين", value: `${fmtMoney(totals.debit)} ${currency}`, grand: false },
+    { label: "إجمالي دائن", value: `${fmtMoney(totals.credit)} ${currency}`, grand: false },
+    { label: "الرصيد النهائي", value: `${fmtMoney(totals.running)} ${currency}`, grand: true },
   ];
 
   return (

@@ -2,13 +2,15 @@ import { Layers, FileWarning, AlertTriangle, Receipt } from "lucide-react";
 import { useDashboard } from "@/presentation/hooks/useDashboard";
 import { formatSYP } from "@/presentation/hooks/useInventory";
 import { KpiCard } from "./KpiCard";
+import { formatNumber, formatMoney, formatQuantity } from "@/shared/utils/formatNumber";
+
 
 function formatUnpaidCurrencies(
   byCurrency: Record<string, { count: number; totalDue: number }> = {},
 ): string {
   const parts = Object.entries(byCurrency)
     .filter(([, v]) => v && v.totalDue > 0)
-    .map(([code, v]) => `${v.totalDue.toLocaleString("en-US")} ${code}`);
+    .map(([code, v]) => `${formatMoney(v.totalDue)} ${code}`);
   return parts.length > 0 ? parts.join(" · ") : formatSYP(0);
 }
 
@@ -20,7 +22,7 @@ export function SecondaryKpiRow() {
       <KpiCard
         title="إجمالي الصبغات النشطة"
         icon={Layers}
-        primary={(activeRolls?.total ?? 0).toLocaleString("en-US")}
+        primary={formatNumber(activeRolls?.total ?? 0)}
         secondary={`${activeRolls?.fabricTypes ?? 0} صنف — ${activeRolls?.colors ?? 0} لون`}
       />
       <KpiCard

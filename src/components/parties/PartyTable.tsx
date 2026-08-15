@@ -41,6 +41,8 @@ import { DataPagination } from "@/components/common/DataPagination";
 import { BulkSelectToolbar } from "@/components/common/BulkSelectToolbar";
 import { ConfirmBulkAction } from "@/components/common/ConfirmBulkAction";
 import { Checkbox } from "@/components/ui/checkbox";
+import { formatNumber, formatMoney, formatQuantity } from "@/shared/utils/formatNumber";
+
 
 const _nextFormId = 0;
 function toMockPatch(patch: Record<string, unknown>): Record<string, unknown> {
@@ -344,7 +346,7 @@ export function PartyListPage({
                     <td className="tabular-nums text-muted-foreground">{p.phone ?? "—"}</td>
                     <td className="text-center tabular-nums text-foreground">{s.invoicesCount}</td>
                     <td className="text-left tabular-nums text-foreground">
-                      {Math.round(s.totalAmount).toLocaleString("en-US")}{" "}
+                      {formatMoney(s.totalAmount)}{" "}
                       <span className="text-[10px] text-muted-foreground">{cur}</span>
                     </td>
                     <td
@@ -352,7 +354,7 @@ export function PartyListPage({
                         s.remaining > 0 ? "text-warning" : "text-success"
                       }`}
                     >
-                      {Math.round(s.remaining).toLocaleString("en-US")}{" "}
+                      {formatMoney(s.remaining)}{" "}
                       <span className="text-[10px] opacity-70">{cur}</span>
                     </td>
                     <td>
@@ -367,8 +369,8 @@ export function PartyListPage({
                             />
                           </div>
                           <div className="text-[10px] tabular-nums text-muted-foreground">
-                            {Math.round(s.creditUsed).toLocaleString("en-US")} /{" "}
-                            {Math.round(s.creditLimit).toLocaleString("en-US")}
+                            {formatMoney(s.creditUsed)} /{" "}
+                            {formatMoney(s.creditLimit)}
                           </div>
                         </div>
                       ) : (

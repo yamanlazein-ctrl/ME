@@ -1,5 +1,7 @@
 import { useSyncExternalStore } from "react";
 import type { Currency } from "@/domain/types";
+import { formatNumber, formatMoney, formatQuantity } from "@/shared/utils/formatNumber";
+
 
 /**
  * Presentation-layer currency utilities.
@@ -61,7 +63,7 @@ export function currencySymbol(c: Currency | ""): string {
 
 export function formatAmount(n: number, c: Currency): string {
   const sym = currencySymbol(c);
-  return `${Math.round(n).toLocaleString("en-US")} ${sym}`;
+  return `${formatMoney(n)} ${sym}`;
 }
 
 /**
@@ -113,7 +115,7 @@ export function addCurrencyBreakdowns(
 /** Format a number with thousands separators only (no symbol), e.g. 1_250_000 → "1,250,000". */
 export function formatThousands(n: number): string {
   if (!Number.isFinite(n)) return "0";
-  return Math.round(n).toLocaleString("en-US");
+  return formatMoney(n);
 }
 
 /**

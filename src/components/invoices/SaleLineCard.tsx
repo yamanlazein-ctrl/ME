@@ -14,6 +14,7 @@ import { currencySymbol } from "@/presentation/hooks/useCurrency";
 import type { Currency } from "@/domain/types";
 import { rollsOfColor, rollById } from "@/presentation/hooks/useInventory";
 import { cn } from "@/lib/utils";
+import { formatNumber, formatQuantity, formatMoney } from "@/shared/utils/formatNumber";
 import { CardField, GroupSection } from "./InvoiceFormLayout";
 import { lineTotal, type SaleLine as SaleLineType } from "./sale-types";
 
@@ -84,7 +85,7 @@ export function SaleLineCard({
         <div className="flex items-center gap-2">
           {!rowIsEmpty && (
             <span className={cn("text-xs font-bold tabular-nums", isUSD ? "text-success" : "text-foreground")}>
-              {Math.round(lineTotal(line)).toLocaleString("en-US")}{" "}
+              {formatMoney(lineTotal(line))}{" "}
               <span className="text-[10px] font-medium text-muted-foreground">{currencySymbol(currency)}</span>
             </span>
           )}
@@ -155,7 +156,7 @@ export function SaleLineCard({
                   roll ? "text-foreground" : "text-muted-foreground",
                 )}
               >
-                {roll ? `${roll.remainingKg.toLocaleString("en-US")} كغ` : "—"}
+                {roll ? `${formatQuantity(roll.remainingKg)} كغ` : "—"}
               </div>
             </CardField>
           </div>
@@ -166,6 +167,7 @@ export function SaleLineCard({
             <CardField label="الكمية (كغ)" required>
               <Input
                 type="number"
+                step="0.01"
                 value={line.quantityKg || ""}
                 onChange={(e) => onUpdate({ quantityKg: e.target.value === "" ? 0 : Number(e.target.value) })}
                 className={cn(
@@ -179,6 +181,7 @@ export function SaleLineCard({
             <CardField label={`السعر / كغ${currency ? ` (${currencySymbol(currency)})` : " (اختر العملة)"}`} required>
               <Input
                 type="number"
+                step="0.01"
                 value={line.pricePerKg || ""}
                 onChange={(e) => onUpdate({ pricePerKg: e.target.value === "" ? 0 : Number(e.target.value) })}
                 className={cn("h-9 text-left tabular-nums", isUSD && "text-success font-semibold")}
@@ -189,10 +192,9 @@ export function SaleLineCard({
             <CardField label="الخصم">
               <Input
                 type="number"
-                min={0}
-                step={1}
+                step="0.01"
                 value={line.discountAmount || ""}
-                onChange={(e) => onUpdate({ discountAmount: e.target.value === "" ? 0 : Math.round(Number(e.target.value)) })}
+                onChange={(e) => onUpdate({ discountAmount: e.target.value === "" ? 0 : Number(e.target.value) })}
                 onKeyDown={(e: KeyboardEvent<HTMLInputElement>) => {
                   if (e.key === "Enter") {
                     e.preventDefault();
@@ -215,7 +217,7 @@ export function SaleLineCard({
               <div className="flex flex-col items-end">
                 <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">الإجمالي</span>
                 <span className={cn("text-lg font-black tabular-nums leading-tight", isUSD ? "text-success" : "text-foreground")}>
-                  {Math.round(lineTotal(line)).toLocaleString("en-US")}{" "}
+                  {formatMoney(lineTotal(line))}{" "}
                   <span className="text-[10px] font-medium text-muted-foreground">{currencySymbol(currency)}</span>
                 </span>
               </div>

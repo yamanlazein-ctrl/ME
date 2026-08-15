@@ -42,6 +42,8 @@ import {
   lineHasData,
   lineTotal,
 } from "@/components/invoices/sale-types";
+import { formatNumber, formatMoney, formatQuantity } from "@/shared/utils/formatNumber";
+
 
 type SaleSearch = { fromOrder?: string };
 
@@ -350,10 +352,10 @@ function SaleInvoicePage() {
           {dataLines.length > 0 && (
             <div className="flex items-center justify-between gap-3 border-t border-border bg-secondary/40 px-4 py-2 text-xs font-semibold">
               <span className="text-muted-foreground">
-                {dataLines.length} بند • {totalQty.toLocaleString("en-US")} كغ
+                {dataLines.length} بند • {formatNumber(totalQty)} كغ
               </span>
               <span className={cn("text-sm font-bold tabular-nums", moneyClass)}>
-                {Math.round(subtotal).toLocaleString("en-US")} {currencySymbol(currency)}
+                {formatMoney(subtotal)} {currencySymbol(currency)}
               </span>
             </div>
           )}
@@ -474,7 +476,7 @@ function SaleInvoicePage() {
           )}
         >
           <div className="grid gap-x-4 gap-y-2 px-3 py-2 sm:grid-cols-3">
-            <TotalCell label="الكمية" value={`${totalQty.toLocaleString("en-US")} كغ`} />
+            <TotalCell label="الكمية" value={`${formatNumber(totalQty)} كغ`} />
             <TotalInputCell
               label="الخصم"
               value={discount}
@@ -493,7 +495,7 @@ function SaleInvoicePage() {
           <div className="grid gap-x-4 gap-y-2 border-t border-border/60 px-3 py-3 sm:grid-cols-3">
             <TotalCell
               label="السعر"
-              value={`${Math.round(subtotal).toLocaleString("en-US")} ${currencySymbol(currency)}`}
+              value={`${formatMoney(subtotal)} ${currencySymbol(currency)}`}
               tone={moneyClass}
             />
             <MoneyInputCell
@@ -505,7 +507,7 @@ function SaleInvoicePage() {
             />
             <TotalCell
               label="المتبقي"
-              value={`${Math.round(remaining).toLocaleString("en-US")} ${currencySymbol(currency)}`}
+              value={`${formatMoney(remaining)} ${currencySymbol(currency)}`}
               tone={remaining > 0 ? "text-destructive" : moneyClass}
             />
           </div>
@@ -529,7 +531,7 @@ function SaleInvoicePage() {
                 isUSD ? "text-success" : "text-foreground",
               )}
             >
-              {Math.round(netTotal).toLocaleString("en-US")}{" "}
+              {formatMoney(netTotal)}{" "}
               <span className="text-sm font-medium text-muted-foreground">
                 {currencySymbol(currency)}
               </span>
@@ -552,7 +554,7 @@ function SaleInvoicePage() {
           <span className="hidden text-xs text-muted-foreground tabular-nums sm:inline">
             {dataLines.length} بند • الإجمالي:{" "}
             <span className={cn("font-semibold", moneyClass)}>
-              {Math.round(netTotal).toLocaleString("en-US")} {currencySymbol(currency)}
+              {formatMoney(netTotal)} {currencySymbol(currency)}
             </span>
           </span>
         }

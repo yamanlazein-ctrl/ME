@@ -14,13 +14,15 @@ import { useDashboard } from "@/presentation/hooks/useDashboard";
 import { formatSYP } from "@/presentation/hooks/useInventory";
 import { DualCurrency } from "@/components/common/DualCurrency";
 import { useReturnsList } from "@/presentation/hooks/useReturns";
+import { formatNumber, formatMoney, formatQuantity } from "@/shared/utils/formatNumber";
+
 
 function formatUnpaidCurrencies(
   byCurrency: Record<string, { count: number; totalDue: number }> = {},
 ): string {
   const parts = Object.entries(byCurrency)
     .filter(([, v]) => v && v.totalDue > 0)
-    .map(([code, v]) => `${v.totalDue.toLocaleString("en-US")} ${code}`);
+    .map(([code, v]) => `${formatMoney(v.totalDue)} ${code}`);
   return parts.length > 0 ? parts.join(" · ") : formatSYP(0);
 }
 
@@ -147,7 +149,7 @@ export function ExecutiveKpiGrid() {
                 className="inline-flex items-baseline gap-1 text-xl font-bold tabular-nums"
                 style={{ color: "var(--currency-syp)" }}
               >
-                <span>{(activeTodayCustomers ?? 0).toLocaleString("en-US")}</span>
+                <span>{formatNumber(activeTodayCustomers ?? 0)}</span>
               </span>
             }
             tone="success"
@@ -161,7 +163,7 @@ export function ExecutiveKpiGrid() {
                 className="inline-flex items-baseline gap-1 text-xl font-bold tabular-nums"
                 style={{ color: "var(--currency-syp)" }}
               >
-                <span>{(totalInventoryKg ?? 0).toLocaleString("en-US")}</span>
+                <span>{formatNumber(totalInventoryKg ?? 0)}</span>
                 <span className="text-[13px] font-semibold opacity-70">كغ</span>
               </span>
             }
@@ -187,20 +189,20 @@ export function ExecutiveKpiGrid() {
           <SecondaryCard
             title="فواتير اليوم"
             icon={Receipt}
-            value={(todayInvoices?.count ?? 0).toLocaleString("en-US")}
+            value={formatMoney(todayInvoices?.count ?? 0)}
             hint="فاتورة"
           />
           <SecondaryCard
             title="فواتير غير مسددة"
             icon={FileWarning}
-            value={(unpaidInvoices?.count ?? 0).toLocaleString("en-US")}
+            value={formatMoney(unpaidInvoices?.count ?? 0)}
             hint={formatUnpaidCurrencies(unpaidInvoices?.byCurrency)}
             tone="warning"
           />
           <SecondaryCard
             title="إجمالي الأقمشة"
             icon={Layers}
-            value={(activeRolls?.total ?? 0).toLocaleString("en-US")}
+            value={formatMoney(activeRolls?.total ?? 0)}
             hint={`${activeRolls?.fabricTypes ?? 0} صنف`}
           />
           <SecondaryCard
@@ -219,7 +221,7 @@ export function ExecutiveKpiGrid() {
           <SecondaryCard
             title="المرتجعات"
             icon={Undo2}
-            value={returnsCount.toLocaleString("en-US")}
+            value={formatMoney(returnsCount)}
             hint="مرتجع اليوم"
           />
         </div>

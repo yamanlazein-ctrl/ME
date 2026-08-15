@@ -19,6 +19,8 @@ import type { Currency } from "@/domain/types";
 import { usePrintJobs, useOpenPrintJobs, useReceivePrint } from "@/presentation/hooks/usePrintJobs";
 import { printDocument } from "@/components/print/printPortal";
 import { PrintJobDocument } from "@/components/print/PrintJobDocument";
+import { formatNumber, formatMoney, formatQuantity } from "@/shared/utils/formatNumber";
+
 
 export const Route = createFileRoute("/invoices/print-receive/new")({
   component: PrintReceivePage,
@@ -185,7 +187,7 @@ function PrintReceivePage() {
                   <div>
                     تكلفة الشراء الأصلية:{" "}
                     <span className="tabular-nums text-foreground">
-                      {srcCost.toLocaleString("en-US")} {src ? currencySymbol(src.currency) : ""}
+                      {formatNumber(srcCost)} {src ? currencySymbol(src.currency) : ""}
                     </span>{" "}
                     / كغ
                   </div>
@@ -284,7 +286,7 @@ function PrintReceivePage() {
                 <div className="rounded-md border border-border bg-background/40 px-3 py-2 text-[11px] text-muted-foreground">
                   التكلفة الإجمالية للكيلو ={" "}
                   <span className="tabular-nums font-bold text-foreground">
-                    {totalCost.toLocaleString("en-US")}
+                    {formatNumber(totalCost)}
                   </span>{" "}
                   (تكلفة القماش + الطباعة)
                 </div>
@@ -325,7 +327,7 @@ function PrintReceivePage() {
                         <td className="p-2 font-medium text-foreground">{j.newName}</td>
                         <td className="p-2 tabular-nums">{j.receivedKg}</td>
                         <td className="p-2 tabular-nums">
-                          {(j.printCostPerKg ?? 0).toLocaleString("en-US")}{" "}
+                          {formatNumber(j.printCostPerKg ?? 0)}{" "}
                           {j.currency ? currencySymbol(j.currency as Currency) : ""}
                         </td>
                       </tr>

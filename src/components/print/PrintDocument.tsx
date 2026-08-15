@@ -97,7 +97,6 @@ export function PrintDocument({
           {showLogo && <img className="print-logo" src={logoUrl} alt={BRAND_NAME} />}
           <div className="print-brand-text">
             <div className="print-company-name">{BRAND_NAME}</div>
-            <div className="print-company-name-en">{BRAND_SUBTITLE}</div>
           </div>
         </div>
         <div className="print-doc-title-box">

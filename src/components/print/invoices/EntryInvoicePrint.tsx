@@ -37,12 +37,12 @@ import {
 import { supplierById } from "@/presentation/hooks/useParties";
 import { useVouchersList } from "@/presentation/hooks/useVouchers";
 import { useInvoiceVisibility } from "./visibility";
+import { formatMoney, formatQuantity } from "@/shared/utils/formatNumber";
+import type { Invoice, InvoiceLineData } from "@/domain/entities/Invoice";
 import { parseLineDetails } from "./lineDetails";
 
 const DETAILS_TITLE = String.fromCharCode(0x62a, 0x641, 0x627, 0x635, 0x64a, 0x644, 0x20, 0x625, 0x636, 0x627, 0x641, 0x64a, 0x629);
 const BAND_LABEL = String.fromCharCode(0x628, 0x646, 0x62f);
-
-import type { Invoice, InvoiceLineData } from "@/domain/entities/Invoice";
 
 type EntryInvoicePrintProps = {
   invoice: Invoice;
@@ -50,9 +50,8 @@ type EntryInvoicePrintProps = {
   pageNumber?: number;
 };
 
-function fmtNumber(n: number): string {
-  return n.toLocaleString("en-US");
-}
+const fmtNumber = (n: number): string => formatMoney(n);
+const fmtQty = (n: number): string => formatQuantity(n);
 
 /** Renders a fabric line as plain text — never a color swatch. */
 function renderColorCell(line: InvoiceLineData) {
@@ -65,7 +64,6 @@ function renderColorCell(line: InvoiceLineData) {
     </div>
   );
 }
-
 export function EntryInvoicePrint({
   invoice,
   totalPages,
@@ -74,7 +72,6 @@ export function EntryInvoicePrint({
   const inv = invoice;
   const vis = useInvoiceVisibility("purchase");
   const supplier = supplierById(inv.partyId);
-
   // Pull vouchers so we can show paid/remaining — same data the detail
   // page uses (invoices.$id.tsx). Linked receipts/payments to this
   // invoice appear here.
@@ -89,14 +86,12 @@ export function EntryInvoicePrint({
   );
   const paid = linkedVouchers.reduce((s, v) => s + v.amount, 0);
   const paymentMethod = linkedVouchers[0]?.method;
-
   const subtotal = inv.total();
   const discount = inv.discount ?? 0;
   const tax = inv.tax ?? 0;
   const grand = subtotal - discount + tax;
   const remaining = Math.max(0, grand - paid);
   const sym = currencySymbol(inv.currency);
-
   const isCancelled = inv.status === "cancelled";
   const statusLabel = isCancelled
     ? "ملغاة"
@@ -105,7 +100,6 @@ export function EntryInvoicePrint({
       : remaining > 0
         ? "مفتوحة (متبقي)"
         : "صادرة";
-
   // ── Meta grid (only fields the user has not hidden) ──────────────
   const meta: PrintMetaItem[] = [];
   if (vis.showInvoiceNumber) meta.push({ label: "رقم الفاتورة", value: inv.number });
@@ -125,7 +119,6 @@ export function EntryInvoicePrint({
       value: String(inv.cancelledAt).slice(0, 19).replace("T", " "),
     });
   }
-
   // ── Items table — all columns by default, with widths that adapt
   //    to which ones the user has hidden so nothing looks empty.
   const allColumns: { key: string; cfg: PrintColumn; on?: boolean }[] = [
@@ -140,7 +133,6 @@ export function EntryInvoicePrint({
     { key: "gross", cfg: { key: "gross", label: "الإجمالي", align: "left", amount: true, width: "10%" }, on: vis.showLineTotal },
   ];
   const columns = allColumns.filter((c) => c.on !== false).map((c) => c.cfg);
-
   const rows = inv.lines.map((l, i) => {
     const fab = fabricById(l.fabricId);
     const roll = rollById(l.rollId);
@@ -159,7 +151,6 @@ export function EntryInvoicePrint({
     };
     return columns.map((c) => cell[c.key] ?? "—");
   });
-
   // ── Totals (only show ones with value > 0 OR if the user wants to
   //    see the row regardless of value — for now we show them only
   //    when there is data, but the user can override via settings).
@@ -180,7 +171,6 @@ export function EntryInvoicePrint({
       grand: true,
     });
   }
-
   // ── Party block (supplier) — every field the user wants.
   const party: PrintParty | undefined = vis.showPartyName
     ? {
@@ -195,7 +185,6 @@ export function EntryInvoicePrint({
           : {}),
       }
     : undefined;
-
   // ── Payment summary (paid / remaining) — entry invoices can have
   //    linked payment vouchers too, so we show them.
   const payment =
@@ -206,7 +195,6 @@ export function EntryInvoicePrint({
           { label: "المتبقي", value: `${fmtNumber(remaining)} ${sym}` },
         ]
       : undefined;
-
   return (
     <PrintDocument
       title="فاتورة شراء"
@@ -248,7 +236,6 @@ export function EntryInvoicePrint({
           </div>
         );
       })}
-
     </PrintDocument>
   );
 }

@@ -2,6 +2,8 @@
  * Money — immutable value object with safe arithmetic.
  */
 import type { Currency } from "@/domain/types";
+import { formatNumber, formatMoney, formatQuantity } from "@/shared/utils/formatNumber";
+
 export type { Currency };
 export interface MoneyData {
   amount: number;
@@ -74,7 +76,7 @@ export class Money implements MoneyData {
 
   toString(): string {
     // Localised SYP / USD formatting can be injected later.
-    return `${Math.round(this.amount).toLocaleString("en-US")} ${this.currency}`;
+    return `${formatMoney(this.amount)} ${this.currency}`;
   }
 
   toJSON(): MoneyData {

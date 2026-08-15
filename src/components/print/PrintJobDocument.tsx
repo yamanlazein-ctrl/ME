@@ -7,6 +7,8 @@ import {
 import { currencySymbol } from "@/presentation/hooks/useCurrency";
 import { colorById, fabricById, rollById } from "@/presentation/hooks/useInventory";
 import type { PrintJobDTO } from "@/application/ports/IPrintJobRepository";
+import { formatNumber, formatMoney, formatQuantity } from "@/shared/utils/formatNumber";
+
 
 const statusLabel = (j: PrintJobDTO) => (j.status === "received" ? "مستلم" : "مرسل إلى المطبعة");
 
@@ -41,7 +43,7 @@ export function PrintJobDocument({ job }: { job: PrintJobDTO }) {
     totals.push({ label: "تكلفة الطباعة (كغ)", value: `${job.printCostPerKg} ${sym}` });
     totals.push({
       label: "إجمالي تكلفة الطباعة",
-      value: `${cost.toLocaleString("en-US")} ${sym}`,
+      value: `${formatMoney(cost)} ${sym}`,
       grand: true,
     });
   }

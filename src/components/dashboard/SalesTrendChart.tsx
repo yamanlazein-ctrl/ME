@@ -9,6 +9,8 @@ import {
   YAxis,
 } from "recharts";
 import { useDashboard } from "@/presentation/hooks/useDashboard";
+import { formatNumber, formatMoney, formatQuantity } from "@/shared/utils/formatNumber";
+
 
 const RANGES = ["7", "14", "30"] as const;
 type Range = (typeof RANGES)[number];
@@ -76,7 +78,7 @@ export function SalesTrendChart() {
                 fontSize: 12,
                 color: "var(--color-popover-foreground)",
               }}
-              formatter={(v: number) => [`${v.toLocaleString("en-US")}K ل.س`, "المبيعات"]}
+              formatter={(v: number) => [`${formatNumber(v)}K ل.س`, "المبيعات"]}
             />
             <Area
               type="monotone"

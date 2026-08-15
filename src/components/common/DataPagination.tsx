@@ -7,6 +7,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { formatNumber, formatMoney, formatQuantity } from "@/shared/utils/formatNumber";
+
 
 /**
  * Shared, RTL-aware pagination bar used at the bottom of list tables.
@@ -50,8 +52,8 @@ export function DataPagination({
     <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border bg-secondary/20 px-5 py-2.5 text-xs text-muted-foreground">
       <div className="flex items-center gap-3">
         <span className="tabular-nums">
-          عرض {from.toLocaleString("en-US")}–{to.toLocaleString("en-US")} من{" "}
-          {total.toLocaleString("en-US")}
+          عرض {formatQuantity(from)}–{formatNumber(to)} من{" "}
+          {formatNumber(total)}
         </span>
         {onPageSizeChange && (
           <Select
