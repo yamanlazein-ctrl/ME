@@ -33,3 +33,13 @@ const envSchema = z.object({
 
 export const config = envSchema.parse(process.env);
 export type Config = typeof config;
+
+// Fix C-3 (forensic audit 2026-08-15): the setup-wizard token gate was
+// documented as "validated at container startup" but nothing ever enforced
+// that. In production with SETUP_TOKEN unset, the wizard endpoints accept
+// any caller. Fail closed at boot instead of silently opening the wizard.
+if (config.NODE_ENV === "production" && !config.SETUP_TOKEN) {
+  throw new Error(
+    "SETUP_TOKEN must be set when NODE_ENV=production — refusing to start with the setup wizard unauthenticated.",
+  );
+}

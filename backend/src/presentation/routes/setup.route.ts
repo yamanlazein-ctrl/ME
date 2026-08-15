@@ -19,15 +19,29 @@ import {
  *   POST /api/setup/init             (SETUP_TOKEN-gated; creates the tenant)
  *   POST /api/setup/wizard/activate  (consumes the activation key)
  *
- * The `SETUP_TOKEN` env guards the bootstrap path. In dev, the
- * token is optional; in production it is required (validated at
- * container startup — the `isSetupTokenRequired` check below is a
- * belt-and-suspenders guard).
+ * The `SETUP_TOKEN` env guards the bootstrap path. In dev, the token is
+ * optional; in production it is required and boot-time-enforced by
+ * `env.ts` (fix for C-3, forensic audit 2026-08-15 — the app now refuses
+ * to start with `NODE_ENV=production` and no `SETUP_TOKEN`).
+ *
+ * The token alone is NOT sufficient authorization for the wizard's
+ * mutating steps (company/admin/review/complete): those additionally
+ * require the target tenant's `isCompleted` flag to still be `false`
+ * (enforced in setupUseCases.ts via `assertWizardMutable`). A shared or
+ * leaked token must not be able to re-provision a tenant that has
+ * already finished setup.
  */
 function checkSetupToken(req: { headers: Record<string, unknown> }): boolean {
   if (!config.SETUP_TOKEN) {
     // In dev (or when no token is configured), allow without a token.
-    return process.env.NODE_ENV !== "production";
+    // Fix C-3 (forensic audit 2026-08-15): read the validated, defaulted
+    // `config.NODE_ENV` instead of the raw `process.env.NODE_ENV`. The raw
+    // env var is `undefined` on any deployment that forgot to export it,
+    // and `undefined !== "production"` is `true` — silently opening every
+    // setup endpoint. `config.NODE_ENV` is Zod-validated with an explicit
+    // default, and env.ts now refuses to boot in production without a
+    // token at all, so this branch can only be reached in dev/test.
+    return config.NODE_ENV !== "production";
   }
   const provided = (req.headers["x-setup-token"] as string | undefined) ?? "";
   return provided === config.SETUP_TOKEN;
@@ -142,6 +156,10 @@ export function registerSetupRoutes(router: Router, container: Container): void 
         req.body,
       );
       if (!r.ok) {
+        if (r.code === "ALREADY_COMPLETED") {
+          res.status(409).json({ code: r.code, message: r.error, statusCode: 409 });
+          return;
+        }
         res.status(422).json({ code: "VALIDATION_ERROR", message: r.error, statusCode: 422 });
         return;
       }
@@ -170,6 +188,10 @@ export function registerSetupRoutes(router: Router, container: Container): void 
         req.body,
       );
       if (!r.ok) {
+        if (r.code === "ALREADY_COMPLETED") {
+          res.status(409).json({ code: r.code, message: r.error, statusCode: 409 });
+          return;
+        }
         res.status(422).json({ code: "VALIDATION_ERROR", message: r.error, statusCode: 422 });
         return;
       }
@@ -191,6 +213,10 @@ export function registerSetupRoutes(router: Router, container: Container): void 
       const tenantId = (req.body?.tenantId as string) ?? "";
       const r = await saveReviewStepUseCase(container.installationStateRepo, tenantId, req.body);
       if (!r.ok) {
+        if (r.code === "ALREADY_COMPLETED") {
+          res.status(409).json({ code: r.code, message: r.error, statusCode: 409 });
+          return;
+        }
         res.status(422).json({ code: "VALIDATION_ERROR", message: r.error, statusCode: 422 });
         return;
       }

@@ -31,7 +31,35 @@ import { randomUUID } from "node:crypto";
  * Pattern follows the existing use-cases (e.g. partyUseCases.ts):
  * returns a `Result<T>` discriminated union.
  */
-type Result<T> = { ok: true; data?: T } | { ok: false; error: string };
+type Result<T> = { ok: true; data?: T } | { ok: false; error: string; code?: string };
+
+// Fix C-3 (forensic audit 2026-08-15): none of the wizard-mutating use
+// cases below ever checked whether the target tenant's wizard was already
+// completed. The SETUP_TOKEN gate only answers "is this caller an
+// operator" — it says nothing about "is this specific tenant still
+// provisionable". Live reproduction against a real Postgres instance
+// confirmed the full chain: a second, unauthenticated call to
+// wizard/admin with a completed tenant's id overwrote the pending admin
+// payload, and wizard/complete then created a brand-new `admin` user
+// under that tenant for whoever called it last — a full account
+// takeover with no token and no credentials, reachable even when
+// SETUP_TOKEN is configured correctly, because the token never varies
+// per tenant. Once `isCompleted` is true for a tenant, every mutating
+// step must refuse outright, regardless of the token.
+async function assertWizardMutable(
+  installationStateRepo: IInstallationStateRepository,
+  tenantId: string,
+): Promise<{ ok: true } | { ok: false; error: string; code: "ALREADY_COMPLETED" }> {
+  const state = await installationStateRepo.findByTenant(tenantId as never);
+  if (state?.isCompleted) {
+    return {
+      ok: false,
+      error: "تم إكمال إعداد هذا الحساب مسبقاً — لا يمكن تعديله عبر معالج الإعداد",
+      code: "ALREADY_COMPLETED",
+    };
+  }
+  return { ok: true };
+}
 
 const startInput = z.object({
   companyName: z.string().min(1).optional(),
@@ -189,6 +217,8 @@ export async function saveCompanyStepUseCase(
 ): Promise<Result<true>> {
   const parsed = companyStepInput.safeParse(input);
   if (!parsed.success) return { ok: false, error: "بيانات الشركة غير صالحة" };
+  const guard = await assertWizardMutable(installationStateRepo, tenantId);
+  if (!guard.ok) return guard;
   try {
     await companyRepo.upsert({
       tenantId: tenantId as never,
@@ -217,6 +247,8 @@ export async function saveAdminStepUseCase(
 ): Promise<Result<true>> {
   const parsed = adminStepInput.safeParse(input);
   if (!parsed.success) return { ok: false, error: "بيانات المسؤول غير صالحة" };
+  const guard = await assertWizardMutable(deps.installationStateRepo, tenantId);
+  if (!guard.ok) return guard;
   try {
     const passwordHash = await deps.passwordHasher.hash(parsed.data.password);
     await deps.installationStateRepo.saveStep(tenantId as never, "admin", {
@@ -242,6 +274,8 @@ export async function saveReviewStepUseCase(
 ): Promise<Result<true>> {
   const parsed = reviewInput.safeParse(input);
   if (!parsed.success) return { ok: false, error: "يجب تأكيد المراجعة" };
+  const guard = await assertWizardMutable(installationStateRepo, tenantId);
+  if (!guard.ok) return guard;
   await installationStateRepo.saveStep(tenantId as never, "review", { confirmed: true });
   return { ok: true, data: true };
 }
@@ -256,6 +290,16 @@ export async function completeWizardUseCase(
   try {
     const state = await deps.installationStateRepo.findByTenant(tenantId);
     if (!state) return { ok: true, data: { isCompleted: false } };
+    if (state.isCompleted) {
+      // Fix C-3: complete() must not re-promote whatever admin payload is
+      // currently sitting in `state.data` once a tenant is already
+      // provisioned — that payload can belong to a later, unauthenticated
+      // caller who overwrote the original admin step (see
+      // assertWizardMutable above). Re-running complete on a completed
+      // tenant is a no-op that reports the existing state, never a fresh
+      // user creation.
+      return { ok: true, data: { isCompleted: true } };
+    }
 
     // R1 + R20: promote the admin credentials captured during the `admin`
     // wizard step into a real Owner user. The merged wizard `data` now
