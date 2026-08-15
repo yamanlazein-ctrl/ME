@@ -24,7 +24,12 @@ export interface DashboardData {
   outstandingOrders: number;
   lowStockFabrics: number;
   lowStockRolls: { low: number; outOfStock: number };
-  todayProfit: { syp: number; marginPercent: number; trend: "up" | "down" };
+  // Fix H-7 (forensic audit 2026-08-15): `syp` used to be a single number
+  // that actually summed profit across every currency present, mislabeled
+  // as if it were SYP-only. byCurrency reports each currency independently.
+  todayProfit: {
+    byCurrency: Record<string, { today: number; marginPercent: number; trend: "up" | "down" }>;
+  };
   activeRolls: { total: number; fabricTypes: number; colors: number };
   totalInventoryKg: number;
   activeTodayCustomers: number;
@@ -32,7 +37,9 @@ export interface DashboardData {
     count: number;
     byCurrency: Record<string, { count: number; totalDue: number }>;
   };
-  salesTrend: Record<string, Array<{ label: string; value: number }>>;
+  // Fix H-7: groupBy(date) alone mixed every currency's sales into one
+  // "value" per day. byCurrency reports each currency's own total per day.
+  salesTrend: Record<string, Array<{ label: string; byCurrency: Record<string, number> }>>;
   alerts: Array<{
     category: "inventory" | "financial";
     level: "low" | "out" | "overdue";
@@ -43,9 +50,22 @@ export interface DashboardData {
     remaining?: string;
   }>;
   topCustomers: Array<{ partyId: string; name: string; revenue: number; currency: string }>;
-  topFabrics: Array<{ fabricId: string; name: string; kgSold: number; revenue: number }>;
+  // Fix H-7: revenue used to be summed across every currency for a
+  // fabric. revenueByCurrency reports each currency's revenue independently.
+  topFabrics: Array<{
+    fabricId: string;
+    name: string;
+    kgSold: number;
+    revenueByCurrency: Record<string, number>;
+  }>;
   cashbox: { balance: number; todayMovementCount: number; isLocked: boolean };
-  vouchers: { receiptsThisMonth: number; paymentsThisMonth: number; count: number };
+  // Fix H-7: receiptsThisMonth/paymentsThisMonth used to sum every
+  // currency's vouchers into one number. byCurrency reports each
+  // currency's receipts/payments/count independently.
+  vouchers: {
+    byCurrency: Record<string, { receipts: number; payments: number; count: number }>;
+    count: number;
+  };
   unreadNotifications: number;
   recentActivity: Array<{ module: string; action: string; detail: string; timestamp: string }>;
 }

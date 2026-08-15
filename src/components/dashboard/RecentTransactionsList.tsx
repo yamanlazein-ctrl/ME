@@ -9,8 +9,7 @@ import {
 } from "lucide-react";
 import { useDashboard } from "@/presentation/hooks/useDashboard";
 import { type TransactionDTO } from "@/application/ports/IDashboardRepository";
-import { DualCurrency } from "@/components/common/DualCurrency";
-import { currencyState, type Currency } from "@/presentation/hooks/useCurrency";
+import { formatAmount, type Currency } from "@/presentation/hooks/useCurrency";
 
 const META: Record<
   TransactionDTO["type"],
@@ -79,11 +78,14 @@ export function RecentTransactionsList() {
               </div>
 
               <div className="text-left shrink-0">
-                {(() => {
-                  const rate = currencyState.rates[t.currency as Currency] ?? 1;
-                  const sypAmount = t.currency === "SYP" ? t.amount : t.amount * rate;
-                  return <DualCurrency syp={sypAmount} size="sm" align="start" />;
-                })()}
+                {/* Fix C-9 (forensic audit 2026-08-15): this used to convert
+                    every non-SYP amount through a hardcoded EXCHANGE_RATES
+                    guess and display it as if it were a real SYP amount.
+                    Show the transaction's own real amount in its own real
+                    currency — no invented conversion. */}
+                <span className="font-bold tabular-nums">
+                  {formatAmount(t.amount, t.currency as Currency)}
+                </span>
                 <div className="mt-0.5 text-[11px] text-muted-foreground text-start">
                   {t.time}
                 </div>
