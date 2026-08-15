@@ -1,4 +1,4 @@
-import { eq, and, desc, ilike, or, sql } from "drizzle-orm";
+import { eq, and, desc, ilike, or, sql, gte, lte } from "drizzle-orm";
 import type { DB } from "../orm/drizzle.js";
 import type {
   IVoucherRepository,
@@ -35,6 +35,8 @@ export class PostgresVoucherRepository implements IVoucherRepository {
     if (filter.partyId) conditions.push(eq(vouchers.partyId, filter.partyId));
     if (filter.invoiceId) conditions.push(eq(vouchers.invoiceId, filter.invoiceId));
     if (filter.status) conditions.push(eq(vouchers.status, filter.status));
+    if (filter.fromDate) conditions.push(gte(vouchers.date, filter.fromDate));
+    if (filter.toDate) conditions.push(lte(vouchers.date, filter.toDate));
     if (filter.search) conditions.push(or(ilike(vouchers.number!, `%${filter.search}%`))!);
     const where = and(...conditions);
     const page = Math.max(0, filter.page ?? 0);

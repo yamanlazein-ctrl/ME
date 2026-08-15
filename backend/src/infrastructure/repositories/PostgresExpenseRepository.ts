@@ -1,4 +1,4 @@
-import { eq, and, desc, ilike, or, sql, inArray } from "drizzle-orm";
+import { eq, and, desc, ilike, or, sql, inArray, gte, lte } from "drizzle-orm";
 import type { DB } from "../orm/drizzle.js";
 import type {
   IExpenseRepository,
@@ -31,6 +31,8 @@ export class PostgresExpenseRepository implements IExpenseRepository {
     const conditions = [eq(expenses.tenantId, ctx.tenantId)];
     if (filter.category) conditions.push(eq(expenses.category, filter.category));
     if (filter.status) conditions.push(eq(expenses.status, filter.status));
+    if (filter.fromDate) conditions.push(gte(expenses.date, filter.fromDate));
+    if (filter.toDate) conditions.push(lte(expenses.date, filter.toDate));
     if (filter.search)
       conditions.push(
         or(

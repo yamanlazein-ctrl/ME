@@ -34,7 +34,7 @@ export function createSuperAdminAuthMiddleware(
     }
 
     try {
-      const payload = await jwtSigner.verify(provided);
+      const payload = await jwtSigner.verifyAccessToken(provided);
       if (payload.role !== "super_admin") {
         res.status(403).json({ code: "FORBIDDEN", message: "Super Admin only", statusCode: 403 });
         return;
