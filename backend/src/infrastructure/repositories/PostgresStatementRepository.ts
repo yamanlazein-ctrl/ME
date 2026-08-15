@@ -58,9 +58,19 @@ export class PostgresStatementRepository implements IStatementRepository {
     const toDate = query.toDate ?? null;
     const type = query.type ?? null;
 
-    // Party balance semantics: customer → debit−credit, supplier → credit−debit.
-    // We accumulate a signed margin per row and let the caller order rows.
-    const mult = query.kind === "customer" ? 1 : -1;
+    // Fix C-8 (forensic audit 2026-08-15, hand-verified across 5 scenarios):
+    // this used to flip to credit−debit for suppliers. Every ledger writer
+    // (invoices, vouchers) already uses a uniform, kind-agnostic sign —
+    // debit increases what's owed, credit decreases it — for both
+    // customer and supplier legs (see the matching fix and full
+    // hand-computation in PostgresPartyRepository.ts's opening-balance
+    // write, which was the one write path that used to disagree with this
+    // uniform convention). Debit−credit uniformly, for both kinds, is the
+    // convention that makes the running balance move the right direction
+    // on every transaction type. This also brings the statement in line
+    // with PostgresLedgerRepository.getBalance()/getBalanceByDate(), which
+    // already compute plain debit−credit with no kind-based flip.
+    const mult = 1;
 
     // previous balance = signed sum of active movements strictly before `from`
     // (no `from` → nothing is "before", so previous balance is 0)
