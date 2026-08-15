@@ -2,13 +2,15 @@ import { Clock, Layers, FileWarning } from "lucide-react";
 import { useDashboard } from "@/presentation/hooks/useDashboard";
 import { useCashboxState } from "@/presentation/hooks/useCashbox";
 import { formatSYP } from "@/presentation/hooks/useInventory";
+import { formatNumber, formatMoney, formatQuantity } from "@/shared/utils/formatNumber";
+
 
 function formatUnpaidCurrencies(
   byCurrency: Record<string, { count: number; totalDue: number }> = {},
 ): string {
   const parts = Object.entries(byCurrency)
     .filter(([, v]) => v && v.totalDue > 0)
-    .map(([code, v]) => `${v.totalDue.toLocaleString("en-US")} ${code}`);
+    .map(([code, v]) => `${formatMoney(v.totalDue)} ${code}`);
   return parts.length > 0 ? parts.join(" · ") : formatSYP(0);
 }
 
@@ -131,7 +133,7 @@ export function HeroSalesCard() {
           <HeroChip
             icon={Layers}
             label="قطعة نشطة"
-            value={(activeRolls?.total ?? 0).toLocaleString("en-US")}
+            value={formatMoney(activeRolls?.total ?? 0)}
           />
           <HeroChip
             icon={FileWarning}

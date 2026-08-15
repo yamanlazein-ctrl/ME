@@ -32,6 +32,8 @@ import {
   groupAmountsByCurrency,
   addCurrencyBreakdowns,
 } from "@/presentation/hooks/useCurrency";
+import { formatNumber, formatMoney, formatQuantity } from "@/shared/utils/formatNumber";
+
 
 export const Route = createFileRoute("/reports/")({ component: ReportsPage });
 
@@ -341,7 +343,7 @@ function ReportsPage() {
         <InfoCard
           icon={Package}
           label="كمية المخزون"
-          value={`${totalKg.toLocaleString("en-US")} كغ`}
+          value={`${formatMoney(totalKg)} كغ`}
         />
         <InfoCard
           icon={Package}

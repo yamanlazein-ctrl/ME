@@ -10,6 +10,8 @@ import { Color, type ColorData } from "@/domain/entities/Color";
 import { Roll, type RollData } from "@/domain/entities/Roll";
 import { UUID, type TenantContext } from "@/domain/types";
 import type { Currency } from "@/domain/types";
+import { formatNumber, formatMoney, formatQuantity } from "@/shared/utils/formatNumber";
+
 
 export type FabricUnit = "meter" | "yard" | "kg";
 export type RollStatus = "active" | "low" | "out";
@@ -605,5 +607,5 @@ export {
   type RollData,
 };
 export function formatSYP(amount: number): string {
-  return amount.toLocaleString("en-US") + " ل.س";
+  return formatMoney(amount) + " ل.س";
 }

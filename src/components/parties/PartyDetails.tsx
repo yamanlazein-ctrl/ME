@@ -73,6 +73,8 @@ import {
   type LedgerType,
 } from "@/presentation/hooks/useLedger";
 import { useStatement, useSettleParty } from "@/presentation/hooks/useStatement";
+import { formatNumber, formatMoney, formatQuantity } from "@/shared/utils/formatNumber";
+
 
 const _nextFormId = 0;
 function toMockPatch(patch: Record<string, unknown>): Record<string, unknown> {
@@ -111,7 +113,7 @@ const METHOD_LABEL: Record<string, string> = {
   card: "بطاقة",
 };
 
-const fmt = (n: number) => Math.round(n).toLocaleString("en-US");
+const fmt = (n: number) => formatMoney(n);
 
 export function PartyDetailsPage({ kind, id }: { kind: PartyKind; id: string }) {
   useInventory();

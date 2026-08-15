@@ -9,6 +9,8 @@ import {
   YAxis,
 } from "recharts";
 import { useDashboard } from "@/presentation/hooks/useDashboard";
+import { formatNumber, formatMoney, formatQuantity } from "@/shared/utils/formatNumber";
+
 
 export function TopFabricsChart() {
   const { data: dashboardData } = useDashboard();
@@ -50,7 +52,7 @@ export function TopFabricsChart() {
                 fontSize: 12,
                 color: "var(--color-popover-foreground)",
               }}
-              formatter={(v: number) => [`${v.toLocaleString("en-US")}K ل.س`, "المبيعات"]}
+              formatter={(v: number) => [`${formatNumber(v)}K ل.س`, "المبيعات"]}
             />
             <Bar dataKey="salesK" radius={[6, 6, 0, 0]}>
               {data.map((_, i) => (

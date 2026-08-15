@@ -23,6 +23,8 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { formatNumber, formatMoney, formatQuantity } from "@/shared/utils/formatNumber";
+
 
 export const Route = createFileRoute("/invoices/$id")({
   component: InvoiceDetailPage,
@@ -166,10 +168,10 @@ function InvoiceDetailPage() {
                     <td className="px-4 py-2 tabular-nums">#{roll?.rollNo ?? "—"}</td>
                     <td className="px-4 py-2 text-left tabular-nums">{l.quantityKg}</td>
                     <td className="px-4 py-2 text-left tabular-nums">
-                      {l.pricePerKg.toLocaleString("en-US")} {currencySymbol(inv.currency)}
+                      {formatNumber(l.pricePerKg)} {currencySymbol(inv.currency)}
                     </td>
                     <td className="px-4 py-2 text-left tabular-nums font-semibold">
-                      {inv.lineTotal(l).toLocaleString("en-US")} {currencySymbol(inv.currency)}
+                      {formatNumber(inv.lineTotal(l))} {currencySymbol(inv.currency)}
                     </td>
                   </tr>
                 );
@@ -214,7 +216,7 @@ function InvoiceDetailPage() {
                     {v.number} — {v.date}
                   </span>
                   <span className="font-semibold text-foreground tabular-nums">
-                    {v.amount.toLocaleString("en-US")} {currencySymbol(v.currency as Currency)}
+                    {formatNumber(v.amount)} {currencySymbol(v.currency as Currency)}
                   </span>
                 </li>
               ))}
@@ -314,7 +316,7 @@ function PayCell({
       <div
         className={`mt-1 flex items-center rounded-lg border px-3 py-2 text-base font-bold tabular-nums ${cls}`}
       >
-        {value.toLocaleString("en-US")}
+        {formatQuantity(value)}
         <span className="mr-1 text-xs font-normal opacity-70">{currencySymbol(currency)}</span>
       </div>
     </div>

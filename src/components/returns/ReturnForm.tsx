@@ -1,6 +1,6 @@
 import { useState, useMemo } from "react";
 import { useNavigate } from "@tanstack/react-router";
-import { formatQuantity, formatMoney } from "@/shared/utils/formatNumber";
+import { formatNumber, formatQuantity, formatMoney } from "@/shared/utils/formatNumber";
 import { PageCard } from "@/components/layout/PageCard";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -251,7 +251,7 @@ export function ReturnForm({ kind }: { kind: ReturnKind }) {
                       />
                     </td>
                     <td className="px-3 py-2 text-left tabular-nums font-semibold">
-                      {(l.quantityKg * l.pricePerKg).toLocaleString("en-US")}
+                      {formatNumber(l.quantityKg * l.pricePerKg)}
                     </td>
                     <td className="px-3 py-2">
                       <button onClick={() => remove(l.id)} className="text-destructive">

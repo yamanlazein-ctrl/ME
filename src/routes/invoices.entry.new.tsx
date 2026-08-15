@@ -54,6 +54,8 @@ import {
 } from "@/components/invoices/entry-types";
 import { useInvoice } from "@/presentation/hooks/useInvoices";
 import { parseLineDetails } from "@/components/print/invoices/lineDetails";
+import { formatNumber, formatMoney, formatQuantity } from "@/shared/utils/formatNumber";
+
 
 export const Route = createFileRoute("/invoices/entry/new")({
   validateSearch: (search: Record<string, unknown>): { edit?: string } => ({
@@ -488,7 +490,7 @@ function EntryInvoicePage() {
     // ── Success — toast + inventory impact summary ────────────────
     const impactParts: string[] = [];
     impactParts.push(
-      `أُضيف ${createdRollIds.length} صبغة (${totalKg.toLocaleString("en-US")} كغ) إلى المخزون`,
+      `أُضيف ${createdRollIds.length} صبغة (${formatNumber(totalKg)} كغ) إلى المخزون`,
     );
     if (newFabrics > 0) impactParts.push(`+${newFabrics} قماش جديد`);
     if (newColors > 0) impactParts.push(`+${newColors} لون جديد`);
@@ -652,7 +654,7 @@ function EntryInvoicePage() {
                             isUSD ? "text-success" : "text-foreground",
                           )}
                         >
-                          {Math.round(lineSubtotal(l)).toLocaleString("en-US")}{" "}
+                          {formatMoney(lineSubtotal(l))}{" "}
                           <span className="text-[10px] font-medium text-muted-foreground">
                             {currencySymbol(currency)}
                           </span>
@@ -892,7 +894,7 @@ function EntryInvoicePage() {
                                 isUSD ? "text-success" : "text-foreground",
                               )}
                             >
-                              {Math.round(lineSubtotal(l)).toLocaleString("en-US")}{" "}
+                              {formatMoney(lineSubtotal(l))}{" "}
                               <span className="text-[10px] font-medium text-muted-foreground">
                                 {currencySymbol(currency)}
                               </span>
@@ -922,7 +924,7 @@ function EntryInvoicePage() {
           {dataLines.length > 0 && (
             <div className="flex items-center justify-between gap-3 border-t border-border bg-secondary/40 px-4 py-2 text-xs font-semibold">
               <span className="text-muted-foreground">
-                {dataLines.length} صبغة • {totalQty.toLocaleString("en-US")} كغ
+                {dataLines.length} صبغة • {formatNumber(totalQty)} كغ
               </span>
               <span
                 className={cn(
@@ -930,7 +932,7 @@ function EntryInvoicePage() {
                   isUSD ? "text-success" : "text-foreground",
                 )}
               >
-                {Math.round(subtotal).toLocaleString("en-US")} {currencySymbol(currency)}
+                {formatMoney(subtotal)} {currencySymbol(currency)}
               </span>
             </div>
           )}
@@ -944,10 +946,10 @@ function EntryInvoicePage() {
           )}
         >
           <div className="grid gap-x-4 gap-y-1 px-3 py-2 sm:grid-cols-2 lg:grid-cols-6">
-            <TotalCell label="الكمية" value={`${totalQty.toLocaleString("en-US")} كغ`} />
+            <TotalCell label="الكمية" value={`${formatNumber(totalQty)} كغ`} />
             <TotalCell
               label="المجموع"
-              value={`${Math.round(subtotal).toLocaleString("en-US")} ${currencySymbol(currency)}`}
+              value={`${formatMoney(subtotal)} ${currencySymbol(currency)}`}
               tone={moneyClass}
             />
             <TotalInputCell
@@ -998,7 +1000,7 @@ function EntryInvoicePage() {
                   isUSD ? "text-success" : "text-foreground",
                 )}
               >
-                {Math.round(grandTotal).toLocaleString("en-US")}{" "}
+                {formatMoney(grandTotal)}{" "}
                 <span className="text-sm font-medium text-muted-foreground">
                   {currencySymbol(currency)}
                 </span>
@@ -1009,7 +1011,7 @@ function EntryInvoicePage() {
             <div className="flex items-center justify-end gap-2 border-t px-3 py-2 text-xs font-semibold">
               <span className="text-muted-foreground">المتبقي:</span>
               <span className={cn("tabular-nums font-bold", moneyClass)}>
-                {Math.max(0, grandTotal - Number(paid)).toLocaleString("en-US")}{" "}
+                {formatMoney(Math.max(0, grandTotal - Number(paid)))}{" "}
                 {currencySymbol(currency)}
               </span>
             </div>
@@ -1033,7 +1035,7 @@ function EntryInvoicePage() {
           <span className="hidden text-xs text-muted-foreground tabular-nums sm:inline">
             {dataLines.length} بند • الإجمالي:{" "}
             <span className={cn("font-semibold", moneyClass)}>
-              {Math.round(grandTotal).toLocaleString("en-US")} {currencySymbol(currency)}
+              {formatMoney(grandTotal)} {currencySymbol(currency)}
             </span>
           </span>
         }

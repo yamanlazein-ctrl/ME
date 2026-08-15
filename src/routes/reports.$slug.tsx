@@ -35,6 +35,8 @@ import type { ReturnDTO } from "@/application/ports/IReturnRepository";
 import type { Invoice as DomainInvoice } from "@/domain/entities/Invoice";
 import type { LedgerEntry as DomainLedgerEntry } from "@/domain/entities/LedgerEntry";
 import { invoiceTotal } from "@/core/calculations/invoiceCalc";
+import { formatNumber, formatMoney, formatQuantity } from "@/shared/utils/formatNumber";
+
 
 type Search = { range?: "7" | "30" | "90" | "all" };
 
@@ -361,17 +363,17 @@ function SalesReport({
                       : (supplierById(i.partyId)?.name ?? i.partyId)}
                   </td>
                   <td className="px-3 py-2 tabular-nums font-semibold">
-                    {Math.round(invoiceTotal(i)).toLocaleString("en-US")}{" "}
+                    {formatMoney(invoiceTotal(i))}{" "}
                     {i.currency}
                   </td>
                   <td className="px-3 py-2 tabular-nums">
-                    {Math.round(paidByInvoice(i.id)).toLocaleString("en-US")}{" "}
+                    {formatMoney(paidByInvoice(i.id))}{" "}
                     {i.currency}
                   </td>
                   <td className="px-3 py-2 tabular-nums font-semibold">
-                    {Math.round(
+                    {formatMoney(
                       Math.max(0, invoiceTotal(i) - paidByInvoice(i.id)),
-                    ).toLocaleString("en-US")}{" "}
+                    )}{" "}
                     {i.currency}
                   </td>
                 </tr>
@@ -512,12 +514,12 @@ function ReturnsReport({
                   </td>
                   <td className="px-3 py-2">{r.partyId}</td>
                   <td className="px-3 py-2 tabular-nums">
-                    {Math.round(
+                    {formatMoney(
                       r.lines.reduce(
                         (sum, l) => sum + l.quantityKg * l.pricePerKg,
                         0,
                       ),
-                    ).toLocaleString("en-US")}{" "}
+                    )}{" "}
                     {r.currency}
                   </td>
                 </tr>
@@ -579,7 +581,7 @@ function ExpensesReport({
                   <td className="px-3 py-2">{e.category}</td>
                   <td className="px-3 py-2">{e.description}</td>
                   <td className="px-3 py-2 tabular-nums">
-                    {Math.round(e.amount).toLocaleString("en-US")} {e.currency}
+                    {formatMoney(e.amount)} {e.currency}
                   </td>
                 </tr>
               ))}
@@ -643,12 +645,12 @@ function LedgerReport({
                   </td>
                   <td className="px-3 py-2 tabular-nums">
                     {e.debit
-                      ? `${Math.round(e.debit).toLocaleString("en-US")} ${e.currency}`
+                      ? `${formatMoney(e.debit)} ${e.currency}`
                       : "—"}
                   </td>
                   <td className="px-3 py-2 tabular-nums">
                     {e.credit
-                      ? `${Math.round(e.credit).toLocaleString("en-US")} ${e.currency}`
+                      ? `${formatMoney(e.credit)} ${e.currency}`
                       : "—"}
                   </td>
                 </tr>
@@ -709,7 +711,7 @@ function CashboxReport({
                 </td>
                 <td className="px-3 py-2">{m.description}</td>
                 <td className="px-3 py-2 tabular-nums font-semibold">
-                  {Math.round(m.amount).toLocaleString("en-US")} {m.currency}
+                  {formatMoney(m.amount)} {m.currency}
                 </td>
               </tr>
             ))}
@@ -762,7 +764,7 @@ function InventoryReport() {
                 <tr key={r.f.id}>
                   <td className="px-3 py-2 font-semibold">{r.f.name}</td>
                   <td className="px-3 py-2 tabular-nums">
-                    {r.kg.toLocaleString("en-US")} كغ
+                    {formatNumber(r.kg)} كغ
                   </td>
                   <td className="px-3 py-2 tabular-nums">{r.rolls}</td>
                   <td className="px-3 py-2 tabular-nums font-semibold">
@@ -824,7 +826,7 @@ function TopFabricsReport({
                   {r.fabric?.name ?? ""}
                 </td>
                 <td className="px-3 py-2 tabular-nums">
-                  {Math.round(r.qty).toLocaleString("en-US")} كغ
+                  {formatMoney(r.qty)} كغ
                 </td>
                 <td className="px-3 py-2 tabular-nums">
                   {formatCurrencyBreakdown(r.revenueByCurrency)}
@@ -925,7 +927,7 @@ function StatBox({
           (byCurrency
             ? formatCurrencyBreakdown(byCurrency)
             : syp != null
-              ? Math.round(syp).toLocaleString("en-US")
+              ? formatMoney(syp)
               : "0")}
         {syp != null && !byCurrency && (
           <DualCurrency syp={syp} className="text-[10px] mt-0.5" />
