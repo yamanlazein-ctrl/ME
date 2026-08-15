@@ -1,4 +1,4 @@
-import { eq, and, desc, ilike, sql } from "drizzle-orm";
+import { eq, and, desc, sql } from "drizzle-orm";
 import type { DB } from "../orm/drizzle.js";
 import type { IPrintJobRepository } from "../../application/ports/IPrintJobRepository.js";
 import { printJobs } from "../orm/schemas/print-job.table.js";
@@ -8,6 +8,7 @@ import { rolls } from "../orm/schemas/roll.table.js";
 import { colors } from "../orm/schemas/color.table.js";
 import { fabrics } from "../orm/schemas/fabric.table.js";
 import { recordStockMovement } from "./stockMovementHelper.js";
+import { nextDocumentNumber } from "../utils/documentNumbers.js";
 import {
   type PrintJobData,
   type CreatePrintJobInput,
@@ -289,12 +290,18 @@ export class PostgresPrintJobRepository implements IPrintJobRepository {
           }
         }
 
-        const shopCount = await tx
-          .select({ c: sql<number>`count(*)` })
-          .from(rolls)
-          .where(and(eq(rolls.tenantId, ctx.tenantId), ilike(rolls.rollNo, "PRT-%")));
-        const seq = Number(shopCount[0]?.c ?? 0) + 1;
-        const generatedRollNo = `PRT-${new Date().getFullYear()}-${String(seq).padStart(4, "0")}`;
+        // Fix H-6 (forensic audit 2026-08-15, live-reproduced): rollNo used to
+        // be derived from `count(*) WHERE rollNo ILIKE 'PRT-%'` + 1 — a
+        // check-then-act race identical in shape to H-4/document_sequences.
+        // Two concurrent print-job completions could both count the same N
+        // and both attempt to insert the SAME PRT-YYYY-NNNN roll number;
+        // since rollNo is uniquely indexed per tenant
+        // (idx_rolls_tenant_roll_no), the loser crashed the whole process
+        // with an uncaught 23505 violation instead of failing gracefully.
+        // Routed through the shared nextDocumentNumber() sequence generator
+        // (same atomic INSERT...ON CONFLICT DO UPDATE used by every other
+        // document type), which is race-free by construction.
+        const generatedRollNo = await nextDocumentNumber("print_roll", ctx.tenantId);
 
         const srcPrice = Number(srcRoll.pricePerKg ?? 0);
         const printCost = input.printCostPerKg ? Number(input.printCostPerKg) : 0;
