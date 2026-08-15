@@ -232,10 +232,30 @@ export function searchColors(term: string, limit = 8): Color[] {
   return scored.slice(0, limit).map((x) => x.c);
 }
 
-export function colorByCode(code: string): Color | undefined {
+/**
+ * Fix C-11 (forensic audit 2026-08-15, live-reproduced): this used to
+ * search the entire tenant-wide colorsCache with no fabricId filter and
+ * return the first arbitrary hit. `code` is only unique per
+ * (tenantId, fabricId) at the DB level (colors.table.ts's unique index is
+ * on tenantId+fabricId+name, and code isn't unique at all) — so a code
+ * collision across two different fabrics silently merged a newly-received
+ * roll into the wrong fabric's color. Live repro: creating "Silk / code
+ * 101" while "Cotton / code 101" already existed filed the new roll under
+ * Cotton's color record, discarding the typed name/hex entirely.
+ *
+ * fabricId is now required, not optional — every call site must know
+ * which fabric it's resolving a code for. There is no safe "unscoped"
+ * fallback: an unknown fabricId means the caller cannot yet tell whether
+ * this is a real match, so it must be treated as "no match" (i.e. the
+ * caller passes undefined/empty and gets undefined back), never as
+ * "search everywhere and hope".
+ */
+export function colorByCode(code: string, fabricId: string | undefined): Color | undefined {
   const q = code.trim().toLowerCase();
-  if (!q) return undefined;
-  return colorsCache.find((c) => (c.code ?? "").trim().toLowerCase() === q);
+  if (!q || !fabricId) return undefined;
+  return colorsCache.find(
+    (c) => c.fabricId === fabricId && (c.code ?? "").trim().toLowerCase() === q,
+  );
 }
 
 /* ── Reactivity hook (re-renders on inventory changes) ────────────── */

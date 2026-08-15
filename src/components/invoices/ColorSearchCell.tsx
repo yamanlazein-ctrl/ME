@@ -22,6 +22,7 @@ export function ColorSearchCell({
   hex,
   existingColorId,
   imageUrl,
+  fabricId,
   onPickExisting,
   onSetName,
   onSetCode,
@@ -33,6 +34,15 @@ export function ColorSearchCell({
   hex?: string;
   existingColorId?: string;
   imageUrl?: string;
+  /**
+   * Fix C-11 (forensic audit 2026-08-15): the code-match preview below
+   * must be scoped to the fabric this line actually resolves to. While
+   * the fabric hasn't been resolved yet (still-unmatched free text), this
+   * is undefined and colorByCode() correctly returns "no match" rather
+   * than searching every fabric in the tenant — the same cross-fabric
+   * merge this fix closes at save time in invoices.entry.new.tsx.
+   */
+  fabricId?: string;
   onPickExisting: (color: Color) => void;
   onSetName: (name: string) => void;
   onSetCode: (code: string) => void;
@@ -45,7 +55,7 @@ export function ColorSearchCell({
 
   const query = activeField === "code" ? code : name;
   const matches = useMemo(() => searchColors(query, 8), [query]);
-  const codeMatch = useMemo(() => colorByCode(code), [code]);
+  const codeMatch = useMemo(() => colorByCode(code, fabricId), [code, fabricId]);
   const nameMatch = useMemo(() => {
     const q = name.trim().toLowerCase();
     if (!q) return undefined;

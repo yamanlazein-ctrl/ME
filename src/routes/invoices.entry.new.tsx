@@ -366,7 +366,11 @@ function EntryInvoicePage() {
         }
         if (!colorId) {
           const codeKey = l.colorCode.trim();
-          const existingColor = codeKey ? colorByCode(codeKey) : undefined;
+          // Fix C-11: fabricId is resolved above (existing or just
+          // created) before we ever look up a color code — pass it so the
+          // lookup can never merge into a same-code color under a
+          // different fabric.
+          const existingColor = codeKey ? colorByCode(codeKey, fabricId) : undefined;
           if (existingColor) {
             colorId = existingColor.id;
           } else {
@@ -769,6 +773,7 @@ function EntryInvoicePage() {
                         hex={l.colorHex}
                         existingColorId={l.existingColorId}
                         imageUrl={l.colorImageUrl}
+                        fabricId={l.existingFabricId}
                         onPickExisting={(c) => pickExistingColorObj(l.id, c)}
                         onSetName={(v) =>
                           updateLine(l.id, {
