@@ -111,8 +111,37 @@ export class PostgresReturnRepository implements IReturnRepository {
         })),
       );
 
-      // Validate return quantities against original invoice (sale + purchase returns)
+      // Validate return quantities against real historical movement — never
+      // allow a return to exceed what was actually sold/purchased on that
+      // exact roll for that exact party, regardless of whether a specific
+      // originalInvoiceId is given.
+      //
+      // Fix BUG-01 / H-1 (forensic audit 2026-08-15, live-reproduced against
+      // a real Postgres instance before this fix): the previous version only
+      // ran this guard `if (input.originalInvoiceId)`, and even then only
+      // checked lines whose rollId existed in the map — a line for a roll
+      // NOT on that invoice was silently skipped (`if (entry && ...)`), and
+      // a return with no originalInvoiceId at all (the UI's own default —
+      // ReturnForm.tsx ships a "— بدون فاتورة —" option) skipped this block
+      // entirely. Both paths let a sale return with `Math.max(0, currentKg
+      // + quantityKg)` (no upper bound at all for sale-kind) fabricate
+      // unlimited stock with no invoice link whatsoever. Live repro:
+      // a fresh 50kg roll became 550kg from a single unlinked sale return,
+      // and a real invoice's return became 200kg heavier on a roll that
+      // invoice never sold, recorded straight into stock_movements as if
+      // legitimate.
+      //
+      // The fix keeps the "originalInvoiceId is optional" UX (a business
+      // may legitimately not track which specific invoice a return maps
+      // to), but conservation is never optional: the eligible quantity is
+      // always derived from real invoice_lines history for that
+      // roll+party, either scoped to one invoice (when given, and then
+      // every line's roll MUST belong to it — no more silent skip) or
+      // across the party's whole active invoice history for that roll
+      // (when not given).
       const invoiceLineQtys = new Map<string, { original: number; returned: number }>();
+      const expectedInvoiceType = input.kind === "sale" ? "sale" : "entry";
+
       if (input.originalInvoiceId) {
         // The original invoice must exist, be active, match the return kind's
         // invoice type, and belong to the same party.
@@ -129,7 +158,6 @@ export class PostgresReturnRepository implements IReturnRepository {
         if (!origInv) {
           throw new Error("الفاتورة الأصلية غير موجودة");
         }
-        const expectedInvoiceType = input.kind === "sale" ? "sale" : "entry";
         if (origInv.type !== expectedInvoiceType) {
           throw new Error(
             `نوع الفاتورة الأصلية (${origInv.type}) لا يطابق نوع المرتجع (${input.kind})`,
@@ -178,15 +206,78 @@ export class PostgresReturnRepository implements IReturnRepository {
           const entry = invoiceLineQtys.get(pr.rollId);
           if (entry) entry.returned = Math.round(Number(pr.total) * 100) / 100;
         }
-        // Guard each line
-        for (const line of input.lines) {
-          const entry = invoiceLineQtys.get(line.rollId);
-          if (entry && line.quantityKg > entry.original - entry.returned) {
-            const verb = input.kind === "sale" ? "المباعة" : "المشتراة";
-            throw new Error(
-              `الكمية المرتجعة (${line.quantityKg} كغ) تتجاوز الكمية ${verb} في الفاتورة الأصلية (${entry.original} كغ) بعد خصم المرتجعات السابقة (${entry.returned} كغ)`,
-            );
-          }
+      } else {
+        // No specific invoice given: conservation is scoped to the party's
+        // entire active invoice history on each referenced roll instead of
+        // one invoice. This still allows the legitimate "operator didn't
+        // pick a specific invoice" workflow while making fabrication
+        // impossible — a roll that was never sold/purchased by this party
+        // simply has no entry in the map, and the guard below rejects it.
+        const rollIds = Array.from(new Set(input.lines.map((l) => l.rollId)));
+        const historical = await tx
+          .select({
+            rollId: invoiceLines.rollId,
+            total: sql<number>`COALESCE(SUM(${invoiceLines.quantityKg}), 0)`,
+          })
+          .from(invoiceLines)
+          .innerJoin(
+            invoices,
+            and(
+              eq(invoices.id, invoiceLines.invoiceId),
+              eq(invoices.tenantId, ctx.tenantId),
+              eq(invoices.partyId, input.partyId),
+              eq(invoices.type, expectedInvoiceType),
+              eq(invoices.status, "active"),
+            ),
+          )
+          .where(and(eq(invoiceLines.tenantId, ctx.tenantId), inArray(invoiceLines.rollId, rollIds)))
+          .groupBy(invoiceLines.rollId);
+        for (const h of historical) {
+          invoiceLineQtys.set(h.rollId, { original: Math.round(Number(h.total) * 100) / 100, returned: 0 });
+        }
+        const prevReturns = await tx
+          .select({
+            rollId: returnLines.rollId,
+            total: sql<number>`COALESCE(SUM(${returnLines.quantityKg}), 0)`,
+          })
+          .from(returnLines)
+          .innerJoin(
+            returns,
+            and(
+              eq(returns.id, returnLines.returnId),
+              ne(returns.id, row.id),
+              eq(returns.status, "active"),
+              eq(returns.kind, input.kind),
+              eq(returns.partyId, input.partyId),
+              eq(returns.tenantId, ctx.tenantId),
+            ),
+          )
+          .where(inArray(returnLines.rollId, rollIds))
+          .groupBy(returnLines.rollId);
+        for (const pr of prevReturns) {
+          const entry = invoiceLineQtys.get(pr.rollId);
+          if (entry) entry.returned = Math.round(Number(pr.total) * 100) / 100;
+        }
+      }
+
+      // Guard every line — no silent skip. A roll absent from the map (never
+      // sold/purchased to this party, or not part of the given invoice) is a
+      // hard rejection, not a pass-through.
+      for (const line of input.lines) {
+        const entry = invoiceLineQtys.get(line.rollId);
+        const verb = input.kind === "sale" ? "بيعها" : "شراؤها";
+        if (!entry) {
+          throw new Error(
+            input.originalInvoiceId
+              ? `اللفافة المحددة لا تنتمي إلى بنود الفاتورة الأصلية المحددة`
+              : `لا يوجد سجل بأن هذه اللفافة تم ${verb} لهذا الطرف — لا يمكن إرجاعها`,
+          );
+        }
+        if (line.quantityKg > entry.original - entry.returned) {
+          const verb2 = input.kind === "sale" ? "المباعة" : "المشتراة";
+          throw new Error(
+            `الكمية المرتجعة (${line.quantityKg} كغ) تتجاوز الكمية ${verb2} (${entry.original} كغ) بعد خصم المرتجعات السابقة (${entry.returned} كغ)`,
+          );
         }
       }
 
