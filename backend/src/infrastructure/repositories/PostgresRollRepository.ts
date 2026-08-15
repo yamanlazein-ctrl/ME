@@ -137,18 +137,52 @@ export class PostgresRollRepository implements IRollRepository {
     // manual roll edit that changes stock leaves zero trace in the
     // "append-only audit trail of every stock change" the stock_movements
     // table's own schema comment promises. When remainingKg is not part of
-    // this update, behavior is unchanged (a single non-transactional
-    // UPDATE, as before). When it is, the update now runs inside a
-    // transaction that locks the row, reads the true prior balance, and
-    // writes a matching "adjustment" movement so the change is traceable
-    // and reconcilable against remainingKg like every other mutation.
+    // this update, behavior is unchanged. When it is, the update now runs
+    // inside a transaction that locks the row, reads the true prior
+    // balance, and writes a matching "adjustment" movement so the change
+    // is traceable and reconcilable against remainingKg like every other
+    // mutation.
+    //
+    // Fix H-5 (forensic audit 2026-08-15, live-reproduced): `version` was
+    // incremented on every update but never COMPARED — a blind
+    // last-writer-wins write with no real optimistic lock, despite the
+    // column existing for exactly this purpose (decrement()/increment()
+    // below already enforce it correctly). A roll edit issued concurrently
+    // with a sale could overwrite the sale's just-deducted remainingKg
+    // with the editor's stale figure, silently erasing the sale.
+    // `expectedVersion` is optional (see IRollRepository.ts) so callers
+    // that haven't adopted it yet keep the previous blind-write behavior
+    // unchanged; when sent, both the remainingKg-less and remainingKg
+    // branches below enforce it with a real compare-and-swap in the
+    // UPDATE's WHERE clause.
+    const applyVersionGuard = (
+      conditions: ReturnType<typeof and>[],
+    ): ReturnType<typeof and>[] =>
+      data.expectedVersion !== undefined
+        ? [...conditions, eq(rolls.version, data.expectedVersion)]
+        : conditions;
+
     if (data.remainingKg === undefined) {
       const [row] = await this.db
         .update(rolls)
         .set(values)
-        .where(and(eq(rolls.id, id), eq(rolls.tenantId, ctx.tenantId)))
+        .where(
+          and(
+            ...applyVersionGuard([eq(rolls.id, id), eq(rolls.tenantId, ctx.tenantId)]),
+          ),
+        )
         .returning();
-      if (!row) throw new Error("Roll not found");
+      if (!row) {
+        if (data.expectedVersion !== undefined) {
+          const stillExists = await this.findById(id, ctx);
+          throw new Error(
+            stillExists
+              ? "تم تعديل اللفافة بواسطة عملية أخرى — أعد التحميل والمحاولة مرة أخرى"
+              : "Roll not found",
+          );
+        }
+        throw new Error("Roll not found");
+      }
       return this.toDomain(row);
     }
 
@@ -164,9 +198,20 @@ export class PostgresRollRepository implements IRollRepository {
       const [row] = await tx
         .update(rolls)
         .set(values)
-        .where(and(eq(rolls.id, id), eq(rolls.tenantId, ctx.tenantId)))
+        .where(
+          and(
+            ...applyVersionGuard([eq(rolls.id, id), eq(rolls.tenantId, ctx.tenantId)]),
+          ),
+        )
         .returning();
-      if (!row) throw new Error("Roll not found");
+      if (!row) {
+        if (data.expectedVersion !== undefined) {
+          throw new Error(
+            "تم تعديل اللفافة بواسطة عملية أخرى — أعد التحميل والمحاولة مرة أخرى",
+          );
+        }
+        throw new Error("Roll not found");
+      }
 
       const oldKg = Number(before.remainingKg);
       const newKg = Number(data.remainingKg);

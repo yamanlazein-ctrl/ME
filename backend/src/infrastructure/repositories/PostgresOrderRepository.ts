@@ -110,6 +110,8 @@ export class PostgresOrderRepository implements IOrderRepository {
               .select()
               .from(rolls)
               .where(and(eq(rolls.id, it.rollId), eq(rolls.tenantId, ctx.tenantId)))
+              .for("update") // Fix H-4: lock the row so a concurrent order creation
+              // cannot read the same "in_stock" snapshot before this transaction commits.
               .limit(1);
             if (!rollRow) {
               throw new Error("اللفافة المحددة غير موجودة");
@@ -125,10 +127,22 @@ export class PostgresOrderRepository implements IOrderRepository {
                 `الكمية المطلوبة (${it.requestedKg} كغ) لللفافة ${rollRow.rollNo} تتجاوز الرصيد المتاح (${Number(rollRow.remainingKg)} كغ)`,
               );
             }
-            await tx
+            const reservedRows = await tx
               .update(rolls)
               .set({ status: "reserved", updatedAt: new Date() })
-              .where(eq(rolls.id, rollRow.id));
+              // Fix H-4: re-assert status in the WHERE clause as a belt-and-braces
+              // guard even though the row lock above already serializes this path.
+              .where(
+                and(
+                  eq(rolls.id, rollRow.id),
+                  eq(rolls.tenantId, ctx.tenantId),
+                  eq(rolls.status, "in_stock"),
+                ),
+              )
+              .returning({ id: rolls.id });
+            if (reservedRows.length === 0) {
+              throw new Error("اللفافة المحددة محجوزة أو مستهلكة");
+            }
           } else if (it.colorId) {
             // Future-order support: items pinned to a color do NOT require the
             // stock to exist yet. When stock is insufficient the order stays
