@@ -205,6 +205,8 @@ export function registerLedgerRoutes(
     );
     if (r.ok) {
       res.json({ ok: true });
+    } else if (r.code === "ALREADY_CANCELLED") {
+      res.status(409).json({ code: r.code, message: "هذا المرجع تم عكسه مسبقاً" });
     } else {
       res.status(422).json({ code: "VALIDATION", message: r.error });
     }

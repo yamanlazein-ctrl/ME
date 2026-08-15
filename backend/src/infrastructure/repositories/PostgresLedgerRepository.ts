@@ -120,45 +120,89 @@ export class PostgresLedgerRepository implements ILedgerRepository {
     cancelledBy: string,
     ctx: TenantContext,
   ): Promise<void> {
-    const entries = await this.db
-      .select()
-      .from(ledgerEntries)
-      .where(
-        and(
-          eq(ledgerEntries.referenceType, referenceType),
-          eq(ledgerEntries.referenceId, referenceId),
-          eq(ledgerEntries.tenantId, ctx.tenantId),
-          eq(ledgerEntries.status, "active"),
-        ),
-      );
+    // Fix C-4 (forensic audit 2026-08-15, live-reproduced): this used to be
+    // a bare SELECT then a bare INSERT on the pool — no transaction, no
+    // lock, and because the reversal design deliberately keeps the
+    // ORIGINAL rows `status = 'active'` (Q2: "the original row stays
+    // active — history is never rewritten"), there is no state flip for a
+    // second call to observe. A second call — concurrent, or simply a
+    // double-clicked button — re-selects the same active originals and
+    // inserts a SECOND full set of reversal rows, over-reversing the
+    // party's balance by the full document amount every time it happens.
+    //
+    // Fix: run the whole thing inside a transaction, serialized per
+    // (tenant, referenceType, referenceId) by a transactional Postgres
+    // advisory lock — a genuine lock, not just an application-level
+    // check — so two concurrent calls for the SAME reference cannot
+    // interleave; the second one blocks until the first commits. Once
+    // inside the lock, check whether a `type = 'cancellation'` row for
+    // this exact reference already exists. If it does, this reference has
+    // already been reversed — reject instead of inserting again. This
+    // keeps the "original stays active, reversal is a separate immutable
+    // row" design intact; it only closes the missing idempotency guard.
+    await this.db.transaction(async (tx) => {
+      const lockKey = `${ctx.tenantId}:${referenceType}:${referenceId}`;
+      await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${lockKey}, 0))`);
 
-    // Q2 "reversal as a separate row": keep each original entry immutable
-    // (append-only) and write a distinct ACTIVE reversal row with opposite
-    // signs so the pair nets to zero. The original row stays active — history
-    // is never rewritten.
-    if (entries.length > 0) {
-      await this.db.insert(ledgerEntries).values(
-        entries.map((e) => {
-          const entryData = this.toDomain(e);
-          const reversal = computeReversal(entryData);
-          return {
-            tenantId: ctx.tenantId,
-            partyId: e.partyId,
-            date: new Date().toISOString().slice(0, 10),
-            type: "cancellation" as const,
-            debit: reversal.debit,
-            credit: reversal.credit,
-            currency: e.currency,
-            cashImpact: reversal.cashImpact,
-            referenceType,
-            referenceId,
-            referenceNumber: e.referenceNumber,
-            description: `إلغاء قيد ${e.referenceNumber ?? referenceId}`,
-            createdBy: ctx.userId,
-          };
-        }),
-      );
-    }
+      const alreadyReversed = await tx
+        .select({ id: ledgerEntries.id })
+        .from(ledgerEntries)
+        .where(
+          and(
+            eq(ledgerEntries.tenantId, ctx.tenantId),
+            eq(ledgerEntries.referenceType, referenceType),
+            eq(ledgerEntries.referenceId, referenceId),
+            eq(ledgerEntries.type, "cancellation"),
+          ),
+        )
+        .limit(1);
+      if (alreadyReversed.length > 0) {
+        throw Object.assign(
+          new Error("This reference has already been reversed"),
+          { code: "ALREADY_CANCELLED" as const },
+        );
+      }
+
+      const entries = await tx
+        .select()
+        .from(ledgerEntries)
+        .where(
+          and(
+            eq(ledgerEntries.referenceType, referenceType),
+            eq(ledgerEntries.referenceId, referenceId),
+            eq(ledgerEntries.tenantId, ctx.tenantId),
+            eq(ledgerEntries.status, "active"),
+          ),
+        );
+
+      // Q2 "reversal as a separate row": keep each original entry immutable
+      // (append-only) and write a distinct ACTIVE reversal row with opposite
+      // signs so the pair nets to zero. The original row stays active — history
+      // is never rewritten.
+      if (entries.length > 0) {
+        await tx.insert(ledgerEntries).values(
+          entries.map((e) => {
+            const entryData = this.toDomain(e);
+            const reversal = computeReversal(entryData);
+            return {
+              tenantId: ctx.tenantId,
+              partyId: e.partyId,
+              date: new Date().toISOString().slice(0, 10),
+              type: "cancellation" as const,
+              debit: reversal.debit,
+              credit: reversal.credit,
+              currency: e.currency,
+              cashImpact: reversal.cashImpact,
+              referenceType,
+              referenceId,
+              referenceNumber: e.referenceNumber,
+              description: `إلغاء قيد ${e.referenceNumber ?? referenceId}`,
+              createdBy: ctx.userId,
+            };
+          }),
+        );
+      }
+    });
   }
 
   async getBalance(partyId: UUID, ctx: TenantContext, currency: string = "SYP"): Promise<PartyBalance> {
