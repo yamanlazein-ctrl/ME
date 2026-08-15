@@ -22,6 +22,11 @@ import { NotFoundError } from "../../../domain/errors/index.js";
 export function idempotency(...methods: string[]): RequestHandler {
   const allowed = new Set(methods.map((m) => m.toUpperCase()));
   return async (req: Request, res: Response, next: NextFunction) => {
+    // Fix C-6 (forensic audit 2026-08-15): track whether the client actually
+    // asked for idempotency protection (sent a valid key), captured outside
+    // the try block so the catch below can tell "nothing to protect" apart
+    // from "protection was requested and the storage layer just broke".
+    let requestedProtection = false;
     try {
       if (!allowed.has(req.method.toUpperCase())) {
         return next();
@@ -30,6 +35,7 @@ export function idempotency(...methods: string[]): RequestHandler {
       if (!key) {
         return next(); // no key, no idempotency — treat as fresh request
       }
+      requestedProtection = true;
       const tenantId = req.tenantContext?.tenantId;
       if (!tenantId) {
         // No tenant context — skip idempotency (middleware order issue)
@@ -89,7 +95,32 @@ export function idempotency(...methods: string[]): RequestHandler {
       });
       next();
     } catch (e) {
-      // If idempotency storage is broken, still serve the request
+      // Fix C-6: this used to unconditionally call next() on ANY error —
+      // "if idempotency storage is broken, still serve the request" — which
+      // is the third fail-open layer (on top of the in-memory Map fallback
+      // fixed in idempotency.middleware.ts): even a total storage outage
+      // (Redis down AND Postgres unreachable) let every write through
+      // completely unprotected, silently.
+      //
+      // A request that never asked for idempotency (no key sent) has
+      // nothing to protect and must proceed normally — failing closed here
+      // would break every plain POST whenever storage hiccups, for zero
+      // benefit. But a request that DID send an Idempotency-Key is
+      // explicitly asking "do not double-apply this financial write if I
+      // retry" — silently downgrading that promise to "best effort, no
+      // guarantee" without telling the caller defeats the entire point of
+      // sending the header. Fail closed for that case: reject with 503 so
+      // the client's own retry logic (which is presumably why it sent an
+      // idempotency key in the first place) waits and retries, rather than
+      // racing an unprotected duplicate write.
+      if (requestedProtection) {
+        res.status(503).json({
+          code: "IDEMPOTENCY_STORAGE_UNAVAILABLE",
+          message: "تعذّر ضمان عدم تكرار الطلب حالياً — يرجى إعادة المحاولة",
+          statusCode: 503,
+        });
+        return;
+      }
       next();
     }
   };

@@ -35,3 +35,4 @@ export * from "./server-installation.table.js";
 export * from "./system-admin.table.js";
 export * from "./invitation-code.table.js";
 export * from "./stock-movement.table.js";
+export * from "./idempotency-key.table.js";
