@@ -128,13 +128,66 @@ export class PostgresRollRepository implements IRollRepository {
     if (data.widthCm !== undefined) values.widthCm = data.widthCm ? String(data.widthCm) : null;
     if (data.weightGsm !== undefined)
       values.weightGsm = data.weightGsm ? String(data.weightGsm) : null;
-    const [row] = await this.db
-      .update(rolls)
-      .set(values)
-      .where(and(eq(rolls.id, id), eq(rolls.tenantId, ctx.tenantId)))
-      .returning();
-    if (!row) throw new Error("Roll not found");
-    return this.toDomain(row);
+
+    // Fix BUG-05 (forensic audit 2026-08-15, live-reproduced): PUT
+    // /api/inventory/rolls/:id let remainingKg be overwritten directly with
+    // no stock_movements row at all — every other write path to
+    // remainingKg (invoice sale/entry, returns, print send/receive) records
+    // one via recordStockMovement(); this path silently skipped it, so a
+    // manual roll edit that changes stock leaves zero trace in the
+    // "append-only audit trail of every stock change" the stock_movements
+    // table's own schema comment promises. When remainingKg is not part of
+    // this update, behavior is unchanged (a single non-transactional
+    // UPDATE, as before). When it is, the update now runs inside a
+    // transaction that locks the row, reads the true prior balance, and
+    // writes a matching "adjustment" movement so the change is traceable
+    // and reconcilable against remainingKg like every other mutation.
+    if (data.remainingKg === undefined) {
+      const [row] = await this.db
+        .update(rolls)
+        .set(values)
+        .where(and(eq(rolls.id, id), eq(rolls.tenantId, ctx.tenantId)))
+        .returning();
+      if (!row) throw new Error("Roll not found");
+      return this.toDomain(row);
+    }
+
+    return this.db.transaction(async (tx) => {
+      const [before] = await tx
+        .select({ remainingKg: rolls.remainingKg })
+        .from(rolls)
+        .where(and(eq(rolls.id, id), eq(rolls.tenantId, ctx.tenantId)))
+        .for("update")
+        .limit(1);
+      if (!before) throw new Error("Roll not found");
+
+      const [row] = await tx
+        .update(rolls)
+        .set(values)
+        .where(and(eq(rolls.id, id), eq(rolls.tenantId, ctx.tenantId)))
+        .returning();
+      if (!row) throw new Error("Roll not found");
+
+      const oldKg = Number(before.remainingKg);
+      const newKg = Number(data.remainingKg);
+      const delta = Math.round((newKg - oldKg) * 100) / 100;
+      if (delta !== 0) {
+        await recordStockMovement(
+          tx,
+          {
+            rollId: id,
+            direction: delta > 0 ? "in" : "out",
+            movementType: "adjustment",
+            quantityKg: Math.abs(delta),
+            balanceAfterKg: newKg,
+            movementDate: new Date().toISOString().slice(0, 10),
+            description: `تعديل يدوي على اللفافة عبر شاشة المخزون (${oldKg} → ${newKg} كغ)`,
+          },
+          ctx,
+        );
+      }
+      return this.toDomain(row);
+    });
   }
 
   async decrement(
