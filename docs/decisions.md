@@ -233,15 +233,99 @@ physically contains the old `credit = 1000` instead of `debit = 1000`.
 
 **Before this fix is applied to any database holding real supplier
 data**: every existing supplier with a non-zero opening balance needs a
-one-time, explicitly-reviewed data migration that swaps `debit` and
-`credit` on its `type = 'opening'` ledger row (and the matching
-`opening_equity` contra row). This was intentionally NOT done
-automatically as part of this code fix — it touches existing financial
-records for real counterparties, which is exactly the kind of change
-this protocol's escalation rules require a human decision on, not an
-autonomous one. Until that migration runs, any supplier that already
-has an opening balance will show an incorrect (though now at least
-*self-consistent* across both balance endpoints) figure after this
-code ships. Suppliers with no opening balance, and every transaction
-that happens after this fix ships, are unaffected and correct
-immediately.
+one-time, explicitly-reviewed data migration to correct its
+`type = 'opening'` ledger row's contribution. This was flagged rather
+than done automatically in the original pass of this decision — it
+touches existing financial records for real counterparties. The user
+explicitly authorized running this migration in this session (the
+project has not launched to real customers yet), so it was executed
+against this same test database; see D-004 below for the exact
+before/after evidence per affected supplier and the migration method
+used.
+
+## D-004 — Supplier opening-balance migration executed (test database, user-authorized)
+
+**Scope check first.** Queried every supplier in the database for a
+non-zero `type = 'opening'` ledger row and inspected its actual sign:
+
+| Supplier | opening row | Needs correction? |
+|---|---|---|
+| SUP-C8-TEST (id `54543bf2-...`) | `debit=0, credit=1000` | **Yes** — written before the D-003 fix |
+| SUP-C8-FIXED (id `7951daa1-...`) | `debit=1000, credit=0` | No — written after the D-003 fix, already correct |
+
+Exactly one supplier in this database needed correction.
+
+**Method — a correcting entry, not an edit.** The append-only trigger
+installed in D-001 (`trg_ledger_entries_append_only`) unconditionally
+blocks any `UPDATE` that changes `debit`/`credit`, on any row,
+regardless of status — and that protection was intentionally left in
+place, not bypassed. Financial corrections in this system are meant to
+be additive: post a new entry, never rewrite a posted one. The
+correcting entry needed is a simple margin calculation: the wrong
+opening row currently contributes `margin = 1*(0-1000) = -1000` to the
+running balance (under the new, correct, uniform-mult formula); the
+right contribution should be `+1000`. The difference is `+2000`, so a
+balanced correcting pair of `debit=2000` (party leg, type=`adjustment`)
+and `credit=2000` (contra leg, `partyId=NULL`, type=`adjustment_contra`)
+closes exactly that gap — both tagged `referenceType='c8_sign_correction'`
+and `referenceId=<supplierId>` for traceability, with a description
+naming exactly what was wrong and why.
+
+Inserted via a direct SQL `INSERT` (not the `POST /api/ledger` route,
+since `writeLedgerEntrySchema` requires `partyId` as a mandatory UUID
+and cannot express the `partyId = NULL` contra leg the equity-offset
+convention already uses elsewhere in this same table — a separate,
+pre-existing gap, not something this migration needed to fix). The
+`INSERT` path is unaffected by the append-only trigger, which only
+guards `UPDATE`/`DELETE`.
+
+**Live before → after, for SUP-C8-TEST specifically:**
+
+| | Before migration | Hand-computed ground truth | After migration |
+|---|---|---|---|
+| `GET .../suppliers/:id/statement` → `finalBalance` | `-500` | `1500` | **`1500`** ✅ |
+| `GET /api/ledger/balance/:id` → `balance` | `-500` | `1500` | **`1500`** ✅ |
+
+**Proof the old row was preserved, not altered.** Direct query of every
+ledger row for this supplier (and its `partyId = NULL` contras) after
+the migration shows the original `opening` row still reads
+`debit=0, credit=1000` — byte-for-byte the same wrong value it always
+had — immediately followed by the new `adjustment` / `adjustment_contra`
+pair (`debit=2000` / `credit=2000`). History was not rewritten; a
+correction was appended next to it, exactly as the append-only design
+requires.
+
+**Proof the ledger stayed balanced.** `SUM(debit) = SUM(credit) = 3000`
+across all four rows tied to this supplier's opening + correction
+(`opening` 0/1000, `opening_equity` 1000/0, `adjustment` 2000/0,
+`adjustment_contra` 0/2000) — confirmed by direct aggregate query,
+satisfying the same per-currency balance invariant C-7 now enforces on
+every new batch write.
+
+No other supplier or customer in this database required correction.
+
+**A real bug was caught in this migration's own tooling, live, and is
+recorded here rather than quietly fixed and forgotten.** After writing
+the one-off correction above by hand, a reusable script
+(`backend/scripts/migrate-c8-supplier-opening-sign.cjs`) was written to
+make this repeatable for any other affected supplier. Its first version
+detected candidates by inspecting the (immutable) `opening` row alone —
+which, correctly, never changes even after a correction is posted next
+to it. Running the script therefore found SUP-C8-TEST's still-wrong
+`opening` row a second time and posted a SECOND correcting pair,
+overshooting the balance to `3500` instead of the correct `1500`
+(confirmed live: `balance = 3500` immediately after the second run).
+This is the exact same class of missing-idempotency defect fixed
+elsewhere in this session (C-4, BUG-01) — caught here in the
+migration tooling itself rather than in application code.
+
+Fixed by adding a `NOT EXISTS` guard excluding any supplier that
+already has a `referenceType = 'c8_sign_correction'` row, then
+corrected the live over-application with a further reversing pair
+(`adjustment` credit=2000 / `adjustment_contra` debit=2000, tagged
+`referenceType = 'c8_sign_correction_reversal'`) rather than editing
+either of the two already-posted correction rows — same append-only
+discipline as the rest of this migration. Verified live: balance
+returned to the correct `1500` on both endpoints, and re-running the
+fixed script reports "No suppliers need correction" with the balance
+unchanged, confirming it is now genuinely idempotent.
