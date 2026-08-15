@@ -103,5 +103,65 @@ verification pass.
 
 ---
 
-*(Further decisions — C-4, C-5, C-7, C-8 — appended below as each is
-completed.)*
+## D-002 — C-4, C-5, C-7 applied as coded (transaction/lock/batch-balance fixes, no sign or schema decisions)
+
+Brief entries for completeness — none of these required a sensitive
+direction decision the way C-8 did, so they are logged here mainly for
+the audit trail rather than because a judgment call needed recording.
+
+- **C-4** (`PostgresLedgerRepository.cancelByReference`): added a
+  transactional Postgres advisory lock keyed by
+  `(tenantId, referenceType, referenceId)` plus a pre-insert check for an
+  existing `type = 'cancellation'` row for that reference. Live-verified:
+  a duplicate cancel call on the same reference now returns
+  `409 ALREADY_CANCELLED` instead of inserting a second (and, on a third
+  call, geometrically compounding) set of reversal rows. See the fix
+  commit on `fix/ledger-cancel-idempotent` for the full live before/after
+  transcript.
+- **C-5** (`PostgresStatementRepository.settle`): wrapped the balance
+  read and the settlement insert in one transaction holding a
+  `FOR UPDATE` lock on the party row.
+
+  **Update — definitively confirmed, both directions.** The first pass
+  reported an honest negative: 2-way, same-tick `Promise.all`, and 8-way
+  parallel requests at real network timing could not force a double-spend
+  on either the original or the fixed code in this low-latency local
+  Postgres instance — the race window is real by inspection, just too
+  narrow to lose reliably at real timing. That result was correctly
+  flagged as inconclusive rather than treated as proof either way,
+  and a follow-up review asked, correctly, whether the "before" case
+  had actually been exercised on the pre-fix code specifically (it had —
+  via `git stash` reverting the file, confirmed by grep — but the
+  negative result alone still didn't prove the vulnerability, only that
+  it couldn't be forced by timing).
+
+  To settle this conclusively, the pre-fix code was temporarily restored
+  (`git stash`/manual revert) with a 300ms artificial delay inserted
+  between the balance SELECT and the settlement INSERT — deterministically
+  widening the exact window the static read identified, rather than
+  relying on real network jitter. Under that widened window:
+  - **Original (pre-fix) code + 300ms delay**: two genuinely parallel
+    `Promise.all` requests against a customer with balance 5,235,000 SYP
+    BOTH succeeded, each posting a full settlement of 5,235,000. Final
+    balance: **-5,235,000** instead of 0 — the double-spend, reproduced
+    on demand.
+  - **Fixed code + the same 300ms delay in the same place** (inside the
+    transaction, after the `FOR UPDATE` lock, before the insert): the
+    first request succeeded (settled 5,158,000); the second was rejected
+    with `"الرصيد صفر لا يحتاج تسوية"` because it blocked on the lock,
+    then re-read the now-zero balance after the first committed. Final
+    balance: **0**, exactly.
+
+  The diagnostic delay was reverted immediately after each side of the
+  test (`git checkout --` on the file), confirmed via `git diff HEAD`
+  returning empty — no diagnostic code was left in the shipped fix. This
+  is now a genuine, deterministic before/after proof, not just a
+  structurally-correct-but-unconfirmed fix. See `fix/statement-settle-atomic`.
+- **C-7** (`writeLedgerUseCase`): added a per-currency
+  Σdebit = Σcredit check across the whole batch (grouped by currency,
+  never summed across currencies), in addition to the pre-existing
+  per-entry single-sidedness check. Live-verified: a single-entry
+  5,000,000 debit-only batch that previously inflated a customer's
+  balance is now rejected; a batch balanced only when SYP and USD are
+  summed together is also rejected; a genuinely balanced same-currency
+  batch still succeeds. See `fix/ledger-batch-balance`.
