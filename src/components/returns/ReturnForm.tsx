@@ -1,5 +1,6 @@
 import { useState, useMemo } from "react";
 import { useNavigate } from "@tanstack/react-router";
+import { formatQuantity, formatMoney } from "@/shared/utils/formatNumber";
 import { PageCard } from "@/components/layout/PageCard";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -234,6 +235,7 @@ export function ReturnForm({ kind }: { kind: ReturnKind }) {
                     <td className="px-3 py-2 text-left">
                       <Input
                         type="number"
+                        step="0.01"
                         value={l.quantityKg || ""}
                         onChange={(e) => update(l.id, { quantityKg: Number(e.target.value) })}
                         className="h-9 w-24"
@@ -242,6 +244,7 @@ export function ReturnForm({ kind }: { kind: ReturnKind }) {
                     <td className="px-3 py-2 text-left">
                       <Input
                         type="number"
+                        step="0.01"
                         value={l.pricePerKg || ""}
                         onChange={(e) => update(l.id, { pricePerKg: Number(e.target.value) })}
                         className="h-9 w-28"

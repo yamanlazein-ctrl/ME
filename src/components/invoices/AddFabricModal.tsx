@@ -278,6 +278,7 @@ export function AddFabricModal({
               <Field label="العرض (سم)">
                 <Input
                   type="number"
+                  step="0.01"
                   value={widthCm}
                   onChange={(e) => setWidthCm(e.target.value === "" ? "" : Number(e.target.value))}
                   className="h-11 tabular-nums"
@@ -286,6 +287,7 @@ export function AddFabricModal({
               <Field label="الوزن / الكثافة (غ/م²)">
                 <Input
                   type="number"
+                  step="0.01"
                   value={weightGsm}
                   onChange={(e) =>
                     setWeightGsm(e.target.value === "" ? "" : Number(e.target.value))
@@ -296,6 +298,7 @@ export function AddFabricModal({
               <Field label="الكمية *">
                 <Input
                   type="number"
+                  step="0.01"
                   value={quantity}
                   onChange={(e) => setQuantity(e.target.value === "" ? "" : Number(e.target.value))}
                   className="h-11 tabular-nums"
@@ -304,6 +307,7 @@ export function AddFabricModal({
               <Field label="سعر الشراء *">
                 <Input
                   type="number"
+                  step="0.01"
                   value={purchasePrice}
                   onChange={(e) =>
                     setPurchasePrice(e.target.value === "" ? "" : Number(e.target.value))
@@ -314,6 +318,7 @@ export function AddFabricModal({
               <Field label="سعر البيع">
                 <Input
                   type="number"
+                  step="0.01"
                   value={salePrice}
                   onChange={(e) =>
                     setSalePrice(e.target.value === "" ? "" : Number(e.target.value))

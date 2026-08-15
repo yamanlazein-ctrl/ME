@@ -798,6 +798,7 @@ function EntryInvoicePage() {
                         <CardField label="الوزن القائم (كغ)">
                           <Input
                             type="number"
+                            step="0.01"
                             value={l.grossKg || ""}
                             onChange={(e) =>
                               updateLine(l.id, {
@@ -812,6 +813,7 @@ function EntryInvoicePage() {
                         <CardField label="الوزن الصافي (كغ)" required>
                           <Input
                             type="number"
+                            step="0.01"
                             value={l.quantity || ""}
                             onChange={(e) =>
                               updateLine(l.id, {
@@ -847,6 +849,7 @@ function EntryInvoicePage() {
                         <CardField label={`السعر / كغ (${currencySymbol(currency)})`} required>
                           <Input
                             type="number"
+                            step="0.01"
                             value={l.pricePerKg || ""}
                             onChange={(e) =>
                               updateLine(l.id, {
