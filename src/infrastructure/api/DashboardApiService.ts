@@ -28,7 +28,11 @@ export interface BackendDashboardResponse {
   outstandingOrders: number;
   lowStockFabrics: number;
   lowStockRolls: { low: number; outOfStock: number };
-  todayProfit: { syp: number; marginPercent: number; trend: "up" | "down" };
+  // Fix H-7: byCurrency breakdown, matching the backend fix — never a
+  // single number that silently summed every currency's profit.
+  todayProfit: {
+    byCurrency: Record<string, { today: number; marginPercent: number; trend: "up" | "down" }>;
+  };
   activeRolls: { total: number; fabricTypes: number; colors: number };
   totalInventoryKg: number;
   activeTodayCustomers: number;
@@ -36,7 +40,8 @@ export interface BackendDashboardResponse {
     count: number;
     byCurrency: Record<string, { count: number; totalDue: number }>;
   };
-  salesTrend: Record<string, Array<{ label: string; value: number }>>;
+  // Fix H-7: per-day byCurrency breakdown instead of one blended value.
+  salesTrend: Record<string, Array<{ label: string; byCurrency: Record<string, number> }>>;
   alerts: Array<{
     category: "inventory" | "financial";
     level: "low" | "out" | "overdue";
@@ -47,9 +52,21 @@ export interface BackendDashboardResponse {
     remaining?: string;
   }>;
   topCustomers: Array<{ partyId: string; name: string; revenue: number }>;
-  topFabrics: Array<{ fabricId: string; name: string; kgSold: number; revenue: number }>;
+  // Fix H-7: revenueByCurrency instead of one number that summed every
+  // currency's revenue for that fabric.
+  topFabrics: Array<{
+    fabricId: string;
+    name: string;
+    kgSold: number;
+    revenueByCurrency: Record<string, number>;
+  }>;
   cashbox: { balance: number; todayMovementCount: number; isLocked: boolean };
-  vouchers: { receiptsThisMonth: number; paymentsThisMonth: number; count: number };
+  // Fix H-7: byCurrency breakdown instead of one blended
+  // receiptsThisMonth/paymentsThisMonth number.
+  vouchers: {
+    byCurrency: Record<string, { receipts: number; payments: number; count: number }>;
+    count: number;
+  };
   unreadNotifications: number;
   recentActivity: Array<{ module: string; action: string; detail: string; timestamp: string }>;
   recentTransactions: BackendDashboardTransaction[];

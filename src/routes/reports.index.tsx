@@ -27,12 +27,13 @@ import {
 } from "@/presentation/hooks/useInventory";
 import { suppliers, customers } from "@/presentation/hooks/useParties";
 import { invoiceTotal } from "@/core/calculations/invoiceCalc";
-import { currencyState } from "@/presentation/hooks/useCurrency";
+import {
+  formatCurrencyBreakdown,
+  groupAmountsByCurrency,
+  addCurrencyBreakdowns,
+} from "@/presentation/hooks/useCurrency";
 
 export const Route = createFileRoute("/reports/")({ component: ReportsPage });
-
-const toSYP = (amount: number, currency: string) =>
-  currency === "USD" ? amount * currencyState.rates.USD : amount;
 
 // Full dataset for accurate aggregation — reports must never be limited by
 // the paginated (limit=20) default used by the invoices/summaries pages.
@@ -82,34 +83,35 @@ function ReportsPage() {
 
   const inRange = (date: string) => (cutoff ? date >= cutoff : true);
 
+  // Fix BUG-06 / C-9 / C-10 (forensic audit 2026-08-15): every total below
+  // used to convert non-SYP amounts through a hardcoded EXCHANGE_RATES
+  // guess (toSYP) and sum the result into one blended number. Group by
+  // currency instead — the true, unconverted amount for each currency —
+  // and render via formatCurrencyBreakdown, which shows each currency's
+  // own figure ("500,000 ل.س + 200 $") and never combines them.
   const salesInvoices = activeInvoices.filter(
     (i) => i.type === "sale" && inRange(i.date),
   );
-  const totalSales = salesInvoices.reduce(
-    (s, i) => s + toSYP(invoiceTotal(i), i.currency),
-    0,
+  const totalSalesByCurrency = groupAmountsByCurrency(salesInvoices, invoiceTotal, (i) => i.currency);
+  const totalReceivedByCurrency = groupAmountsByCurrency(
+    salesInvoices,
+    (i) => paidByInvoice(i.id),
+    (i) => i.currency,
   );
-  const totalReceived = salesInvoices.reduce(
-    (s, i) => s + toSYP(paidByInvoice(i.id), i.currency),
-    0,
-  );
-  const receivables = salesInvoices.reduce(
-    (s, i) =>
-      s + toSYP(Math.max(0, invoiceTotal(i) - paidByInvoice(i.id)), i.currency),
-    0,
+  const receivablesByCurrency = groupAmountsByCurrency(
+    salesInvoices,
+    (i) => Math.max(0, invoiceTotal(i) - paidByInvoice(i.id)),
+    (i) => i.currency,
   );
 
   const purchaseInvoices = activeInvoices.filter(
     (i) => i.type === "entry" && inRange(i.date),
   );
-  const totalPurchases = purchaseInvoices.reduce(
-    (s, i) => s + toSYP(invoiceTotal(i), i.currency),
-    0,
-  );
-  const payables = purchaseInvoices.reduce(
-    (s, i) =>
-      s + toSYP(Math.max(0, invoiceTotal(i) - paidByInvoice(i.id)), i.currency),
-    0,
+  const totalPurchasesByCurrency = groupAmountsByCurrency(purchaseInvoices, invoiceTotal, (i) => i.currency);
+  const payablesByCurrency = groupAmountsByCurrency(
+    purchaseInvoices,
+    (i) => Math.max(0, invoiceTotal(i) - paidByInvoice(i.id)),
+    (i) => i.currency,
   );
 
   const salesReturns = activeReturns.filter(
@@ -118,37 +120,32 @@ function ReportsPage() {
   const entryReturns = activeReturns.filter(
     (r) => r.kind === "entry" && inRange(r.date),
   );
-  const totalSalesReturns = salesReturns.reduce(
-    (s, r) =>
-      s +
-      toSYP(
-        r.lines.reduce((sum, l) => sum + l.quantityKg * l.pricePerKg, 0),
-        r.currency || "SYP",
-      ),
-    0,
+  const returnAmountOf = (r: (typeof salesReturns)[number]) =>
+    r.lines.reduce((sum, l) => sum + l.quantityKg * l.pricePerKg, 0);
+  const totalSalesReturnsByCurrency = groupAmountsByCurrency(
+    salesReturns,
+    returnAmountOf,
+    (r) => r.currency || "SYP",
   );
-  const totalEntryReturns = entryReturns.reduce(
-    (s, r) =>
-      s +
-      toSYP(
-        r.lines.reduce((sum, l) => sum + l.quantityKg * l.pricePerKg, 0),
-        r.currency || "SYP",
-      ),
-    0,
+  const totalEntryReturnsByCurrency = groupAmountsByCurrency(
+    entryReturns,
+    returnAmountOf,
+    (r) => r.currency || "SYP",
   );
 
-  const netRevenue = totalSales - totalSalesReturns;
+  const netRevenueByCurrency = addCurrencyBreakdowns(totalSalesByCurrency, totalSalesReturnsByCurrency, -1);
 
   const periodExpenses = activeExpenses.filter((e) => inRange(e.date));
-  const totalExpensesVal = periodExpenses.reduce(
-    (s, e: { amount: number; currency: string }) =>
-      s + toSYP(e.amount, e.currency),
-    0,
+  const totalExpensesByCurrency = groupAmountsByCurrency(
+    periodExpenses,
+    (e: { amount: number; currency: string }) => e.amount,
+    (e) => e.currency,
   );
 
-  const inventoryValue = rolls.reduce(
-    (s, r) => s + toSYP(r.remainingKg * r.pricePerKg, r.currency),
-    0,
+  const inventoryValueByCurrency = groupAmountsByCurrency(
+    rolls,
+    (r) => r.remainingKg * r.pricePerKg,
+    (r) => r.currency,
   );
   const totalKg = rolls.reduce((s, r) => s + r.remainingKg, 0);
   const lowStockFabrics = fabrics.filter((f) => {
@@ -165,36 +162,41 @@ function ReportsPage() {
     return kg <= (f.minStockKg ?? 0);
   });
 
+  // Fix BUG-06/C-9/C-10: ranked by physical kg sold (currency-agnostic —
+  // safe to sum) instead of a toSYP-blended revenue number. The UI below
+  // only ever displays `qty`, never revenue, for this card.
   const topFabrics = useMemo(() => {
-    const map = new Map<string, { qty: number; revenue: number }>();
+    const map = new Map<string, { qty: number }>();
     salesInvoices.forEach((inv) => {
       inv.lines.forEach((l) => {
-        const cur = map.get(l.fabricId) ?? { qty: 0, revenue: 0 };
+        const cur = map.get(l.fabricId) ?? { qty: 0 };
         cur.qty += l.quantityKg;
-        cur.revenue += toSYP(l.quantityKg * l.pricePerKg, inv.currency);
         map.set(l.fabricId, cur);
       });
     });
     return [...map.entries()]
       .map(([id, v]) => ({ fabric: fabricById(id), ...v }))
-      .sort((a, b) => b.revenue - a.revenue)
+      .sort((a, b) => b.qty - a.qty)
       .slice(0, 5);
   }, [salesInvoices]);
 
+  // Fix BUG-06/C-9/C-10: revenue is now a per-currency breakdown, never a
+  // toSYP-blended single number. Ranked by SYP revenue specifically
+  // (documented, not blended) since a single sortable figure is needed
+  // and there is no real FX rate to fairly compare SYP vs USD customers.
   const topCustomers = useMemo(() => {
-    const map = new Map<string, number>();
+    const map = new Map<string, Record<string, number>>();
     salesInvoices.forEach((inv) => {
-      map.set(
-        inv.partyId,
-        (map.get(inv.partyId) ?? 0) + toSYP(invoiceTotal(inv), inv.currency),
-      );
+      const prev = map.get(inv.partyId) ?? {};
+      prev[inv.currency] = (prev[inv.currency] ?? 0) + invoiceTotal(inv);
+      map.set(inv.partyId, prev);
     });
     return [...map.entries()]
-      .map(([id, revenue]) => ({
+      .map(([id, revenueByCurrency]) => ({
         customer: customers.find((c) => c.id === id),
-        revenue,
+        revenueByCurrency,
       }))
-      .sort((a, b) => b.revenue - a.revenue)
+      .sort((a, b) => (b.revenueByCurrency.SYP ?? 0) - (a.revenueByCurrency.SYP ?? 0))
       .slice(0, 5);
   }, [salesInvoices]);
 
@@ -225,7 +227,7 @@ function ReportsPage() {
         <StatTile
           icon={TrendingUp}
           label="صافي الإيرادات"
-          value={netRevenue}
+          byCurrency={netRevenueByCurrency}
           tone="primary"
         />
         <StatTile
@@ -237,7 +239,7 @@ function ReportsPage() {
         <StatTile
           icon={Package}
           label="قيمة المخزون"
-          value={inventoryValue}
+          byCurrency={inventoryValueByCurrency}
           tone="info"
         />
         <StatTile
@@ -254,38 +256,38 @@ function ReportsPage() {
             <DataRow
               icon={ArrowUpRight}
               label="إجمالي المبيعات"
-              value={formatSYP(totalSales)}
+              value={formatCurrencyBreakdown(totalSalesByCurrency)}
               tone="success"
             />
             <DataRow
               icon={ArrowDownRight}
               label="مرتجعات المبيعات"
-              value={formatSYP(totalSalesReturns)}
+              value={formatCurrencyBreakdown(totalSalesReturnsByCurrency)}
               tone="destructive"
             />
             <DataRow
               icon={ArrowDownRight}
               label="المستحقات (ذمم)"
-              value={formatSYP(receivables)}
+              value={formatCurrencyBreakdown(receivablesByCurrency)}
               tone="warning"
             />
             <hr className="border-border" />
             <DataRow
               icon={ArrowDownRight}
               label="إجمالي المشتريات"
-              value={formatSYP(totalPurchases)}
+              value={formatCurrencyBreakdown(totalPurchasesByCurrency)}
               tone="info"
             />
             <DataRow
               icon={ArrowDownRight}
               label="مرتجعات المشتريات"
-              value={formatSYP(totalEntryReturns)}
+              value={formatCurrencyBreakdown(totalEntryReturnsByCurrency)}
               tone="destructive"
             />
             <DataRow
               icon={ArrowDownRight}
               label="الديون (الذمم)"
-              value={formatSYP(payables)}
+              value={formatCurrencyBreakdown(payablesByCurrency)}
               tone="warning"
             />
           </div>
@@ -296,7 +298,7 @@ function ReportsPage() {
             <DataRow
               icon={ArrowDownRight}
               label="إجمالي المصاريف"
-              value={formatSYP(totalExpensesVal)}
+              value={formatCurrencyBreakdown(totalExpensesByCurrency)}
               tone="destructive"
             />
             <DataRow
@@ -327,7 +329,7 @@ function ReportsPage() {
               <div key={i} className="flex justify-between">
                 <span>{c.customer?.name ?? ""}</span>
                 <span className="tabular-nums font-semibold">
-                  {formatSYP(c.revenue)}
+                  {formatCurrencyBreakdown(c.revenueByCurrency)}
                 </span>
               </div>
             ))}
@@ -378,12 +380,21 @@ function StatTile({
   icon: Icon,
   label,
   value,
+  byCurrency,
   tone,
   isCount,
 }: {
   icon: React.ComponentType<{ className?: string }>;
   label: string;
-  value: number;
+  /** Single-currency or count value (unchanged usage). */
+  value?: number;
+  /**
+   * Fix BUG-06/C-9/C-10: when the underlying figure can span multiple
+   * currencies, pass a breakdown instead of a pre-blended `value` — this
+   * renders each currency's own amount via formatCurrencyBreakdown,
+   * never a toSYP-converted sum.
+   */
+  byCurrency?: Record<string, number>;
   tone?: string;
   isCount?: boolean;
 }) {
@@ -402,8 +413,12 @@ function StatTile({
         <span className="text-[11px] font-semibold">{label}</span>
       </div>
       <div className="mt-1.5 text-lg font-bold tabular-nums">
-        {isCount ? value : formatSYP(value)}
-        {!isCount && (
+        {isCount
+          ? value
+          : byCurrency
+            ? formatCurrencyBreakdown(byCurrency)
+            : formatSYP(value ?? 0)}
+        {!isCount && !byCurrency && (
           <DualCurrency syp={value} className="text-[10px] mt-0.5" />
         )}
       </div>

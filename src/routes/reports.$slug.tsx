@@ -30,7 +30,7 @@ import {
   LEDGER_TYPE_LABEL,
 } from "@/presentation/hooks/useLedger";
 import { formatDateTime } from "@/lib/utils";
-import { currencyState } from "@/presentation/hooks/useCurrency";
+import { formatCurrencyBreakdown, groupAmountsByCurrency } from "@/presentation/hooks/useCurrency";
 import type { ReturnDTO } from "@/application/ports/IReturnRepository";
 import type { Invoice as DomainInvoice } from "@/domain/entities/Invoice";
 import type { LedgerEntry as DomainLedgerEntry } from "@/domain/entities/LedgerEntry";
@@ -48,9 +48,6 @@ export const Route = createFileRoute("/reports/$slug")({
       : "30",
   }),
 });
-
-const toSYP = (a: number, c: string) =>
-  c === "USD" ? a * currencyState.rates.USD : a;
 
 const TITLES: Record<string, { title: string; sub: string }> = {
   "net-sales": { title: "تقرير المبيعات", sub: "فواتير البيع خلال الفترة." },
@@ -309,27 +306,21 @@ function SalesReport({
     vouchers
       .filter((v) => v.status === "active" && v.invoiceId === invoiceId)
       .reduce((s, v) => s + v.amount, 0);
-  const totalSyp = rows.reduce(
-    (s, i) => s + toSYP(invoiceTotal(i), i.currency),
-    0,
-  );
-  const paidSyp = rows.reduce(
-    (s, i) => s + toSYP(paidByInvoice(i.id), i.currency),
-    0,
-  );
-  const remainingSyp = rows.reduce(
-    (s, i) =>
-      s + toSYP(Math.max(0, invoiceTotal(i) - paidByInvoice(i.id)), i.currency),
-    0,
+  const totalByCurrency = groupAmountsByCurrency(rows, invoiceTotal, (i) => i.currency);
+  const paidByCurrency = groupAmountsByCurrency(rows, (i) => paidByInvoice(i.id), (i) => i.currency);
+  const remainingByCurrency = groupAmountsByCurrency(
+    rows,
+    (i) => Math.max(0, invoiceTotal(i) - paidByInvoice(i.id)),
+    (i) => i.currency,
   );
 
   return (
     <div className="space-y-3">
       <div className="grid gap-3 md:grid-cols-4">
         <StatBox label="عدد الفواتير" value={rows.length.toString()} />
-        <StatBox label="الإجمالي" syp={totalSyp} />
-        <StatBox label="المدفوع" syp={paidSyp} tone="good" />
-        <StatBox label="المتبقي" syp={remainingSyp} tone="warning" />
+        <StatBox label="الإجمالي" byCurrency={totalByCurrency} />
+        <StatBox label="المدفوع" byCurrency={paidByCurrency} tone="good" />
+        <StatBox label="المتبقي" byCurrency={remainingByCurrency} tone="warning" />
       </div>
       <PageCard
         title={kind === "sale" ? "قائمة فواتير البيع" : "قائمة فواتير الدخول"}
@@ -407,45 +398,31 @@ function PartyBalances({
     amount: number;
   }[];
 }) {
+  // Fix BUG-06/C-9/C-10: total/paid/remaining are now per-currency
+  // breakdowns, never a toSYP-blended single number. Ranking (sort) still
+  // needs one comparable figure — SYP remaining specifically, documented,
+  // since there is no real FX rate to fairly compare a SYP and a USD
+  // party's remaining balance.
   const rows = (kind === "customer" ? customers : suppliers)
     .map((p) => {
       const invs = invoices.filter(
         (i) => i.partyId === p.id && i.status !== "cancelled",
       );
-      const total = invs.reduce(
-        (s, i) => s + toSYP(invoiceTotal(i), i.currency),
-        0,
-      );
-      const paid = invs.reduce(
-        (s, i) =>
-          s +
-          toSYP(
-            vouchers
-              .filter((v) => v.status === "active" && v.invoiceId === i.id)
-              .reduce((sum, v) => sum + v.amount, 0),
-            i.currency,
-          ),
-        0,
-      );
-      const remaining = invs.reduce(
-        (s, i) =>
-          s +
-          toSYP(
-            Math.max(
-              0,
-              invoiceTotal(i) -
-                vouchers
-                  .filter((v) => v.status === "active" && v.invoiceId === i.id)
-                  .reduce((sum, v) => sum + v.amount, 0),
-            ),
-            i.currency,
-          ),
-        0,
+      const total = groupAmountsByCurrency(invs, invoiceTotal, (i) => i.currency);
+      const paidOf = (i: DomainInvoice) =>
+        vouchers
+          .filter((v) => v.status === "active" && v.invoiceId === i.id)
+          .reduce((sum, v) => sum + v.amount, 0);
+      const paid = groupAmountsByCurrency(invs, paidOf, (i) => i.currency);
+      const remaining = groupAmountsByCurrency(
+        invs,
+        (i) => Math.max(0, invoiceTotal(i) - paidOf(i)),
+        (i) => i.currency,
       );
       return { p, total, paid, remaining, count: invs.length };
     })
     .filter((r) => r.count > 0)
-    .sort((a, b) => b.remaining - a.remaining);
+    .sort((a, b) => (b.remaining.SYP ?? 0) - (a.remaining.SYP ?? 0));
 
   return (
     <PageCard
@@ -471,13 +448,13 @@ function PartyBalances({
                 <td className="px-3 py-2 font-semibold">{r.p.name}</td>
                 <td className="px-3 py-2 tabular-nums">{r.count}</td>
                 <td className="px-3 py-2 tabular-nums">
-                  {Math.round(r.total).toLocaleString("en-US")}
+                  {formatCurrencyBreakdown(r.total)}
                 </td>
                 <td className="px-3 py-2 tabular-nums">
-                  {Math.round(r.paid).toLocaleString("en-US")}
+                  {formatCurrencyBreakdown(r.paid)}
                 </td>
                 <td className="px-3 py-2 tabular-nums font-semibold">
-                  {Math.round(r.remaining).toLocaleString("en-US")}
+                  {formatCurrencyBreakdown(r.remaining)}
                 </td>
               </tr>
             ))}
@@ -498,20 +475,16 @@ function ReturnsReport({
   const rows = returns
     .filter((r) => r.status !== "cancelled" && inRange(r.date))
     .sort((a, b) => (a.date < b.date ? 1 : -1));
-  const totalSyp = rows.reduce(
-    (s, r) =>
-      s +
-      toSYP(
-        r.lines.reduce((sum, l) => sum + l.quantityKg * l.pricePerKg, 0),
-        r.currency || "SYP",
-      ),
-    0,
+  const totalByCurrency = groupAmountsByCurrency(
+    rows,
+    (r) => r.lines.reduce((sum, l) => sum + l.quantityKg * l.pricePerKg, 0),
+    (r) => r.currency || "SYP",
   );
   return (
     <div className="space-y-3">
       <div className="grid gap-3 md:grid-cols-2">
         <StatBox label="عدد المرتجعات" value={rows.length.toString()} />
-        <StatBox label="الإجمالي" syp={totalSyp} />
+        <StatBox label="الإجمالي" byCurrency={totalByCurrency} />
       </div>
       <PageCard title="قائمة المرتجعات" noBodyPadding>
         {rows.length === 0 ? (
@@ -577,12 +550,12 @@ function ExpensesReport({
   const rows = expenses
     .filter((e) => e.status !== "cancelled" && inRange(e.date))
     .sort((a, b) => (a.date < b.date ? 1 : -1));
-  const totalSyp = rows.reduce((s, e) => s + toSYP(e.amount, e.currency), 0);
+  const totalByCurrency = groupAmountsByCurrency(rows, (e) => e.amount, (e) => e.currency);
   return (
     <div className="space-y-3">
       <div className="grid gap-3 md:grid-cols-2">
         <StatBox label="عدد المصاريف" value={rows.length.toString()} />
-        <StatBox label="الإجمالي" syp={totalSyp} />
+        <StatBox label="الإجمالي" byCurrency={totalByCurrency} />
       </div>
       <PageCard title="قائمة المصاريف" noBodyPadding>
         {rows.length === 0 ? (
@@ -628,14 +601,17 @@ function LedgerReport({
   const rows = (entries ?? [])
     .filter((e) => e.status !== "cancelled" && inRange(e.date))
     .sort((a, b) => (a.date < b.date ? 1 : -1));
-  const totalDebit = rows.reduce((s, e) => s + (e.debit || 0), 0);
-  const totalCredit = rows.reduce((s, e) => s + (e.credit || 0), 0);
+  // Fix BUG-06/C-9/C-10: these used to sum e.debit/e.credit with no
+  // currency grouping at all — a USD ledger row and a SYP row were added
+  // directly. Group by e.currency instead.
+  const totalDebitByCurrency = groupAmountsByCurrency(rows, (e) => e.debit || 0, (e) => e.currency);
+  const totalCreditByCurrency = groupAmountsByCurrency(rows, (e) => e.credit || 0, (e) => e.currency);
   return (
     <div className="space-y-3">
       <div className="grid gap-3 md:grid-cols-3">
         <StatBox label="عدد الحركات" value={rows.length.toString()} />
-        <StatBox label="إجمالي المدين" syp={totalDebit} tone="warning" />
-        <StatBox label="إجمالي الدائن" syp={totalCredit} tone="warning" />
+        <StatBox label="إجمالي المدين" byCurrency={totalDebitByCurrency} tone="warning" />
+        <StatBox label="إجمالي الدائن" byCurrency={totalCreditByCurrency} tone="warning" />
       </div>
       <PageCard title="قيود دفتر الحركات" noBodyPadding>
         {rows.length === 0 ? (
@@ -745,20 +721,29 @@ function CashboxReport({
 }
 
 function InventoryReport() {
+  // Fix BUG-06/C-9/C-10: `val` used to convert every roll's value through
+  // toSYP and sum it into one blended number, both per-fabric and in the
+  // grand total. Group by currency at both levels instead.
   const rows = fabrics.map((f) => {
     const fColors = colors.filter((c) => c.fabricId === f.id);
     const fRolls = rolls.filter((r) => fColors.some((c) => c.id === r.colorId));
     const kg = fRolls.reduce((s, r) => s + r.remainingKg, 0);
-    const val = fRolls.reduce(
-      (s, r) => s + toSYP(r.remainingKg * r.pricePerKg, r.currency),
-      0,
+    const valByCurrency = groupAmountsByCurrency(
+      fRolls,
+      (r) => r.remainingKg * r.pricePerKg,
+      (r) => r.currency,
     );
-    return { f, kg, val, rolls: fRolls.length };
+    return { f, kg, valByCurrency, rolls: fRolls.length };
   });
-  const totalVal = rows.reduce((s, r) => s + r.val, 0);
+  const totalValByCurrency: Record<string, number> = {};
+  for (const r of rows) {
+    for (const [cur, amt] of Object.entries(r.valByCurrency)) {
+      totalValByCurrency[cur] = (totalValByCurrency[cur] ?? 0) + amt;
+    }
+  }
   return (
     <div className="space-y-3">
-      <StatBox label="القيمة الإجمالية" syp={totalVal} />
+      <StatBox label="القيمة الإجمالية" byCurrency={totalValByCurrency} />
       <PageCard title="المخزون حسب الصنف" noBodyPadding>
         {rows.length === 0 ? (
           <Empty text="لا مخزون." />
@@ -781,7 +766,7 @@ function InventoryReport() {
                   </td>
                   <td className="px-3 py-2 tabular-nums">{r.rolls}</td>
                   <td className="px-3 py-2 tabular-nums font-semibold">
-                    {Math.round(r.val).toLocaleString("en-US")}
+                    {formatCurrencyBreakdown(r.valByCurrency)}
                   </td>
                 </tr>
               ))}
@@ -803,18 +788,21 @@ function TopFabricsReport({
   const invs = invoices.filter(
     (i) => i.type === "sale" && i.status !== "cancelled" && inRange(i.date),
   );
-  const map = new Map<string, { qty: number; revenue: number }>();
+  // Fix BUG-06/C-9/C-10: revenue is now a per-currency breakdown, never a
+  // toSYP-blended single number. Ranked by kg sold (currency-agnostic,
+  // safe to sum) rather than a converted revenue figure.
+  const map = new Map<string, { qty: number; revenueByCurrency: Record<string, number> }>();
   invs.forEach((i) =>
     i.lines.forEach((l) => {
-      const c = map.get(l.fabricId) ?? { qty: 0, revenue: 0 };
+      const c = map.get(l.fabricId) ?? { qty: 0, revenueByCurrency: {} };
       c.qty += l.quantityKg;
-      c.revenue += toSYP(l.quantityKg * l.pricePerKg, i.currency);
+      c.revenueByCurrency[i.currency] = (c.revenueByCurrency[i.currency] ?? 0) + l.quantityKg * l.pricePerKg;
       map.set(l.fabricId, c);
     }),
   );
   const rows = [...map.entries()]
     .map(([id, v]) => ({ fabric: fabricById(id), ...v }))
-    .sort((a, b) => b.revenue - a.revenue)
+    .sort((a, b) => b.qty - a.qty)
     .slice(0, 10);
   return (
     <PageCard title="أعلى ١٠ أصناف مبيعاً" noBodyPadding>
@@ -839,7 +827,7 @@ function TopFabricsReport({
                   {Math.round(r.qty).toLocaleString("en-US")} كغ
                 </td>
                 <td className="px-3 py-2 tabular-nums">
-                  <DualCurrency syp={Math.round(r.revenue)} />
+                  {formatCurrencyBreakdown(r.revenueByCurrency)}
                 </td>
               </tr>
             ))}
@@ -860,16 +848,18 @@ function TopCustomersReport({
   const invs = invoices.filter(
     (i) => i.type === "sale" && i.status !== "cancelled" && inRange(i.date),
   );
-  const map = new Map<string, number>();
-  invs.forEach((i) =>
-    map.set(
-      i.partyId,
-      (map.get(i.partyId) ?? 0) + toSYP(invoiceTotal(i), i.currency),
-    ),
-  );
+  // Fix BUG-06/C-9/C-10: revenue is now a per-currency breakdown, never a
+  // toSYP-blended single number. Ranked by SYP revenue (documented, not
+  // blended) since a single sortable figure is needed.
+  const map = new Map<string, Record<string, number>>();
+  invs.forEach((i) => {
+    const prev = map.get(i.partyId) ?? {};
+    prev[i.currency] = (prev[i.currency] ?? 0) + invoiceTotal(i);
+    map.set(i.partyId, prev);
+  });
   const rows = [...map.entries()]
-    .map(([id, rev]) => ({ cust: customerById(id), revenue: rev }))
-    .sort((a, b) => b.revenue - a.revenue)
+    .map(([id, revenueByCurrency]) => ({ cust: customerById(id), revenueByCurrency }))
+    .sort((a, b) => (b.revenueByCurrency.SYP ?? 0) - (a.revenueByCurrency.SYP ?? 0))
     .slice(0, 10);
   return (
     <PageCard title="أعلى ١٠ عملاء" noBodyPadding>
@@ -890,7 +880,7 @@ function TopCustomersReport({
                   {r.cust?.name ?? ""}
                 </td>
                 <td className="px-3 py-2 tabular-nums">
-                  <DualCurrency syp={Math.round(r.revenue)} />
+                  {formatCurrencyBreakdown(r.revenueByCurrency)}
                 </td>
               </tr>
             ))}
@@ -905,11 +895,20 @@ function StatBox({
   label,
   value,
   syp,
+  byCurrency,
   tone,
 }: {
   label: string;
   value?: string;
+  /** Single-currency figure (unchanged usage — genuinely SYP-only sources). */
   syp?: number;
+  /**
+   * Fix BUG-06/C-9/C-10 (forensic audit 2026-08-15): when the underlying
+   * figure can span multiple currencies, pass a breakdown instead of a
+   * toSYP-blended `syp` number — renders each currency's own amount via
+   * formatCurrencyBreakdown, never a converted/summed total.
+   */
+  byCurrency?: Record<string, number>;
   tone?: string;
 }) {
   const bg =
@@ -922,8 +921,13 @@ function StatBox({
         {label}
       </div>
       <div className="mt-1 text-lg font-bold tabular-nums">
-        {value ?? (syp != null ? Math.round(syp).toLocaleString("en-US") : "0")}
-        {syp != null && (
+        {value ??
+          (byCurrency
+            ? formatCurrencyBreakdown(byCurrency)
+            : syp != null
+              ? Math.round(syp).toLocaleString("en-US")
+              : "0")}
+        {syp != null && !byCurrency && (
           <DualCurrency syp={syp} className="text-[10px] mt-0.5" />
         )}
       </div>

@@ -140,9 +140,15 @@ export class PostgresDashboardRepository implements IDashboardRepository {
             .where(and(eq(parties.tenantId, ctx.tenantId), inArray(parties.id, customerIds)))
         : [];
 
-    const topFabricLines = await this.db
+    // Fix H-7: `revenue` used to be summed with groupBy(fabricId) only —
+    // a fabric sold in both SYP and USD had those two revenue figures
+    // silently added together. kgSold is a physical quantity (not money)
+    // so it is safe to sum across currencies; revenue is not, so it is
+    // grouped by (fabricId, currency) and kept as a per-currency breakdown.
+    const topFabricRows = await this.db
       .select({
         fabricId: invoiceLines.fabricId,
+        currency: invoices.currency,
         kgSold: sql<number>`SUM(${invoiceLines.quantityKg})`,
         revenue: sql<number>`SUM(GREATEST(0, ${invoiceLines.quantityKg} * ${invoiceLines.pricePerKg} - ${invoiceLines.discountAmount}))`,
       })
@@ -155,9 +161,25 @@ export class PostgresDashboardRepository implements IDashboardRepository {
           eq(invoices.status, "active"),
         ),
       )
-      .groupBy(invoiceLines.fabricId)
-      .orderBy(desc(sql`SUM(${invoiceLines.quantityKg})`))
-      .limit(5);
+      .groupBy(invoiceLines.fabricId, invoices.currency);
+
+    const topFabricAgg = new Map<
+      string,
+      { fabricId: string; kgSold: number; revenueByCurrency: Record<string, number> }
+    >();
+    for (const r of topFabricRows) {
+      const agg = topFabricAgg.get(r.fabricId) ?? {
+        fabricId: r.fabricId,
+        kgSold: 0,
+        revenueByCurrency: {},
+      };
+      agg.kgSold += Number(r.kgSold);
+      agg.revenueByCurrency[r.currency] = (agg.revenueByCurrency[r.currency] ?? 0) + Number(r.revenue);
+      topFabricAgg.set(r.fabricId, agg);
+    }
+    const topFabricLines = Array.from(topFabricAgg.values())
+      .sort((a, b) => b.kgSold - a.kgSold)
+      .slice(0, 5);
 
     const fabricIds = topFabricLines.map((r) => r.fabricId);
     const fabricNames =
@@ -178,8 +200,15 @@ export class PostgresDashboardRepository implements IDashboardRepository {
       .where(and(eq(dayCloses.tenantId, ctx.tenantId), eq(dayCloses.date, today)))
       .limit(1);
 
-    const [voucherStats] = await this.db
+    // Fix H-7 (forensic audit 2026-08-15): this used to aggregate receipts
+    // and payments with NO groupBy(currency) at all, silently summing SYP,
+    // USD, and EUR vouchers into one meaningless number. Group by currency
+    // like every other fixed aggregate in this file (weekSales, monthSales,
+    // topCustomers, unpaidInvoices) and let the caller decide how to
+    // display the breakdown — never fold currencies together server-side.
+    const voucherStatsRows = await this.db
       .select({
+        currency: vouchers.currency,
         receipts: sql<number>`COALESCE(SUM(CASE WHEN ${vouchers.kind} = 'receipt' THEN ${vouchers.amount} ELSE 0 END), 0)`,
         payments: sql<number>`COALESCE(SUM(CASE WHEN ${vouchers.kind} = 'payment' THEN ${vouchers.amount} ELSE 0 END), 0)`,
         count: sql<number>`COUNT(*)`,
@@ -191,7 +220,18 @@ export class PostgresDashboardRepository implements IDashboardRepository {
           gte(vouchers.date, monthStart),
           eq(vouchers.status, "active"),
         ),
-      );
+      )
+      .groupBy(vouchers.currency);
+    const voucherStatsByCurrency: Record<string, { receipts: number; payments: number; count: number }> = {};
+    let voucherStatsCount = 0;
+    for (const row of voucherStatsRows) {
+      voucherStatsByCurrency[row.currency] = {
+        receipts: Number(row.receipts),
+        payments: Number(row.payments),
+        count: Number(row.count),
+      };
+      voucherStatsCount += Number(row.count);
+    }
 
     const [unread] = await this.db
       .select({ count: sql<number>`COUNT(*)` })
@@ -250,15 +290,22 @@ export class PostgresDashboardRepository implements IDashboardRepository {
     // Cost basis: current roll purchase price (price_per_kg) at sale time.
     const saleBase = and(base, eq(invoices.type, "sale"), eq(invoices.status, "active"));
     const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
-    const [revStats] = await this.db
+    // Fix H-7: revStats/cogsStats had no groupBy(currency) at all — a USD
+    // sale and a SYP sale on the same day were summed into one "profitToday"
+    // number with no currency attached. Group both by currency and compute
+    // profit per currency; never combine.
+    const revStatsRows = await this.db
       .select({
+        currency: invoices.currency,
         today: sql<number>`COALESCE(SUM(${invoices.total}) FILTER (WHERE ${invoices.date} = ${today}), 0)`,
         yesterday: sql<number>`COALESCE(SUM(${invoices.total}) FILTER (WHERE ${invoices.date} = ${yesterday}), 0)`,
       })
       .from(invoices)
-      .where(and(saleBase, gte(invoices.date, yesterday)));
-    const [cogsStats] = await this.db
+      .where(and(saleBase, gte(invoices.date, yesterday)))
+      .groupBy(invoices.currency);
+    const cogsStatsRows = await this.db
       .select({
+        currency: invoices.currency,
         // I6 fix: round COGS per line so the dashboard profit is an exact integer
         // that matches the journaled COGS (ledger entries are integer bigint).
         today: sql<number>`COALESCE(SUM(ROUND(${invoiceLines.quantityKg} * ${rolls.pricePerKg})) FILTER (WHERE ${invoices.date} = ${today}), 0)`,
@@ -267,10 +314,19 @@ export class PostgresDashboardRepository implements IDashboardRepository {
       .from(invoiceLines)
       .innerJoin(invoices, eq(invoices.id, invoiceLines.invoiceId))
       .innerJoin(rolls, eq(rolls.id, invoiceLines.rollId))
-      .where(and(saleBase, gte(invoices.date, yesterday)));
-    const profitToday = Number(revStats?.today ?? 0) - Number(cogsStats?.today ?? 0);
-    const profitYesterday = Number(revStats?.yesterday ?? 0) - Number(cogsStats?.yesterday ?? 0);
-    const revenueToday = Number(revStats?.today ?? 0);
+      .where(and(saleBase, gte(invoices.date, yesterday)))
+      .groupBy(invoices.currency);
+
+    const cogsByCurrency = new Map(cogsStatsRows.map((r) => [r.currency, r]));
+    const profitByCurrency: Record<string, { today: number; yesterday: number; revenueToday: number }> = {};
+    for (const rev of revStatsRows) {
+      const cogs = cogsByCurrency.get(rev.currency);
+      profitByCurrency[rev.currency] = {
+        today: Number(rev.today) - Number(cogs?.today ?? 0),
+        yesterday: Number(rev.yesterday) - Number(cogs?.yesterday ?? 0),
+        revenueToday: Number(rev.today),
+      };
+    }
 
     // ── Unpaid sale invoices (total − active receipts per invoice) ──
     // Keep every currency's remaining amount separate — never fold SYP/USD/EUR
@@ -315,21 +371,30 @@ export class PostgresDashboardRepository implements IDashboardRepository {
     }
 
     // ── Sales trend (per-day series for 7/14/30) ────────────────────
+    // Fix H-7: groupBy(invoices.date) alone mixed every currency's sales
+    // into one "value" per day bucket. Group by date AND currency, and
+    // expose a per-currency breakdown per day instead of a single number.
     const trendRows = await this.db
       .select({
         date: invoices.date,
+        currency: invoices.currency,
         total: sql<number>`COALESCE(SUM(${invoices.total}), 0)`,
       })
       .from(invoices)
       .where(and(saleBase, gte(invoices.date, monthStart)))
-      .groupBy(invoices.date)
+      .groupBy(invoices.date, invoices.currency)
       .orderBy(invoices.date);
-    const trendByDate = new Map(trendRows.map((r) => [r.date, Number(r.total)]));
+    const trendByDate = new Map<string, Record<string, number>>();
+    for (const r of trendRows) {
+      const byCurrency = trendByDate.get(r.date) ?? {};
+      byCurrency[r.currency] = Number(r.total);
+      trendByDate.set(r.date, byCurrency);
+    }
     const buildTrend = (days: number) => {
-      const out: Array<{ label: string; value: number }> = [];
+      const out: Array<{ label: string; byCurrency: Record<string, number> }> = [];
       for (let i = days - 1; i >= 0; i--) {
         const d = new Date(Date.now() - i * 86400000).toISOString().slice(0, 10);
-        out.push({ label: d, value: trendByDate.get(d) ?? 0 });
+        out.push({ label: d, byCurrency: trendByDate.get(d) ?? {} });
       }
       return out;
     };
@@ -565,17 +630,29 @@ export class PostgresDashboardRepository implements IDashboardRepository {
       topFabrics: topFabricLines.map((r) => ({
         fabricId: r.fabricId,
         name: fabricNames.find((f) => f.id === r.fabricId)?.name ?? r.fabricId,
-        kgSold: Number(r.kgSold),
-        revenue: Number(r.revenue),
+        kgSold: r.kgSold,
+        // FIX H-7: per-currency breakdown — never a single blended number.
+        revenueByCurrency: r.revenueByCurrency,
       })),
       lowStockRolls: {
         low: Number(lowRollStats?.low ?? 0),
         outOfStock: Number(lowRollStats?.out ?? 0),
       },
+      // FIX H-7: `syp` used to be a single number that actually summed
+      // profit across every currency, mislabeled as if it were SYP-only.
+      // byCurrency reports each currency's own profitToday/marginPercent/
+      // trend independently — never combined.
       todayProfit: {
-        syp: profitToday,
-        marginPercent: revenueToday > 0 ? Math.round((profitToday / revenueToday) * 100) : 0,
-        trend: profitToday >= profitYesterday ? "up" : "down",
+        byCurrency: Object.fromEntries(
+          Object.entries(profitByCurrency).map(([currency, p]) => [
+            currency,
+            {
+              today: p.today,
+              marginPercent: p.revenueToday > 0 ? Math.round((p.today / p.revenueToday) * 100) : 0,
+              trend: p.today >= p.yesterday ? ("up" as const) : ("down" as const),
+            },
+          ]),
+        ),
       },
       activeRolls: {
         total: Number(rollStats?.total ?? 0),
@@ -607,10 +684,11 @@ export class PostgresDashboardRepository implements IDashboardRepository {
         todayMovementCount: Number(todayMovements?.count ?? 0),
         isLocked: !!dayLock,
       },
+      // FIX H-7: byCurrency breakdown instead of one blended
+      // receiptsThisMonth/paymentsThisMonth number.
       vouchers: {
-        receiptsThisMonth: Number(voucherStats?.receipts ?? 0),
-        paymentsThisMonth: Number(voucherStats?.payments ?? 0),
-        count: Number(voucherStats?.count ?? 0),
+        byCurrency: voucherStatsByCurrency,
+        count: voucherStatsCount,
       },
       unreadNotifications: Number(unread?.count ?? 0),
       recentActivity: recentActivity.map((a) => ({

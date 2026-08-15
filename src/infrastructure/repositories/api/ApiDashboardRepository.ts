@@ -34,11 +34,19 @@ export function mapDashboardResponse(raw: BackendDashboardResponse): DashboardDa
       syp: raw.cashbox?.balance ?? 0, // real source (cashbox.balance)
       usd: 0, // no USD balance source → NOT CONNECTED
     },
+    // Fix H-7: the backend now returns todayProfit.byCurrency (never a
+    // single blended number). ProfitDTO only has one slot for
+    // marginPercent/trend, so — same "map only a real source, never
+    // invent/blend" rule this adapter already follows elsewhere — syp and
+    // usd are read from their OWN currency buckets independently (never
+    // summed together), and marginPercent/trend are taken from SYP's own
+    // bucket specifically (documented here, not silently blended) since
+    // this DTO shape has no per-currency slot for those two fields.
     todayProfit: {
-      syp: raw.todayProfit?.syp ?? 0, // real source (revenue − COGS)
-      usd: 0, // no USD source → NOT CONNECTED
-      marginPercent: raw.todayProfit?.marginPercent ?? 0, // real source
-      trend: raw.todayProfit?.trend ?? "up", // real source
+      syp: raw.todayProfit?.byCurrency?.SYP?.today ?? 0, // real source, SYP only
+      usd: raw.todayProfit?.byCurrency?.USD?.today ?? 0, // real source, USD only — was hardcoded 0/NOT CONNECTED before
+      marginPercent: raw.todayProfit?.byCurrency?.SYP?.marginPercent ?? 0, // SYP bucket only
+      trend: raw.todayProfit?.byCurrency?.SYP?.trend ?? "up", // SYP bucket only
     },
     todaySales: {
       syp: raw.todaySales?.byCurrency?.SYP?.total ?? 0, // real source (sale invoices, SYP only)
@@ -92,11 +100,26 @@ export function mapDashboardResponse(raw: BackendDashboardResponse): DashboardDa
       rollNo: a.rollNo,
       remaining: a.remaining,
     })),
+    // Fix H-7: the backend now returns revenueByCurrency (never a single
+    // number that summed every currency's revenue for a fabric). TopFabricDTO
+    // only has one numeric slot (salesK), so — same rule as above — this
+    // reads the SYP bucket specifically and documents it, instead of
+    // silently summing SYP + USD the way `f.revenue` used to.
     topFabrics: (raw.topFabrics ?? []).map((f) => ({
       name: f.name, // real source
-      salesK: (f.revenue ?? 0) / 1000, // real source (thousands of SYP)
+      salesK: (f.revenueByCurrency?.SYP ?? 0) / 1000, // real source, SYP only (thousands of SYP)
     })),
-    salesTrend: raw.salesTrend ?? {}, // real per-day series from backend
+    // Fix H-7: each day's point is now { label, byCurrency } from the
+    // backend (never a single blended value). Project SYP specifically —
+    // never sum across currencies — matching the topFabrics/todayProfit
+    // fix above until the chart component itself is redesigned to render
+    // a per-currency series.
+    salesTrend: Object.fromEntries(
+      Object.entries(raw.salesTrend ?? {}).map(([range, points]) => [
+        range,
+        points.map((p) => ({ label: p.label, value: p.byCurrency?.SYP ?? 0 })),
+      ]),
+    ),
   };
 }
 
