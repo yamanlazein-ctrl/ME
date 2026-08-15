@@ -69,12 +69,16 @@ export async function cancelLedgerByReferenceUseCase(
   referenceId: UUID,
   cancelledBy: string,
   ctx: TenantContext,
-): Promise<{ ok: true } | { ok: false; error: string }> {
+): Promise<{ ok: true } | { ok: false; error: string; code?: string }> {
   try {
     await repo.cancelByReference(referenceType, referenceId, cancelledBy, ctx);
     return { ok: true };
   } catch (e) {
-    return { ok: false, error: "فشل إلغاء القيد" };
+    // Fix C-4: surface the structured ALREADY_CANCELLED code (same pattern
+    // as cancelInvoiceUseCase's NOT_FOUND/ALREADY_CANCELLED) so the route
+    // can return 409 instead of a generic 422 for a duplicate cancel call.
+    const code = e instanceof Error && "code" in e ? (e as { code?: string }).code : undefined;
+    return { ok: false, error: "فشل إلغاء القيد", code };
   }
 }
 
