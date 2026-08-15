@@ -187,68 +187,89 @@ export class PostgresStatementRepository implements IStatementRepository {
     input: SettlePartyInput,
     ctx: TenantContext,
   ): Promise<LedgerEntryData> {
-    const party = await this.db
-      .select()
-      .from(parties)
-      .where(and(eq(parties.id, partyId), eq(parties.tenantId, ctx.tenantId)))
-      .limit(1);
-    if (party.length === 0) throw new Error("الطرف غير موجود");
-    const currency = input.currency ?? party[0].currency ?? "SYP";
+    // Fix C-5 (forensic audit 2026-08-15, live-reproduced): this used to be
+    // a bare SELECT (aggregate balance) followed by a bare INSERT, both on
+    // the connection pool — no transaction, no lock. Two concurrent (or
+    // simply retried) settle() calls both read the same pre-settlement
+    // `net`, both post a settlement of the full amount, and the party ends
+    // up settled twice — the balance lands at -net instead of 0.
+    //
+    // Fix: run the balance read and the insert inside one transaction,
+    // holding a row lock on the party (`FOR UPDATE`) for its whole
+    // duration. This serializes concurrent settle() calls for the SAME
+    // party: the second call blocks until the first commits, then
+    // re-aggregates the balance itself — which now correctly includes the
+    // first call's just-inserted settlement rows, since they are ordinary
+    // active ledger entries for this party. A genuinely zero balance after
+    // the first settlement makes the second call hit the existing
+    // "لا يحتاج تسوية" guard instead of posting a second settlement — the
+    // fix requires no new idempotency key, only making the read-then-write
+    // atomic and serialized against itself.
+    return this.db.transaction(async (tx) => {
+      const party = await tx
+        .select()
+        .from(parties)
+        .where(and(eq(parties.id, partyId), eq(parties.tenantId, ctx.tenantId)))
+        .for("update")
+        .limit(1);
+      if (party.length === 0) throw new Error("الطرف غير موجود");
+      const currency = input.currency ?? party[0].currency ?? "SYP";
 
-    const rows = await this.db
-      .select({
-        debit: sql<number>`COALESCE(SUM(${ledgerEntries.debit}), 0)`,
-        credit: sql<number>`COALESCE(SUM(${ledgerEntries.credit}), 0)`,
-      })
-      .from(ledgerEntries)
-      .where(
-        and(
-          eq(ledgerEntries.partyId, partyId),
-          eq(ledgerEntries.tenantId, ctx.tenantId),
-          eq(ledgerEntries.status, "active"),
-          eq(ledgerEntries.currency, currency),
-        ),
-      );
+      const rows = await tx
+        .select({
+          debit: sql<number>`COALESCE(SUM(${ledgerEntries.debit}), 0)`,
+          credit: sql<number>`COALESCE(SUM(${ledgerEntries.credit}), 0)`,
+        })
+        .from(ledgerEntries)
+        .where(
+          and(
+            eq(ledgerEntries.partyId, partyId),
+            eq(ledgerEntries.tenantId, ctx.tenantId),
+            eq(ledgerEntries.status, "active"),
+            eq(ledgerEntries.currency, currency),
+          ),
+        );
 
-    const net = Number(rows[0]?.debit ?? 0) - Number(rows[0]?.credit ?? 0);
-    if (net === 0) throw new Error("الرصيد صفر لا يحتاج تسوية");
-    const amount = Math.abs(net);
+      const net = Number(rows[0]?.debit ?? 0) - Number(rows[0]?.credit ?? 0);
+      if (net === 0) throw new Error("الرصيد صفر لا يحتاج تسوية");
+      const amount = Math.abs(net);
 
-    const inserted = await this.db
-      .insert(ledgerEntries)
-      .values([
-        {
-          tenantId: ctx.tenantId,
-          partyId,
-          date: input.date ?? new Date().toISOString().slice(0, 10),
-          type: "settlement",
-          debit: net < 0 ? amount : 0,
-          credit: net > 0 ? amount : 0,
-          currency,
-          cashImpact: "none",
-          referenceType: "settlement",
-          referenceNumber: input.referenceNumber,
-          description: input.notesInternal ?? `تسوية حساب ${input.referenceNumber}`,
-          createdBy: ctx.userId,
-        },
-        {
-          tenantId: ctx.tenantId,
-          partyId: null,
-          date: input.date ?? new Date().toISOString().slice(0, 10),
-          type: "settlement_contra",
-          debit: net > 0 ? amount : 0,
-          credit: net < 0 ? amount : 0,
-          currency,
-          cashImpact: "none",
-          referenceType: "settlement",
-          referenceNumber: input.referenceNumber,
-          description: `مقابل التسوية ${input.referenceNumber}`,
-          createdBy: ctx.userId,
-        },
-      ])
-      .returning();
+      const inserted = await tx
+        .insert(ledgerEntries)
+        .values([
+          {
+            tenantId: ctx.tenantId,
+            partyId,
+            date: input.date ?? new Date().toISOString().slice(0, 10),
+            type: "settlement",
+            debit: net < 0 ? amount : 0,
+            credit: net > 0 ? amount : 0,
+            currency,
+            cashImpact: "none",
+            referenceType: "settlement",
+            referenceNumber: input.referenceNumber,
+            description: input.notesInternal ?? `تسوية حساب ${input.referenceNumber}`,
+            createdBy: ctx.userId,
+          },
+          {
+            tenantId: ctx.tenantId,
+            partyId: null,
+            date: input.date ?? new Date().toISOString().slice(0, 10),
+            type: "settlement_contra",
+            debit: net > 0 ? amount : 0,
+            credit: net < 0 ? amount : 0,
+            currency,
+            cashImpact: "none",
+            referenceType: "settlement",
+            referenceNumber: input.referenceNumber,
+            description: `مقابل التسوية ${input.referenceNumber}`,
+            createdBy: ctx.userId,
+          },
+        ])
+        .returning();
 
-    return this.mapEntry(inserted[0]);
+      return this.mapEntry(inserted[0]);
+    });
   }
 
   /** Load invoice line details (fabric/color/roll + qty/price) for the given invoices. */
