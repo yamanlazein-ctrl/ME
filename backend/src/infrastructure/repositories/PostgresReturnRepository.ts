@@ -1,4 +1,4 @@
-import { eq, and, desc, ilike, or, ne, sql, inArray } from "drizzle-orm";
+import { eq, and, desc, ilike, or, ne, sql, inArray, gte, lte } from "drizzle-orm";
 import type { DB } from "../orm/drizzle.js";
 import type { IReturnRepository, ReturnFilter } from "../../application/ports/IReturnRepository.js";
 import { returns } from "../orm/schemas/return.table.js";
@@ -34,6 +34,8 @@ export class PostgresReturnRepository implements IReturnRepository {
     if (filter.kind) conditions.push(eq(returns.kind, filter.kind));
     if (filter.partyId) conditions.push(eq(returns.partyId, filter.partyId));
     if (filter.status) conditions.push(eq(returns.status, filter.status));
+    if (filter.fromDate) conditions.push(gte(returns.date, filter.fromDate));
+    if (filter.toDate) conditions.push(lte(returns.date, filter.toDate));
     if (filter.search) conditions.push(or(ilike(returns.number!, `%${filter.search}%`))!);
     const where = and(...conditions);
     const page = Math.max(0, filter.page ?? 0);

@@ -15,7 +15,7 @@ export function createAuthMiddleware(jwtSigner: JwtSigner, tokenDenylist: RedisT
 
     const token = header.slice(7);
     try {
-      const payload = await jwtSigner.verify(token);
+      const payload = await jwtSigner.verifyAccessToken(token);
 
       if (await tokenDenylist.has(payload.jti)) {
         res
