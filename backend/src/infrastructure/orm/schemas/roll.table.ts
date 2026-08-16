@@ -41,7 +41,8 @@ export const rolls = pgTable(
   },
   (table) => ({
     tenantRollNoIdx: uniqueIndex("idx_rolls_tenant_roll_no").on(table.tenantId, table.rollNo),
-    colorIdx: index("idx_rolls_color").on(table.colorId),
+    colorIdx: index("idx_rolls_color").on(table.tenantId, table.colorId),
+    supplierIdx: index("idx_rolls_supplier").on(table.tenantId, table.supplierId),
     tenantStatusIdx: index("idx_rolls_tenant_status").on(table.tenantId, table.status),
   }),
 );

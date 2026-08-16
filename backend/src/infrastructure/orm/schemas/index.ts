@@ -36,3 +36,6 @@ export * from "./system-admin.table.js";
 export * from "./invitation-code.table.js";
 export * from "./stock-movement.table.js";
 export * from "./idempotency-key.table.js";
+export * from "./party-balance.table.js";
+export * from "./ledger-entry-archive.table.js";
+export * from "./yearly-party-summary.table.js";
