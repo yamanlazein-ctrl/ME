@@ -40,6 +40,7 @@ import {
   registerInvitationPublicRoutes,
 } from "./routes/invitation.route.js";
 import { registerAuditRoutes } from "./routes/audit.route.js";
+import { backupRouter } from "./routes/backup.route.js";
 import { createLicenseHeartbeatMiddleware } from "../infrastructure/http/middleware/license.heartbeat.middleware.js";
 
 // Crash reporting & APM — guarded so it never blocks startup
@@ -265,6 +266,8 @@ registerAuditRoutes(
   authMiddleware,
   rbac(["admin", "accountant", "warehouse", "viewer"]),
 );
+// Full backup endpoint — POST /api/backup/full (returns ZIP file)
+apiRouter.use(backupRouter);
 
 app.use("/api", apiRouter);
 
