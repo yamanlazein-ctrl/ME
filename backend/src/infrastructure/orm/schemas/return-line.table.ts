@@ -15,5 +15,6 @@ export const returnLines = pgTable("return_lines", {
     .notNull()
     .references(() => rolls.id),
   quantityKg: decimal("quantity_kg", { precision: 12, scale: 2 }).notNull(),
+  pieces: integer("pieces").notNull().default(1),
   pricePerKg: decimal("price_per_kg", { precision: 12, scale: 2 }).notNull(),
 });

@@ -27,6 +27,7 @@ export const rolls = pgTable(
     dyeBatch: varchar("dye_batch", { length: 100 }),
     initialKg: decimal("initial_kg", { precision: 12, scale: 2 }).notNull(),
     remainingKg: decimal("remaining_kg", { precision: 12, scale: 2 }).notNull(),
+    pieces: integer("pieces").notNull().default(1),
     pricePerKg: decimal("price_per_kg", { precision: 12, scale: 2 }).notNull(),
     salePricePerKg: decimal("sale_price_per_kg", { precision: 12, scale: 2 }),
     currency: varchar("currency", { length: 3 }).notNull().default("SYP"),

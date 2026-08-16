@@ -21,6 +21,7 @@ export const orderItems = pgTable(
     colorName: varchar("color_name", { length: 255 }).notNull(),
     colorCode: varchar("color_code", { length: 50 }),
     requestedKg: decimal("requested_kg", { precision: 12, scale: 2 }).notNull(),
+    pieces: integer("pieces").notNull().default(1),
     // Pinned roll for this item (multi-roll support: one order item can reserve
     // one specific roll; more rolls = more items sharing the same color).
     rollId: uuid("roll_id").references(() => rolls.id),

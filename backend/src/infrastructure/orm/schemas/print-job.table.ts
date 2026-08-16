@@ -21,6 +21,7 @@ export const printJobs = pgTable(
     sourceFabricId: uuid("source_fabric_id"),
     sourceColorId: uuid("source_color_id"),
     quantityKg: decimal("quantity_kg", { precision: 12, scale: 2 }).notNull(),
+    pieces: integer("pieces").notNull().default(1),
     pressName: varchar("press_name", { length: 255 }),
     printCostPerKg: decimal("print_cost_per_kg", { precision: 12, scale: 2 }),
     currency: varchar("currency", { length: 3 }).notNull().default("SYP"),
