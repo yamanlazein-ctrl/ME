@@ -30,7 +30,7 @@ function Dashboard() {
         </div>
       </div>
       <footer className="pt-2 pb-4 text-center text-[11px] text-muted-foreground">
-        Motard Fabrics Gruob • جميع الكميات محسوبة بالكيلوغرام (كغ)
+        Motard Fabrics Group • جميع الكميات محسوبة بالكيلوغرام (كغ)
       </footer>
     </AppShell>
   );

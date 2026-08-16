@@ -37,9 +37,9 @@ export function LoginPage() {
     >
       <div className="w-full max-w-md rounded-2xl border border-border bg-card p-8 shadow-2xl">
         <div className="flex flex-col items-center text-center">
-          <img src={logoUrl} alt="Motard Fabrics Gruob" className="h-24 w-auto object-contain" />
+          <img src={logoUrl} alt="Motard Fabrics Group" className="h-24 w-auto object-contain" />
           <h1 className="mt-4 text-2xl font-bold tracking-tight text-foreground">
-            Motard Fabrics Gruob
+            Motard Fabrics Group
           </h1>
           <p className="mt-1 text-xs text-muted-foreground">نظام إدارة تجارة الأقمشة المتكامل</p>
         </div>
@@ -81,7 +81,7 @@ export function LoginPage() {
         </form>
 
         <p className="mt-6 text-center text-[10px] text-muted-foreground">
-          © 2026 Motard Fabrics Gruob — جميع الحقوق محفوظة
+          © 2026 Motard Fabrics Group — جميع الحقوق محفوظة
         </p>
       </div>
     </div>

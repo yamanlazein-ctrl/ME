@@ -1,20 +1,33 @@
-// @lovable.dev/vite-tanstack-config already includes the following — do NOT add them manually
-// or the app will break with duplicate plugins:
-//   - TanStack devtools (dev-only, first), tanstackStart, viteReact, tailwindcss, tsConfigPaths,
-//     nitro (build-only using cloudflare as a default target), VITE_* env injection, @ path alias,
-//     React/TanStack dedupe, error logger plugins, and sandbox detection (port/host/strictPort).
-// You can pass additional config via defineConfig({ vite: { ... }, etc... }) if needed.
-import { defineConfig } from "@lovable.dev/vite-tanstack-config";
+import { defineConfig } from "vite";
+import { tanstackStart } from "@tanstack/react-start/plugin/vite";
+import react from "@vitejs/plugin-react";
+import tailwindcss from "@tailwindcss/vite";
+import tsconfigPaths from "vite-tsconfig-paths";
 
+/**
+ * Vite config for Fabric ERP — independent, no third-party wrapper.
+ *
+ * Plugins:
+ *   - TanStack Start (file-based routing, SSR entry: src/server.ts)
+ *   - React (JSX/TSX transform, Fast Refresh)
+ *   - Tailwind CSS 4 (utility-first styling)
+ *   - TypeScript paths (resolves @/* aliases from tsconfig.json)
+ *
+ * Proxy: /api → localhost:8083 (Express backend)
+ */
 export default defineConfig({
-  tanstackStart: {
-    server: { entry: "server" },
-  },
-  vite: {
-    server: {
-      proxy: {
-        "/api": { target: "http://localhost:8083", changeOrigin: true },
-      },
+  plugins: [
+    tanstackStart({ server: { entry: "server" } }),
+    react(),
+    tailwindcss(),
+    tsconfigPaths(),
+  ],
+  server: {
+    proxy: {
+      "/api": { target: "http://localhost:8083", changeOrigin: true },
     },
+  },
+  build: {
+    sourcemap: true,
   },
 });

@@ -6,6 +6,7 @@ import { tmpdir } from "os";
 import { mkdir, rm, writeFile, copyFile, readFile } from "fs/promises";
 import { db } from "../../infrastructure/orm/drizzle.js";
 import { sql } from "drizzle-orm";
+import { logger } from "../../infrastructure/config/logger.js";
 
 /**
  * Full Backup API — يُصدّر نسخة احتياطية كاملة للمشروع كملف ZIP
@@ -85,14 +86,14 @@ backupRouter.post("/backup/full", async (req: Request, res: Response) => {
       }, 300000);
     });
     stream.on("error", (err) => {
-      console.error("[Backup] Stream error:", err);
+      logger.error({ backupId, err: err.message }, "[Backup] Stream error");
       if (!res.headersSent) res.status(500).end();
     });
     stream.pipe(res);
 
-    console.log(`[Backup] ${backupId} | ${(stats.size / 1024 / 1024).toFixed(1)} MB | ${duration}ms`);
+    logger.info({ backupId, sizeMB: (stats.size / 1024 / 1024).toFixed(1), durationMs: duration }, "Backup completed");
   } catch (error) {
-    console.error("[Backup] Failed:", error);
+    logger.error({ backupId, err: (error as Error)?.message }, "Backup failed");
     rm(tmpDir, { recursive: true, force: true }).catch(() => {});
     rm(zipFile, { force: true }).catch(() => {});
     res.status(500).json({

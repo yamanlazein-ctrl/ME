@@ -29,14 +29,12 @@ function headers(): Record<string, string> {
 
 async function apiPost(path: string, body: unknown): Promise<{ ok: boolean; status: number; data: any }> {
   const url = `${API_BASE}${path}`;
-  console.log("apiPost:", url, JSON.stringify(body));
   const r = await fetch(url, {
     method: "POST",
     headers: headers(),
     body: JSON.stringify(body),
   });
   const data = await r.json().catch(() => ({}));
-  console.log("apiPost response:", r.status, url, JSON.stringify(data));
   return { ok: r.ok, status: r.status, data };
 }
 
@@ -83,7 +81,7 @@ export function ActivationScreen({ onActivated }: { onActivated: () => void }) {
        } catch (netErr) {
          throw new Error("خطأ شبكة: " + (netErr instanceof Error ? netErr.message : "فشل الاتصال") + " | tenantId=" + tid + " | key=" + key);
        }
-       console.log("activate response:", r.status, r.data);
+
        if (!r.ok) {
          const code = r.data?.code || r.data?.message || "";
          if (code === "INVALID_LICENSE" || r.status === 400) throw new Error("فشل التفعيل (400): " + (r.data?.message || code || "رسالة فارغة") + " | tenantId=" + tid);
@@ -175,7 +173,7 @@ export function ActivationScreen({ onActivated }: { onActivated: () => void }) {
     <div className="min-h-screen w-full bg-background text-foreground flex items-center justify-center px-4" dir="rtl">
       <div className="w-full max-w-md rounded-2xl border border-border bg-card p-8 shadow-2xl">
         <div className="flex flex-col items-center text-center">
-          <img src={logoUrl} alt="Motard Fabrics Gruob" className="h-20 w-auto object-contain" />
+          <img src={logoUrl} alt="Motard Fabrics Group" className="h-20 w-auto object-contain" />
           <h1 className="mt-4 text-2xl font-bold tracking-tight text-foreground">إعداد النظام</h1>
           <p className="mt-1 text-xs text-muted-foreground">
             {step === "activate" && "أدخل مفتاح الترخيص لبدء التفعيل"}

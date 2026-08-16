@@ -1,4 +1,4 @@
-# Motard Fabrics ERP
+# Motard Fabrics Group ERP
 
 Arabic-language ERP for fabric & roll trading, built as a monorepo with a React
 frontend, an Express + PostgreSQL API, a license-management admin dashboard, and

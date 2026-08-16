@@ -20,7 +20,7 @@ export function Header() {
         <div className="flex items-center gap-2 sm:gap-3 min-w-0 shrink-0">
           <img
             src={logoUrl}
-            alt="Motard Fabrics Gruob"
+            alt="Motard Fabrics Group"
             className="h-8 sm:h-10 w-auto object-contain shrink-0"
           />
           {branchName && (

@@ -10,7 +10,7 @@ import "./print.css";
  * Logo appears top-LEFT; brand name beneath; title on the right.
  * No legacy contact / tax / commercial data is shown.
  */
-const BRAND_NAME = "Motard Fabrics Gruob";
+const BRAND_NAME = "Motard Fabrics Group";
 const BRAND_SUBTITLE = "Motard Fabrics Group";
 
 export type PrintMetaItem = { label: string; value: string };
