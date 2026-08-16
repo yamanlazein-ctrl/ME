@@ -39,6 +39,7 @@ import {
   registerInvitationAdminRoutes,
   registerInvitationPublicRoutes,
 } from "./routes/invitation.route.js";
+import { registerAuditRoutes } from "./routes/audit.route.js";
 import { createLicenseHeartbeatMiddleware } from "../infrastructure/http/middleware/license.heartbeat.middleware.js";
 
 // Crash reporting & APM — guarded so it never blocks startup
@@ -255,6 +256,12 @@ registerSettingsRoutes(
 registerDashboardRoutes(
   apiRouter,
   container.dashboardRepo,
+  authMiddleware,
+  rbac(["admin", "accountant", "warehouse", "viewer"]),
+);
+registerAuditRoutes(
+  apiRouter,
+  container.auditRepo,
   authMiddleware,
   rbac(["admin", "accountant", "warehouse", "viewer"]),
 );
