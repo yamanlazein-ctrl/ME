@@ -1,7 +1,10 @@
 [package]
-name = "erp-desktop"
-version = "0.1.0"
+name = "motard-fabrics-erp"
+version = "1.0.0"
 edition = "2021"
+description = "Motard Fabrics Group ERP — Fabric & roll trading management system"
+authors = ["Motard Fabrics Group"]
+license = "Proprietary"
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
