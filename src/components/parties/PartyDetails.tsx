@@ -798,6 +798,7 @@ function StatementTab({ p, kind }: { p: Party; kind: PartyKind }) {
               <SelectContent>
                 <SelectItem value="SYP">ل.س</SelectItem>
                 <SelectItem value="USD">$ دولار</SelectItem>
+                <SelectItem value="EUR">€ يورو</SelectItem>
               </SelectContent>
             </Select>
           </div>
