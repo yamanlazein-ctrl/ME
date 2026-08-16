@@ -24,9 +24,9 @@ import {
 import { CURRENCIES, formatAmount } from "@/presentation/hooks/useCurrency";
 import { useCreateReturn, RETURN_REASONS, type ReturnKind, type ReturnReason } from "@/presentation/hooks/useReturns";
 import { useInvoicesList } from "@/presentation/hooks/useInvoices";
-import { Plus, Save, Trash2, X, Lock } from "lucide-react";
+import { Plus, Palette, Save, Trash2, X, Lock } from "lucide-react";
 
-type Line = { id: string; rollId: string; quantityKg: number; pricePerKg: number };
+type Line = { id: string; rollId: string; quantityKg: number; pricePerKg: number; fabricId?: string };
 
 export function ReturnForm({ kind }: { kind: ReturnKind }) {
   const navigate = useNavigate();
@@ -55,6 +55,24 @@ export function ReturnForm({ kind }: { kind: ReturnKind }) {
   const update = (id: string, patch: Partial<Line>) =>
     setLines((l) => l.map((x) => (x.id === id ? { ...x, ...patch } : x)));
   const remove = (id: string) => setLines((l) => l.filter((x) => x.id !== id));
+
+  /** Insert a new line right after the current one, preserving fabric context. */
+  const addColorForSameFabric = (lineId: string) => {
+    const currentLine = lines.find((l) => l.id === lineId);
+    let fabricId = currentLine?.fabricId;
+    if (!fabricId && currentLine?.rollId) {
+      const r = rollById(currentLine.rollId);
+      const c = r && colorById(r.colorId);
+      fabricId = c?.fabricId;
+    }
+    const idx = lines.findIndex((l) => l.id === lineId);
+    const newLine: Line = { id: `l-${Date.now()}`, rollId: "", quantityKg: 0, pricePerKg: 0, fabricId };
+    setLines((prev) => {
+      const next = [...prev];
+      next.splice(idx + 1, 0, newLine);
+      return next;
+    });
+  };
 
   const totalAmount = lines.reduce((s, l) => s + l.quantityKg * l.pricePerKg, 0);
 
@@ -205,14 +223,25 @@ export function ReturnForm({ kind }: { kind: ReturnKind }) {
                         value={l.rollId}
                         onValueChange={(v) => {
                           const rr = rollById(v);
-                          update(l.id, { rollId: v, pricePerKg: rr?.pricePerKg ?? 0 });
+                          const cc = rr && colorById(rr.colorId);
+                          update(l.id, {
+                            rollId: v,
+                            pricePerKg: rr?.pricePerKg ?? 0,
+                            fabricId: cc?.fabricId,
+                          });
                         }}
                       >
                         <SelectTrigger>
                           <SelectValue placeholder="اختر صبغة" />
                         </SelectTrigger>
                         <SelectContent>
-                          {rolls.map((rr) => {
+                          {(l.fabricId
+                            ? rolls.filter((rr) => {
+                                const cc = colorById(rr.colorId);
+                                return cc?.fabricId === l.fabricId;
+                              })
+                            : rolls
+                          ).map((rr) => {
                             const cc = colorById(rr.colorId);
                             const ff = cc && fabricById(cc.fabricId);
                             return (
@@ -254,9 +283,21 @@ export function ReturnForm({ kind }: { kind: ReturnKind }) {
                       {formatNumber(l.quantityKg * l.pricePerKg)}
                     </td>
                     <td className="px-3 py-2">
-                      <button onClick={() => remove(l.id)} className="text-destructive">
-                        <Trash2 className="h-4 w-4" />
-                      </button>
+                      <div className="flex items-center gap-1">
+                        {l.rollId && f && (
+                          <button
+                            onClick={() => addColorForSameFabric(l.id)}
+                            className="text-muted-foreground hover:text-primary transition"
+                            title={`إضافة لون جديد لـ ${f.name}`}
+                            aria-label="إضافة لون لنفس القماش"
+                          >
+                            <Palette className="h-4 w-4" />
+                          </button>
+                        )}
+                        <button onClick={() => remove(l.id)} className="text-destructive">
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 );
