@@ -11,6 +11,7 @@ export interface InvoiceLineData {
   colorId: UUID;
   rollId: UUID;
   quantityKg: number;
+  pieces?: number;
   pricePerKg: number;
   discountAmount: number;
   note?: string;

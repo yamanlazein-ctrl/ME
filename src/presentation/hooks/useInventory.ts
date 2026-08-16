@@ -210,8 +210,16 @@ export function totalKgOfColor(colorId: string): number {
   return rollsOfColor(colorId).reduce((s, r) => s + r.remainingKg, 0);
 }
 
+export function totalPiecesOfColor(colorId: string): number {
+  return rollsOfColor(colorId).reduce((s, r) => s + (r.pieces ?? 1), 0);
+}
+
 export function totalKgOfFabric(fabricId: string): number {
   return colorsOfFabric(fabricId).reduce((s, c) => s + totalKgOfColor(c.id), 0);
+}
+
+export function totalPiecesOfFabric(fabricId: string): number {
+  return colorsOfFabric(fabricId).reduce((s, c) => s + totalPiecesOfColor(c.id), 0);
 }
 
 export function searchColors(term: string, limit = 8): Color[] {

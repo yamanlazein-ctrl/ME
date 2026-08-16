@@ -12,6 +12,7 @@ export interface RollData {
   dyeBatch: string;
   initialKg: number;
   remainingKg: number;
+  pieces: number;
   pricePerKg: number;
   salePricePerKg?: number | null;
   currency: Currency;
@@ -31,6 +32,7 @@ export class Roll implements RollData {
   readonly dyeBatch: string;
   readonly initialKg: number;
   remainingKg: number;
+  pieces: number;
   pricePerKg: number;
   salePricePerKg?: number | null;
   readonly currency: Currency;
@@ -49,6 +51,7 @@ export class Roll implements RollData {
     this.dyeBatch = data.dyeBatch;
     this.initialKg = data.initialKg;
     this.remainingKg = data.remainingKg;
+    this.pieces = data.pieces ?? 1;
     this.pricePerKg = data.pricePerKg;
     this.salePricePerKg = data.salePricePerKg;
     this.currency = data.currency;
@@ -69,6 +72,7 @@ export class Roll implements RollData {
     const initial = Math.max(0, props.initialKg);
     return new Roll({
       ...props,
+      pieces: props.pieces ?? 1,
       id: crypto.randomUUID(),
       remainingKg: initial,
       version: 1,

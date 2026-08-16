@@ -134,6 +134,7 @@ export interface CreateOrderItemInput {
   colorName: string;
   colorCode?: string;
   requestedKg: number;
+  pieces?: number;
   rollId?: UUID;
   widthCm?: number;
   weightGsm?: number;

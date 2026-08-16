@@ -153,6 +153,7 @@ function EntryInvoicePage() {
         colorCode: col?.code ?? "",
         colorHex: col?.hex ?? undefined,
         quantity: l.quantityKg,
+        pieces: l.pieces ?? 1,
         pricePerKg: l.pricePerKg,
         discountAmount: l.discountAmount ?? 0,
       };
@@ -409,6 +410,7 @@ function EntryInvoicePage() {
             rollNo: `R-${Date.now().toString().slice(-5)}-${l.id.slice(-2)}`,
             dyeBatch: l.dyeBatch,
             initialKg: l.quantity,
+            pieces: 1,
             // The entry invoice transaction increments remainingKg from 0 to
             // quantity — passing 0 here keeps the stock count accurate without
             // double-counting against the invoice's stock increment.

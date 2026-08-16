@@ -26,6 +26,7 @@ export type EntryLine = {
   gsm: string;
   adad: string;
   sahb: string;
+  pieces: number;
   notes?: string;
   imageUrl?: string;
 };
@@ -50,6 +51,7 @@ export const emptyLine = (): EntryLine => ({
   gsm: "",
   adad: "",
   sahb: "",
+  pieces: 1,
 });
 
 export const cloneStickyFields = (prev: EntryLine): Partial<EntryLine> => ({
@@ -69,6 +71,7 @@ export const cloneStickyFields = (prev: EntryLine): Partial<EntryLine> => ({
   machineNumber: prev.machineNumber,
   kromaj: prev.kromaj,
   gsm: prev.gsm,
+  pieces: prev.pieces,
 });
 
 export const lineHasData = (l: EntryLine) =>

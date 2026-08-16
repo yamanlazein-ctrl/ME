@@ -1,7 +1,7 @@
 import { ChevronDown, ChevronLeft, CheckCircle2, Layers, PackageX, TrendingDown } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ColorSwatch } from "@/components/common/ColorSwatch";
-import { colorsOfFabric, fabricById, rollsOfColor, rollStatus, totalKgOfColor, totalKgOfFabric, type Color, type Fabric, type Roll } from "@/presentation/hooks/useInventory";
+import { colorsOfFabric, fabricById, rollsOfColor, rollStatus, totalKgOfColor, totalPiecesOfColor, totalKgOfFabric, totalPiecesOfFabric, type Color, type Fabric, type Roll } from "@/presentation/hooks/useInventory";
 import { supplierById } from "@/presentation/hooks/useParties";
 import { RowActions } from "./InventoryHelpers";
 import { formatNumber, formatMoney, formatQuantity } from "@/shared/utils/formatNumber";
@@ -50,6 +50,7 @@ function FabricRow({
   onSelect?: () => void;
 }) {
   const totalKg = totalKgOfFabric(fabric.id);
+  const totalPieces = totalPiecesOfFabric(fabric.id);
   const colorCount = colorsOfFabric(fabric.id).length;
   return (
     <div
@@ -81,7 +82,7 @@ function FabricRow({
       <div className="min-w-0 flex-1">
         <div className="text-sm font-semibold text-foreground truncate">{fabric.name}</div>
         <div className="text-xs text-muted-foreground tabular-nums">
-          {colorCount} لون • إجمالي {formatNumber(totalKg)} كغ
+          {totalPieces} أثوب • {colorCount} لون • {formatNumber(totalKg)} كغ
           {fabric.category ? ` • ${fabric.category}` : ""}
           {" • "}
           الحد الأدنى {fabric.minStockKg} كغ
@@ -114,6 +115,7 @@ function ColorRow({
   onSelect?: () => void;
 }) {
   const total = totalKgOfColor(color.id);
+  const pieces = totalPiecesOfColor(color.id);
   const count = rollsOfColor(color.id).length;
   return (
     <div
@@ -141,7 +143,7 @@ function ColorRow({
           {color.name} — <span className="text-muted-foreground tabular-nums">{color.code}</span>
         </div>
         <div className="text-[11px] text-muted-foreground tabular-nums">
-          {count} صبغة • {formatQuantity(total)} كغ متبقية
+          {pieces} أثوب • {count} صبغة • {formatQuantity(total)} كغ
         </div>
       </div>
       <RowActions onEdit={onEdit} onDelete={onDelete} onAdd={onAddRoll} addLabel="إضافة صبغة" />
@@ -205,6 +207,10 @@ function RollRow({
             </dd>
           </div>
           <div className="flex justify-between gap-2">
+            <dt className="text-muted-foreground">عدد الأثواب</dt>
+            <dd className="font-semibold text-foreground tabular-nums">{roll.pieces ?? 1} أثوب</dd>
+          </div>
+          <div className="flex justify-between gap-2">
             <dt className="text-muted-foreground">رقم الصبغة</dt>
             <dd className="text-foreground tabular-nums truncate">{roll.dyeBatch}</dd>
           </div>
@@ -240,13 +246,17 @@ function RollRow({
         <div className="grid h-7 w-7 place-items-center rounded-md bg-secondary text-muted-foreground text-[10px] font-bold tabular-nums shrink-0">
           #{roll.rollNo}
         </div>
-        <div className="min-w-0 flex-1 grid grid-cols-2 lg:grid-cols-4 gap-2 items-center">
+        <div className="min-w-0 flex-1 grid grid-cols-2 lg:grid-cols-5 gap-2 items-center">
           <div>
             <div className="text-xs text-muted-foreground">المتبقي</div>
             <div className="text-sm font-semibold text-foreground tabular-nums">
               {roll.remainingKg}{" "}
               <span className="text-xs text-muted-foreground">/ {roll.initialKg} كغ</span>
             </div>
+          </div>
+          <div>
+            <div className="text-xs text-muted-foreground">الأثواب</div>
+            <div className="text-sm font-semibold text-foreground tabular-nums">{roll.pieces ?? 1}</div>
           </div>
           <div>
             <div className="text-xs text-muted-foreground">رقم الصبغة</div>
