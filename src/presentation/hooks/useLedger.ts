@@ -62,6 +62,7 @@ export {
   buildFabricHistory,
   buildOutstanding,
   buildPartyStats,
+  buildPartyStatsByCurrency,
   partyOf,
 } from "@/core/calculations/ledgerCalc";
 

@@ -88,6 +88,17 @@ export type PartyStats = {
   creditRemaining: number;
 };
 
+/** Per-currency breakdown of party stats — never blends currencies. */
+export type PartyStatsByCurrency = {
+  invoicesCount: number;
+  totalAmount: number;
+  totalPaid: number;
+  remaining: number;
+  avgInvoice: number;
+  lastDate?: string;
+  totalKg: number;
+};
+
 type FsParty = { id: string; creditLimit?: number };
 
 const isActive = (e: { status?: string }) => !e.status || e.status === "active";
@@ -189,19 +200,23 @@ export function buildOutstanding(
     kind: string;
     status: string;
     amount: number;
+    currency?: string;
   }[],
+  currency?: string,
 ): OutstandingRow[] {
   const rows: OutstandingRow[] = [];
   const paidByInvoice = new Map<string, number>();
   for (const v of vouchers) {
     if (v.status !== "active" || !v.invoiceId) continue;
     if (v.partyId !== partyId) continue;
+    if (currency && v.currency !== currency) continue;
     paidByInvoice.set(v.invoiceId, (paidByInvoice.get(v.invoiceId) ?? 0) + v.amount);
   }
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   for (const inv of invoices) {
     if (inv.partyId !== partyId || !isActive(inv)) continue;
+    if (currency && inv.currency !== currency) continue;
     const total = Math.round(invoiceTotal(inv));
     if (total <= 0) continue;
     const paid = Math.round(paidByInvoice.get(inv.id) ?? 0);
@@ -231,21 +246,27 @@ export function buildPartyStats(
   party: FsParty,
   kind: PartyKind,
   invoices: InvoiceData[],
-  vouchers: { partyId: string; kind: string; status: string; amount: number }[],
+  vouchers: { partyId: string; kind: string; status: string; amount: number; currency?: string }[],
+  currency?: string,
 ): PartyStats {
   const expectedType = kind === "supplier" ? "entry" : "sale";
-  const invs = invoices.filter(
+  let invs = invoices.filter(
     (i) => i.partyId === party.id && isActive(i) && i.type === expectedType,
   );
+  if (currency) {
+    invs = invs.filter((i) => i.currency === currency);
+  }
   const totalAmount = invs.reduce((s, i) => s + Math.round(invoiceTotal(i)), 0);
-  const paid = vouchers
-    .filter(
-      (v) =>
-        v.partyId === party.id &&
-        isActive(v) &&
-        v.kind === (kind === "supplier" ? "payment" : "receipt"),
-    )
-    .reduce((s, v) => s + v.amount, 0);
+  let partyVouchers = vouchers.filter(
+    (v) =>
+      v.partyId === party.id &&
+      isActive(v) &&
+      v.kind === (kind === "supplier" ? "payment" : "receipt"),
+  );
+  if (currency) {
+    partyVouchers = partyVouchers.filter((v) => v.currency === currency);
+  }
+  const paid = partyVouchers.reduce((s, v) => s + v.amount, 0);
   const remaining = Math.max(0, totalAmount - paid);
   const totalKg = invs.reduce((s, i) => s + i.lines.reduce((a, l) => a + l.quantityKg, 0), 0);
   const dates = invs
@@ -267,6 +288,52 @@ export function buildPartyStats(
     creditUsed,
     creditRemaining,
   };
+}
+
+/** Build per-currency breakdown of party stats — never blends currencies. */
+export function buildPartyStatsByCurrency(
+  party: FsParty,
+  kind: PartyKind,
+  invoices: InvoiceData[],
+  vouchers: { partyId: string; kind: string; status: string; amount: number; currency?: string }[],
+): Record<string, PartyStatsByCurrency> {
+  const expectedType = kind === "supplier" ? "entry" : "sale";
+  const invs = invoices.filter(
+    (i) => i.partyId === party.id && isActive(i) && i.type === expectedType,
+  );
+  const partyVouchers = vouchers.filter(
+    (v) =>
+      v.partyId === party.id &&
+      isActive(v) &&
+      v.kind === (kind === "supplier" ? "payment" : "receipt"),
+  );
+
+  const out: Record<string, PartyStatsByCurrency> = {};
+  for (const inv of invs) {
+    const c = inv.currency;
+    const cur = out[c] ?? {
+      invoicesCount: 0, totalAmount: 0, totalPaid: 0, remaining: 0, avgInvoice: 0, totalKg: 0,
+    };
+    cur.invoicesCount += 1;
+    cur.totalAmount += Math.round(invoiceTotal(inv));
+    cur.totalKg += inv.lines.reduce((a, l) => a + l.quantityKg, 0);
+    out[c] = cur;
+  }
+  for (const v of partyVouchers) {
+    const c = v.currency ?? "SYP";
+    const cur = out[c] ?? {
+      invoicesCount: 0, totalAmount: 0, totalPaid: 0, remaining: 0, avgInvoice: 0, totalKg: 0,
+    };
+    cur.totalPaid += v.amount;
+    out[c] = cur;
+  }
+  for (const c of Object.keys(out)) {
+    const cur = out[c];
+    cur.remaining = Math.max(0, cur.totalAmount - cur.totalPaid);
+    cur.avgInvoice = cur.invoicesCount ? Math.round(cur.totalAmount / cur.invoicesCount) : 0;
+    cur.totalKg = Math.round(cur.totalKg);
+  }
+  return out;
 }
 
 /** Resolve a party's display name by kind + id from a party list. */

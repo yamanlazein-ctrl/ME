@@ -150,6 +150,7 @@ export class PostgresStatementRepository implements IStatementRepository {
         type: row.type as StatementEntryData["type"],
         status: isCancelled ? "cancelled" : "active",
         referenceType: row.referenceType ?? undefined,
+        referenceId: row.referenceId ?? undefined,
         referenceNumber: row.referenceNumber ?? undefined,
         description:
           row.description ??

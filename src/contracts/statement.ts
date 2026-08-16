@@ -25,6 +25,7 @@ export interface StatementEntryDTO {
   /** Cancelled movements are shown (struck through) but excluded from balances. */
   status: "active" | "cancelled";
   referenceType?: string;
+  referenceId?: UUID;
   referenceNumber?: string;
   description?: string;
   quantityKg?: number;

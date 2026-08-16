@@ -30,6 +30,7 @@ export interface StatementEntryData {
   type: LedgerType;
   status: "active" | "cancelled";
   referenceType?: string;
+  referenceId?: UUID;
   referenceNumber?: string;
   description?: string;
   quantityKg?: number;

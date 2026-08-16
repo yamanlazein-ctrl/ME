@@ -59,7 +59,11 @@ import {
   useParties,
 } from "@/presentation/hooks/useParties";
 import { useInventory, colors, fabrics } from "@/presentation/hooks/useInventory";
-import { currencySymbol, type Currency } from "@/presentation/hooks/useCurrency";
+import {
+  currencySymbol,
+  formatCurrencyBreakdown,
+  type Currency,
+} from "@/presentation/hooks/useCurrency";
 import type { Party } from "@/domain/entities/Party";
 import { useInvoicesList } from "@/presentation/hooks/useInvoices";
 import { useVouchersList } from "@/presentation/hooks/useVouchers";
@@ -69,6 +73,7 @@ import {
   buildFabricHistory,
   buildOutstanding,
   buildPartyStats,
+  buildPartyStatsByCurrency,
   LEDGER_TYPE_LABEL,
   type LedgerType,
 } from "@/presentation/hooks/useLedger";
@@ -148,8 +153,7 @@ export function PartyDetailsPage({ kind, id }: { kind: PartyKind; id: string }) 
     );
   }
 
-  const stats = buildPartyStats(p, kind, allInvoices, allVouchers);
-  const cur = currencySymbol(p.currency ?? "SYP");
+  const statsByCurrency = buildPartyStatsByCurrency(p, kind, allInvoices, allVouchers);
   const active = (p.status ?? "active") === "active";
 
   return (
@@ -209,30 +213,48 @@ export function PartyDetailsPage({ kind, id }: { kind: PartyKind; id: string }) 
         </div>
       </PageCard>
 
-      {/* KPI strip */}
+      {/* KPI strip — per-currency breakdown, never mixes currencies */}
       <PageCard
         title={isSup ? "ملخص المشتريات" : "ملخص المبيعات"}
-        description="لمحة سريعة عن الحساب."
+        description="لمحة سريعة عن الحساب — منفصلة لكل عملة."
         tone="primary"
       >
-        <div className="grid gap-3 md:grid-cols-3 xl:grid-cols-6">
-          <Kpi label="عدد الفواتير" value={String(stats.invoicesCount)} />
-          <Kpi label="الإجمالي" value={fmt(stats.totalAmount)} suffix={cur} />
-          <Kpi label="المدفوع" value={fmt(stats.totalPaid)} suffix={cur} />
-          <Kpi
-            label="المتبقي"
-            value={fmt(stats.remaining)}
-            suffix={cur}
-            tone={stats.remaining > 0 ? "warn" : "good"}
-          />
-          <Kpi
-            label="حد الائتمان المتبقي"
-            value={fmt(stats.creditRemaining)}
-            suffix={cur}
-            tone={stats.creditLimit && stats.creditUsed > stats.creditLimit ? "warn" : "muted"}
-          />
-          <Kpi label="آخر عملية" value={stats.lastDate ?? "—"} />
-        </div>
+        {Object.entries(statsByCurrency).length === 0 ? (
+          <div className="py-6 text-center text-xs text-muted-foreground">لا حركات مسجلة لهذا الحساب.</div>
+        ) : (
+          <div className="space-y-3">
+            {Object.entries(statsByCurrency).map(([ccy, stats]) => {
+              const cur = currencySymbol(ccy as Currency);
+              return (
+                <div
+                  key={ccy}
+                  className="rounded-lg border border-border/60 bg-background/60 px-3 py-2"
+                >
+                  <div className="mb-1 flex items-center gap-2">
+                    <span className="rounded bg-primary/10 px-2 py-0.5 text-[10px] font-bold text-primary">
+                      {cur}
+                    </span>
+                    <span className="text-[11px] font-semibold text-muted-foreground">
+                      {stats.invoicesCount} فاتورة · {fmt(stats.totalKg)} كغ
+                    </span>
+                  </div>
+                  <div className="grid gap-3 md:grid-cols-3 xl:grid-cols-5">
+                    <Kpi label="الإجمالي" value={fmt(stats.totalAmount)} suffix={cur} />
+                    <Kpi label="المدفوع" value={fmt(stats.totalPaid)} suffix={cur} />
+                    <Kpi
+                      label="المتبقي"
+                      value={fmt(stats.remaining)}
+                      suffix={cur}
+                      tone={stats.remaining > 0 ? "warn" : "good"}
+                    />
+                    <Kpi label="متوسط الفاتورة" value={fmt(stats.avgInvoice)} suffix={cur} />
+                    <Kpi label="آخر عملية" value={stats.lastDate ?? "—"} />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </PageCard>
 
       {/* Tabs */}
@@ -266,7 +288,7 @@ export function PartyDetailsPage({ kind, id }: { kind: PartyKind; id: string }) 
       {tab === "stats" && <StatsTab p={p} kind={kind} />}
       {tab === "attachments" && <AttachmentsTab p={p} />}
       {tab === "notes" && <NotesTab p={p} kind={kind} />}
-      {tab === "activity" && <ActivityTab p={p} />}
+      {tab === "activity" && <ActivityTab p={p} kind={kind} />}
 
       <PartyFormDialog
         kind={kind}
@@ -380,9 +402,16 @@ function InvoicesTab({ p, kind }: { p: Party; kind: PartyKind }) {
   const navigate = useNavigate();
   const isSup = kind === "supplier";
   const { data: invData } = useInvoicesList();
+  const { data: vData } = useVouchersList();
   const invs = (invData?.data ?? [])
     .filter((i) => i.partyId === p.id && i.status !== "cancelled")
     .sort((a, b) => (a.date < b.date ? 1 : -1));
+  // Compute actual paid per invoice from linked vouchers (BUG-8 fix).
+  const paidByInvoice = new Map<string, number>();
+  for (const v of (vData?.data ?? [])) {
+    if (v.status !== "active" || !v.invoiceId || v.partyId !== p.id) continue;
+    paidByInvoice.set(v.invoiceId, (paidByInvoice.get(v.invoiceId) ?? 0) + v.amount);
+  }
 
   return (
     <PageCard
@@ -413,7 +442,8 @@ function InvoicesTab({ p, kind }: { p: Party; kind: PartyKind }) {
             )}
             {invs.map((i) => {
               const t = invoiceTotal(i);
-              const r = Math.max(0, t);
+              const paid = paidByInvoice.get(i.id) ?? 0;
+              const r = Math.max(0, t - paid);
               const label = i.type === "entry" ? "شراء" : i.type === "return" ? "مرتجع" : "بيع";
               return (
                 <tr
@@ -426,7 +456,10 @@ function InvoicesTab({ p, kind }: { p: Party; kind: PartyKind }) {
                   <td className="tabular-nums text-muted-foreground">{i.date}</td>
                   <td className="text-center tabular-nums">{i.lines.length}</td>
                   <td className="text-left tabular-nums">{fmt(t)}</td>
-                  <td className="text-left tabular-nums text-muted-foreground">0</td>
+                  <td className="text-left tabular-nums text-muted-foreground">
+                    {fmt(paid)}{" "}
+                    <span className="text-[10px] text-muted-foreground">{currencySymbol(i.currency)}</span>
+                  </td>
                   <td
                     className={`text-left font-semibold tabular-nums ${
                       r > 0 ? "text-warning" : "text-success"
@@ -455,9 +488,27 @@ function PaymentsTab({ p }: { p: Party }) {
   const { data: invData } = useInvoicesList();
   const invs = (invData?.data ?? []).filter((i) => i.partyId === p.id && i.status === "active");
   const openInvs = invs.filter((i) => invoiceRemaining(invoiceTotal(i), 0) > 0);
-  const payments: { date: string; amount: number; invoice: string; invoiceId: string }[] = [];
+  const { data: vData } = useVouchersList();
+  // BUG-9 fix: show actual payment/receipt vouchers linked to this party.
+  const payments = (vData?.data ?? [])
+    .filter((v) => v.partyId === p.id && v.status === "active" && (v.kind === "receipt" || v.kind === "payment"))
+    .map((v) => {
+      const inv = invs.find((i) => i.id === v.invoiceId);
+      return {
+        date: v.date ?? new Date().toISOString().slice(0, 10),
+        amount: v.amount,
+        currency: v.currency ?? "SYP",
+        kind: v.kind,
+        number: v.number,
+        invoice: inv?.number ?? "—",
+        invoiceId: v.invoiceId ?? "",
+        method: v.method ?? "—",
+      };
+    })
+    .sort((a, b) => (a.date < b.date ? 1 : -1));
 
   const submit = async () => {
+    const inv = openInvs.find((i) => i.id === payFor);
     const n = Number(amount);
     if (!payFor || !n || n <= 0) return;
     await createReceipt.mutateAsync({
@@ -467,7 +518,7 @@ function PaymentsTab({ p }: { p: Party }) {
       partyKind: "customer",
       invoiceId: payFor,
       amount: n,
-      currency: (p.currency ?? "SYP") as Currency,
+      currency: (inv?.currency ?? p.currency ?? "SYP") as Currency,
       method: "cash",
     });
     setPayFor("");
@@ -526,14 +577,17 @@ function PaymentsTab({ p }: { p: Party }) {
 
       <PageCard
         title="سجل الدفعات"
-        description="جميع الدفعات المسجلة على فواتير هذا الحساب."
+        description="جميع سندات القبض والصرف المرتبطة بهذا الحساب."
         noBodyPadding
       >
         <div className="w-full overflow-x-auto">
-          <table className="w-full min-w-[600px] text-right text-sm">
+          <table className="w-full min-w-[700px] text-right text-sm">
             <thead className="bg-secondary/60 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
               <tr className="[&>th]:px-4 [&>th]:py-2.5">
                 <th className="w-32">التاريخ</th>
+                <th className="w-32">السند</th>
+                <th className="w-24">النوع</th>
+                <th className="w-24">الطريقة</th>
                 <th className="w-32">الفاتورة</th>
                 <th className="text-left">المبلغ</th>
               </tr>
@@ -541,7 +595,7 @@ function PaymentsTab({ p }: { p: Party }) {
             <tbody className="divide-y divide-border">
               {payments.length === 0 && (
                 <tr>
-                  <td colSpan={3} className="px-4 py-10 text-center text-xs text-muted-foreground">
+                  <td colSpan={6} className="px-4 py-10 text-center text-xs text-muted-foreground">
                     لا توجد دفعات مسجلة بعد.
                   </td>
                 </tr>
@@ -549,10 +603,15 @@ function PaymentsTab({ p }: { p: Party }) {
               {payments.map((pay, idx) => (
                 <tr key={idx} className="h-12 align-middle [&>td]:px-4 [&>td]:py-2">
                   <td className="tabular-nums text-muted-foreground">{pay.date}</td>
+                  <td className="tabular-nums font-semibold text-primary">{pay.number ?? "—"}</td>
+                  <td className="text-xs text-muted-foreground">
+                    {pay.kind === "receipt" ? "قبض" : pay.kind === "payment" ? "صرف" : pay.kind}
+                  </td>
+                  <td className="text-xs text-muted-foreground">{pay.method}</td>
                   <td className="tabular-nums text-primary">{pay.invoice}</td>
                   <td className="text-left font-semibold tabular-nums">
                     {fmt(pay.amount)}{" "}
-                    <span className="text-[10px] text-muted-foreground">{cur}</span>
+                    <span className="text-[10px] text-muted-foreground">{currencySymbol(pay.currency as Currency)}</span>
                   </td>
                 </tr>
               ))}
@@ -567,10 +626,11 @@ function PaymentsTab({ p }: { p: Party }) {
 /* ---------------- Statement of Account ---------------- */
 
 function StatementTab({ p, kind }: { p: Party; kind: PartyKind }) {
+  const navigate = useNavigate();
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
   const [type, setType] = useState<LedgerType | "all">("all");
-  const [ccy, setCcy] = useState<Currency | "all">("all");
+  const [ccy, setCcy] = useState<Currency>(p.currency ?? "SYP");
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [confirmSettle, setConfirmSettle] = useState(false);
 
@@ -578,7 +638,7 @@ function StatementTab({ p, kind }: { p: Party; kind: PartyKind }) {
     from: from || undefined,
     to: to || undefined,
     type: type === "all" ? undefined : type,
-    currency: ccy === "all" ? undefined : ccy,
+    currency: ccy,
   };
 
   const { data: statement, isLoading } = useStatement(p.id, kind, filter);
@@ -731,12 +791,11 @@ function StatementTab({ p, kind }: { p: Party; kind: PartyKind }) {
             <Label className="mb-1 block text-[11px] font-semibold text-muted-foreground">
               العملة
             </Label>
-            <Select value={ccy} onValueChange={(v) => setCcy(v as Currency | "all")}>
+            <Select value={ccy} onValueChange={(v) => setCcy(v as Currency)}>
               <SelectTrigger className="!h-10">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">كل العملات</SelectItem>
                 <SelectItem value="SYP">ل.س</SelectItem>
                 <SelectItem value="USD">$ دولار</SelectItem>
               </SelectContent>
@@ -745,10 +804,7 @@ function StatementTab({ p, kind }: { p: Party; kind: PartyKind }) {
         </div>
         <div className="mt-3 flex flex-wrap items-center gap-2">
           <Button variant="outline" className="h-9 gap-2" onClick={() => printDocument(printDoc)}>
-            <Printer className="h-4 w-4" /> طباعة
-          </Button>
-          <Button variant="outline" className="h-9 gap-2" onClick={() => printDocument(printDoc)}>
-            <FileText className="h-4 w-4" /> تصدير PDF
+            <Printer className="h-4 w-4" /> طباعة / PDF
           </Button>
           <Button variant="outline" className="h-9 gap-2" onClick={exportCsv}>
             <Download className="h-4 w-4" /> تصدير Excel
@@ -859,11 +915,16 @@ function StatementTab({ p, kind }: { p: Party; kind: PartyKind }) {
                 {rows.map((r) => (
                   <Fragment key={r.id}>
                     <tr
-                      className={`h-11 align-middle [&>td]:px-3 [&>td]:py-2 ${
+                      className={`h-11 cursor-pointer align-middle [&>td]:px-3 [&>td]:py-2 ${
                         r.status === "cancelled"
                           ? "bg-destructive/5 text-muted-foreground"
-                          : ""
+                          : "hover:bg-secondary/30"
                       }`}
+                      onClick={() => {
+                        if (r.referenceType === "invoice" && r.referenceId) {
+                          navigate({ to: "/invoices/$id", params: { id: r.referenceId } });
+                        }
+                      }}
                     >
                       <td className="tabular-nums text-muted-foreground">{r.seq}</td>
                       <td className="tabular-nums text-muted-foreground">
@@ -1025,7 +1086,7 @@ function StatementTab({ p, kind }: { p: Party; kind: PartyKind }) {
             <AlertDialogAction
               onClick={(e) => {
                 e.preventDefault();
-                settle.mutate(undefined, {
+                settle.mutate({ currency: ccy }, {
                   onSettled: () => setConfirmSettle(false),
                 });
               }}
@@ -1046,7 +1107,9 @@ function OutstandingTab({ p }: { p: Party }) {
   const invs = invData?.data ?? [];
   const { data: vData } = useVouchersList();
   const vchs = vData?.data ?? [];
-  const rows = buildOutstanding(p.id, invs, vchs);
+  // Currency-filtered outstanding (same pattern as BUG-06 fix) —
+  // avoids mixing SYP+USD+EUR into meaningless blended totals.
+  const rows = buildOutstanding(p.id, invs, vchs, p.currency ?? "SYP");
   const buckets = { "0-30": 0, "31-60": 0, "61-90": 0, "90+": 0 } as Record<
     "0-30" | "31-60" | "61-90" | "90+",
     number
@@ -1154,7 +1217,7 @@ function StatsTab({ p, kind }: { p: Party; kind: PartyKind }) {
   const colorCodes = Object.fromEntries(colors.map((c) => [c.id, c.code ?? ""]));
   const fabricNames = Object.fromEntries(fabrics.map((f) => [f.id, f.name]));
   const hist = buildFabricHistory(p.id, kind, invs, colorNames, colorCodes, fabricNames);
-  const stats = buildPartyStats(p, kind, invs, vchs);
+  const stats = buildPartyStats(p, kind, invs, vchs, p.currency ?? "SYP");
   const topRows = [...hist].sort((a, b) => b.totalKg - a.totalKg);
   const topFabric = topRows[0]?.fabricName;
   const topColor = topRows[0]?.colorName;
@@ -1338,15 +1401,68 @@ function NotesTab({ p, kind }: { p: Party; kind: PartyKind }) {
 
 /* ---------------- Activity ---------------- */
 
-function ActivityTab({ p }: { p: Party }) {
-  const acts = p.activity ?? [];
+/** Derive activity timeline from real data sources (invoices, vouchers, party changes)
+ *  — avoids a non-existent activity table. Sorted newest-first. */
+function ActivityTab({ p, kind }: { p: Party; kind: PartyKind }) {
+  const { data: invData } = useInvoicesList();
+  const invs = (invData?.data ?? []).filter((i) => i.partyId === p.id && i.status !== "cancelled");
+  const { data: vData } = useVouchersList();
+  const vchs = (vData?.data ?? []).filter((v) => v.partyId === p.id && v.status === "active");
+
+  const items: {
+    id: string;
+    kind: "invoice" | "payment" | "updated" | "created";
+    message: string;
+    at: string;
+    currency?: string;
+    amount?: number;
+  }[] = [];
+
+  // Party creation
+  items.push({
+    id: `party-${p.id}`,
+    kind: "created",
+    message: `تم إنشاء الحساب (${p.code ?? "—"})`,
+    at: p.createdAt ?? "",
+  });
+
+  // Invoices (sales/entries/returns)
+  for (const inv of invs) {
+    const label =
+      inv.type === "entry" ? "شراء" : inv.type === "return" ? "مرتجع" : "بيع";
+    items.push({
+      id: `inv-${inv.id}`,
+      kind: "invoice",
+      message: `${label} ${inv.number} — ${fmt(invoiceTotal(inv))} ${currencySymbol(inv.currency)}`,
+      at: inv.date + "T00:00:00",
+      currency: inv.currency,
+      amount: invoiceTotal(inv),
+    });
+  }
+
+  // Vouchers (receipts/payments)
+  for (const v of vchs) {
+    const label = v.kind === "receipt" ? "قبض" : v.kind === "payment" ? "صرف" : v.kind;
+    items.push({
+      id: `vch-${v.id}`,
+      kind: "payment",
+      message: `${label} ${v.number ?? ""} — ${fmt(v.amount)} ${currencySymbol(v.currency ?? "SYP")} ${v.invoiceId ? "على فاتورة" : ""}`,
+      at: (v.date ?? "") + "T00:00:00",
+      currency: v.currency ?? "SYP",
+      amount: v.amount,
+    });
+  }
+
+  // Sort newest-first
+  items.sort((a, b) => (a.at < b.at ? 1 : -1));
+
   return (
-    <PageCard title="سجل النشاط" description="جميع العمليات التي تمت على هذا الحساب." noBodyPadding>
+    <PageCard title="سجل النشاط" description="جميع العمليات المسجلة على هذا الحساب مباشرةً من الفواتير والسندات." noBodyPadding>
       <div className="divide-y divide-border">
-        {acts.length === 0 && (
+        {items.length === 0 && (
           <div className="px-4 py-10 text-center text-xs text-muted-foreground">لا نشاط بعد.</div>
         )}
-        {acts.map((a) => (
+        {items.map((a) => (
           <div key={a.id} className="flex items-start gap-3 px-4 py-3">
             <div
               className={`mt-0.5 grid h-7 w-7 place-items-center rounded-full text-[11px] font-bold ${
@@ -1370,7 +1486,7 @@ function ActivityTab({ p }: { p: Party }) {
             <div className="flex-1">
               <div className="text-sm text-foreground">{a.message}</div>
               <div className="text-[11px] tabular-nums text-muted-foreground">
-                {new Date(a.at).toLocaleString("en-GB")}
+                {a.at ? new Date(a.at).toLocaleString("ar-SY") : "—"}
               </div>
             </div>
           </div>

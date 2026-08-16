@@ -36,7 +36,7 @@ import { currencySymbol } from "@/presentation/hooks/useCurrency";
 import { useInventory } from "@/presentation/hooks/useInventory";
 import { useInvoicesList } from "@/presentation/hooks/useInvoices";
 import { useVouchersList } from "@/presentation/hooks/useVouchers";
-import { buildPartyStats } from "@/presentation/hooks/useLedger";
+import { buildPartyStats, buildPartyStatsByCurrency } from "@/presentation/hooks/useLedger";
 import { DataPagination } from "@/components/common/DataPagination";
 import { BulkSelectToolbar } from "@/components/common/BulkSelectToolbar";
 import { ConfirmBulkAction } from "@/components/common/ConfirmBulkAction";
@@ -131,7 +131,8 @@ export function PartyListPage({
     const result = list.filter((p) => {
       if (status !== "all" && (p.status ?? "active") !== status) return false;
       if (credit !== "all") {
-        const s = buildPartyStats(p, kind, invoices, vouchers);
+        // Credit limit is per-party (single currency) → filter by party.currency to avoid blended totals.
+        const s = buildPartyStats(p, kind, invoices, vouchers, p.currency ?? "SYP");
         const over = s.creditLimit > 0 && s.creditUsed > s.creditLimit;
         if (credit === "over" && !over) return false;
         if (credit === "under" && over) return false;
@@ -183,7 +184,7 @@ export function PartyListPage({
         "الحالة",
       ],
       ...filtered.map((p) => {
-        const s = buildPartyStats(p, kind, invoices, vouchers);
+        const s = buildPartyStats(p, kind, invoices, vouchers, p.currency ?? "SYP");
         return [
           p.code ?? "",
           p.name,
@@ -306,7 +307,7 @@ export function PartyListPage({
                 </tr>
               )}
               {paged.map((p) => {
-                const s = buildPartyStats(p, kind, invoices, vouchers);
+                const s = buildPartyStats(p, kind, invoices, vouchers, p.currency ?? "SYP");
                 const cur = currencySymbol(p.currency ?? "SYP");
                 const active = (p.status ?? "active") === "active";
                 const pct =
