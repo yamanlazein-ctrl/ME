@@ -1,6 +1,6 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
-import { Eye, FileStack, Printer, Trash2 } from "lucide-react";
+import { Eye, FileStack, Pencil, Printer, Trash2 } from "lucide-react";
 import { AppShell } from "@/components/layout/AppShell";
 import { PageCard } from "@/components/layout/PageCard";
 import { Button } from "@/components/ui/button";
@@ -31,7 +31,8 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { DataPagination } from "@/components/common/DataPagination";
-import { useCancelInvoice, useInvoicesList } from "@/presentation/hooks/useInvoices";
+import { useCancelInvoice, useInvoicesList, useInvoice } from "@/presentation/hooks/useInvoices";
+import { useVouchersList } from "@/presentation/hooks/useVouchers";
 import { formatDateTime } from "@/lib/utils";
 import { customers, suppliers } from "@/presentation/hooks/useParties";
 import { useInventory } from "@/presentation/hooks/useInventory";
@@ -89,6 +90,8 @@ function InvoicesTrackingPage() {
   const invoices = useMemo(() => data?.data ?? [], [data]);
   const total = useMemo(() => data?.total ?? 0, [data]);
   const allParties = [...customers, ...suppliers];
+  const { data: vouchersData } = useVouchersList();
+  const allVouchers = vouchersData?.data ?? [];
 
   const cancelInvoice = useCancelInvoice();
 
@@ -274,6 +277,13 @@ function InvoicesTrackingPage() {
                           <Button size="sm" variant="ghost" onClick={() => setPreview(inv)}>
                             <Eye className="ml-1 h-4 w-4" /> عرض
                           </Button>
+                          <Link
+                            to={inv.type === "entry" ? "/invoices/entry/new" : "/invoices/sale/new"}
+                            search={{ edit: inv.id }}
+                            className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-muted-foreground transition hover:bg-secondary hover:text-foreground"
+                          >
+                            <Pencil className="h-3.5 w-3.5" /> تعديل
+                          </Link>
                           <Button
                             size="sm"
                             variant="outline"
