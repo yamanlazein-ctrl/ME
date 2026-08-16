@@ -11,6 +11,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:api": "node tests/e2e/comprehensive-api.mjs",
+    "test:full": "node tests/e2e/full-project-e2e.mjs",
     "test:financial": "node tests/e2e/financial-lock-in.mjs",
     "test:e2e": "playwright test --config=tests/e2e/playwright.comprehensive.config.ts",
     "lint": "eslint .",
