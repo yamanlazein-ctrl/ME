@@ -11,6 +11,7 @@ export interface PrintJobDTO {
   sourceFabricId: UUID;
   sourceColorId: UUID;
   sentKg: number;
+  pieces?: number;
   pressName: string;
   notes?: string | null;
   status: PrintJobStatus;
