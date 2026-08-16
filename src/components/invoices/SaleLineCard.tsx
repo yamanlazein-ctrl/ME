@@ -1,5 +1,5 @@
 import { type KeyboardEvent } from "react";
-import { AlertTriangle, Trash2 } from "lucide-react";
+import { AlertTriangle, Palette, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -31,6 +31,7 @@ export function SaleLineCard({
   onPickFabric,
   onPickColor,
   onAppend,
+  onAddColor,
 }: {
   line: SaleLineType;
   index: number;
@@ -44,6 +45,7 @@ export function SaleLineCard({
   onPickFabric: (fabricId: string) => void;
   onPickColor: (colorId: string) => void;
   onAppend: () => void;
+  onAddColor?: () => void;
 }) {
   const rowIsEmpty = line.fabricName.trim() === "" && line.rollId === "" && line.quantityKg === 0;
 
@@ -88,6 +90,17 @@ export function SaleLineCard({
               {formatMoney(lineTotal(line))}{" "}
               <span className="text-[10px] font-medium text-muted-foreground">{currencySymbol(currency)}</span>
             </span>
+          )}
+          {!rowIsEmpty && line.fabricId && onAddColor && (
+            <button
+              type="button"
+              onClick={onAddColor}
+              className="grid h-7 w-7 place-items-center rounded-md text-muted-foreground transition hover:bg-primary/10 hover:text-primary"
+              aria-label="إضافة لون لنفس القماش"
+              title={`إضافة لون جديد لـ ${line.fabricName}`}
+            >
+              <Palette className="h-3.5 w-3.5" />
+            </button>
           )}
           {!rowIsEmpty && (
             <button

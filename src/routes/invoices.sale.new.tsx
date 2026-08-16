@@ -1,6 +1,6 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Package, Plus, UserPlus } from "lucide-react";
+import { Package, Palette, Plus, UserPlus } from "lucide-react";
 import { AppShell } from "@/components/layout/AppShell";
 import { InvoiceHeader } from "@/components/invoices/InvoiceHeader";
 import { ExitWithoutSavingButton } from "@/components/invoices/ExitWithoutSaving";
@@ -39,6 +39,7 @@ import {
   type SaleLine,
   emptyLine,
   cloneStickyFields,
+  cloneFabricOnly,
   lineHasData,
   lineTotal,
 } from "@/components/invoices/sale-types";
@@ -142,6 +143,23 @@ function SaleInvoicePage() {
     const row: SaleLine = last ? { ...emptyLine(), ...cloneStickyFields(last) } : emptyLine();
     setLines((p) => [...p, row]);
     setTimeout(() => fabricRefs.current[row.id]?.focus(), 0);
+  };
+
+  /** Add a new row with the SAME fabric but EMPTY color — used for multi-color per fabric invoices. */
+  const addColorForSameFabric = (lineId: string) => {
+    const currentLine = lines.find((l) => l.id === lineId);
+    if (!currentLine || !currentLine.fabricId) return;
+    const newLine: SaleLine = {
+      ...emptyLine(),
+      ...cloneFabricOnly(currentLine),
+    };
+    const idx = lines.findIndex((l) => l.id === lineId);
+    setLines((p) => {
+      const next = [...p];
+      next.splice(idx + 1, 0, newLine);
+      return next;
+    });
+    setTimeout(() => fabricRefs.current[newLine.id]?.focus(), 0);
   };
 
   const save = async (thenPrint: boolean, thenNew = false) => {
@@ -335,6 +353,7 @@ function SaleInvoicePage() {
                     });
                 }}
                 onAppend={appendRowAndFocus}
+                onAddColor={() => addColorForSameFabric(l.id)}
               />
             ))}
             <button

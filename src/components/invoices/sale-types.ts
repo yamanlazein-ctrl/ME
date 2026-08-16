@@ -36,6 +36,20 @@ export const cloneStickyFields = (prev: SaleLine): Partial<SaleLine> => ({
   discountAmount: prev.discountAmount,
 });
 
+/** Copy only fabric identity; clear color & roll so user picks a new color for the same fabric. */
+export const cloneFabricOnly = (prev: SaleLine): Partial<SaleLine> => ({
+  fabricId: prev.fabricId,
+  fabricName: prev.fabricName,
+  // Color and roll intentionally left empty
+  colorId: "",
+  colorName: "",
+  colorCode: "",
+  rollId: "",
+  // Preserve pricing (user can change per color if needed)
+  pricePerKg: prev.pricePerKg,
+  discountAmount: prev.discountAmount,
+});
+
 export const lineHasData = (l: SaleLine) =>
   l.fabricName.trim() !== "" || l.rollId !== "" || l.quantityKg > 0;
 
