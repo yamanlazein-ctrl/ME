@@ -413,7 +413,17 @@
   background: var(--mf-bg);
 }
 
+/* Table rows can break across pages when content is tall (multi-color rows).
+   The previous break-inside: avoid caused overflow/cutting on pages.
+   Each row cell keeps its content together, but the row itself can split. */
 .print-table tbody tr {
+  break-inside: auto;
+  page-break-inside: auto;
+}
+
+/* Cells within a row should stay together to avoid splitting content.
+   The td itself won't break, but the tr can break between tds. */
+.print-table td {
   break-inside: avoid;
   page-break-inside: avoid;
 }
@@ -597,11 +607,11 @@
   font-weight: 400;
 }
 
-/* ── Footer — gold divider + brand line ──
+/* ── Footer — gold divider + brand line + owner contact ──
    The reference's footer is a three-column band of (phone · email ·
    address) with a gold rule above. We use the same gold rule on the
    single line of brand text that the document already renders — the
-   data stays exactly as it was. */
+   data stays exactly as it was. Owner contact is appended below. */
 .print-footer {
   margin-top: 18pt;
   border-top: 1px solid var(--mf-gold);
@@ -617,6 +627,110 @@
 .print-footer strong {
   color: var(--mf-black);
   font-weight: 700;
+}
+
+/* Owner contact — appended to every document footer, single source of truth. */
+.print-owner-contact {
+  margin-top: 6pt;
+  font-size: 8pt;
+  font-weight: 700;
+  color: var(--mf-black);
+  letter-spacing: 0.01em;
+}
+
+/* Print timestamp — small, top-right corner, unobtrusive. */
+.print-timestamp {
+  font-size: 6.5pt;
+  color: var(--mf-gray);
+  font-variant-numeric: tabular-nums;
+  direction: ltr;
+  text-align: left;
+  white-space: nowrap;
+  flex: 0 0 auto;
+  align-self: flex-start;
+  padding-top: 4pt;
+  letter-spacing: 0.01em;
+}
+
+/* ── New shared header structure (applies to ALL print documents) ──
+   Row 1: Logo + Company Name (once, no repetition)
+   Row 2: Gold divider
+   Row 3: Document title centered
+   Row 4: Party info grid (name, code, currency, period)
+   ──────────────────────────────────────────────────────────────── */
+
+/* Header top row: brand identity only, clean white background. */
+.print-header-brand {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: flex-start; /* RTL: right-aligned naturally */
+  gap: 12pt;
+  padding: 10pt 18pt 6pt;
+  background: #ffffff;
+}
+
+/* Divider between brand and document title. */
+.print-header-divider {
+  border-top: 2px solid var(--mf-gold);
+  margin: 0 18pt;
+}
+
+/* Title area: centered, clean. */
+.print-header-title-area {
+  text-align: center;
+  padding: 8pt 18pt 6pt;
+}
+
+/* Party info bar: horizontal strip with name, code, currency, period. */
+.print-header-party-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 8pt 24pt;
+  padding: 4pt 18pt 10pt;
+  font-size: 9pt;
+  color: var(--mf-ink);
+  border-bottom: 1px solid var(--mf-line);
+  margin-bottom: 12pt;
+}
+
+.print-header-party-item {
+  display: flex;
+  align-items: center;
+  gap: 4pt;
+}
+
+.print-header-party-label {
+  font-size: 7.5pt;
+  color: var(--mf-gray);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.print-header-party-value {
+  font-weight: 700;
+  color: var(--mf-black);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Legacy print-header (old style) — kept for backward compatibility
+   but will be replaced by the new structured header above. */
+.print-header {
+  display: flex;
+  flex-direction: row-reverse;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16pt;
+  background: #ffffff;
+  color: var(--mf-black);
+  padding: 10pt 18pt 8pt;
+  border-bottom: 2px solid var(--mf-gold);
+  margin-bottom: 14pt;
+  min-height: 60pt;
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
 }
 
 /* ============================================================================

@@ -1,6 +1,7 @@
 import type { CSSProperties, ReactNode } from "react";
 import { useSettings } from "@/presentation/hooks/useSettings";
 import logoUrl from "@/assets/logo-mo-clean.png";
+import { getOwnerFooterLine } from "@/shared/constants/printConfig";
 import "./print.css";
 
 /**
@@ -89,55 +90,90 @@ export function PrintDocument({
   const showPageMarker =
     typeof pageNumber === "number" && typeof totalPages === "number";
 
+  const printDate = new Date().toLocaleString("ar-SY", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+
   return (
     <div className="print-doc">
-      {/* ── Header: brand on right, title + badge in middle, page marker on left ── */}
-      <div className="print-header">
-        <div className="print-brand">
-          {showLogo && <img className="print-logo" src={logoUrl} alt={BRAND_NAME} />}
-          <div className="print-brand-text">
-            <div className="print-company-name">{BRAND_NAME}</div>
-          </div>
+      {/* ═══════════════════════════════════════════════════════════
+          NEW UNIFIED HEADER — applies to ALL print documents.
+          Row 1: Logo + Company Name (once, never repeated)
+          Row 2: Gold divider
+          Row 3: Document title centered
+          Row 4: Party / meta info bar (name, code, currency, period)
+          Print timestamp: small, top-right corner, unobtrusive
+          ═══════════════════════════════════════════════════════════ */}
+
+      {/* ── Row 1: Brand identity ── */}
+      <div className="print-header-brand">
+        {showLogo && <img className="print-logo" src={logoUrl} alt={BRAND_NAME} />}
+        <div className="print-brand-text">
+          <div className="print-company-name">{BRAND_NAME}</div>
         </div>
-        <div className="print-doc-title-box">
-          {typeBadge && (
-            <span className={`print-type-badge print-badge-${typeBadge.toLowerCase()}`}>
-              {BADGE_LABEL[typeBadge]}
-            </span>
-          )}
-          <div className="print-doc-title">{title}</div>
-          {subtitle && <div className="print-doc-subtitle">{subtitle}</div>}
+        {/* Timestamp: tiny, top-right, never prominent */}
+        <div className="print-timestamp" style={{ marginInlineStart: "auto" }}>
+          {printDate}
+          {showPageMarker && ` · صفحة ${pageNumber} / ${totalPages}`}
         </div>
-        {showPageMarker && (
-          <div className="print-page-marker">
-            صفحة {pageNumber} / {totalPages}
-          </div>
-        )}
       </div>
 
+      {/* ── Row 2: Gold divider ── */}
+      <div className="print-header-divider" />
 
-      {/* ── Meta grid ── */}
-      {(meta || extraMeta) && (
-        <div className="print-meta">
-          {[...(meta ?? []), ...(extraMeta ?? [])].map((m) => (
-            <div key={m.label} className="print-meta-item">
-              <span className="print-meta-value">{m.value}</span>
-              <span className="print-meta-label">{m.label}</span>
+      {/* ── Row 3: Document title ── */}
+      <div className="print-header-title-area">
+        {typeBadge && (
+          <span className={`print-type-badge print-badge-${typeBadge.toLowerCase()}`}>
+            {BADGE_LABEL[typeBadge]}
+          </span>
+        )}
+        <div className="print-doc-title">{title}</div>
+        {subtitle && <div className="print-doc-subtitle">{subtitle}</div>}
+      </div>
+
+      {/* ── Row 4: Party / Meta info bar ──
+          If party is provided, show party info (name, code, phone, address).
+          If meta is provided, show meta items (currency, period, date, etc.).
+          Both can coexist — party info is primary, meta is secondary. */}
+      {(party || (meta && meta.length > 0)) && (
+        <div className="print-header-party-bar">
+          {party && (
+            <>
+              <div className="print-header-party-item">
+                <span className="print-header-party-label">{party.label}:</span>
+                <span className="print-header-party-value">{party.name}</span>
+              </div>
+              {party.extra && (
+                <div className="print-header-party-item">
+                  <span className="print-header-party-label">الرمز:</span>
+                  <span className="print-header-party-value">{party.extra.replace(/رمز .*?: /, "")}</span>
+                </div>
+              )}
+              {party.phone && (
+                <div className="print-header-party-item">
+                  <span className="print-header-party-label">الهاتف:</span>
+                  <span className="print-header-party-value">{party.phone}</span>
+                </div>
+              )}
+            </>
+          )}
+          {(meta ?? []).map((m) => (
+            <div key={m.label} className="print-header-party-item">
+              <span className="print-header-party-label">{m.label}:</span>
+              <span className="print-header-party-value">{m.value}</span>
             </div>
           ))}
-        </div>
-      )}
-
-      {/* ── Party block ── */}
-      {party && (
-        <div className="print-party">
-          <div className="print-party-side">
-            <div className="print-party-label">{party.label}</div>
-            <div className="print-party-name">{party.name}</div>
-            {party.phone && <div className="print-party-line">هاتف: {party.phone}</div>}
-            {party.address && <div className="print-party-line">العنوان: {party.address}</div>}
-            {party.extra && <div className="print-party-line">{party.extra}</div>}
-          </div>
+          {(extraMeta ?? []).map((m) => (
+            <div key={m.label} className="print-header-party-item">
+              <span className="print-header-party-label">{m.label}:</span>
+              <span className="print-header-party-value">{m.value}</span>
+            </div>
+          ))}
         </div>
       )}
 
@@ -190,6 +226,7 @@ export function PrintDocument({
       {!hideFooter && (
         <div className="print-footer">
           {footerNote || p.footerNote || `${c.name}${c.phone ? ` · ${c.phone}` : ""}`}
+          <div className="print-owner-contact">{getOwnerFooterLine()}</div>
         </div>
       )}
     </div>
