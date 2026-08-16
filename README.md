@@ -60,6 +60,8 @@ an optional Tauri desktop shell.
 ### Desktop (`desktop/`)
 
 - Tauri 2 (Rust shell) around the built web app
+- **Windows Build** — see `desktop/BUILD-WINDOWS.md` for MSI/NSIS/EXE creation
+- License binding, fingerprinting, 14-day trial, 3-device limit
 
 ## Getting Started
 
