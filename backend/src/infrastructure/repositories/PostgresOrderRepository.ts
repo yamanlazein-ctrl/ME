@@ -161,6 +161,7 @@ export class PostgresOrderRepository implements IOrderRepository {
             colorName: it.colorName,
             colorCode: it.colorCode,
             requestedKg: String(it.requestedKg),
+            pieces: it.pieces ?? 1,
             rollId: it.rollId ?? null,
             widthCm: it.widthCm ? String(it.widthCm) : null,
             weightGsm: it.weightGsm ? String(it.weightGsm) : null,

@@ -8,6 +8,7 @@ export interface RollData {
   dyeBatch?: string;
   initialKg: number;
   remainingKg: number;
+  pieces: number;
   pricePerKg: number;
   salePricePerKg?: number;
   currency: string;
@@ -33,6 +34,7 @@ export class Roll {
       dyeBatch: input.dyeBatch?.trim(),
       initialKg: input.initialKg,
       remainingKg: input.initialKg,
+      pieces: input.pieces ?? 1,
       pricePerKg: input.pricePerKg,
       salePricePerKg: input.salePricePerKg,
       currency: input.currency ?? "SYP",
@@ -116,6 +118,7 @@ export interface CreateRollInput {
   rollNo: string;
   dyeBatch?: string;
   initialKg: number;
+  pieces?: number;
   pricePerKg: number;
   salePricePerKg?: number;
   currency?: string;

@@ -317,6 +317,7 @@ export class PostgresRollRepository implements IRollRepository {
       dyeBatch: n(row.dyeBatch),
       initialKg: Number(row.initialKg),
       remainingKg: Number(row.remainingKg),
+      pieces: Number(row.pieces ?? 1),
       pricePerKg: Number(row.pricePerKg),
       salePricePerKg: row.salePricePerKg ? Number(row.salePricePerKg) : undefined,
       currency: row.currency,

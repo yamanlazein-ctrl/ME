@@ -6,10 +6,11 @@ const orderItemSchema = z.object({
   colorId: z.string().uuid().optional(),
   colorName: z.string().min(1).max(255),
   colorCode: z.string().max(50).optional(),
-  requestedKg: z.number().positive().max(100000),
+  requestedKg: z.coerce.number().positive().max(100000),
+  pieces: z.coerce.number().int().positive().max(100000).optional().default(1),
   rollId: z.string().uuid().optional(),
-  widthCm: z.number().positive().optional(),
-  weightGsm: z.number().positive().optional(),
+  widthCm: z.coerce.number().positive().optional(),
+  weightGsm: z.coerce.number().positive().optional(),
   notes: z.string().max(500).optional(),
 });
 

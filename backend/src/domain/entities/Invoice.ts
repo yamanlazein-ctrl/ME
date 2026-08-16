@@ -48,6 +48,7 @@ export class Invoice {
       colorId: l.colorId,
       rollId: l.rollId,
       quantityKg: l.quantityKg,
+      pieces: l.pieces ?? 1,
       pricePerKg: l.pricePerKg,
       discountAmount: l.discountAmount ?? 0,
       note: l.note?.trim(),
@@ -141,6 +142,7 @@ export interface CreateInvoiceLineInput {
   colorId: UUID;
   rollId: UUID;
   quantityKg: number;
+  pieces?: number;
   pricePerKg: number;
   discountAmount?: number;
   note?: string;

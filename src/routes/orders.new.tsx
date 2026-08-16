@@ -46,6 +46,7 @@ type Line = {
   colorName: string;
   colorCode: string;
   requestedKg: number;
+  pieces: number;
   widthCm?: number;
   weightGsm?: number;
   notes?: string;
@@ -60,6 +61,7 @@ const emptyLine = (): Line => ({
   colorName: "",
   colorCode: "",
   requestedKg: 0,
+  pieces: 1,
 });
 
 const cloneSticky = (p: Line): Partial<Line> => ({
@@ -129,7 +131,7 @@ function NewOrderPage() {
     setError(null);
     if (!customerId) return setError("يرجى تحديد العميل.");
     const valid = lines.filter(
-      (l) => l.fabricName.trim() && l.colorName.trim() && l.requestedKg > 0,
+      (l) => l.fabricName.trim() && l.colorName.trim() && l.requestedKg > 0 && l.pieces >= 1,
     );
     if (!valid.length) return setError("أضف على الأقل بنداً واحداً كاملاً.");
     const cust = customerById(customerId);
@@ -148,6 +150,7 @@ function NewOrderPage() {
           colorName: l.colorName.trim(),
           colorCode: l.colorCode || undefined,
           requestedKg: l.requestedKg,
+          pieces: l.pieces,
           widthCm: l.widthCm,
           weightGsm: l.weightGsm,
           notes: l.notes,
@@ -279,6 +282,20 @@ function NewOrderPage() {
                           }
                         }}
                         placeholder="0"
+                      />
+                    </Field>
+                    <Field label="عدد الأثواب *">
+                      <Input
+                        type="number"
+                        className="h-9 tabular-nums"
+                        value={l.pieces || ""}
+                        onChange={(e) =>
+                          updateLine(l.id, {
+                            pieces: e.target.value === "" ? 1 : Math.max(1, Number(e.target.value)),
+                          })
+                        }
+                        placeholder="1"
+                        min={1}
                       />
                     </Field>
                     <Field label="ملاحظة السطر">

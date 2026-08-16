@@ -1,4 +1,4 @@
-import { pgTable, uuid, decimal } from "drizzle-orm/pg-core";
+import { pgTable, uuid, decimal, integer } from "drizzle-orm/pg-core";
 import { tenants } from "./tenant.table.js";
 import { returns } from "./return.table.js";
 import { rolls } from "./roll.table.js";

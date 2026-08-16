@@ -5,16 +5,17 @@ const invoiceLineSchema = z.object({
   fabricId: z.string().uuid(),
   colorId: z.string().uuid(),
   rollId: z.string().uuid(),
-  quantityKg: z
+  quantityKg: z.coerce
     .number()
     .positive("الكمية يجب أن تكون أكبر من صفر")
     .max(100000, "الكمية كبيرة جداً")
     .refine(is2dp, { message: MAX_2DP_MESSAGE }),
-  pricePerKg: z
+  pieces: z.coerce.number().int().positive().max(100000).optional().default(1),
+  pricePerKg: z.coerce
     .number()
     .positive("السعر يجب أن يكون أكبر من صفر")
     .refine(is2dp, { message: MAX_2DP_MESSAGE }),
-  discountAmount: z
+  discountAmount: z.coerce
     .number()
     .int()
     .min(0, "الخصم لا يمكن أن يكون سالباً")
