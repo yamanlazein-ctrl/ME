@@ -29,6 +29,7 @@ import {
 } from "@/presentation/hooks/usePrintJobs";
 import { printDocument } from "@/components/print/printPortal";
 import { PrintJobDocument } from "@/components/print/PrintJobDocument";
+import { InlineFabricCell, InlineColorCell } from "@/components/invoices/InlineFabricCell";
 
 export const Route = createFileRoute("/invoices/print-send/new")({
   component: PrintSendPage,
@@ -42,9 +43,12 @@ function PrintSendPage() {
 
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
   const [fabricId, setFabricId] = useState("");
+  const [fabricName, setFabricName] = useState("");
   const [colorId, setColorId] = useState("");
+  const [colorName, setColorName] = useState("");
   const [rollId, setRollId] = useState("");
   const [quantityKg, setQuantityKg] = useState<number | "">("");
+  const [pieces, setPieces] = useState<number | "">("");
   const [pressName, setPressName] = useState("");
   const [notes, setNotes] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -56,9 +60,12 @@ function PrintSendPage() {
 
   const reset = () => {
     setFabricId("");
+    setFabricName("");
     setColorId("");
+    setColorName("");
     setRollId("");
     setQuantityKg("");
+    setPieces("");
     setPressName("");
     setNotes("");
   };
@@ -74,6 +81,7 @@ function PrintSendPage() {
         date,
         sourceRollId: rollId,
         quantityKg: q,
+        pieces: pieces ? Number(pieces) : undefined,
         pressName,
         notes,
       });
@@ -146,48 +154,45 @@ function PrintSendPage() {
                 />
               </Field>
 
-              <Field label="القماش">
-                <Select
-                  value={fabricId}
-                  onValueChange={(v) => {
-                    setFabricId(v);
+              <Field label="القماش *">
+                <InlineFabricCell
+                  value={fabricName}
+                  existingFabricId={fabricId || undefined}
+                  onPickExisting={(fid) => {
+                    setFabricId(fid);
+                    setFabricName(fabricById(fid)?.name ?? "");
+                    setColorId("");
+                    setColorName("");
+                    setRollId("");
+                  }}
+                  onSetName={(name) => {
+                    setFabricName(name);
+                    setFabricId("");
+                    setColorId("");
+                    setColorName("");
+                    setRollId("");
+                  }}
+                />
+              </Field>
+
+              <Field label="اللون *">
+                <InlineColorCell
+                  fabricId={fabricId || undefined}
+                  name={colorName}
+                  code={colorById(colorId)?.code ?? ""}
+                  existingColorId={colorId || undefined}
+                  onPickExisting={(cid) => {
+                    setColorId(cid);
+                    setColorName(colorById(cid)?.name ?? "");
+                    setRollId("");
+                  }}
+                  onSetName={(name) => {
+                    setColorName(name);
                     setColorId("");
                     setRollId("");
                   }}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="اختر القماش" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {fabrics.map((f) => (
-                      <SelectItem key={f.id} value={f.id}>
-                        {f.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </Field>
-
-              <Field label="اللون">
-                <Select
-                  value={colorId}
-                  onValueChange={(v) => {
-                    setColorId(v);
-                    setRollId("");
-                  }}
-                  disabled={!fabricId}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="اختر اللون" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {availColors.map((c) => (
-                      <SelectItem key={c.id} value={c.id}>
-                        {c.name} — {c.code}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                  onSetCode={(code) => {}}
+                />
               </Field>
 
               <Field label="الصبغة">
@@ -198,7 +203,7 @@ function PrintSendPage() {
                   <SelectContent>
                     {availRolls.map((r) => (
                       <SelectItem key={r.id} value={r.id}>
-                        صبغة {r.rollNo} — متبقّي {r.remainingKg} كغ
+                        صبغة {r.rollNo} — {(r.pieces ?? 1)} أثوب — متبقّي {r.remainingKg} كغ
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -214,6 +219,18 @@ function PrintSendPage() {
                     setQuantityKg(e.target.value === "" ? "" : Number(e.target.value))
                   }
                   placeholder={src ? `حد أقصى ${src.remainingKg}` : ""}
+                />
+              </Field>
+
+              <Field label="عدد الأثواب">
+                <Input
+                  type="number"
+                  min={1}
+                  value={pieces}
+                  onChange={(e) =>
+                    setPieces(e.target.value === "" ? "" : Number(e.target.value))
+                  }
+                  placeholder="1"
                 />
               </Field>
 

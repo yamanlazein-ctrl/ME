@@ -10,6 +10,7 @@ export interface PrintJobData {
   sourceFabricId?: UUID;
   sourceColorId?: UUID;
   quantityKg: number;
+  pieces?: number;
   pressName?: string;
   printCostPerKg?: number;
   currency: string;
@@ -73,6 +74,7 @@ export interface CreatePrintJobInput {
   sourceFabricId?: UUID;
   sourceColorId?: UUID;
   quantityKg: number;
+  pieces?: number;
   pressName?: string;
   printCostPerKg?: number;
   currency?: string;

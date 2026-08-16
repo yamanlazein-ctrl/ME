@@ -91,6 +91,7 @@ export class PostgresPrintJobRepository implements IPrintJobRepository {
           sourceFabricId: sourceFabricId ?? null,
           sourceColorId: sourceColorId ?? null,
           quantityKg: String(input.quantityKg),
+          pieces: input.pieces ?? 1,
           pressName: input.pressName,
           printCostPerKg: input.printCostPerKg ? String(input.printCostPerKg) : null,
           currency: input.currency ?? "SYP",

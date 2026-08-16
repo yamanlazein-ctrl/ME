@@ -30,6 +30,7 @@ export interface CreatePrintSendInput {
   date: string;
   sourceRollId: UUID;
   quantityKg: number;
+  pieces?: number;
   pressName: string;
   notes?: string;
 }
