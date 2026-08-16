@@ -1,6 +1,6 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
-import { Info, Package, Plus, Trash2 } from "lucide-react";
+import { Info, Package, Palette, Plus, Trash2 } from "lucide-react";
 import { AppShell } from "@/components/layout/AppShell";
 import { InvoiceHeader } from "@/components/invoices/InvoiceHeader";
 import { ExitWithoutSavingButton } from "@/components/invoices/ExitWithoutSaving";
@@ -222,6 +222,40 @@ function EntryInvoicePage() {
     const row: EntryLine = last ? { ...emptyLine(), ...cloneStickyFields(last) } : emptyLine();
     setLines((p) => [...p, row]);
     setTimeout(() => fabricRefs.current[row.id]?.focus(), 0);
+  };
+
+  /** Add a new row with the SAME fabric but EMPTY color — used for multi-color per fabric invoices. */
+  const addColorForSameFabric = (lineId: string) => {
+    const currentLine = lines.find((l) => l.id === lineId);
+    if (!currentLine) return;
+    const newLine: EntryLine = {
+      ...emptyLine(),
+      // Preserve fabric identity (all fields from currentLine that relate to fabric)
+      existingFabricId: currentLine.existingFabricId,
+      fabricName: currentLine.fabricName,
+      category: currentLine.category,
+      unit: currentLine.unit,
+      // Preserve pricing (operator can change per color if needed)
+      pricePerKg: currentLine.pricePerKg,
+      discountAmount: currentLine.discountAmount,
+      // Preserve optional production metadata (operator can change per color if needed)
+      marjaiya: currentLine.marjaiya,
+      masader: currentLine.masader,
+      machineNumber: currentLine.machineNumber,
+      kromaj: currentLine.kromaj,
+      gsm: currentLine.gsm,
+      adad: currentLine.adad,
+      sahb: currentLine.sahb,
+      // Color fields are intentionally left EMPTY so user picks a new color
+      // (existingColorId, colorName, colorCode, colorHex, colorImageUrl all undefined/empty from emptyLine())
+    };
+    const idx = lines.findIndex((l) => l.id === lineId);
+    setLines((p) => {
+      const next = [...p];
+      next.splice(idx + 1, 0, newLine);
+      return next;
+    });
+    setTimeout(() => fabricRefs.current[newLine.id]?.focus(), 0);
   };
 
   const isLastRow = (id: string) => lines[lines.length - 1]?.id === id;
@@ -669,6 +703,17 @@ function EntryInvoicePage() {
                       >
                         <Info className="h-3.5 w-3.5" />
                       </button>
+                      {!rowIsEmpty && l.fabricName && (
+                        <button
+                          type="button"
+                          onClick={() => addColorForSameFabric(l.id)}
+                          className="grid h-7 w-7 place-items-center rounded-md text-muted-foreground transition hover:bg-primary/10 hover:text-primary"
+                          aria-label="إضافة لون لنفس القماش"
+                          title={`إضافة لون جديد لـ ${l.fabricName}`}
+                        >
+                          <Palette className="h-3.5 w-3.5" />
+                        </button>
+                      )}
                       {!rowIsEmpty && (
                         <button
                           type="button"
