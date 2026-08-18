@@ -1,0 +1,42 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Motard Fabrics Group ERP",
+  "version": "1.0.0",
+  "identifier": "com.motardfabrics.erp",
+  "build": {
+    "frontendDist": "../../dist",
+    "devUrl": "http://localhost:5173",
+    "beforeDevCommand": "cd .. && npm run dev",
+    "beforeBuildCommand": "cd .. && npm run build"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "Motard Fabrics Group ERP",
+        "width": 1400,
+        "height": 900,
+        "minWidth": 1024,
+        "minHeight": 768,
+        "resizable": true,
+        "fullscreen": false,
+        "center": true
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob:; connect-src 'self' http://localhost:* https://*"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "windows": {
+      "webviewInstallMode": "downloadBootstrapper",
+      "wix": {
+        "language": ["ar-SA", "en-US"]
+      }
+    },
+    "icon": [
+      "icons/icon.png"
+    ]
+  }
+}

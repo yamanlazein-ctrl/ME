@@ -1,0 +1,13 @@
+node_modules/
+dist/
+.output/
+build/
+coverage/
+playswright-report/
+test-results/
+backend/_backup/
+docs/
+desktop/
+admin-dashboard/dist/
+*.log
+npm-debug.log*

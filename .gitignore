@@ -1,0 +1,69 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+node_modules
+dist
+dist-ssr
+.output
+.vinxi
+.tanstack/**
+.nitro
+*.local
+
+# Wrangler / Cloudflare
+.wrangler/
+.dev.vars
+
+# Test / verification artifacts
+test-results/
+tests/e2e/test-results/
+coverage/
+playwright-report/
+*.tsbuildinfo
+audit/
+.tmp.driveupload/
+
+# Tool configs (local only)
+.mcp.json
+opencode.jsonc
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+# Added by code-review-graph
+.code-review-graph/
+
+# Environment files — never commit real secrets
+.env
+.env.local
+.env.production
+.env.*
+!.env.example
+backend/.env
+backend/.env.local
+backend/.env.production
+backend/.env.*
+!backend/.env.example
+!backend/.env.test
+admin-dashboard/.env
+admin-dashboard/.env.local
+admin-dashboard/.env.production
+admin-dashboard/.env.*
+!admin-dashboard/.env.example
+
+# Rust / Tauri
+desktop/src-tauri/target/
+desktop/node_modules/

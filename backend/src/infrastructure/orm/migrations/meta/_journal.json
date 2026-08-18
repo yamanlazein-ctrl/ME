@@ -1,0 +1,167 @@
+{
+  "version": 7,
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": 7,
+      "when": 0,
+      "tag": "0001_initial",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": 7,
+      "when": 1785399519375,
+      "tag": "0002_platform_foundation",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": 7,
+      "when": 1785399519376,
+      "tag": "0003_invitation_codes",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": 7,
+      "when": 1785399519377,
+      "tag": "0004_invitation_metadata",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": 7,
+      "when": 1785400000000,
+      "tag": "0005_license_extensions_and_system_admins",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": 7,
+      "when": 1785400000001,
+      "tag": "0006_invoice_line_discount_precision",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": 7,
+      "when": 1785400000002,
+      "tag": "0007_print_job_result_fields",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": 7,
+      "when": 1785400000003,
+      "tag": "0008_expense_ledger_party_nullable",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": 7,
+      "when": 1785400000004,
+      "tag": "0009_invoice_shipping",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": 7,
+      "when": 1785400000005,
+      "tag": "0010_invoice_line_discount_amount",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": 7,
+      "when": 1785400000006,
+      "tag": "0011_party_default_discount_amount",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": 7,
+      "when": 1785400000007,
+      "tag": "0012_ledger_party_balance_sign",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": 7,
+      "when": 1785400000008,
+      "tag": "0013_db_hardening",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": 7,
+      "when": 1785400000009,
+      "tag": "0014_idempotency_keys",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": 7,
+      "when": 1785400000010,
+      "tag": "0015_stock_movements",
+      "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": 7,
+      "when": 1785400000011,
+      "tag": "0016_print_job_customer_order",
+      "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": 7,
+      "when": 1785400000012,
+      "tag": "0017_order_reservation",
+      "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": 7,
+      "when": 1785400000013,
+      "tag": "0018_ledger_statement_index",
+      "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": 7,
+      "when": 1785400000014,
+      "tag": "0019_color_hex",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": 7,
+      "when": 1785400000015,
+      "tag": "0020_add_pieces_field",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": 7,
+      "when": 1785400000016,
+      "tag": "0020_performance_indexes_and_balance_cache",
+      "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": 7,
+      "when": 1785400000017,
+      "tag": "0021_license_owner_and_invitation_link",
+      "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": 7,
+      "when": 1785400000018,
+      "tag": "0022_migration_final_reconciliation",
+      "breakpoints": true
+    }
+  ]
+}

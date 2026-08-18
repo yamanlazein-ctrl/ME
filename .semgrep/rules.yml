@@ -1,0 +1,29 @@
+# Fabric ERP — Semgrep rules (security static analysis).
+# Run: npm run test:security  (requires the `semgrep` CLI: pip install semgrep)
+rules:
+  - id: no-hardcoded-secrets
+    languages: [typescript, javascript]
+    message: >-
+      Potential hardcoded secret / credential in source. Never commit real
+      passwords, API keys, or tokens. Move them to environment variables.
+    severity: WARNING
+    pattern-either:
+      - pattern-regex: (password|passwd|secret|api[_-]?key|token)\s*[:=]\s*["'][^"'\s]{6,}["']
+  - id: no-exposed-private-key
+    languages: [typescript, javascript]
+    message: Found a literal private key in the codebase.
+    severity: WARNING
+    pattern-either:
+      - pattern-regex: -----BEGIN (RSA |EC |DSA |OPENSSH )?PRIVATE KEY-----
+  - id: no-console-leftover
+    languages: [typescript, javascript]
+    message: console.log() left in code. Remove debug output before shipping.
+    severity: WARNING
+    patterns:
+      - pattern: console.log(...)
+  - id: no-eval
+    languages: [typescript, javascript]
+    message: Avoid eval() — it executes arbitrary code and is a security risk.
+    severity: WARNING
+    patterns:
+      - pattern: eval(...)

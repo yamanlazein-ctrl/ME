@@ -1,0 +1,792 @@
+/* ============================================================================
+   Unified print design system — Motard Fabrics Group
+   Design principle: classic professional invoice
+     • DARK HEADER BAND with logo + large title + gold bottom rule
+     • Light info block (Total Due / date) for headline facts
+     • GOLD-HEADERED TABLE with hairline rows and alternating background
+     • Gold Grand-Total row that anchors the eye on the final number
+     • Three-zone footer (brand · contact · address) with gold divider
+
+   Palette: gold #C9A227 + black #1A1A1A + white + light gray #FAFAFA
+   Font:    "IBM Plex Sans Arabic" — 400 body / 700 headings
+   Style:   Minimal Luxury — single hairline borders, no gradients, B&W safe
+   All data/fields/columns/calculations are unchanged — only the visual
+   presentation has been restyled to match the reference layout.
+   ============================================================================ */
+
+:root {
+  --mf-gold: #c9a227;
+  --mf-gold-dark: #a8861a;     /* slightly darker gold for borders / shadows */
+  --mf-gold-soft: #e6c873;
+  --mf-black: #1a1a1a;
+  --mf-ink: #2a2a2a;
+  --mf-gray: #6b6b6b;
+  --mf-line: #e5e5e5;
+  --mf-line-strong: #b5b5b5;
+  --mf-bg: #fafafa;
+  --mf-bg-soft: #f3f3f3;
+}
+
+@page {
+  size: A4 portrait;
+  margin: 12mm 11mm;
+  @bottom-center {
+    content: counter(page) " / " counter(pages);
+    font-size: 8pt;
+    color: var(--mf-gray);
+    font-family:
+      "IBM Plex Sans Arabic",
+      system-ui,
+      -apple-system,
+      sans-serif;
+  }
+}
+
+@page :first {
+  margin-top: 12mm;
+}
+
+/* ── The print root is ALWAYS white, regardless of dark mode. ── */
+[data-print-root] {
+  display: block;
+  background: #ffffff !important;
+  color: var(--mf-black) !important;
+  font-family:
+    "IBM Plex Sans Arabic",
+    system-ui,
+    -apple-system,
+    "Segoe UI",
+    sans-serif;
+  font-size: 9.5pt;
+  line-height: 1.55;
+  direction: rtl;
+  text-align: right;
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+  font-weight: 400;
+}
+
+[data-print-root] *,
+[data-print-root] *::before,
+[data-print-root] *::after {
+  box-sizing: border-box;
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+
+[data-print-root] .no-print {
+  display: none !important;
+}
+
+@media print {
+  html,
+  body {
+    margin: 0 !important;
+    padding: 0 !important;
+    height: auto !important;
+    overflow: visible !important;
+    background: #fff !important;
+  }
+
+  body > *:not([data-print-root]) {
+    display: none !important;
+    visibility: hidden !important;
+  }
+
+  [data-print-root] {
+    position: static !important;
+    overflow: visible !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  .print-page-break {
+    break-before: page;
+    page-break-before: always;
+  }
+  .print-avoid-break {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  thead {
+    display: table-header-group;
+  }
+}
+
+/* ============================================================================
+   Design system (normal + print)
+   ============================================================================ */
+
+.print-doc {
+  width: 100%;
+  background: #ffffff;
+  color: var(--mf-black);
+  padding: 0;            /* full-bleed header so the brand band reaches page edge */
+}
+
+/* ── CLEAN HEADER: white background, logo without box, black text, gold divider ──
+   The header is a clean white band with the brand identity on the right
+   (RTL), logo next to company name (once only), and a clean gold divider
+   separating the identity from the document data below. No dark backgrounds,
+   no watermarks, no logo boxes. */
+.print-header {
+  display: flex;
+  flex-direction: row-reverse;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16pt;
+  background: #ffffff;
+  color: var(--mf-black);
+  padding: 10pt 18pt 8pt;
+  border-bottom: 2px solid var(--mf-gold);
+  margin-bottom: 14pt;
+  min-height: 60pt;
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+
+.print-brand {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 12pt;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+/* Logo — clean, no background box, no padding, no border-radius. */
+.print-logo {
+  max-height: 50px;
+  max-width: 70px;
+  object-fit: contain;
+  flex: 0 0 auto;
+  background: transparent !important;
+  padding: 0;
+  border-radius: 0;
+  border: none;
+  /* Ensure SVG renders cleanly with no box shadow or background */
+  box-shadow: none !important;
+}
+
+.print-brand-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+/* Company name: dark text on white background. English line in muted gray. */
+.print-company-name {
+  font-size: 14pt;
+  font-weight: 700;
+  color: var(--mf-black);
+  line-height: 1.2;
+  letter-spacing: -0.005em;
+}
+
+.print-company-name-en {
+  font-size: 9pt;
+  font-weight: 400;
+  color: var(--mf-gray);
+  margin-top: 1pt;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  font-family:
+    "IBM Plex Sans",
+    system-ui,
+    sans-serif;
+}
+
+.print-company-line {
+  font-size: 8pt;
+  color: var(--mf-gray);
+  margin-top: 1pt;
+  direction: ltr;
+  text-align: right;
+  unicode-bidi: plaintext;
+}
+
+.print-doc-title-box {
+  text-align: center;
+  margin-inline: 4pt;
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Type badge: clean gold border on white background, no fill. */
+.print-type-badge {
+  display: inline-block;
+  font-size: 7pt;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  padding: 2pt 8pt;
+  border: 1px solid var(--mf-gold);
+  color: var(--mf-gold-dark);
+  background: transparent;
+  margin-bottom: 4pt;
+  text-transform: uppercase;
+  font-family:
+    "IBM Plex Sans",
+    system-ui,
+    sans-serif;
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+
+.print-doc-title {
+  font-size: 18pt;
+  font-weight: 700;
+  color: var(--mf-black);
+  letter-spacing: -0.01em;
+  line-height: 1.15;
+}
+
+.print-doc-subtitle {
+  font-size: 8.5pt;
+  color: var(--mf-gray);
+  margin-top: 2pt;
+}
+
+.print-page-marker {
+  font-size: 8.5pt;
+  color: var(--mf-gray);
+  font-variant-numeric: tabular-nums;
+  direction: ltr;
+  text-align: left;
+  white-space: nowrap;
+  flex: 0 0 auto;
+  align-self: flex-start;
+  padding-top: 4pt;
+}
+
+/* ── Meta grid (number / date / status / currency) — clean info block ──
+   A 1.5px gold top rule ties it visually to the header divider above. */
+.print-meta {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0 12pt;
+  margin-bottom: 12pt;
+  border: 1px solid var(--mf-line);
+  border-top: 1.5px solid var(--mf-gold);
+  border-radius: 0;
+  background: var(--mf-bg);
+}
+
+.print-meta-item {
+  font-size: 8.5pt;
+  color: var(--mf-black);
+  padding: 6pt 10pt;
+  border-left: 1px solid var(--mf-line);
+  display: flex;
+  flex-direction: column;
+  gap: 1pt;
+}
+
+.print-meta-item:last-child {
+  border-left: none;
+}
+
+.print-meta-value {
+  font-variant-numeric: tabular-nums;
+  color: var(--mf-black);
+  font-weight: 700;
+  direction: ltr;
+  text-align: right;
+  unicode-bidi: plaintext;
+  word-break: break-word;
+  font-size: 9.5pt;
+}
+
+.print-meta-label {
+  display: block;
+  color: var(--mf-gray);
+  font-size: 7.5pt;
+  text-transform: none;
+}
+
+/* ── Party block (customer / supplier) — "Invoice to" card ──
+   Surrounded by a hairline border with a 3px gold side rule — the
+   reference's signature way of framing the bill-to block. */
+.print-party {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8pt 24pt;
+  padding: 8pt 12pt;
+  margin-bottom: 12pt;
+  background: #ffffff;
+  border: 1px solid var(--mf-line);
+  border-right: 3px solid var(--mf-gold);
+  border-left: 1px solid var(--mf-line);
+}
+
+.print-party-side {
+  min-width: 40%;
+  display: flex;
+  flex-direction: column;
+  gap: 1pt;
+}
+
+.print-party-label {
+  font-size: 7.5pt;
+  color: var(--mf-gray);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-weight: 400;
+}
+
+.print-party-name {
+  font-size: 11pt;
+  font-weight: 700;
+  color: var(--mf-black);
+  line-height: 1.25;
+}
+
+.print-party-line {
+  font-size: 8.5pt;
+  color: var(--mf-ink);
+  direction: ltr;
+  text-align: right;
+  unicode-bidi: plaintext;
+}
+
+/* ── Tables (items, lines) — GOLD HEADER with hairline rows ──
+   The header row now uses a solid gold band with bold dark text, the
+   way the reference's "Product Description / Price / Qty. / Total"
+   row does. Body rows alternate white / light gray as before. */
+.print-table {
+  width: 100%;
+  table-layout: fixed;
+  border-collapse: collapse;
+  margin-bottom: 10pt;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+  font-size: 8.5pt;
+}
+
+.print-table thead tr {
+  background: var(--mf-gold);
+  color: var(--mf-black);
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+
+.print-table th {
+  font-size: 7.8pt;
+  font-weight: 700;
+  color: var(--mf-black);
+  border: 1px solid var(--mf-gold-dark);
+  border-bottom: 2px solid var(--mf-gold-dark);
+  padding: 5pt 6pt;
+  text-align: right;
+  vertical-align: middle;
+  background: var(--mf-gold);
+  letter-spacing: 0.02em;
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+
+.print-table th.pd-center,
+.print-table td.pd-center {
+  text-align: center;
+}
+
+.print-table th.pd-left,
+.print-table td.pd-left {
+  text-align: left;
+  direction: ltr;
+}
+
+.print-table td {
+  border: 1px solid var(--mf-line);
+  font-size: 8.5pt;
+  color: var(--mf-black);
+  padding: 5pt 6pt;
+  vertical-align: top;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+  white-space: normal;
+  background: #ffffff;
+}
+
+.print-table tbody tr:nth-child(even) td {
+  background: var(--mf-bg);
+}
+
+/* Table rows can break across pages when content is tall (multi-color rows).
+   The previous break-inside: avoid caused overflow/cutting on pages.
+   Each row cell keeps its content together, but the row itself can split. */
+.print-table tbody tr {
+  break-inside: auto;
+  page-break-inside: auto;
+}
+
+/* Cells within a row should stay together to avoid splitting content.
+   The td itself won't break, but the tr can break between tds. */
+.print-table td {
+  break-inside: avoid;
+  page-break-inside: avoid;
+}
+
+.print-table .pd-amount,
+.print-table td.pd-amount {
+  text-align: left;
+  direction: ltr;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
+.print-table td.pd-note {
+  font-size: 8pt;
+  color: var(--mf-ink);
+}
+
+/* ── Color shown as two-line text (code on top, name below) ── */
+.pd-color-code {
+  font-weight: 700;
+  color: var(--mf-black);
+  font-variant-numeric: tabular-nums;
+  direction: ltr;
+  text-align: right;
+  unicode-bidi: plaintext;
+  font-size: 8.5pt;
+  letter-spacing: 0.02em;
+}
+
+.pd-color-name {
+  color: var(--mf-ink);
+  font-size: 8.5pt;
+  margin-top: 1pt;
+}
+
+/* ── Totals panel (right-aligned end in RTL) with a gold Grand-Total row ──
+   The Grand Total row is now a solid gold band with dark bold text, the
+   way the reference anchors the eye on the final number. */
+.print-totals {
+  margin: 8pt 0 12pt;
+  padding: 6pt 12pt;
+  background: var(--mf-bg);
+  border: 1px solid var(--mf-line);
+  border-right: 3px solid var(--mf-gold);
+  display: flex;
+  flex-direction: column;
+  gap: 2pt;
+  max-width: 50%;
+  margin-inline-start: auto;
+}
+
+.print-total-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12pt;
+  padding: 2.5pt 0;
+  font-size: 9pt;
+  color: var(--mf-ink);
+  border-bottom: 1px dotted var(--mf-line);
+}
+
+.print-total-row:last-child {
+  border-bottom: none;
+}
+
+.print-total-row .pd-amount {
+  direction: ltr;
+  text-align: left;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
+/* Grand-total row — the gold anchor of the whole document */
+.print-grand-total {
+  background: var(--mf-gold) !important;
+  color: var(--mf-black) !important;
+  border-top: 1.5px solid var(--mf-gold-dark);
+  border-bottom: 1.5px solid var(--mf-gold-dark) !important;
+  margin-top: 4pt;
+  padding: 6pt 10pt !important;
+  font-weight: 700;
+  font-size: 11pt;
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+
+.print-grand-total .pd-amount {
+  font-weight: 700;
+  color: var(--mf-black) !important;
+  font-size: 11.5pt;
+}
+
+/* ── Payment summary (الإجمالي / المدفوع / المتبقي) — "Payment Info" card ──
+   The "Total / Paid / Remaining" trio is shown as a three-up card with
+   a 3px gold side rule on the first card, matching the way the reference
+   highlights the headline figure. */
+.print-payment {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8pt;
+  margin-bottom: 12pt;
+}
+
+.print-payment-item {
+  flex: 1;
+  min-width: 30%;
+  border: 1px solid var(--mf-line);
+  padding: 6pt 10pt;
+  background: #ffffff;
+}
+
+.print-payment-item:first-child {
+  border-right: 3px solid var(--mf-gold);
+}
+
+.print-payment-label {
+  font-size: 7.5pt;
+  color: var(--mf-gray);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-weight: 400;
+}
+
+.print-payment-value {
+  font-size: 11pt;
+  font-weight: 700;
+  color: var(--mf-black);
+  direction: ltr;
+  text-align: left;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Notes (free text only — no structured data) — "Terms" card ──
+   The free-text notes appear in a light card with a gold side rule —
+   the same shape used for "Terms & Conditions" in the reference. */
+.print-notes {
+  margin-bottom: 12pt;
+  font-size: 9pt;
+  color: var(--mf-ink);
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+  padding: 7pt 12pt;
+  background: var(--mf-bg);
+  border: 1px solid var(--mf-line);
+  border-right: 3px solid var(--mf-gold);
+  line-height: 1.6;
+}
+
+.print-notes-label {
+  font-weight: 700;
+  margin-inline-end: 4pt;
+  color: var(--mf-black);
+}
+
+/* ── Signatures — two side-by-side, thin gold line ── */
+.print-signatures {
+  display: flex;
+  justify-content: space-between;
+  gap: 36pt;
+  margin-top: 32pt;
+  padding: 0 12pt;
+}
+
+.print-signature {
+  flex: 1;
+  text-align: center;
+  font-size: 8.5pt;
+  color: var(--mf-gray);
+  max-width: 40%;
+}
+
+.print-signature-line {
+  border-top: 1px solid var(--mf-gold);
+  margin-top: 36pt;
+  padding-top: 4pt;
+  color: var(--mf-black);
+  font-weight: 400;
+}
+
+/* ── Footer — gold divider + brand line + owner contact ──
+   The reference's footer is a three-column band of (phone · email ·
+   address) with a gold rule above. We use the same gold rule on the
+   single line of brand text that the document already renders — the
+   data stays exactly as it was. Owner contact is appended below. */
+.print-footer {
+  margin-top: 18pt;
+  border-top: 1px solid var(--mf-gold);
+  padding: 8pt 6pt 4pt;
+  text-align: center;
+  font-size: 7.8pt;
+  color: var(--mf-gray);
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+  letter-spacing: 0.02em;
+}
+
+.print-footer strong {
+  color: var(--mf-black);
+  font-weight: 700;
+}
+
+/* Owner contact — appended to every document footer, single source of truth. */
+.print-owner-contact {
+  margin-top: 6pt;
+  font-size: 8pt;
+  font-weight: 700;
+  color: var(--mf-black);
+  letter-spacing: 0.01em;
+}
+
+/* Print timestamp — small, top-right corner, unobtrusive. */
+.print-timestamp {
+  font-size: 6.5pt;
+  color: var(--mf-gray);
+  font-variant-numeric: tabular-nums;
+  direction: ltr;
+  text-align: left;
+  white-space: nowrap;
+  flex: 0 0 auto;
+  align-self: flex-start;
+  padding-top: 4pt;
+  letter-spacing: 0.01em;
+}
+
+/* ── New shared header structure (applies to ALL print documents) ──
+   Row 1: Logo + Company Name (once, no repetition)
+   Row 2: Gold divider
+   Row 3: Document title centered
+   Row 4: Party info grid (name, code, currency, period)
+   ──────────────────────────────────────────────────────────────── */
+
+/* Header top row: brand identity only, clean white background. */
+.print-header-brand {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: flex-start; /* RTL: right-aligned naturally */
+  gap: 12pt;
+  padding: 10pt 18pt 6pt;
+  background: #ffffff;
+}
+
+/* Divider between brand and document title. */
+.print-header-divider {
+  border-top: 2px solid var(--mf-gold);
+  margin: 0 18pt;
+}
+
+/* Title area: centered, clean. */
+.print-header-title-area {
+  text-align: center;
+  padding: 8pt 18pt 6pt;
+}
+
+/* Party info bar: horizontal strip with name, code, currency, period. */
+.print-header-party-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 8pt 24pt;
+  padding: 4pt 18pt 10pt;
+  font-size: 9pt;
+  color: var(--mf-ink);
+  border-bottom: 1px solid var(--mf-line);
+  margin-bottom: 12pt;
+}
+
+.print-header-party-item {
+  display: flex;
+  align-items: center;
+  gap: 4pt;
+}
+
+.print-header-party-label {
+  font-size: 7.5pt;
+  color: var(--mf-gray);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.print-header-party-value {
+  font-weight: 700;
+  color: var(--mf-black);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Legacy print-header (old style) — kept for backward compatibility
+   but will be replaced by the new structured header above. */
+.print-header {
+  display: flex;
+  flex-direction: row-reverse;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16pt;
+  background: #ffffff;
+  color: var(--mf-black);
+  padding: 10pt 18pt 8pt;
+  border-bottom: 2px solid var(--mf-gold);
+  margin-bottom: 14pt;
+  min-height: 60pt;
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+
+/* ============================================================================
+   Per-line additional details (machine number, kromaj, GSM, etc.)
+   Rendered as a labeled grid under each table row - never in Notes.
+   ============================================================================ */
+.print-line-details {
+  margin: 4pt 0 8pt;
+  padding: 6pt 10pt;
+  background: var(--mf-bg);
+  border: 1px solid var(--mf-line);
+  border-right: 3px solid var(--mf-gold);
+  border-radius: 0;
+}
+
+.print-line-details-title {
+  font-size: 7.5pt;
+  font-weight: 700;
+  color: var(--mf-gray);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-bottom: 4pt;
+}
+
+.print-line-details-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140pt, 1fr));
+  gap: 3pt 12pt;
+}
+
+.print-line-detail-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5pt;
+  font-size: 8pt;
+}
+
+.print-line-detail-label {
+  font-size: 6.8pt;
+  color: var(--mf-gray);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.print-line-detail-value {
+  font-weight: 600;
+  color: var(--mf-black);
+  word-break: break-word;
+  overflow-wrap: break-word;
+}
+
+.print-line-free-note {
+  margin-top: 3pt;
+  font-size: 7.8pt;
+  color: var(--mf-ink);
+  font-style: italic;
+}

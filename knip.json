@@ -1,0 +1,33 @@
+{
+  "entry": [
+    "vite.config.ts",
+    "src/start.ts",
+    "src/server.ts",
+    "src/router.tsx",
+    "src/routeTree.gen.ts",
+    "src/routes/**/*.tsx"
+  ],
+  "project": ["src/**/*.{ts,tsx}", "vite.config.ts"],
+  "ignore": [
+    "node_modules/**",
+    "dist/**",
+    ".output/**",
+    "**/*.test.{ts,tsx}",
+    "**/*.spec.{ts,tsx}",
+    "backend/**",
+    "admin-dashboard/**",
+    "desktop/**",
+    "docs/**"
+  ],
+  "ignoreDependencies": [
+    "@tanstack/react-router",
+    "@tanstack/react-start",
+    "@tanstack/router-plugin",
+    "@tanstack/react-query",
+    "@vitejs/plugin-react",
+    "@tailwindcss/vite",
+    "vite",
+    "vite-tsconfig-paths",
+    "tw-animate-css"
+  ]
+}

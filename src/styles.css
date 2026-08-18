@@ -1,0 +1,310 @@
+@import "tailwindcss" source(none);
+@source "../src";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+/*
+ * Fabric ERP design system.
+ * Light = white surfaces + warm yellow accent.
+ * Dark  = near-black surfaces + same warm yellow accent.
+ * Yellow (#F5B400) is ONLY for accents: buttons, active states, links,
+ * chart highlights. Never a dominant surface.
+ *
+ * ---------------------------------------------------------------------------
+ * DESIGN SYSTEM FOUNDATION (v2)
+ * Single source of truth. Every screen must consume these tokens — no
+ * arbitrary pixel values in components.
+ *
+ *  Spacing scale (4/8/12/16/24/32) ..... --ds-space-1 .. --ds-space-8
+ *  Border-radius (unified) ............. --ds-radius
+ *  Card / section padding .............. --ds-card-pad
+ *  Input height (unified) .............. --ds-input-h
+ *  Table row height (per density) ...... --ds-row-h / -compact / -ultra
+ *  Max content width ................... --ds-content-max
+ *  Focus ring .......................... --ds-focus-ring
+ *
+ * Density: tokens only. Do NOT build a visible toggle yet.
+ * ---------------------------------------------------------------------------
+ */
+
+:root {
+  --ds-space-1: 4px;
+  --ds-space-2: 8px;
+  --ds-space-3: 12px;
+  --ds-space-4: 16px;
+  --ds-space-5: 20px;
+  --ds-space-6: 24px;
+  --ds-space-7: 28px;
+  --ds-space-8: 32px;
+
+  --ds-radius: 0.75rem;
+  --ds-card-pad: 16px;
+  --ds-section-gap: 12px;
+
+  --ds-input-h: 40px;            /* h-10 — one input height everywhere */
+  --ds-row-h: 44px;              /* comfortable — default table row */
+  --ds-row-h-compact: 36px;      /* compact — reserved */
+  --ds-row-h-ultra: 30px;        /* ultra compact — reserved */
+  --ds-row-pad-x: 12px;
+  --ds-row-pad-x-compact: 10px;
+  --ds-row-pad-x-ultra: 8px;
+
+  --ds-content-max: 100%;
+
+  --ds-focus-ring: 0 0 0 2px var(--background), 0 0 0 4px var(--primary);
+}
+
+@theme inline {
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --radius-2xl: calc(var(--radius) + 8px);
+  --radius-3xl: calc(var(--radius) + 12px);
+  --radius-4xl: calc(var(--radius) + 16px);
+
+  --font-sans: "IBM Plex Sans Arabic", "Inter", system-ui, -apple-system, sans-serif;
+
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-surface: var(--surface);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary-glow: var(--primary-glow);
+  --color-accent-soft: var(--accent-soft);
+  --color-currency-syp: var(--currency-syp);
+  --color-currency-usd: var(--currency-usd);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-ring-offset-background: var(--background);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+
+  --shadow-soft: 0 1px 2px 0 oklch(0 0 0 / 0.04), 0 1px 3px 0 oklch(0 0 0 / 0.06);
+  --shadow-elevated: 0 4px 12px -2px oklch(0 0 0 / 0.08), 0 2px 6px -1px oklch(0 0 0 / 0.04);
+}
+
+:root {
+  --radius: 0.625rem;
+
+  /* ================================================================
+   * Motard Fabrics Group — DARK theme (default)
+   * ============================================================== */
+  --background: #0A0A0A;
+  --foreground: #FAFAFA;
+  --surface: #070707;
+  --card: #131313;
+  --card-foreground: #FAFAFA;
+  --popover: #141414;
+  --popover-foreground: #FAFAFA;
+
+  --primary: #FFD740;
+  --primary-foreground: #0A0A0A;
+  --primary-glow: #FFE433;
+  --accent-soft: #FFF3B0;
+
+  --secondary: #1A1A1A;
+  --secondary-foreground: #FAFAFA;
+  --muted: #1A1A1A;
+  --muted-foreground: #9CA3AF;
+  --accent: #1A1A1A;
+  --accent-foreground: #FAFAFA;
+
+  --destructive: oklch(0.637 0.237 25.3);
+  --destructive-foreground: #FFFFFF;
+  --success: oklch(0.72 0.19 149);
+  --success-foreground: #0A0A0A;
+  --warning: oklch(0.78 0.17 70);
+  --warning-foreground: #0A0A0A;
+
+  --border: #242424;
+  --input: #242424;
+  --ring: #FFD740;
+
+  --currency-syp: #FFD740;
+  --currency-usd: #E8D8A8;
+
+  --chart-1: #FFD740;
+  --chart-2: #FFE433;
+  --chart-3: #FFF3B0;
+  --chart-4: #6B7280;
+  --chart-5: #374151;
+
+  --sidebar: #0A0A0A;
+  --sidebar-foreground: #FAFAFA;
+  --sidebar-primary: #FFD740;
+  --sidebar-primary-foreground: #0A0A0A;
+  --sidebar-accent: #1A1A1A;
+  --sidebar-accent-foreground: #FAFAFA;
+  --sidebar-border: #242424;
+  --sidebar-ring: #FFD740;
+
+  --hero-card-bg: linear-gradient(135deg, #17140E 0%, color-mix(in oklab, var(--primary) 18%, #0A0A0A) 100%);
+}
+
+.dark {
+  color-scheme: dark;
+}
+
+/* ================================================================
+ * LIGHT theme — same brand identity, white surfaces, warm gold accent.
+ * ============================================================== */
+.light {
+  color-scheme: light;
+  --background: #FFFFFF;
+  --foreground: #0A0A0A;
+  --surface: #F7F6F2;
+  --card: #FFFFFF;
+  --card-foreground: #0A0A0A;
+  --popover: #FFFFFF;
+  --popover-foreground: #0A0A0A;
+
+  --primary: #C89100;
+  --primary-foreground: #FFFFFF;
+  --primary-glow: #E0A800;
+  --accent-soft: #8A6A00;
+
+  --secondary: #F1EFEA;
+  --secondary-foreground: #0A0A0A;
+  --muted: #F1EFEA;
+  --muted-foreground: #5B6270;
+  --accent: #F1EFEA;
+  --accent-foreground: #0A0A0A;
+
+  --border: #E6E4DE;
+  --input: #E6E4DE;
+  --ring: #C89100;
+
+  --currency-syp: #8A6A00;
+  --currency-usd: #4B5563;
+
+  --chart-1: #C89100;
+  --chart-2: #E0A800;
+  --chart-3: #8A6A00;
+  --chart-4: #9CA3AF;
+  --chart-5: #D1D5DB;
+
+  --sidebar: #FAF9F5;
+  --sidebar-foreground: #0A0A0A;
+  --sidebar-primary: #C89100;
+  --sidebar-primary-foreground: #FFFFFF;
+  --sidebar-accent: #F1EFEA;
+  --sidebar-accent-foreground: #0A0A0A;
+  --sidebar-border: #E6E4DE;
+  --sidebar-ring: #C89100;
+
+  --hero-card-bg: linear-gradient(135deg, #FFFBEE 0%, color-mix(in oklab, var(--primary) 12%, #FFFFFF) 100%);
+}
+
+
+@layer base {
+  * {
+    border-color: var(--color-border);
+  }
+
+  html {
+    font-family: var(--font-sans);
+  }
+
+  body {
+    background-color: var(--color-surface);
+    color: var(--color-foreground);
+    font-feature-settings: "kern", "liga";
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* Arabic numerals stay Latin for readability in ERP tables */
+  .tabular-nums {
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+/* ============================================================
+ * Running border glow — animated conic gradient outline on hover.
+ * A thin light travels around the card edge; the card itself
+ * never gets a fill overlay.
+ * Usage: <div class="card-glow"> ... </div>
+ * ============================================================ */
+@utility card-glow {
+  position: relative;
+  isolation: isolate;
+  -webkit-tap-highlight-color: transparent;
+  &::before {
+    content: "";
+    position: absolute;
+    inset: -1px;
+    border-radius: inherit;
+    padding: 1.5px;
+    background: conic-gradient(
+      from var(--glow-angle, 0deg),
+      transparent 0deg,
+      var(--primary) 40deg,
+      var(--primary-glow) 60deg,
+      transparent 110deg,
+      transparent 360deg
+    );
+    -webkit-mask:
+      linear-gradient(#000 0 0) content-box,
+      linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+    opacity: 0;
+    transition: opacity 0.2s ease;
+    pointer-events: none;
+    z-index: 1;
+  }
+  &:hover::before,
+  &:focus-within::before {
+    opacity: 1;
+    animation: card-glow-spin 2.2s linear infinite;
+  }
+}
+
+@property --glow-angle {
+  syntax: "<angle>";
+  inherits: false;
+  initial-value: 0deg;
+}
+
+@keyframes card-glow-spin {
+  to { --glow-angle: 360deg; }
+}
+
+/* Print isolation is now handled by src/components/print/print.css —
+   everything (app shell) hides during @media print via
+   body > *:not([data-print-root]); the active document lives in a portal.
+   Kept here for on-screen fallbacks: */
+@media print {
+  .no-print {
+    display: none !important;
+  }
+}

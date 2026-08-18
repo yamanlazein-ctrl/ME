@@ -1,0 +1,13 @@
+-- 0019_color_hex.sql
+-- Add a real visual color (hex) column to the `colors` table.
+--
+-- This is STRICTLY additive:
+--   * no columns are dropped or renamed
+--   * `code` is left untouched (it is a commercial / product color identifier,
+--     NOT a hex value — we must NOT reinterpret it)
+--   * the new column is nullable so pre-existing rows are fully preserved
+--   * existing relationships (colorId references from rolls / invoice_lines)
+--     are unaffected
+--
+-- varchar(9) accommodates both #RRGGBB (7 chars) and #RRGGBBAA (9 chars).
+ALTER TABLE colors ADD COLUMN IF NOT EXISTS hex varchar(9);
