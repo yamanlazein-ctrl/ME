@@ -1,5 +1,4 @@
 import {
-  ChevronDown,
   ChevronLeft,
   CheckCircle2,
   Layers,
@@ -46,6 +45,29 @@ function StatusChip({ r, minKg }: { r: Roll; minKg: number }) {
   );
 }
 
+/** Shared column template for desktop roll rows + their header (keeps both aligned). */
+const ROLL_COLS =
+  "grid grid-cols-[minmax(4.5rem,auto)_minmax(7rem,1.1fr)_4.5rem_minmax(6rem,0.9fr)_minmax(7rem,1.4fr)_minmax(6.5rem,0.9fr)_6.5rem_auto] items-center gap-x-3";
+
+/** One column-header row rendered above the rolls of an expanded color. */
+function RollsHeader() {
+  return (
+    <div
+      className={`hidden md:grid ${ROLL_COLS} border-b border-border bg-background/80 px-4 pr-20 py-1.5 text-[10px] font-semibold tracking-wide text-muted-foreground`}
+      dir="rtl"
+    >
+      <span>الصبغة</span>
+      <span>المتبقي / الأصلي</span>
+      <span>الأثواب</span>
+      <span>رقم الصبغة</span>
+      <span>المورد</span>
+      <span>تاريخ الدخول</span>
+      <span>الحالة</span>
+      <span />
+    </div>
+  );
+}
+
 function FabricRow({
   fabric,
   open,
@@ -72,7 +94,7 @@ function FabricRow({
   const colorCount = colorsOfFabric(fabric.id).length;
   return (
     <div
-      className="group flex items-center gap-3 px-4 py-1.5 cursor-pointer hover:bg-secondary/60 transition"
+      className="group flex items-center gap-3 border-b border-border bg-secondary/40 px-4 py-3 cursor-pointer hover:bg-secondary/70 transition"
       onClick={onToggle}
     >
       {selectable && (
@@ -88,7 +110,9 @@ function FabricRow({
         className="grid h-6 w-6 place-items-center rounded text-muted-foreground"
         aria-label={open ? "طي" : "فتح"}
       >
-        {open ? <ChevronDown className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
+        <ChevronLeft
+          className={`h-4 w-4 transition-transform duration-200 ${open ? "-rotate-90" : ""}`}
+        />
       </button>
       <div className="grid h-10 w-10 place-items-center overflow-hidden rounded-lg bg-primary/15 text-primary shrink-0">
         {fabric.imageUrl ? (
@@ -98,16 +122,24 @@ function FabricRow({
         )}
       </div>
       <div className="min-w-0 flex-1">
-        <div className="text-sm font-semibold text-foreground truncate">{fabric.name}</div>
-        <div className="text-xs text-muted-foreground">
-          {colorCount} لون
-          {fabric.category ? ` • ${fabric.category}` : ""}
-          {` • الحد الأدنى ${fabric.minStockKg} كغ`}
+        <div className="text-sm font-bold text-foreground truncate">{fabric.name}</div>
+        <div className="mt-0.5 flex flex-wrap items-center gap-1.5">
+          <span className="inline-flex items-center rounded bg-secondary px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
+            {colorCount} لون
+          </span>
+          {fabric.category && (
+            <span className="inline-flex items-center rounded bg-secondary px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
+              {fabric.category}
+            </span>
+          )}
+          <span className="text-[10px] text-muted-foreground tabular-nums">
+            حد أدنى {fabric.minStockKg} كغ
+          </span>
         </div>
       </div>
-      <div className="flex shrink-0 items-center gap-3">
-        <StockMetric label="باقي" value={totalPieces} unit="أثواب" primary />
-        <StockMetric label="المتبقي" value={formatNumber(totalKg)} unit="كغ" />
+      <div className="flex shrink-0 items-center gap-2">
+        <StockMetric label="أثواب متبقية" value={totalPieces} primary />
+        <StockMetric label="الوزن المتبقي" value={formatNumber(totalKg)} unit="كغ" />
       </div>
       <RowActions onEdit={onEdit} onDelete={onDelete} onAdd={onAddColor} addLabel="إضافة لون" />
     </div>
@@ -155,19 +187,24 @@ function ColorRow({
         type="button"
         className="grid h-6 w-6 place-items-center rounded text-muted-foreground"
       >
-        {open ? <ChevronDown className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
+        <ChevronLeft
+          className={`h-4 w-4 transition-transform duration-200 ${open ? "-rotate-90" : ""}`}
+        />
       </button>
       <ColorSwatch color={color} size="md" />
 
       <div className="min-w-0 flex-1">
-        <div className="text-sm font-medium text-foreground truncate">
-          {color.name} — <span className="text-muted-foreground tabular-nums">{color.code}</span>
+        <div className="flex flex-wrap items-baseline gap-x-2">
+          <span className="text-sm font-bold text-foreground truncate">{color.name}</span>
+          <span className="rounded bg-secondary px-1.5 py-0.5 text-[10px] font-semibold text-muted-foreground tabular-nums">
+            كود {color.code}
+          </span>
         </div>
-        <div className="text-[11px] text-muted-foreground tabular-nums">{count} صبغة</div>
+        <div className="text-[10px] text-muted-foreground tabular-nums">{count} صبغة</div>
       </div>
-      <div className="flex shrink-0 items-center gap-3">
-        <StockMetric label="باقي" value={pieces} unit="أثواب" primary />
-        <StockMetric label="المتبقي" value={formatQuantity(total)} unit="كغ" />
+      <div className="flex shrink-0 items-center gap-2">
+        <StockMetric label="أثواب متبقية" value={pieces} primary />
+        <StockMetric label="الوزن المتبقي" value={formatQuantity(total)} unit="كغ" />
       </div>
       <RowActions onEdit={onEdit} onDelete={onDelete} onAdd={onAddRoll} addLabel="إضافة صبغة" />
     </div>
@@ -211,7 +248,7 @@ function RollRow({
                 aria-label={`تحديد الصبغة #${roll.rollNo}`}
               />
             )}
-            <span className="grid h-7 w-7 shrink-0 place-items-center rounded-md bg-secondary text-muted-foreground text-[10px] font-bold tabular-nums">
+            <span className="grid h-7 min-w-[2.5rem] shrink-0 place-items-center rounded-md bg-secondary px-1.5 text-muted-foreground text-[10px] font-bold tabular-nums">
               #{roll.rollNo}
             </span>
             <span className="text-sm font-semibold text-foreground truncate">
@@ -266,41 +303,41 @@ function RollRow({
             aria-label={`تحديد الصبغة #${roll.rollNo}`}
           />
         )}
-        <div className="grid h-7 w-7 place-items-center rounded-md bg-secondary text-muted-foreground text-[10px] font-bold tabular-nums shrink-0">
-          #{roll.rollNo}
-        </div>
-        <div className="min-w-0 flex-1 grid grid-cols-2 lg:grid-cols-5 gap-2 items-center">
-          <div>
-            <div className="text-xs text-muted-foreground">المتبقي</div>
-            <div className="text-sm font-semibold text-foreground tabular-nums">
-              {roll.remainingKg}{" "}
-              <span className="text-xs text-muted-foreground">/ {roll.initialKg} كغ</span>
+        <div className={`${ROLL_COLS} min-w-0 flex-1`} dir="rtl">
+          <span className="inline-flex h-7 min-w-[2.5rem] items-center justify-center rounded-md bg-primary/10 px-1.5 text-[11px] font-bold text-primary tabular-nums">
+            #{roll.rollNo}
+          </span>
+          <div className="min-w-0">
+            <div className="whitespace-nowrap text-sm font-bold text-foreground tabular-nums">
+              {roll.remainingKg}
+              <span className="text-[10px] font-medium text-muted-foreground"> / {roll.initialKg} كغ</span>
+            </div>
+            <div className="mt-0.5 h-1 w-full max-w-[7rem] overflow-hidden rounded-full bg-secondary">
+              <div
+                className={`h-full rounded-full ${
+                  status === "out" ? "bg-destructive/50" : status === "low" ? "bg-warning" : "bg-success"
+                }`}
+                style={{
+                  width: `${Math.max(
+                    0,
+                    Math.min(100, roll.initialKg > 0 ? (roll.remainingKg / roll.initialKg) * 100 : 0),
+                  )}%`,
+                }}
+              />
             </div>
           </div>
-          <div>
-            <div className="text-xs text-muted-foreground">الأثواب</div>
-            <div className="text-sm font-semibold text-foreground tabular-nums">
-              {roll.pieces ?? 1}
-            </div>
+          <div className="whitespace-nowrap text-sm font-bold text-primary tabular-nums">
+            {roll.pieces ?? 1}
           </div>
-          <div>
-            <div className="text-xs text-muted-foreground">رقم الصبغة</div>
-            <div className="text-sm text-foreground tabular-nums">{roll.dyeBatch}</div>
-          </div>
-          <div>
-            <div className="text-xs text-muted-foreground">المورد</div>
-            <div className="text-sm text-foreground truncate">{supplier?.name ?? "—"}</div>
-          </div>
-          <div>
-            <div className="text-xs text-muted-foreground">تاريخ الدخول</div>
-            <div className="text-sm text-foreground tabular-nums">{roll.entryDate}</div>
-          </div>
+          <div className="truncate text-sm text-foreground tabular-nums">{roll.dyeBatch}</div>
+          <div className="truncate text-sm text-foreground">{supplier?.name ?? "—"}</div>
+          <div className="whitespace-nowrap text-sm text-muted-foreground tabular-nums">{roll.entryDate}</div>
+          <StatusChip r={roll} minKg={minKg} />
+          <RowActions onEdit={onEdit} onDelete={onDelete} />
         </div>
-        <StatusChip r={roll} minKg={minKg} />
-        <RowActions onEdit={onEdit} onDelete={onDelete} />
       </div>
     </>
   );
 }
 
-export { StatusChip, FabricRow, ColorRow, RollRow };
+export { StatusChip, FabricRow, ColorRow, RollRow, RollsHeader };

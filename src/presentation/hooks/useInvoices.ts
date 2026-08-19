@@ -207,10 +207,21 @@ export function useInvoices() {
   });
 }
 
+/**
+ * Sequential, traceable invoice number generator.
+ * Produces: ENT-2026-0001, INV-2026-0001, RET-2026-0001
+ * Each type has its own counter that increments per call within the session.
+ * The 4-digit sequence number makes invoices easy to track and reference.
+ */
+const invoiceCounters: Record<string, number> = {};
+
 export function nextInvoiceNumber(type: string): string {
-  const prefix = type === "entry" ? "ENT" : "INV";
+  const prefix = type === "entry" ? "ENT" : type === "return" ? "RET" : "INV";
   const year = new Date().getFullYear();
-  return `${prefix}-${year}-${Date.now().toString(36).slice(-4).toUpperCase()}`;
+  const key = `${prefix}-${year}`;
+  invoiceCounters[key] = (invoiceCounters[key] ?? 0) + 1;
+  const seq = String(invoiceCounters[key]).padStart(4, "0");
+  return `${key}-${seq}`;
 }
 
 export { type Invoice } from "@/domain/entities/Invoice";

@@ -85,41 +85,22 @@ export function PrintDocument({
   const p = s.printing;
   const showLogo = p.showLogo !== false;
 
-  // Show the page-of-pages line in the header when we know how many
-  // pages the document spans (used by the tracking batch print).
-  const showPageMarker =
-    typeof pageNumber === "number" && typeof totalPages === "number";
-
-  const printDate = new Date().toLocaleString("ar-SY", {
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-
   return (
     <div className="print-doc">
       {/* ═══════════════════════════════════════════════════════════
-          NEW UNIFIED HEADER — applies to ALL print documents.
-          Row 1: Logo + Company Name (once, never repeated)
+          UNIFIED HEADER — applies to ALL print documents.
+          Row 1: Logo + Company Name
           Row 2: Gold divider
-          Row 3: Document title centered
-          Row 4: Party / meta info bar (name, code, currency, period)
-          Print timestamp: small, top-right corner, unobtrusive
+          Row 3: Document title
+          Row 4: Party / meta info bar
           ═══════════════════════════════════════════════════════════ */}
 
       {/* ── Row 1: Brand identity ── */}
       <div className="print-header-brand">
-        {showLogo && <img className="print-logo" src={logoUrl} alt={BRAND_NAME} />}
         <div className="print-brand-text">
           <div className="print-company-name">{BRAND_NAME}</div>
         </div>
-        {/* Timestamp: tiny, top-right, never prominent */}
-        <div className="print-timestamp" style={{ marginInlineStart: "auto" }}>
-          {printDate}
-          {showPageMarker && ` · صفحة ${pageNumber} / ${totalPages}`}
-        </div>
+        {showLogo && <img className="print-logo" src={logoUrl} alt={BRAND_NAME} />}
       </div>
 
       {/* ── Row 2: Gold divider ── */}
@@ -260,7 +241,10 @@ export function PrintTable({
       <thead>
         <tr>
           {columns.map((c) => {
-            const cls = [c.align === "center" ? "pd-center" : "", c.amount ? "pd-amount" : ""]
+            const cls = [
+              c.align === "center" ? "pd-center" : "",
+              c.amount ? "pd-amount amount-col" : "",
+            ]
               .filter(Boolean)
               .join(" ");
             return (
@@ -272,21 +256,38 @@ export function PrintTable({
         </tr>
       </thead>
       <tbody>
-        {rows.map((row, i) => (
-          <tr key={i}>
-            {row.map((cell, j) => {
-              const c = columns[j];
-              const cls = [c?.align === "center" ? "pd-center" : "", c?.amount ? "pd-amount" : ""]
-                .filter(Boolean)
-                .join(" ");
+        {rows.map((row, i) => {
+          // Detail row: single ReactNode that should span all columns
+          if (row.length === 1 && typeof row[0] === "object" && (row[0] as ReactNode) != null) {
+            const el = row[0] as React.ReactElement;
+            // If it's our detail span, render it as a full-width td
+            if ((el as any).key === "detail") {
               return (
-                <td key={j} className={cls}>
-                  {cell}
-                </td>
+                <tr key={i} className="print-detail-row">
+                  <td colSpan={columns.length}>{el}</td>
+                </tr>
               );
-            })}
-          </tr>
-        ))}
+            }
+          }
+          return (
+            <tr key={i}>
+              {row.map((cell, j) => {
+                const c = columns[j];
+                const cls = [
+                  c?.align === "center" ? "pd-center" : "",
+                  c?.amount ? "pd-amount amount-col" : "",
+                ]
+                  .filter(Boolean)
+                  .join(" ");
+                return (
+                  <td key={j} className={cls}>
+                    {cell}
+                  </td>
+                );
+              })}
+            </tr>
+          );
+        })}
       </tbody>
     </table>
   );

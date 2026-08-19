@@ -25,21 +25,46 @@ import {
   type PrintParty,
 } from "@/components/print/PrintDocument";
 import { currencySymbol, currencyState, useCurrencies } from "@/presentation/hooks/useCurrency";
-import {
-  colorById,
-  fabricById,
-  rollById,
-  type Color,
-} from "@/presentation/hooks/useInventory";
 import { customerById } from "@/presentation/hooks/useParties";
 import { useVouchersList } from "@/presentation/hooks/useVouchers";
 import { useInvoiceVisibility } from "./visibility";
-import { formatMoney, formatQuantity } from "@/shared/utils/formatNumber";
+import { resolveCreatedBy } from "@/presentation/hooks/useSettings";
+import { formatMoney, formatNumber, formatQuantity } from "@/shared/utils/formatNumber";
+import { parseLineNote } from "@/components/print/noteParser";
+import {
+  fabricById,
+  colorById,
+  rollById,
+  type Color,
+} from "@/presentation/hooks/useInventory";
 import type { Invoice, InvoiceLineData } from "@/domain/entities/Invoice";
-import { parseLineDetails } from "./lineDetails";
 
-const DETAILS_TITLE = String.fromCharCode(0x62a, 0x641, 0x627, 0x635, 0x64a, 0x644, 0x20, 0x625, 0x636, 0x627, 0x641, 0x64a, 0x629);
-const BAND_LABEL = String.fromCharCode(0x628, 0x646, 0x62f);
+/** Render a color cell showing code, name, and hex swatch — same pattern as EntryInvoicePrint. */
+function renderColorCell(colorId: string) {
+  const col = colorById(colorId) as Pick<Color, "code" | "name" | "hex"> | null;
+  if (!col) return "—";
+  const hexSwatch = col.hex
+    ? {
+        display: "inline-block",
+        width: "10px",
+        height: "10px",
+        borderRadius: "2px",
+        backgroundColor: col.hex,
+        border: "1px solid rgba(0,0,0,0.15)",
+        marginRight: "4px",
+        verticalAlign: "middle" as const,
+      }
+    : null;
+  return (
+    <div style={{ display: "flex", flexDirection: "column", lineHeight: 1.25 }}>
+      <span style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+        {hexSwatch && <span style={hexSwatch} />}
+        {col.code && <span className="pd-color-code">{col.code}</span>}
+      </span>
+      {col.name && <span className="pd-color-name">{col.name}</span>}
+    </div>
+  );
+}
 
 type SaleInvoicePrintProps = {
   invoice: Invoice;
@@ -47,19 +72,11 @@ type SaleInvoicePrintProps = {
   pageNumber?: number;
 };
 
-const fmtNumber = (n: number): string => formatMoney(n);
+// Use formatNumber for unit prices (preserves decimals), formatMoney for totals
+const fmtUnit = (n: number): string => formatNumber(n);
+const fmtMoney = (n: number): string => formatMoney(n);
 const fmtQty = (n: number): string => formatQuantity(n);
 
-function renderColorCell(line: InvoiceLineData) {
-  const col = colorById(line.colorId) as Pick<Color, "code" | "name"> | null;
-  if (!col) return "—";
-  return (
-    <div style={{ display: "flex", flexDirection: "column", lineHeight: 1.25 }}>
-      {col.code && <span className="pd-color-code">{col.code}</span>}
-      <span className="pd-color-name">{col.name}</span>
-    </div>
-  );
-}
 export function SaleInvoicePrint({
   invoice,
   totalPages,
@@ -78,90 +95,122 @@ export function SaleInvoicePrint({
     () => allVouchers.filter((v) => v.invoiceId === inv.id && v.status === "active"),
     [allVouchers, inv.id],
   );
-  const paid = linkedVouchers.reduce((s, v) => s + v.amount, 0);
+  const paidFromVouchers = linkedVouchers.reduce((s, v) => s + v.amount, 0);
+  // Use explicit paid field if provided (manual payment at invoice time), otherwise derive from vouchers
+  const paid = inv.paid !== undefined && inv.paid > 0 ? inv.paid : paidFromVouchers;
   const paymentMethod = linkedVouchers[0]?.method;
-  const subtotal = inv.total();
+  const subtotal = inv.lineSubtotal();
   const discount = inv.discount ?? 0;
   const tax = inv.tax ?? 0;
-  const grand = subtotal - discount + tax;
+  const shipping = inv.shipping ?? 0;
+  // Grand total = subtotal - discount + tax + shipping
+  const grand = inv.total();
   const remaining = Math.max(0, grand - paid);
   const sym = currencySymbol(inv.currency);
   const isCancelled = inv.status === "cancelled";
   const statusLabel = isCancelled
     ? "ملغاة"
-    : inv.status === "draft"
-      ? "مسودة"
-      : remaining > 0
-        ? "مفتوحة (متبقي)"
-        : "مدفوعة بالكامل";
+    : remaining > 0
+      ? `مفتوحة (المتبقي ${fmtMoney(remaining)} ${sym})`
+      : "مقفلة (مدفوعة)";
   const meta: PrintMetaItem[] = [];
-  if (vis.showInvoiceNumber) meta.push({ label: "رقم الفاتورة", value: inv.number });
+  if (vis.showInvoiceNumber) meta.push({ label: "رقم الفاتورة", value: inv.reference || inv.number });
   if (vis.showDate) meta.push({ label: "التاريخ", value: inv.date });
   if (vis.showStatus) meta.push({ label: "الحالة", value: statusLabel });
   if (vis.showCurrency) meta.push({ label: "العملة", value: `${inv.currency} (${sym})` });
   meta.push({
     label: "سعر الصرف",
-    value: `1 $ = ${fmtNumber(currencyState.rates.USD)} ل.س — ${currencyState.lastUpdated}`,
+    value: `1 $ = ${fmtUnit(currencyState.rates.USD)} ل.س — ${currencyState.lastUpdated}`,
   });
-  if (vis.showCreatedBy && inv.createdBy) meta.push({ label: "أنشأ بواسطة", value: inv.createdBy });
-  if (vis.showCreatedAt && inv.createdAt) {
-    meta.push({
-      label: "تاريخ الإنشاء",
-      value: String(inv.createdAt).slice(0, 19).replace("T", " "),
-    });
-  }
+  if (vis.showCreatedBy) meta.push({ label: "أنشأ بواسطة", value: resolveCreatedBy(inv.createdBy) });
   if (vis.showCancelledInfo && isCancelled && inv.cancelledAt) {
     meta.push({
       label: "تاريخ الإلغاء",
       value: String(inv.cancelledAt).slice(0, 19).replace("T", " "),
     });
   }
-  const allColumns: { key: string; cfg: PrintColumn; on?: boolean }[] = [
-    { key: "idx", cfg: { key: "idx", label: "#", align: "center", width: "4%" }, on: vis.showLineIndex },
-    { key: "fabric", cfg: { key: "fabric", label: "القماش", width: "18%" }, on: vis.showFabric },
-    { key: "category", cfg: { key: "category", label: "الفئة", width: "10%" }, on: vis.showFabricCategory },
-    { key: "color", cfg: { key: "color", label: "اللون", width: "16%" }, on: vis.showColorCode || vis.showColorName },
-    { key: "roll", cfg: { key: "roll", label: "رقم الصبغة", width: "13%" }, on: vis.showRollNumber },
-    { key: "pieces", cfg: { key: "pieces", label: "الأثواب", align: "center", width: "7%" }, on: vis.showQuantity },
-    { key: "qty", cfg: { key: "qty", label: "الكمية (كغ)", align: "center", width: "9%" }, on: vis.showQuantity },
-    { key: "price", cfg: { key: "price", label: "السعر/كغ", align: "left", amount: true, width: "9%" }, on: vis.showUnitPrice },
-    { key: "discount", cfg: { key: "discount", label: "الخصم", align: "center", width: "7%" }, on: vis.showLineDiscount },
-    { key: "gross", cfg: { key: "gross", label: "الإجمالي", align: "left", amount: true, width: "10%" }, on: vis.showLineTotal },
+  // ── Items table — 5 main columns only. Extra details (roll no,
+  //    pieces, machine, kromaj, count, draw, reference) rendered
+  //    below each row as a compact detail line.
+  const mainColumns: PrintColumn[] = [
+    { key: "fabric", label: "الصنف", width: "28%" },
+    { key: "color", label: "اللون", width: "18%" },
+    { key: "qty", label: "الكمية (كغ)", align: "center", width: "16%" },
+    { key: "price", label: "السعر/كغ", align: "left", amount: true, width: "16%" },
+    { key: "gross", label: "الإجمالي", align: "left", amount: true, width: "22%" },
   ];
-  const columns = allColumns.filter((c) => c.on !== false).map((c) => c.cfg);
-  const rows = inv.lines.map((l, i) => {
+
+  /** Build a row: main cells + optional detail block below. */
+  function buildRow(l: Invoice["lines"][number]) {
     const fab = fabricById(l.fabricId);
     const roll = rollById(l.rollId);
+    const parsed = parseLineNote(l.note);
     const sub = l.quantityKg * l.pricePerKg;
     const lineTotal = Math.max(0, sub - (l.discountAmount || 0));
-    const cell: Record<string, string | number | React.ReactNode> = {
-      idx: i + 1,
+
+    const main: Record<string, string | number | React.ReactNode> = {
       fabric: fab?.name ?? "—",
-      category: fab?.category ?? "—",
-      color: renderColorCell(l),
-      roll: roll ? roll.rollNo : "—",
-      pieces: (l.pieces && l.pieces > 1) ? String(l.pieces) : "—",
-      qty: fmtNumber(l.quantityKg),
-      price: fmtNumber(l.pricePerKg),
-      discount: (l.discountAmount || 0) > 0 ? fmtNumber(l.discountAmount) : "—",
-      gross: fmtNumber(lineTotal),
+      color: renderColorCell(l.colorId),
+      qty: fmtQty(l.quantityKg),
+      price: fmtUnit(l.pricePerKg),
+      gross: fmtMoney(lineTotal),
     };
-    return columns.map((c) => cell[c.key] ?? "—");
-  });
+
+    // Extra details that go below the main row
+    const details: Array<{ label: string; value: string }> = [];
+    if (roll?.dyeBatch) details.push({ label: "رقم الصبغة", value: roll.dyeBatch });
+    else if (roll?.rollNo) details.push({ label: "رقم الصبغة", value: roll.rollNo });
+    if (l.pieces && l.pieces > 1) details.push({ label: "الأثواب", value: String(l.pieces) });
+    if (parsed.machineNo) details.push({ label: "رقم الماكينة", value: parsed.machineNo });
+    if (parsed.chromaj) details.push({ label: "الكراماج", value: parsed.chromaj });
+    else if (roll?.weightGsm) details.push({ label: "الكراماج", value: String(roll.weightGsm) });
+    if (parsed.count) details.push({ label: "العدد", value: parsed.count });
+    if (parsed.draw) details.push({ label: "السحب", value: parsed.draw });
+    if (parsed.reference) details.push({ label: "المرجعية", value: parsed.reference });
+
+    return { main, details };
+  }
+
+  const columns = mainColumns;
+  const rows: (string | number | React.ReactNode)[][] = [];
+  for (const l of inv.lines) {
+    const r = buildRow(l);
+    rows.push(columns.map((c) => r.main[c.key] ?? "—"));
+    if (r.details.length > 0) {
+      const gridCols = 4;
+      const detailGrid = (
+        <div key="detail" className="pd-detail-grid">
+          {r.details.map((d, i) => (
+            <div key={i} className="pd-detail-item">
+              <span className="pd-detail-label">{d.label}</span>
+              <span className="pd-detail-val">{d.value}</span>
+            </div>
+          ))}
+          {Array.from({ length: gridCols - (r.details.length % gridCols || gridCols) }).map((_, i) => (
+            <div key={`empty-${i}`} className="pd-detail-item pd-detail-empty" />
+          ))}
+        </div>
+      );
+      rows.push([detailGrid as React.ReactNode]);
+    }
+  }
   const totals: PrintTotal[] = [];
   if (vis.showSubtotal) {
-    totals.push({ label: "المجموع", value: `${fmtNumber(subtotal)} ${sym}` });
+    totals.push({ label: "المجموع", value: `${fmtMoney(subtotal)} ${sym}` });
   }
   if (vis.showDiscountTotal && discount > 0) {
-    totals.push({ label: "الخصم", value: `- ${fmtNumber(discount)} ${sym}` });
+    totals.push({ label: "الخصم", value: `- ${fmtMoney(discount)} ${sym}` });
   }
   if (vis.showTax && tax > 0) {
-    totals.push({ label: "الضريبة", value: `+ ${fmtNumber(tax)} ${sym}` });
+    totals.push({ label: "الضريبة", value: `+ ${fmtMoney(tax)} ${sym}` });
+  }
+  if (shipping > 0) {
+    totals.push({ label: "الشحن", value: `+ ${fmtMoney(shipping)} ${sym}` });
   }
   if (vis.showGrandTotal) {
     totals.push({
       label: "الإجمالي النهائي",
-      value: `${fmtNumber(grand)} ${sym}`,
+      value: `${fmtMoney(grand)} ${sym}`,
       grand: true,
     });
   }
@@ -180,9 +229,9 @@ export function SaleInvoicePrint({
     : undefined;
   const payment = vis.showPaymentSummary
     ? [
-        { label: "الإجمالي", value: `${fmtNumber(grand)} ${sym}` },
-        { label: "المقبوض", value: `${fmtNumber(paid)} ${sym}` },
-        { label: "الباقي", value: `${fmtNumber(remaining)} ${sym}` },
+        { label: "الإجمالي", value: `${fmtMoney(grand)} ${sym}` },
+        { label: "المقبوض", value: `${fmtMoney(paid)} ${sym}` },
+        { label: "الباقي", value: `${fmtMoney(remaining)} ${sym}` },
       ]
     : undefined;
   return (
@@ -206,26 +255,6 @@ export function SaleInvoicePrint({
       }
     >
       <PrintTable columns={columns} rows={rows} />
-      {inv.lines.map((l, i) => {
-        const parsed = parseLineDetails(l.note);
-        if (parsed.details.length === 0 && !parsed.freeText) return null;
-        return (
-          <div key={l.id} className="print-line-details">
-            <div className="print-line-details-title">{DETAILS_TITLE} - {BAND_LABEL} {i + 1}</div>
-            <div className="print-line-details-grid">
-              {parsed.details.map((d) => (
-                <div key={d.label} className="print-line-detail-item">
-                  <span className="print-line-detail-label">{d.label}</span>
-                  <span className="print-line-detail-value">{d.value}</span>
-                </div>
-              ))}
-            </div>
-            {parsed.freeText && (
-              <div className="print-line-free-note">{parsed.freeText}</div>
-            )}
-          </div>
-        );
-      })}
     </PrintDocument>
   );
 }

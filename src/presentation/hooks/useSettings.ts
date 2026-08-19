@@ -202,6 +202,46 @@ function makeDefault<T extends { id: string; isDefault: boolean }>(list: T[], id
   list.forEach((x) => (x.isDefault = x.id === id));
 }
 
+/* ── User lookup helpers ─────────────────────────────────────────────
+ *  These resolve a user id (UUID) → readable name. The print templates
+ *  call `resolveCreatedBy()` to show the creator's name instead of a
+ *  raw UUID. There is always a single Admin user in the system, so the
+ *  fallback is "Admin" for null / unknown / malformed ids.
+ *  See EntryInvoicePrint / SaleInvoicePrint / ReturnInvoicePrint.
+ *  ─────────────────────────────────────────────────────────────────── */
+
+/** FALLBACK_NAME — displayed when the user id is missing or unknown. */
+export const FALLBACK_USER_NAME = "Admin";
+
+/** A user id that looks like a UUID (8-4-4-4-12 hex). Used to detect
+ *  raw ids that came from the backend before being resolved to a name. */
+const UUID_LIKE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** Lookup a system user by id (synchronous, backed by the module cache). */
+export function userById(id: string | null | undefined): SystemUser | undefined {
+  if (!id) return undefined;
+  return settings.users.find((u) => u.id === id);
+}
+
+/** Resolve a "created by" value (user id) to a printable name.
+ *  - If the id matches a real user → that user's name
+ *  - If the id is missing, null, or unknown → "Admin" (fallback)
+ *  - If the value is already a non-UUID string (e.g. a name was passed
+ *    directly), return it as-is. */
+export function resolveCreatedBy(raw: string | null | undefined): string {
+  if (!raw || typeof raw !== "string" || raw.trim() === "") {
+    return FALLBACK_USER_NAME;
+  }
+  const trimmed = raw.trim();
+  // Real UUID → look it up; if not found, show Admin
+  if (UUID_LIKE.test(trimmed)) {
+    const u = userById(trimmed);
+    return u?.name ?? FALLBACK_USER_NAME;
+  }
+  // Already a name (non-UUID string) → return as-is
+  return trimmed;
+}
+
 export function logActivity(module: string, action: string, detail?: string) {
   settings.activity.unshift({
     id: nextId("act"),

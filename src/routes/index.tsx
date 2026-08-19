@@ -17,15 +17,21 @@ function Dashboard() {
       title="لوحة التحكم"
       subtitle="نظرة شاملة على حركة المتجر اليوم — المبيعات، المخزون، والصندوق."
     >
-      <div className="space-y-3">
+      {/* Layout idea: prominent hero band → KPI row → main chart (2/3) beside a
+          side panel (1/3) → bottom section with the same 2/3 + 1/3 rhythm. */}
+      <div className="space-y-4">
         <HeroSalesCard />
         <ExecutiveKpiGrid />
-        <div className="grid gap-3 lg:grid-cols-2">
-          <SalesTrendChart />
+        <div className="grid gap-4 lg:grid-cols-3">
+          <div className="lg:col-span-2">
+            <SalesTrendChart />
+          </div>
           <TopFabricsChart />
         </div>
-        <div className="grid gap-3 lg:grid-cols-2">
-          <RecentTransactionsList />
+        <div className="grid gap-4 lg:grid-cols-3">
+          <div className="lg:col-span-2">
+            <RecentTransactionsList />
+          </div>
           <ActiveAlertsList />
         </div>
       </div>

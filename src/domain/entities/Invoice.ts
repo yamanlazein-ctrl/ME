@@ -21,6 +21,8 @@ export interface InvoiceData {
   id: UUID;
   tenantId: UUID;
   number: string;
+  /** Manual/reference invoice number (e.g. "ENT-2026-TMI7"). Optional. */
+  reference?: string | null;
   type: "entry" | "sale" | "return";
   date: string; // yyyy-mm-dd
   partyId: UUID;
@@ -52,6 +54,7 @@ export class Invoice implements InvoiceData {
   readonly id: UUID;
   readonly tenantId: UUID;
   readonly number: string;
+  readonly reference?: string | null;
   readonly type: InvoiceData["type"];
   readonly date: string;
   readonly partyId: UUID;
@@ -75,6 +78,7 @@ export class Invoice implements InvoiceData {
     this.id = data.id;
     this.tenantId = data.tenantId;
     this.number = data.number;
+    this.reference = data.reference;
     this.type = data.type;
     this.date = data.date;
     this.partyId = data.partyId;
@@ -116,8 +120,14 @@ export class Invoice implements InvoiceData {
     });
   }
 
-  /** Compute total from lines after discounts. */
+  /** Compute total from lines after discounts, plus tax and shipping. */
   total(): number {
+    const subtotal = this.lines.reduce((sum, l) => sum + this.lineTotal(l), 0);
+    return subtotal - (this.discount ?? 0) + (this.tax ?? 0) + (this.shipping ?? 0);
+  }
+
+  /** Compute just the lines subtotal (before header-level adjustments). */
+  lineSubtotal(): number {
     return this.lines.reduce((sum, l) => sum + this.lineTotal(l), 0);
   }
 

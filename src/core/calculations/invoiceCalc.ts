@@ -8,6 +8,7 @@ export type InvoiceCalc = {
   lines: readonly InvoiceLineCalc[];
   discount?: number;
   tax?: number;
+  shipping?: number;
 };
 
 export function lineTotal(l: InvoiceLineCalc): number {
@@ -29,11 +30,16 @@ export function invoiceTax(inv: InvoiceCalc): number {
   return inv.tax ?? 0;
 }
 
+export function invoiceShipping(inv: InvoiceCalc): number {
+  return inv.shipping ?? 0;
+}
+
 export function invoiceTotal(inv: InvoiceCalc): number {
   const subtotal = invoiceSubtotal(inv);
   const discount = invoiceDiscount(inv);
   const tax = invoiceTax(inv);
-  return subtotal - discount + tax;
+  const shipping = inv.shipping ?? 0;
+  return subtotal - discount + tax + shipping;
 }
 
 export function invoiceRemaining(total: number, paid: number): number {

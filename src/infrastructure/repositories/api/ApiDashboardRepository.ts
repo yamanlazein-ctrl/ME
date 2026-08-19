@@ -28,8 +28,14 @@ export function mapDashboardResponse(raw: BackendDashboardResponse): DashboardDa
       initials: "",
       unreadNotifications: raw.unreadNotifications ?? 0, // real source
     },
-    // session: no session data in the dashboard response → NOT CONNECTED
-    session: { open: false, openedAt: "" },
+    // Derive session status from cashbox opening data — the backend
+    // dashboard response does not include a dedicated session object,
+    // but the cashbox always carries openingBalance + openingDate
+    // which serve as the authoritative session indicator.
+    session: {
+      open: !!(raw.cashbox?.openingDate),
+      openedAt: raw.cashbox?.openingDate ?? "",
+    },
     cashBalance: {
       syp: raw.cashbox?.balance ?? 0, // real source (cashbox.balance)
       usd: 0, // no USD balance source → NOT CONNECTED

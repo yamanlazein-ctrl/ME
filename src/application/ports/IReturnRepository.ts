@@ -16,6 +16,8 @@ export interface ReturnDTO {
   id: UUID;
   tenantId: UUID;
   number: string;
+  /** Manual/reference number (e.g. "RET-2026-XYZ"). Optional. */
+  reference?: string | null;
   kind: ReturnKind;
   date: string;
   partyId: UUID;

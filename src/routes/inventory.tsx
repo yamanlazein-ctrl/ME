@@ -18,7 +18,7 @@ import {
   totalKgOfFabric,
   totalPiecesOfFabric,
 } from "@/presentation/hooks/useInventory";
-import { FabricRow, ColorRow, RollRow } from "@/components/inventory/InventoryRows";
+import { FabricRow, ColorRow, RollRow, RollsHeader } from "@/components/inventory/InventoryRows";
 import {
   FabricFormDialog,
   ColorFormDialog,
@@ -227,15 +227,29 @@ function InventoryPage() {
             لا نتائج مطابقة للبحث.
           </div>
         )}
-        <ul className="divide-y divide-border max-h-[65vh] overflow-y-auto">
+        <ul className="flex max-h-[65vh] flex-col gap-3 overflow-y-auto p-3">
           {pagedFabrics.map((f) => {
             const isOpen = expandedFabric === f.id || !!q;
             return (
-              <li key={f.id}>
+              <li key={f.id} id={`fabric-card-${f.id}`} className="overflow-hidden rounded-xl border border-border bg-card shadow-soft scroll-mt-4">
                 <FabricRow
                   fabric={f}
                   open={isOpen}
-                  onToggle={() => setExpandedFabric((cur) => (cur === f.id ? null : f.id))}
+                  onToggle={() => {
+                    const opening = expandedFabric !== f.id;
+                    setExpandedFabric((cur) => (cur === f.id ? null : f.id));
+                    // When expanding, glide the card to the top so the colors/rolls
+                    // revealed underneath are immediately in view.
+                    if (opening) {
+                      requestAnimationFrame(() => {
+                        setTimeout(() => {
+                          document
+                            .getElementById(`fabric-card-${f.id}`)
+                            ?.scrollIntoView({ behavior: "smooth", block: "start" });
+                        }, 80);
+                      });
+                    }
+                  }}
                   onEdit={() => setFabForm({ open: true, editing: f })}
                   onDelete={() => setToDelete({ kind: "fabric", id: f.id, name: f.name })}
                   onAddColor={() => setColForm({ open: true, fabricId: f.id })}
@@ -245,21 +259,16 @@ function InventoryPage() {
                 />
                 {isOpen && (
                   <>
-                    <div className="flex flex-wrap items-center gap-x-6 gap-y-1 border-b border-border bg-background/60 px-4 py-2 text-[11px] text-muted-foreground tabular-nums">
-                      <span>
-                        باقي <b className="font-bold text-primary">{totalPiecesOfFabric(f.id)}</b>{" "}
-                        أثواب
+                    <div className="flex flex-wrap items-center gap-2 border-b border-border bg-background/60 px-4 py-2 text-[11px] tabular-nums">
+                      <span className="inline-flex items-center gap-1 rounded-md bg-primary/10 px-2 py-0.5 font-semibold text-primary">
+                        {totalPiecesOfFabric(f.id)} أثواب متبقية
                       </span>
-                      <span>•</span>
-                      <span>
-                        إجمالي المتبقي{" "}
-                        <b className="font-bold text-foreground">
-                          {formatNumber(totalKgOfFabric(f.id))}
-                        </b>{" "}
-                        كغ
+                      <span className="inline-flex items-center gap-1 rounded-md bg-secondary/70 px-2 py-0.5 font-semibold text-foreground">
+                        {formatNumber(totalKgOfFabric(f.id))} كغ متبقية
                       </span>
-                      <span>•</span>
-                      <span>{colorsOfFabric(f.id).length} لون</span>
+                      <span className="inline-flex items-center gap-1 rounded-md bg-secondary/70 px-2 py-0.5 text-muted-foreground">
+                        {colorsOfFabric(f.id).length} لون
+                      </span>
                     </div>
                     <ul className="bg-secondary/30">
                       {colorsOfFabric(f.id).map((c) => {
@@ -292,7 +301,9 @@ function InventoryPage() {
                               }
                             />
                             {colorOpen && (
-                              <ul>
+                              <>
+                                <RollsHeader />
+                                <ul>
                                 {rollsOfColor(c.id).map((r) => (
                                   <li key={r.id}>
                                     <RollRow
@@ -324,7 +335,8 @@ function InventoryPage() {
                                     />
                                   </li>
                                 ))}
-                              </ul>
+                                </ul>
+                              </>
                             )}
                           </li>
                         );

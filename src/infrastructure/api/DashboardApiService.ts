@@ -60,7 +60,7 @@ export interface BackendDashboardResponse {
     kgSold: number;
     revenueByCurrency: Record<string, number>;
   }>;
-  cashbox: { balance: number; todayMovementCount: number; isLocked: boolean };
+  cashbox: { balance: number; todayMovementCount: number; isLocked: boolean; openingDate?: string };
   // Fix H-7: byCurrency breakdown instead of one blended
   // receiptsThisMonth/paymentsThisMonth number.
   vouchers: {

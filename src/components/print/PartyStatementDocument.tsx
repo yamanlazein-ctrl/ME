@@ -54,12 +54,12 @@ export function PartyStatementDocument({
     { key: "date", label: "التاريخ", width: "10%" },
     { key: "type", label: "النوع", width: "12%" },
     { key: "ref", label: "المرجع", width: "12%" },
-    { key: "desc", label: "البيان", width: "22%" },
-    { key: "qty", label: "الكمية", align: "left", width: "9%" },
+    { key: "desc", label: "البيان", width: "20%" },
+    { key: "qty", label: "الكمية", align: "center", width: "8%" },
     { key: "price", label: "السعر", align: "left", amount: true, width: "9%" },
     { key: "debit", label: "مدين", align: "left", amount: true, width: "10%" },
     { key: "credit", label: "دائن", align: "left", amount: true, width: "10%" },
-    { key: "bal", label: "الرصيد", align: "left", amount: true, width: "12%" },
+    { key: "bal", label: "الرصيد", align: "left", amount: true, width: "11%" },
   ];
 
 
@@ -121,9 +121,10 @@ export function PartyStatementDocument({
       meta={meta}
       totals={totalsList}
       signatures={["إعداد", "اعتماد"]}
+      typeBadge="STATEMENT"
     >
       {tableRows.length === 0 ? (
-        <div style={{ padding: "12pt 0 4pt", fontSize: "9pt", color: "#666" }}>
+        <div style={{ padding: "16pt 0 8pt", fontSize: "9.5pt", color: "#666", textAlign: "center" }}>
           لا توجد حركات في هذه الفترة.
         </div>
       ) : (

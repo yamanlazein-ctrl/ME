@@ -94,9 +94,15 @@ const ALL_FIELDS: FieldKey[] = [
   "showFooter",
 ];
 
-const DEFAULT_VISIBILITY: Record<InvoiceKind, Record<FieldKey, boolean>> = {
-  purchase: Object.fromEntries(ALL_FIELDS.map((f) => [f, true])) as Record<FieldKey, boolean>,
-  sale: Object.fromEntries(ALL_FIELDS.map((f) => [f, true])) as Record<FieldKey, boolean>,
+export const DEFAULT_VISIBILITY: Record<InvoiceKind, Record<FieldKey, boolean>> = {
+  purchase: Object.fromEntries(ALL_FIELDS.map((f) => {
+    if (f === "showCreatedBy" || f === "showPaymentMethod") return [f, false];
+    return [f, true];
+  })) as Record<FieldKey, boolean>,
+  sale: Object.fromEntries(ALL_FIELDS.map((f) => {
+    if (f === "showCreatedBy" || f === "showPaymentMethod") return [f, false];
+    return [f, true];
+  })) as Record<FieldKey, boolean>,
   return_in: Object.fromEntries(ALL_FIELDS.map((f) => [f, true])) as Record<FieldKey, boolean>,
   return_out: Object.fromEntries(ALL_FIELDS.map((f) => [f, true])) as Record<FieldKey, boolean>,
 };

@@ -29,11 +29,12 @@ import {
 } from "@/components/print/PrintDocument";
 import { currencySymbol, currencyState, useCurrencies } from "@/presentation/hooks/useCurrency";
 import { colorById, fabricById, rollById, type Color } from "@/presentation/hooks/useInventory";
-import { formatMoney, formatQuantity } from "@/shared/utils/formatNumber";
+import { formatMoney, formatNumber, formatQuantity } from "@/shared/utils/formatNumber";
 import type { ReturnDTO, ReturnReason } from "@/application/ports/IReturnRepository";
 import { customerById, supplierById } from "@/presentation/hooks/useParties";
 import { useInvoiceVisibility } from "./visibility";
 import { useVouchersList } from "@/presentation/hooks/useVouchers";
+import { resolveCreatedBy } from "@/presentation/hooks/useSettings";
 
 type ReturnInvoicePrintProps = {
   returnDoc: ReturnDTO;
@@ -66,7 +67,9 @@ const KIND_BADGE: Record<ReturnDTO["kind"], "RETURN_IN" | "RETURN_OUT"> = {
   sale: "RETURN_OUT",
 };
 
-const fmtNumber = (n: number): string => formatMoney(n);
+// Use formatNumber for unit prices (preserves decimals), formatMoney for totals
+const fmtUnit = (n: number): string => formatNumber(n);
+const fmtMoney = (n: number): string => formatMoney(n);
 const fmtQty = (n: number): string => formatQuantity(n);
 
 function renderRollColorCell(rollId: string) {
@@ -109,15 +112,15 @@ export function ReturnInvoicePrint({
   const statusLabel = isCancelled ? "ملغى" : "نشط";
   // ── Meta grid (visibility-aware) ──
   const meta: PrintMetaItem[] = [];
-  if (vis.showInvoiceNumber) meta.push({ label: "رقم المرتجع", value: r.number });
+  if (vis.showInvoiceNumber) meta.push({ label: "رقم المرتجع", value: r.reference || r.number });
   if (vis.showDate) meta.push({ label: "التاريخ", value: r.date });
   if (vis.showStatus) meta.push({ label: "الحالة", value: statusLabel });
   if (vis.showCurrency) meta.push({ label: "العملة", value: `${r.currency} (${sym})` });
   meta.push({
     label: "سعر الصرف",
-    value: `1 $ = ${fmtNumber(currencyState.rates.USD)} ل.س — ${currencyState.lastUpdated}`,
+    value: `1 $ = ${fmtUnit(currencyState.rates.USD)} ل.س — ${currencyState.lastUpdated}`,
   });
-  if (vis.showCreatedBy && r.createdBy) meta.push({ label: "أنشأ بواسطة", value: r.createdBy });
+  if (vis.showCreatedBy) meta.push({ label: "أنشأ بواسطة", value: resolveCreatedBy(r.createdBy) });
   if (vis.showCreatedAt && r.createdAt) {
     meta.push({
       label: "تاريخ الإنشاء",
@@ -143,12 +146,12 @@ export function ReturnInvoicePrint({
   const allColumns: { key: string; cfg: PrintColumn; on?: boolean }[] = [
     { key: "idx", cfg: { key: "idx", label: "#", align: "center", width: "5%" }, on: vis.showLineIndex },
     { key: "roll", cfg: { key: "roll", label: "رقم الصبغة", width: "14%" }, on: vis.showRollNumber },
-    { key: "fabric", cfg: { key: "fabric", label: "القماش", width: "18%" }, on: vis.showFabric },
-    { key: "color", cfg: { key: "color", label: "اللون", width: "16%" }, on: vis.showColorCode || vis.showColorName },
+    { key: "fabric", cfg: { key: "fabric", label: "القماش", width: "20%" }, on: vis.showFabric },
+    { key: "color", cfg: { key: "color", label: "اللون", width: "18%" }, on: vis.showColorCode || vis.showColorName },
     { key: "pieces", cfg: { key: "pieces", label: "الأثواب", align: "center", width: "7%" }, on: vis.showQuantity },
-    { key: "qty", cfg: { key: "qty", label: "الكمية (كغ)", align: "center", width: "10%" }, on: vis.showQuantity },
-    { key: "price", cfg: { key: "price", label: "السعر/كغ", align: "left", amount: true, width: "10%" }, on: vis.showUnitPrice },
-    { key: "gross", cfg: { key: "gross", label: "الإجمالي", align: "left", amount: true, width: "10%" }, on: vis.showLineTotal },
+    { key: "qty", cfg: { key: "qty", label: "الكمية (كغ)", align: "center", width: "11%" }, on: vis.showQuantity },
+    { key: "price", cfg: { key: "price", label: "السعر/كغ", align: "left", amount: true, width: "11%" }, on: vis.showUnitPrice },
+    { key: "gross", cfg: { key: "gross", label: "الإجمالي", align: "left", amount: true, width: "11%" }, on: vis.showLineTotal },
   ];
   const columns = allColumns.filter((c) => c.on !== false).map((c) => c.cfg);
   const rows = r.lines.map((l, i) => {
@@ -162,15 +165,15 @@ export function ReturnInvoicePrint({
       fabric: fab?.name ?? "—",
       color: renderRollColorCell(l.rollId),
       pieces: (l.pieces && l.pieces > 1) ? String(l.pieces) : "—",
-      qty: fmtNumber(l.quantityKg),
-      price: fmtNumber(l.pricePerKg),
-      gross: fmtNumber(sub),
+      qty: fmtQty(l.quantityKg),
+      price: fmtUnit(l.pricePerKg),
+      gross: fmtMoney(sub),
     };
     return columns.map((c) => cell[c.key] ?? "—");
   });
   const totals: PrintTotal[] = [];
   if (vis.showGrandTotal) {
-    totals.push({ label: "إجمالي المرتجع", value: `${fmtNumber(total)} ${sym}`, grand: true });
+    totals.push({ label: "إجمالي المرتجع", value: `${fmtMoney(total)} ${sym}`, grand: true });
   }
   const partyBlock: PrintParty | undefined = vis.showPartyName
     ? {

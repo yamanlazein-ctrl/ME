@@ -111,8 +111,8 @@ function Field({
 }
 
 /**
- * A compact, side-by-side stock metric. `primary` renders the remaining LOT
- * count (أثواب/pieces) as the big leading figure; the kg value stays secondary.
+ * A compact metric badge: big numeric value with the unit as a small muted
+ * suffix, so "12 أثواب" reads as one clear figure instead of a cramped pair.
  */
 function StockMetric({
   label,
@@ -129,21 +129,22 @@ function StockMetric({
     <div
       className={
         primary
-          ? "shrink-0 flex flex-col items-center justify-center gap-[2px] rounded-lg bg-primary/10 px-3 py-1 text-center leading-[1.1]"
-          : "shrink-0 text-left leading-[1.1]"
+          ? "shrink-0 flex flex-col items-center justify-center rounded-lg bg-primary/10 px-3.5 py-1 text-center"
+          : "shrink-0 flex flex-col items-center justify-center rounded-lg bg-secondary/60 px-3.5 py-1 text-center"
       }
+      title={`${label}: ${value} ${unit ?? ""}`.trim()}
     >
-      <div className="whitespace-nowrap text-[11px] font-medium leading-[1.1] text-muted-foreground">
+      <span className="whitespace-nowrap text-[10px] font-medium tracking-wide text-muted-foreground">
         {label}
-      </div>
-      <div
-        className={`whitespace-nowrap text-[15px] font-bold leading-[1.1] tabular-nums ${
+      </span>
+      <span
+        className={`whitespace-nowrap text-[15px] font-bold leading-tight tabular-nums ${
           primary ? "text-primary" : "text-foreground"
         }`}
       >
         {value}
-        {unit ? <> {unit}</> : null}
-      </div>
+        {unit ? <span className="mr-1 text-[10px] font-medium text-muted-foreground">{unit}</span> : null}
+      </span>
     </div>
   );
 }

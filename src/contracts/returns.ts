@@ -23,6 +23,8 @@ export interface ReturnLineDTO {
 export interface ReturnDTO {
   id: UUID;
   number: string;
+  /** Manual/reference number. Optional. */
+  reference?: string | null;
   kind: ReturnKind;
   date: string;
   partyId: UUID;

@@ -15,13 +15,13 @@
    ============================================================================ */
 
 :root {
-  --mf-gold: #c9a227;
+  --mf-gold: #d4af37;          /* dark gold per print spec */
   --mf-gold-dark: #a8861a;     /* slightly darker gold for borders / shadows */
   --mf-gold-soft: #e6c873;
   --mf-black: #1a1a1a;
   --mf-ink: #2a2a2a;
   --mf-gray: #6b6b6b;
-  --mf-line: #e5e5e5;
+  --mf-line: #000000;          /* table cell borders — solid black for clarity */
   --mf-line-strong: #b5b5b5;
   --mf-bg: #fafafa;
   --mf-bg-soft: #f3f3f3;
@@ -29,21 +29,21 @@
 
 @page {
   size: A4 portrait;
-  margin: 12mm 11mm;
+  margin: 15mm;                /* per print spec */
   @bottom-center {
     content: counter(page) " / " counter(pages);
     font-size: 8pt;
     color: var(--mf-gray);
     font-family:
       "IBM Plex Sans Arabic",
-      system-ui,
-      -apple-system,
+      "Tahoma",
+      "Arial",
       sans-serif;
   }
 }
 
 @page :first {
-  margin-top: 12mm;
+  margin-top: 15mm;
 }
 
 /* ── The print root is ALWAYS white, regardless of dark mode. ── */
@@ -155,17 +155,26 @@
   flex: 1 1 auto;
 }
 
-/* Logo — clean, no background box, no padding, no border-radius. */
+/* ── Header brand: logo + company name, well-aligned ── */
+.print-header-brand {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 12pt 18pt 8pt;
+  background: #ffffff;
+}
+
 .print-logo {
-  max-height: 50px;
-  max-width: 70px;
+  max-height: 48px;
+  max-width: 64px;
   object-fit: contain;
   flex: 0 0 auto;
   background: transparent !important;
   padding: 0;
   border-radius: 0;
   border: none;
-  /* Ensure SVG renders cleanly with no box shadow or background */
   box-shadow: none !important;
 }
 
@@ -175,26 +184,24 @@
   min-width: 0;
 }
 
-/* Company name: dark text on white background. English line in muted gray. */
 .print-company-name {
-  font-size: 14pt;
-  font-weight: 700;
+  font-size: 15pt;
+  font-weight: 600;
   color: var(--mf-black);
-  line-height: 1.2;
-  letter-spacing: -0.005em;
+  line-height: 1.25;
+  letter-spacing: 0;
 }
 
-.print-company-name-en {
-  font-size: 9pt;
-  font-weight: 400;
-  color: var(--mf-gray);
-  margin-top: 1pt;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-  font-family:
-    "IBM Plex Sans",
-    system-ui,
-    sans-serif;
+/* Divider between brand and document title. */
+.print-header-divider {
+  border-top: 1.5px solid var(--mf-gold);
+  margin: 0 18pt;
+}
+
+/* Title area: centered, clean. */
+.print-header-title-area {
+  text-align: center;
+  padding: 8pt 18pt 6pt;
 }
 
 .print-company-line {
@@ -352,10 +359,7 @@
   unicode-bidi: plaintext;
 }
 
-/* ── Tables (items, lines) — GOLD HEADER with hairline rows ──
-   The header row now uses a solid gold band with bold dark text, the
-   way the reference's "Product Description / Price / Qty. / Total"
-   row does. Body rows alternate white / light gray as before. */
+/* ── Tables (items, lines) — light header with hairline rows ── */
 .print-table {
   width: 100%;
   table-layout: fixed;
@@ -363,27 +367,28 @@
   margin-bottom: 10pt;
   word-wrap: break-word;
   overflow-wrap: break-word;
-  font-size: 8.5pt;
+  font-size: 9pt;
 }
 
 .print-table thead tr {
-  background: var(--mf-gold);
+  background: #f5f0e0;
   color: var(--mf-black);
   -webkit-print-color-adjust: exact;
   print-color-adjust: exact;
 }
 
 .print-table th {
-  font-size: 7.8pt;
-  font-weight: 700;
+  font-size: 8.5pt;
+  font-weight: 600;
   color: var(--mf-black);
-  border: 1px solid var(--mf-gold-dark);
-  border-bottom: 2px solid var(--mf-gold-dark);
-  padding: 5pt 6pt;
+  border: 1px solid var(--mf-line-strong);
+  border-bottom: 1.5px solid var(--mf-line-strong);
+  padding: 6pt 8pt;
   text-align: right;
   vertical-align: middle;
-  background: var(--mf-gold);
-  letter-spacing: 0.02em;
+  background: #f5f0e0;
+  white-space: nowrap;
+  letter-spacing: 0;
   -webkit-print-color-adjust: exact;
   print-color-adjust: exact;
 }
@@ -640,48 +645,44 @@
   letter-spacing: 0.01em;
 }
 
-/* Print timestamp — small, top-right corner, unobtrusive. */
-.print-timestamp {
+/* Detail row below main table row — mini grid with label:value cells. */
+.print-detail-row td {
+  padding: 4pt 10pt 6pt;
+  background: var(--mf-bg);
+  border: none;
+}
+
+.pd-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 3pt 10pt;
+  direction: rtl;
+}
+
+.pd-detail-item {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.2;
+}
+
+.pd-detail-label {
   font-size: 6.5pt;
   color: var(--mf-gray);
-  font-variant-numeric: tabular-nums;
-  direction: ltr;
-  text-align: left;
+  font-weight: 500;
+  text-transform: none;
+}
+
+.pd-detail-val {
+  font-size: 8pt;
+  color: var(--mf-ink);
+  font-weight: 600;
   white-space: nowrap;
-  flex: 0 0 auto;
-  align-self: flex-start;
-  padding-top: 4pt;
-  letter-spacing: 0.01em;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-/* ── New shared header structure (applies to ALL print documents) ──
-   Row 1: Logo + Company Name (once, no repetition)
-   Row 2: Gold divider
-   Row 3: Document title centered
-   Row 4: Party info grid (name, code, currency, period)
-   ──────────────────────────────────────────────────────────────── */
-
-/* Header top row: brand identity only, clean white background. */
-.print-header-brand {
-  display: flex;
-  flex-direction: row;
-  align-items: center;
-  justify-content: flex-start; /* RTL: right-aligned naturally */
-  gap: 12pt;
-  padding: 10pt 18pt 6pt;
-  background: #ffffff;
-}
-
-/* Divider between brand and document title. */
-.print-header-divider {
-  border-top: 2px solid var(--mf-gold);
-  margin: 0 18pt;
-}
-
-/* Title area: centered, clean. */
-.print-header-title-area {
-  text-align: center;
-  padding: 8pt 18pt 6pt;
+.pd-detail-empty {
+  visibility: hidden;
 }
 
 /* Party info bar: horizontal strip with name, code, currency, period. */
