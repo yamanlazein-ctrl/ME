@@ -17,6 +17,7 @@ import { PageCard } from "@/components/layout/PageCard";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { settings, logActivity } from "@/presentation/hooks/useSettings";
+import { getAccessToken } from "@/infrastructure/auth/TokenProvider";
 
 const ALLOWED_SETTING_KEYS = [
   "company",
@@ -74,15 +75,13 @@ function BackupPage() {
     abortRef.current = abort;
 
     try {
-      const token = localStorage.getItem("accessToken");
-      const tenantId = localStorage.getItem("tenantId");
+      const token = getAccessToken();
       setFullProgress(30);
 
       const res = await fetch("/api/backup/full", {
         method: "POST",
         headers: {
           Authorization: token ? `Bearer ${token}` : "",
-          "X-Tenant-Id": tenantId ?? "",
         },
         signal: abort.signal,
       });

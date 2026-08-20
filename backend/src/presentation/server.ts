@@ -11,7 +11,6 @@ import { createAuthMiddleware } from "../infrastructure/http/middleware/auth.mid
 import { requestIdMiddleware } from "../infrastructure/http/middleware/request-id.middleware.js";
 import { createErrorHandler } from "../infrastructure/http/middleware/error-handler.middleware.js";
 import { registerAuthRoutes } from "./routes/auth.route.js";
-import { setTenantRlsMiddleware } from "../infrastructure/http/middleware/tenant.middleware.js";
 import { registerHealthRoutes } from "./routes/health.route.js";
 import { checkDatabase } from "../infrastructure/orm/drizzle.js";
 import { checkRedis } from "../infrastructure/auth/TokenDenylist.js";
@@ -57,6 +56,7 @@ if (config.SENTRY_DSN) {
 }
 
 const app = express();
+app.set("trust proxy", 1);
 const container = buildContainer();
 const authMiddleware = createAuthMiddleware(container.jwtSigner, container.tokenDenylist);
 
@@ -116,9 +116,6 @@ app.use((req, _res, next) => {
   logger.info({ requestId: req.id, method: req.method, path: req.path }, "Request started");
   next();
 });
-
-// Multi-tenancy: set RLS session variable
-app.use(setTenantRlsMiddleware);
 
 // License heartbeat — sets req.license with status + grace info (never blocks)
 app.use(
@@ -272,8 +269,8 @@ registerAuditRoutes(
   authMiddleware,
   rbac(["admin", "accountant", "warehouse", "viewer"]),
 );
-// Full backup endpoint — POST /api/backup/full (returns ZIP file)
-apiRouter.use(backupRouter);
+// Full backup endpoint — POST /api/backup/full (returns ZIP file) — admin-only, tenant-scoped
+apiRouter.use(authMiddleware, rbac(["admin"]), backupRouter);
 
 app.use("/api", apiRouter);
 
