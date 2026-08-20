@@ -29,7 +29,9 @@
     "noFallthroughCasesInSwitch": true,
     "noUncheckedSideEffectImports": true,
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": ["./src/*"],
+      "@erp/shared": ["./packages/shared/src/index.ts"],
+      "@erp/shared/*": ["./packages/shared/src/*"]
     }
   }
 }
