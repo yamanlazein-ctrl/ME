@@ -16,7 +16,12 @@ import {
  *
  * Steps: init → activate → company → admin → review → done.
  */
-const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "";
+function getApiBaseUrl(): string {
+  const raw = (import.meta.env.VITE_API_BASE_URL as string | undefined)?.trim();
+  if (!raw || raw === "" || raw === "/api") return "";
+  return raw.replace(/\/+$/, "");
+}
+const API_BASE = getApiBaseUrl();
 const SETUP_TOKEN = import.meta.env.VITE_SETUP_TOKEN as string | undefined;
 
 type Step = "activate" | "company" | "admin" | "review" | "done";

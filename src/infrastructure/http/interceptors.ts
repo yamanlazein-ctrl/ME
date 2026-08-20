@@ -24,12 +24,16 @@ export function authInterceptor(tokenProvider: TokenProvider): HttpInterceptor {
   };
 }
 
-export function tenantHeaderInterceptor(tenantId: string): HttpInterceptor {
+export function tenantHeaderInterceptor(getTenantId: () => string | null): HttpInterceptor {
   return {
-    onRequest: async (config: HttpRequestConfig): Promise<HttpRequestConfig> => ({
-      ...config,
-      headers: { ...config.headers, "X-Tenant-Id": tenantId },
-    }),
+    onRequest: async (config: HttpRequestConfig): Promise<HttpRequestConfig> => {
+      const tenantId = getTenantId();
+      if (!tenantId) return config;
+      return {
+        ...config,
+        headers: { ...config.headers, "X-Tenant-Id": tenantId },
+      };
+    },
   };
 }
 

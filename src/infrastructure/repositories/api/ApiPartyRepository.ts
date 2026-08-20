@@ -12,12 +12,14 @@ export class ApiPartyRepository implements IPartyRepository {
     kind: "customer" | "supplier",
     ctx: TenantContext,
   ): Promise<Party | null> {
+    void ctx;
     try {
       const dto = await this.api.findById(kind, id);
       return Party.reconstitute(dto as unknown as PartyData);
     } catch (e) {
-      console.warn("[ApiRepo] Party findById failed", e);
-      return null;
+      if (e instanceof Error && (e as unknown as { statusCode?: number }).statusCode === 404) return null;
+      if ((e as unknown as { code?: string }).code === "NOT_FOUND") return null;
+      throw e;
     }
   }
 
@@ -26,12 +28,14 @@ export class ApiPartyRepository implements IPartyRepository {
     kind: "customer" | "supplier",
     ctx: TenantContext,
   ): Promise<Party | null> {
+    void ctx;
     try {
       const dto = await this.api.findByCode(kind, code);
       return Party.reconstitute(dto as unknown as PartyData);
     } catch (e) {
-      console.warn("[ApiRepo] Party findByCode failed", e);
-      return null;
+      if (e instanceof Error && (e as unknown as { statusCode?: number }).statusCode === 404) return null;
+      if ((e as unknown as { code?: string }).code === "NOT_FOUND") return null;
+      throw e;
     }
   }
 

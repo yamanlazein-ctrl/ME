@@ -45,12 +45,14 @@ export class ApiReturnRepository implements IReturnRepository {
   constructor(private api: ReturnApiService) {}
 
   async findById(id: UUID, ctx: TenantContext): Promise<ReturnDTO | null> {
+    void ctx;
     try {
       const dto = await this.api.findById(id);
       return toPortReturn(dto);
     } catch (e) {
-      console.warn("[ApiRepo] Return findById failed", e);
-      return null;
+      if (e instanceof Error && (e as unknown as { statusCode?: number }).statusCode === 404) return null;
+      if ((e as unknown as { code?: string }).code === "NOT_FOUND") return null;
+      throw e;
     }
   }
 

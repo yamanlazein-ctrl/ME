@@ -91,21 +91,24 @@ import {
   VoucherApiService,
 } from "./api";
 
-const baseUrl = import.meta.env.VITE_API_BASE_URL ?? "/api";
+function getApiBaseUrl(): string {
+  const raw = (import.meta.env.VITE_API_BASE_URL as string | undefined)?.trim();
+  if (!raw || raw === "" || raw === "/api") return "/api";
+  return raw.replace(/\/+$/, "");
+}
+const baseUrl = getApiBaseUrl();
 const apiClient = new BaseHttpClient({ baseUrl, timeoutMs: 15_000 });
 apiClient.addInterceptor(
-  tenantHeaderInterceptor(
-    (() => {
-      try {
-        const t = localStorage.getItem("erp.auth.accessToken");
-        if (t) {
-          const payload = JSON.parse(atob(t.split(".")[1]));
-          return payload.tenantId || "dev-tenant";
-        }
-      } catch {}
-      return "dev-tenant";
-    })(),
-  ),
+  tenantHeaderInterceptor(() => {
+    try {
+      const t = localStorage.getItem("erp.auth.accessToken");
+      if (t) {
+        const payload = JSON.parse(atob(t.split(".")[1]));
+        return payload.tenantId ?? null;
+      }
+    } catch {}
+    return null;
+  }),
 );
 apiClient.addInterceptor(authInterceptor(createTokenProvider()));
 apiClient.addInterceptor(

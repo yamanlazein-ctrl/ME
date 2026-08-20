@@ -8,22 +8,26 @@ export class ApiOrderRepository implements IOrderRepository {
   constructor(private api: OrderApiService) {}
 
   async findById(id: UUID, ctx: TenantContext): Promise<Order | null> {
+    void ctx;
     try {
       const dto = await this.api.findById(id);
       return Order.reconstitute(dto as unknown as OrderData);
     } catch (e) {
-      console.warn("[ApiRepo] Order findById failed", e);
-      return null;
+      if (e instanceof Error && (e as unknown as { statusCode?: number }).statusCode === 404) return null;
+      if ((e as unknown as { code?: string }).code === "NOT_FOUND") return null;
+      throw e;
     }
   }
 
   async findByCode(code: string, ctx: TenantContext): Promise<Order | null> {
+    void ctx;
     try {
       const dto = await this.api.findByCode(code);
       return Order.reconstitute(dto as unknown as OrderData);
     } catch (e) {
-      console.warn("[ApiRepo] Order findByCode failed", e);
-      return null;
+      if (e instanceof Error && (e as unknown as { statusCode?: number }).statusCode === 404) return null;
+      if ((e as unknown as { code?: string }).code === "NOT_FOUND") return null;
+      throw e;
     }
   }
 

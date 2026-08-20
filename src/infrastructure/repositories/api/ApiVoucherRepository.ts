@@ -58,18 +58,25 @@ export class ApiVoucherRepository implements IVoucherRepository {
   constructor(private api: VoucherApiService) {}
 
   async findById(id: UUID, ctx: TenantContext): Promise<Voucher | null> {
+    void ctx;
     try {
       const payment = await this.api.findPaymentById(id);
       return paymentToVoucher(payment);
-    } catch {
-      /* try receipt */
+    } catch (e) {
+      if (e instanceof Error && (e as unknown as { statusCode?: number }).statusCode !== 404 && (e as unknown as { code?: string }).code !== "NOT_FOUND") {
+        // not a 404, don't fallback silently — but still try receipt for 404 case
+        // fall through to receipt try only if 404
+        const is404 = (e as unknown as { statusCode?: number }).statusCode === 404 || (e as unknown as { code?: string }).code === "NOT_FOUND";
+        if (!is404) throw e;
+      }
     }
     try {
       const receipt = await this.api.findReceiptById(id);
       return receiptToVoucher(receipt);
     } catch (e) {
-      console.warn("[ApiRepo] Voucher findById failed", e);
-      return null;
+      if (e instanceof Error && (e as unknown as { statusCode?: number }).statusCode === 404) return null;
+      if ((e as unknown as { code?: string }).code === "NOT_FOUND") return null;
+      throw e;
     }
   }
 
