@@ -48,11 +48,10 @@ function checkSetupToken(req: { headers: Record<string, unknown> }): boolean {
 }
 
 export function registerSetupRoutes(router: Router, container: Container): void {
-  // GET /api/setup/status — read-only, no token required
-  // Returns default "not completed" state when DB is unavailable (dev mode without PostgreSQL)
+  // GET /api/setup/status — read-only, no tenantId from query (was leaking other tenant's state)
   router.get("/api/setup/status", async (req, res, next) => {
     try {
-      const tenantId = String(req.query.tenantId ?? "bootstrap");
+      const tenantId = "bootstrap";
       const r = await getStatusUseCase(container.installationStateRepo, tenantId);
       if (!r.ok) {
         // If DB unavailable, return default wizard state for dev
@@ -235,7 +234,11 @@ export function registerSetupRoutes(router: Router, container: Container): void 
           .json({ code: "UNAUTHORIZED", message: "رمز الإعداد غير صحيح", statusCode: 401 });
         return;
       }
-      const tenantId = (req.query.tenantId as string) ?? (req.body?.tenantId as string) ?? "";
+      const tenantId = (req.body?.tenantId as string) ?? "";
+      if (!tenantId) {
+        res.status(422).json({ code: "VALIDATION_ERROR", message: "tenantId مطلوب", statusCode: 422 });
+        return;
+      }
       const r = await completeWizardUseCase(
         {
           installationStateRepo: container.installationStateRepo,

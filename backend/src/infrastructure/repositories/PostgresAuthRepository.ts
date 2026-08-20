@@ -6,11 +6,8 @@ import { users } from "../orm/schemas/user.table.js";
 export class PostgresAuthRepository implements IAuthRepository {
   constructor(private readonly db: DB) {}
 
-  async findUserByEmail(email: string, tenantId?: string) {
-    const conditions = [eq(users.email, email)];
-    if (tenantId) {
-      conditions.push(eq(users.tenantId, tenantId));
-    }
+  async findUserByEmail(email: string, tenantId: string) {
+    const conditions = [eq(users.email, email), eq(users.tenantId, tenantId)];
     const rows = await this.db
       .select()
       .from(users)

@@ -3,7 +3,7 @@ import type { TenantContext, PaginatedResult, UUID } from "../../domain/types/in
 export interface IAuthRepository {
   findUserByEmail(
     email: string,
-    tenantId?: string,
+    tenantId: string,
   ): Promise<{
     id: UUID;
     tenantId: UUID;
