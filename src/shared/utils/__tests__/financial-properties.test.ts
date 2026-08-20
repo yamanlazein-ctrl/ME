@@ -142,71 +142,61 @@ describe("Invoice financial properties (fast-check)", () => {
   describe("Line total invariants", () => {
     it("lineTotal(q, p, d) = max(0, q*p - d) for all inputs", () => {
       fc.assert(
-        fc.property(
-          dp2(0, 100_000),
-          dp2(0, 10_000_000),
-          dp2(0, 100_000_000),
-          (q, p, d) => {
-            if (q <= 0) return true; // skip
+        fc.property(dp2(0, 100_000), dp2(0, 10_000_000), dp2(0, 100_000_000), (q, p, d) => {
+          if (q <= 0) return true; // skip
 
-            const line = makeLine({
-              quantityKg: q,
-              pricePerKg: p,
-              discountAmount: d,
-            });
+          const line = makeLine({
+            quantityKg: q,
+            pricePerKg: p,
+            discountAmount: d,
+          });
 
-            const invoice = Invoice.create({
-              id: crypto.randomUUID() as UUID,
-              tenantId: TENANT_ID,
-              number: "INV-001",
-              type: "sale",
-              date: "2026-01-15",
-              partyId: crypto.randomUUID() as UUID,
-              partyType: "customer",
-              currency: CURRENCY,
-              lines: [line],
-              createdBy: "tester",
-              createdAt: "2026-01-01T00:00:00.000Z",
-            });
+          const invoice = Invoice.create({
+            id: crypto.randomUUID() as UUID,
+            tenantId: TENANT_ID,
+            number: "INV-001",
+            type: "sale",
+            date: "2026-01-15",
+            partyId: crypto.randomUUID() as UUID,
+            partyType: "customer",
+            currency: CURRENCY,
+            lines: [line],
+            createdBy: "tester",
+            createdAt: "2026-01-01T00:00:00.000Z",
+          });
 
-            const gross = q * p;
-            const expected = Math.max(0, gross - d);
-            expect(invoice.lineTotal(line)).toBe(expected);
-          },
-        ),
+          const gross = q * p;
+          const expected = Math.max(0, gross - d);
+          expect(invoice.lineTotal(line)).toBe(expected);
+        }),
       );
     });
 
     it("line total is never negative", () => {
       fc.assert(
-        fc.property(
-          dp2(1, 100_000),
-          dp2(0, 10_000_000),
-          dp2(0, 100_000_000),
-          (q, p, d) => {
-            const line = makeLine({
-              quantityKg: q,
-              pricePerKg: p,
-              discountAmount: d,
-            });
+        fc.property(dp2(1, 100_000), dp2(0, 10_000_000), dp2(0, 100_000_000), (q, p, d) => {
+          const line = makeLine({
+            quantityKg: q,
+            pricePerKg: p,
+            discountAmount: d,
+          });
 
-            const invoice = Invoice.create({
-              id: crypto.randomUUID() as UUID,
-              tenantId: TENANT_ID,
-              number: "INV-001",
-              type: "sale",
-              date: "2026-01-15",
-              partyId: crypto.randomUUID() as UUID,
-              partyType: "customer",
-              currency: CURRENCY,
-              lines: [line],
-              createdBy: "tester",
-              createdAt: "2026-01-01T00:00:00.000Z",
-            });
+          const invoice = Invoice.create({
+            id: crypto.randomUUID() as UUID,
+            tenantId: TENANT_ID,
+            number: "INV-001",
+            type: "sale",
+            date: "2026-01-15",
+            partyId: crypto.randomUUID() as UUID,
+            partyType: "customer",
+            currency: CURRENCY,
+            lines: [line],
+            createdBy: "tester",
+            createdAt: "2026-01-01T00:00:00.000Z",
+          });
 
-            expect(invoice.lineTotal(line)).toBeGreaterThanOrEqual(0);
-          },
-        ),
+          expect(invoice.lineTotal(line)).toBeGreaterThanOrEqual(0);
+        }),
       );
     });
   });
@@ -214,63 +204,55 @@ describe("Invoice financial properties (fast-check)", () => {
   // ── Property 3: Zero discount → total = quantity * price ──
   it("with zero discount, line total = quantity × price", () => {
     fc.assert(
-      fc.property(
-        dp2(1, 100_000),
-        dp2(0, 10_000_000),
-        (q, p) => {
-          const line = makeLine({ quantityKg: q, pricePerKg: p, discountAmount: 0 });
-          const invoice = Invoice.create({
-            id: crypto.randomUUID() as UUID,
-            tenantId: TENANT_ID,
-            number: "INV-001",
-            type: "sale",
-            date: "2026-01-15",
-            partyId: crypto.randomUUID() as UUID,
-            partyType: "customer",
-            currency: CURRENCY,
-            lines: [line],
-            createdBy: "tester",
-              createdAt: "2026-01-01T00:00:00.000Z",
-          });
+      fc.property(dp2(1, 100_000), dp2(0, 10_000_000), (q, p) => {
+        const line = makeLine({ quantityKg: q, pricePerKg: p, discountAmount: 0 });
+        const invoice = Invoice.create({
+          id: crypto.randomUUID() as UUID,
+          tenantId: TENANT_ID,
+          number: "INV-001",
+          type: "sale",
+          date: "2026-01-15",
+          partyId: crypto.randomUUID() as UUID,
+          partyType: "customer",
+          currency: CURRENCY,
+          lines: [line],
+          createdBy: "tester",
+          createdAt: "2026-01-01T00:00:00.000Z",
+        });
 
-          expect(invoice.lineTotal(line)).toBe(q * p);
-        },
-      ),
+        expect(invoice.lineTotal(line)).toBe(q * p);
+      }),
     );
   });
 
   // ── Property 4: Discount > gross → line total = 0 ──
   it("when discount > gross, line total = 0", () => {
     fc.assert(
-      fc.property(
-        dp2(1, 10_000),
-        dp2(1, 100_000),
-        (q, p) => {
-          const gross = q * p;
-          const discount = gross + 100; // discount larger than gross
+      fc.property(dp2(1, 10_000), dp2(1, 100_000), (q, p) => {
+        const gross = q * p;
+        const discount = gross + 100; // discount larger than gross
 
-          const line = makeLine({
-            quantityKg: q,
-            pricePerKg: p,
-            discountAmount: discount,
-          });
-          const invoice = Invoice.create({
-            id: crypto.randomUUID() as UUID,
-            tenantId: TENANT_ID,
-            number: "INV-001",
-            type: "sale",
-            date: "2026-01-15",
-            partyId: crypto.randomUUID() as UUID,
-            partyType: "customer",
-            currency: CURRENCY,
-            lines: [line],
-            createdBy: "tester",
-              createdAt: "2026-01-01T00:00:00.000Z",
-          });
+        const line = makeLine({
+          quantityKg: q,
+          pricePerKg: p,
+          discountAmount: discount,
+        });
+        const invoice = Invoice.create({
+          id: crypto.randomUUID() as UUID,
+          tenantId: TENANT_ID,
+          number: "INV-001",
+          type: "sale",
+          date: "2026-01-15",
+          partyId: crypto.randomUUID() as UUID,
+          partyType: "customer",
+          currency: CURRENCY,
+          lines: [line],
+          createdBy: "tester",
+          createdAt: "2026-01-01T00:00:00.000Z",
+        });
 
-          expect(invoice.lineTotal(line)).toBe(0);
-        },
-      ),
+        expect(invoice.lineTotal(line)).toBe(0);
+      }),
     );
   });
 });
@@ -341,37 +323,29 @@ describe("Roll stock properties (fast-check)", () => {
   describe("Reserve then release restores stock", () => {
     it("reserve(kg) then release(kg) returns to original", () => {
       fc.assert(
-        fc.property(
-          dp2(1000, 100_000),
-          dp2(1, 50_000),
-          (initialKg, kg) => {
-            if (kg > initialKg) return true; // skip
+        fc.property(dp2(1000, 100_000), dp2(1, 50_000), (initialKg, kg) => {
+          if (kg > initialKg) return true; // skip
 
-            const roll = makeRoll({ initialKg });
-            roll.reserve(kg);
-            roll.release(kg);
+          const roll = makeRoll({ initialKg });
+          roll.reserve(kg);
+          roll.release(kg);
 
-            expect(roll.remainingKg).toBeCloseTo(initialKg, 6);
-          },
-        ),
+          expect(roll.remainingKg).toBeCloseTo(initialKg, 6);
+        }),
       );
     });
 
     it("release(kg) when kg > reserved clamps to initialKg", () => {
       fc.assert(
-        fc.property(
-          dp2(1000, 50_000),
-          dp2(1, 50_000),
-          (initialKg, reserveAmount) => {
-            if (reserveAmount > initialKg) return true;
+        fc.property(dp2(1000, 50_000), dp2(1, 50_000), (initialKg, reserveAmount) => {
+          if (reserveAmount > initialKg) return true;
 
-            const roll = makeRoll({ initialKg });
-            roll.reserve(reserveAmount);
-            roll.release(reserveAmount + 100); // release more than reserved
+          const roll = makeRoll({ initialKg });
+          roll.reserve(reserveAmount);
+          roll.release(reserveAmount + 100); // release more than reserved
 
-            expect(roll.remainingKg).toBeLessThanOrEqual(initialKg);
-          },
-        ),
+          expect(roll.remainingKg).toBeLessThanOrEqual(initialKg);
+        }),
       );
     });
   });
@@ -380,17 +354,13 @@ describe("Roll stock properties (fast-check)", () => {
   describe("Insufficient stock", () => {
     it("reserve(kg) throws when kg > remainingKg", () => {
       fc.assert(
-        fc.property(
-          dp2(100, 10_000),
-          dp2(100, 100_000),
-          (initialKg, requestKg) => {
-            if (requestKg <= initialKg) return true; // only test when request > initial
+        fc.property(dp2(100, 10_000), dp2(100, 100_000), (initialKg, requestKg) => {
+          if (requestKg <= initialKg) return true; // only test when request > initial
 
-            const roll = makeRoll({ initialKg });
-            expect(() => roll.reserve(requestKg)).toThrow(/Insufficient stock/);
-            expect(roll.remainingKg).toBe(initialKg); // unchanged
-          },
-        ),
+          const roll = makeRoll({ initialKg });
+          expect(() => roll.reserve(requestKg)).toThrow(/Insufficient stock/);
+          expect(roll.remainingKg).toBe(initialKg); // unchanged
+        }),
       );
     });
   });
@@ -399,22 +369,18 @@ describe("Roll stock properties (fast-check)", () => {
   describe("Stock status predicates", () => {
     it("isOutOfStock() === (remainingKg <= 0)", () => {
       fc.assert(
-        fc.property(
-          dp2(100, 10_000),
-          dp2(0, 10_000),
-          (initialKg, reserveKg) => {
-            const roll = makeRoll({ initialKg });
-            try {
-              if (reserveKg <= initialKg) {
-                roll.reserve(reserveKg);
-              }
-            } catch {
-              // reserve failed, remainingKg unchanged
+        fc.property(dp2(100, 10_000), dp2(0, 10_000), (initialKg, reserveKg) => {
+          const roll = makeRoll({ initialKg });
+          try {
+            if (reserveKg <= initialKg) {
+              roll.reserve(reserveKg);
             }
+          } catch {
+            // reserve failed, remainingKg unchanged
+          }
 
-            expect(roll.isOutOfStock()).toBe(roll.remainingKg <= 0);
-          },
-        ),
+          expect(roll.isOutOfStock()).toBe(roll.remainingKg <= 0);
+        }),
       );
     });
   });
@@ -427,16 +393,13 @@ describe("Roll stock properties (fast-check)", () => {
 describe("Precision helper properties (fast-check)", () => {
   it("round2dp(x) always produces at most 2 decimal places (within floating-point tolerance)", () => {
     fc.assert(
-      fc.property(
-        fc.integer({ min: -100_000_000, max: 100_000_000 }),
-        (cents) => {
-          const x = cents / 100;
-          const rounded = round2dp(x);
-          // After rounding, the value should be within floating-point tolerance of having 2dp
-          const diff = Math.abs(rounded * 100 - Math.round(rounded * 100));
-          expect(diff).toBeLessThan(1e-6);
-        },
-      ),
+      fc.property(fc.integer({ min: -100_000_000, max: 100_000_000 }), (cents) => {
+        const x = cents / 100;
+        const rounded = round2dp(x);
+        // After rounding, the value should be within floating-point tolerance of having 2dp
+        const diff = Math.abs(rounded * 100 - Math.round(rounded * 100));
+        expect(diff).toBeLessThan(1e-6);
+      }),
     );
   });
 
@@ -457,23 +420,20 @@ describe("Precision helper properties (fast-check)", () => {
 
   it("hasMoreThan2dp(round2dp(x)) is false within tolerance", () => {
     fc.assert(
-      fc.property(
-        fc.integer({ min: -100_000_000, max: 100_000_000 }),
-        (cents) => {
-          const x = cents / 100;
-          const rounded = round2dp(x);
-          // After rounding, hasMoreThan2dp should return false (or very close)
-          const diff = Math.abs(rounded * 100 - Math.round(rounded * 100));
-          // If diff is tiny (floating-point noise), hasMoreThan2dp might still be true
-          // due to the 1e-9 threshold — that's acceptable noise
-          if (diff < 1e-6) {
-            // Within acceptable tolerance
-            expect(true).toBe(true);
-          } else {
-            expect(hasMoreThan2dp(rounded)).toBe(false);
-          }
-        },
-      ),
+      fc.property(fc.integer({ min: -100_000_000, max: 100_000_000 }), (cents) => {
+        const x = cents / 100;
+        const rounded = round2dp(x);
+        // After rounding, hasMoreThan2dp should return false (or very close)
+        const diff = Math.abs(rounded * 100 - Math.round(rounded * 100));
+        // If diff is tiny (floating-point noise), hasMoreThan2dp might still be true
+        // due to the 1e-9 threshold — that's acceptable noise
+        if (diff < 1e-6) {
+          // Within acceptable tolerance
+          expect(true).toBe(true);
+        } else {
+          expect(hasMoreThan2dp(rounded)).toBe(false);
+        }
+      }),
     );
   });
 });

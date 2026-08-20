@@ -61,5 +61,9 @@ export interface StockMovementFilter {
  */
 export interface IStockMovementRepository {
   record(tx: Tx, input: RecordStockMovementInput, ctx: TenantContext): Promise<void>;
-  listByRoll(rollId: UUID, ctx: TenantContext, filter?: StockMovementFilter): Promise<StockMovementData[]>;
+  listByRoll(
+    rollId: UUID,
+    ctx: TenantContext,
+    filter?: StockMovementFilter,
+  ): Promise<StockMovementData[]>;
 }

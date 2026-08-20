@@ -16,11 +16,7 @@ export class CashboxApiService {
     return res.data;
   }
 
-  async setOpeningBalance(
-    balance: number,
-    openingDate: string,
-    currency?: string,
-  ): Promise<void> {
+  async setOpeningBalance(balance: number, openingDate: string, currency?: string): Promise<void> {
     await this.client.post("/api/cashbox/opening-balance", {
       openingBalance: balance,
       openingDate,
@@ -30,16 +26,12 @@ export class CashboxApiService {
 
   async cashBalanceOn(date: string, currency?: string): Promise<number> {
     const q = currency ? `?currency=${encodeURIComponent(currency)}` : "";
-    const res = await this.client.get<number>(
-      `/api/cashbox/balance/${date}${q}`,
-    );
+    const res = await this.client.get<number>(`/api/cashbox/balance/${date}${q}`);
     return res.data;
   }
 
   async cashMovementsOn(date: string): Promise<DayCashFlowDTO> {
-    const res = await this.client.get<DayCashFlowDTO>(
-      `/api/cashbox/movements/${date}`,
-    );
+    const res = await this.client.get<DayCashFlowDTO>(`/api/cashbox/movements/${date}`);
     return res.data;
   }
 
@@ -49,19 +41,12 @@ export class CashboxApiService {
   }
 
   async listManualMovements(): Promise<ManualMovementDTO[]> {
-    const res = await this.client.get<ManualMovementDTO[]>(
-      "/api/cashbox/manual-movements",
-    );
+    const res = await this.client.get<ManualMovementDTO[]>("/api/cashbox/manual-movements");
     return res.data;
   }
 
-  async addManualMovement(
-    input: CreateManualMovementRequest,
-  ): Promise<ManualMovementDTO> {
-    const res = await this.client.post<ManualMovementDTO>(
-      "/api/cashbox/manual-movements",
-      input,
-    );
+  async addManualMovement(input: CreateManualMovementRequest): Promise<ManualMovementDTO> {
+    const res = await this.client.post<ManualMovementDTO>("/api/cashbox/manual-movements", input);
     return res.data;
   }
 
@@ -70,25 +55,18 @@ export class CashboxApiService {
   }
 
   async closeDay(input: CloseDayRequest): Promise<DailyClosingDTO> {
-    const res = await this.client.post<DailyClosingDTO>(
-      "/api/cashbox/close-day",
-      input,
-    );
+    const res = await this.client.post<DailyClosingDTO>("/api/cashbox/close-day", input);
     return res.data;
   }
 
   async listClosings(): Promise<DailyClosingDTO[]> {
-    const res = await this.client.get<DailyClosingDTO[]>(
-      "/api/cashbox/closings",
-    );
+    const res = await this.client.get<DailyClosingDTO[]>("/api/cashbox/closings");
     return res.data;
   }
 
   async lastClosing(): Promise<DailyClosingDTO | null> {
     try {
-      const res = await this.client.get<DailyClosingDTO>(
-        "/api/cashbox/closings/last",
-      );
+      const res = await this.client.get<DailyClosingDTO>("/api/cashbox/closings/last");
       return res.data ?? null;
     } catch {
       return null;

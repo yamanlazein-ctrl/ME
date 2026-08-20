@@ -119,9 +119,16 @@ test.describe("Cert Financial — Accounting Cycle", () => {
     test.setTimeout(60000);
 
     const slugs = [
-      "net-sales", "purchases", "cashbox", "inventory-value",
-      "receivables", "payables", "sales-returns", "expenses",
-      "top-fabrics", "top-customers",
+      "net-sales",
+      "purchases",
+      "cashbox",
+      "inventory-value",
+      "receivables",
+      "payables",
+      "sales-returns",
+      "expenses",
+      "top-fabrics",
+      "top-customers",
     ];
 
     for (const slug of slugs) {

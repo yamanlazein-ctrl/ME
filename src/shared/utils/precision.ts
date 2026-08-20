@@ -9,8 +9,7 @@
  */
 
 /** Same wording as the backend so the message is consistent. */
-export const MAX_2DP_MSG =
-  "القيمة تقبل حتى خانتين عشريتين كحد أقصى (دقة التخزين 0.01)";
+export const MAX_2DP_MSG = "القيمة تقبل حتى خانتين عشريتين كحد أقصى (دقة التخزين 0.01)";
 
 /** `true` iff `n` is a positive number with more than 2 decimal places. */
 export function hasMoreThan2dp(n: number): boolean {

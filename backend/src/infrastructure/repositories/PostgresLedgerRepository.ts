@@ -157,10 +157,9 @@ export class PostgresLedgerRepository implements ILedgerRepository {
         )
         .limit(1);
       if (alreadyReversed.length > 0) {
-        throw Object.assign(
-          new Error("This reference has already been reversed"),
-          { code: "ALREADY_CANCELLED" as const },
-        );
+        throw Object.assign(new Error("This reference has already been reversed"), {
+          code: "ALREADY_CANCELLED" as const,
+        });
       }
 
       const entries = await tx
@@ -205,7 +204,11 @@ export class PostgresLedgerRepository implements ILedgerRepository {
     });
   }
 
-  async getBalance(partyId: UUID, ctx: TenantContext, currency: string = "SYP"): Promise<PartyBalance> {
+  async getBalance(
+    partyId: UUID,
+    ctx: TenantContext,
+    currency: string = "SYP",
+  ): Promise<PartyBalance> {
     const rows = await this.db
       .select({
         debit: sql<number>`COALESCE(SUM(${ledgerEntries.debit}), 0)`,
@@ -226,7 +229,12 @@ export class PostgresLedgerRepository implements ILedgerRepository {
     return { partyId, totalDebit: d, totalCredit: c, balance: d - c };
   }
 
-  async getBalanceByDate(partyId: UUID, date: string, ctx: TenantContext, currency: string = "SYP"): Promise<PartyBalance> {
+  async getBalanceByDate(
+    partyId: UUID,
+    date: string,
+    ctx: TenantContext,
+    currency: string = "SYP",
+  ): Promise<PartyBalance> {
     const rows = await this.db
       .select({
         debit: sql<number>`COALESCE(SUM(${ledgerEntries.debit}), 0)`,
@@ -302,10 +310,7 @@ export class PostgresLedgerRepository implements ILedgerRepository {
         .select({ id: vouchers.id })
         .from(vouchers)
         .where(
-          and(
-            eq(vouchers.invoiceId, referenceId as string),
-            eq(vouchers.tenantId, ctx.tenantId),
-          ),
+          and(eq(vouchers.invoiceId, referenceId as string), eq(vouchers.tenantId, ctx.tenantId)),
         );
       if (voucherIds.length > 0) {
         const vids = voucherIds.map((v) => v.id as UUID);
@@ -361,8 +366,23 @@ export class PostgresLedgerRepository implements ILedgerRepository {
       );
 
     let timeline: LedgerEntryData[] = ownRows.map((r) => this.toDomain(r));
-    let vouchersList: { id: UUID; number: string; kind: string; date: string; amount: number; method: string; status: string }[] = [];
-    let returnsList: { id: UUID; number: string; kind: string; date: string; status: string; reason: string }[] = [];
+    let vouchersList: {
+      id: UUID;
+      number: string;
+      kind: string;
+      date: string;
+      amount: number;
+      method: string;
+      status: string;
+    }[] = [];
+    let returnsList: {
+      id: UUID;
+      number: string;
+      kind: string;
+      date: string;
+      status: string;
+      reason: string;
+    }[] = [];
     let orderLink: { id: UUID; code: string; status: string; date: string } | null = null;
 
     if (documentType === "invoice") {
@@ -392,12 +412,7 @@ export class PostgresLedgerRepository implements ILedgerRepository {
           reason: returns.reason,
         })
         .from(returns)
-        .where(
-          and(
-            eq(returns.originalInvoiceId, documentId as string),
-            eq(returns.tenantId, T),
-          ),
-        );
+        .where(and(eq(returns.originalInvoiceId, documentId as string), eq(returns.tenantId, T)));
       returnsList = rs;
 
       // Order fulfilled by this invoice.
@@ -418,7 +433,12 @@ export class PostgresLedgerRepository implements ILedgerRepository {
             and(
               eq(ledgerEntries.tenantId, T),
               inArray(ledgerEntries.referenceId, extraRefIds),
-              inArray(ledgerEntries.referenceType, ["receipt_in", "payment_out", "purchase_return", "sales_return"]),
+              inArray(ledgerEntries.referenceType, [
+                "receipt_in",
+                "payment_out",
+                "purchase_return",
+                "sales_return",
+              ]),
             ),
           );
         timeline = [...timeline, ...extra.map((r) => this.toDomain(r))];

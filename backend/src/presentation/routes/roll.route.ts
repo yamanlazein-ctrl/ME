@@ -91,16 +91,22 @@ export function registerRollRoutes(
     res.status(204).send();
   });
 
-  router.get("/inventory/rolls/:id", auth, readGuard, validateUuidParam("id"), async (req: Request, res: Response) => {
-    const r = await findRollUseCase(rollRepo, pid(req), ctx(req));
-    if (!r.ok) {
-      return res.status(500).json({ code: "INTERNAL", message: r.error });
-    }
-    if (!r.data) {
-      return res.status(404).json({ code: "NOT_FOUND", message: "الصبغة غير موجودة" });
-    }
-    res.json(r.data);
-  });
+  router.get(
+    "/inventory/rolls/:id",
+    auth,
+    readGuard,
+    validateUuidParam("id"),
+    async (req: Request, res: Response) => {
+      const r = await findRollUseCase(rollRepo, pid(req), ctx(req));
+      if (!r.ok) {
+        return res.status(500).json({ code: "INTERNAL", message: r.error });
+      }
+      if (!r.data) {
+        return res.status(404).json({ code: "NOT_FOUND", message: "الصبغة غير موجودة" });
+      }
+      res.json(r.data);
+    },
+  );
 
   router.get(
     "/inventory/rolls/:id/movements",
@@ -109,9 +115,11 @@ export function registerRollRoutes(
     validateUuidParam("id"),
     async (req: Request, res: Response) => {
       if (!stockMovementRepo) {
-        return res.status(501).json({ code: "NOT_IMPLEMENTED", message: "سجل حركات المخزون غير مفعّل" });
+        return res
+          .status(501)
+          .json({ code: "NOT_IMPLEMENTED", message: "سجل حركات المخزون غير مفعّل" });
       }
-      const q = (req.query as Record<string, string>);
+      const q = req.query as Record<string, string>;
       const filter = {
         movementType: q.movementType,
         fromDate: q.fromDate,
@@ -122,7 +130,12 @@ export function registerRollRoutes(
         const rows = await stockMovementRepo.listByRoll(pid(req) as string, ctx(req), filter);
         res.json({ data: rows });
       } catch (e) {
-        res.status(500).json({ code: "INTERNAL", message: e instanceof Error ? e.message : "فشل جلب حركات المخزون" });
+        res
+          .status(500)
+          .json({
+            code: "INTERNAL",
+            message: e instanceof Error ? e.message : "فشل جلب حركات المخزون",
+          });
       }
     },
   );

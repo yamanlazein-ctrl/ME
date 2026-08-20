@@ -1,4 +1,15 @@
-import { pgTable, bigserial, uuid, varchar, integer, jsonb, text, timestamp, uniqueIndex, index } from "drizzle-orm/pg-core";
+import {
+  pgTable,
+  bigserial,
+  uuid,
+  varchar,
+  integer,
+  jsonb,
+  text,
+  timestamp,
+  uniqueIndex,
+  index,
+} from "drizzle-orm/pg-core";
 import { tenants } from "./tenant.table.js";
 
 /**
@@ -33,7 +44,9 @@ export const idempotencyKeys = pgTable(
     idempotencyKey: varchar("idempotency_key", { length: 200 }).notNull(),
     statusCode: integer("status_code").notNull(),
     responseBody: jsonb("response_body"),
-    contentType: varchar("content_type", { length: 100 }).notNull().default("application/json; charset=utf-8"),
+    contentType: varchar("content_type", { length: 100 })
+      .notNull()
+      .default("application/json; charset=utf-8"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
   },

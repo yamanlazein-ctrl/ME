@@ -23,8 +23,7 @@ const ADMIN = { email: "admin@erp.local", password: "admin123" };
 const require = createRequire(import.meta.url);
 const { Pool } = require("../../backend/node_modules/pg");
 const pool = new Pool({
-  connectionString:
-    process.env.DATABASE_URL ?? "postgresql://postgres:postgres@localhost:5432/erp",
+  connectionString: process.env.DATABASE_URL ?? "postgresql://postgres:postgres@localhost:5432/erp",
 });
 
 const TENANT_ID = "f7a54ec6-0802-48da-a03c-9474b526e081"; // admin@erp.local tenant
@@ -34,9 +33,21 @@ const TENANT_ID = "f7a54ec6-0802-48da-a03c-9474b526e081"; // admin@erp.local ten
 // version-lock fails when a single invoice carries multiple lines on the SAME
 // roll (pre-existing quirk), so every line gets its own roll here.
 const ASSETS = [
-  { rollId: "64f785e3-5a93-45df-946c-a74847aa0927", fabricId: "acfbab9c-c278-4693-ad81-ca927c1366f7", colorId: "a693e1d5-175d-4e3f-a58f-42faf0b97c3c" },
-  { rollId: "b926b088-d580-49d9-8585-d6e98eb5b87b", fabricId: "6ea74c79-cbd6-4f0a-8115-8a61d05e2ee7", colorId: "30bd3e5e-71be-4d09-9aa4-88f9e81ba395" },
-  { rollId: "af3370aa-e8c0-400c-83b7-9066e5ca88fc", fabricId: "bdc4443e-40d7-4e9e-bb3a-90651594c93e", colorId: "00b8b323-88f3-45f8-ad2b-a87271624524" },
+  {
+    rollId: "64f785e3-5a93-45df-946c-a74847aa0927",
+    fabricId: "acfbab9c-c278-4693-ad81-ca927c1366f7",
+    colorId: "a693e1d5-175d-4e3f-a58f-42faf0b97c3c",
+  },
+  {
+    rollId: "b926b088-d580-49d9-8585-d6e98eb5b87b",
+    fabricId: "6ea74c79-cbd6-4f0a-8115-8a61d05e2ee7",
+    colorId: "30bd3e5e-71be-4d09-9aa4-88f9e81ba395",
+  },
+  {
+    rollId: "af3370aa-e8c0-400c-83b7-9066e5ca88fc",
+    fabricId: "bdc4443e-40d7-4e9e-bb3a-90651594c93e",
+    colorId: "00b8b323-88f3-45f8-ad2b-a87271624524",
+  },
 ];
 
 interface DBRow {
@@ -145,11 +156,7 @@ test.beforeAll(async () => {
     partyId: state.customerId,
     partyType: "customer",
     currency: "SYP",
-    lines: [
-      line(10, 5000, ASSETS[0]),
-      line(5, 4000, ASSETS[1]),
-      line(2, 10000, ASSETS[2]),
-    ], // 50,000 + 20,000 + 20,000
+    lines: [line(10, 5000, ASSETS[0]), line(5, 4000, ASSETS[1]), line(2, 10000, ASSETS[2])], // 50,000 + 20,000 + 20,000
     paid: 0,
   });
   state.invoiceB = b.id as string;
@@ -222,7 +229,15 @@ test("S1/S2: previousBalance and totals match independent SQL aggregates", async
     totalDebit: number;
     totalCredit: number;
     finalBalance: number;
-    entries: { seq: number; type: string; status: string; debit: number; credit: number; runningBalance: number; referenceNumber?: string }[];
+    entries: {
+      seq: number;
+      type: string;
+      status: string;
+      debit: number;
+      credit: number;
+      runningBalance: number;
+      referenceNumber?: string;
+    }[];
   };
 
   // Independent SQL: previous balance = active sum strictly before `from`.
@@ -458,20 +473,20 @@ test("S3 (UI): switching currency in the browser changes the rendered statement"
   await page.locator('input[type="date"]').nth(1).fill(TO);
 
   // Default (SYP) shows invoice B and the 25,000 SYP receipt — but NOT the USD receipt.
-  await expect(
-    page.getByRole("row").filter({ hasText: state.invoiceBNumber }),
-  ).toBeVisible({ timeout: 15_000 });
-  await expect(
-    page.getByRole("row").filter({ hasText: state.receiptSYPNumber }),
-  ).toBeVisible({ timeout: 10_000 });
+  await expect(page.getByRole("row").filter({ hasText: state.invoiceBNumber })).toBeVisible({
+    timeout: 15_000,
+  });
+  await expect(page.getByRole("row").filter({ hasText: state.receiptSYPNumber })).toBeVisible({
+    timeout: 10_000,
+  });
   await expect(page.getByRole("row").filter({ hasText: state.receiptUSDNumber })).toHaveCount(0);
 
   // Switch to USD — the backend re-queries (the receipt R2 is USD-only).
   await page.getByText("كل العملات").first().click();
   await page.getByRole("option", { name: "$ دولار" }).click();
-  await expect(
-    page.getByRole("row").filter({ hasText: state.receiptUSDNumber }),
-  ).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByRole("row").filter({ hasText: state.receiptUSDNumber })).toBeVisible({
+    timeout: 15_000,
+  });
   await expect(page.getByRole("row").filter({ hasText: state.invoiceBNumber })).toHaveCount(0);
   await expect(page.getByRole("row").filter({ hasText: state.receiptSYPNumber })).toHaveCount(0);
 

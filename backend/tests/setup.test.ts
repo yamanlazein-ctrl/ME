@@ -1,5 +1,9 @@
 import { describe, it, expect } from "vitest";
-import { startWizardUseCase, getStatusUseCase, activateAndPersistUseCase } from "@/application/use-cases/setup/setupUseCases";
+import {
+  startWizardUseCase,
+  getStatusUseCase,
+  activateAndPersistUseCase,
+} from "@/application/use-cases/setup/setupUseCases";
 
 /**
  * Phase 0 sub-batch 0F — setup use cases.
@@ -12,20 +16,15 @@ import { startWizardUseCase, getStatusUseCase, activateAndPersistUseCase } from 
  */
 describe("setup use cases — input validation", () => {
   it("startWizard rejects empty input", async () => {
-    const r = await startWizardUseCase(
-      {} as never,
-      {} as never,
-      {},
-    );
+    const r = await startWizardUseCase({} as never, {} as never, {});
     expect(r.ok).toBe(false);
   });
 
   it("startWizard rejects invalid slug", async () => {
-    const r = await startWizardUseCase(
-      {} as never,
-      {} as never,
-      { companyName: "Acme", slug: "BAD SLUG WITH SPACES" },
-    );
+    const r = await startWizardUseCase({} as never, {} as never, {
+      companyName: "Acme",
+      slug: "BAD SLUG WITH SPACES",
+    });
     expect(r.ok).toBe(false);
   });
 
@@ -33,11 +32,10 @@ describe("setup use cases — input validation", () => {
     // Will fail at the repo call (mocks are empty) — we only verify
     // that validation passes and the error message is NOT a
     // validation error.
-    const r = await startWizardUseCase(
-      {} as never,
-      {} as never,
-      { companyName: "Acme", slug: "acme" },
-    );
+    const r = await startWizardUseCase({} as never, {} as never, {
+      companyName: "Acme",
+      slug: "acme",
+    });
     // Either succeeds (ok: true) or fails with a non-validation
     // error (e.g. "Cannot read property of undefined" from the mock).
     // What we DO assert: the failure is NOT a validation failure.

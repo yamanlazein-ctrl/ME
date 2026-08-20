@@ -144,14 +144,42 @@ export function ReturnInvoicePrint({
   }
   // ── Items table — all columns
   const allColumns: { key: string; cfg: PrintColumn; on?: boolean }[] = [
-    { key: "idx", cfg: { key: "idx", label: "#", align: "center", width: "5%" }, on: vis.showLineIndex },
-    { key: "roll", cfg: { key: "roll", label: "رقم الصبغة", width: "14%" }, on: vis.showRollNumber },
+    {
+      key: "idx",
+      cfg: { key: "idx", label: "#", align: "center", width: "5%" },
+      on: vis.showLineIndex,
+    },
+    {
+      key: "roll",
+      cfg: { key: "roll", label: "رقم الصبغة", width: "14%" },
+      on: vis.showRollNumber,
+    },
     { key: "fabric", cfg: { key: "fabric", label: "القماش", width: "20%" }, on: vis.showFabric },
-    { key: "color", cfg: { key: "color", label: "اللون", width: "18%" }, on: vis.showColorCode || vis.showColorName },
-    { key: "pieces", cfg: { key: "pieces", label: "الأثواب", align: "center", width: "7%" }, on: vis.showQuantity },
-    { key: "qty", cfg: { key: "qty", label: "الكمية (كغ)", align: "center", width: "11%" }, on: vis.showQuantity },
-    { key: "price", cfg: { key: "price", label: "السعر/كغ", align: "left", amount: true, width: "11%" }, on: vis.showUnitPrice },
-    { key: "gross", cfg: { key: "gross", label: "الإجمالي", align: "left", amount: true, width: "11%" }, on: vis.showLineTotal },
+    {
+      key: "color",
+      cfg: { key: "color", label: "اللون", width: "18%" },
+      on: vis.showColorCode || vis.showColorName,
+    },
+    {
+      key: "pieces",
+      cfg: { key: "pieces", label: "الأثواب", align: "center", width: "7%" },
+      on: vis.showQuantity,
+    },
+    {
+      key: "qty",
+      cfg: { key: "qty", label: "الكمية (كغ)", align: "center", width: "11%" },
+      on: vis.showQuantity,
+    },
+    {
+      key: "price",
+      cfg: { key: "price", label: "السعر/كغ", align: "left", amount: true, width: "11%" },
+      on: vis.showUnitPrice,
+    },
+    {
+      key: "gross",
+      cfg: { key: "gross", label: "الإجمالي", align: "left", amount: true, width: "11%" },
+      on: vis.showLineTotal,
+    },
   ];
   const columns = allColumns.filter((c) => c.on !== false).map((c) => c.cfg);
   const rows = r.lines.map((l, i) => {
@@ -164,7 +192,7 @@ export function ReturnInvoicePrint({
       roll: roll ? roll.rollNo : "—",
       fabric: fab?.name ?? "—",
       color: renderRollColorCell(l.rollId),
-      pieces: (l.pieces && l.pieces > 1) ? String(l.pieces) : "—",
+      pieces: l.pieces && l.pieces > 1 ? String(l.pieces) : "—",
       qty: fmtQty(l.quantityKg),
       price: fmtUnit(l.pricePerKg),
       gross: fmtMoney(sub),
@@ -195,7 +223,7 @@ export function ReturnInvoicePrint({
       meta={meta}
       party={partyBlock}
       totals={totals}
-      notes={vis.showNotes ? r.notesPrint ?? undefined : undefined}
+      notes={vis.showNotes ? (r.notesPrint ?? undefined) : undefined}
       signatures={vis.showSignatures ? ["توقيع المستلم", "ختم الشركة"] : undefined}
       pageNumber={pageNumber}
       totalPages={totalPages}

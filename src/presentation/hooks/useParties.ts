@@ -57,19 +57,12 @@ function isPaginated<T>(x: unknown): x is { data: T[] } {
 }
 
 async function loadAll(force = false): Promise<void> {
-  if ((loaded && !force) || loadPromise)
-    return loadPromise ?? Promise.resolve();
+  if ((loaded && !force) || loadPromise) return loadPromise ?? Promise.resolve();
   loadPromise = (async () => {
     try {
       const [cRes, sRes] = await Promise.all([
-        container.parties.list.execute(
-          { kind: "customer", limit: 100, offset: 0 },
-          ctx,
-        ),
-        container.parties.list.execute(
-          { kind: "supplier", limit: 100, offset: 0 },
-          ctx,
-        ),
+        container.parties.list.execute({ kind: "customer", limit: 100, offset: 0 }, ctx),
+        container.parties.list.execute({ kind: "supplier", limit: 100, offset: 0 }, ctx),
       ]);
       const cData = isPaginated<Party>(cRes) ? cRes.data : (cRes as Party[]);
       const sData = isPaginated<Party>(sRes) ? sRes.data : (sRes as Party[]);
@@ -116,10 +109,7 @@ export function usePartiesList(filter: PartyFilter = {}) {
   });
 }
 
-export function useParty(
-  id: string,
-  kind: "customer" | "supplier" = "customer",
-) {
+export function useParty(id: string, kind: "customer" | "supplier" = "customer") {
   return useQuery({
     queryKey: KEYS.detail(id),
     queryFn: ({ signal }) => {
@@ -133,8 +123,7 @@ export function useParty(
 export function useCreateParty() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (input: CreatePartyInput) =>
-      container.parties.create.execute(input, ctx),
+    mutationFn: (input: CreatePartyInput) => container.parties.create.execute(input, ctx),
     onSuccess: () => qc.invalidateQueries({ queryKey: KEYS.root }),
   });
 }
@@ -142,17 +131,8 @@ export function useCreateParty() {
 export function useUpdateParty() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (params: {
-      id: string;
-      kind: "customer" | "supplier";
-      patch: Partial<Party>;
-    }) =>
-      container.parties.repository.update(
-        params.id,
-        params.kind,
-        params.patch,
-        ctx,
-      ),
+    mutationFn: (params: { id: string; kind: "customer" | "supplier"; patch: Partial<Party> }) =>
+      container.parties.repository.update(params.id, params.kind, params.patch, ctx),
     onSuccess: () => qc.invalidateQueries({ queryKey: KEYS.root }),
   });
 }
@@ -189,16 +169,8 @@ export function supplierById(id: string): Party | undefined {
 }
 
 function syncPartiesCache() {
-  _customers.splice(
-    0,
-    _customers.length,
-    ..._allParties.filter((p) => p.kind === "customer"),
-  );
-  _suppliers.splice(
-    0,
-    _suppliers.length,
-    ..._allParties.filter((p) => p.kind === "supplier"),
-  );
+  _customers.splice(0, _customers.length, ..._allParties.filter((p) => p.kind === "customer"));
+  _suppliers.splice(0, _suppliers.length, ..._allParties.filter((p) => p.kind === "supplier"));
   notifyPartiesChange();
 }
 
@@ -206,10 +178,7 @@ function syncPartiesCache() {
 
 async function addParty(
   kind: PartyKind,
-  input: { name: string; phone?: string; email?: string } & Record<
-    string,
-    unknown
-  >,
+  input: { name: string; phone?: string; email?: string } & Record<string, unknown>,
 ): Promise<Party> {
   try {
     const res = await container.parties.create.execute(
@@ -246,28 +215,16 @@ async function addParty(
     }
     const party = res.value;
     _allParties.push(party);
-    _customers.splice(
-      0,
-      _customers.length,
-      ..._allParties.filter((p) => p.kind === "customer"),
-    );
-    _suppliers.splice(
-      0,
-      _suppliers.length,
-      ..._allParties.filter((p) => p.kind === "supplier"),
-    );
+    _customers.splice(0, _customers.length, ..._allParties.filter((p) => p.kind === "customer"));
+    _suppliers.splice(0, _suppliers.length, ..._allParties.filter((p) => p.kind === "supplier"));
     syncPartiesCache();
     notifyPartiesChange();
     toast.success(
-      kind === "customer"
-        ? `تم حفظ العميل "${party.name}"`
-        : `تم حفظ المورد "${party.name}"`,
+      kind === "customer" ? `تم حفظ العميل "${party.name}"` : `تم حفظ المورد "${party.name}"`,
     );
     return party;
   } catch (e) {
-    toast.error(
-      `فشل الحفظ: ${e instanceof Error ? e.message : "خطأ غير معروف"}`,
-    );
+    toast.error(`فشل الحفظ: ${e instanceof Error ? e.message : "خطأ غير معروف"}`);
     throw e;
   }
 }
@@ -288,10 +245,7 @@ export const addSupplier = (
   } & Record<string, unknown>,
 ): Promise<Party> => addParty("supplier", input);
 
-export async function updateCustomer(
-  id: string,
-  patch: Record<string, unknown>,
-): Promise<void> {
+export async function updateCustomer(id: string, patch: Record<string, unknown>): Promise<void> {
   try {
     const updated = await container.parties.repository.update(
       id,
@@ -305,16 +259,11 @@ export async function updateCustomer(
     notifyPartiesChange();
     toast.info("تم تحديث العميل");
   } catch (e) {
-    toast.error(
-      `فشل تحديث العميل: ${e instanceof Error ? e.message : "خطأ غير معروف"}`,
-    );
+    toast.error(`فشل تحديث العميل: ${e instanceof Error ? e.message : "خطأ غير معروف"}`);
   }
 }
 
-export async function updateSupplier(
-  id: string,
-  patch: Record<string, unknown>,
-): Promise<void> {
+export async function updateSupplier(id: string, patch: Record<string, unknown>): Promise<void> {
   try {
     const updated = await container.parties.repository.update(
       id,
@@ -328,9 +277,7 @@ export async function updateSupplier(
     notifyPartiesChange();
     toast.info("تم تحديث المورد");
   } catch (e) {
-    toast.error(
-      `فشل تحديث المورد: ${e instanceof Error ? e.message : "خطأ غير معروف"}`,
-    );
+    toast.error(`فشل تحديث المورد: ${e instanceof Error ? e.message : "خطأ غير معروف"}`);
   }
 }
 

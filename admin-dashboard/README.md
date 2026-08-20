@@ -20,9 +20,9 @@ npm run dev
 
 ## Scripts
 
-| Script       | Description        |
-| ------------ | ------------------ |
-| `npm run dev`    | Start dev server   |
-| `npm run build`  | Type-check + build |
-| `npm run lint`   | Oxlint             |
-| `npm run preview`| Preview the build |
+| Script            | Description        |
+| ----------------- | ------------------ |
+| `npm run dev`     | Start dev server   |
+| `npm run build`   | Type-check + build |
+| `npm run lint`    | Oxlint             |
+| `npm run preview` | Preview the build  |

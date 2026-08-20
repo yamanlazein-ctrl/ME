@@ -8,7 +8,8 @@ import type { UUID } from "../../domain/types/index.js";
  * `isCompleted` to decide whether the request can reach the
  * application or must be redirected to /api/setup/*.
  */
-export type WizardStepName = "welcome" | "activate" | "company" | "localization" | "admin" | "review" | "done";
+export type WizardStepName =
+  "welcome" | "activate" | "company" | "localization" | "admin" | "review" | "done";
 
 export interface InstallationStateRow {
   tenantId: UUID;

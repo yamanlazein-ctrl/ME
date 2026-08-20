@@ -9,13 +9,19 @@ let token = "";
 async function api(path: string, opts: RequestInit = {}) {
   if (!token) {
     const r = await fetch(`${API}/auth/login`, {
-      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(AUTH),
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(AUTH),
     });
     token = (await r.json()).accessToken;
   }
   const res = await fetch(path.startsWith("http") ? path : `${API}${path}`, {
     ...opts,
-    headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}`, ...opts.headers },
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+      ...opts.headers,
+    },
   });
   return { status: res.status, data: await res.json().catch(() => null) };
 }
@@ -23,23 +29,40 @@ async function api(path: string, opts: RequestInit = {}) {
 test.describe("سندات القبض والصرف", () => {
   const custId = "5b9f06a8-5e18-4c5a-b372-7eee0e23ea76";
   const suppId = "e2b0e481-10c4-46c1-b4d5-c64bbd2ad25b";
-  let recId = "", payId = "";
+  let recId = "",
+    payId = "";
 
   test("create receipt → 201", async () => {
-    const { status, data } = await api("/receipts", { method: "POST", body: JSON.stringify({
-      kind: "receipt", date: "2026-08-12", partyId: custId, partyKind: "customer",
-      amount: 10000, currency: "SYP", method: "cash",
-    })});
+    const { status, data } = await api("/receipts", {
+      method: "POST",
+      body: JSON.stringify({
+        kind: "receipt",
+        date: "2026-08-12",
+        partyId: custId,
+        partyKind: "customer",
+        amount: 10000,
+        currency: "SYP",
+        method: "cash",
+      }),
+    });
     expect(status).toBe(201);
     expect(data.number).toMatch(/^VOC-/);
     recId = data.id;
   });
 
   test("create payment → 201", async () => {
-    const { status, data } = await api("/payments", { method: "POST", body: JSON.stringify({
-      kind: "payment", date: "2026-08-12", partyId: suppId, partyKind: "supplier",
-      amount: 5000, currency: "SYP", method: "cash",
-    })});
+    const { status, data } = await api("/payments", {
+      method: "POST",
+      body: JSON.stringify({
+        kind: "payment",
+        date: "2026-08-12",
+        partyId: suppId,
+        partyKind: "supplier",
+        amount: 5000,
+        currency: "SYP",
+        method: "cash",
+      }),
+    });
     expect(status).toBe(201);
     expect(data.number).toMatch(/^VOC-/);
     payId = data.id;
@@ -64,10 +87,17 @@ test.describe("المصاريف", () => {
   });
 
   test("create expense → 201", async () => {
-    const { status, data } = await api("/expenses", { method: "POST", body: JSON.stringify({
-      date: "2026-08-12", category: "كهرباء", amount: 1000, currency: "SYP",
-      paidFromCashbox: true, method: "cash",
-    })});
+    const { status, data } = await api("/expenses", {
+      method: "POST",
+      body: JSON.stringify({
+        date: "2026-08-12",
+        category: "كهرباء",
+        amount: 1000,
+        currency: "SYP",
+        paidFromCashbox: true,
+        method: "cash",
+      }),
+    });
     expect(status).toBe(201);
     // cancel immediately to clean up
     await api(`/expenses/${data.id}/cancel`, { method: "POST" });
@@ -114,7 +144,9 @@ test.describe("الصندوق", () => {
 
 test.describe("كشف حساب العملاء والموردين", () => {
   test("customer statement → 200", async () => {
-    const { status, data } = await api("/customers/5b9f06a8-5e18-4c5a-b372-7eee0e23ea76/statement?currency=SYP");
+    const { status, data } = await api(
+      "/customers/5b9f06a8-5e18-4c5a-b372-7eee0e23ea76/statement?currency=SYP",
+    );
     expect(status).toBe(200);
     expect(data).toHaveProperty("previousBalance");
     expect(data).toHaveProperty("finalBalance");
@@ -122,14 +154,20 @@ test.describe("كشف حساب العملاء والموردين", () => {
   });
 
   test("supplier statement → 200", async () => {
-    const { status, data } = await api("/suppliers/e2b0e481-10c4-46c1-b4d5-c64bbd2ad25b/statement?currency=SYP");
+    const { status, data } = await api(
+      "/suppliers/e2b0e481-10c4-46c1-b4d5-c64bbd2ad25b/statement?currency=SYP",
+    );
     expect(status).toBe(200);
     expect(data).toHaveProperty("finalBalance");
   });
 
   test("statement currency isolation: USD ≠ SYP", async () => {
-    const { data: syp } = await api("/customers/5b9f06a8-5e18-4c5a-b372-7eee0e23ea76/statement?currency=SYP");
-    const { data: usd } = await api("/customers/5b9f06a8-5e18-4c5a-b372-7eee0e23ea76/statement?currency=USD");
+    const { data: syp } = await api(
+      "/customers/5b9f06a8-5e18-4c5a-b372-7eee0e23ea76/statement?currency=SYP",
+    );
+    const { data: usd } = await api(
+      "/customers/5b9f06a8-5e18-4c5a-b372-7eee0e23ea76/statement?currency=USD",
+    );
     // Both should return valid data; they should not crash
     expect(syp.finalBalance).toBeDefined();
     expect(usd.finalBalance).toBeDefined();

@@ -65,9 +65,7 @@ describe("InstallationIdStorage", () => {
 
   it("readOrCreate generates and persists a UUID", async () => {
     const id1 = await storage.readOrCreate();
-    expect(id1).toMatch(
-      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
-    );
+    expect(id1).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i);
     expect(existsSync(path)).toBe(true);
     expect(readFileSync(path, "utf8").trim()).toBe(id1);
   });

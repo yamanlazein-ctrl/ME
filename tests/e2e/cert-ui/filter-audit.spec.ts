@@ -8,14 +8,46 @@ const FILTER_TESTS: {
   filterSelector: string;
   skipReason?: string;
 }[] = [
-  { route: "/invoices", description: "Invoice type filter", filterSelector: "select, button[aria-haspopup='listbox'], [role='combobox']" },
-  { route: "/expenses", description: "Expense filter", filterSelector: "select, button[aria-haspopup='listbox'], [role='combobox']" },
-  { route: "/orders", description: "Orders filter", filterSelector: "select, button[aria-haspopup='listbox'], [role='combobox']" },
-  { route: "/returns", description: "Returns filter", filterSelector: "select, button[aria-haspopup='listbox'], [role='combobox']" },
-  { route: "/ledger", description: "Ledger filters", filterSelector: "select, button[aria-haspopup='listbox'], [role='combobox']" },
-  { route: "/customers", description: "Customer search", filterSelector: "input[type='text'], input[type='search'], input:not([type])" },
-  { route: "/suppliers", description: "Supplier search", filterSelector: "input[type='text'], input[type='search'], input:not([type])" },
-  { route: "/inventory", description: "Inventory search", filterSelector: "input[type='text'], input[type='search'], input:not([type])" },
+  {
+    route: "/invoices",
+    description: "Invoice type filter",
+    filterSelector: "select, button[aria-haspopup='listbox'], [role='combobox']",
+  },
+  {
+    route: "/expenses",
+    description: "Expense filter",
+    filterSelector: "select, button[aria-haspopup='listbox'], [role='combobox']",
+  },
+  {
+    route: "/orders",
+    description: "Orders filter",
+    filterSelector: "select, button[aria-haspopup='listbox'], [role='combobox']",
+  },
+  {
+    route: "/returns",
+    description: "Returns filter",
+    filterSelector: "select, button[aria-haspopup='listbox'], [role='combobox']",
+  },
+  {
+    route: "/ledger",
+    description: "Ledger filters",
+    filterSelector: "select, button[aria-haspopup='listbox'], [role='combobox']",
+  },
+  {
+    route: "/customers",
+    description: "Customer search",
+    filterSelector: "input[type='text'], input[type='search'], input:not([type])",
+  },
+  {
+    route: "/suppliers",
+    description: "Supplier search",
+    filterSelector: "input[type='text'], input[type='search'], input:not([type])",
+  },
+  {
+    route: "/inventory",
+    description: "Inventory search",
+    filterSelector: "input[type='text'], input[type='search'], input:not([type])",
+  },
 ];
 
 test.describe("Cert UI — Filter Audit", () => {

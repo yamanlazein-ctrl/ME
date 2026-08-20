@@ -28,12 +28,7 @@ import {
   type PrintParty,
 } from "@/components/print/PrintDocument";
 import { currencySymbol } from "@/presentation/hooks/useCurrency";
-import {
-  fabricById,
-  colorById,
-  rollById,
-  type Color,
-} from "@/presentation/hooks/useInventory";
+import { fabricById, colorById, rollById, type Color } from "@/presentation/hooks/useInventory";
 import { supplierById } from "@/presentation/hooks/useParties";
 import { useVouchersList } from "@/presentation/hooks/useVouchers";
 import { useInvoiceVisibility } from "./visibility";
@@ -80,11 +75,7 @@ const fmtUnit = (n: number): string => formatNumber(n);
 const fmtMoney = (n: number): string => formatMoney(n);
 const fmtQty = (n: number): string => formatQuantity(n);
 
-export function EntryInvoicePrint({
-  invoice,
-  totalPages,
-  pageNumber,
-}: EntryInvoicePrintProps) {
+export function EntryInvoicePrint({ invoice, totalPages, pageNumber }: EntryInvoicePrintProps) {
   const inv = invoice;
   const vis = useInvoiceVisibility("purchase");
   const supplier = supplierById(inv.partyId);
@@ -93,7 +84,15 @@ export function EntryInvoicePrint({
   // invoice appear here.
   const { data: vouchersData } = useVouchersList();
   const allVouchers = useMemo(
-    () => (vouchersData?.data ?? []) as Array<{ invoiceId: string; status: string; amount: number; number: string; date: string; method: string }>,
+    () =>
+      (vouchersData?.data ?? []) as Array<{
+        invoiceId: string;
+        status: string;
+        amount: number;
+        number: string;
+        date: string;
+        method: string;
+      }>,
     [vouchersData],
   );
   const linkedVouchers = useMemo(
@@ -120,11 +119,13 @@ export function EntryInvoicePrint({
       : "مقفلة (مدفوعة)";
   // ── Meta grid (only fields the user has not hidden) ──────────────
   const meta: PrintMetaItem[] = [];
-  if (vis.showInvoiceNumber) meta.push({ label: "رقم الفاتورة", value: inv.reference || inv.number });
+  if (vis.showInvoiceNumber)
+    meta.push({ label: "رقم الفاتورة", value: inv.reference || inv.number });
   if (vis.showDate) meta.push({ label: "التاريخ", value: inv.date });
   if (vis.showStatus) meta.push({ label: "الحالة", value: statusLabel });
   if (vis.showCurrency) meta.push({ label: "العملة", value: `${inv.currency} (${sym})` });
-  if (vis.showCreatedBy) meta.push({ label: "أنشأ بواسطة", value: resolveCreatedBy(inv.createdBy) });
+  if (vis.showCreatedBy)
+    meta.push({ label: "أنشأ بواسطة", value: resolveCreatedBy(inv.createdBy) });
   if (vis.showCancelledInfo && isCancelled && inv.cancelledAt) {
     meta.push({
       label: "تاريخ الإلغاء",
@@ -190,9 +191,11 @@ export function EntryInvoicePrint({
             </div>
           ))}
           {/* Fill empty cells if less than gridCols */}
-          {Array.from({ length: gridCols - (r.details.length % gridCols || gridCols) }).map((_, i) => (
-            <div key={`empty-${i}`} className="pd-detail-item pd-detail-empty" />
-          ))}
+          {Array.from({ length: gridCols - (r.details.length % gridCols || gridCols) }).map(
+            (_, i) => (
+              <div key={`empty-${i}`} className="pd-detail-item pd-detail-empty" />
+            ),
+          )}
         </div>
       );
       rows.push([detailGrid as React.ReactNode]);
@@ -230,21 +233,18 @@ export function EntryInvoicePrint({
         ...(vis.showPartyAddress && (supplier?.address || supplier?.city)
           ? { address: [supplier.address, supplier.city].filter(Boolean).join(" — ") }
           : {}),
-        ...(vis.showPartyCode && supplier?.code
-          ? { extra: `رمز المورّد: ${supplier.code}` }
-          : {}),
+        ...(vis.showPartyCode && supplier?.code ? { extra: `رمز المورّد: ${supplier.code}` } : {}),
       }
     : undefined;
   // ── Payment summary (paid / remaining) — entry invoices can have
   //    linked payment vouchers too, so we show them.
-  const payment =
-    vis.showPaymentSummary
-      ? [
-          { label: "الإجمالي", value: `${fmtMoney(grand)} ${sym}` },
-          { label: "المدفوع", value: `${fmtMoney(paidAmount)} ${sym}` },
-          { label: "المتبقي", value: `${fmtMoney(remaining)} ${sym}` },
-        ]
-      : undefined;
+  const payment = vis.showPaymentSummary
+    ? [
+        { label: "الإجمالي", value: `${fmtMoney(grand)} ${sym}` },
+        { label: "المدفوع", value: `${fmtMoney(paidAmount)} ${sym}` },
+        { label: "المتبقي", value: `${fmtMoney(remaining)} ${sym}` },
+      ]
+    : undefined;
   return (
     <PrintDocument
       title="فاتورة شراء"

@@ -46,7 +46,9 @@ export function registerLicenseV1Routes(
     try {
       const parsed = activateBody.safeParse(req.body);
       if (!parsed.success) {
-        res.status(400).json({ code: "INVALID_REQUEST", message: "بيانات غير صالحة", statusCode: 400 });
+        res
+          .status(400)
+          .json({ code: "INVALID_REQUEST", message: "بيانات غير صالحة", statusCode: 400 });
         return;
       }
       try {
@@ -98,7 +100,11 @@ export function registerLicenseV1Routes(
     async (req: Request, res: Response, next: NextFunction) => {
       try {
         const reason = String(req.body?.reason ?? "admin_revoke");
-        await licenseProvider.revokeDevice(String(req.params.id), String(req.params.deviceId), reason);
+        await licenseProvider.revokeDevice(
+          String(req.params.id),
+          String(req.params.deviceId),
+          reason,
+        );
         res.json({ ok: true });
       } catch (err) {
         next(err);

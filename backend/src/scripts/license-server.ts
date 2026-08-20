@@ -41,13 +41,14 @@ const LICENSE_ADMIN_TOKEN = process.env.LICENSE_ADMIN_TOKEN ?? randomBytes(32).t
 function buildLicenseTokenSignerForServer(): LicenseTokenSigner {
   if (config.LICENSE_SIGNING_KEY) {
     // PEM form. Sign + verify both work.
-    return LicenseTokenSigner.fromPems(config.LICENSE_SIGNING_KEY, config.LICENSE_SIGNING_PUBLIC_KEY ?? "");
+    return LicenseTokenSigner.fromPems(
+      config.LICENSE_SIGNING_KEY,
+      config.LICENSE_SIGNING_PUBLIC_KEY ?? "",
+    );
   }
   // Dev fallback: generate an ephemeral keypair and log a warning
   // so the operator knows to set the env in production.
-  logger.warn(
-    "LICENSE_SIGNING_KEY not set; generating an ephemeral keypair (NOT for production)",
-  );
+  logger.warn("LICENSE_SIGNING_KEY not set; generating an ephemeral keypair (NOT for production)");
   const { privateKey, publicKey } = generateKeyPairSync("ed25519");
   const privJwk = privateKey.export({ format: "jwk" }) as JWK;
   const pubJwk = publicKey.export({ format: "jwk" }) as JWK;

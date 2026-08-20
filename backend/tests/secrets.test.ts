@@ -26,7 +26,10 @@ describe("AesGcmSecretStore", () => {
     const store = new AesGcmSecretStore(key);
     const plaintext = "hello, world — هذا نص اختبار";
     const enc = await store.encrypt(plaintext);
-    const dec = await store.encrypt(enc.ciphertext).then(() => null).catch(() => null);
+    const dec = await store
+      .encrypt(enc.ciphertext)
+      .then(() => null)
+      .catch(() => null);
     expect(dec).toBeNull();
     const out = await store.decrypt(enc);
     expect(out).toBe(plaintext);

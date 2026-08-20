@@ -46,18 +46,11 @@ export class ApiCashboxRepository implements ICashboxRepository {
     await this.api.setOpeningBalance(balance, date, currency);
   }
 
-  async cashBalanceOn(
-    date: string,
-    ctx: TenantContext,
-    currency?: string,
-  ): Promise<number> {
+  async cashBalanceOn(date: string, ctx: TenantContext, currency?: string): Promise<number> {
     return this.api.cashBalanceOn(date, currency);
   }
 
-  async cashMovementsOn(
-    date: string,
-    ctx: TenantContext,
-  ): Promise<DayCashFlowDTO> {
+  async cashMovementsOn(date: string, ctx: TenantContext): Promise<DayCashFlowDTO> {
     return this.api.cashMovementsOn(date);
   }
 
@@ -82,10 +75,7 @@ export class ApiCashboxRepository implements ICashboxRepository {
     await this.api.deleteManualMovement(id);
   }
 
-  async closeDay(
-    input: CloseDayInput,
-    ctx: TenantContext,
-  ): Promise<DailyClosingDTO> {
+  async closeDay(input: CloseDayInput, ctx: TenantContext): Promise<DailyClosingDTO> {
     const dto = await this.api.closeDay(input);
     return toPortClosing(dto);
   }

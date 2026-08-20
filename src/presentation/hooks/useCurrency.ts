@@ -2,7 +2,6 @@ import { useSyncExternalStore } from "react";
 import type { Currency } from "@/domain/types";
 import { formatNumber, formatMoney, formatQuantity } from "@/shared/utils/formatNumber";
 
-
 /**
  * Presentation-layer currency utilities.
  *

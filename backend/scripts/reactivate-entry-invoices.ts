@@ -13,9 +13,18 @@ import { rolls } from "../src/infrastructure/orm/schemas/roll.table.js";
 const TENANT_ID = "407fccfc-ba89-41c5-b5b9-ddb2c4f385d9";
 const USER_ID = "11111111-1111-1111-1111-111111111111";
 
-const INV_NUMBERS = ["INV-2026-0007","INV-2026-0008","INV-2026-0009","INV-2026-0010","INV-2026-0011"];
+const INV_NUMBERS = [
+  "INV-2026-0007",
+  "INV-2026-0008",
+  "INV-2026-0009",
+  "INV-2026-0010",
+  "INV-2026-0011",
+];
 
-const DESIRED_PAID: Record<string, { paid: number; method: "cash" | "transfer" | "check" | "card" }> = {
+const DESIRED_PAID: Record<
+  string,
+  { paid: number; method: "cash" | "transfer" | "check" | "card" }
+> = {
   "INV-2026-0007": { paid: 200000, method: "cash" },
   "INV-2026-0008": { paid: 0, method: "cash" },
   "INV-2026-0009": { paid: 300000, method: "cash" },
@@ -63,10 +72,12 @@ async function main() {
     const invLedgers = await db
       .select()
       .from(ledgerEntries)
-      .where(and(
-        eq(ledgerEntries.referenceId, inv.id),
-        eq(ledgerEntries.referenceType, "purchase_invoice"),
-      ));
+      .where(
+        and(
+          eq(ledgerEntries.referenceId, inv.id),
+          eq(ledgerEntries.referenceType, "purchase_invoice"),
+        ),
+      );
     for (const le of invLedgers) {
       if (le.status === "cancelled") {
         await db
@@ -91,10 +102,7 @@ async function main() {
       const vLedgers = await db
         .select()
         .from(ledgerEntries)
-        .where(and(
-          eq(ledgerEntries.referenceId, v.id),
-          eq(ledgerEntries.status, "cancelled"),
-        ));
+        .where(and(eq(ledgerEntries.referenceId, v.id), eq(ledgerEntries.status, "cancelled")));
       for (const le of vLedgers) {
         await db
           .update(ledgerEntries)
@@ -103,7 +111,9 @@ async function main() {
       }
     }
     if (linkedVouchers.length > 0) {
-      console.log(`  Reactivated ${linkedVouchers.length} linked vouchers and their ledger entries.`);
+      console.log(
+        `  Reactivated ${linkedVouchers.length} linked vouchers and their ledger entries.`,
+      );
     }
 
     // 5. If paid > 0 and no active payment voucher, create one
@@ -111,7 +121,13 @@ async function main() {
       const existingPayVouchers = await db
         .select()
         .from(vouchers)
-        .where(and(eq(vouchers.invoiceId, inv.id), eq(vouchers.kind, "payment"), eq(vouchers.status, "active")));
+        .where(
+          and(
+            eq(vouchers.invoiceId, inv.id),
+            eq(vouchers.kind, "payment"),
+            eq(vouchers.status, "active"),
+          ),
+        );
 
       if (existingPayVouchers.length === 0) {
         const paymentNumber = `PAY-${num}`;
@@ -202,14 +218,25 @@ async function main() {
 
     const party = await db.select().from(parties).where(eq(parties.id, inv.partyId)).limit(1);
     const lines = await db.select().from(invoiceLines).where(eq(invoiceLines.invoiceId, inv.id));
-    const payVouchers = await db.select().from(vouchers).where(and(eq(vouchers.invoiceId, inv.id), eq(vouchers.kind, "payment"), eq(vouchers.status, "active")));
+    const payVouchers = await db
+      .select()
+      .from(vouchers)
+      .where(
+        and(
+          eq(vouchers.invoiceId, inv.id),
+          eq(vouchers.kind, "payment"),
+          eq(vouchers.status, "active"),
+        ),
+      );
 
     console.log(`\n--- ${num} | ${party[0]?.name} ---`);
     console.log(`  Date: ${inv.date}`);
 
     let lineIdx = 1;
     for (const l of lines) {
-      const lineTotal = Math.round(Number(l.quantityKg) * Number(l.pricePerKg) - Number(l.discountAmount ?? 0));
+      const lineTotal = Math.round(
+        Number(l.quantityKg) * Number(l.pricePerKg) - Number(l.discountAmount ?? 0),
+      );
       console.log(`  Line ${lineIdx}: ${lineTotal}`);
       lineIdx++;
     }
@@ -247,4 +274,7 @@ async function main() {
   process.exit(0);
 }
 
-main().catch((e) => { console.error("FATAL:", e); process.exit(1); });
+main().catch((e) => {
+  console.error("FATAL:", e);
+  process.exit(1);
+});

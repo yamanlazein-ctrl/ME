@@ -6,7 +6,10 @@ export type InvoiceForProfit = {
   lines: { rollId?: string; quantityKg: number; pricePerKg: number; discountAmount: number }[];
 };
 
-export function calculateCOGS(invoice: InvoiceForProfit, getRollPrice: (rollId: string) => number): number {
+export function calculateCOGS(
+  invoice: InvoiceForProfit,
+  getRollPrice: (rollId: string) => number,
+): number {
   return invoice.lines.reduce((sum, line) => {
     if (!line.rollId) return sum;
     const price = getRollPrice(line.rollId);

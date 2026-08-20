@@ -16,5 +16,5 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
         <Toaster richColors position="top-center" dir="rtl" />
       </BrowserRouter>
     </QueryClientProvider>
-  </React.StrictMode>
+  </React.StrictMode>,
 );

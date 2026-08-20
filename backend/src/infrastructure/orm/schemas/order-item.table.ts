@@ -1,4 +1,13 @@
-import { pgTable, uuid, varchar, timestamp, decimal, integer, text, index } from "drizzle-orm/pg-core";
+import {
+  pgTable,
+  uuid,
+  varchar,
+  timestamp,
+  decimal,
+  integer,
+  text,
+  index,
+} from "drizzle-orm/pg-core";
 import { orders } from "./order.table.js";
 import { fabrics } from "./fabric.table.js";
 import { colors } from "./color.table.js";

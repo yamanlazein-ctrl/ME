@@ -71,11 +71,7 @@ export async function notifyOrderAvailability(
       }
     }
 
-    const newStatus = !anyPositive
-      ? "open"
-      : allFulfillable
-        ? "available"
-        : "partially_available";
+    const newStatus = !anyPositive ? "open" : allFulfillable ? "available" : "partially_available";
     const [order] = await tx
       .select()
       .from(orders)
@@ -93,9 +89,7 @@ export async function notifyOrderAvailability(
       .where(and(eq(orders.id, orderId), eq(orders.tenantId, ctx.tenantId)));
 
     if (newStatus !== "open") {
-      const customer = order.customerNameSnapshot
-        ? ` للعميل ${order.customerNameSnapshot}`
-        : "";
+      const customer = order.customerNameSnapshot ? ` للعميل ${order.customerNameSnapshot}` : "";
       await tx.insert(notifications).values({
         tenantId: ctx.tenantId,
         userId: null,

@@ -1,4 +1,15 @@
-import { pgTable, uuid, varchar, timestamp, decimal, integer, bigint, real, text, index } from "drizzle-orm/pg-core";
+import {
+  pgTable,
+  uuid,
+  varchar,
+  timestamp,
+  decimal,
+  integer,
+  bigint,
+  real,
+  text,
+  index,
+} from "drizzle-orm/pg-core";
 import { invoices } from "./invoice.table.js";
 import { fabrics } from "./fabric.table.js";
 import { colors } from "./color.table.js";

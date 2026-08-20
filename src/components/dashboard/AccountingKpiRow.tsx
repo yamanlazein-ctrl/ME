@@ -67,7 +67,8 @@ export function AccountingKpiRow() {
     if (outs.length) {
       arCount++;
       for (const r of outs) {
-        if (r.currency === "SYP" || r.currency === "USD") arTotalByCurrency[r.currency] += r.remaining;
+        if (r.currency === "SYP" || r.currency === "USD")
+          arTotalByCurrency[r.currency] += r.remaining;
       }
     }
   }
@@ -78,7 +79,8 @@ export function AccountingKpiRow() {
     if (outs.length) {
       apCount++;
       for (const r of outs) {
-        if (r.currency === "SYP" || r.currency === "USD") apTotalByCurrency[r.currency] += r.remaining;
+        if (r.currency === "SYP" || r.currency === "USD")
+          apTotalByCurrency[r.currency] += r.remaining;
       }
     }
   }
@@ -90,7 +92,9 @@ export function AccountingKpiRow() {
   // sales are the sum of debits on active sales_invoice ledger entries —
   // grouped by currency, never blended.
   const salesTodayByCurrency = byCurrency(
-    ledgerEntries.filter((e) => e.status === "active" && e.date === today && e.type === "sales_invoice"),
+    ledgerEntries.filter(
+      (e) => e.status === "active" && e.date === today && e.type === "sales_invoice",
+    ),
     (e) => e.debit,
     (e) => e.currency,
   );

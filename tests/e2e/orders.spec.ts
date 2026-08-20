@@ -9,13 +9,19 @@ let token = "";
 async function api(path: string, opts: RequestInit = {}) {
   if (!token) {
     const r = await fetch(`${API}/auth/login`, {
-      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(AUTH),
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(AUTH),
     });
     token = (await r.json()).accessToken;
   }
   const res = await fetch(path.startsWith("http") ? path : `${API}${path}`, {
     ...opts,
-    headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}`, ...opts.headers },
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+      ...opts.headers,
+    },
   });
   return { status: res.status, data: await res.json().catch(() => null) };
 }
@@ -24,10 +30,15 @@ test.describe("طلبات العملاء", () => {
   let orderId = "";
 
   test("create order → 201", async () => {
-    const { status, data } = await api("/orders", { method: "POST", body: JSON.stringify({
-      customerNameSnapshot: "زبون اختبار", date: "2026-08-12", currency: "SYP",
-      items: [{ fabricName: "جاكار", colorName: "أحمر", requestedKg: 15 }],
-    })});
+    const { status, data } = await api("/orders", {
+      method: "POST",
+      body: JSON.stringify({
+        customerNameSnapshot: "زبون اختبار",
+        date: "2026-08-12",
+        currency: "SYP",
+        items: [{ fabricName: "جاكار", colorName: "أحمر", requestedKg: 15 }],
+      }),
+    });
     expect(status).toBe(201);
     expect(data.code).toMatch(/^ORD-/);
     expect(data.status).toBe("open");
@@ -50,7 +61,8 @@ test.describe("طلبات العملاء", () => {
 
   test("update order notes → 200", async () => {
     const { status } = await api(`/orders/${orderId}`, {
-      method: "PUT", body: JSON.stringify({ notes: "ملاحظة اختبار" }),
+      method: "PUT",
+      body: JSON.stringify({ notes: "ملاحظة اختبار" }),
     });
     expect(status).toBe(200);
   });
@@ -68,12 +80,18 @@ test.describe("طلبات العملاء", () => {
 
   test("fulfill without invoiceId → 400", async () => {
     // create a new order
-    const { data: ord } = await api("/orders", { method: "POST", body: JSON.stringify({
-      customerNameSnapshot: "اختبار fulfill", date: "2026-08-12", currency: "SYP",
-      items: [{ fabricName: "قطن", colorName: "أبيض", requestedKg: 5 }],
-    })});
+    const { data: ord } = await api("/orders", {
+      method: "POST",
+      body: JSON.stringify({
+        customerNameSnapshot: "اختبار fulfill",
+        date: "2026-08-12",
+        currency: "SYP",
+        items: [{ fabricName: "قطن", colorName: "أبيض", requestedKg: 5 }],
+      }),
+    });
     const { status } = await api(`/orders/${ord.id}/fulfill`, {
-      method: "POST", body: JSON.stringify({}),
+      method: "POST",
+      body: JSON.stringify({}),
     });
     expect(status).toBe(400);
     // cleanup

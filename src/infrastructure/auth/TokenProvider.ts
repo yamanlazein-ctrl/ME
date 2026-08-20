@@ -23,8 +23,7 @@ export function createTokenProvider(): TokenProvider {
           refreshToken,
         });
         localStorage.setItem(TOKEN_KEY, res.accessToken);
-        if (res.refreshToken)
-          localStorage.setItem(REFRESH_KEY, res.refreshToken);
+        if (res.refreshToken) localStorage.setItem(REFRESH_KEY, res.refreshToken);
         return res.accessToken;
       } catch {
         localStorage.removeItem(TOKEN_KEY);
@@ -35,10 +34,7 @@ export function createTokenProvider(): TokenProvider {
   };
 }
 
-export function persistTokens(
-  accessToken: string,
-  refreshToken?: string,
-): void {
+export function persistTokens(accessToken: string, refreshToken?: string): void {
   if (typeof window === "undefined") return;
   try {
     localStorage.setItem(TOKEN_KEY, accessToken);

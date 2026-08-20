@@ -5,7 +5,6 @@ import { useCashboxState } from "@/presentation/hooks/useCashbox";
 import { useOrdersList } from "@/presentation/hooks/useOrders";
 import { formatNumber, formatMoney, formatQuantity } from "@/shared/utils/formatNumber";
 
-
 export function HeroSalesCard() {
   const { data } = useDashboard();
   const { data: cashbox } = useCashboxState();
@@ -113,9 +112,7 @@ export function HeroSalesCard() {
                 مباشر
               </div>
             ) : (
-              <div
-                className="inline-flex items-center gap-1.5 rounded-full border border-muted-foreground/30 bg-muted/20 px-2 py-0.5 text-[10px] font-semibold text-muted-foreground"
-              >
+              <div className="inline-flex items-center gap-1.5 rounded-full border border-muted-foreground/30 bg-muted/20 px-2 py-0.5 text-[10px] font-semibold text-muted-foreground">
                 <span className="inline-block h-1.5 w-1.5 rounded-full bg-muted-foreground" />
                 الجلسة غير مفتوحة
               </div>

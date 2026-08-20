@@ -43,7 +43,6 @@ import { ConfirmBulkAction } from "@/components/common/ConfirmBulkAction";
 import { Checkbox } from "@/components/ui/checkbox";
 import { formatNumber, formatMoney, formatQuantity } from "@/shared/utils/formatNumber";
 
-
 const _nextFormId = 0;
 function toMockPatch(patch: Record<string, unknown>): Record<string, unknown> {
   const out: Record<string, unknown> = {};
@@ -301,7 +300,10 @@ export function PartyListPage({
             <tbody className="divide-y divide-border">
               {filtered.length === 0 && (
                 <tr>
-                  <td colSpan={selectMode ? 11 : 10} className="px-4 py-16 text-center text-xs text-muted-foreground">
+                  <td
+                    colSpan={selectMode ? 11 : 10}
+                    className="px-4 py-16 text-center text-xs text-muted-foreground"
+                  >
                     لا نتائج مطابقة.
                   </td>
                 </tr>
@@ -370,8 +372,7 @@ export function PartyListPage({
                             />
                           </div>
                           <div className="text-[10px] tabular-nums text-muted-foreground">
-                            {formatMoney(s.creditUsed)} /{" "}
-                            {formatMoney(s.creditLimit)}
+                            {formatMoney(s.creditUsed)} / {formatMoney(s.creditLimit)}
                           </div>
                         </div>
                       ) : (

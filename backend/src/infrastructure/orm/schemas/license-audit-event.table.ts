@@ -1,12 +1,4 @@
-import {
-  pgTable,
-  bigserial,
-  uuid,
-  varchar,
-  timestamp,
-  jsonb,
-  index,
-} from "drizzle-orm/pg-core";
+import { pgTable, bigserial, uuid, varchar, timestamp, jsonb, index } from "drizzle-orm/pg-core";
 import { tenants } from "./tenant.table.js";
 import { licenses } from "./license.table.js";
 

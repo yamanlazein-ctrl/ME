@@ -9,7 +9,6 @@ import { colorById, fabricById, rollById } from "@/presentation/hooks/useInvento
 import type { PrintJobDTO } from "@/application/ports/IPrintJobRepository";
 import { formatNumber, formatMoney, formatQuantity } from "@/shared/utils/formatNumber";
 
-
 const statusLabel = (j: PrintJobDTO) => (j.status === "received" ? "مستلم" : "مرسل إلى المطبعة");
 
 export function PrintJobDocument({ job }: { job: PrintJobDTO }) {

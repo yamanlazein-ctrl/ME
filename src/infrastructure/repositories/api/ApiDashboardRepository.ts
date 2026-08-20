@@ -33,7 +33,7 @@ export function mapDashboardResponse(raw: BackendDashboardResponse): DashboardDa
     // but the cashbox always carries openingBalance + openingDate
     // which serve as the authoritative session indicator.
     session: {
-      open: !!(raw.cashbox?.openingDate),
+      open: !!raw.cashbox?.openingDate,
       openedAt: raw.cashbox?.openingDate ?? "",
     },
     cashBalance: {

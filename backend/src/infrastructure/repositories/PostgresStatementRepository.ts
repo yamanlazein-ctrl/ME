@@ -156,7 +156,7 @@ export class PostgresStatementRepository implements IStatementRepository {
           row.description ??
           (row.referenceNumber
             ? `${TYPE_LABEL[row.type] ?? row.type} ${row.referenceNumber}`
-            : TYPE_LABEL[row.type] ?? row.type),
+            : (TYPE_LABEL[row.type] ?? row.type)),
         debit: Math.round(debit),
         credit: Math.round(credit),
         runningBalance: Math.round(running),
@@ -308,9 +308,7 @@ export class PostgresStatementRepository implements IStatementRepository {
       .innerJoin(colors, eq(colors.id, invoiceLines.colorId))
       .innerJoin(rolls, eq(rolls.id, invoiceLines.rollId))
       .innerJoin(invoices, eq(invoices.id, invoiceLines.invoiceId))
-      .where(
-        and(inArray(invoiceLines.invoiceId, invoiceIds), eq(invoices.tenantId, ctx.tenantId)),
-      );
+      .where(and(inArray(invoiceLines.invoiceId, invoiceIds), eq(invoices.tenantId, ctx.tenantId)));
 
     for (const r of rows) {
       const qty = Number(r.quantityKg ?? 0);

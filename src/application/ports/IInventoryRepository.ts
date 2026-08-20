@@ -26,7 +26,10 @@ export interface IInventoryRepository {
   updateFabric(
     id: UUID,
     patch: Partial<
-      Omit<import("@/domain/entities/Fabric").FabricData, "id" | "tenantId" | "createdAt" | "createdBy">
+      Omit<
+        import("@/domain/entities/Fabric").FabricData,
+        "id" | "tenantId" | "createdAt" | "createdBy"
+      >
     >,
     ctx: TenantContext,
   ): Promise<import("@/domain/entities/Fabric").Fabric>;
@@ -48,7 +51,10 @@ export interface IInventoryRepository {
   updateColor(
     id: UUID,
     patch: Partial<
-      Omit<import("@/domain/entities/Color").ColorData, "id" | "tenantId" | "fabricId" | "createdAt">
+      Omit<
+        import("@/domain/entities/Color").ColorData,
+        "id" | "tenantId" | "fabricId" | "createdAt"
+      >
     >,
     ctx: TenantContext,
   ): Promise<import("@/domain/entities/Color").Color>;
@@ -71,9 +77,7 @@ export interface IInventoryRepository {
 
   updateRoll(
     id: UUID,
-    patch: Partial<
-      Omit<RollData, "id" | "tenantId" | "colorId" | "createdAt" | "version">
-    >,
+    patch: Partial<Omit<RollData, "id" | "tenantId" | "colorId" | "createdAt" | "version">>,
     ctx: TenantContext,
   ): Promise<Roll>;
 

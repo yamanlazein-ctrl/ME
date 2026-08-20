@@ -16,6 +16,6 @@ export function logAuditError(error: unknown, context: AuditErrorContext): void 
       tenantId: context.tenantId,
       error: error instanceof Error ? error.message : String(error),
     },
-    "AUDIT_LOGGING_FAILED"
+    "AUDIT_LOGGING_FAILED",
   );
 }

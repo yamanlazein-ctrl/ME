@@ -21,20 +21,8 @@ export function InvoicePrintDocument({ invoice, totalPages, pageNumber }: Props)
   // here, so we map "return" to SaleInvoicePrint (the customer-facing
   // shape — return-to-supplier flows use the Return entity's own template).
   if (invoice.type === "sale") {
-    return (
-      <SaleInvoicePrint
-        invoice={invoice}
-        totalPages={totalPages}
-        pageNumber={pageNumber}
-      />
-    );
+    return <SaleInvoicePrint invoice={invoice} totalPages={totalPages} pageNumber={pageNumber} />;
   }
   // entry + return
-  return (
-    <EntryInvoicePrint
-      invoice={invoice}
-      totalPages={totalPages}
-      pageNumber={pageNumber}
-    />
-  );
+  return <EntryInvoicePrint invoice={invoice} totalPages={totalPages} pageNumber={pageNumber} />;
 }

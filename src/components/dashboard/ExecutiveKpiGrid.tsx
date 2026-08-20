@@ -16,7 +16,6 @@ import { DualCurrency } from "@/components/common/DualCurrency";
 import { useReturnsList } from "@/presentation/hooks/useReturns";
 import { formatNumber, formatMoney, formatQuantity } from "@/shared/utils/formatNumber";
 
-
 function formatUnpaidCurrencies(
   byCurrency: Record<string, { count: number; totalDue: number }> = {},
 ): string {

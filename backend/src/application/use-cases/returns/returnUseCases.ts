@@ -27,7 +27,14 @@ export async function createReturnUseCase(
         entityId: ret.id,
         detail: `مرتجع ${ret.number}`,
       })
-      .catch((err: unknown) => logAuditError(err, { module: "returns", action: "create", entityId: ret.id, tenantId: ctx.tenantId }));
+      .catch((err: unknown) =>
+        logAuditError(err, {
+          module: "returns",
+          action: "create",
+          entityId: ret.id,
+          tenantId: ctx.tenantId,
+        }),
+      );
     return { ok: true, data: ret };
   } catch (e) {
     const msg = e instanceof Error ? e.message : "فشل إنشاء المرتجع";
@@ -54,7 +61,14 @@ export async function cancelReturnUseCase(
         entityId: ret.id,
         detail: `إلغاء مرتجع ${ret.number}`,
       })
-      .catch((err: unknown) => logAuditError(err, { module: "returns", action: "cancel", entityId: ret.id, tenantId: ctx.tenantId }));
+      .catch((err: unknown) =>
+        logAuditError(err, {
+          module: "returns",
+          action: "cancel",
+          entityId: ret.id,
+          tenantId: ctx.tenantId,
+        }),
+      );
     return { ok: true, data: ret };
   } catch (e) {
     const msg = e instanceof Error ? e.message : "فشل إلغاء المرتجع";

@@ -224,9 +224,7 @@ export class PostgresOrderRepository implements IOrderRepository {
       // fulfillment invoice, so drop them back to their natural status
       // (in_stock if any kg remain, exhausted otherwise).
       const items = await tx.select().from(orderItems).where(eq(orderItems.orderId, id));
-      const rollIds = items
-        .map((it) => it.rollId)
-        .filter((r): r is string => Boolean(r));
+      const rollIds = items.map((it) => it.rollId).filter((r): r is string => Boolean(r));
       if (rollIds.length > 0) {
         const reserved = await tx
           .select({ id: rolls.id, remainingKg: rolls.remainingKg })
@@ -276,9 +274,7 @@ export class PostgresOrderRepository implements IOrderRepository {
       // Release reservations: any roll pinned to this order's items and still
       // marked `reserved` goes back to `in_stock`.
       const items = await tx.select().from(orderItems).where(eq(orderItems.orderId, id));
-      const rollIds = items
-        .map((it) => it.rollId)
-        .filter((r): r is string => Boolean(r));
+      const rollIds = items.map((it) => it.rollId).filter((r): r is string => Boolean(r));
       if (rollIds.length > 0) {
         await tx
           .update(rolls)

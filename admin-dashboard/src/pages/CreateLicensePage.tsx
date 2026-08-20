@@ -116,7 +116,9 @@ export function CreateLicensePage({ onClose }: CreateLicensePageProps) {
           </div>
 
           <div>
-            <label className="block text-sm text-zinc-300 mb-2">الميزات (الأساس من الخطة + تخصيص)</label>
+            <label className="block text-sm text-zinc-300 mb-2">
+              الميزات (الأساس من الخطة + تخصيص)
+            </label>
             <div className="grid grid-cols-2 gap-2">
               {FEATURES.map((f) => (
                 <button

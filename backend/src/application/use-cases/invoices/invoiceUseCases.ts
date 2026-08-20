@@ -48,7 +48,11 @@ function invoiceErrorMessage(e: unknown): string {
   const hasCode = (c: string) => hasErrorCode(errs, c);
 
   // 23505 unique_violation (invoices.tenant_id, type, number)
-  if (hasCode("23505") || combined.includes("duplicate") || combined.includes("idx_invoices_tenant_type_number")) {
+  if (
+    hasCode("23505") ||
+    combined.includes("duplicate") ||
+    combined.includes("idx_invoices_tenant_type_number")
+  ) {
     return "رقم الفاتورة مكرر — فاتورة بهذا الرقم موجودة بالفعل. استخدم رقماً جديداً ثم أعد الحفظ.";
   }
   // 23503 foreign_key_violation
@@ -93,7 +97,14 @@ export async function createInvoiceUseCase(
         entityId: invoice.id,
         detail: `فاتورة ${invoice.number}`,
       })
-      .catch((err: unknown) => logAuditError(err, { module: "invoices", action: "create", entityId: invoice.id, tenantId: ctx.tenantId }));
+      .catch((err: unknown) =>
+        logAuditError(err, {
+          module: "invoices",
+          action: "create",
+          entityId: invoice.id,
+          tenantId: ctx.tenantId,
+        }),
+      );
     return { ok: true, data: invoice };
   } catch (e) {
     // Full technical details logged for diagnosis; only a clear Arabic
@@ -122,7 +133,14 @@ export async function cancelInvoiceUseCase(
         entityId: invoice.id,
         detail: `إلغاء فاتورة ${invoice.number}`,
       })
-      .catch((err: unknown) => logAuditError(err, { module: "invoices", action: "cancel", entityId: invoice.id, tenantId: ctx.tenantId }));
+      .catch((err: unknown) =>
+        logAuditError(err, {
+          module: "invoices",
+          action: "cancel",
+          entityId: invoice.id,
+          tenantId: ctx.tenantId,
+        }),
+      );
     return { ok: true, data: invoice };
   } catch (e) {
     console.error("[cancelInvoiceUseCase] failed:", e);

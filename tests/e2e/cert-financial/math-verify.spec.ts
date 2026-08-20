@@ -27,7 +27,10 @@ test.describe("Cert Financial — Math Verification", () => {
     await loginIfNeeded(page);
   });
 
-  test("Formula 1: Stock — after 3 purchase + 1 sale, remainingKg is correct", async ({ page, request }) => {
+  test("Formula 1: Stock — after 3 purchase + 1 sale, remainingKg is correct", async ({
+    page,
+    request,
+  }) => {
     test.setTimeout(90000);
 
     const token = await getAdminToken(request);
@@ -35,7 +38,11 @@ test.describe("Cert Financial — Math Verification", () => {
 
     const supplier = await createSupplier(request);
     const customer = await createCustomer(request);
-    const roll = await createRoll(request, { supplierId: supplier.id, remainingKg: 100, initialKg: 100 });
+    const roll = await createRoll(request, {
+      supplierId: supplier.id,
+      remainingKg: 100,
+      initialKg: 100,
+    });
 
     const purchaseQty = 30;
     const saleQty = 5;
@@ -44,7 +51,16 @@ test.describe("Cert Financial — Math Verification", () => {
       type: "entry",
       partyId: supplier.id,
       partyType: "supplier",
-      lines: [{ fabricId: "fab-1", colorId: "col-1", rollId: roll.id, quantityKg: purchaseQty, pricePerKg: 12000, discountAmount: 0 }],
+      lines: [
+        {
+          fabricId: "fab-1",
+          colorId: "col-1",
+          rollId: roll.id,
+          quantityKg: purchaseQty,
+          pricePerKg: 12000,
+          discountAmount: 0,
+        },
+      ],
       paid: 0,
     });
 
@@ -52,18 +68,30 @@ test.describe("Cert Financial — Math Verification", () => {
       type: "sale",
       partyId: customer.id,
       partyType: "customer",
-      lines: [{ fabricId: "fab-1", colorId: "col-1", rollId: roll.id, quantityKg: saleQty, pricePerKg: 12000, discountAmount: 0 }],
+      lines: [
+        {
+          fabricId: "fab-1",
+          colorId: "col-1",
+          rollId: roll.id,
+          quantityKg: saleQty,
+          pricePerKg: 12000,
+          discountAmount: 0,
+        },
+      ],
       paid: 0,
     });
 
     const res = await fetch(`${BACKEND}/inventory/rolls/${roll.id}`, { headers });
-    const rollData = await res.json() as RollData;
+    const rollData = (await res.json()) as RollData;
 
     const expected = 100 - saleQty;
     expect(rollData.remainingKg).toBe(expected);
   });
 
-  test("Formula 2: Party Balance — customer ledger reflects sale + receipt", async ({ page, request }) => {
+  test("Formula 2: Party Balance — customer ledger reflects sale + receipt", async ({
+    page,
+    request,
+  }) => {
     test.setTimeout(90000);
 
     const token = await getAdminToken(request);
@@ -75,7 +103,16 @@ test.describe("Cert Financial — Math Verification", () => {
       type: "sale",
       partyId: customer.id,
       partyType: "customer",
-      lines: [{ fabricId: "fab-1", colorId: "col-1", rollId: "rol-1", quantityKg: 2, pricePerKg: 12000, discountAmount: 0 }],
+      lines: [
+        {
+          fabricId: "fab-1",
+          colorId: "col-1",
+          rollId: "rol-1",
+          quantityKg: 2,
+          pricePerKg: 12000,
+          discountAmount: 0,
+        },
+      ],
       paid: 0,
     });
 
@@ -93,8 +130,10 @@ test.describe("Cert Financial — Math Verification", () => {
       }),
     });
 
-    const balRes = await fetch(`${BACKEND}/ledger/balance/${customer.id}?currency=SYP`, { headers });
-    const balance = await balRes.json() as { balance: number };
+    const balRes = await fetch(`${BACKEND}/ledger/balance/${customer.id}?currency=SYP`, {
+      headers,
+    });
+    const balance = (await balRes.json()) as { balance: number };
 
     expect(balance.balance).toBe(0);
   });
@@ -106,7 +145,7 @@ test.describe("Cert Financial — Math Verification", () => {
     const headers = { Authorization: `Bearer ${token}` };
 
     const cashboxRes = await fetch(`${BACKEND}/cashbox/state`, { headers });
-    const cashbox = await cashboxRes.json() as { balance: number; openingBalance: number };
+    const cashbox = (await cashboxRes.json()) as { balance: number; openingBalance: number };
 
     expect(typeof cashbox.balance).toBe("number");
     expect(isNaN(cashbox.balance)).toBe(false);

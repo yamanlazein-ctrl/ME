@@ -34,7 +34,6 @@ import {
 } from "@/presentation/hooks/useCurrency";
 import { formatNumber, formatMoney, formatQuantity } from "@/shared/utils/formatNumber";
 
-
 export const Route = createFileRoute("/reports/")({ component: ReportsPage });
 
 // Full dataset for accurate aggregation — reports must never be limited by
@@ -67,10 +66,7 @@ function ReportsPage() {
     () => invoices.filter((i) => i.status !== "cancelled"),
     [invoices],
   );
-  const activeReturns = useMemo(
-    () => returns.filter((r) => r.status !== "cancelled"),
-    [returns],
-  );
+  const activeReturns = useMemo(() => returns.filter((r) => r.status !== "cancelled"), [returns]);
   const activeExpenses = useMemo(
     () => expenses.filter((e) => e.status !== "cancelled"),
     [expenses],
@@ -91,10 +87,12 @@ function ReportsPage() {
   // currency instead — the true, unconverted amount for each currency —
   // and render via formatCurrencyBreakdown, which shows each currency's
   // own figure ("500,000 ل.س + 200 $") and never combines them.
-  const salesInvoices = activeInvoices.filter(
-    (i) => i.type === "sale" && inRange(i.date),
+  const salesInvoices = activeInvoices.filter((i) => i.type === "sale" && inRange(i.date));
+  const totalSalesByCurrency = groupAmountsByCurrency(
+    salesInvoices,
+    invoiceTotal,
+    (i) => i.currency,
   );
-  const totalSalesByCurrency = groupAmountsByCurrency(salesInvoices, invoiceTotal, (i) => i.currency);
   const totalReceivedByCurrency = groupAmountsByCurrency(
     salesInvoices,
     (i) => paidByInvoice(i.id),
@@ -106,22 +104,20 @@ function ReportsPage() {
     (i) => i.currency,
   );
 
-  const purchaseInvoices = activeInvoices.filter(
-    (i) => i.type === "entry" && inRange(i.date),
+  const purchaseInvoices = activeInvoices.filter((i) => i.type === "entry" && inRange(i.date));
+  const totalPurchasesByCurrency = groupAmountsByCurrency(
+    purchaseInvoices,
+    invoiceTotal,
+    (i) => i.currency,
   );
-  const totalPurchasesByCurrency = groupAmountsByCurrency(purchaseInvoices, invoiceTotal, (i) => i.currency);
   const payablesByCurrency = groupAmountsByCurrency(
     purchaseInvoices,
     (i) => Math.max(0, invoiceTotal(i) - paidByInvoice(i.id)),
     (i) => i.currency,
   );
 
-  const salesReturns = activeReturns.filter(
-    (r) => r.kind === "sale" && inRange(r.date),
-  );
-  const entryReturns = activeReturns.filter(
-    (r) => r.kind === "entry" && inRange(r.date),
-  );
+  const salesReturns = activeReturns.filter((r) => r.kind === "sale" && inRange(r.date));
+  const entryReturns = activeReturns.filter((r) => r.kind === "entry" && inRange(r.date));
   const returnAmountOf = (r: (typeof salesReturns)[number]) =>
     r.lines.reduce((sum, l) => sum + l.quantityKg * l.pricePerKg, 0);
   const totalSalesReturnsByCurrency = groupAmountsByCurrency(
@@ -135,7 +131,11 @@ function ReportsPage() {
     (r) => r.currency || "SYP",
   );
 
-  const netRevenueByCurrency = addCurrencyBreakdowns(totalSalesByCurrency, totalSalesReturnsByCurrency, -1);
+  const netRevenueByCurrency = addCurrencyBreakdowns(
+    totalSalesByCurrency,
+    totalSalesReturnsByCurrency,
+    -1,
+  );
 
   const periodExpenses = activeExpenses.filter((e) => inRange(e.date));
   const totalExpensesByCurrency = groupAmountsByCurrency(
@@ -155,10 +155,7 @@ function ReportsPage() {
       .filter((c) => c.fabricId === f.id)
       .reduce(
         (sum, c) =>
-          sum +
-          rolls
-            .filter((r) => r.colorId === c.id)
-            .reduce((s, r) => s + r.remainingKg, 0),
+          sum + rolls.filter((r) => r.colorId === c.id).reduce((s, r) => s + r.remainingKg, 0),
         0,
       );
     return kg <= (f.minStockKg ?? 0);
@@ -244,12 +241,7 @@ function ReportsPage() {
           byCurrency={inventoryValueByCurrency}
           tone="info"
         />
-        <StatTile
-          icon={Users}
-          label="العملاء النشطون"
-          value={customers.length}
-          isCount
-        />
+        <StatTile icon={Users} label="العملاء النشطون" value={customers.length} isCount />
       </div>
 
       <div className="grid gap-3 md:grid-cols-2">
@@ -340,16 +332,8 @@ function ReportsPage() {
       </div>
 
       <div className="grid gap-3 md:grid-cols-2">
-        <InfoCard
-          icon={Package}
-          label="كمية المخزون"
-          value={`${formatMoney(totalKg)} كغ`}
-        />
-        <InfoCard
-          icon={Package}
-          label="عدد الصبغات"
-          value={String(rolls.length)}
-        />
+        <InfoCard icon={Package} label="كمية المخزون" value={`${formatMoney(totalKg)} كغ`} />
+        <InfoCard icon={Package} label="عدد الصبغات" value={String(rolls.length)} />
       </div>
 
       <div className="grid grid-cols-3 gap-2 md:grid-cols-6">
@@ -415,14 +399,8 @@ function StatTile({
         <span className="text-[11px] font-semibold">{label}</span>
       </div>
       <div className="mt-1.5 text-lg font-bold tabular-nums">
-        {isCount
-          ? value
-          : byCurrency
-            ? formatCurrencyBreakdown(byCurrency)
-            : formatSYP(value ?? 0)}
-        {!isCount && !byCurrency && (
-          <DualCurrency syp={value} className="text-[10px] mt-0.5" />
-        )}
+        {isCount ? value : byCurrency ? formatCurrencyBreakdown(byCurrency) : formatSYP(value ?? 0)}
+        {!isCount && !byCurrency && <DualCurrency syp={value} className="text-[10px] mt-0.5" />}
       </div>
     </div>
   );

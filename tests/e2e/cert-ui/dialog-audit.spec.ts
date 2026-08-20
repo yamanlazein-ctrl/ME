@@ -12,21 +12,56 @@ const DIALOG_TESTS: {
   skipReason?: string;
 }[] = [
   // Inventory dialogs
-  { route: "/inventory", description: "Add Fabric dialog", triggerSelector: "button:has-text('إضافة قماش')", dialogTitle: "قماش" },
-  { route: "/inventory", description: "Add Color dialog", triggerSelector: "button:has-text('إضافة لون')", dialogTitle: "لون" },
+  {
+    route: "/inventory",
+    description: "Add Fabric dialog",
+    triggerSelector: "button:has-text('إضافة قماش')",
+    dialogTitle: "قماش",
+  },
+  {
+    route: "/inventory",
+    description: "Add Color dialog",
+    triggerSelector: "button:has-text('إضافة لون')",
+    dialogTitle: "لون",
+  },
 
   // Customer dialogs
-  { route: "/customers", description: "Add Customer dialog", triggerSelector: "button:has-text('عميل')", dialogTitle: "عميل" },
+  {
+    route: "/customers",
+    description: "Add Customer dialog",
+    triggerSelector: "button:has-text('عميل')",
+    dialogTitle: "عميل",
+  },
 
   // Supplier dialogs
-  { route: "/suppliers", description: "Add Supplier dialog", triggerSelector: "button:has-text('مورد')", dialogTitle: "مورد" },
+  {
+    route: "/suppliers",
+    description: "Add Supplier dialog",
+    triggerSelector: "button:has-text('مورد')",
+    dialogTitle: "مورد",
+  },
 
   // Cashbox dialogs
-  { route: "/cashbox", description: "Opening Balance dialog", triggerSelector: "button:has-text('رصيد')", dialogTitle: "رصيد" },
-  { route: "/cashbox", description: "Manual Movement dialog", triggerSelector: "button:has-text('حركة')", dialogTitle: "حركة" },
+  {
+    route: "/cashbox",
+    description: "Opening Balance dialog",
+    triggerSelector: "button:has-text('رصيد')",
+    dialogTitle: "رصيد",
+  },
+  {
+    route: "/cashbox",
+    description: "Manual Movement dialog",
+    triggerSelector: "button:has-text('حركة')",
+    dialogTitle: "حركة",
+  },
 
   // Cancel invoice (two-step dialog)
-  { route: "/invoices/INV-2863", description: "Cancel invoice step 1", triggerSelector: "button:has-text('إلغاء')", dialogTitle: "إلغاء" },
+  {
+    route: "/invoices/INV-2863",
+    description: "Cancel invoice step 1",
+    triggerSelector: "button:has-text('إلغاء')",
+    dialogTitle: "إلغاء",
+  },
 ];
 
 test.describe("Cert UI — Dialog Audit", () => {
@@ -59,11 +94,17 @@ test.describe("Cert UI — Dialog Audit", () => {
         expect(visible).toBe(true);
       }
 
-      const cancelBtn = page.locator("[role='dialog'] button:has-text('إلغاء'), [role='alertdialog'] button:has-text('إلغاء'), [role='alertdialog'] button:has-text('تراجع')").first();
+      const cancelBtn = page
+        .locator(
+          "[role='dialog'] button:has-text('إلغاء'), [role='alertdialog'] button:has-text('إلغاء'), [role='alertdialog'] button:has-text('تراجع')",
+        )
+        .first();
       if (await cancelBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
         await cancelBtn.click();
         await page.waitForTimeout(1000);
-        const stillOpen = await page.locator("[role='dialog'], [role='alertdialog']").isVisible()
+        const stillOpen = await page
+          .locator("[role='dialog'], [role='alertdialog']")
+          .isVisible()
           .catch(() => false);
         if (!stillOpen) {
           expect(stillOpen).toBe(false);
@@ -86,8 +127,16 @@ test.describe("Cert UI — Delete Confirm Dialogs", () => {
   const deleteTests = [
     { route: "/settings/units", trigger: "button:has-text('حذف')", description: "Delete Unit" },
     { route: "/settings/taxes", trigger: "button:has-text('حذف')", description: "Delete Tax" },
-    { route: "/settings/warehouses", trigger: "button:has-text('حذف')", description: "Delete Warehouse" },
-    { route: "/settings/payment-methods", trigger: "button:has-text('حذف')", description: "Delete Payment Method" },
+    {
+      route: "/settings/warehouses",
+      trigger: "button:has-text('حذف')",
+      description: "Delete Warehouse",
+    },
+    {
+      route: "/settings/payment-methods",
+      trigger: "button:has-text('حذف')",
+      description: "Delete Payment Method",
+    },
   ];
 
   for (const dt of deleteTests) {

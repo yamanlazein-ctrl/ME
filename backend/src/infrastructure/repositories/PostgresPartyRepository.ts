@@ -241,7 +241,11 @@ export class PostgresPartyRepository implements IPartyRepository {
       .select({ count: sql<number>`count(*)` })
       .from(invoices)
       .where(
-        and(eq(invoices.partyId, id), eq(invoices.tenantId, ctx.tenantId), eq(invoices.status, "active")),
+        and(
+          eq(invoices.partyId, id),
+          eq(invoices.tenantId, ctx.tenantId),
+          eq(invoices.status, "active"),
+        ),
       );
     if (Number(invCount?.count ?? 0) > 0) {
       throw new Error(`لا يمكن حذف ${kindLabel} لوجود فواتير مرتبطة به`);
@@ -251,7 +255,11 @@ export class PostgresPartyRepository implements IPartyRepository {
       .select({ count: sql<number>`count(*)` })
       .from(vouchers)
       .where(
-        and(eq(vouchers.partyId, id), eq(vouchers.tenantId, ctx.tenantId), eq(vouchers.status, "active")),
+        and(
+          eq(vouchers.partyId, id),
+          eq(vouchers.tenantId, ctx.tenantId),
+          eq(vouchers.status, "active"),
+        ),
       );
     if (Number(vchCount?.count ?? 0) > 0) {
       throw new Error(`لا يمكن حذف ${kindLabel} لوجود سندات قبض/صرف مرتبطة به`);

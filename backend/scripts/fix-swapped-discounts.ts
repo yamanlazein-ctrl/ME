@@ -8,8 +8,15 @@ import { invoiceLines } from "../src/infrastructure/orm/schemas/invoice-line.tab
 import { ledgerEntries } from "../src/infrastructure/orm/schemas/ledger-entry.table.js";
 
 async function main() {
-  const invRows = await db.select().from(invoices).where(eq(invoices.number, "INV-2026-0008")).limit(1);
-  if (invRows.length === 0) { console.log("NOT FOUND"); process.exit(0); }
+  const invRows = await db
+    .select()
+    .from(invoices)
+    .where(eq(invoices.number, "INV-2026-0008"))
+    .limit(1);
+  if (invRows.length === 0) {
+    console.log("NOT FOUND");
+    process.exit(0);
+  }
   const inv = invRows[0];
 
   const lines = await db.select().from(invoiceLines).where(eq(invoiceLines.invoiceId, inv.id));
@@ -24,12 +31,18 @@ async function main() {
     } else {
       continue;
     }
-    await db.update(invoiceLines).set({ discountAmount: correctDiscount }).where(eq(invoiceLines.id, l.id));
+    await db
+      .update(invoiceLines)
+      .set({ discountAmount: correctDiscount })
+      .where(eq(invoiceLines.id, l.id));
     console.log(`Updated line qty=${qty} price=${price} -> discount=${correctDiscount}`);
   }
 
   // Recalculate totals
-  const updatedLines = await db.select().from(invoiceLines).where(eq(invoiceLines.invoiceId, inv.id));
+  const updatedLines = await db
+    .select()
+    .from(invoiceLines)
+    .where(eq(invoiceLines.invoiceId, inv.id));
   let subtotal = 0;
   for (const l of updatedLines) {
     subtotal += Math.round(Number(l.quantityKg) * Number(l.pricePerKg) - Number(l.discountAmount));
@@ -39,11 +52,16 @@ async function main() {
   console.log(`Invoice updated: subtotal=${subtotal}, total=${total}`);
 
   // Update ledger
-  const ledgers = await db.select().from(ledgerEntries).where(and(
-    eq(ledgerEntries.referenceId, inv.id),
-    eq(ledgerEntries.referenceType, "purchase_invoice"),
-    eq(ledgerEntries.status, "active"),
-  ));
+  const ledgers = await db
+    .select()
+    .from(ledgerEntries)
+    .where(
+      and(
+        eq(ledgerEntries.referenceId, inv.id),
+        eq(ledgerEntries.referenceType, "purchase_invoice"),
+        eq(ledgerEntries.status, "active"),
+      ),
+    );
   for (const le of ledgers) {
     if (le.type === "purchase_invoice") {
       await db.update(ledgerEntries).set({ debit: total }).where(eq(ledgerEntries.id, le.id));
@@ -55,4 +73,7 @@ async function main() {
 
   process.exit(0);
 }
-main().catch((e) => { console.error("FATAL:", e); process.exit(1); });
+main().catch((e) => {
+  console.error("FATAL:", e);
+  process.exit(1);
+});

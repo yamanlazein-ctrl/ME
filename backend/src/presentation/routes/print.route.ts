@@ -73,14 +73,20 @@ export function registerPrintRoutes(
     }
   });
 
-  router.get("/printing/:id", auth, readGuard, validateUuidParam("id"), async (req: Request, res: Response) => {
-    const r = await uc.findPrintJobUseCase(printJobRepo, req.params.id as string, ctx(req));
-    if (!r.ok) {
-      return res.status(500).json({ code: "INTERNAL", message: r.error });
-    }
-    if (!r.data) {
-      return res.status(404).json({ code: "NOT_FOUND", message: "سند الطباعة غير موجود" });
-    }
-    res.json(r.data);
-  });
+  router.get(
+    "/printing/:id",
+    auth,
+    readGuard,
+    validateUuidParam("id"),
+    async (req: Request, res: Response) => {
+      const r = await uc.findPrintJobUseCase(printJobRepo, req.params.id as string, ctx(req));
+      if (!r.ok) {
+        return res.status(500).json({ code: "INTERNAL", message: r.error });
+      }
+      if (!r.data) {
+        return res.status(404).json({ code: "NOT_FOUND", message: "سند الطباعة غير موجود" });
+      }
+      res.json(r.data);
+    },
+  );
 }

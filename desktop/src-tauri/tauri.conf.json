@@ -35,8 +35,6 @@
         "language": ["ar-SA", "en-US"]
       }
     },
-    "icon": [
-      "icons/icon.png"
-    ]
+    "icon": ["icons/icon.png"]
   }
 }

@@ -86,9 +86,7 @@ export function RecentTransactionsList() {
                 <span className="font-bold tabular-nums">
                   {formatAmount(t.amount, t.currency as Currency)}
                 </span>
-                <div className="mt-0.5 text-[11px] text-muted-foreground text-start">
-                  {t.time}
-                </div>
+                <div className="mt-0.5 text-[11px] text-muted-foreground text-start">{t.time}</div>
               </div>
 
               <ChevronLeft className="h-4 w-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition" />

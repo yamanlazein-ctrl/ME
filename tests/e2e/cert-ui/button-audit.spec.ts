@@ -11,37 +11,101 @@ const BUTTON_AUDITS: {
   skipReason?: string;
 }[] = [
   // Inventory
-  { route: "/inventory", description: "Add Fabric button", buttonSelector: "button", expectedEffect: "dialog", expectedRouteOrText: "إضافة قماش" },
+  {
+    route: "/inventory",
+    description: "Add Fabric button",
+    buttonSelector: "button",
+    expectedEffect: "dialog",
+    expectedRouteOrText: "إضافة قماش",
+  },
 
   // Customers
-  { route: "/customers", description: "Add Customer button", buttonSelector: "button:has-text('عميل')", expectedEffect: "dialog", expectedRouteOrText: "بطاقة عميل" },
+  {
+    route: "/customers",
+    description: "Add Customer button",
+    buttonSelector: "button:has-text('عميل')",
+    expectedEffect: "dialog",
+    expectedRouteOrText: "بطاقة عميل",
+  },
 
   // Suppliers
-  { route: "/suppliers", description: "Add Supplier button", buttonSelector: "button:has-text('مورد')", expectedEffect: "dialog", expectedRouteOrText: "بطاقة مورد" },
+  {
+    route: "/suppliers",
+    description: "Add Supplier button",
+    buttonSelector: "button:has-text('مورد')",
+    expectedEffect: "dialog",
+    expectedRouteOrText: "بطاقة مورد",
+  },
 
   // Invoices entry
-  { route: "/invoices", description: "Entry New link", buttonSelector: "a:has-text('فاتورة دخول')", expectedEffect: "navigate", expectedRouteOrText: "فاتورة دخول" },
+  {
+    route: "/invoices",
+    description: "Entry New link",
+    buttonSelector: "a:has-text('فاتورة دخول')",
+    expectedEffect: "navigate",
+    expectedRouteOrText: "فاتورة دخول",
+  },
 
   // Invoice detail — print
-  { route: "/invoices/INV-2863", description: "Print button", buttonSelector: "button:has-text('طباعة')", expectedEffect: "action" },
+  {
+    route: "/invoices/INV-2863",
+    description: "Print button",
+    buttonSelector: "button:has-text('طباعة')",
+    expectedEffect: "action",
+  },
 
   // Expenses
-  { route: "/expenses", description: "New expense button", buttonSelector: "a:has-text('مصروف جديد')", expectedEffect: "navigate", expectedRouteOrText: "مصروف جديد" },
+  {
+    route: "/expenses",
+    description: "New expense button",
+    buttonSelector: "a:has-text('مصروف جديد')",
+    expectedEffect: "navigate",
+    expectedRouteOrText: "مصروف جديد",
+  },
 
   // Orders
-  { route: "/orders", description: "New order button", buttonSelector: "a:has-text('طلب جديد')", expectedEffect: "navigate", expectedRouteOrText: "طلب جديد" },
+  {
+    route: "/orders",
+    description: "New order button",
+    buttonSelector: "a:has-text('طلب جديد')",
+    expectedEffect: "navigate",
+    expectedRouteOrText: "طلب جديد",
+  },
 
   // Payments
-  { route: "/payments", description: "New payment button", buttonSelector: "a:has-text('سند صرف جديد')", expectedEffect: "navigate", expectedRouteOrText: "سند صرف" },
+  {
+    route: "/payments",
+    description: "New payment button",
+    buttonSelector: "a:has-text('سند صرف جديد')",
+    expectedEffect: "navigate",
+    expectedRouteOrText: "سند صرف",
+  },
 
   // Receipts
-  { route: "/receipts", description: "New receipt button", buttonSelector: "a:has-text('سند قبض جديد')", expectedEffect: "navigate", expectedRouteOrText: "سند قبض" },
+  {
+    route: "/receipts",
+    description: "New receipt button",
+    buttonSelector: "a:has-text('سند قبض جديد')",
+    expectedEffect: "navigate",
+    expectedRouteOrText: "سند قبض",
+  },
 
   // Returns
-  { route: "/returns", description: "New Sale Return button", buttonSelector: "a:has-text('مرتجع بيع')", expectedEffect: "navigate", expectedRouteOrText: "مرتجع بيع" },
+  {
+    route: "/returns",
+    description: "New Sale Return button",
+    buttonSelector: "a:has-text('مرتجع بيع')",
+    expectedEffect: "navigate",
+    expectedRouteOrText: "مرتجع بيع",
+  },
 
   // Settings
-  { route: "/settings/company", description: "Company save", buttonSelector: "button[type='submit']", expectedEffect: "action" },
+  {
+    route: "/settings/company",
+    description: "Company save",
+    buttonSelector: "button[type='submit']",
+    expectedEffect: "action",
+  },
 ];
 
 test.describe("Cert UI — Button Audit", () => {
@@ -74,9 +138,13 @@ test.describe("Cert UI — Button Audit", () => {
       } else if (audit.expectedEffect === "dialog") {
         await btn.click();
         await page.waitForTimeout(1000);
-        const dialogVisible = await page.locator("[role='dialog']").isVisible()
+        const dialogVisible = await page
+          .locator("[role='dialog']")
+          .isVisible()
           .catch(() => false);
-        const alertDialogVisible = await page.locator("[role='alertdialog']").isVisible()
+        const alertDialogVisible = await page
+          .locator("[role='alertdialog']")
+          .isVisible()
           .catch(() => false);
         expect(dialogVisible || alertDialogVisible).toBe(true);
       } else if (audit.expectedEffect === "action") {
@@ -102,7 +170,9 @@ test.describe("Cert UI — Ledger Buttons", () => {
     let printCalled = false;
     await page.evaluate(() => {
       const orig = window.print;
-      window.print = () => { (window as any).__printCalled = true; };
+      window.print = () => {
+        (window as any).__printCalled = true;
+      };
     });
 
     const printBtn = page.locator("button:has-text('طباعة')").first();
@@ -121,7 +191,8 @@ test.describe("Cert UI — Ledger Buttons", () => {
     await page.waitForTimeout(3000);
     const exportBtn = page.locator("button:has-text('تصدير')");
     const csvBtn = page.locator("button:has-text('CSV')");
-    const exists = (await exportBtn.isVisible().catch(() => false)) ||
+    const exists =
+      (await exportBtn.isVisible().catch(() => false)) ||
       (await csvBtn.isVisible().catch(() => false));
     expect(exists).toBe(true);
   });
@@ -133,9 +204,16 @@ test.describe("Cert UI — Reports Buttons", () => {
   });
 
   const REPORT_SLUGS = [
-    "net-sales", "purchases", "cashbox", "inventory-value",
-    "receivables", "payables", "sales-returns", "expenses",
-    "top-fabrics", "top-customers",
+    "net-sales",
+    "purchases",
+    "cashbox",
+    "inventory-value",
+    "receivables",
+    "payables",
+    "sales-returns",
+    "expenses",
+    "top-fabrics",
+    "top-customers",
   ];
 
   for (const slug of REPORT_SLUGS) {

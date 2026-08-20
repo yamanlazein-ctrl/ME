@@ -24,7 +24,10 @@ test.describe("Cert Print — Automated Print Audit", () => {
     await page.waitForTimeout(3000);
 
     const printRoot = page.locator("[data-print-root]");
-    const hasPrintRoot = await printRoot.first().isVisible({ timeout: 5000 }).catch(() => false);
+    const hasPrintRoot = await printRoot
+      .first()
+      .isVisible({ timeout: 5000 })
+      .catch(() => false);
     expect(hasPrintRoot).toBe(true);
   });
 
@@ -50,7 +53,10 @@ test.describe("Cert Print — Automated Print Audit", () => {
     await page.waitForTimeout(3000);
 
     const printRoot = page.locator("[data-print-root]");
-    const hasPrintRoot = await printRoot.first().isVisible({ timeout: 5000 }).catch(() => false);
+    const hasPrintRoot = await printRoot
+      .first()
+      .isVisible({ timeout: 5000 })
+      .catch(() => false);
     expect(hasPrintRoot).toBe(true);
   });
 
@@ -61,7 +67,10 @@ test.describe("Cert Print — Automated Print Audit", () => {
     await page.waitForTimeout(3000);
 
     const footer = page.locator("[data-print-footer]");
-    const hasFooter = await footer.first().isVisible({ timeout: 5000 }).catch(() => false);
+    const hasFooter = await footer
+      .first()
+      .isVisible({ timeout: 5000 })
+      .catch(() => false);
 
     expect(hasFooter).toBe(true);
   });

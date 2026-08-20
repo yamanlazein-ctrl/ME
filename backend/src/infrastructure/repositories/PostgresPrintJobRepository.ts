@@ -233,12 +233,7 @@ export class PostgresPrintJobRepository implements IPrintJobRepository {
             const existingFab = await tx
               .select()
               .from(fabrics)
-              .where(
-                and(
-                  eq(fabrics.tenantId, ctx.tenantId),
-                  eq(fabrics.name, input.newName),
-                ),
-              )
+              .where(and(eq(fabrics.tenantId, ctx.tenantId), eq(fabrics.name, input.newName)))
               .limit(1);
             if (existingFab.length > 0) {
               resultFabricId = existingFab[0].id;
@@ -306,12 +301,11 @@ export class PostgresPrintJobRepository implements IPrintJobRepository {
 
         const srcPrice = Number(srcRoll.pricePerKg ?? 0);
         const printCost = input.printCostPerKg ? Number(input.printCostPerKg) : 0;
-        const currency = input.currency ?? (srcRoll.currency ?? "SYP");
+        const currency = input.currency ?? srcRoll.currency ?? "SYP";
         const salePrice = input.newSalePricePerKg ?? srcRoll.salePricePerKg ?? undefined;
         // B1 fix: entryDate is NOT NULL in the rolls table; fall back to today's
         // date (or the print job's date) if the caller didn't supply one.
-        const effectiveDate =
-          input.date ?? job.date ?? new Date().toISOString().slice(0, 10);
+        const effectiveDate = input.date ?? job.date ?? new Date().toISOString().slice(0, 10);
 
         const [newRoll] = await tx
           .insert(rolls)
@@ -344,47 +338,47 @@ export class PostgresPrintJobRepository implements IPrintJobRepository {
         }
         // The result roll's initial kg equals receivedKg. The source roll was
         // already deducted at send time — no further source deduction here.
+        await recordStockMovement(
+          tx,
+          {
+            rollId: newRoll.id,
+            direction: "in",
+            movementType: "print_receive",
+            quantityKg: input.receivedKg ?? 0,
+            balanceAfterKg: input.receivedKg ?? 0,
+            referenceType: "print_job",
+            referenceId: job.id,
+            referenceNumber: job.number ?? newRoll.id,
+            movementDate: effectiveDate,
+            description: `Print receive ${job.number} (new roll ${generatedRollNo})`,
+          },
+          ctx,
+        );
+
+        // C6 — document the printing loss (waste): sent − received. The
+        // source roll was already deducted at SEND time, so this movement is
+        // purely informational (balanceAfter stays unchanged) — it makes the
+        // loss explicit and auditable instead of a silent gap.
+        const wasteKg = Math.max(0, Number(job.quantityKg) - (input.receivedKg ?? 0));
+        if (wasteKg > 0) {
           await recordStockMovement(
             tx,
             {
-              rollId: newRoll.id,
-              direction: "in",
-              movementType: "print_receive",
-              quantityKg: input.receivedKg ?? 0,
-              balanceAfterKg: input.receivedKg ?? 0,
+              rollId: job.sourceRollId,
+              direction: "out",
+              movementType: "print_waste",
+              quantityKg: wasteKg,
+              balanceAfterKg: Number(srcRoll.remainingKg),
               referenceType: "print_job",
               referenceId: job.id,
-              referenceNumber: job.number ?? newRoll.id,
+              referenceNumber: job.number ?? "",
               movementDate: effectiveDate,
-              description: `Print receive ${job.number} (new roll ${generatedRollNo})`,
+              description: `Print waste ${job.number} (${wasteKg} kg)`,
             },
             ctx,
           );
-
-          // C6 — document the printing loss (waste): sent − received. The
-          // source roll was already deducted at SEND time, so this movement is
-          // purely informational (balanceAfter stays unchanged) — it makes the
-          // loss explicit and auditable instead of a silent gap.
-          const wasteKg = Math.max(0, Number(job.quantityKg) - (input.receivedKg ?? 0));
-          if (wasteKg > 0) {
-            await recordStockMovement(
-              tx,
-              {
-                rollId: job.sourceRollId,
-                direction: "out",
-                movementType: "print_waste",
-                quantityKg: wasteKg,
-                balanceAfterKg: Number(srcRoll.remainingKg),
-                referenceType: "print_job",
-                referenceId: job.id,
-                referenceNumber: job.number ?? "",
-                movementDate: effectiveDate,
-                description: `Print waste ${job.number} (${wasteKg} kg)`,
-              },
-              ctx,
-            );
-          }
         }
+      }
 
       // Phase 2.3 — auto-create a printing-cost expense (no party) + its ledger
       // row atomically, when a print cost per kg is known. This makes the
@@ -404,7 +398,7 @@ export class PostgresPrintJobRepository implements IPrintJobRepository {
               category: "طباعة",
               description: `تكلفة طباعة ${job.number} (${receivedKgNum} كغ × ${costPerKg})`,
               amount: printCostTotal,
-              currency: input.currency ?? (job.currency ?? "SYP"),
+              currency: input.currency ?? job.currency ?? "SYP",
               date: effectiveDate2,
               method: "cash",
               paidFromCashbox: true,
@@ -422,7 +416,7 @@ export class PostgresPrintJobRepository implements IPrintJobRepository {
               type: "expense",
               debit: printCostTotal,
               credit: 0,
-              currency: input.currency ?? (job.currency ?? "SYP"),
+              currency: input.currency ?? job.currency ?? "SYP",
               cashImpact: "none",
               referenceType: "expense",
               referenceId: expRow.id,
@@ -437,7 +431,7 @@ export class PostgresPrintJobRepository implements IPrintJobRepository {
               type: "cash",
               debit: 0,
               credit: printCostTotal,
-              currency: input.currency ?? (job.currency ?? "SYP"),
+              currency: input.currency ?? job.currency ?? "SYP",
               cashImpact: isCash ? "out" : "none",
               referenceType: "expense",
               referenceId: expRow.id,
@@ -495,7 +489,9 @@ export class PostgresPrintJobRepository implements IPrintJobRepository {
       newSalePricePerKg: num(row.newSalePricePerKg),
       receivedKg: num(row.receivedKg),
       wasteKg:
-        row.receivedKg != null ? Math.max(0, Number(row.quantityKg) - Number(row.receivedKg)) : undefined,
+        row.receivedKg != null
+          ? Math.max(0, Number(row.quantityKg) - Number(row.receivedKg))
+          : undefined,
       resultRollId: n(row.resultRollId),
       resultFabricId: n(row.resultFabricId),
       resultColorId: n(row.resultColorId),

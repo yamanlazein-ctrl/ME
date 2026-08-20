@@ -1,8 +1,17 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useRef, useState, useCallback } from "react";
 import {
-  Download, Upload, Save, Archive, Database, FileStack,
-  Loader2, CheckCircle2, AlertCircle, Clock, HardDrive,
+  Download,
+  Upload,
+  Save,
+  Archive,
+  Database,
+  FileStack,
+  Loader2,
+  CheckCircle2,
+  AlertCircle,
+  Clock,
+  HardDrive,
 } from "lucide-react";
 import { PageCard } from "@/components/layout/PageCard";
 import { Button } from "@/components/ui/button";
@@ -10,17 +19,29 @@ import { Progress } from "@/components/ui/progress";
 import { settings, logActivity } from "@/presentation/hooks/useSettings";
 
 const ALLOWED_SETTING_KEYS = [
-  "company", "currencies", "paymentMethods", "taxes", "units",
-  "warehouses", "printing", "users", "activity", "companyId", "version",
+  "company",
+  "currencies",
+  "paymentMethods",
+  "taxes",
+  "units",
+  "warehouses",
+  "printing",
+  "users",
+  "activity",
+  "companyId",
+  "version",
 ] as const;
 
 function validateBackup(data: unknown): boolean {
   if (typeof data !== "object" || data === null || Array.isArray(data)) return false;
   const d = data as Record<string, unknown>;
   return (
-    typeof d.version === "number" && d.version === 1 &&
+    typeof d.version === "number" &&
+    d.version === 1 &&
     typeof d.exportedAt === "string" &&
-    typeof d.settings === "object" && d.settings !== null && !Array.isArray(d.settings)
+    typeof d.settings === "object" &&
+    d.settings !== null &&
+    !Array.isArray(d.settings)
   );
 }
 
@@ -34,7 +55,9 @@ function BackupPage() {
   const [fullState, setFullState] = useState<"idle" | "loading" | "success" | "error">("idle");
   const [fullProgress, setFullProgress] = useState(0);
   const [fullError, setFullError] = useState<string | null>(null);
-  const [lastFull, setLastFull] = useState<{ date: string; size: string; name: string } | null>(null);
+  const [lastFull, setLastFull] = useState<{ date: string; size: string; name: string } | null>(
+    null,
+  );
   const abortRef = useRef<AbortController | null>(null);
 
   const cancelFull = () => {
@@ -89,7 +112,10 @@ function BackupPage() {
       setLastFull({ date: now.toLocaleString("ar-SY"), size: formatBytes(size), name: fileName });
       setLastBackup(now.toLocaleString("ar"));
       logActivity("النسخ الاحتياطي", "تصدير نسخة كاملة", `حجم: ${formatBytes(size)}`);
-      setTimeout(() => { setFullState("idle"); setFullProgress(0); }, 5000);
+      setTimeout(() => {
+        setFullState("idle");
+        setFullProgress(0);
+      }, 5000);
     } catch (err) {
       if (err instanceof Error && err.name === "AbortError") {
         setFullState("idle");
@@ -117,14 +143,19 @@ function BackupPage() {
   const importSettings = async (file: File) => {
     try {
       const data = JSON.parse(await file.text());
-      if (!validateBackup(data)) { alert("ملف غير صالح."); return; }
+      if (!validateBackup(data)) {
+        alert("ملف غير صالح.");
+        return;
+      }
       const src = data.settings as Record<string, unknown>;
       for (const key of ALLOWED_SETTING_KEYS) {
         if (key in src) (settings as Record<string, unknown>)[key] = src[key];
       }
       logActivity("النسخ الاحتياطي", "استعادة إعدادات", file.name);
       alert("تم استعادة الإعدادات بنجاح.");
-    } catch { alert("فشل قراءة الملف."); }
+    } catch {
+      alert("فشل قراءة الملف.");
+    }
   };
 
   return (
@@ -143,7 +174,9 @@ function BackupPage() {
               </div>
               <div>
                 <div className="font-semibold">تصدير نسخة كاملة</div>
-                <p className="text-xs text-muted-foreground">قاعدة البيانات + الملفات + الإعدادات</p>
+                <p className="text-xs text-muted-foreground">
+                  قاعدة البيانات + الملفات + الإعدادات
+                </p>
               </div>
             </div>
 
@@ -194,15 +227,21 @@ function BackupPage() {
             {lastFull ? (
               <div className="space-y-2 text-sm">
                 <div className="flex items-center justify-between">
-                  <span className="text-muted-foreground flex items-center gap-1"><Clock className="h-3 w-3" /> التاريخ:</span>
+                  <span className="text-muted-foreground flex items-center gap-1">
+                    <Clock className="h-3 w-3" /> التاريخ:
+                  </span>
                   <span className="font-medium">{lastFull.date}</span>
                 </div>
                 <div className="flex items-center justify-between">
-                  <span className="text-muted-foreground flex items-center gap-1"><Database className="h-3 w-3" /> الحجم:</span>
+                  <span className="text-muted-foreground flex items-center gap-1">
+                    <Database className="h-3 w-3" /> الحجم:
+                  </span>
                   <span className="font-medium">{lastFull.size}</span>
                 </div>
                 <div className="flex items-center justify-between">
-                  <span className="text-muted-foreground flex items-center gap-1"><FileStack className="h-3 w-3" /> الملف:</span>
+                  <span className="text-muted-foreground flex items-center gap-1">
+                    <FileStack className="h-3 w-3" /> الملف:
+                  </span>
                   <span className="font-mono text-xs">{lastFull.name}</span>
                 </div>
               </div>
@@ -218,14 +257,22 @@ function BackupPage() {
             <FileStack className="h-4 w-4" /> ما يشمله النسخ الاحتياطي الكامل:
           </h4>
           <ul className="space-y-1 text-sm text-muted-foreground">
-            <li className="flex items-center gap-2"><Database className="h-3 w-3 text-primary" />
-              <strong>قاعدة البيانات:</strong> جميع الجداول (فواتير، أطراف، مخزون، سندات، …)</li>
-            <li className="flex items-center gap-2"><FileStack className="h-3 w-3 text-primary" />
-              <strong>الملفات المرفوعة:</strong> صور، مستندات، ملفات مرفقة بالفواتير</li>
-            <li className="flex items-center gap-2"><Save className="h-3 w-3 text-primary" />
-              <strong>إعدادات النظام:</strong> العملات، الضرائب، المستخدمين، طباعة</li>
-            <li className="flex items-center gap-2"><Archive className="h-3 w-3 text-primary" />
-              <strong>ملف معلومات:</strong> metadata (تاريخ، إصدار، مستخدم)</li>
+            <li className="flex items-center gap-2">
+              <Database className="h-3 w-3 text-primary" />
+              <strong>قاعدة البيانات:</strong> جميع الجداول (فواتير، أطراف، مخزون، سندات، …)
+            </li>
+            <li className="flex items-center gap-2">
+              <FileStack className="h-3 w-3 text-primary" />
+              <strong>الملفات المرفوعة:</strong> صور، مستندات، ملفات مرفقة بالفواتير
+            </li>
+            <li className="flex items-center gap-2">
+              <Save className="h-3 w-3 text-primary" />
+              <strong>إعدادات النظام:</strong> العملات، الضرائب، المستخدمين، طباعة
+            </li>
+            <li className="flex items-center gap-2">
+              <Archive className="h-3 w-3 text-primary" />
+              <strong>ملف معلومات:</strong> metadata (تاريخ، إصدار، مستخدم)
+            </li>
           </ul>
           <p className="mt-2 text-xs text-muted-foreground">
             الملف يُحفظ بتنسيق ZIP. يمكن استعادته عبر سكربت restore.sh في المشروع.
@@ -255,8 +302,13 @@ function BackupPage() {
             <div className="text-sm font-semibold">استيراد الإعدادات</div>
             <p className="text-xs text-muted-foreground">استعادة إعدادات النظام من ملف.</p>
           </button>
-          <input ref={inputRef} type="file" accept="application/json" hidden
-            onChange={(e) => e.target.files?.[0] && importSettings(e.target.files[0])} />
+          <input
+            ref={inputRef}
+            type="file"
+            accept="application/json"
+            hidden
+            onChange={(e) => e.target.files?.[0] && importSettings(e.target.files[0])}
+          />
         </div>
         {lastBackup && (
           <p className="mt-3 text-xs text-muted-foreground">

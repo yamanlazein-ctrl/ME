@@ -43,7 +43,9 @@ test.describe("Cert UI — Form Audit", () => {
       const cancelBtn = page.locator("button:has-text('إلغاء')").first();
 
       const hasSave = await saveBtn.isVisible({ timeout: 3000 }).catch(() => false);
-      expect(hasSave || (await cancelBtn.isVisible({ timeout: 3000 }).catch(() => false))).toBe(true);
+      expect(hasSave || (await cancelBtn.isVisible({ timeout: 3000 }).catch(() => false))).toBe(
+        true,
+      );
 
       expect(errors).toEqual([]);
     });
@@ -64,8 +66,15 @@ test.describe("Cert UI — Form Audit", () => {
         const validationMsg = page.locator(
           `text=${form.requiredLabel}*, [data-invalid="true"], input:invalid, textarea:invalid`,
         );
-        const anyValidation = await validationMsg.first().isVisible({ timeout: 3000 }).catch(() => false);
-        const anyError = await page.locator("text=/مطلوب|خطأ|غير صالح/").first().isVisible({ timeout: 3000 }).catch(() => false);
+        const anyValidation = await validationMsg
+          .first()
+          .isVisible({ timeout: 3000 })
+          .catch(() => false);
+        const anyError = await page
+          .locator("text=/مطلوب|خطأ|غير صالح/")
+          .first()
+          .isVisible({ timeout: 3000 })
+          .catch(() => false);
 
         expect(anyValidation || anyError || true).toBe(true);
       });

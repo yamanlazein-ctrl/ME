@@ -37,7 +37,12 @@ export class PostgresDashboardRepository implements IDashboardRepository {
       })
       .from(invoices)
       .where(
-        and(base, eq(invoices.type, "sale"), eq(invoices.date, today), eq(invoices.status, "active")),
+        and(
+          base,
+          eq(invoices.type, "sale"),
+          eq(invoices.date, today),
+          eq(invoices.status, "active"),
+        ),
       )
       .groupBy(invoices.currency);
 
@@ -56,7 +61,12 @@ export class PostgresDashboardRepository implements IDashboardRepository {
       })
       .from(invoices)
       .where(
-        and(base, eq(invoices.type, "sale"), gte(invoices.date, weekStart), eq(invoices.status, "active")),
+        and(
+          base,
+          eq(invoices.type, "sale"),
+          gte(invoices.date, weekStart),
+          eq(invoices.status, "active"),
+        ),
       )
       .groupBy(invoices.currency);
     const weekSalesByCurrency: Record<string, { total: number; count: number }> = {};
@@ -72,7 +82,12 @@ export class PostgresDashboardRepository implements IDashboardRepository {
       })
       .from(invoices)
       .where(
-        and(base, eq(invoices.type, "sale"), gte(invoices.date, monthStart), eq(invoices.status, "active")),
+        and(
+          base,
+          eq(invoices.type, "sale"),
+          gte(invoices.date, monthStart),
+          eq(invoices.status, "active"),
+        ),
       )
       .groupBy(invoices.currency);
     const monthSalesByCurrency: Record<string, { total: number; count: number }> = {};
@@ -99,12 +114,7 @@ export class PostgresDashboardRepository implements IDashboardRepository {
           eq(rolls.status, "in_stock"),
         ),
       )
-      .where(
-        and(
-          eq(fabrics.tenantId, ctx.tenantId),
-          gt(fabrics.minStockKg, sql`0`),
-        ),
-      )
+      .where(and(eq(fabrics.tenantId, ctx.tenantId), gt(fabrics.minStockKg, sql`0`)))
       .groupBy(fabrics.id, fabrics.minStockKg)
       .having(sql`COALESCE(SUM(${rolls.remainingKg}::numeric), 0) < ${fabrics.minStockKg}`);
     const lowStockCount = lowStockRows.length;
@@ -174,7 +184,8 @@ export class PostgresDashboardRepository implements IDashboardRepository {
         revenueByCurrency: {},
       };
       agg.kgSold += Number(r.kgSold);
-      agg.revenueByCurrency[r.currency] = (agg.revenueByCurrency[r.currency] ?? 0) + Number(r.revenue);
+      agg.revenueByCurrency[r.currency] =
+        (agg.revenueByCurrency[r.currency] ?? 0) + Number(r.revenue);
       topFabricAgg.set(r.fabricId, agg);
     }
     const topFabricLines = Array.from(topFabricAgg.values())
@@ -222,7 +233,10 @@ export class PostgresDashboardRepository implements IDashboardRepository {
         ),
       )
       .groupBy(vouchers.currency);
-    const voucherStatsByCurrency: Record<string, { receipts: number; payments: number; count: number }> = {};
+    const voucherStatsByCurrency: Record<
+      string,
+      { receipts: number; payments: number; count: number }
+    > = {};
     let voucherStatsCount = 0;
     for (const row of voucherStatsRows) {
       voucherStatsByCurrency[row.currency] = {
@@ -272,7 +286,12 @@ export class PostgresDashboardRepository implements IDashboardRepository {
       .select({ count: sql<number>`COUNT(DISTINCT ${invoices.partyId})` })
       .from(invoices)
       .where(
-        and(base, eq(invoices.date, today), eq(invoices.status, "active"), eq(invoices.partyType, "customer")),
+        and(
+          base,
+          eq(invoices.date, today),
+          eq(invoices.status, "active"),
+          eq(invoices.partyType, "customer"),
+        ),
       );
 
     // ── Low-stock / out-of-stock rolls (real roll-level counts) ─────
@@ -318,7 +337,10 @@ export class PostgresDashboardRepository implements IDashboardRepository {
       .groupBy(invoices.currency);
 
     const cogsByCurrency = new Map(cogsStatsRows.map((r) => [r.currency, r]));
-    const profitByCurrency: Record<string, { today: number; yesterday: number; revenueToday: number }> = {};
+    const profitByCurrency: Record<
+      string,
+      { today: number; yesterday: number; revenueToday: number }
+    > = {};
     for (const rev of revStatsRows) {
       const cogs = cogsByCurrency.get(rev.currency);
       profitByCurrency[rev.currency] = {
@@ -336,7 +358,9 @@ export class PostgresDashboardRepository implements IDashboardRepository {
       .select({
         id: invoices.id,
         currency: invoices.currency,
-        remaining: sql<number>`${invoices.total} - COALESCE(SUM(${vouchers.amount}), 0)`.as("remaining"),
+        remaining: sql<number>`${invoices.total} - COALESCE(SUM(${vouchers.amount}), 0)`.as(
+          "remaining",
+        ),
       })
       .from(invoices)
       .leftJoin(
@@ -412,10 +436,7 @@ export class PostgresDashboardRepository implements IDashboardRepository {
       .innerJoin(colors, eq(colors.id, rolls.colorId))
       .innerJoin(fabrics, eq(fabrics.id, colors.fabricId))
       .where(
-        and(
-          eq(rolls.tenantId, ctx.tenantId),
-          sql`${rolls.remainingKg} <= ${fabrics.minStockKg}`,
-        ),
+        and(eq(rolls.tenantId, ctx.tenantId), sql`${rolls.remainingKg} <= ${fabrics.minStockKg}`),
       )
       .orderBy(desc(rolls.remainingKg))
       .limit(20);
@@ -499,13 +520,7 @@ export class PostgresDashboardRepository implements IDashboardRepository {
       })
       .from(invoices)
       .innerJoin(parties, eq(parties.id, invoices.partyId))
-      .where(
-        and(
-          base,
-          eq(invoices.status, "active"),
-          inArray(invoices.type, ["sale", "entry"]),
-        ),
-      )
+      .where(and(base, eq(invoices.status, "active"), inArray(invoices.type, ["sale", "entry"])))
       .orderBy(desc(invoices.createdAt))
       .limit(10);
 

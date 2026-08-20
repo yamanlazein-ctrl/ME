@@ -37,8 +37,7 @@ export function useCashBalance(date?: string, currency?: string) {
     queryKey: [...KEYS.state, "balance", date ?? "today", currency ?? "SYP"],
     queryFn: ({ signal }) => {
       void signal;
-      if (date)
-        return container.cashbox.state.cashBalanceOn(date, ctx, currency);
+      if (date) return container.cashbox.state.cashBalanceOn(date, ctx, currency);
       return container.cashbox.state.currentBalance(ctx);
     },
     staleTime: 15_000,
@@ -76,8 +75,7 @@ export function useAddManualMovement() {
 export function useDeleteManualMovement() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (id: string) =>
-      container.cashbox.state.deleteManualMovement(id, ctx),
+    mutationFn: (id: string) => container.cashbox.state.deleteManualMovement(id, ctx),
     onSuccess: () => {
       toast.error("تم حذف الحركة اليدوية");
       qc.invalidateQueries({ queryKey: KEYS.state });
@@ -120,8 +118,7 @@ export function useSetOpeningBalance() {
 export function useCloseDay() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (input: CloseDayInput) =>
-      container.cashbox.closeDay.execute(input, ctx),
+    mutationFn: (input: CloseDayInput) => container.cashbox.closeDay.execute(input, ctx),
     onSuccess: () => {
       toast.info("تم إقفال اليوم");
       qc.invalidateQueries({ queryKey: KEYS.state });

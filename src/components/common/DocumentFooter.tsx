@@ -28,35 +28,20 @@ export function DocumentFooter({
       <div className="flex items-center justify-between">
         {extra}
         <div className="flex justify-end gap-2">
-          <Button
-            variant="ghost"
-            onClick={onCancel ?? (() => history.back())}
-          >
+          <Button variant="ghost" onClick={onCancel ?? (() => history.back())}>
             <X className="h-4 w-4 ml-1" /> {cancelLabel}
           </Button>
           {onSaveAndNew && (
-            <Button
-              variant="outline"
-              onClick={onSaveAndNew}
-              disabled={saving}
-            >
+            <Button variant="outline" onClick={onSaveAndNew} disabled={saving}>
               <PlusCircle className="h-4 w-4 ml-1" /> حفظ وجديد
             </Button>
           )}
           {onSaveAndPrint && (
-            <Button
-              variant="outline"
-              onClick={onSaveAndPrint}
-              disabled={saving}
-            >
+            <Button variant="outline" onClick={onSaveAndPrint} disabled={saving}>
               <Printer className="h-4 w-4 ml-1" /> حفظ وطباعة
             </Button>
           )}
-          <Button
-            onClick={onSave}
-            disabled={saving}
-            className="bg-primary text-primary-foreground"
-          >
+          <Button onClick={onSave} disabled={saving} className="bg-primary text-primary-foreground">
             <Save className="h-4 w-4 ml-1" /> {saving ? "جارٍ الحفظ…" : saveLabel}
           </Button>
         </div>

@@ -33,10 +33,15 @@ async function main() {
   const rollRows = await db.select().from(rolls).where(inArray(rolls.colorId, colorIds));
   for (const r of rollRows) {
     const c = allColors.find((x) => x.id === r.colorId);
-    console.log(`  roll_no=${r.rollNo}, fabric=${c?.name ?? "?"}, color=${c?.name ?? "?"}, remaining=${r.remainingKg}`);
+    console.log(
+      `  roll_no=${r.rollNo}, fabric=${c?.name ?? "?"}, color=${c?.name ?? "?"}, remaining=${r.remainingKg}`,
+    );
   }
 
   process.exit(0);
 }
 
-main().catch((e) => { console.error("FATAL:", e); process.exit(1); });
+main().catch((e) => {
+  console.error("FATAL:", e);
+  process.exit(1);
+});

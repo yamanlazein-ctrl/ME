@@ -1,6 +1,10 @@
 import { eq, and, gte, lte, desc, sql } from "drizzle-orm";
 import type { DB } from "../orm/drizzle.js";
-import type { IAuditRepository, AuditLogFilter, AuditLogEntry } from "../../application/ports/IAuditRepository.js";
+import type {
+  IAuditRepository,
+  AuditLogFilter,
+  AuditLogEntry,
+} from "../../application/ports/IAuditRepository.js";
 import type { TenantContext, PaginatedResult } from "../../domain/types/index.js";
 import { auditLogs } from "../orm/schemas/audit-log.table.js";
 

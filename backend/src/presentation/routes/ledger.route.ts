@@ -39,7 +39,12 @@ export function registerLedgerRoutes(
 
   router.get("/ledger/balance/:partyId", auth, readGuard, async (req: Request, res: Response) => {
     const currency = (req.query.currency as string) ?? "SYP";
-    const r = await uc.getPartyBalanceUseCase(ledgerRepo, req.params.partyId as string, currency, ctx(req));
+    const r = await uc.getPartyBalanceUseCase(
+      ledgerRepo,
+      req.params.partyId as string,
+      currency,
+      ctx(req),
+    );
     if (r.ok) {
       res.json(r.data);
     } else {
@@ -79,7 +84,9 @@ export function registerLedgerRoutes(
         const r = await ledgerRepo.getCashMovementsOn(date, date, currency, ctx(req));
         res.json({ in: r.in, out: r.out, date, currency });
       } catch (err) {
-        res.status(400).json({ code: "VALIDATION", message: (err as Error).message ?? "Invalid date range" });
+        res
+          .status(400)
+          .json({ code: "VALIDATION", message: (err as Error).message ?? "Invalid date range" });
       }
     },
   );
@@ -150,20 +157,26 @@ export function registerLedgerRoutes(
     },
   );
 
-  router.get("/ledger/:id", auth, readGuard, validateUuidParam("id"), async (req: Request, res: Response) => {
-    const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-    if (!UUID_RE.test(pid(req))) {
-      return res.status(404).json({ code: "NOT_FOUND", message: "القيد غير موجود" });
-    }
-    const r = await uc.findLedgerEntryUseCase(ledgerRepo, pid(req), ctx(req));
-    if (!r.ok) {
-      return res.status(500).json({ code: "INTERNAL", message: r.error });
-    }
-    if (!r.data) {
-      return res.status(404).json({ code: "NOT_FOUND", message: "القيد غير موجود" });
-    }
-    res.json(r.data);
-  });
+  router.get(
+    "/ledger/:id",
+    auth,
+    readGuard,
+    validateUuidParam("id"),
+    async (req: Request, res: Response) => {
+      const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      if (!UUID_RE.test(pid(req))) {
+        return res.status(404).json({ code: "NOT_FOUND", message: "القيد غير موجود" });
+      }
+      const r = await uc.findLedgerEntryUseCase(ledgerRepo, pid(req), ctx(req));
+      if (!r.ok) {
+        return res.status(500).json({ code: "INTERNAL", message: r.error });
+      }
+      if (!r.data) {
+        return res.status(404).json({ code: "NOT_FOUND", message: "القيد غير موجود" });
+      }
+      res.json(r.data);
+    },
+  );
 
   router.post(
     "/ledger",
@@ -181,34 +194,40 @@ export function registerLedgerRoutes(
     },
   );
 
-  router.post("/ledger/:id/cancel", auth, writeGuard, validateUuidParam("id"), async (req: Request, res: Response) => {
-    const c = ctx(req);
-    // Resolve the entry's real reference (type + id) so all rows sharing the
-    // same business reference are reversed together — not a synthetic "ledger"
-    // key that never matches.
-    const found = await ledgerRepo.findById(pid(req), c);
-    if (!found) {
-      return res.status(404).json({ code: "NOT_FOUND", message: "القيد غير موجود" });
-    }
-    if (!found.referenceType || !found.referenceId) {
-      return res.status(422).json({
-        code: "VALIDATION",
-        message: "هذا القيد ليس له مرجع قابل للإلغاء",
-      });
-    }
-    const r = await uc.cancelLedgerByReferenceUseCase(
-      ledgerRepo,
-      found.referenceType,
-      found.referenceId,
-      c.userId,
-      c,
-    );
-    if (r.ok) {
-      res.json({ ok: true });
-    } else if (r.code === "ALREADY_CANCELLED") {
-      res.status(409).json({ code: r.code, message: "هذا المرجع تم عكسه مسبقاً" });
-    } else {
-      res.status(422).json({ code: "VALIDATION", message: r.error });
-    }
-  });
+  router.post(
+    "/ledger/:id/cancel",
+    auth,
+    writeGuard,
+    validateUuidParam("id"),
+    async (req: Request, res: Response) => {
+      const c = ctx(req);
+      // Resolve the entry's real reference (type + id) so all rows sharing the
+      // same business reference are reversed together — not a synthetic "ledger"
+      // key that never matches.
+      const found = await ledgerRepo.findById(pid(req), c);
+      if (!found) {
+        return res.status(404).json({ code: "NOT_FOUND", message: "القيد غير موجود" });
+      }
+      if (!found.referenceType || !found.referenceId) {
+        return res.status(422).json({
+          code: "VALIDATION",
+          message: "هذا القيد ليس له مرجع قابل للإلغاء",
+        });
+      }
+      const r = await uc.cancelLedgerByReferenceUseCase(
+        ledgerRepo,
+        found.referenceType,
+        found.referenceId,
+        c.userId,
+        c,
+      );
+      if (r.ok) {
+        res.json({ ok: true });
+      } else if (r.code === "ALREADY_CANCELLED") {
+        res.status(409).json({ code: r.code, message: "هذا المرجع تم عكسه مسبقاً" });
+      } else {
+        res.status(422).json({ code: "VALIDATION", message: r.error });
+      }
+    },
+  );
 }

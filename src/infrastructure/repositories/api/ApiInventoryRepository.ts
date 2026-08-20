@@ -34,9 +34,7 @@ export class ApiInventoryRepository implements IInventoryRepository {
 
   async updateFabric(
     id: UUID,
-    patch: Partial<
-      Omit<FabricData, "id" | "tenantId" | "createdAt" | "createdBy">
-    >,
+    patch: Partial<Omit<FabricData, "id" | "tenantId" | "createdAt" | "createdBy">>,
     ctx: TenantContext,
   ): Promise<Fabric> {
     const dto = await this.api.updateFabric(id, patch as FabricData);

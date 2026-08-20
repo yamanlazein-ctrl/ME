@@ -44,11 +44,11 @@ cd .. && npm run tauri:build
 
 بعد النجاح، يوجد في `desktop/src-tauri/target/release/bundle/`:
 
-| الملف | الوصف |
-|---|---|
-| `msi/*.msi` | Windows Installer (recommended) |
-| `nsis/*.exe` | NSIS Installer (أخف) |
-| `*.exe` | ملف تنفيذي مباشر (portable) |
+| الملف        | الوصف                           |
+| ------------ | ------------------------------- |
+| `msi/*.msi`  | Windows Installer (recommended) |
+| `nsis/*.exe` | NSIS Installer (أخف)            |
+| `*.exe`      | ملف تنفيذي مباشر (portable)     |
 
 ## خصائص التطبيق
 
@@ -87,6 +87,7 @@ msiexec /i MotardFabricsERP-1.0.0.msi /quiet /norestart
 ### 1. أيقونة التطبيق
 
 استبدل `desktop/src-tauri/icons/icon.png` بأيقونة بمقاسات متعددة:
+
 - `icon.png` (512x512)
 - `icon.ico` (16, 32, 48, 128, 256 — Windows)
 - `icon.icns` (Apple — اختياري)
@@ -94,6 +95,7 @@ msiexec /i MotardFabricsERP-1.0.0.msi /quiet /norestart
 ### 2. تخصيص Installer
 
 عدّل `desktop/src-tauri/tauri.conf.json`:
+
 ```json
 {
   "bundle": {
@@ -117,12 +119,14 @@ signtool sign /f certificate.pfx /p password /t http://timestamp.digicert.com Mo
 ## استكشاف الأخطاء
 
 ### مشكلة: `tauri` لا يُنشئ نافذة
+
 ```powershell
 # تأكد من أن backend يعمل على localhost:8083
 # أو عدّل proxy في vite.config.ts
 ```
 
 ### مشكلة: رقم ترخيص غير صحيح
+
 ```powershell
 # التطبيق يحتاج اتصال بالخادم للتفعيل
 # استخدم license key من admin-dashboard: http://localhost:5173
@@ -131,8 +135,10 @@ signtool sign /f certificate.pfx /p password /t http://timestamp.digicert.com Mo
 ## التحديث التلقائي (Auto-Update)
 
 لتفعيل التحديث التلقائي:
+
 1. استضف ملف `latest.json` على خادمك
 2. عدّل `tauri.conf.json`:
+
 ```json
 {
   "plugins": {

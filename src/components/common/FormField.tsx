@@ -12,9 +12,7 @@ export function FormField({
 }) {
   return (
     <div>
-      <Label className="mb-1 block text-[11px] font-semibold text-muted-foreground">
-        {label}
-      </Label>
+      <Label className="mb-1 block text-[11px] font-semibold text-muted-foreground">{label}</Label>
       {children}
       {error && (
         <p className="mt-1 text-[11px] text-destructive" role="alert">

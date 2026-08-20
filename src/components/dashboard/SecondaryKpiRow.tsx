@@ -4,7 +4,6 @@ import { formatSYP } from "@/presentation/hooks/useInventory";
 import { KpiCard } from "./KpiCard";
 import { formatNumber, formatMoney, formatQuantity } from "@/shared/utils/formatNumber";
 
-
 function formatUnpaidCurrencies(
   byCurrency: Record<string, { count: number; totalDue: number }> = {},
 ): string {

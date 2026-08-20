@@ -40,7 +40,15 @@ export function registerLicenseAdminRoutes(
     tokenDenylist: RedisTokenDenylist;
   },
 ): void {
-  const { licenseRepo, auditRepo, jwtSigner, adminAuth, systemAdminRepo, passwordHasher, tokenDenylist } = deps;
+  const {
+    licenseRepo,
+    auditRepo,
+    jwtSigner,
+    adminAuth,
+    systemAdminRepo,
+    passwordHasher,
+    tokenDenylist,
+  } = deps;
 
   // ── Public: Super Admin login ──────────────────────────────────────
   app.post("/license-admin/login", async (req, res, next) => {
@@ -126,7 +134,9 @@ export function registerLicenseAdminRoutes(
     try {
       const parsed = createBody.safeParse(req.body);
       if (!parsed.success) {
-        res.status(422).json({ code: "VALIDATION_ERROR", message: "بيانات غير صالحة", statusCode: 422 });
+        res
+          .status(422)
+          .json({ code: "VALIDATION_ERROR", message: "بيانات غير صالحة", statusCode: 422 });
         return;
       }
       const d = parsed.data;
@@ -182,9 +192,8 @@ export function registerLicenseAdminRoutes(
   app.get("/license-admin/activations", adminAuth, async (_req, res, next) => {
     try {
       const { db } = await import("../infrastructure/orm/drizzle.js");
-      const { licenseActivations } = await import(
-        "../infrastructure/orm/schemas/license-activation.table.js"
-      );
+      const { licenseActivations } =
+        await import("../infrastructure/orm/schemas/license-activation.table.js");
       const rows = await db.select().from(licenseActivations);
       res.json({ activations: rows });
     } catch (err) {
@@ -192,27 +201,22 @@ export function registerLicenseAdminRoutes(
     }
   });
 
-  app.post(
-    "/license-admin/activations/:id/deactivate",
-    adminAuth,
-    async (req, res, next) => {
-      try {
-        const { db } = await import("../infrastructure/orm/drizzle.js");
-        const { licenseActivations } = await import(
-          "../infrastructure/orm/schemas/license-activation.table.js"
-        );
-        const { eq } = await import("drizzle-orm");
-        const reason = String(req.body?.reason ?? "admin_deactivation");
-        const [row] = await db
-          .update(licenseActivations)
-          .set({ deactivatedAt: new Date(), deactivationReason: reason })
-          .where(eq(licenseActivations.id, req.params.id as never))
-          .returning();
-        res.json({ activation: row });
-        void auditRepo;
-      } catch (err) {
-        next(err);
-      }
-    },
-  );
+  app.post("/license-admin/activations/:id/deactivate", adminAuth, async (req, res, next) => {
+    try {
+      const { db } = await import("../infrastructure/orm/drizzle.js");
+      const { licenseActivations } =
+        await import("../infrastructure/orm/schemas/license-activation.table.js");
+      const { eq } = await import("drizzle-orm");
+      const reason = String(req.body?.reason ?? "admin_deactivation");
+      const [row] = await db
+        .update(licenseActivations)
+        .set({ deactivatedAt: new Date(), deactivationReason: reason })
+        .where(eq(licenseActivations.id, req.params.id as never))
+        .returning();
+      res.json({ activation: row });
+      void auditRepo;
+    } catch (err) {
+      next(err);
+    }
+  });
 }

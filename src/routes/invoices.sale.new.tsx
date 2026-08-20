@@ -45,7 +45,6 @@ import {
 } from "@/components/invoices/sale-types";
 import { formatNumber, formatMoney, formatQuantity } from "@/shared/utils/formatNumber";
 
-
 type SaleSearch = { fromOrder?: string };
 
 export const Route = createFileRoute("/invoices/sale/new")({

@@ -1,10 +1,5 @@
 import type { Request, Response, NextFunction, RequestHandler } from "express";
-import {
-  getIdempotencyKey,
-  readCached,
-  writeCached,
-  tryClaim,
-} from "./idempotency.middleware.js";
+import { getIdempotencyKey, readCached, writeCached, tryClaim } from "./idempotency.middleware.js";
 import { NotFoundError } from "../../../domain/errors/index.js";
 
 /**

@@ -32,8 +32,7 @@ function filterInvoices(
   endDate: string,
 ): Invoice[] {
   return invoices.filter(
-    (inv) =>
-      inv.partyId === customerId && inv.date >= startDate && inv.date <= endDate,
+    (inv) => inv.partyId === customerId && inv.date >= startDate && inv.date <= endDate,
   );
 }
 
@@ -84,12 +83,12 @@ describe("Customer tracking: date-range filtering (fast-check)", () => {
                 currency: CURRENCY,
                 lines: [
                   makeLine({
-                    quantityKg: Math.max(0.01, Math.round(amount / 50 * 100) / 100),
+                    quantityKg: Math.max(0.01, Math.round((amount / 50) * 100) / 100),
                     pricePerKg: 5000,
                   }),
                 ],
                 createdBy: "tester",
-              createdAt: "2026-01-01T00:00:00.000Z",
+                createdAt: "2026-01-01T00:00:00.000Z",
               });
             });
 
@@ -104,9 +103,7 @@ describe("Customer tracking: date-range filtering (fast-check)", () => {
 
             // Verify no invoices outside range are included
             const outsideRange = invoices.filter(
-              (inv) =>
-                inv.partyId === "cust-A" &&
-                (inv.date < startDate || inv.date > endDate),
+              (inv) => inv.partyId === "cust-A" && (inv.date < startDate || inv.date > endDate),
             );
             for (const inv of outsideRange) {
               expect(filtered.some((f) => f.id === inv.id)).toBe(false);
@@ -140,17 +137,12 @@ describe("Customer tracking: date-range filtering (fast-check)", () => {
                 currency: CURRENCY,
                 lines: [makeLine()],
                 createdBy: "tester",
-              createdAt: "2026-01-01T00:00:00.000Z",
+                createdAt: "2026-01-01T00:00:00.000Z",
               });
             });
 
             // Invalid range: start after end
-            const filtered = filterInvoices(
-              invoices,
-              "cust-A" as UUID,
-              "2026-01-20",
-              "2026-01-10",
-            );
+            const filtered = filterInvoices(invoices, "cust-A" as UUID, "2026-01-20", "2026-01-10");
             expect(filtered).toHaveLength(0);
           },
         ),
@@ -184,16 +176,11 @@ describe("Customer tracking: date-range filtering (fast-check)", () => {
                 currency: CURRENCY,
                 lines: [makeLine()],
                 createdBy: "tester",
-              createdAt: "2026-01-01T00:00:00.000Z",
+                createdAt: "2026-01-01T00:00:00.000Z",
               });
             });
 
-            const filtered = filterInvoices(
-              invoices,
-              "cust-A" as UUID,
-              targetDate,
-              targetDate,
-            );
+            const filtered = filterInvoices(invoices, "cust-A" as UUID, targetDate, targetDate);
 
             for (const inv of filtered) {
               expect(inv.date).toBe(targetDate);
@@ -240,7 +227,7 @@ describe("Customer tracking: date-range filtering (fast-check)", () => {
                 currency: CURRENCY,
                 lines: [makeLine({ quantityKg: q, pricePerKg: p })],
                 createdBy: "tester",
-              createdAt: "2026-01-01T00:00:00.000Z",
+                createdAt: "2026-01-01T00:00:00.000Z",
               });
             });
 
@@ -298,7 +285,7 @@ describe("Customer tracking: date-range filtering (fast-check)", () => {
                 currency: CURRENCY,
                 lines: [makeLine()],
                 createdBy: "tester",
-              createdAt: "2026-01-01T00:00:00.000Z",
+                createdAt: "2026-01-01T00:00:00.000Z",
               });
             });
 
@@ -306,10 +293,7 @@ describe("Customer tracking: date-range filtering (fast-check)", () => {
 
             // Manual count
             const expectedCount = items.filter(
-              (item) =>
-                item.customerId === "A" &&
-                item.day >= startDay &&
-                item.day <= endDay,
+              (item) => item.customerId === "A" && item.day >= startDay && item.day <= endDay,
             ).length;
 
             expect(filtered).toHaveLength(expectedCount);
@@ -339,7 +323,7 @@ describe("Customer tracking: specific scenarios", () => {
       currency: CURRENCY,
       lines: [makeLine({ quantityKg: amount / 5000, pricePerKg: 5000 })],
       createdBy: "tester",
-              createdAt: "2026-01-01T00:00:00.000Z",
+      createdAt: "2026-01-01T00:00:00.000Z",
     });
   }
 
@@ -371,12 +355,7 @@ describe("Customer tracking: specific scenarios", () => {
       createInvoice("2026-04-01", 30000), // after
     ];
 
-    const q1Invoices = filterInvoices(
-      invoices,
-      customerId,
-      "2026-01-01",
-      "2026-03-31",
-    );
+    const q1Invoices = filterInvoices(invoices, customerId, "2026-01-01", "2026-03-31");
 
     expect(q1Invoices).toHaveLength(4);
     expect(q1Invoices.map((i) => i.date)).toEqual([
@@ -396,12 +375,7 @@ describe("Customer tracking: specific scenarios", () => {
       createInvoice("2026-03-15", 25000),
     ];
 
-    const febInvoices = filterInvoices(
-      invoices,
-      customerId,
-      "2026-02-01",
-      "2026-02-28",
-    );
+    const febInvoices = filterInvoices(invoices, customerId, "2026-02-01", "2026-02-28");
 
     expect(febInvoices).toHaveLength(0);
   });
@@ -413,12 +387,7 @@ describe("Customer tracking: specific scenarios", () => {
       createInvoice("2026-01-31", 15000), // exactly end
     ];
 
-    const janInvoices = filterInvoices(
-      invoices,
-      customerId,
-      "2026-01-01",
-      "2026-01-31",
-    );
+    const janInvoices = filterInvoices(invoices, customerId, "2026-01-01", "2026-01-31");
 
     expect(janInvoices).toHaveLength(3);
     expect(janInvoices.map((i) => i.date)).toContain("2026-01-01");
@@ -441,7 +410,7 @@ describe("Customer tracking: specific scenarios", () => {
         currency: CURRENCY,
         lines: [makeLine({ quantityKg: 10, pricePerKg: 5000 })],
         createdBy: "tester",
-              createdAt: "2026-01-01T00:00:00.000Z",
+        createdAt: "2026-01-01T00:00:00.000Z",
       }),
       Invoice.create({
         id: crypto.randomUUID() as UUID,
@@ -454,7 +423,7 @@ describe("Customer tracking: specific scenarios", () => {
         currency: CURRENCY,
         lines: [makeLine({ quantityKg: 5, pricePerKg: 3000 })],
         createdBy: "tester",
-              createdAt: "2026-01-01T00:00:00.000Z",
+        createdAt: "2026-01-01T00:00:00.000Z",
       }),
       Invoice.create({
         id: crypto.randomUUID() as UUID,
@@ -467,7 +436,7 @@ describe("Customer tracking: specific scenarios", () => {
         currency: CURRENCY,
         lines: [makeLine({ quantityKg: 8, pricePerKg: 5000 })],
         createdBy: "tester",
-              createdAt: "2026-01-01T00:00:00.000Z",
+        createdAt: "2026-01-01T00:00:00.000Z",
       }),
     ];
 
@@ -482,9 +451,7 @@ describe("Customer tracking: specific scenarios", () => {
     expect(bJan[0].id).toBe(invoices[1].id);
 
     // All customers in Q1
-    const allQ1 = invoices.filter(
-      (inv) => inv.date >= "2026-01-01" && inv.date <= "2026-03-31",
-    );
+    const allQ1 = invoices.filter((inv) => inv.date >= "2026-01-01" && inv.date <= "2026-03-31");
     expect(allQ1).toHaveLength(3);
   });
 });

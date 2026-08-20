@@ -35,9 +35,17 @@ export function registerNotificationRoutes(
     if (!allowedSeverities.has(severity)) {
       return res.status(422).json({ code: "VALIDATION", message: "severity غير صالح" });
     }
-    const r = await uc.createNotificationUseCase(notifRepo, {
-      title, detail, kind: kind as never, severity: severity as never, targetPath,
-    }, ctx(req));
+    const r = await uc.createNotificationUseCase(
+      notifRepo,
+      {
+        title,
+        detail,
+        kind: kind as never,
+        severity: severity as never,
+        targetPath,
+      },
+      ctx(req),
+    );
     if (!r.ok) {
       return res.status(500).json({ code: "INTERNAL", message: r.error });
     }
@@ -67,14 +75,20 @@ export function registerNotificationRoutes(
     },
   );
 
-  router.post("/notifications/:id/read", auth, readGuard, validateUuidParam("id"), async (req: Request, res: Response) => {
-    const r = await uc.markReadUseCase(notifRepo, pid(req), ctx(req));
-    if (r.ok) {
-      res.json({ ok: true });
-    } else {
-      res.status(500).json({ code: "INTERNAL", message: r.error });
-    }
-  });
+  router.post(
+    "/notifications/:id/read",
+    auth,
+    readGuard,
+    validateUuidParam("id"),
+    async (req: Request, res: Response) => {
+      const r = await uc.markReadUseCase(notifRepo, pid(req), ctx(req));
+      if (r.ok) {
+        res.json({ ok: true });
+      } else {
+        res.status(500).json({ code: "INTERNAL", message: r.error });
+      }
+    },
+  );
 
   router.post(
     "/notifications/mark-all-read",

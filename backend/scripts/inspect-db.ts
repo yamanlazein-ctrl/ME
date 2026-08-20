@@ -33,16 +33,23 @@ async function main() {
   console.log("\n=== Rolls ===");
   const rollRows = await db.select().from(rolls).limit(20);
   for (const r of rollRows) {
-    console.log(`  roll_no=${r.rollNo}, color=${r.colorId}, remaining=${r.remainingKg}, price=${r.pricePerKg}`);
+    console.log(
+      `  roll_no=${r.rollNo}, color=${r.colorId}, remaining=${r.remainingKg}, price=${r.pricePerKg}`,
+    );
   }
 
   console.log("\n=== Recent Invoices ===");
   const invRows = await db.select().from(invoices).orderBy(invoices.createdAt).limit(10);
   for (const i of invRows) {
-    console.log(`  ${i.number} type=${i.type} party=${i.partyId} total=${i.total} paid=${i.paid} method=${i.paymentMethod ?? "null"}`);
+    console.log(
+      `  ${i.number} type=${i.type} party=${i.partyId} total=${i.total} paid=${i.paid} method=${i.paymentMethod ?? "null"}`,
+    );
   }
 
   process.exit(0);
 }
 
-main().catch((e) => { console.error("FATAL:", e); process.exit(1); });
+main().catch((e) => {
+  console.error("FATAL:", e);
+  process.exit(1);
+});

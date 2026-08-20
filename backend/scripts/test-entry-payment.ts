@@ -30,7 +30,9 @@ async function main() {
   for (const inv of rows) {
     const paid = Number(inv.paid ?? 0);
     const total = Number(inv.total ?? 0);
-    console.log(`  ${inv.number}: total=${total}, paid=${paid}, due=${total - paid}, method=${inv.paymentMethod ?? "null"}`);
+    console.log(
+      `  ${inv.number}: total=${total}, paid=${paid}, due=${total - paid}, method=${inv.paymentMethod ?? "null"}`,
+    );
 
     // Find linked payment voucher
     const linkedPayments = await db
@@ -38,14 +40,21 @@ async function main() {
       .from(vouchers)
       .where(and(eq(vouchers.invoiceId, inv.id), eq(vouchers.kind, "payment")));
     if (linkedPayments.length > 0) {
-      console.log(`    -> Linked payment voucher: ${linkedPayments[0].number}, amount=${linkedPayments[0].amount}, method=${linkedPayments[0].method}`);
+      console.log(
+        `    -> Linked payment voucher: ${linkedPayments[0].number}, amount=${linkedPayments[0].amount}, method=${linkedPayments[0].method}`,
+      );
     }
 
     // Find linked ledger entries
     const ledgers = await db
       .select()
       .from(ledgerEntries)
-      .where(and(eq(ledgerEntries.referenceId, inv.id), eq(ledgerEntries.referenceType, "purchase_invoice")));
+      .where(
+        and(
+          eq(ledgerEntries.referenceId, inv.id),
+          eq(ledgerEntries.referenceType, "purchase_invoice"),
+        ),
+      );
     const paymentLedgers = await db
       .select()
       .from(ledgerEntries)
@@ -70,7 +79,9 @@ async function main() {
     console.log(`\n=== Party ${partyId} balance ===`);
     console.log(`  Total debit:  ${debit}`);
     console.log(`  Total credit: ${credit}`);
-    console.log(`  Net balance:  ${debit - credit} (should equal sum of amountDue for active entry invoices)`);
+    console.log(
+      `  Net balance:  ${debit - credit} (should equal sum of amountDue for active entry invoices)`,
+    );
   }
 
   console.log("\n✅ Test complete");

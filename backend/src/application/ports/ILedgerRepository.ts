@@ -45,7 +45,12 @@ export interface ILedgerRepository {
     ctx: TenantContext,
   ): Promise<void>;
   getBalance(partyId: UUID, ctx: TenantContext, currency?: string): Promise<PartyBalance>;
-  getBalanceByDate(partyId: UUID, date: string, ctx: TenantContext, currency?: string): Promise<PartyBalance>;
+  getBalanceByDate(
+    partyId: UUID,
+    date: string,
+    ctx: TenantContext,
+    currency?: string,
+  ): Promise<PartyBalance>;
   getCashMovementsOn(
     fromDate: string,
     toDate: string,

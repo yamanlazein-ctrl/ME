@@ -51,11 +51,7 @@ export const ledgerEntries = pgTable(
     dateIdx: index("idx_ledger_date").on(table.tenantId, table.date),
     typeIdx: index("idx_ledger_type").on(table.tenantId, table.type),
     currencyIdx: index("idx_ledger_currency").on(table.tenantId, table.currency),
-    partyDateIdx: index("idx_ledger_party_date").on(
-      table.tenantId,
-      table.partyId,
-      table.date,
-    ),
+    partyDateIdx: index("idx_ledger_party_date").on(table.tenantId, table.partyId, table.date),
     partyCurrencyIdx: index("idx_ledger_party_currency").on(
       table.tenantId,
       table.partyId,

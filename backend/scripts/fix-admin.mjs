@@ -29,8 +29,7 @@ const env = Object.fromEntries(
     }),
 );
 
-const DATABASE_URL =
-  env.DATABASE_URL || "postgresql://postgres:postgres@localhost:5432/erp";
+const DATABASE_URL = env.DATABASE_URL || "postgresql://postgres:postgres@localhost:5432/erp";
 const EMAIL = "admin@erp.local";
 const PASSWORD = "admin123";
 const TENANT_SLUG = "default";
@@ -65,7 +64,9 @@ try {
     [EMAIL, tenantId],
   );
   if (existingUsers.length > 0) {
-    console.log(`user '${EMAIL}' exists: ${existingUsers[0].id} role=${existingUsers[0].role} active=${existingUsers[0].active}`);
+    console.log(
+      `user '${EMAIL}' exists: ${existingUsers[0].id} role=${existingUsers[0].role} active=${existingUsers[0].active}`,
+    );
     console.log("(idempotent — no changes)");
   } else {
     const passwordHash = await argon2.hash(PASSWORD, {

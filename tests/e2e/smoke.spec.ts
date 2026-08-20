@@ -46,7 +46,9 @@ test.describe("Smoke Test — All Routes", () => {
       await page.waitForTimeout(2000);
 
       if (route.title) {
-        await expect(page.getByText(route.title, { exact: false }).first()).toBeVisible({ timeout: 8000 });
+        await expect(page.getByText(route.title, { exact: false }).first()).toBeVisible({
+          timeout: 8000,
+        });
       } else if (route.selector) {
         await expect(page.locator(route.selector).first()).toBeVisible({ timeout: 8000 });
       } else if (route.contains) {

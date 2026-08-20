@@ -36,13 +36,7 @@ export function ColorSwatch({
 
   if (!color) {
     return (
-      <div
-        className={cn(
-          "shrink-0 border-dashed border-border bg-muted/30",
-          sizeCls,
-          className,
-        )}
-      />
+      <div className={cn("shrink-0 border-dashed border-border bg-muted/30", sizeCls, className)} />
     );
   }
 
@@ -55,11 +49,7 @@ export function ColorSwatch({
   if (color.hex) {
     return (
       <div
-        className={cn(
-          "shrink-0 border-border shadow-inner",
-          sizeCls,
-          className,
-        )}
+        className={cn("shrink-0 border-border shadow-inner", sizeCls, className)}
         style={{ background: safeHexColor(color.hex) }}
         title={title}
       />
@@ -73,11 +63,7 @@ export function ColorSwatch({
         src={color.imageUrl}
         alt={color.name}
         title={title}
-        className={cn(
-          "shrink-0 border-border object-cover shadow-inner",
-          sizeCls,
-          className,
-        )}
+        className={cn("shrink-0 border-border object-cover shadow-inner", sizeCls, className)}
       />
     );
   }

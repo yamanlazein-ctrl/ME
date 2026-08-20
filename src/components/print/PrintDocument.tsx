@@ -27,12 +27,7 @@ export type PrintTotal = { label: string; value: string; grand?: boolean };
 
 /** Small label that identifies the document kind in the header. */
 export type PrintTypeBadge =
-  | "PURCHASE"
-  | "SALE"
-  | "RETURN_IN"
-  | "RETURN_OUT"
-  | "PRINT_JOB"
-  | "STATEMENT";
+  "PURCHASE" | "SALE" | "RETURN_IN" | "RETURN_OUT" | "PRINT_JOB" | "STATEMENT";
 
 const BADGE_LABEL: Record<PrintTypeBadge, string> = {
   PURCHASE: "PURCHASE",
@@ -132,7 +127,9 @@ export function PrintDocument({
               {party.extra && (
                 <div className="print-header-party-item">
                   <span className="print-header-party-label">الرمز:</span>
-                  <span className="print-header-party-value">{party.extra.replace(/رمز .*?: /, "")}</span>
+                  <span className="print-header-party-value">
+                    {party.extra.replace(/رمز .*?: /, "")}
+                  </span>
                 </div>
               )}
               {party.phone && (

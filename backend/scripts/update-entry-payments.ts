@@ -12,9 +12,18 @@ import { invoiceLines } from "../src/infrastructure/orm/schemas/invoice-line.tab
 const TENANT_ID = "407fccfc-ba89-41c5-b5b9-ddb2c4f385d9";
 const USER_ID = "11111111-1111-1111-1111-111111111111";
 
-const INV_NUMBERS = ["INV-2026-0007","INV-2026-0008","INV-2026-0009","INV-2026-0010","INV-2026-0011"];
+const INV_NUMBERS = [
+  "INV-2026-0007",
+  "INV-2026-0008",
+  "INV-2026-0009",
+  "INV-2026-0010",
+  "INV-2026-0011",
+];
 
-const DESIRED_PAID: Record<string, { paid: number; method: "cash" | "transfer" | "check" | "card" }> = {
+const DESIRED_PAID: Record<
+  string,
+  { paid: number; method: "cash" | "transfer" | "check" | "card" }
+> = {
   "INV-2026-0007": { paid: 200000, method: "cash" },
   "INV-2026-0008": { paid: 0, method: "cash" },
   "INV-2026-0009": { paid: 300000, method: "cash" },
@@ -127,7 +136,10 @@ async function main() {
 
     const party = await db.select().from(parties).where(eq(parties.id, inv.partyId)).limit(1);
     const lines = await db.select().from(invoiceLines).where(eq(invoiceLines.invoiceId, inv.id));
-    const payVouchers = await db.select().from(vouchers).where(and(eq(vouchers.invoiceId, inv.id), eq(vouchers.kind, "payment")));
+    const payVouchers = await db
+      .select()
+      .from(vouchers)
+      .where(and(eq(vouchers.invoiceId, inv.id), eq(vouchers.kind, "payment")));
 
     console.log(`\n--- ${num} | ${party[0]?.name} ---`);
     console.log(`  Date: ${inv.date}`);
@@ -135,7 +147,9 @@ async function main() {
     let lineIdx = 1;
     let computedSubtotal = 0;
     for (const l of lines) {
-      const lineTotal = Math.round(Number(l.quantityKg) * Number(l.pricePerKg) - Number(l.discountAmount ?? 0));
+      const lineTotal = Math.round(
+        Number(l.quantityKg) * Number(l.pricePerKg) - Number(l.discountAmount ?? 0),
+      );
       computedSubtotal += lineTotal;
       console.log(`  Line ${lineIdx}: ${lineTotal}`);
       lineIdx++;
@@ -175,4 +189,7 @@ async function main() {
   process.exit(0);
 }
 
-main().catch((e) => { console.error("FATAL:", e); process.exit(1); });
+main().catch((e) => {
+  console.error("FATAL:", e);
+  process.exit(1);
+});

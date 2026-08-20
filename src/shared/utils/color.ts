@@ -37,10 +37,7 @@ export function isValidHexColor(value: unknown): value is string {
  *
  * Wrapped in try/catch so it can never throw.
  */
-export function safeHexColor(
-  value: unknown,
-  fallback: string = COLOR_NEUTRAL_FALLBACK,
-): string {
+export function safeHexColor(value: unknown, fallback: string = COLOR_NEUTRAL_FALLBACK): string {
   try {
     if (typeof value !== "string") return fallback;
     const trimmed = value.trim();
@@ -57,10 +54,7 @@ export function safeHexColor(
  * Converts a normalized hex colour to an `rgb()` string. Returns the fallback
  * when the input is not a valid 6-digit hex, so callers can degrade safely.
  */
-export function hexToRgbSafe(
-  value: unknown,
-  fallback: string = "rgb(209 213 219)",
-): string {
+export function hexToRgbSafe(value: unknown, fallback: string = "rgb(209 213 219)"): string {
   try {
     const hex = safeHexColor(value);
     if (hex.length !== 7) return fallback;

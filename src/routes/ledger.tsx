@@ -64,15 +64,10 @@ function LedgerPage() {
       title="دفتر الحركات المركزي"
       subtitle="كل الحركات المالية للنظام: الفواتير، السندات، المصاريف، المرتجعات، والتسويات."
     >
-      <PageCard
-        title="فلاتر البحث"
-        description="تصفية الحركات حسب الفترة أو النوع أو الطرف."
-      >
+      <PageCard title="فلاتر البحث" description="تصفية الحركات حسب الفترة أو النوع أو الطرف.">
         <div className="grid grid-cols-2 gap-3 md:grid-cols-6">
           <div>
-            <Label className="text-[11px] text-muted-foreground">
-              من تاريخ
-            </Label>
+            <Label className="text-[11px] text-muted-foreground">من تاريخ</Label>
             <Input
               type="date"
               value={from}
@@ -81,9 +76,7 @@ function LedgerPage() {
             />
           </div>
           <div>
-            <Label className="text-[11px] text-muted-foreground">
-              إلى تاريخ
-            </Label>
+            <Label className="text-[11px] text-muted-foreground">إلى تاريخ</Label>
             <Input
               type="date"
               value={to}
@@ -93,10 +86,7 @@ function LedgerPage() {
           </div>
           <div>
             <Label className="text-[11px] text-muted-foreground">النوع</Label>
-            <Select
-              value={type}
-              onValueChange={(v) => setType(v as LedgerType | "all")}
-            >
+            <Select value={type} onValueChange={(v) => setType(v as LedgerType | "all")}>
               <SelectTrigger className="!h-10">
                 <SelectValue />
               </SelectTrigger>
@@ -128,10 +118,7 @@ function LedgerPage() {
           </div>
           <div>
             <Label className="text-[11px] text-muted-foreground">الحالة</Label>
-            <Select
-              value={status}
-              onValueChange={(v) => setStatus(v as LedgerStatus | "all")}
-            >
+            <Select value={status} onValueChange={(v) => setStatus(v as LedgerStatus | "all")}>
               <SelectTrigger className="!h-10">
                 <SelectValue />
               </SelectTrigger>
@@ -154,11 +141,7 @@ function LedgerPage() {
         </div>
       </PageCard>
 
-      <PageCard
-        title="الحركات"
-        description={`عرض ${filtered.length} حركة.`}
-        noBodyPadding
-      >
+      <PageCard title="الحركات" description={`عرض ${filtered.length} حركة.`} noBodyPadding>
         <div className="w-full overflow-x-auto">
           <table className="w-full min-w-[900px] text-right text-sm">
             <thead className="bg-secondary/60 text-[11px] font-semibold uppercase text-muted-foreground">
@@ -181,15 +164,9 @@ function LedgerPage() {
                 return (
                   <tr
                     key={r.id}
-                    className={
-                      muted
-                        ? "bg-destructive/5 text-muted-foreground line-through"
-                        : ""
-                    }
+                    className={muted ? "bg-destructive/5 text-muted-foreground line-through" : ""}
                   >
-                    <td className="px-3 py-2 tabular-nums">
-                      {formatDateTime(r.createdAt)}
-                    </td>
+                    <td className="px-3 py-2 tabular-nums">{formatDateTime(r.createdAt)}</td>
                     <td className="px-3 py-2">{LEDGER_TYPE_LABEL[r.type]}</td>
                     <td className="px-3 py-2">{r.description}</td>
                     <td className="px-3 py-2 tabular-nums text-primary">
@@ -209,11 +186,7 @@ function LedgerPage() {
                       {r.credit ? formatAmount(r.credit, r.currency) : "—"}
                     </td>
                     <td className="px-3 py-2 text-xs">
-                      {r.cashImpact === "in"
-                        ? "وارد"
-                        : r.cashImpact === "out"
-                          ? "صادر"
-                          : "لا يوجد"}
+                      {r.cashImpact === "in" ? "وارد" : r.cashImpact === "out" ? "صادر" : "لا يوجد"}
                     </td>
                     <td className="px-3 py-2 text-xs">
                       {r.status === "active" ? "نشطة" : "ملغاة"}
@@ -223,10 +196,7 @@ function LedgerPage() {
               })}
               {filtered.length === 0 && (
                 <tr>
-                  <td
-                    colSpan={9}
-                    className="p-10 text-center text-muted-foreground"
-                  >
+                  <td colSpan={9} className="p-10 text-center text-muted-foreground">
                     لا حركات مطابقة.
                   </td>
                 </tr>

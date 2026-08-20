@@ -231,7 +231,7 @@ function OrdersIndexPage() {
                   <tr key={o.id} className="border-t border-border hover:bg-secondary/30">
                     {selectMode && (
                       <td className="px-3 py-2 text-center">
-                        {(o.status === "cancelled" || o.status === "fulfilled") ? (
+                        {o.status === "cancelled" || o.status === "fulfilled" ? (
                           <span className="inline-block h-4 w-4" />
                         ) : (
                           <Checkbox
@@ -317,8 +317,8 @@ function OrdersIndexPage() {
           <AlertDialogHeader>
             <AlertDialogTitle>تأكيد إلغاء الطلب</AlertDialogTitle>
             <AlertDialogDescription>
-              هل أنت متأكد من إلغاء الطلب "{toCancel?.code}" للعميل {toCancel?.customerNameSnapshot}؟
-              لا يمكن التراجع عن هذا الإجراء.
+              هل أنت متأكد من إلغاء الطلب "{toCancel?.code}" للعميل {toCancel?.customerNameSnapshot}
+              ؟ لا يمكن التراجع عن هذا الإجراء.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter className="flex-row-reverse gap-2">

@@ -64,8 +64,7 @@ export class BaseHttpClient {
     // instead of creating a duplicate record. GETs and DELETEs are excluded.
     const idempotencyKey =
       config.method !== "GET" && config.method !== "DELETE"
-        ? (config.headers?.["Idempotency-Key"] as string | undefined) ??
-          crypto.randomUUID()
+        ? ((config.headers?.["Idempotency-Key"] as string | undefined) ?? crypto.randomUUID())
         : undefined;
 
     for (let attempt = 0; attempt <= retry.maxRetries; attempt++) {
@@ -77,9 +76,7 @@ export class BaseHttpClient {
         headers: {
           ...this.defaultConfig.headers,
           ...config.headers,
-          ...(idempotencyKey
-            ? { "Idempotency-Key": idempotencyKey }
-            : {}),
+          ...(idempotencyKey ? { "Idempotency-Key": idempotencyKey } : {}),
         },
       };
       for (const interceptor of this.interceptors) {

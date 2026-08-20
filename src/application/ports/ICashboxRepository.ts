@@ -73,11 +73,7 @@ export interface ICashboxRepository {
     currency: Currency,
     ctx: TenantContext,
   ): Promise<void>;
-  cashBalanceOn(
-    date: string,
-    ctx: TenantContext,
-    currency?: string,
-  ): Promise<number>;
+  cashBalanceOn(date: string, ctx: TenantContext, currency?: string): Promise<number>;
   cashMovementsOn(date: string, ctx: TenantContext): Promise<DayCashFlowDTO>;
   isDayLocked(date: string, ctx: TenantContext): Promise<boolean>;
   listManualMovements(ctx: TenantContext): Promise<ManualMovementDTO[]>;

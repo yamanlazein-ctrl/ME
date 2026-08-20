@@ -20,9 +20,7 @@ test.describe("Print Preview — Visual Verification (All Doc Types)", () => {
     await page.goto("/", { waitUntil: "domcontentloaded" });
     // Wait for the page to settle
     await page.waitForTimeout(2000);
-    const usernameInput = page
-      .locator('input[name="username"], input[type="text"]')
-      .first();
+    const usernameInput = page.locator('input[name="username"], input[type="text"]').first();
     const isLogin = await usernameInput.isVisible({ timeout: 5_000 }).catch(() => false);
     if (isLogin) {
       await usernameInput.fill("admin@erp.local");
@@ -42,8 +40,17 @@ test.describe("Print Preview — Visual Verification (All Doc Types)", () => {
     await page.waitForTimeout(3000);
 
     // If we got bounced to login, log in and retry once
-    if (await page.locator('input[type="password"]').first().isVisible({ timeout: 1500 }).catch(() => false)) {
-      await page.locator('input[name="username"], input[type="text"]').first().fill("admin@erp.local");
+    if (
+      await page
+        .locator('input[type="password"]')
+        .first()
+        .isVisible({ timeout: 1500 })
+        .catch(() => false)
+    ) {
+      await page
+        .locator('input[name="username"], input[type="text"]')
+        .first()
+        .fill("admin@erp.local");
       await page.locator('input[type="password"]').first().fill("admin123");
       await page.locator('button[type="submit"]').click();
       await waitForApp(page);
@@ -108,12 +115,7 @@ test.describe("Print Preview — Visual Verification (All Doc Types)", () => {
   });
 
   test("03 Return Invoice — مرتجع", async ({ page }) => {
-    await renderAndSnap(
-      page,
-      "03-return-invoice",
-      "/returns",
-      "button[title*='طباعة المرتجع']",
-    );
+    await renderAndSnap(page, "03-return-invoice", "/returns", "button[title*='طباعة المرتجع']");
   });
 
   test("04 Party Statement — كشف حساب عميل", async ({ page }) => {

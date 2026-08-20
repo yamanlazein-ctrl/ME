@@ -26,7 +26,13 @@ export function CardField({
         {label}
         {required && <span className="text-destructive">*</span>}
       </Label>
-      <div className={error ? "[&_input]:border-destructive [&_select]:border-destructive [&_[role=combobox]]:border-destructive" : ""}>
+      <div
+        className={
+          error
+            ? "[&_input]:border-destructive [&_select]:border-destructive [&_[role=combobox]]:border-destructive"
+            : ""
+        }
+      >
         {children}
       </div>
       {error && <p className="mt-0.5 text-[11px] text-destructive">{error}</p>}

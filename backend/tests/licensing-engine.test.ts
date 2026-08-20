@@ -1,11 +1,5 @@
 import { describe, it, expect } from "vitest";
-import {
-  resolveFeatures,
-  defaultLimits,
-  isPlan,
-  isEdition,
-  PLANS,
-} from "@/domain/licensing/plans";
+import { resolveFeatures, defaultLimits, isPlan, isEdition, PLANS } from "@/domain/licensing/plans";
 import {
   isPerpetual,
   interpretFeatures,
@@ -82,7 +76,14 @@ describe("License Engine — metadata (frozen spec §3)", () => {
 });
 
 describe("License Enforcement — limits (frozen spec §3, §9)", () => {
-  const limits: LicenseLimits = { users: 20, devices: 2, branches: 1, warehouses: 3, storage_gb: 10, api_calls: 1000 };
+  const limits: LicenseLimits = {
+    users: 20,
+    devices: 2,
+    branches: 1,
+    warehouses: 3,
+    storage_gb: 10,
+    api_calls: 1000,
+  };
 
   it("allows counts below the limit", () => {
     expect(isWithinLimit(limits, "users", 19)).toBe(true);
@@ -113,7 +114,14 @@ describe("LicenseTokenSigner — extended payload (frozen spec §3)", () => {
       licenseModel: "perpetual",
       bindingType: "machine",
       bindingValue: "fp",
-      limits: { users: 20, devices: 2, branches: 1, warehouses: 3, storage_gb: 10, api_calls: 1000 },
+      limits: {
+        users: 20,
+        devices: 2,
+        branches: 1,
+        warehouses: 3,
+        storage_gb: 10,
+        api_calls: 1000,
+      },
       transferPolicy: { allowed: true, max_transfers: 3, requires_super_admin: true },
       updatePolicy: { channel: "stable", allow_updates: true, minimum_version: "1.0.0" },
       backupPolicy: { enabled: true, cloud_backup: false, max_backups: 30 },
@@ -269,7 +277,14 @@ describe("License activation & transfer (frozen spec §6, §7)", () => {
       licenseModel: "perpetual",
       bindingType: "none",
       bindingValue: "",
-      limits: { users: 50, devices: 10, branches: 5, warehouses: 10, storage_gb: 100, api_calls: 10000 },
+      limits: {
+        users: 50,
+        devices: 10,
+        branches: 5,
+        warehouses: 10,
+        storage_gb: 100,
+        api_calls: 10000,
+      },
       transferPolicy: { allowed: true, max_transfers: 5, requires_super_admin: false },
       updatePolicy: { channel: "stable", allow_updates: true, minimum_version: "1.0.0" },
       backupPolicy: { enabled: true, cloud_backup: true, max_backups: 60 },

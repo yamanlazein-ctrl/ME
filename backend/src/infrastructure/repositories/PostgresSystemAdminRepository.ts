@@ -24,7 +24,13 @@ export class PostgresSystemAdminRepository {
       .where(eq(systemAdmins.email, email.toLowerCase().trim()))
       .limit(1);
     if (!row) return null;
-    return { id: row.id, email: row.email, passwordHash: row.passwordHash, name: row.name, role: row.role };
+    return {
+      id: row.id,
+      email: row.email,
+      passwordHash: row.passwordHash,
+      name: row.name,
+      role: row.role,
+    };
   }
 
   async create(input: {
@@ -42,7 +48,13 @@ export class PostgresSystemAdminRepository {
         role: input.role ?? "super_admin",
       })
       .returning();
-    return { id: row.id, email: row.email, passwordHash: row.passwordHash, name: row.name, role: row.role };
+    return {
+      id: row.id,
+      email: row.email,
+      passwordHash: row.passwordHash,
+      name: row.name,
+      role: row.role,
+    };
   }
 
   async count(): Promise<number> {

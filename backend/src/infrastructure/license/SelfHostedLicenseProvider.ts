@@ -48,11 +48,7 @@ export class SelfHostedLicenseProvider implements ILicenseProvider {
   async activate(req: ActivationRequest): Promise<ActivationResult> {
     return this.db.transaction(async (tx: Tx) => {
       // 1. Find the license by key.
-      const [lic] = await tx
-        .select()
-        .from(licenses)
-        .where(eq(licenses.key, req.key))
-        .limit(1);
+      const [lic] = await tx.select().from(licenses).where(eq(licenses.key, req.key)).limit(1);
       if (!lic) {
         throw new Error("INVALID_LICENSE");
       }
@@ -66,10 +62,7 @@ export class SelfHostedLicenseProvider implements ILicenseProvider {
         .select()
         .from(licenseActivations)
         .where(
-          and(
-            eq(licenseActivations.licenseId, lic.id),
-            isNull(licenseActivations.deactivatedAt),
-          ),
+          and(eq(licenseActivations.licenseId, lic.id), isNull(licenseActivations.deactivatedAt)),
         )
         .limit(1);
 
@@ -94,16 +87,24 @@ export class SelfHostedLicenseProvider implements ILicenseProvider {
       // map the constraint violation to a friendly error instead of 500.
       let activation: typeof licenseActivations.$inferSelect | undefined;
       try {
-        [activation] = await tx.insert(licenseActivations).values({
-          licenseId: lic.id,
-          tenantId,
-          serverFingerprint: req.serverFingerprint,
-          serverFingerprintVersion: req.serverFingerprintVersion,
-          hostname: req.hostname,
-          appVersion: req.appVersion,
-        }).returning();
+        [activation] = await tx
+          .insert(licenseActivations)
+          .values({
+            licenseId: lic.id,
+            tenantId,
+            serverFingerprint: req.serverFingerprint,
+            serverFingerprintVersion: req.serverFingerprintVersion,
+            hostname: req.hostname,
+            appVersion: req.appVersion,
+          })
+          .returning();
       } catch (e) {
-        if (e && typeof e === "object" && "code" in e && (e as { code?: string }).code === "23505") {
+        if (
+          e &&
+          typeof e === "object" &&
+          "code" in e &&
+          (e as { code?: string }).code === "23505"
+        ) {
           throw new Error("ALREADY_ACTIVE");
         }
         throw e;
@@ -271,23 +272,22 @@ export class SelfHostedLicenseProvider implements ILicenseProvider {
   }
 
   async listDevices(activationId: string): Promise<DeviceInfo[]> {
-    return withTenantTx(
-      (await this.activationTenantId(activationId)) ?? "",
-      async (tx: Tx) => {
-        const rows = await tx
-          .select()
-          .from(deviceRegistrations)
-          .where(eq(deviceRegistrations.licenseId, (await this.activationLicenseId(activationId)) ?? ""));
-        return rows.map((r: (typeof deviceRegistrations.$inferSelect)) => ({
-          id: r.id,
-          deviceId: r.deviceId,
-          platform: r.platform as DeviceInfo["platform"],
-          name: r.name,
-          lastSeenAt: r.lastSeenAt,
-          revokedAt: r.revokedAt,
-        }));
-      },
-    );
+    return withTenantTx((await this.activationTenantId(activationId)) ?? "", async (tx: Tx) => {
+      const rows = await tx
+        .select()
+        .from(deviceRegistrations)
+        .where(
+          eq(deviceRegistrations.licenseId, (await this.activationLicenseId(activationId)) ?? ""),
+        );
+      return rows.map((r: typeof deviceRegistrations.$inferSelect) => ({
+        id: r.id,
+        deviceId: r.deviceId,
+        platform: r.platform as DeviceInfo["platform"],
+        name: r.name,
+        lastSeenAt: r.lastSeenAt,
+        revokedAt: r.revokedAt,
+      }));
+    });
   }
 
   async revokeDevice(activationId: string, deviceId: string, reason: string): Promise<void> {

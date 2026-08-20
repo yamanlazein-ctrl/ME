@@ -47,14 +47,14 @@ implementing agent must respect. It is NOT a replacement for the plan.
 The existing `tenants` table has only `license_key` (VARCHAR(255), nullable)
 and `license_expires_at` (TIMESTAMPTZ, nullable). The 0A migration adds:
 
-| Column               | Type          | Notes                                       |
-|----------------------|---------------|---------------------------------------------|
-| `license_status`     | VARCHAR(20)   | `active` \| `trial` \| `expired` \| `suspended` \| `revoked` |
-| `license_type`       | VARCHAR(20)   | `trial` \| `full` \| `subscription`         |
-| `max_devices`        | INTEGER       | default 3                                   |
-| `activation_id`      | UUID          | links to the active `license_activations` row |
-| `server_fingerprint` | VARCHAR(128)  | SHA-256 hex of the host's machine signals   |
-| `last_heartbeat_at`  | TIMESTAMPTZ   | updated by the heartbeat middleware         |
+| Column               | Type         | Notes                                                        |
+| -------------------- | ------------ | ------------------------------------------------------------ |
+| `license_status`     | VARCHAR(20)  | `active` \| `trial` \| `expired` \| `suspended` \| `revoked` |
+| `license_type`       | VARCHAR(20)  | `trial` \| `full` \| `subscription`                          |
+| `max_devices`        | INTEGER      | default 3                                                    |
+| `activation_id`      | UUID         | links to the active `license_activations` row                |
+| `server_fingerprint` | VARCHAR(128) | SHA-256 hex of the host's machine signals                    |
+| `last_heartbeat_at`  | TIMESTAMPTZ  | updated by the heartbeat middleware                          |
 
 These columns live on `tenants` (the existing plan said "1 license ↔ 1 tenant"
 and the `tenants` table is the parent of all business data). The full
@@ -104,11 +104,13 @@ plus the in-memory + API implementations to follow in 0I.
 ## 8. AuthGate ↔ Setup Wizard coexistence (planned for 0F)
 
 The current provider chain is:
+
 ```
 QueryClientProvider → ThemeProvider → AuthGate → ErrorBoundary → Outlet
 ```
 
 In 0F, an `InstallGate` is inserted BEFORE `AuthGate`:
+
 ```
 QueryClientProvider → ThemeProvider → InstallGate → AuthGate → ErrorBoundary → Outlet
 ```
@@ -177,6 +179,7 @@ Both tables hold rows that exist **before** a tenant is established:
   (per-tenant license offline tokens) have a tenant id.
 
 The RLS policy on these tables is:
+
 ```sql
 USING      ((tenant_id IS NULL) OR (tenant_id = current_setting('app.current_tenant_id', true)::UUID))
 WITH CHECK ((tenant_id IS NULL) OR (tenant_id = current_setting('app.current_tenant_id', true)::UUID));
@@ -197,6 +200,7 @@ tenant_id for system-level events).
 ### 10.5. `license_activations` enforces one-active-per-license
 
 A partial unique index:
+
 ```sql
 CREATE UNIQUE INDEX "idx_license_activations_one_active"
   ON "license_activations" ("license_id")

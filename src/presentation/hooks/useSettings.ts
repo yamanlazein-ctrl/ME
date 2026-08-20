@@ -287,7 +287,8 @@ export async function loadSettings(): Promise<void> {
     if (Array.isArray(data.taxes)) merged.taxes = data.taxes;
     if (Array.isArray(data.warehouses)) merged.warehouses = data.warehouses;
     if (Array.isArray(data.paymentMethods)) merged.paymentMethods = data.paymentMethods;
-    if (Array.isArray(data.currencies) && data.currencies.length) merged.currencies = data.currencies;
+    if (Array.isArray(data.currencies) && data.currencies.length)
+      merged.currencies = data.currencies;
     if (data.printing && typeof data.printing === "object" && Object.keys(data.printing).length) {
       merged.printing = data.printing;
     }
@@ -300,8 +301,7 @@ export async function loadSettings(): Promise<void> {
     if (changed) notify();
     // Apply persisted exchange rates to the live currency state (fallback to defaults).
     const currencies = (settings as Record<string, unknown>).currencies as
-      | { code: string; rate: number }[]
-      | undefined;
+      { code: string; rate: number }[] | undefined;
     if (Array.isArray(currencies)) {
       for (const c of currencies) {
         if (c && typeof c.code === "string" && typeof c.rate === "number" && c.rate > 0) {

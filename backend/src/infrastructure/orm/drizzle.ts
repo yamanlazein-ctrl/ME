@@ -42,10 +42,7 @@ export type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
  * is what makes RLS tenant isolation correct for multi-tenant writes.
  * The pooled client is released back to the pool afterwards.
  */
-export async function withTenantTx<T>(
-  tenantId: string,
-  fn: (tx: Tx) => Promise<T>,
-): Promise<T> {
+export async function withTenantTx<T>(tenantId: string, fn: (tx: Tx) => Promise<T>): Promise<T> {
   const client = await pool.connect();
   try {
     const txDb = drizzle(client);

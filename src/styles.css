@@ -42,10 +42,10 @@
   --ds-card-pad: 16px;
   --ds-section-gap: 12px;
 
-  --ds-input-h: 40px;            /* h-10 — one input height everywhere */
-  --ds-row-h: 44px;              /* comfortable — default table row */
-  --ds-row-h-compact: 36px;      /* compact — reserved */
-  --ds-row-h-ultra: 30px;        /* ultra compact — reserved */
+  --ds-input-h: 40px; /* h-10 — one input height everywhere */
+  --ds-row-h: 44px; /* comfortable — default table row */
+  --ds-row-h-compact: 36px; /* compact — reserved */
+  --ds-row-h-ultra: 30px; /* ultra compact — reserved */
   --ds-row-pad-x: 12px;
   --ds-row-pad-x-compact: 10px;
   --ds-row-pad-x-ultra: 8px;
@@ -119,56 +119,60 @@
   /* ================================================================
    * Motard Fabrics Group — DARK theme (default)
    * ============================================================== */
-  --background: #0A0A0A;
-  --foreground: #FAFAFA;
+  --background: #0a0a0a;
+  --foreground: #fafafa;
   --surface: #070707;
   --card: #131313;
-  --card-foreground: #FAFAFA;
+  --card-foreground: #fafafa;
   --popover: #141414;
-  --popover-foreground: #FAFAFA;
+  --popover-foreground: #fafafa;
 
-  --primary: #FFD740;
-  --primary-foreground: #0A0A0A;
-  --primary-glow: #FFE433;
-  --accent-soft: #FFF3B0;
+  --primary: #ffd740;
+  --primary-foreground: #0a0a0a;
+  --primary-glow: #ffe433;
+  --accent-soft: #fff3b0;
 
-  --secondary: #1A1A1A;
-  --secondary-foreground: #FAFAFA;
-  --muted: #1A1A1A;
-  --muted-foreground: #9CA3AF;
-  --accent: #1A1A1A;
-  --accent-foreground: #FAFAFA;
+  --secondary: #1a1a1a;
+  --secondary-foreground: #fafafa;
+  --muted: #1a1a1a;
+  --muted-foreground: #9ca3af;
+  --accent: #1a1a1a;
+  --accent-foreground: #fafafa;
 
   --destructive: oklch(0.637 0.237 25.3);
-  --destructive-foreground: #FFFFFF;
+  --destructive-foreground: #ffffff;
   --success: oklch(0.72 0.19 149);
-  --success-foreground: #0A0A0A;
+  --success-foreground: #0a0a0a;
   --warning: oklch(0.78 0.17 70);
-  --warning-foreground: #0A0A0A;
+  --warning-foreground: #0a0a0a;
 
   --border: #242424;
   --input: #242424;
-  --ring: #FFD740;
+  --ring: #ffd740;
 
-  --currency-syp: #FFD740;
-  --currency-usd: #E8D8A8;
+  --currency-syp: #ffd740;
+  --currency-usd: #e8d8a8;
 
-  --chart-1: #FFD740;
-  --chart-2: #FFE433;
-  --chart-3: #FFF3B0;
-  --chart-4: #6B7280;
+  --chart-1: #ffd740;
+  --chart-2: #ffe433;
+  --chart-3: #fff3b0;
+  --chart-4: #6b7280;
   --chart-5: #374151;
 
-  --sidebar: #0A0A0A;
-  --sidebar-foreground: #FAFAFA;
-  --sidebar-primary: #FFD740;
-  --sidebar-primary-foreground: #0A0A0A;
-  --sidebar-accent: #1A1A1A;
-  --sidebar-accent-foreground: #FAFAFA;
+  --sidebar: #0a0a0a;
+  --sidebar-foreground: #fafafa;
+  --sidebar-primary: #ffd740;
+  --sidebar-primary-foreground: #0a0a0a;
+  --sidebar-accent: #1a1a1a;
+  --sidebar-accent-foreground: #fafafa;
   --sidebar-border: #242424;
-  --sidebar-ring: #FFD740;
+  --sidebar-ring: #ffd740;
 
-  --hero-card-bg: linear-gradient(135deg, #17140E 0%, color-mix(in oklab, var(--primary) 18%, #0A0A0A) 100%);
+  --hero-card-bg: linear-gradient(
+    135deg,
+    #17140e 0%,
+    color-mix(in oklab, var(--primary) 18%, #0a0a0a) 100%
+  );
 }
 
 .dark {
@@ -180,51 +184,54 @@
  * ============================================================== */
 .light {
   color-scheme: light;
-  --background: #FFFFFF;
-  --foreground: #0A0A0A;
-  --surface: #F7F6F2;
-  --card: #FFFFFF;
-  --card-foreground: #0A0A0A;
-  --popover: #FFFFFF;
-  --popover-foreground: #0A0A0A;
+  --background: #ffffff;
+  --foreground: #0a0a0a;
+  --surface: #f7f6f2;
+  --card: #ffffff;
+  --card-foreground: #0a0a0a;
+  --popover: #ffffff;
+  --popover-foreground: #0a0a0a;
 
-  --primary: #C89100;
-  --primary-foreground: #FFFFFF;
-  --primary-glow: #E0A800;
-  --accent-soft: #8A6A00;
+  --primary: #c89100;
+  --primary-foreground: #ffffff;
+  --primary-glow: #e0a800;
+  --accent-soft: #8a6a00;
 
-  --secondary: #F1EFEA;
-  --secondary-foreground: #0A0A0A;
-  --muted: #F1EFEA;
-  --muted-foreground: #5B6270;
-  --accent: #F1EFEA;
-  --accent-foreground: #0A0A0A;
+  --secondary: #f1efea;
+  --secondary-foreground: #0a0a0a;
+  --muted: #f1efea;
+  --muted-foreground: #5b6270;
+  --accent: #f1efea;
+  --accent-foreground: #0a0a0a;
 
-  --border: #E6E4DE;
-  --input: #E6E4DE;
-  --ring: #C89100;
+  --border: #e6e4de;
+  --input: #e6e4de;
+  --ring: #c89100;
 
-  --currency-syp: #8A6A00;
-  --currency-usd: #4B5563;
+  --currency-syp: #8a6a00;
+  --currency-usd: #4b5563;
 
-  --chart-1: #C89100;
-  --chart-2: #E0A800;
-  --chart-3: #8A6A00;
-  --chart-4: #9CA3AF;
-  --chart-5: #D1D5DB;
+  --chart-1: #c89100;
+  --chart-2: #e0a800;
+  --chart-3: #8a6a00;
+  --chart-4: #9ca3af;
+  --chart-5: #d1d5db;
 
-  --sidebar: #FAF9F5;
-  --sidebar-foreground: #0A0A0A;
-  --sidebar-primary: #C89100;
-  --sidebar-primary-foreground: #FFFFFF;
-  --sidebar-accent: #F1EFEA;
-  --sidebar-accent-foreground: #0A0A0A;
-  --sidebar-border: #E6E4DE;
-  --sidebar-ring: #C89100;
+  --sidebar: #faf9f5;
+  --sidebar-foreground: #0a0a0a;
+  --sidebar-primary: #c89100;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #f1efea;
+  --sidebar-accent-foreground: #0a0a0a;
+  --sidebar-border: #e6e4de;
+  --sidebar-ring: #c89100;
 
-  --hero-card-bg: linear-gradient(135deg, #FFFBEE 0%, color-mix(in oklab, var(--primary) 12%, #FFFFFF) 100%);
+  --hero-card-bg: linear-gradient(
+    135deg,
+    #fffbee 0%,
+    color-mix(in oklab, var(--primary) 12%, #ffffff) 100%
+  );
 }
-
 
 @layer base {
   * {
@@ -296,7 +303,9 @@
 }
 
 @keyframes card-glow-spin {
-  to { --glow-angle: 360deg; }
+  to {
+    --glow-angle: 360deg;
+  }
 }
 
 /* Print isolation is now handled by src/components/print/print.css —

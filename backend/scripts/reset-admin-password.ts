@@ -16,4 +16,7 @@ async function main() {
   console.log("Password: admin123");
   process.exit(0);
 }
-main().catch((e) => { console.error("FATAL:", e); process.exit(1); });
+main().catch((e) => {
+  console.error("FATAL:", e);
+  process.exit(1);
+});

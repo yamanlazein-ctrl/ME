@@ -3,16 +3,9 @@ import { is2dp, MAX_2DP_MESSAGE } from "./precision.js";
 
 const returnLineSchema = z.object({
   rollId: z.string().uuid(),
-  quantityKg: z
-    .number()
-    .positive()
-    .max(100000)
-    .refine(is2dp, { message: MAX_2DP_MESSAGE }),
+  quantityKg: z.number().positive().max(100000).refine(is2dp, { message: MAX_2DP_MESSAGE }),
   pieces: z.coerce.number().int().positive().max(100000).optional().default(1),
-  pricePerKg: z
-    .number()
-    .positive()
-    .refine(is2dp, { message: MAX_2DP_MESSAGE }),
+  pricePerKg: z.number().positive().refine(is2dp, { message: MAX_2DP_MESSAGE }),
 });
 
 export const createReturnSchema = z.object({

@@ -15,10 +15,7 @@ const invoiceLineSchema = z.object({
     .number()
     .positive("السعر يجب أن يكون أكبر من صفر")
     .refine(is2dp, { message: MAX_2DP_MESSAGE }),
-  discountAmount: z.coerce
-    .number()
-    .min(0, "الخصم لا يمكن أن يكون سالباً")
-    .optional(),
+  discountAmount: z.coerce.number().min(0, "الخصم لا يمكن أن يكون سالباً").optional(),
   note: z.string().max(500).optional(),
 });
 
@@ -35,10 +32,7 @@ export const createInvoiceSchema = z.object({
   notes: z.string().max(2000).optional(),
   // Optional amount received at sale time. When present, a linked receipt
   // (invoiceId → vouchers) is created atomically in the invoice transaction.
-  paid: z
-    .number()
-    .min(0, "المبلغ المدفوع لا يمكن أن يكون سالباً")
-    .optional(),
+  paid: z.number().min(0, "المبلغ المدفوع لا يمكن أن يكون سالباً").optional(),
   paymentMethod: z.enum(["cash", "transfer", "check", "card"]).optional(),
   orderId: z.string().uuid().optional(),
 });

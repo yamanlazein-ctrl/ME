@@ -10,9 +10,21 @@ import { vouchers } from "../src/infrastructure/orm/schemas/voucher.table.js";
 import { ledgerEntries } from "../src/infrastructure/orm/schemas/ledger-entry.table.js";
 
 const INV_NUMBERS = [
-  "INV-2026-0007","INV-2026-0008","INV-2026-0009","INV-2026-0010","INV-2026-0011",
-  "INV-2026-0023","INV-2026-0024","INV-2026-0025","INV-2026-0026","INV-2026-0027",
-  "INV-2026-0028","INV-2026-0029","INV-2026-0030","INV-2026-0031","INV-2026-0032",
+  "INV-2026-0007",
+  "INV-2026-0008",
+  "INV-2026-0009",
+  "INV-2026-0010",
+  "INV-2026-0011",
+  "INV-2026-0023",
+  "INV-2026-0024",
+  "INV-2026-0025",
+  "INV-2026-0026",
+  "INV-2026-0027",
+  "INV-2026-0028",
+  "INV-2026-0029",
+  "INV-2026-0030",
+  "INV-2026-0031",
+  "INV-2026-0032",
 ];
 
 async function main() {
@@ -28,9 +40,16 @@ async function main() {
 
     const party = await db.select().from(parties).where(eq(parties.id, inv.partyId)).limit(1);
     const lines = await db.select().from(invoiceLines).where(eq(invoiceLines.invoiceId, inv.id));
-    const payVouchers = await db.select().from(vouchers).where(
-      and(eq(vouchers.invoiceId, inv.id), eq(vouchers.kind, "payment"), eq(vouchers.status, "active"))
-    );
+    const payVouchers = await db
+      .select()
+      .from(vouchers)
+      .where(
+        and(
+          eq(vouchers.invoiceId, inv.id),
+          eq(vouchers.kind, "payment"),
+          eq(vouchers.status, "active"),
+        ),
+      );
 
     console.log(`--- ${num} | ${party[0]?.name} ---`);
     console.log(`  Date: ${inv.date}`);
@@ -39,9 +58,13 @@ async function main() {
     let lineIdx = 1;
     let computedSubtotal = 0;
     for (const l of lines) {
-      const lineTotal = Math.round(Number(l.quantityKg) * Number(l.pricePerKg) - Number(l.discountAmount ?? 0));
+      const lineTotal = Math.round(
+        Number(l.quantityKg) * Number(l.pricePerKg) - Number(l.discountAmount ?? 0),
+      );
       computedSubtotal += lineTotal;
-      console.log(`  Line ${lineIdx}: qty=${l.quantityKg} × price=${l.pricePerKg} - discount=${l.discountAmount} = ${lineTotal}`);
+      console.log(
+        `  Line ${lineIdx}: qty=${l.quantityKg} × price=${l.pricePerKg} - discount=${l.discountAmount} = ${lineTotal}`,
+      );
       lineIdx++;
     }
 
@@ -77,4 +100,7 @@ async function main() {
   console.log("\n========== DONE ==========");
   process.exit(0);
 }
-main().catch((e) => { console.error("FATAL:", e); process.exit(1); });
+main().catch((e) => {
+  console.error("FATAL:", e);
+  process.exit(1);
+});

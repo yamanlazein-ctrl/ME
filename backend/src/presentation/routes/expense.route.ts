@@ -87,24 +87,36 @@ export function registerExpenseRoutes(
     },
   );
 
-  router.get("/expenses/:id", auth, readGuard, validateUuidParam("id"), async (req: Request, res: Response) => {
-    const r = await uc.findExpenseUseCase(expenseRepo, pid(req), ctx(req));
-    if (!r.ok) {
-      return res.status(500).json({ code: "INTERNAL", message: r.error });
-    }
-    if (!r.data) {
-      return res.status(404).json({ code: "NOT_FOUND", message: "المصروف غير موجود" });
-    }
-    res.json(r.data);
-  });
-
-  router.post("/expenses/:id/cancel", auth, writeGuard, validateUuidParam("id"), async (req: Request, res: Response) => {
-    const c = ctx(req);
-    const r = await uc.cancelExpenseUseCase(expenseRepo, auditRepo, pid(req), c.userId, c);
-    if (r.ok) {
+  router.get(
+    "/expenses/:id",
+    auth,
+    readGuard,
+    validateUuidParam("id"),
+    async (req: Request, res: Response) => {
+      const r = await uc.findExpenseUseCase(expenseRepo, pid(req), ctx(req));
+      if (!r.ok) {
+        return res.status(500).json({ code: "INTERNAL", message: r.error });
+      }
+      if (!r.data) {
+        return res.status(404).json({ code: "NOT_FOUND", message: "المصروف غير موجود" });
+      }
       res.json(r.data);
-    } else {
-      res.status(422).json({ code: "VALIDATION", message: r.error });
-    }
-  });
+    },
+  );
+
+  router.post(
+    "/expenses/:id/cancel",
+    auth,
+    writeGuard,
+    validateUuidParam("id"),
+    async (req: Request, res: Response) => {
+      const c = ctx(req);
+      const r = await uc.cancelExpenseUseCase(expenseRepo, auditRepo, pid(req), c.userId, c);
+      if (r.ok) {
+        res.json(r.data);
+      } else {
+        res.status(422).json({ code: "VALIDATION", message: r.error });
+      }
+    },
+  );
 }

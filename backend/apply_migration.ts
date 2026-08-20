@@ -3,7 +3,9 @@ import { sql } from "drizzle-orm";
 
 async function main() {
   // Apply migration 0023: add paid and payment_method columns to invoices
-  await db.execute(sql`ALTER TABLE invoices ADD COLUMN IF NOT EXISTS paid REAL NOT NULL DEFAULT 0;`);
+  await db.execute(
+    sql`ALTER TABLE invoices ADD COLUMN IF NOT EXISTS paid REAL NOT NULL DEFAULT 0;`,
+  );
   await db.execute(sql`ALTER TABLE invoices ADD COLUMN IF NOT EXISTS payment_method varchar(20);`);
   await db.execute(sql`
     ALTER TABLE invoices DROP CONSTRAINT IF EXISTS chk_invoices_payment_method;
@@ -70,7 +72,10 @@ async function main() {
     WHERE table_name = 'invoices' AND column_name IN ('paid','subtotal','total')
     ORDER BY column_name;
   `);
-  console.log("INVOICE COLUMNS:", JSON.stringify((res as unknown as { rows: unknown[] }).rows, null, 2));
+  console.log(
+    "INVOICE COLUMNS:",
+    JSON.stringify((res as unknown as { rows: unknown[] }).rows, null, 2),
+  );
 
   const res2 = await db.execute(sql`
     SELECT column_name, data_type
@@ -78,8 +83,14 @@ async function main() {
     WHERE table_name = 'invoice_lines' AND column_name = 'discount_amount'
     ORDER BY column_name;
   `);
-  console.log("LINE COLUMNS:", JSON.stringify((res2 as unknown as { rows: unknown[] }).rows, null, 2));
+  console.log(
+    "LINE COLUMNS:",
+    JSON.stringify((res2 as unknown as { rows: unknown[] }).rows, null, 2),
+  );
 
   process.exit(0);
 }
-main().catch((e) => { console.error("FATAL", e); process.exit(1); });
+main().catch((e) => {
+  console.error("FATAL", e);
+  process.exit(1);
+});

@@ -16,7 +16,10 @@
  */
 
 const API = "http://localhost:8080/api";
-let token = "", passed = 0, failed = 0, failures = [];
+let token = "",
+  passed = 0,
+  failed = 0,
+  failures = [];
 
 async function api(path, opts = {}) {
   if (!token) {
@@ -35,21 +38,39 @@ async function api(path, opts = {}) {
   }
   const res = await fetch(path.startsWith("http") ? path : `${API}${path}`, {
     ...opts,
-    headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}`, ...opts.headers },
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+      ...opts.headers,
+    },
   });
   let data = null;
-  try { data = await res.json(); } catch {}
+  try {
+    data = await res.json();
+  } catch {}
   return { status: res.status, data, headers: res.headers };
 }
 
 function ok(n, c) {
-  if (c) { passed++; console.log(`  ✅ ${n}`); }
-  else { failed++; console.log(`  ❌ ${n}`); failures.push(n); }
+  if (c) {
+    passed++;
+    console.log(`  ✅ ${n}`);
+  } else {
+    failed++;
+    console.log(`  ❌ ${n}`);
+    failures.push(n);
+  }
 }
 
 async function test(n, f) {
   console.log(`\n📋 ${n}`);
-  try { await f(); } catch (e) { failed++; console.log(`  💥 ${e.message}`); failures.push(`${n}: ${e.message}`); }
+  try {
+    await f();
+  } catch (e) {
+    failed++;
+    console.log(`  💥 ${e.message}`);
+    failures.push(`${n}: ${e.message}`);
+  }
 }
 
 // Test data IDs (same as comprehensive-api.mjs)
@@ -73,7 +94,9 @@ await test("Health Check (الفحص العميق)", async () => {
   ok("Has memory check", data?.checks?.memory?.status !== undefined);
   ok("Has uptime", data?.uptime > 0);
   ok("Has version", data?.version !== undefined);
-  console.log(`  ℹ️  Server uptime: ${Math.floor(data?.uptime || 0)}s, Response: ${data?.responseTime}ms`);
+  console.log(
+    `  ℹ️  Server uptime: ${Math.floor(data?.uptime || 0)}s, Response: ${data?.responseTime}ms`,
+  );
 });
 
 // ─── 2. SECURITY: LOGIN & TOKEN ─────────────────────────────
@@ -87,7 +110,9 @@ await test("Security (الأمان)", async () => {
   ok("Bad password → 401", bad.status === 401 || bad.status === 429);
 
   // Missing token
-  const noAuth = await fetch(`${API}/invoices?limit=1`, { headers: { "Content-Type": "application/json" } });
+  const noAuth = await fetch(`${API}/invoices?limit=1`, {
+    headers: { "Content-Type": "application/json" },
+  });
   ok("No token → 401/403", noAuth.status === 401 || noAuth.status === 403);
 });
 
@@ -104,7 +129,10 @@ await test("Phase 1: فاتورة دخول متعددة الألوان", async (
       { fabricId: FID, colorId: CCOL, rollId: RID, quantityKg: 3, pricePerKg: 2200 },
     ],
   };
-  const { status, data } = await api("/invoices", { method: "POST", body: JSON.stringify(invoice) });
+  const { status, data } = await api("/invoices", {
+    method: "POST",
+    body: JSON.stringify(invoice),
+  });
   ok("POST entry → 201", status === 201 && data?.number?.startsWith("INV-"));
   ok("Has 2 lines", data?.lines?.length === 2);
   ok("Line 1 total = 10000", data?.lines?.[0]?.total === 10000);
@@ -125,7 +153,7 @@ await test("Phase 1: فاتورة دخول متعددة الألوان", async (
 // ─── 4. MULTI-COLOR SALE INVOICE (Phase 2) ──────────────────
 await test("Phase 2: فاتورة بيع متعددة الألوان", async () => {
   const { data: rolls } = await api("/inventory/rolls?limit=200");
-  const stockBefore = rolls.data?.find(r => r.id === RID)?.remainingKg ?? 0;
+  const stockBefore = rolls.data?.find((r) => r.id === RID)?.remainingKg ?? 0;
   ok("Stock available", stockBefore > 0);
 
   const invoice = {
@@ -139,13 +167,16 @@ await test("Phase 2: فاتورة بيع متعددة الألوان", async () 
       { fabricId: FID, colorId: CCOL, rollId: RID, quantityKg: 1, pricePerKg: 5500 },
     ],
   };
-  const { status, data } = await api("/invoices", { method: "POST", body: JSON.stringify(invoice) });
+  const { status, data } = await api("/invoices", {
+    method: "POST",
+    body: JSON.stringify(invoice),
+  });
   ok("POST sale → 201", status === 201 && data?.number?.startsWith("INV-"));
   ok("Stock deducted", data?.lines?.length === 2);
 
   // Verify stock reduced
   const { data: rollsAfter } = await api("/inventory/rolls?limit=200");
-  const stockAfter = rollsAfter.data?.find(r => r.id === RID)?.remainingKg ?? 0;
+  const stockAfter = rollsAfter.data?.find((r) => r.id === RID)?.remainingKg ?? 0;
   ok("Stock -3kg", stockAfter === stockBefore - 3);
 
   // Print preview
@@ -155,7 +186,7 @@ await test("Phase 2: فاتورة بيع متعددة الألوان", async () 
   // Cancel and restore stock
   await api(`/invoices/${data.id}/cancel`, { method: "POST" });
   const { data: rollsRestored } = await api("/inventory/rolls?limit=200");
-  const stockRestored = rollsRestored.data?.find(r => r.id === RID)?.remainingKg ?? 0;
+  const stockRestored = rollsRestored.data?.find((r) => r.id === RID)?.remainingKg ?? 0;
   ok("Stock restored", stockRestored === stockBefore);
 });
 
@@ -165,34 +196,51 @@ await test("Phase 3: مرتجع متعدد الألوان", async () => {
   const sale = await api("/invoices", {
     method: "POST",
     body: JSON.stringify({
-      type: "sale", date: "2026-08-16", partyId: CID, partyType: "customer", currency: "SYP",
+      type: "sale",
+      date: "2026-08-16",
+      partyId: CID,
+      partyType: "customer",
+      currency: "SYP",
       lines: [{ fabricId: FID, colorId: CCOL, rollId: RID, quantityKg: 2, pricePerKg: 5000 }],
     }),
   });
   ok("Sale for return → 201", sale.status === 201);
 
   const { data: stockBefore } = await api("/inventory/rolls?limit=200");
-  const sb = stockBefore.data?.find(r => r.id === RID)?.remainingKg ?? 0;
+  const sb = stockBefore.data?.find((r) => r.id === RID)?.remainingKg ?? 0;
 
   // Create return
   const ret = await api("/returns", {
     method: "POST",
     body: JSON.stringify({
-      kind: "sale", date: "2026-08-16", partyId: CID, partyType: "customer", currency: "SYP",
-      lines: [{ invoiceId: sale.data.id, fabricId: FID, colorId: CCOL, rollId: RID, quantityKg: 1, pricePerKg: 5000 }],
+      kind: "sale",
+      date: "2026-08-16",
+      partyId: CID,
+      partyType: "customer",
+      currency: "SYP",
+      lines: [
+        {
+          invoiceId: sale.data.id,
+          fabricId: FID,
+          colorId: CCOL,
+          rollId: RID,
+          quantityKg: 1,
+          pricePerKg: 5000,
+        },
+      ],
     }),
   });
   ok("Return → 201", ret.status === 201 && ret.data?.number?.startsWith("RET-"));
 
   // Verify stock restored by 1kg
   const { data: stockAfter } = await api("/inventory/rolls?limit=200");
-  const sa = stockAfter.data?.find(r => r.id === RID)?.remainingKg ?? 0;
+  const sa = stockAfter.data?.find((r) => r.id === RID)?.remainingKg ?? 0;
   ok("Stock +1kg after return", sa === sb + 1);
 
   // Cancel return
   await api(`/returns/${ret.data.id}/cancel`, { method: "POST" });
   const { data: stockFinal } = await api("/inventory/rolls?limit=200");
-  const sf = stockFinal.data?.find(r => r.id === RID)?.remainingKg ?? 0;
+  const sf = stockFinal.data?.find((r) => r.id === RID)?.remainingKg ?? 0;
   ok("Stock back after cancel", sf === sb);
 
   // Cancel the original sale
@@ -219,7 +267,11 @@ await test("Audit Log (تتبع الفواتير)", async () => {
   const { data: inv } = await api("/invoices", {
     method: "POST",
     body: JSON.stringify({
-      type: "entry", date: "2026-08-16", partyId: SID, partyType: "supplier", currency: "SYP",
+      type: "entry",
+      date: "2026-08-16",
+      partyId: SID,
+      partyType: "supplier",
+      currency: "SYP",
       lines: [{ fabricId: FID, colorId: CCOL, rollId: RID, quantityKg: 1, pricePerKg: 1000 }],
     }),
   });
@@ -240,7 +292,7 @@ await test("Audit Log (تتبع الفواتير)", async () => {
   // Check audit log after cancel
   const auditAfter = await api(`/audit-logs/invoice/${inv.id}`);
   ok("Audit log after cancel → 200", auditAfter.status === 200);
-  const hasCancel = auditAfter.data?.data?.some(e => e.action === "cancel");
+  const hasCancel = auditAfter.data?.data?.some((e) => e.action === "cancel");
   ok("Cancel action logged", hasCancel);
 });
 
@@ -252,7 +304,10 @@ await test("Full Backup (النسخ الاحتياطي الكامل)", async () 
   });
   ok("Backup API → 200", res.status === 200);
   ok("Content-Type is ZIP", res.headers.get("content-type")?.includes("zip"));
-  ok("Content-Disposition has filename", res.headers.get("content-disposition")?.includes("fabric-erp-backup"));
+  ok(
+    "Content-Disposition has filename",
+    res.headers.get("content-disposition")?.includes("fabric-erp-backup"),
+  );
 
   const blob = await res.blob();
   ok("ZIP size > 0", blob.size > 0);
@@ -265,7 +320,11 @@ await test("Print Layout (الطباعة الموحدة)", async () => {
   const { data: inv } = await api("/invoices", {
     method: "POST",
     body: JSON.stringify({
-      type: "sale", date: "2026-08-16", partyId: CID, partyType: "customer", currency: "SYP",
+      type: "sale",
+      date: "2026-08-16",
+      partyId: CID,
+      partyType: "customer",
+      currency: "SYP",
       lines: [{ fabricId: FID, colorId: CCOL, rollId: RID, quantityKg: 1, pricePerKg: 5000 }],
     }),
   });
@@ -288,14 +347,30 @@ await test("Vouchers & Accounting (السندات والمحاسبة)", async ()
   // Receipt
   const receipt = await api("/receipts", {
     method: "POST",
-    body: JSON.stringify({ kind: "receipt", date: "2026-08-16", partyId: CID, partyKind: "customer", amount: 10000, currency: "SYP", method: "cash" }),
+    body: JSON.stringify({
+      kind: "receipt",
+      date: "2026-08-16",
+      partyId: CID,
+      partyKind: "customer",
+      amount: 10000,
+      currency: "SYP",
+      method: "cash",
+    }),
   });
   ok("Receipt → 201", receipt.status === 201);
 
   // Payment
   const payment = await api("/payments", {
     method: "POST",
-    body: JSON.stringify({ kind: "payment", date: "2026-08-16", partyId: SID, partyKind: "supplier", amount: 5000, currency: "SYP", method: "cash" }),
+    body: JSON.stringify({
+      kind: "payment",
+      date: "2026-08-16",
+      partyId: SID,
+      partyKind: "supplier",
+      amount: 5000,
+      currency: "SYP",
+      method: "cash",
+    }),
   });
   ok("Payment → 201", payment.status === 201);
 
@@ -321,7 +396,9 @@ await test("Database Performance (أداء قاعدة البيانات)", async 
 
   // Statement query (should use idx_ledger_party_date)
   const t3 = Date.now();
-  const stmt = await api(`/customers/${CID}/statement?currency=SYP&fromDate=2026-01-01&toDate=2026-12-31`);
+  const stmt = await api(
+    `/customers/${CID}/statement?currency=SYP&fromDate=2026-01-01&toDate=2026-12-31`,
+  );
   const t4 = Date.now();
   ok("Statement → 200", stmt.status === 200);
   ok("Fast statement (< 500ms)", t4 - t3 < 500);
@@ -340,15 +417,21 @@ await test("Database Performance (أداء قاعدة البيانات)", async 
 await test("Error Handling (معالجة الأخطاء)", async () => {
   // Bad UUID
   ok("Bad UUID → 400", (await api("/invoices/bad-uuid")).status === 400);
-  
+
   // Not found
-  ok("Not found → 404", (await api("/invoices/00000000-0000-0000-0000-000000000000")).status === 404);
-  
+  ok(
+    "Not found → 404",
+    (await api("/invoices/00000000-0000-0000-0000-000000000000")).status === 404,
+  );
+
   // Invalid filter
   ok("Invalid filter → 400/422", (await api("/invoices?status=invalid")).status >= 400);
-  
+
   // Unauthorized
-  ok("No auth → 401/403", (await api("/invoices?limit=1", { headers: { Authorization: "" } })).status >= 401);
+  ok(
+    "No auth → 401/403",
+    (await api("/invoices?limit=1", { headers: { Authorization: "" } })).status >= 401,
+  );
 });
 
 // ────────────────────────────────────────────────────────────
@@ -356,9 +439,11 @@ console.log("\n" + "=".repeat(60));
 console.log(`📊 RESULTS: ${passed} passed, ${failed} failed`);
 if (failures.length) {
   console.log(`\n❌ FAILURES:`);
-  failures.forEach(f => console.log(`  - ${f}`));
+  failures.forEach((f) => console.log(`  - ${f}`));
 }
-console.log(`\n🏁 ${failed === 0 ? '✅ GO — All tests passed! Project is production-ready.' : '❌ NO-GO — Fix failures before deployment.'}`);
+console.log(
+  `\n🏁 ${failed === 0 ? "✅ GO — All tests passed! Project is production-ready." : "❌ NO-GO — Fix failures before deployment."}`,
+);
 console.log("=".repeat(60));
 
 process.exit(failed > 0 ? 1 : 0);

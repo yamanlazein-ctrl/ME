@@ -108,13 +108,15 @@ apiClient.addInterceptor(
   ),
 );
 apiClient.addInterceptor(authInterceptor(createTokenProvider()));
-apiClient.addInterceptor(loggingInterceptor(() => {
-  try {
-    return localStorage.getItem("erp.auth.accessToken");
-  } catch {
-    return null;
-  }
-}));
+apiClient.addInterceptor(
+  loggingInterceptor(() => {
+    try {
+      return localStorage.getItem("erp.auth.accessToken");
+    } catch {
+      return null;
+    }
+  }),
+);
 
 /* ── API repository instances ───────────────────────────────────── */
 const expenseRepo = new ApiExpenseRepository(new ExpenseApiService(apiClient));

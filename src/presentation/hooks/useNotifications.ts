@@ -46,8 +46,13 @@ export function useDismissNotifications() {
 export function useCreateNotification() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (input: { title: string; detail?: string; kind?: string; severity?: string; targetPath?: string }) =>
-      container.notifications.list.create(input, ctx),
+    mutationFn: (input: {
+      title: string;
+      detail?: string;
+      kind?: string;
+      severity?: string;
+      targetPath?: string;
+    }) => container.notifications.list.create(input, ctx),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: KEYS.all });
       qc.invalidateQueries({ queryKey: KEYS.count });

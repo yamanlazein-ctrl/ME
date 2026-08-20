@@ -79,26 +79,38 @@ export function registerInvoiceRoutes(
     res.json(r.data);
   });
 
-  router.get("/invoices/:id", auth, readGuard, validateUuidParam("id"), async (req: Request, res: Response) => {
-    const r = await uc.findInvoiceUseCase(invoiceRepo, pid(req), ctx(req));
-    if (!r.ok) {
-      return res.status(500).json({ code: "INTERNAL", message: r.error });
-    }
-    if (!r.data) {
-      return res.status(404).json({ code: "NOT_FOUND", message: "الفاتورة غير موجودة" });
-    }
-    res.json(r.data);
-  });
-
-  router.post("/invoices/:id/cancel", auth, writeGuard, validateUuidParam("id"), async (req: Request, res: Response) => {
-    const c = ctx(req);
-    const r = await uc.cancelInvoiceUseCase(invoiceRepo, auditRepo, pid(req), c.userId, c);
-    if (r.ok) {
+  router.get(
+    "/invoices/:id",
+    auth,
+    readGuard,
+    validateUuidParam("id"),
+    async (req: Request, res: Response) => {
+      const r = await uc.findInvoiceUseCase(invoiceRepo, pid(req), ctx(req));
+      if (!r.ok) {
+        return res.status(500).json({ code: "INTERNAL", message: r.error });
+      }
+      if (!r.data) {
+        return res.status(404).json({ code: "NOT_FOUND", message: "الفاتورة غير موجودة" });
+      }
       res.json(r.data);
-    } else if ((r as { code?: string }).code === "NOT_FOUND") {
-      res.status(404).json({ code: "NOT_FOUND", message: r.error });
-    } else {
-      res.status(422).json({ code: "VALIDATION", message: r.error });
-    }
-  });
+    },
+  );
+
+  router.post(
+    "/invoices/:id/cancel",
+    auth,
+    writeGuard,
+    validateUuidParam("id"),
+    async (req: Request, res: Response) => {
+      const c = ctx(req);
+      const r = await uc.cancelInvoiceUseCase(invoiceRepo, auditRepo, pid(req), c.userId, c);
+      if (r.ok) {
+        res.json(r.data);
+      } else if ((r as { code?: string }).code === "NOT_FOUND") {
+        res.status(404).json({ code: "NOT_FOUND", message: r.error });
+      } else {
+        res.status(422).json({ code: "VALIDATION", message: r.error });
+      }
+    },
+  );
 }

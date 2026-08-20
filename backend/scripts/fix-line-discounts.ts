@@ -32,7 +32,11 @@ async function main() {
     const inv = invRows[0];
 
     // 1. Get lines in order
-    const lines = await db.select().from(invoiceLines).where(eq(invoiceLines.invoiceId, inv.id)).orderBy(invoiceLines.createdAt);
+    const lines = await db
+      .select()
+      .from(invoiceLines)
+      .where(eq(invoiceLines.invoiceId, inv.id))
+      .orderBy(invoiceLines.createdAt);
     if (lines.length !== discounts.length) {
       console.log(`  MISMATCH: ${lines.length} lines vs ${discounts.length} discounts`);
       continue;
@@ -49,11 +53,14 @@ async function main() {
         .where(eq(invoiceLines.id, l.id));
       const lineTotal = Math.round(Number(l.quantityKg) * Number(l.pricePerKg) - newDiscount);
       computedSubtotal += lineTotal;
-      console.log(`  Line ${i + 1}: discountAmount ${l.discountAmount} -> ${newDiscount}, lineTotal=${lineTotal}`);
+      console.log(
+        `  Line ${i + 1}: discountAmount ${l.discountAmount} -> ${newDiscount}, lineTotal=${lineTotal}`,
+      );
     }
 
     // 3. Recalculate invoice totals
-    const newTotal = computedSubtotal - Number(inv.discount) + Number(inv.tax) + Number(inv.shipping);
+    const newTotal =
+      computedSubtotal - Number(inv.discount) + Number(inv.tax) + Number(inv.shipping);
     await db
       .update(invoices)
       .set({
@@ -68,11 +75,13 @@ async function main() {
     const invLedgers = await db
       .select()
       .from(ledgerEntries)
-      .where(and(
-        eq(ledgerEntries.referenceId, inv.id),
-        eq(ledgerEntries.referenceType, "purchase_invoice"),
-        eq(ledgerEntries.status, "active"),
-      ));
+      .where(
+        and(
+          eq(ledgerEntries.referenceId, inv.id),
+          eq(ledgerEntries.referenceType, "purchase_invoice"),
+          eq(ledgerEntries.status, "active"),
+        ),
+      );
     for (const le of invLedgers) {
       if (le.type === "purchase_invoice") {
         await db.update(ledgerEntries).set({ debit: newTotal }).where(eq(ledgerEntries.id, le.id));
@@ -86,13 +95,21 @@ async function main() {
     // 5. Update linked payment voucher amount if paid > newTotal
     const paid = Number(inv.paid);
     if (paid > newTotal) {
-      console.log(`  WARNING: paid (${paid}) > newTotal (${newTotal}). Clamping paid to ${newTotal}.`);
+      console.log(
+        `  WARNING: paid (${paid}) > newTotal (${newTotal}). Clamping paid to ${newTotal}.`,
+      );
       await db.update(invoices).set({ paid: newTotal }).where(eq(invoices.id, inv.id));
       // Update payment voucher and ledger entries
       const payVouchers = await db
         .select()
         .from(vouchers)
-        .where(and(eq(vouchers.invoiceId, inv.id), eq(vouchers.kind, "payment"), eq(vouchers.status, "active")));
+        .where(
+          and(
+            eq(vouchers.invoiceId, inv.id),
+            eq(vouchers.kind, "payment"),
+            eq(vouchers.status, "active"),
+          ),
+        );
       for (const v of payVouchers) {
         await db.update(vouchers).set({ amount: newTotal }).where(eq(vouchers.id, v.id));
         const vLedgers = await db
@@ -101,9 +118,15 @@ async function main() {
           .where(and(eq(ledgerEntries.referenceId, v.id), eq(ledgerEntries.status, "active")));
         for (const vl of vLedgers) {
           if (vl.type === "payment_out") {
-            await db.update(ledgerEntries).set({ credit: newTotal }).where(eq(ledgerEntries.id, vl.id));
+            await db
+              .update(ledgerEntries)
+              .set({ credit: newTotal })
+              .where(eq(ledgerEntries.id, vl.id));
           } else if (vl.type === "cash") {
-            await db.update(ledgerEntries).set({ debit: newTotal }).where(eq(ledgerEntries.id, vl.id));
+            await db
+              .update(ledgerEntries)
+              .set({ debit: newTotal })
+              .where(eq(ledgerEntries.id, vl.id));
           }
         }
       }
@@ -122,9 +145,13 @@ async function main() {
     let lineIdx = 1;
     let computedSubtotal = 0;
     for (const l of lines) {
-      const lineTotal = Math.round(Number(l.quantityKg) * Number(l.pricePerKg) - Number(l.discountAmount ?? 0));
+      const lineTotal = Math.round(
+        Number(l.quantityKg) * Number(l.pricePerKg) - Number(l.discountAmount ?? 0),
+      );
       computedSubtotal += lineTotal;
-      console.log(`  Line ${lineIdx}: qty=${l.quantityKg} × price=${l.pricePerKg} - discount=${l.discountAmount} = ${lineTotal}`);
+      console.log(
+        `  Line ${lineIdx}: qty=${l.quantityKg} × price=${l.pricePerKg} - discount=${l.discountAmount} = ${lineTotal}`,
+      );
       lineIdx++;
     }
     console.log(`  Subtotal (system):  ${inv.subtotal}`);
@@ -155,4 +182,7 @@ async function main() {
   process.exit(0);
 }
 
-main().catch((e) => { console.error("FATAL:", e); process.exit(1); });
+main().catch((e) => {
+  console.error("FATAL:", e);
+  process.exit(1);
+});

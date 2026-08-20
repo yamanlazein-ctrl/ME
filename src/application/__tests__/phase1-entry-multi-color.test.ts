@@ -61,9 +61,9 @@ describe("Phase 1: Entry Invoice — Multi-Color Per Fabric", () => {
     const fabricId = "fabric-cotton-01";
 
     // 3 lines with same fabric, different colors (simulating what the UI now sends)
-    createInvoiceLine(invId, fabricId, "color-black-01", "roll-1", 100, 1500);   // Cotton Black
-    createInvoiceLine(invId, fabricId, "color-white-01", "roll-2", 80, 1400);    // Cotton White
-    createInvoiceLine(invId, fabricId, "color-red-01", "roll-3", 50, 1600);       // Cotton Red
+    createInvoiceLine(invId, fabricId, "color-black-01", "roll-1", 100, 1500); // Cotton Black
+    createInvoiceLine(invId, fabricId, "color-white-01", "roll-2", 80, 1400); // Cotton White
+    createInvoiceLine(invId, fabricId, "color-red-01", "roll-3", 50, 1600); // Cotton Red
 
     const lines = invoiceLines.filter((l) => l.invoiceId === invId);
 
@@ -88,7 +88,7 @@ describe("Phase 1: Entry Invoice — Multi-Color Per Fabric", () => {
     const fabricId = "fabric-silk-01";
 
     // Existing color (already in system) + new color (first time entered)
-    createInvoiceLine(invId, fabricId, "color-navy-01", "roll-4", 30, 2500);  // Existing
+    createInvoiceLine(invId, fabricId, "color-navy-01", "roll-4", 30, 2500); // Existing
     createInvoiceLine(invId, fabricId, "color-gold-01", "roll-5", 20, 2700); // New (first time)
 
     const lines = invoiceLines.filter((l) => l.invoiceId === invId);
@@ -102,9 +102,9 @@ describe("Phase 1: Entry Invoice — Multi-Color Per Fabric", () => {
     const invId = "inv-3";
     const fabricId = "fabric-poly-01";
 
-    createInvoiceLine(invId, fabricId, "color-a", "roll-10", 50, 1000);  // 50,000
-    createInvoiceLine(invId, fabricId, "color-b", "roll-11", 30, 1200);  // 36,000
-    createInvoiceLine(invId, fabricId, "color-c", "roll-12", 20, 1500);  // 30,000
+    createInvoiceLine(invId, fabricId, "color-a", "roll-10", 50, 1000); // 50,000
+    createInvoiceLine(invId, fabricId, "color-b", "roll-11", 30, 1200); // 36,000
+    createInvoiceLine(invId, fabricId, "color-c", "roll-12", 20, 1500); // 30,000
 
     const lines = invoiceLines.filter((l) => l.invoiceId === invId);
     const total = lines.reduce((s, l) => s + l.quantityKg * l.pricePerKg, 0);

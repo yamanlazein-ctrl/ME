@@ -5,23 +5,11 @@ export const createRollSchema = z.object({
   colorId: z.string().uuid(),
   rollNo: z.string().min(1).max(100),
   dyeBatch: z.string().max(100).optional(),
-  initialKg: z
-    .number()
-    .positive()
-    .max(100000)
-    .refine(is2dp, { message: MAX_2DP_MESSAGE }),
+  initialKg: z.number().positive().max(100000).refine(is2dp, { message: MAX_2DP_MESSAGE }),
   /** Optional — defaults to initialKg. Entry-invoice flows pass 0 so the
    *  invoice transaction increments remainingKg to the real stock. */
-  remainingKg: z
-    .number()
-    .min(0)
-    .max(100000)
-    .refine(is2dp, { message: MAX_2DP_MESSAGE })
-    .optional(),
-  pricePerKg: z
-    .number()
-    .positive()
-    .refine(is2dp, { message: MAX_2DP_MESSAGE }),
+  remainingKg: z.number().min(0).max(100000).refine(is2dp, { message: MAX_2DP_MESSAGE }).optional(),
+  pricePerKg: z.number().positive().refine(is2dp, { message: MAX_2DP_MESSAGE }),
   salePricePerKg: z.number().positive().optional(),
   currency: z.enum(["SYP", "USD", "EUR"]).optional(),
   supplierId: z.string().uuid().optional(),

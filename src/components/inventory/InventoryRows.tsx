@@ -1,10 +1,4 @@
-import {
-  ChevronLeft,
-  CheckCircle2,
-  Layers,
-  PackageX,
-  TrendingDown,
-} from "lucide-react";
+import { ChevronLeft, CheckCircle2, Layers, PackageX, TrendingDown } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ColorSwatch } from "@/components/common/ColorSwatch";
 import {
@@ -310,17 +304,27 @@ function RollRow({
           <div className="min-w-0">
             <div className="whitespace-nowrap text-sm font-bold text-foreground tabular-nums">
               {roll.remainingKg}
-              <span className="text-[10px] font-medium text-muted-foreground"> / {roll.initialKg} كغ</span>
+              <span className="text-[10px] font-medium text-muted-foreground">
+                {" "}
+                / {roll.initialKg} كغ
+              </span>
             </div>
             <div className="mt-0.5 h-1 w-full max-w-[7rem] overflow-hidden rounded-full bg-secondary">
               <div
                 className={`h-full rounded-full ${
-                  status === "out" ? "bg-destructive/50" : status === "low" ? "bg-warning" : "bg-success"
+                  status === "out"
+                    ? "bg-destructive/50"
+                    : status === "low"
+                      ? "bg-warning"
+                      : "bg-success"
                 }`}
                 style={{
                   width: `${Math.max(
                     0,
-                    Math.min(100, roll.initialKg > 0 ? (roll.remainingKg / roll.initialKg) * 100 : 0),
+                    Math.min(
+                      100,
+                      roll.initialKg > 0 ? (roll.remainingKg / roll.initialKg) * 100 : 0,
+                    ),
                   )}%`,
                 }}
               />
@@ -331,7 +335,9 @@ function RollRow({
           </div>
           <div className="truncate text-sm text-foreground tabular-nums">{roll.dyeBatch}</div>
           <div className="truncate text-sm text-foreground">{supplier?.name ?? "—"}</div>
-          <div className="whitespace-nowrap text-sm text-muted-foreground tabular-nums">{roll.entryDate}</div>
+          <div className="whitespace-nowrap text-sm text-muted-foreground tabular-nums">
+            {roll.entryDate}
+          </div>
           <StatusChip r={roll} minKg={minKg} />
           <RowActions onEdit={onEdit} onDelete={onDelete} />
         </div>

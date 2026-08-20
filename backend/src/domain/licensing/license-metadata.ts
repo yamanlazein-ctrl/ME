@@ -74,7 +74,10 @@ export interface LicenseMetadata {
  * `perpetual` AND it has no expiry date. Such a license never blocks on
  * expiry and has no renewal flow.
  */
-export function isPerpetual(model: LicenseModel, expiresAt: string | null | Date | undefined): boolean {
+export function isPerpetual(
+  model: LicenseModel,
+  expiresAt: string | null | Date | undefined,
+): boolean {
   if (model !== "perpetual") return false;
   if (expiresAt == null) return true;
   if (expiresAt instanceof Date) return false;

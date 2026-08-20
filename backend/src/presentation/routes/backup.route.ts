@@ -39,7 +39,7 @@ backupRouter.post("/backup/full", async (req: Request, res: Response) => {
     if (pgDumpPath) {
       execSync(
         `${pgDumpPath} --no-owner --no-privileges --format=plain --clean --if-exists ` +
-        `"${process.env.DATABASE_URL ?? ""}" > "${dbFile}"`,
+          `"${process.env.DATABASE_URL ?? ""}" > "${dbFile}"`,
         { stdio: "pipe", timeout: 300000, maxBuffer: 100 * 1024 * 1024 },
       );
     } else {
@@ -49,16 +49,20 @@ backupRouter.post("/backup/full", async (req: Request, res: Response) => {
     // ─── 2. ملف معلومات النسخة ─────────────────────────────────────
     await writeFile(
       join(tmpDir, "backup_info.json"),
-      JSON.stringify({
-        appName: "Fabric ERP",
-        version: process.env.npm_package_version || "1.0.0",
-        backupId,
-        createdAt: new Date().toISOString(),
-        tenantId: req.tenantContext?.tenantId,
-        exportedBy: req.tenantContext?.userId,
-        method: pgDumpPath ? "pg_dump" : "json_dump",
-        databaseUrl: (process.env.DATABASE_URL ?? "").replace(/:.*@/, ":***@"),
-      }, null, 2),
+      JSON.stringify(
+        {
+          appName: "Fabric ERP",
+          version: process.env.npm_package_version || "1.0.0",
+          backupId,
+          createdAt: new Date().toISOString(),
+          tenantId: req.tenantContext?.tenantId,
+          exportedBy: req.tenantContext?.userId,
+          method: pgDumpPath ? "pg_dump" : "json_dump",
+          databaseUrl: (process.env.DATABASE_URL ?? "").replace(/:.*@/, ":***@"),
+        },
+        null,
+        2,
+      ),
     );
 
     // ─── 3. الملفات المرفوعة ───────────────────────────────────────
@@ -76,7 +80,10 @@ backupRouter.post("/backup/full", async (req: Request, res: Response) => {
     // ─── 5. إرسال الملف ───────────────────────────────────────────
     res.setHeader("Content-Type", "application/zip");
     res.setHeader("Content-Length", stats.size);
-    res.setHeader("Content-Disposition", `attachment; filename="fabric-erp-backup-${timestamp}.zip"`);
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename="fabric-erp-backup-${timestamp}.zip"`,
+    );
 
     const stream = createReadStream(zipFile);
     stream.on("end", () => {
@@ -91,7 +98,10 @@ backupRouter.post("/backup/full", async (req: Request, res: Response) => {
     });
     stream.pipe(res);
 
-    logger.info({ backupId, sizeMB: (stats.size / 1024 / 1024).toFixed(1), durationMs: duration }, "Backup completed");
+    logger.info(
+      { backupId, sizeMB: (stats.size / 1024 / 1024).toFixed(1), durationMs: duration },
+      "Backup completed",
+    );
   } catch (error) {
     logger.error({ backupId, err: (error as Error)?.message }, "Backup failed");
     rm(tmpDir, { recursive: true, force: true }).catch(() => {});
@@ -112,7 +122,9 @@ function findPgDump(): string | null {
     return "pg_dump";
   } catch {
     const paths = ["/usr/bin/pg_dump", "/usr/local/bin/pg_dump", "/opt/homebrew/bin/pg_dump"];
-    for (const p of paths) { if (existsSync(p)) return p; }
+    for (const p of paths) {
+      if (existsSync(p)) return p;
+    }
     return null;
   }
 }
@@ -123,7 +135,9 @@ function findZip(): string | null {
     return "zip";
   } catch {
     const paths = ["/usr/bin/zip", "/usr/local/bin/zip"];
-    for (const p of paths) { if (existsSync(p)) return p; }
+    for (const p of paths) {
+      if (existsSync(p)) return p;
+    }
     return null;
   }
 }
@@ -153,13 +167,32 @@ async function createArchive(sourceDir: string, outputFile: string): Promise<voi
 
 async function dbDumpToJson(outputPath: string): Promise<void> {
   const tables = [
-    "tenants", "users", "parties", "fabrics", "colors", "rolls",
-    "invoices", "invoice_lines", "orders", "order_items",
-    "vouchers", "ledger_entries", "cashbox_entries", "expenses",
-    "returns", "return_lines", "print_jobs", "audit_logs",
-    "notifications", "settings", "document_sequences",
-    "stock_movements", "idempotency_keys",
-    "party_balances", "ledger_entry_archive", "yearly_party_summaries",
+    "tenants",
+    "users",
+    "parties",
+    "fabrics",
+    "colors",
+    "rolls",
+    "invoices",
+    "invoice_lines",
+    "orders",
+    "order_items",
+    "vouchers",
+    "ledger_entries",
+    "cashbox_entries",
+    "expenses",
+    "returns",
+    "return_lines",
+    "print_jobs",
+    "audit_logs",
+    "notifications",
+    "settings",
+    "document_sequences",
+    "stock_movements",
+    "idempotency_keys",
+    "party_balances",
+    "ledger_entry_archive",
+    "yearly_party_summaries",
   ];
 
   const dump: Record<string, unknown[]> = {};

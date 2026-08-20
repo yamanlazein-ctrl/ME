@@ -42,9 +42,16 @@ const STATIC_ROUTES = [
 ];
 
 const REPORT_SLUGS = [
-  "net-sales", "purchases", "cashbox", "inventory-value",
-  "receivables", "payables", "sales-returns", "expenses",
-  "top-fabrics", "top-customers",
+  "net-sales",
+  "purchases",
+  "cashbox",
+  "inventory-value",
+  "receivables",
+  "payables",
+  "sales-returns",
+  "expenses",
+  "top-fabrics",
+  "top-customers",
 ];
 
 test.describe("Cert Route — Static Routes", () => {
@@ -127,9 +134,9 @@ test.describe("Cert Route — Dynamic Routes", () => {
   test("/suppliers/$id — seed supplier loads", async ({ page }) => {
     test.setTimeout(20000);
     const { errors } = await assertRouteOk(page, "/suppliers/sup-1");
-    await expect(
-      page.getByText("الشركة السورية للنسيج", { exact: false }).first(),
-    ).toBeVisible({ timeout: 8000 });
+    await expect(page.getByText("الشركة السورية للنسيج", { exact: false }).first()).toBeVisible({
+      timeout: 8000,
+    });
     expect(errors).toEqual([]);
   });
 });

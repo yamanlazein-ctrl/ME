@@ -81,7 +81,6 @@ import {
 import { useStatement, useSettleParty } from "@/presentation/hooks/useStatement";
 import { formatNumber, formatMoney, formatQuantity } from "@/shared/utils/formatNumber";
 
-
 const _nextFormId = 0;
 function toMockPatch(patch: Record<string, unknown>): Record<string, unknown> {
   const out: Record<string, unknown> = {};
@@ -275,7 +274,9 @@ export function PartyDetailsPage({ kind, id }: { kind: PartyKind; id: string }) 
         tone="primary"
       >
         {Object.entries(settlementStats).length === 0 ? (
-          <div className="py-6 text-center text-xs text-muted-foreground">لا حركات مسجلة لهذا الحساب.</div>
+          <div className="py-6 text-center text-xs text-muted-foreground">
+            لا حركات مسجلة لهذا الحساب.
+          </div>
         ) : (
           <div className="space-y-3">
             {Object.entries(settlementStats).map(([ccy, stats]) => {
@@ -471,7 +472,7 @@ function InvoicesTab({ p, kind }: { p: Party; kind: PartyKind }) {
     });
   // Compute actual paid per invoice from linked vouchers (BUG-8 fix).
   const paidByInvoice = new Map<string, number>();
-  for (const v of (vData?.data ?? [])) {
+  for (const v of vData?.data ?? []) {
     if (v.status !== "active" || !v.invoiceId || v.partyId !== p.id) continue;
     paidByInvoice.set(v.invoiceId, (paidByInvoice.get(v.invoiceId) ?? 0) + v.amount);
   }
@@ -520,11 +521,15 @@ function InvoicesTab({ p, kind }: { p: Party; kind: PartyKind }) {
                   <td className="text-center tabular-nums">{i.lines.length}</td>
                   <td className="text-left tabular-nums">
                     {fmt(t)}{" "}
-                    <span className="text-[10px] text-muted-foreground">{currencySymbol(i.currency)}</span>
+                    <span className="text-[10px] text-muted-foreground">
+                      {currencySymbol(i.currency)}
+                    </span>
                   </td>
                   <td className="text-left tabular-nums text-muted-foreground">
                     {fmt(paid)}{" "}
-                    <span className="text-[10px] text-muted-foreground">{currencySymbol(i.currency)}</span>
+                    <span className="text-[10px] text-muted-foreground">
+                      {currencySymbol(i.currency)}
+                    </span>
                   </td>
                   <td
                     className={`text-left font-semibold tabular-nums ${
@@ -532,7 +537,9 @@ function InvoicesTab({ p, kind }: { p: Party; kind: PartyKind }) {
                     }`}
                   >
                     {fmt(r)}{" "}
-                    <span className="text-[10px] text-muted-foreground">{currencySymbol(i.currency)}</span>
+                    <span className="text-[10px] text-muted-foreground">
+                      {currencySymbol(i.currency)}
+                    </span>
                   </td>
                 </tr>
               );
@@ -558,7 +565,12 @@ function PaymentsTab({ p }: { p: Party }) {
   const { data: vData } = useVouchersList();
   // BUG-9 fix: show actual payment/receipt vouchers linked to this party.
   const payments = (vData?.data ?? [])
-    .filter((v) => v.partyId === p.id && v.status === "active" && (v.kind === "receipt" || v.kind === "payment"))
+    .filter(
+      (v) =>
+        v.partyId === p.id &&
+        v.status === "active" &&
+        (v.kind === "receipt" || v.kind === "payment"),
+    )
     .map((v) => {
       const inv = invs.find((i) => i.id === v.invoiceId);
       return {
@@ -678,7 +690,9 @@ function PaymentsTab({ p }: { p: Party }) {
                   <td className="tabular-nums text-primary">{pay.invoice}</td>
                   <td className="text-left font-semibold tabular-nums">
                     {fmt(pay.amount)}{" "}
-                    <span className="text-[10px] text-muted-foreground">{currencySymbol(pay.currency as Currency)}</span>
+                    <span className="text-[10px] text-muted-foreground">
+                      {currencySymbol(pay.currency as Currency)}
+                    </span>
                   </td>
                 </tr>
               ))}
@@ -1154,9 +1168,12 @@ function StatementTab({ p, kind }: { p: Party; kind: PartyKind }) {
             <AlertDialogAction
               onClick={(e) => {
                 e.preventDefault();
-                settle.mutate({ currency: ccy }, {
-                  onSettled: () => setConfirmSettle(false),
-                });
+                settle.mutate(
+                  { currency: ccy },
+                  {
+                    onSettled: () => setConfirmSettle(false),
+                  },
+                );
               }}
             >
               {settle.isPending ? "جارٍ التسوية…" : "تأكيد التسوية"}
@@ -1496,8 +1513,7 @@ function ActivityTab({ p, kind }: { p: Party; kind: PartyKind }) {
 
   // Invoices (sales/entries/returns)
   for (const inv of invs) {
-    const label =
-      inv.type === "entry" ? "شراء" : inv.type === "return" ? "مرتجع" : "بيع";
+    const label = inv.type === "entry" ? "شراء" : inv.type === "return" ? "مرتجع" : "بيع";
     items.push({
       id: `inv-${inv.id}`,
       kind: "invoice",
@@ -1525,7 +1541,11 @@ function ActivityTab({ p, kind }: { p: Party; kind: PartyKind }) {
   items.sort((a, b) => (a.at < b.at ? 1 : -1));
 
   return (
-    <PageCard title="سجل النشاط" description="جميع العمليات المسجلة على هذا الحساب مباشرةً من الفواتير والسندات." noBodyPadding>
+    <PageCard
+      title="سجل النشاط"
+      description="جميع العمليات المسجلة على هذا الحساب مباشرةً من الفواتير والسندات."
+      noBodyPadding
+    >
       <div className="divide-y divide-border">
         {items.length === 0 && (
           <div className="px-4 py-10 text-center text-xs text-muted-foreground">لا نشاط بعد.</div>

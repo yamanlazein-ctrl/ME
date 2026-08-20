@@ -231,7 +231,11 @@ function InventoryPage() {
           {pagedFabrics.map((f) => {
             const isOpen = expandedFabric === f.id || !!q;
             return (
-              <li key={f.id} id={`fabric-card-${f.id}`} className="overflow-hidden rounded-xl border border-border bg-card shadow-soft scroll-mt-4">
+              <li
+                key={f.id}
+                id={`fabric-card-${f.id}`}
+                className="overflow-hidden rounded-xl border border-border bg-card shadow-soft scroll-mt-4"
+              >
                 <FabricRow
                   fabric={f}
                   open={isOpen}
@@ -304,37 +308,37 @@ function InventoryPage() {
                               <>
                                 <RollsHeader />
                                 <ul>
-                                {rollsOfColor(c.id).map((r) => (
-                                  <li key={r.id}>
-                                    <RollRow
-                                      roll={r}
-                                      minKg={f.minStockKg ?? 0}
-                                      onEdit={() =>
-                                        setRolForm({ open: true, colorId: c.id, editing: r })
-                                      }
-                                      onDelete={() =>
-                                        setToDelete({
-                                          kind: "roll",
-                                          id: r.id,
-                                          name: `#${r.rollNo}`,
-                                        })
-                                      }
-                                      selectable={selectMode}
-                                      selected={
-                                        !!selected[
-                                          selKey({ kind: "roll", id: r.id, name: `#${r.rollNo}` })
-                                        ]
-                                      }
-                                      onSelect={() =>
-                                        toggleSelect({
-                                          kind: "roll",
-                                          id: r.id,
-                                          name: `#${r.rollNo}`,
-                                        })
-                                      }
-                                    />
-                                  </li>
-                                ))}
+                                  {rollsOfColor(c.id).map((r) => (
+                                    <li key={r.id}>
+                                      <RollRow
+                                        roll={r}
+                                        minKg={f.minStockKg ?? 0}
+                                        onEdit={() =>
+                                          setRolForm({ open: true, colorId: c.id, editing: r })
+                                        }
+                                        onDelete={() =>
+                                          setToDelete({
+                                            kind: "roll",
+                                            id: r.id,
+                                            name: `#${r.rollNo}`,
+                                          })
+                                        }
+                                        selectable={selectMode}
+                                        selected={
+                                          !!selected[
+                                            selKey({ kind: "roll", id: r.id, name: `#${r.rollNo}` })
+                                          ]
+                                        }
+                                        onSelect={() =>
+                                          toggleSelect({
+                                            kind: "roll",
+                                            id: r.id,
+                                            name: `#${r.rollNo}`,
+                                          })
+                                        }
+                                      />
+                                    </li>
+                                  ))}
                                 </ul>
                               </>
                             )}

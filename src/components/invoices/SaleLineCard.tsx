@@ -86,9 +86,16 @@ export function SaleLineCard({
         </div>
         <div className="flex items-center gap-2">
           {!rowIsEmpty && (
-            <span className={cn("text-xs font-bold tabular-nums", isUSD ? "text-success" : "text-foreground")}>
+            <span
+              className={cn(
+                "text-xs font-bold tabular-nums",
+                isUSD ? "text-success" : "text-foreground",
+              )}
+            >
               {formatMoney(lineTotal(line))}{" "}
-              <span className="text-[10px] font-medium text-muted-foreground">{currencySymbol(currency)}</span>
+              <span className="text-[10px] font-medium text-muted-foreground">
+                {currencySymbol(currency)}
+              </span>
             </span>
           )}
           {!rowIsEmpty && line.fabricId && onAddColor && (
@@ -125,7 +132,14 @@ export function SaleLineCard({
                 existingFabricId={line.fabricId || undefined}
                 onPickExisting={onPickFabric}
                 onSetName={(name) =>
-                  onUpdate({ fabricName: name, fabricId: "", colorId: "", colorName: "", colorCode: "", rollId: "" })
+                  onUpdate({
+                    fabricName: name,
+                    fabricId: "",
+                    colorId: "",
+                    colorName: "",
+                    colorCode: "",
+                    rollId: "",
+                  })
                 }
               />
             </CardField>
@@ -146,13 +160,21 @@ export function SaleLineCard({
         <GroupSection title="بيانات الصبغة">
           <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
             <CardField label="رقم الصبغة" required>
-              <Select value={line.rollId} onValueChange={(v) => onUpdate({ rollId: v })} disabled={!line.colorId}>
+              <Select
+                value={line.rollId}
+                onValueChange={(v) => onUpdate({ rollId: v })}
+                disabled={!line.colorId}
+              >
                 <SelectTrigger className="!h-9">
-                  <SelectValue placeholder={line.colorId ? "اختر صبغة" : "اختر القماش واللون أولاً"} />
+                  <SelectValue
+                    placeholder={line.colorId ? "اختر صبغة" : "اختر القماش واللون أولاً"}
+                  />
                 </SelectTrigger>
                 <SelectContent>
                   {availableRolls.length === 0 && (
-                    <div className="px-3 py-2 text-xs text-muted-foreground">لا توجد صبغات متاحة لهذا اللون.</div>
+                    <div className="px-3 py-2 text-xs text-muted-foreground">
+                      لا توجد صبغات متاحة لهذا اللون.
+                    </div>
                   )}
                   {availableRolls.map((r) => (
                     <SelectItem key={r.id} value={r.id}>
@@ -182,10 +204,13 @@ export function SaleLineCard({
                 type="number"
                 step="0.01"
                 value={line.quantityKg || ""}
-                onChange={(e) => onUpdate({ quantityKg: e.target.value === "" ? 0 : Number(e.target.value) })}
+                onChange={(e) =>
+                  onUpdate({ quantityKg: e.target.value === "" ? 0 : Number(e.target.value) })
+                }
                 className={cn(
                   "h-9 text-left tabular-nums",
-                  exceeds && "border-destructive text-destructive focus-visible:ring-destructive/30",
+                  exceeds &&
+                    "border-destructive text-destructive focus-visible:ring-destructive/30",
                 )}
                 placeholder="0"
                 aria-label="الكمية"
@@ -196,18 +221,27 @@ export function SaleLineCard({
                 type="number"
                 min="1"
                 value={line.pieces || ""}
-                onChange={(e) => onUpdate({ pieces: e.target.value === "" ? 1 : Math.max(1, Number(e.target.value)) })}
+                onChange={(e) =>
+                  onUpdate({
+                    pieces: e.target.value === "" ? 1 : Math.max(1, Number(e.target.value)),
+                  })
+                }
                 className="h-9 text-left tabular-nums"
                 placeholder="1"
                 aria-label="عدد الأثواب"
               />
             </CardField>
-            <CardField label={`السعر / كغ${currency ? ` (${currencySymbol(currency)})` : " (اختر العملة)"}`} required>
+            <CardField
+              label={`السعر / كغ${currency ? ` (${currencySymbol(currency)})` : " (اختر العملة)"}`}
+              required
+            >
               <Input
                 type="number"
                 step="0.01"
                 value={line.pricePerKg || ""}
-                onChange={(e) => onUpdate({ pricePerKg: e.target.value === "" ? 0 : Number(e.target.value) })}
+                onChange={(e) =>
+                  onUpdate({ pricePerKg: e.target.value === "" ? 0 : Number(e.target.value) })
+                }
                 className={cn("h-9 text-left tabular-nums", isUSD && "text-success font-semibold")}
                 placeholder="0"
                 aria-label="سعر الوحدة"
@@ -218,7 +252,9 @@ export function SaleLineCard({
                 type="number"
                 step="0.01"
                 value={line.discountAmount || ""}
-                onChange={(e) => onUpdate({ discountAmount: e.target.value === "" ? 0 : Number(e.target.value) })}
+                onChange={(e) =>
+                  onUpdate({ discountAmount: e.target.value === "" ? 0 : Number(e.target.value) })
+                }
                 onKeyDown={(e: KeyboardEvent<HTMLInputElement>) => {
                   if (e.key === "Enter") {
                     e.preventDefault();
@@ -239,10 +275,19 @@ export function SaleLineCard({
             </CardField>
             <div className="flex items-end justify-end">
               <div className="flex flex-col items-end">
-                <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">الإجمالي</span>
-                <span className={cn("text-lg font-black tabular-nums leading-tight", isUSD ? "text-success" : "text-foreground")}>
+                <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                  الإجمالي
+                </span>
+                <span
+                  className={cn(
+                    "text-lg font-black tabular-nums leading-tight",
+                    isUSD ? "text-success" : "text-foreground",
+                  )}
+                >
                   {formatMoney(lineTotal(line))}{" "}
-                  <span className="text-[10px] font-medium text-muted-foreground">{currencySymbol(currency)}</span>
+                  <span className="text-[10px] font-medium text-muted-foreground">
+                    {currencySymbol(currency)}
+                  </span>
                 </span>
               </div>
             </div>

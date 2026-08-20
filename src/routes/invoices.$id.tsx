@@ -25,7 +25,6 @@ import {
 } from "@/components/ui/alert-dialog";
 import { formatNumber, formatMoney, formatQuantity } from "@/shared/utils/formatNumber";
 
-
 export const Route = createFileRoute("/invoices/$id")({
   component: InvoiceDetailPage,
 });

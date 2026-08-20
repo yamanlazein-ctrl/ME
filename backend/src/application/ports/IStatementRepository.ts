@@ -1,8 +1,5 @@
 import type { TenantContext, UUID } from "../../domain/types/index.js";
-import type {
-  PartyStatementData,
-  StatementQuery,
-} from "../../domain/entities/Statement.js";
+import type { PartyStatementData, StatementQuery } from "../../domain/entities/Statement.js";
 import type { LedgerEntryData } from "../../domain/entities/LedgerEntry.js";
 
 export interface SettlePartyInput {
@@ -28,9 +25,5 @@ export interface IStatementRepository {
    * Zero the party's current balance by writing a `settlement` ledger entry on
    * the opposite side. Throws if the balance is already zero (nothing to settle).
    */
-  settle(
-    partyId: UUID,
-    input: SettlePartyInput,
-    ctx: TenantContext,
-  ): Promise<LedgerEntryData>;
+  settle(partyId: UUID, input: SettlePartyInput, ctx: TenantContext): Promise<LedgerEntryData>;
 }

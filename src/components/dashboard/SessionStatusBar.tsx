@@ -32,7 +32,9 @@ export function SessionStatusBar() {
             {today}
           </span>
         </span>
-        <span className={`flex items-center gap-1.5 font-medium whitespace-nowrap ${isOpen ? "text-foreground" : "text-warning"}`}>
+        <span
+          className={`flex items-center gap-1.5 font-medium whitespace-nowrap ${isOpen ? "text-foreground" : "text-warning"}`}
+        >
           <Clock className="h-3.5 w-3.5 shrink-0" strokeWidth={2} />
           {isOpen ? (
             <span className="whitespace-nowrap">افتتحت الجلسة {openedAtFormatted}</span>

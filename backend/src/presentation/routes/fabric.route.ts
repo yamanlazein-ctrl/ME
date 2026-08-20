@@ -27,7 +27,7 @@ export function registerFabricRoutes(
   const pid = (req: Request): string => req.params.id as string;
   const body = <T>(req: Request): T => (req as unknown as { validatedBody: T }).validatedBody;
 
-    router.post(
+  router.post(
     "/inventory/fabrics",
     auth,
     writeGuard,

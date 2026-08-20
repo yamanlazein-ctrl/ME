@@ -1,9 +1,9 @@
 /**
  * Port: Installation ID persistent storage.
- * 
+ *
  * Stores a unique identifier for this server installation.
  * Used for machine fingerprinting and license transfer detection.
- * 
+ *
  * Production implementation: infrastructure/installation/InstallationIdStorage.ts
  */
 export interface IInstallationIdStorage {

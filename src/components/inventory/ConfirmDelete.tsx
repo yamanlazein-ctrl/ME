@@ -49,11 +49,7 @@ function ConfirmDelete({
           <ul className="max-h-40 overflow-y-auto rounded-md border border-border bg-secondary/30 p-2 text-xs text-muted-foreground">
             {bulk.map((item) => (
               <li key={`${item.kind}:${item.id}`} className="truncate py-0.5">
-                {item.kind === "fabric"
-                  ? "قماش"
-                  : item.kind === "color"
-                    ? "لون"
-                    : "صبغة"}
+                {item.kind === "fabric" ? "قماش" : item.kind === "color" ? "لون" : "صبغة"}
                 {" — "}
                 {item.name}
               </li>

@@ -108,31 +108,49 @@ export function registerPartyRoutes(
     },
   );
 
-  router.get("/parties/:id", auth, readAll, validateUuidParam("id"), async (req: Request, res: Response) => {
-    const result = await findPartyUseCase(partyRepo, paramId(req), ctxFn(req));
-    if (!result.ok) return res.status(500).json({ code: "INTERNAL", message: result.error });
-    if (!result.data)
-      return res.status(404).json({ code: "NOT_FOUND", message: "الطرف غير موجود" });
-    return res.json(result.data);
-  });
+  router.get(
+    "/parties/:id",
+    auth,
+    readAll,
+    validateUuidParam("id"),
+    async (req: Request, res: Response) => {
+      const result = await findPartyUseCase(partyRepo, paramId(req), ctxFn(req));
+      if (!result.ok) return res.status(500).json({ code: "INTERNAL", message: result.error });
+      if (!result.data)
+        return res.status(404).json({ code: "NOT_FOUND", message: "الطرف غير موجود" });
+      return res.json(result.data);
+    },
+  );
 
-  router.get("/customers/:id", auth, readAll, validateUuidParam("id"), async (req: Request, res: Response) => {
-    const result = await findPartyUseCase(partyRepo, paramId(req), ctxFn(req));
-    if (!result.ok) return res.status(500).json({ code: "INTERNAL", message: result.error });
-    if (!result.data || result.data.kind !== "customer") {
-      return res.status(404).json({ code: "NOT_FOUND", message: "العميل غير موجود" });
-    }
-    return res.json(result.data);
-  });
+  router.get(
+    "/customers/:id",
+    auth,
+    readAll,
+    validateUuidParam("id"),
+    async (req: Request, res: Response) => {
+      const result = await findPartyUseCase(partyRepo, paramId(req), ctxFn(req));
+      if (!result.ok) return res.status(500).json({ code: "INTERNAL", message: result.error });
+      if (!result.data || result.data.kind !== "customer") {
+        return res.status(404).json({ code: "NOT_FOUND", message: "العميل غير موجود" });
+      }
+      return res.json(result.data);
+    },
+  );
 
-  router.get("/suppliers/:id", auth, readAll, validateUuidParam("id"), async (req: Request, res: Response) => {
-    const result = await findPartyUseCase(partyRepo, paramId(req), ctxFn(req));
-    if (!result.ok) return res.status(500).json({ code: "INTERNAL", message: result.error });
-    if (!result.data || result.data.kind !== "supplier") {
-      return res.status(404).json({ code: "NOT_FOUND", message: "المورد غير موجود" });
-    }
-    return res.json(result.data);
-  });
+  router.get(
+    "/suppliers/:id",
+    auth,
+    readAll,
+    validateUuidParam("id"),
+    async (req: Request, res: Response) => {
+      const result = await findPartyUseCase(partyRepo, paramId(req), ctxFn(req));
+      if (!result.ok) return res.status(500).json({ code: "INTERNAL", message: result.error });
+      if (!result.data || result.data.kind !== "supplier") {
+        return res.status(404).json({ code: "NOT_FOUND", message: "المورد غير موجود" });
+      }
+      return res.json(result.data);
+    },
+  );
 
   router.put(
     "/customers/:id",
@@ -168,17 +186,29 @@ export function registerPartyRoutes(
     },
   );
 
-  router.delete("/customers/:id", auth, accountantAndUp, validateUuidParam("id"), async (req: Request, res: Response) => {
-    const ctx = ctxFn(req);
-    const result = await cancelPartyUseCase(partyRepo, paramId(req), ctx.userId, ctx);
-    if (result.ok) return res.status(204).end();
-    return res.status(422).json({ code: "VALIDATION", message: result.error });
-  });
+  router.delete(
+    "/customers/:id",
+    auth,
+    accountantAndUp,
+    validateUuidParam("id"),
+    async (req: Request, res: Response) => {
+      const ctx = ctxFn(req);
+      const result = await cancelPartyUseCase(partyRepo, paramId(req), ctx.userId, ctx);
+      if (result.ok) return res.status(204).end();
+      return res.status(422).json({ code: "VALIDATION", message: result.error });
+    },
+  );
 
-  router.delete("/suppliers/:id", auth, accountantAndUp, validateUuidParam("id"), async (req: Request, res: Response) => {
-    const ctx = ctxFn(req);
-    const result = await cancelPartyUseCase(partyRepo, paramId(req), ctx.userId, ctx);
-    if (result.ok) return res.status(204).end();
-    return res.status(422).json({ code: "VALIDATION", message: result.error });
-  });
+  router.delete(
+    "/suppliers/:id",
+    auth,
+    accountantAndUp,
+    validateUuidParam("id"),
+    async (req: Request, res: Response) => {
+      const ctx = ctxFn(req);
+      const result = await cancelPartyUseCase(partyRepo, paramId(req), ctx.userId, ctx);
+      if (result.ok) return res.status(204).end();
+      return res.status(422).json({ code: "VALIDATION", message: result.error });
+    },
+  );
 }

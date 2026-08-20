@@ -62,7 +62,7 @@ test.describe("Cert Financial — Stress Test", () => {
       });
 
       if (res.ok) {
-        const data = await res.json() as { id: string };
+        const data = (await res.json()) as { id: string };
         expect(ids.has(data.id)).toBe(false);
         ids.add(data.id);
       }
@@ -73,13 +73,13 @@ test.describe("Cert Financial — Stress Test", () => {
     const rollRes = await fetch(`${BACKEND}/inventory/rolls/${roll.id}`, {
       headers: { Authorization: `Bearer ${token}` },
     });
-    const rollData = await rollRes.json() as { remainingKg: number };
+    const rollData = (await rollRes.json()) as { remainingKg: number };
     expect(rollData.remainingKg).toBeGreaterThanOrEqual(0);
 
     const cashboxRes = await fetch(`${BACKEND}/cashbox/state`, {
       headers: { Authorization: `Bearer ${token}` },
     });
-    const cashbox = await cashboxRes.json() as { balance: number };
+    const cashbox = (await cashboxRes.json()) as { balance: number };
     expect(isNaN(cashbox.balance)).toBe(false);
     expect(isFinite(cashbox.balance)).toBe(true);
   });
@@ -118,7 +118,7 @@ test.describe("Cert Financial — Stress Test", () => {
       });
 
       if (res.ok) {
-        const data = await res.json() as { id: string };
+        const data = (await res.json()) as { id: string };
         expect(ids.has(data.id)).toBe(false);
         ids.add(data.id);
       }
@@ -129,7 +129,7 @@ test.describe("Cert Financial — Stress Test", () => {
     const cashboxRes = await fetch(`${BACKEND}/cashbox/state`, {
       headers: { Authorization: `Bearer ${token}` },
     });
-    const cashbox = await cashboxRes.json() as { balance: number };
+    const cashbox = (await cashboxRes.json()) as { balance: number };
     expect(isNaN(cashbox.balance)).toBe(false);
     expect(isFinite(cashbox.balance)).toBe(true);
   });
@@ -158,7 +158,7 @@ test.describe("Cert Financial — Stress Test", () => {
       });
 
       if (res.ok) {
-        const data = await res.json() as { id: string };
+        const data = (await res.json()) as { id: string };
         expect(ids.has(data.id)).toBe(false);
         ids.add(data.id);
       }
@@ -174,7 +174,7 @@ test.describe("Cert Financial — Stress Test", () => {
     const headers = { Authorization: `Bearer ${token}` };
 
     const res = await fetch(`${BACKEND}/ledger`, { headers });
-    const entries = await res.json() as { id: string; status: string }[];
+    const entries = (await res.json()) as { id: string; status: string }[];
 
     const ids = new Set<string>();
     for (const e of entries) {

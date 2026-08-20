@@ -10,10 +10,7 @@ export const CONSOLE_NOISE = ["favicon", "Failed to load resource", "net::ERR_"]
  * Collect console errors during the callback and return the filtered list.
  * Filters out known noise (favicon, resource load failures, net::ERR_).
  */
-export async function captureConsoleErrors(
-  page: Page,
-  fn: () => Promise<void>,
-): Promise<string[]> {
+export async function captureConsoleErrors(page: Page, fn: () => Promise<void>): Promise<string[]> {
   const errors: string[] = [];
   const handler = (msg: { type(): string; text(): string }) => {
     if (msg.type() === "error") errors.push(msg.text());

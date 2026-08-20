@@ -233,7 +233,9 @@ export function ColorSearchCell({
           </label>
           <Input
             value={hex ?? ""}
-            onChange={(e) => onSetHex(e.target.value.startsWith("#") ? e.target.value : `#${e.target.value}`)}
+            onChange={(e) =>
+              onSetHex(e.target.value.startsWith("#") ? e.target.value : `#${e.target.value}`)
+            }
             placeholder="#000000"
             className="h-7 w-32 text-[11px] tabular-nums"
             aria-label="قيمة اللون (hex)"

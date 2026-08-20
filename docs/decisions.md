@@ -2,7 +2,7 @@
 
 Sensitive, hard-to-reverse design decisions made during the forensic audit
 fix protocol (2026-08-15 session), recorded so a future maintainer
-understands *why*, not just *what*. Each entry follows the same evidence
+understands _why_, not just _what_. Each entry follows the same evidence
 discipline as the audit itself: no claim without a live before/after check
 against a real Postgres instance.
 
@@ -61,12 +61,13 @@ without depending on a migration runner that cannot currently apply even
 its own first migration.
 
 **Verified live** (before → after, direct DB queries):
+
 - `pg_constraint` CHECK constraints on `rolls`: 0 → 1
   (`ck_remaining_kg_nonnegative`, definition `CHECK (remaining_kg >= 0)`).
 - Triggers on `ledger_entries`: 0 → 1
   (`trg_ledger_entries_append_only`, enabled).
 - Functional proof, not just existence: a direct `UPDATE rolls SET
-  remaining_kg = -5` was rejected with the constraint's own error message;
+remaining_kg = -5` was rejected with the constraint's own error message;
   a direct `DELETE FROM ledger_entries` was rejected
   ("is append-only: DELETE not allowed"); a direct `UPDATE` changing
   `debit` outside a cancellation was rejected ("UPDATE only allowed for
@@ -157,6 +158,7 @@ the audit trail rather than because a judgment call needed recording.
   returning empty — no diagnostic code was left in the shipped fix. This
   is now a genuine, deterministic before/after proof, not just a
   structurally-correct-but-unconfirmed fix. See `fix/statement-settle-atomic`.
+
 - **C-7** (`writeLedgerUseCase`): added a per-currency
   Σdebit = Σcredit check across the whole batch (grouped by currency,
   never summed across currencies), in addition to the pre-existing
@@ -172,7 +174,7 @@ the audit trail rather than because a judgment call needed recording.
 protocol** — it changes the sign of every supplier's running balance —
 so per the explicit instruction for this item, nothing below was
 assumed correct from reading the code. Five running-balance scenarios
-were hand-computed on a calculator *before* touching any file, then
+were hand-computed on a calculator _before_ touching any file, then
 checked against the live system twice: once against the original code
 (to confirm the bug is real, not a misreading), and once against the
 fixed code with a brand-new supplier (to confirm the fix, not just the
@@ -181,6 +183,7 @@ absence of the old bug).
 **The three conflicting conventions found by re-reading the actual
 write paths** (not assumed from the prior audit — re-verified fresh
 this session):
+
 1. `PostgresPartyRepository.create()` — opening balance: **flips**
    debit/credit by `isCustomer` (supplier gets `credit = opening`).
 2. `PostgresInvoiceRepository.create()` — invoice party leg: **always**
@@ -202,7 +205,7 @@ both party kinds. Only the opening-balance writer disagreed with them.
 Compounding that, two of the two balance READERS disagreed with each
 other (one flips for suppliers, one never flips) — meaning, before this
 fix, `GET .../suppliers/:id/statement` and `GET /api/ledger/balance/:id`
-could show *opposite signs* for the very same supplier at the very same
+could show _opposite signs_ for the very same supplier at the very same
 instant.
 
 **Hand-computed ground truth** for a supplier: opening 1000 (we owe
@@ -223,6 +226,7 @@ with reality.
 
 **Decision.** Make debit/credit uniform for both party kinds, matching
 the convention invoices and vouchers already use everywhere:
+
 - `PostgresStatementRepository`: `mult = 1` unconditionally (removed the
   customer/supplier branch).
 - `PostgresPartyRepository.create()`: opening balance is now always
@@ -249,11 +253,11 @@ with a 700 opening balance correctly reads +700 on both endpoints.
 real deployment.** This fix is prospective. It does not rewrite any
 `type = 'opening'` ledger row already written for an existing supplier
 under the old (flipped) convention. Live-proven, not theoretical: the
-SAME test supplier used to reproduce the bug above, re-queried *after*
+SAME test supplier used to reproduce the bug above, re-queried _after_
 the fix was restored, now reads `-500` on **both** endpoints (the
 cross-endpoint disagreement is gone — that part of the fix applies
 universally, since it only changes how existing debit/credit numbers
-are *read*) but `-500` still does not match that supplier's true
+are _read_) but `-500` still does not match that supplier's true
 ground-truth balance of `1500`, because its stored opening row still
 physically contains the old `credit = 1000` instead of `debit = 1000`.
 
@@ -274,9 +278,9 @@ used.
 **Scope check first.** Queried every supplier in the database for a
 non-zero `type = 'opening'` ledger row and inspected its actual sign:
 
-| Supplier | opening row | Needs correction? |
-|---|---|---|
-| SUP-C8-TEST (id `54543bf2-...`) | `debit=0, credit=1000` | **Yes** — written before the D-003 fix |
+| Supplier                         | opening row            | Needs correction?                                 |
+| -------------------------------- | ---------------------- | ------------------------------------------------- |
+| SUP-C8-TEST (id `54543bf2-...`)  | `debit=0, credit=1000` | **Yes** — written before the D-003 fix            |
 | SUP-C8-FIXED (id `7951daa1-...`) | `debit=1000, credit=0` | No — written after the D-003 fix, already correct |
 
 Exactly one supplier in this database needed correction.
@@ -307,10 +311,10 @@ guards `UPDATE`/`DELETE`.
 
 **Live before → after, for SUP-C8-TEST specifically:**
 
-| | Before migration | Hand-computed ground truth | After migration |
-|---|---|---|---|
-| `GET .../suppliers/:id/statement` → `finalBalance` | `-500` | `1500` | **`1500`** ✅ |
-| `GET /api/ledger/balance/:id` → `balance` | `-500` | `1500` | **`1500`** ✅ |
+|                                                    | Before migration | Hand-computed ground truth | After migration |
+| -------------------------------------------------- | ---------------- | -------------------------- | --------------- |
+| `GET .../suppliers/:id/statement` → `finalBalance` | `-500`           | `1500`                     | **`1500`** ✅   |
+| `GET /api/ledger/balance/:id` → `balance`          | `-500`           | `1500`                     | **`1500`** ✅   |
 
 **Proof the old row was preserved, not altered.** Direct query of every
 ledger row for this supplier (and its `partyId = NULL` contras) after

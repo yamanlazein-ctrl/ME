@@ -247,12 +247,12 @@ registerPrintRoutes(
   rbac(["admin", "accountant", "warehouse", "viewer"]),
 );
 registerNotificationRoutes(
-    apiRouter,
-    container.notificationRepo,
-    authMiddleware,
-    rbac(["admin", "accountant", "warehouse", "viewer"]),
-    rbac(["admin", "accountant", "warehouse"]),
-  );
+  apiRouter,
+  container.notificationRepo,
+  authMiddleware,
+  rbac(["admin", "accountant", "warehouse", "viewer"]),
+  rbac(["admin", "accountant", "warehouse"]),
+);
 registerSettingsRoutes(
   apiRouter,
   container.settingsRepo,

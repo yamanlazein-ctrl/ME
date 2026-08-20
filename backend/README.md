@@ -60,30 +60,33 @@ The API will be available at `http://localhost:8080`.
 
 ## Scripts
 
-| Command              | Description                              |
-| -------------------- | ---------------------------------------- |
-| `npm run dev`        | Dev server with hot reload               |
-| `npm run build`      | Compile TypeScript to `dist/`            |
-| `npm start`          | Run compiled server                      |
-| `npm run db:generate`| Generate Drizzle migration SQL           |
-| `npm run db:migrate` | Apply pending migrations                 |
-| `npm run db:push`    | Push schema directly (dev only)          |
-| `npm run db:studio`  | Drizzle Studio GUI                       |
-| `npm run typecheck`  | `tsc --noEmit`                           |
+| Command               | Description                     |
+| --------------------- | ------------------------------- |
+| `npm run dev`         | Dev server with hot reload      |
+| `npm run build`       | Compile TypeScript to `dist/`   |
+| `npm start`           | Run compiled server             |
+| `npm run db:generate` | Generate Drizzle migration SQL  |
+| `npm run db:migrate`  | Apply pending migrations        |
+| `npm run db:push`     | Push schema directly (dev only) |
+| `npm run db:studio`   | Drizzle Studio GUI              |
+| `npm run typecheck`   | `tsc --noEmit`                  |
 
 ## API Overview
 
 ### Auth
+
 - `POST /api/auth/login` — email/password login
 - `POST /api/auth/refresh` — refresh access token
 - `POST /api/auth/logout` — logout (invalidate token)
 
 ### Health
+
 - `GET /api/health/live` — liveness probe
 - `GET /api/health/ready` — readiness probe (DB + Redis)
 - `GET /api/health/deep` — deep health (admin only)
 
 ### Business modules
+
 Invoices, returns, printing (send/receive), orders, parties, rolls/fabrics/colors,
 cashbox, receipts/payments/expenses, ledger & statements, dashboard & reports,
 settings, setup wizard, license, notifications, invitations.
@@ -101,18 +104,18 @@ src/
 
 ## Environment Variables
 
-| Variable                 | Required | Default     | Description                    |
-| ------------------------ | -------- | ----------- | ------------------------------ |
-| `NODE_ENV`               | No       | `development` | Runtime environment          |
-| `PORT`                   | No       | `8080`      | Server port                    |
-| `DATABASE_URL`           | Yes      | —           | PostgreSQL connection string   |
-| `REDIS_URL`              | No       | —           | Redis connection string        |
-| `JWT_SECRET`             | Yes      | —           | Min 32 chars                   |
-| `JWT_EXPIRY_MS`          | No       | `1800000`   | Access token TTL (30 min)      |
-| `REFRESH_TOKEN_EXPIRY_MS`| No       | `2592000000`| Refresh token TTL (30 days)    |
-| `CORS_ORIGIN`            | No       | `*`         | Allowed CORS origins           |
-| `RATE_LIMIT_RPS`         | No       | `100`       | Max requests per window        |
-| `LOG_LEVEL`              | No       | `info`      | Pino log level                 |
+| Variable                  | Required | Default       | Description                  |
+| ------------------------- | -------- | ------------- | ---------------------------- |
+| `NODE_ENV`                | No       | `development` | Runtime environment          |
+| `PORT`                    | No       | `8080`        | Server port                  |
+| `DATABASE_URL`            | Yes      | —             | PostgreSQL connection string |
+| `REDIS_URL`               | No       | —             | Redis connection string      |
+| `JWT_SECRET`              | Yes      | —             | Min 32 chars                 |
+| `JWT_EXPIRY_MS`           | No       | `1800000`     | Access token TTL (30 min)    |
+| `REFRESH_TOKEN_EXPIRY_MS` | No       | `2592000000`  | Refresh token TTL (30 days)  |
+| `CORS_ORIGIN`             | No       | `*`           | Allowed CORS origins         |
+| `RATE_LIMIT_RPS`          | No       | `100`         | Max requests per window      |
+| `LOG_LEVEL`               | No       | `info`        | Pino log level               |
 
 ## Docker
 

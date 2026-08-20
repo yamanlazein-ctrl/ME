@@ -72,7 +72,8 @@ export class LicenseTokenSigner {
   static fromPems(privateKeyPem: string | null, publicKeyPem: string): LicenseTokenSigner {
     // Lazy import to keep startup fast.
     // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const { createPublicKey, createPrivateKey } = require("node:crypto") as typeof import("node:crypto");
+    const { createPublicKey, createPrivateKey } =
+      require("node:crypto") as typeof import("node:crypto");
     const pubKey = createPublicKey(publicKeyPem);
     const publicJwk = nodeKeyToJwk(pubKey);
     // R5: load the private key too, so the PEM path can SIGN (previously
@@ -95,7 +96,10 @@ export class LicenseTokenSigner {
   }
 
   static async generateKeyPair(): Promise<{ privateJwk: JWK; publicJwk: JWK }> {
-    const { publicKey, privateKey } = await generateKeyPair("EdDSA", { crv: "Ed25519", extractable: true });
+    const { publicKey, privateKey } = await generateKeyPair("EdDSA", {
+      crv: "Ed25519",
+      extractable: true,
+    });
     const publicJwk = await exportJWK(publicKey);
     const privateJwk = await exportJWK(privateKey);
     publicJwk.kid = computeKid(publicJwk);
@@ -103,7 +107,10 @@ export class LicenseTokenSigner {
     return { privateJwk, publicJwk };
   }
 
-  async sign(payload: LicenseTokenPayload, opts?: { expiresInSec?: number; jti?: string }): Promise<string> {
+  async sign(
+    payload: LicenseTokenPayload,
+    opts?: { expiresInSec?: number; jti?: string },
+  ): Promise<string> {
     if (!this.privateKeyJwk) {
       throw new Error("LicenseTokenSigner: cannot sign without a private key");
     }

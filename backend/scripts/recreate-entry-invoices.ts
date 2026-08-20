@@ -30,10 +30,19 @@ const ctx: TenantContext = {
 
 const repo = new PostgresInvoiceRepository(db);
 
-const INV_NUMBERS = ["INV-2026-0007","INV-2026-0008","INV-2026-0009","INV-2026-0010","INV-2026-0011"];
+const INV_NUMBERS = [
+  "INV-2026-0007",
+  "INV-2026-0008",
+  "INV-2026-0009",
+  "INV-2026-0010",
+  "INV-2026-0011",
+];
 
 // Desired values extracted from notes
-const DESIRED_PAID: Record<string, { paid: number; method: "cash" | "transfer" | "check" | "card" }> = {
+const DESIRED_PAID: Record<
+  string,
+  { paid: number; method: "cash" | "transfer" | "check" | "card" }
+> = {
   "INV-2026-0007": { paid: 200000, method: "cash" },
   "INV-2026-0008": { paid: 0, method: "cash" },
   "INV-2026-0009": { paid: 300000, method: "cash" },
@@ -97,13 +106,17 @@ async function main() {
     console.log(`  Re-creating with paid=${desired.paid}, method=${desired.method}...`);
     const newInv = await repo.create(createInput, num, ctx);
     console.log(`  Re-created: ${newInv.number}`);
-    console.log(`    total=${newInv.total}, paid=${newInv.paid}, amountDue=${newInv.amountDue}, paymentMethod=${newInv.paymentMethod ?? "null"}`);
+    console.log(
+      `    total=${newInv.total}, paid=${newInv.paid}, amountDue=${newInv.amountDue}, paymentMethod=${newInv.paymentMethod ?? "null"}`,
+    );
 
     // 4. Verify linked payment voucher
     if (desired.paid > 0) {
       const payVouchers = await db.select().from(vouchers).where(eq(vouchers.invoiceId, newInv.id));
       for (const v of payVouchers) {
-        console.log(`    -> Voucher: ${v.number}, kind=${v.kind}, amount=${v.amount}, method=${v.method}`);
+        console.log(
+          `    -> Voucher: ${v.number}, kind=${v.kind}, amount=${v.amount}, method=${v.method}`,
+        );
       }
     }
   }
@@ -124,9 +137,13 @@ async function main() {
     let lineIdx = 1;
     let subtotal = 0;
     for (const l of lines) {
-      const lineTotal = Math.round(Number(l.quantityKg) * Number(l.pricePerKg) - Number(l.discountAmount ?? 0));
+      const lineTotal = Math.round(
+        Number(l.quantityKg) * Number(l.pricePerKg) - Number(l.discountAmount ?? 0),
+      );
       subtotal += lineTotal;
-      console.log(`  Line ${lineIdx}: qty=${l.quantityKg} × price=${l.pricePerKg} - discount=${l.discountAmount} = ${lineTotal}`);
+      console.log(
+        `  Line ${lineIdx}: qty=${l.quantityKg} × price=${l.pricePerKg} - discount=${l.discountAmount} = ${lineTotal}`,
+      );
       lineIdx++;
     }
     console.log(`  Subtotal (computed from lines): ${subtotal}`);
@@ -138,4 +155,7 @@ async function main() {
   process.exit(0);
 }
 
-main().catch((e) => { console.error("FATAL:", e); process.exit(1); });
+main().catch((e) => {
+  console.error("FATAL:", e);
+  process.exit(1);
+});

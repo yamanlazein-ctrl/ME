@@ -11,7 +11,6 @@ import {
 import { useDashboard } from "@/presentation/hooks/useDashboard";
 import { formatNumber, formatMoney, formatQuantity } from "@/shared/utils/formatNumber";
 
-
 export function TopFabricsChart() {
   const { data: dashboardData } = useDashboard();
   const data = dashboardData?.topFabrics ?? [];

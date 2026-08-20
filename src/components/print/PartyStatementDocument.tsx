@@ -62,8 +62,6 @@ export function PartyStatementDocument({
     { key: "bal", label: "الرصيد", align: "left", amount: true, width: "11%" },
   ];
 
-
-
   const tableRows: (string | ReactNode)[][] = [];
   if (previousBalance !== 0 || rows.length > 0) {
     tableRows.push([
@@ -93,10 +91,7 @@ export function PartyStatementDocument({
     tableRows.push([
       cell(String(r.seq), m),
       cell(r.type === "opening" ? "—" : r.date, m),
-      cell(
-        `${LEDGER_TYPE_LABEL[r.type] ?? r.type}${m ? " (ملغاة)" : ""}`,
-        m,
-      ),
+      cell(`${LEDGER_TYPE_LABEL[r.type] ?? r.type}${m ? " (ملغاة)" : ""}`, m),
       cell(r.referenceNumber ?? "—", m),
       cell(r.description, m),
       cell(r.quantityKg ? `${fmtQty(r.quantityKg)} كجم` : "—", m),
@@ -124,7 +119,9 @@ export function PartyStatementDocument({
       typeBadge="STATEMENT"
     >
       {tableRows.length === 0 ? (
-        <div style={{ padding: "16pt 0 8pt", fontSize: "9.5pt", color: "#666", textAlign: "center" }}>
+        <div
+          style={{ padding: "16pt 0 8pt", fontSize: "9.5pt", color: "#666", textAlign: "center" }}
+        >
           لا توجد حركات في هذه الفترة.
         </div>
       ) : (

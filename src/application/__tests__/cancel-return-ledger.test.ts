@@ -20,9 +20,8 @@ describe("CancelReturnUseCase — ledger cancellation", () => {
   });
 
   it("calls ledger.cancelByReference after cancelling return", async () => {
-    const { CancelReturnUseCase } = await import(
-      "@/application/use-cases/returns/CancelReturnUseCase"
-    );
+    const { CancelReturnUseCase } =
+      await import("@/application/use-cases/returns/CancelReturnUseCase");
     const uc = new CancelReturnUseCase(mockReturnRepo, mockLedgerRepo);
     await uc.execute("ret-1" as UUID, ctx);
     expect(mockReturnRepo.cancel).toHaveBeenCalledWith("ret-1", ctx);

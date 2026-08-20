@@ -34,7 +34,8 @@ export function createInstallGateMiddleware(
     // never matches the tenant the wizard actually created.
     let tenantId = process.env.BOOTSTRAP_TENANT_ID;
     if (!tenantId) {
-      tenantId = (await installationStateRepo.findAnyCompleted()) ?? "d7b2a19f-d97c-46d0-9630-b9e457bd8e35";
+      tenantId =
+        (await installationStateRepo.findAnyCompleted()) ?? "d7b2a19f-d97c-46d0-9630-b9e457bd8e35";
     }
     try {
       const state = await installationStateRepo.findByTenant(tenantId);

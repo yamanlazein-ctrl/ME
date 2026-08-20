@@ -22,9 +22,9 @@ test.describe("Page Load Performance", () => {
       await page.waitForTimeout(1000);
 
       const fcp = await page.evaluate(() => {
-        const [entry] = performance.getEntriesByType("paint").filter(
-          (e) => e.name === "first-contentful-paint",
-        ) as PerformanceEntry[];
+        const [entry] = performance
+          .getEntriesByType("paint")
+          .filter((e) => e.name === "first-contentful-paint") as PerformanceEntry[];
         return entry ? entry.startTime : -1;
       });
 

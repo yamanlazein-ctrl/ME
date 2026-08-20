@@ -1,6 +1,9 @@
 import { z } from "zod";
 import type { ITenantRepository } from "../../../application/ports/ITenantRepository.js";
-import type { IInstallationStateRepository, WizardStepName } from "../../../application/ports/IInstallationStateRepository.js";
+import type {
+  IInstallationStateRepository,
+  WizardStepName,
+} from "../../../application/ports/IInstallationStateRepository.js";
 import type { ILicenseProvider } from "../../../application/ports/ILicenseProvider.js";
 import type { IMachineFingerprintProvider } from "../../../application/ports/IMachineFingerprintProvider.js";
 import type { ISecretsRepository } from "../../../application/ports/ISecretsRepository.js";
@@ -63,7 +66,12 @@ async function assertWizardMutable(
 
 const startInput = z.object({
   companyName: z.string().min(1).optional(),
-  slug: z.string().min(1).max(100).regex(/^[a-z0-9-]+$/i).optional(),
+  slug: z
+    .string()
+    .min(1)
+    .max(100)
+    .regex(/^[a-z0-9-]+$/i)
+    .optional(),
 });
 
 export async function startWizardUseCase(
@@ -89,7 +97,9 @@ export async function startWizardUseCase(
       name: companyName,
       slug,
     });
-    const state = await installationStateRepo.create(tenant.id, { bootstrapAt: new Date().toISOString() });
+    const state = await installationStateRepo.create(tenant.id, {
+      bootstrapAt: new Date().toISOString(),
+    });
     return { ok: true, data: { tenantId: state.tenantId, isCompleted: state.isCompleted } };
   } catch (e) {
     return { ok: false, error: "فشل بدء المعالج" };
@@ -205,8 +215,14 @@ const companyStepInput = z.object({
   email: z.string().email().optional(),
   currency: z.string().length(3).optional(),
   language: z.string().min(2).max(5).optional(),
-  fiscalYearStart: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
-  defaultTaxRate: z.string().regex(/^\d+(\.\d{1,4})?$/).optional(),
+  fiscalYearStart: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .optional(),
+  defaultTaxRate: z
+    .string()
+    .regex(/^\d+(\.\d{1,4})?$/)
+    .optional(),
 });
 
 export async function saveCompanyStepUseCase(

@@ -41,9 +41,7 @@ describe("resolveCreatedBy", () => {
 
   it("falls back to 'Admin' for real UUIDs that don't match any user", () => {
     // The actual UUID coming from the backend
-    expect(resolveCreatedBy("c30855ff-09f4-4961-866f-0a6649bb52b6")).toBe(
-      FALLBACK_USER_NAME,
-    );
+    expect(resolveCreatedBy("c30855ff-09f4-4961-866f-0a6649bb52b6")).toBe(FALLBACK_USER_NAME);
   });
 
   it("returns the input as-is when it is already a name (non-UUID)", () => {

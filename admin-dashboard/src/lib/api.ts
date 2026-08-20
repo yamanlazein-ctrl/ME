@@ -1,11 +1,4 @@
-import type {
-  License,
-  Activation,
-  AuditEvent,
-  CreateLicenseInput,
-  Edition,
-  Plan,
-} from "@/types";
+import type { License, Activation, AuditEvent, CreateLicenseInput, Edition, Plan } from "@/types";
 
 const API_BASE = import.meta.env.VITE_LICENSE_SERVER_URL || "http://localhost:8081";
 

@@ -63,24 +63,36 @@ export function registerReturnRoutes(
     },
   );
 
-  router.get("/returns/:id", auth, readGuard, validateUuidParam("id"), async (req: Request, res: Response) => {
-    const r = await uc.findReturnUseCase(returnRepo, pid(req), ctx(req));
-    if (!r.ok) {
-      return res.status(500).json({ code: "INTERNAL", message: r.error });
-    }
-    if (!r.data) {
-      return res.status(404).json({ code: "NOT_FOUND", message: "المرتجع غير موجود" });
-    }
-    res.json(r.data);
-  });
-
-  router.post("/returns/:id/cancel", auth, writeGuard, validateUuidParam("id"), async (req: Request, res: Response) => {
-    const c = ctx(req);
-    const r = await uc.cancelReturnUseCase(returnRepo, auditRepo, pid(req), c.userId, c);
-    if (r.ok) {
+  router.get(
+    "/returns/:id",
+    auth,
+    readGuard,
+    validateUuidParam("id"),
+    async (req: Request, res: Response) => {
+      const r = await uc.findReturnUseCase(returnRepo, pid(req), ctx(req));
+      if (!r.ok) {
+        return res.status(500).json({ code: "INTERNAL", message: r.error });
+      }
+      if (!r.data) {
+        return res.status(404).json({ code: "NOT_FOUND", message: "المرتجع غير موجود" });
+      }
       res.json(r.data);
-    } else {
-      res.status(422).json({ code: "VALIDATION", message: r.error });
-    }
-  });
+    },
+  );
+
+  router.post(
+    "/returns/:id/cancel",
+    auth,
+    writeGuard,
+    validateUuidParam("id"),
+    async (req: Request, res: Response) => {
+      const c = ctx(req);
+      const r = await uc.cancelReturnUseCase(returnRepo, auditRepo, pid(req), c.userId, c);
+      if (r.ok) {
+        res.json(r.data);
+      } else {
+        res.status(422).json({ code: "VALIDATION", message: r.error });
+      }
+    },
+  );
 }

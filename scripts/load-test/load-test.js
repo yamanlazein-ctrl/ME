@@ -40,17 +40,17 @@ const errorRate = new Rate("errors");
 // ---------------------------------------------------------------------------
 export const options = {
   stages: [
-    { duration: "10s", target: 10 },   // Warm-up: 10 virtual users
-    { duration: "20s", target: 50 },   // Ramp up: 50 concurrent users
-    { duration: "30s", target: 100 },  // Peak: 100 concurrent users
-    { duration: "10s", target: 0 },    // Cool down
+    { duration: "10s", target: 10 }, // Warm-up: 10 virtual users
+    { duration: "20s", target: 50 }, // Ramp up: 50 concurrent users
+    { duration: "30s", target: 100 }, // Peak: 100 concurrent users
+    { duration: "10s", target: 0 }, // Cool down
   ],
   thresholds: {
     // Phase 1 targets after indexes
     statement_latency: ["p(95)<200", "p(99)<500"],
     invoice_list_latency: ["p(95)<50"],
     dashboard_latency: ["p(95)<100"],
-    errors: ["rate<0.01"],             // < 1% error rate
+    errors: ["rate<0.01"], // < 1% error rate
     http_req_duration: ["p(95)<200"],
   },
 };
@@ -59,12 +59,16 @@ export const options = {
 // Setup — authenticate once per VU
 // ---------------------------------------------------------------------------
 export function setup() {
-  const loginRes = http.post(`${BASE_URL}/api/auth/login`, JSON.stringify({
-    email: __ENV.TEST_EMAIL || "admin@fabric-erp.test",
-    password: __ENV.TEST_PASSWORD || "testpass123",
-  }), {
-    headers: { "Content-Type": "application/json" },
-  });
+  const loginRes = http.post(
+    `${BASE_URL}/api/auth/login`,
+    JSON.stringify({
+      email: __ENV.TEST_EMAIL || "admin@fabric-erp.test",
+      password: __ENV.TEST_PASSWORD || "testpass123",
+    }),
+    {
+      headers: { "Content-Type": "application/json" },
+    },
+  );
 
   check(loginRes, {
     "login status is 200": (r) => r.status === 200,
@@ -79,7 +83,7 @@ export function setup() {
 export default function (data) {
   const headers = {
     "Content-Type": "application/json",
-    "Authorization": `Bearer ${data.token}`,
+    Authorization: `Bearer ${data.token}`,
     "X-Tenant-Id": data.tenantId,
   };
 
@@ -121,10 +125,7 @@ export default function (data) {
   // --- Scenario 3: Dashboard KPI ---
   group("Dashboard KPI", () => {
     const start = Date.now();
-    const res = http.get(
-      `${BASE_URL}/api/dashboard/today?currency=SYP`,
-      { headers },
-    );
+    const res = http.get(`${BASE_URL}/api/dashboard/today?currency=SYP`, { headers });
     dashboardLatency.add(Date.now() - start);
     const ok = check(res, {
       "dashboard status is 200": (r) => r.status === 200,

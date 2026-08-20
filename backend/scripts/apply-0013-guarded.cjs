@@ -10,7 +10,9 @@ const { Client } = require("pg");
 async function main() {
   const connectionString = process.env.DATABASE_URL;
   if (!connectionString) {
-    throw new Error("DATABASE_URL is not set. Usage: DATABASE_URL=postgresql://... node apply-0013-guarded.cjs");
+    throw new Error(
+      "DATABASE_URL is not set. Usage: DATABASE_URL=postgresql://... node apply-0013-guarded.cjs",
+    );
   }
   const c = new Client({ connectionString });
   await c.connect();

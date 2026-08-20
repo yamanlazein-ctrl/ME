@@ -37,7 +37,12 @@ export function LoginPage() {
     >
       <div className="w-full max-w-md rounded-2xl border border-border bg-card p-8 shadow-2xl">
         <div className="flex flex-col items-center text-center">
-          <img src={logoUrl} alt="Motard Fabrics Group" className="h-24 w-auto object-contain bg-transparent" style={{ background: "transparent" }} />
+          <img
+            src={logoUrl}
+            alt="Motard Fabrics Group"
+            className="h-24 w-auto object-contain bg-transparent"
+            style={{ background: "transparent" }}
+          />
           <h1 className="mt-4 text-2xl font-bold tracking-tight text-foreground">
             Motard Fabrics Group
           </h1>

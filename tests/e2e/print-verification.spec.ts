@@ -70,7 +70,10 @@ test.describe("Print verification: invoice numbers match", () => {
 
     // Step 4: Check print preview if available
     const printRoot = page.locator("[data-print-root]");
-    const hasPrintRoot = await printRoot.first().isVisible({ timeout: 5000 }).catch(() => false);
+    const hasPrintRoot = await printRoot
+      .first()
+      .isVisible({ timeout: 5000 })
+      .catch(() => false);
 
     if (hasPrintRoot) {
       const printText = await printRoot.first().innerText();
@@ -79,7 +82,9 @@ test.describe("Print verification: invoice numbers match", () => {
       expect(printText).toContain(invoice.number);
 
       // If there's a total displayed, verify it matches
-      const totalDisplay = page.locator("[data-testid='invoice-total'], .total-amount, [class*='total']").first();
+      const totalDisplay = page
+        .locator("[data-testid='invoice-total'], .total-amount, [class*='total']")
+        .first();
       const hasTotal = await totalDisplay.isVisible({ timeout: 3000 }).catch(() => false);
 
       if (hasTotal) {
@@ -101,9 +106,11 @@ test.describe("Print verification: invoice numbers match", () => {
     await page.waitForTimeout(2000);
 
     // Look for print button
-    const printButton = page.locator(
-      "button:has-text('طباعة'), button:has-text('Print'), [title*='طباعة'], [title*='Print'], button.print-btn, [data-action='print']"
-    ).first();
+    const printButton = page
+      .locator(
+        "button:has-text('طباعة'), button:has-text('Print'), [title*='طباعة'], [title*='Print'], button.print-btn, [data-action='print']",
+      )
+      .first();
 
     const hasPrintButton = await printButton.isVisible({ timeout: 3000 }).catch(() => false);
 
@@ -113,8 +120,16 @@ test.describe("Print verification: invoice numbers match", () => {
       await page.waitForTimeout(1000);
 
       // Check if print dialog or preview appeared
-      const hasDialog = await page.locator("[role='dialog'], [class*='dialog'], [class*='modal']").first().isVisible({ timeout: 3000 }).catch(() => false);
-      const hasPrintView = await page.locator("[data-print-root], .print-view, [class*='print']").first().isVisible({ timeout: 3000 }).catch(() => false);
+      const hasDialog = await page
+        .locator("[role='dialog'], [class*='dialog'], [class*='modal']")
+        .first()
+        .isVisible({ timeout: 3000 })
+        .catch(() => false);
+      const hasPrintView = await page
+        .locator("[data-print-root], .print-view, [class*='print']")
+        .first()
+        .isVisible({ timeout: 3000 })
+        .catch(() => false);
 
       // At least one of these should be true
       expect(hasDialog || hasPrintView).toBe(true);
@@ -134,8 +149,16 @@ test.describe("Print verification: invoice numbers match", () => {
     expect(bodyText.length).toBeGreaterThan(20);
 
     // Check that the form has quantity and price fields
-    const hasQtyField = await page.locator("input[type='number'], [placeholder*='كمية'], [placeholder*='quantity']").first().isVisible({ timeout: 3000 }).catch(() => false);
-    const hasPriceField = await page.locator("input[type='number'], [placeholder*='سعر'], [placeholder*='price']").first().isVisible({ timeout: 3000 }).catch(() => false);
+    const hasQtyField = await page
+      .locator("input[type='number'], [placeholder*='كمية'], [placeholder*='quantity']")
+      .first()
+      .isVisible({ timeout: 3000 })
+      .catch(() => false);
+    const hasPriceField = await page
+      .locator("input[type='number'], [placeholder*='سعر'], [placeholder*='price']")
+      .first()
+      .isVisible({ timeout: 3000 })
+      .catch(() => false);
 
     expect(hasQtyField || hasPriceField).toBe(true);
   });
@@ -234,7 +257,8 @@ test.describe("Print accessibility (axe-core)", () => {
     const inputsWithoutLabels = await page.evaluate(() => {
       const inputs = Array.from(document.querySelectorAll("input, select, textarea"));
       return inputs.filter((el) => {
-        const hasLabel = el.getAttribute("aria-label") ||
+        const hasLabel =
+          el.getAttribute("aria-label") ||
           el.getAttribute("aria-labelledby") ||
           document.querySelector(`label[for="${el.id}"]`);
         const hasPlaceholder = (el as HTMLInputElement).placeholder;
@@ -264,7 +288,10 @@ test.describe("Print visual regression", () => {
 
     // Take screenshot of print area
     const printRoot = page.locator("[data-print-root]");
-    const hasPrintRoot = await printRoot.first().isVisible({ timeout: 5000 }).catch(() => false);
+    const hasPrintRoot = await printRoot
+      .first()
+      .isVisible({ timeout: 5000 })
+      .catch(() => false);
 
     if (hasPrintRoot) {
       // This will fail on first run (no baseline), then pass on subsequent runs

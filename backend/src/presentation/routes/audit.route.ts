@@ -60,21 +60,16 @@ export function registerAuditRoutes(
    * Convenience endpoint for invoice tracking — returns all audit logs
    * for a specific invoice, sorted newest-first.
    */
-  router.get(
-    "/audit-logs/invoice/:id",
-    auth,
-    readGuard,
-    async (req: Request, res: Response) => {
-      const r = await auditRepo.list(
-        {
-          entityType: "invoice",
-          entityId: req.params.id as string,
-          limit: 100,
-          offset: 0,
-        },
-        ctx(req),
-      );
-      res.json(r);
-    },
-  );
+  router.get("/audit-logs/invoice/:id", auth, readGuard, async (req: Request, res: Response) => {
+    const r = await auditRepo.list(
+      {
+        entityType: "invoice",
+        entityId: req.params.id as string,
+        limit: 100,
+        offset: 0,
+      },
+      ctx(req),
+    );
+    res.json(r);
+  });
 }

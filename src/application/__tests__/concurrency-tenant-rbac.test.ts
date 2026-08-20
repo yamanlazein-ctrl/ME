@@ -5,7 +5,10 @@ describe("Concurrency / Optimistic Locking Test", () => {
   class Roll {
     remainingKg: number;
     version: number;
-    constructor(public id: string, kg: number) {
+    constructor(
+      public id: string,
+      kg: number,
+    ) {
       this.remainingKg = kg;
       this.version = 1;
     }
@@ -76,8 +79,18 @@ describe("Concurrency / Optimistic Locking Test", () => {
 });
 
 describe("Tenant Isolation Test", () => {
-  const tenantA = { tenantId: "tenant-a", userId: "u1", userRole: "admin" as const, userName: "UserA" };
-  const tenantB = { tenantId: "tenant-b", userId: "u2", userRole: "admin" as const, userName: "UserB" };
+  const tenantA = {
+    tenantId: "tenant-a",
+    userId: "u1",
+    userRole: "admin" as const,
+    userName: "UserA",
+  };
+  const tenantB = {
+    tenantId: "tenant-b",
+    userId: "u2",
+    userRole: "admin" as const,
+    userName: "UserB",
+  };
 
   // Simulated multi-tenant store (like InMemoryInvoiceRepository)
   const store = new Map<string, { id: string; tenantId: string; data: string }>();

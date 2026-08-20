@@ -27,7 +27,10 @@ function headers(): Record<string, string> {
   return h;
 }
 
-async function apiPost(path: string, body: unknown): Promise<{ ok: boolean; status: number; data: any }> {
+async function apiPost(
+  path: string,
+  body: unknown,
+): Promise<{ ok: boolean; status: number; data: any }> {
   const url = `${API_BASE}${path}`;
   const r = await fetch(url, {
     method: "POST",
@@ -75,21 +78,41 @@ export function ActivationScreen({ onActivated }: { onActivated: () => void }) {
     setLoading(true);
     try {
       const tid = await ensureTenant();
-       let r;
-       try {
-         r = await apiPost("/api/setup/wizard/activate", { tenantId: tid, key });
-       } catch (netErr) {
-         throw new Error("خطأ شبكة: " + (netErr instanceof Error ? netErr.message : "فشل الاتصال") + " | tenantId=" + tid + " | key=" + key);
-       }
+      let r;
+      try {
+        r = await apiPost("/api/setup/wizard/activate", { tenantId: tid, key });
+      } catch (netErr) {
+        throw new Error(
+          "خطأ شبكة: " +
+            (netErr instanceof Error ? netErr.message : "فشل الاتصال") +
+            " | tenantId=" +
+            tid +
+            " | key=" +
+            key,
+        );
+      }
 
-       if (!r.ok) {
-         const code = r.data?.code || r.data?.message || "";
-         if (code === "INVALID_LICENSE" || r.status === 400) throw new Error("فشل التفعيل (400): " + (r.data?.message || code || "رسالة فارغة") + " | tenantId=" + tid);
-         if (code === "LICENSE_BOUND_TO_ANOTHER_TENANT" || r.status === 409) {
-           throw new Error("المفتاح مُفعّل على تثبيت آخر. استخدم نقل الترخيص أو راجع الدعم");
-         }
-         throw new Error("فشل التفعيل (status " + r.status + "): " + (typeof r.data?.message === "string" ? r.data.message : "رسالة غير معروفة") + " | data=" + JSON.stringify(r.data));
-       }
+      if (!r.ok) {
+        const code = r.data?.code || r.data?.message || "";
+        if (code === "INVALID_LICENSE" || r.status === 400)
+          throw new Error(
+            "فشل التفعيل (400): " +
+              (r.data?.message || code || "رسالة فارغة") +
+              " | tenantId=" +
+              tid,
+          );
+        if (code === "LICENSE_BOUND_TO_ANOTHER_TENANT" || r.status === 409) {
+          throw new Error("المفتاح مُفعّل على تثبيت آخر. استخدم نقل الترخيص أو راجع الدعم");
+        }
+        throw new Error(
+          "فشل التفعيل (status " +
+            r.status +
+            "): " +
+            (typeof r.data?.message === "string" ? r.data.message : "رسالة غير معروفة") +
+            " | data=" +
+            JSON.stringify(r.data),
+        );
+      }
       saveLicenseKey(key);
       saveActivationId(r.data?.activationId ?? r.data?.id ?? tid);
       setStep("company");
@@ -158,7 +181,10 @@ export function ActivationScreen({ onActivated }: { onActivated: () => void }) {
       const tid = await ensureTenant();
       const rv = await apiPost("/api/setup/wizard/review", { tenantId: tid, confirmed: true });
       if (!rv.ok) throw new Error(rv.data?.message || "فشل المراجعة");
-      const cp = await apiPost(`/api/setup/wizard/complete?tenantId=${encodeURIComponent(tid)}`, {});
+      const cp = await apiPost(
+        `/api/setup/wizard/complete?tenantId=${encodeURIComponent(tid)}`,
+        {},
+      );
       if (!cp.ok) throw new Error(cp.data?.message || "فشل إكمال الإعداد");
       setStep("done");
       onActivated();
@@ -170,7 +196,10 @@ export function ActivationScreen({ onActivated }: { onActivated: () => void }) {
   }
 
   return (
-    <div className="min-h-screen w-full bg-background text-foreground flex items-center justify-center px-4" dir="rtl">
+    <div
+      className="min-h-screen w-full bg-background text-foreground flex items-center justify-center px-4"
+      dir="rtl"
+    >
       <div className="w-full max-w-md rounded-2xl border border-border bg-card p-8 shadow-2xl">
         <div className="flex flex-col items-center text-center">
           <img src={logoUrl} alt="Motard Fabrics Group" className="h-20 w-auto object-contain" />
@@ -193,7 +222,9 @@ export function ActivationScreen({ onActivated }: { onActivated: () => void }) {
         {step === "activate" && (
           <form onSubmit={submitActivate} className="mt-6 space-y-4">
             <label className="block">
-              <span className="mb-1.5 block text-xs font-medium text-muted-foreground">مفتاح الترخيص</span>
+              <span className="mb-1.5 block text-xs font-medium text-muted-foreground">
+                مفتاح الترخيص
+              </span>
               <input
                 type="text"
                 value={licenseKey}
@@ -203,7 +234,11 @@ export function ActivationScreen({ onActivated }: { onActivated: () => void }) {
                 autoFocus
               />
             </label>
-            <button type="submit" disabled={loading} className="w-full rounded-lg bg-primary px-4 py-3 text-sm font-bold text-primary-foreground disabled:opacity-50">
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full rounded-lg bg-primary px-4 py-3 text-sm font-bold text-primary-foreground disabled:opacity-50"
+            >
               {loading ? "جاري التفعيل…" : "تفعيل"}
             </button>
           </form>
@@ -211,19 +246,60 @@ export function ActivationScreen({ onActivated }: { onActivated: () => void }) {
 
         {step === "company" && (
           <form onSubmit={submitCompany} className="mt-6 space-y-4">
-            <Field label="اسم الشركة"><input className={inputCls} value={companyName} onChange={(e) => setCompanyName(e.target.value)} /></Field>
-            <Field label="البريد الإلكتروني"><input className={inputCls} value={companyEmail} onChange={(e) => setCompanyEmail(e.target.value)} /></Field>
-            <Field label="الهاتف"><input className={inputCls} value={companyPhone} onChange={(e) => setCompanyPhone(e.target.value)} /></Field>
-            <button type="submit" disabled={loading} className={btnCls}>{loading ? "جاري الحفظ…" : "التالي"}</button>
+            <Field label="اسم الشركة">
+              <input
+                className={inputCls}
+                value={companyName}
+                onChange={(e) => setCompanyName(e.target.value)}
+              />
+            </Field>
+            <Field label="البريد الإلكتروني">
+              <input
+                className={inputCls}
+                value={companyEmail}
+                onChange={(e) => setCompanyEmail(e.target.value)}
+              />
+            </Field>
+            <Field label="الهاتف">
+              <input
+                className={inputCls}
+                value={companyPhone}
+                onChange={(e) => setCompanyPhone(e.target.value)}
+              />
+            </Field>
+            <button type="submit" disabled={loading} className={btnCls}>
+              {loading ? "جاري الحفظ…" : "التالي"}
+            </button>
           </form>
         )}
 
         {step === "admin" && (
           <form onSubmit={submitAdmin} className="mt-6 space-y-4">
-            <Field label="الاسم الكامل"><input className={inputCls} value={adminName} onChange={(e) => setAdminName(e.target.value)} /></Field>
-            <Field label="البريد الإلكتروني"><input className={inputCls} value={adminEmail} onChange={(e) => setAdminEmail(e.target.value)} /></Field>
-            <Field label="كلمة المرور"><input type="password" className={inputCls} value={adminPassword} onChange={(e) => setAdminPassword(e.target.value)} /></Field>
-            <button type="submit" disabled={loading} className={btnCls}>{loading ? "جاري الحفظ…" : "التالي"}</button>
+            <Field label="الاسم الكامل">
+              <input
+                className={inputCls}
+                value={adminName}
+                onChange={(e) => setAdminName(e.target.value)}
+              />
+            </Field>
+            <Field label="البريد الإلكتروني">
+              <input
+                className={inputCls}
+                value={adminEmail}
+                onChange={(e) => setAdminEmail(e.target.value)}
+              />
+            </Field>
+            <Field label="كلمة المرور">
+              <input
+                type="password"
+                className={inputCls}
+                value={adminPassword}
+                onChange={(e) => setAdminPassword(e.target.value)}
+              />
+            </Field>
+            <button type="submit" disabled={loading} className={btnCls}>
+              {loading ? "جاري الحفظ…" : "التالي"}
+            </button>
           </form>
         )}
 
@@ -231,23 +307,31 @@ export function ActivationScreen({ onActivated }: { onActivated: () => void }) {
           <form onSubmit={submitReview} className="mt-6 space-y-4">
             <ul className="space-y-1 text-xs text-muted-foreground">
               <li>الشركة: {companyName}</li>
-              <li>المدير: {adminName} ({adminEmail})</li>
+              <li>
+                المدير: {adminName} ({adminEmail})
+              </li>
               <li>الترخيص: {licenseKey}</li>
             </ul>
-            <button type="submit" disabled={loading} className={btnCls}>{loading ? "جاري الإكمال…" : "إكمال الإعداد"}</button>
+            <button type="submit" disabled={loading} className={btnCls}>
+              {loading ? "جاري الإكمال…" : "إكمال الإعداد"}
+            </button>
           </form>
         )}
 
         {step === "done" && (
-          <p className="mt-6 text-center text-sm text-foreground">تم تفعيل النظام. يمكنك تسجيل الدخول الآن.</p>
+          <p className="mt-6 text-center text-sm text-foreground">
+            تم تفعيل النظام. يمكنك تسجيل الدخول الآن.
+          </p>
         )}
       </div>
     </div>
   );
 }
 
-const inputCls = "w-full rounded-lg border border-border bg-secondary px-3 py-2.5 text-sm outline-none focus:border-primary";
-const btnCls = "w-full rounded-lg bg-primary px-4 py-3 text-sm font-bold text-primary-foreground disabled:opacity-50";
+const inputCls =
+  "w-full rounded-lg border border-border bg-secondary px-3 py-2.5 text-sm outline-none focus:border-primary";
+const btnCls =
+  "w-full rounded-lg bg-primary px-4 py-3 text-sm font-bold text-primary-foreground disabled:opacity-50";
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (

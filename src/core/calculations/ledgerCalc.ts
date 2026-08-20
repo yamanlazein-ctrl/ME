@@ -312,7 +312,12 @@ export function buildPartyStatsByCurrency(
   for (const inv of invs) {
     const c = inv.currency;
     const cur = out[c] ?? {
-      invoicesCount: 0, totalAmount: 0, totalPaid: 0, remaining: 0, avgInvoice: 0, totalKg: 0,
+      invoicesCount: 0,
+      totalAmount: 0,
+      totalPaid: 0,
+      remaining: 0,
+      avgInvoice: 0,
+      totalKg: 0,
     };
     cur.invoicesCount += 1;
     cur.totalAmount += Math.round(invoiceTotal(inv));
@@ -322,7 +327,12 @@ export function buildPartyStatsByCurrency(
   for (const v of partyVouchers) {
     const c = v.currency ?? "SYP";
     const cur = out[c] ?? {
-      invoicesCount: 0, totalAmount: 0, totalPaid: 0, remaining: 0, avgInvoice: 0, totalKg: 0,
+      invoicesCount: 0,
+      totalAmount: 0,
+      totalPaid: 0,
+      remaining: 0,
+      avgInvoice: 0,
+      totalKg: 0,
     };
     cur.totalPaid += v.amount;
     out[c] = cur;

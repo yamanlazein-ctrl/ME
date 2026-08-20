@@ -10,12 +10,23 @@ describe("Phase 3: Return Invoice — Multi-Color Per Fabric", () => {
   };
 
   // Simulate stock + ledger (return ADDS stock back, creates CREDIT ledger entry)
-  const stock = new Map<string, { colorId: string; fabricId: string; remainingKg: number; version: number }>();
+  const stock = new Map<
+    string,
+    { colorId: string; fabricId: string; remainingKg: number; version: number }
+  >();
   const returnLines: Array<{
-    id: string; returnId: string; rollId: string; quantityKg: number; pricePerKg: number;
+    id: string;
+    returnId: string;
+    rollId: string;
+    quantityKg: number;
+    pricePerKg: number;
   }> = [];
   const ledgerEntries: Array<{
-    type: string; referenceId: string; debit: number; credit: number; currency: string;
+    type: string;
+    referenceId: string;
+    debit: number;
+    credit: number;
+    currency: string;
   }> = [];
   let lineSeq = 0;
 
@@ -24,7 +35,11 @@ describe("Phase 3: Return Invoice — Multi-Color Per Fabric", () => {
   }
 
   function createReturnLine(
-    returnId: string, rollId: string, kg: number, price: number, version: number,
+    returnId: string,
+    rollId: string,
+    kg: number,
+    price: number,
+    version: number,
   ) {
     const r = stock.get(rollId);
     if (!r) throw new Error("Roll not found");
@@ -41,7 +56,13 @@ describe("Phase 3: Return Invoice — Multi-Color Per Fabric", () => {
     r.version += 1;
 
     lineSeq++;
-    returnLines.push({ id: `line-${lineSeq}`, returnId, rollId, quantityKg: kg, pricePerKg: price });
+    returnLines.push({
+      id: `line-${lineSeq}`,
+      returnId,
+      rollId,
+      quantityKg: kg,
+      pricePerKg: price,
+    });
 
     // Financial impact: return creates a CREDIT entry (reduces party receivable)
     ledgerEntries.push({
@@ -69,14 +90,14 @@ describe("Phase 3: Return Invoice — Multi-Color Per Fabric", () => {
     const returnId = "ret-1";
 
     createReturnLine(returnId, "roll-cotton-black-01", 20, 5000, 1); // 100,000
-    createReturnLine(returnId, "roll-cotton-white-01", 10, 5200, 1);   // 52,000
+    createReturnLine(returnId, "roll-cotton-white-01", 10, 5200, 1); // 52,000
 
     const lines = returnLines.filter((l) => l.returnId === returnId);
     expect(lines).toHaveLength(2);
 
     // Stock restored for each roll independently
     expect(stock.get("roll-cotton-black-01")!.remainingKg).toBe(120); // 100 + 20
-    expect(stock.get("roll-cotton-white-01")!.remainingKg).toBe(90);   // 80 + 10
+    expect(stock.get("roll-cotton-white-01")!.remainingKg).toBe(90); // 80 + 10
   });
 
   it("derives fabricId and colorId correctly from rollId (no mismatch possible)", () => {
@@ -103,8 +124,8 @@ describe("Phase 3: Return Invoice — Multi-Color Per Fabric", () => {
     const returnId = "ret-4";
 
     createReturnLine(returnId, "roll-cotton-black-01", 25, 5000, 1); // 125,000
-    createReturnLine(returnId, "roll-cotton-white-01", 15, 5200, 1);   // 78,000
-    createReturnLine(returnId, "roll-cotton-red-01", 5, 5500, 1);       // 27,500
+    createReturnLine(returnId, "roll-cotton-white-01", 15, 5200, 1); // 78,000
+    createReturnLine(returnId, "roll-cotton-red-01", 5, 5500, 1); // 27,500
 
     const totalCredit = ledgerEntries
       .filter((e) => e.referenceId === returnId)
@@ -120,7 +141,7 @@ describe("Phase 3: Return Invoice — Multi-Color Per Fabric", () => {
     expect(initialVersion).toBe(1);
 
     createReturnLine(returnId, "roll-cotton-black-01", 10, 5000, 1); // version 1 → 2
-    createReturnLine(returnId, "roll-cotton-black-01", 5, 5000, 2);    // version 2 → 3
+    createReturnLine(returnId, "roll-cotton-black-01", 5, 5000, 2); // version 2 → 3
 
     expect(stock.get("roll-cotton-black-01")!.version).toBe(3);
   });

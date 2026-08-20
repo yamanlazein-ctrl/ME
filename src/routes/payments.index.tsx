@@ -7,11 +7,7 @@ import { Link, createFileRoute } from "@tanstack/react-router";
 import { Plus } from "lucide-react";
 import { BulkSelectToolbar } from "@/components/common/BulkSelectToolbar";
 import { ConfirmBulkAction } from "@/components/common/ConfirmBulkAction";
-import {
-  useVouchersList,
-  useCancelVoucher,
-  type Voucher,
-} from "@/presentation/hooks/useVouchers";
+import { useVouchersList, useCancelVoucher, type Voucher } from "@/presentation/hooks/useVouchers";
 import { supplierById } from "@/presentation/hooks/useParties";
 import { formatAmount } from "@/presentation/hooks/useCurrency";
 import { formatDateTime } from "@/lib/utils";
@@ -157,7 +153,10 @@ function PaymentsList() {
               })}
               {list.length === 0 && (
                 <tr>
-                  <td colSpan={selectMode ? 9 : 8} className="p-10 text-center text-muted-foreground">
+                  <td
+                    colSpan={selectMode ? 9 : 8}
+                    className="p-10 text-center text-muted-foreground"
+                  >
                     لا سندات بعد.
                   </td>
                 </tr>

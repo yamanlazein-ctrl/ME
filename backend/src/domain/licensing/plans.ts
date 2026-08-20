@@ -68,8 +68,22 @@ export const DEFAULT_LIMITS: LicenseLimits = {
 
 const PLAN_LIMITS: Record<Plan, LicenseLimits> = {
   basic: { users: 5, devices: 1, branches: 1, warehouses: 1, storage_gb: 5, api_calls: 10_000 },
-  standard: { users: 20, devices: 2, branches: 2, warehouses: 3, storage_gb: 10, api_calls: 100_000 },
-  premium: { users: 50, devices: 5, branches: 5, warehouses: 10, storage_gb: 50, api_calls: 1_000_000 },
+  standard: {
+    users: 20,
+    devices: 2,
+    branches: 2,
+    warehouses: 3,
+    storage_gb: 10,
+    api_calls: 100_000,
+  },
+  premium: {
+    users: 50,
+    devices: 5,
+    branches: 5,
+    warehouses: 10,
+    storage_gb: 50,
+    api_calls: 1_000_000,
+  },
   enterprise: {
     users: 200,
     devices: 20,

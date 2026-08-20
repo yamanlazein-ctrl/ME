@@ -1,6 +1,9 @@
 import type { Request, Response, NextFunction } from "express";
 import type { UUID } from "../../../domain/types/index.js";
-import type { ILicenseRepository, LicenseRow } from "../../../application/ports/ILicenseRepository.js";
+import type {
+  ILicenseRepository,
+  LicenseRow,
+} from "../../../application/ports/ILicenseRepository.js";
 import type { LicenseLimits } from "../../../domain/licensing/license-metadata.js";
 
 /**

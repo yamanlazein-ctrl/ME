@@ -83,7 +83,10 @@ export const lineSubtotal = (l: EntryLine) => {
   return Math.max(0, gross - (l.discountAmount || 0));
 };
 
-export const pickExistingFabric = (fabricId: string, f: { id: string; name: string; category?: string | null; unit?: string | null }): Partial<EntryLine> => ({
+export const pickExistingFabric = (
+  fabricId: string,
+  f: { id: string; name: string; category?: string | null; unit?: string | null },
+): Partial<EntryLine> => ({
   existingFabricId: f.id,
   fabricName: f.name,
   category: f.category ?? "",

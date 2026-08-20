@@ -59,48 +59,53 @@ export function registerAuthRoutes(router: Router, container: Container) {
     }
   });
 
-  router.post("/api/auth/login", loginRateLimiter, validateBody(LoginSchema), async (req, res, next) => {
-    try {
-      const { email, password, tenantId } = req.validatedBody as z.infer<typeof LoginSchema>;
-      const user = await authRepo.findUserByEmail(email, tenantId);
+  router.post(
+    "/api/auth/login",
+    loginRateLimiter,
+    validateBody(LoginSchema),
+    async (req, res, next) => {
+      try {
+        const { email, password, tenantId } = req.validatedBody as z.infer<typeof LoginSchema>;
+        const user = await authRepo.findUserByEmail(email, tenantId);
 
-      if (!user || !user.active) {
-        throw new InvalidCredentialsError();
-      }
+        if (!user || !user.active) {
+          throw new InvalidCredentialsError();
+        }
 
-      const valid = await container.passwordHasher.verify(user.passwordHash, password);
-      if (!valid) {
-        throw new InvalidCredentialsError();
-      }
+        const valid = await container.passwordHasher.verify(user.passwordHash, password);
+        if (!valid) {
+          throw new InvalidCredentialsError();
+        }
 
-      const jti = randomUUID();
-      const payload = {
-        sub: user.id,
-        tenantId: user.tenantId,
-        role: user.role,
-        jti,
-      };
-
-      const accessToken = await container.jwtSigner.signAccessToken(payload);
-      const refreshToken = await container.jwtSigner.signRefreshToken({
-        ...payload,
-        jti: randomUUID(),
-      });
-
-      res.status(200).json({
-        accessToken,
-        refreshToken,
-        user: {
-          id: user.id,
-          name: user.name,
-          email: user.email,
+        const jti = randomUUID();
+        const payload = {
+          sub: user.id,
+          tenantId: user.tenantId,
           role: user.role,
-        },
-      });
-    } catch (err) {
-      next(err);
-    }
-  });
+          jti,
+        };
+
+        const accessToken = await container.jwtSigner.signAccessToken(payload);
+        const refreshToken = await container.jwtSigner.signRefreshToken({
+          ...payload,
+          jti: randomUUID(),
+        });
+
+        res.status(200).json({
+          accessToken,
+          refreshToken,
+          user: {
+            id: user.id,
+            name: user.name,
+            email: user.email,
+            role: user.role,
+          },
+        });
+      } catch (err) {
+        next(err);
+      }
+    },
+  );
 
   router.post("/api/auth/refresh", validateBody(RefreshTokenSchema), async (req, res, next) => {
     try {

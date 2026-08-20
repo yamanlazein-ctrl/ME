@@ -42,7 +42,9 @@ export async function activateLicenseUseCase(
   provider: ILicenseProvider,
   secretsRepo: ISecretsRepository,
   input: unknown,
-): Promise<Result<{ activationId: string; tenantId: string; features: string[]; offlineToken: string }>> {
+): Promise<
+  Result<{ activationId: string; tenantId: string; features: string[]; offlineToken: string }>
+> {
   const parsed = activateInput.safeParse(input);
   if (!parsed.success) {
     return { ok: false, error: "بيانات التفعيل غير صالحة" };
@@ -58,7 +60,11 @@ export async function activateLicenseUseCase(
     });
     // R16: persist the signed offline token (encrypted at rest) so the
     // license-enforcement guard can verify it without a live call.
-    await secretsRepo.put(parsed.data.tenantId as UUID, "license.token.current", result.offlineToken);
+    await secretsRepo.put(
+      parsed.data.tenantId as UUID,
+      "license.token.current",
+      result.offlineToken,
+    );
     // R11: persist the token id so deactivation/revoke can denylist it.
     await secretsRepo.put(parsed.data.tenantId as UUID, "license.token.jti", result.jti);
     return { ok: true, data: result };

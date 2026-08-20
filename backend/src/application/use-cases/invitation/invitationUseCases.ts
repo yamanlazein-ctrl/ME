@@ -1,4 +1,7 @@
-import type { IInvitationRepository, InvitationRow } from "../../../application/ports/IInvitationRepository.js";
+import type {
+  IInvitationRepository,
+  InvitationRow,
+} from "../../../application/ports/IInvitationRepository.js";
 import type { PostgresInvitationRepository } from "../../../infrastructure/repositories/PostgresInvitationRepository.js";
 import type { Argon2PasswordHasher } from "../../../infrastructure/auth/PasswordHasher.js";
 import type { ILicenseRepository } from "../../../application/ports/ILicenseRepository.js";
@@ -121,10 +124,16 @@ export async function consumeInvitationCodeUseCase(
     // Phase 5 — enforce license limits at the business layer.
     const lic = await licenseRepo.findLatestForTenant(row.tenantId as never);
     if (lic) {
-      if (row.type === "user" && !isWithinLimit(lic.limits, "users", await countUsers(row.tenantId))) {
+      if (
+        row.type === "user" &&
+        !isWithinLimit(lic.limits, "users", await countUsers(row.tenantId))
+      ) {
         return { ok: false, error: "تم الوصول إلى الحد الأقصى للمستخدمين المسموح بهم في الترخيص" };
       }
-      if (row.type === "device" && !isWithinLimit(lic.limits, "devices", await countDevices(row.tenantId))) {
+      if (
+        row.type === "device" &&
+        !isWithinLimit(lic.limits, "devices", await countDevices(row.tenantId))
+      ) {
         return { ok: false, error: "تم الوصول إلى الحد الأقصى للأجهزة المسموح بها في الترخيص" };
       }
     }
@@ -170,13 +179,19 @@ export async function consumeInvitationCodeUseCase(
 
 async function countUsers(tenantId: string): Promise<number> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const [{ c }] = await db.select({ c: count() }).from(users as any).where(eq((users as any).tenantId, tenantId));
+  const [{ c }] = await db
+    .select({ c: count() })
+    .from(users as any)
+    .where(eq((users as any).tenantId, tenantId));
   return Number(c);
 }
 
 async function countDevices(tenantId: string): Promise<number> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const [{ c }] = await db.select({ c: count() }).from(deviceRegistrations as any).where(eq((deviceRegistrations as any).tenantId, tenantId));
+  const [{ c }] = await db
+    .select({ c: count() })
+    .from(deviceRegistrations as any)
+    .where(eq((deviceRegistrations as any).tenantId, tenantId));
   return Number(c);
 }
 

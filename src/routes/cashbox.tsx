@@ -81,10 +81,7 @@ function CashBoxPage() {
   const todayOut = todayFlow?.out ?? 0;
 
   const todayLedger = (ledger ?? [])
-    .filter(
-      (e) =>
-        e.status === "active" && e.date === today && e.cashImpact !== "none",
-    )
+    .filter((e) => e.status === "active" && e.date === today && e.cashImpact !== "none")
     .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
   const manToday = (manualMoves ?? []).filter((m) => m.date === today);
   const rowsCount = todayLedger.length + manToday.length;
@@ -94,32 +91,16 @@ function CashBoxPage() {
     USD: balUSD ?? 0,
     EUR: balEUR ?? 0,
   };
-  const activeCurrencies = CURRENCIES.filter(
-    (c) => perCurrency[c.code] !== undefined,
-  );
+  const activeCurrencies = CURRENCIES.filter((c) => perCurrency[c.code] !== undefined);
 
   const lc = last;
 
   return (
-    <AppShell
-      title="الصندوق"
-      subtitle="حركة النقدية اليومية والإقفال اليومي — بجميع العملات."
-    >
+    <AppShell title="الصندوق" subtitle="حركة النقدية اليومية والإقفال اليومي — بجميع العملات.">
       <div className="grid gap-3 md:grid-cols-6">
-        <KpiTile
-          label="رصيد أول اليوم"
-          value={formatAmount(openingToday, cs.currency)}
-        />
-        <KpiTile
-          label="وارد اليوم"
-          value={formatAmount(todayIn, cs.currency)}
-          tone="in"
-        />
-        <KpiTile
-          label="صادر اليوم"
-          value={formatAmount(todayOut, cs.currency)}
-          tone="out"
-        />
+        <KpiTile label="رصيد أول اليوم" value={formatAmount(openingToday, cs.currency)} />
+        <KpiTile label="وارد اليوم" value={formatAmount(todayIn, cs.currency)} tone="in" />
+        <KpiTile label="صادر اليوم" value={formatAmount(todayOut, cs.currency)} tone="out" />
         <KpiTile
           label="الرصيد الحالي"
           value={formatAmount(currentBalance, cs.currency)}
@@ -147,8 +128,7 @@ function CashBoxPage() {
 
       {locked && (
         <div className="rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-2 text-sm text-destructive flex items-center gap-2">
-          <Lock className="h-4 w-4" /> يوم اليوم مقفل — لا يمكن تسجيل حركات
-          جديدة بتاريخ اليوم.
+          <Lock className="h-4 w-4" /> يوم اليوم مقفل — لا يمكن تسجيل حركات جديدة بتاريخ اليوم.
         </div>
       )}
 
@@ -174,11 +154,7 @@ function CashBoxPage() {
         description="جميع الحركات النقدية لليوم الحالي."
         actions={
           <div className="flex gap-2">
-            <Button
-              variant="outline"
-              onClick={() => setManOpen(true)}
-              disabled={locked}
-            >
+            <Button variant="outline" onClick={() => setManOpen(true)} disabled={locked}>
               <Plus className="h-4 w-4 ml-1" /> حركة يدوية
             </Button>
             <Button
@@ -212,11 +188,7 @@ function CashBoxPage() {
                     {hydrated ? e.createdAt.slice(11, 16) : "--:--"}
                   </td>
                   <td className="px-3 py-2">
-                    {
-                      LEDGER_TYPE_LABEL[
-                        e.type as keyof typeof LEDGER_TYPE_LABEL
-                      ]
-                    }
+                    {LEDGER_TYPE_LABEL[e.type as keyof typeof LEDGER_TYPE_LABEL]}
                   </td>
                   <td className="px-3 py-2">{e.description}</td>
                   <td className="px-3 py-2 text-primary">
@@ -229,14 +201,10 @@ function CashBoxPage() {
                     )}
                   </td>
                   <td className="px-3 py-2 text-left tabular-nums">
-                    {e.cashImpact === "in"
-                      ? formatAmount(e.debit || e.credit, e.currency)
-                      : "—"}
+                    {e.cashImpact === "in" ? formatAmount(e.debit || e.credit, e.currency) : "—"}
                   </td>
                   <td className="px-3 py-2 text-left tabular-nums">
-                    {e.cashImpact === "out"
-                      ? formatAmount(e.debit || e.credit, e.currency)
-                      : "—"}
+                    {e.cashImpact === "out" ? formatAmount(e.debit || e.credit, e.currency) : "—"}
                   </td>
                   <td></td>
                 </tr>
@@ -248,27 +216,19 @@ function CashBoxPage() {
                   </td>
                   <td className="px-3 py-2">
                     {MANUAL_TYPE_LABEL[m.type]}{" "}
-                    <span className="text-[10px] rounded bg-primary/20 px-1">
-                      يدوية
-                    </span>
+                    <span className="text-[10px] rounded bg-primary/20 px-1">يدوية</span>
                   </td>
                   <td className="px-3 py-2">{m.description}</td>
                   <td className="px-3 py-2">—</td>
                   <td className="px-3 py-2 text-left tabular-nums">
-                    {m.direction === "in"
-                      ? formatAmount(m.amount, m.currency)
-                      : "—"}
+                    {m.direction === "in" ? formatAmount(m.amount, m.currency) : "—"}
                   </td>
                   <td className="px-3 py-2 text-left tabular-nums">
-                    {m.direction === "out"
-                      ? formatAmount(m.amount, m.currency)
-                      : "—"}
+                    {m.direction === "out" ? formatAmount(m.amount, m.currency) : "—"}
                   </td>
                   <td className="px-3 py-2">
                     <button
-                      onClick={() =>
-                        confirm("حذف الحركة؟") && deleteMovement.mutate(m.id)
-                      }
+                      onClick={() => confirm("حذف الحركة؟") && deleteMovement.mutate(m.id)}
                       className="text-destructive"
                     >
                       <Trash2 className="h-4 w-4" />
@@ -278,10 +238,7 @@ function CashBoxPage() {
               ))}
               {rowsCount === 0 && (
                 <tr>
-                  <td
-                    colSpan={7}
-                    className="p-10 text-center text-muted-foreground"
-                  >
+                  <td colSpan={7} className="p-10 text-center text-muted-foreground">
                     لا حركات اليوم.
                   </td>
                 </tr>
@@ -323,21 +280,13 @@ function KpiTile({
           : "border-border bg-card";
   return (
     <div className={`rounded-lg border ${cls} p-3`}>
-      <div className="text-[11px] font-semibold text-muted-foreground">
-        {label}
-      </div>
+      <div className="text-[11px] font-semibold text-muted-foreground">{label}</div>
       <div className="mt-1 text-base font-bold tabular-nums">{value}</div>
     </div>
   );
 }
 
-function OpeningDialog({
-  open,
-  onClose,
-}: {
-  open: boolean;
-  onClose: () => void;
-}) {
+function OpeningDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { data: state } = useCashboxState();
   const cs = state ?? {
     openingBalance: 0,
@@ -385,13 +334,7 @@ function OpeningDialog({
   );
 }
 
-function ManualDialog({
-  open,
-  onClose,
-}: {
-  open: boolean;
-  onClose: () => void;
-}) {
+function ManualDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { data: state } = useCashboxState();
   const cs = state ?? {
     openingBalance: 0,
@@ -443,10 +386,7 @@ function ManualDialog({
         <div className="grid gap-3">
           <div>
             <Label>النوع</Label>
-            <Select
-              value={type}
-              onValueChange={(v) => setType(v as ManualMovementType)}
-            >
+            <Select value={type} onValueChange={(v) => setType(v as ManualMovementType)}>
               <SelectTrigger>
                 <SelectValue />
               </SelectTrigger>
@@ -461,10 +401,7 @@ function ManualDialog({
           </div>
           <div>
             <Label>الاتجاه</Label>
-            <Select
-              value={dir}
-              onValueChange={(v) => setDir(v as "in" | "out")}
-            >
+            <Select value={dir} onValueChange={(v) => setDir(v as "in" | "out")}>
               <SelectTrigger>
                 <SelectValue />
               </SelectTrigger>
@@ -549,25 +486,16 @@ function ClosingDialog({
           <DialogTitle>الإقفال اليومي</DialogTitle>
         </DialogHeader>
         <div className="space-y-2 text-sm">
-          <Row
-            label="الرصيد الافتتاحي"
-            value={formatAmount(opening, cs.currency)}
-          />
+          <Row label="الرصيد الافتتاحي" value={formatAmount(opening, cs.currency)} />
           <Row label="مجموع الوارد" value={formatAmount(inn, cs.currency)} />
           <Row label="مجموع الصادر" value={formatAmount(out, cs.currency)} />
-          <Row
-            label="الرصيد المتوقع"
-            value={formatAmount(expected, cs.currency)}
-            bold
-          />
+          <Row label="الرصيد المتوقع" value={formatAmount(expected, cs.currency)} bold />
           <div>
             <Label>المبلغ الفعلي المعدود</Label>
             <Input
               type="number"
               value={counted}
-              onChange={(e) =>
-                setCounted(e.target.value === "" ? "" : Number(e.target.value))
-              }
+              onChange={(e) => setCounted(e.target.value === "" ? "" : Number(e.target.value))}
             />
           </div>
           <div
@@ -587,15 +515,7 @@ function ClosingDialog({
   );
 }
 
-function Row({
-  label,
-  value,
-  bold,
-}: {
-  label: string;
-  value: string;
-  bold?: boolean;
-}) {
+function Row({ label, value, bold }: { label: string; value: string; bold?: boolean }) {
   return (
     <div className={`flex justify-between ${bold ? "font-bold" : ""}`}>
       <span className="text-muted-foreground">{label}</span>

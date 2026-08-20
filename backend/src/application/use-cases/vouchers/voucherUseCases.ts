@@ -28,7 +28,14 @@ export async function createVoucherUseCase(
         entityId: voucher.id,
         detail: `سند ${voucher.kind === "receipt" ? "قبض" : "صرف"} ${voucher.number}`,
       })
-      .catch((err: unknown) => logAuditError(err, { module: "vouchers", action: "create", entityId: voucher.id, tenantId: ctx.tenantId }));
+      .catch((err: unknown) =>
+        logAuditError(err, {
+          module: "vouchers",
+          action: "create",
+          entityId: voucher.id,
+          tenantId: ctx.tenantId,
+        }),
+      );
     return { ok: true, data: voucher };
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : "فشل إنشاء السند" };
@@ -54,7 +61,14 @@ export async function cancelVoucherUseCase(
         entityId: voucher.id,
         detail: `إلغاء سند ${voucher.number}`,
       })
-      .catch((err: unknown) => logAuditError(err, { module: "vouchers", action: "cancel", entityId: voucher.id, tenantId: ctx.tenantId }));
+      .catch((err: unknown) =>
+        logAuditError(err, {
+          module: "vouchers",
+          action: "cancel",
+          entityId: voucher.id,
+          tenantId: ctx.tenantId,
+        }),
+      );
     return { ok: true, data: voucher };
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : "فشل إلغاء السند" };

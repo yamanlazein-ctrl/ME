@@ -64,7 +64,10 @@ export class ApiPartyRepository implements IPartyRepository {
       }
       wire[k] = v;
     }
-    const dto = (await this.api.create(party.kind, wire as Omit<PartyDTO, "id" | "createdAt">)) as unknown as PartyDTO;
+    const dto = (await this.api.create(
+      party.kind,
+      wire as Omit<PartyDTO, "id" | "createdAt">,
+    )) as unknown as PartyDTO;
     return Party.reconstitute(dto as unknown as PartyData);
   }
 

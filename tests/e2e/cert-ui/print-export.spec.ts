@@ -16,7 +16,9 @@ test.describe("Cert UI — Print/Export Audit", () => {
     await page.evaluate(() => {
       (window as any).__printCalled = false;
       const orig = window.print;
-      window.print = () => { (window as any).__printCalled = true; };
+      window.print = () => {
+        (window as any).__printCalled = true;
+      };
     });
 
     const printBtn = page.locator("button:has-text('طباعة')").first();
@@ -36,7 +38,10 @@ test.describe("Cert UI — Print/Export Audit", () => {
     await page.waitForTimeout(3000);
 
     const printRoot = page.locator("[data-print-root]");
-    const exists = await printRoot.first().isVisible({ timeout: 5000 }).catch(() => false);
+    const exists = await printRoot
+      .first()
+      .isVisible({ timeout: 5000 })
+      .catch(() => false);
     expect(exists).toBe(true);
   });
 
@@ -46,7 +51,10 @@ test.describe("Cert UI — Print/Export Audit", () => {
     await page.goto("/ledger", { waitUntil: "domcontentloaded" });
     await page.waitForTimeout(3000);
 
-    const exportBtn = page.locator("button").filter({ hasText: /تصدير|CSV/i }).first();
+    const exportBtn = page
+      .locator("button")
+      .filter({ hasText: /تصدير|CSV/i })
+      .first();
     const isVisible = await exportBtn.isVisible({ timeout: 5000 }).catch(() => false);
 
     if (!isVisible) {

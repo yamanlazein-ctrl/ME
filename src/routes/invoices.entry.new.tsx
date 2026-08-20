@@ -57,7 +57,6 @@ import { parseLineDetails } from "@/components/print/invoices/lineDetails";
 import { formatNumber, formatMoney, formatQuantity } from "@/shared/utils/formatNumber";
 import { MAX_2DP_MSG, hasMoreThan2dp } from "@/shared/utils/precision";
 
-
 export const Route = createFileRoute("/invoices/entry/new")({
   validateSearch: (search: Record<string, unknown>): { edit?: string } => ({
     edit: typeof search.edit === "string" ? search.edit : undefined,
@@ -368,9 +367,7 @@ function EntryInvoicePage() {
         setError(
           `حقل "قيمة اللون (hex)" غير صالح: "${hexVal}". استخدم # متبوعاً بثلاثة أو ستة أو ثمانية أرقام (مثل #000000) أو اتركه فارغاً.`,
         );
-        showError(
-          `حقل "قيمة اللون" في صبغة "${label}" غير صحيح — استخدم #000000 أو اتركه فارغاً`,
-        );
+        showError(`حقل "قيمة اللون" في صبغة "${label}" غير صحيح — استخدم #000000 أو اتركه فارغاً`);
         return;
       }
       if (l.quantity <= 0) {
@@ -584,7 +581,10 @@ function EntryInvoicePage() {
 
     if (!res.ok) {
       const err = (res as any).error;
-      const details = typeof err === "object" ? (err as { details?: Record<string, string[]> })?.details : undefined;
+      const details =
+        typeof err === "object"
+          ? (err as { details?: Record<string, string[]> })?.details
+          : undefined;
       const detailMsg = detailsText(details);
       const msg = detailMsg
         ? detailMsg
@@ -854,13 +854,16 @@ function EntryInvoicePage() {
                             type="number"
                             min="1"
                             value={l.pieces || ""}
-                            onChange={(e) => updateLine(l.id, { pieces: Math.max(1, Number(e.target.value)) })}
+                            onChange={(e) =>
+                              updateLine(l.id, { pieces: Math.max(1, Number(e.target.value)) })
+                            }
                             className="h-9 tabular-nums"
                             placeholder="1"
                             aria-label="عدد الأثواب (المخزون)"
                           />
                           <p className="mt-0.5 text-[10px] leading-tight text-muted-foreground">
-                            يُحفظ في المخزون ويظهر في الطباعة — لا تخلطها بحقل «العدد» (مجرد ملاحظة لا تُحسب).
+                            يُحفظ في المخزون ويظهر في الطباعة — لا تخلطها بحقل «العدد» (مجرد ملاحظة
+                            لا تُحسب).
                           </p>
                         </CardField>
                         <CardField label="رقم الماكينة">
@@ -1009,7 +1012,8 @@ function EntryInvoicePage() {
                             value={l.discountAmount || ""}
                             onChange={(e) =>
                               updateLine(l.id, {
-                                discountAmount: e.target.value === "" ? 0 : Math.round(Number(e.target.value)),
+                                discountAmount:
+                                  e.target.value === "" ? 0 : Math.round(Number(e.target.value)),
                               })
                             }
                             onKeyDown={(e) => handleRowEnd(e, l.id)}
@@ -1146,8 +1150,7 @@ function EntryInvoicePage() {
             <div className="flex items-center justify-end gap-2 border-t px-3 py-2 text-xs font-semibold">
               <span className="text-muted-foreground">المتبقي:</span>
               <span className={cn("tabular-nums font-bold", moneyClass)}>
-                {formatMoney(Math.max(0, grandTotal - Number(paid)))}{" "}
-                {currencySymbol(currency)}
+                {formatMoney(Math.max(0, grandTotal - Number(paid)))} {currencySymbol(currency)}
               </span>
             </div>
           )}

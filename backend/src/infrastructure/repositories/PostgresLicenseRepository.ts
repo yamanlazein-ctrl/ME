@@ -48,10 +48,29 @@ function toLicense(r: LRow): LicenseRow {
     licenseModel: r.licenseModel as LicenseModel,
     bindingType: r.bindingType,
     bindingValue: r.bindingValue,
-    limits: (r.limits as LicenseLimits) ?? { users: 0, devices: 0, branches: 0, warehouses: 0, storage_gb: 0, api_calls: 0 },
-    transferPolicy: (r.transferPolicy as TransferPolicy) ?? { allowed: true, max_transfers: 3, requires_super_admin: true },
-    updatePolicy: (r.updatePolicy as UpdatePolicy) ?? { channel: "stable", allow_updates: true, minimum_version: "1.0.0" },
-    backupPolicy: (r.backupPolicy as BackupPolicy) ?? { enabled: true, cloud_backup: false, max_backups: 30 },
+    limits: (r.limits as LicenseLimits) ?? {
+      users: 0,
+      devices: 0,
+      branches: 0,
+      warehouses: 0,
+      storage_gb: 0,
+      api_calls: 0,
+    },
+    transferPolicy: (r.transferPolicy as TransferPolicy) ?? {
+      allowed: true,
+      max_transfers: 3,
+      requires_super_admin: true,
+    },
+    updatePolicy: (r.updatePolicy as UpdatePolicy) ?? {
+      channel: "stable",
+      allow_updates: true,
+      minimum_version: "1.0.0",
+    },
+    backupPolicy: (r.backupPolicy as BackupPolicy) ?? {
+      enabled: true,
+      cloud_backup: false,
+      max_backups: 30,
+    },
     transfersUsed: r.transfersUsed,
   };
 }
@@ -110,20 +129,12 @@ export class PostgresLicenseRepository implements ILicenseRepository {
   constructor(private readonly db: DB = defaultDb) {}
 
   async findByKey(key: string): Promise<LicenseRow | null> {
-    const [row] = await this.db
-      .select()
-      .from(licenses)
-      .where(eq(licenses.key, key))
-      .limit(1);
+    const [row] = await this.db.select().from(licenses).where(eq(licenses.key, key)).limit(1);
     return row ? toLicense(row) : null;
   }
 
   async findById(id: UUID): Promise<LicenseRow | null> {
-    const [row] = await this.db
-      .select()
-      .from(licenses)
-      .where(eq(licenses.id, id))
-      .limit(1);
+    const [row] = await this.db.select().from(licenses).where(eq(licenses.id, id)).limit(1);
     return row ? toLicense(row) : null;
   }
 
@@ -175,10 +186,7 @@ export class PostgresLicenseRepository implements ILicenseRepository {
       .select()
       .from(licenseActivations)
       .where(
-        and(
-          eq(licenseActivations.licenseId, licenseId),
-          isNull(licenseActivations.deactivatedAt),
-        ),
+        and(eq(licenseActivations.licenseId, licenseId), isNull(licenseActivations.deactivatedAt)),
       )
       .limit(1);
     return row ? toActivation(row) : null;
@@ -224,10 +232,7 @@ export class PostgresLicenseRepository implements ILicenseRepository {
       .orderBy(desc(licenseAuditEvents.createdAt))
       .limit(pagination.pageSize)
       .offset(offset);
-    const [{ c }] = await this.db
-      .select({ c: count() })
-      .from(licenseAuditEvents)
-      .where(w);
+    const [{ c }] = await this.db.select({ c: count() }).from(licenseAuditEvents).where(w);
     return { data: rows.map(toEvent), total: Number(c) };
   }
 }

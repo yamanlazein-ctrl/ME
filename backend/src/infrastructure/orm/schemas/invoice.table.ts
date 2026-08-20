@@ -64,11 +64,7 @@ export const invoices = pgTable(
     statusIdx: index("idx_invoices_status").on(table.tenantId, table.status),
     currencyIdx: index("idx_invoices_currency").on(table.tenantId, table.currency),
     typeIdx: index("idx_invoices_type").on(table.tenantId, table.type),
-    partyDateIdx: index("idx_invoices_party_date").on(
-      table.tenantId,
-      table.partyId,
-      table.date,
-    ),
+    partyDateIdx: index("idx_invoices_party_date").on(table.tenantId, table.partyId, table.date),
     partyStatusIdx: index("idx_invoices_party_status").on(
       table.tenantId,
       table.partyId,

@@ -4,16 +4,16 @@
 
 ## جدول الأوامر
 
-| الأمر | الأداة | ماذا يفعل |
-| --- | --- | --- |
-| `npm run test:logic` | Vitest | اختبار وحدة المنطق والحسابات (المصدر يبدأ بـ `src`) |
-| `npm run test:ui` | Playwright | اختبارات E2E للواجهة (بعد تشغيل الخلفية على 8080) |
-| `npm run test:e2e` | Playwright | نفس suite الشاملة (اسم قديم) |
-| `npm run test:api` | Node | اختبار API شامل (`tests/e2e/comprehensive-api.mjs`) |
-| `npm run test:financial` | Node | قفل القيد المزدوج المالي |
-| `npm run clean:code` | Knip | يبحث عن الملفات/الاستيرادات/الخبرات غير المستخدمة |
-| `npm run test:security` | Semgrep | فحص أمني ثابت على الكود |
-| `npm run check:all` | — | typecheck + logic + knip دفعة واحدة |
+| الأمر                    | الأداة     | ماذا يفعل                                           |
+| ------------------------ | ---------- | --------------------------------------------------- |
+| `npm run test:logic`     | Vitest     | اختبار وحدة المنطق والحسابات (المصدر يبدأ بـ `src`) |
+| `npm run test:ui`        | Playwright | اختبارات E2E للواجهة (بعد تشغيل الخلفية على 8080)   |
+| `npm run test:e2e`       | Playwright | نفس suite الشاملة (اسم قديم)                        |
+| `npm run test:api`       | Node       | اختبار API شامل (`tests/e2e/comprehensive-api.mjs`) |
+| `npm run test:financial` | Node       | قفل القيد المزدوج المالي                            |
+| `npm run clean:code`     | Knip       | يبحث عن الملفات/الاستيرادات/الخبرات غير المستخدمة   |
+| `npm run test:security`  | Semgrep    | فحص أمني ثابت على الكود                             |
+| `npm run check:all`      | —          | typecheck + logic + knip دفعة واحدة                 |
 
 ## الإعداد / التنصيب
 
@@ -23,6 +23,7 @@ npx playwright install   # مرة واحدة: يُنزّل متصفحات Playwr
 ```
 
 ### Semgrep (ملاحظة مهمة)
+
 Semgrep **ليس حزمة npm رسمية** — إنه أداة CLI بالبايثون. ثبّته بأي من:
 
 ```bash
@@ -44,7 +45,9 @@ docker run --rm -v "$PWD:/src" returntocorp/semgrep scan --config p/auto /src
 - **Semgrep:** كل قاعدة تعرض الملف/السطر/السياق. `--json` لإخراج آلي، `severity: WARNING` لترتيب الأهمية.
 
 ## كيف تطلب من المطوّر/الـ agent تنفيذ اختبار معيّن؟
+
 قل له (مثال):
+
 - «شغّل اختبار الوحدات المالية» → سينفّذ `npm run test:logic` أو `vitest run src/...`.
 - «كبّس واجهة تسجيل فاتورة الدخول» → سيشغّل `npm run test:ui` لملف معيّن أو suite محدّد.
 - «ركّز على ملف X اللوني/الدقة» → يصطاد `vitest run src/shared/utils/__tests__/...`.
@@ -52,8 +55,10 @@ docker run --rm -v "$PWD:/src" returntocorp/semgrep scan --config p/auto /src
 - «اعملي فحص أمني سريع» → `npm run test:security` (semgrep).
 
 ## المتطلبات قبل E2E
+
 سويتا E2E تفترض خلفية شغّالة على `http://localhost:8080` وقاعدة بيانات مُصفّرة
 (أُخلي كل الجداول قبل التشغيل). عادةً:
+
 ```bash
 cd backend && npm run dev     # تشغيل الخلفية
 npm run test:ui               # ثم في جذر المشروع

@@ -64,13 +64,7 @@ describe("Phase 0 — Platform Foundation schemas (sub-batch 0A)", () => {
   });
 
   describe("0002_platform_foundation.sql migration", () => {
-    const migrationsDir = join(
-      process.cwd(),
-      "src",
-      "infrastructure",
-      "orm",
-      "migrations",
-    );
+    const migrationsDir = join(process.cwd(), "src", "infrastructure", "orm", "migrations");
     const migrationPath = join(migrationsDir, "0002_platform_foundation.sql");
     const journalPath = join(migrationsDir, "meta", "_journal.json");
     const snapshotPath = join(migrationsDir, "meta", "0002_snapshot.json");
@@ -121,12 +115,8 @@ describe("Phase 0 — Platform Foundation schemas (sub-batch 0A)", () => {
         "setup_wizard_state",
         "server_installations",
       ]) {
-        expect(sql).toMatch(
-          new RegExp(`ALTER TABLE "${t}" ENABLE ROW LEVEL SECURITY`),
-        );
-        expect(sql).toMatch(
-          new RegExp(`ALTER TABLE "${t}" FORCE  ROW LEVEL SECURITY`),
-        );
+        expect(sql).toMatch(new RegExp(`ALTER TABLE "${t}" ENABLE ROW LEVEL SECURITY`));
+        expect(sql).toMatch(new RegExp(`ALTER TABLE "${t}" FORCE  ROW LEVEL SECURITY`));
       }
     });
 
@@ -151,35 +141,20 @@ describe("Phase 0 — Platform Foundation schemas (sub-batch 0A)", () => {
 
     it("creates the partial unique index for one-active-activation-per-license", () => {
       const sql = readFileSync(migrationPath, "utf8");
-      expect(sql).toContain(
-        `CREATE UNIQUE INDEX "idx_license_activations_one_active"`,
-      );
+      expect(sql).toContain(`CREATE UNIQUE INDEX "idx_license_activations_one_active"`);
       expect(sql).toContain(`WHERE "deactivated_at" IS NULL`);
     });
 
     it("installs the append-only trigger on license_audit_events", () => {
       const sql = readFileSync(migrationPath, "utf8");
-      expect(sql).toContain(
-        `CREATE OR REPLACE FUNCTION "fn_license_audit_events_append_only"`,
-      );
-      expect(sql).toMatch(
-        /CREATE TRIGGER "trg_license_audit_events_no_update"/,
-      );
-      expect(sql).toMatch(
-        /CREATE TRIGGER "trg_license_audit_events_no_delete"/,
-      );
+      expect(sql).toContain(`CREATE OR REPLACE FUNCTION "fn_license_audit_events_append_only"`);
+      expect(sql).toMatch(/CREATE TRIGGER "trg_license_audit_events_no_update"/);
+      expect(sql).toMatch(/CREATE TRIGGER "trg_license_audit_events_no_delete"/);
     });
   });
 
   describe("drizzle journal + snapshot", () => {
-    const metaDir = join(
-      process.cwd(),
-      "src",
-      "infrastructure",
-      "orm",
-      "migrations",
-      "meta",
-    );
+    const metaDir = join(process.cwd(), "src", "infrastructure", "orm", "migrations", "meta");
     const journalPath = join(metaDir, "_journal.json");
     const snapshotPath = join(metaDir, "0002_snapshot.json");
 
@@ -192,9 +167,7 @@ describe("Phase 0 — Platform Foundation schemas (sub-batch 0A)", () => {
 
     it("journal records 0002_platform_foundation as the second migration", () => {
       const j = JSON.parse(readFileSync(journalPath, "utf8"));
-      const e1 = j.entries.find(
-        (e: { tag: string }) => e.tag === "0002_platform_foundation",
-      );
+      const e1 = j.entries.find((e: { tag: string }) => e.tag === "0002_platform_foundation");
       expect(e1).toBeDefined();
       expect(e1.idx).toBe(1);
     });

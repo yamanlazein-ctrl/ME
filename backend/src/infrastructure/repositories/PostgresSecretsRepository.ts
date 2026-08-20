@@ -94,9 +94,7 @@ export class PostgresSecretsRepository implements ISecretsRepository {
       return;
     }
     await withTenantTx(tenantId, async (tx) => {
-      await tx
-        .delete(secrets)
-        .where(and(eq(secrets.tenantId, tenantId), eq(secrets.key, key)));
+      await tx.delete(secrets).where(and(eq(secrets.tenantId, tenantId), eq(secrets.key, key)));
     });
   }
 
@@ -112,9 +110,7 @@ export class PostgresSecretsRepository implements ISecretsRepository {
     // duration of the rotation we set the GUC to the row's own
     // tenant_id before updating. This is a small N+1; rotation
     // happens rarely (admin action) so it is acceptable.
-    const allRows = await this.db
-      .select()
-      .from(secrets);
+    const allRows = await this.db.select().from(secrets);
 
     let count = 0;
     for (const row of allRows) {

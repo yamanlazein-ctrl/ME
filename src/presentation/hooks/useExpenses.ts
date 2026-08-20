@@ -65,7 +65,7 @@ export function useCreateExpense() {
         qc.invalidateQueries({ queryKey: ["ledger"] });
         qc.invalidateQueries({ queryKey: ["dashboard"] });
       } else {
-        toast.error(res.error.message ?? res.error as unknown as string);
+        toast.error(res.error.message ?? (res.error as unknown as string));
       }
     },
   });

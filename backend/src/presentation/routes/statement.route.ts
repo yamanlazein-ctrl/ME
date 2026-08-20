@@ -41,7 +41,7 @@ export function registerStatementRoutes(
           if (!party || party.kind !== kind) {
             return res.status(404).json({ code: "NOT_FOUND", message: partyLabel });
           }
-          
+
           const q = req.validatedQuery as z.infer<typeof statementQuerySchema>;
           const statement = await statementRepo.getStatement(
             {

@@ -143,7 +143,9 @@ function StockMetric({
         }`}
       >
         {value}
-        {unit ? <span className="mr-1 text-[10px] font-medium text-muted-foreground">{unit}</span> : null}
+        {unit ? (
+          <span className="mr-1 text-[10px] font-medium text-muted-foreground">{unit}</span>
+        ) : null}
       </span>
     </div>
   );

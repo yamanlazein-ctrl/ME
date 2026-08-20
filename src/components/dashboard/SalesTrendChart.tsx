@@ -11,7 +11,6 @@ import {
 import { useDashboard } from "@/presentation/hooks/useDashboard";
 import { formatNumber, formatMoney, formatQuantity } from "@/shared/utils/formatNumber";
 
-
 const RANGES = ["7", "14", "30"] as const;
 type Range = (typeof RANGES)[number];
 

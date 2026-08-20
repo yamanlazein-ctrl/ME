@@ -18,10 +18,16 @@ export function createSuperAdminAuthMiddleware(
   denylist: RedisTokenDenylist,
   opts?: { fallbackToken?: string },
 ) {
-  return async function superAdminAuth(req: Request, res: Response, next: NextFunction): Promise<void> {
+  return async function superAdminAuth(
+    req: Request,
+    res: Response,
+    next: NextFunction,
+  ): Promise<void> {
     const header = req.headers.authorization;
     if (!header?.startsWith("Bearer ")) {
-      res.status(401).json({ code: "UNAUTHORIZED", message: "Admin authentication required", statusCode: 401 });
+      res
+        .status(401)
+        .json({ code: "UNAUTHORIZED", message: "Admin authentication required", statusCode: 401 });
       return;
     }
     const provided = header.slice(7);
@@ -40,7 +46,9 @@ export function createSuperAdminAuthMiddleware(
         return;
       }
       if (await denylist.has(payload.jti)) {
-        res.status(401).json({ code: "TOKEN_EXPIRED", message: "انتهت صلاحية الجلسة", statusCode: 401 });
+        res
+          .status(401)
+          .json({ code: "TOKEN_EXPIRED", message: "انتهت صلاحية الجلسة", statusCode: 401 });
         return;
       }
       req.systemAdmin = { id: payload.sub, email: payload.sub, role: payload.role };

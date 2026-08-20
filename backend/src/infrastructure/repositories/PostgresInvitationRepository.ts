@@ -59,12 +59,7 @@ export class PostgresInvitationRepository implements IInvitationRepository {
     const rows = await this.db
       .select()
       .from(invitationCodes)
-      .where(
-        and(
-          eq(invitationCodes.tenantId, tenantId),
-          isNull(invitationCodes.revokedAt),
-        ),
-      )
+      .where(and(eq(invitationCodes.tenantId, tenantId), isNull(invitationCodes.revokedAt)))
       .orderBy(invitationCodes.createdAt);
     return rows.map(toRow);
   }

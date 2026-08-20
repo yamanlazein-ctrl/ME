@@ -33,12 +33,7 @@ export class CashboxStateUseCase {
     return this.cashbox.deleteManualMovement(id, ctx);
   }
 
-  setOpeningBalance(
-    balance: number,
-    date: string,
-    currency: Currency,
-    ctx: TenantContext,
-  ) {
+  setOpeningBalance(balance: number, date: string, currency: Currency, ctx: TenantContext) {
     return this.cashbox.setOpeningBalance(balance, date, currency, ctx);
   }
 }

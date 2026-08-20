@@ -2,7 +2,19 @@ import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { fetchLicenses, fetchActivations, deactivateActivation } from "@/lib/api";
 import { CreateLicensePage } from "./CreateLicensePage";
-import { Key, ShieldCheck, ShieldX, Clock, Monitor, Loader2, Search, Plus, Trash2, Copy, ChevronLeft } from "lucide-react";
+import {
+  Key,
+  ShieldCheck,
+  ShieldX,
+  Clock,
+  Monitor,
+  Loader2,
+  Search,
+  Plus,
+  Trash2,
+  Copy,
+  ChevronLeft,
+} from "lucide-react";
 import { toast } from "sonner";
 import type { License } from "@/types";
 import { PLANS, EDITIONS } from "@/types";
@@ -37,9 +49,7 @@ export function LicenseListPage({ onLogout }: { onLogout: () => void }) {
   });
 
   const filtered = (licenses ?? []).filter(
-    (l) =>
-      !search ||
-      l.key.toLowerCase().includes(search.toLowerCase())
+    (l) => !search || l.key.toLowerCase().includes(search.toLowerCase()),
   );
 
   return (
@@ -70,7 +80,10 @@ export function LicenseListPage({ onLogout }: { onLogout: () => void }) {
           <>
             <div className="flex items-center justify-between mb-6">
               <div className="relative">
-                <Search size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500" />
+                <Search
+                  size={16}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500"
+                />
                 <input
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
@@ -122,7 +135,9 @@ export function LicenseListPage({ onLogout }: { onLogout: () => void }) {
                         <td className="px-4 py-3 text-zinc-300">{TYPE_MAP[l.type] ?? l.type}</td>
                         <td className="px-4 py-3 text-zinc-300">
                           {PLANS.find((p) => p.value === l.plan)?.label ?? l.plan ?? "-"}
-                          {l.edition ? ` · ${EDITIONS.find((e) => e.value === l.edition)?.label ?? l.edition}` : ""}
+                          {l.edition
+                            ? ` · ${EDITIONS.find((e) => e.value === l.edition)?.label ?? l.edition}`
+                            : ""}
                         </td>
                         <td className="px-4 py-3">
                           <span
@@ -221,7 +236,9 @@ function LicenseDetail({
             </div>
             <div className="flex justify-between">
               <span className="text-zinc-400">الحالة</span>
-              <span className={`text-xs px-2 py-0.5 rounded border ${STATUS_MAP[lic.status]?.class}`}>
+              <span
+                className={`text-xs px-2 py-0.5 rounded border ${STATUS_MAP[lic.status]?.class}`}
+              >
                 {STATUS_MAP[lic.status]?.label ?? lic.status}
               </span>
             </div>
@@ -304,7 +321,9 @@ function LicenseDetail({
                           فعّل: {new Date(a.createdAt).toLocaleDateString("ar-SA")}
                         </span>
                         {a.lastSeenAt && (
-                          <span>آخر رؤية: {new Date(a.lastSeenAt).toLocaleDateString("ar-SA")}</span>
+                          <span>
+                            آخر رؤية: {new Date(a.lastSeenAt).toLocaleDateString("ar-SA")}
+                          </span>
                         )}
                       </div>
                     </div>

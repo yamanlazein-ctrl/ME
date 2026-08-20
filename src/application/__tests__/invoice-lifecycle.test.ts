@@ -112,9 +112,8 @@ describe("Invoice Lifecycle Integration Test", () => {
     expect(invoices.get("inv-sale-1")!.status).toBe("cancelled");
     expect(rolls.get("roll-1")!.remainingKg).toBe(100);
     expect(
-      ledgerEntries.filter(
-        (e) => e.referenceId === "inv-sale-1" && e.status === "cancelled",
-      ).length,
+      ledgerEntries.filter((e) => e.referenceId === "inv-sale-1" && e.status === "cancelled")
+        .length,
     ).toBe(1);
   });
 

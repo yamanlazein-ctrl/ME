@@ -88,9 +88,7 @@ export class PostgresVoucherRepository implements IVoucherRepository {
             currency: invoices.currency,
           })
           .from(invoices)
-          .where(
-            and(eq(invoices.id, input.invoiceId), eq(invoices.tenantId, ctx.tenantId)),
-          )
+          .where(and(eq(invoices.id, input.invoiceId), eq(invoices.tenantId, ctx.tenantId)))
           .for("update")
           .limit(1);
         if (!inv) throw new Error("الفاتورة المرتبطة غير موجودة");
@@ -134,8 +132,7 @@ export class PostgresVoucherRepository implements IVoucherRepository {
             ),
           );
         const returnsAmount = Number(retAgg?.total ?? 0);
-        const remaining =
-          Number(inv.total) - Number(existing[0]?.paid ?? 0) - returnsAmount;
+        const remaining = Number(inv.total) - Number(existing[0]?.paid ?? 0) - returnsAmount;
         if (input.amount > remaining) {
           throw new Error(`المبلغ يتجاوز المتبقي على الفاتورة (${remaining})`);
         }

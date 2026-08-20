@@ -15,13 +15,13 @@
    ============================================================================ */
 
 :root {
-  --mf-gold: #d4af37;          /* dark gold per print spec */
-  --mf-gold-dark: #a8861a;     /* slightly darker gold for borders / shadows */
+  --mf-gold: #d4af37; /* dark gold per print spec */
+  --mf-gold-dark: #a8861a; /* slightly darker gold for borders / shadows */
   --mf-gold-soft: #e6c873;
   --mf-black: #1a1a1a;
   --mf-ink: #2a2a2a;
   --mf-gray: #6b6b6b;
-  --mf-line: #000000;          /* table cell borders — solid black for clarity */
+  --mf-line: #000000; /* table cell borders — solid black for clarity */
   --mf-line-strong: #b5b5b5;
   --mf-bg: #fafafa;
   --mf-bg-soft: #f3f3f3;
@@ -29,16 +29,12 @@
 
 @page {
   size: A4 portrait;
-  margin: 15mm;                /* per print spec */
+  margin: 15mm; /* per print spec */
   @bottom-center {
     content: counter(page) " / " counter(pages);
     font-size: 8pt;
     color: var(--mf-gray);
-    font-family:
-      "IBM Plex Sans Arabic",
-      "Tahoma",
-      "Arial",
-      sans-serif;
+    font-family: "IBM Plex Sans Arabic", "Tahoma", "Arial", sans-serif;
   }
 }
 
@@ -122,7 +118,7 @@
   width: 100%;
   background: #ffffff;
   color: var(--mf-black);
-  padding: 0;            /* full-bleed header so the brand band reaches page edge */
+  padding: 0; /* full-bleed header so the brand band reaches page edge */
 }
 
 /* ── CLEAN HEADER: white background, logo without box, black text, gold divider ──
@@ -235,10 +231,7 @@
   background: transparent;
   margin-bottom: 4pt;
   text-transform: uppercase;
-  font-family:
-    "IBM Plex Sans",
-    system-ui,
-    sans-serif;
+  font-family: "IBM Plex Sans", system-ui, sans-serif;
   -webkit-print-color-adjust: exact;
   print-color-adjust: exact;
 }

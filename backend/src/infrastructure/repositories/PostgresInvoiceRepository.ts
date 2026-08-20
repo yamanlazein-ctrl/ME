@@ -93,10 +93,7 @@ export class PostgresInvoiceRepository implements IInvoiceRepository {
     const ids = dataRows.map((r) => r.id);
     const items =
       ids.length > 0
-        ? await this.db
-            .select()
-            .from(invoiceLines)
-            .where(inArray(invoiceLines.invoiceId, ids))
+        ? await this.db.select().from(invoiceLines).where(inArray(invoiceLines.invoiceId, ids))
         : [];
     const byId = new Map<string, typeof items>();
     for (const it of items) {
@@ -187,9 +184,7 @@ export class PostgresInvoiceRepository implements IInvoiceRepository {
           // (`if (it.colorId && rollRow.colorId !== it.colorId) throw`); this
           // is the same check, applied where the audit found it missing.
           if (line.colorId !== r.colorId) {
-            throw new Error(
-              `اللون المحدد للبند لا يطابق لون اللفافة ${line.rollId} الفعلي`,
-            );
+            throw new Error(`اللون المحدد للبند لا يطابق لون اللفافة ${line.rollId} الفعلي`);
           }
           const [rollColor] = await tx
             .select({ fabricId: colors.fabricId })
@@ -197,9 +192,7 @@ export class PostgresInvoiceRepository implements IInvoiceRepository {
             .where(and(eq(colors.id, r.colorId), eq(colors.tenantId, ctx.tenantId)))
             .limit(1);
           if (!rollColor || line.fabricId !== rollColor.fabricId) {
-            throw new Error(
-              `القماش المحدد للبند لا يطابق قماش لون اللفافة ${line.rollId} الفعلي`,
-            );
+            throw new Error(`القماش المحدد للبند لا يطابق قماش لون اللفافة ${line.rollId} الفعلي`);
           }
           if (r.status === "reserved" && !(reservationOwners?.has(line.rollId) ?? false)) {
             throw new Error(
@@ -282,9 +275,7 @@ export class PostgresInvoiceRepository implements IInvoiceRepository {
             )
             .returning({ id: rolls.id });
           if (updated.length === 0) {
-            throw new Error(
-              `Roll ${line.rollId} was modified concurrently. Please retry.`,
-            );
+            throw new Error(`Roll ${line.rollId} was modified concurrently. Please retry.`);
           }
           await recordStockMovement(
             tx,
@@ -314,9 +305,7 @@ export class PostgresInvoiceRepository implements IInvoiceRepository {
           const [before] = await tx
             .select({ remainingKg: rolls.remainingKg, colorId: rolls.colorId })
             .from(rolls)
-            .where(
-              and(eq(rolls.id, line.rollId), eq(rolls.tenantId, ctx.tenantId)),
-            )
+            .where(and(eq(rolls.id, line.rollId), eq(rolls.tenantId, ctx.tenantId)))
             .for("update")
             .limit(1);
           // Fix BUG-04 / H-2: the entry-invoice increment path had NO
@@ -329,9 +318,7 @@ export class PostgresInvoiceRepository implements IInvoiceRepository {
             throw new Error(`اللفافة ${line.rollId} غير موجودة`);
           }
           if (line.colorId !== before.colorId) {
-            throw new Error(
-              `اللون المحدد للبند لا يطابق لون اللفافة ${line.rollId} الفعلي`,
-            );
+            throw new Error(`اللون المحدد للبند لا يطابق لون اللفافة ${line.rollId} الفعلي`);
           }
           const [rollColor] = await tx
             .select({ fabricId: colors.fabricId })
@@ -339,9 +326,7 @@ export class PostgresInvoiceRepository implements IInvoiceRepository {
             .where(and(eq(colors.id, before.colorId), eq(colors.tenantId, ctx.tenantId)))
             .limit(1);
           if (!rollColor || line.fabricId !== rollColor.fabricId) {
-            throw new Error(
-              `القماش المحدد للبند لا يطابق قماش لون اللفافة ${line.rollId} الفعلي`,
-            );
+            throw new Error(`القماش المحدد للبند لا يطابق قماش لون اللفافة ${line.rollId} الفعلي`);
           }
           const newKg = Number(before?.remainingKg ?? 0) + line.quantityKg;
           await tx
@@ -352,9 +337,7 @@ export class PostgresInvoiceRepository implements IInvoiceRepository {
               version: sql`${rolls.version} + 1`,
               updatedAt: new Date(),
             })
-            .where(
-              and(eq(rolls.id, line.rollId), eq(rolls.tenantId, ctx.tenantId)),
-            );
+            .where(and(eq(rolls.id, line.rollId), eq(rolls.tenantId, ctx.tenantId)));
           await recordStockMovement(
             tx,
             {
@@ -373,7 +356,11 @@ export class PostgresInvoiceRepository implements IInvoiceRepository {
           );
         }
         // C2 — auto-link: promote matching open customer orders and notify.
-        await notifyOrderAvailability(tx, ctx, input.lines.map((l) => l.colorId));
+        await notifyOrderAvailability(
+          tx,
+          ctx,
+          input.lines.map((l) => l.colorId),
+        );
       }
 
       // Write ledger entry — C4 fix: double-entry. Each transaction writes a
@@ -499,7 +486,7 @@ export class PostgresInvoiceRepository implements IInvoiceRepository {
           })
           .returning();
 
-          await tx.insert(ledgerEntries).values([
+        await tx.insert(ledgerEntries).values([
           {
             tenantId: ctx.tenantId,
             partyId: input.partyId,
@@ -612,7 +599,10 @@ export class PostgresInvoiceRepository implements IInvoiceRepository {
         .for("update")
         .limit(1);
       if (!inv) throw Object.assign(new Error("Invoice not found"), { code: "NOT_FOUND" as const });
-      if (inv.status === "cancelled") throw Object.assign(new Error("Invoice already cancelled"), { code: "ALREADY_CANCELLED" as const });
+      if (inv.status === "cancelled")
+        throw Object.assign(new Error("Invoice already cancelled"), {
+          code: "ALREADY_CANCELLED" as const,
+        });
 
       const ilines = await tx.select().from(invoiceLines).where(eq(invoiceLines.invoiceId, id));
 
@@ -724,8 +714,12 @@ export class PostgresInvoiceRepository implements IInvoiceRepository {
             ),
           );
         // Reverse ledger entries for both receipt_in (sale) and payment_out (entry)
-        const receiptVoucherIds = linkedVouchers.filter((v) => v.kind === "receipt").map((v) => v.id);
-        const paymentVoucherIds = linkedVouchers.filter((v) => v.kind === "payment").map((v) => v.id);
+        const receiptVoucherIds = linkedVouchers
+          .filter((v) => v.kind === "receipt")
+          .map((v) => v.id);
+        const paymentVoucherIds = linkedVouchers
+          .filter((v) => v.kind === "payment")
+          .map((v) => v.id);
         if (receiptVoucherIds.length > 0) {
           await tx
             .update(ledgerEntries)

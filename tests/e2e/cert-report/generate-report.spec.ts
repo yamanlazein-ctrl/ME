@@ -49,7 +49,9 @@ function generateReport(results: Record<string, any> | null): string {
 
   lines.push("| الوحدة | تم الاختبار | نجح | التغطية |");
   lines.push("|---|---|---|---|");
-  lines.push(`| المسارات (Routes) | ${m.routes.tested} | ${m.routes.passed} | ${m.routes.coverage} |`);
+  lines.push(
+    `| المسارات (Routes) | ${m.routes.tested} | ${m.routes.passed} | ${m.routes.coverage} |`,
+  );
   lines.push(`| الأزرار (Buttons) | ${m.ui.buttons.tested} | ${m.ui.buttons.passed} | — |`);
   lines.push(`| الحوارات (Dialogs) | ${m.ui.dialogs.tested} | ${m.ui.dialogs.passed} | — |`);
   lines.push(`| النماذج (Forms) | ${m.ui.forms.tested} | ${m.ui.forms.passed} | — |`);

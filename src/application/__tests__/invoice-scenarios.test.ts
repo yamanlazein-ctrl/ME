@@ -50,7 +50,7 @@ function makeInvoice(
     tax: overrides.tax ?? 0,
     discount: overrides.discount ?? 0,
     createdBy: "tester",
-              createdAt: "2026-01-01T00:00:00.000Z",
+    createdAt: "2026-01-01T00:00:00.000Z",
   });
 }
 
@@ -69,7 +69,7 @@ describe("Invoice scenarios: 50 invoices tracking", () => {
       const date = new Date(baseDate.getTime() + i * 6 * 24 * 60 * 60 * 1000); // every ~6 days
       const dateStr = date.toISOString().slice(0, 10);
       const quantity = 5 + (i % 10); // 5-14 kg varying
-      const price = 4000 + (i * 100); // 4000-8900 varying
+      const price = 4000 + i * 100; // 4000-8900 varying
 
       const invoice = makeInvoice(dateStr, {
         lines: [
@@ -125,9 +125,7 @@ describe("Invoice scenarios: 50 invoices tracking", () => {
     // Filter: January only
     const janStart = "2026-01-01";
     const janEnd = "2026-01-31";
-    const janInvoices = invoices.filter(
-      (inv) => inv.date >= janStart && inv.date <= janEnd,
-    );
+    const janInvoices = invoices.filter((inv) => inv.date >= janStart && inv.date <= janEnd);
 
     expect(janInvoices).toHaveLength(5); // 5 Jan dates
     janInvoices.forEach((inv) => {
@@ -137,18 +135,14 @@ describe("Invoice scenarios: 50 invoices tracking", () => {
     // Filter: February only
     const febStart = "2026-02-01";
     const febEnd = "2026-02-28";
-    const febInvoices = invoices.filter(
-      (inv) => inv.date >= febStart && inv.date <= febEnd,
-    );
+    const febInvoices = invoices.filter((inv) => inv.date >= febStart && inv.date <= febEnd);
 
     expect(febInvoices).toHaveLength(3); // 3 Feb dates
 
     // Filter: Q1 (Jan-Mar)
     const q1Start = "2026-01-01";
     const q1End = "2026-03-31";
-    const q1Invoices = invoices.filter(
-      (inv) => inv.date >= q1Start && inv.date <= q1End,
-    );
+    const q1Invoices = invoices.filter((inv) => inv.date >= q1Start && inv.date <= q1End);
 
     expect(q1Invoices).toHaveLength(10); // all 10
   });
@@ -172,11 +166,7 @@ describe("Invoice scenarios: 50 invoices tracking", () => {
     const filtered = invoices.filter((inv) => inv.date >= start && inv.date <= end);
 
     expect(filtered).toHaveLength(3);
-    expect(filtered.map((inv) => inv.date)).toEqual([
-      "2026-01-10",
-      "2026-01-20",
-      "2026-02-05",
-    ]);
+    expect(filtered.map((inv) => inv.date)).toEqual(["2026-01-10", "2026-01-20", "2026-02-05"]);
   });
 
   // ── Scenario 4: Aggregate totals for customer invoices ──
@@ -216,13 +206,19 @@ describe("Invoice scenarios: 50 invoices tracking", () => {
 
     // Create 20 invoices: 8 for A, 7 for B, 5 for C
     for (let i = 0; i < 8; i++) {
-      invoices.push(makeInvoice(`2026-01-${String(i + 1).padStart(2, "0")}`, { partyId: customerA }));
+      invoices.push(
+        makeInvoice(`2026-01-${String(i + 1).padStart(2, "0")}`, { partyId: customerA }),
+      );
     }
     for (let i = 0; i < 7; i++) {
-      invoices.push(makeInvoice(`2026-01-${String(i + 10).padStart(2, "0")}`, { partyId: customerB }));
+      invoices.push(
+        makeInvoice(`2026-01-${String(i + 10).padStart(2, "0")}`, { partyId: customerB }),
+      );
     }
     for (let i = 0; i < 5; i++) {
-      invoices.push(makeInvoice(`2026-02-${String(i + 1).padStart(2, "0")}`, { partyId: customerC }));
+      invoices.push(
+        makeInvoice(`2026-02-${String(i + 1).padStart(2, "0")}`, { partyId: customerC }),
+      );
     }
 
     expect(invoices).toHaveLength(20);
@@ -288,7 +284,7 @@ describe("Invoice scenarios: 50 invoices tracking", () => {
       currency: CURRENCY,
       lines: [makeLine({ quantityKg: 100, pricePerKg: 3000 })],
       createdBy: "tester",
-              createdAt: "2026-01-01T00:00:00.000Z",
+      createdAt: "2026-01-01T00:00:00.000Z",
     });
     expect(entryInvoice.type).toBe("entry");
     expect(entryInvoice.partyType).toBe("supplier");
@@ -312,7 +308,7 @@ describe("Invoice scenarios: 50 invoices tracking", () => {
       currency: CURRENCY,
       lines: [makeLine({ quantityKg: 5, pricePerKg: 5000 })],
       createdBy: "tester",
-              createdAt: "2026-01-01T00:00:00.000Z",
+      createdAt: "2026-01-01T00:00:00.000Z",
     });
     expect(returnInvoice.type).toBe("return");
 

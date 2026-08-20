@@ -44,23 +44,11 @@ export function BulkSelectToolbar({
 
   return (
     <>
-      <span className="text-sm font-semibold text-foreground tabular-nums">
-        {count} محدد
-      </span>
-      <Button
-        variant="outline"
-        size="sm"
-        onClick={onSelectAll}
-        disabled={!canSelectAll}
-      >
+      <span className="text-sm font-semibold text-foreground tabular-nums">{count} محدد</span>
+      <Button variant="outline" size="sm" onClick={onSelectAll} disabled={!canSelectAll}>
         تحديد الكل
       </Button>
-      <Button
-        variant={actionVariant}
-        size="sm"
-        disabled={!canConfirm}
-        onClick={onAction}
-      >
+      <Button variant={actionVariant} size="sm" disabled={!canConfirm} onClick={onAction}>
         {actionLabel}
       </Button>
       <Button variant="ghost" size="sm" onClick={onExit} title="إلغاء التحديد">

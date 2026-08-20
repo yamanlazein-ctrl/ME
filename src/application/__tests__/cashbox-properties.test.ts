@@ -44,13 +44,21 @@ describe("Cashbox financial properties (fast-check)", () => {
           fc.array(dp2(0, 10_000_000)), // expenses
           (opening, deposits, withdrawals, expenses) => {
             const movements: CashMovement[] = [
-              ...deposits.map((amount) => ({ type: "deposit" as const, amount, date: "2026-01-15" })),
+              ...deposits.map((amount) => ({
+                type: "deposit" as const,
+                amount,
+                date: "2026-01-15",
+              })),
               ...withdrawals.map((amount) => ({
                 type: "withdrawal" as const,
                 amount,
                 date: "2026-01-15",
               })),
-              ...expenses.map((amount) => ({ type: "expense" as const, amount, date: "2026-01-15" })),
+              ...expenses.map((amount) => ({
+                type: "expense" as const,
+                amount,
+                date: "2026-01-15",
+              })),
             ];
 
             const balance = simulateBalance(opening, movements);
@@ -76,18 +84,14 @@ describe("Cashbox financial properties (fast-check)", () => {
 
     it("equal deposits and withdrawals → balance unchanged", () => {
       fc.assert(
-        fc.property(
-          dp2(0, 100_000_000),
-          dp2(0, 10_000_000),
-          (opening, amount) => {
-            const movements: CashMovement[] = [
-              { type: "deposit", amount, date: "2026-01-15" },
-              { type: "withdrawal", amount, date: "2026-01-15" },
-            ];
+        fc.property(dp2(0, 100_000_000), dp2(0, 10_000_000), (opening, amount) => {
+          const movements: CashMovement[] = [
+            { type: "deposit", amount, date: "2026-01-15" },
+            { type: "withdrawal", amount, date: "2026-01-15" },
+          ];
 
-            expect(simulateBalance(opening, movements)).toBeCloseTo(opening, 6);
-          },
-        ),
+          expect(simulateBalance(opening, movements)).toBeCloseTo(opening, 6);
+        }),
       );
     });
   });
@@ -96,20 +100,14 @@ describe("Cashbox financial properties (fast-check)", () => {
   describe("Negative balance detection", () => {
     it("withdrawals > opening + deposits → negative balance", () => {
       fc.assert(
-        fc.property(
-          dp2(0, 1_000_000),
-          dp2(1, 2_000_000),
-          (opening, excessWithdrawal) => {
-            const w = opening + excessWithdrawal;
+        fc.property(dp2(0, 1_000_000), dp2(1, 2_000_000), (opening, excessWithdrawal) => {
+          const w = opening + excessWithdrawal;
 
-            const movements: CashMovement[] = [
-              { type: "withdrawal", amount: w, date: "2026-01-15" },
-            ];
+          const movements: CashMovement[] = [{ type: "withdrawal", amount: w, date: "2026-01-15" }];
 
-            const balance = simulateBalance(opening, movements);
-            expect(balance).toBeLessThan(0); // system should prevent this
-          },
-        ),
+          const balance = simulateBalance(opening, movements);
+          expect(balance).toBeLessThan(0); // system should prevent this
+        }),
       );
     });
   });
@@ -118,14 +116,11 @@ describe("Cashbox financial properties (fast-check)", () => {
   describe("Voucher amount validation", () => {
     it("rejects non-positive amounts", () => {
       fc.assert(
-        fc.property(
-          fc.integer({ min: -1_000_000, max: 0 }),
-          (cents) => {
-            const amount = cents / 100;
-            const isValid = amount > 0;
-            expect(isValid).toBe(false);
-          },
-        ),
+        fc.property(fc.integer({ min: -1_000_000, max: 0 }), (cents) => {
+          const amount = cents / 100;
+          const isValid = amount > 0;
+          expect(isValid).toBe(false);
+        }),
       );
     });
 
@@ -221,21 +216,18 @@ describe("Expense tracking properties (fast-check)", () => {
 
   it("total expenses = sum of all expense amounts", () => {
     fc.assert(
-      fc.property(
-        fc.array(dp2(1, 10_000_000)),
-        (amounts) => {
-          const expenses: Expense[] = amounts.map((amount) => ({
-            amount,
-            category: "general",
-            date: "2026-01-15",
-          }));
+      fc.property(fc.array(dp2(1, 10_000_000)), (amounts) => {
+        const expenses: Expense[] = amounts.map((amount) => ({
+          amount,
+          category: "general",
+          date: "2026-01-15",
+        }));
 
-          const total = expenses.reduce((sum, e) => sum + e.amount, 0);
-          const expected = amounts.reduce((sum, a) => sum + a, 0);
+        const total = expenses.reduce((sum, e) => sum + e.amount, 0);
+        const expected = amounts.reduce((sum, a) => sum + a, 0);
 
-          expect(total).toBeCloseTo(expected, 10);
-        },
-      ),
+        expect(total).toBeCloseTo(expected, 10);
+      }),
     );
   });
 

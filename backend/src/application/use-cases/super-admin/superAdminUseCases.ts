@@ -25,7 +25,9 @@ export async function superAdminLoginUseCase(
   jwtSigner: JwtSigner,
   denylist: RedisTokenDenylist,
   input: unknown,
-): Promise<Result<{ token: string; admin: { id: string; email: string; name: string | null; role: string } }>> {
+): Promise<
+  Result<{ token: string; admin: { id: string; email: string; name: string | null; role: string } }>
+> {
   const parsed = loginInput.safeParse(input);
   if (!parsed.success) {
     return { ok: false, error: "بيانات الدخول غير صالحة" };
@@ -46,6 +48,9 @@ export async function superAdminLoginUseCase(
   });
   return {
     ok: true,
-    data: { token, admin: { id: admin.id, email: admin.email, name: admin.name, role: admin.role } },
+    data: {
+      token,
+      admin: { id: admin.id, email: admin.email, name: admin.name, role: admin.role },
+    },
   };
 }

@@ -11,7 +11,11 @@ test.describe("Git Rollback Verification", () => {
   });
 
   test("npm run build succeeds", () => {
-    const output = execSync("npm run build", { cwd: REPO_ROOT, encoding: "utf-8", timeout: 120000 });
+    const output = execSync("npm run build", {
+      cwd: REPO_ROOT,
+      encoding: "utf-8",
+      timeout: 120000,
+    });
     expect(output).toBeTruthy();
   });
 });

@@ -151,12 +151,7 @@ export class PostgresReturnRepository implements IReturnRepository {
         const [origInv] = await tx
           .select({ type: invoices.type, partyId: invoices.partyId, status: invoices.status })
           .from(invoices)
-          .where(
-            and(
-              eq(invoices.id, input.originalInvoiceId),
-              eq(invoices.tenantId, ctx.tenantId),
-            ),
-          )
+          .where(and(eq(invoices.id, input.originalInvoiceId), eq(invoices.tenantId, ctx.tenantId)))
           .limit(1);
         if (!origInv) {
           throw new Error("الفاتورة الأصلية غير موجودة");
@@ -233,10 +228,15 @@ export class PostgresReturnRepository implements IReturnRepository {
               eq(invoices.status, "active"),
             ),
           )
-          .where(and(eq(invoiceLines.tenantId, ctx.tenantId), inArray(invoiceLines.rollId, rollIds)))
+          .where(
+            and(eq(invoiceLines.tenantId, ctx.tenantId), inArray(invoiceLines.rollId, rollIds)),
+          )
           .groupBy(invoiceLines.rollId);
         for (const h of historical) {
-          invoiceLineQtys.set(h.rollId, { original: Math.round(Number(h.total) * 100) / 100, returned: 0 });
+          invoiceLineQtys.set(h.rollId, {
+            original: Math.round(Number(h.total) * 100) / 100,
+            returned: 0,
+          });
         }
         const prevReturns = await tx
           .select({

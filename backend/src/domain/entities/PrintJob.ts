@@ -38,7 +38,10 @@ export interface PrintJobData {
 export class PrintJob {
   private constructor(private readonly data: PrintJobData) {}
 
-  receive(receivedKg: number, opts: { number?: string; resultRollId: UUID; resultFabricId?: UUID; resultColorId?: UUID }): void {
+  receive(
+    receivedKg: number,
+    opts: { number?: string; resultRollId: UUID; resultFabricId?: UUID; resultColorId?: UUID },
+  ): void {
     if (this.data.status === "received") throw new Error("Print job already received");
     this.data.status = "received";
     this.data.receivedKg = receivedKg;
@@ -103,7 +106,12 @@ export interface ReceivePrintJobInput {
   notes?: string;
 }
 
-export function createPrintJobData(input: CreatePrintJobInput, number: string, tenantId: UUID, createdBy: UUID): PrintJobData {
+export function createPrintJobData(
+  input: CreatePrintJobInput,
+  number: string,
+  tenantId: UUID,
+  createdBy: UUID,
+): PrintJobData {
   return {
     id: "" as UUID,
     tenantId,

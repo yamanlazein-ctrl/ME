@@ -69,7 +69,9 @@ export class PostgresInstallationStateRepository implements IInstallationStateRe
     const completed = Array.from(
       new Set<WizardStepName>([...(existing.completedSteps as WizardStepName[]), step]),
     );
-    const next = WIZARD_ORDER[Math.min(WIZARD_ORDER.indexOf(step) + 1, WIZARD_ORDER.length - 1)] as WizardStepName;
+    const next = WIZARD_ORDER[
+      Math.min(WIZARD_ORDER.indexOf(step) + 1, WIZARD_ORDER.length - 1)
+    ] as WizardStepName;
     // R14: merge step payloads so a later step (e.g. `review`) does not
     // clobber credentials stored by an earlier step (e.g. `admin`).
     const mergedData = { ...(existing.data as Record<string, unknown>), ...data };

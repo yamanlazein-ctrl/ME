@@ -9,20 +9,27 @@ let token = "";
 async function api(path: string, opts: RequestInit = {}) {
   if (!token) {
     const r = await fetch(`${API}/auth/login`, {
-      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(AUTH),
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(AUTH),
     });
     token = (await r.json()).accessToken;
   }
   const res = await fetch(path.startsWith("http") ? path : `${API}${path}`, {
     ...opts,
-    headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}`, ...opts.headers },
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+      ...opts.headers,
+    },
   });
   return { status: res.status, data: await res.json().catch(() => null) };
 }
 
 test.describe("إرسال إلى المطبعة", () => {
   const rid = "2c2eea1e-15a6-4fca-8b0e-9963f5f777cd";
-  let stock = 0, jobId = "";
+  let stock = 0,
+    jobId = "";
 
   test("snapshot stock", async () => {
     const { data } = await api("/inventory/rolls?limit=200");
@@ -32,9 +39,16 @@ test.describe("إرسال إلى المطبعة", () => {
   });
 
   test("send to print → 201", async () => {
-    const { status, data } = await api("/printing/send", { method: "POST", body: JSON.stringify({
-      date: "2026-08-12", sourceRollId: rid, quantityKg: 10, pressName: "TestPress", currency: "SYP",
-    })});
+    const { status, data } = await api("/printing/send", {
+      method: "POST",
+      body: JSON.stringify({
+        date: "2026-08-12",
+        sourceRollId: rid,
+        quantityKg: 10,
+        pressName: "TestPress",
+        currency: "SYP",
+      }),
+    });
     expect(status).toBe(201);
     expect(data.number).toMatch(/^PRT-/);
     expect(data.status).toBe("sent");
@@ -53,9 +67,15 @@ test.describe("إرسال إلى المطبعة", () => {
   });
 
   test("receive from print → 200 + stock deducted", async () => {
-    const { status, data } = await api("/printing/receive", { method: "POST", body: JSON.stringify({
-      jobId, date: "2026-08-12", receivedKg: 8, currency: "SYP",
-    })});
+    const { status, data } = await api("/printing/receive", {
+      method: "POST",
+      body: JSON.stringify({
+        jobId,
+        date: "2026-08-12",
+        receivedKg: 8,
+        currency: "SYP",
+      }),
+    });
     expect(status).toBe(200);
     expect(data.status).toBe("received");
     // Source roll stock should now be stock - 8 (P0-2 fix)
@@ -73,12 +93,25 @@ test.describe("إرسال إلى المطبعة", () => {
 
   test("receive more than sent → 422", async () => {
     // Create a new send first
-    const { data: send } = await api("/printing/send", { method: "POST", body: JSON.stringify({
-      date: "2026-08-12", sourceRollId: rid, quantityKg: 3, pressName: "T2", currency: "SYP",
-    })});
-    const { status } = await api("/printing/receive", { method: "POST", body: JSON.stringify({
-      jobId: send.id, date: "2026-08-12", receivedKg: 999, currency: "SYP",
-    })});
+    const { data: send } = await api("/printing/send", {
+      method: "POST",
+      body: JSON.stringify({
+        date: "2026-08-12",
+        sourceRollId: rid,
+        quantityKg: 3,
+        pressName: "T2",
+        currency: "SYP",
+      }),
+    });
+    const { status } = await api("/printing/receive", {
+      method: "POST",
+      body: JSON.stringify({
+        jobId: send.id,
+        date: "2026-08-12",
+        receivedKg: 999,
+        currency: "SYP",
+      }),
+    });
     expect(status).toBe(422);
   });
 });

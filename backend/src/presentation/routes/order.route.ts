@@ -96,36 +96,54 @@ export function registerOrderRoutes(
     res.json(r.data);
   });
 
-  router.get("/orders/:id", auth, readGuard, validateUuidParam("id"), async (req: Request, res: Response) => {
-    const r = await uc.findOrderUseCase(orderRepo, pid(req), ctx(req));
-    if (!r.ok) {
-      return res.status(500).json({ code: "INTERNAL", message: r.error });
-    }
-    if (!r.data) {
-      return res.status(404).json({ code: "NOT_FOUND", message: "الطلب غير موجود" });
-    }
-    res.json(r.data);
-  });
-
-  router.post("/orders/:id/cancel", auth, writeGuard, validateUuidParam("id"), async (req: Request, res: Response) => {
-    const r = await uc.cancelOrderUseCase(orderRepo, pid(req), ctx(req));
-    if (r.ok) {
+  router.get(
+    "/orders/:id",
+    auth,
+    readGuard,
+    validateUuidParam("id"),
+    async (req: Request, res: Response) => {
+      const r = await uc.findOrderUseCase(orderRepo, pid(req), ctx(req));
+      if (!r.ok) {
+        return res.status(500).json({ code: "INTERNAL", message: r.error });
+      }
+      if (!r.data) {
+        return res.status(404).json({ code: "NOT_FOUND", message: "الطلب غير موجود" });
+      }
       res.json(r.data);
-    } else {
-      res.status(422).json({ code: "VALIDATION", message: r.error });
-    }
-  });
+    },
+  );
 
-  router.post("/orders/:id/fulfill", auth, writeGuard, validateUuidParam("id"), async (req: Request, res: Response) => {
-    const invoiceId = (req.body as { invoiceId?: string }).invoiceId;
-    if (!invoiceId) {
-      return res.status(400).json({ code: "VALIDATION", message: "invoiceId مطلوب" });
-    }
-    const r = await uc.fulfillOrderUseCase(orderRepo, pid(req), invoiceId, ctx(req));
-    if (r.ok) {
-      res.json(r.data);
-    } else {
-      res.status(422).json({ code: "VALIDATION", message: r.error });
-    }
-  });
+  router.post(
+    "/orders/:id/cancel",
+    auth,
+    writeGuard,
+    validateUuidParam("id"),
+    async (req: Request, res: Response) => {
+      const r = await uc.cancelOrderUseCase(orderRepo, pid(req), ctx(req));
+      if (r.ok) {
+        res.json(r.data);
+      } else {
+        res.status(422).json({ code: "VALIDATION", message: r.error });
+      }
+    },
+  );
+
+  router.post(
+    "/orders/:id/fulfill",
+    auth,
+    writeGuard,
+    validateUuidParam("id"),
+    async (req: Request, res: Response) => {
+      const invoiceId = (req.body as { invoiceId?: string }).invoiceId;
+      if (!invoiceId) {
+        return res.status(400).json({ code: "VALIDATION", message: "invoiceId مطلوب" });
+      }
+      const r = await uc.fulfillOrderUseCase(orderRepo, pid(req), invoiceId, ctx(req));
+      if (r.ok) {
+        res.json(r.data);
+      } else {
+        res.status(422).json({ code: "VALIDATION", message: r.error });
+      }
+    },
+  );
 }

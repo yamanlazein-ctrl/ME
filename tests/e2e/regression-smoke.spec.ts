@@ -18,7 +18,11 @@ test("Ledger screen loads and renders entries (incl. cancelled rows)", async ({ 
   await expect(page.getByText("دفتر الحركات المركزي").first()).toBeVisible({ timeout: 20_000 });
   await expect(page.getByText("فلاتر البحث").first()).toBeVisible({ timeout: 10_000 });
   await page.waitForTimeout(2500);
-  const body = await page.locator("tbody").first().innerText().catch(() => "");
+  const body = await page
+    .locator("tbody")
+    .first()
+    .innerText()
+    .catch(() => "");
   expect(body.length).toBeGreaterThan(0);
 });
 

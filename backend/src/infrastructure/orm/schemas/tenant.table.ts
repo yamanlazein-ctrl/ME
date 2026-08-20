@@ -1,13 +1,5 @@
 import { sql } from "drizzle-orm";
-import {
-  pgTable,
-  uuid,
-  varchar,
-  timestamp,
-  integer,
-  jsonb,
-  text,
-} from "drizzle-orm/pg-core";
+import { pgTable, uuid, varchar, timestamp, integer, jsonb, text } from "drizzle-orm/pg-core";
 
 export const tenants = pgTable("tenants", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -33,7 +25,10 @@ export const tenants = pgTable("tenants", {
   licenseVersion: varchar("license_version", { length: 16 }).notNull().default("v1"),
   productVersion: varchar("product_version", { length: 16 }),
   licenseModel: varchar("license_model", { length: 16 }).notNull().default("perpetual"),
-  licenseFeatures: text("license_features").array().notNull().default(sql`'{}'::text[]`),
+  licenseFeatures: text("license_features")
+    .array()
+    .notNull()
+    .default(sql`'{}'::text[]`),
   licenseLimits: jsonb("license_limits").default("{}"),
   licenseBindingType: varchar("license_binding_type", { length: 16 }),
   licenseBindingValue: varchar("license_binding_value", { length: 255 }),

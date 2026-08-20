@@ -42,14 +42,19 @@ async function main() {
      where tenant_id=$1 and status='active' and debit>0 and credit>0`,
     [TENANT],
   );
-  console.log(`[1] entries with BOTH debit+credit (ambiguous): ${amb.rows[0].n} ${amb.rows[0].n === 0 ? "OK" : "!!"}`);
+  console.log(
+    `[1] entries with BOTH debit+credit (ambiguous): ${amb.rows[0].n} ${amb.rows[0].n === 0 ? "OK" : "!!"}`,
+  );
 
   // 2. Per-party reconciliation vs statement endpoint
   const api = process.env.API || "http://localhost:8083/api";
   const login = await fetch(`${api}/auth/login`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email: process.env.ERP_EMAIL || "admin@erp.local", password: process.env.ERP_PASS || "admin123" }),
+    body: JSON.stringify({
+      email: process.env.ERP_EMAIL || "admin@erp.local",
+      password: process.env.ERP_PASS || "admin123",
+    }),
   });
   const token = (await login.json()).accessToken;
   const h = { Authorization: `Bearer ${token}` };
@@ -71,17 +76,24 @@ async function main() {
     );
     const { d, cr } = cur.rows[0];
     const dbBalance = p.kind === "customer" ? (d || 0) - (cr || 0) : (cr || 0) - (d || 0);
-    const st = await fetch(`${api}/${p.kind === "customer" ? "customers" : "suppliers"}/${p.id}/statement?currency=SYP`, { headers: h });
+    const st = await fetch(
+      `${api}/${p.kind === "customer" ? "customers" : "suppliers"}/${p.id}/statement?currency=SYP`,
+      { headers: h },
+    );
     const body = await st.json();
     checked++;
     const apiBalance = body.finalBalance;
     const ok = Math.abs((dbBalance || 0) - (apiBalance || 0)) < 1;
     if (!ok) {
       mismatches++;
-      console.log(`[2] MISMATCH ${p.kind} ${p.code} ${p.name}: db=${dbBalance} statement=${apiBalance}`);
+      console.log(
+        `[2] MISMATCH ${p.kind} ${p.code} ${p.name}: db=${dbBalance} statement=${apiBalance}`,
+      );
     }
   }
-  console.log(`[2] party reconciliations: checked=${checked} mismatches=${mismatches} ${mismatches === 0 ? "OK" : "!!"}`);
+  console.log(
+    `[2] party reconciliations: checked=${checked} mismatches=${mismatches} ${mismatches === 0 ? "OK" : "!!"}`,
+  );
 
   // 3. References with both sides unequal (informational)
   const refs = await c.query(
@@ -93,12 +105,21 @@ async function main() {
      limit 20`,
     [TENANT],
   );
-  console.log(`[3] references with BOTH sides (informational, partial-payment) — top ${refs.rows.length}:`);
-  refs.rows.forEach((r) => console.log(`    ${r.reference_type} ${r.reference_number}: debit=${r.d} credit=${r.cr} rows=${r.rows}`));
+  console.log(
+    `[3] references with BOTH sides (informational, partial-payment) — top ${refs.rows.length}:`,
+  );
+  refs.rows.forEach((r) =>
+    console.log(
+      `    ${r.reference_type} ${r.reference_number}: debit=${r.d} credit=${r.cr} rows=${r.rows}`,
+    ),
+  );
 
   await c.end();
   console.log("\nDONE");
   process.exit(mismatches > 0 ? 1 : 0);
 }
 
-main().catch((e) => { console.error(e.message); process.exit(1); });
+main().catch((e) => {
+  console.error(e.message);
+  process.exit(1);
+});

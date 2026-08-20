@@ -27,7 +27,14 @@ export async function createExpenseUseCase(
         entityId: e.id,
         detail: `مصروف ${e.number}`,
       })
-      .catch((err: unknown) => logAuditError(err, { module: "expenses", action: "create", entityId: e.id, tenantId: ctx.tenantId }));
+      .catch((err: unknown) =>
+        logAuditError(err, {
+          module: "expenses",
+          action: "create",
+          entityId: e.id,
+          tenantId: ctx.tenantId,
+        }),
+      );
     return { ok: true, data: e };
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : "فشل إنشاء المصروف" };
@@ -53,7 +60,14 @@ export async function cancelExpenseUseCase(
         entityId: e.id,
         detail: `إلغاء مصروف ${e.number}`,
       })
-      .catch((err: unknown) => logAuditError(err, { module: "expenses", action: "cancel", entityId: e.id, tenantId: ctx.tenantId }));
+      .catch((err: unknown) =>
+        logAuditError(err, {
+          module: "expenses",
+          action: "cancel",
+          entityId: e.id,
+          tenantId: ctx.tenantId,
+        }),
+      );
     return { ok: true, data: e };
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : "فشل إلغاء المصروف" };

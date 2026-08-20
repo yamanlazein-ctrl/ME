@@ -8,10 +8,7 @@ import { useInvoicesList } from "@/presentation/hooks/useInvoices";
 import { useVouchersList } from "@/presentation/hooks/useVouchers";
 import { useReturnsList, returnAmount } from "@/presentation/hooks/useReturns";
 import { useExpensesList } from "@/presentation/hooks/useExpenses";
-import {
-  useManualMovements,
-  MANUAL_TYPE_LABEL,
-} from "@/presentation/hooks/useCashbox";
+import { useManualMovements, MANUAL_TYPE_LABEL } from "@/presentation/hooks/useCashbox";
 import {
   useInventory,
   fabrics,
@@ -19,16 +16,8 @@ import {
   rolls,
   fabricById,
 } from "@/presentation/hooks/useInventory";
-import {
-  customers,
-  suppliers,
-  customerById,
-  supplierById,
-} from "@/presentation/hooks/useParties";
-import {
-  useLedgerEntries,
-  LEDGER_TYPE_LABEL,
-} from "@/presentation/hooks/useLedger";
+import { customers, suppliers, customerById, supplierById } from "@/presentation/hooks/useParties";
+import { useLedgerEntries, LEDGER_TYPE_LABEL } from "@/presentation/hooks/useLedger";
 import { formatDateTime } from "@/lib/utils";
 import { formatCurrencyBreakdown, groupAmountsByCurrency } from "@/presentation/hooks/useCurrency";
 import type { ReturnDTO } from "@/application/ports/IReturnRepository";
@@ -37,15 +26,12 @@ import type { LedgerEntry as DomainLedgerEntry } from "@/domain/entities/LedgerE
 import { invoiceTotal } from "@/core/calculations/invoiceCalc";
 import { formatNumber, formatMoney, formatQuantity } from "@/shared/utils/formatNumber";
 
-
 type Search = { range?: "7" | "30" | "90" | "all" };
 
 export const Route = createFileRoute("/reports/$slug")({
   component: ReportDetailPage,
   validateSearch: (s: Record<string, unknown>): Search => ({
-    range: (["7", "30", "90", "all"] as const).includes(
-      s.range as "7" | "30" | "90" | "all",
-    )
+    range: (["7", "30", "90", "all"] as const).includes(s.range as "7" | "30" | "90" | "all")
       ? (s.range as "7" | "30" | "90" | "all")
       : "30",
   }),
@@ -197,39 +183,13 @@ function ReportBody({
 }) {
   switch (slug) {
     case "net-sales":
-      return (
-        <SalesReport
-          inRange={inRange}
-          invoices={invoices}
-          kind="sale"
-          vouchers={vouchers}
-        />
-      );
+      return <SalesReport inRange={inRange} invoices={invoices} kind="sale" vouchers={vouchers} />;
     case "purchases":
-      return (
-        <SalesReport
-          inRange={inRange}
-          invoices={invoices}
-          kind="entry"
-          vouchers={vouchers}
-        />
-      );
+      return <SalesReport inRange={inRange} invoices={invoices} kind="entry" vouchers={vouchers} />;
     case "receivables":
-      return (
-        <PartyBalances
-          kind="customer"
-          invoices={invoices}
-          vouchers={vouchers}
-        />
-      );
+      return <PartyBalances kind="customer" invoices={invoices} vouchers={vouchers} />;
     case "payables":
-      return (
-        <PartyBalances
-          kind="supplier"
-          invoices={invoices}
-          vouchers={vouchers}
-        />
-      );
+      return <PartyBalances kind="supplier" invoices={invoices} vouchers={vouchers} />;
     case "sales-returns":
       return <ReturnsReport inRange={inRange} returns={returns} />;
     case "expenses":
@@ -247,9 +207,7 @@ function ReportBody({
     default:
       return (
         <PageCard title="غير معروف">
-          <p className="text-sm text-muted-foreground">
-            التقرير المطلوب غير متاح.
-          </p>
+          <p className="text-sm text-muted-foreground">التقرير المطلوب غير متاح.</p>
         </PageCard>
       );
   }
@@ -263,24 +221,12 @@ function TableWrap({ children }: { children: React.ReactNode }) {
   );
 }
 
-function TH({
-  children,
-  align,
-}: {
-  children: React.ReactNode;
-  align?: "left" | "right";
-}) {
-  return (
-    <th className={`px-3 py-2 ${align === "left" ? "text-left" : ""}`}>
-      {children}
-    </th>
-  );
+function TH({ children, align }: { children: React.ReactNode; align?: "left" | "right" }) {
+  return <th className={`px-3 py-2 ${align === "left" ? "text-left" : ""}`}>{children}</th>;
 }
 
 function Empty({ text }: { text: string }) {
-  return (
-    <div className="p-6 text-center text-sm text-muted-foreground">{text}</div>
-  );
+  return <div className="p-6 text-center text-sm text-muted-foreground">{text}</div>;
 }
 
 function SalesReport({
@@ -300,16 +246,18 @@ function SalesReport({
   }[];
 }) {
   const rows = invoices
-    .filter(
-      (i) => i.status !== "cancelled" && i.type === kind && inRange(i.date),
-    )
+    .filter((i) => i.status !== "cancelled" && i.type === kind && inRange(i.date))
     .sort((a, b) => (a.date < b.date ? 1 : -1));
   const paidByInvoice = (invoiceId: string) =>
     vouchers
       .filter((v) => v.status === "active" && v.invoiceId === invoiceId)
       .reduce((s, v) => s + v.amount, 0);
   const totalByCurrency = groupAmountsByCurrency(rows, invoiceTotal, (i) => i.currency);
-  const paidByCurrency = groupAmountsByCurrency(rows, (i) => paidByInvoice(i.id), (i) => i.currency);
+  const paidByCurrency = groupAmountsByCurrency(
+    rows,
+    (i) => paidByInvoice(i.id),
+    (i) => i.currency,
+  );
   const remainingByCurrency = groupAmountsByCurrency(
     rows,
     (i) => Math.max(0, invoiceTotal(i) - paidByInvoice(i.id)),
@@ -354,27 +302,20 @@ function SalesReport({
                       {i.number}
                     </Link>
                   </td>
-                  <td className="px-3 py-2 tabular-nums">
-                    {formatDateTime(i.createdAt)}
-                  </td>
+                  <td className="px-3 py-2 tabular-nums">{formatDateTime(i.createdAt)}</td>
                   <td className="px-3 py-2">
                     {kind === "sale"
                       ? customerById(i.partyId)?.name
                       : (supplierById(i.partyId)?.name ?? i.partyId)}
                   </td>
                   <td className="px-3 py-2 tabular-nums font-semibold">
-                    {formatMoney(invoiceTotal(i))}{" "}
-                    {i.currency}
+                    {formatMoney(invoiceTotal(i))} {i.currency}
                   </td>
                   <td className="px-3 py-2 tabular-nums">
-                    {formatMoney(paidByInvoice(i.id))}{" "}
-                    {i.currency}
+                    {formatMoney(paidByInvoice(i.id))} {i.currency}
                   </td>
                   <td className="px-3 py-2 tabular-nums font-semibold">
-                    {formatMoney(
-                      Math.max(0, invoiceTotal(i) - paidByInvoice(i.id)),
-                    )}{" "}
-                    {i.currency}
+                    {formatMoney(Math.max(0, invoiceTotal(i) - paidByInvoice(i.id)))} {i.currency}
                   </td>
                 </tr>
               ))}
@@ -407,9 +348,7 @@ function PartyBalances({
   // party's remaining balance.
   const rows = (kind === "customer" ? customers : suppliers)
     .map((p) => {
-      const invs = invoices.filter(
-        (i) => i.partyId === p.id && i.status !== "cancelled",
-      );
+      const invs = invoices.filter((i) => i.partyId === p.id && i.status !== "cancelled");
       const total = groupAmountsByCurrency(invs, invoiceTotal, (i) => i.currency);
       const paidOf = (i: DomainInvoice) =>
         vouchers
@@ -427,10 +366,7 @@ function PartyBalances({
     .sort((a, b) => (b.remaining.SYP ?? 0) - (a.remaining.SYP ?? 0));
 
   return (
-    <PageCard
-      title={kind === "customer" ? "ذمم العملاء" : "ذمم الموردين"}
-      noBodyPadding
-    >
+    <PageCard title={kind === "customer" ? "ذمم العملاء" : "ذمم الموردين"} noBodyPadding>
       {rows.length === 0 ? (
         <Empty text="لا بيانات." />
       ) : (
@@ -449,12 +385,8 @@ function PartyBalances({
               <tr key={r.p.id}>
                 <td className="px-3 py-2 font-semibold">{r.p.name}</td>
                 <td className="px-3 py-2 tabular-nums">{r.count}</td>
-                <td className="px-3 py-2 tabular-nums">
-                  {formatCurrencyBreakdown(r.total)}
-                </td>
-                <td className="px-3 py-2 tabular-nums">
-                  {formatCurrencyBreakdown(r.paid)}
-                </td>
+                <td className="px-3 py-2 tabular-nums">{formatCurrencyBreakdown(r.total)}</td>
+                <td className="px-3 py-2 tabular-nums">{formatCurrencyBreakdown(r.paid)}</td>
                 <td className="px-3 py-2 tabular-nums font-semibold">
                   {formatCurrencyBreakdown(r.remaining)}
                 </td>
@@ -506,20 +438,11 @@ function ReturnsReport({
               {rows.map((r) => (
                 <tr key={r.id}>
                   <td className="px-3 py-2 font-semibold">{r.number}</td>
-                  <td className="px-3 py-2">
-                    {r.kind === "sale" ? "بيع" : "دخول"}
-                  </td>
-                  <td className="px-3 py-2 tabular-nums">
-                    {formatDateTime(r.createdAt)}
-                  </td>
+                  <td className="px-3 py-2">{r.kind === "sale" ? "بيع" : "دخول"}</td>
+                  <td className="px-3 py-2 tabular-nums">{formatDateTime(r.createdAt)}</td>
                   <td className="px-3 py-2">{r.partyId}</td>
                   <td className="px-3 py-2 tabular-nums">
-                    {formatMoney(
-                      r.lines.reduce(
-                        (sum, l) => sum + l.quantityKg * l.pricePerKg,
-                        0,
-                      ),
-                    )}{" "}
+                    {formatMoney(r.lines.reduce((sum, l) => sum + l.quantityKg * l.pricePerKg, 0))}{" "}
                     {r.currency}
                   </td>
                 </tr>
@@ -552,7 +475,11 @@ function ExpensesReport({
   const rows = expenses
     .filter((e) => e.status !== "cancelled" && inRange(e.date))
     .sort((a, b) => (a.date < b.date ? 1 : -1));
-  const totalByCurrency = groupAmountsByCurrency(rows, (e) => e.amount, (e) => e.currency);
+  const totalByCurrency = groupAmountsByCurrency(
+    rows,
+    (e) => e.amount,
+    (e) => e.currency,
+  );
   return (
     <div className="space-y-3">
       <div className="grid gap-3 md:grid-cols-2">
@@ -575,9 +502,7 @@ function ExpensesReport({
             <tbody className="divide-y divide-border">
               {rows.map((e) => (
                 <tr key={e.id}>
-                  <td className="px-3 py-2 tabular-nums">
-                    {formatDateTime(e.createdAt)}
-                  </td>
+                  <td className="px-3 py-2 tabular-nums">{formatDateTime(e.createdAt)}</td>
                   <td className="px-3 py-2">{e.category}</td>
                   <td className="px-3 py-2">{e.description}</td>
                   <td className="px-3 py-2 tabular-nums">
@@ -606,8 +531,16 @@ function LedgerReport({
   // Fix BUG-06/C-9/C-10: these used to sum e.debit/e.credit with no
   // currency grouping at all — a USD ledger row and a SYP row were added
   // directly. Group by e.currency instead.
-  const totalDebitByCurrency = groupAmountsByCurrency(rows, (e) => e.debit || 0, (e) => e.currency);
-  const totalCreditByCurrency = groupAmountsByCurrency(rows, (e) => e.credit || 0, (e) => e.currency);
+  const totalDebitByCurrency = groupAmountsByCurrency(
+    rows,
+    (e) => e.debit || 0,
+    (e) => e.currency,
+  );
+  const totalCreditByCurrency = groupAmountsByCurrency(
+    rows,
+    (e) => e.credit || 0,
+    (e) => e.currency,
+  );
   return (
     <div className="space-y-3">
       <div className="grid gap-3 md:grid-cols-3">
@@ -633,25 +566,15 @@ function LedgerReport({
             <tbody className="divide-y divide-border">
               {rows.map((e) => (
                 <tr key={e.id}>
-                  <td className="px-3 py-2 tabular-nums">
-                    {formatDateTime(e.date)}
-                  </td>
-                  <td className="px-3 py-2">
-                    {LEDGER_TYPE_LABEL[e.type] ?? e.type}
-                  </td>
+                  <td className="px-3 py-2 tabular-nums">{formatDateTime(e.date)}</td>
+                  <td className="px-3 py-2">{LEDGER_TYPE_LABEL[e.type] ?? e.type}</td>
                   <td className="px-3 py-2">{e.description}</td>
+                  <td className="px-3 py-2 tabular-nums">{e.referenceNumber ?? "—"}</td>
                   <td className="px-3 py-2 tabular-nums">
-                    {e.referenceNumber ?? "—"}
+                    {e.debit ? `${formatMoney(e.debit)} ${e.currency}` : "—"}
                   </td>
                   <td className="px-3 py-2 tabular-nums">
-                    {e.debit
-                      ? `${formatMoney(e.debit)} ${e.currency}`
-                      : "—"}
-                  </td>
-                  <td className="px-3 py-2 tabular-nums">
-                    {e.credit
-                      ? `${formatMoney(e.credit)} ${e.currency}`
-                      : "—"}
+                    {e.credit ? `${formatMoney(e.credit)} ${e.currency}` : "—"}
                   </td>
                 </tr>
               ))}
@@ -700,15 +623,11 @@ function CashboxReport({
           <tbody className="divide-y divide-border">
             {rows.map((m) => (
               <tr key={m.id}>
-                <td className="px-3 py-2 tabular-nums">
-                  {formatDateTime(m.createdAt)}
-                </td>
+                <td className="px-3 py-2 tabular-nums">{formatDateTime(m.createdAt)}</td>
                 <td className="px-3 py-2">
                   {MANUAL_TYPE_LABEL[m.type as keyof typeof MANUAL_TYPE_LABEL]}
                 </td>
-                <td className="px-3 py-2">
-                  {m.direction === "in" ? "وارد" : "صادر"}
-                </td>
+                <td className="px-3 py-2">{m.direction === "in" ? "وارد" : "صادر"}</td>
                 <td className="px-3 py-2">{m.description}</td>
                 <td className="px-3 py-2 tabular-nums font-semibold">
                   {formatMoney(m.amount)} {m.currency}
@@ -763,9 +682,7 @@ function InventoryReport() {
               {rows.map((r) => (
                 <tr key={r.f.id}>
                   <td className="px-3 py-2 font-semibold">{r.f.name}</td>
-                  <td className="px-3 py-2 tabular-nums">
-                    {formatNumber(r.kg)} كغ
-                  </td>
+                  <td className="px-3 py-2 tabular-nums">{formatNumber(r.kg)} كغ</td>
                   <td className="px-3 py-2 tabular-nums">{r.rolls}</td>
                   <td className="px-3 py-2 tabular-nums font-semibold">
                     {formatCurrencyBreakdown(r.valByCurrency)}
@@ -798,7 +715,8 @@ function TopFabricsReport({
     i.lines.forEach((l) => {
       const c = map.get(l.fabricId) ?? { qty: 0, revenueByCurrency: {} };
       c.qty += l.quantityKg;
-      c.revenueByCurrency[i.currency] = (c.revenueByCurrency[i.currency] ?? 0) + l.quantityKg * l.pricePerKg;
+      c.revenueByCurrency[i.currency] =
+        (c.revenueByCurrency[i.currency] ?? 0) + l.quantityKg * l.pricePerKg;
       map.set(l.fabricId, c);
     }),
   );
@@ -822,12 +740,8 @@ function TopFabricsReport({
           <tbody className="divide-y divide-border">
             {rows.map((r, i) => (
               <tr key={i}>
-                <td className="px-3 py-2 font-semibold">
-                  {r.fabric?.name ?? ""}
-                </td>
-                <td className="px-3 py-2 tabular-nums">
-                  {formatMoney(r.qty)} كغ
-                </td>
+                <td className="px-3 py-2 font-semibold">{r.fabric?.name ?? ""}</td>
+                <td className="px-3 py-2 tabular-nums">{formatMoney(r.qty)} كغ</td>
                 <td className="px-3 py-2 tabular-nums">
                   {formatCurrencyBreakdown(r.revenueByCurrency)}
                 </td>
@@ -878,9 +792,7 @@ function TopCustomersReport({
           <tbody className="divide-y divide-border">
             {rows.map((r, i) => (
               <tr key={i}>
-                <td className="px-3 py-2 font-semibold">
-                  {r.cust?.name ?? ""}
-                </td>
+                <td className="px-3 py-2 font-semibold">{r.cust?.name ?? ""}</td>
                 <td className="px-3 py-2 tabular-nums">
                   {formatCurrencyBreakdown(r.revenueByCurrency)}
                 </td>
@@ -913,25 +825,14 @@ function StatBox({
   byCurrency?: Record<string, number>;
   tone?: string;
 }) {
-  const bg =
-    tone === "warning"
-      ? "bg-yellow-500/10 border-yellow-500/40"
-      : "bg-card border-border";
+  const bg = tone === "warning" ? "bg-yellow-500/10 border-yellow-500/40" : "bg-card border-border";
   return (
     <div className={`rounded-lg border ${bg} p-4`}>
-      <div className="text-[11px] font-semibold text-muted-foreground">
-        {label}
-      </div>
+      <div className="text-[11px] font-semibold text-muted-foreground">{label}</div>
       <div className="mt-1 text-lg font-bold tabular-nums">
         {value ??
-          (byCurrency
-            ? formatCurrencyBreakdown(byCurrency)
-            : syp != null
-              ? formatMoney(syp)
-              : "0")}
-        {syp != null && !byCurrency && (
-          <DualCurrency syp={syp} className="text-[10px] mt-0.5" />
-        )}
+          (byCurrency ? formatCurrencyBreakdown(byCurrency) : syp != null ? formatMoney(syp) : "0")}
+        {syp != null && !byCurrency && <DualCurrency syp={syp} className="text-[10px] mt-0.5" />}
       </div>
     </div>
   );

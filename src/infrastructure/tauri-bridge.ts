@@ -18,7 +18,9 @@ async function getInvoke(): Promise<TauriInvoke> {
   if (_invoke) return _invoke;
   if (isTauri()) {
     // Dynamic import — only in Tauri desktop context
-    const mod = await (Function('return import("@tauri-apps/api/core")')()) as { invoke: TauriInvoke };
+    const mod = (await Function('return import("@tauri-apps/api/core")')()) as {
+      invoke: TauriInvoke;
+    };
     _invoke = mod.invoke;
     return _invoke;
   }
@@ -47,7 +49,11 @@ export async function getDesktopFingerprint(): Promise<DesktopFingerprint> {
     const ua = navigator.userAgent;
     const hash = await crypto.subtle
       .digest("SHA-256", new TextEncoder().encode(`${ua}-${screen.width}-${screen.height}`))
-      .then((buf) => Array.from(new Uint8Array(buf)).map((b) => b.toString(16).padStart(2, "0")).join(""));
+      .then((buf) =>
+        Array.from(new Uint8Array(buf))
+          .map((b) => b.toString(16).padStart(2, "0"))
+          .join(""),
+      );
     return { hash, hostname: "browser", os: navigator.platform };
   }
   const invoke = await getInvoke();
@@ -66,5 +72,9 @@ export async function validateDesktopLicense(
     return { valid: true, status: "web", message: "وضع المتصفح", graceRemainingDays: null };
   }
   const invoke = await getInvoke();
-  return invoke("validate_license", { apiUrl, licenseKey, fingerprint }) as Promise<DesktopLicenseStatus>;
+  return invoke("validate_license", {
+    apiUrl,
+    licenseKey,
+    fingerprint,
+  }) as Promise<DesktopLicenseStatus>;
 }

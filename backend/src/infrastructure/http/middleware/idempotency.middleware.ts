@@ -51,7 +51,9 @@ function buildKey(tenantId: string, method: string, path: string, key: string): 
   return `idempotency:${tenantId}:${method}:${path}:${key}`;
 }
 
-export function getIdempotencyKey(req: { headers: Record<string, string | string[] | undefined> }): string | null {
+export function getIdempotencyKey(req: {
+  headers: Record<string, string | string[] | undefined>;
+}): string | null {
   const raw = req.headers[IDEMPOTENCY_HEADER];
   if (typeof raw !== "string") return null;
   const trimmed = raw.trim();

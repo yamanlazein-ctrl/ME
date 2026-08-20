@@ -101,7 +101,10 @@ export type ParsedInvoiceNotes = {
   freeText: string;
 };
 
-const INVOICE_NOTE_KEYS: Array<{ key: keyof Omit<ParsedInvoiceNotes, "freeText">; pattern: RegExp }> = [
+const INVOICE_NOTE_KEYS: Array<{
+  key: keyof Omit<ParsedInvoiceNotes, "freeText">;
+  pattern: RegExp;
+}> = [
   { key: "reference", pattern: /المرجع\s*:\s*([^•]+?)(?=\s*•|$)/ },
   { key: "paymentMethod", pattern: /طريقة\s*الدفع\s*:\s*([^•]+?)(?=\s*•|$)/ },
 ];

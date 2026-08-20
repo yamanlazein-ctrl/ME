@@ -43,6 +43,9 @@ export interface LicenseTokenVerification {
 }
 
 export interface ILicenseTokenSigner {
-  sign(payload: LicenseTokenPayload, opts?: { expiresInSec?: number; jti?: string }): Promise<string>;
+  sign(
+    payload: LicenseTokenPayload,
+    opts?: { expiresInSec?: number; jti?: string },
+  ): Promise<string>;
   verify(token: string): Promise<LicenseTokenVerification>;
 }

@@ -9,7 +9,10 @@ export const createColorSchema = z.object({
   hex: z
     .string()
     .max(9, "قيمة اللون طويلة جداً (الحد الأقصى 9 رموز)")
-    .regex(/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/, "قيمة اللون غير صالحة — استخدم # متبوعاً بـ 3 أو 6 أو 8 أرقام (مثل #000000)")
+    .regex(
+      /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/,
+      "قيمة اللون غير صالحة — استخدم # متبوعاً بـ 3 أو 6 أو 8 أرقام (مثل #000000)",
+    )
     .optional()
     .or(z.literal("").transform(() => undefined)),
   imageUrl: z.string().max(2_000_000).optional(),

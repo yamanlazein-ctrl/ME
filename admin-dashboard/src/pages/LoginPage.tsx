@@ -38,7 +38,9 @@ export function LoginPage({ onLogin }: LoginPageProps) {
           className="bg-zinc-900 border border-zinc-800 rounded-xl p-6 space-y-4"
         >
           <div>
-            <label className="block text-sm font-medium text-zinc-300 mb-1">البريد الإلكتروني</label>
+            <label className="block text-sm font-medium text-zinc-300 mb-1">
+              البريد الإلكتروني
+            </label>
             <input
               type="email"
               value={email}

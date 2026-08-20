@@ -21,7 +21,10 @@ export function parseLineDetails(note?: string): {
   freeText: string;
 } {
   if (!note || !note.trim()) return { details: [], freeText: "" };
-  const parts = note.split("•").map((p) => p.trim()).filter(Boolean);
+  const parts = note
+    .split("•")
+    .map((p) => p.trim())
+    .filter(Boolean);
   const details: LineDetail[] = [];
   const freeParts: string[] = [];
   for (const part of parts) {
