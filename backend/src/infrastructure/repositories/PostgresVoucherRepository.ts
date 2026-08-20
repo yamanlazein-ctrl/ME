@@ -200,6 +200,15 @@ export class PostgresVoucherRepository implements IVoucherRepository {
         },
       ]);
 
+      // Maintain invoices.paid transactionally so amountDue (total-paid) stays
+      // consistent when vouchers are collected or cancelled (fix P0-LOGIC-3).
+      if (input.invoiceId) {
+        await tx
+          .update(invoices)
+          .set({ paid: sql`${invoices.paid} + ${input.amount}`, updatedAt: new Date() })
+          .where(and(eq(invoices.id, input.invoiceId), eq(invoices.tenantId, ctx.tenantId)));
+      }
+
       return this.toDomain(row);
     });
   }
@@ -244,6 +253,14 @@ export class PostgresVoucherRepository implements IVoucherRepository {
             eq(ledgerEntries.status, "active"),
           ),
         );
+
+      // Reverse the invoice paid counter when a receipt/payment is cancelled
+      if (row.invoiceId) {
+        await tx
+          .update(invoices)
+          .set({ paid: sql`GREATEST(0, ${invoices.paid} - ${row.amount})`, updatedAt: new Date() })
+          .where(and(eq(invoices.id, row.invoiceId), eq(invoices.tenantId, ctx.tenantId)));
+      }
 
       return this.toDomain(row);
     });
