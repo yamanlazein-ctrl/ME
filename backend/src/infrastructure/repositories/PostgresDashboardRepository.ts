@@ -316,8 +316,9 @@ export class PostgresDashboardRepository implements IDashboardRepository {
     const revStatsRows = await this.db
       .select({
         currency: invoices.currency,
-        today: sql<number>`COALESCE(SUM(${invoices.total}) FILTER (WHERE ${invoices.date} = ${today}), 0)`,
-        yesterday: sql<number>`COALESCE(SUM(${invoices.total}) FILTER (WHERE ${invoices.date} = ${yesterday}), 0)`,
+        // Revenue for profit = subtotal - discount (excludes tax+shipping, per P0-LOGIC-3.6d)
+        today: sql<number>`COALESCE(SUM(${invoices.subtotal} - ${invoices.discount}) FILTER (WHERE ${invoices.date} = ${today}), 0)`,
+        yesterday: sql<number>`COALESCE(SUM(${invoices.subtotal} - ${invoices.discount}) FILTER (WHERE ${invoices.date} = ${yesterday}), 0)`,
       })
       .from(invoices)
       .where(and(saleBase, gte(invoices.date, yesterday)))
@@ -325,10 +326,9 @@ export class PostgresDashboardRepository implements IDashboardRepository {
     const cogsStatsRows = await this.db
       .select({
         currency: invoices.currency,
-        // I6 fix: round COGS per line so the dashboard profit is an exact integer
-        // that matches the journaled COGS (ledger entries are integer bigint).
-        today: sql<number>`COALESCE(SUM(ROUND(${invoiceLines.quantityKg} * ${rolls.pricePerKg})) FILTER (WHERE ${invoices.date} = ${today}), 0)`,
-        yesterday: sql<number>`COALESCE(SUM(ROUND(${invoiceLines.quantityKg} * ${rolls.pricePerKg})) FILTER (WHERE ${invoices.date} = ${yesterday}), 0)`,
+        // Use snapshot costPerKg, not live rolls.pricePerKg (mutates), fallback to roll price for pre-migration
+        today: sql<number>`COALESCE(SUM(ROUND(${invoiceLines.quantityKg} * COALESCE(${invoiceLines.costPerKg}, ${rolls.pricePerKg}))) FILTER (WHERE ${invoices.date} = ${today}), 0)`,
+        yesterday: sql<number>`COALESCE(SUM(ROUND(${invoiceLines.quantityKg} * COALESCE(${invoiceLines.costPerKg}, ${rolls.pricePerKg}))) FILTER (WHERE ${invoices.date} = ${yesterday}), 0)`,
       })
       .from(invoiceLines)
       .innerJoin(invoices, eq(invoices.id, invoiceLines.invoiceId))
