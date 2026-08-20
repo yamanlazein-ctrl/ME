@@ -1,0 +1,3 @@
+# Normalize line endings to LF on checkout so the repository is
+# independent of the host platform's core.autocrlf setting.
+* text=auto eol=lf
