@@ -162,6 +162,27 @@
       "when": 1785400000018,
       "tag": "0022_migration_final_reconciliation",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": 7,
+      "when": 1785400000019,
+      "tag": "0023_invoice_paid_and_payment_method",
+      "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": 7,
+      "when": 1785400000020,
+      "tag": "0024_monetary_fields_to_decimal",
+      "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": 7,
+      "when": 1785400000021,
+      "tag": "0025_ledger_entry_types",
+      "breakpoints": true
     }
   ]
 }
