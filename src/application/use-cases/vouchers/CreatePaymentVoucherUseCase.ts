@@ -7,6 +7,7 @@ import { TenantContext } from "@/domain/types";
 import { IVoucherRepository } from "@/application/ports/IVoucherRepository";
 import { ILedgerRepository } from "@/application/ports/ILedgerRepository";
 import type { CreateVoucherInput } from "@/core/dtos/VoucherDTO";
+import { createVoucherSchema } from "@erp/shared";
 
 export class CreatePaymentVoucherUseCase {
   constructor(
@@ -18,11 +19,10 @@ export class CreatePaymentVoucherUseCase {
     input: CreateVoucherInput,
     ctx: TenantContext,
   ): Promise<Result<Voucher, ValidationError>> {
-    if (!input.partyId) {
-      return Err(new ValidationError("الطرف مطلوب.", "partyId"));
-    }
-    if (!input.amount || input.amount <= 0) {
-      return Err(new ValidationError("المبلغ مطلوب ويجب أن يكون أكبر من الصفر.", "amount"));
+    const parsed = createVoucherSchema.safeParse({ ...input, kind: "payment" as const });
+    if (!parsed.success) {
+      const first = parsed.error.issues[0];
+      return Err(new ValidationError(first.message, first.path.join(".")));
     }
 
     const voucher = Voucher.payment({
