@@ -59,6 +59,10 @@ function invoiceErrorMessage(e: unknown): string {
   if (hasCode("23503") || combined.includes("foreign key")) {
     return "بيانات البند غير صالحة: المورد، أو القماش، أو اللون، أو الصبغة المحددة غير موجودة أو محذوفة.";
   }
+  // 23514 check_violation (e.g. ledger_entries.type)
+  if (hasCode("23514")) {
+    return "نوع الحركة المحاسبية غير مسموح به — راجع بيانات الفاتورة أو تواصل مع الدعم.";
+  }
   // 23502 not_null_violation
   if (hasCode("23502")) {
     return "حقل إلزامي ناقص في بيانات الفاتورة — أكمل جميع الحقول المطلوبة.";
