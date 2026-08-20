@@ -26,7 +26,7 @@ tests/e2e/test-results/
 coverage/
 playwright-report/
 *.tsbuildinfo
-audit/
+/audit/
 .tmp.driveupload/
 
 # Tool configs (local only)
