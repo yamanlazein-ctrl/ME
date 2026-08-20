@@ -34,7 +34,6 @@ import type { ReturnDTO, ReturnReason } from "@/application/ports/IReturnReposit
 import { customerById, supplierById } from "@/presentation/hooks/useParties";
 import { useInvoiceVisibility } from "./visibility";
 import { useVouchersList } from "@/presentation/hooks/useVouchers";
-import { resolveCreatedBy } from "@/presentation/hooks/useSettings";
 
 type ReturnInvoicePrintProps = {
   returnDoc: ReturnDTO;
@@ -120,7 +119,7 @@ export function ReturnInvoicePrint({
     label: "سعر الصرف",
     value: `1 $ = ${fmtUnit(currencyState.rates.USD)} ل.س — ${currencyState.lastUpdated}`,
   });
-  if (vis.showCreatedBy) meta.push({ label: "أنشأ بواسطة", value: resolveCreatedBy(r.createdBy) });
+  if (vis.showCreatedBy) meta.push({ label: "أنشأ بواسطة", value: r.createdBy ? String(r.createdBy) : "" });
   if (vis.showCreatedAt && r.createdAt) {
     meta.push({
       label: "تاريخ الإنشاء",

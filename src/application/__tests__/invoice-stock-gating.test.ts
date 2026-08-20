@@ -91,7 +91,7 @@ describe("CreateInvoiceUseCase", () => {
     const arg = mockInvoiceRepo.create.mock.calls[0][0];
     expect(arg.type).toBe("sale");
     expect(arg.tenantId).toBe(TID);
-    expect(arg.createdBy).toBe("tester");
+    expect(arg.createdBy).toBe(UID);
   });
 
   it("rejects input without a party", async () => {

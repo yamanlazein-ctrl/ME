@@ -36,17 +36,17 @@ export interface InvoiceData {
   shipping?: number;
   notes?: string;
   /**
-   * Amount received at sale time. Drives the backend's automatic creation of a
-   * linked receipt voucher (kind=receipt, invoiceId) inside the same transaction.
-   * Not persisted on the invoice — derived from vouchers when reading.
-   */
+    * Amount received at sale time. Drives the backend's automatic creation of a
+    * linked receipt voucher (kind=receipt, invoiceId) inside the same transaction.
+    * Not persisted on the invoice — derived from vouchers when reading.
+    */
   paid?: number;
   /** Receipt method used when `paid > 0`. Defaults to "cash". */
   paymentMethod?: "cash" | "transfer" | "check" | "card";
   /** Order being fulfilled by this invoice (sale only) — allows its reserved rolls. */
   orderId?: string;
   createdAt: Timestamp;
-  createdBy: string;
+  createdBy: UUID;
   version: number;
   cancelledAt?: Timestamp | null;
 }
@@ -71,7 +71,7 @@ export class Invoice implements InvoiceData {
   readonly paymentMethod?: "cash" | "transfer" | "check" | "card";
   readonly orderId?: string;
   readonly createdAt: Timestamp;
-  readonly createdBy: string;
+  readonly createdBy: UUID;
   version: number;
   cancelledAt?: Timestamp | null;
 

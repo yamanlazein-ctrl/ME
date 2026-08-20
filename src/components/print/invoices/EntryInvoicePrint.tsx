@@ -32,7 +32,6 @@ import { fabricById, colorById, rollById, type Color } from "@/presentation/hook
 import { supplierById } from "@/presentation/hooks/useParties";
 import { useVouchersList } from "@/presentation/hooks/useVouchers";
 import { useInvoiceVisibility } from "./visibility";
-import { resolveCreatedBy } from "@/presentation/hooks/useSettings";
 import { formatMoney, formatNumber, formatQuantity } from "@/shared/utils/formatNumber";
 import { parseLineNote } from "@/components/print/noteParser";
 import type { Invoice } from "@/domain/entities/Invoice";
@@ -124,8 +123,7 @@ export function EntryInvoicePrint({ invoice, totalPages, pageNumber }: EntryInvo
   if (vis.showDate) meta.push({ label: "التاريخ", value: inv.date });
   if (vis.showStatus) meta.push({ label: "الحالة", value: statusLabel });
   if (vis.showCurrency) meta.push({ label: "العملة", value: `${inv.currency} (${sym})` });
-  if (vis.showCreatedBy)
-    meta.push({ label: "أنشأ بواسطة", value: resolveCreatedBy(inv.createdBy) });
+  if (vis.showCreatedBy) meta.push({ label: "أنشأ بواسطة", value: inv.createdBy ? String(inv.createdBy) : "" });
   if (vis.showCancelledInfo && isCancelled && inv.cancelledAt) {
     meta.push({
       label: "تاريخ الإلغاء",

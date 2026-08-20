@@ -54,11 +54,11 @@ export class CreateInvoiceUseCase {
       return Err(new ValidationError(first.message, field));
     }
 
-    /* Build domain entity */
+    /* Build domain entity — createdBy is explicit UUID, resolved server-side */
     const invoice = Invoice.create({
       ...input,
       tenantId: ctx.tenantId,
-      createdBy: ctx.userName,
+      createdBy: ctx.userId as unknown as string,
       createdAt: new Date().toISOString(),
     });
 
