@@ -152,8 +152,8 @@ export async function consumeInvitationCodeUseCase(
         return { ok: false, error: "بيانات المستخدم غير مكتملة في الدعوة" };
       }
       const pw = options.password;
-      if (!pw || pw.length < 3) {
-        return { ok: false, error: "كلمة المرور مطلوبة (3 أحرف على الأقل)" };
+      if (!pw || pw.length < 8) {
+        return { ok: false, error: "كلمة المرور مطلوبة (8 أحرف على الأقل)" };
       }
       const hash = await passwordHasher.hash(pw);
       const u = await repoExtended.createUserFromInvitation(
