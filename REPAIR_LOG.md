@@ -11,3 +11,4 @@
 | P2-MONEY | Display rounds every amount to whole units | PARTIAL | `formatNumber.ts:35` Math.round(num) | — | Money now bigint whole units (no fractional display); is2dp promotion deferred to Phase 5.1 |
 | P0-LOGIC | Frontend/backend invoice totals differ (per-line rounding) | FIXED | parity test failed before fix: 317205.625 (frontend) vs 317205 (backend) | 7952507 | parity test passes, both implementations equal |
 | P1-LOGIC | Payments UI computes remaining with paid hardcoded to 0 | FIXED | code review: `invoiceRemaining(invoiceTotal(i), 0)` literal 0 | 12b841b | open-invoices picker now uses voucher-derived paid; UI-logic-only |
+| P0-LOGIC | Cash day-close trusts client-supplied totals | FIXED | schema accepted openingBalance/totalIn/totalOut and repo stored them | 211370f | close-day now derives figures from ledger; `tests/cashbox-close.test.ts` passes |
