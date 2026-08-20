@@ -48,7 +48,7 @@ test.describe("Page Load Performance", () => {
         totalTransfer += r.transferSize || r.encodedBodySize || 0;
       }
       const entries = performance.getEntriesByType("navigation") as PerformanceNavigationTiming[];
-      const domContentLoaded = entries.length > 0 ? entries[0].domContentEventEnd : -1;
+      const domContentLoaded = entries.length > 0 ? entries[0].domContentLoadedEventEnd : -1;
       return { totalTransfer, domContentLoaded };
     });
 

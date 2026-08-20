@@ -58,7 +58,7 @@ export async function assertRouteOk(
     // @ts-expect-error SPA may not set this
     return (window as Record<string, unknown>).__pageStatus ?? null;
   });
-  return { errors, status };
+  return { errors, status: status as number | null };
 }
 
 /**

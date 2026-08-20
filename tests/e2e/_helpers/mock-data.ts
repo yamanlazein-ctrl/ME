@@ -11,7 +11,7 @@ import type { APIRequestContext } from "@playwright/test";
 const BACKEND = process.env.PLAYWRIGHT_BACKEND_URL ?? "http://localhost:8080";
 const ADMIN = { username: "admin", password: "admin" };
 
-let _cachedToken: string | null = null;
+let _cachedToken = "";
 
 /** Obtain an admin JWT token (cached per process). */
 export async function getAdminToken(request: APIRequestContext): Promise<string> {

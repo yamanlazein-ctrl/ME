@@ -9,7 +9,7 @@
  * Uses Playwright with @axe-core/playwright for accessibility checks.
  */
 import { test, expect } from "@playwright/test";
-import { loginIfNeeded } from "../_helpers/login";
+import { loginIfNeeded } from "./_helpers/login";
 
 const API = "http://localhost:8080/api";
 const AUTH = { email: "admin@erp.local", password: "Admin@12345" };
