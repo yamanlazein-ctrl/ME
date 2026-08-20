@@ -14,6 +14,7 @@ const options = {
       "@erp/shared": path.resolve(__dirname, "./packages/shared/src/index.ts"),
       "@erp/shared/precision": path.resolve(__dirname, "./packages/shared/src/precision.ts"),
       "@erp/shared/money": path.resolve(__dirname, "./packages/shared/src/money.ts"),
+      "@erp/shared/schemas/invoice.schema": path.resolve(__dirname, "./packages/shared/src/schemas/invoice.schema.ts"),
     },
   },
 };

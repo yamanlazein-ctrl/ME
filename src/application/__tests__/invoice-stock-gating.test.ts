@@ -3,6 +3,15 @@ import { TenantContext, UUID } from "@/domain/types";
 import type { IInvoiceRepository } from "@/application/ports/IInvoiceRepository";
 import type { Invoice } from "@/domain/entities/Invoice";
 
+const TID = "00000000-0000-0000-0000-000000000001" as UUID;
+const PID = "00000000-0000-0000-0000-000000000002" as UUID;
+const FID = "00000000-0000-0000-0000-000000000003" as UUID;
+const CID = "00000000-0000-0000-0000-000000000004" as UUID;
+const RID = "00000000-0000-0000-0000-000000000005" as UUID;
+const LID = "00000000-0000-0000-0000-000000000006" as UUID;
+const IID = "00000000-0000-0000-0000-000000000007" as UUID;
+const UID = "00000000-0000-0000-0000-000000000008" as UUID;
+
 const mockInvoiceRepo = {
   create: vi.fn(),
   findById: vi.fn(),
@@ -11,8 +20,8 @@ const mockInvoiceRepo = {
 };
 
 const ctx: TenantContext = {
-  tenantId: "t1" as UUID,
-  userId: "u1" as UUID,
+  tenantId: TID,
+  userId: UID,
   userRole: "admin",
   userName: "tester",
 };
@@ -29,25 +38,25 @@ async function getCancelInvoice() {
 
 function savedInvoice(overrides: Record<string, unknown> = {}) {
   return {
-    id: "inv-1",
+    id: IID,
     number: "PO-3001",
     type: "sale",
     date: "2026-01-15",
-    partyId: "p1",
+    partyId: PID,
     partyType: "customer",
     currency: "SYP",
-    lines: [{ rollId: "r1", quantityKg: 10, pricePerKg: 5000 }],
+    lines: [{ rollId: RID, quantityKg: 10, pricePerKg: 5000 }],
     total: () => 50000,
     ...overrides,
   } as unknown as Invoice;
 }
 
 const baseInput = {
-  tenantId: "t1" as UUID,
+  tenantId: TID,
   number: "PO-3001",
   type: "sale" as const,
   date: "2026-01-15",
-  partyId: "p1" as UUID,
+  partyId: PID,
   partyType: "customer" as const,
   currency: "SYP" as const,
   subtotal: 0,
@@ -56,10 +65,10 @@ const baseInput = {
   total: 0,
   lines: [
     {
-      id: "l1" as UUID,
-      fabricId: "f1" as UUID,
-      colorId: "c1" as UUID,
-      rollId: "r1" as UUID,
+      id: LID,
+      fabricId: FID,
+      colorId: CID,
+      rollId: RID,
       quantityKg: 10,
       pricePerKg: 5000,
       discountAmount: 0,
@@ -81,13 +90,13 @@ describe("CreateInvoiceUseCase", () => {
     expect(mockInvoiceRepo.create).toHaveBeenCalledTimes(1);
     const arg = mockInvoiceRepo.create.mock.calls[0][0];
     expect(arg.type).toBe("sale");
-    expect(arg.tenantId).toBe("t1");
+    expect(arg.tenantId).toBe(TID);
     expect(arg.createdBy).toBe("tester");
   });
 
   it("rejects input without a party", async () => {
     const uc = await getCreateInvoice();
-    const result = await uc.execute({ ...baseInput, partyId: "" }, ctx);
+    const result = await uc.execute({ ...baseInput, partyId: "" as UUID }, ctx);
     expect(result.ok).toBe(false);
     expect(mockInvoiceRepo.create).not.toHaveBeenCalled();
   });
@@ -122,9 +131,9 @@ describe("CancelInvoiceUseCase", () => {
     mockInvoiceRepo.cancel.mockResolvedValue(undefined);
 
     const uc = await getCancelInvoice();
-    const result = await uc.execute("inv-1" as UUID, ctx);
+    const result = await uc.execute(IID, ctx);
     expect(result.ok).toBe(true);
-    expect(mockInvoiceRepo.cancel).toHaveBeenCalledWith("inv-1", ctx);
+    expect(mockInvoiceRepo.cancel).toHaveBeenCalledWith(IID, ctx);
   });
 
   it("rejects cancelling an invoice that cannot be cancelled", async () => {
@@ -133,7 +142,7 @@ describe("CancelInvoiceUseCase", () => {
     );
 
     const uc = await getCancelInvoice();
-    const result = await uc.execute("inv-1" as UUID, ctx);
+    const result = await uc.execute(IID, ctx);
     expect(result.ok).toBe(false);
     expect(mockInvoiceRepo.cancel).not.toHaveBeenCalled();
   });
@@ -142,7 +151,7 @@ describe("CancelInvoiceUseCase", () => {
     mockInvoiceRepo.findById.mockResolvedValue(null);
 
     const uc = await getCancelInvoice();
-    const result = await uc.execute("inv-1" as UUID, ctx);
+    const result = await uc.execute(IID, ctx);
     expect(result.ok).toBe(false);
     expect(mockInvoiceRepo.cancel).not.toHaveBeenCalled();
   });

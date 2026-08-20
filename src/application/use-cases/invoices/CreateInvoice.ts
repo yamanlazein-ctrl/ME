@@ -4,6 +4,7 @@ import { ValidationError } from "@/domain/errors";
 import { InvoiceCreated } from "@/domain/events";
 import { TenantContext } from "@/domain/types";
 import { IInvoiceRepository } from "@/application/ports/IInvoiceRepository";
+import { createInvoiceSchema } from "@erp/shared";
 
 /**
  * Create an invoice through the persistence layer.
@@ -23,20 +24,34 @@ export class CreateInvoiceUseCase {
     >,
     ctx: TenantContext,
   ): Promise<Result<Invoice, ValidationError>> {
-    if (!input.partyId) {
-      return Err(new ValidationError("طرف الفاتورة مطلوب", "partyId"));
-    }
-    if (!input.lines?.length) {
-      return Err(new ValidationError("يجب إضافة سطر واحد على الأقل.", "lines"));
-    }
-
-    for (const line of input.lines) {
-      if (line.quantityKg <= 0) {
-        return Err(new ValidationError("الكمية يجب أن تكون أكبر من صفر.", "quantityKg"));
-      }
-      if (line.pricePerKg < 0) {
-        return Err(new ValidationError("سعر الكيلو يجب ألا يكون سالباً.", "pricePerKg"));
-      }
+    const parsed = createInvoiceSchema.safeParse({
+      type: input.type,
+      date: input.date,
+      partyId: input.partyId,
+      partyType: input.partyType,
+      currency: input.currency,
+      lines: input.lines.map((l) => ({
+        fabricId: l.fabricId,
+        colorId: l.colorId,
+        rollId: l.rollId,
+        quantityKg: l.quantityKg,
+        pieces: l.pieces,
+        pricePerKg: l.pricePerKg,
+        discountAmount: l.discountAmount,
+        note: l.note,
+      })),
+      discount: input.discount,
+      tax: input.tax,
+      shipping: input.shipping,
+      notes: input.notes,
+      paid: input.paid,
+      paymentMethod: input.paymentMethod,
+      orderId: (input as unknown as { orderId?: string }).orderId,
+    });
+    if (!parsed.success) {
+      const first = parsed.error.issues[0];
+      const field = first.path.join(".") || "unknown";
+      return Err(new ValidationError(first.message, field));
     }
 
     /* Build domain entity */
