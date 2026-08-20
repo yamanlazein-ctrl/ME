@@ -376,8 +376,8 @@ export class PostgresInvoiceRepository implements IInvoiceRepository {
           partyId: input.partyId,
           date: input.date,
           type: invoiceType,
-          debit: inv.total,
-          credit: 0,
+          debit: isSale ? inv.total : 0,
+          credit: isSale ? 0 : inv.total,
           currency,
           cashImpact: "none",
           referenceType: invoiceType,
@@ -439,14 +439,14 @@ export class PostgresInvoiceRepository implements IInvoiceRepository {
           });
         }
       } else {
-        // Purchase invoice — balance the party debit with an inventory credit.
+        // Purchase invoice — Dr inventory (asset increases) / Cr party (AP increases)
         legs.push({
           tenantId: ctx.tenantId,
           partyId: null,
           date: input.date,
           type: "inventory_asset",
-          debit: 0,
-          credit: inv.total,
+          debit: inv.total,
+          credit: 0,
           currency,
           cashImpact: "none",
           referenceType: invoiceType,

@@ -211,6 +211,13 @@
       "when": 1785400000025,
       "tag": "0029_rls_hardening",
       "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": 7,
+      "when": 1785400000026,
+      "tag": "0030_purchase_ledger_fix",
+      "breakpoints": true
     }
   ]
 }
