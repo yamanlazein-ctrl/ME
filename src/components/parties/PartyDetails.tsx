@@ -560,9 +560,18 @@ function PaymentsTab({ p }: { p: Party }) {
   const createReceipt = useCreateReceiptVoucher();
 
   const { data: invData } = useInvoicesList();
-  const invs = (invData?.data ?? []).filter((i) => i.partyId === p.id && i.status === "active");
-  const openInvs = invs.filter((i) => invoiceRemaining(invoiceTotal(i), 0) > 0);
   const { data: vData } = useVouchersList();
+  const invs = (invData?.data ?? []).filter((i) => i.partyId === p.id && i.status === "active");
+  // Compute actual paid per invoice from linked vouchers so a fully-paid
+  // invoice does not appear as open (the same map the InvoiceTab builds).
+  const paidByInvoice = new Map<string, number>();
+  for (const v of vData?.data ?? []) {
+    if (v.status !== "active" || !v.invoiceId || v.partyId !== p.id) continue;
+    paidByInvoice.set(v.invoiceId, (paidByInvoice.get(v.invoiceId) ?? 0) + v.amount);
+  }
+  const openInvs = invs.filter(
+    (i) => invoiceRemaining(invoiceTotal(i), paidByInvoice.get(i.id) ?? 0) > 0,
+  );
   // BUG-9 fix: show actual payment/receipt vouchers linked to this party.
   const payments = (vData?.data ?? [])
     .filter(
@@ -624,7 +633,7 @@ function PaymentsTab({ p }: { p: Party }) {
                 )}
                 {openInvs.map((i) => (
                   <SelectItem key={i.id} value={i.id}>
-                    {i.number} — متبقي {fmt(invoiceRemaining(invoiceTotal(i), 0))}{" "}
+                    {i.number} — متبقي {fmt(invoiceRemaining(invoiceTotal(i), paidByInvoice.get(i.id) ?? 0))}{" "}
                     {currencySymbol(i.currency)}
                   </SelectItem>
                 ))}
