@@ -5,7 +5,6 @@ import {
   timestamp,
   integer,
   bigint,
-  real,
   date,
   text,
   uniqueIndex,
@@ -29,17 +28,17 @@ export const invoices = pgTable(
       .references(() => parties.id),
     partyType: varchar("party_type", { length: 10 }).notNull(),
     currency: varchar("currency", { length: 3 }).notNull().default("SYP"),
-    subtotal: real("subtotal").notNull().default(0),
-    discount: real("discount").notNull().default(0),
-    tax: real("tax").notNull().default(0),
-    shipping: real("shipping").notNull().default(0),
-    total: real("total").notNull().default(0),
+    subtotal: bigint("subtotal", { mode: "number" }).notNull().default(0),
+    discount: bigint("discount", { mode: "number" }).notNull().default(0),
+    tax: bigint("tax", { mode: "number" }).notNull().default(0),
+    shipping: bigint("shipping", { mode: "number" }).notNull().default(0),
+    total: bigint("total", { mode: "number" }).notNull().default(0),
     // Amount paid to/from the party at invoice time. For entry (purchase)
     // invoices this is the supplier payment captured on the bill; for sale
     // invoices it is the customer receipt. Stored so the invoice can expose
     // `amountDue = total - paid` and so the supplier/customer balance reflects
     // the payment (a linked payment_out / receipt_in voucher is also written).
-    paid: real("paid").notNull().default(0),
+    paid: bigint("paid", { mode: "number" }).notNull().default(0),
     // Payment method used when paid > 0 (cash/transfer/check/card).
     // Stored on the invoice for audit trail and display purposes.
     paymentMethod: varchar("payment_method", { length: 20 }),

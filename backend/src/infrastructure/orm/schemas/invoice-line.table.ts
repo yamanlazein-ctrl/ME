@@ -6,7 +6,6 @@ import {
   decimal,
   integer,
   bigint,
-  real,
   text,
   index,
 } from "drizzle-orm/pg-core";
@@ -38,7 +37,7 @@ export const invoiceLines = pgTable(
     quantityKg: decimal("quantity_kg", { precision: 12, scale: 2 }).notNull(),
     pieces: integer("pieces").notNull().default(1),
     pricePerKg: decimal("price_per_kg", { precision: 12, scale: 2 }).notNull(),
-    discountAmount: real("discount_amount").notNull().default(0),
+    discountAmount: bigint("discount_amount", { mode: "number" }).notNull().default(0),
     note: text("note"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },

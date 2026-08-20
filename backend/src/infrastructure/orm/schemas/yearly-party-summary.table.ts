@@ -5,7 +5,6 @@ import {
   timestamp,
   integer,
   bigint,
-  real,
   index,
   uniqueIndex,
 } from "drizzle-orm/pg-core";
@@ -37,11 +36,11 @@ export const yearlyPartySummaries = pgTable(
     year: integer("year").notNull(),
     currency: varchar("currency", { length: 3 }).notNull().default("SYP"),
     /** Balance at the START of this year (sum of all previous years). */
-    openingBalance: real("opening_balance").notNull().default(0),
+    openingBalance: bigint("opening_balance", { mode: "number" }).notNull().default(0),
     /** Balance at the END of this year. */
-    closingBalance: real("closing_balance").notNull().default(0),
-    totalDebit: real("total_debit").notNull().default(0),
-    totalCredit: real("total_credit").notNull().default(0),
+    closingBalance: bigint("closing_balance", { mode: "number" }).notNull().default(0),
+    totalDebit: bigint("total_debit", { mode: "number" }).notNull().default(0),
+    totalCredit: bigint("total_credit", { mode: "number" }).notNull().default(0),
     invoiceCount: integer("invoice_count").notNull().default(0),
     voucherCount: integer("voucher_count").notNull().default(0),
     generatedAt: timestamp("generated_at", { withTimezone: true }).notNull().defaultNow(),

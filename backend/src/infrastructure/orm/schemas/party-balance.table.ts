@@ -4,7 +4,6 @@ import {
   varchar,
   timestamp,
   bigint,
-  real,
   index,
   uniqueIndex,
 } from "drizzle-orm/pg-core";
@@ -36,7 +35,7 @@ export const partyBalances = pgTable(
       .notNull()
       .references(() => parties.id),
     currency: varchar("currency", { length: 3 }).notNull().default("SYP"),
-    balance: real("balance").notNull().default(0),
+    balance: bigint("balance", { mode: "number" }).notNull().default(0),
     /** The last ledger entry id that was included in this balance. */
     lastEntryId: uuid("last_entry_id").references(() => ledgerEntries.id),
     /** The date of the last included ledger entry. */
