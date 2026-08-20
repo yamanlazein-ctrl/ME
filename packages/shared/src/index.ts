@@ -5,3 +5,4 @@ export * from "./schemas/return.schema.js";
 export * from "./schemas/voucher.schema.js";
 export * from "./schemas/cashbox.schema.js";
 export * from "./schemas/expense.schema.js";
+export * from "./schemas/party.schema.js";

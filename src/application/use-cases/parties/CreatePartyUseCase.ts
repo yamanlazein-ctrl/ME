@@ -4,6 +4,7 @@ import { Party, PaymentTerms } from "@/domain/entities/Party";
 import { TenantContext } from "@/domain/types";
 import { IPartyRepository } from "@/application/ports/IPartyRepository";
 import type { CreatePartyInput } from "@/core/dtos/PartyDTO";
+import { createPartySchema } from "@erp/shared";
 
 export class CreatePartyUseCase {
   constructor(private readonly repo: IPartyRepository) {}
@@ -12,17 +13,19 @@ export class CreatePartyUseCase {
     input: CreatePartyInput,
     ctx: TenantContext,
   ): Promise<Result<Party, ValidationError>> {
-    if (!input.name?.trim()) {
-      return Err(new ValidationError("اسم الطرف مطلوب.", "name"));
+    const parsed = createPartySchema.safeParse(input);
+    if (!parsed.success) {
+      const first = parsed.error.issues[0];
+      return Err(new ValidationError(first.message, first.path.join(".")));
     }
 
     const party = Party.create({
-      ...input,
+      ...(parsed.data as unknown as CreatePartyInput),
       tenantId: ctx.tenantId,
-      kind: input.kind,
+      kind: parsed.data.kind,
       createdBy: ctx.userName,
-      paymentTerms: input.paymentTerms as PaymentTerms | undefined,
-    });
+      paymentTerms: parsed.data.paymentTerms as unknown as PaymentTerms | undefined,
+    } as unknown as Parameters<typeof Party.create>[0]);
 
     const saved = await this.repo.create(party, ctx);
     return Ok(saved);
