@@ -6,6 +6,7 @@ import {
   CloseDayInput,
   DailyClosingDTO,
 } from "@/application/ports/ICashboxRepository";
+import { closeDaySchema } from "@erp/shared";
 
 export class CloseDayUseCase {
   constructor(private readonly cashbox: ICashboxRepository) {}
@@ -14,16 +15,18 @@ export class CloseDayUseCase {
     input: CloseDayInput,
     ctx: TenantContext,
   ): Promise<Result<DailyClosingDTO, ValidationError | ConflictError>> {
-    if (input.counted < 0) {
-      return Err(new ValidationError("العد الفعلي يجب أن يكون قيمة موجبة.", "counted"));
+    const parsed = closeDaySchema.safeParse(input);
+    if (!parsed.success) {
+      const first = parsed.error.issues[0];
+      return Err(new ValidationError(first.message, first.path.join(".")));
     }
 
-    const locked = await this.cashbox.isDayLocked(input.date, ctx);
+    const locked = await this.cashbox.isDayLocked(parsed.data.date, ctx);
     if (locked) {
       return Err(new ConflictError(`تم إقفال يوم ${input.date} مسبقاً.`));
     }
 
-    const closing = await this.cashbox.closeDay(input, ctx);
+    const closing = await this.cashbox.closeDay(parsed.data as CloseDayInput, ctx);
     return Ok(closing);
   }
 }

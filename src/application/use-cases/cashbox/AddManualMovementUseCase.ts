@@ -6,6 +6,7 @@ import {
   CreateManualMovementInput,
   ManualMovementDTO,
 } from "@/application/ports/ICashboxRepository";
+import { addManualMovementSchema } from "@erp/shared";
 
 export class AddManualMovementUseCase {
   constructor(private readonly cashbox: ICashboxRepository) {}
@@ -14,14 +15,13 @@ export class AddManualMovementUseCase {
     input: CreateManualMovementInput,
     ctx: TenantContext,
   ): Promise<Result<ManualMovementDTO, ValidationError>> {
-    if (input.amount <= 0) {
-      return Err(new ValidationError("المبلغ يجب أن يكون أكبر من الصفر.", "amount"));
-    }
-    if (!input.description?.trim()) {
-      return Err(new ValidationError("البيان مطلوب.", "description"));
+    const parsed = addManualMovementSchema.safeParse(input);
+    if (!parsed.success) {
+      const first = parsed.error.issues[0];
+      return Err(new ValidationError(first.message, first.path.join(".")));
     }
 
-    const saved = await this.cashbox.addManualMovement(input, ctx);
+    const saved = await this.cashbox.addManualMovement(parsed.data as CreateManualMovementInput, ctx);
     return Ok(saved);
   }
 }
