@@ -73,9 +73,11 @@ export async function listInvitationCodesUseCase(
 export async function revokeInvitationCodeUseCase(
   repo: IInvitationRepository,
   id: string,
+  tenantId: string,
 ): Promise<Result<void>> {
   try {
-    await repo.revoke(id);
+    const revoked = await repo.revoke(id, tenantId);
+    if (!revoked) return { ok: false, error: "لم يتم العثور على رمز الدعوة" };
     return { ok: true, data: undefined };
   } catch (e) {
     return { ok: false, error: "فشل إلغاء رمز الدعوة" };
@@ -170,7 +172,7 @@ export async function consumeInvitationCodeUseCase(
       registeredDeviceId = d.id;
     }
 
-    const updated = await repo.consume(row.id);
+    const updated = await repo.consume(row.id, row.tenantId);
     return { ok: true, data: { ...updated, createdUserId, registeredDeviceId } };
   } catch (e) {
     return { ok: false, error: "فشل استهلاك رمز الدعوة" };

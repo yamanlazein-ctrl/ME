@@ -64,18 +64,20 @@ export class PostgresInvitationRepository implements IInvitationRepository {
     return rows.map(toRow);
   }
 
-  async revoke(id: UUID): Promise<void> {
-    await this.db
+  async revoke(id: UUID, tenantId: UUID): Promise<boolean> {
+    const rows = await this.db
       .update(invitationCodes)
       .set({ revokedAt: new Date() })
-      .where(eq(invitationCodes.id, id));
+      .where(and(eq(invitationCodes.id, id), eq(invitationCodes.tenantId, tenantId)))
+      .returning({ id: invitationCodes.id });
+    return rows.length > 0;
   }
 
-  async consume(id: UUID): Promise<InvitationRow> {
+  async consume(id: UUID, tenantId: UUID): Promise<InvitationRow> {
     const [row] = await this.db
       .update(invitationCodes)
       .set({ useCount: 1 })
-      .where(eq(invitationCodes.id, id))
+      .where(and(eq(invitationCodes.id, id), eq(invitationCodes.tenantId, tenantId)))
       .returning();
     if (!row) throw new Error("INVITATION_CONSUME_FAILED");
     return toRow(row);

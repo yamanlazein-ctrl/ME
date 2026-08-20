@@ -64,7 +64,13 @@ export function registerInvitationAdminRoutes(
 
   router.post("/api/invitations/revoke/:id", authMiddleware, adminGuard, async (req, res, next) => {
     try {
-      const r = await revokeInvitationCodeUseCase(container.invitationRepo, String(req.params.id));
+      const ctx = (req as unknown as { tenantContext?: { tenantId?: string } }).tenantContext;
+      const tenantId = ctx?.tenantId ?? "bootstrap";
+      const r = await revokeInvitationCodeUseCase(
+        container.invitationRepo,
+        String(req.params.id),
+        tenantId,
+      );
       if (!r.ok) {
         res.status(422).json({ message: r.error });
         return;

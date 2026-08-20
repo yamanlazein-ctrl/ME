@@ -27,7 +27,7 @@ export interface IInvitationRepository {
 
   listByTenant(tenantId: UUID): Promise<InvitationRow[]>;
 
-  revoke(id: UUID): Promise<void>;
+  revoke(id: UUID, tenantId: UUID): Promise<boolean>;
 
-  consume(id: UUID): Promise<InvitationRow>;
+  consume(id: UUID, tenantId: UUID): Promise<InvitationRow>;
 }
