@@ -25,8 +25,8 @@ async function test(name, fn) {
 }
 function skip(msg) { throw new Error(`SKIP: ${msg}`); }
 async function login() {
-  const r = await fetch(`${API}/auth/login`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email: "admin@erp.local", password: "admin123" }) });
-  if (r.status !== 200) skip(`login failed ${r.status}`);
+  const r = await fetch(`${API}/auth/login`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email: "admin@erp.local", password: "admin123", tenantId: "407fccfc-ba89-41c5-b5b9-ddb2c4f385d9" }) });
+  if (r.status !== 200) skip(`login failed ${r.status} ${await r.text().catch(()=> "")}`);
   const j = await r.json();
   return j.accessToken;
 }

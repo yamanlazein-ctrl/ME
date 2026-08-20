@@ -1,231 +1,116 @@
-# Motard Fabrics Group ERP
+# Motard Fabrics Group ERP — Production Ready
 
-Arabic-language ERP for fabric & roll trading, built as a monorepo with a React
-frontend, an Express + PostgreSQL API, a license-management admin dashboard, and
-an optional Tauri desktop shell.
+Arabic-language ERP for fabric & roll trading. Monorepo: React frontend, Express + PostgreSQL API, and shared domain.
 
 ## Monorepo Layout
 
-| Directory          | What it is                                                  |
-| ------------------ | ----------------------------------------------------------- |
-| `src/`             | Web frontend — TanStack Start + React 19 (Arabic UI)        |
-| `backend/`         | REST API — Express, Drizzle ORM, PostgreSQL 16+, Redis, Zod |
-| `admin-dashboard/` | License & activation admin panel — React + Vite             |
-| `desktop/`         | Tauri desktop wrapper around the web app (Rust)             |
-| `tests/e2e/`       | API + Playwright end-to-end suites                          |
-| `scripts/`         | Standalone verification / audit tooling                     |
+| Directory | Purpose |
+|-----------|---------|
+| `src/` | Web frontend — TanStack Start + React 19 (Arabic UI, RTL) |
+| `backend/` | REST API — Express, Drizzle ORM, PostgreSQL 16+, Redis, Zod |
+| `packages/shared/` | Single source of truth — Zod schemas, entities, `is2dp`, money helpers |
+| `public/` | Static assets |
+| `tests/e2e/` | Playwright + API E2E (including `verify-all-fixes`) |
+| `scripts/` | Verification tooling |
 
 ## Features
 
-- **Inventory** — fabrics, colors, rolls (kg-based), stock movements, warehouse & unit settings
-- **Invoices** — sales, entries (purchases), partial payments, discounts, shipping, cancellation
-- **Returns** — sale & entry returns with roll-level quantity conservation
-- **Printing** — print jobs: send stock to print, receive finished rolls, track waste
-- **Orders** — customer orders with stock reservation
-- **Parties** — customers & suppliers with multi-currency balances
-- **Ledger** — double-entry journal (every transaction balanced), statements, balance replay
-- **Cashbox** — receipts, payments, expenses, transfer expenses, per-currency cashbox sessions
-- **Dashboard & Reports** — KPIs, revenue / COGS / profit, alerts, global search
-- **Settings** — company profile, currencies, taxes, payment methods, users, warehouses, printing
-- **Auth & RBAC** — JWT (jose) + Argon2id, role-based access control, invitation codes
-- **Licensing** — license generation & activation (admin dashboard), device registration
-- **Multi-tenant** — tenant-scoped data with dedicated tenant tables
-- **Reliability** — idempotency keys (Redis SET NX), concurrency-safe stock, rate limiting, audit log
+- **Inventory** — fabrics, colors, rolls (kg), stock movements, `costPerKg` snapshot
+- **Invoices** — sale/entry, `subtotal - discount + tax + shipping` with per-line `Math.round`, partial `paid`, cancellation
+- **Returns** — sale/entry returns with `rollId` aggregation, `pricePerKg` server-derived, `cost` split, currency check
+- **Vouchers** — receipts/payments, `cash` leg correctly `debit`/`credit`, `invoices.paid` maintained transactionally
+- **Ledger** — double-entry, 20 `type` values, append-only trigger, `FORCE RLS`
+- **Cashbox** — `close-day` derived from `ledger` (only `date/counted/currency` from client)
+- **Dashboard** — profit `subtotal-discount` and `costPerKg` snapshot (not live `rolls.price`)
+- **Parties** — customers/suppliers, `openingBalance` journaled both signs
+- **Auth & RBAC** — JWT HS256 + `jti`, Argon2id 64MiB/t=3/p=4, `tenantId` required, `NOBYPASSRLS`
+- **Multi-tenant** — `withTenantTx` `SET LOCAL`, `FORCE RLS`, `missing_ok`
 
 ## Tech Stack
 
-### Web frontend (`src/`)
+- **Frontend:** React 19, TanStack Start/Router/Query, Tailwind 4, Zod, `is2dp` from `@erp/shared`
+- **Backend:** Node 22, Express, Drizzle, Zod via `@erp/shared`, `bigint` money, `withTenantTx`
+- **Shared:** `@erp/shared` — `precision`, `money`, 6 Zod schemas, `Invoice/Party/Roll/Fabric` helpers, `contracts` `z.infer`
 
-- React 19 + TypeScript
-- TanStack Start / Router
-- TanStack Query
-- Tailwind CSS 4 + shadcn/ui-style components
-- Zod + React Hook Form
-
-### Backend (`backend/`)
-
-- Node.js 22+ (LTS) — Express 4
-- Drizzle ORM + PostgreSQL 16+
-- Redis (ioredis) — idempotency keys, rate limiting
-- Zod — runtime validation
-- JWT (jose) + Argon2id — auth
-- Pino — structured logging
-- Sentry — optional error tracking
-
-### Admin dashboard (`admin-dashboard/`)
-
-- React 19 + Vite + React Router
-- Tailwind CSS 4
-
-### Desktop (`desktop/`)
-
-- Tauri 2 (Rust shell) around the built web app
-- **Windows Build** — see `desktop/BUILD-WINDOWS.md` for MSI/NSIS/EXE creation
-- License binding, fingerprinting, 14-day trial, 3-device limit
-
-## Quick Start (TL;DR)
+## Quick Start
 
 ```bash
-# 1) Dependencies + infra
+# 1) Install
 npm install
 cd backend && npm install
-cd backend && docker-compose up -d postgres redis   # or your local PG + Redis
 
-# 2) Environment
-cp .env.example .env            # root (frontend)
-cd backend && cp .env.example .env && # edit DATABASE_URL, JWT_SECRET, REDIS_URL
+# 2) Infra (or local PG/Redis)
+cd backend && docker compose up -d postgres redis
 
-# 3) Migrations → creates an EMPTY schema (fresh install)
+# 3) Env
+cp .env.example .env
+cd backend && cp .env.example .env  # edit DATABASE_URL, JWT_SECRET (≥32), REDIS_URL, APP_MASTER_KEY
+
+# 4) DB (fresh)
 cd backend && npm run db:migrate
 
-# 4) Run
-cd backend && npm run dev        # API on :8080
-cd .. && npm run dev             # Web app on http://localhost:5173
+# 5) Run
+cd backend && npm run dev   # http://localhost:8080  (health: /api/health/live)
+npm run dev                 # http://localhost:5173  (VITE_API_BASE_URL=http://localhost:8080)
 ```
 
-> On a fresh database the tables/constraints are built by the migrations and it
-> starts **empty**. Create the first user via the **initial setup wizard** when
-> you open the app for the first time.
+First run: open `http://localhost:5173`, the setup wizard at `/api/setup/status` creates the `bootstrap` tenant, then `admin@erp.local` / `admin123` (tenant `407fccfc-ba89-41c5-b5b9-ddb2c4f385d9` in dev seed) can log in. For `fix-admin` scripts: `ADMIN_BOOTSTRAP_PASSWORD=... node backend/scripts/fix-admin.mjs --force`.
 
-> Testing arsenal: `npm run test:logic` (Vitest), `npm run test:ui` (Playwright),
-> `npm run check:all` — details in [`TESTING.md`](./TESTING.md).
+## Scripts
 
-## Getting Started
+| Script | Description |
+|--------|-------------|
+| `npm run dev` | Vite dev |
+| `npm run build` | Production build |
+| `npm run typecheck` | Frontend `tsc` |
+| `npm run typecheck:backend` | Backend `tsc` |
+| `npm run test` / `test:logic` | Vitest `110/110` |
+| `npm run test:e2e` | Playwright `verify-all-fixes` `16/16` |
+| `node tests/e2e/verify-fixes-api.mjs` | API `19/19` fresh (no cache) |
+| `npm run check:all` | `typecheck` + `typecheck:backend` + `test:logic` |
+| `cd backend && npm run db:migrate` | Apply migrations `0023`→`0033` |
+| `cd backend && npm run db:studio` | Drizzle Studio |
 
-### 1. Prerequisites
+## Environment
 
-- Node.js 22+
-- PostgreSQL 16+
-- Redis 7+
-- (Optional) Bun, for faster installs — `bun.lock` is provided
+**Root `.env` (`.env.example`):**
 
-Or run the infrastructure with Docker Compose:
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `VITE_API_BASE_URL` | `http://localhost:8080` | Backend URL (single `getApiBaseUrl()`) |
+| `VITE_REPO_MODE` | `api` | `api` only |
 
-```bash
-cd backend
-docker-compose up -d postgres redis
-```
+**Backend `backend/.env.example`:**
 
-### 2. Configure environment
-
-Frontend (root):
-
-```bash
-cp .env.example .env
-```
-
-Backend:
-
-```bash
-cd backend
-cp .env.example .env   # then edit DATABASE_URL, JWT_SECRET, REDIS_URL
-```
-
-### 3. Start the backend
-
-```bash
-cd backend
-npm install
-npm run db:push        # create tables (dev) — or use migrations
-npm run dev            # http://localhost:8080
-```
-
-### 4. Start the frontend
-
-```bash
-cd ..
-npm install
-npm run dev            # Vite proxies /api -> http://localhost:8080 (edit vite.config.ts if needed)
-```
-
-Open the app in the browser. First-run setup wizard creates the admin tenant.
-
-## Database Migrations
-
-Migrations live in `backend/src/infrastructure/orm/migrations/`. Apply with:
-
-```bash
-cd backend
-npm run db:migrate     # apply pending migrations
-npm run db:generate    # generate a new migration after schema changes
-npm run db:studio      # Drizzle Studio GUI
-```
-
-## Running Tests
-
-| Command                           | Scope                                                                  |
-| --------------------------------- | ---------------------------------------------------------------------- |
-| `npm run test`                    | Frontend unit tests (Vitest)                                           |
-| `npm run test:api`                | Comprehensive API e2e (`tests/e2e/comprehensive-api.mjs`)              |
-| `npm run test:financial`          | Financial double-entry lock-in e2e (`tests/e2e/financial-lock-in.mjs`) |
-| `npm run test:e2e`                | Playwright comprehensive suite                                         |
-| `cd backend && npm run typecheck` | Backend typecheck                                                      |
-| `npm run typecheck`               | Frontend typecheck                                                     |
-
-The e2e suites assume a running backend on port 8080 and a freshly reset
-database (truncate all tables before running).
-
-## Scripts (root)
-
-| Script              | Description           |
-| ------------------- | --------------------- |
-| `npm run dev`       | Start Vite dev server |
-| `npm run build`     | Production build      |
-| `npm run typecheck` | `tsc --noEmit`        |
-| `npm run test`      | Vitest unit tests     |
-| `npm run lint`      | ESLint                |
-| `npm run format`    | Prettier              |
-
-## Environment Variables
-
-Frontend (root `.env`) — see `.env.example`:
-
-| Variable              | Default                 | Description                   |
-| --------------------- | ----------------------- | ----------------------------- |
-| `VITE_API_BASE_URL`   | `http://localhost:8080` | Backend API base URL          |
-| `VITE_API_TIMEOUT_MS` | `15000`                 | API timeout                   |
-| `VITE_REPO_MODE`      | `api`                   | Data access mode (`api` only) |
-
-Backend (`backend/.env`) — see `backend/.env.example`:
-
-| Variable                  | Default       | Description                  |
-| ------------------------- | ------------- | ---------------------------- |
-| `NODE_ENV`                | `development` | Runtime environment          |
-| `PORT`                    | `8080`        | Server port                  |
-| `DATABASE_URL`            | —             | PostgreSQL connection string |
-| `REDIS_URL`               | —             | Redis connection string      |
-| `JWT_SECRET`              | —             | Min 32 chars                 |
-| `JWT_EXPIRY_MS`           | `1800000`     | Access token TTL             |
-| `REFRESH_TOKEN_EXPIRY_MS` | `2592000000`  | Refresh token TTL            |
-| `CORS_ORIGIN`             | `*`           | Allowed CORS origins         |
-| `RATE_LIMIT_RPS`          | `100`         | Max requests per window      |
-| `LOG_LEVEL`               | `info`        | Pino log level               |
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `DATABASE_URL` | `postgresql://postgres:postgres@localhost:5432/erp` | PG |
+| `REDIS_URL` | `redis://localhost:6379` | Required in `production` |
+| `JWT_SECRET` | — | ≥32 chars |
+| `CORS_ORIGIN` | `http://localhost:5173` | Refuses `*` in `production` |
+| `APP_MASTER_KEY` | — | Base64 32 bytes |
 
 ## Architecture
 
-The backend follows Clean Architecture with strictly inward-pointing dependencies:
-
 ```
-Presentation (routes, middleware)
-        │
-Infrastructure (repositories, auth, DB, cache)
-        │
-Application (use cases, ports/DTOs)
-        │
-Domain (entities, value objects, errors, events)
+Presentation (routes, middleware)  —  auth → RLS via withTenantTx
+Infrastructure (repositories, drizzle, redis)
+Application (use-cases, ports)     —  Zod via @erp/shared
+Domain (entities via @erp/shared, money bigint, events)
 ```
 
-The web frontend consumes the API through typed contracts
-(`src/contracts/`) and presentation-layer hooks (`src/presentation/hooks/`).
+`@erp/shared` is the single source for `is2dp`, `money`, Zod schemas, and entity helpers. No `className`/`markup` changes were made (design constraint).
 
-## Docker
-
-The backend provides a full `docker-compose.yml` (PostgreSQL + Redis + API):
+## Verification
 
 ```bash
-cd backend
-docker-compose up --build
+npm run typecheck && npm run typecheck:backend   # 0/0
+npm run test:logic                               # 110/110
+npx playwright test tests/e2e/verify-all-fixes.spec.ts --reporter=list  # 16/16
+node tests/e2e/verify-fixes-api.mjs              # 19/19
 ```
+
+Each `verify-all-fixes` test starts from `clearCookies`/`localStorage.clear()` — fresh view, no reliance on prior state.
 
 ## License
 
