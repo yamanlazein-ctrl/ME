@@ -1,4 +1,5 @@
 import { describe, it, expect } from "vitest";
+import { withTenantTx } from "@/infrastructure/orm/drizzle";
 
 /**
  * Smoke tests for the env schema and the withTenantTx helper.
@@ -22,7 +23,6 @@ describe("env schema", () => {
 
 describe("withTenantTx", () => {
   it("rejects empty tenantId", async () => {
-    const { withTenantTx } = await import("@/infrastructure/orm/drizzle");
     await expect(withTenantTx("", async () => 1)).rejects.toThrow(/tenantId is required/);
   });
 });
