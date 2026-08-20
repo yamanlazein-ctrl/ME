@@ -29,9 +29,17 @@ const env = Object.fromEntries(
     }),
 );
 
+if (!process.argv.includes("--force")) {
+  console.error("This script will create/reset credentials. Pass --force and set ADMIN_BOOTSTRAP_PASSWORD env var to proceed.");
+  process.exit(1);
+}
 const DATABASE_URL = env.DATABASE_URL || "postgresql://postgres:postgres@localhost:5432/erp";
 const EMAIL = "admin@erp.local";
-const PASSWORD = "admin123";
+const PASSWORD = process.env.ADMIN_BOOTSTRAP_PASSWORD || env.ADMIN_BOOTSTRAP_PASSWORD;
+if (!PASSWORD) {
+  console.error("ADMIN_BOOTSTRAP_PASSWORD must be set (env var or backend/.env) when using --force.");
+  process.exit(1);
+}
 const TENANT_SLUG = "default";
 const TENANT_NAME = "Default Tenant";
 

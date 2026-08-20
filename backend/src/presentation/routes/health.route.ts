@@ -1,4 +1,4 @@
-import { Router, type Request, type Response } from "express";
+import { Router, type Request, type Response, type RequestHandler } from "express";
 import { db } from "../../infrastructure/orm/drizzle.js";
 import { sql } from "drizzle-orm";
 
@@ -8,6 +8,7 @@ export function registerHealthRoutes(
   checkRedis: () => Promise<boolean>,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   rbac: any,
+  auth?: RequestHandler,
 ) {
   router.get("/api/health/live", (_req, res) => {
     res.status(200).json({ status: "ok" });
@@ -32,7 +33,8 @@ export function registerHealthRoutes(
    * Returns: database latency, memory, uptime, version.
    * Used by: monitoring dashboards, alerting systems, deployment validation.
    */
-  router.get("/api/health/deep", rbac(["admin"]), async (_req: Request, res: Response) => {
+  const deepGuards: RequestHandler[] = auth ? [auth, rbac(["admin"]) as RequestHandler] : [rbac(["admin"]) as RequestHandler];
+  router.get("/api/health/deep", ...deepGuards, async (_req: Request, res: Response) => {
     const start = Date.now();
     const checks: Record<string, { status: string; details?: string; ms?: number }> = {};
 

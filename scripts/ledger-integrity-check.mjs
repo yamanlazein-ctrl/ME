@@ -48,12 +48,17 @@ async function main() {
 
   // 2. Per-party reconciliation vs statement endpoint
   const api = process.env.API || "http://localhost:8083/api";
+  const erpPass = process.env.ERP_PASS;
+  if (!erpPass) {
+    console.error("ERP_PASS must be set (no default). Use ERP_PASS env var.");
+    process.exit(1);
+  }
   const login = await fetch(`${api}/auth/login`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       email: process.env.ERP_EMAIL || "admin@erp.local",
-      password: process.env.ERP_PASS || "admin123",
+      password: erpPass,
     }),
   });
   const token = (await login.json()).accessToken;

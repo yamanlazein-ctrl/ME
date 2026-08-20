@@ -43,3 +43,9 @@ if (config.NODE_ENV === "production" && !config.SETUP_TOKEN) {
     "SETUP_TOKEN must be set when NODE_ENV=production — refusing to start with the setup wizard unauthenticated.",
   );
 }
+if (config.NODE_ENV === "production" && config.CORS_ORIGIN.trim() === "*") {
+  throw new Error("CORS_ORIGIN=* is not allowed in production — set an explicit allowlist.");
+}
+if (config.NODE_ENV === "production" && !config.REDIS_URL) {
+  throw new Error("REDIS_URL must be set when NODE_ENV=production — token denylist requires Redis.");
+}

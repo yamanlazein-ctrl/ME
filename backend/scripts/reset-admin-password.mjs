@@ -20,9 +20,17 @@ const env = Object.fromEntries(
     }),
 );
 
+if (!process.argv.includes("--force")) {
+  console.error("This script resets a production admin password. Pass --force and set ADMIN_BOOTSTRAP_PASSWORD to proceed.");
+  process.exit(1);
+}
 const DATABASE_URL = env.DATABASE_URL;
 const EMAIL = "admin@erp.local";
-const PASSWORD = "admin123";
+const PASSWORD = process.env.ADMIN_BOOTSTRAP_PASSWORD || env.ADMIN_BOOTSTRAP_PASSWORD;
+if (!PASSWORD) {
+  console.error("ADMIN_BOOTSTRAP_PASSWORD must be set when using --force.");
+  process.exit(1);
+}
 
 const client = new pg.Client({ connectionString: DATABASE_URL });
 await client.connect();

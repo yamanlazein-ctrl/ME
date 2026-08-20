@@ -90,11 +90,21 @@ export function registerCompanyRoutes(
       if (!match) {
         res
           .status(422)
-          .json({ code: "VALIDATION_ERROR", message: "dataUrl غير صالح", statusCode: 422 });
+          .json({ code: "VALIDATION_ERROR", message: "dataUrl غير صالحة", statusCode: 422 });
         return;
       }
-      const ext = match[1] === "jpeg" ? "jpg" : match[1]!;
+      const rawExt = (match[1] ?? "").toLowerCase();
+      const allowed = new Set(["png", "jpg", "jpeg", "webp"]);
+      if (!allowed.has(rawExt)) {
+        res.status(422).json({ code: "VALIDATION_ERROR", message: "امتداد الصورة غير مسموح (png/jpg/webp فقط)", statusCode: 422 });
+        return;
+      }
+      const ext = rawExt === "jpeg" ? "jpg" : rawExt;
       const buffer = Buffer.from(match[2]!, "base64");
+      if (buffer.length > 5 * 1024 * 1024) {
+        res.status(422).json({ code: "VALIDATION_ERROR", message: "حجم الصورة يتجاوز 5MB", statusCode: 422 });
+        return;
+      }
       const dir = process.env.COMPANY_LOGO_DIR ?? "/var/lib/erp/logos";
       const path = join(dir, ctx.tenantId, `${randomUUID()}.${ext}`);
       await mkdir(join(dir, ctx.tenantId), { recursive: true });

@@ -130,7 +130,7 @@ app.use(
 // ── Route registration ──────────────────────────────────────────────
 // health + auth already hard-code the `/api` prefix internally → mount at root.
 const router = express.Router();
-registerHealthRoutes(router, checkDatabase, checkRedis, rbac);
+registerHealthRoutes(router, checkDatabase, checkRedis, rbac, authMiddleware);
 registerAuthRoutes(router, container);
 // Phase-0 platform routes (license / setup / company / invitations) also
 // hard-code the `/api` prefix → mount at root like auth & health.

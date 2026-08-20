@@ -131,7 +131,11 @@ function nextId(prefix = "id"): string {
 function randSeg(len: number): string {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
   let s = "";
-  for (let i = 0; i < len; i++) s += chars[Math.floor(Math.random() * chars.length)];
+  // Use crypto.getRandomValues when available (browser), fallback to Math.random only in non-crypto envs
+  const rnd = typeof crypto !== "undefined" && typeof crypto.getRandomValues === "function"
+    ? (() => { const a = new Uint32Array(len); crypto.getRandomValues(a); return Array.from(a, (v) => v % chars.length); })()
+    : Array.from({ length: len }, () => Math.floor(Math.random() * chars.length));
+  for (let i = 0; i < len; i++) s += chars[rnd[i]!];
   return s;
 }
 

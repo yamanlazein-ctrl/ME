@@ -78,7 +78,7 @@ export function registerNotificationRoutes(
   router.post(
     "/notifications/:id/read",
     auth,
-    readGuard,
+    writeGuard,
     validateUuidParam("id"),
     async (req: Request, res: Response) => {
       const r = await uc.markReadUseCase(notifRepo, pid(req), ctx(req));
@@ -93,7 +93,7 @@ export function registerNotificationRoutes(
   router.post(
     "/notifications/mark-all-read",
     auth,
-    readGuard,
+    writeGuard,
     async (req: Request, res: Response) => {
       const r = await uc.markAllReadUseCase(notifRepo, ctx(req));
       if (r.ok) {
@@ -107,7 +107,7 @@ export function registerNotificationRoutes(
   router.post(
     "/notifications/dismiss-all",
     auth,
-    readGuard,
+    writeGuard,
     async (req: Request, res: Response) => {
       const r = await uc.dismissAllUseCase(notifRepo, ctx(req));
       if (r.ok) {
