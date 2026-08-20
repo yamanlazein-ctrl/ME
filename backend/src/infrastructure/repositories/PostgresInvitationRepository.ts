@@ -77,9 +77,15 @@ export class PostgresInvitationRepository implements IInvitationRepository {
     const [row] = await this.db
       .update(invitationCodes)
       .set({ useCount: 1 })
-      .where(and(eq(invitationCodes.id, id), eq(invitationCodes.tenantId, tenantId)))
+      .where(
+        and(
+          eq(invitationCodes.id, id),
+          eq(invitationCodes.tenantId, tenantId),
+          eq(invitationCodes.useCount, 0),
+        ),
+      )
       .returning();
-    if (!row) throw new Error("INVITATION_CONSUME_FAILED");
+    if (!row) throw new Error("INVITATION_ALREADY_CONSUMED");
     return toRow(row);
   }
 
