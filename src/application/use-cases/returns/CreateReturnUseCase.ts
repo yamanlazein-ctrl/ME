@@ -6,6 +6,7 @@ import {
   CreateReturnInput,
   ReturnDTO,
 } from "@/application/ports/IReturnRepository";
+import { createReturnSchema } from "@erp/shared";
 
 export class CreateReturnUseCase {
   constructor(private readonly returns: IReturnRepository) {}
@@ -14,17 +15,13 @@ export class CreateReturnUseCase {
     input: CreateReturnInput,
     ctx: TenantContext,
   ): Promise<Result<ReturnDTO, ValidationError>> {
-    if (!input.partyId) {
-      return Err(new ValidationError("الطرف مطلوب.", "partyId"));
-    }
-    if (!input.lines?.length) {
-      return Err(new ValidationError("يجب إضافة بند واحد على الأقل.", "lines"));
-    }
-    if (input.lines.some((l) => l.quantityKg <= 0 || l.pricePerKg < 0)) {
-      return Err(new ValidationError("الكمية والسعر يجب أن يكونا موجبين.", "lines"));
+    const parsed = createReturnSchema.safeParse(input);
+    if (!parsed.success) {
+      const first = parsed.error.issues[0];
+      return Err(new ValidationError(first.message, first.path.join(".")));
     }
 
-    const saved = await this.returns.create(input, ctx);
+    const saved = await this.returns.create(parsed.data as CreateReturnInput, ctx);
     return Ok(saved);
   }
 }
