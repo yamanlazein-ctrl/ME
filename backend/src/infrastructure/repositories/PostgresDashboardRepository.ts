@@ -350,15 +350,12 @@ export class PostgresDashboardRepository implements IDashboardRepository {
       };
     }
 
-    // ── Unpaid sale invoices (total − active receipts per invoice) ──
-    // Keep every currency's remaining amount separate — never fold SYP/USD/EUR
-    // into one meaningless totalDue. The aggregate `count` is the number of
-    // unpaid invoices across currencies.
+    // ── Unpaid sale invoices (total − receipts − returns, per P0-LOGIC-3.6e unified) ──
     const unpaidSub = this.db
       .select({
         id: invoices.id,
         currency: invoices.currency,
-        remaining: sql<number>`${invoices.total} - COALESCE(SUM(${vouchers.amount}), 0)`.as(
+        remaining: sql<number>`${invoices.total} - COALESCE(SUM(${vouchers.amount}), 0) - COALESCE(SUM(${returnLines.quantityKg} * ${returnLines.pricePerKg}), 0)`.as(
           "remaining",
         ),
       })
@@ -371,6 +368,15 @@ export class PostgresDashboardRepository implements IDashboardRepository {
           eq(vouchers.status, "active"),
         ),
       )
+      .leftJoin(
+        returns,
+        and(
+          eq(returns.originalInvoiceId, invoices.id),
+          eq(returns.kind, "sale"),
+          eq(returns.status, "active"),
+        ),
+      )
+      .leftJoin(returnLines, eq(returnLines.returnId, returns.id))
       .where(and(base, eq(invoices.type, "sale"), eq(invoices.status, "active")))
       .groupBy(invoices.id, invoices.total, invoices.currency)
       .as("unpaid_sub");
