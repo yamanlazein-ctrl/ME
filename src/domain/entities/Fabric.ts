@@ -1,4 +1,5 @@
 import { Timestamp, UUID } from "@/domain/types";
+import { createFabricData as sharedCreateFabricData } from "@erp/shared";
 
 export interface FabricData {
   id: UUID;
@@ -43,11 +44,27 @@ export class Fabric implements FabricData {
   }
 
   static create(props: Omit<FabricData, "id" | "createdAt"> & { id?: UUID }): Fabric {
-    if (!props.name?.trim()) throw new Error("Fabric name is required.");
-    return new Fabric({
-      ...props,
-      id: props.id ?? crypto.randomUUID(),
-      createdAt: new Date().toISOString(),
+    const base = sharedCreateFabricData({
+      name: props.name,
+      category: props.category ?? undefined,
+      minStockKg: props.minStockKg ?? undefined,
+      notes: props.notes ?? undefined,
+      unit: props.unit ?? undefined,
+      imageUrl: props.imageUrl ?? undefined,
+      createdBy: props.createdBy ?? undefined,
     });
+    return new Fabric({
+      ...base,
+      id: (props.id as string) ?? base.id,
+      tenantId: props.tenantId,
+      name: base.name,
+      category: base.category as string | null,
+      minStockKg: base.minStockKg as number | null,
+      notes: base.notes as string | null,
+      unit: base.unit as FabricData["unit"],
+      imageUrl: base.imageUrl as string | null,
+      createdBy: base.createdBy as string | null,
+      createdAt: base.createdAt,
+    } as FabricData);
   }
 }

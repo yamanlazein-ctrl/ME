@@ -1,4 +1,5 @@
 import type { UUID, EntityStatus } from "../types/index.js";
+import { createFabricData as sharedCreateFabricData } from "@erp/shared";
 
 export interface FabricData {
   id: UUID;
@@ -18,15 +19,23 @@ export class Fabric {
   private constructor(private readonly data: FabricData) {}
 
   static create(input: CreateFabricInput): Fabric {
+    const base = sharedCreateFabricData({
+      name: input.name,
+      category: input.category,
+      minStockKg: input.minStockKg ?? undefined,
+      notes: input.notes,
+      unit: input.unit,
+      imageUrl: input.imageUrl,
+    });
     return new Fabric({
       id: "" as UUID,
       tenantId: "" as UUID,
-      name: input.name.trim(),
-      category: input.category?.trim(),
-      minStockKg: input.minStockKg ?? 0,
-      unit: input.unit?.trim(),
-      notes: input.notes?.trim(),
-      imageUrl: input.imageUrl?.trim(),
+      name: base.name,
+      category: base.category ?? undefined,
+      minStockKg: base.minStockKg ?? 0,
+      unit: base.unit ?? undefined,
+      notes: base.notes ?? undefined,
+      imageUrl: base.imageUrl ?? undefined,
       createdAt: "",
       createdBy: undefined,
       updatedAt: "",
