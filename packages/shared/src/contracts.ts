@@ -1,0 +1,21 @@
+import { z } from "zod";
+import { createInvoiceSchema, listInvoicesSchema } from "./schemas/invoice.schema.js";
+import { createReturnSchema, listReturnsSchema } from "./schemas/return.schema.js";
+import { createVoucherSchema, listVouchersSchema } from "./schemas/voucher.schema.js";
+import { createExpenseSchema, listExpensesSchema } from "./schemas/expense.schema.js";
+import { createPartySchema, listPartiesSchema } from "./schemas/party.schema.js";
+import { closeDaySchema, addManualMovementSchema, setOpeningBalanceSchema } from "./schemas/cashbox.schema.js";
+
+export type CreateInvoiceRequest = z.infer<typeof createInvoiceSchema>;
+export type ListInvoicesRequest = z.infer<typeof listInvoicesSchema>;
+export type CreateReturnRequest = z.infer<typeof createReturnSchema>;
+export type ListReturnsRequest = z.infer<typeof listReturnsSchema>;
+export type CreateVoucherRequest = z.infer<typeof createVoucherSchema>;
+export type ListVouchersRequest = z.infer<typeof listVouchersSchema>;
+export type CreateExpenseRequest = z.infer<typeof createExpenseSchema>;
+export type ListExpensesRequest = z.infer<typeof listExpensesSchema>;
+export type CreatePartyRequest = z.infer<typeof createPartySchema>;
+export type ListPartiesRequest = z.infer<typeof listPartiesSchema>;
+export type CloseDayRequest = z.infer<typeof closeDaySchema>;
+export type AddManualMovementRequest = z.infer<typeof addManualMovementSchema>;
+export type SetOpeningBalanceRequest = z.infer<typeof setOpeningBalanceSchema>;

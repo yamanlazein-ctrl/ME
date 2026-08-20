@@ -11,6 +11,7 @@ export type {
   ListResponse,
   ValidationRule,
 } from "./_shared";
+export * from "@erp/shared/contracts";
 
 export * as AuthContracts from "./auth";
 export * as CustomerContracts from "./customers";
