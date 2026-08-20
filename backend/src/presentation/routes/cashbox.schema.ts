@@ -18,9 +18,6 @@ export const addManualMovementSchema = z.object({
 
 export const closeDaySchema = z.object({
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-  openingBalance: z.number().int().min(0),
-  totalIn: z.number().int().min(0),
-  totalOut: z.number().int().min(0),
   counted: z.number().int().min(0),
   currency: z.enum(["SYP", "USD", "EUR"]).optional(),
 });

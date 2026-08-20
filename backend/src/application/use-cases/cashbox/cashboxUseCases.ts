@@ -5,7 +5,7 @@ import type {
   DayCloseData,
   ManualMovementData,
   CreateManualMovementInput,
-  CreateDayCloseInput,
+  CloseDayRequestInput,
 } from "../../../domain/entities/Cashbox.js";
 
 type Result<T> = { ok: true; data: T } | { ok: false; error: string };
@@ -76,7 +76,7 @@ export async function listManualMovementsUseCase(
 
 export async function closeDayUseCase(
   repo: ICashboxRepository,
-  input: CreateDayCloseInput,
+  input: CloseDayRequestInput,
   ctx: TenantContext,
 ): Promise<Result<DayCloseData>> {
   const locked = await repo.isDayLocked(input.date, ctx);

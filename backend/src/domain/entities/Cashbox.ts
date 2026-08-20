@@ -152,3 +152,15 @@ export interface CreateDayCloseInput {
   counted: number;
   currency?: string;
 }
+
+/**
+ * Client-facing close-day request. Only genuinely external facts are accepted:
+ * the date, the physically counted cash amount, and the currency. Opening
+ * balance and total in/out are derived server-side from the ledger so a
+ * cashier cannot mint a "balanced" close by inflating totalOut.
+ */
+export interface CloseDayRequestInput {
+  date: string;
+  counted: number;
+  currency?: string;
+}

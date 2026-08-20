@@ -4,7 +4,7 @@ import type {
   DayCloseData,
   ManualMovementData,
   CreateManualMovementInput,
-  CreateDayCloseInput,
+  CloseDayRequestInput,
 } from "../../domain/entities/Cashbox.js";
 
 export interface ICashboxRepository {
@@ -22,7 +22,7 @@ export interface ICashboxRepository {
   deleteManualMovement(id: UUID, ctx: TenantContext): Promise<void>;
   listManualMovements(ctx: TenantContext): Promise<ManualMovementData[]>;
   isDayLocked(date: string, ctx: TenantContext): Promise<boolean>;
-  closeDay(input: CreateDayCloseInput, ctx: TenantContext): Promise<DayCloseData>;
+  closeDay(input: CloseDayRequestInput, ctx: TenantContext): Promise<DayCloseData>;
   getLastClosing(ctx: TenantContext): Promise<DayCloseData | null>;
   getClosings(ctx: TenantContext): Promise<DayCloseData[]>;
 }
