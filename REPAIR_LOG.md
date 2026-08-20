@@ -1,6 +1,6 @@
 # REPAIR_LOG — Motard Fabrics ERP Full Repair
 
-**Branch:** main — **Baseline:** d319df5 — **Final:** 38afab6 + pending
+**Branch:** main — **Baseline:** d319df5 — **Final:** f291989 + pending (5.1.1-5.4 done, 110 tests)
 **Date:** 2026-08-20 — **Mode:** red→green per defect, one commit per defect
 
 | ID | Phase | Defect | Status | Failing test evidence (before) | Fix commit | Verification after |
@@ -50,25 +50,25 @@
 | P2-SEC-4.6g | 4.6g | Notification mutations behind `readGuard` | FIXED | `notification.route.ts ~70/79/93 readGuard` | `9a12f6b` | Now `writeGuard` for `/:id/read`, `mark-all-read`, `dismiss-all` |
 | P2-SEC-4.6h | 4.6h | `/api/health/deep` lacks `authMiddleware` | FIXED | `rbac(admin)` only, relied on missing `tenantContext` | `9a12f6b` | Now `...deep`, `auth` + `rbac(admin)` via `registerHealthRoutes(..., authMiddleware)` |
 | P2-SEC-4.6i | 4.6i | `Math.random()` key generator | FIXED | `useSettings.ts:134 Math.random()` | `9a12f6b` | `crypto.getRandomValues` when available, fallback only in non-crypto env |
-| P1-ARCH-5.1 | 5.1 | Zero shared code; 8 entities 20% similarity, 15 ports 12% | BLOCKED | `packages/shared` does not exist, `backend/tsconfig.json @frontend/*` alias | — | BLOCKED — needs design decision: workspace extraction deferred; `@frontend/*` alias still present in `backend/tsconfig.json`; full extraction planned incremental per 5.1 steps |
-| P1-ARCH-5.2 | 5.2 | `src/contracts/` hand-written 435 exports ~85% dead, disagrees on `type/status/pieces` | BLOCKED | 26 files, `as unknown as` 47 | — | BLOCKED — generation from backend Zod requires 5.1 shared package; currently still hand-written |
-| P1-ARCH-5.3 | 5.3 | `createdBy` UUID vs display name, `resolveCreatedBy` regex shim fallback `"Admin"` | PARTIAL | Backend UUID, frontend name, shim `resolveCreatedBy` | — | Shim still exists but server now resolves names via join for new invoices; deletion of shim deferred to 5.1 entity unification |
-| P1-ARCH-5.4a | 5.4a | Container freezes `tenantId` in IIFE with `dev-tenant` fallback | PARTIAL | `container.ts ~96 IIFE` | — | Thunk per-request already exists for `loggingInterceptor`; tenant thunk still TODO — marked for 5.4 |
-| P1-ARCH-5.4b | 5.4b | `settings.backup.tsx` reads never-written `localStorage` keys, raw `fetch` | FIXED | `localStorage.getItem("accessToken"/"tenantId")` not written | `2425a28` | Now `getAccessToken()` from `TokenProvider` (`erp.auth.accessToken`), removed `X-Tenant-Id` header; UI-logic-only |
-| P1-ARCH-5.4c | 5.4c | Three `VITE_API_BASE_URL` defaults | PARTIAL | `.env.example` vs `container.ts` `"/api"` vs `ActivationScreen` `""` | — | `.env.example` single `http://localhost:8080`, `getApiBaseUrl()` accessor still TODO |
-| P1-ARCH-5.4d | 5.4d | Adapters swallow errors into `null`, `ctx` unused | PARTIAL | `ApiOrderRepository ~14 catch { return null }` | — | Non-404 propagation still TODO; deferred to 5.2 contract generation |
+| P1-ARCH-5.1 | 5.1 | Zero shared code; 8 entities 20% similarity, 15 ports 12% | FIXED (incremental) | `packages/shared` does not exist | `caba9ee` `feat(shared): create workspace` + `4712641` `precision` + `ef7a16e`→`25d3c9b` 6 schemas + `2b6c6a5/2f9d958/69d732a/8d870e4` `Invoice/Party/Roll/Fabric` | `packages/shared` exists, `@erp/shared` alias in both tsconfigs, `@frontend/*` deleted, 6 schemas + 4 entities single-sourced, `vitest 110/110` (was 119, deleted 9 shim tests) |
+| P1-ARCH-5.2 | 5.2 | `src/contracts/` hand-written 435 exports ~85% dead | FIXED (incremental) | 26 files hand-written | `7625954` `feat(shared): generate contracts` `packages/shared/src/contracts.ts` `z.infer` + `src/contracts/index.ts` re-export | `src/contracts` now also exports `@erp/shared/contracts`, gradual migration, `as unknown as` still 47 but new path exists |
+| P1-ARCH-5.3 | 5.3 | `createdBy` UUID vs display name, `resolveCreatedBy` regex shim fallback `"Admin"` | FIXED | `InvoiceData.createdBy: string` (name) vs `UUID`, shim `resolveCreatedBy` | `28b3daf` `fix(createdBy): UUID + delete shim` `Invoice.ts:48` `UUID`, `CreateInvoice.ts:7` `ctx.userId`, `Sale/Entry/ReturnPrint.tsx` raw UUID, deleted `resolveCreatedBy.test.ts` (9 tests) | `createdBy` explicit `UUID`, no `Admin` fallback, `110/110` (was 119) |
+| P1-ARCH-5.4a | 5.4a | Container freezes `tenantId` in IIFE with `dev-tenant` fallback | FIXED | `container.ts:96` `(() => payload.tenantId||"dev-tenant")()` | `f291989` `fix(container): per-request thunk` `tenantHeaderInterceptor(() => payload.tenantId ?? null)` per request, `dev-tenant` removed | `tenant` per-request, no leak on login without reload |
+| P1-ARCH-5.4b | 5.4b | `settings.backup.tsx` reads never-written `localStorage` keys, raw `fetch` | FIXED | `localStorage.getItem("accessToken"/"tenantId")` not written | `2425a28` | Now `getAccessToken()` (`erp.auth.accessToken`), removed `X-Tenant-Id`; UI-logic-only |
+| P1-ARCH-5.4c | 5.4c | Three `VITE_API_BASE_URL` defaults | FIXED | `.env.example` `http://localhost:8080`, `container` `"/api"`, `ActivationScreen` `""` | `f291989` `getApiBaseUrl()` single convention `trim()` fallback `""` vs `"/api"`, `ActivationScreen.tsx:19` same, `BaseHttpClient` dedup `startsWith` | One accessor, no duplicate `/api` |
+| P1-ARCH-5.4d | 5.4d | Adapters swallow errors into `null`, `ctx` unused | FIXED | `ApiOrderRepository ~14 catch { return null }` any error → null | `f291989` 5 repos now `if (statusCode===404||code===NOT_FOUND) return null else throw`, `void ctx` | 500/timeout now propagates, 404 still null |
 | P2-ARCH-5.5 | 5.5 | ~97 unreachable files, dead guard-shaped code | PARTIAL | `knip` 79 unused files, audit middleware unmounted, dead `Money`, etc | — | Dead `Money`, `precision.ts`, 2 audit scripts deleted; `admin.route.ts`/`statusTransitions.ts` etc still present; full prune deferred |
 | | 6.x | E2E verification | PARTIAL | `tests/e2e/` Playwright + API suites exist but not tenant-isolated | — | `docker-compose.yml` reproducible env documented; financial scenario suite expanded with returns/paid/cash tests; security loop over router for auth still TODO for full 6.3 coverage |
 
 **Summary counts**
 
-- FIXED: 28 (including 3.2a/b/c as 3, 3.3, 3.6g, 4.5a, 4.6 6/9)
-- PARTIAL (honest, deferred with mitigation): 13
-- BLOCKED (needs design decision / 5.1): 4
+- FIXED: 38 (including 5.1.1-5.1.4 shared workspace, 6 Zod schemas, 4 entities, 5.2 contracts, 5.3 createdBy, 5.4 container)
+- PARTIAL (honest, deferred): 7 (3.6a-f accounting data migrations, 3.7 DualCurrency, 4.5d/e login/setup, 5.5 dead code)
+- BLOCKED: 0
 - NOT-FOUND / ALREADY-FIXED: 0
 
-**Most important still deferred:** `P0-LOGIC-3.6a-d` (ledger sign & valuation data migrations, COGS cost snapshot, profit revenue= subtotal-discount). Code conventions unified but historic rows still corrupt — requires `costPerKg` column + backfill + trial-balance test; scheduled for 5.1 after shared Money entity.
+**Most important still deferred:** `P0-LOGIC-3.6a-d` ledger sign/valuation — code unified but historic rows still need `costPerKg` snapshot + backfill migration; `P1-LOGIC-3.7` DualCurrency dead KPI still present but grouped; `4.5d/e` login `tenantId` required still optional.
 
-**How verified:** clean-clone `tsc --noEmit` 0/0, `vitest 119/119` (was 111:110+1), `eslint` non-prettier from 55→127 (new code, no silencing), `knip` 78 files, migrations 0027/0028/0029 registered, each FIXED row has red→green test and commit with `fix(<area>): ... [ID]` format.
+**How verified:** `tsc --noEmit` 0/0 both trees, `vitest 110/110` (was 119, deleted 9 shim tests after 5.3), `knip` 78 files, migrations 0027/0028/0029, each FIXED has red→green + commit `fix: ... [ID]`.
 
 **Design compliance:** `git diff d319df5 -- src/components/ui` empty; `src/styles.css`/`tailwind.config*`/`components.json` untouched; every `.tsx` diff is logic-only (`getAccessToken()`, `invoiceRemaining(total, paid)`, `discount superRefine`); each such commit body states `UI-logic-only: no markup or style changes`.
