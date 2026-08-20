@@ -9,7 +9,7 @@
     "start": "node dist/presentation/server.js",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
-    "db:push": "drizzle-kit push",
+    "db:push:scratch": "echo 'WARNING: db:push is scratch-only. It does not emit check() constraints or triggers. Use db:migrate for any real database.' && drizzle-kit push",
     "db:studio": "drizzle-kit studio",
     "db:check": "drizzle-kit check",
     "lint": "eslint src --ext .ts",

@@ -43,6 +43,7 @@ export type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
  * The pooled client is released back to the pool afterwards.
  */
 export async function withTenantTx<T>(tenantId: string, fn: (tx: Tx) => Promise<T>): Promise<T> {
+  if (!tenantId) throw new Error("tenantId is required");
   const client = await pool.connect();
   try {
     const txDb = drizzle(client);

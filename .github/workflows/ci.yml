@@ -34,6 +34,17 @@ jobs:
       - name: Run unit tests
         run: npm run test:logic
 
+      - name: Provision Postgres + Redis for backend integration tests
+        run: |
+          docker compose -f backend/docker-compose.yml up -d postgres redis
+          # Create a dedicated test database
+          docker exec erp-postgres psql -U postgres -c "CREATE DATABASE erp_test;"
+          # Migrations apply against the test DB
+          cd backend && DATABASE_URL=postgresql://postgres:postgres@localhost:5432/erp_test npm run db:migrate
+
+      - name: Run backend integration tests
+        run: cd backend && npx vitest run
+
       - name: Lint
         run: npm run lint
 
