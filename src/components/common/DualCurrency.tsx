@@ -19,9 +19,12 @@ export function DualCurrency({
   align?: "start" | "end" | "center";
   className?: string;
 }) {
-  const rateUsd = currencyState.rates.USD; // SYP per 1 USD
-  const sypVal = syp ?? (usd ?? 0) * rateUsd;
-  const usdVal = usd ?? (syp ?? 0) / rateUsd;
+  const hasSyp = syp !== undefined;
+  const hasUsd = usd !== undefined;
+  const sypVal = syp;
+  const usdVal = usd;
+  const rateUsd = currencyState.rates.USD;
+  const rateDate = currencyState.lastUpdated;
 
   const sizes: Record<string, { primary: string; secondary: string; sym: string; symSec: string }> =
     {
@@ -49,20 +52,27 @@ export function DualCurrency({
 
   return (
     <div className={cn("flex flex-col leading-tight", alignCls, className)} dir="ltr">
-      <span
-        className={cn("inline-flex items-baseline gap-1 font-bold tabular-nums", s.primary)}
-        style={{ color: "var(--currency-syp)" }}
-      >
-        <span className={cn("font-semibold opacity-80", s.sym)}>{symSyp}</span>
-        <span>{fmt(sypVal)}</span>
-      </span>
-      <span
-        className={cn("inline-flex items-baseline gap-1 font-bold tabular-nums", s.secondary)}
-        style={{ color: "var(--currency-usd)" }}
-      >
-        <span className={cn("font-bold", s.symSec)}>{symUsd}</span>
-        <span>{fmt(usdVal, 2)}</span>
-      </span>
+      {hasSyp && (
+        <span
+          className={cn("inline-flex items-baseline gap-1 font-bold tabular-nums", s.primary)}
+          style={{ color: "var(--currency-syp)" }}
+        >
+          <span className={cn("font-semibold opacity-80", s.sym)}>{symSyp}</span>
+          <span>{fmt(sypVal!)}</span>
+        </span>
+      )}
+      {hasUsd && (
+        <span
+          className={cn("inline-flex items-baseline gap-1 font-bold tabular-nums", s.secondary)}
+          style={{ color: "var(--currency-usd)" }}
+        >
+          <span className={cn("font-bold", s.symSec)}>{symUsd}</span>
+          <span>{fmt(usdVal!, 2)}</span>
+        </span>
+      )}
+      {hasSyp && hasUsd && (
+        <span className="text-[10px] text-muted-foreground">سعر {rateUsd} ل.س — {rateDate}</span>
+      )}
     </div>
   );
 }
