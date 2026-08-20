@@ -1,4 +1,5 @@
 import { Timestamp, UUID, Currency, MoneyData, Mutable } from "@/domain/types";
+import { lineTotal as sharedLineTotal, computeSubtotal as sharedSubtotal } from "@erp/shared";
 
 /* ────────────────────────────────────────────────────────────────────────
  *  Invoice Entity — root aggregate for sale / entry / return documents.
@@ -136,9 +137,7 @@ export class Invoice implements InvoiceData {
   }
 
   lineTotal(line: InvoiceLineData): number {
-    const gross = line.quantityKg * line.pricePerKg;
-    // Fixed-amount (not percentage) line discount, floored at zero.
-    return Math.max(0, gross - (line.discountAmount ?? 0));
+    return sharedLineTotal(line as unknown as import("@erp/shared").InvoiceLineData);
   }
 
   /** True when not already cancelled. */

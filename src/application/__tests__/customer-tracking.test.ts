@@ -233,13 +233,13 @@ describe("Customer tracking: date-range filtering (fast-check)", () => {
 
             const filtered = filterInvoices(invoices, "cust-A" as UUID, startDate, endDate);
 
-            // Manual calculation
+            // Manual calculation (per-line rounded, matches Invoice lineTotal)
             let expectedTotal = 0;
             for (const item of items) {
               if (item.day >= startDay && item.day <= endDay) {
                 const q = item.quantityCents / 100;
                 const p = item.priceCents / 100;
-                expectedTotal += q * p;
+                expectedTotal += Math.round(q * p);
               }
             }
 

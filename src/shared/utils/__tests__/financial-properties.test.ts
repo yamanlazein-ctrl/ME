@@ -86,7 +86,7 @@ describe("Invoice financial properties (fast-check)", () => {
               createdAt: "2026-01-01T00:00:00.000Z",
             });
 
-            const expected = quantity * price;
+            const expected = Math.round(quantity * price);
             expect(invoice.total()).toBeCloseTo(expected, 10);
           },
         ),
@@ -128,7 +128,7 @@ describe("Invoice financial properties (fast-check)", () => {
             });
 
             const expectedSum = invoiceLines.reduce(
-              (sum, l) => sum + Math.max(0, l.quantityKg * l.pricePerKg - l.discountAmount),
+              (sum, l) => sum + Math.max(0, Math.round(l.quantityKg * l.pricePerKg - l.discountAmount)),
               0,
             );
             expect(invoice.total()).toBeCloseTo(expectedSum, 5);
@@ -138,9 +138,9 @@ describe("Invoice financial properties (fast-check)", () => {
     });
   });
 
-  // ── Property 2: Line total = quantity * price - discount ──
+  // ── Property 2: Line total = quantity * price - discount (per-line rounded) ──
   describe("Line total invariants", () => {
-    it("lineTotal(q, p, d) = max(0, q*p - d) for all inputs", () => {
+    it("lineTotal(q, p, d) = max(0, round(q*p - d)) for all inputs", () => {
       fc.assert(
         fc.property(dp2(0, 100_000), dp2(0, 10_000_000), dp2(0, 100_000_000), (q, p, d) => {
           if (q <= 0) return true; // skip
@@ -166,7 +166,7 @@ describe("Invoice financial properties (fast-check)", () => {
           });
 
           const gross = q * p;
-          const expected = Math.max(0, gross - d);
+          const expected = Math.max(0, Math.round(gross - d));
           expect(invoice.lineTotal(line)).toBe(expected);
         }),
       );
@@ -201,8 +201,8 @@ describe("Invoice financial properties (fast-check)", () => {
     });
   });
 
-  // ── Property 3: Zero discount → total = quantity * price ──
-  it("with zero discount, line total = quantity × price", () => {
+  // ── Property 3: Zero discount → total = round(quantity * price) ──
+  it("with zero discount, line total = round(quantity × price)", () => {
     fc.assert(
       fc.property(dp2(1, 100_000), dp2(0, 10_000_000), (q, p) => {
         const line = makeLine({ quantityKg: q, pricePerKg: p, discountAmount: 0 });
@@ -220,7 +220,7 @@ describe("Invoice financial properties (fast-check)", () => {
           createdAt: "2026-01-01T00:00:00.000Z",
         });
 
-        expect(invoice.lineTotal(line)).toBe(q * p);
+        expect(invoice.lineTotal(line)).toBe(Math.round(q * p));
       }),
     );
   });

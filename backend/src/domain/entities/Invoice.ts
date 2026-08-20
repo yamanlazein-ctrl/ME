@@ -1,4 +1,5 @@
 import type { UUID, EntityStatus, InvoiceType } from "../types/index.js";
+import { computeSubtotal as sharedSubtotal } from "@erp/shared";
 
 export interface InvoiceLineData {
   id: UUID;
@@ -143,10 +144,7 @@ export class Invoice {
 }
 
 export function computeSubtotal(lines: InvoiceLineData[]): number {
-  return lines.reduce(
-    (s, l) => s + Math.max(0, Math.round(l.quantityKg * l.pricePerKg - (l.discountAmount ?? 0))),
-    0,
-  );
+  return sharedSubtotal(lines as unknown as import("@erp/shared").InvoiceLineData[]);
 }
 
 export interface CreateInvoiceLineInput {
