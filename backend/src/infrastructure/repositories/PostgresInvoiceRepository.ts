@@ -232,6 +232,24 @@ export class PostgresInvoiceRepository implements IInvoiceRepository {
         })
         .returning();
 
+      // Capture cost snapshot for sale lines so returns can be valued at cost (fix 3.6c)
+      const costByRoll = new Map<string, string>();
+      if (isSale) {
+        for (const l of input.lines) {
+          const v = expectedVersions.get(l.rollId);
+          // Reuse the pricePerKg already fetched for cogsTotal (cost), fallback to sale price if not sale
+          // For sale, cost is roll.pricePerKg at sale time (already in cogsTotal calc)
+          // We need to fetch it again if not already cached
+          if (!costByRoll.has(l.rollId)) {
+            const [rollCost] = await tx
+              .select({ pricePerKg: rolls.pricePerKg })
+              .from(rolls)
+              .where(and(eq(rolls.id, l.rollId), eq(rolls.tenantId, ctx.tenantId)))
+              .limit(1);
+            costByRoll.set(l.rollId, rollCost ? String(rollCost.pricePerKg) : String(l.pricePerKg));
+          }
+        }
+      }
       await tx.insert(invoiceLines).values(
         input.lines.map((l) => ({
           tenantId: ctx.tenantId,
@@ -243,6 +261,7 @@ export class PostgresInvoiceRepository implements IInvoiceRepository {
           pieces: l.pieces ?? 1,
           pricePerKg: String(l.pricePerKg),
           discountAmount: l.discountAmount ?? 0,
+          costPerKg: isSale ? (costByRoll.get(l.rollId) ?? String(l.pricePerKg)) : null,
           note: l.note,
         })),
       );

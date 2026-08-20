@@ -141,8 +141,9 @@ export class PostgresReturnRepository implements IReturnRepository {
       // sums invoice duplicates via GROUP BY (fixes .set() overwrite).
       const invoiceLineQtys = new Map<
         string,
-        { original: number; returned: number; pricePerKg: number; currency: string }
+        { original: number; returned: number; pricePerKg: number; costPerKg: number; currency: string }
       >();
+      // costPerKg is snapshot from invoice_lines.cost_per_kg (sale cost), falls back to price if null (pre-migration rows)
       const expectedInvoiceType = input.kind === "sale" ? "sale" : "entry";
 
       // Currency mismatch check will run after we load the invoice(s)
@@ -168,12 +169,13 @@ export class PostgresReturnRepository implements IReturnRepository {
         invoiceCurrency = origInv.currency;
         if (invoiceCurrency !== inputCurrency)
           throw new Error(`عملة المرتجع (${inputCurrency}) لا تطابق عملة الفاتورة الأصلية (${invoiceCurrency})`);
-        // Aggregate invoice lines by rollId (SUM) and capture price/currency per roll
+        // Aggregate invoice lines by rollId (SUM) and capture price/cost/currency per roll
         const origLines = await tx
           .select({
             rollId: invoiceLines.rollId,
             qty: sql<number>`COALESCE(SUM(${invoiceLines.quantityKg}),0)`,
             price: sql<number>`AVG(${invoiceLines.pricePerKg})`,
+            cost: sql<number>`AVG(${invoiceLines.costPerKg})`,
           })
           .from(invoiceLines)
           .where(and(eq(invoiceLines.invoiceId, input.originalInvoiceId), eq(invoiceLines.tenantId, ctx.tenantId)))
@@ -183,6 +185,7 @@ export class PostgresReturnRepository implements IReturnRepository {
             original: Math.round(Number(ol.qty) * 100) / 100,
             returned: 0,
             pricePerKg: Math.round(Number(ol.price) * 100) / 100,
+            costPerKg: Math.round(Number(ol.cost ?? ol.price) * 100) / 100,
             currency: invoiceCurrency,
           });
         }
@@ -215,6 +218,7 @@ export class PostgresReturnRepository implements IReturnRepository {
             rollId: invoiceLines.rollId,
             total: sql<number>`COALESCE(SUM(${invoiceLines.quantityKg}),0)`,
             price: sql<number>`AVG(${invoiceLines.pricePerKg})`,
+            cost: sql<number>`AVG(${invoiceLines.costPerKg})`,
             currency: sql<string>`MAX(${invoices.currency})`,
           })
           .from(invoiceLines)
@@ -237,6 +241,7 @@ export class PostgresReturnRepository implements IReturnRepository {
             original: Math.round(Number(h.total) * 100) / 100,
             returned: 0,
             pricePerKg: Math.round(Number(h.price) * 100) / 100,
+            costPerKg: Math.round(Number(h.cost ?? h.price) * 100) / 100,
             currency: String(h.currency),
           });
         }
@@ -357,51 +362,109 @@ export class PostgresReturnRepository implements IReturnRepository {
       }
 
       // Write the ledger entry for the return (atomic with stock + return).
-      // Returns always CREDIT the party account, reversing the invoice debit.
       // Price is server-derived from invoice_lines (fix 3.2c), never client-supplied.
+      // For sale returns, split at cost: party at sale price, inventory at cost, COGS reversed.
       const isEntryReturn = input.kind === "entry";
-      let returnTotal = 0;
+      let saleTotal = 0;
+      let costTotal = 0;
       for (const [rollId, totalQty] of inputByRoll) {
         const entry = invoiceLineQtys.get(rollId)!;
-        returnTotal += Math.round(totalQty * entry.pricePerKg);
+        saleTotal += Math.round(totalQty * entry.pricePerKg);
+        costTotal += Math.round(totalQty * entry.costPerKg);
       }
       const returnRefType = isEntryReturn ? "purchase_return" : "sales_return";
-      if (returnTotal > 0) {
-        // C4 fix: double-entry. Party leg (credits the party) + balancing
-        // inventory leg (debit) so the transaction nets to zero.
-        await tx.insert(ledgerEntries).values([
-          {
+      const legs: (typeof ledgerEntries.$inferInsert)[] = [];
+      if (isEntryReturn) {
+        if (saleTotal > 0) {
+          legs.push(
+            {
+              tenantId: ctx.tenantId,
+              partyId: input.partyId,
+              date: input.date,
+              type: returnRefType,
+              debit: 0,
+              credit: saleTotal,
+              currency: input.currency ?? "SYP",
+              cashImpact: "none",
+              referenceType: returnRefType,
+              referenceId: row.id,
+              referenceNumber: autoNumber,
+              description: `Entry return ${autoNumber}`,
+              createdBy: ctx.userId,
+            },
+            {
+              tenantId: ctx.tenantId,
+              partyId: null,
+              date: input.date,
+              type: "inventory_asset",
+              debit: 0,
+              credit: saleTotal,
+              currency: input.currency ?? "SYP",
+              cashImpact: "none",
+              referenceType: returnRefType,
+              referenceId: row.id,
+              referenceNumber: autoNumber,
+              description: `Inventory relief ${autoNumber}`,
+              createdBy: ctx.userId,
+            },
+          );
+        }
+      } else {
+        // Sale return: party at sale price, inventory at cost, COGS reversed at cost
+        if (saleTotal > 0) {
+          legs.push({
             tenantId: ctx.tenantId,
             partyId: input.partyId,
             date: input.date,
             type: returnRefType,
             debit: 0,
-            credit: returnTotal,
+            credit: saleTotal,
             currency: input.currency ?? "SYP",
             cashImpact: "none",
             referenceType: returnRefType,
             referenceId: row.id,
             referenceNumber: autoNumber,
-            description: `${isEntryReturn ? "Entry return" : "Sale return"} ${autoNumber}`,
+            description: `Sale return ${autoNumber}`,
             createdBy: ctx.userId,
-          },
-          {
-            tenantId: ctx.tenantId,
-            partyId: null,
-            date: input.date,
-            type: "inventory_asset",
-            debit: returnTotal,
-            credit: 0,
-            currency: input.currency ?? "SYP",
-            cashImpact: "none",
-            referenceType: returnRefType,
-            referenceId: row.id,
-            referenceNumber: autoNumber,
-            description: `Inventory ${isEntryReturn ? "relief" : "reinstated"} ${autoNumber}`,
-            createdBy: ctx.userId,
-          },
-        ]);
+          });
+          // Revenue contra (or sales_return already is the party leg, revenue will be handled via dashboard using sales_return type)
+          // Inventory at cost
+          if (costTotal > 0) {
+            legs.push({
+              tenantId: ctx.tenantId,
+              partyId: null,
+              date: input.date,
+              type: "inventory_asset",
+              debit: costTotal,
+              credit: 0,
+              currency: input.currency ?? "SYP",
+              cashImpact: "none",
+              referenceType: returnRefType,
+              referenceId: row.id,
+              referenceNumber: autoNumber,
+              description: `Inventory reinstated ${autoNumber}`,
+              createdBy: ctx.userId,
+            });
+            // COGS reversal
+            legs.push({
+              tenantId: ctx.tenantId,
+              partyId: null,
+              date: input.date,
+              type: "cogs_expense",
+              debit: 0,
+              credit: costTotal,
+              currency: input.currency ?? "SYP",
+              cashImpact: "none",
+              referenceType: returnRefType,
+              referenceId: row.id,
+              referenceNumber: autoNumber,
+              description: `COGS reversed ${autoNumber}`,
+              createdBy: ctx.userId,
+            });
+          }
+        }
       }
+      if (legs.length > 0) await tx.insert(ledgerEntries).values(legs);
 
       const lines = await tx.select().from(returnLines).where(eq(returnLines.returnId, row.id));
       return this.toDomain(row, lines);

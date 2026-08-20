@@ -218,6 +218,13 @@
       "when": 1785400000026,
       "tag": "0030_purchase_ledger_fix",
       "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": 7,
+      "when": 1785400000027,
+      "tag": "0031_invoice_line_cost_snapshot",
+      "breakpoints": true
     }
   ]
 }
