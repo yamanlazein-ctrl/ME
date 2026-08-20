@@ -1,6 +1,5 @@
 import { LedgerEntry, type LedgerEntryData } from "@/domain/entities/LedgerEntry";
-import { Money } from "@/domain/value-objects/Money";
-import { TenantContext, UUID } from "@/domain/types";
+import { TenantContext, UUID, MoneyData } from "@/domain/types";
 import type { ILedgerRepository, LedgerFilter } from "@/application/ports/ILedgerRepository";
 import type { Currency, PaginatedResult, LedgerType } from "@/domain/types";
 import { LedgerApiService } from "@/infrastructure/api";
@@ -29,9 +28,9 @@ export class ApiLedgerRepository implements ILedgerRepository {
     throw new Error("Ledger cancellation is performed by domain use cases.");
   }
 
-  async balance(partyId: UUID, currency: string, ctx: TenantContext): Promise<Money> {
+  async balance(partyId: UUID, currency: string, ctx: TenantContext): Promise<MoneyData> {
     const res = await this.api.balance(partyId, currency);
-    return new Money(res.balance, currency as Currency);
+    return { amount: res.balance, currency: currency as Currency };
   }
 
   async cashMovementsOn(

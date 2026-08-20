@@ -1,7 +1,6 @@
 import { LedgerEntry, LedgerEntryData } from "@/domain/entities/LedgerEntry";
-import { Money } from "@/domain/value-objects/Money";
 import { Result } from "@/core/result";
-import { TenantContext, UUID } from "@/domain/types";
+import { TenantContext, UUID, MoneyData } from "@/domain/types";
 import { PaginatedResult, PaginationParams } from "@/domain/types";
 
 /**
@@ -27,7 +26,7 @@ export interface ILedgerRepository {
   /**
    * Running balance for a party. Computed from active entries only.
    */
-  balance(partyId: UUID, currency: string, ctx: TenantContext): Promise<Money>;
+  balance(partyId: UUID, currency: string, ctx: TenantContext): Promise<MoneyData>;
 
   /**
    * Total cash movements on a specific date.
