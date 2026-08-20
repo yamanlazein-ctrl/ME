@@ -34,6 +34,7 @@ function makeInvoice(
     type?: "entry" | "sale" | "return";
     tax?: number;
     discount?: number;
+    shipping?: number;
   } = {},
 ) {
   const lines = overrides.lines ?? [makeLine()];
@@ -49,6 +50,7 @@ function makeInvoice(
     lines,
     tax: overrides.tax ?? 0,
     discount: overrides.discount ?? 0,
+    shipping: overrides.shipping ?? 0,
     createdBy: "tester",
     createdAt: "2026-01-01T00:00:00.000Z",
   });
@@ -258,13 +260,25 @@ describe("Invoice scenarios: 50 invoices tracking", () => {
     // Line 1: 10 * 5000 - 5000 = 45000
     // Line 2: 5 * 3000 - 0 = 15000
     // Total lines: 60000
-    // Invoice total from lines only (tax/discount are metadata, not applied in entity.total())
     expect(invoice.lines[0]).toBeDefined();
     const line1Total = invoice.lineTotal(invoice.lines[0]);
     const line2Total = invoice.lineTotal(invoice.lines[1]);
     expect(line1Total).toBe(45000);
     expect(line2Total).toBe(15000);
-    expect(invoice.total()).toBe(60000);
+    // total() is the net payable (subtotal - discount + tax + shipping).
+    expect(invoice.total()).toBe(59000);
+    expect(invoice.lineSubtotal()).toBe(60000);
+  });
+
+  it("distinguishes total() from lineSubtotal()", () => {
+    const invoice = makeInvoice("2026-01-16", {
+      lines: [makeLine({ quantityKg: 2, pricePerKg: 1000 })],
+      tax: 100,
+      discount: 50,
+      shipping: 25,
+    });
+    expect(invoice.lineSubtotal()).toBe(2000);
+    expect(invoice.total()).toBe(2075);
   });
 
   // ── Scenario 7: Invoice sequence with mixed types ──
