@@ -1,4 +1,5 @@
 import { Timestamp, UUID, Currency, Mutable } from "@/domain/types";
+import { reserveStock as sharedReserve, releaseStock as sharedRelease, isOutOfStock as sharedIsOutOfStock } from "@erp/shared";
 
 /* ────────────────────────────────────────────────────────────────────────
  *  Roll Entity — physical stock unit. Optimistic-locking via version.
@@ -82,32 +83,18 @@ export class Roll implements RollData {
 
   /** Reduce remaining stock; fail if insufficient or negative. */
   reserve(kg: number): void {
-    if (kg <= 0) throw new Error("reserve() requires positive kg");
-    if (this.remainingKg < kg) {
-      throw new Error(
-        `Insufficient stock: requested ${kg}, available ${this.remainingKg} on roll ${this.rollNo}`,
-      );
-    }
-    (this as Mutable<this>).remainingKg = this.remainingKg - kg;
-    (this as Mutable<this>).version += 1;
+    const data = this as unknown as import("@erp/shared").RollData;
+    sharedReserve(data, kg);
   }
 
   /** Restore stock (idempotent). */
   release(kg: number): void {
-    if (kg <= 0) return;
-    const next = this.remainingKg + kg;
-    if (next > this.initialKg) {
-      // Guard: should never release more than was originally reserved,
-      // but we clamp to initial instead of throwing to stay idempotent.
-      (this as Mutable<this>).remainingKg = this.initialKg;
-    } else {
-      (this as Mutable<this>).remainingKg = next;
-    }
-    (this as Mutable<this>).version += 1;
+    const data = this as unknown as import("@erp/shared").RollData;
+    sharedRelease(data, kg);
   }
 
   isOutOfStock(): boolean {
-    return this.remainingKg <= 0;
+    return sharedIsOutOfStock(this as unknown as import("@erp/shared").RollData);
   }
 
   isLowStock(): boolean {

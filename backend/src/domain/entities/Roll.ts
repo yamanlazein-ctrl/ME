@@ -1,4 +1,5 @@
 import type { UUID, RollStatus } from "../types/index.js";
+import { reserveStock as sharedReserve, releaseStock as sharedRelease } from "@erp/shared";
 
 export interface RollData {
   id: UUID;
@@ -54,25 +55,12 @@ export class Roll {
   }
 
   decrement(kg: number): void {
-    if (this.data.remainingKg < kg) {
-      throw new Error(
-        `Roll ${this.data.rollNo}: insufficient stock (${this.data.remainingKg}kg < ${kg}kg)`,
-      );
-    }
-    this.data.remainingKg = Math.round((this.data.remainingKg - kg) * 100) / 100;
-    if (this.data.remainingKg === 0) {
-      this.data.status = "exhausted";
-    }
-    this.data.version++;
+    sharedReserve(this.data as unknown as import("@erp/shared").RollData, kg);
     this.data.updatedAt = new Date().toISOString();
   }
 
   increment(kg: number): void {
-    this.data.remainingKg = Math.round((this.data.remainingKg + kg) * 100) / 100;
-    if (this.data.remainingKg > 0 && this.data.status === "exhausted") {
-      this.data.status = "in_stock";
-    }
-    this.data.version++;
+    sharedRelease(this.data as unknown as import("@erp/shared").RollData, kg);
     this.data.updatedAt = new Date().toISOString();
   }
 
