@@ -5,6 +5,7 @@ import type {
 } from "@/application/ports/IExpenseRepository";
 import { ValidationError } from "@/core/errors/DomainError";
 import { Err, Ok, type Result } from "@/core/result";
+import { createExpenseSchema } from "@erp/shared";
 
 export class CreateExpenseUseCase {
   constructor(
@@ -13,13 +14,14 @@ export class CreateExpenseUseCase {
   ) {}
 
   async execute(input: CreateExpenseInput): Promise<Result<ExpenseDTO, ValidationError>> {
-    const category = input.category.trim();
-    if (!category) return Err(new ValidationError("اسم المصروف مطلوب."));
-    if (!input.description) return Err(new ValidationError("الوصف مطلوب."));
-    if (!input.amount || input.amount <= 0) return Err(new ValidationError("أدخل مبلغاً صحيحاً."));
-
+    const parsed = createExpenseSchema.safeParse(input);
+    if (!parsed.success) {
+      const first = parsed.error.issues[0];
+      return Err(new ValidationError(first.message));
+    }
+    const category = parsed.data.category.trim();
     await this.names.add(category);
-    const created = await this.repo.create({ ...input, category });
+    const created = await this.repo.create({ ...parsed.data, category } as CreateExpenseInput);
     return Ok(created);
   }
 }
