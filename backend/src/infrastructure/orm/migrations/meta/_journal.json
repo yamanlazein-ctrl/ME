@@ -232,6 +232,13 @@
       "when": 1785400000028,
       "tag": "0032_cash_ledger_fix",
       "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": 7,
+      "when": 1785400000029,
+      "tag": "0033_negative_opening_balance_fix",
+      "breakpoints": true
     }
   ]
 }

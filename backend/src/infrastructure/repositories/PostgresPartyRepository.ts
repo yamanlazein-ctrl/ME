@@ -147,16 +147,17 @@ export class PostgresPartyRepository implements IPartyRepository {
       // already compute plain debit-credit with no kind-based flip at all
       // and therefore become correct for suppliers too once this write
       // path stops flipping).
-      if (openingBalance > 0) {
-        // C4 fix: double-entry — balance the opening balance with an equity leg.
+      if (openingBalance !== 0) {
+        const absBal = Math.abs(openingBalance);
+        const isPositive = openingBalance > 0;
         await tx.insert(ledgerEntries).values([
           {
             tenantId: ctx.tenantId,
             partyId: row.id,
             date: new Date().toISOString().slice(0, 10),
             type: "opening",
-            debit: openingBalance,
-            credit: 0,
+            debit: isPositive ? absBal : 0,
+            credit: isPositive ? 0 : absBal,
             currency,
             cashImpact: "none",
             referenceType: "opening",
@@ -170,8 +171,8 @@ export class PostgresPartyRepository implements IPartyRepository {
             partyId: null,
             date: new Date().toISOString().slice(0, 10),
             type: "opening_equity",
-            debit: 0,
-            credit: openingBalance,
+            debit: isPositive ? 0 : absBal,
+            credit: isPositive ? absBal : 0,
             currency,
             cashImpact: "none",
             referenceType: "opening",
