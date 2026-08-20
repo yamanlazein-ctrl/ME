@@ -11,6 +11,9 @@ const options = {
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
+      "@erp/shared": path.resolve(__dirname, "./packages/shared/src/index.ts"),
+      "@erp/shared/precision": path.resolve(__dirname, "./packages/shared/src/precision.ts"),
+      "@erp/shared/money": path.resolve(__dirname, "./packages/shared/src/money.ts"),
     },
   },
 };

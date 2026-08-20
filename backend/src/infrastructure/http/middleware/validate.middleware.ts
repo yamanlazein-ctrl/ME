@@ -2,7 +2,7 @@ import type { Request, Response, NextFunction } from "express";
 import { z } from "zod";
 import { ValidationError } from "../../../domain/errors/index.js";
 
-export function validateBody<T>(schema: z.ZodSchema<T>) {
+export function validateBody(schema: z.ZodTypeAny) {
   return (req: Request, res: Response, next: NextFunction) => {
     const result = schema.safeParse(req.body);
     if (!result.success) {
@@ -20,7 +20,7 @@ export function validateBody<T>(schema: z.ZodSchema<T>) {
   };
 }
 
-export function validateQuery<T>(schema: z.ZodSchema<T>) {
+export function validateQuery(schema: z.ZodTypeAny) {
   return (req: Request, res: Response, next: NextFunction) => {
     const result = schema.safeParse(req.query);
     if (!result.success) {
