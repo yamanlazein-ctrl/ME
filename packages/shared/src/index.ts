@@ -7,3 +7,4 @@ export * from "./schemas/cashbox.schema.js";
 export * from "./schemas/expense.schema.js";
 export * from "./schemas/party.schema.js";
 export * from "./entities/Invoice.js";
+export * from "./entities/Party.js";

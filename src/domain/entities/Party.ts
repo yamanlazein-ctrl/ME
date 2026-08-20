@@ -1,4 +1,5 @@
 import { Timestamp, UUID, Currency, Mutable, VoucherMethod } from "@/domain/types";
+import { createPartyData as sharedCreatePartyData } from "@erp/shared";
 
 export type PaymentTerms = "cash" | "net15" | "net30" | "net60" | "net90";
 export type PaymentMethod = VoucherMethod;
@@ -142,21 +143,52 @@ export class Party implements PartyData {
       id?: UUID;
     },
   ): Party {
-    if (!props.name?.trim()) {
-      throw new Error("Party name is required.");
-    }
-
+    const base = sharedCreatePartyData({
+      kind: props.kind,
+      name: props.name,
+      tenantId: props.tenantId,
+      createdBy: props.createdBy ?? null,
+      code: props.code,
+      companyName: props.companyName ?? undefined,
+      commercialReg: props.commercialReg ?? undefined,
+      category: props.category ?? undefined,
+      salesRep: props.salesRep ?? undefined,
+      phone: props.phone ?? undefined,
+      mobile: props.mobile ?? undefined,
+      whatsapp: props.whatsapp ?? undefined,
+      altPhone: props.altPhone ?? undefined,
+      email: props.email ?? undefined,
+      website: props.website ?? undefined,
+      address: props.address ?? undefined,
+      city: props.city ?? undefined,
+      country: props.country ?? undefined,
+      taxNumber: props.taxNumber ?? undefined,
+      openingBalance: props.openingBalance,
+      creditLimit: props.creditLimit,
+      currency: props.currency as string | undefined,
+      paymentTerms: props.paymentTerms,
+      paymentMethod: props.paymentMethod,
+      defaultDiscount: props.defaultDiscount,
+      vat: props.vat,
+      notes: props.notes ?? undefined,
+    });
     return new Party({
-      ...props,
-      id: props.id ?? crypto.randomUUID(),
-      status: "active",
+      ...base,
+      id: (props.id as string) ?? base.id,
+      status: "active" as PartyStatus,
       attachments: [],
       activity: [],
-      createdAt: new Date().toISOString(),
-      tenantId: props.tenantId,
-      kind: props.kind,
-      createdBy: props.createdBy ?? null,
-    });
+      createdAt: base.createdAt,
+      tenantId: base.tenantId as UUID,
+      kind: base.kind as PartyKind,
+      createdBy: base.createdBy,
+      name: base.name,
+      openingBalance: base.openingBalance,
+      creditLimit: base.creditLimit,
+      currency: base.currency as Currency,
+      defaultDiscount: base.defaultDiscount,
+      vat: base.vat,
+    } as PartyData);
   }
 
   isActive(): boolean {
