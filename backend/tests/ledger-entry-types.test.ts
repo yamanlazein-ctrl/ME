@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeAll } from "vitest";
+import { eq } from "drizzle-orm";
 import { db } from "@/infrastructure/orm/drizzle.js";
 import { ledgerEntries } from "@/infrastructure/orm/schemas/ledger-entry.table.js";
 import { tenants } from "@/infrastructure/orm/schemas/tenant.table.js";
@@ -11,7 +12,9 @@ describe("ledger_entries.type check constraint", () => {
   const partyId = randomUUID();
 
   beforeAll(async () => {
-    await db.insert(tenants).values({ id: tenantId, name: "Test Tenant", slug: "test-tenant" });
+    await db
+      .insert(tenants)
+      .values({ id: tenantId, name: "Test Tenant", slug: `test-tenant-${tenantId.slice(0, 8)}` });
     await db.insert(parties).values({
       id: partyId,
       tenantId,
@@ -59,6 +62,46 @@ describe("ledger_entries.type check constraint", () => {
         referenceId: randomUUID(),
         createdBy: randomUUID(),
       }),
+    ).rejects.toThrow();
+  });
+
+  it("rejects unbalanced ledger rows", async () => {
+    await expect(
+      db.insert(ledgerEntries).values({
+        tenantId,
+        partyId,
+        date: "2026-01-01",
+        type: "cash",
+        debit: 0,
+        credit: 0,
+        currency: "SYP",
+        cashImpact: "none",
+        referenceType: "cash",
+        referenceId: randomUUID(),
+        createdBy: randomUUID(),
+      }),
+    ).rejects.toThrow();
+  });
+
+  it("rejects UPDATE on a ledger row (append-only trigger)", async () => {
+    const [row] = await db
+      .insert(ledgerEntries)
+      .values({
+        tenantId,
+        partyId,
+        date: "2026-01-01",
+        type: "cash",
+        debit: 100,
+        credit: 0,
+        currency: "SYP",
+        cashImpact: "none",
+        referenceType: "cash",
+        referenceId: randomUUID(),
+        createdBy: randomUUID(),
+      })
+      .returning();
+    await expect(
+      db.update(ledgerEntries).set({ debit: 200 }).where(eq(ledgerEntries.id, row.id)),
     ).rejects.toThrow();
   });
 });
