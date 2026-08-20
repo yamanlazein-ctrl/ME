@@ -6,3 +6,4 @@
 | P0-DB | Migrations 0023/0024 absent from journal | FIXED | `drizzle-kit migrate` applied only through 0022; `invoices.paid` missing | d8f421a | Fresh DB migrates through 0025; `invoices.paid` exists |
 | P1-DB | Out-of-band apply_migration.ts patcher | FIXED | file existed outside the drizzle journal | 668d2bc | File deleted; its ALTERs covered by 0023/0024 |
 | P0-DB | push vs migrate produce different DBs (missing checks/trigger) | FIXED | `db:push` emits no CHECK/trigger; ledger balance CHECK and append-only trigger only on migrate | b083878 | Renamed db:push→db:push:scratch; backend tests assert balance CHECK + trigger on a migrated DB |
+| P0-MONEY | Monetary columns stored as float32 real | FIXED | `npx vitest run tests/money-precision.test.ts` failed on real: 45,678,903→45,678,904; SUM exact total lost | 280a5ae | Passes on bigint; round-trip exact, SUM exact |
