@@ -13,9 +13,11 @@ export type InvoiceCalc = {
 
 export function lineTotal(l: InvoiceLineCalc): number {
   const gross = l.quantityKg * l.pricePerKg;
-  // Fixed-amount (not percentage) line discount, floored at zero so a discount
-  // larger than the line gross never produces a negative line total.
-  return Math.max(0, gross - (l.discountAmount || 0));
+  // Matches the backend computeSubtotal: round each line, then sum. The server
+  // owns monetary truth; this client calculation is only a pre-submit preview
+  // and must use the identical per-line rounding so the preview never diverges
+  // from the stored subtotal.
+  return Math.max(0, Math.round(gross - (l.discountAmount || 0)));
 }
 
 export function invoiceSubtotal(inv: InvoiceCalc): number {
