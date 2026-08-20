@@ -1,0 +1,41 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install root dependencies
+        run: npm ci
+
+      - name: Install backend dependencies
+        run: cd backend && npm ci
+
+      - name: Typecheck frontend
+        run: npm run typecheck
+
+      - name: Typecheck backend
+        run: npm run typecheck:backend
+
+      - name: Run unit tests
+        run: npm run test:logic
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Dependency audit (advisory)
+        run: npm run clean:code || echo "Knip advisory only"
