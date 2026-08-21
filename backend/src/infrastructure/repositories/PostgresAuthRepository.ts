@@ -6,7 +6,8 @@ import { users } from "../orm/schemas/user.table.js";
 export class PostgresAuthRepository implements IAuthRepository {
   constructor(private readonly db: DB) {}
 
-  async findUserByEmail(email: string, tenantId: string) {
+  async findUserByEmail(email: string, tenantId?: string) {
+    if (!tenantId) throw new Error("tenantId is required for login");
     const conditions = [eq(users.email, email), eq(users.tenantId, tenantId)];
     const rows = await this.db
       .select()

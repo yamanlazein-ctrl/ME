@@ -65,7 +65,16 @@ export function registerAuthRoutes(router: Router, container: Container) {
     validateBody(LoginSchema),
     async (req, res, next) => {
       try {
-        const { email, password, tenantId } = req.validatedBody as z.infer<typeof LoginSchema>;
+        let { email, password, tenantId } = req.validatedBody as z.infer<typeof LoginSchema>;
+        // Host-based tenant resolution as fallback (e.g., customer1.motard.com → tenant lookup)
+        // For now, require explicit tenantId; host fallback is a future enhancement
+        // to avoid unordered LIMIT 1 when email is not globally unique.
+        if (!tenantId) {
+          const host = (req.headers.host as string | undefined) ?? "";
+          // Simple host→tenant mapping could be added here (e.g., via tenants.slug)
+          // For now, fail fast with clear message instead of picking arbitrary tenant
+          throw new InvalidCredentialsError();
+        }
         const user = await authRepo.findUserByEmail(email, tenantId);
 
         if (!user || !user.active) {
