@@ -67,3 +67,6 @@ admin-dashboard/.env.*
 # Rust / Tauri
 desktop/src-tauri/target/
 desktop/node_modules/
+
+# Local backup snapshots (keep on disk, out of repo)
+backup-pre-redesign/
