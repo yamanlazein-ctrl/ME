@@ -56,13 +56,22 @@ function PrimaryCard({
   return (
     <div
       data-od-id={id}
-      className="card-glow relative flex h-full min-h-[148px] flex-col overflow-hidden rounded-2xl border border-primary/20 bg-card p-5 shadow-elevated transition duration-300 hover:-translate-y-1 hover:border-primary/40"
+      className="card-glow relative flex h-full min-h-[156px] flex-col justify-between overflow-hidden rounded-2xl border border-primary/20 bg-card p-5 shadow-elevated transition duration-300 hover:-translate-y-1 hover:border-primary/40"
     >
       <div
         className="pointer-events-none absolute inset-x-0 top-0 h-[2px]"
         style={{
           background:
             "linear-gradient(90deg, transparent, var(--primary), transparent)",
+        }}
+      />
+      <div
+        className="pointer-events-none absolute h-40 w-40 rounded-full opacity-30 blur-3xl"
+        style={{
+          top: "-2rem",
+          insetInlineEnd: "-1rem",
+          background:
+            "radial-gradient(circle, color-mix(in oklab, var(--primary) 45%, transparent), transparent 70%)",
         }}
       />
       <div className="relative flex items-center gap-3">
@@ -77,8 +86,8 @@ function PrimaryCard({
           {title}
         </h3>
       </div>
-      <div className="relative mt-4">{value}</div>
-      <div className="relative mt-auto pt-4 text-[11px] text-muted-foreground">
+      <div className="relative">{value}</div>
+      <div className="relative text-[11px] text-muted-foreground">
         {footer ?? <span className="opacity-0">—</span>}
       </div>
     </div>
@@ -157,7 +166,7 @@ export function ExecutiveKpiGrid() {
             icon={Users}
             value={
               <span
-                className="inline-flex items-baseline gap-1.5 text-4xl font-bold leading-none tabular-nums sm:text-5xl"
+                className="inline-flex items-baseline gap-1.5 text-4xl font-bold tabular-nums sm:text-5xl"
                 style={{ color: "var(--currency-syp)" }}
               >
                 <span>{formatNumber(activeTodayCustomers ?? 0)}</span>
@@ -175,7 +184,7 @@ export function ExecutiveKpiGrid() {
             icon={Box}
             value={
               <span
-                className="inline-flex items-baseline gap-1.5 text-4xl font-bold leading-none tabular-nums sm:text-5xl"
+                className="inline-flex items-baseline gap-1.5 text-4xl font-bold tabular-nums sm:text-5xl"
                 style={{ color: "var(--currency-syp)" }}
               >
                 <span>{formatNumber(totalInventoryKg ?? 0)}</span>

@@ -151,6 +151,7 @@ export function AppShell({
     setMobileOpen(false);
   }, [activeGroup, pathname]);
 
+  // Lock body scroll + close on Escape when mobile drawer is open
   useEffect(() => {
     if (!mobileOpen) return;
     const prev = document.body.style.overflow;
@@ -192,7 +193,7 @@ export function AppShell({
   const sidebarWidthClass = collapsed ? "w-14" : "w-56";
 
   const renderNav = (isMobile: boolean) => {
-    const collapsedDesktop = !isMobile && collapsed;
+    const showLabels = isMobile || !collapsed;
     return (
       <nav
         aria-label="القائمة الجانبية"
@@ -201,6 +202,9 @@ export function AppShell({
           isMobile ? "" : "sticky top-2 h-[calc(100vh-1rem)]",
         )}
       >
+        {/* Collapse toggle — desktop only. Rotating chevron: points toward
+            the right edge (collapse) when expanded; toward content (expand)
+            when collapsed. Correct for an RTL sidebar pinned to the right. */}
         {!isMobile && (
           <button
             type="button"
@@ -229,17 +233,24 @@ export function AppShell({
           return (
             <Link
               to="/"
-              title="لوحة التحكم"
               className={cn(
                 "mb-2 flex items-center rounded-lg text-sm font-semibold transition duration-200 border-r-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                collapsedDesktop ? "justify-center px-0 py-2.5" : "gap-3 px-3 py-2.5",
+                showLabels ? "gap-3 px-3 py-2.5" : "justify-center px-0 py-2.5",
                 dashActive
                   ? "bg-primary/10 text-primary border-primary"
                   : "border-transparent text-foreground hover:bg-secondary",
               )}
+              title="لوحة التحكم"
             >
               <LayoutDashboard className="h-4 w-4 shrink-0" strokeWidth={2} />
-              {!collapsedDesktop && <span className="truncate">لوحة التحكم</span>}
+              <span
+                className={cn(
+                  "truncate transition-all duration-200 ease-out",
+                  showLabels ? "opacity-100 w-auto" : "opacity-0 w-0 overflow-hidden",
+                )}
+              >
+                لوحة التحكم
+              </span>
             </Link>
           );
         })()}
@@ -250,59 +261,35 @@ export function AppShell({
             const containsActive = g.items.some((it) =>
               it.exact ? pathname === it.to : pathname.startsWith(it.to),
             );
-
-            if (collapsedDesktop) {
-              return (
-                <li
-                  key={g.key}
-                  className="border-t border-border/40 pt-1 first:border-t-0 first:pt-0"
-                >
-                  {g.items.map((n) => {
-                    const active =
-                      pathname === n.to ||
-                      (!n.exact && pathname.startsWith(n.to + "/"));
-                    return (
-                      <Link
-                        key={n.to}
-                        to={n.to}
-                        title={n.label}
-                        className={cn(
-                          "my-0.5 flex items-center justify-center rounded-lg p-2 transition duration-200 border-r-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                          active
-                            ? "bg-primary/10 text-primary border-primary"
-                            : "border-transparent text-muted-foreground hover:bg-secondary hover:text-foreground",
-                        )}
-                      >
-                        <n.icon className="h-4 w-4 shrink-0" strokeWidth={2} />
-                      </Link>
-                    );
-                  })}
-                </li>
-              );
-            }
+            const showItems = !showLabels || isOpen;
 
             return (
               <li key={g.key}>
-                <button
-                  type="button"
-                  onClick={() => toggleGroup(g.key)}
-                  aria-expanded={isOpen}
-                  className={cn(
-                    "flex w-full items-center justify-between gap-2 rounded-lg px-3 py-2 text-[11px] font-semibold uppercase tracking-wider transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                    containsActive ? "text-foreground" : "text-muted-foreground",
-                    "hover:bg-secondary",
-                  )}
-                >
-                  <span>{g.label}</span>
-                  <ChevronDown
+                {showLabels ? (
+                  <button
+                    type="button"
+                    onClick={() => toggleGroup(g.key)}
+                    aria-expanded={isOpen}
                     className={cn(
-                      "h-3.5 w-3.5 transition-transform duration-200",
-                      isOpen && "rotate-180",
+                      "flex w-full items-center justify-between gap-2 rounded-lg px-3 py-2 text-[11px] font-semibold uppercase tracking-wider transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                      containsActive ? "text-foreground" : "text-muted-foreground",
+                      "hover:bg-secondary",
                     )}
-                  />
-                </button>
-                {isOpen && (
-                  <ul className="mt-1 space-y-1 pb-1">
+                  >
+                    <span>{g.label}</span>
+                    <ChevronDown
+                      className={cn(
+                        "h-3.5 w-3.5 transition-transform duration-200",
+                        isOpen && "rotate-180",
+                      )}
+                    />
+                  </button>
+                ) : (
+                  <div className="my-1 border-t border-border/50 first:border-t-0" />
+                )}
+
+                {showItems && (
+                  <ul className={cn("space-y-1 pb-1", showLabels ? "mt-1" : "mt-0")}>
                     {g.items.map((n) => {
                       const active =
                         pathname === n.to ||
@@ -313,14 +300,24 @@ export function AppShell({
                             to={n.to}
                             title={n.label}
                             className={cn(
-                              "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition duration-200 border-r-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                              "flex items-center rounded-lg text-sm font-medium transition duration-200 border-r-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                              showLabels ? "gap-3 px-3 py-2" : "justify-center px-0 py-2",
                               active
                                 ? "bg-primary/10 text-primary border-primary"
                                 : "border-transparent text-muted-foreground hover:bg-secondary hover:text-foreground",
                             )}
                           >
                             <n.icon className="h-4 w-4 shrink-0" strokeWidth={2} />
-                            <span className="truncate">{n.label}</span>
+                            <span
+                              className={cn(
+                                "truncate transition-all duration-200 ease-out",
+                                showLabels
+                                  ? "opacity-100 w-auto"
+                                  : "opacity-0 w-0 overflow-hidden",
+                              )}
+                            >
+                              {n.label}
+                            </span>
                           </Link>
                         </li>
                       );
@@ -332,8 +329,9 @@ export function AppShell({
           })}
         </ul>
 
+        {/* User footer */}
         <div className="mt-2 border-t border-border pt-2">
-          {me && !collapsedDesktop && (
+          {me && !collapsed && (
             <div
               className="flex items-center rounded-lg bg-secondary/40 px-2 py-1.5"
               title={me.name}
@@ -352,11 +350,11 @@ export function AppShell({
             title="تسجيل الخروج"
             className={cn(
               "mt-1.5 flex w-full items-center rounded-lg text-[12px] font-medium text-muted-foreground transition duration-200 hover:bg-destructive/10 hover:text-destructive focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
-              collapsedDesktop ? "justify-center p-2" : "gap-2 px-2 py-1.5",
+              collapsed && !isMobile ? "justify-center p-2" : "gap-2 px-2 py-1.5",
             )}
           >
             <LogOut className="h-3.5 w-3.5 shrink-0" />
-            {!collapsedDesktop && <span>تسجيل الخروج</span>}
+            {(!collapsed || isMobile) && <span>تسجيل الخروج</span>}
           </button>
         </div>
       </nav>
@@ -376,6 +374,7 @@ export function AppShell({
           {renderNav(false)}
         </aside>
 
+        {/* Mobile drawer (animated) */}
         <div
           className={cn(
             "fixed inset-0 z-40 bg-black/60 backdrop-blur-sm transition-opacity duration-200 lg:hidden",
@@ -386,7 +385,7 @@ export function AppShell({
         />
         <aside
           className={cn(
-            "fixed right-0 top-0 z-50 flex h-[100dvh] w-[85vw] max-w-[20rem] flex-col border-l border-border bg-card shadow-2xl transition-transform duration-300 ease-out lg:hidden",
+            "fixed top-0 z-50 flex h-[100dvh] w-[85vw] max-w-[20rem] flex-col border-l border-border bg-card shadow-2xl transition-transform duration-300 ease-out lg:hidden",
             mobileOpen ? "translate-x-0" : "translate-x-full",
           )}
           aria-hidden={!mobileOpen}
@@ -406,6 +405,7 @@ export function AppShell({
         </aside>
 
         <main className="min-w-0 flex-1 space-y-4">
+          {/* Sidebar toggle bar */}
           <div className="flex items-center gap-2">
             <button
               type="button"

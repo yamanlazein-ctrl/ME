@@ -122,7 +122,7 @@ export function SaleLineCard({
         </div>
       </div>
 
-      <div className="space-y-2 p-3">
+      <div className="space-y-3 p-4">
         <GroupSection title="بيانات القماش">
           <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
             <CardField label="نوع القماش" required>
@@ -198,7 +198,7 @@ export function SaleLineCard({
         </GroupSection>
 
         <GroupSection title="بيانات البيع">
-          <div className="grid grid-cols-2 gap-2 md:grid-cols-5">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,0.7fr)_minmax(0,1.2fr)_minmax(0,0.7fr)_minmax(0,1fr)]">
             <CardField label="الكمية (كغ)" required>
               <Input
                 type="number"

@@ -85,7 +85,7 @@ function fieldLabel(path: string): string {
   if (p.includes("quantity") || p.includes("initialkg") || p === "weight") return "الوزن / الكمية";
   if (p.includes("discount")) return "الخصم";
   if (p.includes("note") || p.includes("notes")) return "الملاحظات";
-  if (p.includes("pieces") || p.includes("count") || p.includes("adad")) return "العدد";
+  if (p.includes("pieces")) return "الأثواب";
   if (p.includes("paid")) return "المبلغ المدفوع";
   if (p.includes("hex")) return "قيمة اللون (hex)";
   return path;
@@ -193,7 +193,6 @@ function EntryInvoicePage() {
           else if (d.label.includes("الماكينة")) line.machineNumber = v;
           else if (d.label.includes("كرماج")) line.kromaj = v;
           else if (d.label.includes("GSM")) line.gsm = v;
-          else if (d.label.includes("العدد")) line.adad = v;
           else if (d.label.includes("السحب")) line.sahb = v;
           else if (d.label.includes("قائم")) line.grossKg = Number(v) || 0;
         }
@@ -271,7 +270,6 @@ function EntryInvoicePage() {
       machineNumber: currentLine.machineNumber,
       kromaj: currentLine.kromaj,
       gsm: currentLine.gsm,
-      adad: currentLine.adad,
       sahb: currentLine.sahb,
       // Color fields are intentionally left EMPTY so user picks a new color
       // (existingColorId, colorName, colorCode, colorHex, colorImageUrl all undefined/empty from emptyLine())
@@ -488,7 +486,6 @@ function EntryInvoicePage() {
           l.machineNumber ? `رقم الماكينة: ${l.machineNumber}` : "",
           l.kromaj ? `كراماج: ${l.kromaj}` : "",
           l.gsm ? `GSM: ${l.gsm}` : "",
-          l.adad ? `العدد: ${l.adad}` : "",
           l.sahb ? `السحب: ${l.sahb}` : "",
           l.grossKg ? `وزن قائم: ${l.grossKg}` : "",
           l.notes || "",
@@ -623,7 +620,7 @@ function EntryInvoicePage() {
 
   return (
     <AppShell>
-      <div className="mx-auto w-full max-w-[1400px] space-y-2 pb-24">
+      <div className="mx-auto w-full max-w-[1400px] space-y-4 pb-24">
         <InvoiceHeader
           variant="entry"
           invoiceNumber={invoiceNo}
@@ -633,8 +630,13 @@ function EntryInvoicePage() {
         />
 
         {/* Header row — 5 fields, supplier now inline-searchable + inline-create */}
-        <section className="rounded-lg border border-border bg-card">
-          <div className="grid gap-2 p-2 md:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)_minmax(0,0.9fr)_minmax(0,0.8fr)_minmax(0,0.9fr)]">
+        <section className="overflow-hidden rounded-lg border border-border bg-card">
+          <div className="flex items-center gap-2 border-b border-border/60 bg-secondary/20 px-4 py-2">
+            <span className="text-[11px] font-bold uppercase tracking-[0.16em] text-foreground/55">
+              بيانات الفاتورة
+            </span>
+          </div>
+          <div className="grid gap-x-4 gap-y-3 p-4 md:grid-cols-[minmax(0,2fr)_minmax(0,1.2fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)]">
             <HeaderField label="المورد *">
               <SupplierInlineCombobox value={supplierId} onChange={setSupplierId} />
             </HeaderField>
@@ -804,10 +806,10 @@ function EntryInvoicePage() {
                   </div>
 
                   {/* Card body — grouped sections */}
-                  <div className="space-y-2 p-3">
+                  <div className="space-y-3 p-4">
                     {/* ── بيانات القماش ── */}
                     <GroupSection title="بيانات القماش">
-                      <div className="grid grid-cols-2 gap-2 md:grid-cols-3">
+                      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)]">
                         <CardField label="نوع القماش" required>
                           <InlineFabricCell
                             ref={(el) => {
@@ -848,8 +850,8 @@ function EntryInvoicePage() {
 
                     {/* ── بيانات الإنتاج ── */}
                     <GroupSection title="بيانات الإنتاج">
-                      <div className="grid grid-cols-2 gap-2 md:grid-cols-3">
-                        <CardField label="الأثواب (يُحفظ بالمخزون)">
+                      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+                        <CardField label="الأثواب">
                           <Input
                             type="number"
                             min="1"
@@ -859,11 +861,10 @@ function EntryInvoicePage() {
                             }
                             className="h-9 tabular-nums"
                             placeholder="1"
-                            aria-label="عدد الأثواب (المخزون)"
+                            aria-label="عدد الأثواب"
                           />
                           <p className="mt-0.5 text-[10px] leading-tight text-muted-foreground">
-                            يُحفظ في المخزون ويظهر في الطباعة — لا تخلطها بحقل «العدد» (مجرد ملاحظة
-                            لا تُحسب).
+                            يُطبع على الفاتورة ويُحفظ مع الصبغة.
                           </p>
                         </CardField>
                         <CardField label="رقم الماكينة">
@@ -882,15 +883,6 @@ function EntryInvoicePage() {
                             className="h-9"
                             placeholder="—"
                             aria-label="كراماج"
-                          />
-                        </CardField>
-                        <CardField label="العدد">
-                          <Input
-                            value={l.adad}
-                            onChange={(e) => updateLine(l.id, { adad: e.target.value })}
-                            className="h-9 tabular-nums"
-                            placeholder="—"
-                            aria-label="العدد"
                           />
                         </CardField>
                         <CardField label="السحب">
@@ -934,7 +926,7 @@ function EntryInvoicePage() {
 
                     {/* ── بيانات الوزن ── */}
                     <GroupSection title="بيانات الوزن">
-                      <div className="grid grid-cols-2 gap-2 md:grid-cols-2">
+                      <div className="grid grid-cols-2 gap-3">
                         <CardField label="الوزن القائم (كغ)">
                           <Input
                             type="number"
@@ -970,7 +962,7 @@ function EntryInvoicePage() {
 
                     {/* ── بيانات الصباغة ── */}
                     <GroupSection title="بيانات الصباغة">
-                      <div className="grid grid-cols-1 gap-2">
+                      <div className="max-w-[16rem]">
                         <CardField label="رقم الصبغة">
                           <Input
                             value={l.dyeBatch}
@@ -985,7 +977,7 @@ function EntryInvoicePage() {
 
                     {/* ── بيانات الشراء ── */}
                     <GroupSection title="بيانات الشراء">
-                      <div className="grid grid-cols-2 gap-2 md:grid-cols-3">
+                      <div className="grid grid-cols-2 gap-3 md:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)_minmax(0,1.2fr)]">
                         <CardField label={`السعر / كغ (${currencySymbol(currency)})`} required>
                           <Input
                             type="number"
@@ -1080,17 +1072,24 @@ function EntryInvoicePage() {
         {/* ── Totals ─────────────────────────────────────────────── */}
         <section
           className={cn(
-            "rounded-lg border",
+            "overflow-hidden rounded-lg border",
             isUSD ? "border-success/40 bg-success/[0.04]" : "border-primary/30 bg-primary/[0.03]",
           )}
         >
-          <div className="grid gap-x-4 gap-y-1 px-3 py-2 sm:grid-cols-2 lg:grid-cols-6">
+          <div className="flex items-center gap-2 border-b border-border/60 bg-secondary/20 px-4 py-2">
+            <span className="text-[11px] font-bold uppercase tracking-[0.16em] text-foreground/55">
+              المجاميع
+            </span>
+          </div>
+          <div className="grid gap-x-6 gap-y-2 px-4 py-3 sm:grid-cols-2">
             <TotalCell label="الكمية" value={`${formatNumber(totalQty)} كغ`} />
             <TotalCell
               label="المجموع"
               value={`${formatMoney(subtotal)} ${currencySymbol(currency)}`}
               tone={moneyClass}
             />
+          </div>
+          <div className="grid gap-x-6 gap-y-3 border-t border-border/60 px-4 py-3 sm:grid-cols-2 lg:grid-cols-4">
             <TotalInputCell
               label="الخصم"
               value={discount}
@@ -1119,32 +1118,32 @@ function EntryInvoicePage() {
               suffix={currencySymbol(currency)}
               tone={moneyClass}
             />
-            <div
+          </div>
+          <div
+            className={cn(
+              "flex flex-wrap items-center justify-between gap-3 border-t px-4 py-3",
+              isUSD ? "border-success/30 bg-success/[0.06]" : "border-primary/20 bg-primary/[0.05]",
+            )}
+          >
+            <span
               className={cn(
-                "flex flex-col items-end justify-center border-r pr-3",
-                isUSD ? "border-success/30" : "border-primary/20",
+                "text-[11px] font-bold uppercase tracking-[0.16em]",
+                isUSD ? "text-success" : "text-primary",
               )}
             >
-              <span
-                className={cn(
-                  "text-[10px] font-bold uppercase tracking-[0.14em]",
-                  isUSD ? "text-success" : "text-primary",
-                )}
-              >
-                الإجمالي الكلي
+              الإجمالي الكلي
+            </span>
+            <span
+              className={cn(
+                "text-2xl font-black leading-tight tabular-nums",
+                isUSD ? "text-success" : "text-foreground",
+              )}
+            >
+              {formatMoney(grandTotal)}{" "}
+              <span className="text-sm font-medium text-muted-foreground">
+                {currencySymbol(currency)}
               </span>
-              <span
-                className={cn(
-                  "text-xl font-black leading-tight tabular-nums",
-                  isUSD ? "text-success" : "text-foreground",
-                )}
-              >
-                {formatMoney(grandTotal)}{" "}
-                <span className="text-sm font-medium text-muted-foreground">
-                  {currencySymbol(currency)}
-                </span>
-              </span>
-            </div>
+            </span>
           </div>
           {paid !== "" && Number(paid) > 0 && (
             <div className="flex items-center justify-end gap-2 border-t px-3 py-2 text-xs font-semibold">

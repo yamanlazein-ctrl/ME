@@ -37,12 +37,12 @@ export function CardField({
 
 export function GroupSection({ title, children }: { title: string; children: ReactNode }) {
   return (
-    <div className="rounded-md border border-border/60 bg-secondary/20 p-2.5">
-      <div className="mb-1.5 flex items-center gap-2">
-        <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-primary">
+    <div className="rounded-lg border border-border/50 bg-secondary/20 p-3">
+      <div className="mb-2 flex items-center gap-2">
+        <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-foreground/55">
           {title}
         </span>
-        <div className="h-px flex-1 bg-border/70" />
+        <div className="h-px flex-1 bg-border/60" />
       </div>
       {children}
     </div>

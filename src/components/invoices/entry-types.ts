@@ -24,7 +24,6 @@ export type EntryLine = {
   machineNumber: string;
   kromaj: string;
   gsm: string;
-  adad: string;
   sahb: string;
   pieces: number;
   notes?: string;
@@ -49,7 +48,6 @@ export const emptyLine = (): EntryLine => ({
   machineNumber: "",
   kromaj: "",
   gsm: "",
-  adad: "",
   sahb: "",
   pieces: 1,
 });

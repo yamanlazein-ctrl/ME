@@ -274,7 +274,7 @@ function SaleInvoicePage() {
 
   return (
     <AppShell>
-      <div className="mx-auto w-full max-w-[1400px] space-y-2 pb-24">
+      <div className="mx-auto w-full max-w-[1400px] space-y-4 pb-24">
         <InvoiceHeader
           variant="sale"
           invoiceNumber={invoiceNo}
@@ -380,8 +380,13 @@ function SaleInvoicePage() {
           )}
         </section>
 
-        <section className="rounded-lg border border-border bg-card">
-          <div className="grid gap-2 p-2 md:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)_minmax(0,0.9fr)_minmax(0,0.8fr)_minmax(0,0.9fr)]">
+        <section className="overflow-hidden rounded-lg border border-border bg-card">
+          <div className="flex items-center gap-2 border-b border-border/60 bg-secondary/20 px-4 py-2">
+            <span className="text-[11px] font-bold uppercase tracking-[0.16em] text-foreground/55">
+              بيانات الفاتورة
+            </span>
+          </div>
+          <div className="grid gap-x-4 gap-y-3 p-4 md:grid-cols-[minmax(0,2fr)_minmax(0,1.2fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)]">
             <HeaderField label="العميل *">
               <div className="flex gap-1">
                 <div className="min-w-0 flex-1">
@@ -451,7 +456,7 @@ function SaleInvoicePage() {
               </Select>
             </HeaderField>
           </div>
-          <div className="grid gap-2 border-t border-border/70 bg-secondary/20 p-2 md:grid-cols-[minmax(0,0.4fr)_minmax(0,1.6fr)]">
+          <div className="grid gap-x-4 gap-y-3 border-t border-border/70 bg-secondary/20 p-4 md:grid-cols-[minmax(0,0.4fr)_minmax(0,1.6fr)]">
             <HeaderField label="المستودع">
               <Select value={warehouse} onValueChange={setWarehouse}>
                 <SelectTrigger className="!h-9">
@@ -490,11 +495,16 @@ function SaleInvoicePage() {
 
         <section
           className={cn(
-            "rounded-lg border",
+            "overflow-hidden rounded-lg border",
             isUSD ? "border-success/40 bg-success/[0.04]" : "border-primary/30 bg-primary/[0.03]",
           )}
         >
-          <div className="grid gap-x-4 gap-y-2 px-3 py-2 sm:grid-cols-3">
+          <div className="flex items-center gap-2 border-b border-border/60 bg-secondary/20 px-4 py-2">
+            <span className="text-[11px] font-bold uppercase tracking-[0.16em] text-foreground/55">
+              المجاميع
+            </span>
+          </div>
+          <div className="grid gap-x-6 gap-y-2 px-4 py-3 sm:grid-cols-3">
             <TotalCell label="الكمية" value={`${formatNumber(totalQty)} كغ`} />
             <TotalInputCell
               label="الخصم"
@@ -511,7 +521,7 @@ function SaleInvoicePage() {
               tone={moneyClass}
             />
           </div>
-          <div className="grid gap-x-4 gap-y-2 border-t border-border/60 px-3 py-3 sm:grid-cols-3">
+          <div className="grid gap-x-6 gap-y-2 border-t border-border/60 px-4 py-3 sm:grid-cols-3">
             <TotalCell
               label="السعر"
               value={`${formatMoney(subtotal)} ${currencySymbol(currency)}`}
@@ -532,7 +542,7 @@ function SaleInvoicePage() {
           </div>
           <div
             className={cn(
-              "flex flex-wrap items-center justify-between gap-3 border-t border-border/60 bg-card/50 px-3 py-2",
+              "flex flex-wrap items-center justify-between gap-3 border-t border-border/60 bg-card/50 px-4 py-3",
               isUSD ? "border-success/20" : "border-primary/15",
             )}
           >

@@ -1,7 +1,7 @@
 /**
  * Note parser — extracts structured fields from a `note` string that was
  * built by the entry form (invoices.entry.new.tsx). The form concatenates
- * reference / source / machine / chromaj / gsm / count / draw / grossKg
+ * reference / source / machine / chromaj / gsm / draw / grossKg
  * with a known separator. Anything that doesn't match a known key is
  * returned as `freeText` so the printable "ملاحظات" only shows real
  * free-form notes (per the user's spec).
@@ -17,7 +17,6 @@ export type ParsedLineNote = {
   chromaj: string;
   gsm: string;
   length: string;
-  count: string;
   draw: string;
   grossKg: string;
   freeText: string;
@@ -30,7 +29,6 @@ const EMPTY: ParsedLineNote = {
   chromaj: "",
   gsm: "",
   length: "",
-  count: "",
   draw: "",
   grossKg: "",
   freeText: "",
@@ -48,7 +46,6 @@ const FIELD_KEYS: Array<{ key: keyof Omit<ParsedLineNote, "freeText">; pattern: 
   { key: "chromaj", pattern: /كروماج\s*:\s*([^•]+?)(?=\s*•|$)/ },
   { key: "gsm", pattern: /GSM\s*:\s*([^•]+?)(?=\s*•|$)/ },
   { key: "length", pattern: /المد\s*:\s*([^•]+?)(?=\s*•|$)/ },
-  { key: "count", pattern: /العدد\s*:\s*([^•]+?)(?=\s*•|$)/ },
   { key: "draw", pattern: /السحب\s*:\s*([^•]+?)(?=\s*•|$)/ },
   { key: "grossKg", pattern: /وزن\s*قائم\s*:\s*([^•]+?)(?=\s*•|$)/ },
 ];
@@ -88,7 +85,6 @@ export function hasStructuredNote(parsed: ParsedLineNote): boolean {
     !!parsed.chromaj ||
     !!parsed.gsm ||
     !!parsed.length ||
-    !!parsed.count ||
     !!parsed.draw ||
     !!parsed.grossKg
   );

@@ -163,7 +163,6 @@ export function SaleInvoicePrint({ invoice, totalPages, pageNumber }: SaleInvoic
     if (parsed.machineNo) details.push({ label: "رقم الماكينة", value: parsed.machineNo });
     if (parsed.chromaj) details.push({ label: "الكراماج", value: parsed.chromaj });
     else if (roll?.weightGsm) details.push({ label: "الكراماج", value: String(roll.weightGsm) });
-    if (parsed.count) details.push({ label: "العدد", value: parsed.count });
     if (parsed.draw) details.push({ label: "السحب", value: parsed.draw });
     if (parsed.reference) details.push({ label: "المرجعية", value: parsed.reference });
 
