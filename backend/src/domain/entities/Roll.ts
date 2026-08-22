@@ -10,6 +10,8 @@ export interface RollData {
   initialKg: number;
   remainingKg: number;
   pieces: number;
+  /** Live piece stock — decremented by sales, restored by sale returns/cancels. */
+  remainingPieces: number;
   pricePerKg: number;
   salePricePerKg?: number;
   currency: string;
@@ -36,6 +38,7 @@ export class Roll {
       initialKg: input.initialKg,
       remainingKg: input.initialKg,
       pieces: input.pieces ?? 1,
+      remainingPieces: input.remainingPieces ?? input.pieces ?? 1,
       pricePerKg: input.pricePerKg,
       salePricePerKg: input.salePricePerKg,
       currency: input.currency ?? "SYP",
@@ -107,6 +110,7 @@ export interface CreateRollInput {
   dyeBatch?: string;
   initialKg: number;
   pieces?: number;
+  remainingPieces?: number;
   pricePerKg: number;
   salePricePerKg?: number;
   currency?: string;

@@ -82,6 +82,11 @@ export class PostgresRollRepository implements IRollRepository {
           dyeBatch: data.dyeBatch,
           initialKg: String(data.initialKg),
           remainingKg: String(data.remainingKg ?? data.initialKg),
+          pieces: data.pieces ?? 1,
+          // Mirror remainingKg semantics: born with stock → pieces available;
+          // entry-invoice flow (remainingKg=0) → invoice transaction increments.
+          remainingPieces:
+            Number(data.remainingKg ?? data.initialKg) > 0 ? (data.pieces ?? 1) : (data.remainingPieces ?? 0),
           pricePerKg: String(data.pricePerKg),
           salePricePerKg: data.salePricePerKg ? String(data.salePricePerKg) : null,
           currency: data.currency ?? "SYP",
@@ -310,6 +315,7 @@ export class PostgresRollRepository implements IRollRepository {
       initialKg: Number(row.initialKg),
       remainingKg: Number(row.remainingKg),
       pieces: Number(row.pieces ?? 1),
+      remainingPieces: Number(row.remainingPieces ?? 0),
       pricePerKg: Number(row.pricePerKg),
       salePricePerKg: row.salePricePerKg ? Number(row.salePricePerKg) : undefined,
       currency: row.currency,

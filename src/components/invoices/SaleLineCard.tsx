@@ -54,6 +54,9 @@ export function SaleLineCard({
     : [];
   const roll = rollById(line.rollId);
   const exceeds = roll ? line.quantityKg > roll.remainingKg : false;
+  const piecesExceeds = roll
+    ? (line.pieces || 1) > (roll.remainingPieces ?? roll.pieces ?? 1)
+    : false;
 
   return (
     <article
@@ -296,6 +299,12 @@ export function SaleLineCard({
             <div className="mt-2 flex items-center gap-2 rounded-md border border-destructive/40 bg-destructive/10 px-2.5 py-1.5 text-[11px] font-semibold text-destructive">
               <AlertTriangle className="h-3.5 w-3.5" />
               الكمية تتجاوز المتاح في الصبغة ({roll.remainingKg} كغ).
+            </div>
+          )}
+          {piecesExceeds && roll && (
+            <div className="mt-2 flex items-center gap-2 rounded-md border border-destructive/40 bg-destructive/10 px-2.5 py-1.5 text-[11px] font-semibold text-destructive">
+              <AlertTriangle className="h-3.5 w-3.5" />
+              الأثواب تتجاوز المتاح في الصبغة ({roll.remainingPieces ?? roll.pieces ?? 1} أثواب).
             </div>
           )}
         </GroupSection>

@@ -14,6 +14,8 @@ export interface RollData {
   initialKg: number;
   remainingKg: number;
   pieces: number;
+  /** Live piece stock — moves with entry/sale/return transactions. */
+  remainingPieces?: number;
   pricePerKg: number;
   salePricePerKg?: number | null;
   currency: Currency;
@@ -34,6 +36,7 @@ export class Roll implements RollData {
   readonly initialKg: number;
   remainingKg: number;
   pieces: number;
+  remainingPieces?: number;
   pricePerKg: number;
   salePricePerKg?: number | null;
   readonly currency: Currency;
@@ -53,6 +56,7 @@ export class Roll implements RollData {
     this.initialKg = data.initialKg;
     this.remainingKg = data.remainingKg;
     this.pieces = data.pieces ?? 1;
+    this.remainingPieces = data.remainingPieces;
     this.pricePerKg = data.pricePerKg;
     this.salePricePerKg = data.salePricePerKg;
     this.currency = data.currency;
@@ -76,6 +80,8 @@ export class Roll implements RollData {
       pieces: props.pieces ?? 1,
       id: crypto.randomUUID(),
       remainingKg: initial,
+      remainingPieces:
+        props.remainingPieces ?? (initial > 0 ? (props.pieces ?? 1) : 0),
       version: 1,
       createdAt: new Date().toISOString(),
     });

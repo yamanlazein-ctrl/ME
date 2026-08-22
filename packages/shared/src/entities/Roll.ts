@@ -7,6 +7,8 @@ export type RollData = {
   initialKg: number;
   remainingKg: number;
   pieces: number;
+  /** Live piece stock — moves with entry/sale/return transactions. */
+  remainingPieces?: number;
   pricePerKg: number;
   salePricePerKg?: number | null;
   currency: string;
@@ -50,21 +52,27 @@ export function createRollData(input: {
   } as unknown as RollData;
 }
 
-export function reserveStock(data: RollData, kg: number): void {
+export function reserveStock(data: RollData, kg: number, pieces?: number): void {
   if (kg <= 0) throw new Error("reserve() requires positive kg");
   if (data.remainingKg < kg) throw new Error(`Insufficient stock: requested ${kg}, available ${data.remainingKg} on roll ${data.rollNo}`);
   data.remainingKg = Math.round((data.remainingKg - kg) * 100) / 100;
+  if (pieces !== undefined && data.remainingPieces !== undefined) {
+    data.remainingPieces = Math.max(0, data.remainingPieces - pieces);
+  }
   data.version += 1;
   if (data.remainingKg === 0) data.status = "exhausted";
 }
 
-export function releaseStock(data: RollData, kg: number): void {
+export function releaseStock(data: RollData, kg: number, pieces?: number): void {
   if (kg <= 0) return;
   const next = Math.round((data.remainingKg + kg) * 100) / 100;
   if (next > data.initialKg) {
     data.remainingKg = data.initialKg;
   } else {
     data.remainingKg = next;
+  }
+  if (pieces !== undefined && data.remainingPieces !== undefined) {
+    data.remainingPieces = data.remainingPieces + pieces;
   }
   data.version += 1;
   if (data.remainingKg > 0 && data.status === "exhausted") data.status = "in_stock";

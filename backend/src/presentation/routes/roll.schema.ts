@@ -6,9 +6,15 @@ export const createRollSchema = z.object({
   rollNo: z.string().min(1).max(100),
   dyeBatch: z.string().max(100).optional(),
   initialKg: z.number().positive().max(100000).refine(is2dp, { message: MAX_2DP_MESSAGE }),
-  /** Optional — defaults to initialKg. Entry-invoice flows pass 0 so the
+  /** Optional - defaults to initialKg. Entry-invoice flows pass 0 so the
    *  invoice transaction increments remainingKg to the real stock. */
   remainingKg: z.number().min(0).max(100000).refine(is2dp, { message: MAX_2DP_MESSAGE }).optional(),
+  /** Piece count for this roll. Previously accepted from the entry form but
+   *  silently stripped here (zod strips unknown keys) — every roll got
+   *  pieces=1. Now persisted, and remainingPieces starts = pieces when the
+   *  roll is born with stock (remainingKg > 0), or 0 when the entry-invoice
+   *  flow will increment it. */
+  pieces: z.coerce.number().int().positive().max(100000).optional().default(1),
   pricePerKg: z.number().positive().refine(is2dp, { message: MAX_2DP_MESSAGE }),
   salePricePerKg: z.number().positive().optional(),
   currency: z.enum(["SYP", "USD", "EUR"]).optional(),

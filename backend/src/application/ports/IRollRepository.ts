@@ -15,6 +15,11 @@ export interface CreateRollData {
   dyeBatch?: string;
   initialKg: number;
   remainingKg?: number;
+  /** Piece count (original). Defaults to 1. */
+  pieces?: number;
+  /** Live piece stock. Defaults: = pieces when born with kg stock, else 0
+   *  (entry-invoice flow increments it alongside remainingKg). */
+  remainingPieces?: number;
   pricePerKg: number;
   salePricePerKg?: number;
   currency?: string;

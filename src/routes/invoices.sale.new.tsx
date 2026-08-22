@@ -193,6 +193,14 @@ function SaleInvoicePage() {
       if (roll && l.quantityKg > roll.remainingKg) {
         return setError(`الكمية في الصبغة #${roll.rollNo} تتجاوز المتاح (${roll.remainingKg} كغ).`);
       }
+      if ((l.pieces || 1) < 1 || !Number.isInteger(l.pieces || 1)) {
+        return setError("عدد الأثواب يجب أن يكون عدداً صحيحاً ≥ 1.");
+      }
+      if (roll && (l.pieces || 1) > (roll.remainingPieces ?? roll.pieces ?? 1)) {
+        return setError(
+          `الأثواب في الصبغة #${roll.rollNo} تتجاوز المتاح (${roll.remainingPieces ?? roll.pieces ?? 1} أثواب).`,
+        );
+      }
     }
     const combinedNotes = [
       reference && `المرجع: ${reference}`,

@@ -309,24 +309,36 @@ export class PostgresReturnRepository implements IReturnRepository {
       );
 
       for (const [rollId, totalQty] of inputByRoll) {
+        const totalPieces = piecesByRoll.get(rollId) ?? 1;
         const [r] = await tx
-          .select({ remainingKg: rolls.remainingKg, version: rolls.version })
+          .select({
+            remainingKg: rolls.remainingKg,
+            remainingPieces: rolls.remainingPieces,
+            version: rolls.version,
+          })
           .from(rolls)
           .where(and(eq(rolls.id, rollId), eq(rolls.tenantId, ctx.tenantId)))
           .for("update")
           .limit(1);
         if (r) {
           const currentKg = Number(r.remainingKg);
+          const currentPieces = Number(r.remainingPieces);
           // مرتجع إدخال = إرجاع مواد للمورد → ينقص المخزون؛ مرتجع بيع = استرجاع من العميل → يزيد المخزون
           const delta = input.kind === "entry" ? -totalQty : totalQty;
+          const piecesDelta = input.kind === "entry" ? -totalPieces : totalPieces;
           const newKg = Math.max(0, currentKg + delta);
+          const newPieces = Math.max(0, currentPieces + piecesDelta);
           if (input.kind === "entry" && currentKg < totalQty) {
             throw new Error(`الكمية المرتجعة (${totalQty} كغ) تتجاوز المتاح في الصبغة (${currentKg} كغ)`);
+          }
+          if (input.kind === "entry" && currentPieces < totalPieces) {
+            throw new Error(`الأثواب المرتجعة (${totalPieces}) تتجاوز المتاح في الصبغة (${currentPieces} أثواب)`);
           }
           const updated = await tx
             .update(rolls)
             .set({
               remainingKg: String(newKg),
+              remainingPieces: newPieces,
               status: sql`CASE WHEN ${String(newKg)} <= '0' THEN 'exhausted' ELSE 'in_stock' END`,
               version: sql`${rolls.version} + 1`,
               updatedAt: new Date(),
@@ -487,7 +499,11 @@ export class PostgresReturnRepository implements IReturnRepository {
 
       for (const l of lines) {
         const [roll] = await tx
-          .select({ remainingKg: rolls.remainingKg, version: rolls.version })
+          .select({
+            remainingKg: rolls.remainingKg,
+            remainingPieces: rolls.remainingPieces,
+            version: rolls.version,
+          })
           .from(rolls)
           .where(and(eq(rolls.id, l.rollId), eq(rolls.tenantId, ctx.tenantId)))
           .for("update")
@@ -495,11 +511,14 @@ export class PostgresReturnRepository implements IReturnRepository {
         if (roll) {
           // عكس التأثير الأصلي عند الإلغاء: مرتجع إدخال → يعيد الكمية للمخزون؛ مرتجع بيع → يخصمها
           const delta = r.kind === "entry" ? Number(l.quantityKg) : -Number(l.quantityKg);
+          const piecesDelta = r.kind === "entry" ? Number(l.pieces ?? 1) : -Number(l.pieces ?? 1);
           const newKg = Math.max(0, Number(roll.remainingKg) + delta);
+          const newPieces = Math.max(0, Number(roll.remainingPieces) + piecesDelta);
           const updated = await tx
             .update(rolls)
             .set({
               remainingKg: String(newKg),
+              remainingPieces: newPieces,
               status: sql`CASE WHEN ${String(newKg)} <= '0' THEN 'exhausted' ELSE 'in_stock' END`,
               version: sql`${rolls.version} + 1`,
               updatedAt: new Date(),

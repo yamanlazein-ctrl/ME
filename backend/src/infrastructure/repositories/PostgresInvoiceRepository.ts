@@ -266,21 +266,30 @@ export class PostgresInvoiceRepository implements IInvoiceRepository {
         })),
       );
 
-      // Deduct stock — sale invoices only, with optimistic locking
+      // Deduct stock — sale invoices only, with optimistic locking.
+      // Dual-unit: pieces deducted alongside kg (P0-LOGIC-pieces).
       if (isSale) {
         for (const line of input.lines) {
+          const linePieces = line.pieces ?? 1;
           const [r] = await tx
-            .select({ remainingKg: rolls.remainingKg })
+            .select({ remainingKg: rolls.remainingKg, remainingPieces: rolls.remainingPieces })
             .from(rolls)
             .where(and(eq(rolls.id, line.rollId), eq(rolls.tenantId, ctx.tenantId)))
             .for("update")
             .limit(1);
+          if (linePieces > Number(r!.remainingPieces)) {
+            throw new Error(
+              `عدد الأثواب المطلوب (${linePieces}) يتجاوز المتاح في الصبغة (${Number(r!.remainingPieces)} أثواب)`,
+            );
+          }
           const newKg = Math.max(0, Number(r!.remainingKg) - line.quantityKg);
+          const newPieces = Math.max(0, Number(r!.remainingPieces) - linePieces);
           const expectedVersion = expectedVersions.get(line.rollId);
           const updated = await tx
             .update(rolls)
             .set({
               remainingKg: String(newKg),
+              remainingPieces: newPieces,
               status: sql`CASE WHEN ${String(newKg)} <= '0' THEN 'exhausted' ELSE ${rolls.status} END`,
               version: sql`${rolls.version} + 1`,
               updatedAt: new Date(),
@@ -321,8 +330,13 @@ export class PostgresInvoiceRepository implements IInvoiceRepository {
       // increase by the invoice quantity (this is the documented behavior).
       if (!isSale) {
         for (const line of input.lines) {
+          const linePieces = line.pieces ?? 1;
           const [before] = await tx
-            .select({ remainingKg: rolls.remainingKg, colorId: rolls.colorId })
+            .select({
+              remainingKg: rolls.remainingKg,
+              remainingPieces: rolls.remainingPieces,
+              colorId: rolls.colorId,
+            })
             .from(rolls)
             .where(and(eq(rolls.id, line.rollId), eq(rolls.tenantId, ctx.tenantId)))
             .for("update")
@@ -348,10 +362,12 @@ export class PostgresInvoiceRepository implements IInvoiceRepository {
             throw new Error(`القماش المحدد للبند لا يطابق قماش لون اللفافة ${line.rollId} الفعلي`);
           }
           const newKg = Number(before?.remainingKg ?? 0) + line.quantityKg;
+          const newPieces = Number(before?.remainingPieces ?? 0) + linePieces;
           await tx
             .update(rolls)
             .set({
               remainingKg: sql`${rolls.remainingKg} + ${line.quantityKg}`,
+              remainingPieces: sql`${rolls.remainingPieces} + ${linePieces}`,
               status: sql`CASE WHEN ${rolls.remainingKg} + ${line.quantityKg} > 0 THEN 'in_stock' ELSE ${rolls.status} END`,
               version: sql`${rolls.version} + 1`,
               updatedAt: new Date(),
@@ -630,17 +646,19 @@ export class PostgresInvoiceRepository implements IInvoiceRepository {
       if (inv.type === "sale") {
         for (const l of ilines) {
           const [r] = await tx
-            .select({ remainingKg: rolls.remainingKg })
+            .select({ remainingKg: rolls.remainingKg, remainingPieces: rolls.remainingPieces })
             .from(rolls)
             .where(and(eq(rolls.id, l.rollId), eq(rolls.tenantId, ctx.tenantId)))
             .for("update")
             .limit(1);
           if (r) {
             const newKg = Number(r.remainingKg) + Number(l.quantityKg);
+            const newPieces = Number(r.remainingPieces) + Number(l.pieces ?? 1);
             await tx
               .update(rolls)
               .set({
                 remainingKg: String(newKg),
+                remainingPieces: newPieces,
                 status: "in_stock",
                 version: sql`${rolls.version} + 1`,
                 updatedAt: new Date(),
@@ -667,17 +685,19 @@ export class PostgresInvoiceRepository implements IInvoiceRepository {
       } else {
         for (const l of ilines) {
           const [r] = await tx
-            .select({ remainingKg: rolls.remainingKg })
+            .select({ remainingKg: rolls.remainingKg, remainingPieces: rolls.remainingPieces })
             .from(rolls)
             .where(and(eq(rolls.id, l.rollId), eq(rolls.tenantId, ctx.tenantId)))
             .for("update")
             .limit(1);
           if (r) {
             const newKg = Math.max(0, Number(r.remainingKg) - Number(l.quantityKg));
+            const newPieces = Math.max(0, Number(r.remainingPieces) - Number(l.pieces ?? 1));
             await tx
               .update(rolls)
               .set({
                 remainingKg: String(newKg),
+                remainingPieces: newPieces,
                 status: newKg <= 0 ? "exhausted" : "in_stock",
                 version: sql`${rolls.version} + 1`,
                 updatedAt: new Date(),

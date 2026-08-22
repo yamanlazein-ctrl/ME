@@ -204,7 +204,7 @@ export function totalKgOfColor(colorId: string): number {
 }
 
 export function totalPiecesOfColor(colorId: string): number {
-  return rollsOfColor(colorId).reduce((s, r) => s + (r.pieces ?? 1), 0);
+  return rollsOfColor(colorId).reduce((s, r) => s + (r.remainingPieces ?? r.pieces ?? 1), 0);
 }
 
 export function totalKgOfFabric(fabricId: string): number {

@@ -239,6 +239,13 @@
       "when": 1785400000029,
       "tag": "0033_negative_opening_balance_fix",
       "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": 7,
+      "when": 1785400000030,
+      "tag": "0034_roll_remaining_pieces",
+      "breakpoints": true
     }
   ]
 }
