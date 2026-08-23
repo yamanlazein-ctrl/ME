@@ -14,7 +14,8 @@
     "db:check": "drizzle-kit check",
       "lint": "eslint src --ext .ts",
       "typecheck": "tsc --noEmit",
-      "test:integration": "node scripts/run-integration.mjs"
+      "test:integration": "node scripts/run-integration.mjs",
+      "db:restore": "node scripts/restore-from-backup.mjs"
   },
   "dependencies": {
     "@node-rs/argon2": "^2.0.2",

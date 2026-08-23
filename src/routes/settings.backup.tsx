@@ -274,7 +274,9 @@ function BackupPage() {
             </li>
           </ul>
           <p className="mt-2 text-xs text-muted-foreground">
-            الملف يُحفظ بتنسيق ZIP. يمكن استعادته عبر سكربت restore.sh في المشروع.
+            الملف يُحفظ بتنسيق ZIP. للاسترجاع على جهاز جديد: ثبّت النظام ثم نفّذ{" "}
+            <code className="rounded bg-secondary px-1">npm run db:restore &lt;ملف-النسخة&gt;</code>{" "}
+            — راجع دليل docs/DISASTER-RECOVERY.md.
           </p>
         </div>
       </PageCard>

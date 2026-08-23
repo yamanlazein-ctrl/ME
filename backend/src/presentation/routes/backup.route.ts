@@ -135,6 +135,14 @@ async function dbDumpToJson(outputPath: string, tenantId: string): Promise<void>
     "idempotency_keys",
     "ledger_entry_archive",
     "yearly_party_summaries",
+    // Full-coverage additions: cashbox trio + attachment metadata + company
+    // profile. Without these a restored system loses cashbox sessions,
+    // manual movements, attachment links and the company identity.
+    "cashbox_sessions",
+    "day_closes",
+    "manual_movements",
+    "attachments",
+    "company_profiles",
   ];
   const dump: Record<string, unknown[]> = {};
   const esc = (s: string) => s.replace(/'/g, "''").replace(/"/g, '""');
