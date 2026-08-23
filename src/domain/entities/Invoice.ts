@@ -1,5 +1,5 @@
 import { Timestamp, UUID, Currency, MoneyData, Mutable } from "@/domain/types";
-import { lineTotal as sharedLineTotal, computeSubtotal as sharedSubtotal } from "@erp/shared";
+import { lineTotal as sharedLineTotal, computeSubtotal as sharedSubtotal, round2dp } from "@erp/shared";
 
 /* ────────────────────────────────────────────────────────────────────────
  *  Invoice Entity — root aggregate for sale / entry / return documents.
@@ -123,13 +123,13 @@ export class Invoice implements InvoiceData {
 
   /** Compute total from lines after discounts, plus tax and shipping. */
   total(): number {
-    const subtotal = this.lines.reduce((sum, l) => sum + this.lineTotal(l), 0);
-    return subtotal - (this.discount ?? 0) + (this.tax ?? 0) + (this.shipping ?? 0);
+    const subtotal = round2dp(this.lines.reduce((sum, l) => sum + this.lineTotal(l), 0));
+    return round2dp(subtotal - (this.discount ?? 0) + (this.tax ?? 0) + (this.shipping ?? 0));
   }
 
   /** Compute just the lines subtotal (before header-level adjustments). */
   lineSubtotal(): number {
-    return this.lines.reduce((sum, l) => sum + this.lineTotal(l), 0);
+    return round2dp(this.lines.reduce((sum, l) => sum + this.lineTotal(l), 0));
   }
 
   totalMoney(): MoneyData {

@@ -27,7 +27,7 @@ import {
   type PrintTotal,
   type PrintParty,
 } from "@/components/print/PrintDocument";
-import { currencySymbol, currencyState, useCurrencies } from "@/presentation/hooks/useCurrency";
+import { currencySymbol } from "@/presentation/hooks/useCurrency";
 import { colorById, fabricById, rollById, type Color } from "@/presentation/hooks/useInventory";
 import { formatMoney, formatNumber, formatQuantity } from "@/shared/utils/formatNumber";
 import type { ReturnDTO, ReturnReason } from "@/application/ports/IReturnRepository";
@@ -90,7 +90,6 @@ export function ReturnInvoicePrint({
   pageNumber,
 }: ReturnInvoicePrintProps) {
   const r = returnDoc;
-  useCurrencies();
   const vis = useInvoiceVisibility(r.kind === "entry" ? "return_in" : "return_out");
   const isSupplierReturn = r.kind === "entry";
   const party = isSupplierReturn ? supplierById(r.partyId) : customerById(r.partyId);
@@ -115,10 +114,8 @@ export function ReturnInvoicePrint({
   if (vis.showDate) meta.push({ label: "التاريخ", value: r.date });
   if (vis.showStatus) meta.push({ label: "الحالة", value: statusLabel });
   if (vis.showCurrency) meta.push({ label: "العملة", value: `${r.currency} (${sym})` });
-  meta.push({
-    label: "سعر الصرف",
-    value: `1 $ = ${fmtUnit(currencyState.rates.USD)} ل.س — ${currencyState.lastUpdated}`,
-  });
+  // L10: the hardcoded exchange-rate line was removed — it was cosmetic,
+  // never used in any accounting computation, and misleading on documents.
   if (vis.showCreatedBy) meta.push({ label: "أنشأ بواسطة", value: r.createdBy ? String(r.createdBy) : "" });
   if (vis.showCreatedAt && r.createdAt) {
     meta.push({

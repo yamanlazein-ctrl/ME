@@ -21,13 +21,14 @@ import {
 import { supplierById } from "@/presentation/hooks/useParties";
 import { currencySymbol } from "@/presentation/hooks/useCurrency";
 import type { Currency } from "@/domain/types";
-import { useCreateInvoice, nextInvoiceNumber } from "@/presentation/hooks/useInvoices";
+import { useCreateInvoice, useUpdateInvoice, nextInvoiceNumber } from "@/presentation/hooks/useInvoices";
 import { printDocument } from "@/components/print/printPortal";
 import { InvoicePrintDocument } from "@/components/print/InvoicePrintDocument";
 import { useSettings } from "@/presentation/hooks/useSettings";
 import { DocumentFooter } from "@/components/layout/DocumentFooter";
 import { useDocumentShortcuts } from "@/hooks/use-document-shortcuts";
 import { showError, showSuccess } from "@/components/common/toast-helpers";
+import { buildTenantContext } from "@/infrastructure/di/auth-context";
 import { cn } from "@/lib/utils";
 import { ColorSearchCell } from "@/components/invoices/ColorSearchCell";
 import { Input } from "@/components/ui/input";
@@ -54,6 +55,7 @@ import {
 } from "@/components/invoices/entry-types";
 import { useInvoice } from "@/presentation/hooks/useInvoices";
 import { parseLineDetails } from "@/components/print/invoices/lineDetails";
+import { parseInvoiceNotes } from "@/components/print/noteParser";
 import { formatNumber, formatMoney, formatQuantity } from "@/shared/utils/formatNumber";
 import { MAX_2DP_MSG, hasMoreThan2dp } from "@/shared/utils/precision";
 
@@ -103,6 +105,7 @@ function EntryInvoicePage() {
   useInventory();
   const navigate = useNavigate();
   const create = useCreateInvoice();
+  const update = useUpdateInvoice();
   const { edit } = Route.useSearch();
   const { data: editInvoice } = useInvoice(edit ?? "");
 
@@ -155,7 +158,7 @@ function EntryInvoicePage() {
   const moneyClass = isUSD ? "text-success" : "text-foreground";
 
   // When arriving with ?edit=<invoiceId>, pre-fill the form from that invoice
-  // so the user can correct it and save a new copy (no backend PUT exists).
+  // so the user can correct the SAME invoice (backend PUT exists).
   useEffect(() => {
     if (!edit || !editInvoice) return;
     setSupplierId(editInvoice.partyId);
@@ -164,12 +167,19 @@ function EntryInvoicePage() {
     setDiscount(editInvoice.discount ?? "");
     setTax(editInvoice.tax ?? "");
 
+    // Rehydrate the header-level reference/payment method stored in the note.
+    const parsedHeader = parseInvoiceNotes(editInvoice.notes);
+    if (editInvoice.reference || parsedHeader.reference)
+      setReference(editInvoice.reference || parsedHeader.reference);
+    if (parsedHeader.paymentMethod) setPaymentMethod(parsedHeader.paymentMethod);
+
     const mapped: EntryLine[] = editInvoice.lines.map((l) => {
       const fab = fabricById(l.fabricId);
       const col = colorById(l.colorId);
       const roll = rollById(l.rollId);
       const line: EntryLine = {
         ...emptyLine(),
+        rollId: l.rollId,
         existingFabricId: fab?.id,
         existingColorId: col?.id,
         fabricName: fab?.name ?? "",
@@ -432,6 +442,7 @@ function EntryInvoicePage() {
     let totalKg = 0;
 
     const invLines = [];
+    const isEdit = !!edit;
     try {
       for (const l of rows) {
         let fabricId = l.existingFabricId;
@@ -492,39 +503,52 @@ function EntryInvoicePage() {
         ]
           .filter(Boolean)
           .join(" • ");
-        const roll = await addRoll(
-          {
-            colorId,
-            rollNo: `R-${Date.now().toString().slice(-5)}-${l.id.slice(-2)}`,
-            dyeBatch: l.dyeBatch,
-            initialKg: l.quantity,
-            pieces: l.pieces || 1,
-            // The entry invoice transaction increments remainingKg from 0 to
-            // quantity — passing 0 here keeps the stock count accurate without
-            // double-counting against the invoice's stock increment.
-            remainingKg: 0,
-            pricePerKg: l.pricePerKg,
-            salePricePerKg: l.salePricePerKg,
-            currency,
-            supplierId,
-            entryDate: date,
-            widthCm: l.widthCm,
-            weightGsm: l.weightGsm,
-          },
-          { silent: true },
-        );
-        createdRollIds.push(roll.id);
-        createdRollNos.push(roll.rollNo);
+
+        let rollId = l.rollId;
+        if (isEdit) {
+          // Editing an existing invoice: never create new rolls (that would
+          // duplicate stock). The backend replaces lines against EXISTING rolls.
+          if (!rollId) {
+            throw new Error(
+              `يجب اختيار صبغة موجودة للسطر "${l.fabricName || `سطر #${rows.indexOf(l) + 1}`}" — لا يمكن إنشاء صبغة جديدة عند تعديل فاتورة.`,
+            );
+          }
+        } else {
+          const roll = await addRoll(
+            {
+              colorId,
+              rollNo: `R-${Date.now().toString().slice(-5)}-${l.id.slice(-2)}`,
+              dyeBatch: l.dyeBatch,
+              initialKg: l.quantity,
+              pieces: l.pieces || 1,
+              // The entry invoice transaction increments remainingKg from 0 to
+              // quantity — passing 0 here keeps the stock count accurate without
+              // double-counting against the invoice's stock increment.
+              remainingKg: 0,
+              pricePerKg: l.pricePerKg,
+              salePricePerKg: l.salePricePerKg,
+              currency,
+              supplierId,
+              entryDate: date,
+              widthCm: l.widthCm,
+              weightGsm: l.weightGsm,
+            },
+            { silent: true },
+          );
+          rollId = roll.id;
+          createdRollIds.push(roll.id);
+          createdRollNos.push(roll.rollNo);
+        }
         totalKg += l.quantity;
         invLines.push({
-          id: `il-${roll.id}`,
+          id: `il-${rollId}`,
           fabricId,
           colorId,
-          rollId: roll.id,
+          rollId,
           quantityKg: l.quantity,
           pieces: l.pieces || 1,
           pricePerKg: l.pricePerKg,
-          discountAmount: Math.round(l.discountAmount ?? 0),
+          discountAmount: l.discountAmount ?? 0,
           note: rowNotes || undefined,
         });
       }
@@ -535,10 +559,10 @@ function EntryInvoicePage() {
       const details = (e as { details?: Record<string, string[]> })?.details;
       const detailMsg = detailsText(details);
       const errMsg = detailMsg
-        ? `تعذّر إنشاء الفاتورة: ${detailMsg}`
+        ? `تعذّر حفظ الفاتورة: ${detailMsg}`
         : e instanceof Error
           ? e.message
-          : "خطأ في إنشاء عناصر المخزون";
+          : "خطأ في عناصر المخزون";
       setError(errMsg);
       showError(errMsg);
       return;
@@ -559,14 +583,50 @@ function EntryInvoicePage() {
       showError(msg);
       return;
     }
+
+    if (isEdit) {
+      const res = await update.mutateAsync({
+        id: edit as string,
+        patch: {
+          date,
+          discount: Number(discount) || 0,
+          tax: Number(tax) || 0,
+          shipping: Number(shipping) || 0,
+          notes: advParts.join(" • "),
+          lines: invLines,
+        },
+      });
+      if (!res.ok) {
+        const rawErr = (res as any).error ?? {};
+        const details = rawErr.details as Record<string, string[]> | undefined;
+        const firstDetail = details ? details[Object.keys(details)[0]]?.[0] : undefined;
+        const msg = firstDetail
+          ? `${rawErr.message ?? "فشل تحديث الفاتورة"} — ${firstDetail}`
+          : (rawErr.message ?? rawErr.toString?.() ?? "فشل تحديث الفاتورة");
+        setError(msg);
+        showError(msg);
+        return;
+      }
+      showSuccess(`تم حفظ تعديلات فاتورة الدخول ${res.value.number}`);
+      if (thenPrint) printDocument(<InvoicePrintDocument invoice={res.value} />);
+      if (thenNew) {
+        navigate({ to: "/invoices/entry/new" });
+        return;
+      }
+      navigate({ to: "/invoices/$id", params: { id: res.value.id } });
+      return;
+    }
+
     const res = await create.mutateAsync({
-      tenantId: "dev-tenant",
+      tenantId: buildTenantContext().tenantId,
       number: nextInvoiceNumber("entry"),
       type: "entry",
       date,
       partyId: supplierId,
       partyType: "supplier",
       currency,
+      // Structured reference — no longer only free text inside `notes`.
+      reference: reference.trim() || undefined,
       discount: Number(discount) || 0,
       tax: Number(tax) || 0,
       shipping: Number(shipping) || 0,
@@ -632,7 +692,8 @@ function EntryInvoicePage() {
         {/* Header row — 5 fields, supplier now inline-searchable + inline-create */}
         <section className="overflow-hidden rounded-lg border border-border bg-card">
           <div className="flex items-center gap-2 border-b border-border/60 bg-secondary/20 px-4 py-2">
-            <span className="text-[11px] font-bold uppercase tracking-[0.16em] text-foreground/55">
+            <div className="h-[3px] w-5 bg-primary/25 rounded-sm" />
+            <span className="text-[11px] font-bold uppercase tracking-[0.16em] text-muted-foreground">
               بيانات الفاتورة
             </span>
           </div>
@@ -642,7 +703,7 @@ function EntryInvoicePage() {
             </HeaderField>
             <HeaderField label="رقم الفاتورة">
               <Input
-                className="h-9 tabular-nums"
+                className={cn("h-9 tabular-nums", !reference && "text-muted-foreground/70")}
                 value={reference}
                 onChange={(e) => setReference(e.target.value)}
                 placeholder={invoiceNo}
@@ -731,8 +792,8 @@ function EntryInvoicePage() {
                   className={cn(
                     "group rounded-lg border bg-background/60 transition",
                     rowIsEmpty
-                      ? "border-dashed border-primary/30 bg-primary/[0.02]"
-                      : "border-border hover:border-primary/40 hover:shadow-sm",
+                      ? "border-dashed border-border/60 bg-secondary/[0.02]"
+                      : "border-border hover:border-primary/30",
                   )}
                 >
                   {/* Card header */}
@@ -740,15 +801,15 @@ function EntryInvoicePage() {
                     <div className="flex items-center gap-2">
                       <span
                         className={cn(
-                          "grid h-6 min-w-[28px] place-items-center rounded-md px-2 text-[11px] font-bold tabular-nums",
+                          "grid h-6 min-w-[28px] place-items-center rounded-md px-2 text-[11px] font-medium tabular-nums",
                           rowIsEmpty
-                            ? "bg-primary/10 text-primary"
-                            : "bg-primary text-primary-foreground",
+                            ? "bg-secondary/60 text-muted-foreground"
+                            : "bg-secondary text-foreground",
                         )}
                       >
                         {i + 1}
                       </span>
-                      <span className="text-xs font-semibold text-foreground">
+                      <span className="text-xs font-medium text-muted-foreground">
                         الصبغة رقم {i + 1}
                         {!rowIsEmpty && l.fabricName && (
                           <span className="mr-1.5 font-normal text-muted-foreground">
@@ -766,8 +827,8 @@ function EntryInvoicePage() {
                             isUSD ? "text-success" : "text-foreground",
                           )}
                         >
-                          {formatMoney(lineSubtotal(l))}{" "}
-                          <span className="text-[10px] font-medium text-muted-foreground">
+                          {formatMoney(lineSubtotal(l))}
+                          <span className="mr-1 text-[10px] font-medium text-muted-foreground/60">
                             {currencySymbol(currency)}
                           </span>
                         </span>
@@ -831,7 +892,7 @@ function EntryInvoicePage() {
                           <Input
                             value={l.marjaiya}
                             onChange={(e) => updateLine(l.id, { marjaiya: e.target.value })}
-                            className="h-9"
+                            className={cn("h-9", !l.marjaiya && "text-muted-foreground/70")}
                             placeholder="—"
                             aria-label="المرجعية"
                           />
@@ -840,7 +901,7 @@ function EntryInvoicePage() {
                           <Input
                             value={l.masader}
                             onChange={(e) => updateLine(l.id, { masader: e.target.value })}
-                            className="h-9"
+                            className={cn("h-9", !l.masader && "text-muted-foreground/70")}
                             placeholder="—"
                             aria-label="المصدر"
                           />
@@ -859,19 +920,19 @@ function EntryInvoicePage() {
                             onChange={(e) =>
                               updateLine(l.id, { pieces: Math.max(1, Number(e.target.value)) })
                             }
-                            className="h-9 tabular-nums"
+                            className={cn("h-9 tabular-nums", !l.pieces && "text-muted-foreground/70")}
                             placeholder="1"
                             aria-label="عدد الأثواب"
                           />
                           <p className="mt-0.5 text-[10px] leading-tight text-muted-foreground">
-                            يُطبع على الفاتورة ويُحفظ مع الصبغة.
+                            يُضاف للمخزون ويُخصم عند البيع ويظهر في الطباعة.
                           </p>
                         </CardField>
                         <CardField label="رقم الماكينة">
                           <Input
                             value={l.machineNumber}
                             onChange={(e) => updateLine(l.id, { machineNumber: e.target.value })}
-                            className="h-9"
+                            className={cn("h-9", !l.machineNumber && "text-muted-foreground/70")}
                             placeholder="—"
                             aria-label="رقم الماكينة"
                           />
@@ -880,7 +941,7 @@ function EntryInvoicePage() {
                           <Input
                             value={l.kromaj}
                             onChange={(e) => updateLine(l.id, { kromaj: e.target.value })}
-                            className="h-9"
+                            className={cn("h-9", !l.kromaj && "text-muted-foreground/70")}
                             placeholder="—"
                             aria-label="كراماج"
                           />
@@ -889,7 +950,7 @@ function EntryInvoicePage() {
                           <Input
                             value={l.sahb}
                             onChange={(e) => updateLine(l.id, { sahb: e.target.value })}
-                            className="h-9 tabular-nums"
+                            className={cn("h-9 tabular-nums", !l.sahb && "text-muted-foreground/70")}
                             placeholder="—"
                             aria-label="السحب"
                           />
@@ -937,7 +998,7 @@ function EntryInvoicePage() {
                                 grossKg: e.target.value === "" ? 0 : Number(e.target.value),
                               })
                             }
-                            className="h-9 text-left tabular-nums"
+                            className={cn("h-9 text-left tabular-nums", !l.grossKg && "text-muted-foreground/70")}
                             placeholder="0"
                             aria-label="الوزن القائم"
                           />
@@ -952,7 +1013,7 @@ function EntryInvoicePage() {
                                 quantity: e.target.value === "" ? 0 : Number(e.target.value),
                               })
                             }
-                            className="h-9 text-left tabular-nums"
+                            className={cn("h-9 text-left tabular-nums", !l.quantity && "text-muted-foreground/70")}
                             placeholder="0"
                             aria-label="الوزن الصافي"
                           />
@@ -967,7 +1028,7 @@ function EntryInvoicePage() {
                           <Input
                             value={l.dyeBatch}
                             onChange={(e) => updateLine(l.id, { dyeBatch: e.target.value })}
-                            className="h-9 tabular-nums"
+                            className={cn("h-9 tabular-nums", !l.dyeBatch && "text-muted-foreground/70")}
                             placeholder="DY-…"
                             aria-label="رقم الصبغة"
                           />
@@ -990,7 +1051,8 @@ function EntryInvoicePage() {
                             }
                             className={cn(
                               "h-9 text-left tabular-nums",
-                              isUSD && "text-success font-semibold",
+                              !l.pricePerKg && "text-muted-foreground/70",
+                              isUSD && l.pricePerKg > 0 && "text-success font-semibold",
                             )}
                             placeholder="0"
                             aria-label="سعر الوحدة"
@@ -1004,12 +1066,13 @@ function EntryInvoicePage() {
                             value={l.discountAmount || ""}
                             onChange={(e) =>
                               updateLine(l.id, {
+                                // Fixed amount, decimals kept — same as the sale form.
                                 discountAmount:
-                                  e.target.value === "" ? 0 : Math.round(Number(e.target.value)),
+                                  e.target.value === "" ? 0 : Number(e.target.value),
                               })
                             }
                             onKeyDown={(e) => handleRowEnd(e, l.id)}
-                            className="h-9 text-left tabular-nums"
+                            className={cn("h-9 text-left tabular-nums", !l.discountAmount && "text-muted-foreground/70")}
                             placeholder="0"
                             aria-label="الخصم"
                           />
@@ -1025,8 +1088,8 @@ function EntryInvoicePage() {
                                 isUSD ? "text-success" : "text-foreground",
                               )}
                             >
-                              {formatMoney(lineSubtotal(l))}{" "}
-                              <span className="text-[10px] font-medium text-muted-foreground">
+                              {formatMoney(lineSubtotal(l))}
+                              <span className="mr-1 text-[10px] font-medium text-muted-foreground/60">
                                 {currencySymbol(currency)}
                               </span>
                             </span>
@@ -1063,7 +1126,10 @@ function EntryInvoicePage() {
                   isUSD ? "text-success" : "text-foreground",
                 )}
               >
-                {formatMoney(subtotal)} {currencySymbol(currency)}
+                {formatMoney(subtotal)}
+                <span className="mr-1 text-[10px] font-medium text-muted-foreground/60">
+                  {currencySymbol(currency)}
+                </span>
               </span>
             </div>
           )}
@@ -1072,12 +1138,12 @@ function EntryInvoicePage() {
         {/* ── Totals ─────────────────────────────────────────────── */}
         <section
           className={cn(
-            "overflow-hidden rounded-lg border",
-            isUSD ? "border-success/40 bg-success/[0.04]" : "border-primary/30 bg-primary/[0.03]",
+            "overflow-hidden rounded-lg border border-border bg-card",
           )}
         >
           <div className="flex items-center gap-2 border-b border-border/60 bg-secondary/20 px-4 py-2">
-            <span className="text-[11px] font-bold uppercase tracking-[0.16em] text-foreground/55">
+            <div className="h-[3px] w-5 bg-primary/25 rounded-sm" />
+            <span className="text-[11px] font-bold uppercase tracking-[0.16em] text-muted-foreground">
               المجاميع
             </span>
           </div>
@@ -1085,7 +1151,7 @@ function EntryInvoicePage() {
             <TotalCell label="الكمية" value={`${formatNumber(totalQty)} كغ`} />
             <TotalCell
               label="المجموع"
-              value={`${formatMoney(subtotal)} ${currencySymbol(currency)}`}
+              value={`${formatMoney(subtotal)}`}
               tone={moneyClass}
             />
           </div>
@@ -1121,14 +1187,12 @@ function EntryInvoicePage() {
           </div>
           <div
             className={cn(
-              "flex flex-wrap items-center justify-between gap-3 border-t px-4 py-3",
-              isUSD ? "border-success/30 bg-success/[0.06]" : "border-primary/20 bg-primary/[0.05]",
+              "flex flex-wrap items-center justify-between gap-3 border-t border-border/60 bg-secondary/20 px-4 py-3",
             )}
           >
             <span
               className={cn(
-                "text-[11px] font-bold uppercase tracking-[0.16em]",
-                isUSD ? "text-success" : "text-primary",
+                "text-[11px] font-bold uppercase tracking-[0.16em] text-muted-foreground",
               )}
             >
               الإجمالي الكلي
@@ -1136,23 +1200,27 @@ function EntryInvoicePage() {
             <span
               className={cn(
                 "text-2xl font-black leading-tight tabular-nums",
-                isUSD ? "text-success" : "text-foreground",
+                isUSD ? "text-success" : "text-primary",
               )}
             >
-              {formatMoney(grandTotal)}{" "}
-              <span className="text-sm font-medium text-muted-foreground">
+              {formatMoney(grandTotal)}
+              <span className="mr-1 text-sm font-medium text-muted-foreground/60">
                 {currencySymbol(currency)}
               </span>
             </span>
           </div>
-          {paid !== "" && Number(paid) > 0 && (
-            <div className="flex items-center justify-end gap-2 border-t px-3 py-2 text-xs font-semibold">
-              <span className="text-muted-foreground">المتبقي:</span>
-              <span className={cn("tabular-nums font-bold", moneyClass)}>
-                {formatMoney(Math.max(0, grandTotal - Number(paid)))} {currencySymbol(currency)}
+          <div className="flex items-center justify-end gap-2 border-t px-3 py-2 text-xs font-semibold">
+            <span className="text-muted-foreground">المتبقي:</span>
+            <span className={cn("tabular-nums font-bold", moneyClass)}>
+              {/* Always computed from the FULL stored grand total — never from a
+                  rounded/abbreviated display value (audit rule 3). Shown even
+                  when paid = 0 so screen and print always agree. */}
+              {formatMoney(Math.max(0, grandTotal - (paid === "" ? 0 : Number(paid))))}
+              <span className="mr-1 text-[10px] font-medium text-muted-foreground/60">
+                {currencySymbol(currency)}
               </span>
-            </div>
-          )}
+            </span>
+          </div>
         </section>
 
         {error && (
@@ -1163,6 +1231,9 @@ function EntryInvoicePage() {
       </div>
 
       <DocumentFooter
+        // I12: disable all save buttons while a mutation is in flight —
+        // double-clicking used to post duplicate invoices.
+        isSaving={create.isPending || update.isPending}
         onSave={() => save(false)}
         onSaveAndPrint={() => save(true)}
         onSaveAndNew={() => save(false, true)}

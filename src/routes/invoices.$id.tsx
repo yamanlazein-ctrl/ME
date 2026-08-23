@@ -70,7 +70,7 @@ function InvoiceDetailPage() {
 
   return (
     <AppShell
-      title={`${TYPE_LABEL[inv.type]} — ${inv.number}`}
+      title={`${TYPE_LABEL[inv.type]} — ${inv.reference || inv.number}`}
       subtitle={isCancelled ? "⛔ هذه الفاتورة ملغاة" : `التاريخ: ${inv.date}`}
       actions={
         <div className="flex flex-wrap items-center gap-2">
@@ -109,7 +109,7 @@ function InvoiceDetailPage() {
       {/* Card 1 — Meta */}
       <PageCard title="بيانات الفاتورة" description="المعلومات الأساسية للفاتورة">
         <div className="grid gap-4 md:grid-cols-4">
-          <MetaCell label="رقم الفاتورة" value={inv.number} mono />
+          <MetaCell label="الرقم المرجعي" value={inv.reference || inv.number} mono />
           <MetaCell label="النوع" value={TYPE_LABEL[inv.type]} />
           <MetaCell label="التاريخ" value={inv.date} mono />
           <MetaCell label="العملة" value={inv.currency === "USD" ? "دولار أمريكي" : "ليرة سورية"} />
@@ -194,6 +194,16 @@ function InvoiceDetailPage() {
           </Link>
         }
       >
+        {/* Financial breakdown — mirrors the print template exactly
+            (audit rule 5): subtotal, invoice discount, tax, shipping. */}
+        <div className="mb-3 grid gap-3 md:grid-cols-6">
+          <PayCell label="مجموع الأصناف" value={inv.lineSubtotal()} currency={inv.currency} />
+          <PayCell label="خصم الفاتورة" value={inv.discount ?? 0} currency={inv.currency} />
+          <PayCell label="الضريبة" value={inv.tax ?? 0} currency={inv.currency} />
+          <PayCell label="الشحن" value={inv.shipping ?? 0} currency={inv.currency} />
+          <PayCell label="الإجمالي الكلي" value={total} currency={inv.currency} />
+          <PayCell label="المدفوع عند الفاتورة" value={inv.paid ?? 0} currency={inv.currency} />
+        </div>
         <div className="grid gap-3 md:grid-cols-3">
           <PayCell label="الإجمالي" value={total} currency={inv.currency} />
           <PayCell label={paidLabel} value={paid} currency={inv.currency} />

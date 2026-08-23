@@ -35,18 +35,24 @@ export type InvoiceData = {
   cancelledAt?: string | null;
 };
 
+import { round2dp } from "../precision.js";
+
 export function lineTotal(line: InvoiceLineData): number {
   const gross = line.quantityKg * line.pricePerKg;
-  return Math.max(0, Math.round(gross - (line.discountAmount ?? 0)));
+  // 2-decimal rounding keeps USD/EUR cents exact; SYP amounts are unaffected
+  // because their inputs are validated to whole units via is2dp.
+  return Math.max(0, round2dp(gross - (line.discountAmount ?? 0)));
 }
 
 export function computeSubtotal(lines: readonly InvoiceLineData[]): number {
-  return lines.reduce((s, l) => s + lineTotal(l), 0);
+  // Round the SUM once at the edge (kills float accumulation error on
+  // many-line invoices). Line values are already 2dp-rounded by lineTotal.
+  return round2dp(lines.reduce((s, l) => s + lineTotal(l), 0));
 }
 
 export function invoiceTotal(data: Pick<InvoiceData, "lines" | "discount" | "tax" | "shipping">): number {
   const subtotal = computeSubtotal(data.lines);
-  return subtotal - (data.discount ?? 0) + (data.tax ?? 0) + (data.shipping ?? 0);
+  return round2dp(subtotal - (data.discount ?? 0) + (data.tax ?? 0) + (data.shipping ?? 0));
 }
 
 export function invoiceLineSubtotal(lines: readonly InvoiceLineData[]): number {

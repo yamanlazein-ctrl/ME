@@ -4,6 +4,11 @@ import { sql } from "drizzle-orm";
 
 const PREFIXES: Record<string, string> = {
   invoice: "INV",
+  // Entry (purchase) invoices get their own prefix AND their own sequence
+  // counter — distinct entityType key below keeps the counters separate, so
+  // the first entry invoice after this change is ENT-<year>-0001 while the
+  // existing INV-<year>-NNNN sale-invoice counter continues untouched.
+  invoice_entry: "ENT",
   return: "RET",
   voucher: "VOC",
   expense: "EXP",
@@ -23,6 +28,7 @@ const PREFIXES: Record<string, string> = {
 
 const WIDTHS: Record<string, number> = {
   invoice: 4,
+  invoice_entry: 4,
   return: 4,
   voucher: 4,
   expense: 4,

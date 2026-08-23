@@ -12,8 +12,9 @@
     "db:push:scratch": "echo 'WARNING: db:push is scratch-only. It does not emit check() constraints or triggers. Use db:migrate for any real database.' && drizzle-kit push",
     "db:studio": "drizzle-kit studio",
     "db:check": "drizzle-kit check",
-    "lint": "eslint src --ext .ts",
-    "typecheck": "tsc --noEmit"
+      "lint": "eslint src --ext .ts",
+      "typecheck": "tsc --noEmit",
+      "test:integration": "node scripts/run-integration.mjs"
   },
   "dependencies": {
     "@node-rs/argon2": "^2.0.2",

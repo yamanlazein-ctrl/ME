@@ -39,10 +39,11 @@ export function GroupSection({ title, children }: { title: string; children: Rea
   return (
     <div className="rounded-lg border border-border/50 bg-secondary/20 p-3">
       <div className="mb-2 flex items-center gap-2">
-        <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-foreground/55">
+        <div className="h-[3px] w-5 bg-primary/25 rounded-sm" />
+        <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-muted-foreground">
           {title}
         </span>
-        <div className="h-px flex-1 bg-border/60" />
+        <div className="h-px flex-1 bg-border" />
       </div>
       {children}
     </div>
@@ -55,7 +56,7 @@ export function TotalCell({ label, value, tone }: { label: string; value: string
       <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
         {label}
       </span>
-      <span className={cn("mt-0.5 text-sm font-bold tabular-nums", tone ?? "text-foreground")}>
+      <span className={cn("mt-0.5 text-sm font-black tabular-nums", tone ?? "text-foreground")}>
         {value}
       </span>
     </div>
@@ -86,7 +87,7 @@ export function TotalInputCell({
           min={0}
           className={cn("h-8 pl-9 text-left tabular-nums", tone)}
           value={value}
-          onChange={(e) => onChange(e.target.value === "" ? "" : Number(e.target.value))}
+          onChange={(e) => onChange(e.target.value === "" ? "" : Math.max(0, Number(e.target.value)))}
           placeholder="0"
         />
         <span className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-[10px] text-muted-foreground">
@@ -127,7 +128,10 @@ export function MoneyInputCell({
             const raw = e.target.value;
             if (raw === "") return onChange("");
             const n = parseAmount(raw);
-            onChange(Number.isNaN(n) ? value : n);
+            // Money cells (paid, discount…) must never go negative — a negative
+            // discount would flip `subtotal - discount` into an addition and
+            // inflate the grand total (e.g. 1,450 + 25,000 + 10,000 + 20,000).
+            onChange(Number.isNaN(n) ? value : Math.max(0, n));
           }}
           onFocus={(e) =>
             e.currentTarget.setSelectionRange(

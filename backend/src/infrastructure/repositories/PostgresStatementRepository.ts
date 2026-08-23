@@ -1,4 +1,5 @@
 import { eq, and, gte, lte, sql, inArray, asc } from "drizzle-orm";
+import { randomUUID } from "node:crypto";
 import type { DB } from "../orm/drizzle.js";
 import type {
   IStatementRepository,
@@ -245,6 +246,11 @@ export class PostgresStatementRepository implements IStatementRepository {
       if (net === 0) throw new Error("الرصيد صفر لا يحتاج تسوية");
       const amount = Math.abs(net);
 
+      // M8: both settlement legs share a real generated UUID as referenceId so
+      // the pair is resolvable/reversible by reference (cancel-by-reference),
+      // instead of a NULL that orphans them from every document lookup.
+      const settlementRefId = randomUUID();
+
       const inserted = await tx
         .insert(ledgerEntries)
         .values([
@@ -258,6 +264,7 @@ export class PostgresStatementRepository implements IStatementRepository {
             currency,
             cashImpact: "none",
             referenceType: "settlement",
+            referenceId: settlementRefId,
             referenceNumber: input.referenceNumber,
             description: input.notesInternal ?? `تسوية حساب ${input.referenceNumber}`,
             createdBy: ctx.userId,
@@ -272,6 +279,7 @@ export class PostgresStatementRepository implements IStatementRepository {
             currency,
             cashImpact: "none",
             referenceType: "settlement",
+            referenceId: settlementRefId,
             referenceNumber: input.referenceNumber,
             description: `مقابل التسوية ${input.referenceNumber}`,
             createdBy: ctx.userId,

@@ -14,9 +14,13 @@ export function LoginPage() {
     setError(null);
 
     try {
+      const tenantId =
+        (import.meta.env.VITE_DEFAULT_TENANT_ID as string | undefined) ??
+        "dev-tenant";
       await loginMutation.mutateAsync({
         email: username.trim(),
         password,
+        tenantId,
       });
     } catch (err) {
       console.error("[Login] Error:", err);

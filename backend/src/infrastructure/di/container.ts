@@ -39,6 +39,8 @@ import { PostgresSettingsRepository } from "../repositories/PostgresSettingsRepo
 import type { ISettingsRepository } from "../../application/ports/ISettingsRepository.js";
 import { PostgresDashboardRepository } from "../repositories/PostgresDashboardRepository.js";
 import type { IDashboardRepository } from "../../application/ports/IDashboardRepository.js";
+import { PostgresProfitRepository } from "../repositories/PostgresProfitRepository.js";
+import type { IProfitRepository } from "../../application/ports/IProfitRepository.js";
 import { PostgresAuthRepository } from "../repositories/PostgresAuthRepository.js";
 import type { IAuthRepository } from "../../application/ports/IAuthRepository.js";
 import { PostgresCompanyRepository } from "../repositories/PostgresCompanyRepository.js";
@@ -91,6 +93,7 @@ export interface Container {
   notificationRepo: INotificationRepository;
   settingsRepo: ISettingsRepository;
   dashboardRepo: IDashboardRepository;
+  profitRepo: IProfitRepository;
   companyRepo: ICompanyRepository;
   invitationRepo: IInvitationRepository;
   licenseRepo: ILicenseRepository;
@@ -128,6 +131,7 @@ export function buildContainer(): Container {
   const notificationRepo = new PostgresNotificationRepository(db);
   const settingsRepo = new PostgresSettingsRepository(db);
   const dashboardRepo = new PostgresDashboardRepository(db);
+  const profitRepo = new PostgresProfitRepository(db);
 
   // ── Phase 0 sub-batch extensions ──
   const companyRepo = new PostgresCompanyRepository(db);
@@ -179,6 +183,7 @@ export function buildContainer(): Container {
     notificationRepo,
     settingsRepo,
     dashboardRepo,
+    profitRepo,
     companyRepo,
     invitationRepo,
     licenseRepo,

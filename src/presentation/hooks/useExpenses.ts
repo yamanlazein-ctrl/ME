@@ -64,6 +64,8 @@ export function useCreateExpense() {
         // Expenses write a ledger entry (type=expense); cash expenses affect cashbox/dashboard.
         qc.invalidateQueries({ queryKey: ["ledger"] });
         qc.invalidateQueries({ queryKey: ["dashboard"] });
+        qc.invalidateQueries({ queryKey: ["cashbox"] });
+        qc.invalidateQueries({ queryKey: ["profit"] });
       } else {
         toast.error(res.error.message ?? (res.error as unknown as string));
       }
@@ -80,6 +82,8 @@ export function useCancelExpense() {
       qc.invalidateQueries({ queryKey: KEYS.root });
       qc.invalidateQueries({ queryKey: ["ledger"] });
       qc.invalidateQueries({ queryKey: ["dashboard"] });
+      qc.invalidateQueries({ queryKey: ["cashbox"] });
+      qc.invalidateQueries({ queryKey: ["profit"] });
     },
     onError: (e: Error) => {
       toast.error(`فشل إلغاء المصروف: ${e.message}`);

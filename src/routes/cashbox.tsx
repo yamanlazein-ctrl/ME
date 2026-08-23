@@ -2,6 +2,7 @@ import { AppShell } from "@/components/layout/AppShell";
 import { PageCard } from "@/components/layout/PageCard";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -31,33 +32,55 @@ import {
   MANUAL_TYPE_LABEL,
   type ManualMovementType,
 } from "@/presentation/hooks/useCashbox";
+import { useLedgerEntries, useCashMovementsOn } from "@/presentation/hooks/useLedger";
+import { formatAmount } from "@/presentation/hooks/useCurrency";
+import { Lock, Plus, RotateCw, Settings2 } from "lucide-react";
+import { FinancialSummary } from "@/components/cashbox/FinancialSummary";
 import {
-  useLedgerEntries,
-  useCashMovementsOn,
-  LEDGER_TYPE_LABEL,
-} from "@/presentation/hooks/useLedger";
-import { formatAmount, CURRENCIES } from "@/presentation/hooks/useCurrency";
-import { useHydrated } from "@/hooks/use-hydrated";
-import { Lock, Plus, Trash2 } from "lucide-react";
+  PeriodFilterCard,
+  type CashboxPeriodFilter,
+} from "@/components/cashbox/PeriodFilterCard";
+import { FinancialOverview } from "@/components/cashbox/FinancialOverview";
+import { ActivityTabs } from "@/components/cashbox/ActivityTabs";
+import type { ProfitQueryParams } from "@/contracts/profit";
 
-export const Route = createFileRoute("/cashbox")({ component: CashBoxPage });
+export const Route = createFileRoute("/cashbox")({
+  validateSearch: (search: Record<string, unknown>): CashboxPeriodFilter & { tab?: string } => ({
+    from: typeof search.from === "string" ? search.from : "",
+    to: typeof search.to === "string" ? search.to : "",
+    currency: typeof search.currency === "string" ? search.currency : "all",
+    tab: typeof search.tab === "string" ? search.tab : undefined,
+  }),
+  component: CashBoxPage,
+});
 
+/**
+ * CASHBOX — Financial Control Center.
+ *
+ * Information architecture (visual priority):
+ *   A. Header actions (refresh / manual movement / close day)
+ *   B. Financial Summary — tiered (balance hero → in/out/net/count)
+ *   C. Filter Toolbar (single source for every period-scoped section)
+ *   D. Financial Overview (profitability + debts, collapsible details)
+ *   E. Quick Actions strip
+ *   F. Activity Tabs (one visible table: movements/invoices/receipts/payments)
+ *   G. Secondary settings (bottom)
+ *
+ * All state (from/to/currency/tab) lives in URL search params so navigating
+ * to an invoice and returning preserves the exact view.
+ */
 function CashBoxPage() {
-  const hydrated = useHydrated();
   const today = new Date().toISOString().slice(0, 10);
+  const qc = useQueryClient();
 
-  const { data: state } = useCashboxState();
+  const { data: state, dataUpdatedAt } = useCashboxState();
   const openingToday = state?.openingBalance ?? 0;
   const last = state?.lastClosing ?? null;
   const locked = state?.isLocked ?? false;
-  // Server-authoritative KPIs — the paginated ledger feed must NOT be used to
-  // derive balances/totals (it only carries the latest N entries).
   const { data: balSYP = 0 } = useCashBalance(today, "SYP");
   const { data: balUSD } = useCashBalance(today, "USD");
   const { data: balEUR } = useCashBalance(today, "EUR");
   const { data: todayFlow } = useCashMovementsOn(today, "SYP");
-  const { data: ledgerResult } = useLedgerEntries({ limit: 1000 });
-  const ledger = ledgerResult ?? [];
   const { data: manualMoves = [] } = useManualMovements();
   const addMovement = useAddManualMovement();
   const deleteMovement = useDeleteManualMovement();
@@ -67,6 +90,7 @@ function CashBoxPage() {
   const [manOpen, setManOpen] = useState(false);
   const [closeOpen, setCloseOpen] = useState(false);
   const [openingEdit, setOpeningEdit] = useState(false);
+  const [tabOverride, setTabOverride] = useState<string | null>(null);
 
   const cs = state ?? {
     openingBalance: 0,
@@ -76,175 +100,162 @@ function CashBoxPage() {
     lastClosing: null,
   };
 
-  const currentBalance = balSYP;
-  const todayIn = todayFlow?.in ?? 0;
-  const todayOut = todayFlow?.out ?? 0;
+  // ── URL-persisted period + tab state ──
+  const search = Route.useSearch();
+  const navigate = Route.useNavigate();
+  const monthStart = new Date(new Date().getFullYear(), new Date().getMonth(), 1)
+    .toISOString()
+    .slice(0, 10);
+  const period: CashboxPeriodFilter = {
+    from: search.from || monthStart,
+    to: search.to || today,
+    currency: search.currency || "all",
+  };
+  const activeTab = tabOverride ?? search.tab ?? "transactions";
+  // Optimistic local override so the tab responds INSTANTLY on click; the URL
+  // remains the persisted source of truth once navigation settles.
+  const patchSearch = (patch: Partial<CashboxPeriodFilter & { tab?: string }>) =>
+    navigate({ search: (prev) => ({ ...prev, ...patch }) });
+  const changeTab = (t: string) => {
+    setTabOverride(t);
+    patchSearch({ tab: t });
+  };
 
-  const todayLedger = (ledger ?? [])
-    .filter((e) => e.status === "active" && e.date === today && e.cashImpact !== "none")
-    .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
-  const manToday = (manualMoves ?? []).filter((m) => m.date === today);
-  const rowsCount = todayLedger.length + manToday.length;
+  // Same values feed every period-scoped section — display == API request.
+  const profitQuery: ProfitQueryParams = {
+    fromDate: period.from,
+    toDate: period.to,
+    ...(period.currency !== "all" ? { currency: period.currency } : {}),
+  };
+
+  const refreshAll = () => {
+    for (const key of ["cashbox", "ledger", "profit", "invoices", "vouchers", "dashboard"]) {
+      void qc.invalidateQueries({ queryKey: [key] });
+    }
+  };
 
   const perCurrency: Record<string, number> = {
     SYP: balSYP,
     USD: balUSD ?? 0,
     EUR: balEUR ?? 0,
   };
-  const activeCurrencies = CURRENCIES.filter((c) => perCurrency[c.code] !== undefined);
+  const currentBalance = balSYP;
+  const todayIn = todayFlow?.in ?? 0;
+  const todayOut = todayFlow?.out ?? 0;
 
-  const lc = last;
+  // Today's transaction count (light query; separate cache entry from the tab feed).
+  const { data: todayLedgerResult } = useLedgerEntries({
+    fromDate: today,
+    toDate: today,
+    limit: 500,
+  });
+  const txCount =
+    (todayLedgerResult ?? []).filter((e) => e.status === "active" && e.cashImpact !== "none")
+      .length + manualMoves.filter((m) => m.date === today).length;
 
   return (
-    <AppShell title="الصندوق" subtitle="حركة النقدية اليومية والإقفال اليومي — بجميع العملات.">
-      <div className="grid gap-3 md:grid-cols-6">
-        <KpiTile label="رصيد أول اليوم" value={formatAmount(openingToday, cs.currency)} />
-        <KpiTile label="وارد اليوم" value={formatAmount(todayIn, cs.currency)} tone="in" />
-        <KpiTile label="صادر اليوم" value={formatAmount(todayOut, cs.currency)} tone="out" />
-        <KpiTile
-          label="الرصيد الحالي"
-          value={formatAmount(currentBalance, cs.currency)}
-          tone="primary"
-        />
-        <KpiTile label="عدد الحركات اليوم" value={String(rowsCount)} />
-        <KpiTile label="آخر إقفال" value={lc ? lc.date : "لم يتم"} />
-      </div>
-
-      <PageCard
-        title="الأرصدة حسب العملة"
-        description="مجموع الصندوق موزّع على العملات المستخدمة في النظام."
-      >
-        <div className="grid gap-3 md:grid-cols-3">
-          {activeCurrencies.map((c) => (
-            <KpiTile
-              key={c.code}
-              label={c.label}
-              value={formatAmount(perCurrency[c.code] || 0, c.code)}
-              tone="primary"
-            />
-          ))}
+    <AppShell
+      title="الصندوق"
+      subtitle="حركة النقدية وإدارة السيولة"
+      actions={
+        <div className="flex items-center gap-2">
+          {/* Secondary */}
+          <Button variant="outline" size="sm" onClick={refreshAll} title="تحديث كل البيانات">
+            <RotateCw className="h-4 w-4 ml-1" /> تحديث
+          </Button>
+          {/* Primary */}
+          <Button variant="outline" size="sm" onClick={() => setManOpen(true)} disabled={locked}>
+            <Plus className="h-4 w-4 ml-1" /> حركة يدوية
+          </Button>
+          <Button size="sm" onClick={() => setCloseOpen(true)} disabled={locked}>
+            <Lock className="h-4 w-4 ml-1" /> إقفال اليوم
+          </Button>
         </div>
-      </PageCard>
-
+      }
+    >
       {locked && (
         <div className="rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-2 text-sm text-destructive flex items-center gap-2">
-          <Lock className="h-4 w-4" /> يوم اليوم مقفل — لا يمكن تسجيل حركات جديدة بتاريخ اليوم.
+          <Lock className="h-4 w-4" /> اليوم مقفل — لا يمكن تسجيل حركات جديدة بتاريخ اليوم.
         </div>
       )}
 
+      {/* B — Financial Summary (tiered) */}
+      <FinancialSummary
+        currentBalance={currentBalance}
+        todayIn={todayIn}
+        todayOut={todayOut}
+        txCount={txCount}
+        openingBalance={cs.openingBalance}
+        openingCurrency={cs.currency}
+        openingDate={cs.openingDate}
+        perCurrency={perCurrency}
+        lastUpdatedAt={dataUpdatedAt}
+      />
+
+      {/* C — Filter Toolbar */}
+      <PeriodFilterCard value={period} onChange={patchSearch} />
+
+      {/* D — Financial Overview (profitability ≠ cash position) */}
+      <FinancialOverview query={profitQuery} />
+
+      {/* E — Quick Actions (calm zone: ghost buttons, one row) */}
+      <div className="flex flex-wrap items-center gap-1.5 rounded-xl border border-border bg-card/60 px-4 py-2.5">
+        <span className="ml-1 text-xs text-muted-foreground">إجراءات سريعة:</span>
+        <Button asChild size="sm" variant="ghost" className="h-8">
+          <Link to="/receipts/new">سند قبض</Link>
+        </Button>
+        <Button asChild size="sm" variant="ghost" className="h-8">
+          <Link to="/payments/new">سند صرف</Link>
+        </Button>
+        <Button asChild size="sm" variant="ghost" className="h-8">
+          <Link to="/expenses/new">مصروف جديد</Link>
+        </Button>
+        <Button
+          type="button"
+          size="sm"
+          variant="ghost"
+          className="h-8"
+          onClick={() => setManOpen(true)}
+          disabled={locked}
+        >
+          حركة يدوية
+        </Button>
+      </div>
+
+      {/* F — Main Activity Tabs */}
+      <ActivityTabs
+        query={profitQuery}
+        period={period}
+        tab={activeTab}
+        onTabChange={changeTab}
+        manualMoves={manualMoves}
+        onDeleteManual={(id) => deleteMovement.mutate(id)}
+      />
+
+      {/* G — Secondary settings */}
       <PageCard
         title="إعدادات الصندوق"
-        description="الرصيد الافتتاحي للصندوق."
+        description="الرصيد الافتتاحي وآخر إقفال."
         actions={
-          <Button variant="outline" onClick={() => setOpeningEdit(true)}>
-            تعديل الرصيد الافتتاحي
+          <Button type="button" variant="outline" size="sm" onClick={() => setOpeningEdit(true)}>
+            <Settings2 className="h-4 w-4 ml-1" /> تعديل الرصيد الافتتاحي
           </Button>
         }
       >
-        <div className="text-sm text-muted-foreground">
-          الرصيد الافتتاحي منذ {cs.openingDate}:{" "}
-          <span className="font-bold text-foreground">
-            {formatAmount(cs.openingBalance, cs.currency)}
-          </span>
-        </div>
-      </PageCard>
-
-      <PageCard
-        title="حركات اليوم"
-        description="جميع الحركات النقدية لليوم الحالي."
-        actions={
-          <div className="flex gap-2">
-            <Button variant="outline" onClick={() => setManOpen(true)} disabled={locked}>
-              <Plus className="h-4 w-4 ml-1" /> حركة يدوية
-            </Button>
-            <Button
-              onClick={() => setCloseOpen(true)}
-              disabled={locked}
-              className="bg-primary text-primary-foreground"
-            >
-              <Lock className="h-4 w-4 ml-1" /> الإقفال اليومي
-            </Button>
+        <div className="flex flex-wrap gap-x-8 gap-y-2 text-sm">
+          <div className="text-muted-foreground">
+            الرصيد الافتتاحي منذ {cs.openingDate || "—"}:{" "}
+            <span className="font-bold text-foreground tabular-nums" dir="ltr">
+              {formatAmount(cs.openingBalance, cs.currency)}
+            </span>
           </div>
-        }
-        noBodyPadding
-      >
-        <div className="w-full overflow-x-auto">
-          <table className="w-full min-w-[720px] text-right text-sm">
-            <thead className="bg-secondary/60 text-[11px] font-semibold uppercase text-muted-foreground">
-              <tr className="[&>th]:px-3 [&>th]:py-2.5">
-                <th>الوقت</th>
-                <th>النوع</th>
-                <th>الوصف</th>
-                <th>المرجع</th>
-                <th className="text-left">وارد</th>
-                <th className="text-left">صادر</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border">
-              {todayLedger.map((e) => (
-                <tr key={e.id}>
-                  <td className="px-3 py-2 tabular-nums">
-                    {hydrated ? e.createdAt.slice(11, 16) : "--:--"}
-                  </td>
-                  <td className="px-3 py-2">
-                    {LEDGER_TYPE_LABEL[e.type as keyof typeof LEDGER_TYPE_LABEL]}
-                  </td>
-                  <td className="px-3 py-2">{e.description}</td>
-                  <td className="px-3 py-2 text-primary">
-                    {e.invoiceId ? (
-                      <Link to="/invoices/$id" params={{ id: e.invoiceId }}>
-                        {e.referenceNumber}
-                      </Link>
-                    ) : (
-                      e.referenceNumber
-                    )}
-                  </td>
-                  <td className="px-3 py-2 text-left tabular-nums">
-                    {e.cashImpact === "in" ? formatAmount(e.debit || e.credit, e.currency) : "—"}
-                  </td>
-                  <td className="px-3 py-2 text-left tabular-nums">
-                    {e.cashImpact === "out" ? formatAmount(e.debit || e.credit, e.currency) : "—"}
-                  </td>
-                  <td></td>
-                </tr>
-              ))}
-              {manToday.map((m) => (
-                <tr key={m.id} className="bg-primary/5">
-                  <td className="px-3 py-2 tabular-nums">
-                    {hydrated ? m.createdAt.slice(11, 16) : "--:--"}
-                  </td>
-                  <td className="px-3 py-2">
-                    {MANUAL_TYPE_LABEL[m.type]}{" "}
-                    <span className="text-[10px] rounded bg-primary/20 px-1">يدوية</span>
-                  </td>
-                  <td className="px-3 py-2">{m.description}</td>
-                  <td className="px-3 py-2">—</td>
-                  <td className="px-3 py-2 text-left tabular-nums">
-                    {m.direction === "in" ? formatAmount(m.amount, m.currency) : "—"}
-                  </td>
-                  <td className="px-3 py-2 text-left tabular-nums">
-                    {m.direction === "out" ? formatAmount(m.amount, m.currency) : "—"}
-                  </td>
-                  <td className="px-3 py-2">
-                    <button
-                      onClick={() => confirm("حذف الحركة؟") && deleteMovement.mutate(m.id)}
-                      className="text-destructive"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </button>
-                  </td>
-                </tr>
-              ))}
-              {rowsCount === 0 && (
-                <tr>
-                  <td colSpan={7} className="p-10 text-center text-muted-foreground">
-                    لا حركات اليوم.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
+          <div className="text-muted-foreground">
+            آخر إقفال:{" "}
+            <span className="font-bold text-foreground">{last ? last.date : "لم يتم"}</span>
+          </div>
+          <div className="text-muted-foreground">
+            عملة الجلسة: <span className="font-bold text-foreground">{cs.currency}</span>
+          </div>
         </div>
       </PageCard>
 
@@ -261,30 +272,7 @@ function CashBoxPage() {
   );
 }
 
-function KpiTile({
-  label,
-  value,
-  tone,
-}: {
-  label: string;
-  value: string;
-  tone?: "in" | "out" | "primary";
-}) {
-  const cls =
-    tone === "in"
-      ? "border-success/40 bg-success/10"
-      : tone === "out"
-        ? "border-destructive/40 bg-destructive/10"
-        : tone === "primary"
-          ? "border-primary/40 bg-primary/10"
-          : "border-border bg-card";
-  return (
-    <div className={`rounded-lg border ${cls} p-3`}>
-      <div className="text-[11px] font-semibold text-muted-foreground">{label}</div>
-      <div className="mt-1 text-base font-bold tabular-nums">{value}</div>
-    </div>
-  );
-}
+/* ── Dialogs — same logic as before the restructure (unchanged behavior) ── */
 
 function OpeningDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { data: state } = useCashboxState();
@@ -305,6 +293,7 @@ function OpeningDialog({ open, onClose }: { open: boolean; onClose: () => void }
     setOpening.mutate({ balance: v, date: today, currency: cs.currency });
     onClose();
   };
+
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
       <DialogContent>
@@ -377,6 +366,7 @@ function ManualDialog({ open, onClose }: { open: boolean; onClose: () => void })
       },
     );
   };
+
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
       <DialogContent>
@@ -479,6 +469,7 @@ function ClosingDialog({
       { onSuccess: () => onClose() },
     );
   };
+
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
       <DialogContent>
@@ -523,3 +514,9 @@ function Row({ label, value, bold }: { label: string; value: string; bold?: bool
     </div>
   );
 }
+
+
+
+
+
+

@@ -86,7 +86,10 @@ describe("Invoice financial properties (fast-check)", () => {
               createdAt: "2026-01-01T00:00:00.000Z",
             });
 
-            const expected = Math.round(quantity * price);
+            // 2dp contract: line totals round to 2 decimals (numeric(14,2)
+            // storage) — NOT integer rounding. Same canonical rule as the
+            // backend computeSubtotal and core lineTotal.
+            const expected = round2dp(quantity * price);
             expect(invoice.total()).toBeCloseTo(expected, 10);
           },
         ),
@@ -128,7 +131,7 @@ describe("Invoice financial properties (fast-check)", () => {
             });
 
             const expectedSum = invoiceLines.reduce(
-              (sum, l) => sum + Math.max(0, Math.round(l.quantityKg * l.pricePerKg - l.discountAmount)),
+              (sum, l) => sum + Math.max(0, round2dp(l.quantityKg * l.pricePerKg - l.discountAmount)),
               0,
             );
             expect(invoice.total()).toBeCloseTo(expectedSum, 5);
@@ -166,7 +169,7 @@ describe("Invoice financial properties (fast-check)", () => {
           });
 
           const gross = q * p;
-          const expected = Math.max(0, Math.round(gross - d));
+          const expected = Math.max(0, round2dp(gross - d));
           expect(invoice.lineTotal(line)).toBe(expected);
         }),
       );
@@ -220,7 +223,7 @@ describe("Invoice financial properties (fast-check)", () => {
           createdAt: "2026-01-01T00:00:00.000Z",
         });
 
-        expect(invoice.lineTotal(line)).toBe(Math.round(q * p));
+        expect(invoice.lineTotal(line)).toBe(round2dp(q * p));
       }),
     );
   });

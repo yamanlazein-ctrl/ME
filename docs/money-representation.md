@@ -39,6 +39,35 @@ on both read and write — it keeps every repository code path unchanged.
   rejected at validation for SYP, and USD/EUR may adopt a per-currency scale
   later without a schema change (bigint minor units).
 
+## Update — 2026-08-23: decimal completion (QA decimal-fraction audit)
+
+The QA brief required 100% acceptance of decimal fractions in USD invoices
+(price 1.5$, discount 0.5$, qty 12.5kg). Live testing proved the mixed state
+left by migration 0036 rejected fractional invoice-level discounts and paid
+amounts with SQLSTATE 22P02 (`invalid input syntax for type bigint`), because
+`invoices.subtotal/total`, ledger legs, vouchers etc. were still BIGINT while
+inputs were NUMERIC(14,2).
+
+Completed the conversion (migration `0037_monetary_decimal_completion.sql`):
+**every** monetary column is now `NUMERIC(14,2)`; drizzle schemas use
+`numeric(..., { mode: "number" })` so repository code paths are unchanged.
+
+Rounding policy changed from whole units (`Math.round`) to **2 decimals
+(`round2dp`)** at every parity point:
+
+- `packages/shared/src/entities/Invoice.ts` — lineTotal / computeSubtotal /
+  invoiceTotal (backend journaling truth)
+- `packages/shared/src/schemas/invoice.schema.ts` — validation superRefine
+- `src/core/calculations/invoiceCalc.ts` + `src/domain/entities/Invoice.ts` —
+  frontend preview & entity
+- `backend/src/.../PostgresInvoiceRepository.ts` — update() subtotal, COGS leg
+
+Sums are rounded once at the edge to kill float accumulation. Display:
+`formatMoney` now keeps up to 2 decimals instead of rounding to integers, so
+print shows "18.25" not "19". SYP amounts are unaffected (whole-unit inputs
+render identically). Regression tests: root `src/__tests__/decimal-parity.test.ts`,
+backend `tests/invoice-total-parity.test.ts`.
+
 ## Forbidden
 
 - `real` / `float4` / `float8` for money columns.

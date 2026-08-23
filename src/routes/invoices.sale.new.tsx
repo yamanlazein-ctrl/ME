@@ -8,7 +8,12 @@ import { colorById, fabricById, rollById, useInventory } from "@/presentation/ho
 import { addCustomer, customers } from "@/presentation/hooks/useParties";
 import { currencySymbol } from "@/presentation/hooks/useCurrency";
 import type { Currency } from "@/domain/types";
-import { useCreateInvoice, nextInvoiceNumber } from "@/presentation/hooks/useInvoices";
+import {
+  useCreateInvoice,
+  useUpdateInvoice,
+  useInvoice,
+  nextInvoiceNumber,
+} from "@/presentation/hooks/useInvoices";
 import { toast } from "sonner";
 import { printDocument } from "@/components/print/printPortal";
 import { InvoicePrintDocument } from "@/components/print/InvoicePrintDocument";
@@ -44,12 +49,14 @@ import {
   lineTotal,
 } from "@/components/invoices/sale-types";
 import { formatNumber, formatMoney, formatQuantity } from "@/shared/utils/formatNumber";
+import { parseInvoiceNotes } from "@/components/print/noteParser";
 
-type SaleSearch = { fromOrder?: string };
+type SaleSearch = { fromOrder?: string; edit?: string };
 
 export const Route = createFileRoute("/invoices/sale/new")({
   validateSearch: (s: Record<string, unknown>): SaleSearch => ({
     fromOrder: typeof s.fromOrder === "string" ? s.fromOrder : undefined,
+    edit: typeof s.edit === "string" ? s.edit : undefined,
   }),
   component: SaleInvoicePage,
 });
@@ -59,7 +66,10 @@ function SaleInvoicePage() {
   const navigate = useNavigate();
   const search = Route.useSearch();
   const fromOrderId = search.fromOrder;
+  const edit = search.edit;
   const create = useCreateInvoice();
+  const update = useUpdateInvoice();
+  const { data: editInvoice } = useInvoice(edit ?? "");
   const fromOrder = useOrder(fromOrderId ?? "");
   const fulfillOrder = useFulfillOrder();
 
@@ -80,6 +90,9 @@ function SaleInvoicePage() {
   const [lines, setLines] = useState<SaleLine[]>([emptyLine()]);
   const [discount, setDiscount] = useState<number | "">("");
   const [tax, setTax] = useState<number | "">("");
+  // Unified totals formula (audit rule 4): grand total includes shipping for
+  // BOTH entry and sale invoices — the sale form previously dropped it.
+  const [shipping, setShipping] = useState<number | "">("");
   const [paid, setPaid] = useState<number | "">("");
   const [error, setError] = useState<string | null>(null);
   const [quickCustomer, setQuickCustomer] = useState(false);
@@ -87,6 +100,43 @@ function SaleInvoicePage() {
   const fabricRefs = useRef<Record<string, HTMLInputElement | null>>({});
 
   const prefilledRef = useRef<string | null>(null);
+
+  // When arriving with ?edit=<invoiceId>, pre-fill the form from that invoice
+  // so the operator edits the SAME invoice via PUT (no duplicate rolls).
+  const editPrefilledRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!edit || !editInvoice || editPrefilledRef.current === edit) return;
+    editPrefilledRef.current = edit;
+    setCustomerId(editInvoice.partyId);
+    setCurrency(editInvoice.currency as Currency);
+    setDate(editInvoice.date);
+    const parsedHeader = parseInvoiceNotes(editInvoice.notes);
+    setReference(editInvoice.reference || parsedHeader.reference || "");
+    setNotes(parsedHeader.freeText);
+    setDiscount(editInvoice.discount ?? "");
+    setTax(editInvoice.tax ?? "");
+    setShipping(editInvoice.shipping ?? "");
+    const mapped: SaleLine[] = editInvoice.lines.map((l) => {
+      const fab = fabricById(l.fabricId);
+      const col = colorById(l.colorId);
+      return {
+        ...emptyLine(),
+        fabricId: l.fabricId,
+        fabricName: fab?.name ?? "",
+        colorId: l.colorId,
+        colorName: col?.name ?? "",
+        colorCode: col?.code ?? "",
+        rollId: l.rollId,
+        quantityKg: l.quantityKg,
+        pieces: l.pieces ?? 1,
+        pricePerKg: l.pricePerKg,
+        discountAmount: l.discountAmount ?? 0,
+        note: l.note,
+      };
+    });
+    setLines(mapped.length > 0 ? mapped : [emptyLine()]);
+  }, [edit, editInvoice]);
+
   useEffect(() => {
     if (!fromOrderId || !fromOrder.data || prefilledRef.current === fromOrderId) return;
     const order = fromOrder.data;
@@ -125,7 +175,10 @@ function SaleInvoicePage() {
   const subtotal = dataLines.reduce((s, l) => s + l.quantityKg * l.pricePerKg, 0);
   const totalQty = dataLines.reduce((s, l) => s + (l.quantityKg || 0), 0);
   const totalAfter = dataLines.reduce((s, l) => s + lineTotal(l), 0);
-  const netTotal = totalAfter - (Number(discount) || 0) + (Number(tax) || 0);
+  // Same canonical formula as the entry form and the backend entity:
+  // total = subtotal − discount + tax + shipping; remaining = total − paid.
+  const netTotal =
+    totalAfter - (Number(discount) || 0) + (Number(tax) || 0) + (Number(shipping) || 0);
   const remaining = Math.max(0, netTotal - (Number(paid) || 0));
   const isUSD = currency === "USD";
   const moneyClass = isUSD ? "text-success" : "text-foreground";
@@ -190,13 +243,16 @@ function SaleInvoicePage() {
         return setError("الخصم لا يمكن أن يتجاوز إجمالي البند.");
       }
       const roll = rollById(l.rollId);
-      if (roll && l.quantityKg > roll.remainingKg) {
+      // When editing, availability is validated against per-roll DELTAS by the
+      // backend (the original sale already reduced remainingKg/remainingPieces,
+      // so a straight `quantity > remaining` check would false-positive).
+      if (!edit && roll && l.quantityKg > roll.remainingKg) {
         return setError(`الكمية في الصبغة #${roll.rollNo} تتجاوز المتاح (${roll.remainingKg} كغ).`);
       }
       if ((l.pieces || 1) < 1 || !Number.isInteger(l.pieces || 1)) {
         return setError("عدد الأثواب يجب أن يكون عدداً صحيحاً ≥ 1.");
       }
-      if (roll && (l.pieces || 1) > (roll.remainingPieces ?? roll.pieces ?? 1)) {
+      if (!edit && roll && (l.pieces || 1) > (roll.remainingPieces ?? roll.pieces ?? 1)) {
         return setError(
           `الأثواب في الصبغة #${roll.rollNo} تتجاوز المتاح (${roll.remainingPieces ?? roll.pieces ?? 1} أثواب).`,
         );
@@ -218,6 +274,52 @@ function SaleInvoicePage() {
           : paymentMethod === "بطاقة" || paymentMethod === "card"
             ? "card"
             : "cash";
+    const linePayload = valid.map((l) => ({
+      id: l.id,
+      fabricId: l.fabricId,
+      colorId: l.colorId,
+      rollId: l.rollId,
+      quantityKg: l.quantityKg,
+      pieces: l.pieces,
+      pricePerKg: l.pricePerKg,
+      discountAmount: l.discountAmount,
+      note: l.note,
+    }));
+
+    if (edit) {
+      const res = await update.mutateAsync({
+        id: edit,
+        patch: {
+          date,
+          discount: Number(discount) || 0,
+          tax: Number(tax) || 0,
+          shipping: Number(shipping) || 0,
+          notes: combinedNotes,
+          lines: linePayload,
+        },
+      });
+      if (!res.ok) {
+        const rawErr = (res as any).error ?? {};
+        const details = rawErr.details as Record<string, string[]> | undefined;
+        const firstDetail = details ? details[Object.keys(details)[0]]?.[0] : undefined;
+        return setError(
+          typeof rawErr === "string"
+            ? rawErr
+            : firstDetail
+              ? `${rawErr.message} — ${firstDetail}`
+              : (rawErr.message ?? "فشل تحديث الفاتورة"),
+        );
+      }
+      toast.success(`تم حفظ تعديلات الفاتورة ${res.value.number}`);
+      if (thenPrint) printDocument(<InvoicePrintDocument invoice={res.value} />);
+      if (thenNew) {
+        navigate({ to: "/invoices/sale/new" });
+        return;
+      }
+      navigate({ to: "/invoices/$id", params: { id: res.value.id } });
+      return;
+    }
+
     const res = await create.mutateAsync({
       tenantId: "dev-tenant",
       number: nextInvoiceNumber("sale"),
@@ -226,22 +328,15 @@ function SaleInvoicePage() {
       partyId: customerId,
       partyType: "customer",
       currency,
+      // Structured reference + unified totals formula (shipping included).
+      reference: reference.trim() || undefined,
       discount: Number(discount) || 0,
       tax: Number(tax) || 0,
+      shipping: Number(shipping) || 0,
       paid: paidAmount,
       paymentMethod: methodEnum,
       orderId: fromOrderId || undefined,
-      lines: valid.map((l) => ({
-        id: l.id,
-        fabricId: l.fabricId,
-        colorId: l.colorId,
-        rollId: l.rollId,
-        quantityKg: l.quantityKg,
-        pieces: l.pieces,
-        pricePerKg: l.pricePerKg,
-        discountAmount: l.discountAmount,
-        note: l.note,
-      })),
+      lines: linePayload,
       notes: combinedNotes,
     });
     if (!res.ok) {
@@ -272,6 +367,7 @@ function SaleInvoicePage() {
     setLines([emptyLine()]);
     setDiscount("");
     setTax("");
+    setShipping("");
     setPaid("");
     setReference("");
     setNotes("");
@@ -528,6 +624,14 @@ function SaleInvoicePage() {
               suffix={currencySymbol(currency)}
               tone={moneyClass}
             />
+            {/* Shipping — same field as entry invoices (unified formula). */}
+            <TotalInputCell
+              label="الشحن"
+              value={shipping}
+              onChange={setShipping}
+              suffix={currencySymbol(currency)}
+              tone={moneyClass}
+            />
           </div>
           <div className="grid gap-x-6 gap-y-2 border-t border-border/60 px-4 py-3 sm:grid-cols-3">
             <TotalCell
@@ -582,6 +686,9 @@ function SaleInvoicePage() {
         )}
       </div>
       <DocumentFooter
+        // I12: disable all save buttons while a mutation is in flight —
+        // double-clicking used to post duplicate invoices/vouchers.
+        isSaving={create.isPending || update.isPending || fulfillOrder.isPending}
         onSave={() => save(false)}
         onSaveAndPrint={() => save(true)}
         onSaveAndNew={() => save(false, true)}

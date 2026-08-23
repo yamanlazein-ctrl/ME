@@ -5,6 +5,7 @@ export { ReturnApiService } from "./ReturnApiService";
 export { VoucherApiService } from "./VoucherApiService";
 export { CashboxApiService } from "./CashboxApiService";
 export { LedgerApiService } from "./LedgerApiService";
+export { ProfitApiService } from "./ProfitApiService";
 export { ExpenseApiService } from "./ExpenseApiService";
 export { DashboardApiService } from "./DashboardApiService";
 export { SettingsApiService } from "./SettingsApiService";

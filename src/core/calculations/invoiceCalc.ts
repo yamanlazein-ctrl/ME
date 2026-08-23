@@ -1,3 +1,5 @@
+import { round2dp } from "@erp/shared";
+
 export type InvoiceLineCalc = {
   quantityKg: number;
   pricePerKg: number;
@@ -13,15 +15,17 @@ export type InvoiceCalc = {
 
 export function lineTotal(l: InvoiceLineCalc): number {
   const gross = l.quantityKg * l.pricePerKg;
-  // Matches the backend computeSubtotal: round each line, then sum. The server
-  // owns monetary truth; this client calculation is only a pre-submit preview
-  // and must use the identical per-line rounding so the preview never diverges
-  // from the stored subtotal.
-  return Math.max(0, Math.round(gross - (l.discountAmount || 0)));
+  // Matches the backend computeSubtotal: round each line to 2dp, then sum. The
+  // server owns monetary truth; this client calculation is only a pre-submit
+  // preview and must use the identical per-line rounding so the preview never
+  // diverges from the stored subtotal. 2dp keeps USD/EUR cents exact.
+  return Math.max(0, round2dp(gross - (l.discountAmount || 0)));
 }
 
 export function invoiceSubtotal(inv: InvoiceCalc): number {
-  return inv.lines.reduce((s, l) => s + lineTotal(l), 0);
+  // Round the SUM once at the edge to match the backend's computeSubtotal
+  // (kills float accumulation error on many-line invoices).
+  return round2dp(inv.lines.reduce((s, l) => s + lineTotal(l), 0));
 }
 
 export function invoiceDiscount(inv: InvoiceCalc): number {

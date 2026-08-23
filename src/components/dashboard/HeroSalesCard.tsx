@@ -1,59 +1,33 @@
 import { Link } from "@tanstack/react-router";
-import { Clock, Layers, PackageOpen } from "lucide-react";
+import { Clock, Receipt, Calendar, Layers, PackageOpen } from "lucide-react";
 import { useDashboard } from "@/presentation/hooks/useDashboard";
 import { useCashboxState } from "@/presentation/hooks/useCashbox";
 import { useOrdersList } from "@/presentation/hooks/useOrders";
-import { formatMoney } from "@/shared/utils/formatNumber";
+import { formatNumber, formatMoney } from "@/shared/utils/formatNumber";
 
 export function HeroSalesCard() {
   const { data } = useDashboard();
   const { data: cashbox } = useCashboxState();
-  const { activeRolls } = data ?? {};
+  const { activeRolls, todayInvoices } = data ?? {};
   const { data: ordersData } = useOrdersList();
   const availableOrders = (ordersData?.data ?? []).filter(
     (o) => o.status === "available" || o.status === "partially_available",
   ).length;
   const hasSession = cashbox && cashbox.openingBalance > 0;
 
-  const formatSessionTime = (
-    isoString: string | undefined,
-  ): { time: string; period: string } => {
-    if (!isoString) return { time: "", period: "" };
-    try {
-      const date = new Date(isoString);
-      if (isNaN(date.getTime())) return { time: "", period: "" };
-      const str = date.toLocaleTimeString("ar-SY", {
-        hour: "2-digit",
-        minute: "2-digit",
-        numberingSystem: "latn",
-      });
-      const parts = str.trim().split(/\s+/);
-      return { time: parts[0] ?? "", period: parts[1] ?? "" };
-    } catch {
-      return { time: "", period: "" };
-    }
-  };
-
-  const formatDate = (iso: string | undefined): string => {
-    if (!iso) return "";
-    const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso);
-    if (m) return `${m[3]}-${m[2]}-${m[1]}`;
-    const date = new Date(iso);
-    if (isNaN(date.getTime())) return iso;
+  // Always show TODAY's real date (no dependence on a session that may not
+  // be open). Format as DD-MM-YYYY.
+  const formatDate = (d: Date): string => {
     const pad = (n: number) => String(n).padStart(2, "0");
-    return `${pad(date.getDate())}-${pad(date.getMonth() + 1)}-${date.getFullYear()}`;
+    return `${pad(d.getDate())}-${pad(d.getMonth() + 1)}-${d.getFullYear()}`;
   };
+  const todayLabel = formatDate(new Date());
 
-  const now = new Date();
-  const session = formatSessionTime(hasSession ? now.toISOString() : "");
-  const sessionTimeNum = hasSession ? session.time : "";
-  const sessionPeriod = hasSession ? session.period : "";
-  const sessionDate =
-    hasSession && cashbox.openingDate ? formatDate(cashbox.openingDate) : "";
+  const todayCount = todayInvoices?.count ?? 0;
 
   return (
     <section
-      data-od-id="hero-session"
+      data-od-id="hero-today-invoices"
       className="card-glow relative overflow-hidden rounded-2xl border border-primary/25 p-5 shadow-[0_24px_60px_-30px_color-mix(in_oklab,var(--primary)_45%,transparent)] transition-transform duration-300 hover:-translate-y-0.5 sm:p-6"
       style={{ background: "var(--hero-card-bg)" }}
     >
@@ -80,56 +54,32 @@ export function HeroSalesCard() {
             className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.18em]"
             style={{ color: "var(--accent-soft)" }}
           >
-            <Clock className="h-3.5 w-3.5" strokeWidth={2} />
-            افتتاح الجلسة
+            <Receipt className="h-3.5 w-3.5" strokeWidth={2} />
+            فواتير اليوم
           </div>
           <div className="mt-1 flex items-baseline gap-2.5">
             <span
-              dir="ltr"
               className="text-6xl font-bold leading-none tracking-tight tabular-nums sm:text-7xl"
               style={{ color: "var(--foreground)" }}
             >
-              {hasSession ? sessionTimeNum : "—"}
+              {formatNumber(todayCount)}
             </span>
-            {hasSession && sessionPeriod && (
-              <span className="text-2xl font-semibold text-muted-foreground">
-                {sessionPeriod}
-              </span>
-            )}
+            <span className="text-2xl font-semibold text-muted-foreground">
+              فاتورة
+            </span>
           </div>
           <p className="mt-1 text-[12px] text-muted-foreground">
-            {hasSession
-              ? "الجلسة مفتوحة — العمليات مسجّلة لحظياً"
-              : "لا توجد جلسة مفتوحة حالياً"}
+            عدد فواتير الدخول والبيع المسجلة{" "}
+            {hasSession ? "• الجلسة مفتوحة" : "• الجلسة غير مفتوحة"}
           </p>
-        </div>
-
-        <div className="shrink-0">
-          {hasSession ? (
-            <div
-              className="inline-flex items-center gap-2 rounded-full border border-success/30 bg-success/10 px-3 py-1.5 text-[11px] font-semibold"
-              style={{ color: "var(--success)" }}
-            >
-              <span className="relative inline-flex h-2 w-2">
-                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-success opacity-70" />
-                <span className="relative inline-flex h-2 w-2 rounded-full bg-success" />
-              </span>
-              مباشر
-            </div>
-          ) : (
-            <div className="inline-flex items-center gap-2 rounded-full border border-muted-foreground/30 bg-muted/30 px-3 py-1.5 text-[11px] font-semibold text-muted-foreground">
-              <span className="inline-block h-2 w-2 rounded-full bg-muted-foreground/60" />
-              الجلسة غير مفتوحة
-            </div>
-          )}
         </div>
       </div>
 
       <div className="relative mt-5 grid grid-cols-1 gap-px overflow-hidden rounded-xl border border-primary/10 bg-primary/5 sm:grid-cols-3">
         <HeroChip
-          icon={Clock}
-          label="تاريخ الافتتاح"
-          value={sessionDate || "—"}
+          icon={Calendar}
+          label="تاريخ اليوم"
+          value={todayLabel}
         />
         <HeroChip
           icon={Layers}

@@ -4,7 +4,7 @@ import {
   varchar,
   timestamp,
   integer,
-  bigint,
+  numeric,
   date,
   text,
   uniqueIndex,
@@ -20,7 +20,11 @@ export const invoices = pgTable(
     tenantId: uuid("tenant_id")
       .notNull()
       .references(() => tenants.id),
-    number: varchar("number", { length: 50 }).notNull(),
+   number: varchar("number", { length: 50 }).notNull(),
+   // Human-readable reference (ENT-2026-XXXX / INV-2026-XXXX). Server
+   // defaults it to `number` when the user does not supply one. Screen,
+   // API and print templates all read this field.
+   reference: varchar("reference", { length: 100 }),
     type: varchar("type", { length: 10 }).notNull(),
     date: date("date").notNull(),
     partyId: uuid("party_id")
@@ -28,17 +32,17 @@ export const invoices = pgTable(
       .references(() => parties.id),
     partyType: varchar("party_type", { length: 10 }).notNull(),
     currency: varchar("currency", { length: 3 }).notNull().default("SYP"),
-    subtotal: bigint("subtotal", { mode: "number" }).notNull().default(0),
-    discount: bigint("discount", { mode: "number" }).notNull().default(0),
-    tax: bigint("tax", { mode: "number" }).notNull().default(0),
-    shipping: bigint("shipping", { mode: "number" }).notNull().default(0),
-    total: bigint("total", { mode: "number" }).notNull().default(0),
+    subtotal: numeric("subtotal", { precision: 14, scale: 2, mode: "number" }).notNull().default(0),
+    discount: numeric("discount", { precision: 14, scale: 2, mode: "number" }).notNull().default(0),
+    tax: numeric("tax", { precision: 14, scale: 2, mode: "number" }).notNull().default(0),
+    shipping: numeric("shipping", { precision: 14, scale: 2, mode: "number" }).notNull().default(0),
+    total: numeric("total", { precision: 14, scale: 2, mode: "number" }).notNull().default(0),
     // Amount paid to/from the party at invoice time. For entry (purchase)
     // invoices this is the supplier payment captured on the bill; for sale
     // invoices it is the customer receipt. Stored so the invoice can expose
     // `amountDue = total - paid` and so the supplier/customer balance reflects
     // the payment (a linked payment_out / receipt_in voucher is also written).
-    paid: bigint("paid", { mode: "number" }).notNull().default(0),
+    paid: numeric("paid", { precision: 14, scale: 2, mode: "number" }).notNull().default(0),
     // Payment method used when paid > 0 (cash/transfer/check/card).
     // Stored on the invoice for audit trail and display purposes.
     paymentMethod: varchar("payment_method", { length: 20 }),

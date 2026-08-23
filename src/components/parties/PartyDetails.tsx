@@ -165,14 +165,21 @@ function settledByParty(
 export function PartyDetailsPage({ kind, id }: { kind: PartyKind; id: string }) {
   useInventory();
   useParties();
-  const { data: invoicesData } = useInvoicesList();
-  const allInvoices = invoicesData?.data ?? [];
-  const { data: vouchersData } = useVouchersList();
-  const allVouchers = vouchersData?.data ?? [];
-  const { data: ledgerEntries = [] } = useLedgerEntries({ limit: 1000 });
   const navigate = useNavigate();
   const isSup = kind === "supplier";
   const p: Party | undefined = isSup ? supplierById(id) : customerById(id);
+  // H2 fix: aggregate the summary card from THIS party's full document set,
+  // not page 1 of an unscoped global list. Both endpoints accept partyId +
+  // limit (server caps at 1000), so the totals below are truly cumulative.
+  const { data: invoicesData } = useInvoicesList(
+    p ? { partyId: p.id, type: isSup ? "entry" : "sale", limit: 1000 } : undefined,
+  );
+  const allInvoices = invoicesData?.data ?? [];
+  const { data: vouchersData } = useVouchersList(
+    p ? { partyId: p.id, limit: 1000 } : undefined,
+  );
+  const allVouchers = vouchersData?.data ?? [];
+  const { data: ledgerEntries = [] } = useLedgerEntries({ limit: 1000 });
 
   const [tab, setTab] = useState<TabId>("overview");
   const [editing, setEditing] = useState(false);
@@ -205,7 +212,9 @@ export function PartyDetailsPage({ kind, id }: { kind: PartyKind; id: string }) 
   const settlementStats: Record<string, (typeof statsByCurrency)[string]> = {};
   for (const [ccy, stats] of Object.entries(statsByCurrency)) {
     const amt = settled[ccy] ?? 0;
-    if (amt > 0) settlementStats[ccy] = { ...stats, remaining: Math.max(0, stats.remaining - amt) };
+    // No Math.max clamp: a negative remaining is a genuine credit balance
+    // (over-payment/over-settlement) and must stay visible, not be hidden.
+    if (amt > 0) settlementStats[ccy] = { ...stats, remaining: stats.remaining - amt };
     else settlementStats[ccy] = stats;
   }
   const active = (p.status ?? "active") === "active";

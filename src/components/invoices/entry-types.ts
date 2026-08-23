@@ -4,6 +4,8 @@ export type EntryLine = {
   id: string;
   existingFabricId?: string;
   existingColorId?: string;
+  /** Existing roll id when editing an invoice — avoids creating duplicate rolls. */
+  rollId?: string;
   fabricName: string;
   category: string;
   unit: FabricUnit;
@@ -55,6 +57,7 @@ export const emptyLine = (): EntryLine => ({
 export const cloneStickyFields = (prev: EntryLine): Partial<EntryLine> => ({
   existingFabricId: prev.existingFabricId,
   existingColorId: prev.existingColorId,
+  rollId: prev.rollId,
   fabricName: prev.fabricName,
   category: prev.category,
   unit: prev.unit,

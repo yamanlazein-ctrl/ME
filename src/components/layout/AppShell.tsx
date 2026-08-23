@@ -206,7 +206,7 @@ export function AppShell({
             type="button"
             onClick={toggleCollapsed}
             className={cn(
-              "mb-2 flex items-center rounded-lg border border-border bg-secondary/40 text-muted-foreground transition duration-300 hover:border-primary/40 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
+              "mb-2 flex items-center rounded-lg text-muted-foreground transition duration-200 hover:bg-primary/10 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
               collapsed ? "justify-center p-2.5" : "gap-2 px-3 py-2.5 text-[12px] font-medium",
             )}
             aria-label={collapsed ? "فتح القائمة" : "طي القائمة"}
@@ -215,7 +215,7 @@ export function AppShell({
           >
             <ChevronLeft
               className={cn(
-                "h-4 w-4 transition-transform duration-300 ease-out",
+                "h-4 w-4 transition-transform duration-200 ease-out",
                 !collapsed && "rotate-180",
               )}
               strokeWidth={2}
@@ -231,15 +231,20 @@ export function AppShell({
               to="/"
               title="لوحة التحكم"
               className={cn(
-                "mb-2 flex items-center rounded-lg text-sm font-semibold transition duration-200 border-r-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                "group relative mb-2 flex items-center rounded-lg text-sm font-semibold transition duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                 collapsedDesktop ? "justify-center px-0 py-2.5" : "gap-3 px-3 py-2.5",
                 dashActive
-                  ? "bg-primary/10 text-primary border-primary"
-                  : "border-transparent text-foreground hover:bg-secondary",
+                  ? "bg-primary/15 text-primary shadow-[inset_-2px_0_0_0_hsl(var(--primary))]"
+                  : "text-foreground/70 hover:bg-secondary/80 hover:text-foreground",
               )}
             >
               <LayoutDashboard className="h-4 w-4 shrink-0" strokeWidth={2} />
               {!collapsedDesktop && <span className="truncate">لوحة التحكم</span>}
+              {collapsedDesktop && (
+                <span className="pointer-events-none absolute right-full mr-2 rounded-md bg-popover px-2 py-1 text-[11px] font-medium text-popover-foreground opacity-0 shadow-md transition-opacity duration-150 group-hover:opacity-100">
+                  لوحة التحكم
+                </span>
+              )}
             </Link>
           );
         })()}
@@ -265,15 +270,17 @@ export function AppShell({
                       <Link
                         key={n.to}
                         to={n.to}
-                        title={n.label}
                         className={cn(
-                          "my-0.5 flex items-center justify-center rounded-lg p-2 transition duration-200 border-r-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                          "group relative my-1 flex items-center justify-center rounded-lg p-2.5 transition duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                           active
-                            ? "bg-primary/10 text-primary border-primary"
-                            : "border-transparent text-muted-foreground hover:bg-secondary hover:text-foreground",
+                            ? "bg-primary/15 text-primary shadow-[inset_-2px_0_0_0_hsl(var(--primary))]"
+                            : "text-foreground/70 hover:bg-secondary/80 hover:text-foreground",
                         )}
                       >
                         <n.icon className="h-4 w-4 shrink-0" strokeWidth={2} />
+                        <span className="pointer-events-none absolute right-full mr-2 rounded-md bg-popover px-2 py-1 text-[11px] font-medium text-popover-foreground opacity-0 shadow-md transition-opacity duration-150 group-hover:opacity-100 whitespace-nowrap">
+                          {n.label}
+                        </span>
                       </Link>
                     );
                   })}
@@ -289,8 +296,8 @@ export function AppShell({
                   aria-expanded={isOpen}
                   className={cn(
                     "flex w-full items-center justify-between gap-2 rounded-lg px-3 py-2 text-[11px] font-semibold uppercase tracking-wider transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                    containsActive ? "text-foreground" : "text-muted-foreground",
-                    "hover:bg-secondary",
+                    containsActive ? "text-foreground" : "text-foreground/70",
+                    "hover:bg-secondary/80 hover:text-foreground",
                   )}
                 >
                   <span>{g.label}</span>
@@ -313,10 +320,10 @@ export function AppShell({
                             to={n.to}
                             title={n.label}
                             className={cn(
-                              "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition duration-200 border-r-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                              "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                               active
-                                ? "bg-primary/10 text-primary border-primary"
-                                : "border-transparent text-muted-foreground hover:bg-secondary hover:text-foreground",
+                                ? "bg-primary/15 text-primary shadow-[inset_-2px_0_0_0_hsl(var(--primary))]"
+                                : "text-foreground/70 hover:bg-secondary/80 hover:text-foreground",
                             )}
                           >
                             <n.icon className="h-4 w-4 shrink-0" strokeWidth={2} />
@@ -351,8 +358,8 @@ export function AppShell({
             onClick={() => logout.mutate()}
             title="تسجيل الخروج"
             className={cn(
-              "mt-1.5 flex w-full items-center rounded-lg text-[12px] font-medium text-muted-foreground transition duration-200 hover:bg-destructive/10 hover:text-destructive focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
-              collapsedDesktop ? "justify-center p-2" : "gap-2 px-2 py-1.5",
+              "mt-1.5 flex w-full items-center rounded-lg text-[12px] font-medium text-foreground/70 transition duration-200 hover:bg-destructive/10 hover:text-destructive focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
+              collapsedDesktop ? "justify-center p-2.5" : "gap-2 px-2 py-1.5",
             )}
           >
             <LogOut className="h-3.5 w-3.5 shrink-0" />

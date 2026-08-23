@@ -14,6 +14,8 @@ export type { InvoiceData, InvoiceLineData };
 export interface InvoiceDTO {
   id: UUID;
   number: string;
+  /** Human-readable reference (ENT-2026-0001 / INV-2026-0001). */
+  reference?: string | null;
   type: "entry" | "sale" | "return";
   date: string;
   partyId: UUID;
@@ -40,6 +42,8 @@ export interface CreateInvoiceRequest {
   partyId: UUID;
   partyType: "customer" | "supplier";
   currency: Currency;
+  /** Optional user-supplied reference; server defaults it to the generated number. */
+  reference?: string;
   discount?: number;
   tax?: number;
   shipping?: number;
@@ -53,6 +57,8 @@ export interface CreateInvoiceRequest {
     colorId: UUID;
     rollId: UUID;
     quantityKg: number;
+    /** Piece count (أثواب) — omitted values default to 1 server-side. */
+    pieces?: number;
     pricePerKg: number;
     discountAmount: number;
     note?: string;

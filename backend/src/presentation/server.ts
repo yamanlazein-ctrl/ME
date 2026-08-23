@@ -33,6 +33,7 @@ import { registerSettingsRoutes } from "./routes/settings.route.js";
 import { registerDashboardRoutes } from "./routes/dashboard.route.js";
 import { registerLicenseRoutes } from "./routes/license.route.js";
 import { registerSetupRoutes } from "./routes/setup.route.js";
+import { registerProfitRoutes } from "./routes/profit.route.js";
 import { registerCompanyRoutes } from "./routes/company.route.js";
 import {
   registerInvitationAdminRoutes,
@@ -260,6 +261,14 @@ registerSettingsRoutes(
 registerDashboardRoutes(
   apiRouter,
   container.dashboardRepo,
+  authMiddleware,
+  rbac(["admin", "accountant", "warehouse", "viewer"]),
+);
+// Profit endpoints were fully implemented but never mounted — the cashbox
+// financial overview got 404s. Mounting the EXISTING route (no API changes).
+registerProfitRoutes(
+  apiRouter,
+  container.profitRepo,
   authMiddleware,
   rbac(["admin", "accountant", "warehouse", "viewer"]),
 );

@@ -25,14 +25,15 @@ export function formatNumber(n: number | string | null | undefined): string {
 }
 
 /**
- * Money amount formatter: rounds to integer then formats with separators.
- * Use this for all monetary amounts (SYP, USD, EUR).
+ * Money amount formatter: keeps up to 2 decimal places (USD/EUR cents) and
+ * formats with thousands separators. SYP amounts are whole numbers and render
+ * unchanged. Use this for all monetary amounts (SYP, USD, EUR).
  */
 export function formatMoney(n: number | string | null | undefined): string {
   if (n === null || n === undefined) return "—";
   const num = typeof n === "string" ? Number(n) : n;
   if (Number.isNaN(num)) return "—";
-  return Math.round(num).toLocaleString("en-US");
+  return num.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 2 });
 }
 
 /**

@@ -1,5 +1,5 @@
-import { z } from "zod";
-import { is2dp, MAX_2DP_MESSAGE } from "../precision.js";
+﻿import { z } from "zod";
+import { is2dp, MAX_2DP_MESSAGE, round2dp } from "../precision.js";
 
 const invoiceLineSchema = z.object({
   fabricId: z.string().uuid(),
@@ -24,7 +24,10 @@ export const createInvoiceSchema = z
     type: z.enum(["entry", "sale"]),
     date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
     partyId: z.string().uuid(),
-    partyType: z.enum(["customer", "supplier"]),
+   partyType: z.enum(["customer", "supplier"]),
+   // Human-readable reference (ENT-2026-0001 / INV-2026-0001). Optional —
+   // the server falls back to its generated number when omitted.
+   reference: z.string().max(100).optional(),
     currency: z.enum(["SYP", "USD", "EUR"]).optional(),
     lines: z.array(invoiceLineSchema).min(1).max(100),
     discount: z.number().min(0, "الخصم لا يمكن أن يكون سالباً").optional(),
@@ -36,9 +39,13 @@ export const createInvoiceSchema = z
     orderId: z.string().uuid().optional(),
   })
   .superRefine((data, ctx) => {
-    const subtotal = data.lines.reduce(
-      (s, l) => s + Math.max(0, Math.round(Number(l.quantityKg) * Number(l.pricePerKg) - Number(l.discountAmount ?? 0))),
-      0,
+    // 2dp per-line rounding + one edge round on the sum — mirrors
+    // packages/shared/src/entities/Invoice.ts computeSubtotal exactly.
+    const subtotal = round2dp(
+      data.lines.reduce(
+        (s, l) => s + Math.max(0, round2dp(Number(l.quantityKg) * Number(l.pricePerKg) - Number(l.discountAmount ?? 0))),
+        0,
+      ),
     );
     const discount = data.discount ?? 0;
     if (discount > subtotal) {
@@ -50,6 +57,32 @@ export const createInvoiceSchema = z
     }
     if ((data.paid ?? 0) > total) {
       ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["paid"], message: "المبلغ المدفوع لا يمكن أن يتجاوز الإجمالي" });
+    }
+  });
+
+export const updateInvoiceSchema = z
+  .object({
+    date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+    lines: z.array(invoiceLineSchema).min(1).max(100),
+    discount: z.number().min(0, "الخصم لا يمكن أن يكون سالباً").optional(),
+    tax: z.number().min(0, "الضريبة لا يمكن أن تكون سالبة").optional(),
+    shipping: z.number().min(0, "الشحن لا يمكن أن يكون سالباً").optional(),
+    notes: z.string().max(2000).optional(),
+  })
+  .superRefine((data, ctx) => {
+    const subtotal = round2dp(
+      data.lines.reduce(
+        (s, l) => s + Math.max(0, round2dp(Number(l.quantityKg) * Number(l.pricePerKg) - Number(l.discountAmount ?? 0))),
+        0,
+      ),
+    );
+    const discount = data.discount ?? 0;
+    if (discount > subtotal) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["discount"], message: "الخصم لا يمكن أن يتجاوز المجموع الفرعي" });
+    }
+    const total = subtotal - discount + (data.tax ?? 0) + (data.shipping ?? 0);
+    if (total <= 0) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["discount"], message: "مجموع الفاتورة يجب أن يكون موجباً" });
     }
   });
 
@@ -66,3 +99,4 @@ export const listInvoicesSchema = z.object({
 
 export type CreateInvoiceInput = z.infer<typeof createInvoiceSchema>;
 export type InvoiceLineInput = z.infer<typeof invoiceLineSchema>;
+

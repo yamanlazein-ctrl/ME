@@ -24,7 +24,7 @@ import {
   type PrintTotal,
   type PrintParty,
 } from "@/components/print/PrintDocument";
-import { currencySymbol, currencyState, useCurrencies } from "@/presentation/hooks/useCurrency";
+import { currencySymbol } from "@/presentation/hooks/useCurrency";
 import { customerById } from "@/presentation/hooks/useParties";
 import { useVouchersList } from "@/presentation/hooks/useVouchers";
 import { useInvoiceVisibility } from "./visibility";
@@ -37,7 +37,8 @@ import type { Invoice, InvoiceLineData } from "@/domain/entities/Invoice";
 function renderColorCell(colorId: string) {
   const col = colorById(colorId) as Pick<Color, "code" | "name" | "hex"> | null;
   if (!col) return "—";
-  const hexSwatch = col.hex
+    // Strict #RGB/#RRGGBB guard — same rationale as EntryInvoicePrint.
+    const hexSwatch = col.hex && /^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(col.hex)
     ? {
         display: "inline-block",
         width: "10px",
@@ -73,7 +74,6 @@ const fmtQty = (n: number): string => formatQuantity(n);
 
 export function SaleInvoicePrint({ invoice, totalPages, pageNumber }: SaleInvoicePrintProps) {
   const inv = invoice;
-  useCurrencies();
   const vis = useInvoiceVisibility("sale");
   const customer = customerById(inv.partyId);
   const { data: vouchersData } = useVouchersList();
@@ -117,10 +117,8 @@ export function SaleInvoicePrint({ invoice, totalPages, pageNumber }: SaleInvoic
   if (vis.showDate) meta.push({ label: "التاريخ", value: inv.date });
   if (vis.showStatus) meta.push({ label: "الحالة", value: statusLabel });
   if (vis.showCurrency) meta.push({ label: "العملة", value: `${inv.currency} (${sym})` });
-  meta.push({
-    label: "سعر الصرف",
-    value: `1 $ = ${fmtUnit(currencyState.rates.USD)} ل.س — ${currencyState.lastUpdated}`,
-  });
+  // L10: the hardcoded exchange-rate line was removed — it was cosmetic,
+  // never used in any accounting computation, and misleading on invoices.
   if (vis.showCreatedBy) meta.push({ label: "أنشأ بواسطة", value: inv.createdBy ? String(inv.createdBy) : "" });
   if (vis.showCancelledInfo && isCancelled && inv.cancelledAt) {
     meta.push({
@@ -144,8 +142,9 @@ export function SaleInvoicePrint({ invoice, totalPages, pageNumber }: SaleInvoic
     const fab = fabricById(l.fabricId);
     const roll = rollById(l.rollId);
     const parsed = parseLineNote(l.note);
-    const sub = l.quantityKg * l.pricePerKg;
-    const lineTotal = Math.max(0, sub - (l.discountAmount || 0));
+    // Single source of truth: the entity's lineTotal (same rounding as the
+    // backend and the on-screen table — print can no longer diverge).
+    const lineTotal = inv.lineTotal(l);
 
     const main: Record<string, string | number | React.ReactNode> = {
       fabric: fab?.name ?? "—",

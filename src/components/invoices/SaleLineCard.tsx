@@ -63,21 +63,21 @@ export function SaleLineCard({
       className={cn(
         "group rounded-lg border bg-background/60 transition",
         rowIsEmpty
-          ? "border-dashed border-primary/30 bg-primary/[0.02]"
-          : "border-border hover:border-primary/40 hover:shadow-sm",
+          ? "border-dashed border-border/60 bg-secondary/[0.02]"
+          : "border-border hover:border-primary/30",
       )}
     >
       <div className="flex items-center justify-between gap-2 border-b border-border/60 px-3 py-1.5">
         <div className="flex items-center gap-2">
           <span
             className={cn(
-              "grid h-6 min-w-[28px] place-items-center rounded-md px-2 text-[11px] font-bold tabular-nums",
-              rowIsEmpty ? "bg-primary/10 text-primary" : "bg-primary text-primary-foreground",
+              "grid h-6 min-w-[28px] place-items-center rounded-md px-2 text-[11px] font-medium tabular-nums",
+              rowIsEmpty ? "bg-secondary/60 text-muted-foreground" : "bg-secondary text-foreground",
             )}
           >
             {index + 1}
           </span>
-          <span className="text-xs font-semibold text-foreground">
+          <span className="text-xs font-medium text-muted-foreground">
             البند رقم {index + 1}
             {!rowIsEmpty && line.fabricName && (
               <span className="mr-1.5 font-normal text-muted-foreground">
@@ -95,22 +95,11 @@ export function SaleLineCard({
                 isUSD ? "text-success" : "text-foreground",
               )}
             >
-              {formatMoney(lineTotal(line))}{" "}
-              <span className="text-[10px] font-medium text-muted-foreground">
+              {formatMoney(lineTotal(line))}
+              <span className="mr-1 text-[10px] font-medium text-muted-foreground/60">
                 {currencySymbol(currency)}
               </span>
             </span>
-          )}
-          {!rowIsEmpty && line.fabricId && onAddColor && (
-            <button
-              type="button"
-              onClick={onAddColor}
-              className="grid h-7 w-7 place-items-center rounded-md text-muted-foreground transition hover:bg-primary/10 hover:text-primary"
-              aria-label="إضافة لون لنفس القماش"
-              title={`إضافة لون جديد لـ ${line.fabricName}`}
-            >
-              <Palette className="h-3.5 w-3.5" />
-            </button>
           )}
           {!rowIsEmpty && (
             <button
@@ -158,6 +147,17 @@ export function SaleLineCard({
               />
             </CardField>
           </div>
+          {line.fabricId && onAddColor && (
+            <button
+              type="button"
+              onClick={onAddColor}
+              className="inline-flex items-center gap-1.5 rounded-md border border-primary/30 bg-primary/10 px-3 py-1.5 text-xs font-bold text-primary transition hover:bg-primary/20"
+              aria-label="إضافة لون آخر لنفس القماش"
+            >
+              <Palette className="h-3.5 w-3.5" />
+              + إضافة لون آخر لنفس القماش
+            </button>
+          )}
         </GroupSection>
 
         <GroupSection title="بيانات الصبغة">
@@ -212,6 +212,7 @@ export function SaleLineCard({
                 }
                 className={cn(
                   "h-9 text-left tabular-nums",
+                  !line.quantityKg && "text-muted-foreground/70",
                   exceeds &&
                     "border-destructive text-destructive focus-visible:ring-destructive/30",
                 )}
@@ -229,7 +230,7 @@ export function SaleLineCard({
                     pieces: e.target.value === "" ? 1 : Math.max(1, Number(e.target.value)),
                   })
                 }
-                className="h-9 text-left tabular-nums"
+                className={cn("h-9 text-left tabular-nums", !line.pieces && "text-muted-foreground/70")}
                 placeholder="1"
                 aria-label="عدد الأثواب"
               />
@@ -245,7 +246,7 @@ export function SaleLineCard({
                 onChange={(e) =>
                   onUpdate({ pricePerKg: e.target.value === "" ? 0 : Number(e.target.value) })
                 }
-                className={cn("h-9 text-left tabular-nums", isUSD && "text-success font-semibold")}
+                className={cn("h-9 text-left tabular-nums", !line.pricePerKg && "text-muted-foreground/70", isUSD && line.pricePerKg > 0 && "text-success font-semibold")}
                 placeholder="0"
                 aria-label="سعر الوحدة"
               />
@@ -271,7 +272,7 @@ export function SaleLineCard({
                     }
                   }
                 }}
-                className="h-9 text-left tabular-nums"
+                className={cn("h-9 text-left tabular-nums", !line.discountAmount && "text-muted-foreground/70")}
                 placeholder="0"
                 aria-label="الخصم"
               />
@@ -287,8 +288,8 @@ export function SaleLineCard({
                     isUSD ? "text-success" : "text-foreground",
                   )}
                 >
-                  {formatMoney(lineTotal(line))}{" "}
-                  <span className="text-[10px] font-medium text-muted-foreground">
+                  {formatMoney(lineTotal(line))}
+                  <span className="mr-1 text-[10px] font-medium text-muted-foreground/60">
                     {currencySymbol(currency)}
                   </span>
                 </span>
@@ -313,7 +314,7 @@ export function SaleLineCard({
           <Input
             value={line.note ?? ""}
             onChange={(e) => onUpdate({ note: e.target.value })}
-            className="h-9"
+            className={cn("h-9", !line.note && "text-muted-foreground/70")}
             placeholder="—"
             aria-label="ملاحظة السطر"
           />

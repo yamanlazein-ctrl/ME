@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import fc from "fast-check";
 import { TenantContext, UUID, Currency } from "@/domain/types";
 import { Invoice, InvoiceLineData } from "@/domain/entities/Invoice";
+import { round2dp } from "@erp/shared";
 
 /* ────────────────────────────────────────────────────────────────────────
  * Customer tracking tests: find invoices for a customer between dates.
@@ -233,13 +234,14 @@ describe("Customer tracking: date-range filtering (fast-check)", () => {
 
             const filtered = filterInvoices(invoices, "cust-A" as UUID, startDate, endDate);
 
-            // Manual calculation (per-line rounded, matches Invoice lineTotal)
+            // Manual calculation (per-line rounded to 2dp — the canonical
+            // numeric(14,2) contract shared with the backend computeSubtotal).
             let expectedTotal = 0;
             for (const item of items) {
               if (item.day >= startDay && item.day <= endDay) {
                 const q = item.quantityCents / 100;
                 const p = item.priceCents / 100;
-                expectedTotal += Math.round(q * p);
+                expectedTotal += round2dp(q * p);
               }
             }
 

@@ -147,7 +147,7 @@ function PrintSendPage() {
           title: `${fabricById(colorById(r.colorId)?.fabricId ?? "")?.name ?? ""} — ${
             colorById(r.colorId)?.name ?? ""
           }`,
-          subtitle: `صبغة ${r.rollNo} — متبقّي ${formatQuantity(r.remainingKg)} كغ — ${r.pieces} أثواب`,
+          subtitle: `صبغة ${r.rollNo} — متبقّي ${formatQuantity(r.remainingKg)} كغ — ${r.remainingPieces ?? r.pieces} أثواب`,
         })),
     [rolls],
   );
@@ -280,7 +280,7 @@ function PrintSendPage() {
                 {src && (
                   <p className="mt-1 text-[11px] text-muted-foreground">
                     المتاح: <span className="tabular-nums">{formatQuantity(src.remainingKg)}</span>{" "}
-                    كغ — {src.pieces} أثواب
+                    كغ — {src.remainingPieces ?? src.pieces} أثواب
                   </p>
                 )}
               </div>

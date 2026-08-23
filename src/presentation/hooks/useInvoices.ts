@@ -91,6 +91,10 @@ export function useCreateInvoice() {
         // Invoice create changes stock (entry +, sale -) — refresh inventory caches.
         void refreshInventory();
         qc.invalidateQueries({ queryKey: ["inventory"] });
+        // New invoice changes profit/debts/ledger — keep cashbox center fresh.
+        qc.invalidateQueries({ queryKey: ["cashbox"] });
+        qc.invalidateQueries({ queryKey: ["ledger"] });
+        qc.invalidateQueries({ queryKey: ["profit"] });
       } else {
         const rawErr = (res.error as any) ?? {};
         const details = rawErr.details as Record<string, string[]> | undefined;
@@ -129,6 +133,10 @@ export function useCancelInvoice() {
         // Invoice cancel restores stock — refresh inventory caches.
         void refreshInventory();
         qc.invalidateQueries({ queryKey: ["inventory"] });
+        // Cancellation reverses ledger legs + profit contribution.
+        qc.invalidateQueries({ queryKey: ["cashbox"] });
+        qc.invalidateQueries({ queryKey: ["ledger"] });
+        qc.invalidateQueries({ queryKey: ["profit"] });
       } else {
         const errMsg =
           (res.error as any)?.message ?? (res.error as any)?.toString?.() ?? "فشل إلغاء الفاتورة";
@@ -170,6 +178,11 @@ export function useUpdateInvoice() {
         qc.refetchQueries({ queryKey: ["dashboard"] });
         void refreshInventory();
         qc.invalidateQueries({ queryKey: ["inventory"] });
+        // Edited invoice must be reflected immediately by cashbox/profit/ledger.
+        qc.invalidateQueries({ queryKey: ["cashbox"] });
+        qc.invalidateQueries({ queryKey: ["ledger"] });
+        qc.invalidateQueries({ queryKey: ["profit"] });
+        qc.invalidateQueries({ queryKey: ["statement"] });
       } else {
         const rawErr = (res.error as any) ?? {};
         const details = rawErr.details as Record<string, string[]> | undefined;

@@ -325,11 +325,12 @@ export function ReturnForm({ kind }: { kind: ReturnKind }) {
                         {l.rollId && f && (
                           <button
                             onClick={() => addColorForSameFabric(l.id)}
-                            className="text-muted-foreground hover:text-primary transition"
+                            className="inline-flex items-center gap-1.5 rounded-md border border-primary/30 bg-primary/10 px-2.5 py-1.5 text-xs font-bold text-primary transition hover:bg-primary/20"
                             title={`إضافة لون جديد لـ ${f.name}`}
-                            aria-label="إضافة لون لنفس القماش"
+                            aria-label="إضافة لون آخر لنفس القماش"
                           >
-                            <Palette className="h-4 w-4" />
+                            <Palette className="h-3.5 w-3.5" />
+                            + إضافة لون آخر
                           </button>
                         )}
                         <button onClick={() => remove(l.id)} className="text-destructive">

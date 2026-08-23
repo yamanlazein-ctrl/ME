@@ -85,6 +85,7 @@ import {
   OrderApiService,
   PartyApiService,
   PrintJobApiService,
+  ProfitApiService,
   ReturnApiService,
   SettingsApiService,
   StatementApiService,
@@ -134,6 +135,7 @@ const returnRepo = new ApiReturnRepository(new ReturnApiService(apiClient));
 const cashboxRepo = new ApiCashboxRepository(new CashboxApiService(apiClient));
 const settingsApi = new SettingsApiService(apiClient);
 const statementApi = new StatementApiService(apiClient);
+const profitApi = new ProfitApiService(apiClient);
 const dashboardRepo = new ApiDashboardRepository(new DashboardApiService(apiClient));
 const notificationRepo = new ApiNotificationRepository(new NotificationApiService(apiClient));
 const printJobRepo = new ApiPrintJobRepository(new PrintJobApiService(apiClient));
@@ -257,6 +259,10 @@ export const container = {
 
   statement: {
     api: statementApi,
+  },
+
+  profit: {
+    api: profitApi,
   },
 
   notifications: {

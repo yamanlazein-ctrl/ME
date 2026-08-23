@@ -3,7 +3,7 @@ import { GlobalSearch } from "./GlobalSearch";
 import { ThemeToggle } from "./ThemeToggle";
 import { settings } from "@/presentation/hooks/useSettings";
 import logoUrl from "@/assets/logo-motard.png";
-import { Store, RefreshCw } from "lucide-react";
+import { Store, RefreshCw, Globe } from "lucide-react";
 
 export function Header() {
   const branchName = settings.company?.name ?? "";
@@ -49,9 +49,15 @@ export function Header() {
 
         {/* End (RTL left): last sync + theme + notifications */}
         <div className="flex shrink-0 items-center gap-2 sm:gap-2.5">
-          <div className="hidden items-center gap-1.5 rounded-full border border-border/60 bg-card/60 px-2.5 py-1 text-[11px] text-muted-foreground tabular-nums lg:flex">
-            <RefreshCw className="h-3 w-3 text-primary/70" strokeWidth={2} />
-            <span>آخر مزامنة {lastSync}</span>
+          <div className="hidden items-center gap-1.5 lg:flex">
+            <div className="flex items-center gap-1.5 rounded-full border border-border/60 bg-card/60 px-2.5 py-1 text-[11px] text-muted-foreground tabular-nums">
+              <RefreshCw className="h-3 w-3 text-primary/70" strokeWidth={2} />
+              <span>آخر مزامنة {lastSync}</span>
+            </div>
+            <div className="flex items-center gap-1.5 rounded-full border border-border/60 bg-card/60 px-2.5 py-1 text-[11px] font-medium text-foreground/80">
+              <Globe className="h-3 w-3 text-primary/70" strokeWidth={2} />
+              <span>متصل</span>
+            </div>
           </div>
           <div className="flex items-center gap-1.5 sm:gap-2">
             <ThemeToggle />

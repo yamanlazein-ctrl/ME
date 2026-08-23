@@ -61,6 +61,7 @@ export function useCreateReceiptVoucher() {
       qc.invalidateQueries({ queryKey: ["cashbox"] });
       qc.invalidateQueries({ queryKey: ["statement"] });
       qc.invalidateQueries({ queryKey: ["parties"] });
+      qc.invalidateQueries({ queryKey: ["profit"] });
       // A receipt linked to an invoice changes its paid/remaining.
       if (variables.invoiceId) {
         qc.invalidateQueries({ queryKey: ["invoices", "detail", variables.invoiceId] });
@@ -84,6 +85,7 @@ export function useCreatePaymentVoucher() {
       qc.invalidateQueries({ queryKey: ["cashbox"] });
       qc.invalidateQueries({ queryKey: ["statement"] });
       qc.invalidateQueries({ queryKey: ["parties"] });
+      qc.invalidateQueries({ queryKey: ["profit"] });
       // A payment linked to an invoice changes its paid/remaining.
       if (variables.invoiceId) {
         qc.invalidateQueries({ queryKey: ["invoices", "detail", variables.invoiceId] });
@@ -107,6 +109,7 @@ export function useCancelVoucher() {
       qc.invalidateQueries({ queryKey: ["cashbox"] });
       qc.invalidateQueries({ queryKey: ["statement"] });
       qc.invalidateQueries({ queryKey: ["parties"] });
+      qc.invalidateQueries({ queryKey: ["profit"] });
       // Cancelling a voucher may change an invoice's paid/remaining.
       qc.invalidateQueries({ queryKey: ["invoices", "detail"] });
     },

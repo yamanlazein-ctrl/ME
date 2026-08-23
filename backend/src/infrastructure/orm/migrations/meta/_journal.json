@@ -246,6 +246,41 @@
       "when": 1785400000030,
       "tag": "0034_roll_remaining_pieces",
       "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": 7,
+      "when": 1785400000031,
+      "tag": "0035_invoice_reference",
+      "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": 7,
+      "when": 1785400000032,
+      "tag": "0036_live_monetary_hardening",
+      "breakpoints": true
+    },
+    {
+      "idx": 37,
+      "version": 7,
+      "when": 1785400000033,
+      "tag": "0036b_ledger_append_only",
+      "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": 7,
+      "when": 1785400000034,
+      "tag": "0037_monetary_decimal_completion",
+      "breakpoints": true
+    },
+    {
+      "idx": 39,
+      "version": 7,
+      "when": 1785400000035,
+      "tag": "0038_drop_party_balances",
+      "breakpoints": true
     }
   ]
 }

@@ -133,7 +133,6 @@ async function dbDumpToJson(outputPath: string, tenantId: string): Promise<void>
     "document_sequences",
     "stock_movements",
     "idempotency_keys",
-    "party_balances",
     "ledger_entry_archive",
     "yearly_party_summaries",
   ];

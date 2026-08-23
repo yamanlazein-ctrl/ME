@@ -207,7 +207,7 @@ export function ExecutiveKpiGrid() {
             id="kpi-secondary-today-invoices"
             title="فواتير اليوم"
             icon={Receipt}
-            value={formatMoney(todayInvoices?.count ?? 0)}
+            value={formatNumber(todayInvoices?.count ?? 0)}
             hint="فاتورة"
           />
           <SecondaryCard

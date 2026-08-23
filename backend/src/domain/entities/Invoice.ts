@@ -1,5 +1,5 @@
 import type { UUID, EntityStatus, InvoiceType } from "../types/index.js";
-import { computeSubtotal as sharedSubtotal } from "@erp/shared";
+import { computeSubtotal as sharedSubtotal, round2dp } from "@erp/shared";
 
 export interface InvoiceLineData {
   id: UUID;
@@ -18,6 +18,8 @@ export interface InvoiceData {
   tenantId: UUID;
   number: string;
   type: InvoiceType;
+  /** Human-readable reference (ENT-2026-0001 / INV-2026-0001). */
+  reference?: string | null;
   date: string;
   partyId: UUID;
   partyType: "customer" | "supplier";
@@ -64,7 +66,8 @@ export class Invoice {
     const discount = input.discount ?? 0;
     const tax = input.tax ?? 0;
     const shipping = input.shipping ?? 0;
-    const total = subtotal - discount + tax + shipping;
+    // One edge-round keeps cents exact and kills float accumulation.
+    const total = round2dp(subtotal - discount + tax + shipping);
     const paid = input.paid ?? 0;
     const paymentMethod = paid > 0 ? (input.paymentMethod ?? "cash") : undefined;
     return new Invoice({
@@ -164,6 +167,8 @@ export interface CreateInvoiceInput {
   partyId: UUID;
   partyType: "customer" | "supplier";
   currency?: string;
+  /** Human-readable reference. Server defaults it to the generated number. */
+  reference?: string;
   lines: CreateInvoiceLineInput[];
   discount?: number;
   tax?: number;
@@ -184,4 +189,16 @@ export interface CreateInvoiceInput {
    * reserved roll NOT owned by this order is rejected (BUG-17).
    */
   orderId?: UUID;
+}
+
+/** Editable fields for PUT /invoices/:id. partyId/type/currency/paid are
+ *  immutable after creation — cancel & recreate instead. Lines are replaced
+ *  wholesale and MUST reference existing rolls. */
+export interface UpdateInvoiceInput {
+  date: string;
+  lines: CreateInvoiceLineInput[];
+  discount?: number;
+  tax?: number;
+  shipping?: number;
+  notes?: string;
 }

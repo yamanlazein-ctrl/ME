@@ -267,7 +267,9 @@ export function buildPartyStats(
     partyVouchers = partyVouchers.filter((v) => v.currency === currency);
   }
   const paid = partyVouchers.reduce((s, v) => s + v.amount, 0);
-  const remaining = Math.max(0, totalAmount - paid);
+  // No Math.max clamp — a negative remaining is a real credit balance and
+  // hiding it corrupts the summary card (H2 fix).
+  const remaining = totalAmount - paid;
   const totalKg = invs.reduce((s, i) => s + i.lines.reduce((a, l) => a + l.quantityKg, 0), 0);
   const dates = invs
     .map((i) => i.date)
@@ -339,7 +341,8 @@ export function buildPartyStatsByCurrency(
   }
   for (const c of Object.keys(out)) {
     const cur = out[c];
-    cur.remaining = Math.max(0, cur.totalAmount - cur.totalPaid);
+    // H2 fix: keep negative (credit) balances visible instead of clamping.
+    cur.remaining = cur.totalAmount - cur.totalPaid;
     cur.avgInvoice = cur.invoicesCount ? Math.round(cur.totalAmount / cur.invoicesCount) : 0;
     cur.totalKg = Math.round(cur.totalKg);
   }

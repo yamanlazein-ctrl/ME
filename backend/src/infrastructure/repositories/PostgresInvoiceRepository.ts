@@ -8,14 +8,20 @@ import { invoices } from "../orm/schemas/invoice.table.js";
 import { invoiceLines } from "../orm/schemas/invoice-line.table.js";
 import { rolls } from "../orm/schemas/roll.table.js";
 import { colors } from "../orm/schemas/color.table.js";
+import { parties } from "../orm/schemas/party.table.js";
 import { orders } from "../orm/schemas/order.table.js";
 import { orderItems } from "../orm/schemas/order-item.table.js";
 import { ledgerEntries } from "../orm/schemas/ledger-entry.table.js";
 import { vouchers } from "../orm/schemas/voucher.table.js";
 import { recordStockMovement } from "./stockMovementHelper.js";
 import { notifyOrderAvailability } from "./orderAvailabilityNotifier.js";
-import type { InvoiceData, CreateInvoiceInput } from "../../domain/entities/Invoice.js";
-import { Invoice } from "../../domain/entities/Invoice.js";
+import type {
+  InvoiceData,
+  CreateInvoiceInput,
+  UpdateInvoiceInput,
+} from "../../domain/entities/Invoice.js";
+import { Invoice, computeSubtotal } from "../../domain/entities/Invoice.js";
+import { round2dp } from "@erp/shared";
 import type { TenantContext, PaginatedResult } from "../../domain/types/index.js";
 
 export class PostgresInvoiceRepository implements IInvoiceRepository {
@@ -67,7 +73,12 @@ export class PostgresInvoiceRepository implements IInvoiceRepository {
     if (filter.fromDate) conditions.push(gte(invoices.date, filter.fromDate));
     if (filter.toDate) conditions.push(lte(invoices.date, filter.toDate));
     if (filter.search) {
-      conditions.push(or(ilike(invoices.number!, `%${filter.search}%`))!);
+      conditions.push(
+        or(
+          ilike(invoices.number, `%${filter.search}%`),
+          ilike(invoices.reference, `%${filter.search}%`),
+        )!,
+      );
     }
     const where = and(...conditions);
     const page = Math.max(0, filter.page ?? 0);
@@ -125,12 +136,36 @@ export class PostgresInvoiceRepository implements IInvoiceRepository {
     const isSale = input.type === "sale";
 
     return this.db.transaction(async (tx) => {
+      // H3 (party-kind guard): an entry invoice must target a supplier and a
+      // sale invoice must target a customer. Without this check a sale posted
+      // against a supplier party mixes AR/AP legs in one account.
+      const expectedKind = isSale ? "customer" : "supplier";
+      const [party] = await tx
+        .select({ kind: parties.kind })
+        .from(parties)
+        .where(and(eq(parties.id, input.partyId), eq(parties.tenantId, ctx.tenantId)))
+        .limit(1);
+      if (!party) {
+        throw new Error("الطرف المحدد للفاتورة غير موجود");
+      }
+      if (party.kind !== expectedKind) {
+        throw new Error(
+          isSale
+            ? `لا يمكن إنشاء فاتورة بيع لطرف من نوع «${party.kind === "supplier" ? "مورد" : party.kind}» — اختر عميلاً`
+            : `لا يمكن إنشاء فاتورة دخول لطرف من نوع «${party.kind === "customer" ? "عميل" : party.kind}» — اختر مورداً`,
+        );
+      }
+      if (input.partyType !== expectedKind) {
+        throw new Error("نوع الطرف في الفاتورة لا يطابق نوع الفاتورة");
+      }
+
       // Stock validation and deduction only for sale invoices.
       // Entry invoices add stock via roll creation — no deduction needed.
       const expectedVersions = new Map<string, number>();
       // C4+COGS: cost of goods sold for sale invoices = Σ(quantityKg × roll.pricePerKg),
       // captured at sale time so it is journaled (not just derived at read time).
       let cogsTotal = 0;
+      const invoiceCurrency = input.currency ?? "SYP";
       if (isSale) {
         // BUG-17: a roll reserved by an open order must not be sold by a
         // different invoice. The only legitimate buyer of a `reserved` roll is
@@ -166,6 +201,7 @@ export class PostgresInvoiceRepository implements IInvoiceRepository {
               status: rolls.status,
               pricePerKg: rolls.pricePerKg,
               colorId: rolls.colorId,
+              currency: rolls.currency,
             })
             .from(rolls)
             .where(and(eq(rolls.id, line.rollId), eq(rolls.tenantId, ctx.tenantId)))
@@ -202,11 +238,20 @@ export class PostgresInvoiceRepository implements IInvoiceRepository {
           if (r.status === "exhausted") {
             throw new Error(`اللفافة ${line.rollId} نفدت ولا يمكن بيعها`);
           }
+          // H1 (cross-currency COGS guard): roll.pricePerKg is denominated in
+          // the roll's own purchase currency. Selling it on an invoice in a
+          // different currency journals COGS in a blended unit and corrupts
+          // the profit report — block it outright.
+          if (r.currency !== invoiceCurrency) {
+            throw new Error(
+              `عملة اللفافة ${line.rollId} (${r.currency}) لا تطابق عملة الفاتورة (${invoiceCurrency}) — لا يمكن خلط العملات في التكلفة`,
+            );
+          }
           expectedVersions.set(line.rollId, Number(r.version));
           // Round quantity to the DB's scale (2dp) so the journaled COGS matches
           // the stored invoice line exactly (a 0.001kg input is stored as 0.00).
           const storedQty = Math.round(Number(line.quantityKg) * 100) / 100;
-          cogsTotal += Math.round(storedQty * Number(r.pricePerKg));
+          cogsTotal += round2dp(storedQty * Number(r.pricePerKg));
         }
       }
 
@@ -214,7 +259,10 @@ export class PostgresInvoiceRepository implements IInvoiceRepository {
         .insert(invoices)
         .values({
           tenantId: ctx.tenantId,
-          number: autoNumber,
+         number: autoNumber,
+         // Reference = user-supplied value or the server-generated number.
+         // Screen, API and print all read this single structured field.
+         reference: input.reference?.trim() || autoNumber,
           type: input.type,
           date: input.date,
           partyId: input.partyId,
@@ -404,7 +452,7 @@ export class PostgresInvoiceRepository implements IInvoiceRepository {
       // Only the party leg carries partyId (drives the party statement/balance);
       // non-party legs (revenue / COGS / inventory) carry partyId = null.
       const invoiceType = isSale ? "sales_invoice" : "purchase_invoice";
-      const currency = input.currency ?? "SYP";
+      const currency = invoiceCurrency;
       const legs: (typeof ledgerEntries.$inferInsert)[] = [
         {
           tenantId: ctx.tenantId,
@@ -592,8 +640,12 @@ export class PostgresInvoiceRepository implements IInvoiceRepository {
             partyId: input.partyId,
             date: input.date,
             type: "payment_out",
-            debit: 0,
-            credit: paid,
+            // Uniform party convention (debit − credit, both kinds): a
+            // supplier payment DEBITS the supplier — it must REDUCE what we
+            // owe after the purchase_invoice credit. The old credit here
+            // re-inflated the debt instead of settling it.
+            debit: paid,
+            credit: 0,
             currency: input.currency ?? "SYP",
             cashImpact: "none",
             referenceType: "payment_out",
@@ -607,8 +659,10 @@ export class PostgresInvoiceRepository implements IInvoiceRepository {
             partyId: null,
             date: input.date,
             type: "cash",
-            debit: paid,
-            credit: 0,
+            // Cash OUT is a CREDIT (migration 0032 convention); the old
+            // debit here increased the cash balance on a supplier payment.
+            debit: 0,
+            credit: paid,
             currency: input.currency ?? "SYP",
             cashImpact,
             referenceType: "payment_out",
@@ -623,6 +677,375 @@ export class PostgresInvoiceRepository implements IInvoiceRepository {
       const lines = await tx.select().from(invoiceLines).where(eq(invoiceLines.invoiceId, row.id));
       return this.toDomain(row, lines);
     });
+  }
+
+  async update(id: string, input: UpdateInvoiceInput, ctx: TenantContext): Promise<InvoiceData> {
+    const lines = input.lines.map((l) => ({
+      fabricId: l.fabricId,
+      colorId: l.colorId,
+      rollId: l.rollId,
+      quantityKg: l.quantityKg,
+      pieces: l.pieces ?? 1,
+      pricePerKg: l.pricePerKg,
+      discountAmount: l.discountAmount ?? 0,
+      note: l.note?.trim(),
+    }));
+    const subtotal = round2dp(
+      lines.reduce((s, l) => s + Math.max(0, round2dp(l.quantityKg * l.pricePerKg - l.discountAmount)), 0),
+    );
+    const discount = input.discount ?? 0;
+    const tax = input.tax ?? 0;
+    const shipping = input.shipping ?? 0;
+    const total = subtotal - discount + tax + shipping;
+
+    return this.db.transaction(async (tx) => {
+      const [inv] = await tx
+        .select()
+        .from(invoices)
+        .where(and(eq(invoices.id, id), eq(invoices.tenantId, ctx.tenantId)))
+        .for("update")
+        .limit(1);
+      if (!inv) throw Object.assign(new Error("Invoice not found"), { code: "NOT_FOUND" as const });
+      if (inv.status === "cancelled")
+        throw Object.assign(new Error("Invoice already cancelled"), {
+          code: "ALREADY_CANCELLED" as const,
+        });
+
+      const isSale = inv.type === "sale";
+      const invoiceType = isSale ? "sales_invoice" : "purchase_invoice";
+
+      const oldLines = await tx
+        .select()
+        .from(invoiceLines)
+        .where(eq(invoiceLines.invoiceId, id));
+
+      // Aggregate both old and new quantities per roll so a roll moved across
+      // lines (or duplicated) nets out to one delta instead of double-counting.
+      const oldByRoll = new Map<string, { kg: number; pieces: number }>();
+      for (const l of oldLines) {
+        const e = oldByRoll.get(l.rollId) ?? { kg: 0, pieces: 0 };
+        e.kg += Number(l.quantityKg);
+        e.pieces += Number(l.pieces ?? 1);
+        oldByRoll.set(l.rollId, e);
+      }
+      const newByRoll = new Map<string, { kg: number; pieces: number; fabricId: string; colorId: string }>();
+      for (const l of lines) {
+        const e = newByRoll.get(l.rollId) ?? {
+          kg: 0,
+          pieces: 0,
+          fabricId: l.fabricId,
+          colorId: l.colorId,
+        };
+        e.kg += l.quantityKg;
+        e.pieces += l.pieces;
+        newByRoll.set(l.rollId, e);
+      }
+
+      const rollIds = new Set([...oldByRoll.keys(), ...newByRoll.keys()]);
+      const rollStates = new Map<
+        string,
+        {
+          remainingKg: number;
+          remainingPieces: number;
+          pricePerKg: number;
+          colorId: string;
+          currency: string;
+          version: number;
+        }
+      >();
+      const deltas = new Map<string, { kg: number; pieces: number }>();
+
+      for (const rollId of rollIds) {
+        const [r] = await tx
+          .select({
+            remainingKg: rolls.remainingKg,
+            remainingPieces: rolls.remainingPieces,
+            pricePerKg: rolls.pricePerKg,
+            colorId: rolls.colorId,
+            currency: rolls.currency,
+            version: rolls.version,
+          })
+          .from(rolls)
+          .where(and(eq(rolls.id, rollId), eq(rolls.tenantId, ctx.tenantId)))
+          .for("update")
+          .limit(1);
+        if (!r) throw new Error(`اللفافة ${rollId} غير موجودة`);
+
+        // H1: same cross-currency guard as create — an edited sale line must
+        // not revalue COGS from a roll priced in another currency.
+        if (isSale && newByRoll.has(rollId) && r.currency !== inv.currency) {
+          throw new Error(
+            `عملة اللفافة ${rollId} (${r.currency}) لا تطابق عملة الفاتورة (${inv.currency}) — لا يمكن خلط العملات في التكلفة`,
+          );
+        }
+
+        const next = newByRoll.get(rollId);
+        if (next) {
+          if (next.colorId !== r.colorId) {
+            throw new Error(`اللون المحدد للبند لا يطابق لون اللفافة ${rollId} الفعلي`);
+          }
+          const [rollColor] = await tx
+            .select({ fabricId: colors.fabricId })
+            .from(colors)
+            .where(and(eq(colors.id, r.colorId), eq(colors.tenantId, ctx.tenantId)))
+            .limit(1);
+          if (!rollColor || next.fabricId !== rollColor.fabricId) {
+            throw new Error(`القماش المحدد للبند لا يطابق قماش لون اللفافة ${rollId} الفعلي`);
+          }
+        }
+
+        const old = oldByRoll.get(rollId) ?? { kg: 0, pieces: 0 };
+        const neu = newByRoll.get(rollId) ?? { kg: 0, pieces: 0 };
+        deltas.set(rollId, {
+          kg: Math.round((neu.kg - old.kg) * 100) / 100,
+          pieces: neu.pieces - old.pieces,
+        });
+        rollStates.set(rollId, {
+          remainingKg: Number(r.remainingKg),
+          remainingPieces: Number(r.remainingPieces),
+          pricePerKg: Number(r.pricePerKg),
+          colorId: r.colorId,
+          currency: r.currency,
+          version: Number(r.version),
+        });
+      }
+
+      // Apply per-roll stock deltas. Entry invoices ADD stock, sale invoices
+      // DEDUCT it; a negative delta therefore reverses the original direction.
+      for (const [rollId, delta] of deltas) {
+        const state = rollStates.get(rollId)!;
+        const kgDelta = isSale ? -delta.kg : delta.kg;
+        const piecesDelta = isSale ? -delta.pieces : delta.pieces;
+        const newKg = Math.round((state.remainingKg + kgDelta) * 100) / 100;
+        const newPieces = state.remainingPieces + piecesDelta;
+
+        if (newKg < 0) {
+          throw new Error(
+            isSale
+              ? `لا يمكن زيادة كمية البيع — المتاح في اللفافة ${rollId} غير كافٍ`
+              : `لا يمكن إنقاص كمية الدخول — المتاح في اللفافة ${rollId} غير كافٍ`,
+          );
+        }
+        if (newPieces < 0) {
+          throw new Error(
+            `الأثواب الناتجة عن التعديل تتجاوز المتاح في اللفافة ${rollId}`,
+          );
+        }
+
+        await tx
+          .update(rolls)
+          .set({
+            remainingKg: String(newKg),
+            remainingPieces: newPieces,
+            status: newKg <= 0 ? "exhausted" : "in_stock",
+            version: sql`${rolls.version} + 1`,
+            updatedAt: new Date(),
+          })
+          .where(and(eq(rolls.id, rollId), eq(rolls.tenantId, ctx.tenantId)));
+
+        if (Math.round(kgDelta * 100) / 100 !== 0) {
+          await recordStockMovement(
+            tx,
+            {
+              rollId,
+              direction: kgDelta > 0 ? "in" : "out",
+              movementType: isSale ? "invoice_sale" : "invoice_entry",
+              quantityKg: Math.abs(kgDelta),
+              balanceAfterKg: newKg,
+              referenceType: invoiceType,
+              referenceId: id,
+              referenceNumber: inv.number,
+              movementDate: input.date,
+              description: `تعديل فاتورة ${inv.number}`,
+            },
+            ctx,
+          );
+        }
+      }
+
+      // Cost snapshot for sale lines (same valuation rule as create).
+      let cogsTotal = 0;
+      if (isSale) {
+        for (const l of lines) {
+          const state = rollStates.get(l.rollId)!;
+          const storedQty = Math.round(l.quantityKg * 100) / 100;
+          cogsTotal += Math.round(storedQty * state.pricePerKg);
+        }
+      }
+
+      // Replace lines and header.
+      await tx.delete(invoiceLines).where(eq(invoiceLines.invoiceId, id));
+      await tx.insert(invoiceLines).values(
+        lines.map((l) => ({
+          tenantId: ctx.tenantId,
+          invoiceId: id,
+          fabricId: l.fabricId,
+          colorId: l.colorId,
+          rollId: l.rollId,
+          quantityKg: String(l.quantityKg),
+          pieces: l.pieces,
+          pricePerKg: String(l.pricePerKg),
+          discountAmount: l.discountAmount,
+          costPerKg: isSale ? String(rollStates.get(l.rollId)!.pricePerKg) : null,
+          note: l.note,
+        })),
+      );
+
+      // Ledger is append-only (trigger 0013). Rewrite by soft-cancelling the
+      // invoice's original legs and inserting freshly-valued ones in the same
+      // transaction — no UPDATE of immutable financial columns.
+      await tx
+        .update(ledgerEntries)
+        .set({
+          status: "cancelled",
+          cancelledAt: new Date(),
+          cancelledBy: ctx.userId,
+        })
+        .where(
+          and(
+            eq(ledgerEntries.referenceId, id),
+            eq(ledgerEntries.tenantId, ctx.tenantId),
+            eq(ledgerEntries.referenceType, invoiceType),
+            eq(ledgerEntries.status, "active"),
+          ),
+        );
+
+      await tx.insert(ledgerEntries).values(
+        this.invoiceLedgerLegs({
+          tenantId: ctx.tenantId,
+          partyId: inv.partyId,
+          date: input.date,
+          currency: inv.currency,
+          isSale,
+          total,
+          cogsTotal,
+          referenceId: id,
+          referenceNumber: inv.number,
+          createdBy: ctx.userId,
+        }),
+      );
+
+      const [updated] = await tx
+        .update(invoices)
+        .set({
+          date: input.date,
+          subtotal: Math.round(subtotal),
+          discount: Math.round(discount),
+          tax: Math.round(tax),
+          shipping: Math.round(shipping),
+          total: Math.round(total),
+          notes: input.notes ?? null,
+          updatedAt: new Date(),
+          version: sql`${invoices.version} + 1`,
+        })
+        .where(and(eq(invoices.id, id), eq(invoices.tenantId, ctx.tenantId)))
+        .returning();
+
+      const updatedLines = await tx
+        .select()
+        .from(invoiceLines)
+        .where(eq(invoiceLines.invoiceId, id));
+      return this.toDomain(updated, updatedLines);
+    });
+  }
+
+  /** Build the invoice's own balanced ledger legs (excludes paid-linked voucher legs). */
+  private invoiceLedgerLegs(args: {
+    tenantId: string;
+    partyId: string;
+    date: string;
+    currency: string;
+    isSale: boolean;
+    total: number;
+    cogsTotal: number;
+    referenceId: string;
+    referenceNumber: string;
+    createdBy: string | undefined;
+  }): (typeof ledgerEntries.$inferInsert)[] {
+    const invoiceType = args.isSale ? "sales_invoice" : "purchase_invoice";
+    const legs: (typeof ledgerEntries.$inferInsert)[] = [
+      {
+        tenantId: args.tenantId,
+        partyId: args.partyId,
+        date: args.date,
+        type: invoiceType,
+        debit: args.isSale ? args.total : 0,
+        credit: args.isSale ? 0 : args.total,
+        currency: args.currency,
+        cashImpact: "none",
+        referenceType: invoiceType,
+        referenceId: args.referenceId,
+        referenceNumber: args.referenceNumber,
+        description: `${args.isSale ? "Sale invoice" : "Purchase invoice"} ${args.referenceNumber}`,
+        createdBy: args.createdBy,
+      },
+    ];
+    if (args.isSale) {
+      legs.push({
+        tenantId: args.tenantId,
+        partyId: null,
+        date: args.date,
+        type: "sales_revenue",
+        debit: 0,
+        credit: args.total,
+        currency: args.currency,
+        cashImpact: "none",
+        referenceType: invoiceType,
+        referenceId: args.referenceId,
+        referenceNumber: args.referenceNumber,
+        description: `Sales revenue ${args.referenceNumber}`,
+        createdBy: args.createdBy,
+      });
+      if (args.cogsTotal > 0) {
+        legs.push({
+          tenantId: args.tenantId,
+          partyId: null,
+          date: args.date,
+          type: "cogs_expense",
+          debit: args.cogsTotal,
+          credit: 0,
+          currency: args.currency,
+          cashImpact: "none",
+          referenceType: invoiceType,
+          referenceId: args.referenceId,
+          referenceNumber: args.referenceNumber,
+          description: `Cost of goods sold ${args.referenceNumber}`,
+          createdBy: args.createdBy,
+        });
+        legs.push({
+          tenantId: args.tenantId,
+          partyId: null,
+          date: args.date,
+          type: "inventory_asset",
+          debit: 0,
+          credit: args.cogsTotal,
+          currency: args.currency,
+          cashImpact: "none",
+          referenceType: invoiceType,
+          referenceId: args.referenceId,
+          referenceNumber: args.referenceNumber,
+          description: `Inventory relief ${args.referenceNumber}`,
+          createdBy: args.createdBy,
+        });
+      }
+    } else {
+      legs.push({
+        tenantId: args.tenantId,
+        partyId: null,
+        date: args.date,
+        type: "inventory_asset",
+        debit: args.total,
+        credit: 0,
+        currency: args.currency,
+        cashImpact: "none",
+        referenceType: invoiceType,
+        referenceId: args.referenceId,
+        referenceNumber: args.referenceNumber,
+        description: `Inventory received ${args.referenceNumber}`,
+        createdBy: args.createdBy,
+      });
+    }
+    return legs;
   }
 
   async cancel(id: string, cancelledBy: string, ctx: TenantContext): Promise<InvoiceData> {
@@ -847,6 +1270,7 @@ export class PostgresInvoiceRepository implements IInvoiceRepository {
       tenantId: row.tenantId,
       number: row.number,
       type: row.type as InvoiceData["type"],
+      reference: row.reference ?? row.number,
       date: row.date,
       partyId: row.partyId,
       partyType: row.partyType as InvoiceData["partyType"],

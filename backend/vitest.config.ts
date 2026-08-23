@@ -14,6 +14,10 @@ export default defineConfig({
     include: ["tests/**/*.test.ts", "src/**/*.test.ts"],
     exclude: ["node_modules", "dist"],
     setupFiles: ["tests/setup.ts"],
+    // Integration suites share one test database (erp_test) and audit-findings
+    // is a live-API E2E — parallel workers race on tenant rows and crash under
+    // load. Sequential files keep runs deterministic.
+    fileParallelism: false,
     coverage: {
       provider: "v8",
       reporter: ["text", "html", "lcov"],

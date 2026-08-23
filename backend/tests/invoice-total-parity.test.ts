@@ -1,13 +1,18 @@
-import { describe, it, expect } from "vitest";
-import { computeSubtotal } from "@/domain/entities/Invoice.js";
-import { invoiceSubtotal, lineTotal } from "../../src/core/calculations/invoiceCalc.js";
-
 /**
  * P0-LOGIC regression: frontend and backend computed invoice totals
  * differently. Backend rounds each line then sums; frontend used to sum exact
  * values then let the display round once, so the preview diverged from the
  * journaled subtotal (e.g. 3 × 0.5kg @ 1 → backend 3 vs frontend 1.5).
+ *
+ * 2026-08-23 (decimal-fraction audit): rounding policy changed from whole
+ * units (Math.round) to 2 decimals (round2dp) so USD/EUR cents are preserved
+ * exactly end-to-end. SYP amounts are unaffected (whole-unit inputs).
  */
+import { describe, it, expect } from "vitest";
+import { computeSubtotal } from "@/domain/entities/Invoice.js";
+import { round2dp } from "@erp/shared";
+import { invoiceSubtotal, lineTotal } from "../../src/core/calculations/invoiceCalc.js";
+
 describe("invoice total parity (frontend vs backend)", () => {
   const cases = [
     {
@@ -17,7 +22,7 @@ describe("invoice total parity (frontend vs backend)", () => {
         { quantityKg: 0.5, pricePerKg: 1, discountAmount: 0 },
         { quantityKg: 0.5, pricePerKg: 1, discountAmount: 0 },
       ],
-      backend: 3,
+      backend: 1.5,
     },
     {
       name: "5 x 7.25kg @ 8750.50",
@@ -26,16 +31,22 @@ describe("invoice total parity (frontend vs backend)", () => {
         pricePerKg: 8750.5,
         discountAmount: 0,
       })),
-      backend: 317205,
+      // per line: round2dp(7.25 × 8750.50 = 63441.125) = 63441.13; × 5
+      backend: 317205.65,
+    },
+    {
+      name: "USD cents: 12.5kg @ 1.5 with 0.5 line discount",
+      lines: [{ quantityKg: 12.5, pricePerKg: 1.5, discountAmount: 0.5 }],
+      backend: 18.25,
     },
   ];
 
   it.each(cases)("$name", ({ lines, backend }) => {
     expect(invoiceSubtotal({ lines })).toBe(backend);
     expect(computeSubtotal(lines as never)).toBe(backend);
-    // Per-line behaviour is the actual fix: each line rounds independently.
+    // Per-line behaviour is the actual fix: each line rounds independently at 2dp.
     for (const l of lines) {
-      expect(lineTotal(l)).toBe(Math.max(0, Math.round(l.quantityKg * l.pricePerKg - l.discountAmount)));
+      expect(lineTotal(l)).toBe(Math.max(0, round2dp(l.quantityKg * l.pricePerKg - l.discountAmount)));
     }
   });
 });

@@ -40,7 +40,10 @@ import type { Invoice } from "@/domain/entities/Invoice";
 function renderColorCell(colorId: string) {
   const col = colorById(colorId) as Pick<Color, "code" | "name" | "hex"> | null;
   if (!col) return "—";
-  const hexSwatch = col.hex
+    // Only a strict #RGB/#RRGGBB hex reaches the style — garbage input can
+    // never produce a broken swatch (browsers ignore invalid values, but the
+    // guard also keeps non-hex strings from rendering as unexpected colors).
+    const hexSwatch = col.hex && /^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(col.hex)
     ? {
         display: "inline-block",
         width: "10px",
@@ -146,8 +149,9 @@ export function EntryInvoicePrint({ invoice, totalPages, pageNumber }: EntryInvo
     const fab = fabricById(l.fabricId);
     const roll = rollById(l.rollId);
     const parsed = parseLineNote(l.note);
-    const sub = l.quantityKg * l.pricePerKg;
-    const lineTotal = Math.max(0, sub - (l.discountAmount || 0));
+    // Single source of truth: the entity's lineTotal (same rounding as the
+    // backend and the on-screen table — print can no longer diverge).
+    const lineTotal = inv.lineTotal(l);
 
     const main: Record<string, string | number | React.ReactNode> = {
       fabric: fab?.name ?? "—",

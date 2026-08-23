@@ -1,6 +1,10 @@
 import type { IInvoiceRepository, InvoiceFilter } from "../../ports/IInvoiceRepository.js";
 import type { TenantContext, PaginatedResult } from "../../../domain/types/index.js";
-import type { InvoiceData, CreateInvoiceInput } from "../../../domain/entities/Invoice.js";
+import type {
+  InvoiceData,
+  CreateInvoiceInput,
+  UpdateInvoiceInput,
+} from "../../../domain/entities/Invoice.js";
 import type { IAuditRepository } from "../../ports/IAuditRepository.js";
 import { logAuditError } from "../../../infrastructure/audit/auditErrorHandler.js";
 
@@ -115,6 +119,46 @@ export async function createInvoiceUseCase(
     // message reaches the caller/UI.
     console.error("[createInvoiceUseCase] failed:", collectErrors(e));
     return { ok: false, error: invoiceErrorMessage(e) };
+  }
+}
+
+export async function updateInvoiceUseCase(
+  repo: IInvoiceRepository,
+  audit: IAuditRepository,
+  id: string,
+  input: UpdateInvoiceInput,
+  ctx: TenantContext,
+): Promise<Result<InvoiceData> & { code?: string }> {
+  if (!input.lines?.length) return { ok: false, error: "يجب إضافة بند واحد على الأقل", code: "VALIDATION" };
+  try {
+    const invoice = await repo.update(id, input, ctx);
+    audit
+      .create({
+        tenantId: ctx.tenantId,
+        actorId: ctx.userId,
+        module: "invoices",
+        action: "update",
+        entityType: "invoice",
+        entityId: invoice.id,
+        detail: `تعديل فاتورة ${invoice.number}`,
+      })
+      .catch((err: unknown) =>
+        logAuditError(err, {
+          module: "invoices",
+          action: "update",
+          entityId: invoice.id,
+          tenantId: ctx.tenantId,
+        }),
+      );
+    return { ok: true, data: invoice };
+  } catch (e) {
+    console.error("[updateInvoiceUseCase] failed:", e);
+    const code =
+      e instanceof Error && "code" in e ? (e as { code?: string }).code : undefined;
+    if (code === "NOT_FOUND") return { ok: false, error: "الفاتورة غير موجودة.", code };
+    if (code === "ALREADY_CANCELLED")
+      return { ok: false, error: "لا يمكن تعديل فاتورة ملغاة.", code };
+    return { ok: false, error: invoiceErrorMessage(e), code };
   }
 }
 

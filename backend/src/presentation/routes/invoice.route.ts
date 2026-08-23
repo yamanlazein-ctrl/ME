@@ -9,7 +9,12 @@ import { idempotency } from "../../infrastructure/http/middleware/idempotency-ha
 import type { IInvoiceRepository } from "../../application/ports/IInvoiceRepository.js";
 import type { IAuditRepository } from "../../application/ports/IAuditRepository.js";
 import type { TenantContext } from "../../domain/types/index.js";
-import { createInvoiceSchema, listInvoicesSchema } from "./invoice.schema.js";
+import {
+  createInvoiceSchema,
+  updateInvoiceSchema,
+  listInvoicesSchema,
+  type CreateInvoiceInput,
+} from "./invoice.schema.js";
 import * as uc from "../../application/use-cases/invoices/invoiceUseCases.js";
 import { nextDocumentNumber } from "../../infrastructure/utils/documentNumbers.js";
 
@@ -32,11 +37,15 @@ export function registerInvoiceRoutes(
     idempotency("POST"),
     validateBody(createInvoiceSchema),
     async (req: Request, res: Response) => {
+      const input = body<CreateInvoiceInput>(req);
       const r = await uc.createInvoiceUseCase(
         invoiceRepo,
         auditRepo,
-        body(req),
-        await nextDocumentNumber("invoice", ctx(req).tenantId),
+        input,
+        await nextDocumentNumber(
+          input.type === "entry" ? "invoice_entry" : "invoice",
+          ctx(req).tenantId,
+        ),
         ctx(req),
       );
       if (r.ok) {
@@ -93,6 +102,32 @@ export function registerInvoiceRoutes(
         return res.status(404).json({ code: "NOT_FOUND", message: "الفاتورة غير موجودة" });
       }
       res.json(r.data);
+    },
+  );
+
+  router.put(
+    "/invoices/:id",
+    auth,
+    writeGuard,
+    idempotency("PUT"),
+    validateUuidParam("id"),
+    validateBody(updateInvoiceSchema),
+    async (req: Request, res: Response) => {
+      const c = ctx(req);
+      const r = await uc.updateInvoiceUseCase(
+        invoiceRepo,
+        auditRepo,
+        pid(req),
+        body(req),
+        c,
+      );
+      if (r.ok) {
+        res.json(r.data);
+      } else if ((r as { code?: string }).code === "NOT_FOUND") {
+        res.status(404).json({ code: "NOT_FOUND", message: r.error });
+      } else {
+        res.status(422).json({ code: "VALIDATION", message: r.error });
+      }
     },
   );
 

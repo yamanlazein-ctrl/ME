@@ -58,6 +58,9 @@ export class ApiInvoiceRepository implements IInvoiceRepository {
         colorId: l.colorId,
         rollId: l.rollId,
         quantityKg: l.quantityKg,
+        // Dual-unit stock: pieces MUST reach the backend or the entry-invoice
+        // increment (rolls.remaining_pieces += line.pieces ?? 1) defaults to +1.
+        pieces: l.pieces ?? 1,
         pricePerKg: l.pricePerKg,
         discountAmount: l.discountAmount,
         note: l.note,

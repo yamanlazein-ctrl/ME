@@ -158,23 +158,24 @@ export class PostgresVoucherRepository implements IVoucherRepository {
         .returning();
 
       // Write the ledger entry atomically with the voucher — mirrors
-      // PostgresInvoiceRepository. Vouchers always CREDIT the party account:
-      // a receipt credits the customer (customer paid), a payment credits the
-      // supplier (we paid). Cash impact follows method — cashbox reads
-      // cashImpact, not the debit/credit side.
+      // PostgresInvoiceRepository. Uniform party convention (debit − credit,
+      // both kinds — see PostgresStatementRepository fix C-8): a receipt
+      // CREDITS the customer (their debt shrinks), a payment DEBITS the
+      // supplier (what we owe shrinks). The old credit-on-payment re-inflated
+      // supplier debt instead of settling it.
       const isPayment = input.kind === "payment";
       const refType = isPayment ? "payment_out" : "receipt_in";
       const cashImpact = input.method === "cash" ? (isPayment ? "out" : "in") : "none";
-      // C4 fix: double-entry. Party leg (credits the party, no cash impact) +
-      // balancing cash leg (carries cashImpact so the cashbox still reads it).
+      // C4 fix: double-entry. Party leg + balancing cash leg (carries
+      // cashImpact so the cashbox still reads it).
       await tx.insert(ledgerEntries).values([
         {
           tenantId: ctx.tenantId,
           partyId: input.partyId,
           date: input.date,
           type: refType,
-          debit: 0,
-          credit: input.amount,
+          debit: isPayment ? input.amount : 0,
+          credit: isPayment ? 0 : input.amount,
           currency: input.currency ?? "SYP",
           cashImpact: "none",
           referenceType: refType,
