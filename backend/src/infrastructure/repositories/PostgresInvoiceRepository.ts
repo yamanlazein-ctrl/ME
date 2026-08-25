@@ -21,7 +21,7 @@ import type {
   UpdateInvoiceInput,
 } from "../../domain/entities/Invoice.js";
 import { Invoice, computeSubtotal } from "../../domain/entities/Invoice.js";
-import { round2dp } from "@erp/shared";
+import { round2dp, BASE_CURRENCY, computeBaseEquivalent, isValidFxRate } from "@erp/shared";
 import type { TenantContext, PaginatedResult } from "../../domain/types/index.js";
 
 export class PostgresInvoiceRepository implements IInvoiceRepository {
@@ -166,6 +166,18 @@ export class PostgresInvoiceRepository implements IInvoiceRepository {
       // captured at sale time so it is journaled (not just derived at read time).
       let cogsTotal = 0;
       const invoiceCurrency = input.currency ?? "SYP";
+      // BUG-03 fix — frozen FX rate for this document (units per 1 USD).
+      const fxRate =
+        invoiceCurrency === BASE_CURRENCY
+          ? 1
+          : isValidFxRate(input.exchangeRate)
+            ? input.exchangeRate!
+            : null;
+      const legFx = (debit: number, credit: number) => ({
+        exchangeRate: fxRate,
+        baseDebit: computeBaseEquivalent(debit, invoiceCurrency, fxRate),
+        baseCredit: computeBaseEquivalent(credit, invoiceCurrency, fxRate),
+      });
       if (isSale) {
         // BUG-17: a roll reserved by an open order must not be sold by a
         // different invoice. The only legitimate buyer of a `reserved` roll is
@@ -276,6 +288,13 @@ export class PostgresInvoiceRepository implements IInvoiceRepository {
           paid: input.paid ?? 0,
           paymentMethod: (input.paid ?? 0) > 0 ? (input.paymentMethod ?? "cash") : null,
           notes: input.notes,
+          // BUG-03 fix — frozen FX capture at creation time (mirrors fx.ts rule):
+          // USD (base) documents force rate=1/base=amount; non-USD documents use
+          // the caller-supplied rate when present. Legacy rows keep NULL by design
+          // (never guess a current rate for a historical document).
+          exchangeRate: fxRate,
+          baseTotal: computeBaseEquivalent(inv.total, invoiceCurrency, fxRate),
+          basePaid: computeBaseEquivalent(input.paid ?? 0, invoiceCurrency, fxRate),
           createdBy: ctx.userId,
         })
         .returning();
@@ -455,6 +474,7 @@ export class PostgresInvoiceRepository implements IInvoiceRepository {
       const currency = invoiceCurrency;
       const legs: (typeof ledgerEntries.$inferInsert)[] = [
         {
+          ...legFx(isSale ? inv.total : 0, isSale ? 0 : inv.total),
           tenantId: ctx.tenantId,
           partyId: input.partyId,
           date: input.date,
@@ -473,6 +493,7 @@ export class PostgresInvoiceRepository implements IInvoiceRepository {
       if (isSale) {
         // Revenue leg — balances the AR debit.
         legs.push({
+          ...legFx(0, inv.total),
           tenantId: ctx.tenantId,
           partyId: null,
           date: input.date,
@@ -491,6 +512,7 @@ export class PostgresInvoiceRepository implements IInvoiceRepository {
         // auditable from the ledger (not only a read-time dashboard formula).
         if (cogsTotal > 0) {
           legs.push({
+            ...legFx(cogsTotal, 0),
             tenantId: ctx.tenantId,
             partyId: null,
             date: input.date,
@@ -506,6 +528,7 @@ export class PostgresInvoiceRepository implements IInvoiceRepository {
             createdBy: ctx.userId,
           });
           legs.push({
+            ...legFx(0, cogsTotal),
             tenantId: ctx.tenantId,
             partyId: null,
             date: input.date,
@@ -524,6 +547,7 @@ export class PostgresInvoiceRepository implements IInvoiceRepository {
       } else {
         // Purchase invoice — Dr inventory (asset increases) / Cr party (AP increases)
         legs.push({
+          ...legFx(inv.total, 0),
           tenantId: ctx.tenantId,
           partyId: null,
           date: input.date,
@@ -571,6 +595,7 @@ export class PostgresInvoiceRepository implements IInvoiceRepository {
 
         await tx.insert(ledgerEntries).values([
           {
+            ...legFx(0, paid),
             tenantId: ctx.tenantId,
             partyId: input.partyId,
             date: input.date,
@@ -586,6 +611,7 @@ export class PostgresInvoiceRepository implements IInvoiceRepository {
             createdBy: ctx.userId,
           },
           {
+            ...legFx(paid, 0),
             tenantId: ctx.tenantId,
             partyId: null,
             date: input.date,
@@ -636,6 +662,7 @@ export class PostgresInvoiceRepository implements IInvoiceRepository {
         const cashImpact = method === "cash" ? "out" : "none";
         await tx.insert(ledgerEntries).values([
           {
+            ...legFx(paid, 0),
             tenantId: ctx.tenantId,
             partyId: input.partyId,
             date: input.date,
@@ -655,6 +682,7 @@ export class PostgresInvoiceRepository implements IInvoiceRepository {
             createdBy: ctx.userId,
           },
           {
+            ...legFx(0, paid),
             tenantId: ctx.tenantId,
             partyId: null,
             date: input.date,
@@ -1275,6 +1303,9 @@ export class PostgresInvoiceRepository implements IInvoiceRepository {
       partyId: row.partyId,
       partyType: row.partyType as InvoiceData["partyType"],
       currency: row.currency,
+      exchangeRate: row.exchangeRate ?? undefined,
+      baseTotal: row.baseTotal ?? undefined,
+      basePaid: row.basePaid ?? undefined,
       subtotal: row.subtotal,
       discount: row.discount,
       tax: row.tax,

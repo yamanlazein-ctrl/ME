@@ -11,6 +11,10 @@ export interface VoucherData {
   invoiceId?: UUID;
   amount: number;
   currency: string;
+  /** Units of `currency` per 1 USD — frozen at creation. */
+  exchangeRate?: number | null;
+  /** USD equivalent of `amount` at the frozen rate. */
+  baseAmount?: number | null;
   method: VoucherMethod;
   status: EntityStatus;
   notesPrint?: string;
@@ -104,6 +108,8 @@ export interface CreateVoucherInput {
   invoiceId?: UUID;
   amount: number;
   currency?: string;
+  /** Units of `currency` per 1 USD — frozen at creation. */
+  exchangeRate?: number;
   method: VoucherMethod;
   notesPrint?: string;
   notesInternal?: string;

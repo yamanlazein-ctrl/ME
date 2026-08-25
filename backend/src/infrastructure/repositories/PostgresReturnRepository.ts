@@ -8,6 +8,7 @@ import { ledgerEntries } from "../orm/schemas/ledger-entry.table.js";
 import { invoiceLines } from "../orm/schemas/invoice-line.table.js";
 import { invoices } from "../orm/schemas/invoice.table.js";
 import { recordStockMovement } from "./stockMovementHelper.js";
+import { round2dp, BASE_CURRENCY, computeBaseEquivalent } from "@erp/shared";
 import {
   ReturnDoc,
   type ReturnData,
@@ -149,6 +150,9 @@ export class PostgresReturnRepository implements IReturnRepository {
       // Currency mismatch check will run after we load the invoice(s)
       const inputCurrency = input.currency ?? "SYP";
       let invoiceCurrency: string | null = null;
+      // BUG-03 fix: frozen FX derived server-side from the original document(s).
+      let linkedInvoiceFx: number | null = null;
+      let unlinkedInvoiceFx: number | null = null;
 
       if (input.originalInvoiceId) {
         const [origInv] = await tx
@@ -157,6 +161,7 @@ export class PostgresReturnRepository implements IReturnRepository {
             partyId: invoices.partyId,
             status: invoices.status,
             currency: invoices.currency,
+            exchangeRate: invoices.exchangeRate,
           })
           .from(invoices)
           .where(and(eq(invoices.id, input.originalInvoiceId), eq(invoices.tenantId, ctx.tenantId)))
@@ -169,6 +174,9 @@ export class PostgresReturnRepository implements IReturnRepository {
         invoiceCurrency = origInv.currency;
         if (invoiceCurrency !== inputCurrency)
           throw new Error(`عملة المرتجع (${inputCurrency}) لا تطابق عملة الفاتورة الأصلية (${invoiceCurrency})`);
+        // The return MUST reuse the ORIGINAL invoice's frozen rate — never a
+        // current rate and never a client-supplied value.
+        linkedInvoiceFx = origInv.exchangeRate == null ? null : Number(origInv.exchangeRate);
         // Aggregate invoice lines by rollId (SUM) and capture price/cost/currency per roll
         const origLines = await tx
           .select({
@@ -220,6 +228,8 @@ export class PostgresReturnRepository implements IReturnRepository {
             price: sql<number>`AVG(${invoiceLines.pricePerKg})`,
             cost: sql<number>`AVG(${invoiceLines.costPerKg})`,
             currency: sql<string>`MAX(${invoices.currency})`,
+            minRate: sql<number | null>`MIN(${invoices.exchangeRate})`,
+            maxRate: sql<number | null>`MAX(${invoices.exchangeRate})`,
           })
           .from(invoiceLines)
           .innerJoin(
@@ -234,9 +244,17 @@ export class PostgresReturnRepository implements IReturnRepository {
           )
           .where(and(eq(invoiceLines.tenantId, ctx.tenantId), inArray(invoiceLines.rollId, rollIds)))
           .groupBy(invoiceLines.rollId);
+        let rateMin: number | null = null;
+        let rateMax: number | null = null;
         for (const h of historical) {
           if (String(h.currency) !== inputCurrency)
             throw new Error(`عملة المرتجع (${inputCurrency}) لا تطابق عملة الفواتير الأصلية (${h.currency})`);
+          // BUG-03 fix: unlinked returns may only reuse a frozen rate when EVERY
+          // candidate historical invoice shares the same non-null rate.
+          const lo = h.minRate == null ? null : Number(h.minRate);
+          const hi = h.maxRate == null ? null : Number(h.maxRate);
+          if (lo != null && (rateMin == null || lo < rateMin)) rateMin = lo;
+          if (hi != null && (rateMax == null || hi > rateMax)) rateMax = hi;
           invoiceLineQtys.set(h.rollId, {
             original: Math.round(Number(h.total) * 100) / 100,
             returned: 0,
@@ -245,6 +263,7 @@ export class PostgresReturnRepository implements IReturnRepository {
             currency: String(h.currency),
           });
         }
+        if (rateMin != null && rateMin === rateMax) unlinkedInvoiceFx = rateMin;
         const prevReturns = await tx
           .select({ rollId: returnLines.rollId, total: sql<number>`COALESCE(SUM(${returnLines.quantityKg}),0)` })
           .from(returnLines)
@@ -385,17 +404,37 @@ export class PostgresReturnRepository implements IReturnRepository {
         costTotal += Math.round(totalQty * entry.costPerKg);
       }
       const returnRefType = isEntryReturn ? "purchase_return" : "sales_return";
+      // F4: per-leg FX for USD aggregations on the ledger (S10 from audit).
+      // BUG-03 fix: the frozen rate is derived SERVER-SIDE from the ORIGINAL
+      // invoice(s) stored at their creation — never client-supplied, never a
+      // "current" rate (fx.ts rule). Legacy invoices with NULL rates keep NULL
+      // base legs (documented legacy-data constraint).
+      const returnCurrency = input.currency ?? "SYP";
+      let derivedFx = input.originalInvoiceId ? linkedInvoiceFx : unlinkedInvoiceFx;
+      if (derivedFx == null && returnCurrency === BASE_CURRENCY) derivedFx = 1;
+      const fxRate = derivedFx;
+      const legFx = (debit: number, credit: number) => ({
+        exchangeRate: fxRate,
+        baseDebit: computeBaseEquivalent(debit, returnCurrency, fxRate),
+        baseCredit: computeBaseEquivalent(credit, returnCurrency, fxRate),
+      });
       const legs: (typeof ledgerEntries.$inferInsert)[] = [];
       if (isEntryReturn) {
+        // BUG-02 fix — purchase return mirrors the purchase invoice:
+        //   Dr party T  (supplier balance DECREASES — same convention as
+        //                payment_out from the C-8 family of fixes)
+        //   Cr inventory T
+        // Σdebit = Σcredit = T. No contra leg needed (symmetric amounts).
         if (saleTotal > 0) {
           legs.push(
             {
+              ...legFx(saleTotal, 0),
               tenantId: ctx.tenantId,
               partyId: input.partyId,
               date: input.date,
               type: returnRefType,
-              debit: 0,
-              credit: saleTotal,
+              debit: saleTotal,
+              credit: 0,
               currency: input.currency ?? "SYP",
               cashImpact: "none",
               referenceType: returnRefType,
@@ -405,6 +444,7 @@ export class PostgresReturnRepository implements IReturnRepository {
               createdBy: ctx.userId,
             },
             {
+              ...legFx(0, saleTotal),
               tenantId: ctx.tenantId,
               partyId: null,
               date: input.date,
@@ -422,9 +462,15 @@ export class PostgresReturnRepository implements IReturnRepository {
           );
         }
       } else {
-        // Sale return: party at sale price, inventory at cost, COGS reversed at cost
+        // Sale return — BUG-02 fix, fully balanced set:
+        //   Cr party T            (customer balance decreases)
+        //   Dr sales_return_contra T  (revenue is reversed)
+        //   Dr inventory_asset C  (stock value returns at cost)
+        //   Cr cogs_expense C     (COGS reversal at cost)
+        // Σdebit = T + C = Σcredit ✓ (migration 0040 contract restored)
         if (saleTotal > 0) {
           legs.push({
+            ...legFx(0, saleTotal),
             tenantId: ctx.tenantId,
             partyId: input.partyId,
             date: input.date,
@@ -439,10 +485,27 @@ export class PostgresReturnRepository implements IReturnRepository {
             description: `Sale return ${autoNumber}`,
             createdBy: ctx.userId,
           });
-          // Revenue contra (or sales_return already is the party leg, revenue will be handled via dashboard using sales_return type)
+          // Revenue contra — balances the return group (BUG-02).
+          legs.push({
+            ...legFx(saleTotal, 0),
+            tenantId: ctx.tenantId,
+            partyId: null,
+            date: input.date,
+            type: "sales_return_contra",
+            debit: saleTotal,
+            credit: 0,
+            currency: input.currency ?? "SYP",
+            cashImpact: "none",
+            referenceType: returnRefType,
+            referenceId: row.id,
+            referenceNumber: autoNumber,
+            description: `Revenue contra ${autoNumber}`,
+            createdBy: ctx.userId,
+          });
           // Inventory at cost
           if (costTotal > 0) {
             legs.push({
+              ...legFx(costTotal, 0),
               tenantId: ctx.tenantId,
               partyId: null,
               date: input.date,
@@ -459,6 +522,7 @@ export class PostgresReturnRepository implements IReturnRepository {
             });
             // COGS reversal
             legs.push({
+              ...legFx(0, costTotal),
               tenantId: ctx.tenantId,
               partyId: null,
               date: input.date,
@@ -476,7 +540,21 @@ export class PostgresReturnRepository implements IReturnRepository {
           }
         }
       }
+
+      // BUG-01 fix (REGRESSION): restore the ledger insert. This line was added
+      // by 75b7ecb [P0-LOGIC-3.6c] but was accidentally dropped by the uncommitted
+      // local FX work — returns silently wrote ZERO ledger entries. The dedicated
+      // lock-in test backend/tests/return-ledger-insert-lock.test.mjs guards it.
       if (legs.length > 0) await tx.insert(ledgerEntries).values(legs);
+
+      // BUG-03 fix: persist the frozen FX on the return row itself.
+      await tx
+        .update(returns)
+        .set({
+          exchangeRate: fxRate,
+          baseTotal: computeBaseEquivalent(saleTotal, input.currency ?? "SYP", fxRate),
+        })
+        .where(eq(returns.id, row.id));
 
       const lines = await tx.select().from(returnLines).where(eq(returnLines.returnId, row.id));
       return this.toDomain(row, lines);
@@ -611,6 +689,8 @@ export class PostgresReturnRepository implements IReturnRepository {
       originalInvoiceId: n(row.originalInvoiceId),
       reason: row.reason,
       currency: row.currency,
+      exchangeRate: row.exchangeRate === null ? null : Number(row.exchangeRate),
+      baseTotal: row.baseTotal == null ? null : Number(row.baseTotal),
       notesPrint: n(row.notesPrint),
       notesInternal: n(row.notesInternal),
       status: row.status as ReturnData["status"],

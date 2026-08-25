@@ -24,6 +24,12 @@ export interface InvoiceData {
   partyId: UUID;
   partyType: "customer" | "supplier";
   currency: string;
+  /** Units of `currency` per 1 USD — frozen at creation (null for legacy rows). */
+  exchangeRate?: number | null;
+  /** USD equivalent of `total` at the frozen exchangeRate. */
+  baseTotal?: number | null;
+  /** USD equivalent of `paid` at the frozen exchangeRate. */
+  basePaid?: number | null;
   subtotal: number;
   discount: number;
   tax: number;
@@ -183,6 +189,13 @@ export interface CreateInvoiceInput {
   paid?: number;
   /** Receipt method used when `paid > 0`. Defaults to "cash". */
   paymentMethod?: "cash" | "transfer" | "check" | "card";
+  /**
+   * BUG-03 fix: frozen FX rate (units of `currency` per 1 USD) captured at
+   * invoice creation. Ignored/forced to 1 for USD (base) invoices. Non-USD
+   * invoices without a rate keep NULL base amounts (legacy-data constraint —
+   * never guess a current rate for a historical document).
+   */
+  exchangeRate?: number;
   /**
    * Optional order being fulfilled by this invoice (sale invoices only). When
    * present, reserved rolls pinned to that order are allowed to be sold; a

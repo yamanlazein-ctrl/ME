@@ -1,5 +1,6 @@
 ﻿import { z } from "zod";
 import { is2dp, MAX_2DP_MESSAGE, round2dp } from "../precision.js";
+import { exchangeRateSchema } from "../fx.js";
 
 const invoiceLineSchema = z.object({
   fabricId: z.string().uuid(),
@@ -29,6 +30,9 @@ export const createInvoiceSchema = z
    // the server falls back to its generated number when omitted.
    reference: z.string().max(100).optional(),
     currency: z.enum(["SYP", "USD", "EUR"]).optional(),
+    // BUG-03 fix: frozen FX rate (units of `currency` per 1 USD). Required
+    // semantics: forced to 1 for USD; optional-but-honored for non-USD.
+    exchangeRate: exchangeRateSchema,
     lines: z.array(invoiceLineSchema).min(1).max(100),
     discount: z.number().min(0, "الخصم لا يمكن أن يكون سالباً").optional(),
     tax: z.number().min(0, "الضريبة لا يمكن أن تكون سالبة").optional(),

@@ -45,7 +45,13 @@ export const invoices = pgTable(
     paid: numeric("paid", { precision: 14, scale: 2, mode: "number" }).notNull().default(0),
     // Payment method used when paid > 0 (cash/transfer/check/card).
     // Stored on the invoice for audit trail and display purposes.
-    paymentMethod: varchar("payment_method", { length: 20 }),
+   paymentMethod: varchar("payment_method", { length: 20 }),
+   // Frozen FX rate (units of `currency` per 1 USD) and USD-base equivalents —
+   // exist in the DB since the FX migrations; declared here so drizzle can
+   // read/write them (create/update paths persist them).
+   exchangeRate: numeric("exchange_rate", { precision: 18, scale: 6, mode: "number" }),
+   baseTotal: numeric("base_total", { precision: 14, scale: 2, mode: "number" }),
+   basePaid: numeric("base_paid", { precision: 14, scale: 2, mode: "number" }),
     notes: text("notes"),
     status: varchar("status", { length: 20 }).notNull().default("active"),
     version: integer("version").notNull().default(1),

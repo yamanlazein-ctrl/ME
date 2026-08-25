@@ -19,6 +19,10 @@ export interface ReturnData {
   originalInvoiceId?: UUID;
   reason: string;
   currency: string;
+  /** Units of `currency` per 1 USD — frozen at creation. */
+  exchangeRate?: number | null;
+  /** USD equivalent of `total` at the frozen rate. */
+  baseTotal?: number | null;
   notesPrint?: string;
   notesInternal?: string;
   status: EntityStatus;
@@ -119,6 +123,8 @@ export interface CreateReturnInput {
   originalInvoiceId?: UUID;
   reason: string;
   currency?: string;
+  /** Units of `currency` per 1 USD — frozen at creation. */
+  exchangeRate?: number;
   notesPrint?: string;
   notesInternal?: string;
   lines: CreateReturnLineInput[];

@@ -7,6 +7,7 @@ import {
   date,
   text,
   uniqueIndex,
+  numeric,
 } from "drizzle-orm/pg-core";
 import { tenants } from "./tenant.table.js";
 import { parties } from "./party.table.js";
@@ -28,6 +29,9 @@ export const returns = pgTable(
     originalInvoiceId: uuid("original_invoice_id").references(() => invoices.id),
     reason: varchar("reason", { length: 20 }).notNull(),
     currency: varchar("currency", { length: 3 }).notNull().default("SYP"),
+    // Base-currency (USD) FX capture — frozen at creation time.
+    exchangeRate: numeric("exchange_rate", { precision: 18, scale: 6, mode: "number" }),
+    baseTotal: numeric("base_total", { precision: 14, scale: 2, mode: "number" }),
     notesPrint: text("notes_print"),
     notesInternal: text("notes_internal"),
     status: varchar("status", { length: 20 }).notNull().default("active"),

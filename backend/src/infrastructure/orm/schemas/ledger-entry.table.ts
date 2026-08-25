@@ -28,6 +28,11 @@ export const ledgerEntries = pgTable(
     debit: numeric("debit", { precision: 14, scale: 2, mode: "number" }).default(0),
     credit: numeric("credit", { precision: 14, scale: 2, mode: "number" }).default(0),
     currency: varchar("currency", { length: 3 }).notNull().default("SYP"),
+    // Frozen FX rate + USD-base amounts — exist in the DB; declared so drizzle
+    // can read/write them (invoice legs persist them on create/update).
+    exchangeRate: numeric("exchange_rate", { precision: 18, scale: 6, mode: "number" }),
+    baseDebit: numeric("base_debit", { precision: 14, scale: 2, mode: "number" }),
+    baseCredit: numeric("base_credit", { precision: 14, scale: 2, mode: "number" }),
     cashImpact: varchar("cash_impact", { length: 10 }).notNull().default("none"),
     referenceType: varchar("reference_type", { length: 50 }),
     referenceId: uuid("reference_id"),

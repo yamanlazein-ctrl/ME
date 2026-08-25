@@ -38,7 +38,11 @@ export async function createVoucherUseCase(
       );
     return { ok: true, data: voucher };
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : "فشل إنشاء السند" };
+    // F4 (audit fix): raw JS errors (e.g. ReferenceError on a TDZ) are not actionable
+    // for the user. Log the full error server-side and return a generic Arabic message.
+    const err = e instanceof Error ? e : new Error(String(e));
+    logAuditError(err, { module: "vouchers", action: "create", entityId: autoNumber, tenantId: ctx.tenantId });
+    return { ok: false, error: "تعذّر إنشاء السند بسبب خطأ داخلي. أعد المحاولة، وإذا تكرر الأمر راجع مسؤول النظام." };
   }
 }
 

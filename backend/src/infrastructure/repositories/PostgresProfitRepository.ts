@@ -1,4 +1,4 @@
-import { eq, and, sql, gte, lte } from "drizzle-orm";
+import { eq, and, sql, gte, lte, inArray } from "drizzle-orm";
 import type { DB } from "../orm/drizzle.js";
 import type { IProfitRepository } from "../../application/ports/IProfitRepository.js";
 import type {
@@ -112,17 +112,107 @@ export class PostgresProfitRepository implements IProfitRepository {
       )
       .orderBy(sql`${invoices.date} DESC, ${invoices.number} DESC`);
 
-    return rows.map((r) => ({
-      invoiceId: r.invoiceId,
-      number: r.number,
-      date: r.date,
-      partyId: r.partyId,
-      partyName: r.partyName ?? "",
-      currency: r.currency,
-      // revenue for profit = subtotal − discount (excludes tax + shipping, per P0-LOGIC-3.6d)
-      revenue: Number(r.revenue) - Number(r.discount),
-      cogs: Number(r.cogs),
-    }));
+    // BUG-04 fix: active sale returns must reduce BOTH the revenue AND the COGS
+    // of their original invoice (previously the report ignored returns entirely
+    // and kept showing phantom profit). Returns are valued at the invoice's own
+    // cost snapshot (invoice_lines.cost_per_kg → rolls.price_per_kg fallback).
+    const returnAdj = await this.getReturnAdjustments(
+      rows.map((r) => r.invoiceId),
+      ctx,
+    );
+
+    return rows.map((r) => {
+      const adj = returnAdj.get(r.invoiceId) ?? { revenue: 0, cogs: 0 };
+      const revenue = Math.max(0, Number(r.revenue) - Number(r.discount) - adj.revenue);
+      const cogs = Math.max(0, Number(r.cogs) - adj.cogs);
+      return {
+        invoiceId: r.invoiceId,
+        number: r.number,
+        date: r.date,
+        partyId: r.partyId,
+        partyName: r.partyName ?? "",
+        currency: r.currency,
+        // revenue for profit = subtotal − discount (excludes tax + shipping, per P0-LOGIC-3.6d)
+        revenue,
+        cogs,
+      };
+    });
+  }
+
+  /**
+   * BUG-04 fix — per-invoice adjustments for ACTIVE returns linked to it.
+   * revenue  = Σ(return_lines.qty × return_lines.pricePerKg)
+   * cogs     = Σ(return_lines.qty × COALESCE(invoice_lines.costPerKg, rolls.pricePerKg))
+   * matched by rollId within the same invoice.
+   */
+  private async getReturnAdjustments(
+    invoiceIds: string[],
+    ctx: TenantContext,
+  ): Promise<Map<string, { revenue: number; cogs: number }>> {
+    const out = new Map<string, { revenue: number; cogs: number }>();
+    if (invoiceIds.length === 0) return out;
+
+    const revRows = await this.db
+      .select({
+        invoiceId: returns.originalInvoiceId,
+        total: sql<number>`COALESCE(SUM(${returnLines.quantityKg} * ${returnLines.pricePerKg}), 0)`,
+      })
+      .from(returns)
+      .innerJoin(returnLines, eq(returnLines.returnId, returns.id))
+      .where(
+        and(
+          eq(returns.tenantId, ctx.tenantId),
+          eq(returns.status, "active"),
+          inArray(returns.originalInvoiceId, invoiceIds),
+        ),
+      )
+      .groupBy(returns.originalInvoiceId);
+    for (const r of revRows) {
+      if (r.invoiceId) out.set(r.invoiceId, { revenue: Number(r.total), cogs: 0 });
+    }
+
+    // Cost side: match each return line to its invoice line via rollId.
+    const retLineRows = await this.db
+      .select({
+        invoiceId: returns.originalInvoiceId,
+        rollId: returnLines.rollId,
+        qty: sql<number>`COALESCE(SUM(${returnLines.quantityKg}), 0)`,
+      })
+      .from(returns)
+      .innerJoin(returnLines, eq(returnLines.returnId, returns.id))
+      .where(
+        and(
+          eq(returns.tenantId, ctx.tenantId),
+          eq(returns.status, "active"),
+          inArray(returns.originalInvoiceId, invoiceIds),
+        ),
+      )
+      .groupBy(returns.originalInvoiceId, returnLines.rollId);
+
+    if (retLineRows.length > 0) {
+      const costRows = await this.db
+        .select({
+          invoiceId: invoices.id,
+          rollId: invoiceLines.rollId,
+          cost: sql<number>`MAX(COALESCE(${invoiceLines.costPerKg}, ${rolls.pricePerKg}))`,
+        })
+        .from(invoices)
+        .innerJoin(invoiceLines, eq(invoiceLines.invoiceId, invoices.id))
+        .innerJoin(rolls, eq(rolls.id, invoiceLines.rollId))
+        .where(and(eq(invoices.tenantId, ctx.tenantId), inArray(invoices.id, invoiceIds)))
+        .groupBy(invoices.id, invoiceLines.rollId);
+      const costMap = new Map<string, number>();
+      for (const cr of costRows) costMap.set(`${cr.invoiceId}:${cr.rollId}`, Number(cr.cost));
+
+      for (const rl of retLineRows) {
+        if (!rl.invoiceId) continue;
+        const unitCost = costMap.get(`${rl.invoiceId}:${rl.rollId}`) ?? 0;
+        const cur = out.get(rl.invoiceId) ?? { revenue: 0, cogs: 0 };
+        cur.cogs += Number(rl.qty) * unitCost;
+        out.set(rl.invoiceId, cur);
+      }
+    }
+    return out;
   }
 
   /** Aggregated expense totals per currency for the period. */

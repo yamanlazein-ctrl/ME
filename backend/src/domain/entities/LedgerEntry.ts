@@ -9,6 +9,12 @@ export interface LedgerEntryData {
   debit: number;
   credit: number;
   currency: string;
+  /** Units of `currency` per 1 USD — frozen at the originating document's creation. */
+  exchangeRate?: number | null;
+  /** USD equivalent of `debit` at the frozen rate (null when the document had no rate). */
+  baseDebit?: number | null;
+  /** USD equivalent of `credit` at the frozen rate (null when the document had no rate). */
+  baseCredit?: number | null;
   cashImpact: CashImpact;
   referenceType?: string;
   referenceId?: UUID;
@@ -21,7 +27,6 @@ export interface LedgerEntryData {
   cancelledBy?: UUID;
   cancellationReferenceId?: UUID;
 }
-
 export class LedgerEntry {
   private constructor(private readonly data: LedgerEntryData) {}
 

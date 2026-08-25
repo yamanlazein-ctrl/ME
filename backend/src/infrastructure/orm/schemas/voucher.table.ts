@@ -32,6 +32,9 @@ export const vouchers = pgTable(
     invoiceId: uuid("invoice_id").references(() => invoices.id),
     amount: numeric("amount", { precision: 14, scale: 2, mode: "number" }).notNull(),
     currency: varchar("currency", { length: 3 }).notNull().default("SYP"),
+    // Base-currency (USD) FX capture — frozen at creation time.
+    exchangeRate: numeric("exchange_rate", { precision: 18, scale: 6, mode: "number" }),
+    baseAmount: numeric("base_amount", { precision: 14, scale: 2, mode: "number" }),
     method: varchar("method", { length: 20 }).notNull(),
     status: varchar("status", { length: 20 }).notNull().default("active"),
     notesPrint: text("notes_print"),
