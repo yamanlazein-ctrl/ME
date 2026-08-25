@@ -14,6 +14,7 @@
     "db:check": "drizzle-kit check",
       "lint": "eslint src --ext .ts",
       "typecheck": "tsc --noEmit",
+      "test:lock": "node tests/lock-in.test.mjs",
       "test:integration": "node scripts/run-integration.mjs",
       "db:restore": "node scripts/restore-from-backup.mjs"
   },
