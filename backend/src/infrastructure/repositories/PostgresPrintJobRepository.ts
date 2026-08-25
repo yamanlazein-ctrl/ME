@@ -3,7 +3,6 @@ import type { DB } from "../orm/drizzle.js";
 import type { IPrintJobRepository } from "../../application/ports/IPrintJobRepository.js";
 import { printJobs } from "../orm/schemas/print-job.table.js";
 import { ledgerEntries } from "../orm/schemas/ledger-entry.table.js";
-import { expenses } from "../orm/schemas/expense.table.js";
 import { rolls } from "../orm/schemas/roll.table.js";
 import { colors } from "../orm/schemas/color.table.js";
 import { fabrics } from "../orm/schemas/fabric.table.js";
@@ -307,6 +306,17 @@ export class PostgresPrintJobRepository implements IPrintJobRepository {
         // date (or the print job's date) if the caller didn't supply one.
         const effectiveDate = input.date ?? job.date ?? new Date().toISOString().slice(0, 10);
 
+        // BUG-05 fix: compute sellable pieces for the result roll. Previously
+        // this insert omitted pieces/remainingPieces so every printed roll was
+        // created with remaining_pieces=0 while any sale requires pieces>=1 —
+        // making ALL printed fabric unsellable. Scale the pieces recorded on
+        // the print job by the received/sent kg ratio (waste shrinks pieces),
+        // minimum 1 when anything was received.
+        const resultPieces = Math.max(
+          (input.receivedKg ?? 0) > 0 ? 1 : 0,
+          Math.round((Number(job.pieces) || 1) * ((input.receivedKg ?? 0) / (Number(job.quantityKg) || 1))),
+        );
+
         const [newRoll] = await tx
           .insert(rolls)
           .values({
@@ -323,6 +333,8 @@ export class PostgresPrintJobRepository implements IPrintJobRepository {
             entryDate: effectiveDate,
             widthCm: srcRoll.widthCm ? String(srcRoll.widthCm) : null,
             weightGsm: srcRoll.weightGsm ? String(srcRoll.weightGsm) : null,
+            pieces: resultPieces,
+            remainingPieces: resultPieces,
           })
           .returning();
         resultRollId = newRoll.id;
@@ -380,9 +392,11 @@ export class PostgresPrintJobRepository implements IPrintJobRepository {
         }
       }
 
-      // Phase 2.3 — auto-create a printing-cost expense (no party) + its ledger
-      // row atomically, when a print cost per kg is known. This makes the
-      // printing cost flow into the ledger/cashbox automatically.
+      // BUG-06 fix (approach A): the printing cost is CAPITALIZED into the
+      // result roll's unit cost (see pricePerKg = srcPrice + printCost above),
+      // so it must reach the P&L exactly ONCE — via COGS when the printed
+      // fabric is sold. The old separate EXPENSE row double-counted it.
+      // Cash outflow tracking is preserved: Dr inventory / Cr cash (impact=out).
       const effectiveDate2 = input.date ?? job.date ?? new Date().toISOString().slice(0, 10);
       let costExpenseId: string | null = null;
       const costPerKg = input.printCostPerKg ?? Number(job.printCostPerKg ?? 0);
@@ -390,38 +404,20 @@ export class PostgresPrintJobRepository implements IPrintJobRepository {
       if (costPerKg > 0 && receivedKgNum > 0) {
         const printCostTotal = Math.round(receivedKgNum * costPerKg);
         if (printCostTotal > 0) {
-          const [expRow] = await tx
-            .insert(expenses)
-            .values({
-              tenantId: ctx.tenantId,
-              number: `EXP-${job.number}`,
-              category: "طباعة",
-              description: `تكلفة طباعة ${job.number} (${receivedKgNum} كغ × ${costPerKg})`,
-              amount: printCostTotal,
-              currency: input.currency ?? job.currency ?? "SYP",
-              date: effectiveDate2,
-              method: "cash",
-              paidFromCashbox: true,
-              createdBy: ctx.userId,
-            })
-            .returning();
-          costExpenseId = expRow.id;
-          const isCash = true;
-          // C4 fix: double-entry — expense leg + balancing cash leg.
           await tx.insert(ledgerEntries).values([
             {
               tenantId: ctx.tenantId,
               partyId: null,
               date: effectiveDate2,
-              type: "expense",
+              type: "inventory_asset",
               debit: printCostTotal,
               credit: 0,
               currency: input.currency ?? job.currency ?? "SYP",
               cashImpact: "none",
-              referenceType: "expense",
-              referenceId: expRow.id,
+              referenceType: "print_job",
+              referenceId: job.id,
               referenceNumber: `EXP-${job.number}`,
-              description: `Expense EXP-${job.number}: طباعة - تكلفة طباعة ${job.number}`,
+              description: `Printing cost capitalized ${job.number} (${receivedKgNum} kg x ${costPerKg})`,
               createdBy: ctx.userId,
             },
             {
@@ -432,11 +428,11 @@ export class PostgresPrintJobRepository implements IPrintJobRepository {
               debit: 0,
               credit: printCostTotal,
               currency: input.currency ?? job.currency ?? "SYP",
-              cashImpact: isCash ? "out" : "none",
-              referenceType: "expense",
-              referenceId: expRow.id,
+              cashImpact: "out",
+              referenceType: "print_job",
+              referenceId: job.id,
               referenceNumber: `EXP-${job.number}`,
-              description: `Cash paid EXP-${job.number}`,
+              description: `Cash paid to press EXP-${job.number}`,
               createdBy: ctx.userId,
             },
           ]);
