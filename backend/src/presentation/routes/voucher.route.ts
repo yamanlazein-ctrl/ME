@@ -11,7 +11,6 @@ import type { IAuditRepository } from "../../application/ports/IAuditRepository.
 import type { TenantContext } from "../../domain/types/index.js";
 import { createVoucherSchema, listVouchersSchema } from "./voucher.schema.js";
 import * as uc from "../../application/use-cases/vouchers/voucherUseCases.js";
-import { nextDocumentNumber } from "../../infrastructure/utils/documentNumbers.js";
 
 export function registerVoucherRoutes(
   router: Router,
@@ -37,7 +36,6 @@ export function registerVoucherRoutes(
         voucherRepo,
         auditRepo,
         { ...b, kind: "payment" } as Parameters<typeof uc.createVoucherUseCase>[2],
-        await nextDocumentNumber("voucher", ctx(req).tenantId),
         ctx(req),
       );
       if (r.ok) {
@@ -60,7 +58,6 @@ export function registerVoucherRoutes(
         voucherRepo,
         auditRepo,
         { ...b, kind: "receipt" } as Parameters<typeof uc.createVoucherUseCase>[2],
-        await nextDocumentNumber("voucher", ctx(req).tenantId),
         ctx(req),
       );
       if (r.ok) {

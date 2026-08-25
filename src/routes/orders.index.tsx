@@ -270,6 +270,18 @@ function OrdersIndexPage() {
                     </td>
                     <td className="px-3 py-2 text-left">
                       <div className="flex items-center justify-end gap-1">
+                        {/* BUG-07 — owner decision shortcut: sell the available
+                            quantity now as a normal sale invoice (prefilled). */}
+                        {o.status !== "cancelled" && o.status !== "fulfilled" && (
+                          <Link
+                            to="/invoices/sale/new"
+                            search={{ fromOrder: o.id }}
+                            title="إنشاء فاتورة بيع لهذه الطلبية"
+                            className="text-xs font-semibold text-success hover:underline"
+                          >
+                            بيع الآن
+                          </Link>
+                        )}
                         <Link
                           to="/orders/$id"
                           params={{ id: o.id }}

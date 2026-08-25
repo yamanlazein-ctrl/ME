@@ -78,3 +78,31 @@ export const FulfillOrderEndpoint: EndpointMeta = {
   auth: { required: true, roles: ["admin", "warehouse"] },
   description: "Mark order as fulfilled with linked invoice",
 };
+
+/* ── BUG-07 — informational pending-order conflicts (soft warning) ── */
+
+export interface PendingConflictLine {
+  fabricId?: string | null;
+  colorId?: string | null;
+  quantityKg: number;
+}
+export interface PendingConflictItem {
+  fabricName: string;
+  colorName: string;
+  requestedKg: number;
+}
+export interface PendingConflict {
+  orderId: UUID;
+  code: string;
+  customerNameSnapshot: string;
+  items: PendingConflictItem[];
+}
+export type PendingConflictsResponse = { data: PendingConflict[] };
+export const PendingConflictsEndpoint: EndpointMeta = {
+  path: "/api/orders/pending-conflicts",
+  method: "POST",
+  auth: { required: true, roles: ["admin", "accountant", "warehouse", "viewer"] },
+  description:
+    "Informational check: which pending customer orders want the same fabric/color about to be sold. Never blocks.",
+};
+

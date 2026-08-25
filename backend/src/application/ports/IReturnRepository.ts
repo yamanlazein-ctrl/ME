@@ -15,6 +15,6 @@ export interface ReturnFilter {
 export interface IReturnRepository {
   findById(id: string, ctx: TenantContext): Promise<ReturnData | null>;
   list(filter: ReturnFilter, ctx: TenantContext): Promise<PaginatedResult<ReturnData>>;
-  create(input: CreateReturnInput, autoNumber: string, ctx: TenantContext): Promise<ReturnData>;
+  create(input: CreateReturnInput, ctx: TenantContext): Promise<ReturnData>;
   cancel(id: string, cancelledBy: string, ctx: TenantContext): Promise<ReturnData>;
 }

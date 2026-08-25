@@ -20,7 +20,7 @@ export interface IInvoiceRepository {
   findById(id: string, ctx: TenantContext): Promise<InvoiceData | null>;
   findByNumber(number: string, type: string, ctx: TenantContext): Promise<InvoiceData | null>;
   list(filter: InvoiceFilter, ctx: TenantContext): Promise<PaginatedResult<InvoiceData>>;
-  create(input: CreateInvoiceInput, autoNumber: string, ctx: TenantContext): Promise<InvoiceData>;
+  create(input: CreateInvoiceInput, ctx: TenantContext): Promise<InvoiceData>;
   /**
    * Edit an active invoice: applies per-roll stock deltas (entry +new-old,
    * sale old-new), replaces lines, and rewrites the ledger via reversal

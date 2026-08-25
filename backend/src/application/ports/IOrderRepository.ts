@@ -11,6 +11,26 @@ export interface OrderFilter {
   limit?: number;
 }
 
+/** One sale line to check against pending customer orders (BUG-07 soft warning). */
+export interface PendingConflictLine {
+  fabricId?: string | null;
+  colorId?: string | null;
+  quantityKg: number;
+}
+
+export interface PendingConflictItem {
+  fabricName: string;
+  colorName: string;
+  requestedKg: number;
+}
+
+export interface PendingConflict {
+  orderId: UUID;
+  code: string;
+  customerNameSnapshot: string;
+  items: PendingConflictItem[];
+}
+
 export interface IOrderRepository {
   findById(id: string, ctx: TenantContext): Promise<OrderData | null>;
   findByCode(code: string, ctx: TenantContext): Promise<OrderData | null>;
@@ -19,4 +39,5 @@ export interface IOrderRepository {
   update(id: string, data: Partial<CreateOrderInput>, ctx: TenantContext): Promise<OrderData>;
   fulfill(id: string, invoiceId: UUID, ctx: TenantContext): Promise<OrderData>;
   cancel(id: string, ctx: TenantContext): Promise<OrderData>;
+  findPendingConflicts(lines: PendingConflictLine[], ctx: TenantContext): Promise<PendingConflict[]>;
 }

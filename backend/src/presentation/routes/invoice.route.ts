@@ -16,7 +16,6 @@ import {
   type CreateInvoiceInput,
 } from "./invoice.schema.js";
 import * as uc from "../../application/use-cases/invoices/invoiceUseCases.js";
-import { nextDocumentNumber } from "../../infrastructure/utils/documentNumbers.js";
 
 export function registerInvoiceRoutes(
   router: Router,
@@ -38,14 +37,14 @@ export function registerInvoiceRoutes(
     validateBody(createInvoiceSchema),
     async (req: Request, res: Response) => {
       const input = body<CreateInvoiceInput>(req);
+      // H-NEW: number allocation moved INSIDE the repository transaction
+      // (PostgresInvoiceRepository.create → allocateDocumentNumber), so a
+      // failed save no longer burns a number. The route no longer needs to
+      // pre-call nextDocumentNumber here.
       const r = await uc.createInvoiceUseCase(
         invoiceRepo,
         auditRepo,
         input,
-        await nextDocumentNumber(
-          input.type === "entry" ? "invoice_entry" : "invoice",
-          ctx(req).tenantId,
-        ),
         ctx(req),
       );
       if (r.ok) {

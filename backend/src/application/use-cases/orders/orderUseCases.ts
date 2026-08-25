@@ -1,4 +1,9 @@
-import type { IOrderRepository, OrderFilter } from "../../ports/IOrderRepository.js";
+import type {
+  IOrderRepository,
+  OrderFilter,
+  PendingConflict,
+  PendingConflictLine,
+} from "../../ports/IOrderRepository.js";
 import type { TenantContext, PaginatedResult } from "../../../domain/types/index.js";
 import type { OrderData, CreateOrderInput } from "../../../domain/entities/Order.js";
 
@@ -91,5 +96,17 @@ export async function fulfillOrderUseCase(
     return { ok: true, data: await repo.fulfill(id, invoiceId, ctx) };
   } catch (e) {
     return { ok: false, error: "فشل تنفيذ الطلب" };
+  }
+}
+
+export async function findPendingConflictsUseCase(
+  repo: IOrderRepository,
+  lines: PendingConflictLine[],
+  ctx: TenantContext,
+): Promise<Result<PendingConflict[]>> {
+  try {
+    return { ok: true, data: await repo.findPendingConflicts(lines, ctx) };
+  } catch (e) {
+    return { ok: false, error: "فشل التحقق من الطلبيات المعلّقة" };
   }
 }

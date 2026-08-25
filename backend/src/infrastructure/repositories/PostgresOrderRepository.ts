@@ -1,10 +1,16 @@
 import { eq, and, desc, ilike, sql, inArray } from "drizzle-orm";
 import type { DB } from "../orm/drizzle.js";
-import type { IOrderRepository, OrderFilter } from "../../application/ports/IOrderRepository.js";
+import type {
+  IOrderRepository,
+  OrderFilter,
+  PendingConflict,
+  PendingConflictLine,
+} from "../../application/ports/IOrderRepository.js";
 import { orders } from "../orm/schemas/order.table.js";
 import { orderItems } from "../orm/schemas/order-item.table.js";
 import { rolls } from "../orm/schemas/roll.table.js";
 import { Order, type OrderData, type CreateOrderInput } from "../../domain/entities/Order.js";
+import { applyOrderAvailabilityAtCreation } from "./orderAvailabilityNotifier.js";
 import type { TenantContext, PaginatedResult, UUID } from "../../domain/types/index.js";
 
 export class PostgresOrderRepository implements IOrderRepository {
@@ -97,21 +103,17 @@ export class PostgresOrderRepository implements IOrderRepository {
         .returning();
 
       if (input.items.length > 0) {
-        // Phase 3.1/3.2 — reservation:
-        //  - items carrying rollId pin a specific roll: the roll must exist,
-        //    be in_stock, belong to the item's color, and have enough kg.
-        //    We mark it `reserved` so it can't be double-sold while the order
-        //    is open.
-        //  - items without rollId fall back to the aggregate color availability
-        //    check (sum of remainingKg across rolls of that color).
+        // BUG-07 — orders are informational: rollId is stored as a reference
+        // ONLY. No roll is ever marked `reserved`, and no stock requirement is
+        // enforced at order time — the owner decides what to sell and when.
+        // We still validate the reference itself (exists + belongs to the
+        // item's color) so stale/wrong pins fail fast instead of misleading.
         for (const it of input.items) {
           if (it.rollId) {
             const [rollRow] = await tx
-              .select()
+              .select({ id: rolls.id, colorId: rolls.colorId })
               .from(rolls)
               .where(and(eq(rolls.id, it.rollId), eq(rolls.tenantId, ctx.tenantId)))
-              .for("update") // Fix H-4: lock the row so a concurrent order creation
-              // cannot read the same "in_stock" snapshot before this transaction commits.
               .limit(1);
             if (!rollRow) {
               throw new Error("اللفافة المحددة غير موجودة");
@@ -119,36 +121,6 @@ export class PostgresOrderRepository implements IOrderRepository {
             if (it.colorId && rollRow.colorId !== it.colorId) {
               throw new Error("اللفافة المحددة لا تنتمي إلى اللون المطلوب");
             }
-            if (rollRow.status !== "in_stock") {
-              throw new Error("اللفافة المحددة محجوزة أو مستهلكة");
-            }
-            if (Number(rollRow.remainingKg) < it.requestedKg) {
-              throw new Error(
-                `الكمية المطلوبة (${it.requestedKg} كغ) لللفافة ${rollRow.rollNo} تتجاوز الرصيد المتاح (${Number(rollRow.remainingKg)} كغ)`,
-              );
-            }
-            const reservedRows = await tx
-              .update(rolls)
-              .set({ status: "reserved", updatedAt: new Date() })
-              // Fix H-4: re-assert status in the WHERE clause as a belt-and-braces
-              // guard even though the row lock above already serializes this path.
-              .where(
-                and(
-                  eq(rolls.id, rollRow.id),
-                  eq(rolls.tenantId, ctx.tenantId),
-                  eq(rolls.status, "in_stock"),
-                ),
-              )
-              .returning({ id: rolls.id });
-            if (reservedRows.length === 0) {
-              throw new Error("اللفافة المحددة محجوزة أو مستهلكة");
-            }
-          } else if (it.colorId) {
-            // Future-order support: items pinned to a color do NOT require the
-            // stock to exist yet. When stock is insufficient the order stays
-            // "open" (no reservation) and the availability notifier promotes it
-            // automatically once matching stock arrives (entry invoice / roll).
-            // Orders whose stock IS sufficient keep the previous behavior.
           }
         }
         await tx.insert(orderItems).values(
@@ -169,6 +141,10 @@ export class PostgresOrderRepository implements IOrderRepository {
           })),
         );
       }
+
+      // BUG-07 §1 — compute initial availability and notify the owner
+      // (informational only: sell now or wait is their decision).
+      await applyOrderAvailabilityAtCreation(tx, ctx, row.id);
 
       const items = await tx.select().from(orderItems).where(eq(orderItems.orderId, row.id));
       return this.toDomain(row, items);
@@ -220,34 +196,8 @@ export class PostgresOrderRepository implements IOrderRepository {
         .returning();
       if (!row) throw new Error("Order not found or not in an open/available status");
 
-      // Release reservations: the rolls pinned to this order were consumed by the
-      // fulfillment invoice, so drop them back to their natural status
-      // (in_stock if any kg remain, exhausted otherwise).
+      // BUG-07 — no reservation release needed: rolls are never locked by orders.
       const items = await tx.select().from(orderItems).where(eq(orderItems.orderId, id));
-      const rollIds = items.map((it) => it.rollId).filter((r): r is string => Boolean(r));
-      if (rollIds.length > 0) {
-        const reserved = await tx
-          .select({ id: rolls.id, remainingKg: rolls.remainingKg })
-          .from(rolls)
-          .where(
-            and(
-              eq(rolls.tenantId, ctx.tenantId),
-              inArray(rolls.id, rollIds),
-              eq(rolls.status, "reserved"),
-            ),
-          );
-        for (const r of reserved) {
-          const newKg = Number(r.remainingKg);
-          await tx
-            .update(rolls)
-            .set({
-              status: newKg <= 0 ? "exhausted" : "in_stock",
-              updatedAt: new Date(),
-              version: sql`${rolls.version} + 1`,
-            })
-            .where(eq(rolls.id, r.id));
-        }
-      }
       return this.toDomain(row, items);
     });
   }
@@ -271,24 +221,62 @@ export class PostgresOrderRepository implements IOrderRepository {
         .returning();
       if (!row) throw new Error("Order not found or already processed");
 
-      // Release reservations: any roll pinned to this order's items and still
-      // marked `reserved` goes back to `in_stock`.
+      // BUG-07 — no reservation release needed: rolls are never locked by orders.
       const items = await tx.select().from(orderItems).where(eq(orderItems.orderId, id));
-      const rollIds = items.map((it) => it.rollId).filter((r): r is string => Boolean(r));
-      if (rollIds.length > 0) {
-        await tx
-          .update(rolls)
-          .set({ status: "in_stock", updatedAt: new Date() })
-          .where(
-            and(
-              eq(rolls.tenantId, ctx.tenantId),
-              inArray(rolls.id, rollIds),
-              eq(rolls.status, "reserved"),
-            ),
-          );
-      }
       return this.toDomain(row, items);
     });
+  }
+
+  /**
+   * BUG-07 soft warning — find open/pending orders whose items match any of
+   * the given sale lines (by colorId, or by fabricId when the line carries no
+   * color). Purely informational; callers must not block sales on this.
+   */
+  async findPendingConflicts(
+    lines: PendingConflictLine[],
+    ctx: TenantContext,
+  ): Promise<PendingConflict[]> {
+    const rows = await this.db
+      .select({ order: orders, item: orderItems })
+      .from(orders)
+      .innerJoin(orderItems, eq(orderItems.orderId, orders.id))
+      .where(
+        and(
+          eq(orders.tenantId, ctx.tenantId),
+          inArray(orders.status, ["open", "partially_available", "available"]),
+        ),
+      );
+
+    const matchesLine = (
+      it: typeof orderItems.$inferSelect,
+      ln: PendingConflictLine,
+    ): boolean => {
+      if (ln.colorId) return it.colorId === ln.colorId;
+      if (ln.fabricId) return it.fabricId === ln.fabricId;
+      return false;
+    };
+
+    const byOrder = new Map<string, PendingConflict>();
+    for (const { order, item } of rows) {
+      const matched = lines.filter((ln) => matchesLine(item, ln));
+      if (matched.length === 0) continue;
+      let entry = byOrder.get(order.id);
+      if (!entry) {
+        entry = {
+          orderId: order.id,
+          code: order.code,
+          customerNameSnapshot: order.customerNameSnapshot,
+          items: [],
+        };
+        byOrder.set(order.id, entry);
+      }
+      entry.items.push({
+        fabricName: item.fabricName,
+        colorName: item.colorName,
+        requestedKg: Number(item.requestedKg),
+      });
+    }
+    return [...byOrder.values()];
   }
 
   private toDomain(

@@ -1,4 +1,5 @@
 import { eq, and, desc, ilike, or, sql, gte, lte } from "drizzle-orm";
+import { allocateDocumentNumber } from "../utils/documentNumbers.js";
 import type { DB } from "../orm/drizzle.js";
 import type {
   IVoucherRepository,
@@ -71,10 +72,17 @@ export class PostgresVoucherRepository implements IVoucherRepository {
 
   async create(
     input: CreateVoucherInput,
-    autoNumber: string,
     ctx: TenantContext,
   ): Promise<VoucherData> {
     return this.db.transaction(async (tx) => {
+      // H-NEW (forensic audit 2026-08-25, voucher numbering): allocate the
+      // document number INSIDE this transaction so a failure in the guards
+      // below (over-collection, cross-currency, cancelled-invoice, FK) does
+      // not burn a number. Allocation also stays atomic with the ledger
+      // double-entry inserts and the invoices.paid update, so a crash
+      // mid-insert rolls back the entire voucher including its number.
+      const autoNumber = await allocateDocumentNumber(tx, "voucher", ctx.tenantId);
+
       if (input.invoiceId) {
         // TX7 fix: lock the invoice row so concurrent voucher inserts serialize
         // and the remaining = total − active_vouchers − returns computation sees

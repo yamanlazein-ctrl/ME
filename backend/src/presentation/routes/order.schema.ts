@@ -51,5 +51,18 @@ export const listOrdersSchema = z.object({
   limit: z.coerce.number().int().min(1).max(1000).optional().default(20),
 });
 
+export const pendingConflictsSchema = z.object({
+  lines: z
+    .array(
+      z.object({
+        fabricId: z.string().uuid().nullable().optional(),
+        colorId: z.string().uuid().nullable().optional(),
+        quantityKg: z.coerce.number().positive(),
+      }),
+    )
+    .min(1)
+    .max(100),
+});
+
 export type CreateOrderInput = z.infer<typeof createOrderSchema>;
 export type UpdateOrderInput = z.infer<typeof updateOrderSchema>;

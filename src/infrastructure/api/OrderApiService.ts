@@ -5,6 +5,8 @@ import type {
   OrderFilter,
   ListOrdersResponse,
   FulfillOrderRequest,
+  PendingConflictLine,
+  PendingConflictsResponse,
 } from "@/contracts/orders";
 
 export class OrderApiService {
@@ -45,6 +47,15 @@ export class OrderApiService {
   async fulfill(id: string, invoiceId: string): Promise<OrderDTO> {
     const req: FulfillOrderRequest = { invoiceId };
     const res = await this.client.post<OrderDTO>(`/api/orders/${id}/fulfill`, req);
+    return res.data;
+  }
+
+  /** BUG-07 — informational: pending orders matching the lines about to be sold. */
+  async pendingConflicts(lines: PendingConflictLine[]): Promise<PendingConflictsResponse> {
+    const res = await this.client.post<PendingConflictsResponse>(
+      "/api/orders/pending-conflicts",
+      { lines },
+    );
     return res.data;
   }
 }

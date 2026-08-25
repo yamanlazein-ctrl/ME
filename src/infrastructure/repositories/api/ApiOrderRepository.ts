@@ -1,6 +1,11 @@
 import { Order, type OrderData } from "@/domain/entities/Order";
 import { TenantContext, UUID, type PaginatedResult } from "@/domain/types";
-import type { IOrderRepository, OrderFilter } from "@/application/ports/IOrderRepository";
+import type {
+  IOrderRepository,
+  OrderFilter,
+  PendingConflict,
+  PendingConflictLine,
+} from "@/application/ports/IOrderRepository";
 import type { CreateOrderInput, UpdateOrderInput } from "@/core/dtos/OrderDTO";
 import { OrderApiService } from "@/infrastructure/api";
 
@@ -55,5 +60,15 @@ export class ApiOrderRepository implements IOrderRepository {
   async fulfill(id: UUID, invoiceId: UUID, ctx: TenantContext): Promise<Order> {
     const dto = await this.api.fulfill(id, invoiceId);
     return Order.reconstitute(dto as unknown as OrderData);
+  }
+
+  /** BUG-07 — informational only: pending orders wanting the same fabric/color. */
+  async findPendingConflicts(
+    lines: PendingConflictLine[],
+    ctx: TenantContext,
+  ): Promise<PendingConflict[]> {
+    void ctx;
+    const res = await this.api.pendingConflicts(lines);
+    return res.data;
   }
 }

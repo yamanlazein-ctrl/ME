@@ -1,5 +1,6 @@
 import { eq, and, desc, ilike, or, ne, sql, inArray, gte, lte } from "drizzle-orm";
 import type { DB } from "../orm/drizzle.js";
+import { allocateDocumentNumber } from "../utils/documentNumbers.js";
 import type { IReturnRepository, ReturnFilter } from "../../application/ports/IReturnRepository.js";
 import { returns } from "../orm/schemas/return.table.js";
 import { returnLines } from "../orm/schemas/return-line.table.js";
@@ -83,10 +84,16 @@ export class PostgresReturnRepository implements IReturnRepository {
 
   async create(
     input: CreateReturnInput,
-    autoNumber: string,
     ctx: TenantContext,
   ): Promise<ReturnData> {
     return this.db.transaction(async (tx) => {
+      // H-NEW (forensic audit 2026-08-25, return numbering): allocate the
+      // document number INSIDE this transaction. The conservation guards
+      // below (BUG-01/H-1 quantity-vs-history, currency mismatch, invoice
+      // linkage) throw AFTER the old route-level allocation had already
+      // burned a number; now the rollback restores the sequence too.
+      const autoNumber = await allocateDocumentNumber(tx, "return", ctx.tenantId);
+
       const [row] = await tx
         .insert(returns)
         .values({

@@ -1,4 +1,4 @@
-import { db } from "../orm/drizzle.js";
+import { db, type Tx } from "../orm/drizzle.js";
 import { documentSequences } from "../orm/schemas/document-sequence.table.js";
 import { sql } from "drizzle-orm";
 
@@ -80,4 +80,67 @@ export async function nextDocumentNumber(entityType: string, tenantId: string): 
 
   const padded = String(row.lastNumber).padStart(width, "0");
   return `${prefix}-${year}-${padded}`;
+}
+
+/**
+ * In-transaction number allocation. Same atomic upsert as `nextDocumentNumber`,
+ * but runs against a caller-provided `Tx` so the sequence increment and the
+ * downstream insert share one transaction — if the downstream insert fails,
+ * the rollback undoes the sequence bump as well. This is the fix for the
+ * "failed save burns a number" pathology: a use-case that throws, a FK that
+ * violates, a stock guard that rejects — none of them leave a gap in the
+ * numbering because the increment was never committed.
+ *
+ * Race-free for the same reason as `nextDocumentNumber` (single
+ * `INSERT ... ON CONFLICT DO UPDATE ... RETURNING` statement, which Postgres
+ * serializes per-row), so concurrent callers in separate transactions still
+ * receive distinct, consecutive numbers.
+ */
+export async function allocateDocumentNumber(
+  tx: Tx,
+  entityType: string,
+  tenantId: string,
+): Promise<string> {
+  const { prefix, width } = resolveNumberFormat(entityType);
+  const year = new Date().getFullYear().toString();
+
+  const [row] = await tx
+    .insert(documentSequences)
+    .values({ tenantId, entityType, prefix, lastNumber: 1 })
+    .onConflictDoUpdate({
+      target: [documentSequences.tenantId, documentSequences.entityType, documentSequences.prefix],
+      set: { lastNumber: sql`${documentSequences.lastNumber} + 1` },
+    })
+    .returning({ lastNumber: documentSequences.lastNumber });
+
+  const padded = String(row.lastNumber).padStart(width, "0");
+  return `${prefix}-${year}-${padded}`;
+}
+
+/**
+ * Convenience wrapper: allocate a number inside the caller's transaction, then
+ * invoke `fn` with the allocated number. The callback runs in the SAME
+ * transaction, so any throw from `fn` rolls back the sequence increment.
+ *
+ * Use this when a single repository method needs both a new number and the
+ * insert that consumes it. For repositories whose insert logic is already
+ * a multi-statement transaction, prefer calling `allocateDocumentNumber`
+ * directly at the top of the existing `db.transaction(async (tx) => ...)`
+ * block.
+ */
+export async function withNumberedSequence<T>(
+  tx: Tx,
+  entityType: string,
+  tenantId: string,
+  fn: (number: string) => Promise<T>,
+): Promise<T> {
+  const number = await allocateDocumentNumber(tx, entityType, tenantId);
+  return await fn(number);
+}
+
+function resolveNumberFormat(entityType: string): { prefix: string; width: number } {
+  return {
+    prefix: PREFIXES[entityType] ?? entityType.toUpperCase(),
+    width: WIDTHS[entityType] ?? 4,
+  };
 }

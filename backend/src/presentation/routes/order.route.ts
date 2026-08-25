@@ -8,7 +8,7 @@ import { validateUuidParam } from "../../infrastructure/http/middleware/validate
 import { idempotency } from "../../infrastructure/http/middleware/idempotency-handler.middleware.js";
 import type { IOrderRepository } from "../../application/ports/IOrderRepository.js";
 import type { TenantContext } from "../../domain/types/index.js";
-import { createOrderSchema, updateOrderSchema, listOrdersSchema } from "./order.schema.js";
+import { createOrderSchema, updateOrderSchema, listOrdersSchema, pendingConflictsSchema } from "./order.schema.js";
 import * as uc from "../../application/use-cases/orders/orderUseCases.js";
 import { nextDocumentNumber } from "../../infrastructure/utils/documentNumbers.js";
 
@@ -95,6 +95,24 @@ export function registerOrderRoutes(
     }
     res.json(r.data);
   });
+
+  // BUG-07 — informational check: which pending customer orders want the same
+  // fabric/color the salesperson is about to sell? Read-only; never blocks.
+  router.post(
+    "/orders/pending-conflicts",
+    auth,
+    readGuard,
+    validateBody(pendingConflictsSchema),
+    async (req: Request, res: Response) => {
+      const { lines } = body<{ lines: Array<{ fabricId?: string; colorId?: string; quantityKg: number }> }>(req);
+      const r = await uc.findPendingConflictsUseCase(orderRepo, lines, ctx(req));
+      if (r.ok) {
+        res.json({ data: r.data });
+      } else {
+        res.status(500).json({ code: "INTERNAL", message: r.error });
+      }
+    },
+  );
 
   router.get(
     "/orders/:id",

@@ -10,13 +10,14 @@ export async function createReturnUseCase(
   repo: IReturnRepository,
   audit: IAuditRepository,
   input: CreateReturnInput,
-  autoNumber: string,
   ctx: TenantContext,
 ): Promise<Result<ReturnData>> {
   if (!input.lines?.length) return { ok: false, error: "يجب إضافة بند واحد على الأقل" };
   if (!input.partyId) return { ok: false, error: "الطرف مطلوب" };
   try {
-    const ret = await repo.create(input, autoNumber, ctx);
+    // Number allocated INSIDE repo.create's transaction — a failed
+    // conservation guard (BUG-01/H-1) no longer burns a number.
+    const ret = await repo.create(input, ctx);
     audit
       .create({
         tenantId: ctx.tenantId,

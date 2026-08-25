@@ -18,7 +18,9 @@ import { toast } from "sonner";
 import { printDocument } from "@/components/print/printPortal";
 import { InvoicePrintDocument } from "@/components/print/InvoicePrintDocument";
 import { useSettings } from "@/presentation/hooks/useSettings";
-import { useOrder, useFulfillOrder, matchRollsForItem } from "@/presentation/hooks/useOrders";
+import { useOrder, useFulfillOrder, matchRollsForItem, fetchPendingOrderConflicts } from "@/presentation/hooks/useOrders";
+import type { PendingConflict } from "@/application/ports/IOrderRepository";
+import { PendingOrderConflictDialog } from "@/components/invoices/PendingOrderConflictDialog";
 import { DocumentFooter } from "@/components/layout/DocumentFooter";
 import { useDocumentShortcuts } from "@/hooks/use-document-shortcuts";
 import { cn } from "@/lib/utils";
@@ -96,6 +98,13 @@ function SaleInvoicePage() {
   const [paid, setPaid] = useState<number | "">("");
   const [error, setError] = useState<string | null>(null);
   const [quickCustomer, setQuickCustomer] = useState(false);
+  // BUG-07 — interactive soft warning state: pending orders matching the lines
+  // about to be sold + the save request that is paused until the user chooses.
+  const [pendingConflicts, setPendingConflicts] = useState<PendingConflict[] | null>(null);
+  const pendingSaveRef = useRef<{ thenPrint: boolean; thenNew: boolean }>({
+    thenPrint: false,
+    thenNew: false,
+  });
 
   const fabricRefs = useRef<Record<string, HTMLInputElement | null>>({});
 
@@ -214,7 +223,7 @@ function SaleInvoicePage() {
     setTimeout(() => fabricRefs.current[newLine.id]?.focus(), 0);
   };
 
-  const save = async (thenPrint: boolean, thenNew = false) => {
+  const save = async (thenPrint: boolean, thenNew = false, skipConflictCheck = false) => {
     setError(null);
     if (!customerId) return setError("يرجى تحديد العميل.");
     if (!currency) return setError("اختر العملة (دولار $ أو ليرة سورية ل.س) قبل الحفظ.");
@@ -285,6 +294,31 @@ function SaleInvoicePage() {
       discountAmount: l.discountAmount,
       note: l.note,
     }));
+
+    // BUG-07 — interactive non-blocking warning (approved design): before the
+    // sale leaves the page, ask (best-effort) whether any of these quantities
+    // are recorded in a pending customer order. If so, PAUSE here and require
+    // a conscious choice via PendingOrderConflictDialog — "متابعة وبيع الكمية"
+    // resumes this exact save; "إلغاء الفاتورة" aborts and blanks the form.
+    // The check NEVER blocks on failure and never enforces a stock lock.
+    if (!skipConflictCheck) {
+      try {
+        const conflicts = await fetchPendingOrderConflicts(
+          valid.map((l) => ({
+            fabricId: l.fabricId || null,
+            colorId: l.colorId || null,
+            quantityKg: l.quantityKg,
+          })),
+        );
+        if (conflicts.length > 0) {
+          pendingSaveRef.current = { thenPrint, thenNew };
+          setPendingConflicts(conflicts);
+          return;
+        }
+      } catch {
+        // Informational only: an endpoint failure must never block saving.
+      }
+    }
 
     if (edit) {
       const res = await update.mutateAsync({
@@ -709,6 +743,22 @@ function SaleInvoicePage() {
         onCreated={(id) => {
           setCustomerId(id);
           setQuickCustomer(false);
+        }}
+      />
+      <PendingOrderConflictDialog
+        open={pendingConflicts !== null}
+        conflicts={(pendingConflicts ?? []).map((c) => ({
+          code: c.code,
+          customerNameSnapshot: c.customerNameSnapshot,
+          items: c.items,
+        }))}
+        onProceed={() => {
+          setPendingConflicts(null);
+          void save(pendingSaveRef.current.thenPrint, pendingSaveRef.current.thenNew, true);
+        }}
+        onCancel={() => {
+          setPendingConflicts(null);
+          resetForm();
         }}
       />
     </AppShell>

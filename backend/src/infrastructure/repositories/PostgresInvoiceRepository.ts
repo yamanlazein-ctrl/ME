@@ -1,4 +1,5 @@
 import { eq, and, ilike, or, sql, inArray, gte, lte } from "drizzle-orm";
+import { allocateDocumentNumber } from "../utils/documentNumbers.js";
 import type { DB } from "../orm/drizzle.js";
 import type {
   IInvoiceRepository,
@@ -127,15 +128,30 @@ export class PostgresInvoiceRepository implements IInvoiceRepository {
 
   async create(
     input: CreateInvoiceInput,
-    autoNumber: string,
     ctx: TenantContext,
   ): Promise<InvoiceData> {
-    const entity = Invoice.create(input, autoNumber);
-    const inv = entity.toData();
-
     const isSale = input.type === "sale";
+    // Entity-type key is derived from input.type so the same repository method
+    // can serve both entry and sale without the caller having to know which
+    // document-sequence row to bump. The allocation happens INSIDE the insert
+    // transaction below — see the H-NEW comment there.
+    const entityType = isSale ? "invoice" : "invoice_entry";
 
     return this.db.transaction(async (tx) => {
+      // H-NEW (forensic audit 2026-08-25, entry-invoice numbering): the
+      // document number is allocated inside THIS transaction rather than
+      // by the route handler before the transaction begins. If any guard
+      // below throws — party-kind mismatch, stock insufficient, color/
+      // fabric/currency mismatch, FK violation, check constraint — the
+      // transaction rolls back and the sequence increment is undone
+      // alongside the insert. A failed save therefore does NOT burn a
+      // number, closing the gap pathology that previously produced
+      // jumps like ENT-2026-0001 → ENT-2026-0005 on a retry.
+      const autoNumber = await allocateDocumentNumber(tx, entityType, ctx.tenantId);
+
+      const entity = Invoice.create(input, autoNumber);
+      const inv = entity.toData();
+
       // H3 (party-kind guard): an entry invoice must target a supplier and a
       // sale invoice must target a customer. Without this check a sale posted
       // against a supplier party mixes AR/AP legs in one account.
@@ -179,32 +195,9 @@ export class PostgresInvoiceRepository implements IInvoiceRepository {
         baseCredit: computeBaseEquivalent(credit, invoiceCurrency, fxRate),
       });
       if (isSale) {
-        // BUG-17: a roll reserved by an open order must not be sold by a
-        // different invoice. The only legitimate buyer of a `reserved` roll is
-        // the order that pinned it — i.e. this invoice carries that orderId.
-        let reservationOwners: Set<string> | null = null;
-        if (input.orderId) {
-          const ownerRows = await tx
-            .select({ rollId: orderItems.rollId })
-            .from(orderItems)
-            .innerJoin(
-              orders,
-              and(
-                eq(orderItems.orderId, orders.id),
-                eq(orders.tenantId, ctx.tenantId),
-                inArray(orders.status, ["open", "available", "partially_available"]),
-              ),
-            )
-            .where(
-              and(
-                eq(orderItems.orderId, input.orderId as string),
-                eq(orderItems.tenantId, ctx.tenantId),
-              ),
-            );
-          reservationOwners = new Set(
-            ownerRows.map((r) => r.rollId).filter((r): r is string => Boolean(r)),
-          );
-        }
+        // BUG-07 — the old BUG-17 reservation guard is REMOVED by design:
+        // orders no longer lock rolls, so any in_stock roll can be sold on
+        // any invoice regardless of pending customer orders.
         for (const line of input.lines) {
           const [r] = await tx
             .select({
@@ -241,11 +234,6 @@ export class PostgresInvoiceRepository implements IInvoiceRepository {
             .limit(1);
           if (!rollColor || line.fabricId !== rollColor.fabricId) {
             throw new Error(`القماش المحدد للبند لا يطابق قماش لون اللفافة ${line.rollId} الفعلي`);
-          }
-          if (r.status === "reserved" && !(reservationOwners?.has(line.rollId) ?? false)) {
-            throw new Error(
-              `اللفافة ${line.rollId} محجوزة لطلب آخر ولا يمكن بيعها في هذه الفاتورة`,
-            );
           }
           if (r.status === "exhausted") {
             throw new Error(`اللفافة ${line.rollId} نفدت ولا يمكن بيعها`);

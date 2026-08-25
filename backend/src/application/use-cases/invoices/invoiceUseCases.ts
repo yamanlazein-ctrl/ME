@@ -88,13 +88,15 @@ export async function createInvoiceUseCase(
   repo: IInvoiceRepository,
   audit: IAuditRepository,
   input: CreateInvoiceInput,
-  autoNumber: string,
   ctx: TenantContext,
 ): Promise<Result<InvoiceData>> {
   if (!input.lines?.length) return { ok: false, error: "يجب إضافة بند واحد على الأقل" };
   if (!input.partyId) return { ok: false, error: "الطرف مطلوب" };
   try {
-    const invoice = await repo.create(input, autoNumber, ctx);
+    // Document number is allocated INSIDE repo.create (same transaction as
+    // the insert). A failed save rolls back the sequence increment, so
+    // a validation error or FK violation does not burn a number.
+    const invoice = await repo.create(input, ctx);
     audit
       .create({
         tenantId: ctx.tenantId,

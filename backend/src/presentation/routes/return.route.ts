@@ -11,7 +11,6 @@ import type { IAuditRepository } from "../../application/ports/IAuditRepository.
 import type { TenantContext } from "../../domain/types/index.js";
 import { createReturnSchema, listReturnsSchema } from "./return.schema.js";
 import * as uc from "../../application/use-cases/returns/returnUseCases.js";
-import { nextDocumentNumber } from "../../infrastructure/utils/documentNumbers.js";
 
 export function registerReturnRoutes(
   router: Router,
@@ -36,7 +35,6 @@ export function registerReturnRoutes(
         returnRepo,
         auditRepo,
         body(req),
-        await nextDocumentNumber("return", ctx(req).tenantId),
         ctx(req),
       );
       if (r.ok) {

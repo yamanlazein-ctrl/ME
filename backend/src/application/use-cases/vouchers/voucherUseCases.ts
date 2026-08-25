@@ -10,14 +10,17 @@ export async function createVoucherUseCase(
   repo: IVoucherRepository,
   audit: IAuditRepository,
   input: CreateVoucherInput,
-  autoNumber: string,
   ctx: TenantContext,
 ): Promise<Result<VoucherData>> {
   if (!input.amount || input.amount <= 0)
     return { ok: false, error: "المبلغ يجب أن يكون أكبر من صفر" };
   if (!input.partyId) return { ok: false, error: "الطرف مطلوب" };
   try {
-    const voucher = await repo.create(input, autoNumber, ctx);
+    // Document number is allocated INSIDE repo.create (same transaction as
+    // the insert and the ledger double-entry). A failed guard — over-
+    // collection, cross-currency, cancelled invoice — rolls back the
+    // sequence increment too, so no number is burned.
+    const voucher = await repo.create(input, ctx);
     audit
       .create({
         tenantId: ctx.tenantId,
@@ -41,7 +44,14 @@ export async function createVoucherUseCase(
     // F4 (audit fix): raw JS errors (e.g. ReferenceError on a TDZ) are not actionable
     // for the user. Log the full error server-side and return a generic Arabic message.
     const err = e instanceof Error ? e : new Error(String(e));
-    logAuditError(err, { module: "vouchers", action: "create", entityId: autoNumber, tenantId: ctx.tenantId });
+    logAuditError(err, {
+      module: "vouchers",
+      action: "create",
+      // No voucher id exists yet on failure (numbering happens inside
+      // repo.create's transaction); fall back to the linked invoice id.
+      entityId: input.invoiceId ?? "unknown",
+      tenantId: ctx.tenantId,
+    });
     return { ok: false, error: "تعذّر إنشاء السند بسبب خطأ داخلي. أعد المحاولة، وإذا تكرر الأمر راجع مسؤول النظام." };
   }
 }

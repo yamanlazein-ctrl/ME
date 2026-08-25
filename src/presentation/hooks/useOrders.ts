@@ -4,6 +4,7 @@ import { buildTenantContext } from "@/infrastructure/di/auth-context";
 import { isOk } from "@/core/result";
 import { toast } from "sonner";
 import type { OrderFilter } from "@/application/ports/IOrderRepository";
+import type { PendingConflict } from "@/application/ports/IOrderRepository";
 import type { CreateOrderInput, UpdateOrderInput } from "@/core/dtos/OrderDTO";
 import type { Order } from "@/domain/entities/Order";
 import { UUID } from "@/domain/types";
@@ -174,3 +175,17 @@ export function orderAvailability(o: {
   }
   return anyMatch ? (allFull ? "full" : "partial") : "none";
 }
+
+/* ── BUG-07 — informational soft-warning check ──────────────────────────── */
+
+/**
+ * Ask the backend which pending customer orders want the same fabric/color as
+ * the sale lines about to be saved. Purely informational — callers must never
+ * block a sale on the result (and failures here are swallowed by the caller).
+ */
+export async function fetchPendingOrderConflicts(
+  lines: Array<{ fabricId?: string | null; colorId?: string | null; quantityKg: number }>,
+): Promise<PendingConflict[]> {
+  return container.orders.repository.findPendingConflicts(lines, ctx);
+}
+
