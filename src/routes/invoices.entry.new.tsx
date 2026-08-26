@@ -112,6 +112,9 @@ function EntryInvoicePage() {
   const [supplierId, setSupplierId] = useState("");
   const [currency, setCurrency] = useState<Currency>("SYP");
   const [date, setDate] = useState<string>(new Date().toISOString().slice(0, 10));
+  // FX rule (base currency = USD): a non-USD entry invoice MUST carry the
+  // frozen exchange rate (units of SYP per 1 USD) captured at creation time.
+  const [exchangeRate, setExchangeRate] = useState<number | "">("");
   const settingsSnap = useSettings();
   const enabledPaymentMethods = settingsSnap.paymentMethods.filter((m) => m.enabled);
   const [paymentMethod, setPaymentMethod] = useState<string>(
@@ -164,6 +167,10 @@ function EntryInvoicePage() {
     setSupplierId(editInvoice.partyId);
     setCurrency(editInvoice.currency as Currency);
     setDate(editInvoice.date);
+    // QA fix (Part 2): populate the frozen exchange rate from the API so the
+    // user can view and update it on an existing invoice.
+    if (editInvoice.exchangeRate && Number(editInvoice.exchangeRate) > 0)
+      setExchangeRate(Number(editInvoice.exchangeRate));
     setDiscount(editInvoice.discount ?? "");
     setTax(editInvoice.tax ?? "");
 
@@ -573,6 +580,16 @@ function EntryInvoicePage() {
       paymentMethod && `طريقة الدفع: ${paymentMethod}`,
     ].filter(Boolean);
 
+    // FX rule: a non-USD invoice must carry a positive frozen exchange rate.
+    // The backend fails closed on this too — this early guard gives instant,
+    // field-level feedback instead of a round-trip error.
+    if (!isUSD && !(Number(exchangeRate) > 0)) {
+      const msg = "سعر الصرف مطلوب لكل عملية ليست بالدولار (عملة الأساس USD)";
+      setError(msg);
+      showError(msg);
+      return;
+    }
+
     const paidAmount = paid === "" ? 0 : Number(paid);
     // Guard against overpaying — show a clear Arabic error instead of letting
     // the backend reject with a confusing "Paid amount exceeds invoice total".
@@ -594,6 +611,12 @@ function EntryInvoicePage() {
           shipping: Number(shipping) || 0,
           notes: advParts.join(" • "),
           lines: invLines,
+          // QA fix (Part 2): forward the (possibly updated) frozen FX rate so
+          // the backend re-captures base_total / base_paid and re-values the
+          // ledger legs with the same division rule used at creation time.
+          ...(currency === "USD"
+            ? {}
+            : { exchangeRate: Number(exchangeRate) > 0 ? Number(exchangeRate) : undefined }),
         },
       });
       if (!res.ok) {
@@ -634,7 +657,12 @@ function EntryInvoicePage() {
       notes: advParts.join(" • "),
       paid: paidAmount > 0 ? paidAmount : undefined,
       paymentMethod: paidAmount > 0 ? mapPaymentMethod(paymentMethod) : undefined,
-    });
+      // FX rule (frozen at creation). The container's use case forwards this
+      // to Postgres unchanged; the Zod schema on the backend accepts it.
+      ...(currency === "USD"
+        ? {}
+        : { exchangeRate: Number(exchangeRate) > 0 ? Number(exchangeRate) : undefined }),
+    } as unknown as Parameters<typeof create.mutateAsync>[0]);
 
     if (!res.ok) {
       const err = (res as any).error;
@@ -727,6 +755,30 @@ function EntryInvoicePage() {
                   <SelectItem value="USD">$ USD</SelectItem>
                 </SelectContent>
               </Select>
+            </HeaderField>
+            <HeaderField label="سعر الصرف (ل.س / $)">
+              {currency === "USD" ? (
+                <Input
+                  value="1"
+                  readOnly
+                  disabled
+                  dir="ltr"
+                  className="!h-9 bg-muted/40 text-muted-foreground"
+                />
+              ) : (
+                <Input
+                  type="number"
+                  min={1}
+                  step="any"
+                  value={exchangeRate}
+                  onChange={(e) =>
+                    setExchangeRate(e.target.value === "" ? "" : Number(e.target.value))
+                  }
+                  placeholder="مثلاً 15000"
+                  dir="ltr"
+                  className="!h-9"
+                />
+              )}
             </HeaderField>
             <HeaderField label="الدفع">
               <Select value={paymentMethod} onValueChange={(v) => setPaymentMethod(v)}>
