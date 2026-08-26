@@ -209,6 +209,10 @@ export interface CreateInvoiceInput {
  *  wholesale and MUST reference existing rolls. */
 export interface UpdateInvoiceInput {
   date: string;
+  /** Optional frozen FX rate (units of `currency` per 1 USD), re-captured on
+   *  edit. Omitted → the repository falls back to the rate stored on the invoice;
+   *  USD documents are always 1. */
+  exchangeRate?: number | null;
   lines: CreateInvoiceLineInput[];
   discount?: number;
   tax?: number;

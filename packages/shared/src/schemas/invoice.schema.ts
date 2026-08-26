@@ -1,4 +1,4 @@
-﻿import { z } from "zod";
+import { z } from "zod";
 import { is2dp, MAX_2DP_MESSAGE, round2dp } from "../precision.js";
 import { exchangeRateSchema } from "../fx.js";
 
@@ -68,6 +68,10 @@ export const updateInvoiceSchema = z
   .object({
     date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
     lines: z.array(invoiceLineSchema).min(1).max(100),
+    // FX re-capture on edit (mirrors create): optional strictly-positive rate.
+    // Omitted → the repository falls back to the frozen rate already stored on
+    // the invoice (USD is always 1). Never silently re-values a historical doc.
+    exchangeRate: exchangeRateSchema,
     discount: z.number().min(0, "الخصم لا يمكن أن يكون سالباً").optional(),
     tax: z.number().min(0, "الضريبة لا يمكن أن تكون سالبة").optional(),
     shipping: z.number().min(0, "الشحن لا يمكن أن يكون سالباً").optional(),
