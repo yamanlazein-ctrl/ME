@@ -33,6 +33,10 @@ export interface ReturnDTO {
   lines: ReturnLineDTO[];
   reason: ReturnReason;
   currency: string;
+  /** Units of `currency` per 1 USD — frozen at creation. */
+  exchangeRate?: number | null;
+  /** USD equivalent of the return total (total / exchangeRate). */
+  baseTotal?: number | null;
   notesPrint?: string | null;
   notesInternal?: string | null;
   status: ReturnStatus;

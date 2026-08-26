@@ -564,7 +564,15 @@ export class PostgresReturnRepository implements IReturnRepository {
         .where(eq(returns.id, row.id));
 
       const lines = await tx.select().from(returnLines).where(eq(returnLines.returnId, row.id));
-      return this.toDomain(row, lines);
+      // BUG-02 fix: the tx.update(...) above persists exchange_rate/base_total in
+      // PG, but the in-memory `row` captured before the update still holds NULL —
+      // re-read the committed row so the API response carries the real frozen FX.
+      const [updatedRow] = await tx
+        .select()
+        .from(returns)
+        .where(eq(returns.id, row.id))
+        .limit(1);
+      return this.toDomain(updatedRow ?? row, lines);
     });
   }
 
