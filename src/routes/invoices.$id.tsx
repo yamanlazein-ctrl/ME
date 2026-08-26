@@ -113,6 +113,18 @@ function InvoiceDetailPage() {
           <MetaCell label="النوع" value={TYPE_LABEL[inv.type]} />
           <MetaCell label="التاريخ" value={inv.date} mono />
           <MetaCell label="العملة" value={inv.currency === "USD" ? "دولار أمريكي" : "ليرة سورية"} />
+          {inv.currency !== "USD" && Number(inv.exchangeRate) > 1 ? (
+            <>
+              <MetaCell
+                label="سعر الصرف"
+                value={`${formatNumber(Number(inv.exchangeRate))} · بتاريخ ${inv.date}`}
+              />
+              <MetaCell
+                label="المعادل بالدولار"
+                value={`$${formatNumber(Number(inv.baseTotal) || 0)}`}
+              />
+            </>
+          ) : null}
         </div>
         <div className="mt-4 flex items-center justify-between rounded-lg border border-border bg-secondary/30 px-4 py-3">
           <div className="min-w-0">

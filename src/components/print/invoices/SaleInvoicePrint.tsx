@@ -245,11 +245,26 @@ export function SaleInvoicePrint({ invoice, totalPages, pageNumber }: SaleInvoic
       totalPages={totalPages}
       typeBadge={vis.showTypeBadge ? "SALE" : undefined}
       hideFooter={!vis.showFooter}
-      extraMeta={
-        vis.showPaymentMethod && paymentMethod
+      extraMeta={[
+        // QA fix (Part 2): show the frozen FX rate on printed paper when the
+        // document currency is NOT the base currency (USD) and a real rate
+        // (> 1) was captured at creation time.
+        ...(inv.currency !== "USD" && Number(inv.exchangeRate) > 1
+          ? [
+              {
+                label: "سعر الصرف",
+                value: `${formatNumber(Number(inv.exchangeRate))} (بتاريخ ${inv.date})`,
+              },
+              {
+                label: "المعادل بالدولار",
+                value: `$${formatNumber(Number(inv.baseTotal) || 0)}`,
+              },
+            ]
+          : []),
+        ...(vis.showPaymentMethod && paymentMethod
           ? [{ label: "طريقة الدفع", value: String(paymentMethod) }]
-          : undefined
-      }
+          : []),
+      ]}
     >
       <PrintTable columns={columns} rows={rows} />
     </PrintDocument>
