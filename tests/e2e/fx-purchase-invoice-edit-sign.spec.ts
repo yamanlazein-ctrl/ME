@@ -5,14 +5,13 @@ import type { Browser } from "@playwright/test";
  * Purchase-invoice EDIT sign consistency (real UI only).
  *
  * Regression for the create-vs-edit ledger sign divergence: the create path
- * writes the invoice party leg as DEBIT for BOTH sale and purchase (C-8:
- * debit = obligation increases), but the edit path (invoiceLedgerLegs) used
- * to CREDIT the supplier for purchase invoices. Editing a purchase invoice
+ * writes the purchase-invoice party leg as CREDIT (AP), but the edit path
+ * (invoiceLedgerLegs) used to DEBIT it. Editing a purchase invoice
  * therefore flipped the supplier balance from +T to -T.
  *
  * This spec drives the real React UI: create a purchase invoice, edit it
  * twice, and assert the supplier statement stays positive and correct after
- * every edit (active purchase_invoice leg is always debit, never credit).
+ * every edit (active purchase_invoice leg is always credit, never debit).
  */
 
 const FRONTEND = process.env.PLAYWRIGHT_FRONTEND_URL ?? "http://localhost:5173";
@@ -61,7 +60,7 @@ test.describe.serial("FX purchase-invoice edit sign", () => {
     await browser?.close();
   });
 
-  test("edit preserves DEBIT party leg (create → edit → edit stays positive)", async () => {
+  test("edit preserves CREDIT party leg (create → edit → edit stays positive)", async () => {
     // ── create purchase invoice: 100kg @ 1000 = 100,000 ──────────────────────
     await page.goto(`${FRONTEND}/invoices/entry/new`, { waitUntil: "domcontentloaded" });
     await sleep(3500);
@@ -108,11 +107,11 @@ test.describe.serial("FX purchase-invoice edit sign", () => {
     const activeLeg = (stmt: any) =>
       stmt.entries.find((e: any) => e.type === "purchase_invoice" && e.status === "active");
 
-    // After create: +100,000, debit.
+    // After create: +100,000, credit.
     const stmt1 = await openStatement(page);
     expect(stmt1.finalBalance).toBe(100000);
-    expect(activeLeg(stmt1).debit).toBe(100000);
-    expect(activeLeg(stmt1).credit).toBe(0);
+    expect(activeLeg(stmt1).debit).toBe(0);
+    expect(activeLeg(stmt1).credit).toBe(100000);
 
     // ── edit #1: 100kg → 150kg = 150,000 ──────────────────────────────────────
     await page.goto(`${FRONTEND}/invoices/entry/new?edit=${state.invoiceId}`, {
@@ -132,8 +131,8 @@ test.describe.serial("FX purchase-invoice edit sign", () => {
 
     const stmt2 = await openStatement(page);
     expect(stmt2.finalBalance).toBe(150000); // stays positive — not flipped to -150,000
-    expect(activeLeg(stmt2).debit).toBe(150000);
-    expect(activeLeg(stmt2).credit).toBe(0);
+    expect(activeLeg(stmt2).debit).toBe(0);
+    expect(activeLeg(stmt2).credit).toBe(150000);
 
     // ── edit #2: 150kg → 80kg = 80,000 ────────────────────────────────────────
     await page.goto(`${FRONTEND}/invoices/entry/new?edit=${state.invoiceId}`, {
@@ -153,7 +152,7 @@ test.describe.serial("FX purchase-invoice edit sign", () => {
 
     const stmt3 = await openStatement(page);
     expect(stmt3.finalBalance).toBe(80000); // stays positive through multiple edits
-    expect(activeLeg(stmt3).debit).toBe(80000);
-    expect(activeLeg(stmt3).credit).toBe(0);
+    expect(activeLeg(stmt3).debit).toBe(0);
+    expect(activeLeg(stmt3).credit).toBe(80000);
   });
 });

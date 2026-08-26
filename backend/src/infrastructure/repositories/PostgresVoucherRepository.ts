@@ -15,6 +15,7 @@ import {
   type VoucherData,
   type CreateVoucherInput,
 } from "../../domain/entities/Voucher.js";
+import { BASE_CURRENCY, computeBaseEquivalent, isValidFxRate, FX_REQUIRED_MESSAGE } from "@erp/shared";
 import type { TenantContext, PaginatedResult } from "../../domain/types/index.js";
 
 export class PostgresVoucherRepository implements IVoucherRepository {
@@ -146,6 +147,26 @@ export class PostgresVoucherRepository implements IVoucherRepository {
         }
       }
 
+      // FX capture (base currency = USD, fx.ts rule). A non-USD voucher without a
+      // valid rate fails closed so the ledger base-equivalent stays convertible and
+      // balanced — mirroring the invoice repository's create/update guard. USD is 1.
+      const voucherCurrency = input.currency ?? "SYP";
+      const fxRate =
+        voucherCurrency === BASE_CURRENCY
+          ? 1
+          : isValidFxRate(input.exchangeRate)
+            ? input.exchangeRate!
+            : null;
+      if (voucherCurrency !== BASE_CURRENCY && !isValidFxRate(fxRate)) {
+        throw new Error(FX_REQUIRED_MESSAGE);
+      }
+      const voucherBaseAmount = computeBaseEquivalent(input.amount, voucherCurrency, fxRate);
+      const legFx = (debit: number, credit: number) => ({
+        exchangeRate: fxRate,
+        baseDebit: computeBaseEquivalent(debit, voucherCurrency, fxRate),
+        baseCredit: computeBaseEquivalent(credit, voucherCurrency, fxRate),
+      });
+
       const [row] = await tx
         .insert(vouchers)
         .values({
@@ -157,7 +178,9 @@ export class PostgresVoucherRepository implements IVoucherRepository {
           partyKind: input.partyKind,
           invoiceId: input.invoiceId ?? null,
           amount: input.amount,
-          currency: input.currency ?? "SYP",
+          currency: voucherCurrency,
+          exchangeRate: fxRate,
+          baseAmount: voucherBaseAmount,
           method: input.method,
           notesPrint: input.notesPrint,
           notesInternal: input.notesInternal,
@@ -165,12 +188,10 @@ export class PostgresVoucherRepository implements IVoucherRepository {
         })
         .returning();
 
-      // Write the ledger entry atomically with the voucher — mirrors
-      // PostgresInvoiceRepository. Uniform party convention (debit − credit,
-      // both kinds — see PostgresStatementRepository fix C-8): a receipt
-      // CREDITS the customer (their debt shrinks), a payment DEBITS the
-      // supplier (what we owe shrinks). The old credit-on-payment re-inflated
-      // supplier debt instead of settling it.
+      // Standard double-entry. Party leg mirrors the cash leg so Σdebit=Σcredit:
+      //   receipt_in (customer pays) → Cr party (AR decreases) / Dr cash (received)
+      //   payment_out (we pay supplier) → Dr party (AP decreases) / Cr cash (paid out)
+      // Supplier balance = credit − debit, so Dr payment reduces what we owe.
       const isPayment = input.kind === "payment";
       const refType = isPayment ? "payment_out" : "receipt_in";
       const cashImpact = input.method === "cash" ? (isPayment ? "out" : "in") : "none";
@@ -178,13 +199,14 @@ export class PostgresVoucherRepository implements IVoucherRepository {
       // cashImpact so the cashbox still reads it).
       await tx.insert(ledgerEntries).values([
         {
+          ...legFx(isPayment ? input.amount : 0, isPayment ? 0 : input.amount),
           tenantId: ctx.tenantId,
           partyId: input.partyId,
           date: input.date,
           type: refType,
           debit: isPayment ? input.amount : 0,
           credit: isPayment ? 0 : input.amount,
-          currency: input.currency ?? "SYP",
+          currency: voucherCurrency,
           cashImpact: "none",
           referenceType: refType,
           referenceId: row.id,
@@ -193,13 +215,18 @@ export class PostgresVoucherRepository implements IVoucherRepository {
           createdBy: ctx.userId,
         },
         {
+          ...legFx(isPayment ? 0 : input.amount, isPayment ? input.amount : 0),
           tenantId: ctx.tenantId,
           partyId: null,
           date: input.date,
           type: "cash",
+          // Cash leg mirrors the party leg so Σdebit=Σcredit within the same
+          // currency. cashImpact carries the direction (in for receipt, out
+          // for payment) so the cashbox/derived balances remain correct
+          // regardless of which raw side the value lands on.
           debit: isPayment ? 0 : input.amount,
           credit: isPayment ? input.amount : 0,
-          currency: input.currency ?? "SYP",
+          currency: voucherCurrency,
           cashImpact,
           referenceType: refType,
           referenceId: row.id,
@@ -292,6 +319,8 @@ export class PostgresVoucherRepository implements IVoucherRepository {
       invoiceId: n(row.invoiceId),
       amount: row.amount,
       currency: row.currency,
+      exchangeRate: row.exchangeRate ?? undefined,
+      baseAmount: row.baseAmount ?? undefined,
       method: row.method as VoucherData["method"],
       status: row.status as VoucherData["status"],
       notesPrint: n(row.notesPrint),

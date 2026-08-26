@@ -427,22 +427,22 @@ export class PostgresReturnRepository implements IReturnRepository {
       });
       const legs: (typeof ledgerEntries.$inferInsert)[] = [];
       if (isEntryReturn) {
-        // BUG-03 fix — a purchase return DECREASES the supplier balance
-        // (balance = Σ(debit − credit); credit reduces what we owe), matching
-        // the sale-return party leg and the C-8 "voucher/return CREDIT the
-        // party" convention:
-        //   Cr party T       (supplier balance DECREASES)
-        //   Dr inventory T   (goods come back onto the books; balances ΣD = ΣC = T)
+        // Standard double-entry (revert of the C-8/BUG-3 supplier "uniform
+        // debit" convention): a purchase return DEBITS the supplier (AP
+        // decreases) and CREDITS inventory (goods leave the books). Supplier
+        // balance = credit − debit, so Dr reduces what we owe.
+        //   Dr party T       (supplier balance DECREASES)
+        //   Cr inventory T   (goods leave the books; balances ΣD = ΣC = T)
         if (saleTotal > 0) {
           legs.push(
             {
-              ...legFx(0, saleTotal),
+              ...legFx(saleTotal, 0),
               tenantId: ctx.tenantId,
               partyId: input.partyId,
               date: input.date,
               type: returnRefType,
-              debit: 0,
-              credit: saleTotal,
+              debit: saleTotal,
+              credit: 0,
               currency: input.currency ?? "SYP",
               cashImpact: "none",
               referenceType: returnRefType,
@@ -452,19 +452,19 @@ export class PostgresReturnRepository implements IReturnRepository {
               createdBy: ctx.userId,
             },
             {
-              ...legFx(saleTotal, 0),
+              ...legFx(0, saleTotal),
               tenantId: ctx.tenantId,
               partyId: null,
               date: input.date,
               type: "inventory_asset",
-              debit: saleTotal,
-              credit: 0,
+              debit: 0,
+              credit: saleTotal,
               currency: input.currency ?? "SYP",
               cashImpact: "none",
               referenceType: returnRefType,
               referenceId: row.id,
               referenceNumber: autoNumber,
-              description: `Inventory reinstated ${autoNumber}`,
+              description: `Inventory returned ${autoNumber}`,
               createdBy: ctx.userId,
             },
           );

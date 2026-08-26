@@ -471,20 +471,18 @@ export class PostgresInvoiceRepository implements IInvoiceRepository {
       const currency = invoiceCurrency;
       const legs: (typeof ledgerEntries.$inferInsert)[] = [
         {
-          ...legFx(inv.total, 0),
+          ...legFx(isSale ? inv.total : 0, isSale ? 0 : inv.total),
           tenantId: ctx.tenantId,
           partyId: input.partyId,
           date: input.date,
           type: invoiceType,
-          // D-003 / C-8 uniform convention: invoice party leg is ALWAYS
-          // debit=total (increases the party's balance) for BOTH sale
-          // (customer owed us) and purchase (we owe supplier). The earlier
-          // inversion — credit for purchase — is the live bug NEW-01.
-          // (legFx(inv.total, 0) keeps base_debit aligned with the raw
-          // debit — the old legFx(0, total) for purchase wrote the USD
-          // equivalent into base_credit, inverting the base columns.)
-          debit: inv.total,
-          credit: 0,
+          // Standard double-entry (Dr inventory / Cr AP for purchases):
+          //   sale     → Dr party (customer AR: they owe us)
+          //   purchase → Cr party (supplier AP: we owe them)
+          // Party balance: customer = debit − credit, supplier = credit − debit.
+          // legFx keeps base_debit/base_credit aligned with the raw columns.
+          debit: isSale ? inv.total : 0,
+          credit: isSale ? 0 : inv.total,
           currency,
           cashImpact: "none",
           referenceType: invoiceType,
@@ -549,7 +547,8 @@ export class PostgresInvoiceRepository implements IInvoiceRepository {
           });
         }
       } else {
-        // Purchase invoice — Dr inventory (asset increases) / Cr party (AP increases)
+        // Purchase invoice — Dr inventory (asset increases) / Cr party (AP increases).
+        // Σdebit = Σcredit = total (balanced double-entry).
         legs.push({
           ...legFx(inv.total, 0),
           tenantId: ctx.tenantId,
@@ -1040,19 +1039,17 @@ export class PostgresInvoiceRepository implements IInvoiceRepository {
     });
     const legs: (typeof ledgerEntries.$inferInsert)[] = [
       {
-        ...legFx(args.total, 0),
+        ...legFx(args.isSale ? args.total : 0, args.isSale ? 0 : args.total),
         tenantId: args.tenantId,
         partyId: args.partyId,
         date: args.date,
         type: invoiceType,
-        // C-8 uniformity — must match the create path: the invoice party leg
-        // is ALWAYS debit for both sale (customer owes us) and purchase (we
-        // owe supplier); debit = obligation increases. The old conditional
-        // (debit: isSale ? total : 0, credit: isSale ? 0 : total) credited the
-        // supplier on every purchase-invoice edit, flipping the balance
-        // negative (create wrote +T, edit wrote −T).
-        debit: args.total,
-        credit: 0,
+        // Standard double-entry (matches the create path and the supplier
+        // "credit = owed" statement convention): sale → Dr party (AR),
+        // purchase → Cr party (AP). Create and edit must agree so an edit
+        // never flips the party's balance direction.
+        debit: args.isSale ? args.total : 0,
+        credit: args.isSale ? 0 : args.total,
         currency: args.currency,
         cashImpact: "none",
         referenceType: invoiceType,

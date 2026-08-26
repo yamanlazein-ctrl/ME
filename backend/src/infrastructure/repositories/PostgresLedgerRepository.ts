@@ -9,6 +9,7 @@ import { ledgerEntries } from "../orm/schemas/ledger-entry.table.js";
 import { vouchers } from "../orm/schemas/voucher.table.js";
 import { returns } from "../orm/schemas/return.table.js";
 import { orders } from "../orm/schemas/order.table.js";
+import { parties } from "../orm/schemas/party.table.js";
 import {
   LedgerEntry,
   type LedgerEntryData,
@@ -226,7 +227,8 @@ export class PostgresLedgerRepository implements ILedgerRepository {
 
     const d = Number(rows[0]?.debit ?? 0);
     const c = Number(rows[0]?.credit ?? 0);
-    return { partyId, totalDebit: d, totalCredit: c, balance: d - c };
+    // Standard sign: customer (AR) = debit − credit; supplier (AP) = credit − debit.
+    return { partyId, totalDebit: d, totalCredit: c, balance: (await this.partyIsSupplier(partyId, ctx)) ? c - d : d - c };
   }
 
   async getBalanceByDate(
@@ -253,7 +255,17 @@ export class PostgresLedgerRepository implements ILedgerRepository {
 
     const d = Number(rows[0]?.debit ?? 0);
     const c = Number(rows[0]?.credit ?? 0);
-    return { partyId, totalDebit: d, totalCredit: c, balance: d - c };
+    return { partyId, totalDebit: d, totalCredit: c, balance: (await this.partyIsSupplier(partyId, ctx)) ? c - d : d - c };
+  }
+
+  /** Resolve the party kind to pick the correct sign for the balance. */
+  private async partyIsSupplier(partyId: UUID, ctx: TenantContext): Promise<boolean> {
+    const [party] = await this.db
+      .select({ kind: parties.kind })
+      .from(parties)
+      .where(and(eq(parties.id, partyId), eq(parties.tenantId, ctx.tenantId)))
+      .limit(1);
+    return party?.kind === "supplier";
   }
 
   async getCashMovementsOn(

@@ -11,7 +11,7 @@ import { invoices } from "../orm/schemas/invoice.table.js";
 import { vouchers } from "../orm/schemas/voucher.table.js";
 import { Party, type PartyData } from "../../domain/entities/Party.js";
 import type { TenantContext, PaginatedResult } from "../../domain/types/index.js";
-import { nextDocumentNumber } from "../utils/documentNumbers.js";
+import { allocateDocumentNumber } from "../utils/documentNumbers.js";
 
 export class PostgresPartyRepository implements IPartyRepository {
   constructor(private readonly db: DB) {}
@@ -80,13 +80,20 @@ export class PostgresPartyRepository implements IPartyRepository {
   }
 
   async create(data: CreatePartyData, ctx: TenantContext): Promise<PartyData> {
-    const code =
-      data.code?.trim() ||
-      (await nextDocumentNumber(data.kind === "supplier" ? "supplier" : "customer", ctx.tenantId));
     const openingBalance = data.openingBalance ?? 0;
     const currency = data.currency ?? "SYP";
 
     return this.db.transaction(async (tx) => {
+      // H-NEW: explicit client codes pass through; auto-codes allocate inside
+      // this transaction so an insert/ledger failure rolls back the counter.
+      const code =
+        data.code?.trim() ||
+        (await allocateDocumentNumber(
+          tx,
+          data.kind === "supplier" ? "supplier" : "customer",
+          ctx.tenantId,
+        ));
+
       const [row] = await tx
         .insert(parties)
         .values({
@@ -121,43 +128,37 @@ export class PostgresPartyRepository implements IPartyRepository {
         .returning();
 
       // Record the opening balance as a ledger entry so it is reflected in the
-      // party statement and balance.
-      //
-      // Fix C-8 (forensic audit 2026-08-15, verified by hand across 5
-      // scenarios before touching this code): this used to flip
-      // debit/credit by isCustomer ("customer's opening balance is a
-      // DEBIT, a supplier's is a CREDIT"). That was the ONLY sign-flipping
-      // write path in the whole ledger — purchase invoices ALWAYS debit
-      // the party leg (PostgresInvoiceRepository.ts, same code for sale
-      // and purchase), and payment/receipt vouchers ALWAYS credit the
-      // party leg (PostgresVoucherRepository.ts, same code for both
-      // kinds) — regardless of customer vs supplier. Hand-computed
-      // ground truth for a supplier opening at 1000, then +500 purchase,
-      // -300 payment, +200 purchase, -100 payment: true running balance
-      // is 1000 -> 1500 -> 1200 -> 1400 -> 1300. With the OLD flipped
-      // opening convention plus the statement's supplier mult=-1, the
-      // system computed 1000 -> 500 -> 800 -> 600 -> 700 — every single
-      // post-opening movement ran in the OPPOSITE direction from reality.
-      // Debit uniformly = "obligation increases" and credit uniformly =
-      // "obligation decreases", for both party kinds — matching what
-      // invoices and vouchers already do everywhere else — makes the
-      // hand-computed sequence come out exactly right (see
-      // PostgresStatementRepository.ts's matching mult fix, and
-      // PostgresLedgerRepository.getBalance()/getBalanceByDate(), which
-      // already compute plain debit-credit with no kind-based flip at all
-      // and therefore become correct for suppliers too once this write
-      // path stops flipping).
+      // party statement and balance. Standard double-entry (Dr inventory /
+      // Cr AP for supplier-side docs — see PostgresInvoiceRepository,
+      // PostgresStatementRepository): customer positive = Dr (AR), supplier
+      // positive = Cr (AP). The equity leg mirrors the party leg so every
+      // opening journal is balanced (Σdebit = Σcredit).
       if (openingBalance !== 0) {
         const absBal = Math.abs(openingBalance);
         const isPositive = openingBalance > 0;
+        const isSupplier = data.kind === "supplier";
+        const partyDebit = isSupplier
+          ? isPositive
+            ? 0
+            : absBal
+          : isPositive
+            ? absBal
+            : 0;
+        const partyCredit = isSupplier
+          ? isPositive
+            ? absBal
+            : 0
+          : isPositive
+            ? 0
+            : absBal;
         await tx.insert(ledgerEntries).values([
           {
             tenantId: ctx.tenantId,
             partyId: row.id,
             date: new Date().toISOString().slice(0, 10),
             type: "opening",
-            debit: isPositive ? absBal : 0,
-            credit: isPositive ? 0 : absBal,
+            debit: partyDebit,
+            credit: partyCredit,
             currency,
             cashImpact: "none",
             referenceType: "opening",
@@ -171,8 +172,8 @@ export class PostgresPartyRepository implements IPartyRepository {
             partyId: null,
             date: new Date().toISOString().slice(0, 10),
             type: "opening_equity",
-            debit: isPositive ? 0 : absBal,
-            credit: isPositive ? absBal : 0,
+            debit: partyCredit,
+            credit: partyDebit,
             currency,
             cashImpact: "none",
             referenceType: "opening",

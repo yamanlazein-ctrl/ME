@@ -20,6 +20,7 @@ import { fabrics } from "../orm/schemas/fabric.table.js";
 import { colors } from "../orm/schemas/color.table.js";
 import { rolls } from "../orm/schemas/roll.table.js";
 import { invoices } from "../orm/schemas/invoice.table.js";
+import { allocateDocumentNumber } from "../utils/documentNumbers.js";
 
 const INVOICE_TYPES = ["sales_invoice", "purchase_invoice"];
 
@@ -59,19 +60,12 @@ export class PostgresStatementRepository implements IStatementRepository {
     const toDate = query.toDate ?? null;
     const type = query.type ?? null;
 
-    // Fix C-8 (forensic audit 2026-08-15, hand-verified across 5 scenarios):
-    // this used to flip to credit−debit for suppliers. Every ledger writer
-    // (invoices, vouchers) already uses a uniform, kind-agnostic sign —
-    // debit increases what's owed, credit decreases it — for both
-    // customer and supplier legs (see the matching fix and full
-    // hand-computation in PostgresPartyRepository.ts's opening-balance
-    // write, which was the one write path that used to disagree with this
-    // uniform convention). Debit−credit uniformly, for both kinds, is the
-    // convention that makes the running balance move the right direction
-    // on every transaction type. This also brings the statement in line
-    // with PostgresLedgerRepository.getBalance()/getBalanceByDate(), which
-    // already compute plain debit−credit with no kind-based flip.
-    const mult = 1;
+    // Standard double-entry sign convention (Dr AR for customers, Cr AP for
+    // suppliers): customer balance = debit − credit, supplier balance =
+    // credit − debit. This matches the ledger writers (purchase invoice →
+    // Cr party, purchase return / supplier payment → Dr party) and
+    // PostgresLedgerRepository.getBalance()/getBalanceByDate().
+    const mult = p.kind === "customer" ? 1 : -1;
 
     // previous balance = signed sum of active movements strictly before `from`
     // (no `from` → nothing is "before", so previous balance is 0)
@@ -246,6 +240,14 @@ export class PostgresStatementRepository implements IStatementRepository {
       if (net === 0) throw new Error("الرصيد صفر لا يحتاج تسوية");
       const amount = Math.abs(net);
 
+      // H-NEW (forensic audit 2026-08-25): the SET reference number is
+      // allocated INSIDE this transaction (after the zero-balance guard), so
+      // a rejected settlement never burns a sequence slot. Explicit caller
+      // references still pass through untouched.
+      const referenceNumber =
+        input.referenceNumber ??
+        (await allocateDocumentNumber(tx, "settlement", ctx.tenantId));
+
       // M8: both settlement legs share a real generated UUID as referenceId so
       // the pair is resolvable/reversible by reference (cancel-by-reference),
       // instead of a NULL that orphans them from every document lookup.
@@ -265,8 +267,8 @@ export class PostgresStatementRepository implements IStatementRepository {
             cashImpact: "none",
             referenceType: "settlement",
             referenceId: settlementRefId,
-            referenceNumber: input.referenceNumber,
-            description: input.notesInternal ?? `تسوية حساب ${input.referenceNumber}`,
+            referenceNumber,
+            description: input.notesInternal ?? `تسوية حساب ${referenceNumber}`,
             createdBy: ctx.userId,
           },
           {
@@ -280,8 +282,8 @@ export class PostgresStatementRepository implements IStatementRepository {
             cashImpact: "none",
             referenceType: "settlement",
             referenceId: settlementRefId,
-            referenceNumber: input.referenceNumber,
-            description: `مقابل التسوية ${input.referenceNumber}`,
+            referenceNumber,
+            description: `مقابل التسوية ${referenceNumber}`,
             createdBy: ctx.userId,
           },
         ])

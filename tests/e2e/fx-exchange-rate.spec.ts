@@ -221,9 +221,9 @@ test.describe.serial("FX exchange-rate browser regressions", () => {
   });
 
   // ───────────────────────────────────────────────────────────────────────────
-  // BUG#3 — purchase return CREDITS the supplier (balance decreases)
+  // BUG#3 — purchase return DEBITS the supplier (balance decreases)
   // ───────────────────────────────────────────────────────────────────────────
-  test("BUG#3 statement: purchase return credits the supplier balance", async () => {
+  test("BUG#3 statement: purchase return debits the supplier (balance decreases)", async () => {
     await page.goto(`${FRONTEND}/suppliers/${state.supplierId}`, { waitUntil: "domcontentloaded" });
     await sleep(3000);
 
@@ -240,18 +240,19 @@ test.describe.serial("FX exchange-rate browser regressions", () => {
 
     const stmt = await response.json();
 
-    // Entry invoice DEBITS 100,000; return CREDITS 10,000 → final 90,000.
+    // Entry invoice CREDITS 100,000 (AP); return DEBITS 10,000 (AP decreases)
+    // → supplier final balance = credit − debit = 90,000.
     expect(stmt.currency).toBe("SYP");
-    expect(stmt.totalDebit).toBe(100000);
-    expect(stmt.totalCredit).toBe(10000);
+    expect(stmt.totalDebit).toBe(10000);
+    expect(stmt.totalCredit).toBe(100000);
 
     const invoiceRow = stmt.entries.find((e: any) => e.type === "purchase_invoice");
     const returnRow = stmt.entries.find((e: any) => e.type === "purchase_return");
     expect(invoiceRow).toBeTruthy();
-    expect(invoiceRow.debit).toBe(100000);
+    expect(invoiceRow.credit).toBe(100000);
     expect(returnRow).toBeTruthy();
-    expect(returnRow.debit).toBe(0); // was 10000 before the fix (wrong direction)
-    expect(returnRow.credit).toBe(10000); // credit DECREASES the balance
+    expect(returnRow.debit).toBe(10000); // Dr decreases supplier AP (correct direction)
+    expect(returnRow.credit).toBe(0);
     expect(stmt.finalBalance).toBe(90000); // 100,000 − 10,000
   });
 });
