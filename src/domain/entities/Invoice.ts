@@ -29,6 +29,12 @@ export interface InvoiceData {
   partyId: UUID;
   partyType: "customer" | "supplier";
   currency: Currency;
+  /** Units of `currency` per 1 USD — frozen at creation (null for legacy rows). */
+  exchangeRate?: number | null;
+  /** USD equivalent of `total` at the frozen exchangeRate. */
+  baseTotal?: number | null;
+  /** USD equivalent of `paid` at the frozen exchangeRate. */
+  basePaid?: number | null;
   status: "draft" | "active" | "cancelled";
   lines: readonly InvoiceLineData[];
   discount?: number;
@@ -61,6 +67,12 @@ export class Invoice implements InvoiceData {
   readonly partyId: UUID;
   readonly partyType: InvoiceData["partyType"];
   readonly currency: Currency;
+  /** Units of `currency` per 1 USD — frozen at creation (null for legacy rows). */
+  readonly exchangeRate?: number | null;
+  /** USD equivalent of `total` at the frozen exchangeRate. */
+  readonly baseTotal?: number | null;
+  /** USD equivalent of `paid` at the frozen exchangeRate. */
+  readonly basePaid?: number | null;
   status: InvoiceData["status"];
   readonly lines: readonly InvoiceLineData[];
   readonly discount?: number;
@@ -85,6 +97,9 @@ export class Invoice implements InvoiceData {
     this.partyId = data.partyId;
     this.partyType = data.partyType;
     this.currency = data.currency;
+    this.exchangeRate = data.exchangeRate;
+    this.baseTotal = data.baseTotal;
+    this.basePaid = data.basePaid;
     this.status = data.status;
     this.lines = Object.freeze(data.lines);
     this.discount = data.discount;

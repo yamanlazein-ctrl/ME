@@ -47,6 +47,9 @@ export class ApiInvoiceRepository implements IInvoiceRepository {
       partyId: invoice.partyId,
       partyType: invoice.partyType,
       currency: invoice.currency,
+      reference: invoice.reference ?? undefined,
+      /** Units of `currency` per 1 USD — frozen at creation (required for non-USD). */
+      exchangeRate: invoice.exchangeRate ?? undefined,
       discount: invoice.discount,
       tax: invoice.tax,
       shipping: invoice.shipping,

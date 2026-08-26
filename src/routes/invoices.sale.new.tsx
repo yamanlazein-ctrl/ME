@@ -77,6 +77,9 @@ function SaleInvoicePage() {
 
   const [customerId, setCustomerId] = useState("");
   const [currency, setCurrency] = useState<Currency | "">("");
+  // FX rule (base currency = USD): non-USD sale invoices MUST carry the
+  // frozen exchange rate (units of SYP per 1 USD) captured at creation time.
+  const [exchangeRate, setExchangeRate] = useState<number | "">("");
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
   const settingsSnap = useSettings();
   const enabledPaymentMethods = settingsSnap.paymentMethods.filter((m) => m.enabled);
@@ -119,6 +122,10 @@ function SaleInvoicePage() {
     setCustomerId(editInvoice.partyId);
     setCurrency(editInvoice.currency as Currency);
     setDate(editInvoice.date);
+    // QA fix (Part 2): populate the frozen exchange rate from the API so the
+    // user can view and update it on an existing invoice.
+    if (editInvoice.exchangeRate && Number(editInvoice.exchangeRate) > 0)
+      setExchangeRate(Number(editInvoice.exchangeRate));
     const parsedHeader = parseInvoiceNotes(editInvoice.notes);
     setReference(editInvoice.reference || parsedHeader.reference || "");
     setNotes(parsedHeader.freeText);
@@ -320,6 +327,12 @@ function SaleInvoicePage() {
       }
     }
 
+    // FX rule: a non-USD invoice must carry a positive frozen exchange rate.
+    if (currency !== "USD" && !(Number(exchangeRate) > 0)) {
+      setError("سعر الصرف مطلوب لكل عملية ليست بالدولار (عملة الأساس USD)");
+      return;
+    }
+
     if (edit) {
       const res = await update.mutateAsync({
         id: edit,
@@ -330,6 +343,11 @@ function SaleInvoicePage() {
           shipping: Number(shipping) || 0,
           notes: combinedNotes,
           lines: linePayload,
+          // QA fix (Part 2): forward the (possibly updated) frozen FX rate so
+          // the backend re-captures base_total / base_paid on edit.
+          ...(currency === "USD"
+            ? {}
+            : { exchangeRate: Number(exchangeRate) > 0 ? Number(exchangeRate) : undefined }),
         },
       });
       if (!res.ok) {
@@ -372,7 +390,11 @@ function SaleInvoicePage() {
       orderId: fromOrderId || undefined,
       lines: linePayload,
       notes: combinedNotes,
-    });
+      // FX rule (frozen at creation). Forwarded to the backend as-is.
+      ...(currency === "USD"
+        ? {}
+        : { exchangeRate: Number(exchangeRate) > 0 ? Number(exchangeRate) : undefined }),
+    } as unknown as Parameters<typeof create.mutateAsync>[0]);
     if (!res.ok) {
       const rawErr = (res as any).error ?? {};
       const details = rawErr.details as Record<string, string[]> | undefined;
@@ -578,6 +600,30 @@ function SaleInvoicePage() {
                   <SelectItem value="USD">$ USD</SelectItem>
                 </SelectContent>
               </Select>
+            </HeaderField>
+            <HeaderField label="سعر الصرف (ل.س / $)">
+              {currency === "USD" ? (
+                <Input
+                  value="1"
+                  readOnly
+                  disabled
+                  dir="ltr"
+                  className="!h-9 bg-muted/40 text-muted-foreground"
+                />
+              ) : (
+                <Input
+                  type="number"
+                  min={1}
+                  step="any"
+                  value={exchangeRate}
+                  onChange={(e) =>
+                    setExchangeRate(e.target.value === "" ? "" : Number(e.target.value))
+                  }
+                  placeholder="مثلاً 15000"
+                  dir="ltr"
+                  className="!h-9"
+                />
+              )}
             </HeaderField>
             <HeaderField label="الدفع">
               <Select value={paymentMethod} onValueChange={setPaymentMethod}>

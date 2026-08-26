@@ -22,6 +22,12 @@ export interface InvoiceDTO {
   partyType: "customer" | "supplier";
   partyName: string;
   currency: Currency;
+  /** Units of `currency` per 1 USD — frozen at creation (null for legacy rows). */
+  exchangeRate?: number | null;
+  /** USD equivalent of `total` at the frozen exchangeRate. */
+  baseTotal?: number | null;
+  /** USD equivalent of `paid` at the frozen exchangeRate. */
+  basePaid?: number | null;
   status: "draft" | "active" | "cancelled";
   lines: InvoiceLineData[];
   subtotal: number;
@@ -42,6 +48,8 @@ export interface CreateInvoiceRequest {
   partyId: UUID;
   partyType: "customer" | "supplier";
   currency: Currency;
+  /** Units of `currency` per 1 USD — frozen at creation (required for non-USD). */
+  exchangeRate?: number;
   /** Optional user-supplied reference; server defaults it to the generated number. */
   reference?: string;
   discount?: number;
