@@ -21,8 +21,8 @@ export const CURRENCIES: { code: Currency; label: string; symbol: string }[] = [
   { code: "EUR", label: "يورو", symbol: "€" },
 ];
 
-/** Default currency used throughout the app. */
-export const DEFAULT_CURRENCY: Currency = "SYP";
+/** Default currency used throughout the app as the primary display currency. */
+export const DEFAULT_CURRENCY: Currency = "USD";
 
 /** Default exchange rates relative to SYP (1 SYP = rate) — fallback until the user sets real rates in Settings. */
 export const EXCHANGE_RATES: Record<Currency, number> = {

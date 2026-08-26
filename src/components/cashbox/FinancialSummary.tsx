@@ -1,4 +1,4 @@
-import { formatAmount, CURRENCIES } from "@/presentation/hooks/useCurrency";
+import { formatAmount, CURRENCIES, useCurrencies } from "@/presentation/hooks/useCurrency";
 import { useHydrated } from "@/hooks/use-hydrated";
 import { cn } from "@/lib/utils";
 import type { Currency } from "@/domain/types";
@@ -33,6 +33,13 @@ export function FinancialSummary({
   lastUpdatedAt?: number;
 }) {
   const hydrated = useHydrated();
+  // Primary display currency comes from the central setting (Settings → العملات,
+  // "افتراضية"). Falls back to DEFAULT_CURRENCY (USD). Display-only: it decides
+  // WHICH per-currency balance renders as the hero — never recalculates values.
+  const { defaultCurrency } = useCurrencies();
+  const currencies = [...CURRENCIES].sort((a, b) =>
+    a.code === defaultCurrency ? -1 : b.code === defaultCurrency ? 1 : 0,
+  );
   const negative = currentBalance < 0;
   const freshTime =
     hydrated && lastUpdatedAt
@@ -72,7 +79,7 @@ export function FinancialSummary({
           dir="ltr"
         >
           {/* formatAmount already includes the symbol — never append it again */}
-          {formatAmount(currentBalance, "SYP")}
+          {formatAmount(currentBalance, defaultCurrency)}
         </div>
 
         {negative && (
@@ -85,7 +92,7 @@ export function FinancialSummary({
             not faded chips): code + label on one side, full amount with its
             own symbol on the other. Never summed across currencies. */}
         <div className="mt-5 space-y-1.5 border-t border-border pt-3">
-          {CURRENCIES.map((c) => {
+          {currencies.map((c) => {
             const v = perCurrency[c.code] ?? 0;
             return (
               <div key={c.code} className="flex items-center justify-between gap-3">
