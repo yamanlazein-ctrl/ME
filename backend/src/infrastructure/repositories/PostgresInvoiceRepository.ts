@@ -471,7 +471,7 @@ export class PostgresInvoiceRepository implements IInvoiceRepository {
       const currency = invoiceCurrency;
       const legs: (typeof ledgerEntries.$inferInsert)[] = [
         {
-          ...legFx(isSale ? inv.total : 0, isSale ? 0 : inv.total),
+          ...legFx(inv.total, 0),
           tenantId: ctx.tenantId,
           partyId: input.partyId,
           date: input.date,
@@ -480,6 +480,9 @@ export class PostgresInvoiceRepository implements IInvoiceRepository {
           // debit=total (increases the party's balance) for BOTH sale
           // (customer owed us) and purchase (we owe supplier). The earlier
           // inversion — credit for purchase — is the live bug NEW-01.
+          // (legFx(inv.total, 0) keeps base_debit aligned with the raw
+          // debit — the old legFx(0, total) for purchase wrote the USD
+          // equivalent into base_credit, inverting the base columns.)
           debit: inv.total,
           credit: 0,
           currency,
@@ -1037,13 +1040,19 @@ export class PostgresInvoiceRepository implements IInvoiceRepository {
     });
     const legs: (typeof ledgerEntries.$inferInsert)[] = [
       {
-        ...legFx(args.isSale ? args.total : 0, args.isSale ? 0 : args.total),
+        ...legFx(args.total, 0),
         tenantId: args.tenantId,
         partyId: args.partyId,
         date: args.date,
         type: invoiceType,
-        debit: args.isSale ? args.total : 0,
-        credit: args.isSale ? 0 : args.total,
+        // C-8 uniformity — must match the create path: the invoice party leg
+        // is ALWAYS debit for both sale (customer owes us) and purchase (we
+        // owe supplier); debit = obligation increases. The old conditional
+        // (debit: isSale ? total : 0, credit: isSale ? 0 : total) credited the
+        // supplier on every purchase-invoice edit, flipping the balance
+        // negative (create wrote +T, edit wrote −T).
+        debit: args.total,
+        credit: 0,
         currency: args.currency,
         cashImpact: "none",
         referenceType: invoiceType,
