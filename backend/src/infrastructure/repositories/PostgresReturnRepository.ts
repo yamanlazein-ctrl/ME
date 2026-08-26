@@ -427,21 +427,22 @@ export class PostgresReturnRepository implements IReturnRepository {
       });
       const legs: (typeof ledgerEntries.$inferInsert)[] = [];
       if (isEntryReturn) {
-        // BUG-02 fix — purchase return mirrors the purchase invoice:
-        //   Dr party T  (supplier balance DECREASES — same convention as
-        //                payment_out from the C-8 family of fixes)
-        //   Cr inventory T
-        // Σdebit = Σcredit = T. No contra leg needed (symmetric amounts).
+        // BUG-03 fix — a purchase return DECREASES the supplier balance
+        // (balance = Σ(debit − credit); credit reduces what we owe), matching
+        // the sale-return party leg and the C-8 "voucher/return CREDIT the
+        // party" convention:
+        //   Cr party T       (supplier balance DECREASES)
+        //   Dr inventory T   (goods come back onto the books; balances ΣD = ΣC = T)
         if (saleTotal > 0) {
           legs.push(
             {
-              ...legFx(saleTotal, 0),
+              ...legFx(0, saleTotal),
               tenantId: ctx.tenantId,
               partyId: input.partyId,
               date: input.date,
               type: returnRefType,
-              debit: saleTotal,
-              credit: 0,
+              debit: 0,
+              credit: saleTotal,
               currency: input.currency ?? "SYP",
               cashImpact: "none",
               referenceType: returnRefType,
@@ -451,19 +452,19 @@ export class PostgresReturnRepository implements IReturnRepository {
               createdBy: ctx.userId,
             },
             {
-              ...legFx(0, saleTotal),
+              ...legFx(saleTotal, 0),
               tenantId: ctx.tenantId,
               partyId: null,
               date: input.date,
               type: "inventory_asset",
-              debit: 0,
-              credit: saleTotal,
+              debit: saleTotal,
+              credit: 0,
               currency: input.currency ?? "SYP",
               cashImpact: "none",
               referenceType: returnRefType,
               referenceId: row.id,
               referenceNumber: autoNumber,
-              description: `Inventory relief ${autoNumber}`,
+              description: `Inventory reinstated ${autoNumber}`,
               createdBy: ctx.userId,
             },
           );

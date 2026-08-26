@@ -22,7 +22,7 @@ import type {
   UpdateInvoiceInput,
 } from "../../domain/entities/Invoice.js";
 import { Invoice, computeSubtotal } from "../../domain/entities/Invoice.js";
-import { round2dp, BASE_CURRENCY, computeBaseEquivalent, isValidFxRate } from "@erp/shared";
+import { round2dp, BASE_CURRENCY, computeBaseEquivalent, isValidFxRate, FX_REQUIRED_MESSAGE } from "@erp/shared";
 import type { TenantContext, PaginatedResult } from "../../domain/types/index.js";
 
 export class PostgresInvoiceRepository implements IInvoiceRepository {
@@ -194,62 +194,71 @@ export class PostgresInvoiceRepository implements IInvoiceRepository {
         baseDebit: computeBaseEquivalent(debit, invoiceCurrency, fxRate),
         baseCredit: computeBaseEquivalent(credit, invoiceCurrency, fxRate),
       });
-      if (isSale) {
-        // BUG-07 — the old BUG-17 reservation guard is REMOVED by design:
-        // orders no longer lock rolls, so any in_stock roll can be sold on
-        // any invoice regardless of pending customer orders.
-        for (const line of input.lines) {
-          const [r] = await tx
-            .select({
-              kg: rolls.remainingKg,
-              version: rolls.version,
-              status: rolls.status,
-              pricePerKg: rolls.pricePerKg,
-              colorId: rolls.colorId,
-              currency: rolls.currency,
-            })
-            .from(rolls)
-            .where(and(eq(rolls.id, line.rollId), eq(rolls.tenantId, ctx.tenantId)))
-            .for("update")
-            .limit(1);
-          if (!r || Number(r.kg) < line.quantityKg) {
+      // QA fix (ENT-2026-0002): a non-USD invoice without a valid rate used to
+      // slip through with NULL base_total / NULL ledger base_* columns — an
+      // unconvertible document that breaks cross-currency sums and the
+      // double-entry balance in the base currency. Fail closed instead: the
+      // caller must supply the rate at creation time (the UI now enforces it
+      // too). USD documents are always convertible (rate = 1).
+      if (invoiceCurrency !== BASE_CURRENCY && !isValidFxRate(fxRate)) {
+        throw new Error(FX_REQUIRED_MESSAGE);
+      }
+      // Per-line guards: stock, color/fabric match, currency match.
+      // Runs for BOTH sale and entry invoices (NEW-03 added entry arm).
+      // The H1 cross-currency guard inside rejects when the roll's currency
+      // does not match the invoice currency, so COGS and stock value stay
+      // in one unit.
+      // Per-line guards. The roll SELECT runs for BOTH sale and entry so
+      // the entry arm gets the H1 cross-currency guard (NEW-03) and the
+      // color/fabric integrity check. Stock sufficiency and COGS
+      // accumulation are sale-only.
+      for (const line of input.lines) {
+        const [r] = await tx
+          .select({
+            kg: rolls.remainingKg,
+            version: rolls.version,
+            status: rolls.status,
+            pricePerKg: rolls.pricePerKg,
+            colorId: rolls.colorId,
+            currency: rolls.currency,
+          })
+          .from(rolls)
+          .where(and(eq(rolls.id, line.rollId), eq(rolls.tenantId, ctx.tenantId)))
+          .for("update")
+          .limit(1);
+        if (!r) {
+          throw new Error(`اللفافة ${line.rollId} غير موجودة`);
+        }
+        // BUG-04 / H-2: line.colorId must match the roll's real color.
+        if (line.colorId !== r.colorId) {
+          throw new Error(`اللون المحدد للبند لا يطابق لون اللفافة ${line.rollId} الفعلي`);
+        }
+        const [rollColor] = await tx
+          .select({ fabricId: colors.fabricId })
+          .from(colors)
+          .where(and(eq(colors.id, r.colorId), eq(colors.tenantId, ctx.tenantId)))
+          .limit(1);
+        if (!rollColor || line.fabricId !== rollColor.fabricId) {
+          throw new Error(`القماش المحدد للبند لا يطابق قماش لون اللفافة ${line.rollId} الفعلي`);
+        }
+        // H1 (cross-currency guard): applies to BOTH sale (for COGS) and
+        // entry (for stock value integrity). NEW-03 was the entry arm
+        // being missing.
+        if (r.currency !== invoiceCurrency) {
+          throw new Error(
+            `عملة اللفافة ${line.rollId} (${r.currency}) لا تطابق عملة الفاتورة (${invoiceCurrency}) — لا يمكن خلط العملات في التكلفة`,
+          );
+        }
+        if (isSale) {
+          if (Number(r.kg) < line.quantityKg) {
             throw new Error(
-              `Roll ${line.rollId} has insufficient stock (${Number(r?.kg ?? 0)}kg < ${line.quantityKg}kg)`,
+              `اللفافة ${line.rollId} المخزون غير كافٍ (${Number(r.kg)} كغ < ${line.quantityKg} كغ)`,
             );
-          }
-          // Fix BUG-04 / H-2 (forensic audit 2026-08-15, live-reproduced): the
-          // roll was locked and validated for stock/status only — the
-          // client-supplied line.colorId/fabricId were stored verbatim with
-          // no check against the roll's real color. PostgresOrderRepository
-          // already enforces this exact invariant for reservations
-          // (`if (it.colorId && rollRow.colorId !== it.colorId) throw`); this
-          // is the same check, applied where the audit found it missing.
-          if (line.colorId !== r.colorId) {
-            throw new Error(`اللون المحدد للبند لا يطابق لون اللفافة ${line.rollId} الفعلي`);
-          }
-          const [rollColor] = await tx
-            .select({ fabricId: colors.fabricId })
-            .from(colors)
-            .where(and(eq(colors.id, r.colorId), eq(colors.tenantId, ctx.tenantId)))
-            .limit(1);
-          if (!rollColor || line.fabricId !== rollColor.fabricId) {
-            throw new Error(`القماش المحدد للبند لا يطابق قماش لون اللفافة ${line.rollId} الفعلي`);
           }
           if (r.status === "exhausted") {
             throw new Error(`اللفافة ${line.rollId} نفدت ولا يمكن بيعها`);
           }
-          // H1 (cross-currency COGS guard): roll.pricePerKg is denominated in
-          // the roll's own purchase currency. Selling it on an invoice in a
-          // different currency journals COGS in a blended unit and corrupts
-          // the profit report — block it outright.
-          if (r.currency !== invoiceCurrency) {
-            throw new Error(
-              `عملة اللفافة ${line.rollId} (${r.currency}) لا تطابق عملة الفاتورة (${invoiceCurrency}) — لا يمكن خلط العملات في التكلفة`,
-            );
-          }
           expectedVersions.set(line.rollId, Number(r.version));
-          // Round quantity to the DB's scale (2dp) so the journaled COGS matches
-          // the stored invoice line exactly (a 0.001kg input is stored as 0.00).
           const storedQty = Math.round(Number(line.quantityKg) * 100) / 100;
           cogsTotal += round2dp(storedQty * Number(r.pricePerKg));
         }
@@ -467,8 +476,12 @@ export class PostgresInvoiceRepository implements IInvoiceRepository {
           partyId: input.partyId,
           date: input.date,
           type: invoiceType,
-          debit: isSale ? inv.total : 0,
-          credit: isSale ? 0 : inv.total,
+          // D-003 / C-8 uniform convention: invoice party leg is ALWAYS
+          // debit=total (increases the party's balance) for BOTH sale
+          // (customer owed us) and purchase (we owe supplier). The earlier
+          // inversion — credit for purchase — is the live bug NEW-01.
+          debit: inv.total,
+          credit: 0,
           currency,
           cashImpact: "none",
           referenceType: invoiceType,
@@ -575,6 +588,11 @@ export class PostgresInvoiceRepository implements IInvoiceRepository {
             invoiceId: row.id,
             amount: paid,
             currency: input.currency ?? "SYP",
+            // QA fix: the linked receipt voucher must freeze the same FX rate
+            // as its invoice — it was omitted here, leaving base_amount NULL
+            // even when the invoice had a valid rate.
+            exchangeRate: fxRate,
+            baseAmount: computeBaseEquivalent(paid, invoiceCurrency, fxRate),
             method,
             notesPrint: `قبض مرتبط بالفاتورة ${autoNumber}`,
             createdBy: ctx.userId,
@@ -641,6 +659,11 @@ export class PostgresInvoiceRepository implements IInvoiceRepository {
             invoiceId: row.id,
             amount: paid,
             currency: input.currency ?? "SYP",
+            // QA fix (ENT-2026-0002): the linked supplier-payment voucher never
+            // froze its FX capture — PAY-ENT-2026-0002 shipped with NULL
+            // exchange_rate / base_amount even though the invoice rate existed.
+            exchangeRate: fxRate,
+            baseAmount: computeBaseEquivalent(paid, invoiceCurrency, fxRate),
             method,
             notesPrint: `دفعة مرتبطة بالفاتورة ${autoNumber}`,
             createdBy: ctx.userId,
@@ -650,17 +673,17 @@ export class PostgresInvoiceRepository implements IInvoiceRepository {
         const cashImpact = method === "cash" ? "out" : "none";
         await tx.insert(ledgerEntries).values([
           {
-            ...legFx(paid, 0),
+            ...legFx(0, paid),
             tenantId: ctx.tenantId,
             partyId: input.partyId,
             date: input.date,
             type: "payment_out",
-            // Uniform party convention (debit − credit, both kinds): a
-            // supplier payment DEBITS the supplier — it must REDUCE what we
-            // owe after the purchase_invoice credit. The old credit here
-            // re-inflated the debt instead of settling it.
-            debit: paid,
-            credit: 0,
+            // BUG-03 (same-pattern): a supplier payment CREDITS the supplier
+            // (balance = Σ(debit − credit)); it must REDUCE what we owe. This
+            // matches PostgresVoucherRepository's C-8 party leg (always credit)
+            // and migration 0012. The old debit here re-inflated the debt.
+            debit: 0,
+            credit: paid,
             currency: input.currency ?? "SYP",
             cashImpact: "none",
             referenceType: "payment_out",
@@ -670,15 +693,17 @@ export class PostgresInvoiceRepository implements IInvoiceRepository {
             createdBy: ctx.userId,
           },
           {
-            ...legFx(0, paid),
+            ...legFx(paid, 0),
             tenantId: ctx.tenantId,
             partyId: null,
             date: input.date,
             type: "cash",
-            // Cash OUT is a CREDIT (migration 0032 convention); the old
-            // debit here increased the cash balance on a supplier payment.
-            debit: 0,
-            credit: paid,
+            // Cash leg balances the always-credit party leg (C-8 convention,
+            // mirrors PostgresVoucherRepository). cashImpact carries the
+            // direction (out for cash payment) for the cashbox, which sums
+            // debit+credit keyed off cashImpact.
+            debit: paid,
+            credit: 0,
             currency: input.currency ?? "SYP",
             cashImpact,
             referenceType: "payment_out",
@@ -889,6 +914,22 @@ export class PostgresInvoiceRepository implements IInvoiceRepository {
         }
       }
 
+      // QA fix (ENT-2026-0002): FX re-capture on edit. The update path used to
+      // ignore the rate entirely — rewritten legs carried NULL base_* columns
+      // and the invoice row kept stale/NULL exchange fields. Resolution order:
+      // caller-supplied rate → the frozen rate already on the invoice; USD is
+      // always 1. Non-USD without any resolvable rate fails closed so the base
+      // ledger stays convertible and balanced.
+      const editFx =
+        inv.currency === BASE_CURRENCY
+          ? 1
+          : isValidFxRate(input.exchangeRate)
+            ? input.exchangeRate!
+            : (inv.exchangeRate ?? null);
+      if (inv.currency !== BASE_CURRENCY && !isValidFxRate(editFx)) {
+        throw new Error(FX_REQUIRED_MESSAGE);
+      }
+
       // Replace lines and header.
       await tx.delete(invoiceLines).where(eq(invoiceLines.invoiceId, id));
       await tx.insert(invoiceLines).values(
@@ -932,6 +973,7 @@ export class PostgresInvoiceRepository implements IInvoiceRepository {
           partyId: inv.partyId,
           date: input.date,
           currency: inv.currency,
+          fxRate: editFx,
           isSale,
           total,
           cogsTotal,
@@ -951,6 +993,11 @@ export class PostgresInvoiceRepository implements IInvoiceRepository {
           shipping: Math.round(shipping),
           total: Math.round(total),
           notes: input.notes ?? null,
+          // QA fix — persist the (possibly updated) frozen FX capture so
+          // base_total / base_paid always match the current document values.
+          exchangeRate: editFx,
+          baseTotal: computeBaseEquivalent(total, inv.currency, editFx),
+          basePaid: computeBaseEquivalent(Number(inv.paid), inv.currency, editFx),
           updatedAt: new Date(),
           version: sql`${invoices.version} + 1`,
         })
@@ -971,6 +1018,8 @@ export class PostgresInvoiceRepository implements IInvoiceRepository {
     partyId: string;
     date: string;
     currency: string;
+    /** Frozen FX rate (units of `currency` per 1 USD); USD documents pass 1. */
+    fxRate?: number | null;
     isSale: boolean;
     total: number;
     cogsTotal: number;
@@ -979,8 +1028,16 @@ export class PostgresInvoiceRepository implements IInvoiceRepository {
     createdBy: string | undefined;
   }): (typeof ledgerEntries.$inferInsert)[] {
     const invoiceType = args.isSale ? "sales_invoice" : "purchase_invoice";
+    // QA fix (ENT-2026-0002): rewritten legs must carry the frozen FX capture —
+    // previously exchange_rate / base_debit / base_credit were never set here.
+    const legFx = (debit: number, credit: number) => ({
+      exchangeRate: args.fxRate ?? null,
+      baseDebit: computeBaseEquivalent(debit, args.currency, args.fxRate),
+      baseCredit: computeBaseEquivalent(credit, args.currency, args.fxRate),
+    });
     const legs: (typeof ledgerEntries.$inferInsert)[] = [
       {
+        ...legFx(args.isSale ? args.total : 0, args.isSale ? 0 : args.total),
         tenantId: args.tenantId,
         partyId: args.partyId,
         date: args.date,
@@ -998,6 +1055,7 @@ export class PostgresInvoiceRepository implements IInvoiceRepository {
     ];
     if (args.isSale) {
       legs.push({
+        ...legFx(0, args.total),
         tenantId: args.tenantId,
         partyId: null,
         date: args.date,
@@ -1014,6 +1072,7 @@ export class PostgresInvoiceRepository implements IInvoiceRepository {
       });
       if (args.cogsTotal > 0) {
         legs.push({
+          ...legFx(args.cogsTotal, 0),
           tenantId: args.tenantId,
           partyId: null,
           date: args.date,
@@ -1029,6 +1088,7 @@ export class PostgresInvoiceRepository implements IInvoiceRepository {
           createdBy: args.createdBy,
         });
         legs.push({
+          ...legFx(0, args.cogsTotal),
           tenantId: args.tenantId,
           partyId: null,
           date: args.date,
@@ -1046,6 +1106,7 @@ export class PostgresInvoiceRepository implements IInvoiceRepository {
       }
     } else {
       legs.push({
+        ...legFx(args.total, 0),
         tenantId: args.tenantId,
         partyId: null,
         date: args.date,
