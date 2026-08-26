@@ -33,7 +33,7 @@ import {
   type ManualMovementType,
 } from "@/presentation/hooks/useCashbox";
 import { useLedgerEntries, useCashMovementsOn } from "@/presentation/hooks/useLedger";
-import { formatAmount } from "@/presentation/hooks/useCurrency";
+import { formatAmount, useCurrencies } from "@/presentation/hooks/useCurrency";
 import { Lock, Plus, RotateCw, Settings2 } from "lucide-react";
 import { FinancialSummary } from "@/components/cashbox/FinancialSummary";
 import {
@@ -72,6 +72,7 @@ export const Route = createFileRoute("/cashbox")({
 function CashBoxPage() {
   const today = new Date().toISOString().slice(0, 10);
   const qc = useQueryClient();
+  const { defaultCurrency } = useCurrencies();
 
   const { data: state, dataUpdatedAt } = useCashboxState();
   const openingToday = state?.openingBalance ?? 0;
@@ -139,7 +140,8 @@ function CashBoxPage() {
     USD: balUSD ?? 0,
     EUR: balEUR ?? 0,
   };
-  const currentBalance = balSYP;
+  // Hero balance = the default display currency's own balance (no conversion).
+  const currentBalance = perCurrency[defaultCurrency] ?? 0;
   const todayIn = todayFlow?.in ?? 0;
   const todayOut = todayFlow?.out ?? 0;
 
