@@ -23,6 +23,14 @@ export type ActivityEntry = {
   message: string;
 };
 
+export interface PartyListStats {
+  invoicesCount: number;
+  totalAmount: number;
+  totalPaid: number;
+  remaining: number;
+  lastDate?: string;
+}
+
 export interface PartyData {
   id: UUID;
   tenantId: UUID;
@@ -58,6 +66,7 @@ export interface PartyData {
   createdBy?: string | null;
   cancelledAt?: Timestamp | null;
   cancelledBy?: string | null;
+  stats?: PartyListStats;
 }
 
 export class Party implements PartyData {
@@ -95,6 +104,7 @@ export class Party implements PartyData {
   readonly createdBy: string | null;
   readonly cancelledAt?: Timestamp | null;
   readonly cancelledBy?: string | null;
+  readonly stats?: PartyListStats;
 
   private constructor(data: PartyData) {
     this.id = data.id;
@@ -131,6 +141,7 @@ export class Party implements PartyData {
     this.createdBy = data.createdBy ?? null;
     this.cancelledAt = data.cancelledAt ?? null;
     this.cancelledBy = data.cancelledBy ?? null;
+    this.stats = data.stats;
   }
 
   /** Reconstitute from persistence (skip validation). */

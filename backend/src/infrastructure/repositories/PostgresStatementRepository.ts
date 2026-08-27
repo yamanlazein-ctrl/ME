@@ -21,6 +21,7 @@ import { colors } from "../orm/schemas/color.table.js";
 import { rolls } from "../orm/schemas/roll.table.js";
 import { invoices } from "../orm/schemas/invoice.table.js";
 import { allocateDocumentNumber } from "../utils/documentNumbers.js";
+import { round2dp } from "@erp/shared";
 
 const INVOICE_TYPES = ["sales_invoice", "purchase_invoice"];
 
@@ -152,9 +153,9 @@ export class PostgresStatementRepository implements IStatementRepository {
           (row.referenceNumber
             ? `${TYPE_LABEL[row.type] ?? row.type} ${row.referenceNumber}`
             : (TYPE_LABEL[row.type] ?? row.type)),
-        debit: Math.round(debit),
-        credit: Math.round(credit),
-        runningBalance: Math.round(running),
+        debit: round2dp(debit),
+        credit: round2dp(credit),
+        runningBalance: round2dp(running),
       };
 
       if (INVOICE_TYPES.includes(row.type) && row.referenceId) {
@@ -180,10 +181,10 @@ export class PostgresStatementRepository implements IStatementRepository {
       fromDate,
       toDate,
       type,
-      previousBalance: Math.round(previousBalance),
-      totalDebit: Math.round(totalDebit),
-      totalCredit: Math.round(totalCredit),
-      finalBalance: Math.round(running),
+      previousBalance: round2dp(previousBalance),
+      totalDebit: round2dp(totalDebit),
+      totalCredit: round2dp(totalCredit),
+      finalBalance: round2dp(running),
       entries,
     };
   }
@@ -332,7 +333,7 @@ export class PostgresStatementRepository implements IStatementRepository {
         rollNo: r.rollNo ?? null,
         quantityKg: Math.round(qty * 100) / 100,
         pricePerKg: Math.round(price * 100) / 100,
-        amount: Math.round(qty * price),
+        amount: round2dp(qty * price),
       };
       const list = map.get(r.invoiceId) ?? [];
       list.push(line);

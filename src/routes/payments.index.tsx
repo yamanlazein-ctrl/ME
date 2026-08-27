@@ -7,6 +7,8 @@ import { Link, createFileRoute } from "@tanstack/react-router";
 import { Plus } from "lucide-react";
 import { BulkSelectToolbar } from "@/components/common/BulkSelectToolbar";
 import { ConfirmBulkAction } from "@/components/common/ConfirmBulkAction";
+import { printDocument } from "@/components/print/printPortal";
+import { VoucherPrintDocument } from "@/components/print/VoucherPrintDocument";
 import { useVouchersList, useCancelVoucher, type Voucher } from "@/presentation/hooks/useVouchers";
 import { supplierById } from "@/presentation/hooks/useParties";
 import { formatAmount } from "@/presentation/hooks/useCurrency";
@@ -136,17 +138,26 @@ function PaymentsList() {
                       {v.status === "active" ? "نشطة" : "ملغاة"}
                     </td>
                     <td className="px-3 py-2">
-                      {v.status === "active" && (
+                      <div className="flex items-center gap-1">
                         <Button
                           size="sm"
-                          variant="outline"
-                          onClick={() =>
-                            confirm(`إلغاء سند الصرف ${v.number}؟`) && cancelVoucherMut.mutate(v.id)
-                          }
+                          variant="ghost"
+                          onClick={() => printDocument(<VoucherPrintDocument voucher={v} />)}
                         >
-                          إلغاء
+                          طباعة
                         </Button>
-                      )}
+                        {v.status === "active" && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() =>
+                              confirm(`إلغاء سند الصرف ${v.number}؟`) && cancelVoucherMut.mutate(v.id)
+                            }
+                          >
+                            إلغاء
+                          </Button>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 );

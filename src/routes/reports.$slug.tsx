@@ -187,9 +187,23 @@ function ReportBody({
     case "purchases":
       return <SalesReport inRange={inRange} invoices={invoices} kind="entry" vouchers={vouchers} />;
     case "receivables":
-      return <PartyBalances kind="customer" invoices={invoices} vouchers={vouchers} />;
+      return (
+        <PartyBalances
+          kind="customer"
+          invoices={invoices}
+          vouchers={vouchers}
+          ledgerEntries={ledgerEntriesArr}
+        />
+      );
     case "payables":
-      return <PartyBalances kind="supplier" invoices={invoices} vouchers={vouchers} />;
+      return (
+        <PartyBalances
+          kind="supplier"
+          invoices={invoices}
+          vouchers={vouchers}
+          ledgerEntries={ledgerEntriesArr}
+        />
+      );
     case "sales-returns":
       return <ReturnsReport inRange={inRange} returns={returns} />;
     case "expenses":
@@ -331,6 +345,7 @@ function PartyBalances({
   kind,
   invoices,
   vouchers,
+  ledgerEntries,
 }: {
   kind: "customer" | "supplier";
   invoices: DomainInvoice[];
@@ -340,12 +355,27 @@ function PartyBalances({
     status: string;
     amount: number;
   }[];
+  ledgerEntries: DomainLedgerEntry[];
 }) {
   // Fix BUG-06/C-9/C-10: total/paid/remaining are now per-currency
   // breakdowns, never a toSYP-blended single number. Ranking (sort) still
   // needs one comparable figure — SYP remaining specifically, documented,
   // since there is no real FX rate to fairly compare a SYP and a USD
   // party's remaining balance.
+  const remainingOf = (partyId: string): Record<string, number> => {
+    // Authoritative remaining — from the ledger (debit − credit for customers,
+    // credit − debit for suppliers), identical to the كشف الحساب / getBalance.
+    const out: Record<string, number> = {};
+    for (const e of ledgerEntries ?? []) {
+      if (!e || e.partyId !== partyId) continue;
+      if ((e.status ?? "active") !== "active") continue;
+      const ccy = e.currency ?? "SYP";
+      const signed =
+        kind === "supplier" ? (e.credit ?? 0) - (e.debit ?? 0) : (e.debit ?? 0) - (e.credit ?? 0);
+      out[ccy] = (out[ccy] ?? 0) + signed;
+    }
+    return out;
+  };
   const rows = (kind === "customer" ? customers : suppliers)
     .map((p) => {
       const invs = invoices.filter((i) => i.partyId === p.id && i.status !== "cancelled");
@@ -355,11 +385,7 @@ function PartyBalances({
           .filter((v) => v.status === "active" && v.invoiceId === i.id)
           .reduce((sum, v) => sum + v.amount, 0);
       const paid = groupAmountsByCurrency(invs, paidOf, (i) => i.currency);
-      const remaining = groupAmountsByCurrency(
-        invs,
-        (i) => Math.max(0, invoiceTotal(i) - paidOf(i)),
-        (i) => i.currency,
-      );
+      const remaining = remainingOf(p.id);
       return { p, total, paid, remaining, count: invs.length };
     })
     .filter((r) => r.count > 0)
@@ -407,7 +433,7 @@ function ReturnsReport({
   returns: ReturnDTO[];
 }) {
   const rows = returns
-    .filter((r) => r.status !== "cancelled" && inRange(r.date))
+    .filter((r) => r.kind === "sale" && r.status !== "cancelled" && inRange(r.date))
     .sort((a, b) => (a.date < b.date ? 1 : -1));
   const totalByCurrency = groupAmountsByCurrency(
     rows,

@@ -7,6 +7,7 @@ import type {
 import { expenses } from "../orm/schemas/expense.table.js";
 import { ledgerEntries } from "../orm/schemas/ledger-entry.table.js";
 import { cashboxSessions, manualMovements } from "../orm/schemas/cashbox.table.js";
+import { assertDayUnlocked } from "./dayLockHelper.js";
 import {
   Expense,
   type ExpenseData,
@@ -52,7 +53,7 @@ export class PostgresExpenseRepository implements IExpenseRepository {
         .where(where)
         .limit(limit)
         .offset(offset)
-        .orderBy(desc(expenses.createdAt)),
+        .orderBy(desc(expenses.date), desc(expenses.createdAt)),
       this.db
         .select({ count: sql<number>`count(*)` })
         .from(expenses)
@@ -77,6 +78,7 @@ export class PostgresExpenseRepository implements IExpenseRepository {
     ctx: TenantContext,
   ): Promise<ExpenseData> {
     return this.db.transaction(async (tx) => {
+      await assertDayUnlocked(tx, ctx.tenantId, input.date);
       // Problem 3 fix: default paidFromCashbox to true ONCE and reuse it, so the
       // ledger cashImpact flag matches what is actually persisted (the raw input
       // field is undefined when omitted, which previously made transfer-method

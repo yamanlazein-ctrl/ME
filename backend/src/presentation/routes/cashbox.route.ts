@@ -37,7 +37,12 @@ export function registerCashboxRoutes(
       const date = req.params.date as string;
       const state = await cashboxRepo.getState(ctx(req));
       const currency = (req.query.currency as string) || state.session?.currency || "SYP";
-      const opening = state.session?.openingBalance ?? 0;
+      // Opening balance belongs to the session's currency only. Adding it
+      // unconditionally leaked the SYP (or whatever) opening into every other
+      // currency's balance — confirmed live: USD/EUR both reported the SYP
+      // opening. Scope it to the session currency.
+      const opening =
+        currency === state.session?.currency ? (state.session?.openingBalance ?? 0) : 0;
       const from = state.session?.openingDate ?? "0001-01-01";
       const [ledger, manual] = await Promise.all([
         ledgerRepo.getCashMovementsOn(from, date, currency, ctx(req)),

@@ -51,7 +51,7 @@ export class PostgresReturnRepository implements IReturnRepository {
         .where(where)
         .limit(limit)
         .offset(offset)
-        .orderBy(desc(returns.createdAt)),
+        .orderBy(desc(returns.date), desc(returns.createdAt)),
       this.db
         .select({ count: sql<number>`count(*)` })
         .from(returns)
@@ -407,8 +407,8 @@ export class PostgresReturnRepository implements IReturnRepository {
       let costTotal = 0;
       for (const [rollId, totalQty] of inputByRoll) {
         const entry = invoiceLineQtys.get(rollId)!;
-        saleTotal += Math.round(totalQty * entry.pricePerKg);
-        costTotal += Math.round(totalQty * entry.costPerKg);
+        saleTotal += round2dp(totalQty * entry.pricePerKg);
+        costTotal += round2dp(totalQty * entry.costPerKg);
       }
       const returnRefType = isEntryReturn ? "purchase_return" : "sales_return";
       // F4: per-leg FX for USD aggregations on the ledger (S10 from audit).

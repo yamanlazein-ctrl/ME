@@ -90,6 +90,7 @@ import {
   SettingsApiService,
   StatementApiService,
   VoucherApiService,
+  FxApiService,
 } from "./api";
 
 function getApiBaseUrl(): string {
@@ -107,7 +108,9 @@ apiClient.addInterceptor(
         const payload = JSON.parse(atob(t.split(".")[1]));
         return payload.tenantId ?? null;
       }
-    } catch {}
+    } catch {
+      // Missing/corrupt token — no tenant header; auth interceptor handles auth.
+    }
     return null;
   }),
 );
@@ -140,6 +143,8 @@ const dashboardRepo = new ApiDashboardRepository(new DashboardApiService(apiClie
 const notificationRepo = new ApiNotificationRepository(new NotificationApiService(apiClient));
 const printJobRepo = new ApiPrintJobRepository(new PrintJobApiService(apiClient));
 const authRepo = new ApiAuthRepository(new AuthApiService(apiClient));
+// Header reference-rate widget only (⛔ display-only — never billing logic).
+const fxApi = new FxApiService(apiClient);
 
 export const container = {
   auth: { repository: authRepo },
@@ -255,6 +260,12 @@ export const container = {
 
   settings: {
     api: settingsApi,
+  },
+
+  fx: {
+    // Reference USD→SYP badge in the header. ⛔ Display-only: must never be
+    // consumed by invoice/voucher forms or any exchangeRate field.
+    api: fxApi,
   },
 
   statement: {

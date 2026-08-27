@@ -7,6 +7,7 @@ import type {
   CreateManualMovementInput,
   CloseDayRequestInput,
 } from "../../../domain/entities/Cashbox.js";
+import { DayLockedError } from "../../../domain/errors/index.js";
 
 type Result<T> = { ok: true; data: T } | { ok: false; error: string };
 
@@ -46,6 +47,7 @@ export async function addManualMovementUseCase(
   try {
     return { ok: true, data: await repo.addManualMovement(input, ctx) };
   } catch (e) {
+    if (e instanceof DayLockedError) return { ok: false, error: e.message };
     return { ok: false, error: "فشل إضافة حركة يدوية" };
   }
 }

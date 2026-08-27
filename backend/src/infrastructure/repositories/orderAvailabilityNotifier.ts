@@ -1,7 +1,8 @@
-import { and, eq, inArray, sql } from "drizzle-orm";
+import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 import { orders } from "../orm/schemas/order.table.js";
 import { orderItems } from "../orm/schemas/order-item.table.js";
 import { rolls } from "../orm/schemas/roll.table.js";
+import { colors } from "../orm/schemas/color.table.js";
 import { notifications } from "../orm/schemas/notification.table.js";
 import type { DB } from "../orm/drizzle.js";
 import type { TenantContext } from "../../domain/types/index.js";
@@ -118,12 +119,65 @@ export async function applyOrderAvailabilityAtCreation(
  * partial while matching stock just arrived. The message includes concrete
  * contents (fabric/color, available vs requested kg).
  */
+/**
+ * OI-6 — heals order lines recorded for a colour that did not exist yet.
+ *
+ * Such lines are stored with `colorId = NULL` (name only). When that colour
+ * finally becomes a real row (entry invoice / roll arrival), link every
+ * still-pending order line to it by name + fabric and backfill `colorId`, so
+ * that every colour-keyed path sees the line again:
+ *   • notifyOrderAvailability (stock-arrival notification, C2)
+ *   • colorAvailableKg aggregation
+ *   • findPendingConflicts (BUG-07 sale warning)
+ */
+async function backfillNameOnlyOrderItems(
+  tx: Tx,
+  ctx: TenantContext,
+  colorIds: string[],
+): Promise<void> {
+  if (!colorIds.length) return;
+  const arriving = await tx
+    .select({ id: colors.id, name: colors.name, fabricId: colors.fabricId })
+    .from(colors)
+    .where(and(eq(colors.tenantId, ctx.tenantId), inArray(colors.id, colorIds)));
+  if (!arriving.length) return;
+
+  for (const c of arriving) {
+    const colorName = c.name.trim().toLowerCase();
+    if (!colorName) continue;
+    const orphans = await tx
+      .select({ item: orderItems })
+      .from(orderItems)
+      .innerJoin(orders, eq(orders.id, orderItems.orderId))
+      .where(
+        and(
+          eq(orders.tenantId, ctx.tenantId),
+          inArray(orders.status, ["open", "partially_available"]),
+          isNull(orderItems.colorId),
+          eq(sql`lower(trim(${orderItems.colorName}))`, colorName),
+        ),
+      );
+    for (const { item } of orphans) {
+      // Fabric guard: never link across fabrics. When the line itself has no
+      // fabricId (fabric was also name-only), colour name is the only signal.
+      if (item.fabricId && item.fabricId !== c.fabricId) continue;
+      await tx
+        .update(orderItems)
+        .set({ colorId: c.id })
+        .where(and(eq(orderItems.id, item.id), eq(orderItems.tenantId, ctx.tenantId)));
+    }
+  }
+}
+
 export async function notifyOrderAvailability(
   tx: Tx,
   ctx: TenantContext,
   colorIds: string[],
 ): Promise<void> {
   if (!colorIds.length) return;
+
+  // OI-6 — first link name-only order lines to the colours that just arrived.
+  await backfillNameOnlyOrderItems(tx, ctx, colorIds);
 
   const rows = await tx
     .select({ order: orders, item: orderItems })

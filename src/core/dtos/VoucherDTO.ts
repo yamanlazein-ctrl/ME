@@ -27,6 +27,8 @@ export type CreateVoucherInput = {
   invoiceId?: string;
   amount: number;
   currency: Currency;
+  /** Units of `currency` per 1 USD — required for non-USD vouchers. */
+  exchangeRate?: number;
   method: VoucherMethod;
   notesPrint?: string;
   notesInternal?: string;

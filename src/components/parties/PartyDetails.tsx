@@ -129,39 +129,6 @@ function invoiceSeqNumber(n: string): number {
   return m ? Number(m[1]) : NaN;
 }
 
-/**
- * Sum per-currency settled amounts (تسوية حساب) for a party from ledger entries.
- * A settlement posts a single-side movement that zeroes the party balance, so its
- * magnitude (max of debit/credit) reduces the party's outstanding — for both
- * customers (credit side) and suppliers (debit side). The contra entry carries
- * partyId = null and is ignored. Cancelled settlements are excluded.
- */
-function settledByParty(
-  entries: ReadonlyArray<{
-    partyId?: string | null;
-    type?: string;
-    referenceType?: string;
-    status?: string;
-    debit?: number;
-    credit?: number;
-    currency?: string;
-  }>,
-  partyId: string,
-): Record<string, number> {
-  const out: Record<string, number> = {};
-  for (const e of entries) {
-    if (!e || e.partyId !== partyId) continue;
-    if ((e.status ?? "active") !== "active") continue;
-    const isSettlement = e.type === "settlement" || e.referenceType === "settlement";
-    if (!isSettlement) continue;
-    const amt = Math.max(e.debit ?? 0, e.credit ?? 0);
-    if (amt <= 0) continue;
-    const c = e.currency ?? "SYP";
-    out[c] = (out[c] ?? 0) + amt;
-  }
-  return out;
-}
-
 export function PartyDetailsPage({ kind, id }: { kind: PartyKind; id: string }) {
   useInventory();
   useParties();
@@ -179,7 +146,9 @@ export function PartyDetailsPage({ kind, id }: { kind: PartyKind; id: string }) 
     p ? { partyId: p.id, limit: 1000 } : undefined,
   );
   const allVouchers = vouchersData?.data ?? [];
-  const { data: ledgerEntries = [] } = useLedgerEntries({ limit: 1000 });
+  const { data: ledgerEntries = [] } = useLedgerEntries(
+    p ? { partyId: p.id, limit: 1000 } : undefined,
+  );
 
   const [tab, setTab] = useState<TabId>("overview");
   const [editing, setEditing] = useState(false);
@@ -204,18 +173,30 @@ export function PartyDetailsPage({ kind, id }: { kind: PartyKind; id: string }) 
   }
 
   const statsByCurrency = buildPartyStatsByCurrency(p, kind, allInvoices, allVouchers);
-  // Settlement-awareness (fix D/E): a party settlement (تسوية) is written as a
-  // ledger entry, not a voucher, so the invoice/voucher-based stats would keep
-  // showing stale outstanding. Reduce each currency's remaining by its settled
-  // amount — single-currency, never across currencies.
-  const settled = settledByParty(ledgerEntries, p.id);
-  const settlementStats: Record<string, (typeof statsByCurrency)[string]> = {};
-  for (const [ccy, stats] of Object.entries(statsByCurrency)) {
-    const amt = settled[ccy] ?? 0;
-    // No Math.max clamp: a negative remaining is a genuine credit balance
-    // (over-payment/over-settlement) and must stay visible, not be hidden.
-    if (amt > 0) settlementStats[ccy] = { ...stats, remaining: stats.remaining - amt };
-    else settlementStats[ccy] = stats;
+  // Authoritative remaining (fix): the outstanding balance must match the كشف
+  // الحساب exactly, so it is computed from the ledger (debit minus credit per
+  // currency, same sign as getBalance) — settlements, returns and adjustments
+  // all pass through automatically. The descriptive KPIs (الإجمالي / المدفوع /
+  // متوسط الفاتورة) stay invoice/voucher-based, as they are not ledger balances.
+  const remainingByCurrency: Record<string, number> = {};
+  for (const e of ledgerEntries) {
+    if (!e || e.partyId !== p.id) continue;
+    if ((e.status ?? "active") !== "active") continue;
+    const ccy = e.currency ?? "SYP";
+    const signed = isSup ? (e.credit ?? 0) - (e.debit ?? 0) : (e.debit ?? 0) - (e.credit ?? 0);
+    remainingByCurrency[ccy] = (remainingByCurrency[ccy] ?? 0) + signed;
+  }
+  const overviewStats: Record<string, (typeof statsByCurrency)[string]> = {};
+  for (const ccy of new Set([...Object.keys(statsByCurrency), ...Object.keys(remainingByCurrency)])) {
+    const base = statsByCurrency[ccy] ?? {
+      invoicesCount: 0,
+      totalAmount: 0,
+      totalPaid: 0,
+      remaining: 0,
+      avgInvoice: 0,
+      totalKg: 0,
+    };
+    overviewStats[ccy] = { ...base, remaining: remainingByCurrency[ccy] ?? 0 };
   }
   const active = (p.status ?? "active") === "active";
 
@@ -282,13 +263,13 @@ export function PartyDetailsPage({ kind, id }: { kind: PartyKind; id: string }) 
         description="لمحة سريعة عن الحساب — منفصلة لكل عملة."
         tone="primary"
       >
-        {Object.entries(settlementStats).length === 0 ? (
+        {Object.entries(overviewStats).length === 0 ? (
           <div className="py-6 text-center text-xs text-muted-foreground">
             لا حركات مسجلة لهذا الحساب.
           </div>
         ) : (
           <div className="space-y-3">
-            {Object.entries(settlementStats).map(([ccy, stats]) => {
+            {Object.entries(overviewStats).map(([ccy, stats]) => {
               const cur = currencySymbol(ccy as Currency);
               return (
                 <div
@@ -466,8 +447,8 @@ function OverviewTab({ p, kind }: { p: Party; kind: PartyKind }) {
 function InvoicesTab({ p, kind }: { p: Party; kind: PartyKind }) {
   const navigate = useNavigate();
   const isSup = kind === "supplier";
-  const { data: invData } = useInvoicesList();
-  const { data: vData } = useVouchersList();
+  const { data: invData } = useInvoicesList({ partyId: p.id, limit: 1000 });
+  const { data: vData } = useVouchersList({ partyId: p.id, limit: 1000 });
   const invs = (invData?.data ?? [])
     .filter((i) => i.partyId === p.id && i.status !== "cancelled")
     .sort((a, b) => {
@@ -568,8 +549,8 @@ function PaymentsTab({ p }: { p: Party }) {
   const cur = currencySymbol(p.currency ?? "SYP");
   const createReceipt = useCreateReceiptVoucher();
 
-  const { data: invData } = useInvoicesList();
-  const { data: vData } = useVouchersList();
+  const { data: invData } = useInvoicesList({ partyId: p.id, limit: 1000 });
+  const { data: vData } = useVouchersList({ partyId: p.id, limit: 1000 });
   const invs = (invData?.data ?? []).filter((i) => i.partyId === p.id && i.status === "active");
   // Compute actual paid per invoice from linked vouchers so a fully-paid
   // invoice does not appear as open (the same map the InvoiceTab builds).
@@ -1206,9 +1187,9 @@ function StatementTab({ p, kind }: { p: Party; kind: PartyKind }) {
 /* ---------------- Outstanding ---------------- */
 
 function OutstandingTab({ p }: { p: Party }) {
-  const { data: invData } = useInvoicesList();
+  const { data: invData } = useInvoicesList({ partyId: p.id, limit: 1000 });
   const invs = invData?.data ?? [];
-  const { data: vData } = useVouchersList();
+  const { data: vData } = useVouchersList({ partyId: p.id, limit: 1000 });
   const vchs = vData?.data ?? [];
   // Currency-filtered outstanding (same pattern as BUG-06 fix) —
   // avoids mixing SYP+USD+EUR into meaningless blended totals.
@@ -1312,9 +1293,9 @@ function OutstandingTab({ p }: { p: Party }) {
 /* ---------------- Stats / History ---------------- */
 
 function StatsTab({ p, kind }: { p: Party; kind: PartyKind }) {
-  const { data: invData } = useInvoicesList();
+  const { data: invData } = useInvoicesList({ partyId: p.id, limit: 1000 });
   const invs = invData?.data ?? [];
-  const { data: vData } = useVouchersList();
+  const { data: vData } = useVouchersList({ partyId: p.id, limit: 1000 });
   const vchs = vData?.data ?? [];
   const colorNames = Object.fromEntries(colors.map((c) => [c.id, c.name]));
   const colorCodes = Object.fromEntries(colors.map((c) => [c.id, c.code ?? ""]));
@@ -1507,9 +1488,9 @@ function NotesTab({ p, kind }: { p: Party; kind: PartyKind }) {
 /** Derive activity timeline from real data sources (invoices, vouchers, party changes)
  *  — avoids a non-existent activity table. Sorted newest-first. */
 function ActivityTab({ p, kind }: { p: Party; kind: PartyKind }) {
-  const { data: invData } = useInvoicesList();
+  const { data: invData } = useInvoicesList({ partyId: p.id, limit: 1000 });
   const invs = (invData?.data ?? []).filter((i) => i.partyId === p.id && i.status !== "cancelled");
-  const { data: vData } = useVouchersList();
+  const { data: vData } = useVouchersList({ partyId: p.id, limit: 1000 });
   const vchs = (vData?.data ?? []).filter((v) => v.partyId === p.id && v.status === "active");
 
   const items: {

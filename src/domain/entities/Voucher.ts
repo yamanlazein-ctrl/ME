@@ -22,6 +22,7 @@ export interface VoucherData {
   invoiceId?: UUID | null;
   amount: number;
   currency: Currency;
+  exchangeRate?: number | null;
   method: VoucherMethod;
   notesPrint?: string | null;
   notesInternal?: string | null;
@@ -44,6 +45,7 @@ export class Voucher implements VoucherData {
   readonly invoiceId?: UUID | null;
   readonly amount: number;
   readonly currency: Currency;
+  readonly exchangeRate: number | null;
   readonly method: VoucherMethod;
   readonly notesPrint: string | null;
   readonly notesInternal: string | null;
@@ -65,6 +67,7 @@ export class Voucher implements VoucherData {
     this.invoiceId = data.invoiceId;
     this.amount = data.amount;
     this.currency = data.currency;
+    this.exchangeRate = data.exchangeRate ?? null;
     this.method = data.method;
     this.notesPrint = data.notesPrint ?? null;
     this.notesInternal = data.notesInternal ?? null;

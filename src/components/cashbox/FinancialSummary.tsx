@@ -124,12 +124,13 @@ export function FinancialSummary({
       </div>
 
       {/* Tier 2 — calm, uniform, clearly secondary */}
-      <StatCard label="وارد اليوم" value={todayIn} tone="in" />
-      <StatCard label="صادر اليوم" value={todayOut} tone="out" />
+      <StatCard label="وارد اليوم" value={todayIn} tone="in" currency={defaultCurrency} />
+      <StatCard label="صادر اليوم" value={todayOut} tone="out" currency={defaultCurrency} />
       <StatCard
         label="صافي حركة اليوم"
         value={todayIn - todayOut}
         tone={todayIn - todayOut >= 0 ? "in" : "out"}
+        currency={defaultCurrency}
       />
       <StatCard label="عدد حركات اليوم" value={txCount} isCount />
     </section>
@@ -141,11 +142,13 @@ function StatCard({
   value,
   tone,
   isCount,
+  currency,
 }: {
   label: string;
   value: number;
   tone?: "in" | "out";
   isCount?: boolean;
+  currency?: Currency;
 }) {
   return (
     <div className="rounded-xl border border-border bg-card p-4">
@@ -160,7 +163,7 @@ function StatCard({
         dir={isCount ? undefined : "ltr"}
       >
         {/* formatAmount already appends the currency symbol — no extra suffix */}
-        {isCount ? String(value) : formatAmount(value, "SYP")}
+        {isCount ? String(value) : formatAmount(value, currency ?? "SYP")}
       </div>
     </div>
   );

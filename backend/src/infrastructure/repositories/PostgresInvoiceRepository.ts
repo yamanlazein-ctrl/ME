@@ -1,4 +1,4 @@
-import { eq, and, ilike, or, sql, inArray, gte, lte } from "drizzle-orm";
+import { eq, and, ilike, or, sql, inArray, gte, lte, desc } from "drizzle-orm";
 import { allocateDocumentNumber } from "../utils/documentNumbers.js";
 import type { DB } from "../orm/drizzle.js";
 import type {
@@ -16,6 +16,7 @@ import { ledgerEntries } from "../orm/schemas/ledger-entry.table.js";
 import { vouchers } from "../orm/schemas/voucher.table.js";
 import { recordStockMovement } from "./stockMovementHelper.js";
 import { notifyOrderAvailability } from "./orderAvailabilityNotifier.js";
+import { assertDayUnlocked } from "./dayLockHelper.js";
 import type {
   InvoiceData,
   CreateInvoiceInput,
@@ -93,9 +94,9 @@ export class PostgresInvoiceRepository implements IInvoiceRepository {
         .where(where)
         .limit(limit)
         .offset(offset)
-        // Problem 2 fix: order by invoice date (chronological), not createdAt,
-        // so date-range exports list invoices in their real business order.
-        .orderBy(invoices.date, invoices.createdAt),
+        // Newest first: order by business date descending (createdAt as tiebreaker),
+        // so the latest entered invoice is always at the top of the list.
+        .orderBy(desc(invoices.date), desc(invoices.createdAt)),
       this.db
         .select({ count: sql<number>`count(*)` })
         .from(invoices)
@@ -572,6 +573,12 @@ export class PostgresInvoiceRepository implements IInvoiceRepository {
       // A partial or full payment (paid > 0) creates a linked receipt voucher
       // (number RCP-<invoiceNo>) plus a receipt_in ledger entry, all atomically.
       const paid = input.paid ?? 0;
+      // OI-7: a cash-paid invoice (paid > 0 + cash method) writes a cash ledger
+      // leg (cashImpact in/out) and moves the cashbox — reject it on a closed
+      // day, using the same atomic guard as vouchers/expenses/manual movements.
+      if (paid > 0 && (input.paymentMethod ?? "cash") === "cash") {
+        await assertDayUnlocked(tx, ctx.tenantId, input.date);
+      }
       if (isSale && paid > 0) {
         if (paid > inv.total) {
           throw new Error(`المبلغ المدفوع (${paid}) أكبر من إجمالي الفاتورة (${inv.total})`);
@@ -912,7 +919,7 @@ export class PostgresInvoiceRepository implements IInvoiceRepository {
         for (const l of lines) {
           const state = rollStates.get(l.rollId)!;
           const storedQty = Math.round(l.quantityKg * 100) / 100;
-          cogsTotal += Math.round(storedQty * state.pricePerKg);
+          cogsTotal += round2dp(storedQty * state.pricePerKg);
         }
       }
 
@@ -989,11 +996,11 @@ export class PostgresInvoiceRepository implements IInvoiceRepository {
         .update(invoices)
         .set({
           date: input.date,
-          subtotal: Math.round(subtotal),
-          discount: Math.round(discount),
-          tax: Math.round(tax),
-          shipping: Math.round(shipping),
-          total: Math.round(total),
+          subtotal: round2dp(subtotal),
+          discount: round2dp(discount),
+          tax: round2dp(tax),
+          shipping: round2dp(shipping),
+          total: round2dp(total),
           notes: input.notes ?? null,
           // QA fix — persist the (possibly updated) frozen FX capture so
           // base_total / base_paid always match the current document values.

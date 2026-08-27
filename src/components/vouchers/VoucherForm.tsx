@@ -37,6 +37,8 @@ export function VoucherForm({ kind }: { kind: VoucherKind }) {
   const [invoiceId, setInvoiceId] = useState<string>("");
   const [amount, setAmount] = useState<number | "">("");
   const [currency, setCurrency] = useState<Currency>("SYP");
+  const [exchangeRate, setExchangeRate] = useState<number | "">("");
+  const [fxError, setFxError] = useState<string | null>(null);
   const [method, setMethod] = useState<VoucherMethod>("cash");
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
   const [notesPrint, setNotesPrint] = useState("");
@@ -98,6 +100,12 @@ export function VoucherForm({ kind }: { kind: VoucherKind }) {
       setAmountError("المبلغ يجب أن يكون رقماً.");
       valid = false;
     }
+    if (currency !== "USD" && !(Number(exchangeRate) > 0)) {
+      setFxError("سعر الصرف مطلوب لكل عملية ليست بالدولار (عملة الأساس USD)");
+      valid = false;
+    } else {
+      setFxError(null);
+    }
     if (valid && invoiceId) {
       const opt = invoiceOptions.find((i) => i.id === invoiceId);
       if (opt && Number(amount) > opt.remaining) {
@@ -116,6 +124,8 @@ export function VoucherForm({ kind }: { kind: VoucherKind }) {
       invoiceId: invoiceId || undefined,
       amount: Number(amount),
       currency,
+      exchangeRate:
+        currency !== "USD" && Number(exchangeRate) > 0 ? Number(exchangeRate) : undefined,
       method,
       notesPrint: notesPrint || undefined,
       notesInternal: notesInternal || undefined,
@@ -198,6 +208,20 @@ export function VoucherForm({ kind }: { kind: VoucherKind }) {
               </SelectContent>
             </Select>
           </Field>
+          {currency !== "USD" && (
+            <FormField label="سعر الصرف (ل.س / $)" error={fxError ?? undefined}>
+              <Input
+                type="number"
+                value={exchangeRate}
+                onChange={(e) => {
+                  setExchangeRate(e.target.value === "" ? "" : Number(e.target.value));
+                  setFxError(null);
+                }}
+                className="h-10"
+                placeholder="أدخل سعر الصرف يدوياً"
+              />
+            </FormField>
+          )}
           <Field label={isReceipt ? "طريقة الاستلام" : "طريقة الدفع"}>
             <Select value={method} onValueChange={(v) => setMethod(v as VoucherMethod)}>
               <SelectTrigger className="!h-10">

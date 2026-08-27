@@ -6,12 +6,12 @@ import "./print.css";
 
 /**
  * Brand identity for the print header.
- * The company name is hard-coded here (print-only) per the product spec.
+ * The company name is read from settings (`settings.company.name`) — a single
+ * shared source of truth for EVERY document (entry, sale, voucher, return…).
  * Logo appears top-LEFT; brand name beneath; title on the right.
  * No legacy contact / tax / commercial data is shown.
  */
-const BRAND_NAME = "Motard Fabrics Group";
-const BRAND_SUBTITLE = "Motard Fabrics Group";
+const FALLBACK_BRAND_NAME = "Motard Fabrics Group";
 
 export type PrintMetaItem = { label: string; value: string };
 
@@ -27,7 +27,14 @@ export type PrintTotal = { label: string; value: string; grand?: boolean };
 
 /** Small label that identifies the document kind in the header. */
 export type PrintTypeBadge =
-  "PURCHASE" | "SALE" | "RETURN_IN" | "RETURN_OUT" | "PRINT_JOB" | "STATEMENT";
+  | "PURCHASE"
+  | "SALE"
+  | "RETURN_IN"
+  | "RETURN_OUT"
+  | "PRINT_JOB"
+  | "STATEMENT"
+  | "RECEIPT"
+  | "PAYMENT";
 
 const BADGE_LABEL: Record<PrintTypeBadge, string> = {
   PURCHASE: "PURCHASE",
@@ -36,6 +43,8 @@ const BADGE_LABEL: Record<PrintTypeBadge, string> = {
   RETURN_OUT: "RETURN OUT",
   PRINT_JOB: "PRINT JOB",
   STATEMENT: "STATEMENT",
+  RECEIPT: "RECEIPT",
+  PAYMENT: "PAYMENT",
 };
 
 export function PrintDocument({
@@ -93,9 +102,9 @@ export function PrintDocument({
       {/* ── Row 1: Brand identity ── */}
       <div className="print-header-brand">
         <div className="print-brand-text">
-          <div className="print-company-name">{BRAND_NAME}</div>
+          <div className="print-company-name">{c.name || FALLBACK_BRAND_NAME}</div>
         </div>
-        {showLogo && <img className="print-logo" src={logoUrl} alt={BRAND_NAME} />}
+        {showLogo && <img className="print-logo" src={logoUrl} alt={c.name || FALLBACK_BRAND_NAME} />}
       </div>
 
       {/* ── Row 2: Gold divider ── */}

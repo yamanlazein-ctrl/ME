@@ -1,4 +1,4 @@
-import { eq, and, desc, ilike, or, sql } from "drizzle-orm";
+import { eq, and, desc, ilike, or, sql, inArray } from "drizzle-orm";
 import type { DB } from "../orm/drizzle.js";
 import type {
   IPartyRepository,
@@ -9,7 +9,7 @@ import { parties } from "../orm/schemas/party.table.js";
 import { ledgerEntries } from "../orm/schemas/ledger-entry.table.js";
 import { invoices } from "../orm/schemas/invoice.table.js";
 import { vouchers } from "../orm/schemas/voucher.table.js";
-import { Party, type PartyData } from "../../domain/entities/Party.js";
+import { Party, type PartyData, type PartyListStats } from "../../domain/entities/Party.js";
 import type { TenantContext, PaginatedResult } from "../../domain/types/index.js";
 import { allocateDocumentNumber } from "../utils/documentNumbers.js";
 
@@ -67,8 +67,28 @@ export class PostgresPartyRepository implements IPartyRepository {
     ]);
 
     const total = Number(countRows[0]?.count ?? 0);
+    const domains = dataRows.map((r) => this.toDomain(r));
+    // Server-side aggregation for the list view (قائمة العملاء/الموردين): one
+    // GROUP BY per figure instead of shipping the tenant's invoices/vouchers to
+    // the client. Only computed for kind-scoped lists (the consumer always asks
+    // per kind); mixed `/parties` lists stay stats-free.
+    if (filter.kind && domains.length > 0) {
+      const statsMap = await this.computeListStats(
+        domains.map((d) => d.id),
+        filter.kind,
+        ctx.tenantId,
+      );
+      for (const d of domains) {
+        d.stats = statsMap.get(d.id) ?? {
+          invoicesCount: 0,
+          totalAmount: 0,
+          totalPaid: 0,
+          remaining: 0,
+        };
+      }
+    }
     return {
-      data: dataRows.map((r) => this.toDomain(r)),
+      data: domains,
       meta: {
         total,
         page,
@@ -77,6 +97,110 @@ export class PostgresPartyRepository implements IPartyRepository {
         totalPages: Math.ceil(total / limit),
       },
     };
+  }
+
+  /**
+   * Compute per-party list stats in three indexed GROUP BY queries, each scoped
+   * to the party's own currency (matching `buildPartyStats`'s single-currency
+   * semantics). `remaining` comes exclusively from the ledger so it always
+   * matches the account statement's `finalBalance`.
+   */
+  private async computeListStats(
+    partyIds: string[],
+    kind: "customer" | "supplier",
+    tenantId: string,
+  ): Promise<Map<string, PartyListStats>> {
+    const map = new Map<string, PartyListStats>();
+    const get = (id: string): PartyListStats => {
+      const existing = map.get(id);
+      if (existing) return existing;
+      const s: PartyListStats = { invoicesCount: 0, totalAmount: 0, totalPaid: 0, remaining: 0 };
+      map.set(id, s);
+      return s;
+    };
+
+    const invoiceType = kind === "supplier" ? "entry" : "sale";
+    const voucherKind = kind === "supplier" ? "payment" : "receipt";
+
+    // 1) Invoices: count / total / last date, in the party's currency.
+    const invRows = await this.db
+      .select({
+        partyId: invoices.partyId,
+        cnt: sql<number>`count(*)::int`,
+        total: sql<string>`coalesce(sum(${invoices.total}), 0)::text`,
+        lastDate: sql<string>`max(${invoices.date}::text)`,
+      })
+      .from(invoices)
+      .innerJoin(parties, and(eq(parties.id, invoices.partyId), eq(parties.tenantId, tenantId)))
+      .where(
+        and(
+          eq(invoices.tenantId, tenantId),
+          eq(invoices.type, invoiceType),
+          eq(invoices.status, "active"),
+          inArray(invoices.partyId, partyIds),
+          eq(invoices.currency, parties.currency),
+        ),
+      )
+      .groupBy(invoices.partyId);
+
+    for (const r of invRows) {
+      const s = get(r.partyId);
+      s.invoicesCount = Number(r.cnt);
+      s.totalAmount = Number(r.total);
+      if (r.lastDate) s.lastDate = r.lastDate;
+    }
+
+    // 2) Vouchers: total paid, in the party's currency.
+    const vchRows = await this.db
+      .select({
+        partyId: vouchers.partyId,
+        total: sql<string>`coalesce(sum(${vouchers.amount}), 0)::text`,
+      })
+      .from(vouchers)
+      .innerJoin(parties, and(eq(parties.id, vouchers.partyId), eq(parties.tenantId, tenantId)))
+      .where(
+        and(
+          eq(vouchers.tenantId, tenantId),
+          eq(vouchers.kind, voucherKind),
+          eq(vouchers.status, "active"),
+          inArray(vouchers.partyId, partyIds),
+          eq(vouchers.currency, parties.currency),
+        ),
+      )
+      .groupBy(vouchers.partyId);
+
+    for (const r of vchRows) {
+      get(r.partyId).totalPaid = Number(r.total);
+    }
+
+    // 3) Ledger balance — the authoritative remaining balance.
+    const ledRows = await this.db
+      .select({
+        partyId: ledgerEntries.partyId,
+        debit: sql<string>`coalesce(sum(${ledgerEntries.debit}), 0)::text`,
+        credit: sql<string>`coalesce(sum(${ledgerEntries.credit}), 0)::text`,
+      })
+      .from(ledgerEntries)
+      .innerJoin(parties, and(eq(parties.id, ledgerEntries.partyId), eq(parties.tenantId, tenantId)))
+      .where(
+        and(
+          eq(ledgerEntries.tenantId, tenantId),
+          eq(ledgerEntries.status, "active"),
+          inArray(ledgerEntries.partyId, partyIds),
+          eq(ledgerEntries.currency, parties.currency),
+        ),
+      )
+      .groupBy(ledgerEntries.partyId);
+
+    for (const r of ledRows) {
+      if (!r.partyId) continue; // ledger_entries.party_id is nullable (cash/non-party rows)
+      const d = Number(r.debit);
+      const c = Number(r.credit);
+      // Standard sign: customer (AR) = debit − credit; supplier (AP) = credit − debit.
+      get(r.partyId).remaining = kind === "supplier" ? c - d : d - c;
+    }
+
+    return map;
   }
 
   async create(data: CreatePartyData, ctx: TenantContext): Promise<PartyData> {

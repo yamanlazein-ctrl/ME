@@ -99,9 +99,9 @@ function ReportsPage() {
     (i) => i.currency,
   );
   const receivablesByCurrency = groupAmountsByCurrency(
-    salesInvoices,
-    (i) => Math.max(0, invoiceTotal(i) - paidByInvoice(i.id)),
-    (i) => i.currency,
+    customers,
+    (c) => c.stats?.remaining ?? 0,
+    (c) => c.currency ?? "SYP",
   );
 
   const purchaseInvoices = activeInvoices.filter((i) => i.type === "entry" && inRange(i.date));
@@ -111,9 +111,9 @@ function ReportsPage() {
     (i) => i.currency,
   );
   const payablesByCurrency = groupAmountsByCurrency(
-    purchaseInvoices,
-    (i) => Math.max(0, invoiceTotal(i) - paidByInvoice(i.id)),
-    (i) => i.currency,
+    suppliers,
+    (s) => s.stats?.remaining ?? 0,
+    (s) => s.currency ?? "SYP",
   );
 
   const salesReturns = activeReturns.filter((r) => r.kind === "sale" && inRange(r.date));

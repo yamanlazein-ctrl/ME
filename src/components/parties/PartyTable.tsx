@@ -34,14 +34,12 @@ import {
 } from "@/presentation/hooks/useParties";
 import { currencySymbol } from "@/presentation/hooks/useCurrency";
 import { useInventory } from "@/presentation/hooks/useInventory";
-import { useInvoicesList } from "@/presentation/hooks/useInvoices";
-import { useVouchersList } from "@/presentation/hooks/useVouchers";
-import { buildPartyStats, buildPartyStatsByCurrency } from "@/presentation/hooks/useLedger";
 import { DataPagination } from "@/components/common/DataPagination";
 import { BulkSelectToolbar } from "@/components/common/BulkSelectToolbar";
 import { ConfirmBulkAction } from "@/components/common/ConfirmBulkAction";
 import { Checkbox } from "@/components/ui/checkbox";
-import { formatNumber, formatMoney, formatQuantity } from "@/shared/utils/formatNumber";
+import { formatMoney } from "@/shared/utils/formatNumber";
+import type { Party } from "@/domain/entities/Party";
 
 const _nextFormId = 0;
 function toMockPatch(patch: Record<string, unknown>): Record<string, unknown> {
@@ -51,6 +49,25 @@ function toMockPatch(patch: Record<string, unknown>): Record<string, unknown> {
     else out[k] = v;
   }
   return out;
+}
+
+/**
+ * Build the per-party list summary from server-side aggregates (`p.stats`).
+ * `remaining` is the ledger balance (identical to the account statement), so the
+ * كشف الحساب and قائمة العملاء always agree; `creditUsed` mirrors it.
+ */
+function partySummary(p: Party) {
+  const st = p.stats;
+  const remaining = st?.remaining ?? 0;
+  return {
+    invoicesCount: st?.invoicesCount ?? 0,
+    totalAmount: st?.totalAmount ?? 0,
+    totalPaid: st?.totalPaid ?? 0,
+    remaining,
+    lastDate: st?.lastDate,
+    creditLimit: p.creditLimit ?? 0,
+    creditUsed: remaining,
+  };
 }
 
 export function PartyListPage({
@@ -64,10 +81,6 @@ export function PartyListPage({
 }) {
   useInventory();
   useParties();
-  const { data: invoicesData } = useInvoicesList();
-  const invoices = invoicesData?.data ?? [];
-  const { data: vouchersData } = useVouchersList();
-  const vouchers = vouchersData?.data ?? [];
   const navigate = useNavigate();
 
   const list = kind === "supplier" ? suppliers : customers;
@@ -130,8 +143,8 @@ export function PartyListPage({
     const result = list.filter((p) => {
       if (status !== "all" && (p.status ?? "active") !== status) return false;
       if (credit !== "all") {
-        // Credit limit is per-party (single currency) → filter by party.currency to avoid blended totals.
-        const s = buildPartyStats(p, kind, invoices, vouchers, p.currency ?? "SYP");
+        // Credit limit is per-party (single currency) → server-side aggregate.
+        const s = partySummary(p);
         const over = s.creditLimit > 0 && s.creditUsed > s.creditLimit;
         if (credit === "over" && !over) return false;
         if (credit === "under" && over) return false;
@@ -152,7 +165,7 @@ export function PartyListPage({
       return arCollator.compare(a.name ?? "", b.name ?? "");
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [q, status, credit, list.length, invoices, vouchers]);
+  }, [q, status, credit, list.length]);
 
   const total = filtered.length;
   const pageCount = Math.max(1, Math.ceil(total / pageSize));
@@ -183,7 +196,7 @@ export function PartyListPage({
         "الحالة",
       ],
       ...filtered.map((p) => {
-        const s = buildPartyStats(p, kind, invoices, vouchers, p.currency ?? "SYP");
+        const s = partySummary(p);
         return [
           p.code ?? "",
           p.name,
@@ -309,7 +322,7 @@ export function PartyListPage({
                 </tr>
               )}
               {paged.map((p) => {
-                const s = buildPartyStats(p, kind, invoices, vouchers, p.currency ?? "SYP");
+                const s = partySummary(p);
                 const cur = currencySymbol(p.currency ?? "SYP");
                 const active = (p.status ?? "active") === "active";
                 const pct =

@@ -7,6 +7,7 @@ import { rolls } from "../orm/schemas/roll.table.js";
 import { colors } from "../orm/schemas/color.table.js";
 import { fabrics } from "../orm/schemas/fabric.table.js";
 import { recordStockMovement } from "./stockMovementHelper.js";
+import { assertDayUnlocked } from "./dayLockHelper.js";
 import { nextDocumentNumber } from "../utils/documentNumbers.js";
 import {
   type PrintJobData,
@@ -14,6 +15,7 @@ import {
   type ReceivePrintJobInput,
 } from "../../domain/entities/PrintJob.js";
 import type { TenantContext, UUID } from "../../domain/types/index.js";
+import { round2dp } from "@erp/shared";
 
 export class PostgresPrintJobRepository implements IPrintJobRepository {
   constructor(private readonly db: DB) {}
@@ -112,7 +114,7 @@ export class PostgresPrintJobRepository implements IPrintJobRepository {
       // (receivable for the printing service). No cash impact — settled via
       // receipt vouchers later.
       if (input.customerId && input.chargePerKg) {
-        const chargeAmount = Math.round(input.quantityKg * input.chargePerKg);
+        const chargeAmount = round2dp(input.quantityKg * input.chargePerKg);
         if (chargeAmount > 0) {
           // C4 fix: double-entry — balance the customer receivable with revenue.
           await tx.insert(ledgerEntries).values([
@@ -402,8 +404,10 @@ export class PostgresPrintJobRepository implements IPrintJobRepository {
       const costPerKg = input.printCostPerKg ?? Number(job.printCostPerKg ?? 0);
       const receivedKgNum = input.receivedKg ?? 0;
       if (costPerKg > 0 && receivedKgNum > 0) {
-        const printCostTotal = Math.round(receivedKgNum * costPerKg);
+        const printCostTotal = round2dp(receivedKgNum * costPerKg);
         if (printCostTotal > 0) {
+          // OI-7: printing cost paid now moves cash out — reject on a closed day.
+          await assertDayUnlocked(tx, ctx.tenantId, effectiveDate2);
           await tx.insert(ledgerEntries).values([
             {
               tenantId: ctx.tenantId,

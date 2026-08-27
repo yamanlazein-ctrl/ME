@@ -3,6 +3,7 @@ import type { DB } from "../orm/drizzle.js";
 import type { ICashboxRepository } from "../../application/ports/ICashboxRepository.js";
 import { cashboxSessions, manualMovements, dayCloses } from "../orm/schemas/cashbox.table.js";
 import { ledgerEntries } from "../orm/schemas/ledger-entry.table.js";
+import { assertDayUnlocked } from "./dayLockHelper.js";
 import type {
   CashboxState,
   DayCloseData,
@@ -81,6 +82,7 @@ export class PostgresCashboxRepository implements ICashboxRepository {
     ctx: TenantContext,
   ): Promise<ManualMovementData> {
     return this.db.transaction(async (tx) => {
+      await assertDayUnlocked(tx, ctx.tenantId, input.date);
       const [row] = await tx
         .insert(manualMovements)
         .values({
@@ -190,7 +192,11 @@ export class PostgresCashboxRepository implements ICashboxRepository {
         .where(eq(cashboxSessions.tenantId, ctx.tenantId))
         .limit(1);
       const currency = input.currency ?? session?.currency ?? "SYP";
-      const opening = session?.openingBalance ?? 0;
+      // Currency-scope the opening fund exactly like the balance endpoint: it
+      // only counts for the session's currency, never for another currency's
+      // day-close totals.
+      const opening =
+        currency === session?.currency ? (session?.openingBalance ?? 0) : 0;
       const from = session?.openingDate ?? "0001-01-01";
 
       const [ledger] = await tx

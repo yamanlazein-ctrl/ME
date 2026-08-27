@@ -81,7 +81,9 @@ function CashBoxPage() {
   const { data: balSYP = 0 } = useCashBalance(today, "SYP");
   const { data: balUSD } = useCashBalance(today, "USD");
   const { data: balEUR } = useCashBalance(today, "EUR");
-  const { data: todayFlow } = useCashMovementsOn(today, "SYP");
+  const { data: todayFlowSYP } = useCashMovementsOn(today, "SYP");
+  const { data: todayFlowUSD } = useCashMovementsOn(today, "USD");
+  const { data: todayFlowEUR } = useCashMovementsOn(today, "EUR");
   const { data: manualMoves = [] } = useManualMovements();
   const addMovement = useAddManualMovement();
   const deleteMovement = useDeleteManualMovement();
@@ -142,8 +144,13 @@ function CashBoxPage() {
   };
   // Hero balance = the default display currency's own balance (no conversion).
   const currentBalance = perCurrency[defaultCurrency] ?? 0;
-  const todayIn = todayFlow?.in ?? 0;
-  const todayOut = todayFlow?.out ?? 0;
+  const todayFlowByCurrency: Record<string, { in: number; out: number }> = {
+    SYP: todayFlowSYP ?? { in: 0, out: 0 },
+    USD: todayFlowUSD ?? { in: 0, out: 0 },
+    EUR: todayFlowEUR ?? { in: 0, out: 0 },
+  };
+  const todayIn = todayFlowByCurrency[defaultCurrency]?.in ?? 0;
+  const todayOut = todayFlowByCurrency[defaultCurrency]?.out ?? 0;
 
   // Today's transaction count (light query; separate cache entry from the tab feed).
   const { data: todayLedgerResult } = useLedgerEntries({

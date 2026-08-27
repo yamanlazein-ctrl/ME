@@ -2,6 +2,7 @@ import type { LedgerType, CashImpact, Currency } from "@/domain/types";
 import type { PartyKind } from "@/domain/entities/Party";
 import type { InvoiceData, InvoiceLineData } from "@/domain/entities/Invoice";
 import { invoiceTotal } from "./invoiceCalc";
+import { round2dp } from "@erp/shared";
 
 export type LedgerStatus = "active" | "cancelled";
 
@@ -186,7 +187,7 @@ export function buildFabricHistory(
   }
   return [...map.values()].map((r) => ({
     ...r,
-    avgPrice: r.totalKg > 0 ? Math.round(r.totalAmount / r.totalKg) : 0,
+    avgPrice: r.totalKg > 0 ? round2dp(r.totalAmount / r.totalKg) : 0,
   }));
 }
 
@@ -217,9 +218,9 @@ export function buildOutstanding(
   for (const inv of invoices) {
     if (inv.partyId !== partyId || !isActive(inv)) continue;
     if (currency && inv.currency !== currency) continue;
-    const total = Math.round(invoiceTotal(inv));
+    const total = round2dp(invoiceTotal(inv));
     if (total <= 0) continue;
-    const paid = Math.round(paidByInvoice.get(inv.id) ?? 0);
+    const paid = round2dp(paidByInvoice.get(inv.id) ?? 0);
     const remaining = Math.max(0, total - paid);
     if (remaining <= 0) continue;
     const d = new Date(inv.date + "T00:00:00");
@@ -256,7 +257,7 @@ export function buildPartyStats(
   if (currency) {
     invs = invs.filter((i) => i.currency === currency);
   }
-  const totalAmount = invs.reduce((s, i) => s + Math.round(invoiceTotal(i)), 0);
+  const totalAmount = invs.reduce((s, i) => s + round2dp(invoiceTotal(i)), 0);
   let partyVouchers = vouchers.filter(
     (v) =>
       v.partyId === party.id &&
@@ -283,7 +284,7 @@ export function buildPartyStats(
     totalAmount,
     totalPaid: paid,
     remaining,
-    avgInvoice: invs.length ? Math.round(totalAmount / invs.length) : 0,
+    avgInvoice: invs.length ? round2dp(totalAmount / invs.length) : 0,
     lastDate: dates.length ? dates[dates.length - 1] : undefined,
     totalKg: Math.round(totalKg),
     creditLimit,
@@ -322,7 +323,7 @@ export function buildPartyStatsByCurrency(
       totalKg: 0,
     };
     cur.invoicesCount += 1;
-    cur.totalAmount += Math.round(invoiceTotal(inv));
+    cur.totalAmount += round2dp(invoiceTotal(inv));
     cur.totalKg += inv.lines.reduce((a, l) => a + l.quantityKg, 0);
     out[c] = cur;
   }
@@ -343,7 +344,7 @@ export function buildPartyStatsByCurrency(
     const cur = out[c];
     // H2 fix: keep negative (credit) balances visible instead of clamping.
     cur.remaining = cur.totalAmount - cur.totalPaid;
-    cur.avgInvoice = cur.invoicesCount ? Math.round(cur.totalAmount / cur.invoicesCount) : 0;
+    cur.avgInvoice = cur.invoicesCount ? round2dp(cur.totalAmount / cur.invoicesCount) : 0;
     cur.totalKg = Math.round(cur.totalKg);
   }
   return out;

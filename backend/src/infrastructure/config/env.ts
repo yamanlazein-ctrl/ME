@@ -29,6 +29,10 @@ const envSchema = z.object({
   LICENSE_SERVER_MODE: z.enum(["server", "embedded"]).default("embedded"),
   SUPER_ADMIN_EMAIL: z.string().email().optional(),
   SUPER_ADMIN_PASSWORD: z.string().optional(),
+  // ── FX reference rate (header display-only widget — never billing logic) ──
+  FX_UPSTREAM_URL: z.string().url().default("https://liranews.info/api/public/v1/price/usdsypd"),
+  FX_REFRESH_INTERVAL_MS: z.coerce.number().default(15 * 60 * 1000),
+  FX_FETCH_TIMEOUT_MS: z.coerce.number().default(8_000),
 });
 
 export const config = envSchema.parse(process.env);
@@ -47,5 +51,7 @@ if (config.NODE_ENV === "production" && config.CORS_ORIGIN.trim() === "*") {
   throw new Error("CORS_ORIGIN=* is not allowed in production — set an explicit allowlist.");
 }
 if (config.NODE_ENV === "production" && !config.REDIS_URL) {
-  throw new Error("REDIS_URL must be set when NODE_ENV=production — token denylist requires Redis.");
+  throw new Error(
+    "REDIS_URL must be set when NODE_ENV=production — token denylist requires Redis.",
+  );
 }

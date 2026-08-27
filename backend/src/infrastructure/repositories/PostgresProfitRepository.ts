@@ -18,6 +18,7 @@ import { parties } from "../orm/schemas/party.table.js";
 import { vouchers } from "../orm/schemas/voucher.table.js";
 import { returns } from "../orm/schemas/return.table.js";
 import { returnLines } from "../orm/schemas/return-line.table.js";
+import { ledgerEntries } from "../orm/schemas/ledger-entry.table.js";
 
 /**
  * PostgresProfitRepository — computes net profit directly from live data.
@@ -444,7 +445,65 @@ export class PostgresProfitRepository implements IProfitRepository {
       });
     }
 
-    return out.sort((a, b) => b.remaining - a.remaining);
+    // Authoritative reconciliation (fix): a party balance is a PARTY-level figure —
+    // receipts can be unlinked (invoice_id NULL), and returns + settlements also post
+    // to the ledger — so summing per-invoice `total − paid − returns` drifts from the
+    // true outstanding. Reconcile each party+currency group to its LEDGER balance
+    // (identical to the كشف الحساب / getBalance): reduce the group's invoice remainings
+    // (oldest invoices absorb the reduction first) until they sum exactly to the ledger
+    // balance. Fully-settled / overpaid groups drop out (remaining <= 0).
+    const balRows = await this.db
+      .select({
+        partyId: ledgerEntries.partyId,
+        currency: ledgerEntries.currency,
+        debit: sql<string>`coalesce(sum(${ledgerEntries.debit}), 0)::text`,
+        credit: sql<string>`coalesce(sum(${ledgerEntries.credit}), 0)::text`,
+      })
+      .from(ledgerEntries)
+      .where(
+        and(
+          eq(ledgerEntries.tenantId, ctx.tenantId),
+          eq(ledgerEntries.status, "active"),
+          ...(query.currency ? [eq(ledgerEntries.currency, query.currency)] : []),
+        ),
+      )
+      .groupBy(ledgerEntries.partyId, ledgerEntries.currency);
+
+    const balByKey = new Map<string, { deb: number; cred: number }>();
+    for (const r of balRows) {
+      if (!r.partyId) continue;
+      const key = `${r.partyId}|${r.currency}`;
+      const prev = balByKey.get(key) ?? { deb: 0, cred: 0 };
+      prev.deb += Number(r.debit);
+      prev.cred += Number(r.credit);
+      balByKey.set(key, prev);
+    }
+
+    const groups = new Map<string, DebtItem[]>();
+    for (const it of out) {
+      const key = `${it.partyId}|${it.currency}`;
+      const arr = groups.get(key) ?? [];
+      arr.push(it);
+      groups.set(key, arr);
+    }
+
+    for (const items of groups.values()) {
+      const bal = balByKey.get(`${items[0].partyId}|${items[0].currency}`);
+      if (!bal) continue;
+      const isPayable = items[0].kind === "payable";
+      const target = isPayable ? bal.cred - bal.deb : bal.deb - bal.cred;
+      items.sort((a, b) => (a.date < b.date ? -1 : 1)); // oldest absorbs first
+      let current = items.reduce((s, it) => s + it.remaining, 0);
+      let diff = target - current;
+      for (const it of items) {
+        if (diff >= 0) break;
+        const take = Math.min(it.remaining, Math.abs(diff));
+        it.remaining -= take;
+        diff += take;
+      }
+    }
+
+    return out.filter((it) => it.remaining > 0).sort((a, b) => b.remaining - a.remaining);
   }
 
   /** Individual expense rows for the details drill-down. */

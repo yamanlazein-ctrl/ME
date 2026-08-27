@@ -1,4 +1,5 @@
 import type { UUID, EntityStatus, ReturnKind } from "../types/index.js";
+import { round2dp } from "@erp/shared";
 
 export interface ReturnLineData {
   id: UUID;
@@ -80,7 +81,7 @@ export class ReturnDoc {
   }
 
   get amount(): number {
-    return this.data.lines.reduce((s, l) => s + Math.round(l.quantityKg * l.pricePerKg), 0);
+    return this.data.lines.reduce((s, l) => s + round2dp(l.quantityKg * l.pricePerKg), 0);
   }
 
   toData(): ReturnData {

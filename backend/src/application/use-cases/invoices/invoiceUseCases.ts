@@ -7,6 +7,7 @@ import type {
 } from "../../../domain/entities/Invoice.js";
 import type { IAuditRepository } from "../../ports/IAuditRepository.js";
 import { logAuditError } from "../../../infrastructure/audit/auditErrorHandler.js";
+import { DayLockedError } from "../../../domain/errors/index.js";
 
 type Result<T> = { ok: true; data: T } | { ok: false; error: string };
 
@@ -47,6 +48,7 @@ function errorsCombined(errors: Collected[]): string {
  * logged server-side (caller) for diagnosis instead.
  */
 function invoiceErrorMessage(e: unknown): string {
+  if (e instanceof DayLockedError) return e.message;
   const errs = collectErrors(e);
   const combined = errorsCombined(errs);
   const hasCode = (c: string) => hasErrorCode(errs, c);

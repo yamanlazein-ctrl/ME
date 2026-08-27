@@ -41,6 +41,8 @@ import {
 } from "./routes/invitation.route.js";
 import { registerAuditRoutes } from "./routes/audit.route.js";
 import { backupRouter } from "./routes/backup.route.js";
+import { registerFxRoutes } from "./routes/fx.route.js";
+import { FxRateService } from "../infrastructure/fx/FxRateService.js";
 import { createLicenseHeartbeatMiddleware } from "../infrastructure/http/middleware/license.heartbeat.middleware.js";
 
 // Crash reporting & APM — guarded so it never blocks startup
@@ -60,6 +62,15 @@ const app = express();
 app.set("trust proxy", 1);
 const container = buildContainer();
 const authMiddleware = createAuthMiddleware(container.jwtSigner, container.tokenDenylist);
+
+// FX reference rate — display-only header widget (⛔ never billing logic).
+// The backend fetches the provider on a timer into an in-memory cache; the
+// browser only ever calls GET /api/fx/reference-rate (see registerFxRoutes).
+const fxRateService = new FxRateService({
+  upstreamUrl: config.FX_UPSTREAM_URL,
+  refreshIntervalMs: config.FX_REFRESH_INTERVAL_MS,
+  fetchTimeoutMs: config.FX_FETCH_TIMEOUT_MS,
+});
 
 // Security & compression middleware
 // Pure JSON API — CSP governs only HTML documents. Allow same-origin
@@ -278,6 +289,8 @@ registerAuditRoutes(
   authMiddleware,
   rbac(["admin", "accountant", "warehouse", "viewer"]),
 );
+// FX reference rate — display-only header widget (⛔ never billing logic).
+registerFxRoutes(apiRouter, fxRateService, authMiddleware);
 // Full backup endpoint — POST /api/backup/full (returns ZIP file) — admin-only, tenant-scoped
 apiRouter.use(authMiddleware, rbac(["admin"]), backupRouter);
 
@@ -303,6 +316,8 @@ Sentry.setupExpressErrorHandler(app);
 app.use(createErrorHandler(logger));
 
 // Start server
+// FX reference rate background refresh — non-blocking, never delays startup.
+fxRateService.start();
 app.listen(config.PORT, () => {
   logger.info(`ERP API server listening on port ${config.PORT} in ${config.NODE_ENV} mode`);
 });

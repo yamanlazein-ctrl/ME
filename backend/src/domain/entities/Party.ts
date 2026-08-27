@@ -1,6 +1,24 @@
 import type { UUID, PartyKind, EntityStatus } from "../types/index.js";
 import { createPartyData as sharedCreatePartyData } from "@erp/shared";
 
+/**
+ * Server-computed per-party summary for list views (قائمة العملاء/الموردين).
+ *
+ * `remaining` is the AUTHORITATIVE outstanding balance and is computed from the
+ * ledger (SUM debit − SUM credit, same sign convention as the account statement
+ * `getBalance`), NOT from invoices+vouchers alone — so settlements, returns and
+ * opening balances are reflected identically to the statement. The other
+ * figures (`invoicesCount`, `totalAmount`, `totalPaid`, `lastDate`) are computed
+ * directly from invoices + vouchers, scoped to the party's own currency.
+ */
+export interface PartyListStats {
+  invoicesCount: number;
+  totalAmount: number;
+  totalPaid: number;
+  remaining: number;
+  lastDate?: string;
+}
+
 export interface PartyData {
   id: UUID;
   tenantId: UUID;
@@ -37,6 +55,8 @@ export interface PartyData {
   updatedAt: string;
   cancelledAt?: string;
   cancelledBy?: UUID;
+  /** Only present when the list is fetched with server-side aggregation. */
+  stats?: PartyListStats;
 }
 
 export class Party {

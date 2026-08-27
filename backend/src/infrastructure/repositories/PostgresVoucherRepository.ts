@@ -10,6 +10,7 @@ import { invoices } from "../orm/schemas/invoice.table.js";
 import { ledgerEntries } from "../orm/schemas/ledger-entry.table.js";
 import { returns } from "../orm/schemas/return.table.js";
 import { returnLines } from "../orm/schemas/return-line.table.js";
+import { assertDayUnlocked } from "./dayLockHelper.js";
 import {
   Voucher,
   type VoucherData,
@@ -52,7 +53,7 @@ export class PostgresVoucherRepository implements IVoucherRepository {
         .where(where)
         .limit(limit)
         .offset(offset)
-        .orderBy(desc(vouchers.createdAt)),
+        .orderBy(desc(vouchers.date), desc(vouchers.createdAt)),
       this.db
         .select({ count: sql<number>`count(*)` })
         .from(vouchers)
@@ -76,6 +77,7 @@ export class PostgresVoucherRepository implements IVoucherRepository {
     ctx: TenantContext,
   ): Promise<VoucherData> {
     return this.db.transaction(async (tx) => {
+      await assertDayUnlocked(tx, ctx.tenantId, input.date);
       // H-NEW (forensic audit 2026-08-25, voucher numbering): allocate the
       // document number INSIDE this transaction so a failure in the guards
       // below (over-collection, cross-currency, cancelled-invoice, FK) does

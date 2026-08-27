@@ -3,6 +3,7 @@ import type { TenantContext, PaginatedResult } from "../../../domain/types/index
 import type { VoucherData, CreateVoucherInput } from "../../../domain/entities/Voucher.js";
 import type { IAuditRepository } from "../../ports/IAuditRepository.js";
 import { logAuditError } from "../../../infrastructure/audit/auditErrorHandler.js";
+import { DayLockedError } from "../../../domain/errors/index.js";
 
 type Result<T> = { ok: true; data: T } | { ok: false; error: string };
 
@@ -41,6 +42,7 @@ export async function createVoucherUseCase(
       );
     return { ok: true, data: voucher };
   } catch (e) {
+    if (e instanceof DayLockedError) return { ok: false, error: e.message };
     // F4 (audit fix): raw JS errors (e.g. ReferenceError on a TDZ) are not actionable
     // for the user. Log the full error server-side and return a generic Arabic message.
     const err = e instanceof Error ? e : new Error(String(e));

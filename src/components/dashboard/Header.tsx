@@ -1,6 +1,7 @@
 import { NotificationsBell } from "./NotificationsBell";
 import { GlobalSearch } from "./GlobalSearch";
 import { ThemeToggle } from "./ThemeToggle";
+import { FxReferenceRate } from "./FxReferenceRate";
 import { settings } from "@/presentation/hooks/useSettings";
 import logoUrl from "@/assets/logo-motard.png";
 import { Store, RefreshCw, Globe } from "lucide-react";
@@ -29,13 +30,8 @@ export function Header() {
           />
           {branchName && (
             <div className="hidden min-w-0 items-center gap-1.5 rounded-full border border-border/60 bg-card/60 px-2.5 py-1 text-xs md:flex">
-              <Store
-                className="h-3.5 w-3.5 shrink-0 text-primary/80"
-                strokeWidth={2}
-              />
-              <span className="truncate font-medium text-foreground/80">
-                {branchName}
-              </span>
+              <Store className="h-3.5 w-3.5 shrink-0 text-primary/80" strokeWidth={2} />
+              <span className="truncate font-medium text-foreground/80">{branchName}</span>
             </div>
           )}
         </div>
@@ -47,9 +43,12 @@ export function Header() {
           </div>
         </div>
 
-        {/* End (RTL left): last sync + theme + notifications */}
+        {/* End (RTL left): reference FX + last sync + theme + notifications */}
         <div className="flex shrink-0 items-center gap-2 sm:gap-2.5">
           <div className="hidden items-center gap-1.5 lg:flex">
+            {/* Reference USD→SYP rate — DISPLAY-ONLY badge, fully isolated
+                from invoice/voucher logic (exchangeRate stays manual). */}
+            <FxReferenceRate />
             <div className="flex items-center gap-1.5 rounded-full border border-border/60 bg-card/60 px-2.5 py-1 text-[11px] text-muted-foreground tabular-nums">
               <RefreshCw className="h-3 w-3 text-primary/70" strokeWidth={2} />
               <span>آخر مزامنة {lastSync}</span>

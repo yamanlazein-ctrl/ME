@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { exchangeRateSchema } from "../fx.js";
 
 export const createVoucherSchema = z.object({
   kind: z.enum(["receipt", "payment"]),
@@ -8,6 +9,9 @@ export const createVoucherSchema = z.object({
   invoiceId: z.string().uuid().optional(),
   amount: z.number().int().positive(),
   currency: z.enum(["SYP", "USD", "EUR"]).optional(),
+  // BUG-03 (same-pattern) frozen FX rate: units of `currency` per 1 USD,
+  // required for non-USD vouchers. Mirrors createInvoiceSchema.
+  exchangeRate: exchangeRateSchema,
   method: z.enum(["cash", "transfer", "check", "card"]),
   notesPrint: z.string().max(2000).optional(),
   notesInternal: z.string().max(2000).optional(),

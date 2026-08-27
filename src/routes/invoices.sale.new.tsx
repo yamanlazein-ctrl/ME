@@ -619,7 +619,7 @@ function SaleInvoicePage() {
                   onChange={(e) =>
                     setExchangeRate(e.target.value === "" ? "" : Number(e.target.value))
                   }
-                  placeholder="مثلاً 15000"
+                  placeholder="أدخل سعر الصرف يدوياً"
                   dir="ltr"
                   className="!h-9"
                 />

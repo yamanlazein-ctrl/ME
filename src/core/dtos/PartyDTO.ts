@@ -1,5 +1,5 @@
 import type { Currency } from "@/domain/types";
-import type { PartyKind, PaymentMethod, PartyStatus } from "@/domain/entities/Party";
+import type { PartyKind, PaymentMethod, PartyStatus, PartyListStats } from "@/domain/entities/Party";
 
 export type PartyDTO = {
   id: string;
@@ -29,6 +29,8 @@ export type PartyDTO = {
   notes?: string | null;
   status: PartyStatus;
   createdAt: string;
+  /** Present only for kind-scoped list calls (server-side aggregation). */
+  stats?: PartyListStats;
 };
 
 export type CreatePartyInput = {
