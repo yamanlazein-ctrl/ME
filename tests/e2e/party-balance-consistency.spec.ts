@@ -444,10 +444,24 @@ test("T2 — بعد التسوية (0): الرصيد يُصفَّر في كل ا
   console.log("  [2.3] تقرير الذمم المتبقي = 0 ✅");
 
   // (5) بطاقة الديون: العميل المسوّى لا يظهر بين المدينين.
+  //    على بيانات فارغة: بعد التسوية لا توجد أي ذمم (مدين ودائن = 0)، فلا يظهر
+  //    زر «عرض جداول الذمم» بل EmptyState «لا ذمم مستحقة» — والغياب الآمن
+  //    للعميل مساوٍ ثبوت الغياب. نتعامل مع الحالتين بدل افتراض وجود الزر.
   await nav(page, "الصندوق");
   const toggle = page.getByRole("button", { name: /عرض جداول الذمم/ });
-  await expect(toggle).toBeVisible({ timeout: 20_000 });
-  await toggle.click();
-  await expect(page.getByRole("row").filter({ hasText: state.customerName })).toHaveCount(0);
+  const emptyDebts = page.getByText("لا ذمم مستحقة", { exact: true });
+  const deadline = Date.now() + 15_000;
+  let hasToggle = false;
+  while (Date.now() < deadline) {
+    hasToggle = (await toggle.count()) > 0;
+    if (hasToggle || (await emptyDebts.count()) > 0) break;
+    await page.waitForTimeout(500);
+  }
+  if (hasToggle) {
+    await toggle.first().click();
+    await expect(page.getByRole("row").filter({ hasText: state.customerName })).toHaveCount(0);
+  } else {
+    await expect(emptyDebts).toBeVisible();
+  }
   console.log("  [2.5] بطاقة الديون: العميل المسوّى غائب ✅");
 });
