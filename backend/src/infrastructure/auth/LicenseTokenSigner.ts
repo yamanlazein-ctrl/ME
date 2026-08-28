@@ -1,4 +1,10 @@
-import { createHash, randomUUID as cryptoRandomUUID } from "node:crypto";
+import {
+  createHash,
+  createPrivateKey,
+  createPublicKey,
+  randomUUID as cryptoRandomUUID,
+  type KeyObject,
+} from "node:crypto";
 import { SignJWT, jwtVerify, generateKeyPair, exportJWK, importJWK, type JWK } from "jose";
 import type {
   BindingType,
@@ -62,32 +68,57 @@ export class LicenseTokenSigner {
   }
 
   /**
-   * Construct from PEM strings. The current implementation does NOT
-   * support PEM-based signing because `jose`'s `importJWK` returns a
-   * WebCrypto `CryptoKey` and Node's `createPublicKey` rejects it.
-   * For production, use the JWK-based constructor. The PEM path is
-   * retained for backward-compatibility but limited to verification
-   * until 0J adds a proper Node-to-jose bridge.
+   * Construct from PEM strings (the form stored in `LICENSE_SIGNING_KEY` /
+   * `LICENSE_SIGNING_PUBLIC_KEY`).
+   *
+   * Both signing and verification work: Node converts an Ed25519 PEM to a JWK
+   * (`export({ format: "jwk" })`) and `jose` imports that JWK directly.
+   *
+   * Two operational details this handles so a correct `.env` cannot fail at
+   * boot:
+   * - **Escaped newlines.** A PEM is multi-line. Inside a `.env` file dotenv
+   *   accepts both a real multi-line quoted value and a single line with `\n`
+   *   escapes, but a value exported directly into the process environment
+   *   keeps the literal backslash-n. `normalizePem` restores real newlines so
+   *   both forms behave identically.
+   * - **Public key omitted.** The public key is derivable from the private
+   *   key, so an operator only has to persist ONE secret. Previously the
+   *   caller passed `?? ""` and `createPublicKey("")` threw
+   *   `DECODER routines::unsupported`, crashing startup for an otherwise
+   *   valid configuration.
    */
   static fromPems(privateKeyPem: string | null, publicKeyPem: string): LicenseTokenSigner {
-    // Lazy import to keep startup fast.
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const { createPublicKey, createPrivateKey } =
-      require("node:crypto") as typeof import("node:crypto");
-    const pubKey = createPublicKey(publicKeyPem);
-    const publicJwk = nodeKeyToJwk(pubKey);
+    const privPem = normalizePem(privateKeyPem);
+    const pubPem = normalizePem(publicKeyPem);
+
     // R5: load the private key too, so the PEM path can SIGN (previously
     // it was verification-only). A malformed private PEM degrades to a
     // verifier-only signer rather than crashing startup.
     let privateJwk: JWK | null = null;
-    if (privateKeyPem) {
+    let privateKeyObj: KeyObject | null = null;
+    if (privPem) {
       try {
-        const privKey = createPrivateKey(privateKeyPem);
-        privateJwk = nodeKeyToJwk(privKey);
+        privateKeyObj = createPrivateKey(privPem);
+        privateJwk = nodeKeyToJwk(privateKeyObj);
       } catch {
         privateJwk = null;
+        privateKeyObj = null;
       }
     }
+
+    // Prefer the explicitly configured public key; otherwise derive it from
+    // the private key so a single persisted secret is enough.
+    let publicJwk: JWK;
+    if (pubPem) {
+      publicJwk = nodeKeyToJwk(createPublicKey(pubPem));
+    } else if (privateKeyObj) {
+      publicJwk = nodeKeyToJwk(createPublicKey(privateKeyObj));
+    } else {
+      throw new Error(
+        "LicenseTokenSigner.fromPems: neither a usable private key nor a public key was provided",
+      );
+    }
+
     return new LicenseTokenSigner(privateJwk, publicJwk);
   }
 
@@ -194,6 +225,17 @@ export class LicenseTokenSigner {
 
 function computeKid(jwk: JWK): string {
   return createHash("sha256").update(JSON.stringify(jwk)).digest("hex").slice(0, 16);
+}
+
+/**
+ * Accept a PEM whose newlines were escaped as the two characters `\` + `n`
+ * (unavoidable when a multi-line key travels through a shell env var), and
+ * treat blank/whitespace-only input as absent.
+ */
+function normalizePem(pem: string | null | undefined): string | null {
+  if (!pem) return null;
+  const normalized = pem.replace(/\\n/g, "\n").trim();
+  return normalized === "" ? null : normalized;
 }
 
 function nodeKeyToJwk(nodeKey: unknown): JWK {

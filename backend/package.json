@@ -16,6 +16,7 @@
       "typecheck": "tsc --noEmit",
       "test:lock": "node tests/lock-in.test.mjs",
       "test:integration": "node scripts/run-integration.mjs",
+      "license:genkey": "node scripts/generate-license-signing-key.mjs",
       "db:restore": "node scripts/restore-from-backup.mjs"
   },
   "dependencies": {

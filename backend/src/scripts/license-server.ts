@@ -39,16 +39,22 @@ const LICENSE_SERVER_PORT = Number(process.env.LICENSE_SERVER_PORT ?? 8081);
 const LICENSE_ADMIN_TOKEN = process.env.LICENSE_ADMIN_TOKEN ?? randomBytes(32).toString("hex");
 
 function buildLicenseTokenSignerForServer(): LicenseTokenSigner {
-  if (config.LICENSE_SIGNING_KEY) {
-    // PEM form. Sign + verify both work.
+  if (config.LICENSE_SIGNING_KEY?.trim()) {
+    // PEM form. Sign + verify both work. The public key is optional — it is
+    // derived from the private key when `LICENSE_SIGNING_PUBLIC_KEY` is unset.
     return LicenseTokenSigner.fromPems(
       config.LICENSE_SIGNING_KEY,
       config.LICENSE_SIGNING_PUBLIC_KEY ?? "",
     );
   }
   // Dev fallback: generate an ephemeral keypair and log a warning
-  // so the operator knows to set the env in production.
-  logger.warn("LICENSE_SIGNING_KEY not set; generating an ephemeral keypair (NOT for production)");
+  // so the operator knows to set the env in production. Every restart
+  // invalidates all previously issued offline tokens.
+  logger.warn(
+    "LICENSE_SIGNING_KEY not set; generating an ephemeral keypair (NOT for production — " +
+      "offline license tokens will not survive a restart). Generate a persistent key " +
+      "with: npm run license:genkey",
+  );
   const { privateKey, publicKey } = generateKeyPairSync("ed25519");
   const privJwk = privateKey.export({ format: "jwk" }) as JWK;
   const pubJwk = publicKey.export({ format: "jwk" }) as JWK;

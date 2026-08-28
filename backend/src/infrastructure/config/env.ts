@@ -74,3 +74,20 @@ if (config.NODE_ENV === "production" && !config.REDIS_URL) {
     "REDIS_URL must be set when NODE_ENV=production — token denylist requires Redis.",
   );
 }
+// An unset signing key makes both entrypoints mint an EPHEMERAL keypair at
+// boot, so every restart silently invalidates every offline license token
+// issued before it. Fail closed rather than ship a build whose licenses
+// expire on the next restart. Generate one with `npm run license:genkey`.
+// Verify-only installs (public key without the private key) are allowed:
+// they cannot sign, and the tokens they verify were signed elsewhere.
+if (
+  config.NODE_ENV === "production" &&
+  !config.LICENSE_SIGNING_KEY &&
+  !config.LICENSE_SIGNING_PUBLIC_KEY
+) {
+  throw new Error(
+    "LICENSE_SIGNING_KEY must be set when NODE_ENV=production — refusing to start with an " +
+      "ephemeral license signing key, which would invalidate every issued offline token on " +
+      "each restart. Generate a persistent keypair with: npm run license:genkey",
+  );
+}

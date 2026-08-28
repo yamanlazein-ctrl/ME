@@ -202,25 +202,31 @@ export function buildContainer(): Container {
  * Build the license token signer for a customer install.
  *
  * - When `LICENSE_SIGNING_KEY` is set (self-hosted single process), both
- *   sign + verify work (PEM form).
+ *   sign + verify work (PEM form). `LICENSE_SIGNING_PUBLIC_KEY` is optional:
+ *   the public key is derived from the private key when absent.
  * - When only the PUBLIC key is set (separate License Server), the
  *   customer install can verify but not sign.
  * - When neither is set, generate an ephemeral keypair in dev so the app
- *   boots; a warning is logged. In production this MUST be configured.
+ *   boots; a warning is logged. Production refuses to boot (see env.ts),
+ *   because an ephemeral key silently invalidates every offline license
+ *   token that was issued before the last restart.
  */
 function buildLicenseTokenSignerForInstall(): LicenseTokenSigner {
-  if (config.LICENSE_SIGNING_KEY) {
+  // `.trim()` so a blank/whitespace-only env value counts as absent rather
+  // than reaching the PEM parser with nothing usable.
+  if (config.LICENSE_SIGNING_KEY?.trim()) {
     return LicenseTokenSigner.fromPems(
       config.LICENSE_SIGNING_KEY,
       config.LICENSE_SIGNING_PUBLIC_KEY ?? "",
     );
   }
-  if (config.LICENSE_SIGNING_PUBLIC_KEY) {
+  if (config.LICENSE_SIGNING_PUBLIC_KEY?.trim()) {
     return LicenseTokenSigner.fromPems(null, config.LICENSE_SIGNING_PUBLIC_KEY);
   }
   logger.warn(
     "LICENSE_SIGNING_KEY / LICENSE_SIGNING_PUBLIC_KEY not set; generating an ephemeral " +
-      "keypair (NOT for production — license offline tokens will not survive restarts)",
+      "keypair (NOT for production — license offline tokens will not survive restarts). " +
+      "Generate a persistent key with: npm run license:genkey",
   );
   const { privateKey, publicKey } = generateKeyPairSync("ed25519");
   const privJwk = privateKey.export({ format: "jwk" }) as JWK;
