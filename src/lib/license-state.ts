@@ -1,3 +1,8 @@
+import { getDesktopFingerprint, isTauri, detectPlatform } from "@/infrastructure/tauri-bridge";
+
+export type { DevicePlatform } from "@/infrastructure/tauri-bridge";
+export { detectPlatform, isTauri } from "@/infrastructure/tauri-bridge";
+
 const KEY_STORAGE = "erp.license.key";
 const ACTIVATION_ID_STORAGE = "erp.license.activationId";
 const HOSTNAME_STORAGE = "erp.license.hostname";
@@ -119,7 +124,55 @@ export function getFingerprintVersion(): number {
   return FINGERPRINT_VERSION;
 }
 
+/**
+ * Device fingerprint used for license binding.
+ *
+ * Inside the Tauri desktop shell this delegates to the Rust `get_fingerprint`
+ * command (real hardware signals: MAC + machine id + CPU), which is the
+ * authoritative source. On the plain web build there is no hardware access, so
+ * it falls back to the weak browser fingerprint below — good enough to key the
+ * local at-rest encryption, but NOT a hardware lock.
+ */
 export async function getServerFingerprint(): Promise<string> {
+  if (isTauri()) {
+    try {
+      const fp = await getDesktopFingerprint();
+      if (fp?.hash) return fp.hash;
+    } catch {
+      // Tauri IPC unavailable — fall through to the browser fingerprint.
+    }
+  }
+  return getBrowserFingerprint();
+}
+
+/**
+ * Hardware-bound activation metadata for the backend.
+ *
+ * `platform` is reported so `device_registrations.platform` records the real
+ * shell (windows / android / …) instead of a fixed value, and `hostname`
+ * carries the machine name when Tauri can provide it.
+ */
+export async function getActivationDeviceInfo(): Promise<{
+  fingerprint: string;
+  platform: ReturnType<typeof detectPlatform>;
+  hostname?: string;
+}> {
+  if (isTauri()) {
+    try {
+      const fp = await getDesktopFingerprint();
+      return {
+        fingerprint: fp.hash,
+        platform: detectPlatform(fp.os),
+        hostname: fp.hostname,
+      };
+    } catch {
+      // fall through to the browser values
+    }
+  }
+  return { fingerprint: await getBrowserFingerprint(), platform: detectPlatform() };
+}
+
+async function getBrowserFingerprint(): Promise<string> {
   const parts = [
     navigator.userAgent || "",
     navigator.language || "",

@@ -44,6 +44,10 @@ import { backupRouter } from "./routes/backup.route.js";
 import { registerFxRoutes } from "./routes/fx.route.js";
 import { FxRateService } from "../infrastructure/fx/FxRateService.js";
 import { createLicenseHeartbeatMiddleware } from "../infrastructure/http/middleware/license.heartbeat.middleware.js";
+import { createInstallGateMiddleware } from "../infrastructure/http/middleware/install.gate.middleware.js";
+import { createLicenseGuard } from "../infrastructure/http/middleware/license.guard.middleware.js";
+import { requireFeature } from "../infrastructure/http/middleware/license.enforcement.middleware.js";
+import { FEATURES } from "../domain/licensing/features.js";
 
 // Crash reporting & APM — guarded so it never blocks startup
 if (config.SENTRY_DSN) {
@@ -129,6 +133,11 @@ app.use((req, _res, next) => {
   next();
 });
 
+// Install gate — blocks business traffic with 503 SETUP_REQUIRED until the
+// setup wizard is completed. Health/setup/invitation-entry paths stay open so
+// a fresh install can always be provisioned (see ALLOW_LIST in the gate).
+app.use(createInstallGateMiddleware(container.installationStateRepo, container.tenantRepo));
+
 // License heartbeat — sets req.license with status + grace info (never blocks)
 app.use(
   createLicenseHeartbeatMiddleware(
@@ -157,6 +166,31 @@ app.use(router);
 // frontend API services call `/api/<resource>`. Mount them under `/api`
 // so both sides agree.
 const apiRouter = express.Router();
+// License enforcement for business traffic. Runs authMiddleware first so
+// `req.tenantContext` exists (the guard no-ops without it), then the guard:
+// revoked → 403, expired with grace exhausted → 403, expired within grace →
+// allowed + `X-License-Grace` header. `active`/`trial`/`no_license` pass through.
+apiRouter.use(
+  authMiddleware,
+  createLicenseGuard({
+    licenseRepo: container.licenseRepo,
+    secretsRepo: container.secretsRepo,
+    signer: container.licenseTokenSigner,
+    cipher: container.secretCipher,
+    tokenDenylist: container.tokenDenylist,
+  }),
+);
+// Feature gating per module (frozen spec §9 layer 2). Only features that are
+// part of every issued plan are gated here, so an existing license can never
+// lose access to a module it already uses.
+// FINAL DECISION (owner, 2026-08-28): accounting is available in every plan
+// (`feature.accounting` is in all PLANS entries) and its routes stay
+// un-gated by design — this is a final decision, not an open item.
+apiRouter.use("/inventory", requireFeature(container.licenseRepo, FEATURES.INVENTORY));
+apiRouter.use("/invoices", requireFeature(container.licenseRepo, FEATURES.SALES));
+apiRouter.use("/orders", requireFeature(container.licenseRepo, FEATURES.SALES));
+apiRouter.use("/returns", requireFeature(container.licenseRepo, FEATURES.SALES));
+apiRouter.use("/profit", requireFeature(container.licenseRepo, FEATURES.REPORTS));
 registerPartyRoutes(
   apiRouter,
   container.partyRepo,

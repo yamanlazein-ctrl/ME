@@ -13,6 +13,7 @@ import appCss from "../styles.css?url";
 import { reportError } from "../lib/error-reporting";
 import { ThemeProvider } from "../components/theme-provider";
 import { AuthGate } from "../components/auth/AuthGate";
+import { ActivationGate } from "../components/activation/ActivationGate";
 import { ErrorBoundary } from "../components/ErrorBoundary";
 import { Toaster } from "../components/ui/sonner";
 import { loadSettings } from "../presentation/hooks/useSettings";
@@ -138,13 +139,17 @@ function RootComponent() {
   return (
     <QueryClientProvider client={queryClient}>
       <ThemeProvider>
-        <AuthGate>
-          {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
-          <ErrorBoundary>
-            <Outlet />
-          </ErrorBoundary>
-          <Toaster position="top-center" richColors closeButton />
-        </AuthGate>
+        {/* Provisioning gate first: an un-provisioned install must run the
+            Setup Wizard (license activation) before any login screen. */}
+        <ActivationGate>
+          <AuthGate>
+            {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
+            <ErrorBoundary>
+              <Outlet />
+            </ErrorBoundary>
+            <Toaster position="top-center" richColors closeButton />
+          </AuthGate>
+        </ActivationGate>
       </ThemeProvider>
     </QueryClientProvider>
   );

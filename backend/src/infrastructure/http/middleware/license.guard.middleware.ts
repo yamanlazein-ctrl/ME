@@ -23,6 +23,22 @@ import type { RequestLicenseStatus } from "./license.heartbeat.middleware.js";
  */
 const BLOCKED: ReadonlySet<string> = new Set(["expired", "revoked"]);
 
+/**
+ * Remaining grace days for a license row.
+ *
+ * Policy: an `expired` license stays usable (read-only period, signalled by
+ * `X-License-Grace`) until `expiresAt + graceDays` elapses, and is blocked
+ * only afterwards. When `expiresAt` is null the row cannot be dated, so the
+ * configured `graceDays` is taken at face value.
+ *
+ * Returns whole days left; 0 means grace is exhausted → block.
+ */
+export function graceRemainingDaysFor(lic: { expiresAt: Date | null; graceDays: number }): number {
+  if (!lic.expiresAt) return Math.max(0, lic.graceDays);
+  const deadline = lic.expiresAt.getTime() + lic.graceDays * 86400000;
+  return Math.max(0, Math.ceil((deadline - Date.now()) / 86400000));
+}
+
 export interface LicenseGuardDeps {
   licenseRepo: ILicenseRepository;
   secretsRepo: ISecretsRepository;
@@ -76,9 +92,20 @@ export function createLicenseGuard(deps: LicenseGuardDeps) {
         return;
       }
 
-      // Fallback: no heartbeat info — check license row directly
+      // Fallback: no heartbeat info — check license row directly.
+      // `revoked` is terminal. `expired` honours the grace period: still
+      // inside it → allow + X-License-Grace (read-only period); exhausted
+      // → 403. This mirrors the heartbeat branch above so both paths agree.
       const lic = await deps.licenseRepo.findLatestForTenant(ctx.tenantId);
       if (lic && BLOCKED.has(lic.status)) {
+        if (lic.status === "expired") {
+          const grace = graceRemainingDaysFor(lic);
+          if (grace > 0) {
+            res.setHeader("X-License-Grace", String(grace));
+            next();
+            return;
+          }
+        }
         res.status(403).json({
           code: "LICENSE_INVALID",
           message: "الترخيص غير صالح أو منتهٍ. راجع لوحة التراخيص.",

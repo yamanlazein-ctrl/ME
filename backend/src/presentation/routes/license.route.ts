@@ -9,6 +9,7 @@ import {
   revokeDeviceUseCase,
   deactivateLicenseUseCase,
   activateLicenseUseCase,
+  ACTIVATION_ERRORS,
 } from "../../application/use-cases/license/licenseUseCases.js";
 import { heartbeatUseCase } from "../../application/use-cases/license/licenseUseCases.js";
 
@@ -94,11 +95,22 @@ export function registerLicenseRoutes(
         serverFingerprint: combined,
         hostname: req.body?.hostname,
         appVersion: req.body?.appVersion,
+        // Reported by the client shell (Tauri desktop / mobile / browser) so
+        // the device row records the real platform instead of a fixed value.
+        platform: req.body?.platform,
       });
       if (!r.ok) {
         const msg = r.error;
+        // Conflict for capacity/binding refusals, 400 for a bad key, 500 otherwise.
         const status =
-          msg === "INVALID_LICENSE" ? 400 : msg === "LICENSE_BOUND_TO_ANOTHER_TENANT" ? 409 : 500;
+          msg === ACTIVATION_ERRORS.DEVICE_LIMIT_REACHED || msg === ACTIVATION_ERRORS.ALREADY_ACTIVE
+            ? 409
+            : msg === ACTIVATION_ERRORS.INVALID_LICENSE
+              ? 400
+              : msg === ACTIVATION_ERRORS.LICENSE_REVOKED ||
+                  msg === ACTIVATION_ERRORS.LICENSE_EXPIRED
+                ? 403
+                : 500;
         res.status(status).json({ code: "ACTIVATION_FAILED", message: msg, statusCode: status });
         return;
       }

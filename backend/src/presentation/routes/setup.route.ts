@@ -51,7 +51,15 @@ export function registerSetupRoutes(router: Router, container: Container): void 
   // GET /api/setup/status — read-only, no tenantId from query (was leaking other tenant's state)
   router.get("/api/setup/status", async (req, res, next) => {
     try {
-      const tenantId = "bootstrap";
+      // Resolve the real install the same way the install gate does: the
+      // operator-supplied bootstrap tenant, else the first tenant whose
+      // wizard is already complete. The previous hardcoded "bootstrap" id
+      // matched no row, so a fully provisioned install still reported
+      // `isCompleted: false` and the activation gate would loop forever.
+      const tenantId =
+        process.env.BOOTSTRAP_TENANT_ID ??
+        (await container.installationStateRepo.findAnyCompleted()) ??
+        "bootstrap";
       const r = await getStatusUseCase(container.installationStateRepo, tenantId);
       if (!r.ok) {
         // If DB unavailable, return default wizard state for dev

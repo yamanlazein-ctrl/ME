@@ -122,6 +122,7 @@ const activateInput = z.object({
   key: z.string().min(1),
   hostname: z.string().optional(),
   appVersion: z.string().optional(),
+  platform: z.enum(["windows", "macos", "linux", "android", "ios", "web"]).optional(),
 });
 
 export async function activateAndPersistUseCase(
@@ -154,6 +155,7 @@ export async function activateAndPersistUseCase(
       serverFingerprintVersion: metadata.version,
       hostname: parsed.data.hostname,
       appVersion: parsed.data.appVersion,
+      platform: parsed.data.platform,
       tenantId,
     });
 

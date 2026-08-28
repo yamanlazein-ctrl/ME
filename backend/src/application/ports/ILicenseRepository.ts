@@ -32,6 +32,9 @@ export interface LicenseRow {
   features: string[];
   vendorId: string | null;
   vendorMetadata: Record<string, unknown> | null;
+  customerName: string | null;
+  customerPhone: string | null;
+  customerNotes: string | null;
   tenantId: UUID | null;
   createdAt: Date;
   updatedAt: Date;

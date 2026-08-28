@@ -29,9 +29,19 @@ export const EDITIONS: Record<Edition, { name: string }> = {
   textile: { name: "Textile" },
 };
 
+// FINAL DECISION (owner, 2026-08-28): accounting is core to this product —
+// `feature.accounting` is included in EVERY plan and is never plan-gated.
+// Do not remove it from a plan to differentiate tiers; tier differentiation
+// happens through limits and the other features only.
 export const PLANS: Record<Plan, FeatureId[]> = {
-  basic: [FEATURES.INVENTORY],
-  standard: [FEATURES.INVENTORY, FEATURES.SALES, FEATURES.PURCHASING, FEATURES.REPORTS],
+  basic: [FEATURES.INVENTORY, FEATURES.ACCOUNTING],
+  standard: [
+    FEATURES.INVENTORY,
+    FEATURES.ACCOUNTING,
+    FEATURES.SALES,
+    FEATURES.PURCHASING,
+    FEATURES.REPORTS,
+  ],
   premium: [
     FEATURES.INVENTORY,
     FEATURES.SALES,

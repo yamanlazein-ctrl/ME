@@ -124,7 +124,13 @@ export async function consumeInvitationCodeUseCase(
     if (row.useCount >= 1) return { ok: false, error: "تم استخدام رمز الدعوة مسبقاً" };
 
     // Phase 5 — enforce license limits at the business layer.
+    // A user invitation that carries a device fingerprint also consumes a
+    // device slot ("device consumption on accept"), so the device cap must be
+    // checked for device invitations AND for user invitations being accepted
+    // on a device.
     const lic = await licenseRepo.findLatestForTenant(row.tenantId as never);
+    const acceptsDevice =
+      row.type === "device" || (row.type === "user" && Boolean(options.deviceFingerprint));
     if (lic) {
       if (
         row.type === "user" &&
@@ -132,10 +138,7 @@ export async function consumeInvitationCodeUseCase(
       ) {
         return { ok: false, error: "تم الوصول إلى الحد الأقصى للمستخدمين المسموح بهم في الترخيص" };
       }
-      if (
-        row.type === "device" &&
-        !isWithinLimit(lic.limits, "devices", await countDevices(row.tenantId))
-      ) {
+      if (acceptsDevice && !isWithinLimit(lic.limits, "devices", await countDevices(row.tenantId))) {
         return { ok: false, error: "تم الوصول إلى الحد الأقصى للأجهزة المسموح بها في الترخيص" };
       }
     }
@@ -165,6 +168,18 @@ export async function consumeInvitationCodeUseCase(
         hash,
       );
       createdUserId = u.id;
+      // Device consumption on accept: register the accepting device so it
+      // counts against the license device cap (checked above).
+      if (options.deviceFingerprint) {
+        const licenseId =
+          (lic?.id as string | undefined) ?? "00000000-0000-0000-0000-000000000000";
+        const d = await repoExtended.registerDevice(
+          row.tenantId,
+          licenseId as never,
+          options.deviceFingerprint,
+        );
+        registeredDeviceId = d.id;
+      }
     } else if (row.type === "device") {
       const fingerprint = options.deviceFingerprint ?? `auto-${Date.now()}`;
       const licenseId = (meta.licenseId as string) ?? "00000000-0000-0000-0000-000000000000";

@@ -124,6 +124,10 @@ export function registerLicenseAdminRoutes(
       backupPolicy: backupPolicySchema.optional(),
       expiresAt: z.string().datetime().optional(),
       companyName: z.string().optional(),
+      // ── Customer directory fields (Phase ب) — real columns ──
+      customerName: z.string().max(200).optional(),
+      customerPhone: z.string().max(40).optional(),
+      customerNotes: z.string().max(2000).optional(),
       maxDevices: z.number().int().min(1).max(100).default(3),
       graceDays: z.number().int().min(0).max(60).default(7),
     })
@@ -161,6 +165,12 @@ export function registerLicenseAdminRoutes(
           maxDevices: d.maxDevices,
           features,
           vendorMetadata: d.companyName ? { companyName: d.companyName } : null,
+          // Customer directory columns. `customerName` falls back to
+          // `companyName` so the single name field always lands in a real
+          // column, not just in vendor_metadata.
+          customerName: d.customerName ?? d.companyName ?? null,
+          customerPhone: d.customerPhone ?? null,
+          customerNotes: d.customerNotes ?? null,
           // Engine fields
           edition: d.edition,
           plan: d.plan,

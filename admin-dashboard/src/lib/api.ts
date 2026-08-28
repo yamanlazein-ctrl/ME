@@ -53,6 +53,9 @@ export async function createLicense(input: CreateLicenseInput): Promise<License>
     featureRemove: input.featureRemove ?? [],
     companyName: input.companyName,
   };
+  if (input.customerName) body.customerName = input.customerName;
+  if (input.customerPhone) body.customerPhone = input.customerPhone;
+  if (input.customerNotes) body.customerNotes = input.customerNotes;
   if (input.limits) body.limits = input.limits;
   if (input.bindingType) body.bindingType = input.bindingType;
   if (input.bindingValue) body.bindingValue = input.bindingValue;

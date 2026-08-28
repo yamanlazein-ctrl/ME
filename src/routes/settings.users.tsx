@@ -42,6 +42,7 @@ import {
   type UserRole,
 } from "@/presentation/hooks/useSettings";
 import { useCurrentUser } from "@/presentation/hooks/useAuth";
+import { InvitationManager } from "@/components/invitations/InvitationManager";
 
 export const Route = createFileRoute("/settings/users")({ component: UsersPage });
 
@@ -220,6 +221,9 @@ function UsersPage() {
           ))}
         </div>
       </PageCard>
+
+      {/* Phase ج — invitation codes for onboarding employees */}
+      <InvitationManager />
 
       {/* Add / Edit dialog */}
       <Dialog open={open} onOpenChange={setOpen}>

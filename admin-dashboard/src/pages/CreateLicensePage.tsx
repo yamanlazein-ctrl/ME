@@ -12,6 +12,8 @@ interface CreateLicensePageProps {
 export function CreateLicensePage({ onClose }: CreateLicensePageProps) {
   const qc = useQueryClient();
   const [companyName, setCompanyName] = useState("");
+  const [customerPhone, setCustomerPhone] = useState("");
+  const [customerNotes, setCustomerNotes] = useState("");
   const [edition, setEdition] = useState<(typeof EDITIONS)[number]["value"]>("erp");
   const [plan, setPlan] = useState<(typeof PLANS)[number]["value"]>("standard");
   const [licenseModel, setLicenseModel] = useState<"perpetual" | "subscription">("perpetual");
@@ -36,6 +38,9 @@ export function CreateLicensePage({ onClose }: CreateLicensePageProps) {
     mutationFn: () =>
       createLicense({
         companyName,
+        customerName: companyName,
+        customerPhone: customerPhone.trim() || undefined,
+        customerNotes: customerNotes.trim() || undefined,
         edition,
         plan,
         licenseModel,
@@ -63,12 +68,33 @@ export function CreateLicensePage({ onClose }: CreateLicensePageProps) {
 
         <div className="p-4 space-y-4">
           <div>
-            <label className="block text-sm text-zinc-300 mb-1">اسم الشركة / العميل</label>
+            <label className="block text-sm text-zinc-300 mb-1">اسم العميل</label>
             <input
               value={companyName}
               onChange={(e) => setCompanyName(e.target.value)}
               className="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-white placeholder:text-zinc-500"
-              placeholder="اسم الشركة"
+              placeholder="اسم العميل / الشركة"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm text-zinc-300 mb-1">هاتف العميل</label>
+            <input
+              value={customerPhone}
+              onChange={(e) => setCustomerPhone(e.target.value)}
+              className="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-white placeholder:text-zinc-500"
+              placeholder="رقم الهاتف (اختياري)"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm text-zinc-300 mb-1">ملاحظات</label>
+            <textarea
+              value={customerNotes}
+              onChange={(e) => setCustomerNotes(e.target.value)}
+              rows={2}
+              className="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-white placeholder:text-zinc-500 resize-none"
+              placeholder="ملاحظات حول العميل أو الترخيص (اختياري)"
             />
           </div>
 

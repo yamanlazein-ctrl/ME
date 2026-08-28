@@ -115,6 +115,7 @@ export function LicenseListPage({ onLogout }: { onLogout: () => void }) {
                   <thead>
                     <tr className="border-b border-zinc-800 text-zinc-400">
                       <th className="text-right px-4 py-3 font-medium">المفتاح</th>
+                      <th className="text-right px-4 py-3 font-medium">العميل</th>
                       <th className="text-right px-4 py-3 font-medium">النوع</th>
                       <th className="text-right px-4 py-3 font-medium">الخطة</th>
                       <th className="text-right px-4 py-3 font-medium">الحالة</th>
@@ -131,6 +132,9 @@ export function LicenseListPage({ onLogout }: { onLogout: () => void }) {
                       >
                         <td className="px-4 py-3">
                           <span className="font-mono text-white">{maskKey(l.key)}</span>
+                        </td>
+                        <td className="px-4 py-3 text-zinc-300">
+                          {l.customerName ?? l.companyName ?? "-"}
                         </td>
                         <td className="px-4 py-3 text-zinc-300">{TYPE_MAP[l.type] ?? l.type}</td>
                         <td className="px-4 py-3 text-zinc-300">
@@ -216,6 +220,26 @@ function LicenseDetail({
               <span className="text-zinc-400">المفتاح</span>
               <span className="font-mono text-white">{lic.key}</span>
             </div>
+            <div className="flex justify-between">
+              <span className="text-zinc-400">العميل</span>
+              <span className="text-white">{lic.customerName ?? lic.companyName ?? "-"}</span>
+            </div>
+            {lic.customerPhone && (
+              <div className="flex justify-between">
+                <span className="text-zinc-400">الهاتف</span>
+                <span className="text-white" dir="ltr">
+                  {lic.customerPhone}
+                </span>
+              </div>
+            )}
+            {lic.customerNotes && (
+              <div className="flex justify-between gap-3">
+                <span className="text-zinc-400 shrink-0">ملاحظات</span>
+                <span className="text-white text-left whitespace-pre-wrap break-words">
+                  {lic.customerNotes}
+                </span>
+              </div>
+            )}
             <div className="flex justify-between">
               <span className="text-zinc-400">النوع</span>
               <span className="text-white">{TYPE_MAP[lic.type] ?? lic.type}</span>

@@ -49,6 +49,9 @@ export interface License {
   issuedAt: string;
   expiresAt: string | null;
   companyName?: string;
+  customerName?: string | null;
+  customerPhone?: string | null;
+  customerNotes?: string | null;
 }
 
 export interface Activation {
@@ -77,6 +80,9 @@ export interface AuditEvent {
 
 export interface CreateLicenseInput {
   companyName: string;
+  customerName?: string;
+  customerPhone?: string;
+  customerNotes?: string;
   edition: Edition;
   plan: Plan;
   licenseModel: LicenseModel;
@@ -108,9 +114,16 @@ export const PLANS: { value: Plan; label: string }[] = [
 ];
 
 // Mirrors the backend PLANS map (frozen spec §5).
+// FINAL DECISION (owner, 2026-08-28): accounting is core — included in every plan.
 export const PLAN_FEATURES: Record<Plan, string[]> = {
-  basic: ["feature.inventory"],
-  standard: ["feature.inventory", "feature.sales", "feature.purchasing", "feature.reports"],
+  basic: ["feature.inventory", "feature.accounting"],
+  standard: [
+    "feature.inventory",
+    "feature.accounting",
+    "feature.sales",
+    "feature.purchasing",
+    "feature.reports",
+  ],
   premium: [
     "feature.inventory",
     "feature.sales",

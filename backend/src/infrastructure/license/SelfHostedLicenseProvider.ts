@@ -180,6 +180,28 @@ export class SelfHostedLicenseProvider implements ILicenseProvider {
 
       // R6: register the activating server as a device so admins can see
       // and manage installs. Signed token is stored on the device row.
+      // The device cap from the license (`limits.devices`, falling back to
+      // `max_devices`) is enforced here so a key can never be spread over
+      // more machines than it licenses — counting only live (non-revoked)
+      // registrations, so revoking a device frees its slot.
+      const deviceLimit =
+        (lic.limits as LicenseLimits | null)?.devices ?? lic.maxDevices ?? 0;
+      if (deviceLimit > 0) {
+        const live = await tx
+          .select({ fingerprint: deviceRegistrations.deviceFingerprint })
+          .from(deviceRegistrations)
+          .where(
+            and(
+              eq(deviceRegistrations.licenseId, lic.id),
+              isNull(deviceRegistrations.revokedAt),
+            ),
+          );
+        const alreadyRegistered = live.some((d) => d.fingerprint === req.serverFingerprint);
+        if (!alreadyRegistered && live.length >= deviceLimit) {
+          throw new Error("DEVICE_LIMIT_REACHED");
+        }
+      }
+
       const deviceId = randomUUID();
       await tx.insert(deviceRegistrations).values({
         licenseId: lic.id,
@@ -187,7 +209,7 @@ export class SelfHostedLicenseProvider implements ILicenseProvider {
         deviceId,
         deviceFingerprint: req.serverFingerprint,
         deviceFingerprintVersion: req.serverFingerprintVersion,
-        platform: "linux",
+        platform: req.platform ?? "web",
         name: req.hostname ?? "server",
         signedToken: token,
         signedTokenExpiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),

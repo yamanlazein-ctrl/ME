@@ -3,6 +3,7 @@ import logoUrl from "@/assets/logo-motard.png";
 import {
   setActivationId as saveActivationId,
   setLicenseKey as saveLicenseKey,
+  getActivationDeviceInfo,
 } from "@/lib/license-state";
 
 /**
@@ -83,9 +84,19 @@ export function ActivationScreen({ onActivated }: { onActivated: () => void }) {
     setLoading(true);
     try {
       const tid = await ensureTenant();
+      // Report the real device platform/hostname so the backend records this
+      // install correctly on `device_registrations` and can enforce the
+      // per-license device cap. Inside Tauri these come from the Rust
+      // fingerprint command; on the web they degrade to browser values.
+      const device = await getActivationDeviceInfo();
       let r;
       try {
-        r = await apiPost("/api/setup/wizard/activate", { tenantId: tid, key });
+        r = await apiPost("/api/setup/wizard/activate", {
+          tenantId: tid,
+          key,
+          platform: device.platform,
+          hostname: device.hostname,
+        });
       } catch (netErr) {
         throw new Error(
           "خطأ شبكة: " +

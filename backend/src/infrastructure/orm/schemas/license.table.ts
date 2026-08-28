@@ -37,6 +37,12 @@ export const licenses = pgTable(
     features: text("features").array().notNull().default([]),
     vendorId: varchar("vendor_id", { length: 64 }),
     vendorMetadata: jsonb("vendor_metadata"),
+    // ── Customer directory fields (Phase ب) ───────────────────────────
+    // Real columns (not buried in vendor_metadata) so the admin dashboard
+    // can list, search and report on the customer a license was issued to.
+    customerName: text("customer_name"),
+    customerPhone: text("customer_phone"),
+    customerNotes: text("customer_notes"),
     // Cross-tenant anchor. The License Server writes a row that is
     // "system-level" (no tenant yet) before activation. After
     // activation, the license_activations row links it to a tenant.

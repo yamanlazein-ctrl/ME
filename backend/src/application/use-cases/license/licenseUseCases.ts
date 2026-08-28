@@ -36,7 +36,21 @@ const activateInput = z.object({
   serverFingerprint: z.string().min(1),
   hostname: z.string().optional(),
   appVersion: z.string().optional(),
+  platform: z.enum(["windows", "macos", "linux", "android", "ios", "web"]).optional(),
 });
+
+/**
+ * Activation refusal reasons, mapped from the provider's thrown error codes
+ * to user-facing Arabic messages. Exported so the route layer can pick the
+ * right HTTP status by identity instead of matching on message text.
+ */
+export const ACTIVATION_ERRORS = {
+  DEVICE_LIMIT_REACHED: "تم الوصول إلى الحد الأقصى للأجهزة المسموح بها في هذا الترخيص",
+  INVALID_LICENSE: "مفتاح الترخيص غير صالح",
+  LICENSE_REVOKED: "تم إلغاء هذا الترخيص",
+  LICENSE_EXPIRED: "انتهت صلاحية هذا الترخيص",
+  ALREADY_ACTIVE: "الترخيص مُفعَّل بالفعل على تثبيت آخر",
+} as const;
 
 export async function activateLicenseUseCase(
   provider: ILicenseProvider,
@@ -57,6 +71,7 @@ export async function activateLicenseUseCase(
       serverFingerprintVersion: 1,
       hostname: parsed.data.hostname,
       appVersion: parsed.data.appVersion,
+      platform: parsed.data.platform,
     });
     // R16: persist the signed offline token (encrypted at rest) so the
     // license-enforcement guard can verify it without a live call.
@@ -69,8 +84,14 @@ export async function activateLicenseUseCase(
     await secretsRepo.put(parsed.data.tenantId as UUID, "license.token.jti", result.jti);
     return { ok: true, data: result };
   } catch (e) {
-    const msg = "فشل التفعيل";
-    return { ok: false, error: msg };
+    // Surface the concrete refusal reasons so the UI can explain them; any
+    // other failure stays a generic message. Callers map these to HTTP
+    // statuses by identity against ACTIVATION_ERRORS (never by substring).
+    const raw = e instanceof Error ? e.message : "";
+    return {
+      ok: false,
+      error: ACTIVATION_ERRORS[raw as keyof typeof ACTIVATION_ERRORS] ?? "فشل التفعيل",
+    };
   }
 }
 

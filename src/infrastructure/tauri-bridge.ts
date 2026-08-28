@@ -9,7 +9,8 @@ interface TauriInvoke {
 
 let _invoke: TauriInvoke | null = null;
 
-function isTauri(): boolean {
+/** True when the app is running inside the Tauri desktop shell. */
+export function isTauri(): boolean {
   if (typeof window === "undefined") return false;
   return "__TAURI_INTERNALS__" in window || "__TAURI__" in window;
 }
@@ -31,6 +32,29 @@ export interface DesktopFingerprint {
   hash: string;
   hostname: string;
   os: string;
+}
+
+/** Platform ids accepted by the backend `device_registrations.platform` column. */
+export type DevicePlatform = "windows" | "macos" | "linux" | "android" | "ios" | "web";
+
+/**
+ * Best-effort platform id for the shell the app runs in.
+ *
+ * Inside Tauri the OS string reported by the Rust `get_fingerprint` command is
+ * authoritative; on the web we fall back to the user agent. Returns `"web"`
+ * when nothing more specific can be determined, which is what the backend
+ * defaults to anyway.
+ */
+export function detectPlatform(osHint?: string): DevicePlatform {
+  const hay = `${osHint ?? ""} ${
+    typeof navigator === "undefined" ? "" : navigator.userAgent
+  }`.toLowerCase();
+  if (/android/.test(hay)) return "android";
+  if (/iphone|ipad|ipod|\bios\b/.test(hay)) return "ios";
+  if (/windows|win32|win64/.test(hay)) return "windows";
+  if (/macos|mac os|darwin|macintosh/.test(hay)) return "macos";
+  if (/linux/.test(hay)) return "linux";
+  return isTauri() ? "windows" : "web";
 }
 
 export interface DesktopLicenseStatus {

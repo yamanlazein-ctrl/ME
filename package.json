@@ -17,6 +17,7 @@
     "test:financial": "node tests/e2e/financial-lock-in.mjs",
     "test:e2e": "playwright test --config=tests/e2e/playwright.comprehensive.config.ts",
     "test:party-balance": "playwright test --config=tests/e2e/playwright.partybalance.config.ts",
+    "test:licensing": "playwright test --config=tests/e2e/playwright.licensing.config.ts",
     "test:logic": "vitest run",
     "test:properties": "vitest run src/shared/utils/__tests__/financial-properties.test.ts src/application/__tests__/cashbox-properties.test.ts",
     "test:scenarios": "vitest run src/application/__tests__/invoice-scenarios.test.ts src/application/__tests__/customer-tracking.test.ts",

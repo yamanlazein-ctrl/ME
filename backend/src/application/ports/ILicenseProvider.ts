@@ -28,6 +28,12 @@ export interface ActivationRequest {
    * refused with ALREADY_ACTIVE).
    */
   tenantId: string;
+  /**
+   * Platform of the activating device. Persisted on the
+   * `device_registrations` row so admins can tell a Windows install from
+   * an Android/iOS one. Defaults to `"web"` when the caller cannot tell.
+   */
+  platform?: DeviceRegistration["platform"];
 }
 
 export interface ActivationResult {
