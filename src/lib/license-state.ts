@@ -6,6 +6,7 @@ export { detectPlatform, isTauri } from "@/infrastructure/tauri-bridge";
 const KEY_STORAGE = "erp.license.key";
 const ACTIVATION_ID_STORAGE = "erp.license.activationId";
 const HOSTNAME_STORAGE = "erp.license.hostname";
+const TENANT_ID_STORAGE = "erp.install.tenantId";
 const FINGERPRINT_VERSION = 1;
 
 // Encryption key derived from device fingerprint via PBKDF2
@@ -108,6 +109,44 @@ export function getStoredHostname(): string | null {
 
 export function setStoredHostname(name: string): void {
   writeString(HOSTNAME_STORAGE, name);
+}
+
+/**
+ * Tenant id of THIS install, as created by the Setup Wizard.
+ *
+ * Deployment model is one install = one customer = one tenant (the backend
+ * assumes the same: `/api/setup/status` and the install gate resolve the
+ * tenant via `BOOTSTRAP_TENANT_ID ?? findAnyCompleted()`). The login form
+ * used to send `VITE_DEFAULT_TENANT_ID` from the build-time `.env`, so a
+ * freshly provisioned install — whose wizard created a brand-new tenant —
+ * could never log in: the backend requires an explicit tenantId and returned
+ * 401 INVALID_CREDENTIALS for the stale one.
+ *
+ * Written once, right after the wizard's `complete` step succeeds (the only
+ * moment the tenant is known to be fully provisioned), and read first by the
+ * login form with the env value kept as a backwards-compatible fallback.
+ *
+ * Deliberately NOT encrypted, unlike the license key and activation id: a
+ * tenant id is an identifier rather than a secret, and the login form needs
+ * it synchronously (encryption here would force an async read for no gain).
+ *
+ * Known limitation (open item): this is per-browser/per-device local state,
+ * so a SECOND device opening the same install has no value and falls back to
+ * the env default. Employees are unaffected (invitation redemption returns
+ * the tenant id from the server). A complete fix needs a server-side source
+ * — e.g. `/api/setup/status` returning the tenant id, or the host-based
+ * resolution left as a TODO in `auth.route.ts` — which is a wider
+ * architectural decision.
+ */
+export function getInstallTenantId(): string | null {
+  const raw = readString(TENANT_ID_STORAGE);
+  return raw && raw.trim() !== "" ? raw : null;
+}
+
+export function setInstallTenantId(tenantId: string): void {
+  const value = tenantId.trim();
+  if (value === "") return;
+  writeString(TENANT_ID_STORAGE, value);
 }
 
 export function isActivated(): boolean {

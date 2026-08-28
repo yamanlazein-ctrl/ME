@@ -3,6 +3,7 @@ import logoUrl from "@/assets/logo-motard.png";
 import {
   setActivationId as saveActivationId,
   setLicenseKey as saveLicenseKey,
+  setInstallTenantId,
   getActivationDeviceInfo,
 } from "@/lib/license-state";
 
@@ -204,6 +205,11 @@ export function ActivationScreen({ onActivated }: { onActivated: () => void }) {
       // left the install stuck on the review screen.
       const cp = await apiPost("/api/setup/wizard/complete", { tenantId: tid });
       if (!cp.ok) throw new Error(cp.data?.message || "فشل إكمال الإعداد");
+      // Persist the tenant this install was provisioned with. The login form
+      // reads it instead of the build-time VITE_DEFAULT_TENANT_ID, which
+      // belongs to whatever tenant the bundle was built against and makes a
+      // freshly provisioned install unable to log in (401).
+      setInstallTenantId(tid);
       setStep("done");
       onActivated();
     } catch (err) {

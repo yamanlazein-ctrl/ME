@@ -2,7 +2,7 @@ import { useState, type FormEvent, type ReactNode } from "react";
 import logoUrl from "@/assets/logo-motard.png";
 import { useLogin } from "@/presentation/hooks/useAuth";
 import { validateInvitation, consumeInvitation } from "@/lib/invitations";
-import { getServerFingerprint } from "@/lib/license-state";
+import { getServerFingerprint, getInstallTenantId } from "@/lib/license-state";
 
 export function LoginPage() {
   const [username, setUsername] = useState("");
@@ -24,7 +24,12 @@ export function LoginPage() {
     setError(null);
 
     try {
+      // One install = one customer = one tenant. Prefer the tenant this
+      // install was actually provisioned with by the Setup Wizard; the
+      // build-time env value is only a backwards-compatible fallback for
+      // installs that were provisioned before this was persisted.
       const tenantId =
+        getInstallTenantId() ??
         (import.meta.env.VITE_DEFAULT_TENANT_ID as string | undefined) ??
         "dev-tenant";
       await loginMutation.mutateAsync({
