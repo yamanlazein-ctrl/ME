@@ -4,7 +4,7 @@ import helmet from "helmet";
 import compression from "compression";
 import rateLimit from "express-rate-limit";
 import * as Sentry from "@sentry/node";
-import { config } from "../infrastructure/config/env.js";
+import { config, corsOrigins } from "../infrastructure/config/env.js";
 import { logger } from "../infrastructure/config/logger.js";
 import { buildContainer } from "../infrastructure/di/container.js";
 import { createAuthMiddleware } from "../infrastructure/http/middleware/auth.middleware.js";
@@ -93,7 +93,7 @@ app.use(
 app.use(compression());
 app.use(
   cors({
-    origin: config.CORS_ORIGIN,
+    origin: corsOrigins,
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allowedHeaders: [
       "Content-Type",

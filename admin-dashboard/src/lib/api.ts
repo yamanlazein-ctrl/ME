@@ -1,6 +1,24 @@
 import type { License, Activation, AuditEvent, CreateLicenseInput, Edition, Plan } from "@/types";
 
-const API_BASE = import.meta.env.VITE_LICENSE_SERVER_URL || "http://localhost:8081";
+/**
+ * Same-origin by default (empty base ⇒ relative paths).
+ *
+ * The Vite dev server proxies `/license-admin` and `/v1` to the License
+ * Server on :8081 (see `vite.config.ts`), so the browser issues a
+ * same-origin request and CORS never enters the picture. This replaces the
+ * previous absolute `http://localhost:8081`, which was blocked by CORS
+ * because the License Server's allowlist did not contain the dashboard's
+ * own origin (:5174).
+ *
+ * ⚠️ PRODUCTION: a built static bundle has no Vite dev server, so nothing
+ * proxies these paths. When deploying, either
+ *   (a) serve this bundle behind a real reverse proxy (nginx/Caddy) that
+ *       forwards `/license-admin` and `/v1` to the License Server, or
+ *   (b) set `VITE_LICENSE_SERVER_URL` to the License Server's absolute
+ *       origin — in which case that origin MUST be listed in the server's
+ *       `CORS_ORIGIN` allowlist, or CORS will block it again.
+ */
+const API_BASE = (import.meta.env.VITE_LICENSE_SERVER_URL ?? "").replace(/\/+$/, "");
 
 function getAuthHeaders(): Record<string, string> {
   const token = sessionStorage.getItem("admin_token");

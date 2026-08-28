@@ -13,7 +13,10 @@ const envSchema = z.object({
   JWT_SECRET: z.string().min(32),
   JWT_EXPIRY_MS: z.coerce.number().default(1_800_000), // 30 minutes
   REFRESH_TOKEN_EXPIRY_MS: z.coerce.number().default(2_592_000_000), // 30 days
-  CORS_ORIGIN: z.string().default("http://localhost:5173"),
+  // Comma-separated allowlist. Default covers the ERP frontend (5173) and
+  // the license admin dashboard (5174) in dev. Parsed into an array by
+  // `corsOrigins` below; the raw string is kept for backwards compatibility.
+  CORS_ORIGIN: z.string().default("http://localhost:5173,http://localhost:5174"),
   RATE_LIMIT_RPS: z.coerce.number().default(100),
   RATE_LIMIT_WINDOW_MS: z.coerce.number().default(60_000),
   LOG_LEVEL: z.enum(["fatal", "error", "warn", "info", "debug", "trace"]).default("info"),
@@ -37,6 +40,22 @@ const envSchema = z.object({
 
 export const config = envSchema.parse(process.env);
 export type Config = typeof config;
+
+/**
+ * CORS_ORIGIN parsed into a list.
+ *
+ * Defence-in-depth companion to the dashboard's proxy-based (same-origin)
+ * calls: a direct API call that bypasses the proxy — a manual test, a
+ * script, a differently-hosted dashboard — still gets a correct CORS
+ * response instead of failing opaquely. `"*"` is passed through unchanged
+ * (and is already refused in production by the check below).
+ */
+export const corsOrigins: string[] | "*" =
+  config.CORS_ORIGIN.trim() === "*"
+    ? "*"
+    : config.CORS_ORIGIN.split(",")
+        .map((o) => o.trim())
+        .filter(Boolean);
 
 // Fix C-3 (forensic audit 2026-08-15): the setup-wizard token gate was
 // documented as "validated at container startup" but nothing ever enforced

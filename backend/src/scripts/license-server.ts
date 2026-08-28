@@ -18,7 +18,7 @@
 import express from "express";
 import helmet from "helmet";
 import cors from "cors";
-import { config } from "../infrastructure/config/env.js";
+import { config, corsOrigins } from "../infrastructure/config/env.js";
 import { logger } from "../infrastructure/config/logger.js";
 import { db } from "../infrastructure/orm/drizzle.js";
 import { JwtSigner } from "../infrastructure/auth/JwtSigner.js";
@@ -95,7 +95,7 @@ async function main(): Promise<void> {
 
   const app = express();
   app.use(helmet());
-  app.use(cors({ origin: config.CORS_ORIGIN, credentials: true }));
+  app.use(cors({ origin: corsOrigins, credentials: true }));
   app.use(express.json({ limit: "1mb" }));
 
   // Public v1 endpoints (called by the customer install).
