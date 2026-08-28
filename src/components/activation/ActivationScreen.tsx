@@ -197,10 +197,12 @@ export function ActivationScreen({ onActivated }: { onActivated: () => void }) {
       const tid = await ensureTenant();
       const rv = await apiPost("/api/setup/wizard/review", { tenantId: tid, confirmed: true });
       if (!rv.ok) throw new Error(rv.data?.message || "فشل المراجعة");
-      const cp = await apiPost(
-        `/api/setup/wizard/complete?tenantId=${encodeURIComponent(tid)}`,
-        {},
-      );
+      // `tenantId` goes in the BODY, exactly like the four preceding steps
+      // (activate / company / admin / review). The backend reads it from
+      // `req.body` only (setup.route.ts) and never looks at `req.query`, so the
+      // previous query-string form always failed with 422 "tenantId مطلوب" and
+      // left the install stuck on the review screen.
+      const cp = await apiPost("/api/setup/wizard/complete", { tenantId: tid });
       if (!cp.ok) throw new Error(cp.data?.message || "فشل إكمال الإعداد");
       setStep("done");
       onActivated();
