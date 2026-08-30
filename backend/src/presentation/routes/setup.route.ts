@@ -1,4 +1,4 @@
-import { Router } from "express";
+import { Router, type Request } from "express";
 import { z } from "zod";
 import { config } from "../../infrastructure/config/env.js";
 import type { Container } from "../../infrastructure/di/container.js";
@@ -32,6 +32,12 @@ import {
  * already finished setup.
  */
 function checkSetupToken(req: { headers: Record<string, unknown> }): boolean {
+  // DESKTOP_DEPLOY: the customer runs the wizard locally on first launch with
+  // no operator-provided SETUP_TOKEN. Access is instead gated by
+  // requireLocalAccess (must come from loopback / private LAN, never the
+  // internet) and by assertWizardMutable (re-locks once the install is
+  // completed). See registerSetupRoutes.
+  if (config.DESKTOP_DEPLOY) return true;
   if (!config.SETUP_TOKEN) {
     // In dev (or when no token is configured), allow without a token.
     // Fix C-3 (forensic audit 2026-08-15): read the validated, defaulted
@@ -45,6 +51,39 @@ function checkSetupToken(req: { headers: Record<string, unknown> }): boolean {
   }
   const provided = (req.headers["x-setup-token"] as string | undefined) ?? "";
   return provided === config.SETUP_TOKEN;
+}
+
+/**
+ * DESKTOP_DEPLOY guard for the setup wizard's mutating endpoints.
+ *
+ * The wizard runs locally on the customer's machine on first launch. It must
+ * be reachable only from that machine (loopback) or the customer's own private
+ * LAN — never from an arbitrary public address — so a device on the same
+ * network as the host cannot drive the provisioning flow. The "first run only"
+ * lock is enforced separately by assertWizardMutable inside each use case
+ * (once isCompleted=true, every mutating step returns ALREADY_COMPLETED).
+ */
+function isLocalOrPrivateLan(ip: string | undefined): boolean {
+  if (!ip) return false;
+  const host = ip.replace(/^::ffff:/, "").split(":")[0];
+  if (host === "127.0.0.1" || host === "localhost" || host === "::1") return true;
+
+  // IPv4 private / link-local ranges.
+  if (host.includes(".")) {
+    if (host.startsWith("10.")) return true;
+    if (host.startsWith("192.168.")) return true;
+    if (host.startsWith("169.254.")) return true;
+    if (/^172\.(1[6-9]|2\d|3[01])\./.test(host)) return true;
+    return false;
+  }
+  // IPv6 private (unique local) range.
+  if (host.startsWith("fc") || host.startsWith("fd")) return true;
+  return false;
+}
+
+function requireLocalAccess(req: Request): boolean {
+  if (!config.DESKTOP_DEPLOY) return checkSetupToken(req);
+  return isLocalOrPrivateLan(req.ip ?? req.socket?.remoteAddress);
 }
 
 export function registerSetupRoutes(router: Router, container: Container): void {
@@ -76,7 +115,7 @@ export function registerSetupRoutes(router: Router, container: Container): void 
   // POST /api/setup/init — SETUP_TOKEN gated
   router.post("/api/setup/init", async (req, res, next) => {
     try {
-      if (!checkSetupToken(req)) {
+      if (!requireLocalAccess(req)) {
         res.status(401).json({
           code: "UNAUTHORIZED",
           message: "رمز الإعداد غير صحيح",
@@ -103,7 +142,7 @@ export function registerSetupRoutes(router: Router, container: Container): void 
   const activateBody = z.object({ key: z.string().min(1), tenantId: z.string().uuid() });
   router.post("/api/setup/wizard/activate", async (req, res, next) => {
     try {
-      if (!checkSetupToken(req)) {
+      if (!requireLocalAccess(req)) {
         res
           .status(401)
           .json({ code: "UNAUTHORIZED", message: "رمز الإعداد غير صحيح", statusCode: 401 });
@@ -143,7 +182,7 @@ export function registerSetupRoutes(router: Router, container: Container): void 
   // POST /api/setup/wizard/company
   router.post("/api/setup/wizard/company", async (req, res, next) => {
     try {
-      if (!checkSetupToken(req)) {
+      if (!requireLocalAccess(req)) {
         res
           .status(401)
           .json({ code: "UNAUTHORIZED", message: "رمز الإعداد غير صحيح", statusCode: 401 });
@@ -179,7 +218,7 @@ export function registerSetupRoutes(router: Router, container: Container): void 
   // POST /api/setup/wizard/admin
   router.post("/api/setup/wizard/admin", async (req, res, next) => {
     try {
-      if (!checkSetupToken(req)) {
+      if (!requireLocalAccess(req)) {
         res
           .status(401)
           .json({ code: "UNAUTHORIZED", message: "رمز الإعداد غير صحيح", statusCode: 401 });
@@ -211,7 +250,7 @@ export function registerSetupRoutes(router: Router, container: Container): void 
   // POST /api/setup/wizard/review
   router.post("/api/setup/wizard/review", async (req, res, next) => {
     try {
-      if (!checkSetupToken(req)) {
+      if (!requireLocalAccess(req)) {
         res
           .status(401)
           .json({ code: "UNAUTHORIZED", message: "رمز الإعداد غير صحيح", statusCode: 401 });
@@ -236,7 +275,7 @@ export function registerSetupRoutes(router: Router, container: Container): void 
   // POST /api/setup/wizard/complete
   router.post("/api/setup/wizard/complete", async (req, res, next) => {
     try {
-      if (!checkSetupToken(req)) {
+      if (!requireLocalAccess(req)) {
         res
           .status(401)
           .json({ code: "UNAUTHORIZED", message: "رمز الإعداد غير صحيح", statusCode: 401 });

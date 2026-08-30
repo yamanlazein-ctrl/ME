@@ -2,6 +2,7 @@ import { createElement, type ReactNode } from "react";
 import { flushSync } from "react-dom";
 import { createRoot, type Root } from "react-dom/client";
 import { QueryClientProvider } from "@tanstack/react-query";
+import { toast } from "sonner";
 import { getQueryClient } from "@/infrastructure/queryClient";
 
 /**
@@ -21,6 +22,11 @@ import { getQueryClient } from "@/infrastructure/queryClient";
 
 let activeRoot: Root | null = null;
 let activeContainer: HTMLDivElement | null = null;
+// #8: fingerprint of the data/filters the active print snapshot was rendered
+// from. When the caller reports the data changed (printDataChanged) and the
+// fingerprint differs, the stale snapshot is discarded and the user is told
+// to reopen — the printed copy can never silently contradict the screen.
+let activeFingerprint: string | null = null;
 
 function cleanup() {
   if (activeRoot) {
@@ -35,6 +41,7 @@ function cleanup() {
     activeContainer.remove();
     activeContainer = null;
   }
+  activeFingerprint = null;
 }
 
 function afterPrint() {
@@ -47,10 +54,13 @@ export function installPrintHandler() {
   window.addEventListener("afterprint", afterPrint);
 }
 
-/** Render `node` into the print portal and open the OS print dialog. */
-export function printDocument(node: ReactNode): void {
+/** Render `node` into the print portal and open the OS print dialog.
+ *  `fingerprint` (optional) identifies the data/filters the snapshot was
+ *  rendered from — see printDataChanged(). */
+export function printDocument(node: ReactNode, fingerprint?: string): void {
   cleanup();
   installPrintHandler();
+  activeFingerprint = fingerprint ?? null;
 
   const container = document.createElement("div");
   container.setAttribute("data-print-root", "true");
@@ -86,4 +96,20 @@ export function printDocument(node: ReactNode): void {
   window.setTimeout(() => {
     window.print();
   }, 200);
+}
+
+/**
+ * #8: call whenever the underlying data/filters change while a print snapshot
+ * may still be open. If nothing is open → no-op. If the fingerprint matches
+ * the one the snapshot was rendered from → no-op. Otherwise the stale print
+ * document is closed immediately with a clear message, so the printed copy
+ * can never silently contradict the filtered screen data.
+ */
+export function printDataChanged(fingerprint: string): void {
+  if (!activeRoot) return;
+  if (activeFingerprint !== null && fingerprint === activeFingerprint) return;
+  cleanup();
+  toast.info(
+    "تغيّرت فلاتر/بيانات الطباعة وأُغلقت نافذة الطباعة — أعد فتح «طباعة / PDF» لعرض النسخة المحدثة.",
+  );
 }

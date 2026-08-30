@@ -17,16 +17,16 @@ function Dashboard() {
       title="لوحة التحكم"
       subtitle="نظرة شاملة على حركة المتجر اليوم — المبيعات، المخزون، والصندوق."
     >
-      <div className="space-y-5">
+      <div className="space-y-6">
         <HeroSalesCard />
         <ExecutiveKpiGrid />
-        <div className="grid gap-4 lg:grid-cols-3">
+        <div className="grid gap-5 lg:grid-cols-3">
           <div className="lg:col-span-2">
             <SalesTrendChart />
           </div>
           <TopFabricsChart />
         </div>
-        <div className="grid gap-4 lg:grid-cols-3">
+        <div className="grid gap-5 lg:grid-cols-3">
           <div className="lg:col-span-2">
             <RecentTransactionsList />
           </div>

@@ -1,8 +1,73 @@
-import { type ReactNode } from "react";
+import { type ReactNode, useState } from "react";
 import { cn } from "@/lib/utils";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { formatThousands, parseAmount } from "@/presentation/hooks/useCurrency";
+
+/**
+ * Money/amount input that ACCEPTS thousand separators and decimal points
+ * while typing (e.g. "55000" → shows "55,000" live; a trailing "," or "."
+ * is preserved until the next digit lands). Reformats on blur. While the
+ * user is mid-typing we display their raw text; once it ends with a digit
+ * we show it formatted, so separators appear automatically without ever
+ * eating a typed character.
+ */
+export function FormattedAmountInput({
+  value,
+  onChange,
+  className,
+  placeholder,
+  ariaLabel,
+  onKeyDown,
+}: {
+  value: number | "";
+  onChange: (v: number | "") => void;
+  className?: string;
+  placeholder?: string;
+  ariaLabel?: string;
+  onKeyDown?: (e: React.KeyboardEvent<HTMLInputElement>) => void;
+}) {
+  const [raw, setRaw] = useState<string | null>(null);
+  const endsWithSeparator = (s: string) => /[.,]\s*$/.test(s);
+  const display =
+    raw !== null
+      ? raw.trim() === ""
+        ? raw
+        : endsWithSeparator(raw)
+          ? raw
+          : Number.isNaN(parseAmount(raw))
+            ? raw
+            : formatThousands(parseAmount(raw))
+      : value === "" || value === 0
+        ? ""
+        : formatThousands(value);
+  return (
+    <Input
+      type="text"
+      inputMode="decimal"
+      dir="ltr"
+      value={display}
+      onChange={(e) => {
+        const v = e.target.value;
+        setRaw(v);
+        if (v.trim() === "") return onChange("");
+        const n = parseAmount(v);
+        if (!Number.isNaN(n)) onChange(n);
+      }}
+      onBlur={() => setRaw(null)}
+      onFocus={(e) =>
+        e.currentTarget.setSelectionRange(
+          e.currentTarget.value.length,
+          e.currentTarget.value.length,
+        )
+      }
+      onKeyDown={onKeyDown}
+      className={className}
+      placeholder={placeholder}
+      aria-label={ariaLabel}
+    />
+  );
+}
 
 export function HeaderField({ label, children }: { label: string; children: ReactNode }) {
   return (
@@ -82,12 +147,10 @@ export function TotalInputCell({
         {label}
       </span>
       <div className="relative mt-0.5">
-        <Input
-          type="number"
-          min={0}
-          className={cn("h-8 pl-9 text-left tabular-nums", tone)}
+        <FormattedAmountInput
           value={value}
-          onChange={(e) => onChange(e.target.value === "" ? "" : Math.max(0, Number(e.target.value)))}
+          onChange={(v) => onChange(v === "" ? "" : Math.max(0, v))}
+          className={cn("h-8 pl-9 text-left tabular-nums", tone)}
           placeholder="0"
         />
         <span className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-[10px] text-muted-foreground">
@@ -111,34 +174,21 @@ export function MoneyInputCell({
   suffix: string;
   tone?: string;
 }) {
-  const text = value === "" || value === 0 ? "" : formatThousands(value);
   return (
     <div className="flex flex-col">
       <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
         {label}
       </span>
       <div className="relative mt-0.5">
-        <Input
-          type="text"
-          inputMode="numeric"
-          dir="ltr"
-          className={cn("h-8 pl-9 text-left tabular-nums", tone)}
-          value={text}
-          onChange={(e) => {
-            const raw = e.target.value;
-            if (raw === "") return onChange("");
-            const n = parseAmount(raw);
+        <FormattedAmountInput
+          value={value}
+          onChange={(v) => {
             // Money cells (paid, discount…) must never go negative — a negative
             // discount would flip `subtotal - discount` into an addition and
             // inflate the grand total (e.g. 1,450 + 25,000 + 10,000 + 20,000).
-            onChange(Number.isNaN(n) ? value : Math.max(0, n));
+            onChange(v === "" ? "" : Math.max(0, v));
           }}
-          onFocus={(e) =>
-            e.currentTarget.setSelectionRange(
-              e.currentTarget.value.length,
-              e.currentTarget.value.length,
-            )
-          }
+          className={cn("h-8 pl-9 text-left tabular-nums", tone)}
           placeholder="0"
         />
         <span className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-[10px] text-muted-foreground">

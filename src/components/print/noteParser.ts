@@ -42,8 +42,7 @@ const FIELD_KEYS: Array<{ key: keyof Omit<ParsedLineNote, "freeText">; pattern: 
   { key: "source", pattern: /مصدر\s*:\s*([^•]+?)(?=\s*•|$)/ },
   { key: "machineNo", pattern: /رقم\s*الماكينة\s*:\s*([^•]+?)(?=\s*•|$)/ },
   { key: "machineNo", pattern: /رقم الماكينة\s*:\s*([^•]+?)(?=\s*•|$)/ },
-  { key: "chromaj", pattern: /كرماج\s*:\s*([^•]+?)(?=\s*•|$)/ },
-  { key: "chromaj", pattern: /كروماج\s*:\s*([^•]+?)(?=\s*•|$)/ },
+  { key: "chromaj", pattern: /كراماج\s*:\s*([^•]+?)(?=\s*•|$)/ },
   { key: "gsm", pattern: /GSM\s*:\s*([^•]+?)(?=\s*•|$)/ },
   { key: "length", pattern: /المد\s*:\s*([^•]+?)(?=\s*•|$)/ },
   { key: "draw", pattern: /السحب\s*:\s*([^•]+?)(?=\s*•|$)/ },
@@ -90,10 +89,11 @@ export function hasStructuredNote(parsed: ParsedLineNote): boolean {
   );
 }
 
-/** Parse a top-level invoice.notes (which contains المرجع + طريقة الدفع) */
+/** Parse a top-level invoice.notes (which contains المرجع + طريقة الدفع + المستودع) */
 export type ParsedInvoiceNotes = {
   reference: string;
   paymentMethod: string;
+  warehouse: string;
   freeText: string;
 };
 
@@ -103,24 +103,33 @@ const INVOICE_NOTE_KEYS: Array<{
 }> = [
   { key: "reference", pattern: /المرجع\s*:\s*([^•]+?)(?=\s*•|$)/ },
   { key: "paymentMethod", pattern: /طريقة\s*الدفع\s*:\s*([^•]+?)(?=\s*•|$)/ },
+  // #1: the save flow re-appends "المستودع: X" on every edit — consuming it
+  // here (stripping it from freeText) is what stops the duplication.
+  { key: "warehouse", pattern: /المستودع\s*:\s*([^•]+?)(?=\s*•|$)/ },
 ];
 
 export function parseInvoiceNotes(raw: string | null | undefined): ParsedInvoiceNotes {
-  if (!raw) return { reference: "", paymentMethod: "", freeText: "" };
-  const out: ParsedInvoiceNotes = { reference: "", paymentMethod: "", freeText: "" };
+  if (!raw) return { reference: "", paymentMethod: "", warehouse: "", freeText: "" };
+  const out: ParsedInvoiceNotes = { reference: "", paymentMethod: "", warehouse: "", freeText: "" };
   let working = raw.trim();
 
   for (const { key, pattern } of INVOICE_NOTE_KEYS) {
-    const m = working.match(pattern);
-    if (m && m[1]) {
+    // Consume EVERY occurrence of each key (not just the first) so a note that
+    // already accumulated duplicates ("المستودع: w1 ... المستودع: w1") is
+    // fully cleaned and rewritten exactly once on the next save.
+    let m: RegExpMatchArray | null;
+    while ((m = working.match(pattern)) && m[1]) {
       const val = m[1].trim();
       if (!out[key]) out[key] = val;
       working = working.replace(m[0], "").trim();
+      if (!working) break;
     }
   }
 
+  // Collapse any leftover double separators left by consumed fragments.
   out.freeText = working
     .replace(/^[•\s]+|[•\s]+$/g, "")
+    .replace(/•\s*•/g, "•")
     .replace(/\s{2,}/g, " ")
     .trim();
 

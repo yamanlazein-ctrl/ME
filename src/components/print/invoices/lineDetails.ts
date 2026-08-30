@@ -9,7 +9,7 @@ const FIELD_PATTERNS: { label: string; key: string }[] = [
   { label: "مرجعية", key: "مرجعية" },
   { label: "مصدر", key: "مصدر" },
   { label: "رقم الماكينة", key: "رقم الماكينة" },
-  { label: "كرماج", key: "كرماج" },
+  { label: "كراماج", key: "كراماج" },
   { label: "GSM", key: "GSM" },
   { label: "السحب", key: "السحب" },
   { label: "وزن قائم", key: "وزن قائم" },

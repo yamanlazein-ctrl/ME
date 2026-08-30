@@ -7,6 +7,12 @@ dotenv.config({ path: "../.env" });
 
 const envSchema = z.object({
   NODE_ENV: z.enum(["development", "production", "test"]).default("development"),
+  // Desktop packaging mode: the backend is launched by the Tauri sidecar on a
+  // single self-contained machine. Relaxes three production boot gates that
+  // assume a server operator is present to provision secrets (see gates below).
+  // Does NOT relax APP_MASTER_KEY, JWT_SECRET, DATABASE_URL, CORS, or any
+  // auth/RLS hardening — those still fail closed.
+  DESKTOP_DEPLOY: z.coerce.boolean().default(false),
   PORT: z.coerce.number().default(8080),
   DATABASE_URL: z.string().url(),
   REDIS_URL: z.string().url().optional(),
@@ -20,6 +26,10 @@ const envSchema = z.object({
   RATE_LIMIT_RPS: z.coerce.number().default(100),
   RATE_LIMIT_WINDOW_MS: z.coerce.number().default(60_000),
   LOG_LEVEL: z.enum(["fatal", "error", "warn", "info", "debug", "trace"]).default("info"),
+  // Optional logs directory. Absolute or relative to the project root
+  // (backend/src/infrastructure/config/logger.ts resolves `../..` x4 up).
+  // Default: "logs" → <repo-root>/logs.
+  LOG_DIR: z.string().optional(),
   SENTRY_DSN: z.string().url().optional(),
   // -- Secrets: master key for AES-256-GCM secret encryption (Task 1.1) --
   // 32 bytes, base64. Missing/invalid causes the app to refuse to boot.
@@ -61,7 +71,15 @@ export const corsOrigins: string[] | "*" =
 // documented as "validated at container startup" but nothing ever enforced
 // that. In production with SETUP_TOKEN unset, the wizard endpoints accept
 // any caller. Fail closed at boot instead of silently opening the wizard.
-if (config.NODE_ENV === "production" && !config.SETUP_TOKEN) {
+// In DESKTOP_DEPLOY mode the customer runs the wizard locally on first launch
+// (see setup.route.ts + install.gate.middleware.ts), so the SETUP_TOKEN gate
+// is relaxed — but only until the wizard marks the install completed, after
+// which the install gate and assertWizardMutable lock it permanently.
+if (
+  config.NODE_ENV === "production" &&
+  !config.DESKTOP_DEPLOY &&
+  !config.SETUP_TOKEN
+) {
   throw new Error(
     "SETUP_TOKEN must be set when NODE_ENV=production — refusing to start with the setup wizard unauthenticated.",
   );
@@ -69,7 +87,14 @@ if (config.NODE_ENV === "production" && !config.SETUP_TOKEN) {
 if (config.NODE_ENV === "production" && config.CORS_ORIGIN.trim() === "*") {
   throw new Error("CORS_ORIGIN=* is not allowed in production — set an explicit allowlist.");
 }
-if (config.NODE_ENV === "production" && !config.REDIS_URL) {
+// DESKTOP_DEPLOY runs without Redis: the token denylist degrades to a no-op
+// (see TokenDenylist.ts — `redis` is null and every method returns safely).
+// Documented as an accepted trade-off for a single self-contained machine.
+if (
+  config.NODE_ENV === "production" &&
+  !config.DESKTOP_DEPLOY &&
+  !config.REDIS_URL
+) {
   throw new Error(
     "REDIS_URL must be set when NODE_ENV=production — token denylist requires Redis.",
   );
@@ -79,7 +104,9 @@ if (config.NODE_ENV === "production" && !config.REDIS_URL) {
 // issued before it. Fail closed rather than ship a build whose licenses
 // expire on the next restart. Generate one with `npm run license:genkey`.
 // Verify-only installs (public key without the private key) are allowed:
-// they cannot sign, and the tokens they verify were signed elsewhere.
+// they cannot sign, and the tokens they verify were signed elsewhere. The
+// DESKTOP_DEPLOY path is intentionally verify-only (D3): the private key is
+// never shipped, so the public key alone is sufficient to boot.
 if (
   config.NODE_ENV === "production" &&
   !config.LICENSE_SIGNING_KEY &&

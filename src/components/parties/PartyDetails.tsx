@@ -1,4 +1,4 @@
-import { Fragment, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import { Link, useNavigate } from "@tanstack/react-router";
 import {
   ArrowRight,
@@ -23,7 +23,7 @@ import {
 } from "lucide-react";
 import { AppShell } from "@/components/layout/AppShell";
 import { PageCard } from "@/components/layout/PageCard";
-import { printDocument } from "@/components/print/printPortal";
+import { printDocument, printDataChanged } from "@/components/print/printPortal";
 import { PartyStatementDocument } from "@/components/print/PartyStatementDocument";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -721,6 +721,13 @@ function StatementTab({ p, kind }: { p: Party; kind: PartyKind }) {
     currency: ccy,
   };
 
+  // #8: fingerprint of the active statement filters — when they change while
+  // a print snapshot is open, the stale snapshot is closed with a notice.
+  const printFilterKey = JSON.stringify({ from, to, type, ccy });
+  useEffect(() => {
+    printDataChanged(printFilterKey);
+  }, [printFilterKey]);
+
   const { data: statement, isLoading } = useStatement(p.id, kind, filter);
   const settle = useSettleParty(p.id, kind);
 
@@ -884,7 +891,7 @@ function StatementTab({ p, kind }: { p: Party; kind: PartyKind }) {
           </div>
         </div>
         <div className="mt-3 flex flex-wrap items-center gap-2">
-          <Button variant="outline" className="h-9 gap-2" onClick={() => printDocument(printDoc)}>
+          <Button variant="outline" className="h-9 gap-2" onClick={() => printDocument(printDoc, printFilterKey)}>
             <Printer className="h-4 w-4" /> طباعة / PDF
           </Button>
           <Button variant="outline" className="h-9 gap-2" onClick={exportCsv}>
@@ -1013,15 +1020,23 @@ function StatementTab({ p, kind }: { p: Party; kind: PartyKind }) {
                       </td>
                       <td className="text-xs">
                         {LEDGER_TYPE_LABEL[r.type] ?? r.type}
+                        {/* #3: real text space + parentheses (matches print
+                            "فاتورة بيع (ملغاة)"), not just a CSS margin. */}
                         {r.status === "cancelled" && (
-                          <span className="mr-1 rounded bg-destructive/10 px-1 py-0.5 text-[9px] font-semibold text-destructive">
-                            ملغاة
-                          </span>
+                          <>
+                            {" "}
+                            <span
+                              className="inline-block rounded border border-destructive/40 bg-destructive/10 px-1.5 py-0.5 text-[10px] font-bold text-destructive"
+                              title="قيد ملغى — لا يُحسب في المجاميع أو الرصيد"
+                            >
+                              (ملغاة)
+                            </span>
+                          </>
                         )}
                       </td>
                       <td
                         className={`tabular-nums text-primary ${
-                          r.status === "cancelled" ? "line-through" : ""
+                          r.status === "cancelled" ? "text-destructive/50 line-through" : ""
                         }`}
                       >
                         {r.referenceNumber}
@@ -1029,28 +1044,28 @@ function StatementTab({ p, kind }: { p: Party; kind: PartyKind }) {
                       <td className="text-muted-foreground">{r.description}</td>
                       <td
                         className={`text-left tabular-nums ${
-                          r.status === "cancelled" ? "line-through" : ""
+                          r.status === "cancelled" ? "text-destructive/50 line-through" : ""
                         }`}
                       >
                         {r.quantityKg ? `${fmt(r.quantityKg)} كجم` : "—"}
                       </td>
                       <td
                         className={`text-left tabular-nums ${
-                          r.status === "cancelled" ? "line-through" : ""
+                          r.status === "cancelled" ? "text-destructive/50 line-through" : ""
                         }`}
                       >
                         {r.pricePerKg ? fmt(r.pricePerKg) : "—"}
                       </td>
                       <td
                         className={`text-left tabular-nums ${
-                          r.status === "cancelled" ? "line-through" : ""
+                          r.status === "cancelled" ? "text-destructive/50 line-through" : ""
                         }`}
                       >
                         {r.debit ? fmt(r.debit) : "—"}
                       </td>
                       <td
                         className={`text-left tabular-nums ${
-                          r.status === "cancelled" ? "line-through" : ""
+                          r.status === "cancelled" ? "text-destructive/50 line-through" : ""
                         }`}
                       >
                         {r.credit ? fmt(r.credit) : "—"}
@@ -1058,15 +1073,27 @@ function StatementTab({ p, kind }: { p: Party; kind: PartyKind }) {
                       <td
                         className={`text-left font-semibold tabular-nums ${
                           r.status === "cancelled"
-                            ? "line-through"
+                            ? "text-muted-foreground/70"
                             : r.runningBalance > 0
                               ? "text-warning"
                               : r.runningBalance < 0
                                 ? "text-success"
                                 : ""
                         }`}
+                        title={
+                          r.status === "cancelled"
+                            ? "الرصيد الجاري هنا لم يتأثر بالقيد الملغى (غير محتسب)"
+                            : undefined
+                        }
                       >
                         {fmt(r.runningBalance)}
+                        {/* #4: make explicit that the cancelled row did NOT move
+                            the balance, instead of silently carrying it forward. */}
+                        {r.status === "cancelled" && (
+                          <span className="mt-0.5 block text-[9px] font-normal text-destructive/70">
+                            (لم يُحتسب)
+                          </span>
+                        )}
                       </td>
                       <td className="text-left">
                         {spendable(r) && (

@@ -40,4 +40,18 @@ export class InvoiceApiService {
     const res = await this.client.post<InvoiceDTO>(`/api/invoices/${id}/cancel`);
     return res.data;
   }
+
+  /**
+   * #7: READ-ONLY preview of the next server-side invoice number
+   * (document_sequences). Does not consume a number — the real number is
+   * still allocated atomically at save time.
+   */
+  async nextNumber(
+    type: "sale" | "entry",
+  ): Promise<{ data: { number: string; estimate: boolean } }> {
+    return this.client.get<{ number: string; estimate: boolean }>(
+      "/api/invoices/next-number",
+      { params: { type } },
+    );
+  }
 }

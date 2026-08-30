@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
-import { Inbox, Printer, Save, Search } from "lucide-react";
+import { Inbox, Palette, Plus, Printer, Save, Search, Trash2 } from "lucide-react";
 import { AppShell } from "@/components/layout/AppShell";
 import { PageCard } from "@/components/layout/PageCard";
 import { Input } from "@/components/ui/input";
@@ -21,9 +21,34 @@ import type { Currency } from "@/domain/types";
 import { usePrintJobs, useOpenPrintJobs, useReceivePrint } from "@/presentation/hooks/usePrintJobs";
 import { printDocument } from "@/components/print/printPortal";
 import { PrintJobDocument } from "@/components/print/PrintJobDocument";
+import { PrintPageBreak } from "@/components/print/PrintDocument";
 import { formatNumber, formatMoney, formatQuantity } from "@/shared/utils/formatNumber";
 
 type DocOption = { id: string; title: string; subtitle?: string };
+
+/** One line of the receive request — one sent voucher becoming one new color. */
+type ReceiveLine = {
+  key: string;
+  /** Sent-job id, or `fabric:<sourceFabricId>` marker pre-filtering the picker. */
+  jobId: string;
+  receivedKg: number | "";
+  printCostPerKg: number | "";
+  newName: string;
+  newColorName: string;
+  newColorCode: string;
+  newSalePrice: number | "";
+};
+
+const emptyReceiveLine = (): ReceiveLine => ({
+  key: `rl-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+  jobId: "",
+  receivedKg: "",
+  printCostPerKg: "",
+  newName: "",
+  newColorName: "",
+  newColorCode: "",
+  newSalePrice: "",
+});
 
 /** Free-text type-ahead for picking a source document (roll / send voucher). */
 function DocumentAutocomplete({
@@ -115,8 +140,32 @@ function PrintReceivePage() {
   useInventory();
   const { data: allJobs = [] } = usePrintJobs();
   const { data: open = [] } = useOpenPrintJobs();
+  const receivePrint = useReceivePrint();
 
-  const receiveOptions = useMemo(
+  const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
+  const [currency, setCurrency] = useState<Currency>("SYP");
+  const [newCategory, setNewCategory] = useState("طباعة");
+  const [notes, setNotes] = useState("");
+  const [lines, setLines] = useState<ReceiveLine[]>([emptyReceiveLine()]);
+  const [error, setError] = useState<string | null>(null);
+  const [ok, setOk] = useState<string | null>(null);
+
+  const jobById = (id: string) => allJobs.find((j) => j.id === id);
+
+  const updateLine = (key: string, patch: Partial<ReceiveLine>) =>
+    setLines((ls) => ls.map((l) => (l.key === key ? { ...l, ...patch } : l)));
+  const removeLine = (key: string) =>
+    setLines((ls) => (ls.length === 1 ? [emptyReceiveLine()] : ls.filter((l) => l.key !== key)));
+
+  /** "Add another color for the same fabric": appends a receive line
+   *  pre-filtered to open jobs of the same source fabric. */
+  const addColorForSameFabric = (line: ReceiveLine) => {
+    const job = jobById(line.jobId);
+    if (!job) return;
+    setLines((ls) => [...ls, { ...emptyReceiveLine(), jobId: `fabric:${job.sourceFabricId}` }]);
+  };
+
+  const openOptions = useMemo(
     () =>
       open.map((j) => {
         const f = fabricById(j.sourceFabricId);
@@ -129,83 +178,96 @@ function PrintReceivePage() {
     [open],
   );
 
-  const [jobId, setJobId] = useState("");
-  const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
-  const [receivedKg, setReceivedKg] = useState<number | "">("");
-  const [printCost, setPrintCost] = useState<number | "">("");
-  const [currency, setCurrency] = useState<Currency>("SYP");
-  const [newName, setNewName] = useState("");
-  const [newCategory, setNewCategory] = useState("طباعة");
-  const [newColorName, setNewColorName] = useState("");
-  const [newColorCode, setNewColorCode] = useState("");
-  const [newSalePrice, setNewSalePrice] = useState<number | "">("");
-  const [notes, setNotes] = useState("");
-  const [error, setError] = useState<string | null>(null);
-  const [ok, setOk] = useState<string | null>(null);
-  const receivePrint = useReceivePrint();
-
-  const job = jobId ? allJobs.find((j) => j.id === jobId) : undefined;
-  const src = job ? rollById(job.sourceRollId) : undefined;
-  const srcFab = job ? fabricById(job.sourceFabricId) : undefined;
-  const srcCol = job ? colorById(job.sourceColorId) : undefined;
-
-  const srcCost = src?.pricePerKg ?? 0;
-  const totalCost = srcCost + (Number(printCost) || 0);
-
-  const reset = () => {
-    setJobId("");
-    setReceivedKg("");
-    setPrintCost("");
-    setNewName("");
-    setNewColorName("");
-    setNewColorCode("");
-    setNewSalePrice("");
-    setNotes("");
+  const optionsForLine = (line: ReceiveLine): DocOption[] => {
+    if (line.jobId.startsWith("fabric:")) {
+      const fabId = line.jobId.slice(7);
+      return openOptions.filter((o) => {
+        const j = jobById(o.id);
+        return j && j.sourceFabricId === fabId;
+      });
+    }
+    return openOptions;
   };
+
+  const labelForLine = (line: ReceiveLine): string => {
+    if (line.jobId.startsWith("fabric:")) {
+      const fab = fabricById(line.jobId.slice(7));
+      return fab ? `قماش ${fab.name} — اختر سند الإرسال` : "";
+    }
+    return line.jobId || "";
+  };
+
+  const received = allJobs.filter((j) => j.status === "received").slice(0, 20);
 
   const save = async (thenPrint = false) => {
     setError(null);
     setOk(null);
+    const valid = lines.filter(
+      (l) => !l.jobId.startsWith("fabric:") && l.jobId && Number(l.receivedKg) > 0 && l.newName.trim(),
+    );
     try {
-      if (!jobId) throw new Error("اختر سند الإرسال");
-      const q = Number(receivedKg);
-      const c = Number(printCost);
-      if (!q || q <= 0) throw new Error("أدخل الكمية المستلمة");
-      if (isNaN(c) || c < 0) throw new Error("أدخل تكلفة الطباعة");
-      if (!newName.trim()) throw new Error("أدخل اسم الصنف الجديد");
-      const recRes = await receivePrint.mutateAsync({
-        jobId,
-        date,
-        receivedKg: q,
-        printCostPerKg: c,
-        currency,
-        newName,
-        newCategory,
-        newColorName,
-        newColorCode,
-        newSalePricePerKg: newSalePrice ? Number(newSalePrice) : undefined,
-        notes,
-      });
-      if (!recRes.ok) throw new Error(recRes.error?.message ?? "فشل الحفظ");
-      if (thenPrint) printDocument(<PrintJobDocument job={recRes.value} />);
-      setOk(`تم استلام السند ${recRes.value.number} وإدخال الصنف الجديد إلى المخزون.`);
-      reset();
+      if (valid.length === 0)
+        throw new Error("أضف بنداً واحداً على الأقل (سند إرسال + كمية + اسم الصنف الجديد)");
+      for (const l of valid) {
+        const c = Number(l.printCostPerKg);
+        if (isNaN(c) || c < 0) throw new Error("أدخل تكلفة طباعة صحيحة لكل بند");
+      }
+      if (!newCategory.trim()) throw new Error("أدخل التصنيف");
+
+      // One composite request → one receive per sent voucher, sequentially.
+      const created = [];
+      for (const l of valid) {
+        const recRes = await receivePrint.mutateAsync({
+          jobId: l.jobId,
+          date,
+          receivedKg: Number(l.receivedKg),
+          printCostPerKg: Number(l.printCostPerKg),
+          currency,
+          newName: l.newName.trim(),
+          newCategory,
+          newColorName: l.newColorName,
+          newColorCode: l.newColorCode,
+          newSalePricePerKg: l.newSalePrice === "" ? undefined : Number(l.newSalePrice),
+          notes,
+        });
+        if (!recRes.ok) throw new Error(recRes.error?.message ?? "فشل الحفظ");
+        created.push(recRes.value);
+      }
+
+      const numbers = created.map((j) => j.number).join("، ");
+      if (thenPrint && created.length > 0) {
+        printDocument(
+          <>
+            {created.map((j, i) => (
+              <div key={j.id}>
+                {i > 0 && <PrintPageBreak />}
+                <PrintJobDocument job={j} />
+              </div>
+            ))}
+          </>,
+        );
+      }
+      setOk(
+        created.length === 1
+          ? `تم استلام السند ${numbers} وإدخال الصنف الجديد إلى المخزون.`
+          : `تم استلام ${created.length} سنادات بنجاح: ${numbers}`,
+      );
+      setLines([emptyReceiveLine()]);
+      setNotes("");
     } catch (e) {
       setError((e as Error).message);
     }
   };
 
-  const received = allJobs.filter((j) => j.status === "received").slice(0, 20);
-
   return (
     <AppShell
       title="استلام من المطبعة"
-      subtitle="تحديد سند الإرسال وإدخال الصنف المطبوع الجديد مع تكلفة الطباعة."
+      subtitle="تحديد سنادات الإرسال وإدخال الأصناف المطبوعة الجديدة بألوانها — بأي عدد من الألوان."
     >
       <div className="space-y-4">
         <PageCard
-          title="استلام سند"
-          description="اختر سند الإرسال المفتوح، ثم عرّف الصنف الجديد."
+          title="استلام سنادات"
+          description="لكل بند: سند إرسال + الصنف الجديد — البنود تُستلم دفعة واحدة بنفس التاريخ والعملة."
           actions={
             <div className="flex gap-2">
               <Button
@@ -237,170 +299,176 @@ function PrintReceivePage() {
             </div>
           )}
 
-          <div className="grid gap-4 lg:grid-cols-2">
-            {/* SEND-VOUCHER */}
-            <div className="space-y-3 rounded-lg border border-border bg-secondary/40 p-4">
-              <div className="flex items-center gap-2 text-xs font-bold text-foreground">
-                <Inbox className="h-4 w-4 text-primary" />
-                سند الإرسال
-              </div>
+          {/* Shared fields */}
+          <div className="mb-4 grid gap-3 rounded-lg border border-border bg-secondary/40 p-4 md:grid-cols-3">
+            <Field label="تاريخ الاستلام">
+              <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+            </Field>
+            <Field label="التصنيف">
+              <Input value={newCategory} onChange={(e) => setNewCategory(e.target.value)} />
+            </Field>
+            <Field label="العملة">
+              <Select value={currency} onValueChange={(v) => setCurrency(v as Currency)}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="SYP">ل.س</SelectItem>
+                  <SelectItem value="USD">$ USD</SelectItem>
+                </SelectContent>
+              </Select>
+            </Field>
+          </div>
 
-              <Field label="اختر السند *">
-                <DocumentAutocomplete
-                  selectedLabel={job?.number ?? ""}
-                  placeholder="ابحث برقم السند أو القماش أو المطبعة..."
-                  options={receiveOptions}
-                  onPick={setJobId}
-                />
-              </Field>
+          {/* ── Receive lines ── */}
+          <div className="space-y-3">
+            {lines.map((line, idx) => {
+              const isFabricOnly = line.jobId.startsWith("fabric:");
+              const job = isFabricOnly ? undefined : jobById(line.jobId);
+              const src = job ? rollById(job.sourceRollId) : undefined;
+              const srcFab = job ? fabricById(job.sourceFabricId) : undefined;
+              const srcCol = job ? colorById(job.sourceColorId) : undefined;
+              const srcCost = src?.pricePerKg ?? 0;
+              const totalCost = srcCost + (Number(line.printCostPerKg) || 0);
+              return (
+                <div key={line.key} className="rounded-lg border border-border bg-background/50 p-3">
+                  <div className="mb-2 flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <span className="grid h-6 min-w-[28px] place-items-center rounded-md bg-primary/10 px-2 text-[11px] font-bold text-primary tabular-nums">
+                        {idx + 1}
+                      </span>
+                      <span className="text-xs font-semibold text-foreground">
+                        {job
+                          ? `${job.number} — ${srcFab?.name ?? ""} — ${srcCol?.name ?? ""}`
+                          : "لون مُستلم"}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      {job && (
+                        <button
+                          type="button"
+                          onClick={() => addColorForSameFabric(line)}
+                          className="inline-flex items-center gap-1 rounded-md border border-primary/30 bg-primary/10 px-2 py-1 text-[11px] font-bold text-primary transition hover:bg-primary/20"
+                          title={`إضافة لون آخر لقماش ${srcFab?.name ?? ""}`}
+                        >
+                          <Palette className="h-3.5 w-3.5" /> إضافة لون آخر لنفس القماش
+                        </button>
+                      )}
+                      {lines.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() => removeLine(line.key)}
+                          className="grid h-7 w-7 place-items-center rounded-md text-muted-foreground transition hover:bg-destructive/10 hover:text-destructive"
+                          aria-label="حذف البند"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      )}
+                    </div>
+                  </div>
 
-              <Field label="تاريخ الاستلام">
-                <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
-              </Field>
+                  <div className="grid gap-3 md:grid-cols-4">
+                    <div className="md:col-span-2">
+                      <Field label="سند الإرسال *">
+                        <DocumentAutocomplete
+                          selectedLabel={labelForLine(line)}
+                          placeholder="ابحث برقم السند أو القماش أو المطبعة..."
+                          options={optionsForLine(line)}
+                          onPick={(id) => updateLine(line.key, { jobId: id })}
+                        />
+                      </Field>
+                    </div>
+                    <Field label="اسم التصميم / الصنف الجديد *">
+                      <Input
+                        value={line.newName}
+                        onChange={(e) => updateLine(line.key, { newName: e.target.value })}
+                        placeholder="مثال: قطن مطبوع — تصميم 12"
+                      />
+                    </Field>
+                    <div className="grid grid-cols-2 gap-2">
+                      <Field label="اسم اللون">
+                        <Input
+                          value={line.newColorName}
+                          onChange={(e) => updateLine(line.key, { newColorName: e.target.value })}
+                          placeholder={srcCol?.name || ""}
+                        />
+                      </Field>
+                      <Field label="كود اللون">
+                        <Input
+                          value={line.newColorCode}
+                          onChange={(e) => updateLine(line.key, { newColorCode: e.target.value })}
+                          placeholder="تلقائي"
+                        />
+                      </Field>
+                    </div>
 
-              {job && (
-                <div className="rounded-md bg-background/40 px-3 py-2 text-[11px] text-muted-foreground space-y-1">
-                  <div>
-                    القماش الأصلي:{" "}
-                    <span className="text-foreground">
-                      {srcFab?.name} — {srcCol?.name}
-                    </span>
-                  </div>
-                  <div>
-                    المطبعة: <span className="text-foreground">{job.pressName}</span>
-                  </div>
-                  <div>
-                    الكمية المرسلة:{" "}
-                    <span className="tabular-nums text-foreground">{job.sentKg}</span> كغ
-                  </div>
-                  <div>
-                    الأثواب المرسلة:{" "}
-                    <span className="tabular-nums text-foreground">{job.pieces ?? 1}</span> أثواب
-                  </div>
-                  <div>
-                    سيُضاف للمخزون:{" "}
-                    <span className="tabular-nums text-foreground">
-                      {receivedKg === "" ? "0" : formatQuantity(receivedKg)}
-                    </span>{" "}
-                    كغ
-                  </div>
-                  <div>
-                    تكلفة الشراء الأصلية:{" "}
-                    <span className="tabular-nums text-foreground">
-                      {formatNumber(srcCost)} {src ? currencySymbol(src.currency) : ""}
-                    </span>{" "}
-                    / كغ
+                    <Field label="الكمية الفعلية المستلمة (كغ) *">
+                      <Input
+                        type="number"
+                        inputMode="decimal"
+                        min={0}
+                        step={0.01}
+                        value={line.receivedKg}
+                        onChange={(e) => {
+                          const v = e.target.value;
+                          if (v === "") return updateLine(line.key, { receivedKg: "" });
+                          const n = Number(v);
+                          if (Number.isFinite(n) && n >= 0) updateLine(line.key, { receivedKg: n });
+                        }}
+                        placeholder={job ? `حتى ${formatQuantity(job.sentKg)}` : ""}
+                      />
+                    </Field>
+                    <Field label="تكلفة الطباعة للكيلو *">
+                      <Input
+                        type="number"
+                        min={0}
+                        value={line.printCostPerKg}
+                        onChange={(e) =>
+                          updateLine(line.key, {
+                            printCostPerKg: e.target.value === "" ? "" : Number(e.target.value),
+                          })
+                        }
+                      />
+                    </Field>
+                    <Field label="سعر البيع للكيلو (اختياري)">
+                      <Input
+                        type="number"
+                        min={0}
+                        value={line.newSalePrice}
+                        onChange={(e) =>
+                          updateLine(line.key, {
+                            newSalePrice: e.target.value === "" ? "" : Number(e.target.value),
+                          })
+                        }
+                      />
+                    </Field>
+                    {job && (
+                      <div className="flex items-end">
+                        <div className="w-full rounded-md border border-border bg-background/40 px-3 py-2 text-[11px] text-muted-foreground">
+                          التكلفة الإجمالية للكيلو ={" "}
+                          <span className="font-bold tabular-nums text-foreground">
+                            {formatNumber(totalCost)}
+                          </span>{" "}
+                          (تكلفة القماش + الطباعة)
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
-              )}
-            </div>
+              );
+            })}
 
-            {/* NEW ITEM */}
-            <div className="space-y-3 rounded-lg border border-border bg-secondary/40 p-4">
-              <div className="flex items-center gap-2 text-xs font-bold text-foreground">
-                <Inbox className="h-4 w-4 -scale-x-100 text-primary" />
-                الصنف المطبوع الجديد
-              </div>
+            <button
+              type="button"
+              onClick={() => setLines((ls) => [...ls, emptyReceiveLine()])}
+              className="flex w-full items-center justify-center gap-2 rounded-lg border border-dashed border-border py-2.5 text-xs font-semibold text-muted-foreground transition hover:border-primary hover:bg-primary/5 hover:text-primary"
+            >
+              <Plus className="h-4 w-4" /> إضافة بند استلام آخر (أي قماش)
+            </button>
 
-              <Field label="اسم التصميم / الصنف الجديد *">
-                <Input
-                  value={newName}
-                  onChange={(e) => setNewName(e.target.value)}
-                  placeholder="مثال: قطن مطبوع — تصميم 12"
-                />
-              </Field>
-
-              <div className="grid grid-cols-2 gap-2">
-                <Field label="التصنيف">
-                  <Input value={newCategory} onChange={(e) => setNewCategory(e.target.value)} />
-                </Field>
-                <Field label="العملة">
-                  <Select value={currency} onValueChange={(v) => setCurrency(v as Currency)}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="SYP">ل.س</SelectItem>
-                      <SelectItem value="USD">$ USD</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </Field>
-              </div>
-
-              <div className="grid grid-cols-2 gap-2">
-                <Field label="اسم اللون">
-                  <Input
-                    value={newColorName}
-                    onChange={(e) => setNewColorName(e.target.value)}
-                    placeholder={srcCol?.name || ""}
-                  />
-                </Field>
-                <Field label="كود اللون">
-                  <Input
-                    value={newColorCode}
-                    onChange={(e) => setNewColorCode(e.target.value)}
-                    placeholder="تلقائي"
-                  />
-                </Field>
-              </div>
-
-              <div className="grid grid-cols-2 gap-2">
-                <Field label="الكمية الفعلية المستلمة (كغ) *">
-                  <Input
-                    type="number"
-                    inputMode="decimal"
-                    min={0}
-                    step={0.01}
-                    value={receivedKg}
-                    onChange={(e) => {
-                      const v = e.target.value;
-                      if (v === "") {
-                        setReceivedKg("");
-                        return;
-                      }
-                      const n = Number(v);
-                      if (Number.isFinite(n) && n >= 0) setReceivedKg(n);
-                    }}
-                    placeholder={job ? `حتى ${formatQuantity(job.sentKg)}` : ""}
-                  />
-                </Field>
-                <Field label="تكلفة الطباعة للكيلو *">
-                  <Input
-                    type="number"
-                    min={0}
-                    value={printCost}
-                    onChange={(e) =>
-                      setPrintCost(e.target.value === "" ? "" : Number(e.target.value))
-                    }
-                  />
-                </Field>
-              </div>
-
-              <Field label="سعر البيع للكيلو (اختياري)">
-                <Input
-                  type="number"
-                  min={0}
-                  value={newSalePrice}
-                  onChange={(e) =>
-                    setNewSalePrice(e.target.value === "" ? "" : Number(e.target.value))
-                  }
-                />
-              </Field>
-
-              <Field label="ملاحظات">
-                <Input value={notes} onChange={(e) => setNotes(e.target.value)} />
-              </Field>
-
-              {job && (
-                <div className="rounded-md border border-border bg-background/40 px-3 py-2 text-[11px] text-muted-foreground">
-                  التكلفة الإجمالية للكيلو ={" "}
-                  <span className="tabular-nums font-bold text-foreground">
-                    {formatNumber(totalCost)}
-                  </span>{" "}
-                  (تكلفة القماش + الطباعة)
-                </div>
-              )}
-            </div>
+            <Field label="ملاحظات">
+              <Input value={notes} onChange={(e) => setNotes(e.target.value)} />
+            </Field>
           </div>
         </PageCard>
 

@@ -158,7 +158,15 @@ export function VoucherForm({ kind }: { kind: VoucherKind }) {
           <Field label="الفاتورة المرتبطة (اختياري)">
             <Select
               value={invoiceId || "none"}
-              onValueChange={(v) => setInvoiceId(v === "none" ? "" : v)}
+              onValueChange={(v) => {
+                const id = v === "none" ? "" : v;
+                setInvoiceId(id);
+                // Vouchers settle an invoice in ITS currency — adopting the
+                // invoice's currency here prevents the cross-currency
+                // rejection the backend would otherwise raise on save.
+                const opt = invoiceOptions.find((i) => i.id === id);
+                if (opt) setCurrency(opt.currency as Currency);
+              }}
               disabled={!partyId}
             >
               <SelectTrigger className="!h-10">
@@ -174,6 +182,17 @@ export function VoucherForm({ kind }: { kind: VoucherKind }) {
               </SelectContent>
             </Select>
             <p className="mt-1 text-[11px] leading-snug text-muted-foreground">{invoiceHint}</p>
+            {(() => {
+              const opt = invoiceOptions.find((i) => i.id === invoiceId);
+              if (!opt || opt.currency === currency) return null;
+              const curLabel = CURRENCIES.find((c) => c.code === opt.currency)?.label ?? opt.currency;
+              return (
+                <p className="mt-1 text-[11px] font-semibold text-warning">
+                  ⚠️ عملة السند تختلف عن عملة الفاتورة ({curLabel}) — بدّل العملة إلى{" "}
+                  {curLabel} قبل الحفظ.
+                </p>
+              );
+            })()}
           </Field>
           <Field label="التاريخ">
             <Input

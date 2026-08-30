@@ -121,7 +121,7 @@ signtool sign /f certificate.pfx /p password /t http://timestamp.digicert.com Mo
 ### مشكلة: `tauri` لا يُنشئ نافذة
 
 ```powershell
-# تأكد من أن backend يعمل على localhost:8083
+# تأكد من أن backend يعمل على 127.0.0.1:8080 (backend/.env → PORT=8080)
 # أو عدّل proxy في vite.config.ts
 ```
 

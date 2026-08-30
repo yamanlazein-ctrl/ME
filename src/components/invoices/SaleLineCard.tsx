@@ -15,7 +15,7 @@ import type { Currency } from "@/domain/types";
 import { rollsOfColor, rollById } from "@/presentation/hooks/useInventory";
 import { cn } from "@/lib/utils";
 import { formatNumber, formatQuantity, formatMoney } from "@/shared/utils/formatNumber";
-import { CardField, GroupSection } from "./InvoiceFormLayout";
+import { CardField, FormattedAmountInput, GroupSection } from "./InvoiceFormLayout";
 import { lineTotal, type SaleLine as SaleLineType } from "./sale-types";
 
 export function SaleLineCard({
@@ -239,43 +239,35 @@ export function SaleLineCard({
               label={`السعر / كغ${currency ? ` (${currencySymbol(currency)})` : " (اختر العملة)"}`}
               required
             >
-              <Input
-                type="number"
-                step="0.01"
-                value={line.pricePerKg || ""}
-                onChange={(e) =>
-                  onUpdate({ pricePerKg: e.target.value === "" ? 0 : Number(e.target.value) })
-                }
+              <FormattedAmountInput
+                value={line.pricePerKg}
+                onChange={(v) => onUpdate({ pricePerKg: v === "" ? 0 : v })}
                 className={cn("h-9 text-left tabular-nums", !line.pricePerKg && "text-muted-foreground/70", isUSD && line.pricePerKg > 0 && "text-success font-semibold")}
                 placeholder="0"
-                aria-label="سعر الوحدة"
+                ariaLabel="سعر الوحدة"
               />
             </CardField>
             <CardField label="الخصم">
-              <Input
-                type="number"
-                step="0.01"
-                value={line.discountAmount || ""}
-                onChange={(e) =>
-                  onUpdate({ discountAmount: e.target.value === "" ? 0 : Number(e.target.value) })
-                }
-                onKeyDown={(e: KeyboardEvent<HTMLInputElement>) => {
-                  if (e.key === "Enter") {
-                    e.preventDefault();
-                    if (isLast) {
-                      onAppend();
-                    } else {
-                      const next = allLines[index + 1];
-                      if (next) {
-                        // Focus next fabric input — handled by caller via ref
+              <FormattedAmountInput
+                  value={line.discountAmount}
+                  onChange={(v) => onUpdate({ discountAmount: v === "" ? 0 : Math.max(0, v) })}
+                  onKeyDown={(e: KeyboardEvent<HTMLInputElement>) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      if (isLast) {
+                        onAppend();
+                      } else {
+                        const next = allLines[index + 1];
+                        if (next) {
+                          // Focus next fabric input — handled by caller via ref
+                        }
                       }
                     }
-                  }
-                }}
-                className={cn("h-9 text-left tabular-nums", !line.discountAmount && "text-muted-foreground/70")}
-                placeholder="0"
-                aria-label="الخصم"
-              />
+                  }}
+                  className={cn("h-9 text-left tabular-nums", !line.discountAmount && "text-muted-foreground/70")}
+                  placeholder="0"
+                  ariaLabel="الخصم"
+                />
             </CardField>
             <div className="flex items-end justify-end">
               <div className="flex flex-col items-end">

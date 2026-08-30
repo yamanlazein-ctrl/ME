@@ -188,7 +188,8 @@ export function ReturnInvoicePrint({
       roll: roll ? roll.rollNo : "—",
       fabric: fab?.name ?? "—",
       color: renderRollColorCell(l.rollId),
-      pieces: l.pieces && l.pieces > 1 ? String(l.pieces) : "—",
+      // #6: show pieces whenever a count exists (pieces >= 1).
+      pieces: l.pieces && l.pieces >= 1 ? String(l.pieces) : "—",
       qty: fmtQty(l.quantityKg),
       price: fmtUnit(l.pricePerKg),
       gross: fmtMoney(sub),

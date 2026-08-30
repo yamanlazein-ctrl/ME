@@ -1,4 +1,5 @@
 import { eq, and, desc, ilike, or, sql, gte, lte } from "drizzle-orm";
+import { BusinessRuleError } from "../../domain/errors/index.js";
 import { allocateDocumentNumber } from "../utils/documentNumbers.js";
 import type { DB } from "../orm/drizzle.js";
 import type {
@@ -102,19 +103,21 @@ export class PostgresVoucherRepository implements IVoucherRepository {
           .where(and(eq(invoices.id, input.invoiceId), eq(invoices.tenantId, ctx.tenantId)))
           .for("update")
           .limit(1);
-        if (!inv) throw new Error("الفاتورة المرتبطة غير موجودة");
+        if (!inv) throw new BusinessRuleError("الفاتورة المرتبطة غير موجودة");
         // TX5 fix: refuse vouchers against cancelled invoices so the user
         // can't collect on a cancelled document (silent data corruption).
         if (inv.status === "cancelled") {
-          throw new Error("لا يمكن إنشاء سند لفاتورة مُلغاة");
+          throw new BusinessRuleError("لا يمكن إنشاء سند لفاتورة مُلغاة");
         }
         // Cross-currency guard: refuse a voucher whose currency differs from the
         // linked invoice. Mixed-currency payments silently corrupt the party
         // balance (Bug E2E #7). No FX conversion is supported at this layer.
         const voucherCurrency = input.currency ?? "SYP";
         if (inv.currency !== voucherCurrency) {
-          throw new Error(
-            `لا يمكن سداد فاتورة بعملة مختلفة عن عملة السند (فاتورة: ${inv.currency}، سند: ${voucherCurrency})`,
+          // BusinessRuleError (not plain Error): the use-case layer passes these
+          // verbatim to the user instead of masking them as internal errors.
+          throw new BusinessRuleError(
+            `لا يمكن سداد فاتورة بعملة مختلفة عن عملة السند (فاتورة: ${inv.currency}، سند: ${voucherCurrency}) — بدّل عملة السند إلى ${inv.currency}.`,
           );
         }
         const existing = await tx
@@ -145,7 +148,7 @@ export class PostgresVoucherRepository implements IVoucherRepository {
         const returnsAmount = Number(retAgg?.total ?? 0);
         const remaining = Number(inv.total) - Number(existing[0]?.paid ?? 0) - returnsAmount;
         if (input.amount > remaining) {
-          throw new Error(`المبلغ يتجاوز المتبقي على الفاتورة (${remaining})`);
+          throw new BusinessRuleError(`المبلغ يتجاوز المتبقي على الفاتورة (${remaining})`);
         }
       }
 
@@ -160,7 +163,7 @@ export class PostgresVoucherRepository implements IVoucherRepository {
             ? input.exchangeRate!
             : null;
       if (voucherCurrency !== BASE_CURRENCY && !isValidFxRate(fxRate)) {
-        throw new Error(FX_REQUIRED_MESSAGE);
+        throw new BusinessRuleError(FX_REQUIRED_MESSAGE);
       }
       const voucherBaseAmount = computeBaseEquivalent(input.amount, voucherCurrency, fxRate);
       const legFx = (debit: number, credit: number) => ({

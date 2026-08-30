@@ -28,6 +28,8 @@ export function ColorSearchCell({
   onSetCode,
   onSetHex,
   onSetImage,
+  disabled,
+  renameMode,
 }: {
   name: string;
   code: string;
@@ -48,6 +50,10 @@ export function ColorSearchCell({
   onSetCode: (code: string) => void;
   onSetHex?: (hex: string | undefined) => void;
   onSetImage?: (dataUrl: string | undefined) => void;
+  /** Locked when the line is bound to a saved lot — lot colors are immutable. */
+  disabled?: boolean;
+  /** Bound-lot rename mode: a new typed name RENAMES the color on save. */
+  renameMode?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [activeField, setActiveField] = useState<"code" | "name">("code");
@@ -153,6 +159,7 @@ export function ColorSearchCell({
               setOpen(true);
             }}
             onFocus={() => {
+              if (disabled) return;
               setActiveField("code");
               setOpen(true);
             }}
@@ -164,6 +171,7 @@ export function ColorSearchCell({
               matched && "border-primary/40 bg-primary/[0.03]",
               isNew && "border-warning/40 text-primary",
             )}
+            disabled={disabled}
             aria-label="رقم اللون"
           />
         </div>
@@ -178,6 +186,7 @@ export function ColorSearchCell({
               setOpen(true);
             }}
             onFocus={() => {
+              if (disabled) return;
               setActiveField("name");
               setOpen(true);
             }}
@@ -185,6 +194,7 @@ export function ColorSearchCell({
             onKeyDown={handleKey}
             placeholder="اسم اللون"
             className={cn("h-9", matched && "border-primary/40 bg-primary/[0.03]")}
+            disabled={disabled}
             aria-label="اسم اللون"
           />
         </div>
@@ -198,7 +208,7 @@ export function ColorSearchCell({
           </span>
         ) : isNew ? (
           <span className="inline-flex items-center gap-1 rounded bg-secondary px-1.5 py-0.5 font-semibold text-muted-foreground">
-            <Sparkles className="h-3 w-3" /> لون جديد — سيُسجَّل عند الحفظ
+            <Sparkles className="h-3 w-3" /> {renameMode ? 'سيتم تحديث اسم اللون عند الحفظ' : 'لون جديد — سيُسجَّل عند الحفظ'}
           </span>
         ) : (
           <span className="text-muted-foreground">اكتب الرقم أو الاسم للبحث في المخزون</span>

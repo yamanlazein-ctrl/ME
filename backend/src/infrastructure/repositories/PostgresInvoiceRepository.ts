@@ -25,6 +25,7 @@ import type {
 import { Invoice, computeSubtotal } from "../../domain/entities/Invoice.js";
 import { round2dp, BASE_CURRENCY, computeBaseEquivalent, isValidFxRate, FX_REQUIRED_MESSAGE } from "@erp/shared";
 import type { TenantContext, PaginatedResult } from "../../domain/types/index.js";
+import { BusinessRuleError } from "../../domain/errors/index.js";
 
 export class PostgresInvoiceRepository implements IInvoiceRepository {
   constructor(private readonly db: DB) {}
@@ -163,17 +164,17 @@ export class PostgresInvoiceRepository implements IInvoiceRepository {
         .where(and(eq(parties.id, input.partyId), eq(parties.tenantId, ctx.tenantId)))
         .limit(1);
       if (!party) {
-        throw new Error("الطرف المحدد للفاتورة غير موجود");
+        throw new BusinessRuleError("الطرف المحدد للفاتورة غير موجود");
       }
       if (party.kind !== expectedKind) {
-        throw new Error(
+        throw new BusinessRuleError(
           isSale
             ? `لا يمكن إنشاء فاتورة بيع لطرف من نوع «${party.kind === "supplier" ? "مورد" : party.kind}» — اختر عميلاً`
             : `لا يمكن إنشاء فاتورة دخول لطرف من نوع «${party.kind === "customer" ? "عميل" : party.kind}» — اختر مورداً`,
         );
       }
       if (input.partyType !== expectedKind) {
-        throw new Error("نوع الطرف في الفاتورة لا يطابق نوع الفاتورة");
+        throw new BusinessRuleError("نوع الطرف في الفاتورة لا يطابق نوع الفاتورة");
       }
 
       // Stock validation and deduction only for sale invoices.
@@ -202,7 +203,7 @@ export class PostgresInvoiceRepository implements IInvoiceRepository {
       // caller must supply the rate at creation time (the UI now enforces it
       // too). USD documents are always convertible (rate = 1).
       if (invoiceCurrency !== BASE_CURRENCY && !isValidFxRate(fxRate)) {
-        throw new Error(FX_REQUIRED_MESSAGE);
+        throw new BusinessRuleError(FX_REQUIRED_MESSAGE);
       }
       // Per-line guards: stock, color/fabric match, currency match.
       // Runs for BOTH sale and entry invoices (NEW-03 added entry arm).
@@ -222,17 +223,20 @@ export class PostgresInvoiceRepository implements IInvoiceRepository {
             pricePerKg: rolls.pricePerKg,
             colorId: rolls.colorId,
             currency: rolls.currency,
+            rollNo: rolls.rollNo,
           })
           .from(rolls)
           .where(and(eq(rolls.id, line.rollId), eq(rolls.tenantId, ctx.tenantId)))
           .for("update")
           .limit(1);
         if (!r) {
-          throw new Error(`اللفافة ${line.rollId} غير موجودة`);
+          throw new BusinessRuleError("الصبغة المحددة لأحد البنود غير موجودة (ربما حُذفت) — أعد اختيار الصبغة");
         }
         // BUG-04 / H-2: line.colorId must match the roll's real color.
         if (line.colorId !== r.colorId) {
-          throw new Error(`اللون المحدد للبند لا يطابق لون اللفافة ${line.rollId} الفعلي`);
+          throw new BusinessRuleError(
+            `لا يمكن تغيير لون الصبغة #${r.rollNo} بعد حفظها — لون البند المختار لا يطابق لون الصبغة المحفوظة. احذف البند وأضف صبغة جديدة باللون الصحيح.`,
+          );
         }
         const [rollColor] = await tx
           .select({ fabricId: colors.fabricId })
@@ -240,24 +244,39 @@ export class PostgresInvoiceRepository implements IInvoiceRepository {
           .where(and(eq(colors.id, r.colorId), eq(colors.tenantId, ctx.tenantId)))
           .limit(1);
         if (!rollColor || line.fabricId !== rollColor.fabricId) {
-          throw new Error(`القماش المحدد للبند لا يطابق قماش لون اللفافة ${line.rollId} الفعلي`);
+          throw new BusinessRuleError(
+            `لا يمكن تغيير قماش الصبغة #${r.rollNo} بعد حفظها — قماش البند المختار لا يطابق قماش الصبغة المحفوظة.`,
+          );
         }
         // H1 (cross-currency guard): applies to BOTH sale (for COGS) and
         // entry (for stock value integrity). NEW-03 was the entry arm
         // being missing.
         if (r.currency !== invoiceCurrency) {
-          throw new Error(
+          throw new BusinessRuleError(
             `عملة اللفافة ${line.rollId} (${r.currency}) لا تطابق عملة الفاتورة (${invoiceCurrency}) — لا يمكن خلط العملات في التكلفة`,
+          );
+        }
+        // DIAG-أ (silent-error fix): an entry invoice must only stock a FRESH,
+        // EMPTY roll. The frontend contract creates each roll with
+        // remainingKg=0 right before the invoice (entry.new.tsx addRoll), and
+        // the entry arm below increments remainingKg by the line quantity.
+        // Without this cap, an API caller (or a stale UI) could reference an
+        // already-stocked roll and silently inflate its stock — quantity 500
+        // on a roll holding 406kg became 506kg with no resistance. Exhausted
+        // rolls are rejected too so a sold-out roll cannot be resurrected.
+        if (!isSale && (Number(r.kg) > 0 || r.status !== "in_stock")) {
+          throw new BusinessRuleError(
+            `فاتورة الدخول يجب أن تشير إلى لفافة جديدة فارغة — اللفافة ${line.rollId} عليها مخزون حالي (${Number(r.kg)} كغ، حالة ${r.status}) ولا يمكن إضافة مخزون فوقها من فاتورة دخول`,
           );
         }
         if (isSale) {
           if (Number(r.kg) < line.quantityKg) {
-            throw new Error(
+            throw new BusinessRuleError(
               `اللفافة ${line.rollId} المخزون غير كافٍ (${Number(r.kg)} كغ < ${line.quantityKg} كغ)`,
             );
           }
           if (r.status === "exhausted") {
-            throw new Error(`اللفافة ${line.rollId} نفدت ولا يمكن بيعها`);
+            throw new BusinessRuleError(`اللفافة ${line.rollId} نفدت ولا يمكن بيعها`);
           }
           expectedVersions.set(line.rollId, Number(r.version));
           const storedQty = Math.round(Number(line.quantityKg) * 100) / 100;
@@ -343,7 +362,7 @@ export class PostgresInvoiceRepository implements IInvoiceRepository {
             .for("update")
             .limit(1);
           if (linePieces > Number(r!.remainingPieces)) {
-            throw new Error(
+            throw new BusinessRuleError(
               `عدد الأثواب المطلوب (${linePieces}) يتجاوز المتاح في الصبغة (${Number(r!.remainingPieces)} أثواب)`,
             );
           }
@@ -368,7 +387,7 @@ export class PostgresInvoiceRepository implements IInvoiceRepository {
             )
             .returning({ id: rolls.id });
           if (updated.length === 0) {
-            throw new Error(`Roll ${line.rollId} was modified concurrently. Please retry.`);
+            throw new BusinessRuleError(`Roll ${line.rollId} was modified concurrently. Please retry.`);
           }
           await recordStockMovement(
             tx,
@@ -401,6 +420,7 @@ export class PostgresInvoiceRepository implements IInvoiceRepository {
               remainingKg: rolls.remainingKg,
               remainingPieces: rolls.remainingPieces,
               colorId: rolls.colorId,
+              rollNo: rolls.rollNo,
             })
             .from(rolls)
             .where(and(eq(rolls.id, line.rollId), eq(rolls.tenantId, ctx.tenantId)))
@@ -413,10 +433,12 @@ export class PostgresInvoiceRepository implements IInvoiceRepository {
           // success. It also never checked line.colorId/fabricId against the
           // roll's real color, same gap as the sale path above.
           if (!before) {
-            throw new Error(`اللفافة ${line.rollId} غير موجودة`);
+            throw new BusinessRuleError("الصبغة المحددة لأحد البنود غير موجودة (ربما حُذفت) — أعد اختيار الصبغة");
           }
           if (line.colorId !== before.colorId) {
-            throw new Error(`اللون المحدد للبند لا يطابق لون اللفافة ${line.rollId} الفعلي`);
+            throw new BusinessRuleError(
+              `لا يمكن تغيير لون الصبغة #${before.rollNo} بعد حفظها — لون البند المختار لا يطابق لون الصبغة المحفوظة. احذف البند وأضف صبغة جديدة باللون الصحيح.`,
+            );
           }
           const [rollColor] = await tx
             .select({ fabricId: colors.fabricId })
@@ -424,7 +446,7 @@ export class PostgresInvoiceRepository implements IInvoiceRepository {
             .where(and(eq(colors.id, before.colorId), eq(colors.tenantId, ctx.tenantId)))
             .limit(1);
           if (!rollColor || line.fabricId !== rollColor.fabricId) {
-            throw new Error(`القماش المحدد للبند لا يطابق قماش لون اللفافة ${line.rollId} الفعلي`);
+            throw new BusinessRuleError(`القماش المحدد للبند لا يطابق قماش لون اللفافة ${line.rollId} الفعلي`);
           }
           const newKg = Number(before?.remainingKg ?? 0) + line.quantityKg;
           const newPieces = Number(before?.remainingPieces ?? 0) + linePieces;
@@ -581,7 +603,7 @@ export class PostgresInvoiceRepository implements IInvoiceRepository {
       }
       if (isSale && paid > 0) {
         if (paid > inv.total) {
-          throw new Error(`المبلغ المدفوع (${paid}) أكبر من إجمالي الفاتورة (${inv.total})`);
+          throw new BusinessRuleError(`المبلغ المدفوع (${paid}) أكبر من إجمالي الفاتورة (${inv.total})`);
         }
         const method = input.paymentMethod ?? "cash";
         const receiptNumber = `RCP-${autoNumber}`;
@@ -652,7 +674,7 @@ export class PostgresInvoiceRepository implements IInvoiceRepository {
       // balance was inflated by the paid amount (the bug under fix).
       if (!isSale && paid > 0) {
         if (paid > inv.total) {
-          throw new Error(`المبلغ المدفوع (${paid}) أكبر من إجمالي الفاتورة (${inv.total})`);
+          throw new BusinessRuleError(`المبلغ المدفوع (${paid}) أكبر من إجمالي الفاتورة (${inv.total})`);
         }
         const method = input.paymentMethod ?? "cash";
         const paymentNumber = `PAY-${autoNumber}`;
@@ -801,6 +823,7 @@ export class PostgresInvoiceRepository implements IInvoiceRepository {
           colorId: string;
           currency: string;
           version: number;
+          status: string;
         }
       >();
       const deltas = new Map<string, { kg: number; pieces: number }>();
@@ -814,17 +837,19 @@ export class PostgresInvoiceRepository implements IInvoiceRepository {
             colorId: rolls.colorId,
             currency: rolls.currency,
             version: rolls.version,
+            status: rolls.status,
+            rollNo: rolls.rollNo,
           })
           .from(rolls)
           .where(and(eq(rolls.id, rollId), eq(rolls.tenantId, ctx.tenantId)))
           .for("update")
           .limit(1);
-        if (!r) throw new Error(`اللفافة ${rollId} غير موجودة`);
+        if (!r) throw new BusinessRuleError(`اللفافة ${rollId} غير موجودة`);
 
         // H1: same cross-currency guard as create — an edited sale line must
         // not revalue COGS from a roll priced in another currency.
         if (isSale && newByRoll.has(rollId) && r.currency !== inv.currency) {
-          throw new Error(
+          throw new BusinessRuleError(
             `عملة اللفافة ${rollId} (${r.currency}) لا تطابق عملة الفاتورة (${inv.currency}) — لا يمكن خلط العملات في التكلفة`,
           );
         }
@@ -832,7 +857,7 @@ export class PostgresInvoiceRepository implements IInvoiceRepository {
         const next = newByRoll.get(rollId);
         if (next) {
           if (next.colorId !== r.colorId) {
-            throw new Error(`اللون المحدد للبند لا يطابق لون اللفافة ${rollId} الفعلي`);
+            throw new BusinessRuleError(`لا يمكن تغيير لون الصبغة #${r.rollNo} بعد حفظها — لون البند المختار لا يطابق لون الصبغة المحفوظة. احذف البند وأضف صبغة جديدة باللون الصحيح.`);
           }
           const [rollColor] = await tx
             .select({ fabricId: colors.fabricId })
@@ -840,7 +865,7 @@ export class PostgresInvoiceRepository implements IInvoiceRepository {
             .where(and(eq(colors.id, r.colorId), eq(colors.tenantId, ctx.tenantId)))
             .limit(1);
           if (!rollColor || next.fabricId !== rollColor.fabricId) {
-            throw new Error(`القماش المحدد للبند لا يطابق قماش لون اللفافة ${rollId} الفعلي`);
+            throw new BusinessRuleError(`القماش المحدد للبند لا يطابق قماش لون اللفافة ${rollId} الفعلي`);
           }
         }
 
@@ -857,6 +882,7 @@ export class PostgresInvoiceRepository implements IInvoiceRepository {
           colorId: r.colorId,
           currency: r.currency,
           version: Number(r.version),
+          status: r.status,
         });
       }
 
@@ -869,15 +895,47 @@ export class PostgresInvoiceRepository implements IInvoiceRepository {
         const newKg = Math.round((state.remainingKg + kgDelta) * 100) / 100;
         const newPieces = state.remainingPieces + piecesDelta;
 
+        // DIAG-أ (silent-error fix, v2 — delta-based): cap entry quantity
+        // increases against the roll's REAL unsold stock at edit time.
+        // `state.remainingKg` is read fresh (FOR UPDATE) before this request's
+        // deltas are applied, and `delta` is the per-roll AGGREGATE of the
+        // whole PUT (newByRoll/oldByRoll), so a request touching the same roll
+        // on multiple lines cannot double-count. Rules:
+        //  - delta.kg <= 0 (decrease / hold): always allowed.
+        //  - delta.kg > 0 (increase): allowed only while the roll still holds
+        //    at least that much unsold stock (delta <= remaining_kg).
+        //  - A roll introduced by this edit must still be a fresh, empty,
+        //    in-stock roll (mirrors the create-path cap).
+        if (!isSale && newByRoll.has(rollId)) {
+          if (!oldByRoll.has(rollId)) {
+            if (state.remainingKg !== 0 || state.status !== "in_stock") {
+              throw new BusinessRuleError(
+                `لا يمكن إدخال اللفافة ${rollId} عبر تعديل فاتورة — عليها مخزون حالي (${state.remainingKg} كغ، حالة ${state.status}). أنشئ فاتورة دخول جديدة.`,
+              );
+            }
+          } else {
+            if (delta.kg > state.remainingKg) {
+              throw new BusinessRuleError(
+                `لا يمكن زيادة كمية الدخول بمقدار ${delta.kg} كغ — المتاح غير المباع في اللفافة ${rollId} هو ${state.remainingKg} كغ فقط`,
+              );
+            }
+            if (delta.pieces > state.remainingPieces) {
+              throw new BusinessRuleError(
+                `لا يمكن زيادة عدد أثواب الدخول بمقدار ${delta.pieces} — المتاح غير المباع في اللفافة ${rollId} هو ${state.remainingPieces} أثواب فقط`,
+              );
+            }
+          }
+        }
+
         if (newKg < 0) {
-          throw new Error(
+          throw new BusinessRuleError(
             isSale
               ? `لا يمكن زيادة كمية البيع — المتاح في اللفافة ${rollId} غير كافٍ`
               : `لا يمكن إنقاص كمية الدخول — المتاح في اللفافة ${rollId} غير كافٍ`,
           );
         }
         if (newPieces < 0) {
-          throw new Error(
+          throw new BusinessRuleError(
             `الأثواب الناتجة عن التعديل تتجاوز المتاح في اللفافة ${rollId}`,
           );
         }
@@ -936,7 +994,7 @@ export class PostgresInvoiceRepository implements IInvoiceRepository {
             ? input.exchangeRate!
             : (inv.exchangeRate ?? null);
       if (inv.currency !== BASE_CURRENCY && !isValidFxRate(editFx)) {
-        throw new Error(FX_REQUIRED_MESSAGE);
+        throw new BusinessRuleError(FX_REQUIRED_MESSAGE);
       }
 
       // Replace lines and header.

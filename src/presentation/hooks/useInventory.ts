@@ -364,13 +364,16 @@ export async function addColor(
 export async function updateColor(
   id: string,
   patch: Partial<Omit<ColorData, "id" | "createdAt" | "tenantId">>,
+  opts?: { silent?: boolean },
 ) {
   try {
     const updated = await container.inventory.repository.updateColor(id, patch, ctx);
     const idx = colorsCache.findIndex((c) => c.id === id);
     if (idx >= 0) colorsCache[idx] = updated;
     notifyInventoryChange();
-    toast.info("تم تحديث اللون");
+    // silent: true → the caller aggregates feedback into its own toast
+    // (invoice-save rename flow shows ONE success toast, not one per line).
+    if (!opts?.silent) toast.info("تم تحديث اللون");
   } catch (e) {
     toast.error(`فشل تحديث اللون: ${e instanceof Error ? e.message : "خطأ غير معروف"}`);
   }

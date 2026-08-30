@@ -9,7 +9,7 @@
 import { writeFile, mkdir } from "node:fs/promises";
 import path from "node:path";
 
-const BASE = process.env.ERP_API_BASE_URL || "http://localhost:8083";
+const BASE = process.env.ERP_API_BASE_URL || "http://127.0.0.1:8080";
 const TENANT_ID = process.env.ERP_TENANT_ID || "407fccfc-ba89-41c5-b5b9-ddb2c4f385d9";
 const EMAIL = process.env.ERP_ADMIN_EMAIL || "admin@erp.local";
 const PASSWORD = process.env.ERP_ADMIN_PASSWORD || "GcvUIlmnyP5rZQs6rO";

@@ -7,11 +7,36 @@ import type {
 } from "../../../domain/entities/Invoice.js";
 import type { IAuditRepository } from "../../ports/IAuditRepository.js";
 import { logAuditError } from "../../../infrastructure/audit/auditErrorHandler.js";
-import { DayLockedError } from "../../../domain/errors/index.js";
+import { DayLockedError, BusinessRuleError } from "../../../domain/errors/index.js";
+import { logger } from "../../../infrastructure/config/logger.js";
 
 type Result<T> = { ok: true; data: T } | { ok: false; error: string };
 
 type Collected = { code?: string; message?: string };
+
+/**
+ * Compact invoice snapshot for the audit trail (invoice-tracking feature):
+ * captures exactly the fields an operator would want to diff — number, date,
+ * currency, status, money fields and per-line qty/price — without dumping
+ * whole row payloads into audit_logs. Stored in before_snapshot/after_snapshot.
+ */
+function invoiceAuditSnapshot(inv: InvoiceData) {
+  return {
+    number: inv.number,
+    date: inv.date,
+    currency: inv.currency,
+    status: inv.status,
+    discount: inv.discount ?? 0,
+    tax: inv.tax ?? 0,
+    total: inv.total,
+    lines: (inv.lines ?? []).map((l) => ({
+      rollId: l.rollId,
+      quantityKg: l.quantityKg,
+      pricePerKg: l.pricePerKg,
+      pieces: l.pieces ?? 1,
+    })),
+  };
+}
 
 /**
  * Walk an error and its `cause` chain to collect Postgres/Drizzle error
@@ -48,6 +73,11 @@ function errorsCombined(errors: Collected[]): string {
  * logged server-side (caller) for diagnosis instead.
  */
 function invoiceErrorMessage(e: unknown): string {
+  // A known business-rule violation carries the precise, actionable Arabic
+  // reason already — return it verbatim instead of masking it. Everything
+  // else is an unexpected fault (mapped to the generic "internal error"
+  // below and logged server-side).
+  if (e instanceof BusinessRuleError) return e.message;
   if (e instanceof DayLockedError) return e.message;
   const errs = collectErrors(e);
   const combined = errorsCombined(errs);
@@ -103,11 +133,13 @@ export async function createInvoiceUseCase(
       .create({
         tenantId: ctx.tenantId,
         actorId: ctx.userId,
+        actorName: ctx.userName,
         module: "invoices",
         action: "create",
         entityType: "invoice",
         entityId: invoice.id,
         detail: `فاتورة ${invoice.number}`,
+        afterSnapshot: invoiceAuditSnapshot(invoice),
       })
       .catch((err: unknown) =>
         logAuditError(err, {
@@ -119,9 +151,14 @@ export async function createInvoiceUseCase(
       );
     return { ok: true, data: invoice };
   } catch (e) {
-    // Full technical details logged for diagnosis; only a clear Arabic
-    // message reaches the caller/UI.
-    console.error("[createInvoiceUseCase] failed:", collectErrors(e));
+    // Full technical details logged to the file (pino) for diagnosis; only a
+    // clear Arabic message reaches the caller/UI. A known BusinessRuleError is
+    // logged at warn (audit trail) with its exact message.
+    if (e instanceof BusinessRuleError) {
+      logger.warn({ err: e.message }, "[createInvoiceUseCase] business rule violation");
+    } else {
+      logger.error({ err: collectErrors(e) }, "[createInvoiceUseCase] failed");
+    }
     return { ok: false, error: invoiceErrorMessage(e) };
   }
 }
@@ -135,16 +172,22 @@ export async function updateInvoiceUseCase(
 ): Promise<Result<InvoiceData> & { code?: string }> {
   if (!input.lines?.length) return { ok: false, error: "يجب إضافة بند واحد على الأقل", code: "VALIDATION" };
   try {
+    // Fetch the pre-edit state first so the audit trail can show exactly
+    // what changed (invoice-tracking feature).
+    const before = await repo.findById(id, ctx);
     const invoice = await repo.update(id, input, ctx);
     audit
       .create({
         tenantId: ctx.tenantId,
         actorId: ctx.userId,
+        actorName: ctx.userName,
         module: "invoices",
         action: "update",
         entityType: "invoice",
         entityId: invoice.id,
         detail: `تعديل فاتورة ${invoice.number}`,
+        beforeSnapshot: before ? invoiceAuditSnapshot(before) : undefined,
+        afterSnapshot: invoiceAuditSnapshot(invoice),
       })
       .catch((err: unknown) =>
         logAuditError(err, {
@@ -156,7 +199,11 @@ export async function updateInvoiceUseCase(
       );
     return { ok: true, data: invoice };
   } catch (e) {
-    console.error("[updateInvoiceUseCase] failed:", e);
+    if (e instanceof BusinessRuleError) {
+      logger.warn({ err: e.message }, "[updateInvoiceUseCase] business rule violation");
+    } else {
+      logger.error({ err: collectErrors(e) }, "[updateInvoiceUseCase] failed");
+    }
     const code =
       e instanceof Error && "code" in e ? (e as { code?: string }).code : undefined;
     if (code === "NOT_FOUND") return { ok: false, error: "الفاتورة غير موجودة.", code };
@@ -179,11 +226,13 @@ export async function cancelInvoiceUseCase(
       .create({
         tenantId: ctx.tenantId,
         actorId: ctx.userId,
+        actorName: ctx.userName,
         module: "invoices",
         action: "cancel",
         entityType: "invoice",
         entityId: invoice.id,
         detail: `إلغاء فاتورة ${invoice.number}`,
+        beforeSnapshot: invoiceAuditSnapshot(invoice),
       })
       .catch((err: unknown) =>
         logAuditError(err, {
@@ -195,7 +244,7 @@ export async function cancelInvoiceUseCase(
       );
     return { ok: true, data: invoice };
   } catch (e) {
-    console.error("[cancelInvoiceUseCase] failed:", e);
+    logger.error({ err: collectErrors(e) }, "[cancelInvoiceUseCase] failed");
     // TX11: surface the structured code so the route can map NOT_FOUND → 404.
     const code = e instanceof Error && "code" in e ? (e as { code?: string }).code : undefined;
     if (code === "NOT_FOUND") return { ok: false, error: "الفاتورة غير موجودة.", code };

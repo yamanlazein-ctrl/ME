@@ -13,6 +13,8 @@ import {
   addRoll,
   colorByCode,
   colorById,
+  colorsOfFabric,
+  updateColor,
   fabricById,
   fabricByName,
   rollById,
@@ -21,7 +23,7 @@ import {
 import { supplierById } from "@/presentation/hooks/useParties";
 import { currencySymbol } from "@/presentation/hooks/useCurrency";
 import type { Currency } from "@/domain/types";
-import { useCreateInvoice, useUpdateInvoice, nextInvoiceNumber } from "@/presentation/hooks/useInvoices";
+import { useCreateInvoice, useUpdateInvoice, useNextInvoiceNumber, nextInvoiceNumber } from "@/presentation/hooks/useInvoices";
 import { printDocument } from "@/components/print/printPortal";
 import { InvoicePrintDocument } from "@/components/print/InvoicePrintDocument";
 import { useSettings } from "@/presentation/hooks/useSettings";
@@ -45,6 +47,7 @@ import {
   GroupSection,
   TotalCell,
   TotalInputCell,
+  FormattedAmountInput,
 } from "@/components/invoices/InvoiceFormLayout";
 import {
   type EntryLine,
@@ -102,10 +105,14 @@ function detailsText(details?: Record<string, string[]>, fallback = ""): string 
 }
 
 function EntryInvoicePage() {
-  useInventory();
+  // Inventory cache reactivity: useInventory() returns the cache version which
+  // increments when the async fabrics/colors/rolls load completes. Captured so
+  // the edit-prefill repair effect below can re-resolve names when the cache
+  // arrives AFTER the invoice data (the async-load race).
+  const inventoryVersion = useInventory();
   const navigate = useNavigate();
   const create = useCreateInvoice();
-  const update = useUpdateInvoice();
+  const update = useUpdateInvoice({ silent: true });
   const { edit } = Route.useSearch();
   const { data: editInvoice } = useInvoice(edit ?? "");
 
@@ -121,7 +128,10 @@ function EntryInvoicePage() {
     enabledPaymentMethods[0]?.name ?? "نقدي",
   );
   const [reference, setReference] = useState("");
-  const invoiceNo = useMemo(() => nextInvoiceNumber("entry"), []);
+  // #7 preview from the server's document_sequences (estimate — real number is
+  // allocated at save time and may differ under concurrency).
+  const { data: previewNumber } = useNextInvoiceNumber("entry");
+  const invoiceNo = previewNumber ?? nextInvoiceNumber("entry");
 
   // Always keep a trailing empty row so operator can type immediately.
   const [lines, setLines] = useState<EntryLine[]>(() => [emptyLine()]);
@@ -162,8 +172,31 @@ function EntryInvoicePage() {
 
   // When arriving with ?edit=<invoiceId>, pre-fill the form from that invoice
   // so the user can correct the SAME invoice (backend PUT exists).
+  //
+  // Race fix: the mapping resolves fabric/color/roll names through the
+  // module-level inventory cache, which loads ASYNCHRONOUSLY. Previously this
+  // effect re-ran on every editInvoice identity change (clobbering in-progress
+  // edits on refetch) yet never re-ran when the cache arrived later — so a
+  // cold cache produced lines with empty names and permanently failing
+  // validation ("حقول ناقصة"). Two guards now make this correct:
+  //   - editPrefilledRef: one-shot prefill per edit id — a react-query refetch
+  //     must never clobber the operator's edits (same protection as
+  //     invoices.sale.new.tsx:118-121).
+  //   - The repair effect below re-resolves the identity fields once the
+  //     cache becomes available (inventoryVersion change).
+  const editRawLinesRef = useRef<{ rollId: string; fabricId: string; colorId: string }[] | null>(
+    null,
+  );
+  const editPrefilledRef = useRef<string | null>(null);
   useEffect(() => {
     if (!edit || !editInvoice) return;
+    if (editPrefilledRef.current === edit) return;
+    editPrefilledRef.current = edit;
+    editRawLinesRef.current = editInvoice.lines.map((l) => ({
+      rollId: l.rollId,
+      fabricId: l.fabricId,
+      colorId: l.colorId,
+    }));
     setSupplierId(editInvoice.partyId);
     setCurrency(editInvoice.currency as Currency);
     setDate(editInvoice.date);
@@ -208,7 +241,7 @@ function EntryInvoicePage() {
           if (d.label.includes("مرجعية")) line.marjaiya = v;
           else if (d.label.includes("مصدر")) line.masader = v;
           else if (d.label.includes("الماكينة")) line.machineNumber = v;
-          else if (d.label.includes("كرماج")) line.kromaj = v;
+          else if (d.label.includes("كراماج")) line.kromaj = v;
           else if (d.label.includes("GSM")) line.gsm = v;
           else if (d.label.includes("السحب")) line.sahb = v;
           else if (d.label.includes("قائم")) line.grossKg = Number(v) || 0;
@@ -219,6 +252,55 @@ function EntryInvoicePage() {
     });
     setLines(mapped.length > 0 ? mapped : [emptyLine()]);
   }, [edit, editInvoice]);
+
+  // Repair pass for the async-cache race: if the one-shot prefill above ran
+  // while the inventory cache was still empty (fabricById/colorById returned
+  // null → empty names), re-resolve ONLY the still-empty identity fields now
+  // that the cache has arrived (inventoryVersion changed). Lines are paired
+  // by rollId — stable per saved line, so user-added/removed rows can never
+  // be mismatched — and anything the operator already typed or picked is
+  // left untouched (an empty name/id pair is the only thing repaired).
+  useEffect(() => {
+    if (!edit || !inventoryVersion) return;
+    const rawLines = editRawLinesRef.current;
+    if (!rawLines) return;
+    setLines((prev) => {
+      let changed = false;
+      const next = prev.map((l) => {
+        const raw = l.rollId ? rawLines.find((r) => r.rollId === l.rollId) : undefined;
+        if (!raw) return l;
+        let line = l;
+        const fab = fabricById(raw.fabricId);
+        if (fab && !l.existingFabricId && !l.fabricName.trim()) {
+          line = {
+            ...line,
+            existingFabricId: fab.id,
+            fabricName: fab.name,
+            category: fab.category ?? "",
+            unit: (fab.unit ?? "kg") as EntryLine["unit"],
+          };
+        }
+        const col = colorById(raw.colorId);
+        if (col && !l.existingColorId && !l.colorName.trim()) {
+          line = {
+            ...line,
+            existingColorId: col.id,
+            colorName: col.name,
+            colorCode: col.code,
+            colorHex: col.hex ?? undefined,
+            colorImageUrl: col.imageUrl ?? undefined,
+          };
+        }
+        const roll = rollById(raw.rollId);
+        if (roll?.rollNo && !l.notes) {
+          line = { ...line, notes: `رقم الصبغة: ${roll.rollNo}` };
+        }
+        if (line !== l) changed = true;
+        return line;
+      });
+      return changed ? next : prev;
+    });
+  }, [edit, inventoryVersion]);
 
   const removeLine = (id: string) => {
     setLines((p) => {
@@ -444,6 +526,7 @@ function EntryInvoicePage() {
     // ── Persist side-effects: new fabrics, colors, rolls ───────────
     let newFabrics = 0;
     let newColors = 0;
+    let renamedColors = 0;
     const createdRollIds: string[] = [];
     const createdRollNos: string[] = [];
     let totalKg = 0;
@@ -474,7 +557,32 @@ function EntryInvoicePage() {
             newFabrics += 1;
           }
         }
-        if (!colorId) {
+        // ── Color resolution: bound lot vs new lot (edit mode) ──
+        // A bound (saved) lot keeps its colorId forever, BUT its name/code/hex
+        // may be freely corrected — that RENAMES the color entity in stock.
+        // The only rejected action: pointing the lot to a DIFFERENT saved
+        // color (picked from the dropdown), which no save can express.
+        const rawSaved = isEdit
+          ? editRawLinesRef.current?.find((r) => r.rollId === l.rollId)
+          : undefined;
+        if (rawSaved) {
+          const boundId = rawSaved.colorId;
+          const col0Name = colorById(boundId)?.name ?? "";
+          const codeKey = l.colorCode.trim();
+          const nameKey = l.colorName.trim().toLowerCase();
+          const byCode = codeKey ? colorByCode(codeKey, fabricId) : undefined;
+          const byName = nameKey
+            ? colorsOfFabric(fabricId).find((c) => c.name.toLowerCase() === nameKey)
+            : undefined;
+          if ((byCode && byCode.id !== boundId) || (byName && byName.id !== boundId)) {
+            const other = byCode && byCode.id !== boundId ? byCode : byName;
+            const msg = `البند رقم ${rows.indexOf(l) + 1}: لا يمكن تحويل اللفافة إلى الصبغة «${other?.name}» المحفوظة. احذف هذا البند وأضف صبغة جديدة باللون المطلوب — أو صحّح كتابة اسم/كود نفس اللون (${col0Name}) لإعادة تسميته.`;
+            setError(msg);
+            showError(msg);
+            return;
+          }
+          colorId = boundId;
+        } else if (!colorId) {
           const codeKey = l.colorCode.trim();
           // Fix C-11: fabricId is resolved above (existing or just
           // created) before we ever look up a color code — pass it so the
@@ -484,18 +592,65 @@ function EntryInvoicePage() {
           if (existingColor) {
             colorId = existingColor.id;
           } else {
-            const col = await addColor(
-              {
-                fabricId,
-                name: l.colorName.trim(),
-                code: codeKey || `C-${Date.now().toString().slice(-3)}`,
-                hex: l.colorHex ?? undefined,
-                imageUrl: l.colorImageUrl ?? undefined,
-              },
-              { silent: true },
-            );
-            colorId = col.id;
-            newColors += 1;
+            // Name match too: on EDIT, the operator usually fixes a typo in
+            // the color NAME while the code stays — resolve to the same
+            // color so it becomes a RENAME, never a duplicate.
+            const nameKey = l.colorName.trim();
+            const byName = nameKey
+              ? colorsOfFabric(fabricId).find(
+                  (c) => c.name.toLowerCase() === nameKey.toLowerCase(),
+                )
+              : undefined;
+            if (byName) {
+              colorId = byName.id;
+            } else {
+              const col = await addColor(
+                {
+                  fabricId,
+                  name: l.colorName.trim(),
+                  code: codeKey || `C-${Date.now().toString().slice(-3)}`,
+                  hex: l.colorHex ?? undefined,
+                  imageUrl: l.colorImageUrl ?? undefined,
+                },
+                { silent: true },
+              );
+              colorId = col.id;
+              newColors += 1;
+            }
+          }
+        }
+        // ── Rename sync: typed name/code/hex ≠ stored → rename the color ──
+        if (colorId) {
+          const col = colorById(colorId);
+          if (col) {
+            const newName = l.colorName.trim();
+            const newCode = l.colorCode.trim();
+            const newHex = (l.colorHex ?? "").trim();
+            const renamed =
+              (newName && newName !== col.name) ||
+              (newCode && newCode !== col.code) ||
+              (newHex && newHex !== (col.hex ?? ""));
+            if (renamed) {
+              const conflict = colorsOfFabric(fabricId).find(
+                (c) => c.id !== colorId && c.name.toLowerCase() === newName.toLowerCase(),
+              );
+              if (conflict) {
+                const msg = `الاسم «${newName}» مستخدم أصلاً لصبغة أخرى من نفس القماش — اختر اسماً مختلفاً لإعادة التسمية.`;
+                setError(msg);
+                showError(msg);
+                return;
+              }
+              await updateColor(
+                colorId,
+                {
+                  name: newName || col.name,
+                  code: newCode || col.code || undefined,
+                  hex: newHex || col.hex || undefined,
+                },
+                { silent: true },
+              );
+              renamedColors += 1;
+            }
           }
         }
         const rowNotes = [
@@ -630,7 +785,11 @@ function EntryInvoicePage() {
         showError(msg);
         return;
       }
-      showSuccess(`تم حفظ تعديلات فاتورة الدخول ${res.value.number}`);
+      const renameNote =
+        renamedColors > 0
+          ? " — وأُعيدت تسمية " + (renamedColors === 1 ? "لون واحد" : renamedColors + " ألوان")
+          : "";
+      showSuccess(`تم حفظ تعديلات فاتورة الدخول ${res.value.number}${renameNote}`);
       if (thenPrint) printDocument(<InvoicePrintDocument invoice={res.value} />);
       if (thenNew) {
         navigate({ to: "/invoices/entry/new" });
@@ -1034,7 +1193,13 @@ function EntryInvoicePage() {
                         }
                         onSetHex={(hex) => updateLine(l.id, { colorHex: hex })}
                         onSetImage={(url) => updateLine(l.id, { colorImageUrl: url })}
+                        renameMode={!!edit && !!l.rollId}
                       />
+                      {!!edit && !!l.existingColorId && (
+                        <p className="mt-1 text-[10px] leading-tight text-muted-foreground">
+                          ✏️ تعديل الاسم/الكود يعيد تسمية لون هذه الصبغة في المخزون — وتحويل اللفافة نفسها إلى صبغة أخرى محفوظة غير مسموح.
+                        </p>
+                      )}
                     </GroupSection>
 
                     {/* ── بيانات الوزن ── */}
@@ -1092,14 +1257,10 @@ function EntryInvoicePage() {
                     <GroupSection title="بيانات الشراء">
                       <div className="grid grid-cols-2 gap-3 md:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)_minmax(0,1.2fr)]">
                         <CardField label={`السعر / كغ (${currencySymbol(currency)})`} required>
-                          <Input
-                            type="number"
-                            step="0.01"
-                            value={l.pricePerKg || ""}
-                            onChange={(e) =>
-                              updateLine(l.id, {
-                                pricePerKg: e.target.value === "" ? 0 : Number(e.target.value),
-                              })
+                          <FormattedAmountInput
+                            value={l.pricePerKg}
+                            onChange={(v) =>
+                              updateLine(l.id, { pricePerKg: v === "" ? 0 : v })
                             }
                             className={cn(
                               "h-9 text-left tabular-nums",
@@ -1107,26 +1268,20 @@ function EntryInvoicePage() {
                               isUSD && l.pricePerKg > 0 && "text-success font-semibold",
                             )}
                             placeholder="0"
-                            aria-label="سعر الوحدة"
+                            ariaLabel="سعر الوحدة"
                           />
                         </CardField>
                         <CardField label="الخصم">
-                          <Input
-                            type="number"
-                            min={0}
-                            step={1}
-                            value={l.discountAmount || ""}
-                            onChange={(e) =>
-                              updateLine(l.id, {
-                                // Fixed amount, decimals kept — same as the sale form.
-                                discountAmount:
-                                  e.target.value === "" ? 0 : Number(e.target.value),
-                              })
+                          <FormattedAmountInput
+                            value={l.discountAmount}
+                            onChange={(v) =>
+                              // Fixed amount, decimals kept — same as the sale form.
+                              updateLine(l.id, { discountAmount: v === "" ? 0 : Math.max(0, v) })
                             }
                             onKeyDown={(e) => handleRowEnd(e, l.id)}
                             className={cn("h-9 text-left tabular-nums", !l.discountAmount && "text-muted-foreground/70")}
                             placeholder="0"
-                            aria-label="الخصم"
+                            ariaLabel="الخصم"
                           />
                         </CardField>
                         <div className="flex items-end justify-end">

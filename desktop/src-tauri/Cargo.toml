@@ -16,3 +16,17 @@ serde_json = "1"
 reqwest = { version = "0.12", features = ["json"] }
 hostname = "0.4"
 tokio = { version = "1", features = ["full"] }
+# Sidecar spawned at runtime to run the backend + SSR frontend; required for
+# desktop packaging (no external Node runtime on the client machine).
+tauri-plugin-shell = "2"
+# Windows DPAPI (CurrentUser scope) for encrypting locally-generated secrets
+# (JWT_SECRET, APP_MASTER_KEY) so they never ship as plaintext.
+windows = { version = "0.61", features = ["Win32_Security_Cryptography", "Win32_Foundation"] }
+rand = "0.8"
+base64 = "0.22"
+dirs-sys = "0.5"
+
+[[bin]]
+name = "d3_probe"
+path = "src/bin/d3_probe.rs"
+

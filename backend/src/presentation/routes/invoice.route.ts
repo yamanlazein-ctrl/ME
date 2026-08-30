@@ -16,6 +16,7 @@ import {
   type CreateInvoiceInput,
 } from "./invoice.schema.js";
 import * as uc from "../../application/use-cases/invoices/invoiceUseCases.js";
+import { peekNextDocumentNumber } from "../../infrastructure/utils/documentNumbers.js";
 
 export function registerInvoiceRoutes(
   router: Router,
@@ -70,6 +71,25 @@ export function registerInvoiceRoutes(
       }
     },
   );
+
+  // #7: read-only next-number preview for the new-invoice screens. MUST be
+  // registered before "/invoices/:id" so "next-number" isn't captured as an id.
+  router.get("/invoices/next-number", auth, readGuard, async (req: Request, res: Response) => {
+    const type = String((req.query.type as string) ?? "sale");
+    if (type !== "sale" && type !== "entry") {
+      return res.status(400).json({ code: "BAD_REQUEST", message: "type يجب أن يكون sale أو entry" });
+    }
+    const entityType = type === "entry" ? "invoice_entry" : "invoice";
+    try {
+      const number = await peekNextDocumentNumber(entityType, ctx(req).tenantId);
+      return res.json({ number, estimate: true });
+    } catch (e) {
+      return res.status(500).json({
+        code: "INTERNAL",
+        message: e instanceof Error ? e.message : "تعذر قراءة الرقم التالي",
+      });
+    }
+  });
 
   router.get("/invoices/number/:number", auth, readGuard, async (req: Request, res: Response) => {
     const r = await uc.findInvoiceByNumberUseCase(

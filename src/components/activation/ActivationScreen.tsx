@@ -26,6 +26,12 @@ function getApiBaseUrl(): string {
 const API_BASE = getApiBaseUrl();
 const SETUP_TOKEN = import.meta.env.VITE_SETUP_TOKEN as string | undefined;
 
+// Desktop pre-baked build: the license is baked into the bundled DB and
+// activated verify-only at runtime — there is no key for the customer to enter.
+// The backend's activate step ignores the key in this mode, so we hide the
+// input and let the user continue straight to company setup.
+const isDesktopPreBaked = import.meta.env.VITE_DESKTOP_DEPLOY === "true";
+
 type Step = "activate" | "company" | "admin" | "review" | "done";
 
 function headers(): Record<string, string> {
@@ -78,7 +84,7 @@ export function ActivationScreen({ onActivated }: { onActivated: () => void }) {
     e.preventDefault();
     setError(null);
     const key = licenseKey.trim().toUpperCase();
-    if (!key) {
+    if (!key && !isDesktopPreBaked) {
       setError("الرجاء إدخال مفتاح الترخيص");
       return;
     }
@@ -229,7 +235,10 @@ export function ActivationScreen({ onActivated }: { onActivated: () => void }) {
           <img src={logoUrl} alt="Motard Fabrics Group" className="h-20 w-auto object-contain" />
           <h1 className="mt-4 text-2xl font-bold tracking-tight text-foreground">إعداد النظام</h1>
           <p className="mt-1 text-xs text-muted-foreground">
-            {step === "activate" && "أدخل مفتاح الترخيص لبدء التفعيل"}
+            {step === "activate" &&
+              (isDesktopPreBaked
+                ? "تم تضمين الترخيص مسبقاً في هذا التثبيت"
+                : "أدخل مفتاح الترخيص لبدء التفعيل")}
             {step === "company" && "بيانات الشركة"}
             {step === "admin" && "حساب المدير الرئيسي"}
             {step === "review" && "مراجعة وإكمال"}
@@ -243,7 +252,7 @@ export function ActivationScreen({ onActivated }: { onActivated: () => void }) {
           </p>
         )}
 
-        {step === "activate" && (
+        {step === "activate" && !isDesktopPreBaked && (
           <form onSubmit={submitActivate} className="mt-6 space-y-4">
             <label className="block">
               <span className="mb-1.5 block text-xs font-medium text-muted-foreground">
@@ -266,6 +275,22 @@ export function ActivationScreen({ onActivated }: { onActivated: () => void }) {
               {loading ? "جاري التفعيل…" : "تفعيل"}
             </button>
           </form>
+        )}
+
+        {step === "activate" && isDesktopPreBaked && (
+          <div className="mt-6 space-y-4">
+            <p className="rounded-md border border-border bg-secondary px-3 py-3 text-sm text-muted-foreground">
+              يتضمّن هذا التثبيت ترخيصاً مفعّلاً مسبقاً. يمكنك المتابعة مباشرةً إلى إعداد بيانات الشركة.
+            </p>
+            <button
+              type="button"
+              onClick={submitActivate}
+              disabled={loading}
+              className="w-full rounded-lg bg-primary px-4 py-3 text-sm font-bold text-primary-foreground disabled:opacity-50"
+            >
+              {loading ? "جاري التفعيل…" : "متابعة"}
+            </button>
+          </div>
         )}
 
         {step === "company" && (

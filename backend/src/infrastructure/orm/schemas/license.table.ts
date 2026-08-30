@@ -81,6 +81,16 @@ export const licenses = pgTable(
     // Number of completed transfers (enforced against transferPolicy.maxTransfers).
     transfersUsed: integer("transfers_used").notNull().default(0),
 
+    // ── Desktop pre-baked offline token (option d) ───────────────────────
+    // The signed offline token is baked at BUILD TIME (dev machine, with the
+    // private key) and stored here UNENCRYPTED — a signed JWT is integrity-
+    // protected, not secret. At first launch the desktop bootstrap migrates it
+    // (encrypted with APP_MASTER_KEY) into the `secrets` table, which is what
+    // the runtime license guard actually reads. This column is NOT used by the
+    // regular server-side license flow and is null in non-desktop deployments.
+    offlineToken: text("offline_token"),
+    offlineTokenJti: text("offline_token_jti"),
+
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },

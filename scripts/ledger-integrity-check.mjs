@@ -47,7 +47,7 @@ async function main() {
   );
 
   // 2. Per-party reconciliation vs statement endpoint
-  const api = process.env.API || "http://localhost:8083/api";
+  const api = process.env.API || "http://127.0.0.1:8080/api";
   const erpPass = process.env.ERP_PASS;
   if (!erpPass) {
     console.error("ERP_PASS must be set (no default). Use ERP_PASS env var.");

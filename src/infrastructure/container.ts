@@ -75,6 +75,7 @@ import { authInterceptor, loggingInterceptor, tenantHeaderInterceptor } from "./
 import { createTokenProvider } from "./auth/TokenProvider";
 import {
   AuthApiService,
+  AuditApiService,
   CashboxApiService,
   DashboardApiService,
   ExpenseApiService,
@@ -130,6 +131,8 @@ const expenseRepo = new ApiExpenseRepository(new ExpenseApiService(apiClient));
 const expenseNamesRepo = new ApiExpenseNamesRepository(new ExpenseApiService(apiClient));
 const inventoryRepo = new ApiInventoryRepository(new InventoryApiService(apiClient));
 const invoiceRepo = new ApiInvoiceRepository(new InvoiceApiService(apiClient));
+const invoiceApi = new InvoiceApiService(apiClient);
+const auditApi = new AuditApiService(apiClient);
 const ledgerRepo = new ApiLedgerRepository(new LedgerApiService(apiClient));
 const partyRepo = new ApiPartyRepository(new PartyApiService(apiClient));
 const voucherRepo = new ApiVoucherRepository(new VoucherApiService(apiClient));
@@ -188,8 +191,17 @@ export const container = {
     get repository() {
       return invoiceRepo;
     },
+    get api() {
+      return invoiceApi;
+    },
     get ledger() {
       return ledgerRepo;
+    },
+  },
+
+  audit: {
+    get api() {
+      return auditApi;
     },
   },
 

@@ -111,7 +111,7 @@ export function WorkflowSteps({ steps, active }: { steps: string[]; active: numb
             <div
               className={`grid h-6 w-6 place-items-center rounded-full text-[11px] font-bold ${
                 state === "active"
-                  ? "bg-primary text-primary-foreground shadow-[0_0_0_3px_hsl(var(--primary)/0.15)]"
+                  ? "bg-primary text-primary-foreground ring-[3px] ring-primary/15"
                   : state === "done"
                     ? "bg-primary/20 text-primary"
                     : "bg-secondary text-muted-foreground"

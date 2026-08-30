@@ -1,6 +1,6 @@
 import { db, type Tx } from "../orm/drizzle.js";
 import { documentSequences } from "../orm/schemas/document-sequence.table.js";
-import { sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 
 const PREFIXES: Record<string, string> = {
   invoice: "INV",
@@ -143,4 +143,37 @@ function resolveNumberFormat(entityType: string): { prefix: string; width: numbe
     prefix: PREFIXES[entityType] ?? entityType.toUpperCase(),
     width: WIDTHS[entityType] ?? 4,
   };
+}
+
+/**
+ * READ-ONLY preview of the next document number — does NOT consume a number.
+ *
+ * Used by the UI to show what the number will most likely be on save
+ * (#7: the old frontend preview kept a session-local counter that restarted
+ * at 0001 on every reload, so it never matched the server-assigned number).
+ * A plain SELECT on document_sequences: if the row doesn't exist yet the
+ * first number would be 1. The real allocation still happens atomically at
+ * save time, so under concurrency the preview remains an estimate.
+ */
+export async function peekNextDocumentNumber(
+  entityType: string,
+  tenantId: string,
+): Promise<string> {
+  const { prefix, width } = resolveNumberFormat(entityType);
+  const year = new Date().getFullYear().toString();
+
+  const [row] = await db
+    .select({ lastNumber: documentSequences.lastNumber })
+    .from(documentSequences)
+    .where(
+      and(
+        eq(documentSequences.tenantId, tenantId),
+        eq(documentSequences.entityType, entityType),
+        eq(documentSequences.prefix, prefix),
+      ),
+    )
+    .limit(1);
+
+  const next = (row?.lastNumber ?? 0) + 1;
+  return `${prefix}-${year}-${String(next).padStart(width, "0")}`;
 }

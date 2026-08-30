@@ -13,6 +13,7 @@ import type { ILicenseRepository } from "../../../application/ports/ILicenseRepo
 import type { IPasswordHasher } from "../../../application/ports/IPasswordHasher.js";
 import type { ILicenseTokenSigner } from "../../../application/ports/ILicenseTokenSigner.js";
 import type { IInstallationIdStorage } from "../../../application/ports/IInstallationIdStorage.js";
+import { config } from "../../../infrastructure/config/env.js";
 import { randomUUID } from "node:crypto";
 
 /**
@@ -125,6 +126,52 @@ const activateInput = z.object({
   platform: z.enum(["windows", "macos", "linux", "android", "ios", "web"]).optional(),
 });
 
+/**
+ * L-3 (option d) — desktop verify-only license bootstrap.
+ *
+ * In DESKTOP_DEPLOY the offline token is baked into `licenses.offline_token`
+ * at BUILD TIME (dev machine, with the private key) and shipped inside the
+ * installer DB. This use-case promotes that baked token into the encrypted
+ * `secrets` store on first launch (after APP_MASTER_KEY is available), which
+ * is what the runtime license guard actually reads. It is idempotent and
+ * pure-verify: it NEVER signs anything (no private key at runtime).
+ */
+export async function bootstrapDesktopLicenseUseCase(
+  deps: {
+    licenseRepo: ILicenseRepository;
+    secretsRepo: ISecretsRepository;
+    tokenSigner: ILicenseTokenSigner;
+  },
+  tenantId: string,
+): Promise<Result<{ migrated: boolean }>> {
+  if (!config.DESKTOP_DEPLOY) return { ok: true, data: { migrated: false } };
+
+  const baked = await deps.licenseRepo.findBakedForTenant(tenantId as never);
+  if (!baked || !baked.offlineToken) {
+    // Nothing baked for this tenant — the wizard/activation flow will surface
+    // the appropriate (unlicensed) state. No error.
+    return { ok: true, data: { migrated: false } };
+  }
+
+  // Verify the baked token is genuine (signed by our public key) before
+  // promoting it. A tampered/forgeable token fails here and is never stored.
+  try {
+    await deps.tokenSigner.verify(baked.offlineToken);
+  } catch {
+    return { ok: false, error: "الرمز المخبوز غير صالح أو مُعطَّب", code: "BAD_BAKED_TOKEN" };
+  }
+
+  // Idempotent: skip if already migrated.
+  const existing = await deps.secretsRepo.get(tenantId, "license.token.current");
+  if (existing) return { ok: true, data: { migrated: false } };
+
+  await deps.secretsRepo.put(tenantId, "license.token.current", baked.offlineToken);
+  if (baked.offlineTokenJti) {
+    await deps.secretsRepo.put(tenantId, "license.token.jti", baked.offlineTokenJti);
+  }
+  return { ok: true, data: { migrated: true } };
+}
+
 export async function activateAndPersistUseCase(
   deps: {
     licenseProvider: ILicenseProvider;
@@ -148,6 +195,52 @@ export async function activateAndPersistUseCase(
     // Combine the host fingerprint with the installation id so a
     // re-imaged host with the same MAC still triggers a re-activation.
     const combined = `${metadata.hash}::${installationId}`;
+
+    // ── D3 / option d: DESKTOP_DEPLOY is verify-only ──
+    // The token is pre-baked (signed off-device). We promote it into the
+    // encrypted secrets store (idempotent) and treat the license as
+    // activated — NO signing, NO call to the license provider/server.
+    if (config.DESKTOP_DEPLOY) {
+      const boot = await bootstrapDesktopLicenseUseCase(
+        {
+          licenseRepo: deps.licenseRepo,
+          secretsRepo: deps.secretsRepo,
+          tokenSigner: deps.tokenSigner,
+        },
+        tenantId,
+      );
+      if (!boot.ok) {
+        return { ok: false, error: boot.error ?? "فشل تفعيل الترخيص", code: boot.code };
+      }
+
+      const lic = await deps.licenseRepo.findBakedForTenant(tenantId as never);
+      if (!lic) return { ok: false, error: "فشل تفعيل الترخيص (لا يوجد ترخيص مخبوز)" };
+
+      await deps.tenantRepo.setLicenseCache(tenantId, {
+        licenseStatus: lic.status ?? "active",
+        licenseType: lic.type ?? "full",
+        maxDevices: lic.maxDevices ?? 3,
+        activationId: lic.id,
+        serverFingerprint: combined,
+        licenseKey: parsed.data.key || lic.key,
+        licenseExpiresAt: lic.expiresAt ?? null,
+        lastHeartbeatAt: new Date(),
+      });
+
+      await deps.installationStateRepo.saveStep(tenantId, "activate", {
+        key: parsed.data.key,
+        activationId: lic.id,
+      });
+
+      return {
+        ok: true,
+        data: {
+          activationId: lic.id,
+          features: lic.features ?? [],
+          expiresAt: lic.expiresAt?.toISOString() ?? null,
+        },
+      };
+    }
 
     const result = await deps.licenseProvider.activate({
       key: parsed.data.key,

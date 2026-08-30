@@ -5,6 +5,7 @@ import type { ILicenseRepository } from "../../../application/ports/ILicenseRepo
 import type { ISecretsRepository } from "../../../application/ports/ISecretsRepository.js";
 import type { IMachineFingerprintProvider } from "../../../application/ports/IMachineFingerprintProvider.js";
 import type { ILicenseTokenSigner } from "../../../application/ports/ILicenseTokenSigner.js";
+import { config } from "../../../infrastructure/config/env.js";
 
 /**
  * Phase 0 sub-batch 0E — license use cases.
@@ -62,6 +63,15 @@ export async function activateLicenseUseCase(
   const parsed = activateInput.safeParse(input);
   if (!parsed.success) {
     return { ok: false, error: "بيانات التفعيل غير صالحة" };
+  }
+  // D3 / option d: in DESKTOP_DEPLOY the license is pre-baked and activated
+  // off-device. There is no private key at runtime, so (re)activation with a
+  // key is impossible and must be refused rather than attempt a signature.
+  if (config.DESKTOP_DEPLOY) {
+    return {
+      ok: false,
+      error: "الترخيص مُفعَّل مسبقاً في هذا التثبيت المكتبي — لا حاجة لإعادة التفعيل",
+    };
   }
   try {
     const result = await provider.activate({

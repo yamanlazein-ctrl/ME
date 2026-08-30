@@ -51,6 +51,9 @@ export interface LicenseRow {
   updatePolicy: UpdatePolicy;
   backupPolicy: BackupPolicy;
   transfersUsed: number;
+  // ── Desktop pre-baked offline token (option d) ──
+  offlineToken: string | null;
+  offlineTokenJti: string | null;
 }
 
 export interface ActivationRow {
@@ -107,6 +110,11 @@ export interface ILicenseRepository {
    * status, so the enforcement guard can block on `expired`/`revoked`.
    */
   findLatestForTenant(tenantId: UUID): Promise<LicenseRow | null>;
+  /**
+   * Desktop (option d): return the pre-baked signed token row for a tenant,
+   * if one was baked at build time. Returns null when no offline_token is set.
+   */
+  findBakedForTenant(tenantId: UUID): Promise<LicenseRow | null>;
   list(filter: { tenantId?: UUID; status?: string }): Promise<LicenseRow[]>;
 
   // ── Activation rows ──

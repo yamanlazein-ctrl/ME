@@ -5,6 +5,7 @@ interface ImportMetaEnv {
   readonly VITE_API_TIMEOUT_MS: string;
   readonly VITE_REPO_MODE: string;
   readonly VITE_DEFAULT_TENANT_ID: string;
+  readonly VITE_DESKTOP_DEPLOY?: string;
   readonly VITE_DEFAULT_USER_ID: string;
   readonly VITE_DEFAULT_USER_NAME: string;
   readonly VITE_DEFAULT_USER_ROLE: string;

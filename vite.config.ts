@@ -12,8 +12,6 @@ import tsconfigPaths from "vite-tsconfig-paths";
  *   - React (JSX/TSX transform, Fast Refresh)
  *   - Tailwind CSS 4 (utility-first styling)
  *   - TypeScript paths (resolves @/* aliases from tsconfig.json)
- *
- * Proxy: /api → localhost:8083 (Express backend)
  */
 export default defineConfig({
   plugins: [
@@ -22,11 +20,6 @@ export default defineConfig({
     tailwindcss(),
     tsconfigPaths(),
   ],
-  server: {
-    proxy: {
-      "/api": { target: "http://localhost:8083", changeOrigin: true },
-    },
-  },
   build: {
     sourcemap: true,
   },

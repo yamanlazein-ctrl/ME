@@ -95,6 +95,23 @@ export class DuplicateDocumentError extends DomainError {
   }
 }
 
+/**
+ * Known business-rule violation. Thrown by the invoice repository when a
+ * request breaks a domain rule (color must match the roll, fabric must match,
+ * entry quantity delta must not exceed the roll's unsold stock, etc.).
+ *
+ * The catch layer in invoiceUseCases checks `instanceof BusinessRuleError`
+ * FIRST and returns `e.message` verbatim to the user — because this text is
+ * the precise, actionable reason. Anything that is NOT a BusinessRuleError is
+ * treated as an unexpected programming fault: logged to the file and masked
+ * behind the generic "internal error" message.
+ */
+export class BusinessRuleError extends DomainError {
+  constructor(message: string) {
+    super("BUSINESS_RULE", message);
+  }
+}
+
 export class RateLimitExceededError extends DomainError {
   constructor() {
     super("RATE_LIMIT_EXCEEDED", "تم تجاوز الحد المسموح من الطلبات. يرجى المحاولة لاحقاً");

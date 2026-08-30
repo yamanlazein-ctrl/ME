@@ -359,3 +359,32 @@ discipline as the rest of this migration. Verified live: balance
 returned to the correct `1500` on both endpoints, and re-running the
 fixed script reports "No suppliers need correction" with the balance
 unchanged, confirming it is now genuinely idempotent.
+
+---
+
+## D-005 — FINAL (محسوم): كلمات المرور تُخزَّن بـ Argon2id فقط — لا طبقة تشفير إضافية بـ ENCRYPTION_KEY
+
+**الحالة:** قرار نهائي محسوم (NOT an open item) — لا تعديل كود الآن أو مستقبلاً على هذه النقطة.
+
+**القرار:** تخزين كلمات المرور يعتمد على **Argon2id وحده**
+(`@node-rs/argon2`, معاملات `memoryCost=65536, timeCost=3, parallelism=4,
+algorithm=2`)، وهذا هو المعيار العالمي الصحيح. **لا** تُضاف أي طبقة
+تشفير إضافية (`ENCRYPTION_KEY` / `APP_MASTER_KEY`) فوق الهاش — التشفير فوق
+دالة هاش معيارية مخصّصة لكلمات المرور زائد عن الحاجة، ويضيف تعقيداً بلا
+أمان إضافي.
+
+**`APP_MASTER_KEY` (اسم مفتاح التشفير الفعلي في هذا الكود — لا يوجد متغير
+اسمه `ENCRYPTION_KEY`):** موجود جاهزاً للاستخدام المستقبلي لبيانات **أخرى**
+غير كلمات المرور (وهو مستخدَم فعلياً اليوم لإغلاق توكنات الترخيص المخزَّنة في
+جدول `secrets` عبر AES-256-GCM)، وهذا كافٍ تماماً.
+
+**لماذا هذا محسوم وليس مفتوحاً:** الخياران البديلان (تشفير كلمات المرور
+بطبقة فوق Argon2id، أو إعادة استخدام `APP_MASTER_KEY` لكلمات المرور) رُفضا
+صراحةً بقرار المالك 2026-08-29. أي جلسة لاحقة تقرأ هذا البند لا يجب أن تعيد
+فتحه ولا أن "تكتشفه" كمشكلة جديدة.
+
+**الدليل الحي على أن الوضع الحالي سليم:** تحقق إعادة تشغيل مزدوج في
+2026-08-29 أثبت أن `JWT_SECRET` (64 حرفاً) و`APP_MASTER_KEY` (base64/32 بايت)
+كلاهما ثابت في `backend/.env` ويُقرآن حصراً منه (لا توليد عشوائي fallback)،
+وأن البيانات المشفَّرة الفعلية في `secrets` (`license.token.current` /
+`license.token.jti`) تُفكّ بنجاح بعد كل إعادة تشغيل.

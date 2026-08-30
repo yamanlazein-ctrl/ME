@@ -1,3 +1,4 @@
+export { AuditApiService } from "./AuditApiService";
 export { InventoryApiService } from "./InventoryApiService";
 export { OrderApiService } from "./OrderApiService";
 export { InvoiceApiService } from "./InvoiceApiService";

@@ -412,8 +412,8 @@ export function AppShell({
           <div className="min-h-0 flex-1 overflow-y-auto p-2">{renderNav(true)}</div>
         </aside>
 
-        <main className="min-w-0 flex-1 space-y-4">
-          <div className="flex items-center gap-2">
+        <main className="min-w-0 flex-1 space-y-5">
+          <div className="flex items-center gap-3">
             <button
               type="button"
               onClick={() => setMobileOpen(true)}
@@ -424,7 +424,7 @@ export function AppShell({
               <Menu className="h-5 w-5" />
             </button>
             {(title || actions) && (
-              <div className="flex flex-1 flex-wrap items-start justify-between gap-3">
+              <div className="flex flex-1 flex-wrap items-center justify-between gap-3">
                 <div className="min-w-0">
                   {title && (
                     <h1 className="truncate text-xl font-bold text-foreground">
@@ -432,7 +432,7 @@ export function AppShell({
                     </h1>
                   )}
                   {subtitle && (
-                    <p className="mt-0.5 text-sm text-muted-foreground">{subtitle}</p>
+                    <p className="mt-1 text-sm text-muted-foreground">{subtitle}</p>
                   )}
                 </div>
                 {actions && <div className="flex items-center gap-2">{actions}</div>}

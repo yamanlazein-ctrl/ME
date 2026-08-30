@@ -12,6 +12,7 @@ import {
   useCreateInvoice,
   useUpdateInvoice,
   useInvoice,
+  useNextInvoiceNumber,
   nextInvoiceNumber,
 } from "@/presentation/hooks/useInvoices";
 import { toast } from "sonner";
@@ -90,7 +91,10 @@ function SaleInvoicePage() {
     (warehousesList.find((w) => w.isDefault) ?? warehousesList[0])?.id ?? "",
   );
   const [notes, setNotes] = useState("");
-  const invoiceNo = useMemo(() => nextInvoiceNumber("sale"), []);
+  // #7 preview from the server's document_sequences (estimate — real number is
+  // allocated at save time and may differ under concurrency).
+  const { data: previewNumber } = useNextInvoiceNumber("sale");
+  const invoiceNo = previewNumber ?? nextInvoiceNumber("sale");
 
   const [lines, setLines] = useState<SaleLine[]>([emptyLine()]);
   const [discount, setDiscount] = useState<number | "">("");
@@ -127,6 +131,11 @@ function SaleInvoicePage() {
     if (editInvoice.exchangeRate && Number(editInvoice.exchangeRate) > 0)
       setExchangeRate(Number(editInvoice.exchangeRate));
     const parsedHeader = parseInvoiceNotes(editInvoice.notes);
+    // #1: restore the warehouse stored in the notes so re-saving does not
+    // append a second المستودع fragment under a different default.
+    if (parsedHeader.warehouse && warehousesList.some((w) => w.id === parsedHeader.warehouse)) {
+      setWarehouse(parsedHeader.warehouse);
+    }
     setReference(editInvoice.reference || parsedHeader.reference || "");
     setNotes(parsedHeader.freeText);
     setDiscount(editInvoice.discount ?? "");
@@ -274,9 +283,12 @@ function SaleInvoicePage() {
         );
       }
     }
+    // #1: never append a second warehouse fragment if the free-text notes
+    // already carry one (edit flow parses it out; this guards manual text).
+    const notesIncludeWarehouse = /المستودع\s*:/.test(notes);
     const combinedNotes = [
       reference && `المرجع: ${reference}`,
-      warehouse && warehouse !== "main" && `المستودع: ${warehouse}`,
+      warehouse && warehouse !== "main" && !notesIncludeWarehouse && `المستودع: ${warehouse}`,
       paymentMethod && `طريقة الدفع: ${paymentMethod}`,
       notes,
     ]

@@ -27,10 +27,20 @@ function generateAdminPassword(): string {
 async function seed() {
   const hasher = new Argon2PasswordHasher();
 
+  // D4: allow the desktop build to pin a known tenant id (the one the
+  // frontend/backend expect via VITE_DEFAULT_TENANT_ID). When unset, the
+  // legacy behaviour (random uuid) is preserved so dev seeding is unchanged.
+  const fixedTenantId = process.env.SEED_TENANT_ID?.trim() || undefined;
+  // D4: allow the desktop build to bake a known admin password instead of a
+  // one-time random one (which the customer could never retrieve). When unset,
+  // the legacy random+printed-once behaviour is preserved.
+  const fixedAdminPassword = process.env.SEED_ADMIN_PASSWORD?.trim() || undefined;
+
   // Create default tenant
   const [tenant] = await db
     .insert(tenants)
     .values({
+      ...(fixedTenantId ? { id: fixedTenantId } : {}),
       name: "Default Tenant",
       slug: "default",
       status: "active",
@@ -50,7 +60,9 @@ async function seed() {
   // Task 1.2: the password is generated at seed time (random, 107 bits)
   // and printed once. It is never committed to source. To regenerate,
   // delete the seeded rows and re-run the script — there is no default.
-  const adminPassword = generateAdminPassword();
+  // D4: a desktop build may pin a known password via SEED_ADMIN_PASSWORD so
+  // the customer can actually log in (the one-time random value would be lost).
+  const adminPassword = fixedAdminPassword ?? generateAdminPassword();
   const passwordHash = await hasher.hash(adminPassword);
   const [user] = await db
     .insert(users)

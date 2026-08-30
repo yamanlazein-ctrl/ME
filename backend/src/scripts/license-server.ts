@@ -29,7 +29,10 @@ import { Argon2PasswordHasher } from "../infrastructure/auth/PasswordHasher.js";
 import { RedisTokenDenylist, redis } from "../infrastructure/auth/TokenDenylist.js";
 import { SelfHostedLicenseProvider } from "../infrastructure/license/SelfHostedLicenseProvider.js";
 import { LicenseTokenSigner } from "../infrastructure/auth/LicenseTokenSigner.js";
-import { randomBytes, generateKeyPairSync } from "node:crypto";
+import { randomBytes, generateKeyPairSync, createPublicKey } from "node:crypto";
+import { existsSync, readFileSync, appendFileSync } from "node:fs";
+import { join, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
 import type { JWK } from "jose";
 import { createSuperAdminAuthMiddleware } from "../infrastructure/http/middleware/super-admin-auth.middleware.js";
 import { registerLicenseAdminRoutes } from "./license-admin.route.js";
@@ -47,15 +50,41 @@ function buildLicenseTokenSignerForServer(): LicenseTokenSigner {
       config.LICENSE_SIGNING_PUBLIC_KEY ?? "",
     );
   }
-  // Dev fallback: generate an ephemeral keypair and log a warning
-  // so the operator knows to set the env in production. Every restart
-  // invalidates all previously issued offline tokens.
-  logger.warn(
-    "LICENSE_SIGNING_KEY not set; generating an ephemeral keypair (NOT for production — " +
-      "offline license tokens will not survive a restart). Generate a persistent key " +
-      "with: npm run license:genkey",
-  );
+  // ── Auto-persist for dev/test (same logic as container.ts) ──
+  // Production refuses to boot without the key (see env.ts). In dev,
+  // generate a persistent keypair and append it to .env so subsequent
+  // restarts reuse the same key.
   const { privateKey, publicKey } = generateKeyPairSync("ed25519");
+  const privPem = privateKey.export({ type: "pkcs8", format: "pem" }).toString().trim();
+  const pubPem = createPublicKey(privateKey).export({ type: "spki", format: "pem" }).toString().trim();
+  const oneLine = (pem: string) => pem.replace(/\n/g, "\\n");
+
+  const __dirname = dirname(fileURLToPath(import.meta.url));
+  const envPath = join(__dirname, "..", "..", ".env");
+  const envBlock = [
+    "",
+    "# ── License signing keypair (Ed25519) — auto-generated once, DO NOT regenerate ──",
+    "# Rotating these invalidates every offline license token already issued.",
+    `LICENSE_SIGNING_KEY="${oneLine(privPem)}"`,
+    `LICENSE_SIGNING_PUBLIC_KEY="${oneLine(pubPem)}"`,
+    "",
+  ].join("\n");
+
+  try {
+    if (!existsSync(envPath) || !/^\s*LICENSE_SIGNING_KEY\s*=/m.test(readFileSync(envPath, "utf8"))) {
+      appendFileSync(envPath, envBlock, "utf8");
+      logger.info(
+        { envPath },
+        "LICENSE_SIGNING_KEY not set — generated a persistent Ed25519 keypair and appended to .env.",
+      );
+    }
+  } catch (err) {
+    logger.warn({ err, envPath }, "Failed to persist LICENSE_SIGNING_KEY to .env — using in-memory key only");
+  }
+
+  process.env.LICENSE_SIGNING_KEY = privPem.replace(/\n/g, "\\n");
+  process.env.LICENSE_SIGNING_PUBLIC_KEY = pubPem.replace(/\n/g, "\\n");
+
   const privJwk = privateKey.export({ format: "jwk" }) as JWK;
   const pubJwk = publicKey.export({ format: "jwk" }) as JWK;
   return new LicenseTokenSigner(privJwk, pubJwk);

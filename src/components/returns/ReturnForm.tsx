@@ -28,7 +28,7 @@ import {
   type ReturnKind,
   type ReturnReason,
 } from "@/presentation/hooks/useReturns";
-import { useInvoicesList } from "@/presentation/hooks/useInvoices";
+import { useInvoicesList, useInvoice } from "@/presentation/hooks/useInvoices";
 import { Plus, Palette, Save, Trash2, X, Lock } from "lucide-react";
 
 type Line = {
@@ -55,6 +55,25 @@ export function ReturnForm({ kind }: { kind: ReturnKind }) {
 
   const { data: invoicesData } = useInvoicesList();
   const allInvoices = invoicesData?.data ?? [];
+
+  // The original invoice (with its actual lines) — used to restrict the lot
+  // list to the rolls that were really on that invoice (#11) and to default
+  // the price to the invoice's actual sale price (#2).
+  const { data: originalInvoice } = useInvoice(invoiceId);
+  const invoiceRollIds = useMemo(() => {
+    const lines = originalInvoice?.lines ?? [];
+    return new Set(lines.map((ln) => ln.rollId).filter(Boolean));
+  }, [originalInvoice]);
+
+  // Invoice line lookup: rollId → the original invoice's actual sale price (#2).
+  const invoicePriceByRoll = useMemo(() => {
+    const lines = originalInvoice?.lines ?? [];
+    const map = new Map<string, number>();
+    for (const ln of lines) {
+      if (ln.rollId && !map.has(ln.rollId)) map.set(ln.rollId, ln.pricePerKg);
+    }
+    return map;
+  }, [originalInvoice]);
 
   const invoiceOptions = useMemo(() => {
     if (!partyId) return [];
@@ -250,9 +269,13 @@ export function ReturnForm({ kind }: { kind: ReturnKind }) {
                         onValueChange={(v) => {
                           const rr = rollById(v);
                           const cc = rr && colorById(rr.colorId);
+                          // #2: default to the original invoice's sale price for
+                          // this roll; fall back to the roll's stored price only
+                          // when no original invoice context exists.
+                          const defaultPrice = invoicePriceByRoll.get(v) ?? rr?.pricePerKg ?? 0;
                           update(l.id, {
                             rollId: v,
-                            pricePerKg: rr?.pricePerKg ?? 0,
+                            pricePerKg: defaultPrice,
                             fabricId: cc?.fabricId,
                           });
                         }}
@@ -261,21 +284,28 @@ export function ReturnForm({ kind }: { kind: ReturnKind }) {
                           <SelectValue placeholder="اختر صبغة" />
                         </SelectTrigger>
                         <SelectContent>
-                          {(l.fabricId
-                            ? rolls.filter((rr) => {
-                                const cc = colorById(rr.colorId);
-                                return cc?.fabricId === l.fabricId;
-                              })
-                            : rolls
-                          ).map((rr) => {
-                            const cc = colorById(rr.colorId);
-                            const ff = cc && fabricById(cc.fabricId);
-                            return (
-                              <SelectItem key={rr.id} value={rr.id}>
-                                {ff?.name} — {cc?.name} #{rr.rollNo}
-                              </SelectItem>
-                            );
-                          })}
+                          {(() => {
+                            // #11: when an original invoice is selected, only its
+                            // actual lots are eligible — never the whole tenant pool.
+                            let pool = l.fabricId
+                              ? rolls.filter((rr) => {
+                                  const cc = colorById(rr.colorId);
+                                  return cc?.fabricId === l.fabricId;
+                                })
+                              : rolls;
+                            if (invoiceId && invoiceRollIds.size > 0) {
+                              pool = pool.filter((rr) => invoiceRollIds.has(rr.id));
+                            }
+                            return pool.map((rr) => {
+                              const cc = colorById(rr.colorId);
+                              const ff = cc && fabricById(cc.fabricId);
+                              return (
+                                <SelectItem key={rr.id} value={rr.id}>
+                                  {ff?.name} — {cc?.name} #{rr.rollNo}
+                                </SelectItem>
+                              );
+                            });
+                          })()}
                         </SelectContent>
                       </Select>
                       {f && (

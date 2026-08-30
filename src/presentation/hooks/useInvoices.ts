@@ -151,7 +151,7 @@ export function useCancelInvoice() {
  * pieces, and prices). Reuses the existing repository update path
  * (`PUT /api/invoices/:id`) — no new backend endpoint.
  */
-export function useUpdateInvoice() {
+export function useUpdateInvoice(opts?: { silent?: boolean }) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async ({
@@ -171,7 +171,8 @@ export function useUpdateInvoice() {
     },
     onSuccess: (res) => {
       if (res.ok) {
-        toast.success("تم حفظ التعديلات بنجاح");
+        // silent: true → the editing page shows its own detailed success toast.
+        if (!opts?.silent) toast.success("تم حفظ التعديلات بنجاح");
         qc.invalidateQueries({ queryKey: KEYS.root });
         qc.invalidateQueries({ queryKey: KEYS.detail(res.value.id) });
         qc.invalidateQueries({ queryKey: ["dashboard"] });
@@ -228,6 +229,12 @@ export function useInvoices() {
  */
 const invoiceCounters: Record<string, number> = {};
 
+/**
+ * DEPRECATED session-local preview counter — kept only as a synchronous
+ * fallback while the real next-number query loads. The REAL number is always
+ * allocated server-side at save time (see #7); use `useNextInvoiceNumber`
+ * for the on-screen preview.
+ */
 export function nextInvoiceNumber(type: string): string {
   const prefix = type === "entry" ? "ENT" : type === "return" ? "RET" : "INV";
   const year = new Date().getFullYear();
@@ -235,6 +242,25 @@ export function nextInvoiceNumber(type: string): string {
   invoiceCounters[key] = (invoiceCounters[key] ?? 0) + 1;
   const seq = String(invoiceCounters[key]).padStart(4, "0");
   return `${key}-${seq}`;
+}
+
+/**
+ * #7: preview of the NEXT invoice number from the REAL source
+ * (server-side document_sequences, read-only — consumes nothing).
+ * The backend still allocates its own number at save time, so this stays
+ * an estimate under concurrency — the UI labels it as such.
+ */
+export function useNextInvoiceNumber(type: "sale" | "entry") {
+  return useQuery({
+    queryKey: [...KEYS.root, "next-number", type],
+    queryFn: async () => {
+      const res = await container.invoices.api.nextNumber(type);
+      return res.data.number;
+    },
+    staleTime: 0,
+    refetchOnWindowFocus: false,
+    retry: 1,
+  });
 }
 
 export { type Invoice } from "@/domain/entities/Invoice";

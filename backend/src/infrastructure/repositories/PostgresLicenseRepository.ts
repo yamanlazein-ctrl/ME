@@ -1,4 +1,4 @@
-import { and, desc, eq, gte, lte, count, isNull, type SQL } from "drizzle-orm";
+import { and, desc, eq, gte, lte, count, isNull, isNotNull, type SQL } from "drizzle-orm";
 import { db as defaultDb, withTenantTx, type DB } from "../orm/drizzle.js";
 import type { UUID } from "../../domain/types/index.js";
 import type {
@@ -75,6 +75,8 @@ function toLicense(r: LRow): LicenseRow {
       max_backups: 30,
     },
     transfersUsed: r.transfersUsed,
+    offlineToken: r.offlineToken,
+    offlineTokenJti: r.offlineTokenJti,
   };
 }
 
@@ -162,6 +164,15 @@ export class PostgresLicenseRepository implements ILicenseRepository {
         .limit(1);
       return row ? toLicense(row) : null;
     });
+  }
+
+  async findBakedForTenant(tenantId: UUID): Promise<LicenseRow | null> {
+    const [row] = await this.db
+      .select()
+      .from(licenses)
+      .where(and(eq(licenses.tenantId, tenantId), isNotNull(licenses.offlineToken)))
+      .limit(1);
+    return row ? toLicense(row) : null;
   }
 
   async list(filter: { tenantId?: UUID; status?: string }): Promise<LicenseRow[]> {

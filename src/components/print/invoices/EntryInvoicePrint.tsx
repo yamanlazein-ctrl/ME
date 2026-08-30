@@ -165,7 +165,8 @@ export function EntryInvoicePrint({ invoice, totalPages, pageNumber }: EntryInvo
     const details: Array<{ label: string; value: string }> = [];
     if (roll?.dyeBatch) details.push({ label: "رقم الصبغة", value: roll.dyeBatch });
     else if (roll?.rollNo) details.push({ label: "رقم الصبغة", value: roll.rollNo });
-    if (l.pieces && l.pieces > 1) details.push({ label: "الأثواب", value: String(l.pieces) });
+    // #6: show the pieces line whenever a count exists (pieces >= 1), not only > 1.
+    if (l.pieces && l.pieces >= 1) details.push({ label: "الأثواب", value: String(l.pieces) });
     if (parsed.machineNo) details.push({ label: "رقم الماكينة", value: parsed.machineNo });
     if (parsed.chromaj) details.push({ label: "الكراماج", value: parsed.chromaj });
     else if (roll?.weightGsm) details.push({ label: "الكراماج", value: String(roll.weightGsm) });
