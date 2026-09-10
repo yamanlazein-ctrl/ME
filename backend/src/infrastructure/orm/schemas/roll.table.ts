@@ -47,4 +47,4 @@ export const rolls = pgTable(
     supplierIdx: index("idx_rolls_supplier").on(table.tenantId, table.supplierId),
     tenantStatusIdx: index("idx_rolls_tenant_status").on(table.tenantId, table.status),
   }),
-);
+).enableRLS();

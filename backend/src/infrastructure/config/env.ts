@@ -14,15 +14,23 @@ const envSchema = z.object({
   // auth/RLS hardening — those still fail closed.
   DESKTOP_DEPLOY: z.coerce.boolean().default(false),
   PORT: z.coerce.number().default(8080),
+  HOST: z.string().default("0.0.0.0"),
   DATABASE_URL: z.string().url(),
   REDIS_URL: z.string().url().optional(),
   JWT_SECRET: z.string().min(32),
   JWT_EXPIRY_MS: z.coerce.number().default(1_800_000), // 30 minutes
-  REFRESH_TOKEN_EXPIRY_MS: z.coerce.number().default(2_592_000_000), // 30 days
-  // Comma-separated allowlist. Default covers the ERP frontend (5173) and
-  // the license admin dashboard (5174) in dev. Parsed into an array by
-  // `corsOrigins` below; the raw string is kept for backwards compatibility.
-  CORS_ORIGIN: z.string().default("http://localhost:5173,http://localhost:5174"),
+  // Desktop SKU keeps the operator signed in across reboots until explicit
+  // logout; 365 days avoids a silent cliff after a month of daily use.
+  REFRESH_TOKEN_EXPIRY_MS: z.coerce.number().default(31_536_000_000), // 365 days
+  // Comma-separated allowlist. Default covers Vite (5173), SSR sidecar (4173),
+  // and the license admin dashboard (5174) on both localhost and 127.0.0.1 —
+  // browsers treat those as different origins (local web test on :4173 was
+  // blocked and fell through to the license-key wizard).
+  CORS_ORIGIN: z
+    .string()
+    .default(
+      "http://localhost:5173,http://127.0.0.1:5173,http://localhost:4173,http://127.0.0.1:4173,http://localhost:5174,http://127.0.0.1:5174",
+    ),
   RATE_LIMIT_RPS: z.coerce.number().default(100),
   RATE_LIMIT_WINDOW_MS: z.coerce.number().default(60_000),
   LOG_LEVEL: z.enum(["fatal", "error", "warn", "info", "debug", "trace"]).default("info"),
@@ -43,9 +51,14 @@ const envSchema = z.object({
   SUPER_ADMIN_EMAIL: z.string().email().optional(),
   SUPER_ADMIN_PASSWORD: z.string().optional(),
   // ── FX reference rate (header display-only widget — never billing logic) ──
-  FX_UPSTREAM_URL: z.string().url().default("https://liranews.info/api/public/v1/price/usdsypd"),
+  FX_UPSTREAM_URL: z
+    .string()
+    .url()
+    .default("https://lirascope.syria-cloud.sy/api/v1/rates/latest?currencies=USD&lang=ar"),
   FX_REFRESH_INTERVAL_MS: z.coerce.number().default(15 * 60 * 1000),
   FX_FETCH_TIMEOUT_MS: z.coerce.number().default(8_000),
+  // Optional central sync hub URL for desktop peers (phase 4+). Empty = local-only.
+  CENTRAL_SYNC_URL: z.string().url().optional(),
 });
 
 export const config = envSchema.parse(process.env);

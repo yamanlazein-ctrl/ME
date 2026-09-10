@@ -29,6 +29,8 @@ export interface StatementEntryData {
   date: string;
   type: LedgerType;
   status: "active" | "cancelled";
+  /** Ledger row currency — always set; critical when the statement is multi-currency. */
+  currency: string;
   referenceType?: string;
   referenceId?: UUID;
   referenceNumber?: string;
@@ -52,6 +54,7 @@ export interface PartyStatementData {
   partyName: string;
   partyCode?: string | null;
   kind: PartyKind;
+  /** Selected filter currency, or `"ALL"` when every ledger currency is included. */
   currency: string;
   fromDate?: string | null;
   toDate?: string | null;
@@ -60,6 +63,11 @@ export interface PartyStatementData {
   totalDebit: number;
   totalCredit: number;
   finalBalance: number;
+  /** Per-currency totals — populated when `currency === "ALL"`, else a single-key map. */
+  totalsByCurrency?: Record<
+    string,
+    { previousBalance: number; totalDebit: number; totalCredit: number; finalBalance: number }
+  >;
   entries: StatementEntryData[];
 }
 

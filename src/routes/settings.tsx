@@ -7,8 +7,6 @@ export const Route = createFileRoute("/settings")({ component: SettingsLayout })
 const NAV = [
   { to: "/settings/company", label: "معلومات الشركة" },
   { to: "/settings/invoice", label: "إعدادات الفواتير" },
-  { to: "/settings/currencies", label: "العملات" },
-  { to: "/settings/taxes", label: "الضرائب" },
   { to: "/settings/warehouses", label: "المستودعات" },
   { to: "/settings/payment-methods", label: "طرق الدفع" },
   { to: "/settings/units", label: "وحدات القياس" },
@@ -16,7 +14,6 @@ const NAV = [
   { to: "/settings/backup", label: "النسخ الاحتياطي" },
   { to: "/settings/users", label: "المستخدمون والصلاحيات" },
   { to: "/settings/activity", label: "سجل النشاط" },
-  { to: "/settings/audit", label: "حالة النظام" },
 ];
 
 function SettingsLayout() {

@@ -24,7 +24,8 @@ import { supplierById } from "@/presentation/hooks/useParties";
 import { currencySymbol } from "@/presentation/hooks/useCurrency";
 import type { Currency } from "@/domain/types";
 import { useCreateInvoice, useUpdateInvoice, useNextInvoiceNumber, nextInvoiceNumber } from "@/presentation/hooks/useInvoices";
-import { printDocument } from "@/components/print/printPortal";
+import { printOrArchive } from "@/components/print/printPortal";
+import { archiveMeta } from "@/shared/utils/documentArchive";
 import { InvoicePrintDocument } from "@/components/print/InvoicePrintDocument";
 import { useSettings } from "@/presentation/hooks/useSettings";
 import { DocumentFooter } from "@/components/layout/DocumentFooter";
@@ -667,15 +668,15 @@ function EntryInvoicePage() {
           .join(" • ");
 
         let rollId = l.rollId;
-        if (isEdit) {
-          // Editing an existing invoice: never create new rolls (that would
-          // duplicate stock). The backend replaces lines against EXISTING rolls.
-          if (!rollId) {
+        if (!rollId) {
+          // New line on create OR edit: create an empty roll, then the invoice
+          // (create/update) stocks it. Backend edit path already accepts rolls
+          // introduced by the PUT as long as remainingKg=0 and status=in_stock.
+          if (!colorId) {
             throw new Error(
-              `يجب اختيار صبغة موجودة للسطر "${l.fabricName || `سطر #${rows.indexOf(l) + 1}`}" — لا يمكن إنشاء صبغة جديدة عند تعديل فاتورة.`,
+              `يجب تحديد لون للسطر "${l.fabricName || `سطر #${rows.indexOf(l) + 1}`}" قبل الحفظ.`,
             );
           }
-        } else {
           const roll = await addRoll(
             {
               colorId,
@@ -789,8 +790,20 @@ function EntryInvoicePage() {
         renamedColors > 0
           ? " — وأُعيدت تسمية " + (renamedColors === 1 ? "لون واحد" : renamedColors + " ألوان")
           : "";
-      showSuccess(`تم حفظ تعديلات فاتورة الدخول ${res.value.number}${renameNote}`);
-      if (thenPrint) printDocument(<InvoicePrintDocument invoice={res.value} />);
+      const addedNote =
+        createdRollIds.length > 0
+          ? ` — وأُضيفت ${createdRollIds.length} صبغة جديدة للمخزون`
+          : "";
+      showSuccess(`تم حفظ تعديلات فاتورة الدخول ${res.value.number}${renameNote}${addedNote}`);
+      printOrArchive(
+        <InvoicePrintDocument invoice={res.value} />,
+        archiveMeta("entry", {
+          date: res.value.date,
+          typeLabel: "ENTRY",
+          number: res.value.number,
+        }),
+        thenPrint,
+      );
       if (thenNew) {
         navigate({ to: "/invoices/entry/new" });
         return;
@@ -850,7 +863,11 @@ function EntryInvoicePage() {
     if (newColors > 0) impactParts.push(`+${newColors} لون جديد`);
     showSuccess(`تم حفظ فاتورة الدخول رقم ${inv.number} — ${impactParts.join(" • ")}`);
 
-    if (thenPrint) printDocument(<InvoicePrintDocument invoice={inv} />);
+    printOrArchive(
+      <InvoicePrintDocument invoice={inv} />,
+      archiveMeta("entry", { date: inv.date, typeLabel: "ENTRY", number: inv.number }),
+      thenPrint,
+    );
     if (thenNew) {
       resetForm();
       return;

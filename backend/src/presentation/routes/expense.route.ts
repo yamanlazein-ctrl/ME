@@ -8,10 +8,20 @@ import { validateUuidParam } from "../../infrastructure/http/middleware/validate
 import { idempotency } from "../../infrastructure/http/middleware/idempotency-handler.middleware.js";
 import type { IExpenseRepository } from "../../application/ports/IExpenseRepository.js";
 import type { IAuditRepository } from "../../application/ports/IAuditRepository.js";
+import type { ISyncOutboxRepository } from "../../application/ports/ISyncOutboxRepository.js";
 import type { TenantContext } from "../../domain/types/index.js";
+import type { CreateExpenseInput } from "../../domain/entities/Expense.js";
 import { createExpenseSchema, listExpensesSchema, addExpenseNameSchema } from "./expense.schema.js";
 import * as uc from "../../application/use-cases/expenses/expenseUseCases.js";
 import { nextDocumentNumber } from "../../infrastructure/utils/documentNumbers.js";
+import {
+  enqueueExpenseCancel,
+  enqueueExpenseCreate,
+  isSyncEnqueueEnabled,
+  opIdFromRequest,
+  syncDeviceIdFromRequest,
+} from "../../application/use-cases/sync/syncEnqueue.js";
+import { logger } from "../../infrastructure/config/logger.js";
 
 export function registerExpenseRoutes(
   router: Router,
@@ -20,6 +30,7 @@ export function registerExpenseRoutes(
   auth: RequestHandler,
   writeGuard: RequestHandler,
   readGuard: RequestHandler,
+  syncOutboxRepo?: ISyncOutboxRepository,
 ) {
   const ctx = (req: Request): TenantContext => req.tenantContext!;
   const pid = (req: Request): string => req.params.id as string;
@@ -32,14 +43,29 @@ export function registerExpenseRoutes(
     idempotency("POST"),
     validateBody(createExpenseSchema),
     async (req: Request, res: Response) => {
+      const input = body<CreateExpenseInput>(req);
       const r = await uc.createExpenseUseCase(
         expenseRepo,
         auditRepo,
-        body(req),
+        input,
         await nextDocumentNumber("expense", ctx(req).tenantId),
         ctx(req),
       );
       if (r.ok) {
+        if (syncOutboxRepo && isSyncEnqueueEnabled()) {
+          try {
+            await enqueueExpenseCreate(
+              syncOutboxRepo,
+              { id: r.data.id, number: r.data.number },
+              input,
+              ctx(req),
+              syncDeviceIdFromRequest(req),
+              opIdFromRequest(req),
+            );
+          } catch (err) {
+            logger.warn({ err, expenseId: r.data.id }, "sync outbox enqueue failed after expense create");
+          }
+        }
         res.status(201).json(r.data);
       } else {
         res.status(422).json({ code: "VALIDATION", message: r.error });
@@ -113,6 +139,19 @@ export function registerExpenseRoutes(
       const c = ctx(req);
       const r = await uc.cancelExpenseUseCase(expenseRepo, auditRepo, pid(req), c.userId, c);
       if (r.ok) {
+        if (syncOutboxRepo && isSyncEnqueueEnabled()) {
+          try {
+            await enqueueExpenseCancel(
+              syncOutboxRepo,
+              { id: r.data.id, number: r.data.number },
+              c,
+              syncDeviceIdFromRequest(req),
+              opIdFromRequest(req),
+            );
+          } catch (err) {
+            logger.warn({ err, expenseId: r.data.id }, "sync outbox enqueue failed after expense cancel");
+          }
+        }
         res.json(r.data);
       } else {
         res.status(422).json({ code: "VALIDATION", message: r.error });

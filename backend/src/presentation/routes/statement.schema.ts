@@ -9,7 +9,8 @@ export const statementQuerySchema = z.object({
     .string()
     .regex(/^\d{4}-\d{2}-\d{2}$/)
     .optional(),
-  currency: z.enum(["SYP", "USD", "EUR"]).optional(),
+  /** `"ALL"` returns every ledger currency (running balance is per-currency). */
+  currency: z.enum(["SYP", "USD", "EUR", "ALL"]).optional(),
   type: z.string().max(30).optional(),
 });
 

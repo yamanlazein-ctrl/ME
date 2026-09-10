@@ -87,6 +87,15 @@ function requireLocalAccess(req: Request): boolean {
 }
 
 export function registerSetupRoutes(router: Router, container: Container): void {
+  // Desktop SKU: wizard POSTs may carry a leftover tenantId from a failed first
+  // Continue (the old /init minted a random tenant). Always pin mutating steps
+  // to the seeded slug=`default` tenant that holds the baked license.
+  async function resolveWizardTenantId(posted: string): Promise<string> {
+    if (!config.DESKTOP_DEPLOY || !posted) return posted;
+    const baked = await container.tenantRepo.findBySlug("default");
+    return baked?.id ?? posted;
+  }
+
   // GET /api/setup/status — read-only, no tenantId from query (was leaking other tenant's state)
   router.get("/api/setup/status", async (req, res, next) => {
     try {
@@ -95,20 +104,48 @@ export function registerSetupRoutes(router: Router, container: Container): void 
       // wizard is already complete. The previous hardcoded "bootstrap" id
       // matched no row, so a fully provisioned install still reported
       // `isCompleted: false` and the activation gate would loop forever.
-      const tenantId =
+      let tenantId =
         process.env.BOOTSTRAP_TENANT_ID ??
         (await container.installationStateRepo.findAnyCompleted()) ??
         "bootstrap";
+      if (config.DESKTOP_DEPLOY && !process.env.BOOTSTRAP_TENANT_ID) {
+        const baked = await container.tenantRepo.findBySlug("default");
+        if (baked) tenantId = baked.id;
+      }
       const r = await getStatusUseCase(container.installationStateRepo, tenantId);
       if (!r.ok) {
-        // If DB unavailable, return default wizard state for dev
-        res.json({ isCompleted: false, currentStep: "welcome" });
+        // Prefer any completed tenant over a hard false — a soft failure must
+        // not re-open the wizard on a provisioned desktop install (P4).
+        const done = await container.installationStateRepo.findAnyCompleted();
+        if (done) {
+          res.json({ isCompleted: true, currentStep: "done" });
+          return;
+        }
+        res.status(503).json({
+          code: "SETUP_STATUS_UNAVAILABLE",
+          message: "تعذّر قراءة حالة الإعداد",
+          statusCode: 503,
+        });
         return;
       }
       res.json(r.data);
     } catch {
-      // Fallback for dev without DB: wizard not completed
-      res.json({ isCompleted: false, currentStep: "welcome" });
+      try {
+        const done = await container.installationStateRepo.findAnyCompleted();
+        if (done) {
+          res.json({ isCompleted: true, currentStep: "done" });
+          return;
+        }
+      } catch {
+        /* fall through */
+      }
+      // Fail the request so ActivationGate's catch can use local markers
+      // instead of treating a transport/DB blip as "wizard required".
+      res.status(503).json({
+        code: "SETUP_STATUS_UNAVAILABLE",
+        message: "تعذّر قراءة حالة الإعداد",
+        statusCode: 503,
+      });
     }
   });
 
@@ -139,7 +176,11 @@ export function registerSetupRoutes(router: Router, container: Container): void 
   });
 
   // POST /api/setup/wizard/activate — SETUP_TOKEN gated
-  const activateBody = z.object({ key: z.string().min(1), tenantId: z.string().uuid() });
+  const activateBody = z.object({
+    // Desktop pre-baked mode sends an empty key (no customer-entered license).
+    key: config.DESKTOP_DEPLOY ? z.string().optional() : z.string().min(1),
+    tenantId: z.string().uuid(),
+  });
   router.post("/api/setup/wizard/activate", async (req, res, next) => {
     try {
       if (!requireLocalAccess(req)) {
@@ -166,8 +207,8 @@ export function registerSetupRoutes(router: Router, container: Container): void 
           tokenSigner: container.licenseTokenSigner,
           licenseRepo: container.licenseRepo,
         },
-        parsed.data.tenantId,
-        { key: parsed.data.key },
+        await resolveWizardTenantId(parsed.data.tenantId),
+        { key: parsed.data.key ?? "" },
       );
       if (!r.ok) {
         res.status(400).json({ code: "ACTIVATION_FAILED", message: r.error, statusCode: 400 });
@@ -188,7 +229,7 @@ export function registerSetupRoutes(router: Router, container: Container): void 
           .json({ code: "UNAUTHORIZED", message: "رمز الإعداد غير صحيح", statusCode: 401 });
         return;
       }
-      const tenantId = (req.body?.tenantId as string) ?? "";
+      const tenantId = await resolveWizardTenantId((req.body?.tenantId as string) ?? "");
       if (!tenantId) {
         res
           .status(422)
@@ -224,7 +265,7 @@ export function registerSetupRoutes(router: Router, container: Container): void 
           .json({ code: "UNAUTHORIZED", message: "رمز الإعداد غير صحيح", statusCode: 401 });
         return;
       }
-      const tenantId = (req.body?.tenantId as string) ?? "";
+      const tenantId = await resolveWizardTenantId((req.body?.tenantId as string) ?? "");
       const r = await saveAdminStepUseCase(
         {
           installationStateRepo: container.installationStateRepo,
@@ -256,7 +297,7 @@ export function registerSetupRoutes(router: Router, container: Container): void 
           .json({ code: "UNAUTHORIZED", message: "رمز الإعداد غير صحيح", statusCode: 401 });
         return;
       }
-      const tenantId = (req.body?.tenantId as string) ?? "";
+      const tenantId = await resolveWizardTenantId((req.body?.tenantId as string) ?? "");
       const r = await saveReviewStepUseCase(container.installationStateRepo, tenantId, req.body);
       if (!r.ok) {
         if (r.code === "ALREADY_COMPLETED") {
@@ -281,7 +322,7 @@ export function registerSetupRoutes(router: Router, container: Container): void 
           .json({ code: "UNAUTHORIZED", message: "رمز الإعداد غير صحيح", statusCode: 401 });
         return;
       }
-      const tenantId = (req.body?.tenantId as string) ?? "";
+      const tenantId = await resolveWizardTenantId((req.body?.tenantId as string) ?? "");
       if (!tenantId) {
         res.status(422).json({ code: "VALIDATION_ERROR", message: "tenantId مطلوب", statusCode: 422 });
         return;

@@ -8,6 +8,7 @@ import {
 import { currencySymbol } from "@/presentation/hooks/useCurrency";
 import { customerById, supplierById } from "@/presentation/hooks/useParties";
 import { formatMoney } from "@/shared/utils/formatNumber";
+import { convertForSettlement } from "@erp/shared";
 
 const METHOD_LABEL: Record<string, string> = {
   cash: "نقدي",
@@ -48,8 +49,34 @@ export function VoucherPrintDocument({ voucher }: { voucher: Voucher }) {
       }
     : { label: partyLabel, name: "—" };
 
+  /**
+   * When the voucher is settled in a currency other than the linked invoice's,
+   * print what it is actually worth on that invoice — e.g. a 100 USD receipt
+   * against a SYP invoice at 132 shows "المقابل: 13,200 ل.س بسعر صرف 132".
+   * Uses `convertForSettlement` with the voucher's OWN recorded rate — the
+   * same helper and the same rate `PostgresVoucherRepository.create` used to
+   * actually settle it — never the invoice's own frozen rate, so the printed
+   * figure always matches the amount that was deducted from the invoice.
+   */
+  const counterpart = (() => {
+    if (!v.invoiceCurrency || v.invoiceCurrency === v.currency) return null;
+    const value = convertForSettlement(v.amount, v.currency, v.invoiceCurrency, v.exchangeRate ?? null);
+    // No usable rate: the amount is not expressible, so print nothing rather
+    // than a silently wrong number.
+    if (value === null) return null;
+    return { value, sym: currencySymbol(v.invoiceCurrency), rate: v.exchangeRate! };
+  })();
+
   const totals: PrintTotal[] = [
     { label: "المبلغ", value: `${formatMoney(v.amount)} ${sym}`, grand: true },
+    ...(counterpart
+      ? [
+          {
+            label: `المقابل بعملة الفاتورة (${counterpart.sym})`,
+            value: `${formatMoney(counterpart.value)} ${counterpart.sym} بسعر صرف ${formatMoney(counterpart.rate)}`,
+          },
+        ]
+      : []),
   ];
 
   return (

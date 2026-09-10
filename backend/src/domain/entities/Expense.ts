@@ -80,4 +80,5 @@ export interface CreateExpenseInput {
   paidFromCashbox?: boolean;
   notesPrint?: string;
   notesInternal?: string;
+  preAllocatedId?: UUID;
 }

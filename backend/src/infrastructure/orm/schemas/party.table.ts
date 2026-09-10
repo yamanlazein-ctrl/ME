@@ -37,12 +37,18 @@ export const parties = pgTable(
     city: varchar("city", { length: 100 }),
     country: varchar("country", { length: 100 }),
     taxNumber: varchar("tax_number", { length: 100 }),
-    openingBalance: numeric("opening_balance", { precision: 14, scale: 2, mode: "number" }).notNull().default(0),
+    openingBalance: numeric("opening_balance", { precision: 14, scale: 2, mode: "number" })
+      .notNull()
+      .default(0),
     creditLimit: numeric("credit_limit", { precision: 14, scale: 2, mode: "number" }).default(0),
     currency: varchar("currency", { length: 3 }).notNull().default("SYP"),
     paymentTerms: varchar("payment_terms", { length: 20 }),
     paymentMethod: varchar("payment_method", { length: 20 }),
-    defaultDiscount: numeric("default_discount_amount", { precision: 14, scale: 2, mode: "number" }).default(0),
+    defaultDiscount: numeric("default_discount_amount", {
+      precision: 14,
+      scale: 2,
+      mode: "number",
+    }).default(0),
     vat: decimal("vat", { precision: 5, scale: 4 }).default("0"),
     status: varchar("status", { length: 20 }).notNull().default("active"),
     notes: text("notes"),
@@ -58,4 +64,4 @@ export const parties = pgTable(
     tenantCodeIdx: uniqueIndex("idx_parties_tenant_code").on(table.tenantId, table.code),
     tenantNameIdx: uniqueIndex("idx_parties_tenant_name").on(table.tenantId, table.name),
   }),
-);
+).enableRLS();

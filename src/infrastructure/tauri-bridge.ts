@@ -102,3 +102,33 @@ export async function validateDesktopLicense(
     fingerprint,
   }) as Promise<DesktopLicenseStatus>;
 }
+
+/** Document types for Desktop/أقمشة ومنسوجات archive (Issue 12). */
+export type ArchiveDocType = "sale" | "entry" | "print_send" | "print_receive";
+
+export interface ArchiveDocumentResult {
+  path: string;
+  format: string;
+}
+
+/** Create Desktop archive folders (idempotent). No-op outside Tauri. */
+export async function ensureDocumentFolders(): Promise<string | null> {
+  if (!isTauri()) return null;
+  const invoke = await getInvoke();
+  return (await invoke("ensure_document_folders")) as string;
+}
+
+/** Archive a printed/saved document into the Desktop folder tree. */
+export async function archiveDocumentPdf(
+  docType: ArchiveDocType,
+  fileStem: string,
+  html: string,
+): Promise<ArchiveDocumentResult | null> {
+  if (!isTauri()) return null;
+  const invoke = await getInvoke();
+  return (await invoke("archive_document_pdf", {
+    docType,
+    fileStem,
+    html,
+  })) as ArchiveDocumentResult;
+}

@@ -29,4 +29,4 @@ export const colors = pgTable(
       table.name,
     ),
   }),
-);
+).enableRLS();

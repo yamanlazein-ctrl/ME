@@ -9,6 +9,18 @@
  * `Math.max(0, remaining)` clamp so credit balances (over-payment) stay
  * visible as negative remaining instead of being hidden at 0.
  *
+ * `totalPaid` is read from `invoice.paid` — a field the backend maintains
+ * transactionally (`PostgresVoucherRepository.create`/`cancel`) and keeps
+ * denominated in the INVOICE's own currency, converting any foreign-currency
+ * receipt/payment voucher at collection time. That is also exactly what the
+ * Outstanding/Aging tabs on the same page read (`paidByInvoice` in
+ * `PartyDetails.tsx`), so summing raw voucher amounts by voucher-currency
+ * here instead would silently drop any payment made in a currency different
+ * from the invoice — and would disagree with those other tabs. The
+ * `vouchers` parameter is accepted for API-compat with callers but is not
+ * used to compute `totalPaid`; these fixtures set `paid` on the invoice the
+ * way the backend would, instead of relying on it.
+ *
  * These tests pin the function's math so the fix cannot regress it.
  */
 import { describe, it, expect } from "vitest";
@@ -16,8 +28,8 @@ import { buildPartyStatsByCurrency } from "@/core/calculations/ledgerCalc";
 
 const party = { id: "p1" } as any;
 
-const inv = (n: number, currency: string, total: number) => ({
-  id: `i${n}`, partyId: "p1", status: "active", type: "sale", currency,
+const inv = (n: number, currency: string, total: number, paid = 0) => ({
+  id: `i${n}`, partyId: "p1", status: "active", type: "sale", currency, paid,
   lines: [{ quantityKg: 1, pricePerKg: total, discountAmount: 0 }], discount: 0, tax: 0, shipping: 0,
 });
 
@@ -36,14 +48,12 @@ describe("buildPartyStatsByCurrency — full-dataset contract (audit H2)", () =>
     expect(stats["SYP"].totalAmount).not.toContain?.(15); // no blending
   });
 
-  it("paid only counts that currency's receipts; over-payment surfaces as a NEGATIVE (credit) remaining", () => {
-    const invoices = [inv(1, "SYP", 1000), inv(2, "USD", 5)];
-    const vouchers = [
-      { partyId: "p1", kind: "receipt", status: "active", amount: 1200, currency: "SYP" }, // overpay
-      { partyId: "p1", kind: "receipt", status: "active", amount: 5, currency: "USD" },
-      { partyId: "p1", kind: "payment", status: "active", amount: 999, currency: "SYP" }, // must be ignored
-    ];
-    const stats = buildPartyStatsByCurrency(party, "customer", invoices as any, vouchers as any);
+  it("totalPaid comes from invoice.paid (backend-maintained, FX-converted); over-payment surfaces as a NEGATIVE (credit) remaining", () => {
+    // A 5 USD invoice collected via a SYP receipt: the backend converts the
+    // SYP amount into the invoice's own USD currency before writing `paid`
+    // — this fixture mirrors that, not the voucher's raw currency/amount.
+    const invoices = [inv(1, "SYP", 1000, 1200), inv(2, "USD", 5, 5)];
+    const stats = buildPartyStatsByCurrency(party, "customer", invoices as any, []);
     expect(stats["SYP"].totalPaid).toBe(1200);
     // H2 fix: the old Math.max(0, …) clamp hid the 200 credit balance.
     expect(stats["SYP"].remaining).toBe(-200);

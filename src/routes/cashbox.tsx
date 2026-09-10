@@ -33,7 +33,7 @@ import {
   type ManualMovementType,
 } from "@/presentation/hooks/useCashbox";
 import { useLedgerEntries, useCashMovementsOn } from "@/presentation/hooks/useLedger";
-import { formatAmount, useCurrencies } from "@/presentation/hooks/useCurrency";
+import { formatAmount } from "@/presentation/hooks/useCurrency";
 import { Lock, Plus, RotateCw, Settings2 } from "lucide-react";
 import { FinancialSummary } from "@/components/cashbox/FinancialSummary";
 import {
@@ -72,8 +72,6 @@ export const Route = createFileRoute("/cashbox")({
 function CashBoxPage() {
   const today = new Date().toISOString().slice(0, 10);
   const qc = useQueryClient();
-  const { defaultCurrency } = useCurrencies();
-
   const { data: state, dataUpdatedAt } = useCashboxState();
   const openingToday = state?.openingBalance ?? 0;
   const last = state?.lastClosing ?? null;
@@ -142,15 +140,16 @@ function CashBoxPage() {
     USD: balUSD ?? 0,
     EUR: balEUR ?? 0,
   };
-  // Hero balance = the default display currency's own balance (no conversion).
-  const currentBalance = perCurrency[defaultCurrency] ?? 0;
+  // Independent per-currency flows — never converted or summed across boxes.
   const todayFlowByCurrency: Record<string, { in: number; out: number }> = {
     SYP: todayFlowSYP ?? { in: 0, out: 0 },
     USD: todayFlowUSD ?? { in: 0, out: 0 },
     EUR: todayFlowEUR ?? { in: 0, out: 0 },
   };
-  const todayIn = todayFlowByCurrency[defaultCurrency]?.in ?? 0;
-  const todayOut = todayFlowByCurrency[defaultCurrency]?.out ?? 0;
+  // Day-close uses the session currency box only (opening applies there).
+  const sessionCurrency = cs.currency || "SYP";
+  const todayIn = todayFlowByCurrency[sessionCurrency]?.in ?? 0;
+  const todayOut = todayFlowByCurrency[sessionCurrency]?.out ?? 0;
 
   // Today's transaction count (light query; separate cache entry from the tab feed).
   const { data: todayLedgerResult } = useLedgerEntries({
@@ -188,11 +187,9 @@ function CashBoxPage() {
         </div>
       )}
 
-      {/* B — Financial Summary (tiered) */}
+      {/* B — Financial Summary: independent SYP / USD boxes (no FX mix) */}
       <FinancialSummary
-        currentBalance={currentBalance}
-        todayIn={todayIn}
-        todayOut={todayOut}
+        todayFlowByCurrency={todayFlowByCurrency}
         txCount={txCount}
         openingBalance={cs.openingBalance}
         openingCurrency={cs.currency}
@@ -291,6 +288,9 @@ function OpeningDialog({ open, onClose }: { open: boolean; onClose: () => void }
     openingDate: "",
   };
   const [v, setV] = useState(cs.openingBalance);
+  const [currency, setCurrency] = useState<"SYP" | "USD">(
+    cs.currency === "USD" ? "USD" : "SYP",
+  );
   const [balErr, setBalErr] = useState<string | null>(null);
   const setOpening = useSetOpeningBalance();
   const today = new Date().toISOString().slice(0, 10);
@@ -299,7 +299,7 @@ function OpeningDialog({ open, onClose }: { open: boolean; onClose: () => void }
       setBalErr("أدخل رصيداً صحيحاً أكبر من صفر.");
       return;
     }
-    setOpening.mutate({ balance: v, date: today, currency: cs.currency });
+    setOpening.mutate({ balance: v, date: today, currency });
     onClose();
   };
 
@@ -310,6 +310,24 @@ function OpeningDialog({ open, onClose }: { open: boolean; onClose: () => void }
           <DialogTitle>تعديل الرصيد الافتتاحي للصندوق</DialogTitle>
         </DialogHeader>
         <div className="space-y-2">
+          <div>
+            <Label>عملة الصندوق</Label>
+            <Select
+              value={currency}
+              onValueChange={(v) => setCurrency(v as "SYP" | "USD")}
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="SYP">ليرة سورية (SYP)</SelectItem>
+                <SelectItem value="USD">دولار (USD)</SelectItem>
+              </SelectContent>
+            </Select>
+            <p className="mt-1 text-[11px] text-muted-foreground">
+              الافتتاحي يخص عملة واحدة فقط — لا يُحوَّل ولا يُخلط مع الصندوق الآخر.
+            </p>
+          </div>
           <FormField label="المبلغ" error={balErr ?? undefined}>
             <Input
               type="number"
@@ -342,6 +360,9 @@ function ManualDialog({ open, onClose }: { open: boolean; onClose: () => void })
   const [type, setType] = useState<ManualMovementType>("adjustment");
   const [dir, setDir] = useState<"in" | "out">("in");
   const [amount, setAmount] = useState<number | "">("");
+  const [currency, setCurrency] = useState<"SYP" | "USD">(
+    cs.currency === "USD" ? "USD" : "SYP",
+  );
   const [desc, setDesc] = useState("");
   const [amtErr, setAmtErr] = useState<string | null>(null);
   const [descErr, setDescErr] = useState<string | null>(null);
@@ -363,7 +384,7 @@ function ManualDialog({ open, onClose }: { open: boolean; onClose: () => void })
         type,
         direction: dir,
         amount: Number(amount),
-        currency: cs.currency,
+        currency,
         description: desc,
       },
       {
@@ -407,6 +428,21 @@ function ManualDialog({ open, onClose }: { open: boolean; onClose: () => void })
               <SelectContent>
                 <SelectItem value="in">وارد</SelectItem>
                 <SelectItem value="out">صادر</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div>
+            <Label>العملة (صندوق مستقل)</Label>
+            <Select
+              value={currency}
+              onValueChange={(v) => setCurrency(v as "SYP" | "USD")}
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="SYP">ليرة سورية (SYP)</SelectItem>
+                <SelectItem value="USD">دولار (USD)</SelectItem>
               </SelectContent>
             </Select>
           </div>

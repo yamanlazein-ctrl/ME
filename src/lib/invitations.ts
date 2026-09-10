@@ -10,6 +10,7 @@
  * token the same way the rest of the app does, without pulling in the DI
  * container, so it can be used from the login screen (pre-auth).
  */
+import { getApiBaseUrl } from "@/lib/api-base-url";
 
 export type InvitationType = "device" | "user";
 
@@ -49,11 +50,7 @@ export interface ConsumeInvitationResult {
 }
 
 function apiBase(): string {
-  const raw = (import.meta.env.VITE_API_BASE_URL as string | undefined)?.trim();
-  // When a full backend origin is configured use it as-is; otherwise fall back
-  // to same-origin (paths below already carry the /api prefix).
-  if (!raw || raw === "/api") return "";
-  return raw.replace(/\/+$/, "");
+  return getApiBaseUrl("");
 }
 
 function authHeaders(): Record<string, string> {
@@ -122,8 +119,9 @@ export function validateInvitation(
 
 /**
  * Public: consume a code. For a `user` invitation this creates the account
- * (password required) and — when a device fingerprint is supplied — registers
- * the accepting device against the license device cap.
+ * (4-digit PIN required) and — when a device fingerprint is supplied — registers
+ * the accepting device against the license device cap. The new user appears on
+ * GET /api/auth/device-roster for the PIN picker.
  */
 export function consumeInvitation(
   input: ConsumeInvitationInput,

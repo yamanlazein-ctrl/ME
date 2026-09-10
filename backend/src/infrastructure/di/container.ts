@@ -4,6 +4,8 @@ import { JwtSigner } from "../auth/JwtSigner.js";
 import { Argon2PasswordHasher } from "../auth/PasswordHasher.js";
 import { config } from "../config/env.js";
 import { PostgresPartyRepository } from "../repositories/PostgresPartyRepository.js";
+import type { IUserRepository } from "../../application/ports/IUserRepository.js";
+import { PostgresUserRepository } from "../repositories/PostgresUserRepository.js";
 import type { IPartyRepository } from "../../application/ports/IPartyRepository.js";
 import { PostgresFabricRepository } from "../repositories/PostgresFabricRepository.js";
 import type { IFabricRepository } from "../../application/ports/IFabricRepository.js";
@@ -55,6 +57,16 @@ import { PostgresInstallationStateRepository } from "../repositories/PostgresIns
 import type { IInstallationStateRepository } from "../../application/ports/IInstallationStateRepository.js";
 import { PostgresSecretsRepository } from "../repositories/PostgresSecretsRepository.js";
 import type { ISecretsRepository } from "../../application/ports/ISecretsRepository.js";
+import { PostgresSyncDeviceRepository } from "../repositories/PostgresSyncDeviceRepository.js";
+import type { ISyncDeviceRepository } from "../../application/ports/ISyncDeviceRepository.js";
+import { PostgresSyncOutboxRepository } from "../repositories/PostgresSyncOutboxRepository.js";
+import type { ISyncOutboxRepository } from "../../application/ports/ISyncOutboxRepository.js";
+import { PostgresSyncInboxRepository } from "../repositories/PostgresSyncInboxRepository.js";
+import type { ISyncInboxRepository } from "../../application/ports/ISyncInboxRepository.js";
+import { PostgresDocumentNumberBlockRepository } from "../repositories/PostgresDocumentNumberBlockRepository.js";
+import type { IDocumentNumberBlockRepository } from "../../application/ports/IDocumentNumberBlockRepository.js";
+import { PostgresSyncResourceClaimRepository } from "../repositories/PostgresSyncResourceClaimRepository.js";
+import type { ISyncResourceClaimRepository } from "../../application/ports/ISyncResourceClaimRepository.js";
 import type { ISecretCipher } from "../../application/ports/ISecretCipher.js";
 import { AesGcmSecretStore, decodeMasterKey } from "../secrets/AesGcmSecretStore.js";
 import { NodeFingerprintProvider } from "../fingerprint/NodeFingerprintProvider.js";
@@ -97,6 +109,7 @@ export interface Container {
   settingsRepo: ISettingsRepository;
   dashboardRepo: IDashboardRepository;
   profitRepo: IProfitRepository;
+  userRepo: IUserRepository;
   companyRepo: ICompanyRepository;
   invitationRepo: IInvitationRepository;
   licenseRepo: ILicenseRepository;
@@ -104,6 +117,11 @@ export interface Container {
   installationStateRepo: IInstallationStateRepository;
   secretCipher: ISecretCipher;
   secretsRepo: ISecretsRepository;
+  syncDeviceRepo: ISyncDeviceRepository;
+  syncOutboxRepo: ISyncOutboxRepository;
+  syncInboxRepo: ISyncInboxRepository;
+  documentNumberBlockRepo: IDocumentNumberBlockRepository;
+  syncResourceClaimRepo: ISyncResourceClaimRepository;
   fingerprintProvider: IMachineFingerprintProvider;
   installationIdStorage: IInstallationIdStorage;
   licenseTokenSigner: ILicenseTokenSigner;
@@ -135,6 +153,7 @@ export function buildContainer(): Container {
   const settingsRepo = new PostgresSettingsRepository(db);
   const dashboardRepo = new PostgresDashboardRepository(db);
   const profitRepo = new PostgresProfitRepository(db);
+  const userRepo = new PostgresUserRepository(db);
 
   // ── Phase 0 sub-batch extensions ──
   const companyRepo = new PostgresCompanyRepository(db);
@@ -142,6 +161,11 @@ export function buildContainer(): Container {
   const licenseRepo = new PostgresLicenseRepository(db);
   const tenantRepo = new PostgresTenantRepository(db);
   const installationStateRepo = new PostgresInstallationStateRepository(db);
+  const syncDeviceRepo = new PostgresSyncDeviceRepository(db);
+  const syncOutboxRepo = new PostgresSyncOutboxRepository(db);
+  const syncInboxRepo = new PostgresSyncInboxRepository(db);
+  const documentNumberBlockRepo = new PostgresDocumentNumberBlockRepository(db);
+  const syncResourceClaimRepo = new PostgresSyncResourceClaimRepository(db);
 
   // Fail fast when the master key is missing/invalid (Task 1.1).
   const masterKey = decodeMasterKey(config.APP_MASTER_KEY);
@@ -187,6 +211,7 @@ export function buildContainer(): Container {
     settingsRepo,
     dashboardRepo,
     profitRepo,
+    userRepo,
     companyRepo,
     invitationRepo,
     licenseRepo,
@@ -194,6 +219,11 @@ export function buildContainer(): Container {
     installationStateRepo,
     secretCipher,
     secretsRepo,
+    syncDeviceRepo,
+    syncOutboxRepo,
+    syncInboxRepo,
+    documentNumberBlockRepo,
+    syncResourceClaimRepo,
     fingerprintProvider,
     installationIdStorage,
     licenseTokenSigner,

@@ -20,7 +20,8 @@ import {
   useCreatePrintSend,
   nextPrintJobNumber,
 } from "@/presentation/hooks/usePrintJobs";
-import { printDocument } from "@/components/print/printPortal";
+import { printOrArchive } from "@/components/print/printPortal";
+import { archiveMeta } from "@/shared/utils/documentArchive";
 import { PrintJobDocument } from "@/components/print/PrintJobDocument";
 import { PrintPageBreak } from "@/components/print/PrintDocument";
 import { formatQuantity } from "@/shared/utils/formatNumber";
@@ -129,7 +130,7 @@ export const Route = createFileRoute("/invoices/print-send/new")({
 });
 
 function PrintSendPage() {
-  useInventory();
+  const invVersion = useInventory();
   const { data: jobs = [] } = usePrintJobs();
   const createPrintSend = useCreatePrintSend();
   const number = useMemo(() => nextPrintJobNumber(), []);
@@ -162,7 +163,7 @@ function PrintSendPage() {
           }`,
           subtitle: `صبغة ${r.rollNo} — متبقّي ${formatQuantity(r.remainingKg)} كغ — ${r.remainingPieces ?? r.pieces} أثواب`,
         })),
-    [rolls],
+    [invVersion],
   );
 
   const updateLine = (key: string, patch: Partial<SendLine>) =>
@@ -243,16 +244,25 @@ function PrintSendPage() {
       }
 
       const numbers = created.map((j) => j.number).join("، ");
-      if (thenPrint && created.length > 0) {
-        printDocument(
-          <>
-            {created.map((j, i) => (
-              <div key={j.id}>
-                {i > 0 && <PrintPageBreak />}
-                <PrintJobDocument job={j} />
-              </div>
-            ))}
-          </>,
+      const doc = (
+        <>
+          {created.map((j, i) => (
+            <div key={j.id}>
+              {i > 0 && <PrintPageBreak />}
+              <PrintJobDocument job={j} />
+            </div>
+          ))}
+        </>
+      );
+      if (created.length > 0) {
+        printOrArchive(
+          doc,
+          archiveMeta("print_send", {
+            date,
+            typeLabel: "PRINT-SEND",
+            number: created.map((j) => j.number).join("_"),
+          }),
+          thenPrint,
         );
       }
       setOk(
@@ -517,6 +527,52 @@ function PrintSendPage() {
                           >
                             استلام
                           </Link>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </PageCard>
+
+        <PageCard
+          title="سجل كميات الإرسال"
+          description={`كل عمليات الإرسال (الأحدث أولاً) — ${jobs.length} سند`}
+        >
+          {jobs.length === 0 ? (
+            <div className="py-8 text-center text-sm text-muted-foreground">لا سجل بعد.</div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead className="bg-secondary/50 text-muted-foreground">
+                  <tr>
+                    <th className="p-2 text-right">الرقم</th>
+                    <th className="p-2 text-right">تاريخ الإرسال</th>
+                    <th className="p-2 text-right">القماش</th>
+                    <th className="p-2 text-right">المطبعة</th>
+                    <th className="p-2 text-right tabular-nums">مرسل (كغ)</th>
+                    <th className="p-2 text-right tabular-nums">مستلم (كغ)</th>
+                    <th className="p-2 text-right">الحالة</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {jobs.map((j) => {
+                    const fab = fabricById(j.sourceFabricId);
+                    const col = colorById(j.sourceColorId);
+                    return (
+                      <tr key={j.id} className="border-t border-border">
+                        <td className="p-2 font-mono tabular-nums">{j.number}</td>
+                        <td className="p-2 tabular-nums">{j.sentDate}</td>
+                        <td className="p-2">
+                          {fab?.name} — {col?.name}
+                        </td>
+                        <td className="p-2">{j.pressName}</td>
+                        <td className="p-2 tabular-nums font-semibold">{j.sentKg}</td>
+                        <td className="p-2 tabular-nums">{j.receivedKg ?? "—"}</td>
+                        <td className="p-2">
+                          {j.status === "received" ? "مستلم" : "قيد التشغيل"}
                         </td>
                       </tr>
                     );

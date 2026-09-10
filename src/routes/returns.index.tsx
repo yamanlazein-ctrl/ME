@@ -3,7 +3,7 @@ import { PageCard } from "@/components/layout/PageCard";
 import { Button } from "@/components/ui/button";
 import { Link, createFileRoute } from "@tanstack/react-router";
 import { Plus, Printer } from "lucide-react";
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { RETURN_REASONS } from "@/presentation/hooks/useReturns";
 import { useReturnsList, useCancelReturn } from "@/presentation/hooks/useReturns";
 import { customerById, supplierById } from "@/presentation/hooks/useParties";
@@ -12,6 +12,7 @@ import { formatDateTime } from "@/lib/utils";
 import { printDocument } from "@/components/print/printPortal";
 import { ReturnInvoicePrint } from "@/components/print/invoices/ReturnInvoicePrint";
 import { useInventory } from "@/presentation/hooks/useInventory";
+import { useInvoicesList } from "@/presentation/hooks/useInvoices";
 import { toast } from "sonner";
 import type { Currency } from "@/domain/types";
 import type { ReturnDTO } from "@/application/ports/IReturnRepository";
@@ -22,13 +23,26 @@ function ReturnsList() {
   useInventory();
   const { data: paginated } = useReturnsList();
   const returns = paginated?.data ?? [];
+  const { data: invoicesData } = useInvoicesList({ limit: 1000 });
+  const invoiceNumberById = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const inv of invoicesData?.data ?? []) {
+      m.set(inv.id, inv.number || inv.reference || inv.id);
+    }
+    return m;
+  }, [invoicesData]);
   const cancelReturn = useCancelReturn();
   const [kind, setKind] = useState<"all" | "entry" | "sale">("all");
   const list = returns.filter((r) => kind === "all" || r.kind === kind);
 
   const handlePrint = (r: ReturnDTO) => {
     try {
-      printDocument(<ReturnInvoicePrint returnDoc={r} />);
+      const originalInvoiceNumber = r.originalInvoiceId
+        ? invoiceNumberById.get(r.originalInvoiceId)
+        : undefined;
+      printDocument(
+        <ReturnInvoicePrint returnDoc={r} originalInvoiceNumber={originalInvoiceNumber} />,
+      );
     } catch (e) {
       toast.error(`فشل تحضير المستند للطباعة: ${e instanceof Error ? e.message : ""}`);
     }
@@ -106,7 +120,7 @@ function ReturnsList() {
                     <td className="px-3 py-2 text-primary">
                       {r.originalInvoiceId ? (
                         <Link to="/invoices/$id" params={{ id: r.originalInvoiceId }}>
-                          {r.originalInvoiceId}
+                          {invoiceNumberById.get(r.originalInvoiceId) ?? "—"}
                         </Link>
                       ) : (
                         "—"

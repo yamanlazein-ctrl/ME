@@ -50,4 +50,4 @@ export const secrets = pgTable(
   (table) => ({
     tenantKeyIdx: uniqueIndex("idx_secrets_tenant_key").on(table.tenantId, table.key),
   }),
-);
+).enableRLS();

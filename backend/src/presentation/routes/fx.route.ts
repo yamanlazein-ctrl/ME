@@ -10,7 +10,7 @@ import type { FxRateService } from "../../infrastructure/fx/FxRateService.js";
  * used to pre-fill any `exchangeRate` field — users always type the exchange
  * rate manually on every invoice. The only consumer is the header widget.
  *
- * The external provider (liranews.info) is contacted exclusively by
+ * The external provider (LiraScope) is contacted exclusively by
  * FxRateService's background timer — never per request, never from a browser.
  * The response is always HTTP 200 with an `available` flag so the frontend
  * can render its graceful fallback without error-handling gymnastics.
@@ -21,6 +21,17 @@ export function registerFxRoutes(
   authMiddleware: RequestHandler,
 ): void {
   apiRouter.get("/fx/reference-rate", authMiddleware, (_req, res) => {
-    res.status(200).json(fxRateService.getSnapshot());
+    try {
+      res.status(200).json(fxRateService.getSnapshot());
+    } catch {
+      // Display widget must never 500 — degrade to empty snapshot.
+      res.status(200).json({
+        available: false,
+        stale: false,
+        reason: "NO_DATA",
+        sourceName: "LiraScope",
+        sourceUrl: "https://lirascope.syria-cloud.sy",
+      });
+    }
   });
 }

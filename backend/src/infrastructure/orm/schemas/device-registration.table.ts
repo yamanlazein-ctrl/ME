@@ -43,4 +43,4 @@ export const deviceRegistrations = pgTable(
     // Fast lookup when a client hits /v1/activations/:id/devices.
     deviceIdIdx: index("idx_device_registrations_device_id").on(table.deviceId),
   }),
-);
+).enableRLS();

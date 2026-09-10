@@ -5,6 +5,7 @@ edition = "2021"
 description = "Motard Fabrics Group ERP — Fabric & roll trading management system"
 authors = ["Motard Fabrics Group"]
 license = "Proprietary"
+default-run = "motard-fabrics-erp"
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
@@ -19,14 +20,37 @@ tokio = { version = "1", features = ["full"] }
 # Sidecar spawned at runtime to run the backend + SSR frontend; required for
 # desktop packaging (no external Node runtime on the client machine).
 tauri-plugin-shell = "2"
+# Windows boot autostart (HKCU Run). Re-enable on every launch — the upstream
+# plugin is known to lose the Run key after one reboot on some Windows builds.
+tauri-plugin-autostart = "2"
 # Windows DPAPI (CurrentUser scope) for encrypting locally-generated secrets
 # (JWT_SECRET, APP_MASTER_KEY) so they never ship as plaintext.
-windows = { version = "0.61", features = ["Win32_Security_Cryptography", "Win32_Foundation"] }
+windows = { version = "0.61", features = ["Win32_Security_Cryptography", "Win32_Foundation", "Win32_UI_WindowsAndMessaging", "Win32_System_Threading", "Win32_System_Diagnostics_ToolHelp"] }
 rand = "0.8"
 base64 = "0.22"
 dirs-sys = "0.5"
 
 [[bin]]
+name = "motard-fabrics-erp"
+path = "src/main.rs"
+
+[[bin]]
 name = "d3_probe"
 path = "src/bin/d3_probe.rs"
+
+[[bin]]
+name = "runtime_probe"
+path = "src/bin/runtime_probe.rs"
+
+# Permanent fast-iteration profile (see desktop/DEV-WORKFLOW.md).
+# Same codegen as dev (opt-level 0) but WITHOUT debuginfo: linking the Tauri
+# dependency tree (zstd-sys, blake3, …) dominates build time and debuginfo
+# roughly doubles it. Use `cargo build --profile dev-fast` for any runnable
+# test that does not need the debugger — minutes instead of an hour.
+# Release/MSI builds are unaffected (profile.release untouched).
+[profile.dev-fast]
+inherits = "dev"
+opt-level = 0
+debug = false
+incremental = true
 

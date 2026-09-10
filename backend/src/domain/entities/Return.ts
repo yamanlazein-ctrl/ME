@@ -129,4 +129,6 @@ export interface CreateReturnInput {
   notesPrint?: string;
   notesInternal?: string;
   lines: CreateReturnLineInput[];
+  preAllocatedNumber?: string;
+  preAllocatedId?: UUID;
 }

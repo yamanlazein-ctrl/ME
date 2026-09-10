@@ -32,6 +32,8 @@ import {
 } from "@/components/ui/alert-dialog";
 import { DataPagination } from "@/components/common/DataPagination";
 import { useCancelInvoice, useInvoicesList, useInvoice } from "@/presentation/hooks/useInvoices";
+import { useReturnsList } from "@/presentation/hooks/useReturns";
+import { usePrintJobs } from "@/presentation/hooks/usePrintJobs";
 import { useInvoiceAudit } from "@/presentation/hooks/useAudit";
 import type { AuditLogDTO } from "@/infrastructure/api/AuditApiService";
 import { useVouchersList } from "@/presentation/hooks/useVouchers";
@@ -43,9 +45,40 @@ import { formatAmount } from "@/presentation/hooks/useCurrency";
 import type { InvoiceFilter } from "@/application/ports/IInvoiceRepository";
 import type { Invoice } from "@/domain/entities/Invoice";
 import { InvoicePrintView } from "@/components/invoices/InvoicePrintView";
-import { printDocument } from "@/components/print/printPortal";
+import { printDocument, printOrArchive } from "@/components/print/printPortal";
+import { archiveMeta } from "@/shared/utils/documentArchive";
 import { PrintPageBreak } from "@/components/print/PrintDocument";
 import { InvoicePrintDocument } from "@/components/print/InvoicePrintDocument";
+
+type TrackKind = "all" | "entry" | "sale" | "return" | "print_send" | "print_receive";
+
+type TrackRow = {
+  id: string;
+  kind: Exclude<TrackKind, "all">;
+  number: string;
+  date: string;
+  partyName: string;
+  totalLabel: string;
+  statusLabel: string;
+  href: string;
+};
+
+function printInvoiceWithArchive(inv: Invoice) {
+  const node = <InvoicePrintDocument invoice={inv} />;
+  if (inv.type === "sale" || inv.type === "entry") {
+    printOrArchive(
+      node,
+      archiveMeta(inv.type, {
+        date: inv.date,
+        typeLabel: inv.type === "entry" ? "ENTRY" : "SALE",
+        number: inv.number || inv.reference || inv.id,
+      }),
+      true,
+    );
+  } else {
+    printDocument(node);
+  }
+}
 
 const TYPE_LABEL: Record<Invoice["type"], string> = {
   entry: "فاتورة دخول",
@@ -66,7 +99,7 @@ export const Route = createFileRoute("/invoices/tracking")({
 function InvoicesTrackingPage() {
   useInventory();
   const [q, setQ] = useState("");
-  const [type, setType] = useState<Invoice["type"] | "all">("all");
+  const [type, setType] = useState<TrackKind>("all");
   const [status, setStatus] = useState<Invoice["status"] | "all">("all");
   const [partyId, setPartyId] = useState<string>("all");
   const [from, setFrom] = useState("");
@@ -77,10 +110,13 @@ function InvoicesTrackingPage() {
   const [pageSize, setPageSize] = useState(20);
   const [toDelete, setToDelete] = useState<Invoice | null>(null);
 
+  const invoiceTypeFilter: Invoice["type"] | undefined =
+    type === "entry" || type === "sale" ? type : undefined;
+
   const filter: InvoiceFilter = useMemo(() => {
     const f: InvoiceFilter = {};
     if (q.trim()) f.search = q.trim();
-    if (type !== "all") f.type = type;
+    if (invoiceTypeFilter) f.type = invoiceTypeFilter;
     if (status !== "all") f.status = status;
     if (partyId !== "all") f.partyId = partyId;
     if (from) f.fromDate = from;
@@ -88,16 +124,77 @@ function InvoicesTrackingPage() {
     f.page = page;
     f.limit = pageSize;
     return f;
-  }, [q, type, status, partyId, from, to, page, pageSize]);
+  }, [q, invoiceTypeFilter, status, partyId, from, to, page, pageSize]);
 
-  const { data, isLoading, error } = useInvoicesList(filter);
-  const invoices = useMemo(() => data?.data ?? [], [data]);
-  const total = useMemo(() => data?.total ?? 0, [data]);
+  const { data, isLoading, error } = useInvoicesList(
+    type === "return" || type === "print_send" || type === "print_receive" ? { ...filter, limit: 1 } : filter,
+  );
+  const invoices = useMemo(() => {
+    if (type === "return" || type === "print_send" || type === "print_receive") return [];
+    return data?.data ?? [];
+  }, [data, type]);
+  const { data: returnsData } = useReturnsList({ limit: 500 });
+  const { data: printJobs = [] } = usePrintJobs();
   const allParties = [...customers, ...suppliers];
   const { data: vouchersData } = useVouchersList();
   const allVouchers = vouchersData?.data ?? [];
 
   const cancelInvoice = useCancelInvoice();
+
+  const extraRows: TrackRow[] = useMemo(() => {
+    const rows: TrackRow[] = [];
+    const qLower = q.trim().toLowerCase();
+    if (type === "all" || type === "return") {
+      for (const r of returnsData?.data ?? []) {
+        if (status === "active" && r.status !== "active") continue;
+        if (status === "cancelled" && r.status !== "cancelled") continue;
+        if (partyId !== "all" && r.partyId !== partyId) continue;
+        if (from && r.date < from) continue;
+        if (to && r.date > to) continue;
+        const party =
+          r.kind === "entry"
+            ? suppliers.find((p) => p.id === r.partyId)
+            : customers.find((p) => p.id === r.partyId);
+        const label = r.kind === "entry" ? "مرتجع دخول" : "مرتجع بيع";
+        if (qLower && !`${r.number} ${party?.name ?? ""} ${label}`.toLowerCase().includes(qLower)) {
+          continue;
+        }
+        const totalVal = r.lines.reduce((s, l) => s + l.quantityKg * l.pricePerKg, 0);
+        rows.push({
+          id: `ret-${r.id}`,
+          kind: "return",
+          number: r.number,
+          date: r.date,
+          partyName: party?.name ?? "—",
+          totalLabel: formatAmount(totalVal, r.currency as never),
+          statusLabel: r.status === "active" ? "نشطة" : "ملغاة",
+          href: "/returns",
+        });
+      }
+    }
+    if (type === "all" || type === "print_send" || type === "print_receive") {
+      for (const j of printJobs) {
+        const isRecv = j.status === "received";
+        if (type === "print_send" && isRecv) continue;
+        if (type === "print_receive" && !isRecv) continue;
+        if (qLower && !`${j.number} ${j.pressName ?? ""}`.toLowerCase().includes(qLower)) continue;
+        rows.push({
+          id: `print-${j.id}`,
+          kind: isRecv ? "print_receive" : "print_send",
+          number: j.number,
+          date: j.sentDate,
+          partyName: j.pressName || "مطبعة",
+          totalLabel: `${j.sentKg} كغ`,
+          statusLabel: isRecv ? "مستلم" : "مرسل",
+          href: isRecv ? "/invoices/print-receive/new" : "/invoices/print-send/new",
+        });
+      }
+    }
+    return rows;
+  }, [returnsData, printJobs, type, status, partyId, from, to, q]);
+
+  const invoiceTotal = useMemo(() => data?.total ?? 0, [data]);
+  const total = type === "all" ? invoiceTotal + extraRows.length : type === "entry" || type === "sale" ? invoiceTotal : extraRows.length;
 
   useEffect(() => setPage(0), [q, type, status, partyId, from, to]);
 
@@ -151,7 +248,7 @@ function InvoicesTrackingPage() {
             </div>
             <div>
               <Label className="text-[11px] text-muted-foreground">النوع</Label>
-              <Select value={type} onValueChange={(v) => setType(v as Invoice["type"] | "all")}>
+              <Select value={type} onValueChange={(v) => setType(v as TrackKind)}>
                 <SelectTrigger className="!h-10">
                   <SelectValue />
                 </SelectTrigger>
@@ -160,6 +257,8 @@ function InvoicesTrackingPage() {
                   <SelectItem value="entry">فاتورة دخول</SelectItem>
                   <SelectItem value="sale">فاتورة بيع</SelectItem>
                   <SelectItem value="return">مرتجع</SelectItem>
+                  <SelectItem value="print_send">إرسال مطبعة</SelectItem>
+                  <SelectItem value="print_receive">استلام مطبعة</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -219,7 +318,7 @@ function InvoicesTrackingPage() {
 
         <PageCard
           title="سجل الفواتير"
-          description={`عرض ${invoices.length} من أصل ${total} فاتورة.`}
+          description={`عرض ${invoices.length + extraRows.length} مستنداً (فواتير + مرتجعات + مطبعة).`}
           noBodyPadding
         >
           {isLoading && <div className="p-8 text-center text-muted-foreground">جاري التحميل…</div>}
@@ -267,51 +366,77 @@ function InvoicesTrackingPage() {
                           </span>
                         </td>
                         <td className="px-3 py-2 text-left">
-                          {!isCancelled && (
+                          <div className="inline-flex flex-nowrap items-center justify-end gap-1 whitespace-nowrap">
+                            <Button size="sm" variant="ghost" onClick={() => setPreview(inv)}>
+                              <Eye className="ml-1 h-4 w-4" /> عرض
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => {
+                                setPreview(inv);
+                                printInvoiceWithArchive(inv);
+                              }}
+                            >
+                              <Printer className="ml-1 h-4 w-4" /> طباعة
+                            </Button>
+                            {!isCancelled && (
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                className="text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                                onClick={() => setToDelete(inv)}
+                                aria-label="حذف"
+                              >
+                                <Trash2 className="ml-1 h-4 w-4" /> حذف
+                              </Button>
+                            )}
                             <Button
                               size="sm"
                               variant="ghost"
-                              className="text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
-                              onClick={() => setToDelete(inv)}
-                              aria-label="حذف"
+                              onClick={() => setHistoryInv(inv)}
+                              aria-label="سجل الفاتورة"
+                              title="الخط الزمني للفاتورة (من سجل التدقيق)"
                             >
-                              <Trash2 className="ml-1 h-4 w-4" /> حذف
+                              <History className="ml-1 h-4 w-4" /> السجل
                             </Button>
-                          )}
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            onClick={() => setHistoryInv(inv)}
-                            aria-label="سجل الفاتورة"
-                            title="الخط الزمني للفاتورة (من سجل التدقيق)"
-                          >
-                            <History className="ml-1 h-4 w-4" /> السجل
-                          </Button>
-                          <Button size="sm" variant="ghost" onClick={() => setPreview(inv)}>
-                            <Eye className="ml-1 h-4 w-4" /> عرض
-                          </Button>
-                          <Link
-                            to={inv.type === "entry" ? "/invoices/entry/new" : "/invoices/sale/new"}
-                            search={{ edit: inv.id }}
-                            className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-muted-foreground transition hover:bg-secondary hover:text-foreground"
-                          >
-                            <Pencil className="h-3.5 w-3.5" /> تعديل
-                          </Link>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => {
-                              setPreview(inv);
-                              printDocument(<InvoicePrintDocument invoice={inv} />);
-                            }}
-                          >
-                            <Printer className="h-4 w-4" />
-                          </Button>
+                            <Link
+                              to={inv.type === "entry" ? "/invoices/entry/new" : "/invoices/sale/new"}
+                              search={{ edit: inv.id }}
+                              className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-muted-foreground transition hover:bg-secondary hover:text-foreground"
+                            >
+                              <Pencil className="h-3.5 w-3.5" /> تعديل
+                            </Link>
+                          </div>
                         </td>
                       </tr>
                     );
                   })}
-                  {invoices.length === 0 && (
+                  {extraRows.map((row) => (
+                    <tr key={row.id}>
+                      <td className="px-3 py-2 font-mono text-xs text-primary">{row.number}</td>
+                      <td className="px-3 py-2">
+                        {row.kind === "return"
+                          ? "مرتجع"
+                          : row.kind === "print_send"
+                            ? "إرسال مطبعة"
+                            : "استلام مطبعة"}
+                      </td>
+                      <td className="px-3 py-2">{row.partyName}</td>
+                      <td className="px-3 py-2 tabular-nums">{row.date}</td>
+                      <td className="px-3 py-2 text-left tabular-nums">{row.totalLabel}</td>
+                      <td className="px-3 py-2">{row.statusLabel}</td>
+                      <td className="px-3 py-2 text-left">
+                        <Link
+                          to={row.href}
+                          className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-primary hover:underline"
+                        >
+                          فتح
+                        </Link>
+                      </td>
+                    </tr>
+                  ))}
+                  {invoices.length === 0 && extraRows.length === 0 && (
                     <tr>
                       <td colSpan={7} className="p-10 text-center text-muted-foreground">
                         لا توجد فواتير مطابقة.
@@ -361,7 +486,7 @@ function InvoicesTrackingPage() {
             </Button>
             <Button
               className="gap-2"
-              onClick={() => preview && printDocument(<InvoicePrintDocument invoice={preview} />)}
+              onClick={() => preview && printInvoiceWithArchive(preview)}
             >
               <Printer className="h-4 w-4" /> طباعة
             </Button>

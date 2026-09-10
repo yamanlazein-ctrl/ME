@@ -1,6 +1,6 @@
 import type { TenantContext, UUID } from "@/domain/types";
 
-export type NotificationKind = "credit" | "aging" | "stock" | "unpaid" | "cash" | "order";
+export type NotificationKind = "credit" | "aging" | "stock" | "unpaid" | "cash" | "order" | "sync";
 export type NotificationSeverity = "info" | "warning" | "critical";
 
 export interface AppNotificationDTO {

@@ -14,6 +14,7 @@ import type { IPasswordHasher } from "../../../application/ports/IPasswordHasher
 import type { ILicenseTokenSigner } from "../../../application/ports/ILicenseTokenSigner.js";
 import type { IInstallationIdStorage } from "../../../application/ports/IInstallationIdStorage.js";
 import { config } from "../../../infrastructure/config/env.js";
+import { runWithTenantContext } from "../../../infrastructure/orm/tenant-context.js";
 import { randomUUID } from "node:crypto";
 
 /**
@@ -84,6 +85,24 @@ export async function startWizardUseCase(
   if (!parsed.success) return { ok: false, error: "بيانات غير صالحة" };
 
   try {
+    // Desktop SKU: the installer DB already has the seeded tenant + baked
+    // license (slug `default`). Creating a second tenant here would make
+    // activate look up the license on the wrong id and fail.
+    if (config.DESKTOP_DEPLOY) {
+      const existing = await tenantRepo.findBySlug("default");
+      if (existing) {
+        const state =
+          (await installationStateRepo.findByTenant(existing.id)) ??
+          (await installationStateRepo.create(existing.id, {
+            bootstrapAt: new Date().toISOString(),
+          }));
+        return {
+          ok: true,
+          data: { tenantId: existing.id, isCompleted: state.isCompleted },
+        };
+      }
+    }
+
     const companyName = parsed.data.companyName ?? "شركة جديدة";
     const slug = parsed.data.slug ?? `tenant-${Math.random().toString(36).slice(2, 10)}`;
     const existing = await tenantRepo.findBySlug(slug);
@@ -120,7 +139,8 @@ export async function getStatusUseCase(
 }
 
 const activateInput = z.object({
-  key: z.string().min(1),
+  // Empty key is valid in DESKTOP_DEPLOY (pre-baked license, no customer key).
+  key: z.string().optional(),
   hostname: z.string().optional(),
   appVersion: z.string().optional(),
   platform: z.enum(["windows", "macos", "linux", "android", "ios", "web"]).optional(),
@@ -146,7 +166,11 @@ export async function bootstrapDesktopLicenseUseCase(
 ): Promise<Result<{ migrated: boolean }>> {
   if (!config.DESKTOP_DEPLOY) return { ok: true, data: { migrated: false } };
 
-  const baked = await deps.licenseRepo.findBakedForTenant(tenantId as never);
+  // Pre-JWT bootstrap flow: no ALS context exists yet, so stamp the tenant
+  // GUC from the explicit tenantId (RLS category-2 licenses: own-tenant rows).
+  const baked = await runWithTenantContext({ tenantId }, () =>
+    deps.licenseRepo.findBakedForTenant(tenantId as never),
+  );
   if (!baked || !baked.offlineToken) {
     // Nothing baked for this tenant — the wizard/activation flow will surface
     // the appropriate (unlicensed) state. No error.
@@ -185,9 +209,20 @@ export async function activateAndPersistUseCase(
   },
   tenantId: string,
   input: unknown,
-): Promise<Result<{ activationId: string; features: string[]; expiresAt: string | null }>> {
+): Promise<
+  Result<{
+    activationId: string;
+    features: string[];
+    expiresAt: string | null;
+    tenantId?: string;
+    isCompleted?: boolean;
+  }>
+> {
   const parsed = activateInput.safeParse(input);
   if (!parsed.success) return { ok: false, error: "بيانات التفعيل غير صالحة" };
+  if (!config.DESKTOP_DEPLOY && !(parsed.data.key && parsed.data.key.length >= 1)) {
+    return { ok: false, error: "بيانات التفعيل غير صالحة" };
+  }
   try {
     const fingerprint = await deps.fingerprintProvider.collect();
     const metadata = await deps.fingerprintProvider.getMetadata(fingerprint);
@@ -201,22 +236,35 @@ export async function activateAndPersistUseCase(
     // encrypted secrets store (idempotent) and treat the license as
     // activated — NO signing, NO call to the license provider/server.
     if (config.DESKTOP_DEPLOY) {
+      let effectiveTenantId = tenantId;
+      let lic = await runWithTenantContext({ tenantId: effectiveTenantId }, () =>
+        deps.licenseRepo.findBakedForTenant(effectiveTenantId as never),
+      );
+      if (!lic) {
+        const fallback = await deps.tenantRepo.findBySlug("default");
+        if (fallback) {
+          effectiveTenantId = fallback.id;
+          lic = await runWithTenantContext({ tenantId: effectiveTenantId }, () =>
+            deps.licenseRepo.findBakedForTenant(effectiveTenantId as never),
+          );
+        }
+      }
+
       const boot = await bootstrapDesktopLicenseUseCase(
         {
           licenseRepo: deps.licenseRepo,
           secretsRepo: deps.secretsRepo,
           tokenSigner: deps.tokenSigner,
         },
-        tenantId,
+        effectiveTenantId,
       );
       if (!boot.ok) {
         return { ok: false, error: boot.error ?? "فشل تفعيل الترخيص", code: boot.code };
       }
 
-      const lic = await deps.licenseRepo.findBakedForTenant(tenantId as never);
       if (!lic) return { ok: false, error: "فشل تفعيل الترخيص (لا يوجد ترخيص مخبوز)" };
 
-      await deps.tenantRepo.setLicenseCache(tenantId, {
+      await deps.tenantRepo.setLicenseCache(effectiveTenantId, {
         licenseStatus: lic.status ?? "active",
         licenseType: lic.type ?? "full",
         maxDevices: lic.maxDevices ?? 3,
@@ -227,10 +275,17 @@ export async function activateAndPersistUseCase(
         lastHeartbeatAt: new Date(),
       });
 
-      await deps.installationStateRepo.saveStep(tenantId, "activate", {
+      await deps.installationStateRepo.saveStep(effectiveTenantId, "activate", {
         key: parsed.data.key,
         activationId: lic.id,
       });
+
+      // Desktop SKU: seed already provisioned company + admin. Mark the wizard
+      // complete here so Continue does not force company/admin screens, and so
+      // the next cold boot skips ActivationGate (local status = completed).
+      const completed = await deps.installationStateRepo.markCompleted(
+        effectiveTenantId as never,
+      );
 
       return {
         ok: true,
@@ -238,12 +293,14 @@ export async function activateAndPersistUseCase(
           activationId: lic.id,
           features: lic.features ?? [],
           expiresAt: lic.expiresAt?.toISOString() ?? null,
+          tenantId: effectiveTenantId,
+          isCompleted: completed.isCompleted,
         },
       };
     }
 
     const result = await deps.licenseProvider.activate({
-      key: parsed.data.key,
+      key: parsed.data.key ?? "",
       serverFingerprint: combined,
       serverFingerprintVersion: metadata.version,
       hostname: parsed.data.hostname,
@@ -262,7 +319,11 @@ export async function activateAndPersistUseCase(
     // (R7): the provider already wrote correct columns during activate(),
     // but we re-assert them here so the cache always reflects the source
     // of truth and never a hardcoded default.
-    const lic = await deps.licenseRepo.findById(result.licenseId as never);
+    // Re-assert the cache from the source of truth — the tenant-stamped read
+    // (RLS category-2: own-tenant license row) in the same bootstrap flow.
+    const lic = await runWithTenantContext({ tenantId }, () =>
+      deps.licenseRepo.findById(result.licenseId as never),
+    );
     await deps.tenantRepo.setLicenseCache(tenantId, {
       licenseStatus: lic?.status ?? "active",
       licenseType: lic?.type ?? "full",

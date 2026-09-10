@@ -128,7 +128,7 @@ export function GlobalSearch() {
             }}
             onFocus={() => setOpen(true)}
             placeholder="ابحث عن عميل، فاتورة، صنف، صبغة..."
-            className="h-10 w-full rounded-full border border-border/70 bg-card text-sm text-foreground outline-none transition-all duration-200 placeholder:text-muted-foreground/60 ps-10 pe-14 focus:border-primary focus:bg-background focus:ring-2 focus:ring-primary/25"
+            className="h-9 w-full rounded-lg border border-border bg-secondary/40 text-sm text-foreground outline-none transition placeholder:text-muted-foreground/55 ps-10 pe-14 focus:border-primary/50 focus:bg-background focus:ring-1 focus:ring-primary/20"
           />
           <kbd
             className="pointer-events-none absolute top-1/2 -translate-y-1/2 select-none rounded border border-border bg-secondary/60 px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground tabular-nums"

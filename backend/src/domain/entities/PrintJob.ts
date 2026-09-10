@@ -14,12 +14,16 @@ export interface PrintJobData {
   pressName?: string;
   printCostPerKg?: number;
   currency: string;
+  /** Units of currency per 1 USD — frozen at receive when set. */
+  exchangeRate?: number;
   newName?: string;
   newCategory?: string;
   newColorName?: string;
   newColorCode?: string;
   newSalePricePerKg?: number;
   receivedKg?: number;
+  /** ISO timestamp when the job was marked received (if any). */
+  receivedAt?: string;
   /** Printing loss = quantityKg − receivedKg (computed, read-only). */
   wasteKg?: number;
   resultRollId?: UUID;
@@ -98,6 +102,8 @@ export interface ReceivePrintJobInput {
   receivedKg: number;
   printCostPerKg?: number;
   currency?: string;
+  /** Required when receive currency ≠ USD (same rule as invoices). */
+  exchangeRate?: number;
   newName?: string;
   newCategory?: string;
   newColorName?: string;

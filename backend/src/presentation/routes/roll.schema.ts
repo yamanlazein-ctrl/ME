@@ -28,7 +28,15 @@ export const updateRollSchema = createRollSchema
   .partial()
   .omit({ colorId: true })
   .extend({
-    remainingKg: z.number().positive().max(100000).optional(),
+    // Align with create: allow 0 (exhausted) and fractional kg such as 0.50.
+    // The previous `.positive()` rejected remainingKg=0 on edit and was
+    // inconsistent with createRollSchema.remainingKg `.min(0)`.
+    remainingKg: z
+      .number()
+      .min(0)
+      .max(100000)
+      .refine(is2dp, { message: MAX_2DP_MESSAGE })
+      .optional(),
     // Fix H-5: optional optimistic-concurrency token. When sent, the
     // repository enforces it with a real compare-and-swap; omitted means
     // the caller hasn't adopted it yet and gets the legacy blind-write

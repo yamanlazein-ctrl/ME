@@ -149,6 +149,23 @@ export function setInstallTenantId(tenantId: string): void {
   writeString(TENANT_ID_STORAGE, value);
 }
 
+const LAST_EMAIL_STORAGE = "erp.auth.lastEmail";
+
+export function getRememberedEmail(): string | null {
+  const raw = readString(LAST_EMAIL_STORAGE);
+  return raw && raw.trim() !== "" ? raw : null;
+}
+
+export function setRememberedEmail(email: string): void {
+  const value = email.trim();
+  if (value === "") return;
+  writeString(LAST_EMAIL_STORAGE, value);
+}
+
+export function clearRememberedEmail(): void {
+  writeString(LAST_EMAIL_STORAGE, null);
+}
+
 export function isActivated(): boolean {
   return Boolean(getLicenseKey() && getActivationId());
 }

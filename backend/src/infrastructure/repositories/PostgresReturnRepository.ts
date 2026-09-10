@@ -92,11 +92,15 @@ export class PostgresReturnRepository implements IReturnRepository {
       // below (BUG-01/H-1 quantity-vs-history, currency mismatch, invoice
       // linkage) throw AFTER the old route-level allocation had already
       // burned a number; now the rollback restores the sequence too.
-      const autoNumber = await allocateDocumentNumber(tx, "return", ctx.tenantId);
+      const autoNumber = await allocateDocumentNumber(tx, "return", ctx.tenantId, {
+        syncDeviceId: ctx.syncDeviceId,
+        preAllocatedNumber: input.preAllocatedNumber,
+      });
 
       const [row] = await tx
         .insert(returns)
         .values({
+          ...(input.preAllocatedId ? { id: input.preAllocatedId } : {}),
           tenantId: ctx.tenantId,
           number: autoNumber,
           kind: input.kind,

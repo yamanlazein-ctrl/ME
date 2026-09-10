@@ -25,18 +25,10 @@ function TrendTooltip({ active, payload, label }: TrendTooltipProps) {
   if (!active || !payload?.length) return null;
   const v = payload[0].value;
   return (
-    <div
-      className="rounded-lg border border-border bg-popover px-3 py-2 shadow-elevated"
-      dir="rtl"
-    >
-      <div className="text-[11px] font-medium text-muted-foreground">
-        {label}
-      </div>
+    <div className="rounded-lg border border-border bg-popover px-3 py-2 shadow-elevated" dir="rtl">
+      <div className="text-[11px] font-medium text-muted-foreground">{label}</div>
       <div className="mt-1 flex items-center gap-2">
-        <span
-          className="h-2 w-2 rounded-full"
-          style={{ background: "var(--primary)" }}
-        />
+        <span className="h-2 w-2 rounded-full" style={{ background: "var(--primary)" }} />
         <span className="text-sm font-bold tabular-nums text-foreground">
           {formatNumber(v ?? 0)}K
         </span>
@@ -78,7 +70,7 @@ export function SalesTrendChart() {
   return (
     <div
       data-od-id="panel-sales-trend"
-      className="rounded-2xl border border-border bg-card p-5 shadow-soft"
+      className="rounded-xl border border-border bg-card p-4 shadow-soft"
     >
       <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
         <div className="flex items-center gap-2.5">
@@ -87,9 +79,7 @@ export function SalesTrendChart() {
           </span>
           <div>
             <h3 className="text-sm font-bold text-foreground">اتجاه المبيعات</h3>
-            <p className="mt-0.5 text-[11px] text-muted-foreground">
-              القيم بآلاف الليرات السورية
-            </p>
+            <p className="mt-0.5 text-[11px] text-muted-foreground">القيم بآلاف الليرات السورية</p>
           </div>
         </div>
         <div className="inline-flex rounded-lg border border-border bg-secondary/60 p-0.5">

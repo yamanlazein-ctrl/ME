@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { DollarSign } from "lucide-react";
 import { container } from "@/infrastructure/container";
 import type { FxReferenceRateResponse } from "@/infrastructure/api";
 
@@ -15,7 +14,7 @@ import type { FxReferenceRateResponse } from "@/infrastructure/api";
  *
  * Design constraints implemented here:
  * - Backend-only data: the browser calls our internal endpoint
- *   GET /api/fx/reference-rate (server-cached); liranews.info is never
+ *   GET /api/fx/reference-rate (server-cached); LiraScope is never
  *   contacted from the browser.
  * - Fully async and non-blocking: fetches in the background after mount;
  *   nothing on the page ever waits for this request.
@@ -31,7 +30,7 @@ import type { FxReferenceRateResponse } from "@/infrastructure/api";
 const REFRESH_INTERVAL_MS = 10 * 60 * 1000; // re-reads the backend's cached snapshot (backend refreshes upstream every 15 min)
 const REFETCH_ON_VISIBLE_AFTER_MS = 5 * 60 * 1000;
 const STALE_TINT_MS = 2 * 60 * 60 * 1000; // matches the backend stale threshold
-const SOURCE_URL_FALLBACK = "https://liranews.info";
+const SOURCE_URL_FALLBACK = "https://lirascope.syria-cloud.sy";
 
 function formatRate(n: number): string {
   return new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 }).format(n);
@@ -104,10 +103,9 @@ export function FxReferenceRate() {
       <div
         role="status"
         aria-label="جارٍ جلب السعر المرجعي"
-        className="flex items-center gap-2 rounded-full border border-border/60 bg-card/60 px-3 py-1.5"
+        className="text-[12px] text-muted-foreground"
       >
-        <span className="h-2.5 w-2.5 animate-pulse rounded-full bg-primary/50" />
-        <span className="text-xs text-muted-foreground">السعر المرجعي…</span>
+        السعر المرجعي…
       </div>
     );
   }
@@ -121,10 +119,9 @@ export function FxReferenceRate() {
         role="status"
         aria-live="polite"
         title="تعذّر جلب السعر المرجعي حالياً — سيُعاد المحاولة تلقائياً. سعر الصرف في الفواتير يُدخل يدوياً كالمعتاد."
-        className="flex items-center gap-2 rounded-full border border-border/60 bg-card/60 px-3 py-1.5"
+        className="text-[12px] text-muted-foreground"
       >
-        <DollarSign className="h-3.5 w-3.5 shrink-0 text-muted-foreground/50" strokeWidth={2} />
-        <span className="text-[11px] text-muted-foreground">السعر المرجعي غير متوفر حالياً</span>
+        السعر المرجعي غير متوفر
       </div>
     );
   }
@@ -134,40 +131,40 @@ export function FxReferenceRate() {
     snapshot?.stale === true ||
     (snapshot?.fetchedAt ? nowMs - Date.parse(snapshot.fetchedAt) > STALE_TINT_MS : false);
   const ago = snapshot?.fetchedAt ? formatAgo(snapshot.fetchedAt, nowMs) : "";
+  const sourceName = snapshot?.sourceName ?? "LiraScope";
+  const sourceUrl = snapshot?.sourceUrl ?? SOURCE_URL_FALLBACK;
+  const meta = [ago ? `آخر تحديث ${ago}` : stale ? "سعر قديم" : null]
+    .filter(Boolean)
+    .join(" · ");
 
   return (
     <div
       role="status"
       aria-live="polite"
       title="سعر مرجعي للعرض فقط — يُدخل سعر الصرف يدوياً في كل فاتورة"
-      className={
-        stale
-          ? "flex items-center gap-2 rounded-full border border-warning/50 bg-warning/10 px-3 py-1.5"
-          : "flex items-center gap-2 rounded-full border border-border/60 bg-card/60 px-3 py-1.5"
-      }
+      className="flex items-baseline gap-2 whitespace-nowrap"
     >
-      <DollarSign
-        className={stale ? "h-4 w-4 shrink-0 text-warning" : "h-4 w-4 shrink-0 text-primary/70"}
-        strokeWidth={2}
-      />
-      <div className="flex min-w-0 flex-col items-start leading-tight">
-        <span className="text-[13px] font-semibold tabular-nums text-foreground/90">
-          <span dir="ltr">$1 = {formatRate(rateValue)}</span>{" "}
-          <span className="font-normal text-muted-foreground">ل.س</span>
-        </span>
-        <span className="text-[10px] text-muted-foreground">
-          المصدر:{" "}
-          <a
-            href={snapshot?.sourceUrl ?? SOURCE_URL_FALLBACK}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="underline decoration-dotted underline-offset-2 transition-colors hover:text-foreground"
-          >
-            {snapshot?.sourceName ?? "أخبار الليرة"}
-          </a>
-          {ago ? <> · آخر تحديث {ago}</> : stale ? <> · سعر قديم</> : null}
-        </span>
-      </div>
+      <span
+        className={
+          stale
+            ? "text-[12px] font-semibold tabular-nums text-warning"
+            : "text-[12px] font-semibold tabular-nums text-foreground"
+        }
+      >
+        <span dir="ltr">$1 = {formatRate(rateValue)}</span>
+        <span className="ms-1 font-normal text-muted-foreground">ل.س</span>
+      </span>
+      <span className="text-[10px] text-muted-foreground">
+        <a
+          href={sourceUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="underline decoration-dotted underline-offset-2 transition-colors hover:text-foreground"
+        >
+          {sourceName}
+        </a>
+        {meta ? <> · {meta}</> : null}
+      </span>
     </div>
   );
 }

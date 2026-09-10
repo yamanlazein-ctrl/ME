@@ -1,0 +1,13 @@
+{
+  "name": "أقمشة ومنسوجات",
+  "address": "سوريا - حلب - الشيخ نجار، المدينة الصناعية، الفئة الأولى، الصالة، شارع النيل",
+  "phone": "021 26 64 629 · محمود كوكة: 0933 70 35 73 · زكريا كوكة: 0944 88 76 44",
+  "nameExact": true,
+  "addressExact": true,
+  "nameHexMatch": true,
+  "addressHexMatch": true,
+  "name_hex": "d8a3d982d985d8b4d8a920d988d985d986d8b3d988d8acd8a7d8aa",
+  "landline": "021 26 64 629",
+  "phone_mahmoud": "0933 70 35 73",
+  "phone_zakaria": "0944 88 76 44"
+}

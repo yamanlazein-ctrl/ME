@@ -4,6 +4,13 @@ import { createRoot, type Root } from "react-dom/client";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { getQueryClient } from "@/infrastructure/queryClient";
+import { refreshInventory } from "@/presentation/hooks/useInventory";
+import {
+  archiveDocumentPdf,
+  ensureDocumentFolders,
+  isTauri,
+  type ArchiveDocType,
+} from "@/infrastructure/tauri-bridge";
 
 /**
  * Unified print portal.
@@ -18,15 +25,22 @@ import { getQueryClient } from "@/infrastructure/queryClient";
  * commit produces a BLANK WHITE PAGE. We therefore wrap the render in
  * `flushSync()` so the document is fully committed to the DOM before the
  * print dialog opens.
+ *
+ * Issue 12: when running inside Tauri, also archives a PDF (or HTML fallback)
+ * into Desktop/أقمشة ومنسوجات/<doc-type>/ after the DOM commit.
  */
 
 let activeRoot: Root | null = null;
 let activeContainer: HTMLDivElement | null = null;
-// #8: fingerprint of the data/filters the active print snapshot was rendered
-// from. When the caller reports the data changed (printDataChanged) and the
-// fingerprint differs, the stale snapshot is discarded and the user is told
-// to reopen — the printed copy can never silently contradict the screen.
 let activeFingerprint: string | null = null;
+/** Saved so we can blank document.title during print (kills browser header text). */
+let previousDocumentTitle: string | null = null;
+
+export type PrintArchiveMeta = {
+  docType: ArchiveDocType;
+  /** Base filename without extension — e.g. company_date_SALE-2026-0001 */
+  fileStem: string;
+};
 
 function cleanup() {
   if (activeRoot) {
@@ -45,6 +59,10 @@ function cleanup() {
 }
 
 function afterPrint() {
+  if (previousDocumentTitle !== null) {
+    document.title = previousDocumentTitle;
+    previousDocumentTitle = null;
+  }
   cleanup();
 }
 
@@ -54,10 +72,85 @@ export function installPrintHandler() {
   window.addEventListener("afterprint", afterPrint);
 }
 
+/**
+ * Inline every reachable stylesheet rule so headless Chrome `file://` PDF
+ * export still has CSS (linked Vite/asset URLs often fail offline).
+ * Issue 15: prefer Windows system Arabic fonts over Google Fonts (unavailable offline).
+ */
+function collectInlineCss(): string {
+  const chunks: string[] = [];
+  for (const sheet of Array.from(document.styleSheets)) {
+    try {
+      for (const rule of Array.from(sheet.cssRules)) {
+        chunks.push(rule.cssText);
+      }
+    } catch {
+      /* cross-origin sheet — skip */
+    }
+  }
+  return chunks.join("\n");
+}
+
+const ARCHIVE_ARABIC_FONT_CSS = `
+  /* Issue 15 — headless PDF: system Arabic fonts (no Google Fonts dependency) */
+  [data-print-root],
+  [data-print-root] * {
+    font-family: "Segoe UI", "Tahoma", "Arial Unicode MS", "Arial", sans-serif !important;
+  }
+  .pd-amount, .print-total-row .pd-amount, .print-company-contact-line {
+    direction: ltr;
+    unicode-bidi: plaintext;
+  }
+`;
+
+/** Build a standalone HTML snapshot of the print root (RTL + inlined styles). */
+function buildArchiveHtml(container: HTMLElement, title?: string): string {
+  const inline = collectInlineCss();
+  const safeTitle = (title || "archive").replace(/[<>&"]/g, "");
+  return `<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8" />
+<title>${safeTitle}</title>
+<style>
+${inline}
+</style>
+<style>
+  @page { size: A4; margin: 12mm; }
+  body { background: #fff; margin: 0; }
+  [data-print-root] { display: block !important; position: static !important; left: auto !important; }
+  ${ARCHIVE_ARABIC_FONT_CSS}
+</style>
+</head>
+<body>
+${container.outerHTML}
+</body>
+</html>`;
+}
+
+async function archiveIfDesktop(container: HTMLElement, meta?: PrintArchiveMeta): Promise<void> {
+  if (!isTauri() || !meta) return;
+  try {
+    await ensureDocumentFolders();
+    const html = buildArchiveHtml(container, meta.fileStem);
+    const res = await archiveDocumentPdf(meta.docType, meta.fileStem, html);
+    if (res?.path) {
+      console.info("[print-archive]", res.format, res.path);
+    }
+  } catch (e) {
+    console.warn("[print-archive] failed:", e);
+  }
+}
+
 /** Render `node` into the print portal and open the OS print dialog.
  *  `fingerprint` (optional) identifies the data/filters the snapshot was
- *  rendered from — see printDataChanged(). */
-export function printDocument(node: ReactNode, fingerprint?: string): void {
+ *  rendered from — see printDataChanged().
+ *  `archive` (optional, Tauri only) drops a PDF into the Desktop archive. */
+export function printDocument(
+  node: ReactNode,
+  fingerprint?: string,
+  archive?: PrintArchiveMeta,
+): void {
   cleanup();
   installPrintHandler();
   activeFingerprint = fingerprint ?? null;
@@ -70,31 +163,92 @@ export function printDocument(node: ReactNode, fingerprint?: string): void {
   const root = createRoot(container);
   activeRoot = root;
 
-  // Synchronously commit the document to the DOM so window.print() never
-  // captures an empty page. This is the fix for "blank white page on print".
-  // The document templates use React Query hooks (e.g. useVouchersList), so
-  // we render inside a QueryClientProvider sharing the app's client — the
-  // detached root would otherwise throw "No QueryClient set" and print blank.
-  //
-  // If the template throws during render, we must not leave a blank
-  // [data-print-root] container behind — clean it up and surface the error
-  // so the user is not left staring at a white page.
-  try {
-    flushSync(() => {
-      root.render(createElement(QueryClientProvider, { client: getQueryClient() }, node));
-    });
-  } catch (e) {
-    cleanup();
-    console.error("[print] failed to render document:", e);
-    setTimeout(() => {
-      window.alert("تعذّر عرض مستند الطباعة. راجع سجل الأخطاء.");
-    }, 0);
-    return;
-  }
+  // Wait for inventory colours/fabrics/rolls before painting the print DOM —
+  // otherwise every colour cell resolves to "—" (looks like one wrong colour).
+  void (async () => {
+    try {
+      await refreshInventory();
+      flushSync(() => {
+        root.render(createElement(QueryClientProvider, { client: getQueryClient() }, node));
+      });
+    } catch (e) {
+      cleanup();
+      console.error("[print] failed to render document:", e);
+      setTimeout(() => {
+        window.alert("تعذّر عرض مستند الطباعة. راجع سجل الأخطاء.");
+      }, 0);
+      return;
+    }
 
-  // Give the browser a tick to lay out / load images, then open the dialog.
+    window.setTimeout(() => {
+      void archiveIfDesktop(container, archive).finally(() => {
+        // Blank the tab title so Chrome/Edge print headers don't show
+        // "نظام إدارة…" or a date line above the logo.
+        if (previousDocumentTitle === null) {
+          previousDocumentTitle = document.title;
+        }
+        document.title = "\u00a0";
+        window.print();
+      });
+    }, 200);
+  })();
+}
+
+/** Issue 12: print (optional) and always archive on desktop when meta is set. */
+export function printOrArchive(
+  node: ReactNode,
+  archive: PrintArchiveMeta,
+  thenPrint: boolean,
+): void {
+  if (thenPrint) {
+    printDocument(node, undefined, archive);
+  } else {
+    archiveDocument(node, archive);
+  }
+}
+
+/**
+ * Issue 12: archive without opening the print dialog (used on save).
+ * Renders `node` off-screen, writes PDF/HTML to Desktop folders, then cleans up.
+ */
+export function archiveDocument(
+  node: ReactNode,
+  archive: PrintArchiveMeta,
+): void {
+  if (!isTauri()) return;
+
+  const container = document.createElement("div");
+  container.setAttribute("data-print-root", "true");
+  container.style.cssText = "position:fixed;left:-10000px;top:0;width:210mm;";
+  document.body.appendChild(container);
+  const root = createRoot(container);
+
   window.setTimeout(() => {
-    window.print();
+    void (async () => {
+      try {
+        await refreshInventory();
+        flushSync(() => {
+          root.render(createElement(QueryClientProvider, { client: getQueryClient() }, node));
+        });
+      } catch (e) {
+        console.warn("[print-archive] render failed:", e);
+        try {
+          root.unmount();
+        } catch {
+          /* ignore */
+        }
+        container.remove();
+        return;
+      }
+      void archiveIfDesktop(container, archive).finally(() => {
+        try {
+          root.unmount();
+        } catch {
+          /* ignore */
+        }
+        container.remove();
+      });
+    })();
   }, 200);
 }
 

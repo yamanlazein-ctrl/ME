@@ -499,6 +499,13 @@ fn spawn_backend(cfg: &BootConfig, store: &secret_store::SecretStore) -> io::Res
             "LOG_DIR",
             cfg.app_data_root.join("logs").to_string_lossy().into_owned(),
         )
+        // Company logo uploads default to Linux `/var/lib/erp/logos` in the
+        // backend — unusable on a Windows desktop install. Point at a writable
+        // per-user path next to logs/pgdata (same pattern as LOG_DIR).
+        .env(
+            "COMPANY_LOGO_DIR",
+            cfg.app_data_root.join("logos").to_string_lossy().into_owned(),
+        )
         .env("DATABASE_URL", &database_url)
         .env("JWT_SECRET", &store.jwt_secret)
         .env("APP_MASTER_KEY", &store.app_master_key)
@@ -530,7 +537,6 @@ fn spawn_backend(cfg: &BootConfig, store: &secret_store::SecretStore) -> io::Res
 /// otherwise show error states until the API comes up.
 fn spawn_ssr(cfg: &BootConfig) -> io::Result<HiddenChild> {
     let ssr_script = cfg.resources_root.join("ssr").join("serve.mjs");
-    let ssr_str = ssr_script.to_string_lossy().into_owned();
     log(&format!(
         "starting SSR frontend server on http://127.0.0.1:{}",
         SSR_PORT

@@ -11,6 +11,7 @@ import { createAuthMiddleware } from "../infrastructure/http/middleware/auth.mid
 import { requestIdMiddleware } from "../infrastructure/http/middleware/request-id.middleware.js";
 import { createErrorHandler } from "../infrastructure/http/middleware/error-handler.middleware.js";
 import { registerAuthRoutes } from "./routes/auth.route.js";
+import { registerUserRoutes } from "./routes/user.route.js";
 import { registerHealthRoutes } from "./routes/health.route.js";
 import { checkDatabase } from "../infrastructure/orm/drizzle.js";
 import { checkRedis } from "../infrastructure/auth/TokenDenylist.js";
@@ -42,7 +43,9 @@ import {
 import { registerAuditRoutes } from "./routes/audit.route.js";
 import { backupRouter } from "./routes/backup.route.js";
 import { registerFxRoutes } from "./routes/fx.route.js";
+import { registerSyncRoutes } from "./routes/sync.route.js";
 import { FxRateService } from "../infrastructure/fx/FxRateService.js";
+import { offlineWriteGuard } from "../infrastructure/http/middleware/offline-write.middleware.js";
 import { createLicenseHeartbeatMiddleware } from "../infrastructure/http/middleware/license.heartbeat.middleware.js";
 import { createInstallGateMiddleware } from "../infrastructure/http/middleware/install.gate.middleware.js";
 import { createLicenseGuard } from "../infrastructure/http/middleware/license.guard.middleware.js";
@@ -82,10 +85,21 @@ const fxRateService = new FxRateService({
 // otherwise be blocked by helmet's default `default-src 'none'`).
 app.use(
   helmet({
+    // JSON API is called cross-origin from Vite (:5173) and SSR (:4173).
+    // Helmet's default CORP `same-origin` blocks browsers from reading those
+    // responses even when CORS allowlists the Origin — Chrome then fails
+    // `/api/setup/status` and ActivationGate falls through to the license wizard.
+    crossOriginResourcePolicy: { policy: "cross-origin" },
     contentSecurityPolicy: {
       directives: {
         defaultSrc: ["'none'", "'self'"],
-        connectSrc: ["'self'", "http://localhost:5173"],
+        connectSrc: [
+          "'self'",
+          "http://localhost:5173",
+          "http://127.0.0.1:5173",
+          "http://localhost:4173",
+          "http://127.0.0.1:4173",
+        ],
       },
     },
   }),
@@ -179,6 +193,7 @@ apiRouter.use(
     cipher: container.secretCipher,
     tokenDenylist: container.tokenDenylist,
   }),
+  offlineWriteGuard,
 );
 // Feature gating per module (frozen spec §9 layer 2). Only features that are
 // part of every issued plan are gated here, so an existing license can never
@@ -197,6 +212,14 @@ registerPartyRoutes(
   authMiddleware,
   rbac(["admin", "accountant"]),
   rbac(["admin", "accountant", "warehouse", "viewer"]),
+  container.syncOutboxRepo,
+);
+registerUserRoutes(
+  apiRouter,
+  container.userRepo,
+  container.passwordHasher,
+  authMiddleware,
+  rbac(["admin"]),
 );
 registerFabricRoutes(
   apiRouter,
@@ -204,6 +227,7 @@ registerFabricRoutes(
   authMiddleware,
   rbac(["admin", "warehouse"]),
   rbac(["admin", "accountant", "warehouse", "viewer"]),
+  container.syncOutboxRepo,
 );
 registerColorRoutes(
   apiRouter,
@@ -211,6 +235,7 @@ registerColorRoutes(
   authMiddleware,
   rbac(["admin", "warehouse"]),
   rbac(["admin", "accountant", "warehouse", "viewer"]),
+  container.syncOutboxRepo,
 );
 registerRollRoutes(
   apiRouter,
@@ -219,6 +244,7 @@ registerRollRoutes(
   rbac(["admin", "warehouse"]),
   rbac(["admin", "accountant", "warehouse", "viewer"]),
   container.stockMovementRepo,
+  container.syncOutboxRepo,
 );
 registerOrderRoutes(
   apiRouter,
@@ -226,6 +252,8 @@ registerOrderRoutes(
   authMiddleware,
   rbac(["admin", "accountant"]),
   rbac(["admin", "accountant", "warehouse", "viewer"]),
+  container.syncOutboxRepo,
+  container.partyRepo,
 );
 registerInvoiceRoutes(
   apiRouter,
@@ -234,6 +262,13 @@ registerInvoiceRoutes(
   authMiddleware,
   rbac(["admin", "accountant"]),
   rbac(["admin", "accountant", "warehouse", "viewer"]),
+  container.syncOutboxRepo,
+  {
+    partyRepo: container.partyRepo,
+    fabricRepo: container.fabricRepo,
+    colorRepo: container.colorRepo,
+    rollRepo: container.rollRepo,
+  },
 );
 registerVoucherRoutes(
   apiRouter,
@@ -242,6 +277,8 @@ registerVoucherRoutes(
   authMiddleware,
   rbac(["admin", "accountant"]),
   rbac(["admin", "accountant", "warehouse", "viewer"]),
+  container.syncOutboxRepo,
+  container.partyRepo,
 );
 registerLedgerRoutes(
   apiRouter,
@@ -265,6 +302,13 @@ registerReturnRoutes(
   authMiddleware,
   rbac(["admin", "accountant"]),
   rbac(["admin", "accountant", "warehouse", "viewer"]),
+  container.syncOutboxRepo,
+  {
+    partyRepo: container.partyRepo,
+    fabricRepo: container.fabricRepo,
+    colorRepo: container.colorRepo,
+    rollRepo: container.rollRepo,
+  },
 );
 registerCashboxRoutes(
   apiRouter,
@@ -281,6 +325,7 @@ registerExpenseRoutes(
   authMiddleware,
   rbac(["admin", "accountant"]),
   rbac(["admin", "accountant", "warehouse", "viewer"]),
+  container.syncOutboxRepo,
 );
 registerPrintRoutes(
   apiRouter,
@@ -325,6 +370,7 @@ registerAuditRoutes(
 );
 // FX reference rate — display-only header widget (⛔ never billing logic).
 registerFxRoutes(apiRouter, fxRateService, authMiddleware);
+registerSyncRoutes(apiRouter, container, authMiddleware);
 // Full backup endpoint — POST /api/backup/full (returns ZIP file) — admin-only, tenant-scoped
 apiRouter.use(authMiddleware, rbac(["admin"]), backupRouter);
 
@@ -350,10 +396,131 @@ Sentry.setupExpressErrorHandler(app);
 app.use(createErrorHandler(logger));
 
 // Start server
-// FX reference rate background refresh — non-blocking, never delays startup.
+// Desktop SKU: ensure schema patches that land after a baked pgdata-template
+// was shipped (e.g. users.pin_hash for the PIN picker) exist on the live DB.
+// Idempotent; never blocks boot longer than a single DDL.
+async function ensureDesktopSchema(): Promise<void> {
+  if (!config.DESKTOP_DEPLOY) return;
+  try {
+    const { pool } = await import("../infrastructure/orm/drizzle.js");
+    await pool.query(
+      `ALTER TABLE users ADD COLUMN IF NOT EXISTS pin_hash varchar(255)`,
+    );
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS sync_devices (
+        id uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+        tenant_id uuid NOT NULL REFERENCES tenants(id),
+        last_seen_by_user_id uuid REFERENCES users(id),
+        device_fingerprint varchar(128) NOT NULL,
+        device_fingerprint_version integer DEFAULT 1 NOT NULL,
+        platform varchar(16) NOT NULL,
+        hostname varchar(120),
+        label varchar(120),
+        last_seen_at timestamptz DEFAULT now() NOT NULL,
+        created_at timestamptz DEFAULT now() NOT NULL,
+        updated_at timestamptz DEFAULT now() NOT NULL
+      )
+    `);
+    await pool.query(
+      `CREATE UNIQUE INDEX IF NOT EXISTS uq_sync_devices_tenant_fingerprint ON sync_devices (tenant_id, device_fingerprint)`,
+    );
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS sync_outbox (
+        id uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+        tenant_id uuid NOT NULL REFERENCES tenants(id),
+        sync_device_id uuid REFERENCES sync_devices(id),
+        op_id uuid NOT NULL,
+        entity_type varchar(40) NOT NULL,
+        entity_id uuid NOT NULL,
+        operation varchar(20) NOT NULL,
+        payload jsonb NOT NULL,
+        status varchar(20) DEFAULT 'pending' NOT NULL,
+        error_detail text,
+        created_at timestamptz DEFAULT now() NOT NULL,
+        updated_at timestamptz DEFAULT now() NOT NULL,
+        synced_at timestamptz
+      )
+    `);
+    await pool.query(
+      `CREATE UNIQUE INDEX IF NOT EXISTS uq_sync_outbox_tenant_op ON sync_outbox (tenant_id, op_id)`,
+    );
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS sync_inbox (
+        id uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+        tenant_id uuid NOT NULL REFERENCES tenants(id),
+        sync_device_id uuid REFERENCES sync_devices(id),
+        op_id uuid NOT NULL,
+        entity_type varchar(40) NOT NULL,
+        entity_id uuid NOT NULL,
+        operation varchar(20) NOT NULL,
+        payload jsonb NOT NULL,
+        status varchar(20) DEFAULT 'received' NOT NULL,
+        received_at timestamptz DEFAULT now() NOT NULL,
+        applied_at timestamptz
+      )
+    `);
+    await pool.query(
+      `CREATE UNIQUE INDEX IF NOT EXISTS uq_sync_inbox_tenant_op ON sync_inbox (tenant_id, op_id)`,
+    );
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS document_number_blocks (
+        id uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+        tenant_id uuid NOT NULL REFERENCES tenants(id),
+        sync_device_id uuid NOT NULL REFERENCES sync_devices(id),
+        entity_type varchar(30) NOT NULL,
+        year integer NOT NULL,
+        prefix varchar(10) NOT NULL,
+        start_number bigint NOT NULL,
+        end_number bigint NOT NULL,
+        next_number bigint NOT NULL,
+        status varchar(20) DEFAULT 'active' NOT NULL,
+        claimed_at timestamptz DEFAULT now() NOT NULL,
+        updated_at timestamptz DEFAULT now() NOT NULL,
+        reclaimed_at timestamptz
+      )
+    `);
+    await pool.query(
+      `CREATE UNIQUE INDEX IF NOT EXISTS uq_doc_num_blocks_tenant_entity_year_start ON document_number_blocks (tenant_id, entity_type, year, start_number)`,
+    );
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS sync_resource_claims (
+        id uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+        tenant_id uuid NOT NULL REFERENCES tenants(id),
+        resource_type varchar(40) NOT NULL,
+        resource_id uuid NOT NULL,
+        claimed_by_op_id uuid NOT NULL,
+        claimed_by_device_id uuid REFERENCES sync_devices(id),
+        entity_type varchar(40) NOT NULL,
+        entity_id uuid NOT NULL,
+        claimed_at timestamptz DEFAULT now() NOT NULL
+      )
+    `);
+    await pool.query(
+      `CREATE UNIQUE INDEX IF NOT EXISTS uq_sync_resource_claims_tenant_resource ON sync_resource_claims (tenant_id, resource_type, resource_id)`,
+    );
+    await pool.query(`ALTER TABLE sync_inbox ADD COLUMN IF NOT EXISTS reject_reason text`);
+    await pool.query(`ALTER TABLE sync_inbox ADD COLUMN IF NOT EXISTS conflict_op_id uuid`);
+    await pool.query(`ALTER TABLE sync_inbox ADD COLUMN IF NOT EXISTS conflict_detail jsonb`);
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS sync_state (
+        tenant_id uuid PRIMARY KEY REFERENCES tenants(id),
+        last_pull_at timestamptz,
+        updated_at timestamptz DEFAULT now() NOT NULL
+      )
+    `);
+    logger.info("Desktop schema ensure: pin_hash + sync + number-blocks + FWW + pull state ready");
+  } catch (err) {
+    logger.error({ err }, "Desktop schema ensure failed — PIN roster / sync may break");
+  }
+}
+
 fxRateService.start();
-app.listen(config.PORT, () => {
-  logger.info(`ERP API server listening on port ${config.PORT} in ${config.NODE_ENV} mode`);
+void ensureDesktopSchema().finally(() => {
+  app.listen(config.PORT, config.HOST, () => {
+    logger.info(
+      `ERP API server listening on ${config.HOST}:${config.PORT} in ${config.NODE_ENV} mode`,
+    );
+  });
 });
 
 export default app;

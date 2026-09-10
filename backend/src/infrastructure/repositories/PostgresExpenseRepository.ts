@@ -144,6 +144,7 @@ export class PostgresExpenseRepository implements IExpenseRepository {
       const [row] = await tx
         .insert(expenses)
         .values({
+          ...(input.preAllocatedId ? { id: input.preAllocatedId } : {}),
           tenantId: ctx.tenantId,
           number: autoNumber,
           category: input.category,

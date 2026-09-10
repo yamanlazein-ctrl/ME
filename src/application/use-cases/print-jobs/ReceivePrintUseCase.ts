@@ -23,6 +23,14 @@ export class ReceivePrintUseCase {
     if (!input.newName?.trim()) {
       return Err(new ValidationError("اسم الصنف الجديد مطلوب.", "newName"));
     }
+    if (input.currency !== "USD" && !(Number(input.exchangeRate) > 0)) {
+      return Err(
+        new ValidationError(
+          "سعر الصرف مطلوب لكل عملية ليست بالدولار (عملة الأساس USD)",
+          "exchangeRate",
+        ),
+      );
+    }
 
     const saved = await this.printJobs.receive(input, ctx);
     return Ok(saved);

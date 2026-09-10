@@ -26,8 +26,6 @@ export interface InvoiceDTO {
   exchangeRate?: number | null;
   /** USD equivalent of `total` at the frozen exchangeRate. */
   baseTotal?: number | null;
-  /** USD equivalent of `paid` at the frozen exchangeRate. */
-  basePaid?: number | null;
   status: "draft" | "active" | "cancelled";
   lines: InvoiceLineData[];
   subtotal: number;

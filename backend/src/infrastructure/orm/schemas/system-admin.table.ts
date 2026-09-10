@@ -21,4 +21,4 @@ export const systemAdmins = pgTable("system_admins", {
   role: varchar("role", { length: 20 }).notNull().default("super_admin"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
-});
+}).enableRLS();

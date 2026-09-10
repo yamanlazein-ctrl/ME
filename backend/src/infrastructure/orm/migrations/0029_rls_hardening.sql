@@ -11,8 +11,15 @@ BEGIN
   END IF;
 END $$;
 
--- Grant minimal privileges to app_user (owner retains DDL)
-GRANT CONNECT ON DATABASE fabric_erp TO app_user;
+-- Grant CONNECT on whichever catalog this migration is running against.
+-- GRANT ON DATABASE requires a literal identifier, so we quote
+-- current_database() via format('%I') — server-derived, not user input,
+-- no hardcoded catalog name (the previous fabric_erp literal aborted
+-- migrate() on every database not named exactly that).
+DO $$
+BEGIN
+  EXECUTE format('GRANT CONNECT ON DATABASE %I TO app_user', current_database());
+END $$;
 GRANT USAGE ON SCHEMA public TO app_user;
 GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO app_user;
 GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO app_user;

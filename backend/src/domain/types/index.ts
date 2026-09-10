@@ -9,6 +9,8 @@ export interface TenantContext {
   userId: UUID;
   userRole: "admin" | "accountant" | "warehouse" | "viewer";
   userName: string;
+  /** Sync device id from `X-Sync-Device-Id` (desktop multi-device numbering). */
+  syncDeviceId?: UUID | null;
 }
 
 export type Timestamp = string; // ISO 8601
@@ -73,7 +75,7 @@ export type ManualMovementType =
   "capital" | "withdrawal" | "transfer" | "adjustment" | "correction";
 export type MovementDirection = "in" | "out";
 
-export type NotificationKind = "credit" | "aging" | "stock" | "unpaid" | "cash" | "order";
+export type NotificationKind = "credit" | "aging" | "stock" | "unpaid" | "cash" | "order" | "sync";
 export type NotificationSeverity = "info" | "warning" | "critical";
 
 export type Role = "admin" | "accountant" | "warehouse" | "viewer";

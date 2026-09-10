@@ -57,4 +57,10 @@ describe("setup use cases — input validation", () => {
     const r = await activateAndPersistUseCase({} as never, "tenant", {});
     expect(r.ok).toBe(false);
   });
+
+  it("activateAndPersist rejects a blank key outside desktop deploy", async () => {
+    const r = await activateAndPersistUseCase({} as never, "tenant", { key: "" });
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.error).toMatch(/بيانات التفعيل غير صالحة/);
+  });
 });

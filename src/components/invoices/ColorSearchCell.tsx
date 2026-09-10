@@ -60,7 +60,7 @@ export function ColorSearchCell({
   const fileRef = useRef<HTMLInputElement>(null);
 
   const query = activeField === "code" ? code : name;
-  const matches = useMemo(() => searchColors(query, 8), [query]);
+  const matches = useMemo(() => searchColors(query), [query]);
   const codeMatch = useMemo(() => colorByCode(code, fabricId), [code, fabricId]);
   const nameMatch = useMemo(() => {
     const q = name.trim().toLowerCase();

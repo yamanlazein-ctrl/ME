@@ -350,12 +350,14 @@ export class PostgresDashboardRepository implements IDashboardRepository {
       };
     }
 
-    // ── Unpaid sale invoices (total − receipts − returns, per P0-LOGIC-3.6e unified) ──
+    // ── Unpaid sale invoices (total − paid − returns, per P0-LOGIC-3.6e unified) ──
+    // `paid` is maintained by PostgresVoucherRepository in the invoice's own
+    // currency after FX conversion, so no client-side re-summing is needed.
     const unpaidSub = this.db
       .select({
         id: invoices.id,
         currency: invoices.currency,
-        remaining: sql<number>`${invoices.total} - COALESCE(SUM(${vouchers.amount}), 0) - COALESCE(SUM(${returnLines.quantityKg} * ${returnLines.pricePerKg}), 0)`.as(
+        remaining: sql<number>`${invoices.total} - ${invoices.paid} - COALESCE(SUM(${returnLines.quantityKg} * ${returnLines.pricePerKg}), 0)`.as(
           "remaining",
         ),
       })

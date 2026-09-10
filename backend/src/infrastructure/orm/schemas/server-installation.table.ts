@@ -33,4 +33,4 @@ export const serverInstallations = pgTable(
     ),
     tenantIdx: index("idx_server_installations_tenant").on(table.tenantId),
   }),
-);
+).enableRLS();

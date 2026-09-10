@@ -6,6 +6,7 @@ import type { PostgresInvitationRepository } from "../../../infrastructure/repos
 import type { Argon2PasswordHasher } from "../../../infrastructure/auth/PasswordHasher.js";
 import type { ILicenseRepository } from "../../../application/ports/ILicenseRepository.js";
 import { db } from "../../../infrastructure/orm/drizzle.js";
+import { runWithTenantContext } from "../../../infrastructure/orm/tenant-context.js";
 import { users } from "../../../infrastructure/orm/schemas/user.table.js";
 import { deviceRegistrations } from "../../../infrastructure/orm/schemas/device-registration.table.js";
 import { eq, count } from "drizzle-orm";
@@ -128,7 +129,11 @@ export async function consumeInvitationCodeUseCase(
     // device slot ("device consumption on accept"), so the device cap must be
     // checked for device invitations AND for user invitations being accepted
     // on a device.
-    const lic = await licenseRepo.findLatestForTenant(row.tenantId as never);
+    // Pre-auth consume flow: no ALS context exists, so stamp the invitation's
+    // tenant GUC for the license lookup (RLS category-2, own-tenant rows).
+    const lic = await runWithTenantContext({ tenantId: row.tenantId }, () =>
+      licenseRepo.findLatestForTenant(row.tenantId as never),
+    );
     const acceptsDevice =
       row.type === "device" || (row.type === "user" && Boolean(options.deviceFingerprint));
     if (lic) {
@@ -155,8 +160,8 @@ export async function consumeInvitationCodeUseCase(
         return { ok: false, error: "بيانات المستخدم غير مكتملة في الدعوة" };
       }
       const pw = options.password;
-      if (!pw || pw.length < 8) {
-        return { ok: false, error: "كلمة المرور مطلوبة (8 أحرف على الأقل)" };
+      if (!pw || !/^\d{4}$/.test(pw)) {
+        return { ok: false, error: "الرقم السري مطلوب (4 أرقام)" };
       }
       const hash = await passwordHasher.hash(pw);
       const u = await repoExtended.createUserFromInvitation(
@@ -168,6 +173,13 @@ export async function consumeInvitationCodeUseCase(
         hash,
       );
       createdUserId = u.id;
+      // Same PIN unlocks the device picker (pin_hash).
+      await runWithTenantContext({ tenantId: row.tenantId }, async () => {
+        await db
+          .update(users)
+          .set({ pinHash: hash, updatedAt: new Date() })
+          .where(eq(users.id, u.id));
+      });
       // Device consumption on accept: register the accepting device so it
       // counts against the license device cap (checked above).
       if (options.deviceFingerprint) {
@@ -195,21 +207,27 @@ export async function consumeInvitationCodeUseCase(
 }
 
 async function countUsers(tenantId: string): Promise<number> {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const [{ c }] = await db
-    .select({ c: count() })
-    .from(users as any)
-    .where(eq((users as any).tenantId, tenantId));
-  return Number(c);
+  // Pre-auth flow — stamp the tenant GUC (`users` is category-1 RLS).
+  return runWithTenantContext({ tenantId }, async () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const [{ c }] = await db
+      .select({ c: count() })
+      .from(users as any)
+      .where(eq((users as any).tenantId, tenantId));
+    return Number(c);
+  });
 }
 
 async function countDevices(tenantId: string): Promise<number> {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const [{ c }] = await db
-    .select({ c: count() })
-    .from(deviceRegistrations as any)
-    .where(eq((deviceRegistrations as any).tenantId, tenantId));
-  return Number(c);
+  // Pre-auth flow — stamp the tenant GUC (device_registrations is category-2).
+  return runWithTenantContext({ tenantId }, async () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const [{ c }] = await db
+      .select({ c: count() })
+      .from(deviceRegistrations as any)
+      .where(eq((deviceRegistrations as any).tenantId, tenantId));
+    return Number(c);
+  });
 }
 
 function generateCode(): string {

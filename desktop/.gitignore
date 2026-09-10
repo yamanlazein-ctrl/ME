@@ -1,0 +1,2 @@
+# Never ship under desktop/src-tauri/resources — kept for local forensics only.
+_not_packaged/

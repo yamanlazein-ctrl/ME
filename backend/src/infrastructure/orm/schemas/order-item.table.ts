@@ -41,4 +41,4 @@ export const orderItems = pgTable(
   (table) => ({
     rollIdx: index("idx_order_items_roll").on(table.tenantId, table.rollId),
   }),
-);
+).enableRLS();

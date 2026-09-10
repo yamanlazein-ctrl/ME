@@ -4,12 +4,23 @@ import { PageCard } from "@/components/layout/PageCard";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Link, createFileRoute } from "@tanstack/react-router";
-import { Plus } from "lucide-react";
+import { Pencil, Plus, Printer, Trash2 } from "lucide-react";
 import { BulkSelectToolbar } from "@/components/common/BulkSelectToolbar";
 import { ConfirmBulkAction } from "@/components/common/ConfirmBulkAction";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { printDocument } from "@/components/print/printPortal";
 import { VoucherPrintDocument } from "@/components/print/VoucherPrintDocument";
 import { useVouchersList, useCancelVoucher, type Voucher } from "@/presentation/hooks/useVouchers";
+import { useInvoicesList } from "@/presentation/hooks/useInvoices";
 import { supplierById } from "@/presentation/hooks/useParties";
 import { formatAmount } from "@/presentation/hooks/useCurrency";
 import { formatDateTime } from "@/lib/utils";
@@ -17,13 +28,22 @@ import { formatDateTime } from "@/lib/utils";
 export const Route = createFileRoute("/payments/")({ component: PaymentsList });
 
 function PaymentsList() {
-  const { data: listData } = useVouchersList({ kind: "payment" });
+  const { data: listData } = useVouchersList({ kind: "payment", limit: 1000 });
   const list = listData?.data ?? [];
+  const { data: invoicesData } = useInvoicesList({ limit: 1000 });
+  const invoiceNumberById = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const inv of invoicesData?.data ?? []) {
+      m.set(inv.id, inv.number || inv.reference || inv.id.slice(0, 8));
+    }
+    return m;
+  }, [invoicesData]);
   const cancelVoucherMut = useCancelVoucher();
 
   const [selectMode, setSelectMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Record<string, boolean>>({});
   const [bulkTarget, setBulkTarget] = useState<{ items: Voucher[] } | null>(null);
+  const [toCancel, setToCancel] = useState<Voucher | null>(null);
 
   const activeList = useMemo(() => list.filter((v) => v.status === "active"), [list]);
   const selectionCount = Object.keys(selectedIds).length;
@@ -85,7 +105,7 @@ function PaymentsList() {
     >
       <PageCard title="القائمة" description={`${list.length} سند مسجل.`} noBodyPadding>
         <div className="w-full overflow-x-auto">
-          <table className="w-full min-w-[800px] text-right text-sm">
+          <table className="w-full min-w-[900px] text-right text-sm">
             <thead className="bg-secondary/60 text-[11px] uppercase text-muted-foreground">
               <tr className="[&>th]:px-3 [&>th]:py-2.5">
                 {selectMode && <th className="w-10"></th>}
@@ -96,7 +116,7 @@ function PaymentsList() {
                 <th className="text-left">المبلغ</th>
                 <th>طريقة الدفع</th>
                 <th>الحالة</th>
-                <th></th>
+                <th className="text-left">إجراءات</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
@@ -122,7 +142,7 @@ function PaymentsList() {
                     <td className="px-3 py-2 text-primary">
                       {v.invoiceId ? (
                         <Link to="/invoices/$id" params={{ id: v.invoiceId }}>
-                          {v.invoiceId}
+                          {invoiceNumberById.get(v.invoiceId) ?? "—"}
                         </Link>
                       ) : (
                         <span className="text-muted-foreground">دفعة عامة</span>
@@ -137,25 +157,31 @@ function PaymentsList() {
                     <td className="px-3 py-2 text-xs">
                       {v.status === "active" ? "نشطة" : "ملغاة"}
                     </td>
-                    <td className="px-3 py-2">
-                      <div className="flex items-center gap-1">
+                    <td className="px-3 py-2 text-left">
+                      <div className="inline-flex flex-nowrap items-center gap-1 whitespace-nowrap">
                         <Button
                           size="sm"
                           variant="ghost"
-                          onClick={() => printDocument(<VoucherPrintDocument voucher={v} />)}
+                          onClick={() => printDocument(<VoucherPrintDocument voucher={v as never} />)}
                         >
-                          طباعة
+                          <Printer className="ml-1 h-4 w-4" /> طباعة
                         </Button>
                         {v.status === "active" && (
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() =>
-                              confirm(`إلغاء سند الصرف ${v.number}؟`) && cancelVoucherMut.mutate(v.id)
-                            }
-                          >
-                            إلغاء
-                          </Button>
+                          <>
+                            <Button size="sm" variant="ghost" asChild>
+                              <Link to="/payments/new" search={{ edit: v.id }}>
+                                <Pencil className="ml-1 h-4 w-4" /> تعديل
+                              </Link>
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                              onClick={() => setToCancel(v)}
+                            >
+                              <Trash2 className="ml-1 h-4 w-4" /> حذف
+                            </Button>
+                          </>
                         )}
                       </div>
                     </td>
@@ -189,6 +215,29 @@ function PaymentsList() {
         onCancel={() => setBulkTarget(null)}
         onConfirm={confirmBulkCancel}
       />
+
+      <AlertDialog open={!!toCancel} onOpenChange={(o) => !o && setToCancel(null)}>
+        <AlertDialogContent dir="rtl">
+          <AlertDialogHeader>
+            <AlertDialogTitle>تأكيد الحذف</AlertDialogTitle>
+            <AlertDialogDescription>
+              هل أنت متأكد من إلغاء سند الصرف "{toCancel?.number}"؟ لا يمكن التراجع عن هذا الإجراء.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="flex-row-reverse gap-2">
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => {
+                if (toCancel) cancelVoucherMut.mutate(toCancel.id);
+                setToCancel(null);
+              }}
+            >
+              حذف نهائي
+            </AlertDialogAction>
+            <AlertDialogCancel>إلغاء</AlertDialogCancel>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </AppShell>
   );
 }

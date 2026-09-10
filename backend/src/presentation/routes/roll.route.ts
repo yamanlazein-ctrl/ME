@@ -16,6 +16,14 @@ import {
   listRollsUseCase,
   deleteRollUseCase,
 } from "../../application/use-cases/inventory/rollUseCases.js";
+import type { ISyncOutboxRepository } from "../../application/ports/ISyncOutboxRepository.js";
+import {
+  enqueueMasterCreate,
+  isSyncEnqueueEnabled,
+  opIdFromRequest,
+  syncDeviceIdFromRequest,
+} from "../../application/use-cases/sync/syncEnqueue.js";
+import { logger } from "../../infrastructure/config/logger.js";
 
 export function registerRollRoutes(
   router: Router,
@@ -24,6 +32,7 @@ export function registerRollRoutes(
   writeGuard: RequestHandler,
   readGuard: RequestHandler,
   stockMovementRepo?: IStockMovementRepository,
+  syncOutboxRepo?: ISyncOutboxRepository,
 ) {
   const ctx = (req: Request): TenantContext => req.tenantContext!;
   const pid = (req: Request): string => req.params.id as string;
@@ -37,6 +46,39 @@ export function registerRollRoutes(
     async (req: Request, res: Response) => {
       const r = await createRollUseCase(rollRepo, body(req), ctx(req));
       if (r.ok) {
+        if (syncOutboxRepo && isSyncEnqueueEnabled()) {
+          try {
+            const roll = r.data;
+            await enqueueMasterCreate(
+              syncOutboxRepo,
+              "roll",
+              roll.id,
+              {
+                id: roll.id,
+                colorId: roll.colorId,
+                rollNo: roll.rollNo,
+                dyeBatch: roll.dyeBatch ?? null,
+                initialKg: roll.initialKg,
+                remainingKg: roll.remainingKg,
+                pieces: roll.pieces,
+                remainingPieces: roll.remainingPieces,
+                pricePerKg: roll.pricePerKg,
+                salePricePerKg: roll.salePricePerKg ?? null,
+                currency: roll.currency,
+                supplierId: roll.supplierId ?? null,
+                entryDate: roll.entryDate,
+                widthCm: roll.widthCm ?? null,
+                weightGsm: roll.weightGsm ?? null,
+                status: roll.status,
+              },
+              ctx(req),
+              syncDeviceIdFromRequest(req),
+              opIdFromRequest(req),
+            );
+          } catch (err) {
+            logger.warn({ err, rollId: r.data.id }, "sync outbox enqueue failed after roll create");
+          }
+        }
         res.status(201).json(r.data);
       } else {
         res.status(422).json({ code: "VALIDATION", message: r.error });

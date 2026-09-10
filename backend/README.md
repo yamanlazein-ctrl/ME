@@ -107,13 +107,14 @@ src/
 | Variable                  | Required | Default       | Description                  |
 | ------------------------- | -------- | ------------- | ---------------------------- |
 | `NODE_ENV`                | No       | `development` | Runtime environment          |
+| `HOST`                    | No       | `0.0.0.0`     | Bind address for the API     |
 | `PORT`                    | No       | `8080`        | Server port                  |
 | `DATABASE_URL`            | Yes      | —             | PostgreSQL connection string |
 | `REDIS_URL`               | No       | —             | Redis connection string      |
 | `JWT_SECRET`              | Yes      | —             | Min 32 chars                 |
 | `JWT_EXPIRY_MS`           | No       | `1800000`     | Access token TTL (30 min)    |
-| `REFRESH_TOKEN_EXPIRY_MS` | No       | `2592000000`  | Refresh token TTL (30 days)  |
-| `CORS_ORIGIN`             | No       | `*`           | Allowed CORS origins         |
+| `REFRESH_TOKEN_EXPIRY_MS` | No       | `31536000000` | Refresh token TTL (365 days) |
+| `CORS_ORIGIN`             | No       | local allowlist | Allowed CORS origins       |
 | `RATE_LIMIT_RPS`          | No       | `100`         | Max requests per window      |
 | `LOG_LEVEL`               | No       | `info`        | Pino log level               |
 
@@ -124,6 +125,32 @@ docker-compose up --build
 ```
 
 Starts PostgreSQL, Redis and the API server.
+
+### Production central-server stack
+
+For a shared central ERP server, use the production compose file:
+
+```bash
+cp .env.production.example .env.production
+docker compose --env-file .env.production -f docker-compose.production.yml up -d --build
+```
+
+This stack provides:
+
+- PostgreSQL 16 with a persistent volume
+- Redis 7 for the token denylist
+- The backend in `NODE_ENV=production`
+- Nginx reverse proxy with HTTPS termination
+
+Place your TLS certificate files at:
+
+```text
+backend/deploy/certs/fullchain.pem
+backend/deploy/certs/privkey.pem
+```
+
+And update `CORS_ORIGIN` in `.env.production` to the real public origins that
+will call the API directly.
 
 ## Tests
 

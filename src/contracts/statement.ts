@@ -24,6 +24,8 @@ export interface StatementEntryDTO {
   type: LedgerType;
   /** Cancelled movements are shown (struck through) but excluded from balances. */
   status: "active" | "cancelled";
+  /** Ledger currency for this row (always present; needed for multi-currency statements). */
+  currency?: Currency;
   referenceType?: string;
   referenceId?: UUID;
   referenceNumber?: string;
@@ -42,7 +44,8 @@ export interface PartyStatementDTO {
   partyName: string;
   partyCode?: string | null;
   kind: PartyKind;
-  currency: Currency;
+  /** Filter currency, or `"ALL"` when every ledger currency is included. */
+  currency: Currency | "ALL";
   fromDate?: string | null;
   toDate?: string | null;
   type?: string | null;
@@ -50,13 +53,16 @@ export interface PartyStatementDTO {
   totalDebit: number;
   totalCredit: number;
   finalBalance: number;
+  totalsByCurrency?: Partial<
+    Record<Currency, { previousBalance: number; totalDebit: number; totalCredit: number; finalBalance: number }>
+  >;
   entries: StatementEntryDTO[];
 }
 
 export interface StatementFilter {
   from?: string;
   to?: string;
-  currency?: Currency;
+  currency?: Currency | "ALL";
   type?: LedgerType;
 }
 

@@ -150,4 +150,5 @@ export interface CreateOrderInput {
   currency?: string;
   notes?: string;
   items: CreateOrderItemInput[];
+  preAllocatedId?: UUID;
 }

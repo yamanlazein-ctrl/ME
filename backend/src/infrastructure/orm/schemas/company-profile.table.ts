@@ -53,4 +53,4 @@ export const companyProfiles = pgTable(
   (table) => ({
     tenantIdx: uniqueIndex("idx_company_profiles_tenant").on(table.tenantId),
   }),
-);
+).enableRLS();

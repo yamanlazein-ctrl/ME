@@ -59,4 +59,4 @@ export const idempotencyKeys = pgTable(
     ),
     expiresIdx: index("idx_idempotency_expires").on(table.expiresAt),
   }),
-);
+).enableRLS();

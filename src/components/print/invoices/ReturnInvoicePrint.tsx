@@ -15,7 +15,7 @@
  * - signatures
  * - footer
  *
- * No color swatches — color shown as `code` + `name` text only.
+ * Color cell: circular swatch + كود + name (same identity as inventory).
  * All fields default to visible. Users can hide via /settings/invoice.
  */
 import { useMemo, type ReactNode } from "react";
@@ -28,12 +28,13 @@ import {
   type PrintParty,
 } from "@/components/print/PrintDocument";
 import { currencySymbol } from "@/presentation/hooks/useCurrency";
-import { colorById, fabricById, rollById, type Color } from "@/presentation/hooks/useInventory";
+import { colorById, fabricById, rollById, useInventory } from "@/presentation/hooks/useInventory";
 import { formatMoney, formatNumber, formatQuantity } from "@/shared/utils/formatNumber";
 import type { ReturnDTO, ReturnReason } from "@/application/ports/IReturnRepository";
 import { customerById, supplierById } from "@/presentation/hooks/useParties";
 import { useInvoiceVisibility } from "./visibility";
 import { useVouchersList } from "@/presentation/hooks/useVouchers";
+import { PrintColorCell } from "./printColorCell";
 
 type ReturnInvoicePrintProps = {
   returnDoc: ReturnDTO;
@@ -74,21 +75,16 @@ const fmtQty = (n: number): string => formatQuantity(n);
 function renderRollColorCell(rollId: string) {
   const roll = rollById(rollId);
   if (!roll) return "—";
-  const col = colorById(roll.colorId) as Pick<Color, "code" | "name"> | null;
-  if (!col) return "—";
-  return (
-    <div style={{ display: "flex", flexDirection: "column", lineHeight: 1.25 }}>
-      {col.code && <span className="pd-color-code">{col.code}</span>}
-      <span className="pd-color-name">{col.name}</span>
-    </div>
-  );
+  return <PrintColorCell colorId={roll.colorId} />;
 }
+
 export function ReturnInvoicePrint({
   returnDoc,
   originalInvoiceNumber,
   totalPages,
   pageNumber,
 }: ReturnInvoicePrintProps) {
+  useInventory();
   const r = returnDoc;
   const vis = useInvoiceVisibility(r.kind === "entry" ? "return_in" : "return_out");
   const isSupplierReturn = r.kind === "entry";

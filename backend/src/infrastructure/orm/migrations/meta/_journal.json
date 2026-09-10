@@ -285,15 +285,85 @@
     {
       "idx": 40,
       "version": 7,
-      "when": 1785500000000,
-      "tag": "0040_purchase_double_entry_restore",
+      "when": 1785450000000,
+      "tag": "0039_fx_base_columns",
       "breakpoints": true
     },
     {
       "idx": 41,
       "version": 7,
+      "when": 1785500000000,
+      "tag": "0040_purchase_double_entry_restore",
+      "breakpoints": true
+    },
+    {
+      "idx": 42,
+      "version": 7,
+      "when": 1785550000000,
+      "tag": "0041_party_list_stats_indexes",
+      "breakpoints": true
+    },
+    {
+      "idx": 43,
+      "version": 7,
       "when": 1785600000000,
       "tag": "0042_license_customer_fields",
+      "breakpoints": true
+    },
+    {
+      "idx": 44,
+      "version": 7,
+      "when": 1788151830504,
+      "tag": "0043_license_offline_token_columns",
+      "breakpoints": true
+    },
+    {
+      "idx": 45,
+      "version": 7,
+      "when": 1788800000000,
+      "tag": "0044_sales_return_contra_ledger_type",
+      "breakpoints": true
+    },
+    {
+      "idx": 46,
+      "version": 7,
+      "when": 1788850000000,
+      "tag": "0045_print_job_exchange_rate",
+      "breakpoints": true
+    },
+    {
+      "idx": 47,
+      "version": 7,
+      "when": 1788961200000,
+      "tag": "0047_sync_devices",
+      "breakpoints": true
+    },
+    {
+      "idx": 48,
+      "version": 7,
+      "when": 1788964800000,
+      "tag": "0048_sync_outbox_inbox",
+      "breakpoints": true
+    },
+    {
+      "idx": 49,
+      "version": 7,
+      "when": 1788968400000,
+      "tag": "0049_document_number_blocks",
+      "breakpoints": true
+    },
+    {
+      "idx": 50,
+      "version": 7,
+      "when": 1788972000000,
+      "tag": "0050_sync_resource_claims",
+      "breakpoints": true
+    },
+    {
+      "idx": 51,
+      "version": 7,
+      "when": 1788975600000,
+      "tag": "0051_sync_state",
       "breakpoints": true
     }
   ]

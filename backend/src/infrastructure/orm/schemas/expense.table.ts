@@ -38,4 +38,4 @@ export const expenses = pgTable(
   (table) => ({
     tenantNumberIdx: uniqueIndex("idx_expenses_tenant_number").on(table.tenantId, table.number),
   }),
-);
+).enableRLS();

@@ -16,12 +16,14 @@ export const cashboxSessions = pgTable("cashbox_sessions", {
   tenantId: uuid("tenant_id")
     .notNull()
     .references(() => tenants.id),
-  openingBalance: numeric("opening_balance", { precision: 14, scale: 2, mode: "number" }).notNull().default(0),
+  openingBalance: numeric("opening_balance", { precision: 14, scale: 2, mode: "number" })
+    .notNull()
+    .default(0),
   openingDate: date("opening_date").notNull(),
   currency: varchar("currency", { length: 3 }).notNull().default("SYP"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
-});
+}).enableRLS();
 
 export const manualMovements = pgTable("manual_movements", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -37,7 +39,7 @@ export const manualMovements = pgTable("manual_movements", {
   notesInternal: text("notes_internal"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   createdBy: uuid("created_by"),
-});
+}).enableRLS();
 
 export const dayCloses = pgTable(
   "day_closes",
@@ -47,7 +49,11 @@ export const dayCloses = pgTable(
       .notNull()
       .references(() => tenants.id),
     date: date("date").notNull(),
-    openingBalance: numeric("opening_balance", { precision: 14, scale: 2, mode: "number" }).notNull(),
+    openingBalance: numeric("opening_balance", {
+      precision: 14,
+      scale: 2,
+      mode: "number",
+    }).notNull(),
     totalIn: numeric("total_in", { precision: 14, scale: 2, mode: "number" }).notNull(),
     totalOut: numeric("total_out", { precision: 14, scale: 2, mode: "number" }).notNull(),
     expected: numeric("expected", { precision: 14, scale: 2, mode: "number" }).notNull(),
@@ -60,4 +66,4 @@ export const dayCloses = pgTable(
   (table) => ({
     tenantDateIdx: uniqueIndex("idx_day_closes_tenant_date").on(table.tenantId, table.date),
   }),
-);
+).enableRLS();

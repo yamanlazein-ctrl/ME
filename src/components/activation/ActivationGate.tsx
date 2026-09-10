@@ -1,47 +1,48 @@
 import { useEffect, useState } from "react";
 import { ActivationScreen } from "./ActivationScreen";
+import { getApiBaseUrl } from "@/lib/api-base-url";
 import { isActivated } from "@/lib/license-state";
 
 /**
- * Gate that runs the Setup Wizard before the app is usable.
+ * Gate before AuthGate / app shell.
  *
- * Two independent signals mean "already provisioned":
- *   1. Local activation state (this browser/desktop install activated a key).
- *   2. The backend reports the setup wizard as completed — needed because a
- *      fresh browser profile against an already-provisioned server has no
- *      local state and must NOT be sent through the wizard again.
+ * N1 (V2): Local license markers are the source of truth for "already
+ * activated on this device". Backend `isCompleted` alone must NOT skip the
+ * license/invite screen — otherwise a provisioned DB opens straight to login
+ * and never asks for the one-time key. After local activation succeeds once,
+ * this gate stays open forever on this device (session restore is AuthGate).
  *
- * While the backend is being asked, nothing is rendered (a flash of the
- * wizard on a provisioned install would be worse than a blank frame). If the
- * status call fails the gate opens: a network hiccup must never lock an
- * operator out of a working install — license enforcement server-side is the
- * real protection, this gate is only the provisioning entry point.
+ * Soft network failure: if local markers exist, allow through; otherwise keep
+ * the activation screen so a first-run cannot fall through to login.
  *
  * `VITE_ACTIVATION_BYPASS=1` skips the gate entirely for local UI work.
  */
 const DEV_BYPASS = import.meta.env.VITE_ACTIVATION_BYPASS === "1";
 
-function getApiBaseUrl(): string {
-  const raw = (import.meta.env.VITE_API_BASE_URL as string | undefined)?.trim();
-  if (!raw || raw === "/api") return "";
-  return raw.replace(/\/+$/, "");
-}
-
 export function ActivationGate({ children }: { children: React.ReactNode }) {
-  const [activated, setActivated] = useState<boolean>(() => isActivated() || DEV_BYPASS);
-  const [checking, setChecking] = useState<boolean>(() => !(isActivated() || DEV_BYPASS));
+  const [activated, setActivated] = useState<boolean>(() => DEV_BYPASS || isActivated());
+  const [checking, setChecking] = useState<boolean>(() => !DEV_BYPASS);
 
   useEffect(() => {
     if (!checking) return;
     let cancelled = false;
     void (async () => {
       try {
-        const r = await fetch(`${getApiBaseUrl()}/api/setup/status`);
+        const localOk = isActivated();
+        const r = await fetch(`${getApiBaseUrl("")}/api/setup/status`);
+        if (!r.ok) {
+          if (!cancelled) setActivated(localOk);
+          return;
+        }
         const data = (await r.json()) as { isCompleted?: boolean };
-        if (!cancelled && data?.isCompleted) setActivated(true);
+        // Pass only when this device has completed the one-time activation.
+        // Incomplete backend setup always stays on the wizard.
+        if (!cancelled) {
+          if (data?.isCompleted === false) setActivated(false);
+          else setActivated(localOk);
+        }
       } catch {
-        // Backend unreachable — open the gate rather than trapping the user.
-        if (!cancelled) setActivated(true);
+        if (!cancelled) setActivated(isActivated());
       } finally {
         if (!cancelled) setChecking(false);
       }

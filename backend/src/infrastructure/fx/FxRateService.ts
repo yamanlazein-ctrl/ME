@@ -12,34 +12,53 @@ import { logger } from "../config/logger.js";
  * every invoice. Keep this module isolated from all billing logic.
  *
  * Fetch strategy (provider requirement + UX):
- * - The ONLY caller of the external provider (liranews.info) is this backend
+ * - The ONLY caller of the external provider (LiraScope) is this backend
  *   service, on a timer, storing the last known rate in an in-memory cache.
  * - Browsers never hit the provider directly: the frontend calls the internal
  *   endpoint GET /api/fx/reference-rate, which serves the cached snapshot.
- *   This protects against provider-side rate limiting ("excessive use"),
- *   avoids CORS, and keeps page loads free of any external request.
+ *   This protects against provider-side rate limiting, avoids CORS, and keeps
+ *   page loads free of any external request.
  * - Failures are swallowed into the snapshot (available/stale flags) so the
  *   UI can degrade gracefully; nothing here can break a page render.
  */
 
-const DEFAULT_UPSTREAM_URL = "https://liranews.info/api/public/v1/price/usdsypd";
-// Provider asked for a modest cadence — 15 min sits inside the 10–15 min window.
+const DEFAULT_UPSTREAM_URL =
+  "https://lirascope.syria-cloud.sy/api/v1/rates/latest?currencies=USD&lang=ar";
+// Provider free tier: keep a modest cadence (15 min).
 const DEFAULT_REFRESH_INTERVAL_MS = 15 * 60 * 1000;
 const DEFAULT_FETCH_TIMEOUT_MS = 8_000;
 // A cached rate older than this is flagged "stale" so the UI can tint it.
 const DEFAULT_STALE_AFTER_MS = 2 * 60 * 60 * 1000;
 
-const SOURCE_NAME = "أخبار الليرة";
-const SOURCE_URL = "https://liranews.info";
+const SOURCE_NAME = "LiraScope";
+const SOURCE_URL = "https://lirascope.syria-cloud.sy";
+
+const rateRowSchema = z.object({
+  currency: z.string().min(1),
+  buy: z.number().finite().positive(),
+  sell: z.number().finite().positive(),
+  mid: z.number().finite().positive(),
+  timestampUtc: z.string().optional(),
+  isManualOverride: z.boolean().optional(),
+});
 
 const upstreamResponseSchema = z.object({
-  usdsypd: z.object({
-    value: z.number().finite().positive(),
-    sell: z.number().finite().positive().optional(),
-    buy: z.number().finite().positive().optional(),
-    price_updated_at: z.string().optional(),
-  }),
+  timestampUtc: z.string().optional(),
+  cbsRates: z.array(rateRowSchema).optional(),
+  marketRates: z.array(rateRowSchema).optional(),
+  effectiveRates: z.array(rateRowSchema).optional(),
 });
+
+function pickUsdRate(
+  parsed: z.infer<typeof upstreamResponseSchema>,
+): z.infer<typeof rateRowSchema> | null {
+  // Prefer effective (manual override or market), then market, then CBS.
+  for (const pool of [parsed.effectiveRates, parsed.marketRates, parsed.cbsRates]) {
+    const usd = pool?.find((r) => r.currency.toUpperCase() === "USD");
+    if (usd) return usd;
+  }
+  return null;
+}
 
 export type FxRateSnapshot = {
   /** true when we have a rate worth showing (fresh or stale). */
@@ -174,16 +193,19 @@ export class FxRateService {
       // Shape validation: any schema drift from the provider is treated as a
       // failed fetch (last known price is kept, snapshot flags the problem).
       const parsed = upstreamResponseSchema.parse(json);
-      const u = parsed.usdsypd;
+      const usd = pickUsdRate(parsed);
+      if (!usd) {
+        throw new Error("upstream payload has no USD rate");
+      }
       this.lastKnown = {
-        value: u.value,
-        sell: u.sell,
-        buy: u.buy,
-        priceUpdatedAt: u.price_updated_at,
+        value: usd.mid,
+        sell: usd.sell,
+        buy: usd.buy,
+        priceUpdatedAt: usd.timestampUtc ?? parsed.timestampUtc,
         fetchedAt: new Date(this.now()).toISOString(),
       };
       this.lastErrorAt = undefined;
-      logger.debug({ value: u.value }, "FX reference rate updated");
+      logger.debug({ value: usd.mid }, "FX reference rate updated (LiraScope)");
       return true;
     } catch (err) {
       this.lastErrorAt = new Date(this.now()).toISOString();

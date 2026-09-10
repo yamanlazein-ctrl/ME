@@ -21,18 +21,10 @@ function FabricTooltip({ active, payload }: FabricTooltipProps) {
   if (!active || !payload?.length) return null;
   const p = payload[0].payload;
   return (
-    <div
-      className="rounded-lg border border-border bg-popover px-3 py-2 shadow-elevated"
-      dir="rtl"
-    >
-      <div className="truncate text-[11px] font-medium text-muted-foreground">
-        {p.name}
-      </div>
+    <div className="rounded-lg border border-border bg-popover px-3 py-2 shadow-elevated" dir="rtl">
+      <div className="truncate text-[11px] font-medium text-muted-foreground">{p.name}</div>
       <div className="mt-1 flex items-center gap-2">
-        <span
-          className="h-2 w-2 rounded-full"
-          style={{ background: "var(--primary)" }}
-        />
+        <span className="h-2 w-2 rounded-full" style={{ background: "var(--primary)" }} />
         <span className="text-sm font-bold tabular-nums text-foreground">
           {formatNumber(p.salesK)}K
         </span>
@@ -68,16 +60,13 @@ function EmptyState({ icon: Icon, text }: { icon: typeof Trophy; text: string })
 export function TopFabricsChart() {
   const { data: dashboardData } = useDashboard();
   const data = dashboardData?.topFabrics ?? [];
-  const maxIdx = data.reduce(
-    (m, d, i) => (d.salesK > data[m].salesK ? i : m),
-    0,
-  );
+  const maxIdx = data.reduce((m, d, i) => (d.salesK > data[m].salesK ? i : m), 0);
   const loading = !dashboardData;
 
   return (
     <div
       data-od-id="panel-top-fabrics"
-      className="rounded-2xl border border-border bg-card p-5 shadow-soft"
+      className="rounded-xl border border-border bg-card p-4 shadow-soft"
     >
       <div className="mb-4 flex items-center gap-2.5">
         <span className="grid h-8 w-8 place-items-center rounded-lg border border-primary/30 bg-primary/10 text-primary">
@@ -85,9 +74,7 @@ export function TopFabricsChart() {
         </span>
         <div>
           <h3 className="text-sm font-bold text-foreground">الأكثر مبيعاً</h3>
-          <p className="mt-0.5 text-[11px] text-muted-foreground">
-            القيم بآلاف الليرات السورية
-          </p>
+          <p className="mt-0.5 text-[11px] text-muted-foreground">القيم بآلاف الليرات السورية</p>
         </div>
       </div>
 
@@ -133,12 +120,8 @@ export function TopFabricsChart() {
                 {data.map((_, i) => (
                   <Cell
                     key={i}
-                    fill={
-                      i === maxIdx ? "var(--color-primary)" : "url(#fabricBar)"
-                    }
-                    stroke={
-                      i === maxIdx ? "var(--color-primary-glow)" : "transparent"
-                    }
+                    fill={i === maxIdx ? "var(--color-primary)" : "url(#fabricBar)"}
+                    stroke={i === maxIdx ? "var(--color-primary-glow)" : "transparent"}
                     strokeWidth={i === maxIdx ? 1 : 0}
                   />
                 ))}

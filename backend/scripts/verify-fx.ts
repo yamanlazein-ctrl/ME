@@ -5,7 +5,7 @@
  *
  *   cd backend
  *   node --import tsx scripts/verify-fx.ts          # unit + route contract checks (fake upstream)
- *   node --import tsx scripts/verify-fx.ts --live   # additionally calls the real liranews.info API
+ *   node --import tsx scripts/verify-fx.ts --live   # additionally calls the real LiraScope API
  *
  * Complements backend/tests/fx-rate.test.ts (vitest) with the same coverage
  * for environments where spawning test runners is not possible.
@@ -19,13 +19,38 @@ import { FxRateService } from "../src/infrastructure/fx/FxRateService.js";
 import { registerFxRoutes } from "../src/presentation/routes/fx.route.js";
 
 const OK_PAYLOAD = {
-  usdsypd: {
-    symbol: "usdsypd",
-    value: 14500.0,
-    sell: 14520.0,
-    buy: 14480.0,
-    price_updated_at: "2026-01-01T10:00:00Z",
-  },
+  disclaimer: "test",
+  timestampUtc: "2026-01-01T12:00:00Z",
+  cbsRates: [
+    {
+      currency: "USD",
+      buy: 110,
+      sell: 111,
+      mid: 110.5,
+      timestampUtc: "2026-01-01T11:00:00Z",
+      isManualOverride: false,
+    },
+  ],
+  marketRates: [
+    {
+      currency: "USD",
+      buy: 14480,
+      sell: 14520,
+      mid: 14500,
+      timestampUtc: "2026-01-01T10:00:00Z",
+      isManualOverride: false,
+    },
+  ],
+  effectiveRates: [
+    {
+      currency: "USD",
+      buy: 14480,
+      sell: 14520,
+      mid: 14500,
+      timestampUtc: "2026-01-01T10:00:00Z",
+      isManualOverride: false,
+    },
+  ],
 };
 
 type FetchHandler = (url: string, init?: { signal?: AbortSignal }) => Promise<Response>;
@@ -69,8 +94,8 @@ async function main() {
     assert.equal(snap.rate?.sell, 14520);
     assert.equal(snap.rate?.buy, 14480);
     assert.equal(snap.priceUpdatedAt, "2026-01-01T10:00:00Z");
-    assert.equal(snap.sourceName, "أخبار الليرة");
-    assert.equal(snap.sourceUrl, "https://liranews.info");
+    assert.equal(snap.sourceName, "LiraScope");
+    assert.equal(snap.sourceUrl, "https://lirascope.syria-cloud.sy");
     console.log("[PASS] 1. valid payload → available snapshot + attribution");
   }
 
@@ -125,9 +150,9 @@ async function main() {
   {
     const badPayloads: unknown[] = [
       { unexpected: true },
-      { usdsypd: { sell: 1 } }, // missing value
-      { usdsypd: { value: -5 } }, // negative
-      { usdsypd: { value: "abc" } }, // non-numeric
+      { marketRates: [{ currency: "EUR", buy: 1, sell: 2, mid: 1.5 }] },
+      { marketRates: [{ currency: "USD", buy: 1, sell: 2, mid: -5 }] },
+      { marketRates: [{ currency: "USD", buy: 1, sell: 2, mid: "abc" }] },
     ];
     for (const body of badPayloads) {
       const service = new FxRateService({
@@ -208,8 +233,8 @@ async function main() {
     const body = (await res.json()) as Record<string, unknown>;
     assert.equal(body.available, true);
     assert.equal(body.stale, false);
-    assert.equal(body.sourceName, "أخبار الليرة");
-    assert.equal(body.sourceUrl, "https://liranews.info");
+    assert.equal(body.sourceName, "LiraScope");
+    assert.equal(body.sourceUrl, "https://lirascope.syria-cloud.sy");
     assert.equal((body.rate as Record<string, unknown>).value, 14500);
     server.close();
     servers.length = 0;
@@ -279,7 +304,7 @@ async function main() {
       const snap = service.getSnapshot();
       if (ok && snap.available) {
         console.log(
-          `[LIVE] real provider responded: value=${snap.rate?.value} sell=${snap.rate?.sell} buy=${snap.rate?.buy} fetchedAt=${snap.fetchedAt}`,
+          `[LIVE] real provider responded: value=${snap.rate?.value} sell=${snap.rate?.sell} buy=${snap.rate?.buy} source=${snap.sourceName} fetchedAt=${snap.fetchedAt}`,
         );
       } else {
         console.log(

@@ -4,6 +4,7 @@
 // module hacks. D4-3's main.rs sidecar logic should pull from this crate too.
 pub mod desktop_runtime;
 pub mod device_binding;
+pub mod document_archive;
 pub mod hidden_process;
 pub mod secret_store;
 

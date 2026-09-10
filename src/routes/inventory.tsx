@@ -60,11 +60,14 @@ function InventoryPage() {
   const filteredFabrics = useMemo(() => {
     if (!q) return fabrics;
     return fabrics.filter((f) => {
-      if (f.name.toLowerCase().includes(q)) return true;
+      if ((f.name ?? "").toLowerCase().includes(q)) return true;
       return colorsOfFabric(f.id).some((c) => {
-        if (c.name.toLowerCase().includes(q) || c.code.toLowerCase().includes(q)) return true;
+        if ((c.name ?? "").toLowerCase().includes(q) || (c.code ?? "").toLowerCase().includes(q))
+          return true;
         return rollsOfColor(c.id).some(
-          (r) => r.rollNo.toLowerCase().includes(q) || r.dyeBatch.toLowerCase().includes(q),
+          (r) =>
+            (r.rollNo ?? "").toLowerCase().includes(q) ||
+            (r.dyeBatch ?? "").toLowerCase().includes(q),
         );
       });
     });
@@ -234,7 +237,7 @@ function InventoryPage() {
               <li
                 key={f.id}
                 id={`fabric-card-${f.id}`}
-                className="overflow-hidden rounded-xl border border-border bg-card shadow-soft scroll-mt-4"
+                className="rounded-xl border border-border bg-card shadow-soft scroll-mt-4"
               >
                 <FabricRow
                   fabric={f}
@@ -274,7 +277,7 @@ function InventoryPage() {
                         {colorsOfFabric(f.id).length} لون
                       </span>
                     </div>
-                    <ul className="bg-secondary/30">
+                    <ul className="max-h-[min(50vh,28rem)] overflow-y-auto bg-secondary/30">
                       {colorsOfFabric(f.id).map((c) => {
                         const colorOpen = expandedColor === c.id || !!q;
                         return (

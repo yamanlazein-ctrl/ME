@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<title>Motard ERP — جاري التشغيل</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    background: #141414;
+    color: #f5f5f5;
+    font-family: "Segoe UI", Tahoma, Arial, sans-serif;
+    display: flex; align-items: center; justify-content: center;
+    user-select: none; cursor: default;
+  }
+  .card { text-align: center; width: 320px; }
+  .logo {
+    font-size: 44px; font-weight: 800; color: #f5c518;
+    letter-spacing: 2px; margin-bottom: 6px;
+  }
+  .sub { font-size: 13px; color: #9a9a9a; margin-bottom: 26px; }
+  .bar-wrap {
+    background: #2b2b2b; border-radius: 6px; height: 8px;
+    overflow: hidden; margin-bottom: 14px;
+  }
+  .bar {
+    height: 100%; width: 8%;
+    background: #f5c518; border-radius: 6px;
+    transition: width 0.4s ease;
+  }
+  #stage { font-size: 14px; color: #d7d7d7; min-height: 22px; }
+</style>
+</head>
+<body>
+  <div class="card">
+    <div class="logo">M</div>
+    <div class="sub">Motard Fabrics Group ERP</div>
+    <div class="bar-wrap"><div class="bar" id="bar"></div></div>
+    <div id="stage">جاري تشغيل النظام…</div>
+  </div>
+<script>
+  // Called from Rust via window.eval() as boot stages complete.
+  // Never throws: boot must not depend on the splash page state.
+  (function () {
+    var pct = 8;
+    var bar = document.getElementById("bar");
+    var stage = document.getElementById("stage");
+    window.setStage = function (text) {
+      try {
+        if (typeof text === "string" && text) stage.textContent = text;
+        pct = Math.min(pct + 14, 96);
+        bar.style.width = pct + "%";
+      } catch (e) { /* ignore */ }
+    };
+  })();
+</script>
+</body>
+</html>

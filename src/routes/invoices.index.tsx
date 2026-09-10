@@ -23,14 +23,17 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { DataPagination } from "@/components/common/DataPagination";
-import { Plus, Search, FileText, Ban, Trash2 } from "lucide-react";
+import { Plus, Trash2, Pencil, Printer, Eye } from "lucide-react";
 import { useCancelInvoice, useInvoicesList } from "@/presentation/hooks/useInvoices";
-import { useVouchersList } from "@/presentation/hooks/useVouchers";
 import { customers, suppliers } from "@/presentation/hooks/useParties";
+import { useInventory } from "@/presentation/hooks/useInventory";
 import { formatAmount } from "@/presentation/hooks/useCurrency";
 import { formatDateTime } from "@/lib/utils";
 import type { InvoiceFilter } from "@/application/ports/IInvoiceRepository";
 import type { Invoice } from "@/domain/entities/Invoice";
+import { printOrArchive, printDocument } from "@/components/print/printPortal";
+import { archiveMeta } from "@/shared/utils/documentArchive";
+import { InvoicePrintDocument } from "@/components/print/InvoicePrintDocument";
 
 const TYPE_LABEL: Record<Invoice["type"], string> = {
   entry: "فاتورة دخول",
@@ -58,6 +61,7 @@ function InvoicesIndexPage() {
   const [page, setPage] = useState(0);
   const [pageSize, setPageSize] = useState(20);
   const [toDelete, setToDelete] = useState<Invoice | null>(null);
+  useInventory();
 
   const filter: InvoiceFilter = useMemo(() => {
     const f: InvoiceFilter = {};
@@ -75,12 +79,10 @@ function InvoicesIndexPage() {
   const { data, isLoading, error } = useInvoicesList(filter);
   const invoices = data?.data ?? [];
   const total = data?.total ?? 0;
-  const { data: vouchersData } = useVouchersList();
-  const allVouchers = vouchersData?.data ?? [];
-  const paidByInvoice = (invoiceId: string) =>
-    allVouchers
-      .filter((v) => v.status === "active" && v.invoiceId === invoiceId)
-      .reduce((s, v) => s + v.amount, 0);
+  const paidByInvoice = (invoiceId: string) => {
+    const inv = invoices.find((i) => i.id === invoiceId);
+    return inv?.paid ?? 0;
+  };
 
   const allParties = [...customers, ...suppliers];
 
@@ -253,22 +255,56 @@ function InvoicesIndexPage() {
                         </span>
                       </td>
                       <td className="px-3 py-2 text-left">
-                        {!isCancelled && (
+                        <div className="inline-flex flex-nowrap items-center justify-end gap-1 whitespace-nowrap">
+                          <Link to="/invoices/$id" params={{ id: inv.id }}>
+                            <Button size="sm" variant="ghost">
+                              <Eye className="ml-1 h-4 w-4" /> عرض
+                            </Button>
+                          </Link>
                           <Button
                             size="sm"
-                            variant="ghost"
-                            className="text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
-                            onClick={() => setToDelete(inv)}
-                            aria-label="حذف"
+                            variant="outline"
+                            onClick={() => {
+                              const node = <InvoicePrintDocument invoice={inv} />;
+                              if (inv.type === "sale" || inv.type === "entry") {
+                                printOrArchive(
+                                  node,
+                                  archiveMeta(inv.type, {
+                                    date: inv.date,
+                                    typeLabel: inv.type === "entry" ? "ENTRY" : "SALE",
+                                    number: inv.number || inv.reference || inv.id,
+                                  }),
+                                  true,
+                                );
+                              } else {
+                                printDocument(node);
+                              }
+                            }}
                           >
-                            <Trash2 className="ml-1 h-4 w-4" /> حذف
+                            <Printer className="ml-1 h-4 w-4" /> طباعة
                           </Button>
-                        )}
-                        <Link to="/invoices/$id" params={{ id: inv.id }}>
-                          <Button size="sm" variant="ghost">
-                            <FileText className="h-4 w-4" />
-                          </Button>
-                        </Link>
+                          {!isCancelled && (inv.type === "sale" || inv.type === "entry") && (
+                            <Link
+                              to={inv.type === "entry" ? "/invoices/entry/new" : "/invoices/sale/new"}
+                              search={{ edit: inv.id }}
+                            >
+                              <Button size="sm" variant="ghost">
+                                <Pencil className="ml-1 h-4 w-4" /> تعديل
+                              </Button>
+                            </Link>
+                          )}
+                          {!isCancelled && (
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                              onClick={() => setToDelete(inv)}
+                              aria-label="حذف"
+                            >
+                              <Trash2 className="ml-1 h-4 w-4" /> حذف
+                            </Button>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   );

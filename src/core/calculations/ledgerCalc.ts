@@ -258,16 +258,8 @@ export function buildPartyStats(
     invs = invs.filter((i) => i.currency === currency);
   }
   const totalAmount = invs.reduce((s, i) => s + round2dp(invoiceTotal(i)), 0);
-  let partyVouchers = vouchers.filter(
-    (v) =>
-      v.partyId === party.id &&
-      isActive(v) &&
-      v.kind === (kind === "supplier" ? "payment" : "receipt"),
-  );
-  if (currency) {
-    partyVouchers = partyVouchers.filter((v) => v.currency === currency);
-  }
-  const paid = partyVouchers.reduce((s, v) => s + v.amount, 0);
+  // Read paid directly from invoice rows (backend-maintained, FX-converted).
+  const paid = invs.reduce((s, i) => s + (i.paid ?? 0), 0);
   // No Math.max clamp — a negative remaining is a real credit balance and
   // hiding it corrupts the summary card (H2 fix).
   const remaining = totalAmount - paid;
@@ -304,12 +296,6 @@ export function buildPartyStatsByCurrency(
   const invs = invoices.filter(
     (i) => i.partyId === party.id && isActive(i) && i.type === expectedType,
   );
-  const partyVouchers = vouchers.filter(
-    (v) =>
-      v.partyId === party.id &&
-      isActive(v) &&
-      v.kind === (kind === "supplier" ? "payment" : "receipt"),
-  );
 
   const out: Record<string, PartyStatsByCurrency> = {};
   for (const inv of invs) {
@@ -324,20 +310,8 @@ export function buildPartyStatsByCurrency(
     };
     cur.invoicesCount += 1;
     cur.totalAmount += round2dp(invoiceTotal(inv));
+    cur.totalPaid += inv.paid ?? 0;
     cur.totalKg += inv.lines.reduce((a, l) => a + l.quantityKg, 0);
-    out[c] = cur;
-  }
-  for (const v of partyVouchers) {
-    const c = v.currency ?? "SYP";
-    const cur = out[c] ?? {
-      invoicesCount: 0,
-      totalAmount: 0,
-      totalPaid: 0,
-      remaining: 0,
-      avgInvoice: 0,
-      totalKg: 0,
-    };
-    cur.totalPaid += v.amount;
     out[c] = cur;
   }
   for (const c of Object.keys(out)) {

@@ -40,4 +40,4 @@ export const licenseAuditEvents = pgTable(
     ),
     eventTypeIdx: index("idx_license_audit_events_event_type").on(table.eventType),
   }),
-);
+).enableRLS();

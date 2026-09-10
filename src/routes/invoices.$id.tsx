@@ -10,7 +10,8 @@ import type { Currency } from "@/domain/types";
 import { colorById, fabricById, rollById, useInventory } from "@/presentation/hooks/useInventory";
 import { customerById, supplierById } from "@/presentation/hooks/useParties";
 import { useVouchersList } from "@/presentation/hooks/useVouchers";
-import { printDocument } from "@/components/print/printPortal";
+import { printDocument, printOrArchive } from "@/components/print/printPortal";
+import { archiveMeta } from "@/shared/utils/documentArchive";
 import { InvoicePrintDocument } from "@/components/print/InvoicePrintDocument";
 import { Button } from "@/components/ui/button";
 import {
@@ -57,9 +58,9 @@ function InvoiceDetailPage() {
   }
 
   const total = inv.total();
-  const linkedVouchers = allVouchers.filter((v) => v.invoiceId === inv.id && v.status === "active");
-  const paid = linkedVouchers.reduce((s, v) => s + v.amount, 0);
+  const paid = inv.paid ?? 0;
   const remaining = Math.max(0, total - paid);
+  const linkedVouchers = allVouchers.filter((v) => v.invoiceId === inv.id && v.status === "active");
   const party =
     inv.partyType === "customer" ? customerById(inv.partyId) : supplierById(inv.partyId);
   const partyRoute = inv.partyType === "customer" ? "/customers/$id" : "/suppliers/$id";
@@ -77,7 +78,22 @@ function InvoiceDetailPage() {
           <Button
             variant="outline"
             className="gap-2"
-            onClick={() => printDocument(<InvoicePrintDocument invoice={inv} />)}
+            onClick={() => {
+              const node = <InvoicePrintDocument invoice={inv} />;
+              if (inv.type === "sale" || inv.type === "entry") {
+                printOrArchive(
+                  node,
+                  archiveMeta(inv.type, {
+                    date: inv.date,
+                    typeLabel: inv.type === "entry" ? "ENTRY" : "SALE",
+                    number: inv.number || inv.reference || inv.id,
+                  }),
+                  true,
+                );
+              } else {
+                printDocument(node);
+              }
+            }}
           >
             <Printer className="h-4 w-4" /> طباعة
           </Button>
@@ -214,7 +230,7 @@ function InvoiceDetailPage() {
           <PayCell label="الضريبة" value={inv.tax ?? 0} currency={inv.currency} />
           <PayCell label="الشحن" value={inv.shipping ?? 0} currency={inv.currency} />
           <PayCell label="الإجمالي الكلي" value={total} currency={inv.currency} />
-          <PayCell label="المدفوع عند الفاتورة" value={inv.paid ?? 0} currency={inv.currency} />
+          <PayCell label="إجمالي المدفوع" value={paid} currency={inv.currency} />
         </div>
         <div className="grid gap-3 md:grid-cols-3">
           <PayCell label="الإجمالي" value={total} currency={inv.currency} />

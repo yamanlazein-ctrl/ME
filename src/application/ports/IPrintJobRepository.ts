@@ -42,6 +42,8 @@ export interface ReceivePrintInput {
   receivedKg: number;
   printCostPerKg: number;
   currency: string;
+  /** Units of currency per 1 USD — required when currency ≠ USD. */
+  exchangeRate?: number;
   newName: string;
   newCategory?: string;
   newColorName?: string;

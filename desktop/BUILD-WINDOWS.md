@@ -44,11 +44,11 @@ cd .. && npm run tauri:build
 
 بعد النجاح، يوجد في `desktop/src-tauri/target/release/bundle/`:
 
-| الملف        | الوصف                           |
-| ------------ | ------------------------------- |
-| `msi/*.msi`  | Windows Installer (recommended) |
-| `nsis/*.exe` | NSIS Installer (أخف)            |
-| `*.exe`      | ملف تنفيذي مباشر (portable)     |
+| الملف       | الوصف                           |
+| ----------- | ------------------------------- |
+| `msi/*.msi` | Windows Installer (recommended) |
+
+> ملاحظة: `tauri.conf.json` الحالي يحدد `"targets": ["msi"]` فقط. لتفعيل NSIS أو exe محمول، أضف `"nsis"` أو `"app"` إلى مصفوفة `bundle.targets` أولاً.
 
 ## خصائص التطبيق
 
@@ -81,6 +81,41 @@ cd .. && npm run tauri:build
 # MSI صامت (للشركات)
 msiexec /i MotardFabricsERP-1.0.0.msi /quiet /norestart
 ```
+
+## سياسة بيانات إلغاء التثبيت (سلوك متعمد — لا "تصلحه")
+
+عند إلغاء التثبيت الحقيقي (uninstall من Control Panel، وليس ترقية)، يحذف الـMSI
+مجلد بيانات المستخدم بالكامل:
+
+```
+%LOCALAPPDATA%\motard-erp\   (قاعدة البيانات الحية pgdata + السجلات + secrets.dat)
+```
+
+التنفيذ: `desktop/src-tauri/wix-cleanup.wxs` (CustomAction مؤجلة، Return=ignore،
+تعمل بصفة المستخدم، شرط `REMOVE="ALL" AND NOT UPGRADINGPRODUCTCODE` — أي لا تعمل
+عند الترقية أو الإصلاح). السبب: بقايا قواعد الاختبار (`erp_e2e*`،
+`erp_wizard_test*`...) كانت تُعاد استخدامها بصمت بعد إعادة التثبيت وتسبب لبساً.
+
+⚠️ **تحذير لعميل حقيقي مستقبلاً:** هذا الحذف سيدمر قاعدة بيانات العميل الحية.
+قبل الشحن لعميل فعلي يجب إما جعله اختيارياً (خيار واجهة أو خاصية
+`MOTARD_WIPEDATA=1`) أو شحنه كأداة "إعادة ضبط مصنع" منفصلة.
+
+## تسريع الإقلاع: استثناء Windows Defender (خطوة اختيارية موصى بها)
+
+يقيس الإقلاع الدافئ ~27 ثانية على جهاز مرجعي، معظمها تحميل وحدات Node.js
+(الباك-إند ~21s) تحت الفحص الآني لـDefender — وأول إقلاع أطول (نسخ قالب
+pgdata بحجم ~177MB). لا نفرض أي استثناء برمجياً من المثبّت (تعديل استثناءات
+الحماية تلقائياً يتطلب صلاحيات مرتفعة وقد يُقرأ كسلوك مريب) — هذه خطوة يدوية
+يقررها مسؤول كل جهاز:
+
+1. افتح **Windows Security ← Virus & threat protection ← Manage settings ←
+   Exclusions ← Add an exclusion ← Folder**.
+2. أضف مجلد التثبيت: `C:\Program Files\Motard Fabrics Group ERP`
+3. أضف مجلد البيانات: `%LOCALAPPDATA%\motard-erp`
+4. أعد فتح التطبيق وقارن زمن ظهور الواجهة الجاهزة.
+
+أثر متوقع: تقليص واضح في زمن الإقلاع البارد والدافئ معاً (الفحص الآني لعشرات
+آلاف ملفات `node_modules` هو العامل الخارجي الأكبر).
 
 ## تعديلات مطلوبة قبل البناء
 
@@ -132,7 +167,21 @@ signtool sign /f certificate.pfx /p password /t http://timestamp.digicert.com Mo
 # استخدم license key من admin-dashboard: http://localhost:5173
 ```
 
+## متبقٍ قبل التسليم النهائي
+
+> قائمة بنود يجب إنجازها قبل تسليم الـEXE الفعلي للعميل. هذه الأيقونة الحالية
+> هي **placeholder مؤقّتة** وليست تصميماً نهائياً.
+
+- [ ] **استبدال أيقونة التطبيق بشعار احترافي حقيقي:** الأيقونة الحالية
+  `desktop/src-tauri/icons/icon.ico` (وكذلك `icon.png`) هي أيقونة placeholder
+  اصطناعية (خلفية ذهبية + حرف "M") ولّدت آلياً لغرض تمرير بناء `tauri-build`
+  فقط. يجب استبدالها بشعار الشركة الرسمي (مربّع، ≥256×256، متعدد المقاسات)
+  قبل التسليم للعميل. الخطوة 10 من خطة التحزيم كانت تشير إلى أن `icon.png`
+  الأصلي كان تالفاً (1×1) — تم تجاوز العائق مؤقتاً بهذه الـplaceholder.
+
 ## التحديث التلقائي (Auto-Update)
+
+> **⚠️ غير مُفعَّل حالياً.** `Cargo.toml` الحالي لا يتضمن تبعية `tauri-plugin-updater`، و`tauri.conf.json` لا يحتوي قسم `plugins`. الخطوات أدناه توضيحية لتفعيله **مستقبلاً** فقط — تتطلب أولاً إضافة `tauri-plugin-updater = "2"` إلى `[dependencies]` في `Cargo.toml` وتسجيله في `main.rs` عبر `.plugin(tauri_plugin_updater::Builder::new().build())`.
 
 لتفعيل التحديث التلقائي:
 

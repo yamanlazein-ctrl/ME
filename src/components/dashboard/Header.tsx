@@ -2,63 +2,71 @@ import { NotificationsBell } from "./NotificationsBell";
 import { GlobalSearch } from "./GlobalSearch";
 import { ThemeToggle } from "./ThemeToggle";
 import { FxReferenceRate } from "./FxReferenceRate";
-import { settings } from "@/presentation/hooks/useSettings";
-import logoUrl from "@/assets/logo-motard.png";
-import { Store, RefreshCw, Globe } from "lucide-react";
+import { PRINT_BRAND_NAME } from "@/shared/constants/printConfig";
+import { useConnectivity } from "@/presentation/hooks/useConnectivity";
+import { useAutoSync } from "@/presentation/hooks/useAutoSync";
+import logoUrl from "@/assets/logo-motard-icon.png";
+import { cn } from "@/lib/utils";
 
+/**
+ * Top bar — three clear zones with air between them.
+ * Brand (start) · Search (middle) · Tools (end).
+ */
 export function Header() {
-  const branchName = settings.company?.name ?? "";
-  const lastSync = new Date().toLocaleTimeString("ar-SY", {
-    hour: "2-digit",
-    minute: "2-digit",
-    numberingSystem: "latn",
-  });
+  const connectivity = useConnectivity();
+  useAutoSync();
+  const online = connectivity === "online";
 
   return (
     <header
       data-od-id="top-bar"
-      className="sticky top-0 z-30 border-b border-border bg-background/80 shadow-[0_4px_16px_-8px_rgba(0,0,0,0.45)] backdrop-blur-xl"
+      className="sticky top-0 z-30 border-b border-border bg-background/95 backdrop-blur-md"
     >
-      <div className="mx-auto flex h-16 items-center gap-4 px-5">
-        {/* Start (RTL right): logo lockup + branch */}
-        <div className="flex min-w-0 shrink-0 items-center gap-3">
+      <div className="mx-auto flex h-[3.75rem] items-center gap-6 px-5 md:gap-10 md:px-8">
+        {/* Zone 1 — Brand */}
+        <div className="flex shrink-0 items-center gap-2.5">
           <img
             src={logoUrl}
-            alt="Motard Fabrics Group"
-            className="h-9 w-auto shrink-0 object-contain"
+            alt=""
+            className="h-8 w-8 object-contain object-center"
             style={{ background: "transparent" }}
           />
-          {branchName && (
-            <div className="hidden min-w-0 items-center gap-1.5 rounded-full border border-border/60 bg-card/60 px-3 py-1 text-xs md:flex">
-              <Store className="h-3.5 w-3.5 shrink-0 text-primary/80" strokeWidth={2} />
-              <span className="truncate font-medium text-foreground/80">{branchName}</span>
-            </div>
-          )}
+          <span className="hidden max-w-[14rem] truncate text-[13px] font-semibold tracking-tight text-foreground sm:inline">
+            {PRINT_BRAND_NAME}
+          </span>
         </div>
 
-        {/* Center: search */}
-        <div className="flex min-w-0 flex-1 justify-center px-4">
-          <div className="w-full max-w-[420px]">
-            <GlobalSearch />
-          </div>
+        {/* Zone 2 — Search */}
+        <div className="mx-auto w-full max-w-md flex-1">
+          <GlobalSearch />
         </div>
 
-        {/* End (RTL left): reference FX + last sync + theme + notifications */}
-        <div className="flex shrink-0 items-center gap-3">
-          <div className="hidden items-center gap-2 lg:flex">
-            {/* Reference USD→SYP rate — DISPLAY-ONLY badge, fully isolated
-                from invoice/voucher logic (exchangeRate stays manual). */}
+        {/* Zone 3 — Tools */}
+        <div className="flex shrink-0 items-center gap-5">
+          <div className="hidden xl:block">
             <FxReferenceRate />
-            <div className="flex items-center gap-1.5 rounded-full border border-border/60 bg-card/60 px-3 py-1 text-[11px] text-muted-foreground tabular-nums">
-              <RefreshCw className="h-3 w-3 text-primary/70" strokeWidth={2} />
-              <span>آخر مزامنة {lastSync}</span>
-            </div>
-            <div className="flex items-center gap-1.5 rounded-full border border-border/60 bg-card/60 px-3 py-1 text-[11px] font-medium text-foreground/80">
-              <Globe className="h-3 w-3 text-primary/70" strokeWidth={2} />
-              <span>متصل</span>
-            </div>
           </div>
-          <div className="flex items-center gap-2">
+
+          <span
+            className={cn(
+              "hidden items-center gap-1.5 text-[11px] font-medium lg:inline-flex",
+              online ? "text-emerald-600 dark:text-emerald-400" : "text-destructive",
+            )}
+            title={online ? "الاتصال بالخادم متاح" : "لا يوجد اتصال بالخادم"}
+            role="status"
+            aria-live="polite"
+          >
+            <span
+              className={cn(
+                "h-1.5 w-1.5 rounded-full",
+                online ? "bg-emerald-500" : "bg-destructive",
+              )}
+              aria-hidden
+            />
+            {online ? "متصل" : "غير متصل"}
+          </span>
+
+          <div className="flex items-center gap-0.5 border-s border-border ps-4">
             <ThemeToggle />
             <NotificationsBell />
           </div>

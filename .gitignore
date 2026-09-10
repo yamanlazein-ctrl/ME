@@ -33,6 +33,9 @@ playwright-report/
 .mcp.json
 opencode.jsonc
 
+# Husky runtime cache (keep hooks, ignore internal cache)
+.husky/_/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
@@ -67,6 +70,49 @@ admin-dashboard/.env.*
 # Rust / Tauri
 desktop/src-tauri/target/
 desktop/node_modules/
+desktop/src-tauri/resources/
+desktop/src-tauri/Cargo.lock
+desktop/src-tauri/gen/
+desktop/package-lock.json
+desktop/pnpm-lock.yaml
 
 # Local backup snapshots (keep on disk, out of repo)
 backup-pre-redesign/
+backup/
+*.dump
+
+# Postgres staging binaries (local pg_dump environment, rebuilt on demand)
+backup/pgdump-staging/
+*.dll
+pg_dump.exe
+pg_dumpall.exe
+
+# Install / debug logs (local only, some exceed GitHub 100MB limit)
+install_log.txt
+install_log_quiet.txt
+install_*.log
+*-dev.log
+frontend-run*.log
+build-prod*.log
+preview-prod*.log
+mig-out.txt
+
+# AI tool caches & workdirs (local only, thousands of files)
+.scannerwork/
+.claude/
+.workbuddy-ai/
+.code-review-graph/
+.semgrep/
+.tanstack/
+
+# Phase / scratch reports kept locally (regenerable)
+PHASE_REPORTS/
+MASTER_REMEDIATION_PLAN.md
+EXECUTION_LOG.md
+EXECUTION_STATUS.md
+REPAIR_TRACKER.md
+SESSION-AND-LICENSE-PLAN.md
+CLAUDE.md
+1
+1.md.txt
+sonar-project.properties

@@ -1,6 +1,6 @@
 import { useEffect, useMemo } from "react";
 import { Link, useNavigate } from "@tanstack/react-router";
-import { Eye, MoreVertical, Pencil, Printer } from "lucide-react";
+import { Eye, MoreVertical, Pencil, Printer, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Table,
@@ -19,17 +19,17 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { ErrorState } from "@/components/ui/error-state";
 import { EmptyState } from "@/components/ui/empty-state";
-import { useInvoicesList } from "@/presentation/hooks/useInvoices";
-import { useVouchersList } from "@/presentation/hooks/useVouchers";
+import { useInvoicesList, useCancelInvoice } from "@/presentation/hooks/useInvoices";
 import { useProfitDetails } from "@/presentation/hooks/useProfit";
 import { customerById, supplierById } from "@/presentation/hooks/useParties";
 import { buildTenantContext } from "@/infrastructure/di/auth-context";
-import { printDocument } from "@/components/print/printPortal";
+import { printOrArchive } from "@/components/print/printPortal";
+import { archiveMeta } from "@/shared/utils/documentArchive";
 import { InvoicePrintDocument } from "@/components/print/InvoicePrintDocument";
 import { formatNumber, formatQuantity } from "@/shared/utils/formatNumber";
 import { currencySymbol } from "@/presentation/hooks/useCurrency";
-import type { Currency } from "@/domain/types";
 import type { Invoice } from "@/domain/entities/Invoice";
+import type { Currency } from "@/domain/types";
 import type { ProfitQueryParams } from "@/contracts/profit";
 
 const EDIT_ROLES = new Set(["admin", "accountant"]);
@@ -42,6 +42,7 @@ const EDIT_ROLES = new Set(["admin", "accountant"]);
 export function SalesInvoicesTable({ query }: { query: ProfitQueryParams }) {
   const navigate = useNavigate();
   const canEdit = EDIT_ROLES.has(buildTenantContext().userRole);
+  const cancelInvoice = useCancelInvoice();
 
   const filter = {
     type: "sale" as const,
@@ -53,7 +54,6 @@ export function SalesInvoicesTable({ query }: { query: ProfitQueryParams }) {
   };
   const { data, isLoading, isError, refetch, error } = useInvoicesList(filter);
   const { data: profitDetails } = useProfitDetails(query);
-  const { data: vouchersData } = useVouchersList({ limit: 1000 });
 
   useEffect(() => {
     if (error) console.error("[cashbox] invoices list failed:", error);
@@ -67,14 +67,15 @@ export function SalesInvoicesTable({ query }: { query: ProfitQueryParams }) {
     return m;
   }, [profitDetails]);
 
+  const invoices = data?.data ?? [];
+
   const paidByInvoice = useMemo(() => {
     const m = new Map<string, number>();
-    for (const v of vouchersData?.data ?? []) {
-      if (v.kind !== "receipt" || v.status !== "active" || !v.invoiceId) continue;
-      m.set(v.invoiceId, (m.get(v.invoiceId) ?? 0) + v.amount);
+    for (const inv of invoices) {
+      m.set(inv.id, inv.paid ?? 0);
     }
     return m;
-  }, [vouchersData]);
+  }, [invoices]);
 
   if (isLoading) {
     return (
@@ -90,7 +91,6 @@ export function SalesInvoicesTable({ query }: { query: ProfitQueryParams }) {
     return <ErrorState title="تعذر تحميل الفواتير" onRetry={() => void refetch()} />;
   }
 
-  const invoices = data?.data ?? [];
   if (invoices.length === 0) {
     return (
       <EmptyState
@@ -182,10 +182,32 @@ export function SalesInvoicesTable({ query }: { query: ProfitQueryParams }) {
                       )}
                       {/* Print — the SAME print document used by /invoices/$id */}
                       <DropdownMenuItem
-                        onClick={() => printDocument(<InvoicePrintDocument invoice={inv} />)}
+                        onClick={() => {
+                          printOrArchive(
+                            <InvoicePrintDocument invoice={inv} />,
+                            archiveMeta("sale", {
+                              date: inv.date,
+                              typeLabel: "SALE",
+                              number: inv.number || inv.reference || inv.id,
+                            }),
+                            true,
+                          );
+                        }}
                       >
                         <Printer className="h-4 w-4" /> طباعة
                       </DropdownMenuItem>
+                      {canEdit && inv.status === "active" && (
+                        <DropdownMenuItem
+                          className="text-destructive focus:text-destructive"
+                          onClick={() => {
+                            if (confirm(`حذف الفاتورة ${inv.number}؟`)) {
+                              void cancelInvoice.mutateAsync(inv.id);
+                            }
+                          }}
+                        >
+                          <Trash2 className="h-4 w-4" /> حذف
+                        </DropdownMenuItem>
+                      )}
                     </DropdownMenuContent>
                   </DropdownMenu>
                 </TableCell>

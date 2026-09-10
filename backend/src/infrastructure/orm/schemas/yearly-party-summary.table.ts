@@ -36,11 +36,19 @@ export const yearlyPartySummaries = pgTable(
     year: integer("year").notNull(),
     currency: varchar("currency", { length: 3 }).notNull().default("SYP"),
     /** Balance at the START of this year (sum of all previous years). */
-    openingBalance: numeric("opening_balance", { precision: 14, scale: 2, mode: "number" }).notNull().default(0),
+    openingBalance: numeric("opening_balance", { precision: 14, scale: 2, mode: "number" })
+      .notNull()
+      .default(0),
     /** Balance at the END of this year. */
-    closingBalance: numeric("closing_balance", { precision: 14, scale: 2, mode: "number" }).notNull().default(0),
-    totalDebit: numeric("total_debit", { precision: 14, scale: 2, mode: "number" }).notNull().default(0),
-    totalCredit: numeric("total_credit", { precision: 14, scale: 2, mode: "number" }).notNull().default(0),
+    closingBalance: numeric("closing_balance", { precision: 14, scale: 2, mode: "number" })
+      .notNull()
+      .default(0),
+    totalDebit: numeric("total_debit", { precision: 14, scale: 2, mode: "number" })
+      .notNull()
+      .default(0),
+    totalCredit: numeric("total_credit", { precision: 14, scale: 2, mode: "number" })
+      .notNull()
+      .default(0),
     invoiceCount: integer("invoice_count").notNull().default(0),
     voucherCount: integer("voucher_count").notNull().default(0),
     generatedAt: timestamp("generated_at", { withTimezone: true }).notNull().defaultNow(),
@@ -56,4 +64,4 @@ export const yearlyPartySummaries = pgTable(
     tenantPartyIdx: index("idx_yps_party").on(table.tenantId, table.partyId),
     tenantYearIdx: index("idx_yps_year").on(table.tenantId, table.year),
   }),
-);
+).enableRLS();

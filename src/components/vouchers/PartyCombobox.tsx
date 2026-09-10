@@ -3,7 +3,7 @@ import { Check, ChevronDown, Plus, Search } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
-import { customers, suppliers } from "@/presentation/hooks/useParties";
+import { customers, suppliers, useParties } from "@/presentation/hooks/useParties";
 
 /**
  * Searchable party (customer/supplier) combobox for use in forms.
@@ -27,6 +27,7 @@ export function PartyCombobox({
   onCreateNew: () => void;
   placeholder?: string;
 }) {
+  useParties();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
 
@@ -53,7 +54,7 @@ export function PartyCombobox({
         <button
           type="button"
           className={cn(
-            "flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 text-right text-sm font-medium hover:border-primary/50 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary",
+            "flex h-9 w-full items-center justify-between rounded-md border border-input bg-background px-3 text-right text-sm font-medium hover:border-primary/50 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary",
             !selected && "font-normal text-muted-foreground",
           )}
         >

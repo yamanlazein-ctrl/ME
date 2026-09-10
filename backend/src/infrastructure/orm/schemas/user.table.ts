@@ -20,6 +20,8 @@ export const users = pgTable(
     name: varchar("name", { length: 255 }).notNull(),
     email: varchar("email", { length: 320 }).notNull(),
     passwordHash: varchar("password_hash", { length: 255 }).notNull(),
+    /** Optional 4-digit PIN (Argon2) for device user-picker unlock. */
+    pinHash: varchar("pin_hash", { length: 255 }),
     role: varchar("role", { length: 20 }).notNull(),
     isLicenseOwner: boolean("is_license_owner").notNull().default(false),
     active: boolean("active").notNull().default(true),
@@ -31,4 +33,4 @@ export const users = pgTable(
     tenantEmailIdx: uniqueIndex("idx_users_tenant_email").on(table.tenantId, table.email),
     licenseOwnerIdx: index("idx_users_license_owner").on(table.tenantId, table.isLicenseOwner),
   }),
-);
+).enableRLS();

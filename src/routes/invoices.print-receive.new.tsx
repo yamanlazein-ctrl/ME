@@ -19,7 +19,8 @@ import { colorById, fabricById, rollById, useInventory } from "@/presentation/ho
 import { currencySymbol } from "@/presentation/hooks/useCurrency";
 import type { Currency } from "@/domain/types";
 import { usePrintJobs, useOpenPrintJobs, useReceivePrint } from "@/presentation/hooks/usePrintJobs";
-import { printDocument } from "@/components/print/printPortal";
+import { printOrArchive } from "@/components/print/printPortal";
+import { archiveMeta } from "@/shared/utils/documentArchive";
 import { PrintJobDocument } from "@/components/print/PrintJobDocument";
 import { PrintPageBreak } from "@/components/print/PrintDocument";
 import { formatNumber, formatMoney, formatQuantity } from "@/shared/utils/formatNumber";
@@ -144,6 +145,7 @@ function PrintReceivePage() {
 
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
   const [currency, setCurrency] = useState<Currency>("SYP");
+  const [exchangeRate, setExchangeRate] = useState<number | "">("");
   const [newCategory, setNewCategory] = useState("طباعة");
   const [notes, setNotes] = useState("");
   const [lines, setLines] = useState<ReceiveLine[]>([emptyReceiveLine()]);
@@ -194,10 +196,25 @@ function PrintReceivePage() {
       const fab = fabricById(line.jobId.slice(7));
       return fab ? `قماش ${fab.name} — اختر سند الإرسال` : "";
     }
-    return line.jobId || "";
+    const job = jobById(line.jobId);
+    if (!job) return "";
+    const f = fabricById(job.sourceFabricId);
+    return `${job.number} — ${f?.name ?? ""} — ${job.sentKg} كغ`;
   };
 
   const received = allJobs.filter((j) => j.status === "received").slice(0, 20);
+
+  /** Manual FX needed for non-USD receive, or when converting a non-USD source into USD. */
+  const needsManualFx = useMemo(() => {
+    if (currency !== "USD") return true;
+    return lines.some((l) => {
+      if (!l.jobId || l.jobId.startsWith("fabric:")) return false;
+      const job = jobById(l.jobId);
+      const src = job ? rollById(job.sourceRollId) : undefined;
+      const srcCur = src?.currency ?? "SYP";
+      return srcCur !== currency;
+    });
+  }, [currency, lines, allJobs]);
 
   const save = async (thenPrint = false) => {
     setError(null);
@@ -213,6 +230,15 @@ function PrintReceivePage() {
         if (isNaN(c) || c < 0) throw new Error("أدخل تكلفة طباعة صحيحة لكل بند");
       }
       if (!newCategory.trim()) throw new Error("أدخل التصنيف");
+      if (needsManualFx && !(Number(exchangeRate) > 0)) {
+        const proceed = window.confirm(
+          "عملة الاستلام تختلف عن المصدر أو ليست بالدولار، ولم يُدخل سعر صرف.\n\nموافق = المتابعة بدون تحويل (تكلفة المصدر كما هي)\nإلغاء = الرجوع لإدخال سعر الصرف يدوياً",
+        );
+        if (!proceed) {
+          setError("أدخل سعر الصرف يدوياً ثم أعد الحفظ.");
+          return;
+        }
+      }
 
       // One composite request → one receive per sent voucher, sequentially.
       const created = [];
@@ -223,10 +249,13 @@ function PrintReceivePage() {
           receivedKg: Number(l.receivedKg),
           printCostPerKg: Number(l.printCostPerKg),
           currency,
+          ...(needsManualFx && Number(exchangeRate) > 0
+            ? { exchangeRate: Number(exchangeRate) }
+            : {}),
           newName: l.newName.trim(),
           newCategory,
-          newColorName: l.newColorName,
-          newColorCode: l.newColorCode,
+          newColorName: l.newColorName.trim() || undefined,
+          newColorCode: l.newColorCode.trim() || undefined,
           newSalePricePerKg: l.newSalePrice === "" ? undefined : Number(l.newSalePrice),
           notes,
         });
@@ -235,16 +264,25 @@ function PrintReceivePage() {
       }
 
       const numbers = created.map((j) => j.number).join("، ");
-      if (thenPrint && created.length > 0) {
-        printDocument(
-          <>
-            {created.map((j, i) => (
-              <div key={j.id}>
-                {i > 0 && <PrintPageBreak />}
-                <PrintJobDocument job={j} />
-              </div>
-            ))}
-          </>,
+      const doc = (
+        <>
+          {created.map((j, i) => (
+            <div key={j.id}>
+              {i > 0 && <PrintPageBreak />}
+              <PrintJobDocument job={j} />
+            </div>
+          ))}
+        </>
+      );
+      if (created.length > 0) {
+        printOrArchive(
+          doc,
+          archiveMeta("print_receive", {
+            date,
+            typeLabel: "PRINT-RECV",
+            number: created.map((j) => j.number).join("_"),
+          }),
+          thenPrint,
         );
       }
       setOk(
@@ -300,7 +338,7 @@ function PrintReceivePage() {
           )}
 
           {/* Shared fields */}
-          <div className="mb-4 grid gap-3 rounded-lg border border-border bg-secondary/40 p-4 md:grid-cols-3">
+          <div className="mb-4 grid gap-3 rounded-lg border border-border bg-secondary/40 p-4 md:grid-cols-4">
             <Field label="تاريخ الاستلام">
               <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
             </Field>
@@ -308,7 +346,14 @@ function PrintReceivePage() {
               <Input value={newCategory} onChange={(e) => setNewCategory(e.target.value)} />
             </Field>
             <Field label="العملة">
-              <Select value={currency} onValueChange={(v) => setCurrency(v as Currency)}>
+              <Select
+                value={currency}
+                onValueChange={(v) => {
+                  const c = v as Currency;
+                  setCurrency(c);
+                  if (c === "USD") setExchangeRate("");
+                }}
+              >
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
@@ -317,6 +362,29 @@ function PrintReceivePage() {
                   <SelectItem value="USD">$ USD</SelectItem>
                 </SelectContent>
               </Select>
+            </Field>
+            <Field label="سعر الصرف (ل.س / $)">
+              {!needsManualFx ? (
+                <Input
+                  value="1"
+                  readOnly
+                  disabled
+                  dir="ltr"
+                  className="bg-muted/40 text-muted-foreground"
+                />
+              ) : (
+                <Input
+                  type="number"
+                  min={1}
+                  step="any"
+                  value={exchangeRate}
+                  onChange={(e) =>
+                    setExchangeRate(e.target.value === "" ? "" : Number(e.target.value))
+                  }
+                  placeholder="أدخل سعر الصرف يدوياً"
+                  dir="ltr"
+                />
+              )}
             </Field>
           </div>
 

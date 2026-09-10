@@ -70,8 +70,14 @@ import { ApiNotificationRepository } from "./repositories/api/ApiNotificationRep
 import { ApiAuthRepository } from "./repositories/api/ApiAuthRepository";
 import { ApiPrintJobRepository } from "./repositories/api/ApiPrintJobRepository";
 
+import { getApiBaseUrl } from "@/lib/api-base-url";
 import { BaseHttpClient } from "./http";
-import { authInterceptor, loggingInterceptor, tenantHeaderInterceptor } from "./http/interceptors";
+import {
+  authInterceptor,
+  loggingInterceptor,
+  tenantHeaderInterceptor,
+  offlineModeInterceptor,
+} from "./http/interceptors";
 import { createTokenProvider } from "./auth/TokenProvider";
 import {
   AuthApiService,
@@ -94,11 +100,6 @@ import {
   FxApiService,
 } from "./api";
 
-function getApiBaseUrl(): string {
-  const raw = (import.meta.env.VITE_API_BASE_URL as string | undefined)?.trim();
-  if (!raw || raw === "" || raw === "/api") return "/api";
-  return raw.replace(/\/+$/, "");
-}
 const baseUrl = getApiBaseUrl();
 const apiClient = new BaseHttpClient({ baseUrl, timeoutMs: 15_000 });
 apiClient.addInterceptor(
@@ -116,6 +117,7 @@ apiClient.addInterceptor(
   }),
 );
 apiClient.addInterceptor(authInterceptor(createTokenProvider()));
+apiClient.addInterceptor(offlineModeInterceptor());
 apiClient.addInterceptor(
   loggingInterceptor(() => {
     try {

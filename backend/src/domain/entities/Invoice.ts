@@ -28,8 +28,6 @@ export interface InvoiceData {
   exchangeRate?: number | null;
   /** USD equivalent of `total` at the frozen exchangeRate. */
   baseTotal?: number | null;
-  /** USD equivalent of `paid` at the frozen exchangeRate. */
-  basePaid?: number | null;
   subtotal: number;
   discount: number;
   tax: number;
@@ -202,6 +200,16 @@ export interface CreateInvoiceInput {
    * reserved roll NOT owned by this order is rejected (BUG-17).
    */
   orderId?: UUID;
+  /**
+   * Final document number already reserved from a device block (PRE_ALLOCATED).
+   * Used when replaying a synced create on the hub — must not bump sequences.
+   */
+  preAllocatedNumber?: string;
+  /**
+   * Stable invoice id from the originating device — hub/peer replay must
+   * insert the same UUID so cross-device references stay aligned.
+   */
+  preAllocatedId?: UUID;
 }
 
 /** Editable fields for PUT /invoices/:id. partyId/type/currency/paid are

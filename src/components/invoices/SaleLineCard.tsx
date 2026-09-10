@@ -87,7 +87,7 @@ export function SaleLineCard({
             )}
           </span>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           {!rowIsEmpty && (
             <span
               className={cn(
@@ -101,22 +101,12 @@ export function SaleLineCard({
               </span>
             </span>
           )}
-          {!rowIsEmpty && (
-            <button
-              type="button"
-              onClick={onRemove}
-              className="grid h-7 w-7 place-items-center rounded-md text-muted-foreground transition hover:bg-destructive/10 hover:text-destructive"
-              aria-label="حذف البند"
-            >
-              <Trash2 className="h-3.5 w-3.5" />
-            </button>
-          )}
         </div>
       </div>
 
-      <div className="space-y-3 p-4">
+      <div className="space-y-3 p-3 sm:p-4">
         <GroupSection title="بيانات القماش">
-          <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-[minmax(0,1.4fr)_minmax(0,1.1fr)_minmax(0,0.9fr)]">
             <CardField label="نوع القماش" required>
               <InlineFabricCell
                 ref={fabricRef}
@@ -135,7 +125,7 @@ export function SaleLineCard({
                 }
               />
             </CardField>
-            <CardField label="اللون / رقم اللون" required>
+            <CardField label="اسم اللون" required>
               <InlineColorCell
                 fabricId={line.fabricId || undefined}
                 name={line.colorName}
@@ -144,20 +134,22 @@ export function SaleLineCard({
                 onPickExisting={onPickColor}
                 onSetName={(name) => onUpdate({ colorName: name, colorId: "", rollId: "" })}
                 onSetCode={(code) => onUpdate({ colorCode: code, colorId: "", rollId: "" })}
+                mode="name"
+              />
+            </CardField>
+            <CardField label="رقم اللون" required>
+              <InlineColorCell
+                fabricId={line.fabricId || undefined}
+                name={line.colorName}
+                code={line.colorCode}
+                existingColorId={line.colorId || undefined}
+                onPickExisting={onPickColor}
+                onSetName={(name) => onUpdate({ colorName: name, colorId: "", rollId: "" })}
+                onSetCode={(code) => onUpdate({ colorCode: code, colorId: "", rollId: "" })}
+                mode="code"
               />
             </CardField>
           </div>
-          {line.fabricId && onAddColor && (
-            <button
-              type="button"
-              onClick={onAddColor}
-              className="inline-flex items-center gap-1.5 rounded-md border border-primary/30 bg-primary/10 px-3 py-1.5 text-xs font-bold text-primary transition hover:bg-primary/20"
-              aria-label="إضافة لون آخر لنفس القماش"
-            >
-              <Palette className="h-3.5 w-3.5" />
-              + إضافة لون آخر لنفس القماش
-            </button>
-          )}
         </GroupSection>
 
         <GroupSection title="بيانات الصبغة">
@@ -203,13 +195,9 @@ export function SaleLineCard({
         <GroupSection title="بيانات البيع">
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,0.7fr)_minmax(0,1.2fr)_minmax(0,0.7fr)_minmax(0,1fr)]">
             <CardField label="الكمية (كغ)" required>
-              <Input
-                type="number"
-                step="0.01"
+              <FormattedAmountInput
                 value={line.quantityKg || ""}
-                onChange={(e) =>
-                  onUpdate({ quantityKg: e.target.value === "" ? 0 : Number(e.target.value) })
-                }
+                onChange={(v) => onUpdate({ quantityKg: v === "" ? 0 : v })}
                 className={cn(
                   "h-9 text-left tabular-nums",
                   !line.quantityKg && "text-muted-foreground/70",
@@ -217,7 +205,7 @@ export function SaleLineCard({
                     "border-destructive text-destructive focus-visible:ring-destructive/30",
                 )}
                 placeholder="0"
-                aria-label="الكمية"
+                ariaLabel="الكمية"
               />
             </CardField>
             <CardField label="الأثواب">
@@ -311,6 +299,33 @@ export function SaleLineCard({
             aria-label="ملاحظة السطر"
           />
         </GroupSection>
+
+        {/* Actions at end of line — same placement as ReturnForm (add-color + delete) */}
+        <div className="flex flex-wrap items-center justify-center gap-2 border-t border-border/60 pt-3">
+          {(line.fabricId || line.fabricName.trim()) && onAddColor && (
+            <button
+              type="button"
+              onClick={onAddColor}
+              className="inline-flex items-center gap-1.5 rounded-md border border-primary/30 bg-primary/10 px-2.5 py-1.5 text-xs font-bold text-primary transition hover:bg-primary/20"
+              title="إضافة لون آخر لنفس القماش"
+              aria-label="إضافة لون آخر لنفس القماش"
+            >
+              <Palette className="h-3.5 w-3.5" />
+              + إضافة لون آخر لنفس القماش
+            </button>
+          )}
+          {!rowIsEmpty && (
+            <button
+              type="button"
+              onClick={onRemove}
+              className="inline-flex items-center gap-1.5 rounded-md border border-destructive/30 bg-destructive/5 px-2.5 py-1.5 text-xs font-semibold text-destructive transition hover:bg-destructive/10"
+              aria-label="حذف البند"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+              حذف
+            </button>
+          )}
+        </div>
       </div>
     </article>
   );

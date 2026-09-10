@@ -1,18 +1,17 @@
 import {
   Receipt,
-  FileWarning,
-  Layers,
-  AlertTriangle,
-  Undo2,
   Box,
   Users,
   type LucideIcon,
 } from "lucide-react";
 import type { ReactNode } from "react";
 import { useDashboard } from "@/presentation/hooks/useDashboard";
+import { useCashboxState } from "@/presentation/hooks/useCashbox";
+import { useOrdersList } from "@/presentation/hooks/useOrders";
 import { formatSYP } from "@/presentation/hooks/useInventory";
 import { useReturnsList } from "@/presentation/hooks/useReturns";
 import { formatNumber, formatMoney } from "@/shared/utils/formatNumber";
+import { cn } from "@/lib/utils";
 
 function formatUnpaidCurrencies(
   byCurrency: Record<string, { count: number; totalDue: number }> = {},
@@ -23,105 +22,85 @@ function formatUnpaidCurrencies(
   return parts.length > 0 ? parts.join(" · ") : formatSYP(0);
 }
 
-type Tone = "neutral" | "primary" | "success" | "warning" | "destructive";
-
-function chipTone(tone: Tone) {
-  switch (tone) {
-    case "success":
-      return "bg-success/10 text-success border-success/30";
-    case "warning":
-      return "bg-warning/10 text-warning border-warning/30";
-    case "destructive":
-      return "bg-destructive/10 text-destructive border-destructive/30";
-    default:
-      return "bg-primary/10 text-primary border-primary/30";
-  }
+function formatDate(d: Date): string {
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${pad(d.getDate())}-${pad(d.getMonth() + 1)}-${d.getFullYear()}`;
 }
 
+/** Hero KPI — calm card, no rainbow chips. */
 function PrimaryCard({
   id,
   title,
   icon: Icon,
   value,
-  tone = "neutral",
+  unit,
   footer,
 }: {
   id: string;
   title: string;
   icon: LucideIcon;
   value: ReactNode;
-  tone?: Tone;
+  unit?: string;
   footer?: ReactNode;
 }) {
   return (
-    <div
+    <article
       data-od-id={id}
-      className="card-glow relative flex h-full min-h-[148px] flex-col overflow-hidden rounded-2xl border border-primary/20 bg-card p-5 shadow-elevated transition duration-300 hover:-translate-y-1 hover:border-primary/40"
+      className="flex min-h-[148px] flex-col rounded-xl border border-border bg-card p-5 shadow-soft"
     >
-      <div
-        className="pointer-events-none absolute inset-x-0 top-0 h-[2px]"
-        style={{
-          background:
-            "linear-gradient(90deg, transparent, var(--primary), transparent)",
-        }}
-      />
-      <div className="relative flex items-center gap-3">
-        <span
-          className={`grid h-11 w-11 shrink-0 place-items-center rounded-xl border ${chipTone(
-            tone,
-          )}`}
-        >
-          <Icon className="h-5 w-5" strokeWidth={2} />
+      <div className="flex items-center justify-between gap-3">
+        <h3 className="text-[13px] font-medium text-muted-foreground">{title}</h3>
+        <Icon className="h-4 w-4 text-primary/80" strokeWidth={2} aria-hidden />
+      </div>
+
+      <div className="mt-5 flex items-baseline gap-2">
+        <span className="text-[2rem] font-semibold leading-none tracking-tight tabular-nums text-foreground">
+          {value}
         </span>
-        <h3 className="min-w-0 flex-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
-          {title}
-        </h3>
+        {unit && <span className="text-sm text-muted-foreground">{unit}</span>}
       </div>
-      <div className="relative mt-4">{value}</div>
-      <div className="relative mt-auto pt-4 text-[11px] text-muted-foreground">
-        {footer ?? <span className="opacity-0">—</span>}
-      </div>
-    </div>
+
+      <p className="mt-auto pt-4 text-[12px] leading-relaxed text-muted-foreground">
+        {footer ?? "\u00a0"}
+      </p>
+    </article>
   );
 }
 
-function SecondaryCard({
+/** One metric cell inside the operations strip — typography, not icon soup. */
+function MetricCell({
   id,
-  title,
-  icon: Icon,
+  label,
   value,
   hint,
-  tone = "neutral",
+  emphasize,
 }: {
   id: string;
-  title: string;
-  icon: LucideIcon;
+  label: string;
   value: ReactNode;
   hint?: ReactNode;
-  tone?: Tone;
+  emphasize?: "warning" | "danger";
 }) {
   return (
     <div
       data-od-id={id}
-      className="group relative flex h-full flex-col overflow-hidden rounded-xl border border-border/70 bg-card p-3.5 shadow-soft transition duration-200 hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-elevated"
+      className="flex min-w-0 flex-col gap-3 border-border px-5 py-4 sm:border-s sm:first:border-s-0"
     >
-      <div className="flex items-center gap-2">
-        <span
-          className={`grid h-7 w-7 shrink-0 place-items-center rounded-lg border ${chipTone(
-            tone,
-          )}`}
-        >
-          <Icon className="h-3.5 w-3.5" strokeWidth={2} />
-        </span>
-        <span className="min-w-0 flex-1 truncate text-[10px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
-          {title}
-        </span>
+      <div className="text-[10px] font-medium tracking-[0.12em] text-muted-foreground">
+        {label}
       </div>
-      <div className="mt-2.5 text-2xl font-bold leading-none tracking-tight text-foreground tabular-nums">
+      <div
+        className={cn(
+          "text-[1.5rem] font-semibold leading-none tabular-nums tracking-tight",
+          emphasize === "warning" && "text-warning",
+          emphasize === "danger" && "text-destructive",
+          !emphasize && "text-foreground",
+        )}
+      >
         {value}
       </div>
-      {hint && (
-        <div className="mt-1.5 truncate text-[10px] font-medium text-muted-foreground tabular-nums">
+      {hint != null && hint !== "" && (
+        <div className="truncate text-[11px] leading-snug text-muted-foreground tabular-nums">
           {hint}
         </div>
       )}
@@ -133,6 +112,8 @@ export function ExecutiveKpiGrid() {
   const { data } = useDashboard();
   const today = new Date().toISOString().slice(0, 10);
   const { data: returnsData } = useReturnsList();
+  const { data: cashbox } = useCashboxState();
+  const { data: ordersData } = useOrdersList();
 
   const {
     todayInvoices,
@@ -147,107 +128,95 @@ export function ExecutiveKpiGrid() {
     (r) => r.status === "active" && r.date === today,
   ).length;
 
+  const availableOrders = (ordersData?.data ?? []).filter(
+    (o) => o.status === "available" || o.status === "partially_available",
+  ).length;
+
+  const hasSession = cashbox && cashbox.openingBalance > 0;
+  const todayCount = todayInvoices?.count ?? 0;
+  const low = lowStockRolls?.low ?? 0;
+  const out = lowStockRolls?.outOfStock ?? 0;
+
   return (
-    <div className="space-y-5" data-od-id="kpi-grid">
+    <div className="space-y-4" data-od-id="kpi-grid">
       <section data-od-id="kpi-primary-section">
-        <div className="grid gap-3 md:grid-cols-2">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <PrimaryCard
+            id="kpi-primary-today-invoices"
+            title="فواتير اليوم"
+            icon={Receipt}
+            value={<span dir="ltr">{formatNumber(todayCount)}</span>}
+            unit="فاتورة"
+            footer={`${formatDate(new Date())} · ${hasSession ? "الجلسة مفتوحة" : "الجلسة غير مفتوحة"}`}
+          />
           <PrimaryCard
             id="kpi-primary-customers"
             title="العملاء النشطين"
             icon={Users}
-            value={
-              <span
-                className="inline-flex items-baseline gap-1.5 text-4xl font-bold leading-none tabular-nums sm:text-5xl"
-                style={{ color: "var(--currency-syp)" }}
-              >
-                <span>{formatNumber(activeTodayCustomers ?? 0)}</span>
-                <span className="text-base font-semibold text-muted-foreground">
-                  عميل
-                </span>
-              </span>
-            }
-            tone="success"
-            footer={<span>عميل مختلف اليوم</span>}
+            value={<span dir="ltr">{formatNumber(activeTodayCustomers ?? 0)}</span>}
+            unit="عميل"
+            footer="عميل مختلف اليوم"
           />
           <PrimaryCard
             id="kpi-primary-inventory"
             title="إجمالي المخزون"
             icon={Box}
-            value={
-              <span
-                className="inline-flex items-baseline gap-1.5 text-4xl font-bold leading-none tabular-nums sm:text-5xl"
-                style={{ color: "var(--currency-syp)" }}
-              >
-                <span>{formatNumber(totalInventoryKg ?? 0)}</span>
-                <span className="text-base font-semibold text-muted-foreground">
-                  كغ
-                </span>
-              </span>
-            }
-            tone="primary"
-            footer={
-              <span>
-                {activeRolls?.total ?? 0} صبغة في{" "}
-                {activeRolls?.fabricTypes ?? 0} أصناف
-              </span>
-            }
+            value={<span dir="ltr">{formatNumber(totalInventoryKg ?? 0)}</span>}
+            unit="كغ"
+            footer={`${activeRolls?.total ?? 0} صبغة · ${activeRolls?.fabricTypes ?? 0} أصناف`}
           />
         </div>
       </section>
 
-      <section data-od-id="kpi-secondary-section">
-        <div className="mb-3 flex items-center gap-3">
-          <h3 className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
-            نظرة عامة على العمليات
-          </h3>
-          <div className="h-px flex-1 bg-border/60" />
-        </div>
-        <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5">
-          <SecondaryCard
-            id="kpi-secondary-today-invoices"
-            title="فواتير اليوم"
-            icon={Receipt}
-            value={formatNumber(todayInvoices?.count ?? 0)}
-            hint="فاتورة"
-          />
-          <SecondaryCard
-            id="kpi-secondary-unpaid"
-            title="فواتير غير مسددة"
-            icon={FileWarning}
-            value={formatMoney(unpaidInvoices?.count ?? 0)}
-            hint={formatUnpaidCurrencies(unpaidInvoices?.byCurrency)}
-            tone="warning"
-          />
-          <SecondaryCard
-            id="kpi-secondary-fabrics"
-            title="إجمالي الأقمشة"
-            icon={Layers}
-            value={formatMoney(activeRolls?.total ?? 0)}
-            hint={`${activeRolls?.fabricTypes ?? 0} صنف`}
-          />
-          <SecondaryCard
-            id="kpi-secondary-low-stock"
-            title="صبغات منخفضة"
-            icon={AlertTriangle}
-            value={
-              <span className="flex items-baseline gap-1.5">
-                <span className="text-warning">{lowStockRolls?.low ?? 0}</span>
-                <span className="text-muted-foreground/40">/</span>
-                <span className="text-destructive">
-                  {lowStockRolls?.outOfStock ?? 0}
+      <section data-od-id="kpi-secondary-section" aria-label="نظرة عامة على العمليات">
+        <div className="overflow-hidden rounded-xl border border-border bg-card">
+          <div className="border-b border-border/80 bg-secondary/25 px-5 py-2">
+            <h3 className="text-[11px] font-semibold tracking-[0.08em] text-muted-foreground">
+              عمليات اليوم
+            </h3>
+          </div>
+          <div className="grid sm:grid-cols-2 lg:grid-cols-5">
+            <MetricCell
+              id="kpi-secondary-unpaid"
+              label="غير مسددة"
+              value={<span dir="ltr">{formatNumber(unpaidInvoices?.count ?? 0)}</span>}
+              hint={formatUnpaidCurrencies(unpaidInvoices?.byCurrency)}
+              emphasize={(unpaidInvoices?.count ?? 0) > 0 ? "warning" : undefined}
+            />
+            <MetricCell
+              id="kpi-secondary-fabrics"
+              label="الأقمشة"
+              value={<span dir="ltr">{formatNumber(activeRolls?.total ?? 0)}</span>}
+              hint={`${activeRolls?.fabricTypes ?? 0} صنف`}
+            />
+            <MetricCell
+              id="kpi-secondary-low-stock"
+              label="مخزون منخفض"
+              value={
+                <span className="inline-flex items-baseline gap-1" dir="ltr">
+                  <span className={low > 0 ? "text-warning" : undefined}>{low}</span>
+                  <span className="text-sm font-normal text-muted-foreground">/</span>
+                  <span className={out > 0 ? "text-destructive" : "text-muted-foreground"}>
+                    {out}
+                  </span>
                 </span>
-              </span>
-            }
-            hint="منخفضة / منتهية"
-            tone="warning"
-          />
-          <SecondaryCard
-            id="kpi-secondary-returns"
-            title="المرتجعات"
-            icon={Undo2}
-            value={formatMoney(returnsCount)}
-            hint="مرتجع اليوم"
-          />
+              }
+              hint="منخفض / منتهٍ"
+              emphasize={out > 0 ? "danger" : low > 0 ? "warning" : undefined}
+            />
+            <MetricCell
+              id="kpi-secondary-returns"
+              label="مرتجعات"
+              value={<span dir="ltr">{formatNumber(returnsCount)}</span>}
+              hint="اليوم"
+            />
+            <MetricCell
+              id="kpi-secondary-available-orders"
+              label="طلبات جاهزة"
+              value={<span dir="ltr">{formatNumber(availableOrders)}</span>}
+              hint="للتسليم"
+            />
+          </div>
         </div>
       </section>
     </div>

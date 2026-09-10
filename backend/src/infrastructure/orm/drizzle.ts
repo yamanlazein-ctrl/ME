@@ -1,7 +1,75 @@
 import { drizzle } from "drizzle-orm/node-postgres";
 import { sql } from "drizzle-orm";
-import { Pool } from "pg";
+import { Pool, PoolClient } from "pg";
 import { config } from "../config/env.js";
+import { tenantContext } from "./tenant-context.js";
+
+/**
+ * A pg Pool that stamps the RLS tenant GUC onto every connection at checkout
+ * time, keyed by the AsyncLocalStorage request context.
+ *
+ * This is the ONLY thing that makes multi-tenant RLS correct against a shared
+ * pool: it sets `app.current_tenant_id` (and `app.platform_mode` when present)
+ * on the exact connection that is about to run the request's queries, and
+ * every query path (single statement via `Pool.query()`, and transactions via
+ * `db.transaction()` / `withTenantTx()` → `Pool.connect()`) funnels through
+ * `connect()`. The connection is then released back to the pool, and the next
+ * checkout re-stamps it from the next request's context — so there is never a
+ * window where a stale tenant leaks across requests.
+ */
+class TenantScopedPool extends Pool {
+  override connect(): Promise<PoolClient>;
+  override connect(
+    callback: (
+      err: Error | undefined,
+      client: PoolClient | undefined,
+      done: (release?: () => void) => void,
+    ) => void,
+  ): void;
+  override connect(
+    callback?: (
+      err: Error | undefined,
+      client: PoolClient | undefined,
+      done: (release?: () => void) => void,
+    ) => void,
+  ): Promise<PoolClient> | void {
+    const stamp = (client: PoolClient): Promise<PoolClient> => {
+      const ctx = tenantContext.getStore();
+      // set_config(..., is_local = false) == SET (session level). Because the
+      // pool REUSES connections across requests, a session-level GUC set here
+      // SURVIVES until the next checkout — so we must ALWAYS overwrite BOTH
+      // GUCs on every checkout (including resetting them to NULL when the
+      // current context has no tenant / is not platform). Otherwise a
+      // platform request (app.platform_mode='on') would leak that flag to the
+      // next tenant request reusing the same connection, letting a tenant see
+      // other tenants' category-2 rows.
+      const stmts: Promise<unknown>[] = [
+        client.query("SELECT set_config('app.current_tenant_id', $1, false)", [
+          ctx?.tenantId ?? null,
+        ]),
+        client.query("SELECT set_config('app.platform_mode', $1, false)", [
+          ctx?.platformMode ? "on" : null,
+        ]),
+      ];
+      return Promise.all(stmts).then(() => client);
+    };
+
+    if (callback) {
+      super.connect((err, client, done) => {
+        if (err) {
+          callback(err, undefined, done);
+          return;
+        }
+        stamp(client!).then(
+          (c) => callback(undefined, c, done),
+          (e) => callback(e, undefined, done),
+        );
+      });
+      return;
+    }
+    return super.connect().then(stamp);
+  }
+}
 
 // Connection pool sizing rationale:
 // max: 20 — balanced for ~50 concurrent users on a t3.small (2 vCPU).
@@ -11,7 +79,7 @@ import { config } from "../config/env.js";
 // idleTimeoutMillis: 30000 — releases idle connections after 30s to
 // return resources to the pool. connectionTimeoutMillis: 5000 — fails
 // fast (5s) rather than hanging when DB is unreachable.
-export const pool = new Pool({
+export const pool = new TenantScopedPool({
   connectionString: config.DATABASE_URL,
   max: 20,
   idleTimeoutMillis: 30000,
@@ -19,11 +87,6 @@ export const pool = new Pool({
 });
 
 export const db = drizzle(pool);
-
-/** Set RLS tenant context for the current connection session — call once per request before queries */
-export async function setTenantForRequest(tenantId: string): Promise<void> {
-  await pool.query("SET LOCAL app.current_tenant_id = $1", [tenantId]);
-}
 
 export type DB = typeof db;
 

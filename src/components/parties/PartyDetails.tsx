@@ -67,8 +67,7 @@ import {
 import type { Party } from "@/domain/entities/Party";
 import { useInvoicesList } from "@/presentation/hooks/useInvoices";
 import { useVouchersList } from "@/presentation/hooks/useVouchers";
-import { useCreateReceiptVoucher } from "@/presentation/hooks/useVouchers";
-import { invoiceTotal, invoiceRemaining } from "@/core/calculations/invoiceCalc";
+import { invoiceTotal } from "@/core/calculations/invoiceCalc";
 import {
   buildFabricHistory,
   buildOutstanding,
@@ -173,31 +172,9 @@ export function PartyDetailsPage({ kind, id }: { kind: PartyKind; id: string }) 
   }
 
   const statsByCurrency = buildPartyStatsByCurrency(p, kind, allInvoices, allVouchers);
-  // Authoritative remaining (fix): the outstanding balance must match the كشف
-  // الحساب exactly, so it is computed from the ledger (debit minus credit per
-  // currency, same sign as getBalance) — settlements, returns and adjustments
-  // all pass through automatically. The descriptive KPIs (الإجمالي / المدفوع /
-  // متوسط الفاتورة) stay invoice/voucher-based, as they are not ledger balances.
-  const remainingByCurrency: Record<string, number> = {};
-  for (const e of ledgerEntries) {
-    if (!e || e.partyId !== p.id) continue;
-    if ((e.status ?? "active") !== "active") continue;
-    const ccy = e.currency ?? "SYP";
-    const signed = isSup ? (e.credit ?? 0) - (e.debit ?? 0) : (e.debit ?? 0) - (e.credit ?? 0);
-    remainingByCurrency[ccy] = (remainingByCurrency[ccy] ?? 0) + signed;
-  }
-  const overviewStats: Record<string, (typeof statsByCurrency)[string]> = {};
-  for (const ccy of new Set([...Object.keys(statsByCurrency), ...Object.keys(remainingByCurrency)])) {
-    const base = statsByCurrency[ccy] ?? {
-      invoicesCount: 0,
-      totalAmount: 0,
-      totalPaid: 0,
-      remaining: 0,
-      avgInvoice: 0,
-      totalKg: 0,
-    };
-    overviewStats[ccy] = { ...base, remaining: remainingByCurrency[ccy] ?? 0 };
-  }
+  // N14: summary «المتبقي» must match open-invoices / aging on this same page
+  // (invoice total − paid), not a separate ledger debit−credit path that drifts.
+  const overviewStats = statsByCurrency;
   const active = (p.status ?? "active") === "active";
 
   return (
@@ -328,7 +305,7 @@ export function PartyDetailsPage({ kind, id }: { kind: PartyKind; id: string }) 
 
       {tab === "overview" && <OverviewTab p={p} kind={kind} />}
       {tab === "invoices" && <InvoicesTab p={p} kind={kind} />}
-      {tab === "payments" && <PaymentsTab p={p} />}
+      {tab === "payments" && <PaymentsTab p={p} kind={kind} />}
       {tab === "statement" && <StatementTab p={p} kind={kind} />}
       {tab === "outstanding" && <OutstandingTab p={p} />}
       {tab === "stats" && <StatsTab p={p} kind={kind} />}
@@ -447,32 +424,74 @@ function OverviewTab({ p, kind }: { p: Party; kind: PartyKind }) {
 function InvoicesTab({ p, kind }: { p: Party; kind: PartyKind }) {
   const navigate = useNavigate();
   const isSup = kind === "supplier";
-  const { data: invData } = useInvoicesList({ partyId: p.id, limit: 1000 });
-  const { data: vData } = useVouchersList({ partyId: p.id, limit: 1000 });
+  // Issue 16(a): date-range filter on the party invoices view
+  const [from, setFrom] = useState("");
+  const [to, setTo] = useState("");
+  const { data: invData } = useInvoicesList({
+    partyId: p.id,
+    limit: 1000,
+    fromDate: from || undefined,
+    toDate: to || undefined,
+  });
   const invs = (invData?.data ?? [])
     .filter((i) => i.partyId === p.id && i.status !== "cancelled")
     .sort((a, b) => {
-      // Newest date first (requirement A); same-day entries tie-broken by
-      // sequence number descending so creation order is preserved.
+      // Issue 16(b): newest date first; same-day tie-break by invoice sequence desc
       if (a.date !== b.date) return a.date < b.date ? 1 : -1;
       const sa = invoiceSeqNumber(a.number);
       const sb = invoiceSeqNumber(b.number);
       if (!Number.isNaN(sa) && !Number.isNaN(sb) && sa !== sb) return sa > sb ? -1 : 1;
       return b.number.localeCompare(a.number);
     });
-  // Compute actual paid per invoice from linked vouchers (BUG-8 fix).
+  // Read paid from the invoice row (backend-maintained, FX-converted).
   const paidByInvoice = new Map<string, number>();
-  for (const v of vData?.data ?? []) {
-    if (v.status !== "active" || !v.invoiceId || v.partyId !== p.id) continue;
-    paidByInvoice.set(v.invoiceId, (paidByInvoice.get(v.invoiceId) ?? 0) + v.amount);
+  for (const i of invs) {
+    paidByInvoice.set(i.id, i.paid ?? 0);
   }
 
   return (
     <PageCard
       title={isSup ? "فواتير الشراء" : "فواتير البيع"}
-      description="جميع الفواتير المرتبطة بهذا الحساب."
+      description="جميع الفواتير المرتبطة بهذا الحساب — الأحدث أولاً. يمكن تصفيتها بفترة زمنية."
       noBodyPadding
     >
+      <div className="flex flex-wrap items-end gap-3 border-b border-border px-4 py-3">
+        <div>
+          <Label className="mb-1 block text-[11px] font-semibold text-muted-foreground">
+            من تاريخ
+          </Label>
+          <Input
+            type="date"
+            className="h-9 w-[160px] tabular-nums"
+            value={from}
+            onChange={(e) => setFrom(e.target.value)}
+          />
+        </div>
+        <div>
+          <Label className="mb-1 block text-[11px] font-semibold text-muted-foreground">
+            إلى تاريخ
+          </Label>
+          <Input
+            type="date"
+            className="h-9 w-[160px] tabular-nums"
+            value={to}
+            onChange={(e) => setTo(e.target.value)}
+          />
+        </div>
+        {(from || to) && (
+          <Button
+            type="button"
+            variant="ghost"
+            className="h-9 text-xs text-muted-foreground"
+            onClick={() => {
+              setFrom("");
+              setTo("");
+            }}
+          >
+            مسح الفترة
+          </Button>
+        )}
+      </div>
       <div className="w-full overflow-x-auto">
         <table className="w-full min-w-[820px] text-right text-sm">
           <thead className="bg-secondary/60 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
@@ -543,25 +562,12 @@ function InvoicesTab({ p, kind }: { p: Party; kind: PartyKind }) {
 
 /* ---------------- Payments ---------------- */
 
-function PaymentsTab({ p }: { p: Party }) {
-  const [payFor, setPayFor] = useState<string>("");
-  const [amount, setAmount] = useState("");
-  const cur = currencySymbol(p.currency ?? "SYP");
-  const createReceipt = useCreateReceiptVoucher();
-
+function PaymentsTab({ p, kind }: { p: Party; kind: PartyKind }) {
+  const navigate = useNavigate();
+  const isSup = kind === "supplier";
   const { data: invData } = useInvoicesList({ partyId: p.id, limit: 1000 });
   const { data: vData } = useVouchersList({ partyId: p.id, limit: 1000 });
   const invs = (invData?.data ?? []).filter((i) => i.partyId === p.id && i.status === "active");
-  // Compute actual paid per invoice from linked vouchers so a fully-paid
-  // invoice does not appear as open (the same map the InvoiceTab builds).
-  const paidByInvoice = new Map<string, number>();
-  for (const v of vData?.data ?? []) {
-    if (v.status !== "active" || !v.invoiceId || v.partyId !== p.id) continue;
-    paidByInvoice.set(v.invoiceId, (paidByInvoice.get(v.invoiceId) ?? 0) + v.amount);
-  }
-  const openInvs = invs.filter(
-    (i) => invoiceRemaining(invoiceTotal(i), paidByInvoice.get(i.id) ?? 0) > 0,
-  );
   // BUG-9 fix: show actual payment/receipt vouchers linked to this party.
   const payments = (vData?.data ?? [])
     .filter(
@@ -585,71 +591,32 @@ function PaymentsTab({ p }: { p: Party }) {
     })
     .sort((a, b) => (a.date < b.date ? 1 : -1));
 
-  const submit = async () => {
-    const inv = openInvs.find((i) => i.id === payFor);
-    const n = Number(amount);
-    if (!payFor || !n || n <= 0) return;
-    await createReceipt.mutateAsync({
-      kind: "receipt",
-      date: new Date().toISOString().slice(0, 10),
-      partyId: p.id,
-      partyKind: "customer",
-      invoiceId: payFor,
-      amount: n,
-      currency: (inv?.currency ?? p.currency ?? "SYP") as Currency,
-      method: "cash",
-    });
-    setPayFor("");
-    setAmount("");
-  };
-
   return (
     <div className="space-y-4">
-      <PageCard title="تسجيل دفعة" description="أضف دفعة على أي فاتورة مفتوحة." tone="primary">
-        <div className="grid gap-3 md:grid-cols-[1fr_1fr_auto]">
-          <div>
-            <Label className="mb-1 block text-[11px] font-semibold text-muted-foreground">
-              الفاتورة
-            </Label>
-            <Select value={payFor} onValueChange={setPayFor}>
-              <SelectTrigger className="!h-10">
-                <SelectValue placeholder="اختر فاتورة مفتوحة" />
-              </SelectTrigger>
-              <SelectContent>
-                {openInvs.length === 0 && (
-                  <div className="px-3 py-2 text-xs text-muted-foreground">
-                    لا توجد فواتير مفتوحة.
-                  </div>
-                )}
-                {openInvs.map((i) => (
-                  <SelectItem key={i.id} value={i.id}>
-                    {i.number} — متبقي {fmt(invoiceRemaining(invoiceTotal(i), paidByInvoice.get(i.id) ?? 0))}{" "}
-                    {currencySymbol(i.currency)}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div>
-            <Label className="mb-1 block text-[11px] font-semibold text-muted-foreground">
-              المبلغ
-            </Label>
-            <Input
-              type="number"
-              className="h-10 tabular-nums"
-              value={amount}
-              onChange={(e) => setAmount(e.target.value)}
-              placeholder="0"
-            />
-          </div>
-          <div className="flex items-end">
-            <Button
-              onClick={submit}
-              className="h-10 gap-2 bg-primary text-primary-foreground hover:bg-primary/90"
-            >
-              <Plus className="h-4 w-4" /> تسجيل الدفعة
-            </Button>
-          </div>
+      <PageCard
+        title="تسجيل دفعة"
+        description={
+          isSup
+            ? "يفتح سند صرف كامل (عملة + سعر صرف + فاتورة) — لا تسجيل مختصر من هنا."
+            : "يفتح سند قبض كامل (عملة + سعر صرف + فاتورة) — لا تسجيل مختصر من هنا."
+        }
+        tone="primary"
+      >
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            onClick={() =>
+              navigate({
+                to: isSup ? "/payments/new" : "/receipts/new",
+                search: { partyId: p.id },
+              })
+            }
+            className="h-10 gap-2 bg-primary text-primary-foreground hover:bg-primary/90"
+          >
+            <Plus className="h-4 w-4" /> {isSup ? "سند صرف جديد" : "سند قبض جديد"}
+          </Button>
+          <p className="text-[11px] text-muted-foreground">
+            اختر العملة وسعر الصرف والفاتورة في شاشة السند — هنا كان التسجيل بدون عملة فيرفض الحفظ.
+          </p>
         </div>
       </PageCard>
 
@@ -710,7 +677,10 @@ function StatementTab({ p, kind }: { p: Party; kind: PartyKind }) {
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
   const [type, setType] = useState<LedgerType | "all">("all");
-  const [ccy, setCcy] = useState<Currency>(p.currency ?? "SYP");
+  // Default ALL so SYP invoices + USD receipts both appear — filtering to
+  // party.currency alone was hiding whole document classes and looked like
+  // "فقط آخر فاتورة".
+  const [ccy, setCcy] = useState<Currency | "ALL">("ALL");
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [confirmSettle, setConfirmSettle] = useState(false);
 
@@ -736,8 +706,15 @@ function StatementTab({ p, kind }: { p: Party; kind: PartyKind }) {
   const totalDebit = statement?.totalDebit ?? 0;
   const totalCredit = statement?.totalCredit ?? 0;
   const finalBalance = statement?.finalBalance ?? 0;
-  const currency = statement?.currency ?? p.currency ?? "SYP";
-  const cur = currencySymbol(currency);
+  const multiCcy = ccy === "ALL" || statement?.currency === "ALL";
+  const totalsByCurrency = statement?.totalsByCurrency ?? {};
+  const displayCcy: Currency =
+    !multiCcy && statement?.currency && statement.currency !== "ALL"
+      ? statement.currency
+      : !multiCcy && ccy !== "ALL"
+        ? ccy
+        : (p.currency ?? "SYP");
+  const cur = multiCcy ? "" : currencySymbol(displayCcy);
 
   const toggleRow = (id: string) =>
     setExpanded((prev) => {
@@ -811,7 +788,7 @@ function StatementTab({ p, kind }: { p: Party; kind: PartyKind }) {
       period={`${(statement?.fromDate ?? from) || "البداية"} — ${
         (statement?.toDate ?? to) || "اليوم"
       }`}
-      currency={cur}
+      currency={multiCcy ? "متعدد" : cur}
       previousBalance={previousBalance}
       rows={rows.map((r) => ({
         seq: r.seq,
@@ -878,11 +855,12 @@ function StatementTab({ p, kind }: { p: Party; kind: PartyKind }) {
             <Label className="mb-1 block text-[11px] font-semibold text-muted-foreground">
               العملة
             </Label>
-            <Select value={ccy} onValueChange={(v) => setCcy(v as Currency)}>
+            <Select value={ccy} onValueChange={(v) => setCcy(v as Currency | "ALL")}>
               <SelectTrigger className="!h-10">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
+                <SelectItem value="ALL">كل العملات (كل الفواتير والحركات)</SelectItem>
                 <SelectItem value="SYP">ل.س</SelectItem>
                 <SelectItem value="USD">$ دولار</SelectItem>
                 <SelectItem value="EUR">€ يورو</SelectItem>
@@ -897,7 +875,7 @@ function StatementTab({ p, kind }: { p: Party; kind: PartyKind }) {
           <Button variant="outline" className="h-9 gap-2" onClick={exportCsv}>
             <Download className="h-4 w-4" /> تصدير Excel
           </Button>
-          {finalBalance !== 0 && (
+          {!multiCcy && finalBalance !== 0 && (
             <Button
               variant="default"
               className="h-9 gap-2 bg-warning text-warning-foreground hover:bg-warning/90"
@@ -921,42 +899,79 @@ function StatementTab({ p, kind }: { p: Party; kind: PartyKind }) {
           noBodyPadding={false}
         >
           {/* Summary */}
-          <div className="grid gap-3 px-4 pb-4 md:grid-cols-4">
-            {[
-              { label: "رصيد سابق", value: previousBalance },
-              { label: "إجمالي مدين", value: totalDebit },
-              { label: "إجمالي دائن", value: totalCredit },
-              { label: "الرصيد النهائي", value: finalBalance, bold: true },
-            ].map((s) => (
-              <div
-                key={s.label}
-                className={`rounded-lg border px-4 py-3 ${
-                  s.bold ? "border-primary/30 bg-primary/5" : "border-border bg-background/60"
-                }`}
-              >
-                <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-                  {s.label}
-                </div>
+          {multiCcy ? (
+            <div className="space-y-3 px-4 pb-4">
+              <p className="text-[11px] text-muted-foreground">
+                عرض كل العملات — الرصيد الجاري لكل صف بعملته. لا يُخلط ل.س مع دولار في رقم واحد.
+              </p>
+              <div className="grid gap-3 md:grid-cols-3">
+                {(["SYP", "USD", "EUR"] as Currency[])
+                  .filter((c) => totalsByCurrency[c])
+                  .map((c) => {
+                    const t = totalsByCurrency[c]!;
+                    return (
+                      <div key={c} className="rounded-lg border border-primary/30 bg-primary/5 px-4 py-3">
+                        <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                          رصيد {currencySymbol(c)}
+                        </div>
+                        <div
+                          className={`mt-1 text-sm font-bold tabular-nums ${
+                            t.finalBalance > 0
+                              ? "text-warning"
+                              : t.finalBalance < 0
+                                ? "text-success"
+                                : ""
+                          }`}
+                        >
+                          {fmt(t.finalBalance)} {currencySymbol(c)}
+                        </div>
+                        <div className="mt-1 text-[10px] text-muted-foreground tabular-nums">
+                          مدين {fmt(t.totalDebit)} · دائن {fmt(t.totalCredit)}
+                        </div>
+                      </div>
+                    );
+                  })}
+              </div>
+            </div>
+          ) : (
+            <div className="grid gap-3 px-4 pb-4 md:grid-cols-4">
+              {[
+                { label: "رصيد سابق", value: previousBalance },
+                { label: "إجمالي مدين", value: totalDebit },
+                { label: "إجمالي دائن", value: totalCredit },
+                { label: "الرصيد النهائي", value: finalBalance, bold: true },
+              ].map((s) => (
                 <div
-                  className={`mt-1 text-sm font-bold tabular-nums ${
-                    s.bold ? (s.value > 0 ? "text-warning" : s.value < 0 ? "text-success" : "") : ""
+                  key={s.label}
+                  className={`rounded-lg border px-4 py-3 ${
+                    s.bold ? "border-primary/30 bg-primary/5" : "border-border bg-background/60"
                   }`}
                 >
-                  {fmt(s.value)} {cur}
+                  <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                    {s.label}
+                  </div>
+                  <div
+                    className={`mt-1 text-sm font-bold tabular-nums ${
+                      s.bold ? (s.value > 0 ? "text-warning" : s.value < 0 ? "text-success" : "") : ""
+                    }`}
+                  >
+                    {fmt(s.value)} {cur}
+                  </div>
                 </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
 
           <div className="w-full overflow-x-auto">
-            <table className="w-full min-w-[1060px] text-right text-sm">
+            <table className="w-full min-w-[1100px] text-right text-sm">
               <thead className="bg-secondary/60 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
                 <tr className="[&>th]:px-3 [&>th]:py-2.5">
                   <th className="w-10">#</th>
                   <th className="w-28">التاريخ</th>
                   <th className="w-32">النوع</th>
                   <th className="w-28">المرجع</th>
-                  <th className="min-w-[180px]">البيان</th>
+                  <th className="min-w-[160px]">البيان</th>
+                  {multiCcy && <th className="w-16">العملة</th>}
                   <th className="w-20 text-left">الكمية</th>
                   <th className="w-24 text-left">السعر</th>
                   <th className="w-28 text-left">مدين</th>
@@ -966,12 +981,12 @@ function StatementTab({ p, kind }: { p: Party; kind: PartyKind }) {
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
-                {previousBalance !== 0 && (
+                {previousBalance !== 0 && !multiCcy && (
                   <tr className="h-11 bg-muted/40 align-middle [&>td]:px-3 [&>td]:py-2">
                     <td className="tabular-nums text-muted-foreground">—</td>
                     <td className="tabular-nums text-muted-foreground">—</td>
                     <td className="text-xs font-semibold">رصيد سابق</td>
-                    <td colSpan={4} className="text-muted-foreground">
+                    <td colSpan={multiCcy ? 5 : 4} className="text-muted-foreground">
                       أرصدة قبل تاريخ البداية
                     </td>
                     <td className="text-left tabular-nums" />
@@ -993,7 +1008,7 @@ function StatementTab({ p, kind }: { p: Party; kind: PartyKind }) {
                 {rows.length === 0 && (
                   <tr>
                     <td
-                      colSpan={11}
+                      colSpan={multiCcy ? 12 : 11}
                       className="px-4 py-10 text-center text-xs text-muted-foreground"
                     >
                       لا حركات في هذه الفترة.
@@ -1042,6 +1057,11 @@ function StatementTab({ p, kind }: { p: Party; kind: PartyKind }) {
                         {r.referenceNumber}
                       </td>
                       <td className="text-muted-foreground">{r.description}</td>
+                      {multiCcy && (
+                        <td className="tabular-nums text-xs text-muted-foreground">
+                          {currencySymbol((r.currency as Currency) ?? "SYP")}
+                        </td>
+                      )}
                       <td
                         className={`text-left tabular-nums ${
                           r.status === "cancelled" ? "text-destructive/50 line-through" : ""
@@ -1087,6 +1107,11 @@ function StatementTab({ p, kind }: { p: Party; kind: PartyKind }) {
                         }
                       >
                         {fmt(r.runningBalance)}
+                        {multiCcy && (
+                          <span className="ms-1 text-[10px] font-normal text-muted-foreground">
+                            {currencySymbol((r.currency as Currency) ?? "SYP")}
+                          </span>
+                        )}
                         {/* #4: make explicit that the cancelled row did NOT move
                             the balance, instead of silently carrying it forward. */}
                         {r.status === "cancelled" && (
@@ -1114,7 +1139,7 @@ function StatementTab({ p, kind }: { p: Party; kind: PartyKind }) {
                     </tr>
                     {expanded.has(r.id) && r.lines && (
                       <tr className="bg-muted/30 align-middle [&>td]:px-3 [&>td]:py-2">
-                        <td colSpan={11}>
+                        <td colSpan={multiCcy ? 12 : 11}>
                           <div className="mb-1 mt-1 rounded-lg border border-border/60 bg-background/40 px-3 py-2">
                             <div className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
                               تفاصيل الأصناف
@@ -1195,7 +1220,7 @@ function StatementTab({ p, kind }: { p: Party; kind: PartyKind }) {
               onClick={(e) => {
                 e.preventDefault();
                 settle.mutate(
-                  { currency: ccy },
+                  { currency: ccy === "ALL" ? (p.currency ?? "SYP") : ccy },
                   {
                     onSettled: () => setConfirmSettle(false),
                   },

@@ -1,15 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
-import {
-  Pencil,
-  Plus,
-  Trash2,
-  ShieldCheck,
-  Copy,
-  RefreshCw,
-  ShieldAlert,
-  Check,
-} from "lucide-react";
+import { Pencil, Plus, Trash2, ShieldCheck, ShieldAlert } from "lucide-react";
 import { PageCard } from "@/components/layout/PageCard";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -35,7 +26,6 @@ import {
   addUser,
   updateUser,
   deleteUser,
-  regenerateLicenseKey,
   ROLE_LABEL,
   ROLE_PERMISSIONS,
   type SystemUser,
@@ -69,14 +59,13 @@ function UsersPage() {
   const { data: me } = useCurrentUser();
   const [editing, setEditing] = useState<Draft | null>(null);
   const [open, setOpen] = useState(false);
-  const [issuedKey, setIssuedKey] = useState<{ key: string; name: string } | null>(null);
 
   if (!me || me.role !== "admin") {
     return (
       <PageCard title="الوصول مرفوض" description="هذه الصفحة متاحة لمدير النظام فقط.">
         <div className="flex items-center gap-3 rounded-lg border border-destructive/40 bg-destructive/5 p-4 text-sm text-destructive">
           <ShieldAlert className="h-5 w-5" />
-          <span>ليس لديك صلاحية لإدارة المستخدمين والمفاتيح.</span>
+          <span>ليس لديك صلاحية لإدارة المستخدمين.</span>
         </div>
       </PageCard>
     );
@@ -107,25 +96,23 @@ function UsersPage() {
         role: editing.role,
         active: editing.active,
       });
-      setOpen(false);
     } else {
-      const u = addUser({
+      addUser({
         name: editing.name.trim(),
         email: editing.email.trim(),
         password: editing.password || undefined,
         role: editing.role,
         active: editing.active,
       });
-      setOpen(false);
-      setIssuedKey({ key: u.licenseKey, name: u.name });
     }
+    setOpen(false);
   };
 
   return (
     <div className="space-y-4">
       <PageCard
         title="المستخدمون والصلاحيات"
-        description="أنشئ حساباً للمستخدم واختر دوره؛ يولّد النظام مفتاح تفعيل يُعطى له لفتح البرنامج بصلاحياته فقط."
+        description="أنشئ حساباً واختر دوره. الانضمام للأجهزة يتم عبر رمز دعوة؛ الدخول بعد التفعيل باختيار المستخدم والرقم السري."
         noBodyPadding
         actions={
           <Button size="sm" onClick={openNew} className="bg-primary text-primary-foreground">
@@ -139,7 +126,6 @@ function UsersPage() {
               <tr className="[&>th]:px-3 [&>th]:py-2.5">
                 <th>الاسم</th>
                 <th>الدور</th>
-                <th>مفتاح التفعيل</th>
                 <th>الحالة</th>
                 <th>تاريخ الإنشاء</th>
                 <th className="text-left">إجراءات</th>
@@ -155,27 +141,6 @@ function UsersPage() {
                     )}
                   </td>
                   <td className="px-3 py-2">{ROLE_LABEL[u.role]}</td>
-                  <td className="px-3 py-2">
-                    <div className="flex items-center gap-1">
-                      <code className="rounded bg-secondary px-2 py-0.5 text-[11px] font-mono tracking-wider">
-                        {u.licenseKey}
-                      </code>
-                      <CopyBtn value={u.licenseKey} />
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        title="توليد مفتاح جديد"
-                        onClick={() => {
-                          if (!confirm(`استبدال مفتاح ${u.name}؟ سيتوقف المفتاح القديم عن العمل.`))
-                            return;
-                          const k = regenerateLicenseKey(u.id);
-                          if (k) setIssuedKey({ key: k, name: u.name });
-                        }}
-                      >
-                        <RefreshCw className="h-3.5 w-3.5" />
-                      </Button>
-                    </div>
-                  </td>
                   <td className="px-3 py-2">
                     <span className={u.active ? "text-success" : "text-muted-foreground"}>
                       {u.active ? "مفعّل" : "موقوف"}
@@ -222,16 +187,14 @@ function UsersPage() {
         </div>
       </PageCard>
 
-      {/* Phase ج — invitation codes for onboarding employees */}
       <InvitationManager />
 
-      {/* Add / Edit dialog */}
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>{editing?.id ? "تعديل مستخدم" : "إضافة مستخدم"}</DialogTitle>
             <DialogDescription>
-              اختر الدور المناسب. عند الحفظ يُولَّد مفتاح تفعيل يمنح هذا المستخدم صلاحيات دوره فقط.
+              اختر الدور المناسب. للموظفين الجدد على أجهزة أخرى استخدم رمز الدعوة أدناه.
             </DialogDescription>
           </DialogHeader>
           {editing && (
@@ -252,7 +215,7 @@ function UsersPage() {
                 />
               </div>
               <div className="grid gap-1.5">
-                <Label>كلمة المرور (اختياري — للدخول بالحساب)</Label>
+                <Label>كلمة المرور (لتعيين الرقم السري أول مرة)</Label>
                 <Input
                   type="text"
                   value={editing.password}
@@ -277,8 +240,8 @@ function UsersPage() {
                   </SelectContent>
                 </Select>
               </div>
-              <div className="flex items-center justify-between rounded border p-2">
-                <Label>مفعّل</Label>
+              <div className="flex items-center justify-between rounded-lg border px-3 py-2">
+                <Label>الحساب مفعّل</Label>
                 <Switch
                   checked={editing.active}
                   onCheckedChange={(v) => setEditing({ ...editing, active: v })}
@@ -290,65 +253,10 @@ function UsersPage() {
             <Button variant="outline" onClick={() => setOpen(false)}>
               إلغاء
             </Button>
-            <Button onClick={save} className="bg-primary text-primary-foreground">
-              حفظ
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Issued-key dialog */}
-      <Dialog open={!!issuedKey} onOpenChange={(v) => !v && setIssuedKey(null)}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>مفتاح التفعيل جاهز</DialogTitle>
-            <DialogDescription>
-              أعطِ هذا المفتاح للمستخدم <b>{issuedKey?.name}</b>. سيستخدمه في تبويب «التفعيل بمفتاح
-              الترخيص» لفتح البرنامج.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="flex items-center gap-2 rounded-lg border-2 border-primary/40 bg-primary/5 p-3">
-            <code className="flex-1 text-center text-base font-mono font-bold tracking-widest text-primary">
-              {issuedKey?.key}
-            </code>
-            {issuedKey && <CopyBtn value={issuedKey.key} large />}
-          </div>
-          <DialogFooter>
-            <Button
-              onClick={() => setIssuedKey(null)}
-              className="bg-primary text-primary-foreground"
-            >
-              تم
-            </Button>
+            <Button onClick={save}>حفظ</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
-  );
-}
-
-function CopyBtn({ value, large }: { value: string; large?: boolean }) {
-  const [done, setDone] = useState(false);
-  return (
-    <Button
-      size="sm"
-      variant="ghost"
-      title="نسخ"
-      onClick={async () => {
-        try {
-          await navigator.clipboard.writeText(value);
-          setDone(true);
-          setTimeout(() => setDone(false), 1200);
-        } catch {
-          /* ignore */
-        }
-      }}
-    >
-      {done ? (
-        <Check className={large ? "h-5 w-5 text-success" : "h-3.5 w-3.5 text-success"} />
-      ) : (
-        <Copy className={large ? "h-5 w-5" : "h-3.5 w-3.5"} />
-      )}
-    </Button>
   );
 }

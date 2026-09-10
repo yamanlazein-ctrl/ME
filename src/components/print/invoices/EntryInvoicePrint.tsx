@@ -12,9 +12,7 @@
  * - signatures
  * - footer
  *
- * No color swatches — color is shown as `code` + `name` text only so the
- * document remains readable in black-and-white print.
- *
+ * Color cell: circular swatch + كود + name (same identity as inventory).
  * All fields are shown by default. Users can hide specific fields via
  * /settings/invoice — hiding affects the print only, never the data.
  */
@@ -28,43 +26,14 @@ import {
   type PrintParty,
 } from "@/components/print/PrintDocument";
 import { currencySymbol } from "@/presentation/hooks/useCurrency";
-import { fabricById, colorById, rollById, type Color } from "@/presentation/hooks/useInventory";
+import { fabricById, rollById, useInventory } from "@/presentation/hooks/useInventory";
 import { supplierById } from "@/presentation/hooks/useParties";
 import { useVouchersList } from "@/presentation/hooks/useVouchers";
 import { useInvoiceVisibility } from "./visibility";
 import { formatMoney, formatNumber, formatQuantity } from "@/shared/utils/formatNumber";
 import { parseLineNote } from "@/components/print/noteParser";
+import { PrintColorCell } from "./printColorCell";
 import type { Invoice } from "@/domain/entities/Invoice";
-
-/** Render a color cell showing code, name, and hex swatch — same pattern as ReturnInvoicePrint. */
-function renderColorCell(colorId: string) {
-  const col = colorById(colorId) as Pick<Color, "code" | "name" | "hex"> | null;
-  if (!col) return "—";
-    // Only a strict #RGB/#RRGGBB hex reaches the style — garbage input can
-    // never produce a broken swatch (browsers ignore invalid values, but the
-    // guard also keeps non-hex strings from rendering as unexpected colors).
-    const hexSwatch = col.hex && /^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(col.hex)
-    ? {
-        display: "inline-block",
-        width: "10px",
-        height: "10px",
-        borderRadius: "2px",
-        backgroundColor: col.hex,
-        border: "1px solid rgba(0,0,0,0.15)",
-        marginRight: "4px",
-        verticalAlign: "middle" as const,
-      }
-    : null;
-  return (
-    <div style={{ display: "flex", flexDirection: "column", lineHeight: 1.25 }}>
-      <span style={{ display: "flex", alignItems: "center", gap: "4px" }}>
-        {hexSwatch && <span style={hexSwatch} />}
-        {col.code && <span className="pd-color-code">{col.code}</span>}
-      </span>
-      {col.name && <span className="pd-color-name">{col.name}</span>}
-    </div>
-  );
-}
 
 type EntryInvoicePrintProps = {
   invoice: Invoice;
@@ -78,6 +47,8 @@ const fmtMoney = (n: number): string => formatMoney(n);
 const fmtQty = (n: number): string => formatQuantity(n);
 
 export function EntryInvoicePrint({ invoice, totalPages, pageNumber }: EntryInvoicePrintProps) {
+  // Ensure inventory cache is subscribed so colour lookups stay reactive.
+  useInventory();
   const inv = invoice;
   const vis = useInvoiceVisibility("purchase");
   const supplier = supplierById(inv.partyId);
@@ -101,9 +72,9 @@ export function EntryInvoicePrint({ invoice, totalPages, pageNumber }: EntryInvo
     () => allVouchers.filter((v) => v.invoiceId === inv.id && v.status === "active"),
     [allVouchers, inv.id],
   );
-  const paid = linkedVouchers.reduce((s, v) => s + v.amount, 0);
-  // Use explicit paid field if provided (manual payment at invoice time), otherwise derive from vouchers
-  const paidAmount = inv.paid !== undefined && inv.paid > 0 ? inv.paid : paid;
+  // Read paid from the invoice row (backend-maintained, FX-converted) —
+  // never sum voucher amounts raw across currencies.
+  const paidAmount = inv.paid ?? 0;
   const paymentMethod = linkedVouchers[0]?.method;
   const subtotal = inv.lineSubtotal();
   const discount = inv.discount ?? 0;
@@ -133,40 +104,40 @@ export function EntryInvoicePrint({ invoice, totalPages, pageNumber }: EntryInvo
       value: String(inv.cancelledAt).slice(0, 19).replace("T", " "),
     });
   }
-  // ── Items table — 5 main columns only. Extra details (roll no,
-  //    pieces, machine, kromaj, count, draw, reference) rendered
-  //    below each row as a compact detail line.
+  // ── Items table — rolls + pieces in the MAIN row (Issue 13), not nested.
   const mainColumns: PrintColumn[] = [
-    { key: "fabric", label: "الصنف", width: "28%" },
-    { key: "color", label: "اللون", width: "18%" },
-    { key: "qty", label: "الكمية (كغ)", align: "center", width: "16%" },
-    { key: "price", label: "السعر/كغ", align: "left", amount: true, width: "16%" },
-    { key: "gross", label: "الإجمالي", align: "left", amount: true, width: "22%" },
+    { key: "fabric", label: "الصنف", width: "22%" },
+    { key: "color", label: "اللون", width: "14%" },
+    { key: "roll", label: "رقم الصبغة", width: "14%" },
+    { key: "pieces", label: "الأثواب", align: "center", width: "8%" },
+    { key: "qty", label: "الكمية (كغ)", align: "center", width: "12%" },
+    { key: "price", label: "السعر/كغ", align: "left", amount: true, width: "12%" },
+    { key: "gross", label: "الإجمالي", align: "left", amount: true, width: "18%" },
   ];
 
-  /** Build a row: main cells + optional detail block below. */
+  /** Build a row: main cells + optional secondary detail (machine/kromaj only). */
   function buildRow(l: Invoice["lines"][number]) {
     const fab = fabricById(l.fabricId);
     const roll = rollById(l.rollId);
     const parsed = parseLineNote(l.note);
-    // Single source of truth: the entity's lineTotal (same rounding as the
-    // backend and the on-screen table — print can no longer diverge).
     const lineTotal = inv.lineTotal(l);
+    const rollLabel = roll?.rollNo
+      ? `#${roll.rollNo}`
+      : roll?.dyeBatch
+        ? String(roll.dyeBatch)
+        : "—";
 
     const main: Record<string, string | number | React.ReactNode> = {
       fabric: fab?.name ?? "—",
-      color: renderColorCell(l.colorId),
+      color: <PrintColorCell colorId={l.colorId} />,
+      roll: rollLabel,
+      pieces: l.pieces && l.pieces >= 1 ? String(l.pieces) : "—",
       qty: fmtQty(l.quantityKg),
       price: fmtUnit(l.pricePerKg),
       gross: fmtMoney(lineTotal),
     };
 
-    // Extra details that go below the main row
     const details: Array<{ label: string; value: string }> = [];
-    if (roll?.dyeBatch) details.push({ label: "رقم الصبغة", value: roll.dyeBatch });
-    else if (roll?.rollNo) details.push({ label: "رقم الصبغة", value: roll.rollNo });
-    // #6: show the pieces line whenever a count exists (pieces >= 1), not only > 1.
-    if (l.pieces && l.pieces >= 1) details.push({ label: "الأثواب", value: String(l.pieces) });
     if (parsed.machineNo) details.push({ label: "رقم الماكينة", value: parsed.machineNo });
     if (parsed.chromaj) details.push({ label: "الكراماج", value: parsed.chromaj });
     else if (roll?.weightGsm) details.push({ label: "الكراماج", value: String(roll.weightGsm) });

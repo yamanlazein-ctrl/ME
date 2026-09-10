@@ -4,8 +4,9 @@ import { Package, Palette, Plus, UserPlus } from "lucide-react";
 import { AppShell } from "@/components/layout/AppShell";
 import { InvoiceHeader } from "@/components/invoices/InvoiceHeader";
 import { ExitWithoutSavingButton } from "@/components/invoices/ExitWithoutSaving";
-import { colorById, fabricById, rollById, useInventory } from "@/presentation/hooks/useInventory";
-import { addCustomer, customers } from "@/presentation/hooks/useParties";
+import { PartyCombobox } from "@/components/vouchers/PartyCombobox";
+import { colorById, fabricById, fabricByName, rollById, useInventory } from "@/presentation/hooks/useInventory";
+import { addCustomer, customers, useParties } from "@/presentation/hooks/useParties";
 import { currencySymbol } from "@/presentation/hooks/useCurrency";
 import type { Currency } from "@/domain/types";
 import {
@@ -16,7 +17,8 @@ import {
   nextInvoiceNumber,
 } from "@/presentation/hooks/useInvoices";
 import { toast } from "sonner";
-import { printDocument } from "@/components/print/printPortal";
+import { printOrArchive } from "@/components/print/printPortal";
+import { archiveMeta } from "@/shared/utils/documentArchive";
 import { InvoicePrintDocument } from "@/components/print/InvoicePrintDocument";
 import { useSettings } from "@/presentation/hooks/useSettings";
 import { useOrder, useFulfillOrder, matchRollsForItem, fetchPendingOrderConflicts } from "@/presentation/hooks/useOrders";
@@ -66,6 +68,7 @@ export const Route = createFileRoute("/invoices/sale/new")({
 
 function SaleInvoicePage() {
   useInventory();
+  useParties();
   const navigate = useNavigate();
   const search = Route.useSearch();
   const fromOrderId = search.fromOrder;
@@ -225,10 +228,15 @@ function SaleInvoicePage() {
   /** Add a new row with the SAME fabric but EMPTY color — used for multi-color per fabric invoices. */
   const addColorForSameFabric = (lineId: string) => {
     const currentLine = lines.find((l) => l.id === lineId);
-    if (!currentLine || !currentLine.fabricId) return;
+    if (!currentLine) return;
+    const fabricId =
+      currentLine.fabricId ||
+      (currentLine.fabricName ? (fabricByName(currentLine.fabricName)?.id ?? "") : "");
+    if (!fabricId) return;
+    const fabric = fabricById(fabricId);
     const newLine: SaleLine = {
       ...emptyLine(),
-      ...cloneFabricOnly(currentLine),
+      ...cloneFabricOnly({ ...currentLine, fabricId, fabricName: fabric?.name ?? currentLine.fabricName }),
     };
     const idx = lines.findIndex((l) => l.id === lineId);
     setLines((p) => {
@@ -339,9 +347,17 @@ function SaleInvoicePage() {
       }
     }
 
-    // FX rule: a non-USD invoice must carry a positive frozen exchange rate.
-    if (currency !== "USD" && !(Number(exchangeRate) > 0)) {
-      setError("سعر الصرف مطلوب لكل عملية ليست بالدولار (عملة الأساس USD)");
+    // FX: required for non-USD invoices, OR when any selected roll is in a different currency.
+    const crossCurrencyStock = valid.some((l) => {
+      const r = rollById(l.rollId);
+      return r && r.currency !== currency;
+    });
+    if ((currency !== "USD" || crossCurrencyStock) && !(Number(exchangeRate) > 0)) {
+      setError(
+        crossCurrencyStock
+          ? "سعر الصرف مطلوب يدوياً لأن عملة الصبغة تختلف عن عملة الفاتورة"
+          : "سعر الصرف مطلوب لكل عملية ليست بالدولار (عملة الأساس USD)",
+      );
       return;
     }
 
@@ -357,9 +373,8 @@ function SaleInvoicePage() {
           lines: linePayload,
           // QA fix (Part 2): forward the (possibly updated) frozen FX rate so
           // the backend re-captures base_total / base_paid on edit.
-          ...(currency === "USD"
-            ? {}
-            : { exchangeRate: Number(exchangeRate) > 0 ? Number(exchangeRate) : undefined }),
+          // Forward manual FX whenever entered (needed for USD sale of SYP stock).
+          ...(Number(exchangeRate) > 0 ? { exchangeRate: Number(exchangeRate) } : {}),
         },
       });
       if (!res.ok) {
@@ -375,7 +390,15 @@ function SaleInvoicePage() {
         );
       }
       toast.success(`تم حفظ تعديلات الفاتورة ${res.value.number}`);
-      if (thenPrint) printDocument(<InvoicePrintDocument invoice={res.value} />);
+      printOrArchive(
+        <InvoicePrintDocument invoice={res.value} />,
+        archiveMeta("sale", {
+          date: res.value.date,
+          typeLabel: "SALE",
+          number: res.value.number,
+        }),
+        thenPrint,
+      );
       if (thenNew) {
         navigate({ to: "/invoices/sale/new" });
         return;
@@ -402,10 +425,9 @@ function SaleInvoicePage() {
       orderId: fromOrderId || undefined,
       lines: linePayload,
       notes: combinedNotes,
-      // FX rule (frozen at creation). Forwarded to the backend as-is.
-      ...(currency === "USD"
-        ? {}
-        : { exchangeRate: Number(exchangeRate) > 0 ? Number(exchangeRate) : undefined }),
+      // FX (frozen at creation). Always forward when user entered a rate —
+      // required for USD invoices that sell SYP-priced stock.
+      ...(Number(exchangeRate) > 0 ? { exchangeRate: Number(exchangeRate) } : {}),
     } as unknown as Parameters<typeof create.mutateAsync>[0]);
     if (!res.ok) {
       const rawErr = (res as any).error ?? {};
@@ -422,7 +444,11 @@ function SaleInvoicePage() {
     const inv = res.value;
     toast.success(`تم إنشاء الفاتورة ${inv.number} بنجاح`);
     if (fromOrderId) await fulfillOrder.mutateAsync({ orderId: fromOrderId, invoiceId: inv.id });
-    if (thenPrint) printDocument(<InvoicePrintDocument invoice={inv} />);
+    printOrArchive(
+      <InvoicePrintDocument invoice={inv} />,
+      archiveMeta("sale", { date: inv.date, typeLabel: "SALE", number: inv.number }),
+      thenPrint,
+    );
     if (thenNew) {
       resetForm();
       return;
@@ -562,18 +588,13 @@ function SaleInvoicePage() {
             <HeaderField label="العميل *">
               <div className="flex gap-1">
                 <div className="min-w-0 flex-1">
-                  <Select value={customerId} onValueChange={setCustomerId}>
-                    <SelectTrigger className="!h-9">
-                      <SelectValue placeholder="اختر العميل" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {customers.map((c) => (
-                        <SelectItem key={c.id} value={c.id}>
-                          {c.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <PartyCombobox
+                    kind="customer"
+                    value={customerId}
+                    onChange={setCustomerId}
+                    onCreateNew={() => setQuickCustomer(true)}
+                    placeholder="ابحث عن عميل..."
+                  />
                 </div>
                 <Button
                   type="button"
@@ -614,28 +635,18 @@ function SaleInvoicePage() {
               </Select>
             </HeaderField>
             <HeaderField label="سعر الصرف (ل.س / $)">
-              {currency === "USD" ? (
-                <Input
-                  value="1"
-                  readOnly
-                  disabled
-                  dir="ltr"
-                  className="!h-9 bg-muted/40 text-muted-foreground"
-                />
-              ) : (
-                <Input
-                  type="number"
-                  min={1}
-                  step="any"
-                  value={exchangeRate}
-                  onChange={(e) =>
-                    setExchangeRate(e.target.value === "" ? "" : Number(e.target.value))
-                  }
-                  placeholder="أدخل سعر الصرف يدوياً"
-                  dir="ltr"
-                  className="!h-9"
-                />
-              )}
+              <Input
+                type="number"
+                min={1}
+                step="any"
+                value={exchangeRate}
+                onChange={(e) =>
+                  setExchangeRate(e.target.value === "" ? "" : Number(e.target.value))
+                }
+                placeholder="أدخل سعر الصرف يدوياً"
+                dir="ltr"
+                className="!h-9"
+              />
             </HeaderField>
             <HeaderField label="الدفع">
               <Select value={paymentMethod} onValueChange={setPaymentMethod}>

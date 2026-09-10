@@ -1,6 +1,6 @@
 import { useState, useMemo } from "react";
 import { useNavigate } from "@tanstack/react-router";
-import { formatNumber, formatQuantity, formatMoney } from "@/shared/utils/formatNumber";
+import { formatNumber } from "@/shared/utils/formatNumber";
 import { PageCard } from "@/components/layout/PageCard";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,12 +13,16 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { customers, suppliers } from "@/presentation/hooks/useParties";
+import { FormattedAmountInput } from "@/components/invoices/InvoiceFormLayout";
+import { PartyCombobox } from "@/components/vouchers/PartyCombobox";
+import { RollSearchCombobox } from "@/components/returns/RollSearchCombobox";
+import { useParties } from "@/presentation/hooks/useParties";
 import {
   rolls,
   rollById,
   colorById,
   fabricById,
+  useInventory,
   type Currency,
 } from "@/presentation/hooks/useInventory";
 import { CURRENCIES, formatAmount } from "@/presentation/hooks/useCurrency";
@@ -40,9 +44,14 @@ type Line = {
   fabricId?: string;
 };
 
+/** Fixed column tracks so headers and cells stay aligned (RTL). */
+const LINE_GRID =
+  "grid grid-cols-[minmax(0,2.2fr)_4.5rem_5.5rem_4.5rem_6rem_5rem_2.5rem] items-center gap-x-2";
+
 export function ReturnForm({ kind }: { kind: ReturnKind }) {
+  useParties();
+  useInventory();
   const navigate = useNavigate();
-  const parties = kind === "entry" ? suppliers : customers;
   const [partyId, setPartyId] = useState("");
   const [invoiceId, setInvoiceId] = useState("");
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
@@ -56,20 +65,16 @@ export function ReturnForm({ kind }: { kind: ReturnKind }) {
   const { data: invoicesData } = useInvoicesList();
   const allInvoices = invoicesData?.data ?? [];
 
-  // The original invoice (with its actual lines) — used to restrict the lot
-  // list to the rolls that were really on that invoice (#11) and to default
-  // the price to the invoice's actual sale price (#2).
   const { data: originalInvoice } = useInvoice(invoiceId);
   const invoiceRollIds = useMemo(() => {
-    const lines = originalInvoice?.lines ?? [];
-    return new Set(lines.map((ln) => ln.rollId).filter(Boolean));
+    const invLines = originalInvoice?.lines ?? [];
+    return new Set(invLines.map((ln) => ln.rollId).filter(Boolean));
   }, [originalInvoice]);
 
-  // Invoice line lookup: rollId → the original invoice's actual sale price (#2).
   const invoicePriceByRoll = useMemo(() => {
-    const lines = originalInvoice?.lines ?? [];
+    const invLines = originalInvoice?.lines ?? [];
     const map = new Map<string, number>();
-    for (const ln of lines) {
+    for (const ln of invLines) {
       if (ln.rollId && !map.has(ln.rollId)) map.set(ln.rollId, ln.pricePerKg);
     }
     return map;
@@ -88,11 +93,15 @@ export function ReturnForm({ kind }: { kind: ReturnKind }) {
       ...l,
       { id: `l-${Date.now()}`, rollId: "", quantityKg: 0, pricePerKg: 0, pieces: 1 },
     ]);
-  const update = (id: string, patch: Partial<Line>) =>
+  const update = (id: string, patch: Partial<Line>) => {
+    setErr(null);
     setLines((l) => l.map((x) => (x.id === id ? { ...x, ...patch } : x)));
-  const remove = (id: string) => setLines((l) => l.filter((x) => x.id !== id));
+  };
+  const remove = (id: string) => {
+    setErr(null);
+    setLines((l) => l.filter((x) => x.id !== id));
+  };
 
-  /** Insert a new line right after the current one, preserving fabric context. */
   const addColorForSameFabric = (lineId: string) => {
     const currentLine = lines.find((l) => l.id === lineId);
     let fabricId = currentLine?.fabricId;
@@ -117,8 +126,17 @@ export function ReturnForm({ kind }: { kind: ReturnKind }) {
     });
   };
 
-  const totalAmount = lines.reduce((s, l) => s + l.quantityKg * l.pricePerKg, 0);
+  const poolForLine = (l: Line) => {
+    let pool = l.fabricId
+      ? rolls.filter((rr) => colorById(rr.colorId)?.fabricId === l.fabricId)
+      : rolls;
+    if (invoiceId && invoiceRollIds.size > 0) {
+      pool = pool.filter((rr) => invoiceRollIds.has(rr.id));
+    }
+    return pool;
+  };
 
+  const totalAmount = lines.reduce((s, l) => s + l.quantityKg * l.pricePerKg, 0);
   const createReturnMut = useCreateReturn();
 
   const save = async () => {
@@ -153,237 +171,211 @@ export function ReturnForm({ kind }: { kind: ReturnKind }) {
 
   return (
     <>
-      <PageCard title="بيانات المرتجع">
-        <div className="grid gap-3 md:grid-cols-3">
-          <Field label={kind === "entry" ? "المورد *" : "العميل *"}>
-            <Select
-              value={partyId}
-              onValueChange={(v) => {
-                setPartyId(v);
-                setInvoiceId("");
-              }}
-            >
-              <SelectTrigger className="!h-10">
-                <SelectValue placeholder="اختر..." />
-              </SelectTrigger>
-              <SelectContent>
-                {parties.map((p) => (
-                  <SelectItem key={p.id} value={p.id}>
-                    {p.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </Field>
-          <Field label="الفاتورة الأصلية (اختياري)">
-            <Select
-              value={invoiceId || "none"}
-              onValueChange={(v) => setInvoiceId(v === "none" ? "" : v)}
-              disabled={!partyId}
-            >
-              <SelectTrigger className="!h-10">
-                <SelectValue placeholder="—" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="none">— بدون فاتورة —</SelectItem>
-                {invoiceOptions.map((i) => (
-                  <SelectItem key={i.id} value={i.id}>
-                    {i.number}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </Field>
-          <Field label="التاريخ">
-            <Input
-              type="date"
-              value={date}
-              onChange={(e) => setDate(e.target.value)}
-              className="h-10"
-            />
-          </Field>
-          <Field label="السبب">
-            <Select value={reason} onValueChange={(v) => setReason(v as ReturnReason)}>
-              <SelectTrigger className="!h-10">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {RETURN_REASONS.map((r) => (
-                  <SelectItem key={r.code} value={r.code}>
-                    {r.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </Field>
-          <Field label="العملة">
-            <Select value={currency} onValueChange={(v) => setCurrency(v as Currency)}>
-              <SelectTrigger className="!h-10">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {CURRENCIES.map((c) => (
-                  <SelectItem key={c.code} value={c.code}>
-                    {c.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </Field>
+      <PageCard title="بيانات المرتجع" description="الطرف والفاتورة الأصلية أولاً، ثم التاريخ والسبب والعملة.">
+        <div className="space-y-4">
+          <div className="grid gap-3 md:grid-cols-2">
+            <Field label={kind === "entry" ? "المورد *" : "العميل *"}>
+              <PartyCombobox
+                kind={kind === "entry" ? "supplier" : "customer"}
+                value={partyId}
+                onChange={(id) => {
+                  setPartyId(id);
+                  setInvoiceId("");
+                }}
+                onCreateNew={() =>
+                  navigate({ to: kind === "entry" ? "/suppliers" : "/customers" })
+                }
+                placeholder={kind === "entry" ? "ابحث عن مورد..." : "ابحث عن عميل..."}
+              />
+            </Field>
+            <Field label="الفاتورة الأصلية (اختياري)">
+              <Select
+                value={invoiceId || "none"}
+                onValueChange={(v) => setInvoiceId(v === "none" ? "" : v)}
+                disabled={!partyId}
+              >
+                <SelectTrigger className="!h-9">
+                  <SelectValue placeholder="—" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">— بدون فاتورة —</SelectItem>
+                  {invoiceOptions.map((i) => (
+                    <SelectItem key={i.id} value={i.id}>
+                      {i.number}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </Field>
+          </div>
+          <div className="grid gap-3 md:grid-cols-3">
+            <Field label="التاريخ">
+              <Input
+                type="date"
+                value={date}
+                onChange={(e) => setDate(e.target.value)}
+                className="h-9"
+              />
+            </Field>
+            <Field label="السبب">
+              <Select value={reason} onValueChange={(v) => setReason(v as ReturnReason)}>
+                <SelectTrigger className="!h-9">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {RETURN_REASONS.map((r) => (
+                    <SelectItem key={r.code} value={r.code}>
+                      {r.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </Field>
+            <Field label="العملة">
+              <Select value={currency} onValueChange={(v) => setCurrency(v as Currency)}>
+                <SelectTrigger className="!h-9">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {CURRENCIES.map((c) => (
+                    <SelectItem key={c.code} value={c.code}>
+                      {c.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </Field>
+          </div>
         </div>
       </PageCard>
 
       <PageCard
         title="بنود المرتجع"
-        description="اختر الصبغة والكمية المرتجعة (بالكغ)."
+        description="ابحث عن الصبغة بالاسم أو الرقم، ثم أدخل الكمية."
         actions={
-          <Button onClick={addLine} variant="outline">
+          <Button onClick={addLine} variant="outline" size="sm">
             <Plus className="h-4 w-4 ml-1" /> إضافة بند
           </Button>
         }
         noBodyPadding
       >
-        <div className="w-full overflow-x-auto">
-          <table className="w-full min-w-[700px] text-right text-sm">
-            <thead className="bg-secondary/60 text-[11px] uppercase text-muted-foreground">
-              <tr className="[&>th]:px-3 [&>th]:py-2.5">
-                <th>الصبغة</th>
-                <th>المتبقي</th>
-                <th className="text-left">الكمية</th>
-                <th className="text-left">الأثواب</th>
-                <th className="text-left">السعر / كغ</th>
-                <th className="text-left">الإجمالي</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border">
+        <div className="min-w-0 overflow-x-auto">
+          <div className="min-w-[720px]">
+            <div
+              className={`${LINE_GRID} border-b border-border bg-secondary/60 px-3 py-2 text-[11px] font-semibold uppercase text-muted-foreground`}
+            >
+              <div>الصبغة</div>
+              <div className="text-center">المتبقي</div>
+              <div className="text-center">الكمية</div>
+              <div className="text-center">الأثواب</div>
+              <div className="text-center">السعر / كغ</div>
+              <div className="text-center">الإجمالي</div>
+              <div />
+            </div>
+
+            {lines.length === 0 && (
+              <div className="px-3 py-10 text-center text-sm text-muted-foreground">
+                لا بنود بعد — اضغط «إضافة بند».
+              </div>
+            )}
+
+            <div className="divide-y divide-border">
               {lines.map((l) => {
                 const r = rollById(l.rollId);
                 const c = r && colorById(r.colorId);
                 const f = c && fabricById(c.fabricId);
+                const lineTotal = l.quantityKg * l.pricePerKg;
                 return (
-                  <tr key={l.id}>
-                    <td className="px-3 py-2">
-                      <Select
-                        value={l.rollId}
-                        onValueChange={(v) => {
-                          const rr = rollById(v);
-                          const cc = rr && colorById(rr.colorId);
-                          // #2: default to the original invoice's sale price for
-                          // this roll; fall back to the roll's stored price only
-                          // when no original invoice context exists.
-                          const defaultPrice = invoicePriceByRoll.get(v) ?? rr?.pricePerKg ?? 0;
-                          update(l.id, {
-                            rollId: v,
-                            pricePerKg: defaultPrice,
-                            fabricId: cc?.fabricId,
-                          });
-                        }}
-                      >
-                        <SelectTrigger>
-                          <SelectValue placeholder="اختر صبغة" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {(() => {
-                            // #11: when an original invoice is selected, only its
-                            // actual lots are eligible — never the whole tenant pool.
-                            let pool = l.fabricId
-                              ? rolls.filter((rr) => {
-                                  const cc = colorById(rr.colorId);
-                                  return cc?.fabricId === l.fabricId;
-                                })
-                              : rolls;
-                            if (invoiceId && invoiceRollIds.size > 0) {
-                              pool = pool.filter((rr) => invoiceRollIds.has(rr.id));
-                            }
-                            return pool.map((rr) => {
-                              const cc = colorById(rr.colorId);
-                              const ff = cc && fabricById(cc.fabricId);
-                              return (
-                                <SelectItem key={rr.id} value={rr.id}>
-                                  {ff?.name} — {cc?.name} #{rr.rollNo}
-                                </SelectItem>
-                              );
+                  <div key={l.id} className="px-3 py-2.5">
+                    <div className={LINE_GRID}>
+                      <div className="min-w-0">
+                        <RollSearchCombobox
+                          value={l.rollId}
+                          options={poolForLine(l)}
+                          placeholder={
+                            l.fabricId ? "صبغة أخرى لنفس القماش..." : "ابحث عن صبغة..."
+                          }
+                          onChange={(v) => {
+                            const rr = rollById(v);
+                            const cc = rr && colorById(rr.colorId);
+                            const defaultPrice =
+                              invoicePriceByRoll.get(v) ?? rr?.pricePerKg ?? 0;
+                            update(l.id, {
+                              rollId: v,
+                              pricePerKg: defaultPrice,
+                              fabricId: cc?.fabricId,
                             });
-                          })()}
-                        </SelectContent>
-                      </Select>
-                      {f && (
-                        <div className="text-[10px] text-muted-foreground mt-1">
-                          {f.name} — {c?.name}
-                        </div>
-                      )}
-                    </td>
-                    <td className="px-3 py-2 tabular-nums text-muted-foreground">
-                      {r?.remainingKg ?? "—"}
-                    </td>
-                    <td className="px-3 py-2 text-left">
-                      <Input
-                        type="number"
-                        step="0.01"
-                        value={l.quantityKg || ""}
-                        onChange={(e) => update(l.id, { quantityKg: Number(e.target.value) })}
-                        className="h-9 w-24"
-                      />
-                    </td>
-                    <td className="px-3 py-2 text-left">
-                      <Input
-                        type="number"
-                        min="1"
-                        value={l.pieces || ""}
-                        onChange={(e) =>
-                          update(l.id, { pieces: Math.max(1, Number(e.target.value)) })
-                        }
-                        className="h-9 w-20"
-                        aria-label="عدد الأثواب"
-                      />
-                    </td>
-                    <td className="px-3 py-2 text-left">
-                      <Input
-                        type="number"
-                        step="0.01"
-                        value={l.pricePerKg || ""}
-                        onChange={(e) => update(l.id, { pricePerKg: Number(e.target.value) })}
-                        className="h-9 w-28"
-                      />
-                    </td>
-                    <td className="px-3 py-2 text-left tabular-nums font-semibold">
-                      {formatNumber(l.quantityKg * l.pricePerKg)}
-                    </td>
-                    <td className="px-3 py-2">
-                      <div className="flex items-center gap-1">
+                          }}
+                        />
                         {l.rollId && f && (
                           <button
+                            type="button"
                             onClick={() => addColorForSameFabric(l.id)}
-                            className="inline-flex items-center gap-1.5 rounded-md border border-primary/30 bg-primary/10 px-2.5 py-1.5 text-xs font-bold text-primary transition hover:bg-primary/20"
-                            title={`إضافة لون جديد لـ ${f.name}`}
+                            className="mt-1.5 inline-flex items-center gap-1 rounded border border-primary/25 bg-primary/5 px-2 py-0.5 text-[10px] font-bold text-primary hover:bg-primary/15"
+                            title={`إضافة لون آخر لـ ${f.name}`}
                             aria-label="إضافة لون آخر لنفس القماش"
                           >
-                            <Palette className="h-3.5 w-3.5" />
-                            + إضافة لون آخر
+                            <Palette className="h-3 w-3" />
+                            + لون آخر لنفس القماش
                           </button>
                         )}
-                        <button onClick={() => remove(l.id)} className="text-destructive">
+                      </div>
+                      <div className="text-center text-sm tabular-nums text-muted-foreground">
+                        {r ? formatNumber(r.remainingKg) : "—"}
+                      </div>
+                      <div>
+                        <FormattedAmountInput
+                          value={l.quantityKg || ""}
+                          onChange={(v) => update(l.id, { quantityKg: v === "" ? 0 : v })}
+                          className="h-9 w-full text-center"
+                          ariaLabel="الكمية"
+                        />
+                      </div>
+                      <div>
+                        <Input
+                          type="number"
+                          min="1"
+                          value={l.pieces || ""}
+                          onChange={(e) =>
+                            update(l.id, {
+                              pieces: Math.max(1, Number(e.target.value) || 1),
+                            })
+                          }
+                          className="h-9 w-full text-center tabular-nums"
+                          aria-label="عدد الأثواب"
+                        />
+                      </div>
+                      <div>
+                        <FormattedAmountInput
+                          value={l.pricePerKg || ""}
+                          onChange={(v) => update(l.id, { pricePerKg: v === "" ? 0 : v })}
+                          className="h-9 w-full text-center"
+                          ariaLabel="السعر"
+                        />
+                      </div>
+                      <div className="text-center text-sm font-semibold tabular-nums">
+                        {formatNumber(lineTotal)}
+                      </div>
+                      <div className="flex justify-center">
+                        <button
+                          type="button"
+                          onClick={() => remove(l.id)}
+                          className="grid h-8 w-8 place-items-center rounded-md text-destructive hover:bg-destructive/10"
+                          aria-label="حذف البند"
+                        >
                           <Trash2 className="h-4 w-4" />
                         </button>
                       </div>
-                    </td>
-                  </tr>
+                    </div>
+                  </div>
                 );
               })}
-              {lines.length === 0 && (
-                <tr>
-                  <td colSpan={7} className="p-8 text-center text-muted-foreground">
-                    لا بنود بعد.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
+            </div>
+          </div>
         </div>
         <div className="border-t border-border p-3 text-left text-sm">
           الإجمالي:{" "}
-          <span className="font-bold tabular-nums text-lg">
+          <span className="text-lg font-bold tabular-nums">
             {formatAmount(totalAmount, currency)}
           </span>
         </div>
@@ -431,8 +423,10 @@ export function ReturnForm({ kind }: { kind: ReturnKind }) {
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <div>
-      <Label className="mb-1 block text-[11px] font-semibold text-muted-foreground">{label}</Label>
+    <div className="space-y-1.5">
+      <Label className="mb-0 block text-[11px] font-semibold leading-none text-muted-foreground">
+        {label}
+      </Label>
       {children}
     </div>
   );

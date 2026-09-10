@@ -10,7 +10,7 @@ import type { BaseHttpClient } from "@/infrastructure/http";
  * Keep it isolated from all billing logic.
  *
  * The browser only ever calls our internal backend endpoint (which serves a
- * server-side cached snapshot); it never contacts liranews.info directly.
+ * server-side cached snapshot); it never contacts LiraScope directly.
  */
 export interface FxReferenceRateResponse {
   /** true when we have a rate worth showing (fresh or stale). */

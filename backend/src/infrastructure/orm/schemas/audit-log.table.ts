@@ -39,4 +39,4 @@ export const auditLogs = pgTable(
     tenantActorIdx: index("idx_audit_logs_tenant_actor").on(table.tenantId, table.actorId),
     tenantCreatedAtIdx: index("idx_audit_logs_tenant_created").on(table.tenantId, table.createdAt),
   }),
-);
+).enableRLS();

@@ -1,28 +1,18 @@
 import type { Request, Response, NextFunction } from "express";
-import { pool } from "../../orm/drizzle.js";
 
 /**
- * Sets the PostgreSQL app.current_tenant_id session variable
- * for RLS policies on the current pooled connection.
+ * DEPRECATED — replaced by the AsyncLocalStorage tenant context.
  *
- * Uses pool.query() with SET SESSION so that RLS has a fallback
- * tenant context. Combined with explicit WHERE tenant_id = ctx.tenantId
- * in every repository query for defense-in-depth.
+ * This middleware previously set `app.current_tenant_id` via a session-level
+ * `SET SESSION` on the shared pg Pool, which is racy (PLATFORM_FOUNDATION_NOTES
+ * §2): the pooled connection is reused across requests, so the GUC could leak
+ * from one tenant's request into another's. Tenant context is now established
+ * by `auth.middleware.ts` using `runWithTenantContext`, and `TenantScopedPool`
+ * stamps the GUC at connection checkout time.
  *
- * In Phase 2/3, upgrade to request-scoped database client
- * with SET LOCAL per-transaction for proper per-request isolation.
+ * It is kept as a no-op passthrough so that any existing call site that still
+ * references it does not break; it is currently NOT registered in `server.ts`.
  */
-export async function setTenantRlsMiddleware(req: Request, _res: Response, next: NextFunction) {
-  const ctx = req.tenantContext;
-  if (!ctx) {
-    next();
-    return;
-  }
-
-  try {
-    await pool.query("SET SESSION app.current_tenant_id = $1", [ctx.tenantId]);
-    next();
-  } catch (err) {
-    next(err);
-  }
+export async function setTenantRlsMiddleware(_req: Request, _res: Response, next: NextFunction) {
+  next();
 }

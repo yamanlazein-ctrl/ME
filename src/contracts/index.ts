@@ -33,6 +33,5 @@ export * as NotificationContracts from "./notifications";
 export * as PrintContract from "./printing";
 export * as SettingsContracts from "./settings";
 export * as UserContracts from "./users";
-export * as LicenseContracts from "./licenses";
 export * as BackupContracts from "./backups";
 export * as ActivityContracts from "./activity";

@@ -15,7 +15,7 @@ import {
   type ReceivePrintJobInput,
 } from "../../domain/entities/PrintJob.js";
 import type { TenantContext, UUID } from "../../domain/types/index.js";
-import { round2dp } from "@erp/shared";
+import { round2dp, convertAmount, isValidFxRate } from "@erp/shared";
 
 export class PostgresPrintJobRepository implements IPrintJobRepository {
   constructor(private readonly db: DB) {}
@@ -63,8 +63,8 @@ export class PostgresPrintJobRepository implements IPrintJobRepository {
         .limit(1);
       if (src.length > 0) {
         // Guard: refuse to send more than the roll currently holds. Stock is
-        // only deducted at receive time (by receivedKg), so without this check a
-        // print job could be created against stock that has already been sold.
+        // deducted at SEND time (see below), so this check prevents overselling
+        // against already-committed print jobs and sales.
         if (Number(src[0].remainingKg) < input.quantityKg) {
           throw new Error(
             `كمية الإرسال (${input.quantityKg} كغ) تتجاوز المخزون المتاح (${Number(src[0].remainingKg)} كغ)`,
@@ -255,8 +255,23 @@ export class PostgresPrintJobRepository implements IPrintJobRepository {
         }
 
         if (resultFabricId) {
+          const sourceFabricId = job.sourceFabricId ?? null;
+          const fabricChanged = resultFabricId !== sourceFabricId;
           const baseColorId = job.sourceColorId ?? srcRoll.colorId;
-          if (input.newColorName) {
+          // Issue 11: never attach a result roll to the SOURCE color when the
+          // fabric was renamed — inventory name resolves via color→fabric, so
+          // reusing source colorId left the old fabric name on the new roll.
+          if (input.newColorName?.trim() || fabricChanged) {
+            let colorName = input.newColorName?.trim() ?? "";
+            if (!colorName && baseColorId) {
+              const [srcCol] = await tx
+                .select({ name: colors.name })
+                .from(colors)
+                .where(and(eq(colors.id, baseColorId), eq(colors.tenantId, ctx.tenantId)))
+                .limit(1);
+              colorName = srcCol?.name?.trim() || "افتراضي";
+            }
+            if (!colorName) colorName = "افتراضي";
             const existingCol = await tx
               .select()
               .from(colors)
@@ -264,7 +279,7 @@ export class PostgresPrintJobRepository implements IPrintJobRepository {
                 and(
                   eq(colors.tenantId, ctx.tenantId),
                   eq(colors.fabricId, resultFabricId),
-                  eq(colors.name, input.newColorName),
+                  eq(colors.name, colorName),
                 ),
               )
               .limit(1);
@@ -276,7 +291,7 @@ export class PostgresPrintJobRepository implements IPrintJobRepository {
                 .values({
                   tenantId: ctx.tenantId,
                   fabricId: resultFabricId,
-                  name: input.newColorName,
+                  name: colorName,
                   code: input.newColorCode ?? null,
                 })
                 .returning();
@@ -301,8 +316,34 @@ export class PostgresPrintJobRepository implements IPrintJobRepository {
         const generatedRollNo = await nextDocumentNumber("print_roll", ctx.tenantId);
 
         const srcPrice = Number(srcRoll.pricePerKg ?? 0);
-        const printCost = input.printCostPerKg ? Number(input.printCostPerKg) : 0;
-        const currency = input.currency ?? srcRoll.currency ?? "SYP";
+        const printCost = input.printCostPerKg != null ? Number(input.printCostPerKg) : 0;
+        const srcCur = srcRoll.currency ?? "SYP";
+        const currency = input.currency ?? srcCur;
+        const fxRate = input.exchangeRate;
+        // Same FX rule as invoices: non-USD receive needs a manual rate.
+        // Cross-currency also needs a rate when the non-USD side is involved.
+        const needsFx =
+          currency !== "USD" || (srcCur !== currency && srcCur !== "USD");
+        // Soft FX (N8): do not hard-block receive when rate is missing —
+        // convertAmount falls back to source price; FE asks for confirmation.
+        if (srcCur !== currency && srcCur !== "USD" && currency !== "USD") {
+          throw new Error(
+            `لا يمكن تحويل تكلفة المصدر من ${srcCur} إلى ${currency} مباشرة — اختر نفس عملة اللفافة أو الدولار`,
+          );
+        }
+        const srcInReceive =
+          convertAmount(
+            srcPrice,
+            {
+              currency: srcCur,
+              exchangeRate: srcCur === "USD" ? 1 : isValidFxRate(fxRate) ? fxRate : null,
+            },
+            {
+              currency,
+              exchangeRate: currency === "USD" ? 1 : isValidFxRate(fxRate) ? fxRate : null,
+            },
+          ) ?? srcPrice;
+        const unitCost = round2dp(srcInReceive + printCost);
         const salePrice = input.newSalePricePerKg ?? srcRoll.salePricePerKg ?? undefined;
         // B1 fix: entryDate is NOT NULL in the rolls table; fall back to today's
         // date (or the print job's date) if the caller didn't supply one.
@@ -328,7 +369,7 @@ export class PostgresPrintJobRepository implements IPrintJobRepository {
             dyeBatch: srcRoll.dyeBatch,
             initialKg: String(input.receivedKg),
             remainingKg: String(input.receivedKg),
-            pricePerKg: String(srcPrice + printCost),
+            pricePerKg: String(unitCost),
             salePricePerKg: salePrice != null ? String(salePrice) : null,
             currency,
             supplierId: srcRoll.supplierId ?? null,
@@ -449,6 +490,17 @@ export class PostgresPrintJobRepository implements IPrintJobRepository {
           status: "received",
           receivedKg: input.receivedKg != null ? String(input.receivedKg) : null,
           printCostPerKg: input.printCostPerKg != null ? String(input.printCostPerKg) : null,
+          currency: input.currency ?? job.currency,
+          exchangeRate:
+            input.exchangeRate != null && input.exchangeRate > 0
+              ? String(input.exchangeRate)
+              : null,
+          newName: input.newName ?? job.newName,
+          newCategory: input.newCategory ?? job.newCategory,
+          newColorName: input.newColorName ?? job.newColorName,
+          newColorCode: input.newColorCode ?? job.newColorCode,
+          newSalePricePerKg:
+            input.newSalePricePerKg != null ? String(input.newSalePricePerKg) : job.newSalePricePerKg,
           resultRollId,
           resultFabricId: resultFabricId ?? null,
           resultColorId: resultColorId ?? null,
@@ -479,15 +531,18 @@ export class PostgresPrintJobRepository implements IPrintJobRepository {
       sourceFabricId: n(row.sourceFabricId),
       sourceColorId: n(row.sourceColorId),
       quantityKg: Number(row.quantityKg),
+      pieces: row.pieces != null ? Number(row.pieces) : undefined,
       pressName: n(row.pressName),
       printCostPerKg: num(row.printCostPerKg),
       currency: row.currency,
+      exchangeRate: num(row.exchangeRate),
       newName: n(row.newName),
       newCategory: n(row.newCategory),
       newColorName: n(row.newColorName),
       newColorCode: n(row.newColorCode),
       newSalePricePerKg: num(row.newSalePricePerKg),
       receivedKg: num(row.receivedKg),
+      receivedAt: row.receivedAt ? row.receivedAt.toISOString() : undefined,
       wasteKg:
         row.receivedKg != null
           ? Math.max(0, Number(row.quantityKg) - Number(row.receivedKg))

@@ -9,7 +9,15 @@ export class ApiNotificationRepository implements INotificationRepository {
   constructor(private api: NotificationApiService) {}
 
   async list(ctx: TenantContext): Promise<AppNotificationDTO[]> {
-    return this.api.list();
+    const rows = await this.api.list();
+    return rows.map((n) => {
+      const raw = n as AppNotificationDTO & { targetPath?: string };
+      const path = raw.to?.path ?? raw.targetPath;
+      return {
+        ...raw,
+        to: path ? { path } : raw.to ?? null,
+      };
+    });
   }
 
   async create(

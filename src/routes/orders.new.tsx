@@ -12,8 +12,10 @@ import {
   searchColors,
   colorByCode,
   fabricByName,
+  totalKgOfColor,
 } from "@/presentation/hooks/useInventory";
-import { addCustomer, customers, customerById } from "@/presentation/hooks/useParties";
+import { formatQuantity } from "@/shared/utils/formatNumber";
+import { addCustomer, customers, customerById, useParties } from "@/presentation/hooks/useParties";
 import type { Currency } from "@/domain/types";
 import { useCreateOrder, orderDetailsText } from "@/presentation/hooks/useOrders";
 import { Input } from "@/components/ui/input";
@@ -85,6 +87,7 @@ const hasData = (l: Line) => l.fabricName.trim() !== "" || l.requestedKg > 0;
 
 function NewOrderPage() {
   useInventory();
+  useParties();
   const navigate = useNavigate();
   const createOrder = useCreateOrder();
 
@@ -264,7 +267,7 @@ function NewOrderPage() {
                     )}
                   </div>
 
-                  <div className="grid grid-cols-1 gap-2 p-3 md:grid-cols-4">
+                  <div className="grid grid-cols-1 gap-2 p-3 md:grid-cols-2 lg:grid-cols-5">
                     <Field label="نوع القماش *">
                       <InlineFabricCell
                         ref={(el) => {
@@ -294,6 +297,11 @@ function NewOrderPage() {
                         onSetName={(name) => updateLine(l.id, { colorName: name, colorId: "" })}
                         onSetCode={(code) => updateLine(l.id, { colorCode: code, colorId: "" })}
                       />
+                    </Field>
+                    <Field label="المتاح بالمخزون (كغ)">
+                      <div className="flex h-9 items-center rounded-md border border-border bg-secondary/30 px-3 text-sm tabular-nums text-foreground">
+                        {l.colorId ? `${formatQuantity(totalKgOfColor(l.colorId))} كغ` : "—"}
+                      </div>
                     </Field>
                     <Field label="الكمية المطلوبة (كغ) *">
                       <Input

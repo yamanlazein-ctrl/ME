@@ -1,5 +1,6 @@
 import { eq, and, isNull } from "drizzle-orm";
 import { db as defaultDb, withTenantTx, type DB } from "../orm/drizzle.js";
+import { runWithPlatformContext } from "../orm/tenant-context.js";
 import { secrets } from "../orm/schemas/secret.table.js";
 import type { ISecretCipher, EncryptedSecret } from "../../application/ports/ISecretCipher.js";
 import type {
@@ -90,7 +91,9 @@ export class PostgresSecretsRepository implements ISecretsRepository {
 
   async delete(tenantId: string | null, key: string): Promise<void> {
     if (tenantId === null) {
-      await this.db.delete(secrets).where(and(isNull(secrets.tenantId), eq(secrets.key, key)));
+      await runWithPlatformContext(() =>
+        this.db.delete(secrets).where(and(isNull(secrets.tenantId), eq(secrets.key, key))),
+      );
       return;
     }
     await withTenantTx(tenantId, async (tx) => {
@@ -102,15 +105,10 @@ export class PostgresSecretsRepository implements ISecretsRepository {
     // Adopt the new key FIRST so the test encrypt call below uses it.
     await this.cipher.rotate(newMasterKey);
 
-    // Read all rows outside any tenant scope (system-level), re-encrypt
-    // each, write back. Tenant-scoped rows are also re-encrypted; the
-    // GUC scoping on UPDATE is bypassed because we operate as
-    // superuser (per the project's DATABASE_URL), but the
-    // FORCE RLS policy would still apply. To bypass it for the
-    // duration of the rotation we set the GUC to the row's own
-    // tenant_id before updating. This is a small N+1; rotation
-    // happens rarely (admin action) so it is acceptable.
-    const allRows = await this.db.select().from(secrets);
+    // Read all rows within platform context (system-level visibility spans
+    // both NULL rows and every tenant's rows; category-2 policy grants this
+    // only under app.platform_mode = 'on').
+    const allRows = await runWithPlatformContext(() => this.db.select().from(secrets));
 
     let count = 0;
     for (const row of allRows) {
@@ -124,17 +122,19 @@ export class PostgresSecretsRepository implements ISecretsRepository {
       );
 
       if (row.tenantId === null) {
-        await this.db
-          .update(secrets)
-          .set({
-            ciphertext: enc.ciphertext,
-            iv: enc.iv,
-            authTag: enc.authTag,
-            algorithm: enc.algorithm,
-            version: row.version + 1,
-            rotatedAt: new Date(),
-          })
-          .where(eq(secrets.id, row.id));
+        await runWithPlatformContext(() =>
+          this.db
+            .update(secrets)
+            .set({
+              ciphertext: enc.ciphertext,
+              iv: enc.iv,
+              authTag: enc.authTag,
+              algorithm: enc.algorithm,
+              version: row.version + 1,
+              rotatedAt: new Date(),
+            })
+            .where(eq(secrets.id, row.id)),
+        );
       } else {
         await withTenantTx(row.tenantId, async (tx) => {
           await tx
@@ -158,49 +158,53 @@ export class PostgresSecretsRepository implements ISecretsRepository {
   // ── System-level (tenantId IS NULL) helpers ──────────────────
 
   private async getSystemLevel(key: string): Promise<SecretRecord | null> {
-    const [row] = await this.db
-      .select()
-      .from(secrets)
-      .where(and(isNull(secrets.tenantId), eq(secrets.key, key)))
-      .limit(1);
-    return row ? toRecord(row) : null;
+    return runWithPlatformContext(async () => {
+      const [row] = await this.db
+        .select()
+        .from(secrets)
+        .where(and(isNull(secrets.tenantId), eq(secrets.key, key)))
+        .limit(1);
+      return row ? toRecord(row) : null;
+    });
   }
 
   private async putSystemLevel(key: string, enc: EncryptedSecret): Promise<number> {
-    const [existing] = await this.db
-      .select({ id: secrets.id, version: secrets.version })
-      .from(secrets)
-      .where(and(isNull(secrets.tenantId), eq(secrets.key, key)))
-      .limit(1);
+    return runWithPlatformContext(async () => {
+      const [existing] = await this.db
+        .select({ id: secrets.id, version: secrets.version })
+        .from(secrets)
+        .where(and(isNull(secrets.tenantId), eq(secrets.key, key)))
+        .limit(1);
 
-    if (existing) {
-      await this.db
-        .update(secrets)
-        .set({
+      if (existing) {
+        await this.db
+          .update(secrets)
+          .set({
+            ciphertext: enc.ciphertext,
+            iv: enc.iv,
+            authTag: enc.authTag,
+            algorithm: enc.algorithm,
+            version: existing.version + 1,
+            rotatedAt: new Date(),
+          })
+          .where(eq(secrets.id, existing.id));
+        return existing.version + 1;
+      }
+
+      const [row] = await this.db
+        .insert(secrets)
+        .values({
+          tenantId: null,
+          key,
           ciphertext: enc.ciphertext,
           iv: enc.iv,
           authTag: enc.authTag,
           algorithm: enc.algorithm,
-          version: existing.version + 1,
-          rotatedAt: new Date(),
+          version: 1,
         })
-        .where(eq(secrets.id, existing.id));
-      return existing.version + 1;
-    }
-
-    const [row] = await this.db
-      .insert(secrets)
-      .values({
-        tenantId: null,
-        key,
-        ciphertext: enc.ciphertext,
-        iv: enc.iv,
-        authTag: enc.authTag,
-        algorithm: enc.algorithm,
-        version: 1,
-      })
-      .returning({ version: secrets.version });
-    return row!.version;
+        .returning({ version: secrets.version });
+      return row!.version;
+    });
   }
 }
 

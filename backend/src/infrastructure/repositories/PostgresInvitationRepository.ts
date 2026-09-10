@@ -1,6 +1,7 @@
 import { eq, and, isNull } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import { db as defaultDb, withTenantTx, type DB } from "../orm/drizzle.js";
+import { runWithTenantContext, runWithPlatformContext } from "../orm/tenant-context.js";
 import type { UUID } from "../../domain/types/index.js";
 import type {
   IInvitationRepository,
@@ -47,12 +48,18 @@ export class PostgresInvitationRepository implements IInvitationRepository {
   }
 
   async findByCode(code: string): Promise<InvitationRow | null> {
-    const [row] = await this.db
-      .select()
-      .from(invitationCodes)
-      .where(eq(invitationCodes.code, code))
-      .limit(1);
-    return row ? toRow(row) : null;
+    // Pre-auth lookup by code (invitation validate/consume): no JWT exists
+    // yet, and the code must be resolvable regardless of which tenant issued
+    // it. This is a bootstrap-style platform read — the tenant check happens
+    // afterwards when the row's own tenantId drives the subsequent writes.
+    return runWithPlatformContext(async () => {
+      const [row] = await this.db
+        .select()
+        .from(invitationCodes)
+        .where(eq(invitationCodes.code, code))
+        .limit(1);
+      return row ? toRow(row) : null;
+    });
   }
 
   async listByTenant(tenantId: UUID): Promise<InvitationRow[]> {
@@ -74,19 +81,23 @@ export class PostgresInvitationRepository implements IInvitationRepository {
   }
 
   async consume(id: UUID, tenantId: UUID): Promise<InvitationRow> {
-    const [row] = await this.db
-      .update(invitationCodes)
-      .set({ useCount: 1 })
-      .where(
-        and(
-          eq(invitationCodes.id, id),
-          eq(invitationCodes.tenantId, tenantId),
-          eq(invitationCodes.useCount, 0),
-        ),
-      )
-      .returning();
-    if (!row) throw new Error("INVITATION_ALREADY_CONSUMED");
-    return toRow(row);
+    // Called from the pre-auth consume flow — stamp the invitation's own
+    // tenant GUC so the UPDATE passes WITH CHECK (category-1 RLS).
+    return runWithTenantContext({ tenantId }, async () => {
+      const [row] = await this.db
+        .update(invitationCodes)
+        .set({ useCount: 1 })
+        .where(
+          and(
+            eq(invitationCodes.id, id),
+            eq(invitationCodes.tenantId, tenantId),
+            eq(invitationCodes.useCount, 0),
+          ),
+        )
+        .returning();
+      if (!row) throw new Error("INVITATION_ALREADY_CONSUMED");
+      return toRow(row);
+    });
   }
 
   async createUserFromInvitation(
@@ -97,19 +108,23 @@ export class PostgresInvitationRepository implements IInvitationRepository {
     role: string,
     passwordHash: string,
   ): Promise<{ id: UUID }> {
-    const [u] = await this.db
-      .insert(users)
-      .values({
-        tenantId,
-        name,
-        email,
-        role,
-        passwordHash,
-        active: true,
-      })
-      .returning({ id: users.id });
-    if (!u) throw new Error("USER_CREATE_FAILED");
-    return u;
+    // Pre-auth flow (no JWT yet) — stamp the tenant GUC from the invitation's
+    // tenant so the `users` insert passes WITH CHECK (category-1 RLS).
+    return runWithTenantContext({ tenantId }, async () => {
+      const [u] = await this.db
+        .insert(users)
+        .values({
+          tenantId,
+          name,
+          email,
+          role,
+          passwordHash,
+          active: true,
+        })
+        .returning({ id: users.id });
+      if (!u) throw new Error("USER_CREATE_FAILED");
+      return u;
+    });
   }
 
   async registerDevice(
@@ -117,19 +132,23 @@ export class PostgresInvitationRepository implements IInvitationRepository {
     licenseId: UUID,
     fingerprint: string,
   ): Promise<{ id: UUID }> {
-    const [d] = await this.db
-      .insert(deviceRegistrations)
-      .values({
-        licenseId,
-        tenantId,
-        deviceId: randomUUID(),
-        deviceFingerprint: fingerprint,
-        deviceFingerprintVersion: 1,
-        platform: "web",
-        lastSeenAt: new Date(),
-      })
-      .returning({ id: deviceRegistrations.id });
-    if (!d) throw new Error("DEVICE_REGISTER_FAILED");
-    return d;
+    // Pre-auth flow — same tenant-stamping rationale as above; the device
+    // row is category-2 and must match either the tenant GUC or platform.
+    return runWithTenantContext({ tenantId }, async () => {
+      const [d] = await this.db
+        .insert(deviceRegistrations)
+        .values({
+          licenseId,
+          tenantId,
+          deviceId: randomUUID(),
+          deviceFingerprint: fingerprint,
+          deviceFingerprintVersion: 1,
+          platform: "web",
+          lastSeenAt: new Date(),
+        })
+        .returning({ id: deviceRegistrations.id });
+      if (!d) throw new Error("DEVICE_REGISTER_FAILED");
+      return d;
+    });
   }
 }

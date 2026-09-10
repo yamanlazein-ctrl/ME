@@ -99,4 +99,4 @@ export const licenses = pgTable(
     tenantIdx: index("idx_licenses_tenant").on(table.tenantId),
     statusIdx: index("idx_licenses_status").on(table.status),
   }),
-);
+).enableRLS();

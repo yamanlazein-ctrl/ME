@@ -15,6 +15,14 @@ export interface VoucherData {
   exchangeRate?: number | null;
   /** USD equivalent of `amount` at the frozen rate. */
   baseAmount?: number | null;
+  /**
+   * Currency + frozen rate of the LINKED INVOICE, carried along so the print
+   * template can show the voucher's counterpart in the invoice's currency
+   * ("المقابل: 13,200 ل.س بسعر صرف 132") without a second round-trip.
+   * Undefined for standalone payments.
+   */
+  invoiceCurrency?: string;
+  invoiceExchangeRate?: number | null;
   method: VoucherMethod;
   status: EntityStatus;
   notesPrint?: string;
@@ -113,4 +121,8 @@ export interface CreateVoucherInput {
   method: VoucherMethod;
   notesPrint?: string;
   notesInternal?: string;
+  /** Sync replay: keep originating device number. */
+  preAllocatedNumber?: string;
+  /** Sync replay: keep originating device id. */
+  preAllocatedId?: UUID;
 }

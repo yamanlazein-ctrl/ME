@@ -54,7 +54,8 @@ export interface SystemUserDTO {
   active: boolean;
   createdAt: string;
   password?: string;
-  licenseKey: string;
+  /** Deprecated — fake MF keys removed (OI-14). Optional for legacy DTOs. */
+  licenseKey?: string;
 }
 
 export interface ActivityEntryDTO {
@@ -96,12 +97,11 @@ export interface ISettingsRepository {
   deletePaymentMethod(id: UUID, ctx: TenantContext): Promise<void>;
   listUsers(ctx: TenantContext): Promise<SystemUserDTO[]>;
   addUser(
-    input: Omit<SystemUserDTO, "id" | "createdAt" | "licenseKey"> & { licenseKey?: string },
+    input: Omit<SystemUserDTO, "id" | "createdAt">,
     ctx: TenantContext,
   ): Promise<SystemUserDTO>;
   updateUser(id: UUID, patch: Partial<SystemUserDTO>, ctx: TenantContext): Promise<void>;
   deleteUser(id: UUID, ctx: TenantContext): Promise<void>;
-  regenerateLicenseKey(id: UUID, ctx: TenantContext): Promise<string | undefined>;
   listActivity(ctx: TenantContext): Promise<ActivityEntryDTO[]>;
   clearActivity(ctx: TenantContext): Promise<void>;
   logActivity(module: string, action: string, detail?: string, ctx?: TenantContext): Promise<void>;

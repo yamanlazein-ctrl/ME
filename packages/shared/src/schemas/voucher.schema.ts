@@ -7,7 +7,7 @@ export const createVoucherSchema = z.object({
   partyId: z.string().uuid(),
   partyKind: z.enum(["customer", "supplier"]),
   invoiceId: z.string().uuid().optional(),
-  amount: z.number().int().positive(),
+  amount: z.number().positive(),
   currency: z.enum(["SYP", "USD", "EUR"]).optional(),
   // BUG-03 (same-pattern) frozen FX rate: units of `currency` per 1 USD,
   // required for non-USD vouchers. Mirrors createInvoiceSchema.

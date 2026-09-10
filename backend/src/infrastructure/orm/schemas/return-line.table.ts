@@ -23,4 +23,4 @@ export const returnLines = pgTable(
   (table) => ({
     returnRollIdx: uniqueIndex("idx_return_lines_return_roll").on(table.returnId, table.rollId),
   }),
-);
+).enableRLS();

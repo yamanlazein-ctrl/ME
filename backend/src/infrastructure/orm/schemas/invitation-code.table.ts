@@ -25,4 +25,4 @@ export const invitationCodes = pgTable(
   (table) => ({
     licenseIdx: index("idx_invitation_codes_license").on(table.licenseId),
   }),
-);
+).enableRLS();

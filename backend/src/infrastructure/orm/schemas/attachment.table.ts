@@ -15,4 +15,4 @@ export const attachments = pgTable("attachments", {
   storageUrl: text("storage_url"),
   uploadedBy: uuid("uploaded_by"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-});
+}).enableRLS();

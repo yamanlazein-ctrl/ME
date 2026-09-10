@@ -15,6 +15,14 @@ import {
   listFabricsUseCase,
   deleteFabricUseCase,
 } from "../../application/use-cases/inventory/fabricUseCases.js";
+import type { ISyncOutboxRepository } from "../../application/ports/ISyncOutboxRepository.js";
+import {
+  enqueueMasterCreate,
+  isSyncEnqueueEnabled,
+  opIdFromRequest,
+  syncDeviceIdFromRequest,
+} from "../../application/use-cases/sync/syncEnqueue.js";
+import { logger } from "../../infrastructure/config/logger.js";
 
 export function registerFabricRoutes(
   router: Router,
@@ -22,6 +30,7 @@ export function registerFabricRoutes(
   auth: RequestHandler,
   writeGuard: RequestHandler,
   readGuard: RequestHandler,
+  syncOutboxRepo?: ISyncOutboxRepository,
 ) {
   const ctx = (req: Request): TenantContext => req.tenantContext!;
   const pid = (req: Request): string => req.params.id as string;
@@ -36,6 +45,30 @@ export function registerFabricRoutes(
     async (req: Request, res: Response) => {
       const r = await createFabricUseCase(fabricRepo, body(req), ctx(req));
       if (r.ok) {
+        if (syncOutboxRepo && isSyncEnqueueEnabled()) {
+          try {
+            const f = r.data;
+            await enqueueMasterCreate(
+              syncOutboxRepo,
+              "fabric",
+              f.id,
+              {
+                id: f.id,
+                name: f.name,
+                category: f.category ?? null,
+                minStockKg: f.minStockKg,
+                unit: f.unit ?? null,
+                notes: f.notes ?? null,
+                imageUrl: f.imageUrl ?? null,
+              },
+              ctx(req),
+              syncDeviceIdFromRequest(req),
+              opIdFromRequest(req),
+            );
+          } catch (err) {
+            logger.warn({ err, fabricId: r.data.id }, "sync outbox enqueue failed after fabric create");
+          }
+        }
         res.status(201).json(r.data);
       } else {
         res.status(422).json({ code: "VALIDATION", message: r.error });

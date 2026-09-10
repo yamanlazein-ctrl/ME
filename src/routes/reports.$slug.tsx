@@ -187,23 +187,9 @@ function ReportBody({
     case "purchases":
       return <SalesReport inRange={inRange} invoices={invoices} kind="entry" vouchers={vouchers} />;
     case "receivables":
-      return (
-        <PartyBalances
-          kind="customer"
-          invoices={invoices}
-          vouchers={vouchers}
-          ledgerEntries={ledgerEntriesArr}
-        />
-      );
+      return <PartyBalances kind="customer" invoices={invoices} ledgerEntries={ledgerEntriesArr} />;
     case "payables":
-      return (
-        <PartyBalances
-          kind="supplier"
-          invoices={invoices}
-          vouchers={vouchers}
-          ledgerEntries={ledgerEntriesArr}
-        />
-      );
+      return <PartyBalances kind="supplier" invoices={invoices} ledgerEntries={ledgerEntriesArr} />;
     case "sales-returns":
       return <ReturnsReport inRange={inRange} returns={returns} />;
     case "expenses":
@@ -262,10 +248,10 @@ function SalesReport({
   const rows = invoices
     .filter((i) => i.status !== "cancelled" && i.type === kind && inRange(i.date))
     .sort((a, b) => (a.date < b.date ? 1 : -1));
-  const paidByInvoice = (invoiceId: string) =>
-    vouchers
-      .filter((v) => v.status === "active" && v.invoiceId === invoiceId)
-      .reduce((s, v) => s + v.amount, 0);
+  const paidByInvoice = (invoiceId: string) => {
+    const inv = invoices.find((i) => i.id === invoiceId);
+    return inv?.paid ?? 0;
+  };
   const totalByCurrency = groupAmountsByCurrency(rows, invoiceTotal, (i) => i.currency);
   const paidByCurrency = groupAmountsByCurrency(
     rows,
@@ -344,17 +330,10 @@ function SalesReport({
 function PartyBalances({
   kind,
   invoices,
-  vouchers,
   ledgerEntries,
 }: {
   kind: "customer" | "supplier";
   invoices: DomainInvoice[];
-  vouchers: {
-    id: string;
-    invoiceId?: string | null;
-    status: string;
-    amount: number;
-  }[];
   ledgerEntries: DomainLedgerEntry[];
 }) {
   // Fix BUG-06/C-9/C-10: total/paid/remaining are now per-currency
@@ -380,11 +359,9 @@ function PartyBalances({
     .map((p) => {
       const invs = invoices.filter((i) => i.partyId === p.id && i.status !== "cancelled");
       const total = groupAmountsByCurrency(invs, invoiceTotal, (i) => i.currency);
-      const paidOf = (i: DomainInvoice) =>
-        vouchers
-          .filter((v) => v.status === "active" && v.invoiceId === i.id)
-          .reduce((sum, v) => sum + v.amount, 0);
-      const paid = groupAmountsByCurrency(invs, paidOf, (i) => i.currency);
+      // Read paid from the invoice row (backend-maintained, FX-converted) —
+      // never sum voucher amounts raw across currencies.
+      const paid = groupAmountsByCurrency(invs, (i) => i.paid ?? 0, (i) => i.currency);
       const remaining = remainingOf(p.id);
       return { p, total, paid, remaining, count: invs.length };
     })

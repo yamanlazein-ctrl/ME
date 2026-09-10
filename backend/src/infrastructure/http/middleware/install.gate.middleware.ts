@@ -9,6 +9,9 @@ const ALLOW_LIST = [
   "/api/setup/wizard",
   "/api/invitations/validate",
   "/api/invitations/consume",
+  "/api/auth/device-roster",
+  "/api/auth/pin-login",
+  "/api/auth/set-pin",
 ];
 
 function isAllowed(path: string): boolean {

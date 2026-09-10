@@ -20,10 +20,12 @@ export const LEDGER_ENTRY_TYPES = [
   "printing_revenue",
   "purchase_invoice",
   "purchase_return",
+  "purchase_return_contra",
   "receipt_in",
   "sales_invoice",
   "sales_revenue",
   "sales_return",
+  "sales_return_contra",
   "settlement",
   "settlement_contra",
 ] as const;

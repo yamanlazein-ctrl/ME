@@ -38,7 +38,11 @@ export function QuickCustomerDialog({
   const submit = async () => {
     if (!name.trim()) return setErr("الاسم مطلوب.");
     try {
-      const c = await addCustomer({ name: name.trim(), phone: phone.trim(), email: email.trim() });
+      const c = await addCustomer({
+        name: name.trim(),
+        ...(phone.trim() ? { phone: phone.trim() } : {}),
+        ...(email.trim() ? { email: email.trim() } : {}),
+      });
       onCreated(c.id);
     } catch {
       // addCustomer already surfaces the error via toast.

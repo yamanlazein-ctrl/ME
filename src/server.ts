@@ -1,7 +1,5 @@
-import "./lib/error-capture";
-
-import { consumeLastCapturedError } from "./lib/error-capture";
-import { renderErrorPage } from "./lib/error-page";
+// Inline SSR helpers to avoid Vite module-runner deadlocks while optimizeDeps
+ // is still bundling sibling files (fetchModule timeouts on error-*.ts).
 
 type ServerEntry = {
   fetch: (request: Request, env: unknown, ctx: unknown) => Promise<Response> | Response;
@@ -18,21 +16,28 @@ async function getServerEntry(): Promise<ServerEntry> {
   return serverEntryPromise;
 }
 
-// h3 swallows in-handler throws into a normal 500 Response with body
-// {"unhandled":true,"message":"HTTPError"} — try/catch alone never fires for those.
-async function normalizeCatastrophicSsrResponse(response: Response): Promise<Response> {
-  if (response.status < 500) return response;
-  const contentType = response.headers.get("content-type") ?? "";
-  if (!contentType.includes("application/json")) return response;
-
-  const body = await response.clone().text();
-  if (!isH3SwallowedErrorBody(body)) return response;
-
-  console.error(consumeLastCapturedError() ?? new Error(`h3 swallowed SSR error: ${body}`));
-  return new Response(renderErrorPage(), {
-    status: 500,
-    headers: { "content-type": "text/html; charset=utf-8" },
-  });
+function renderErrorPage(): string {
+  return `<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8" />
+<title>خطأ في التشغيل</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<style>
+  body{font-family:Tahoma,Segoe UI,sans-serif;margin:0;background:#0f1115;color:#f3f4f6;
+       display:flex;min-height:100vh;align-items:center;justify-content:center}
+  .box{max-width:28rem;padding:1.5rem;border:1px solid #333;border-radius:12px;background:#171a21}
+  h1{font-size:1.15rem;margin:0 0 .5rem}
+  p{margin:0;color:#9ca3af;font-size:.9rem;line-height:1.5}
+</style>
+</head>
+<body>
+  <div class="box">
+    <h1>تعذّر عرض الصفحة</h1>
+    <p>حدث خطأ أثناء تحميل واجهة التطوير. حدّث الصفحة بعد بضع ثوانٍ.</p>
+  </div>
+</body>
+</html>`;
 }
 
 function isH3SwallowedErrorBody(body: string): boolean {
@@ -42,6 +47,21 @@ function isH3SwallowedErrorBody(body: string): boolean {
   } catch {
     return false;
   }
+}
+
+async function normalizeCatastrophicSsrResponse(response: Response): Promise<Response> {
+  if (response.status < 500) return response;
+  const contentType = response.headers.get("content-type") ?? "";
+  if (!contentType.includes("application/json")) return response;
+
+  const body = await response.clone().text();
+  if (!isH3SwallowedErrorBody(body)) return response;
+
+  console.error(new Error(`h3 swallowed SSR error: ${body}`));
+  return new Response(renderErrorPage(), {
+    status: 500,
+    headers: { "content-type": "text/html; charset=utf-8" },
+  });
 }
 
 export default {

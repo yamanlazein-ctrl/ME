@@ -41,7 +41,7 @@ export const licenseActivations = pgTable(
     // not here, because Drizzle does not expose partial indexes
     // declaratively.
   }),
-);
+).enableRLS();
 
 // Re-exported for the migration's partial-index reference.
 export { licenses as _licensesRef };

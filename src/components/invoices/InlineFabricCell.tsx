@@ -125,9 +125,11 @@ export const InlineColorCell = forwardRef<
     onPickExisting: (colorId: string) => void;
     onSetName: (name: string) => void;
     onSetCode: (code: string) => void;
+    /** "both" = name+code side by side; "name"/"code" = single field for split layouts */
+    mode?: "both" | "name" | "code";
   }
 >(function InlineColorCell(
-  { fabricId, name, code, existingColorId, onPickExisting, onSetName, onSetCode },
+  { fabricId, name, code, existingColorId, onPickExisting, onSetName, onSetCode, mode = "both" },
   ref,
 ) {
   const [open, setOpen] = useState(false);
@@ -142,59 +144,82 @@ export const InlineColorCell = forwardRef<
   const exact = options.find((c) => c.name.toLowerCase() === q);
   const isNew = q.length > 0 && !exact && !!fabricId;
 
-  return (
-    <div className="relative flex items-center gap-1">
-      <Input
-        ref={ref}
-        value={name}
-        onChange={(e) => {
-          onSetName(e.target.value);
-          setOpen(true);
-        }}
-        onFocus={() => setOpen(true)}
-        onBlur={() => setTimeout(() => setOpen(false), 120)}
-        onKeyDown={(e) => {
-          if (e.key === "Enter" && matches.length === 1) {
-            e.preventDefault();
-            onPickExisting(matches[0].id);
-            setOpen(false);
-          }
-          if (e.key === "Escape") setOpen(false);
-        }}
-        placeholder="اللون"
-        className={cn(
-          "h-8 min-w-0 flex-1 border-transparent bg-transparent px-2 text-sm hover:border-border focus:border-primary focus:bg-background",
-          isNew && "text-primary",
-        )}
-        aria-label="اسم اللون"
-      />
-      <Input
-        ref={codeRef}
-        value={code}
-        onChange={(e) => onSetCode(e.target.value)}
-        placeholder="C-000"
-        className="h-8 w-16 border-transparent bg-transparent px-1 text-center text-[11px] tabular-nums hover:border-border focus:border-primary focus:bg-background"
-        aria-label="رمز اللون"
-      />
-      {open && matches.length > 0 && (
-        <div className="absolute right-0 top-full z-20 mt-1 w-[220px] rounded-md border border-border bg-popover shadow-lg">
-          {matches.map((c) => (
-            <button
-              key={c.id}
-              type="button"
-              onMouseDown={(e) => {
-                e.preventDefault();
-                onPickExisting(c.id);
-                setOpen(false);
-              }}
-              className="flex w-full items-center justify-between px-3 py-1.5 text-right text-sm hover:bg-secondary"
-            >
-              <span className="truncate font-medium text-foreground">{c.name}</span>
-              <span className="tabular-nums text-[10px] text-muted-foreground">{c.code}</span>
-            </button>
-          ))}
-        </div>
+  const nameInput = (
+    <Input
+      ref={ref}
+      value={name}
+      onChange={(e) => {
+        onSetName(e.target.value);
+        setOpen(true);
+      }}
+      onFocus={() => setOpen(true)}
+      onBlur={() => setTimeout(() => setOpen(false), 120)}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" && matches.length === 1) {
+          e.preventDefault();
+          onPickExisting(matches[0].id);
+          setOpen(false);
+        }
+        if (e.key === "Escape") setOpen(false);
+      }}
+      placeholder="اللون"
+      className={cn(
+        "h-9 min-w-0 w-full border-border bg-background px-2 text-sm focus:border-primary",
+        isNew && "text-primary",
       )}
+      aria-label="اسم اللون"
+    />
+  );
+
+  const codeInput = (
+    <Input
+      ref={mode === "code" ? ref : codeRef}
+      value={code}
+      onChange={(e) => onSetCode(e.target.value)}
+      placeholder="C-000"
+      className="h-9 min-w-0 w-full border-border bg-background px-2 text-center text-sm tabular-nums focus:border-primary"
+      aria-label="رمز اللون"
+    />
+  );
+
+  const dropdown =
+    open && matches.length > 0 && mode !== "code" ? (
+      <div className="absolute right-0 top-full z-20 mt-1 w-full min-w-[220px] rounded-md border border-border bg-popover shadow-lg">
+        {matches.map((c) => (
+          <button
+            key={c.id}
+            type="button"
+            onMouseDown={(e) => {
+              e.preventDefault();
+              onPickExisting(c.id);
+              setOpen(false);
+            }}
+            className="flex w-full items-center justify-between px-3 py-1.5 text-right text-sm hover:bg-secondary"
+          >
+            <span className="truncate font-medium text-foreground">{c.name}</span>
+            <span className="tabular-nums text-[10px] text-muted-foreground">{c.code}</span>
+          </button>
+        ))}
+      </div>
+    ) : null;
+
+  if (mode === "name") {
+    return (
+      <div className="relative">
+        {nameInput}
+        {dropdown}
+      </div>
+    );
+  }
+  if (mode === "code") {
+    return <div className="relative">{codeInput}</div>;
+  }
+
+  return (
+    <div className="relative grid grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)] items-center gap-2">
+      {nameInput}
+      {codeInput}
+      {dropdown}
     </div>
   );
 });

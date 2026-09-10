@@ -1,12 +1,20 @@
 import { useState, type FormEvent, type ReactNode } from "react";
-import logoUrl from "@/assets/logo-motard.png";
+import logoUrl from "@/assets/logo-motard-icon.png";
+import { DesktopServerSettings } from "@/components/auth/DesktopServerSettings";
 import { useLogin } from "@/presentation/hooks/useAuth";
 import { validateInvitation, consumeInvitation } from "@/lib/invitations";
-import { getServerFingerprint, getInstallTenantId } from "@/lib/license-state";
+import {
+  getServerFingerprint,
+  getInstallTenantId,
+  getRememberedEmail,
+  setRememberedEmail,
+} from "@/lib/license-state";
 
 export function LoginPage() {
-  const [username, setUsername] = useState("");
+  const remembered = getRememberedEmail();
+  const [username, setUsername] = useState(remembered ?? "");
   const [password, setPassword] = useState("");
+  const [passwordOnly, setPasswordOnly] = useState(Boolean(remembered));
   const [error, setError] = useState<string | null>(null);
 
   // Phase ج — invitation entry (an employee redeems a code minted by admin).
@@ -29,14 +37,20 @@ export function LoginPage() {
       // build-time env value is only a backwards-compatible fallback for
       // installs that were provisioned before this was persisted.
       const tenantId =
+        (import.meta.env.VITE_DESKTOP_DEPLOY === "true"
+          ? (import.meta.env.VITE_DEFAULT_TENANT_ID as string | undefined)
+          : null) ??
         getInstallTenantId() ??
         (import.meta.env.VITE_DEFAULT_TENANT_ID as string | undefined) ??
         "dev-tenant";
+      const email = username.trim();
       await loginMutation.mutateAsync({
-        email: username.trim(),
+        email,
         password,
         tenantId,
       });
+      setRememberedEmail(email);
+      setPasswordOnly(true);
     } catch (err) {
       console.error("[Login] Error:", err);
       const msg =
@@ -99,7 +113,7 @@ export function LoginPage() {
           <img
             src={logoUrl}
             alt="Motard Fabrics Group"
-            className="h-24 w-auto object-contain bg-transparent"
+            className="h-16 w-16 object-contain object-center bg-transparent"
             style={{ background: "transparent" }}
           />
           <h1 className="mt-4 text-2xl font-bold tracking-tight text-foreground">
@@ -108,18 +122,34 @@ export function LoginPage() {
           <p className="mt-1 text-xs text-muted-foreground">نظام إدارة تجارة الأقمشة المتكامل</p>
         </div>
 
+        <DesktopServerSettings />
+
         {mode === "login" ? (
           <form onSubmit={submit} className="mt-6 space-y-4">
-            <Field label="البريد الإلكتروني">
-              <input
-                type="text"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                className="w-full rounded-lg border border-border bg-secondary px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground outline-none focus:border-primary focus:ring-1 focus:ring-primary transition"
-                autoComplete="username"
-                placeholder="admin@erp.local"
-              />
-            </Field>
+            {passwordOnly && username ? (
+              <div className="rounded-md border border-border bg-secondary px-3 py-2 text-sm">
+                <span className="text-muted-foreground">الحساب: </span>
+                <span className="font-medium">{username}</span>
+                <button
+                  type="button"
+                  className="mr-3 text-xs text-primary underline"
+                  onClick={() => setPasswordOnly(false)}
+                >
+                  تغيير الحساب
+                </button>
+              </div>
+            ) : (
+              <Field label="البريد الإلكتروني">
+                <input
+                  type="text"
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
+                  className="w-full rounded-lg border border-border bg-secondary px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground outline-none focus:border-primary focus:ring-1 focus:ring-primary transition"
+                  autoComplete="username"
+                  placeholder="admin@erp.local"
+                />
+              </Field>
+            )}
             <Field label="كلمة المرور">
               <input
                 type="password"
@@ -127,6 +157,7 @@ export function LoginPage() {
                 onChange={(e) => setPassword(e.target.value)}
                 className="w-full rounded-lg border border-border bg-secondary px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground outline-none focus:border-primary focus:ring-1 focus:ring-primary transition"
                 autoComplete="current-password"
+                autoFocus={passwordOnly}
               />
             </Field>
 
@@ -188,20 +219,11 @@ export function LoginPage() {
 
         <button
           type="button"
-          onClick={() => {
-            setMode(mode === "login" ? "invitation" : "login");
-            setError(null);
-            setInvError(null);
-            setInvSuccess(null);
-          }}
-          className="mt-4 w-full text-center text-xs text-primary hover:underline"
+          onClick={() => setMode(mode === "login" ? "invitation" : "login")}
+          className="mt-4 w-full text-xs text-muted-foreground hover:text-foreground transition"
         >
-          {mode === "login" ? "لديك رمز دعوة؟ فعّله من هنا" : "العودة إلى تسجيل الدخول"}
+          {mode === "login" ? "لديك رمز دعوة؟ فعّله من هنا" : "العودة لتسجيل الدخول"}
         </button>
-
-        <p className="mt-6 text-center text-[10px] text-muted-foreground">
-          © 2026 Motard Fabrics Group — جميع الحقوق محفوظة
-        </p>
       </div>
     </div>
   );

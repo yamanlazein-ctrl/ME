@@ -19,4 +19,4 @@ export const documentSequences = pgTable(
       table.prefix,
     ),
   }),
-);
+).enableRLS();

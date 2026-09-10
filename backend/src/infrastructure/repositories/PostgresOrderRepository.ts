@@ -91,6 +91,7 @@ export class PostgresOrderRepository implements IOrderRepository {
       const [row] = await tx
         .insert(orders)
         .values({
+          ...(input.preAllocatedId ? { id: input.preAllocatedId } : {}),
           tenantId: ctx.tenantId,
           code: autoCode,
           customerId: input.customerId ?? null,

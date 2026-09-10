@@ -12,7 +12,10 @@ export const createPartySchema = z.object({
   mobile: z.string().max(30).optional(),
   whatsapp: z.string().max(30).optional(),
   altPhone: z.string().max(30).optional(),
-  email: z.string().email().max(320).optional(),
+  email: z.preprocess(
+    (v) => (v === "" || v === null ? undefined : v),
+    z.string().email().max(320).optional(),
+  ),
   website: z.string().max(500).optional(),
   address: z.string().optional(),
   city: z.string().max(100).optional(),

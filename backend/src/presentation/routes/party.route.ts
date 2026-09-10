@@ -15,6 +15,14 @@ import {
   listPartiesUseCase,
   cancelPartyUseCase,
 } from "../../application/use-cases/parties/partyUseCases.js";
+import type { ISyncOutboxRepository } from "../../application/ports/ISyncOutboxRepository.js";
+import {
+  enqueueMasterCreate,
+  isSyncEnqueueEnabled,
+  opIdFromRequest,
+  syncDeviceIdFromRequest,
+} from "../../application/use-cases/sync/syncEnqueue.js";
+import { logger } from "../../infrastructure/config/logger.js";
 
 export function registerPartyRoutes(
   router: Router,
@@ -22,6 +30,7 @@ export function registerPartyRoutes(
   auth: RequestHandler,
   accountantAndUp: RequestHandler,
   readAll: RequestHandler,
+  syncOutboxRepo?: ISyncOutboxRepository,
 ) {
   const ctxFn = (req: Request): TenantContext => req.tenantContext!;
   const paramId = (req: Request): string => req.params.id as string;
@@ -39,8 +48,52 @@ export function registerPartyRoutes(
         input as Parameters<typeof createPartyUseCase>[1],
         ctxFn(req),
       );
-      if (result.ok) return res.status(201).json(result.data);
-      return res.status(422).json({ code: "VALIDATION", message: result.error });
+      if (!result.ok) {
+        return res.status(422).json({ code: "VALIDATION", message: result.error });
+      }
+      const p = result.data;
+      if (syncOutboxRepo && isSyncEnqueueEnabled()) {
+        try {
+          await enqueueMasterCreate(
+            syncOutboxRepo,
+            "party",
+            p.id,
+            {
+              id: p.id,
+              kind: p.kind,
+              code: p.code ?? null,
+              name: p.name,
+              companyName: p.companyName ?? null,
+              commercialReg: p.commercialReg ?? null,
+              category: p.category ?? null,
+              salesRep: p.salesRep ?? null,
+              phone: p.phone ?? null,
+              mobile: p.mobile ?? null,
+              whatsapp: p.whatsapp ?? null,
+              altPhone: p.altPhone ?? null,
+              email: p.email ?? null,
+              website: p.website ?? null,
+              address: p.address ?? null,
+              city: p.city ?? null,
+              country: p.country ?? null,
+              taxNumber: p.taxNumber ?? null,
+              currency: p.currency,
+              paymentTerms: p.paymentTerms ?? null,
+              paymentMethod: p.paymentMethod ?? null,
+              defaultDiscount: p.defaultDiscount,
+              vat: p.vat,
+              status: p.status,
+              notes: p.notes ?? null,
+            },
+            ctxFn(req),
+            syncDeviceIdFromRequest(req),
+            opIdFromRequest(req),
+          );
+        } catch (err) {
+          logger.warn({ err, partyId: p.id }, "sync outbox enqueue failed after party create");
+        }
+      }
+      return res.status(201).json(p);
     },
   );
 
@@ -56,8 +109,52 @@ export function registerPartyRoutes(
         input as Parameters<typeof createPartyUseCase>[1],
         ctxFn(req),
       );
-      if (result.ok) return res.status(201).json(result.data);
-      return res.status(422).json({ code: "VALIDATION", message: result.error });
+      if (!result.ok) {
+        return res.status(422).json({ code: "VALIDATION", message: result.error });
+      }
+      const p = result.data;
+      if (syncOutboxRepo && isSyncEnqueueEnabled()) {
+        try {
+          await enqueueMasterCreate(
+            syncOutboxRepo,
+            "party",
+            p.id,
+            {
+              id: p.id,
+              kind: p.kind,
+              code: p.code ?? null,
+              name: p.name,
+              companyName: p.companyName ?? null,
+              commercialReg: p.commercialReg ?? null,
+              category: p.category ?? null,
+              salesRep: p.salesRep ?? null,
+              phone: p.phone ?? null,
+              mobile: p.mobile ?? null,
+              whatsapp: p.whatsapp ?? null,
+              altPhone: p.altPhone ?? null,
+              email: p.email ?? null,
+              website: p.website ?? null,
+              address: p.address ?? null,
+              city: p.city ?? null,
+              country: p.country ?? null,
+              taxNumber: p.taxNumber ?? null,
+              currency: p.currency,
+              paymentTerms: p.paymentTerms ?? null,
+              paymentMethod: p.paymentMethod ?? null,
+              defaultDiscount: p.defaultDiscount,
+              vat: p.vat,
+              status: p.status,
+              notes: p.notes ?? null,
+            },
+            ctxFn(req),
+            syncDeviceIdFromRequest(req),
+            opIdFromRequest(req),
+          );
+        } catch (err) {
+          logger.warn({ err, partyId: p.id }, "sync outbox enqueue failed after party create");
+        }
+      }
+      return res.status(201).json(p);
     },
   );
 

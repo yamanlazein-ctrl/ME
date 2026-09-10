@@ -36,14 +36,11 @@ import { Route as ReportsSlugRouteImport } from './routes/reports.$slug'
 import { Route as ReturnsIndexRouteImport } from './routes/returns.index'
 import { Route as SettingsIndexRouteImport } from './routes/settings.index'
 import { Route as SettingsActivityRouteImport } from './routes/settings.activity'
-import { Route as SettingsAuditRouteImport } from './routes/settings.audit'
 import { Route as SettingsBackupRouteImport } from './routes/settings.backup'
 import { Route as SettingsCompanyRouteImport } from './routes/settings.company'
-import { Route as SettingsCurrenciesRouteImport } from './routes/settings.currencies'
 import { Route as SettingsInvoiceRouteImport } from './routes/settings.invoice'
 import { Route as SettingsPaymentMethodsRouteImport } from './routes/settings.payment-methods'
 import { Route as SettingsPrintingRouteImport } from './routes/settings.printing'
-import { Route as SettingsTaxesRouteImport } from './routes/settings.taxes'
 import { Route as SettingsUnitsRouteImport } from './routes/settings.units'
 import { Route as SettingsUsersRouteImport } from './routes/settings.users'
 import { Route as SettingsWarehousesRouteImport } from './routes/settings.warehouses'
@@ -191,11 +188,6 @@ const SettingsActivityRoute = SettingsActivityRouteImport.update({
   path: '/activity',
   getParentRoute: () => SettingsRoute,
 } as any)
-const SettingsAuditRoute = SettingsAuditRouteImport.update({
-  id: '/audit',
-  path: '/audit',
-  getParentRoute: () => SettingsRoute,
-} as any)
 const SettingsBackupRoute = SettingsBackupRouteImport.update({
   id: '/backup',
   path: '/backup',
@@ -204,11 +196,6 @@ const SettingsBackupRoute = SettingsBackupRouteImport.update({
 const SettingsCompanyRoute = SettingsCompanyRouteImport.update({
   id: '/company',
   path: '/company',
-  getParentRoute: () => SettingsRoute,
-} as any)
-const SettingsCurrenciesRoute = SettingsCurrenciesRouteImport.update({
-  id: '/currencies',
-  path: '/currencies',
   getParentRoute: () => SettingsRoute,
 } as any)
 const SettingsInvoiceRoute = SettingsInvoiceRouteImport.update({
@@ -224,11 +211,6 @@ const SettingsPaymentMethodsRoute = SettingsPaymentMethodsRouteImport.update({
 const SettingsPrintingRoute = SettingsPrintingRouteImport.update({
   id: '/printing',
   path: '/printing',
-  getParentRoute: () => SettingsRoute,
-} as any)
-const SettingsTaxesRoute = SettingsTaxesRouteImport.update({
-  id: '/taxes',
-  path: '/taxes',
   getParentRoute: () => SettingsRoute,
 } as any)
 const SettingsUnitsRoute = SettingsUnitsRouteImport.update({
@@ -306,14 +288,11 @@ export interface FileRoutesByFullPath {
   '/receipts/new': typeof ReceiptsNewRoute
   '/reports/$slug': typeof ReportsSlugRoute
   '/settings/activity': typeof SettingsActivityRoute
-  '/settings/audit': typeof SettingsAuditRoute
   '/settings/backup': typeof SettingsBackupRoute
   '/settings/company': typeof SettingsCompanyRoute
-  '/settings/currencies': typeof SettingsCurrenciesRoute
   '/settings/invoice': typeof SettingsInvoiceRoute
   '/settings/payment-methods': typeof SettingsPaymentMethodsRoute
   '/settings/printing': typeof SettingsPrintingRoute
-  '/settings/taxes': typeof SettingsTaxesRoute
   '/settings/units': typeof SettingsUnitsRoute
   '/settings/users': typeof SettingsUsersRoute
   '/settings/warehouses': typeof SettingsWarehousesRoute
@@ -352,14 +331,11 @@ export interface FileRoutesByTo {
   '/receipts/new': typeof ReceiptsNewRoute
   '/reports/$slug': typeof ReportsSlugRoute
   '/settings/activity': typeof SettingsActivityRoute
-  '/settings/audit': typeof SettingsAuditRoute
   '/settings/backup': typeof SettingsBackupRoute
   '/settings/company': typeof SettingsCompanyRoute
-  '/settings/currencies': typeof SettingsCurrenciesRoute
   '/settings/invoice': typeof SettingsInvoiceRoute
   '/settings/payment-methods': typeof SettingsPaymentMethodsRoute
   '/settings/printing': typeof SettingsPrintingRoute
-  '/settings/taxes': typeof SettingsTaxesRoute
   '/settings/units': typeof SettingsUnitsRoute
   '/settings/users': typeof SettingsUsersRoute
   '/settings/warehouses': typeof SettingsWarehousesRoute
@@ -401,14 +377,11 @@ export interface FileRoutesById {
   '/receipts/new': typeof ReceiptsNewRoute
   '/reports/$slug': typeof ReportsSlugRoute
   '/settings/activity': typeof SettingsActivityRoute
-  '/settings/audit': typeof SettingsAuditRoute
   '/settings/backup': typeof SettingsBackupRoute
   '/settings/company': typeof SettingsCompanyRoute
-  '/settings/currencies': typeof SettingsCurrenciesRoute
   '/settings/invoice': typeof SettingsInvoiceRoute
   '/settings/payment-methods': typeof SettingsPaymentMethodsRoute
   '/settings/printing': typeof SettingsPrintingRoute
-  '/settings/taxes': typeof SettingsTaxesRoute
   '/settings/units': typeof SettingsUnitsRoute
   '/settings/users': typeof SettingsUsersRoute
   '/settings/warehouses': typeof SettingsWarehousesRoute
@@ -451,14 +424,11 @@ export interface FileRouteTypes {
     | '/receipts/new'
     | '/reports/$slug'
     | '/settings/activity'
-    | '/settings/audit'
     | '/settings/backup'
     | '/settings/company'
-    | '/settings/currencies'
     | '/settings/invoice'
     | '/settings/payment-methods'
     | '/settings/printing'
-    | '/settings/taxes'
     | '/settings/units'
     | '/settings/users'
     | '/settings/warehouses'
@@ -497,14 +467,11 @@ export interface FileRouteTypes {
     | '/receipts/new'
     | '/reports/$slug'
     | '/settings/activity'
-    | '/settings/audit'
     | '/settings/backup'
     | '/settings/company'
-    | '/settings/currencies'
     | '/settings/invoice'
     | '/settings/payment-methods'
     | '/settings/printing'
-    | '/settings/taxes'
     | '/settings/units'
     | '/settings/users'
     | '/settings/warehouses'
@@ -545,14 +512,11 @@ export interface FileRouteTypes {
     | '/receipts/new'
     | '/reports/$slug'
     | '/settings/activity'
-    | '/settings/audit'
     | '/settings/backup'
     | '/settings/company'
-    | '/settings/currencies'
     | '/settings/invoice'
     | '/settings/payment-methods'
     | '/settings/printing'
-    | '/settings/taxes'
     | '/settings/units'
     | '/settings/users'
     | '/settings/warehouses'
@@ -800,13 +764,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SettingsActivityRouteImport
       parentRoute: typeof SettingsRoute
     }
-    '/settings/audit': {
-      id: '/settings/audit'
-      path: '/audit'
-      fullPath: '/settings/audit'
-      preLoaderRoute: typeof SettingsAuditRouteImport
-      parentRoute: typeof SettingsRoute
-    }
     '/settings/backup': {
       id: '/settings/backup'
       path: '/backup'
@@ -819,13 +776,6 @@ declare module '@tanstack/react-router' {
       path: '/company'
       fullPath: '/settings/company'
       preLoaderRoute: typeof SettingsCompanyRouteImport
-      parentRoute: typeof SettingsRoute
-    }
-    '/settings/currencies': {
-      id: '/settings/currencies'
-      path: '/currencies'
-      fullPath: '/settings/currencies'
-      preLoaderRoute: typeof SettingsCurrenciesRouteImport
       parentRoute: typeof SettingsRoute
     }
     '/settings/invoice': {
@@ -847,13 +797,6 @@ declare module '@tanstack/react-router' {
       path: '/printing'
       fullPath: '/settings/printing'
       preLoaderRoute: typeof SettingsPrintingRouteImport
-      parentRoute: typeof SettingsRoute
-    }
-    '/settings/taxes': {
-      id: '/settings/taxes'
-      path: '/taxes'
-      fullPath: '/settings/taxes'
-      preLoaderRoute: typeof SettingsTaxesRouteImport
       parentRoute: typeof SettingsRoute
     }
     '/settings/units': {
@@ -951,14 +894,11 @@ const ReportsRouteWithChildren =
 
 interface SettingsRouteChildren {
   SettingsActivityRoute: typeof SettingsActivityRoute
-  SettingsAuditRoute: typeof SettingsAuditRoute
   SettingsBackupRoute: typeof SettingsBackupRoute
   SettingsCompanyRoute: typeof SettingsCompanyRoute
-  SettingsCurrenciesRoute: typeof SettingsCurrenciesRoute
   SettingsInvoiceRoute: typeof SettingsInvoiceRoute
   SettingsPaymentMethodsRoute: typeof SettingsPaymentMethodsRoute
   SettingsPrintingRoute: typeof SettingsPrintingRoute
-  SettingsTaxesRoute: typeof SettingsTaxesRoute
   SettingsUnitsRoute: typeof SettingsUnitsRoute
   SettingsUsersRoute: typeof SettingsUsersRoute
   SettingsWarehousesRoute: typeof SettingsWarehousesRoute
@@ -967,14 +907,11 @@ interface SettingsRouteChildren {
 
 const SettingsRouteChildren: SettingsRouteChildren = {
   SettingsActivityRoute: SettingsActivityRoute,
-  SettingsAuditRoute: SettingsAuditRoute,
   SettingsBackupRoute: SettingsBackupRoute,
   SettingsCompanyRoute: SettingsCompanyRoute,
-  SettingsCurrenciesRoute: SettingsCurrenciesRoute,
   SettingsInvoiceRoute: SettingsInvoiceRoute,
   SettingsPaymentMethodsRoute: SettingsPaymentMethodsRoute,
   SettingsPrintingRoute: SettingsPrintingRoute,
-  SettingsTaxesRoute: SettingsTaxesRoute,
   SettingsUnitsRoute: SettingsUnitsRoute,
   SettingsUsersRoute: SettingsUsersRoute,
   SettingsWarehousesRoute: SettingsWarehousesRoute,

@@ -39,7 +39,11 @@ export function useCreateReturn() {
       qc.invalidateQueries({ queryKey: ["dashboard"] });
     },
     onError: (e: Error) => {
-      toast.error(`فشل إنشاء المرتجع: ${e.message}`);
+      toast.error(
+        e instanceof Error && e.message && !/INSERT|UPDATE|SELECT|constraint|violates/i.test(e.message)
+          ? `فشل إنشاء المرتجع: ${e.message}`
+          : "حدث خطأ، يرجى المحاولة مرة أخرى أو التواصل مع الدعم",
+      );
     },
   });
 }
@@ -58,7 +62,11 @@ export function useCancelReturn() {
       qc.invalidateQueries({ queryKey: ["dashboard"] });
     },
     onError: (e: Error) => {
-      toast.error(`فشل إلغاء المرتجع: ${e.message}`);
+      toast.error(
+        e instanceof Error && e.message && !/INSERT|UPDATE|SELECT|constraint|violates/i.test(e.message)
+          ? `فشل إلغاء المرتجع: ${e.message}`
+          : "حدث خطأ، يرجى المحاولة مرة أخرى أو التواصل مع الدعم",
+      );
     },
   });
 }

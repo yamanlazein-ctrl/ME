@@ -35,4 +35,4 @@ export const orders = pgTable(
   (table) => ({
     tenantCodeIdx: uniqueIndex("idx_orders_tenant_code").on(table.tenantId, table.code),
   }),
-);
+).enableRLS();

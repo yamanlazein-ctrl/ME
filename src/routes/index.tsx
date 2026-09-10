@@ -1,6 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { AppShell } from "@/components/layout/AppShell";
-import { HeroSalesCard } from "@/components/dashboard/HeroSalesCard";
 import { ExecutiveKpiGrid } from "@/components/dashboard/ExecutiveKpiGrid";
 import { TopFabricsChart } from "@/components/dashboard/TopFabricsChart";
 import { SalesTrendChart } from "@/components/dashboard/SalesTrendChart";
@@ -17,16 +16,15 @@ function Dashboard() {
       title="لوحة التحكم"
       subtitle="نظرة شاملة على حركة المتجر اليوم — المبيعات، المخزون، والصندوق."
     >
-      <div className="space-y-6">
-        <HeroSalesCard />
+      <div className="space-y-4">
         <ExecutiveKpiGrid />
-        <div className="grid gap-5 lg:grid-cols-3">
+        <div className="grid gap-4 lg:grid-cols-3">
           <div className="lg:col-span-2">
             <SalesTrendChart />
           </div>
           <TopFabricsChart />
         </div>
-        <div className="grid gap-5 lg:grid-cols-3">
+        <div className="grid gap-4 lg:grid-cols-3">
           <div className="lg:col-span-2">
             <RecentTransactionsList />
           </div>

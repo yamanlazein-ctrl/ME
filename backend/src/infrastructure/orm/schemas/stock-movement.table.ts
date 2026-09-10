@@ -44,4 +44,4 @@ export const stockMovements = pgTable(
     ),
     dateIdx: index("idx_stock_movements_date").on(table.tenantId, table.movementDate),
   }),
-);
+).enableRLS();

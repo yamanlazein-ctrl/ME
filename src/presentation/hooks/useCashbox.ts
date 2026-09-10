@@ -38,7 +38,7 @@ export function useCashBalance(date?: string, currency?: string) {
     queryFn: ({ signal }) => {
       void signal;
       if (date) return container.cashbox.state.cashBalanceOn(date, ctx, currency);
-      return container.cashbox.state.currentBalance(ctx);
+      return container.cashbox.state.currentBalance(ctx, currency);
     },
     staleTime: 15_000,
   });

@@ -3,6 +3,10 @@ import { toast } from "sonner";
 import { container } from "@/infrastructure/container";
 import type { SettingsSection } from "@/infrastructure/api";
 import { setExchangeRate, type Currency } from "@/presentation/hooks/useCurrency";
+import {
+  FIXED_COMPANY_CONTACT,
+  formatCompanyPhoneField,
+} from "@/shared/constants/printConfig";
 
 export type ActivityEntry = {
   id: string;
@@ -53,7 +57,8 @@ export type SystemUser = {
   active: boolean;
   createdAt: string;
   password?: string;
-  licenseKey: string;
+  /** @deprecated OI-14 — fake MF keys removed; kept optional for legacy localStorage only */
+  licenseKey?: string;
 };
 
 export const ROLE_LABEL: Record<UserRole, string> = {
@@ -82,13 +87,14 @@ export const ROLE_ALLOWED_PATHS: Record<UserRole, string[]> = {
     "/expenses",
     "/ledger",
     "/cashbox",
+    "/reports/",
     "/reports",
     "/print-center",
     "/customers",
     "/suppliers",
   ],
   warehouse: ["/", "/inventory", "/invoices/entry", "/returns/entry", "/print-center"],
-  viewer: ["/", "/inventory", "/customers", "/suppliers", "/reports"],
+  viewer: ["/", "/inventory", "/customers", "/suppliers", "/reports", "/reports/"],
 };
 
 export function roleCanAccess(role: UserRole, path: string): boolean {
@@ -128,34 +134,19 @@ function nextId(prefix = "id"): string {
   return `${prefix}-${seq}`;
 }
 
-function randSeg(len: number): string {
-  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-  let s = "";
-  // Use crypto.getRandomValues when available (browser), fallback to Math.random only in non-crypto envs
-  const rnd = typeof crypto !== "undefined" && typeof crypto.getRandomValues === "function"
-    ? (() => { const a = new Uint32Array(len); crypto.getRandomValues(a); return Array.from(a, (v) => v % chars.length); })()
-    : Array.from({ length: len }, () => Math.floor(Math.random() * chars.length));
-  for (let i = 0; i < len; i++) s += chars[rnd[i]!];
-  return s;
-}
-
-export function generateLicenseKey(role: UserRole): string {
-  const roleTag = role.slice(0, 3).toUpperCase();
-  return `MF-${roleTag}-${randSeg(4)}-${randSeg(4)}-${randSeg(4)}`;
-}
-
 /* ── Settings state ────────────────────────────────────────────────── */
 
 export const settings = {
   company: {
-    name: "مطارد للأقمشة",
-    nameEn: "Motared Fabrics Group",
+    name: "Motard Fabrics Group",
+    nameEn: "",
     commercialReg: "",
     taxNumber: "",
-    phone: "",
+    // Issue 14: single source — defaults match protocol contact; also stored via PUT /settings/company
+    phone: formatCompanyPhoneField(),
     email: "",
-    address: "",
-    city: "",
+    address: FIXED_COMPANY_CONTACT.address,
+    city: "حلب",
   } as CompanySettings,
   taxes: [{ id: "t1", name: "ضريبة القيمة المضافة", rate: 0, enabled: true }] as Tax[],
   warehouses: [
@@ -194,7 +185,6 @@ export const settings = {
         typeof process !== "undefined"
           ? process.env.VITE_MOCK_ADMIN_PASSWORD || "NOT_SET"
           : "NOT_SET",
-      licenseKey: "MF-ADM-0000-0000-0001",
     },
   ] as SystemUser[],
   activity: [] as ActivityEntry[],
@@ -218,7 +208,19 @@ export function logActivity(module: string, action: string, detail?: string) {
   if (settings.activity.length > 500) settings.activity.length = 500;
 }
 
-/* ── API sync (GET /settings + PUT /settings/:section) ───────────── */
+/** Issue 14 — ensure company address/phone in settings match protocol contact when empty. */
+function ensureCompanyContactDefaults(): boolean {
+  let patched = false;
+  if (!(settings.company.address ?? "").trim()) {
+    settings.company.address = FIXED_COMPANY_CONTACT.address;
+    patched = true;
+  }
+  if (!(settings.company.phone ?? "").trim()) {
+    settings.company.phone = formatCompanyPhoneField();
+    patched = true;
+  }
+  return patched;
+}
 
 let loadStarted = false;
 const dirty = new Set<string>();
@@ -263,6 +265,11 @@ export async function loadSettings(): Promise<void> {
       changed = true;
     }
     if (changed) notify();
+    // Issue 14: seed empty address/phone once into DB from protocol contact
+    if (ensureCompanyContactDefaults()) {
+      notify();
+      persistSection("company");
+    }
     // Apply persisted exchange rates to the live currency state (fallback to defaults).
     const currencies = (settings as Record<string, unknown>).currencies as
       { code: string; rate: number }[] | undefined;
@@ -396,28 +403,16 @@ export function deletePaymentMethod(id: string) {
 
 /* ── Users CRUD ────────────────────────────────────────────────────── */
 
-export function addUser(
-  v: Omit<SystemUser, "id" | "createdAt" | "licenseKey"> & { licenseKey?: string },
-): SystemUser {
+export function addUser(v: Omit<SystemUser, "id" | "createdAt">): SystemUser {
   const u: SystemUser = {
     ...v,
     id: nextId("usr"),
     createdAt: new Date().toISOString().slice(0, 10),
-    licenseKey: v.licenseKey || generateLicenseKey(v.role),
   };
   settings.users.push(u);
   logActivity("المستخدمون", "إضافة مستخدم", `${u.name} — ${ROLE_LABEL[u.role]}`);
   notify();
   return u;
-}
-
-export function regenerateLicenseKey(id: string): string | undefined {
-  const u = settings.users.find((x) => x.id === id);
-  if (!u) return undefined;
-  u.licenseKey = generateLicenseKey(u.role);
-  logActivity("المستخدمون", "توليد مفتاح جديد", u.name);
-  notify();
-  return u.licenseKey;
 }
 
 export function updateUser(id: string, patch: Partial<SystemUser>) {

@@ -56,4 +56,4 @@ export const vouchers = pgTable(
     partyIdx: index("idx_vouchers_party").on(table.tenantId, table.partyId),
     invoiceIdx: index("idx_vouchers_invoice").on(table.tenantId, table.invoiceId),
   }),
-);
+).enableRLS();

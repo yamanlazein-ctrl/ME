@@ -15,4 +15,4 @@ export const settings = pgTable("settings", {
   warehouses: jsonb("warehouses").default("[]"),
   printing: jsonb("printing").default("{}"),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
-});
+}).enableRLS();

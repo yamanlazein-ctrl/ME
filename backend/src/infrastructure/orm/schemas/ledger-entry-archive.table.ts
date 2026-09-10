@@ -59,4 +59,4 @@ export const ledgerEntryArchive = pgTable(
     tenantDateIdx: index("idx_archive_tenant_date").on(table.tenantId, table.date),
     tenantYearIdx: index("idx_archive_tenant_year").on(table.tenantId, table.archiveYear),
   }),
-);
+).enableRLS();

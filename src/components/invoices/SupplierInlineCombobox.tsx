@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
-import { addSupplier, supplierById, suppliers } from "@/presentation/hooks/useParties";
+import { addSupplier, supplierById, suppliers, useParties } from "@/presentation/hooks/useParties";
 
 /**
  * Compact supplier picker for use in the invoice header.
@@ -26,6 +26,7 @@ export function SupplierInlineCombobox({
   onChange: (id: string) => void;
   className?: string;
 }) {
+  useParties();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [addMode, setAddMode] = useState(false);

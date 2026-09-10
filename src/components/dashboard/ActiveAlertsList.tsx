@@ -89,9 +89,7 @@ function AlertRow({ a }: { a: AlertDTO }) {
       </div>
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
-          <span className="truncate text-sm font-semibold text-foreground">
-            {a.customer}
-          </span>
+          <span className="truncate text-sm font-semibold text-foreground">{a.customer}</span>
           <span className="rounded-md bg-secondary px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground tabular-nums">
             {a.invoiceNo}
           </span>
@@ -115,7 +113,7 @@ export function ActiveAlertsList() {
   return (
     <div
       data-od-id="panel-active-alerts"
-      className="flex flex-col rounded-2xl border border-border bg-card shadow-soft"
+      className="flex flex-col rounded-xl border border-border bg-card shadow-soft"
     >
       <div className="flex items-center justify-between border-b border-border px-5 py-4">
         <div className="flex items-center gap-2.5">

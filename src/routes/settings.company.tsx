@@ -14,7 +14,7 @@ function CompanyPage() {
   return (
     <PageCard
       title="معلومات الشركة"
-      description="اسم الشركة والعنوان وبيانات التواصل — تظهر في الفواتير والطباعة."
+      description="اسم الشركة والعنوان وبيانات التواصل — مصدر واحد لكل قوالب الطباعة (فواتير / مرتجعات / مطبعة)."
     >
       <div className="grid gap-3 md:grid-cols-2">
         <Field label="اسم الشركة">

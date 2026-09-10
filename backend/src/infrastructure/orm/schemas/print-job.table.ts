@@ -35,6 +35,8 @@ export const printJobs = pgTable(
     pressName: varchar("press_name", { length: 255 }),
     printCostPerKg: decimal("print_cost_per_kg", { precision: 12, scale: 2 }),
     currency: varchar("currency", { length: 3 }).notNull().default("SYP"),
+    /** Units of `currency` per 1 USD — frozen at receive (Issue 11). */
+    exchangeRate: decimal("exchange_rate", { precision: 18, scale: 6 }),
     newName: varchar("new_name", { length: 255 }),
     newCategory: varchar("new_category", { length: 100 }),
     newColorName: varchar("new_color_name", { length: 255 }),
@@ -58,4 +60,4 @@ export const printJobs = pgTable(
     customerIdx: index("idx_print_jobs_customer").on(table.tenantId, table.customerId),
     orderIdx: index("idx_print_jobs_order").on(table.tenantId, table.orderId),
   }),
-);
+).enableRLS();

@@ -48,4 +48,4 @@ export const returns = pgTable(
       table.number,
     ),
   }),
-);
+).enableRLS();

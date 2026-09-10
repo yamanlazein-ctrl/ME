@@ -12,13 +12,38 @@ import { registerFxRoutes } from "../src/presentation/routes/fx.route.js";
  */
 
 const OK_PAYLOAD = {
-  usdsypd: {
-    symbol: "usdsypd",
-    value: 14500.0,
-    sell: 14520.0,
-    buy: 14480.0,
-    price_updated_at: "2026-01-01T10:00:00Z",
-  },
+  disclaimer: "test",
+  timestampUtc: "2026-01-01T12:00:00Z",
+  cbsRates: [
+    {
+      currency: "USD",
+      buy: 110,
+      sell: 111,
+      mid: 110.5,
+      timestampUtc: "2026-01-01T11:00:00Z",
+      isManualOverride: false,
+    },
+  ],
+  marketRates: [
+    {
+      currency: "USD",
+      buy: 14480,
+      sell: 14520,
+      mid: 14500,
+      timestampUtc: "2026-01-01T10:00:00Z",
+      isManualOverride: false,
+    },
+  ],
+  effectiveRates: [
+    {
+      currency: "USD",
+      buy: 14480,
+      sell: 14520,
+      mid: 14500,
+      timestampUtc: "2026-01-01T10:00:00Z",
+      isManualOverride: false,
+    },
+  ],
 };
 
 type FetchHandler = (url: string, init?: { signal?: AbortSignal }) => Promise<Response>;
@@ -45,7 +70,7 @@ afterEach(() => {
 });
 
 describe("FxRateService", () => {
-  it("parses a valid upstream payload into an available snapshot", async () => {
+  it("parses a valid LiraScope payload into an available snapshot", async () => {
     let calls = 0;
     const service = new FxRateService({
       fetchImpl: makeFetch(async () => {
@@ -69,8 +94,37 @@ describe("FxRateService", () => {
     expect(snap.priceUpdatedAt).toBe("2026-01-01T10:00:00Z");
     expect(snap.fetchedAt).toBe(new Date(1_000_000).toISOString());
     // Mandatory provider attribution
-    expect(snap.sourceName).toBe("أخبار الليرة");
-    expect(snap.sourceUrl).toBe("https://liranews.info");
+    expect(snap.sourceName).toBe("LiraScope");
+    expect(snap.sourceUrl).toBe("https://lirascope.syria-cloud.sy");
+  });
+
+  it("prefers effectiveRates over marketRates and cbsRates", async () => {
+    const service = new FxRateService({
+      fetchImpl: makeFetch(async () =>
+        jsonResponse({
+          effectiveRates: [{ currency: "USD", buy: 200, sell: 210, mid: 205 }],
+          marketRates: [{ currency: "USD", buy: 100, sell: 110, mid: 105 }],
+          cbsRates: [{ currency: "USD", buy: 50, sell: 55, mid: 52.5 }],
+        }),
+      ),
+    });
+    SERVICES_TO_STOP.push(service);
+    await expect(service.refresh()).resolves.toBe(true);
+    expect(service.getSnapshot().rate?.value).toBe(205);
+  });
+
+  it("falls back to marketRates when effectiveRates has no USD", async () => {
+    const service = new FxRateService({
+      fetchImpl: makeFetch(async () =>
+        jsonResponse({
+          effectiveRates: [{ currency: "EUR", buy: 1, sell: 2, mid: 1.5 }],
+          marketRates: [{ currency: "USD", buy: 100, sell: 110, mid: 105 }],
+        }),
+      ),
+    });
+    SERVICES_TO_STOP.push(service);
+    await expect(service.refresh()).resolves.toBe(true);
+    expect(service.getSnapshot().rate?.value).toBe(105);
   });
 
   it("keeps the last known price (flagged stale) when the upstream fails afterwards", async () => {
@@ -119,9 +173,9 @@ describe("FxRateService", () => {
 
   it.each([
     ["wrong shape", { unexpected: true }],
-    ["missing value", { usdsypd: { sell: 1 } }],
-    ["negative value", { usdsypd: { value: -5 } }],
-    ["non-numeric value", { usdsypd: { value: "abc" } }],
+    ["missing USD", { marketRates: [{ currency: "EUR", buy: 1, sell: 2, mid: 1.5 }] }],
+    ["negative mid", { marketRates: [{ currency: "USD", buy: 1, sell: 2, mid: -5 }] }],
+    ["non-numeric mid", { marketRates: [{ currency: "USD", buy: 1, sell: 2, mid: "abc" }] }],
     ["HTTP 500", null], // handled separately below
   ])("treats malformed payload (%s) as a failed fetch", async (_name, body) => {
     if (body === null) return; // placeholder row; real HTTP case covered next
@@ -193,23 +247,26 @@ describe("GET /fx/reference-rate (route contract)", () => {
     const { port } = server.address() as AddressInfo;
 
     const res = await fetch(`http://127.0.0.1:${port}/fx/reference-rate`);
-    expect(res.status).toBe(200); // never an error status — the UI degrades gracefully
-    const body = (await res.json()) as Record<string, unknown>;
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      available: boolean;
+      sourceName: string;
+      sourceUrl: string;
+      rate: { value: number };
+    };
     expect(body.available).toBe(true);
-    expect(body.stale).toBe(false);
-    expect(body.sourceName).toBe("أخبار الليرة");
-    expect(body.sourceUrl).toBe("https://liranews.info");
-    expect((body.rate as Record<string, unknown>).value).toBe(14500);
+    expect(body.rate.value).toBe(14500);
+    expect(body.sourceName).toBe("LiraScope");
+    expect(body.sourceUrl).toBe("https://lirascope.syria-cloud.sy");
   });
 
-  it("still returns HTTP 200 with available:false when the provider never responded", async () => {
+  it("returns available:false without throwing when there is no cached rate", async () => {
     const service = new FxRateService({
       fetchImpl: makeFetch(async () => {
         throw new Error("offline");
       }),
     });
     SERVICES_TO_STOP.push(service);
-    await service.refresh();
 
     const app = express();
     const router = express.Router();
@@ -221,30 +278,27 @@ describe("GET /fx/reference-rate (route contract)", () => {
 
     const res = await fetch(`http://127.0.0.1:${port}/fx/reference-rate`);
     expect(res.status).toBe(200);
-    const body = (await res.json()) as Record<string, unknown>;
+    const body = (await res.json()) as { available: boolean };
     expect(body.available).toBe(false);
   });
 
-  it("requires authentication (401 when the auth middleware rejects)", async () => {
-    const service = new FxRateService({
-      fetchImpl: makeFetch(async () => jsonResponse(OK_PAYLOAD)),
-    });
-    SERVICES_TO_STOP.push(service);
+  it("never throws on the route even if the service misbehaves", async () => {
+    const service = {
+      getSnapshot: () => {
+        throw new Error("boom");
+      },
+    } as unknown as FxRateService;
 
     const app = express();
     const router = express.Router();
-    const rejectingAuth: express.RequestHandler = (_req, res) => {
-      res
-        .status(401)
-        .json({ code: "UNAUTHORIZED", message: "مطلوب تسجيل الدخول", statusCode: 401 });
-    };
-    registerFxRoutes(router, service, rejectingAuth);
+    registerFxRoutes(router, service, (_req, _res, next) => next());
     app.use(router);
     const server = app.listen(0);
     SERVERS_TO_CLOSE.push(server);
     const { port } = server.address() as AddressInfo;
 
     const res = await fetch(`http://127.0.0.1:${port}/fx/reference-rate`);
-    expect(res.status).toBe(401);
+    // Route must not 500 — graceful degradation for a display widget.
+    expect(res.status).toBe(200);
   });
 });

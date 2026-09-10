@@ -7,12 +7,15 @@
     "frontendDist": "../../dist",
     "devUrl": "http://localhost:5173",
     "beforeDevCommand": "cd .. && npm run dev",
-    "beforeBuildCommand": "cd .. && npm run build"
+    "beforeBuildCommand": "cmd /c src-tauri\\before-build.cmd"
   },
   "app": {
     "windows": [
       {
+        "label": "main",
         "title": "Motard Fabrics Group ERP",
+        "url": "http://127.0.0.1:4173",
+        "visible": false,
         "width": 1400,
         "height": 900,
         "minWidth": 1024,
@@ -20,21 +23,45 @@
         "resizable": true,
         "fullscreen": false,
         "center": true
+      },
+      {
+        "label": "splash",
+        "title": "Motard ERP",
+        "url": "splash.html",
+        "width": 420,
+        "height": 320,
+        "minWidth": 420,
+        "minHeight": 320,
+        "resizable": false,
+        "fullscreen": false,
+        "center": true,
+        "decorations": false,
+        "alwaysOnTop": true,
+        "skipTaskbar": true
       }
     ],
     "security": {
-      "csp": "default-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob:; connect-src 'self' http://localhost:* https://*"
+      "csp": "default-src 'self'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob:; connect-src 'self' http://localhost:* http://127.0.0.1:* ws://localhost:* ws://127.0.0.1:* https://* wss://*"
     }
   },
   "bundle": {
     "active": true,
-    "targets": "all",
+    "targets": ["msi"],
     "windows": {
-      "webviewInstallMode": "downloadBootstrapper",
+      "webviewInstallMode": { "type": "downloadBootstrapper" },
       "wix": {
-        "language": ["ar-SA", "en-US"]
+        "language": ["ar-SA"],
+        "fragmentPaths": ["./wix-cleanup.wxs"]
       }
     },
-    "icon": ["icons/icon.png"]
+    "icon": ["icons/icon.ico", "icons/icon.png"],
+    "resources": {
+      "resources/postgres": "postgres",
+      "resources/node.exe": "node.exe",
+      "resources/backend": "backend",
+      "resources/license-public.pem": "license-public.pem",
+      "resources/ssr": "ssr",
+      "resources/node_modules": "node_modules"
+    }
   }
 }

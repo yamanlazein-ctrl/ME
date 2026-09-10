@@ -20,7 +20,19 @@ export default defineConfig({
     tailwindcss(),
     tsconfigPaths(),
   ],
+  // Local web: avoid SSR/client optimizer deadlock (Vite fetchModule 60s timeouts).
+  optimizeDeps: {
+    holdUntilCrawlEnd: false,
+  },
+  server: {
+    warmup: {
+      clientFiles: ["./src/routes/__root.tsx", "./src/router.tsx"],
+    },
+  },
   build: {
-    sourcemap: true,
+    // Desktop release build sets VITE_DESKTOP_DEPLOY=true — maps are stripped
+    // from the MSI and must not be required at runtime. Keep maps for local
+    // web/dev builds only.
+    sourcemap: process.env.VITE_DESKTOP_DEPLOY === "true" ? false : true,
   },
 });

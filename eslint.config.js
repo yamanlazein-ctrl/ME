@@ -55,6 +55,29 @@ export default tseslint.config(
       ],
     },
   },
+  // Architecture boundary (Phase F — docs/decisions.md D-006): direct
+  // database access is allowed ONLY in the RLS-stamping pool
+  // (backend drizzle.ts). Any other pg import would bypass the
+  // app.current_tenant_id / app.platform_mode stamping that makes
+  // row-level security correct in a shared pool.
+  {
+    files: ["backend/src/**/*.ts"],
+    ignores: ["backend/src/infrastructure/orm/drizzle.ts"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          paths: [
+            {
+              name: "pg",
+              message:
+                "لا تصل إلى قاعدة البيانات مباشرة عبر pg خارج src/infrastructure/orm/drizzle.ts — استخدم db/withTenantTx حتى لا يتجاوز الوصول إلى RLS (سياق المستأجر يُختم في TenantScopedPool).",
+            },
+          ],
+        },
+      ],
+    },
+  },
   // shadcn/ui components commonly export both components and utilities;
   // suppress react-refresh fast-refresh warnings for the ui directory.
   {

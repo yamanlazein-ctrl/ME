@@ -61,8 +61,8 @@ async function loadAll(force = false): Promise<void> {
   loadPromise = (async () => {
     try {
       const [cRes, sRes] = await Promise.all([
-        container.parties.list.execute({ kind: "customer", limit: 100, offset: 0 }, ctx),
-        container.parties.list.execute({ kind: "supplier", limit: 100, offset: 0 }, ctx),
+        container.parties.list.execute({ kind: "customer", limit: 1000, offset: 0 }, ctx),
+        container.parties.list.execute({ kind: "supplier", limit: 1000, offset: 0 }, ctx),
       ]);
       const cData = isPaginated<Party>(cRes) ? cRes.data : (cRes as Party[]);
       const sData = isPaginated<Party>(sRes) ? sRes.data : (sRes as Party[]);

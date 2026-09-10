@@ -60,3 +60,41 @@ export function loggingInterceptor(getToken?: () => string | null): HttpIntercep
     },
   };
 }
+
+const OFFLINE_MODE_KEY = "erp.sync.offlineMode";
+
+export function setOfflineModeFlag(offline: boolean): void {
+  try {
+    if (offline) localStorage.setItem(OFFLINE_MODE_KEY, "1");
+    else localStorage.removeItem(OFFLINE_MODE_KEY);
+  } catch {
+    // ignore
+  }
+}
+
+export function offlineModeInterceptor(): HttpInterceptor {
+  return {
+    onRequest: async (config: HttpRequestConfig): Promise<HttpRequestConfig> => {
+      let offline = false;
+      try {
+        offline = localStorage.getItem(OFFLINE_MODE_KEY) === "1";
+      } catch {
+        offline = false;
+      }
+      let syncDeviceId: string | null = null;
+      try {
+        syncDeviceId = localStorage.getItem("erp.sync.deviceId");
+      } catch {
+        syncDeviceId = null;
+      }
+      return {
+        ...config,
+        headers: {
+          ...config.headers,
+          ...(offline ? { "X-Offline-Mode": "1" } : {}),
+          ...(syncDeviceId ? { "X-Sync-Device-Id": syncDeviceId } : {}),
+        },
+      };
+    },
+  };
+}

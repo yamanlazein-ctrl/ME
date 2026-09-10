@@ -102,7 +102,7 @@ export function useCancelVoucher() {
   return useMutation({
     mutationFn: (id: string) => container.vouchers.cancel.execute(id, ctx),
     onSuccess: () => {
-      toast.error("تم إلغاء السند");
+      toast.success("تم إلغاء السند");
       qc.invalidateQueries({ queryKey: KEYS.root });
       qc.invalidateQueries({ queryKey: ["dashboard"] });
       qc.invalidateQueries({ queryKey: ["ledger"] });

@@ -19,7 +19,7 @@ export function NotificationsBell() {
         <button
           type="button"
           aria-label="التنبيهات"
-          className="relative grid h-10 w-10 place-items-center rounded-full border border-border bg-card text-foreground transition duration-200 hover:border-primary/40 hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background cursor-pointer"
+          className="relative grid h-9 w-9 place-items-center rounded-lg text-muted-foreground transition hover:bg-secondary hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring cursor-pointer"
         >
           <Bell className="h-[18px] w-[18px]" strokeWidth={2} />
           {count > 0 && (
@@ -76,13 +76,9 @@ export function NotificationsBell() {
                 }`}
               />
               <div className="min-w-0 flex-1">
-                <div className="truncate text-xs font-semibold text-foreground">
-                  {n.title}
-                </div>
+                <div className="truncate text-xs font-semibold text-foreground">{n.title}</div>
                 {n.detail && (
-                  <div className="mt-0.5 text-[11px] text-muted-foreground">
-                    {n.detail}
-                  </div>
+                  <div className="mt-0.5 text-[11px] text-muted-foreground">{n.detail}</div>
                 )}
               </div>
             </Link>

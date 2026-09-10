@@ -62,7 +62,11 @@ function isPaginated<T>(x: unknown): x is { data: T[] } {
 }
 
 async function loadAll(force = false): Promise<void> {
-  if ((loaded && !force) || loadPromise) return loadPromise ?? Promise.resolve();
+  if (loaded && !force && !loadPromise) return Promise.resolve();
+  if (loadPromise) {
+    if (!force) return loadPromise;
+    await loadPromise;
+  }
   loadPromise = (async () => {
     try {
       const [fRes, cRes, rRes] = await Promise.all([
@@ -215,10 +219,13 @@ export function totalPiecesOfFabric(fabricId: string): number {
   return colorsOfFabric(fabricId).reduce((s, c) => s + totalPiecesOfColor(c.id), 0);
 }
 
-export function searchColors(term: string, limit = 8): Color[] {
-  const all = colorsCache;
+export function searchColors(term: string, limit = 200): Color[] {
+  // Prefer colours that currently have stock; fall back to full catalogue
+  // when nothing is in stock (still useful for search/create flows).
+  const stocked = colorsCache.filter((c) => totalKgOfColor(c.id) > 0);
+  const all = stocked.length > 0 ? stocked : colorsCache;
   const q = term.trim().toLowerCase();
-  if (!q) return all.slice(0, limit);
+  if (!q) return all;
   const scored = all
     .map((c) => {
       const code = (c.code ?? "").toLowerCase();

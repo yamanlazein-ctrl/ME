@@ -1,6 +1,6 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect } from "react";
-import { LoginPage } from "@/components/auth/LoginPage";
+import { UserPickerPage } from "@/components/auth/UserPickerPage";
 import { useCurrentUser } from "@/presentation/hooks/useAuth";
 
 export const Route = createFileRoute("/login")({
@@ -17,5 +17,5 @@ function LoginRoute() {
     }
   }, [isLoading, user, navigate]);
 
-  return <LoginPage />;
+  return <UserPickerPage />;
 }

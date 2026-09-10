@@ -100,10 +100,22 @@ export class PostgresPartyRepository implements IPartyRepository {
   }
 
   /**
-   * Compute per-party list stats in three indexed GROUP BY queries, each scoped
-   * to the party's own currency (matching `buildPartyStats`'s single-currency
-   * semantics). `remaining` comes exclusively from the ledger so it always
-   * matches the account statement's `finalBalance`.
+   * Compute per-party list stats from the party's own invoices, scoped to the
+   * party's own currency (matching `buildPartyStats`'s single-currency
+   * semantics).
+   *
+   * `totalPaid`/`remaining` are read from `invoices.paid` — the same field
+   * the account-statement page (`Outstanding`/aging tabs, `PartyDetails.tsx`)
+   * reads, and which the backend keeps transactionally in sync with every
+   * voucher (`PostgresVoucherRepository.create`/`cancel`), converting a
+   * foreign-currency receipt/payment into the invoice's own currency before
+   * crediting it. This used to instead sum `vouchers.amount` (undercounting
+   * any payment collected in a different currency than the invoice) and,
+   * separately, derive `remaining` from the raw ledger debit/credit balance
+   * — a path that can drift from `invoices.paid` (e.g. rounding, timing) and
+   * did: the party list showed a different رصيد than the account statement
+   * for the exact same party. Reading everything from `invoices.paid`
+   * guarantees the list, the summary card, and the aging tabs always agree.
    */
   private async computeListStats(
     partyIds: string[],
@@ -120,14 +132,14 @@ export class PostgresPartyRepository implements IPartyRepository {
     };
 
     const invoiceType = kind === "supplier" ? "entry" : "sale";
-    const voucherKind = kind === "supplier" ? "payment" : "receipt";
 
-    // 1) Invoices: count / total / last date, in the party's currency.
+    // Invoices: count / total / paid / last date, in the party's currency.
     const invRows = await this.db
       .select({
         partyId: invoices.partyId,
         cnt: sql<number>`count(*)::int`,
         total: sql<string>`coalesce(sum(${invoices.total}), 0)::text`,
+        paid: sql<string>`coalesce(sum(${invoices.paid}), 0)::text`,
         lastDate: sql<string>`max(${invoices.date}::text)`,
       })
       .from(invoices)
@@ -147,57 +159,11 @@ export class PostgresPartyRepository implements IPartyRepository {
       const s = get(r.partyId);
       s.invoicesCount = Number(r.cnt);
       s.totalAmount = Number(r.total);
+      s.totalPaid = Number(r.paid);
+      // Deliberately not clamped to 0 — a negative remaining is a real
+      // credit balance (over-payment) and must stay visible as such.
+      s.remaining = s.totalAmount - s.totalPaid;
       if (r.lastDate) s.lastDate = r.lastDate;
-    }
-
-    // 2) Vouchers: total paid, in the party's currency.
-    const vchRows = await this.db
-      .select({
-        partyId: vouchers.partyId,
-        total: sql<string>`coalesce(sum(${vouchers.amount}), 0)::text`,
-      })
-      .from(vouchers)
-      .innerJoin(parties, and(eq(parties.id, vouchers.partyId), eq(parties.tenantId, tenantId)))
-      .where(
-        and(
-          eq(vouchers.tenantId, tenantId),
-          eq(vouchers.kind, voucherKind),
-          eq(vouchers.status, "active"),
-          inArray(vouchers.partyId, partyIds),
-          eq(vouchers.currency, parties.currency),
-        ),
-      )
-      .groupBy(vouchers.partyId);
-
-    for (const r of vchRows) {
-      get(r.partyId).totalPaid = Number(r.total);
-    }
-
-    // 3) Ledger balance — the authoritative remaining balance.
-    const ledRows = await this.db
-      .select({
-        partyId: ledgerEntries.partyId,
-        debit: sql<string>`coalesce(sum(${ledgerEntries.debit}), 0)::text`,
-        credit: sql<string>`coalesce(sum(${ledgerEntries.credit}), 0)::text`,
-      })
-      .from(ledgerEntries)
-      .innerJoin(parties, and(eq(parties.id, ledgerEntries.partyId), eq(parties.tenantId, tenantId)))
-      .where(
-        and(
-          eq(ledgerEntries.tenantId, tenantId),
-          eq(ledgerEntries.status, "active"),
-          inArray(ledgerEntries.partyId, partyIds),
-          eq(ledgerEntries.currency, parties.currency),
-        ),
-      )
-      .groupBy(ledgerEntries.partyId);
-
-    for (const r of ledRows) {
-      if (!r.partyId) continue; // ledger_entries.party_id is nullable (cash/non-party rows)
-      const d = Number(r.debit);
-      const c = Number(r.credit);
-      // Standard sign: customer (AR) = debit − credit; supplier (AP) = credit − debit.
-      get(r.partyId).remaining = kind === "supplier" ? c - d : d - c;
     }
 
     return map;

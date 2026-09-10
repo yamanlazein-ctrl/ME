@@ -192,12 +192,13 @@ export class PostgresCashboxRepository implements ICashboxRepository {
         .where(eq(cashboxSessions.tenantId, ctx.tenantId))
         .limit(1);
       const currency = input.currency ?? session?.currency ?? "SYP";
-      // Currency-scope the opening fund exactly like the balance endpoint: it
-      // only counts for the session's currency, never for another currency's
-      // day-close totals.
-      const opening =
-        currency === session?.currency ? (session?.openingBalance ?? 0) : 0;
-      const from = session?.openingDate ?? "0001-01-01";
+      // Mirror GET /cashbox/balance/:date — opening amount AND opening date
+      // apply only to the session currency. Other currencies keep full history
+      // (no amount leak, no date truncation).
+      const sessionCurrency = session?.currency;
+      const opening = currency === sessionCurrency ? (session?.openingBalance ?? 0) : 0;
+      const from =
+        currency === sessionCurrency ? (session?.openingDate ?? "0001-01-01") : "0001-01-01";
 
       const [ledger] = await tx
         .select({

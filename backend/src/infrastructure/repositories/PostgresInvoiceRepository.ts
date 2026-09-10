@@ -23,7 +23,7 @@ import type {
   UpdateInvoiceInput,
 } from "../../domain/entities/Invoice.js";
 import { Invoice, computeSubtotal } from "../../domain/entities/Invoice.js";
-import { round2dp, BASE_CURRENCY, computeBaseEquivalent, isValidFxRate, FX_REQUIRED_MESSAGE } from "@erp/shared";
+import { round2dp, BASE_CURRENCY, computeBaseEquivalent, isValidFxRate, FX_REQUIRED_MESSAGE, convertForSettlement } from "@erp/shared";
 import type { TenantContext, PaginatedResult } from "../../domain/types/index.js";
 import { BusinessRuleError } from "../../domain/errors/index.js";
 
@@ -149,7 +149,10 @@ export class PostgresInvoiceRepository implements IInvoiceRepository {
       // alongside the insert. A failed save therefore does NOT burn a
       // number, closing the gap pathology that previously produced
       // jumps like ENT-2026-0001 → ENT-2026-0005 on a retry.
-      const autoNumber = await allocateDocumentNumber(tx, entityType, ctx.tenantId);
+      const autoNumber = await allocateDocumentNumber(tx, entityType, ctx.tenantId, {
+        syncDeviceId: ctx.syncDeviceId,
+        preAllocatedNumber: input.preAllocatedNumber,
+      });
 
       const entity = Invoice.create(input, autoNumber);
       const inv = entity.toData();
@@ -185,12 +188,11 @@ export class PostgresInvoiceRepository implements IInvoiceRepository {
       let cogsTotal = 0;
       const invoiceCurrency = input.currency ?? "SYP";
       // BUG-03 fix — frozen FX rate for this document (units per 1 USD).
-      const fxRate =
-        invoiceCurrency === BASE_CURRENCY
+      const fxRate = isValidFxRate(input.exchangeRate)
+        ? input.exchangeRate!
+        : invoiceCurrency === BASE_CURRENCY
           ? 1
-          : isValidFxRate(input.exchangeRate)
-            ? input.exchangeRate!
-            : null;
+          : null;
       const legFx = (debit: number, credit: number) => ({
         exchangeRate: fxRate,
         baseDebit: computeBaseEquivalent(debit, invoiceCurrency, fxRate),
@@ -202,6 +204,9 @@ export class PostgresInvoiceRepository implements IInvoiceRepository {
       // double-entry balance in the base currency. Fail closed instead: the
       // caller must supply the rate at creation time (the UI now enforces it
       // too). USD documents are always convertible (rate = 1).
+      // Fail closed for non-USD without rate. USD invoices may still need a
+      // caller-supplied rate when selling stock priced in another currency
+      // (validated per-line when converting COGS).
       if (invoiceCurrency !== BASE_CURRENCY && !isValidFxRate(fxRate)) {
         throw new BusinessRuleError(FX_REQUIRED_MESSAGE);
       }
@@ -248,13 +253,15 @@ export class PostgresInvoiceRepository implements IInvoiceRepository {
             `لا يمكن تغيير قماش الصبغة #${r.rollNo} بعد حفظها — قماش البند المختار لا يطابق قماش الصبغة المحفوظة.`,
           );
         }
-        // H1 (cross-currency guard): applies to BOTH sale (for COGS) and
-        // entry (for stock value integrity). NEW-03 was the entry arm
-        // being missing.
+        // Cross-currency: ENTRY still rejects (stock value integrity).
+        // SALE allows it when a manual FX rate can convert roll cost → invoice currency
+        // (owner: buy SYP / sell USD is a normal workflow).
         if (r.currency !== invoiceCurrency) {
-          throw new BusinessRuleError(
-            `عملة اللفافة ${line.rollId} (${r.currency}) لا تطابق عملة الفاتورة (${invoiceCurrency}) — لا يمكن خلط العملات في التكلفة`,
-          );
+          if (!isSale) {
+            throw new BusinessRuleError(
+              `عملة اللفافة ${line.rollId} (${r.currency}) لا تطابق عملة الفاتورة (${invoiceCurrency}) — لا يمكن خلط العملات في التكلفة`,
+            );
+          }
         }
         // DIAG-أ (silent-error fix): an entry invoice must only stock a FRESH,
         // EMPTY roll. The frontend contract creates each roll with
@@ -280,13 +287,33 @@ export class PostgresInvoiceRepository implements IInvoiceRepository {
           }
           expectedVersions.set(line.rollId, Number(r.version));
           const storedQty = Math.round(Number(line.quantityKg) * 100) / 100;
-          cogsTotal += round2dp(storedQty * Number(r.pricePerKg));
+          const rollCostNative = round2dp(storedQty * Number(r.pricePerKg));
+          if (r.currency === invoiceCurrency) {
+            cogsTotal += rollCostNative;
+          } else {
+            // Never use the synthetic USD rate=1 for cross-currency COGS —
+            // require the caller's manual rate.
+            const rate = isValidFxRate(input.exchangeRate) ? input.exchangeRate! : null;
+            const converted = convertForSettlement(
+              rollCostNative,
+              r.currency,
+              invoiceCurrency,
+              rate,
+            );
+            if (converted === null) {
+              throw new BusinessRuleError(
+                `سعر الصرف مطلوب يدوياً لبيع صبغة بعملة (${r.currency}) بفاتورة (${invoiceCurrency})`,
+              );
+            }
+            cogsTotal += converted;
+          }
         }
       }
 
       const [row] = await tx
         .insert(invoices)
         .values({
+          ...(input.preAllocatedId ? { id: input.preAllocatedId } : {}),
           tenantId: ctx.tenantId,
          number: autoNumber,
          // Reference = user-supplied value or the server-generated number.
@@ -311,7 +338,6 @@ export class PostgresInvoiceRepository implements IInvoiceRepository {
           // (never guess a current rate for a historical document).
           exchangeRate: fxRate,
           baseTotal: computeBaseEquivalent(inv.total, invoiceCurrency, fxRate),
-          basePaid: computeBaseEquivalent(input.paid ?? 0, invoiceCurrency, fxRate),
           createdBy: ctx.userId,
         })
         .returning();
@@ -846,13 +872,8 @@ export class PostgresInvoiceRepository implements IInvoiceRepository {
           .limit(1);
         if (!r) throw new BusinessRuleError(`اللفافة ${rollId} غير موجودة`);
 
-        // H1: same cross-currency guard as create — an edited sale line must
-        // not revalue COGS from a roll priced in another currency.
-        if (isSale && newByRoll.has(rollId) && r.currency !== inv.currency) {
-          throw new BusinessRuleError(
-            `عملة اللفافة ${rollId} (${r.currency}) لا تطابق عملة الفاتورة (${inv.currency}) — لا يمكن خلط العملات في التكلفة`,
-          );
-        }
+        // Cross-currency SALE: deferred FX probe until editFx is resolved below.
+        // (ENTRY invoices never reach sale roll deltas with currency mismatch for COGS.)
 
         const next = newByRoll.get(rollId);
         if (next) {
@@ -971,33 +992,47 @@ export class PostgresInvoiceRepository implements IInvoiceRepository {
         }
       }
 
-      // Cost snapshot for sale lines (same valuation rule as create).
-      let cogsTotal = 0;
-      if (isSale) {
-        for (const l of lines) {
-          const state = rollStates.get(l.rollId)!;
-          const storedQty = Math.round(l.quantityKg * 100) / 100;
-          cogsTotal += round2dp(storedQty * state.pricePerKg);
-        }
-      }
-
       // QA fix (ENT-2026-0002): FX re-capture on edit. The update path used to
       // ignore the rate entirely — rewritten legs carried NULL base_* columns
       // and the invoice row kept stale/NULL exchange fields. Resolution order:
       // caller-supplied rate → the frozen rate already on the invoice; USD is
       // always 1. Non-USD without any resolvable rate fails closed so the base
       // ledger stays convertible and balanced.
-      const editFx =
-        inv.currency === BASE_CURRENCY
-          ? 1
-          : isValidFxRate(input.exchangeRate)
-            ? input.exchangeRate!
-            : (inv.exchangeRate ?? null);
+      const editFx = isValidFxRate(input.exchangeRate)
+        ? input.exchangeRate!
+        : inv.currency === BASE_CURRENCY
+          ? (inv.exchangeRate ?? 1)
+          : (inv.exchangeRate ?? null);
       if (inv.currency !== BASE_CURRENCY && !isValidFxRate(editFx)) {
         throw new BusinessRuleError(FX_REQUIRED_MESSAGE);
       }
 
-      // Replace lines and header.
+      // Cost snapshot for sale lines — convert roll-native cost → invoice currency via FX.
+      let cogsTotal = 0;
+      if (isSale) {
+        for (const l of lines) {
+          const state = rollStates.get(l.rollId)!;
+          const storedQty = Math.round(l.quantityKg * 100) / 100;
+          const rollCostNative = round2dp(storedQty * state.pricePerKg);
+          if (state.currency === inv.currency) {
+            cogsTotal += rollCostNative;
+          } else {
+            const rate = isValidFxRate(input.exchangeRate) ? input.exchangeRate! : null;
+            const converted = convertForSettlement(
+              rollCostNative,
+              state.currency,
+              inv.currency,
+              rate,
+            );
+            if (converted === null) {
+              throw new BusinessRuleError(
+                `سعر الصرف مطلوب يدوياً لبيع صبغة بعملة (${state.currency}) بفاتورة (${inv.currency})`,
+              );
+            }
+            cogsTotal += converted;
+          }
+        }
+      }
       await tx.delete(invoiceLines).where(eq(invoiceLines.invoiceId, id));
       await tx.insert(invoiceLines).values(
         lines.map((l) => ({
@@ -1061,10 +1096,9 @@ export class PostgresInvoiceRepository implements IInvoiceRepository {
           total: round2dp(total),
           notes: input.notes ?? null,
           // QA fix — persist the (possibly updated) frozen FX capture so
-          // base_total / base_paid always match the current document values.
+          // base_total always matches the current document value.
           exchangeRate: editFx,
           baseTotal: computeBaseEquivalent(total, inv.currency, editFx),
-          basePaid: computeBaseEquivalent(Number(inv.paid), inv.currency, editFx),
           updatedAt: new Date(),
           version: sql`${invoices.version} + 1`,
         })
@@ -1425,7 +1459,6 @@ export class PostgresInvoiceRepository implements IInvoiceRepository {
       currency: row.currency,
       exchangeRate: row.exchangeRate ?? undefined,
       baseTotal: row.baseTotal ?? undefined,
-      basePaid: row.basePaid ?? undefined,
       subtotal: row.subtotal,
       discount: row.discount,
       tax: row.tax,

@@ -166,7 +166,7 @@ function ColorRow({
   const count = rollsOfColor(color.id).length;
   return (
     <div
-      className="group flex items-center gap-3 px-4 py-2.5 pr-10 cursor-pointer hover:bg-secondary/80 transition border-t border-border"
+      className="group flex flex-wrap items-center gap-3 px-4 py-2.5 cursor-pointer hover:bg-secondary/80 transition border-t border-border"
       onClick={onToggle}
     >
       {selectable && (

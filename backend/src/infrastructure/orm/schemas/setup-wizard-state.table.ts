@@ -30,4 +30,4 @@ export const setupWizardState = pgTable("setup_wizard_state", {
   data: jsonb("data").default("{}"),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-});
+}).enableRLS();

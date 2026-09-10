@@ -3,6 +3,7 @@ import type { JwtSigner } from "../../auth/JwtSigner.js";
 import type { RedisTokenDenylist } from "../../auth/TokenDenylist.js";
 import type { TenantContext } from "../../../domain/types/index.js";
 import { db } from "../../orm/drizzle.js";
+import { runWithTenantContext } from "../../orm/tenant-context.js";
 import { users } from "../../orm/schemas/user.table.js";
 import { eq } from "drizzle-orm";
 
@@ -50,16 +51,36 @@ export function createAuthMiddleware(jwtSigner: JwtSigner, tokenDenylist: RedisT
         return;
       }
 
-      req.tenantContext = {
-        tenantId: payload.tenantId,
-        userId: payload.sub,
-        userRole: payload.role as TenantContext["userRole"],
-        userName: await resolveUserName(payload.sub, payload.sub),
-      };
+      // Establish the request-scoped tenant context BEFORE any business query
+      // (including the `users` name lookup below) runs. This stamps the RLS
+      // GUC on every connection this request checks out — resolving the
+      // شرط-1 ordering problem: the tenant id comes from the already-verified
+      // JWT, never from a circular DB read.
+      return runWithTenantContext({ tenantId: payload.tenantId }, async () => {
+        const deviceHeader = req.headers["x-sync-device-id"];
+        const syncDeviceId =
+          typeof deviceHeader === "string"
+            ? deviceHeader
+            : Array.isArray(deviceHeader)
+              ? deviceHeader[0]
+              : null;
 
-      next();
+        req.tenantContext = {
+          tenantId: payload.tenantId,
+          userId: payload.sub,
+          userRole: payload.role as TenantContext["userRole"],
+          userName: await resolveUserName(payload.sub, payload.sub),
+          syncDeviceId: syncDeviceId && isUuid(syncDeviceId) ? syncDeviceId : null,
+        };
+
+        next();
+      });
     } catch {
       res.status(401).json({ code: "UNAUTHORIZED", message: "جلسة غير صالحة", statusCode: 401 });
     }
   };
+}
+
+function isUuid(value: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
 }

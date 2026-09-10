@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { PageCard } from "@/components/layout/PageCard";
 import { Button } from "@/components/ui/button";
@@ -13,6 +13,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { FormField } from "@/components/common/FormField";
+import { FormattedAmountInput } from "@/components/invoices/InvoiceFormLayout";
 import { PartyCombobox } from "@/components/vouchers/PartyCombobox";
 import { PartyFormDialog } from "@/components/parties/PartyFormDialog";
 import { addCustomer, addSupplier, type Currency } from "@/presentation/hooks/useParties";
@@ -20,20 +21,51 @@ import { CURRENCIES, formatAmount } from "@/presentation/hooks/useCurrency";
 import {
   useCreateReceiptVoucher,
   useCreatePaymentVoucher,
+  useCancelVoucher,
+  useVoucher,
   type VoucherKind,
   type VoucherMethod,
 } from "@/presentation/hooks/useVouchers";
 import { useInvoicesList } from "@/presentation/hooks/useInvoices";
-import { useVouchersList } from "@/presentation/hooks/useVouchers";
 import { invoiceTotal } from "@/core/calculations/invoiceCalc";
+import { convertForSettlement } from "@erp/shared";
 import { Save, X, Lock } from "lucide-react";
 
-export function VoucherForm({ kind }: { kind: VoucherKind }) {
+/**
+ * Restate an amount in the linked invoice's currency using the rate entered
+ * ON THIS VOUCHER right now (`convertForSettlement` — same helper the
+ * backend uses in `PostgresVoucherRepository.create`/`cancel`), never either
+ * side's own frozen historical rate. Returns null when FX is missing so the
+ * UI can require a manual rate instead of silently comparing raw
+ * cross-currency amounts (N12/N13).
+ */
+function toInvoiceCurrency(
+  amount: number,
+  from: { currency: string; exchangeRate?: number | null },
+  invoiceCurrency: string,
+): number | null {
+  if (from.currency === invoiceCurrency) return amount;
+  return convertForSettlement(amount, from.currency, invoiceCurrency, from.exchangeRate ?? null);
+}
+
+export function VoucherForm({
+  kind,
+  initialPartyId,
+  editId,
+}: {
+  kind: VoucherKind;
+  /** Prefill party when opened from customer/supplier payments tab. */
+  initialPartyId?: string;
+  /** Amend mode: load voucher, then cancel+recreate on save (no PUT API). */
+  editId?: string;
+}) {
   const navigate = useNavigate();
   const createReceipt = useCreateReceiptVoucher();
   const createPayment = useCreatePaymentVoucher();
+  const cancelVoucher = useCancelVoucher();
+  const { data: editing } = useVoucher(editId ?? "");
   const isReceipt = kind === "receipt";
-  const [partyId, setPartyId] = useState("");
+  const [partyId, setPartyId] = useState(initialPartyId ?? "");
   const [invoiceId, setInvoiceId] = useState<string>("");
   const [amount, setAmount] = useState<number | "">("");
   const [currency, setCurrency] = useState<Currency>("SYP");
@@ -46,11 +78,30 @@ export function VoucherForm({ kind }: { kind: VoucherKind }) {
   const [partyError, setPartyError] = useState<string | null>(null);
   const [amountError, setAmountError] = useState<string | null>(null);
   const [addPartyOpen, setAddPartyOpen] = useState(false);
+  const [hydratedEdit, setHydratedEdit] = useState(false);
 
-  const { data: invoicesData } = useInvoicesList();
+  useEffect(() => {
+    if (!editing || hydratedEdit) return;
+    if (editing.kind !== kind) return;
+    if (editing.status === "cancelled") return;
+    setPartyId(editing.partyId);
+    setInvoiceId(editing.invoiceId ?? "");
+    setAmount(editing.amount);
+    setCurrency(editing.currency as Currency);
+    setExchangeRate(editing.exchangeRate && editing.exchangeRate > 0 ? editing.exchangeRate : "");
+    setMethod(editing.method);
+    setDate(editing.date);
+    setNotesPrint(editing.notesPrint ?? "");
+    setNotesInternal(editing.notesInternal ?? "");
+    setHydratedEdit(true);
+  }, [editing, hydratedEdit, kind]);
+
+  // Scoped to the selected party with a high limit — a global page-1 list
+  // silently dropped older invoices for that party (looked like "only the last").
+  const { data: invoicesData } = useInvoicesList(
+    partyId ? { partyId, limit: 1000 } : { limit: 1000 },
+  );
   const allInvoices = invoicesData?.data ?? [];
-  const { data: vouchersData } = useVouchersList();
-  const allVouchers = vouchersData?.data ?? [];
 
   const invoiceOptions = useMemo(() => {
     if (!partyId) return [];
@@ -59,23 +110,38 @@ export function VoucherForm({ kind }: { kind: VoucherKind }) {
     // we never render two <SelectItem> with the same value/key (which would make
     // the Radix dropdown appear to draw the same list twice).
     const seen = new Set<string>();
+    // When amending, the amount currently on this voucher frees up on cancel —
+    // add it back so the same (or smaller) amount still validates.
+    const creditBack =
+      editing && editing.status === "active" && editing.invoiceId
+        ? toInvoiceCurrency(
+            editing.amount,
+            {
+              currency: editing.currency,
+              exchangeRate: editing.exchangeRate ?? null,
+            },
+            // settled into invoice currency — look up invoice below
+            allInvoices.find((i) => i.id === editing.invoiceId)?.currency ?? editing.currency,
+          ) ?? 0
+        : 0;
+    const editInvoiceId = editing?.invoiceId ?? "";
+
     return allInvoices
       .filter((i) => i.type === wantedType && i.status !== "cancelled" && i.partyId === partyId)
       .map((i) => {
-        const paidOfInvoice = allVouchers
-          .filter((v) => v.status === "active" && v.invoiceId === i.id)
-          .reduce((s, v) => s + v.amount, 0);
-        return {
-          ...i,
-          remaining: Math.max(0, invoiceTotal(i) - paidOfInvoice),
-        };
+        let remaining = Math.max(0, invoiceTotal(i) - (i.paid ?? 0));
+        if (editInvoiceId && i.id === editInvoiceId) remaining = Math.max(0, remaining + creditBack);
+        return { ...i, remaining };
       })
       .filter((i) => {
-        if (i.remaining <= 0 || seen.has(i.id)) return false;
+        // Keep the linked invoice visible while amending even if remaining was 0
+        // before credit-back (edge float cases).
+        if (i.remaining <= 0 && i.id !== editInvoiceId) return false;
+        if (seen.has(i.id)) return false;
         seen.add(i.id);
         return true;
       });
-  }, [partyId, isReceipt, allInvoices, allVouchers]);
+  }, [partyId, isReceipt, allInvoices, editing]);
 
   // Dynamic helper text so the "الفاتورة المرتبطة" field is self-explanatory:
   // it only shows a party's unpaid invoices AFTER a party is chosen.
@@ -101,18 +167,33 @@ export function VoucherForm({ kind }: { kind: VoucherKind }) {
       valid = false;
     }
     if (currency !== "USD" && !(Number(exchangeRate) > 0)) {
-      setFxError("سعر الصرف مطلوب لكل عملية ليست بالدولار (عملة الأساس USD)");
+      setFxError("سعر الصرف مطلوب يدوياً لكل عملية ليست بالدولار (عملة الأساس USD)");
       valid = false;
     } else {
       setFxError(null);
     }
     if (valid && invoiceId) {
       const opt = invoiceOptions.find((i) => i.id === invoiceId);
-      if (opt && Number(amount) > opt.remaining) {
-        setAmountError(
-          `المبلغ يتجاوز المتبقي على الفاتورة (${formatAmount(opt.remaining, opt.currency)}).`,
-        );
-        valid = false;
+      if (opt) {
+        const voucherFx = {
+          currency,
+          exchangeRate: Number(exchangeRate) > 0 ? Number(exchangeRate) : null,
+        };
+        if (opt.currency !== currency && !(Number(exchangeRate) > 0)) {
+          setFxError("عملة السند تختلف عن عملة الفاتورة — أدخل سعر الصرف يدوياً أولاً");
+          valid = false;
+        } else {
+          const settled = toInvoiceCurrency(Number(amount), voucherFx, opt.currency);
+          if (settled == null) {
+            setFxError("تعذر التحويل — أدخل سعر صرف صحيح لهذه العملية");
+            valid = false;
+          } else if (settled > opt.remaining + 0.01) {
+            setAmountError(
+              `بعد التحويل ${formatAmount(settled, opt.currency)} يتجاوز المتبقي ${formatAmount(opt.remaining, opt.currency)}.`,
+            );
+            valid = false;
+          }
+        }
       }
     }
     if (!valid) return;
@@ -124,13 +205,16 @@ export function VoucherForm({ kind }: { kind: VoucherKind }) {
       invoiceId: invoiceId || undefined,
       amount: Number(amount),
       currency,
-      exchangeRate:
-        currency !== "USD" && Number(exchangeRate) > 0 ? Number(exchangeRate) : undefined,
+      exchangeRate: Number(exchangeRate) > 0 ? Number(exchangeRate) : undefined,
       method,
       notesPrint: notesPrint || undefined,
       notesInternal: notesInternal || undefined,
     };
     try {
+      // Amend = cancel the old voucher first (frees remaining), then create.
+      if (editId && editing?.status === "active") {
+        await cancelVoucher.mutateAsync(editId);
+      }
       await (isReceipt ? createReceipt : createPayment).mutateAsync(input);
       navigate({ to: isReceipt ? "/receipts" : "/payments" });
     } catch {
@@ -138,10 +222,39 @@ export function VoucherForm({ kind }: { kind: VoucherKind }) {
     }
   };
 
+  const selectedInvoice = invoiceOptions.find((i) => i.id === invoiceId);
+  const showFxField =
+    currency !== "USD" ||
+    Boolean(selectedInvoice && selectedInvoice.currency !== currency);
+
+  // Live preview of settlement math (multiply when paying USD against SYP):
+  // amount × rate → invoice currency. Shown whenever both amount and rate
+  // are present so the operator never has to guess whether we divide or multiply.
+  const settlementPreview = useMemo(() => {
+    if (!selectedInvoice || !amount || Number(amount) <= 0) return null;
+    if (selectedInvoice.currency === currency) {
+      return { settled: Number(amount), rate: null as number | null };
+    }
+    const rate = Number(exchangeRate);
+    if (!(rate > 0)) return null;
+    const settled = toInvoiceCurrency(
+      Number(amount),
+      { currency, exchangeRate: rate },
+      selectedInvoice.currency,
+    );
+    if (settled == null) return null;
+    return { settled, rate };
+  }, [selectedInvoice, amount, currency, exchangeRate]);
+
   return (
     <>
+      {editId && editing?.status === "active" && (
+        <div className="mb-3 rounded-lg border border-warning/40 bg-warning/10 px-4 py-2 text-sm text-warning-foreground">
+          تعديل السند {editing.number} — عند الحفظ يُلغى السند الحالي ويُنشأ سند جديد بالقيم المعدّلة.
+        </div>
+      )}
       <PageCard title="بيانات السند" description="اختر الطرف والمبلغ وطريقة الاستلام / الدفع.">
-        <div className="grid gap-3 md:grid-cols-3">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           <FormField label={isReceipt ? "العميل *" : "المورد *"} error={partyError ?? undefined}>
             <PartyCombobox
               kind={isReceipt ? "customer" : "supplier"}
@@ -158,15 +271,7 @@ export function VoucherForm({ kind }: { kind: VoucherKind }) {
           <Field label="الفاتورة المرتبطة (اختياري)">
             <Select
               value={invoiceId || "none"}
-              onValueChange={(v) => {
-                const id = v === "none" ? "" : v;
-                setInvoiceId(id);
-                // Vouchers settle an invoice in ITS currency — adopting the
-                // invoice's currency here prevents the cross-currency
-                // rejection the backend would otherwise raise on save.
-                const opt = invoiceOptions.find((i) => i.id === id);
-                if (opt) setCurrency(opt.currency as Currency);
-              }}
+              onValueChange={(v) => setInvoiceId(v === "none" ? "" : v)}
               disabled={!partyId}
             >
               <SelectTrigger className="!h-10">
@@ -182,17 +287,6 @@ export function VoucherForm({ kind }: { kind: VoucherKind }) {
               </SelectContent>
             </Select>
             <p className="mt-1 text-[11px] leading-snug text-muted-foreground">{invoiceHint}</p>
-            {(() => {
-              const opt = invoiceOptions.find((i) => i.id === invoiceId);
-              if (!opt || opt.currency === currency) return null;
-              const curLabel = CURRENCIES.find((c) => c.code === opt.currency)?.label ?? opt.currency;
-              return (
-                <p className="mt-1 text-[11px] font-semibold text-warning">
-                  ⚠️ عملة السند تختلف عن عملة الفاتورة ({curLabel}) — بدّل العملة إلى{" "}
-                  {curLabel} قبل الحفظ.
-                </p>
-              );
-            })()}
           </Field>
           <Field label="التاريخ">
             <Input
@@ -203,15 +297,24 @@ export function VoucherForm({ kind }: { kind: VoucherKind }) {
             />
           </Field>
           <FormField label="المبلغ *" error={amountError ?? undefined}>
-            <Input
-              type="number"
+            <FormattedAmountInput
               value={amount}
-              onChange={(e) => {
-                setAmount(e.target.value === "" ? "" : Number(e.target.value));
+              onChange={(v) => {
+                setAmount(v);
                 setAmountError(null);
               }}
               className="h-10"
+              ariaLabel="المبلغ"
             />
+            {settlementPreview && selectedInvoice && selectedInvoice.currency !== currency ? (
+              <p className="mt-1 text-[11px] leading-snug text-muted-foreground" dir="ltr">
+                ≈ {formatAmount(settlementPreview.settled, selectedInvoice.currency)}
+                {settlementPreview.rate != null
+                  ? ` (${Number(amount)} × ${settlementPreview.rate})`
+                  : ""}
+                {" · "}متبقٍ {formatAmount(selectedInvoice.remaining, selectedInvoice.currency)}
+              </p>
+            ) : null}
           </FormField>
           <Field label="العملة">
             <Select value={currency} onValueChange={(v) => setCurrency(v as Currency)}>
@@ -227,19 +330,24 @@ export function VoucherForm({ kind }: { kind: VoucherKind }) {
               </SelectContent>
             </Select>
           </Field>
-          {currency !== "USD" && (
-            <FormField label="سعر الصرف (ل.س / $)" error={fxError ?? undefined}>
-              <Input
-                type="number"
-                value={exchangeRate}
-                onChange={(e) => {
-                  setExchangeRate(e.target.value === "" ? "" : Number(e.target.value));
-                  setFxError(null);
-                }}
-                className="h-10"
-                placeholder="أدخل سعر الصرف يدوياً"
-              />
-            </FormField>
+          {showFxField && (
+            <div className="min-w-0 sm:col-span-2 lg:col-span-1">
+              <FormField label="سعر الصرف (ل.س / $) — يدوي لكل عملية" error={fxError ?? undefined}>
+                <FormattedAmountInput
+                  value={exchangeRate}
+                  onChange={(v) => {
+                    setExchangeRate(v);
+                    setFxError(null);
+                  }}
+                  className="h-10 min-w-0"
+                  placeholder="أدخل سعر الصرف يدوياً"
+                  ariaLabel="سعر الصرف"
+                />
+                <p className="mt-1 text-[11px] leading-snug text-muted-foreground">
+                  دولار → ليرة: ضرب المبلغ × السعر · ليرة → دولار: قسمة المبلغ ÷ السعر
+                </p>
+              </FormField>
+            </div>
           )}
           <Field label={isReceipt ? "طريقة الاستلام" : "طريقة الدفع"}>
             <Select value={method} onValueChange={(v) => setMethod(v as VoucherMethod)}>

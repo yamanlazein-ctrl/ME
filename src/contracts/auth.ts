@@ -62,3 +62,31 @@ export const MeEndpoint: EndpointMeta = {
   auth: { required: true, roles: ["admin", "accountant", "warehouse", "viewer"] },
   description: "Get current authenticated user profile",
 };
+
+/* ── GET /api/auth/device-roster ──────────────────────────────── */
+export interface DeviceRosterUser {
+  id: string;
+  name: string;
+  email: string;
+  role: string;
+  hasPin: boolean;
+}
+export interface DeviceRosterResponse {
+  tenantId: string;
+  users: DeviceRosterUser[];
+}
+
+/* ── POST /api/auth/pin-login ─────────────────────────────────── */
+export interface PinLoginRequest {
+  userId: string;
+  pin: string;
+  tenantId?: string;
+}
+
+/* ── POST /api/auth/set-pin ───────────────────────────────────── */
+export interface SetPinRequest {
+  userId: string;
+  pin: string;
+  currentSecret: string;
+  tenantId?: string;
+}

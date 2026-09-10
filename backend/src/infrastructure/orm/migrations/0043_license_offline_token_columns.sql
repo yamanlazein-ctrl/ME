@@ -1,0 +1,22 @@
+-- Desktop pre-baked offline token columns (option d).
+--
+-- DRIFT REPAIR: `offlineToken` / `offlineTokenJti` were added to
+-- src/infrastructure/orm/schemas/license.table.ts (the "Desktop pre-baked
+-- offline token" block) during the Windows packaging work, but no migration
+-- was ever emitted for them. The running dev DB therefore has 29 columns on
+-- `licenses` and none of the two, so every query that SELECTs the whole row
+-- fails with:
+--
+--     column "offline_token" does not exist
+--
+-- That error is raised inside `licenseGuard`, which sits in front of every
+-- write route — so the whole dev install returned HTTP 500 on any write.
+--
+-- Additive only: two nullable text columns, matching license.table.ts exactly:
+--     offlineToken:    text("offline_token")
+--     offlineTokenJti: text("offline_token_jti")
+-- No data is altered, moved, or dropped. Safe to run on a live database.
+--
+-- Idempotent — safe to re-run.
+ALTER TABLE "licenses" ADD COLUMN IF NOT EXISTS "offline_token" text;
+ALTER TABLE "licenses" ADD COLUMN IF NOT EXISTS "offline_token_jti" text;

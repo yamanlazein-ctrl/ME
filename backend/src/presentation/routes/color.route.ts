@@ -15,6 +15,14 @@ import {
   listColorsUseCase,
   deleteColorUseCase,
 } from "../../application/use-cases/inventory/colorUseCases.js";
+import type { ISyncOutboxRepository } from "../../application/ports/ISyncOutboxRepository.js";
+import {
+  enqueueMasterCreate,
+  isSyncEnqueueEnabled,
+  opIdFromRequest,
+  syncDeviceIdFromRequest,
+} from "../../application/use-cases/sync/syncEnqueue.js";
+import { logger } from "../../infrastructure/config/logger.js";
 
 export function registerColorRoutes(
   router: Router,
@@ -22,6 +30,7 @@ export function registerColorRoutes(
   auth: RequestHandler,
   writeGuard: RequestHandler,
   readGuard: RequestHandler,
+  syncOutboxRepo?: ISyncOutboxRepository,
 ) {
   const ctx = (req: Request): TenantContext => req.tenantContext!;
   const pid = (req: Request): string => req.params.id as string;
@@ -36,6 +45,29 @@ export function registerColorRoutes(
     async (req: Request, res: Response) => {
       const r = await createColorUseCase(colorRepo, body(req), ctx(req));
       if (r.ok) {
+        if (syncOutboxRepo && isSyncEnqueueEnabled()) {
+          try {
+            const c = r.data;
+            await enqueueMasterCreate(
+              syncOutboxRepo,
+              "color",
+              c.id,
+              {
+                id: c.id,
+                fabricId: c.fabricId,
+                name: c.name,
+                code: c.code ?? null,
+                hex: c.hex ?? null,
+                imageUrl: c.imageUrl ?? null,
+              },
+              ctx(req),
+              syncDeviceIdFromRequest(req),
+              opIdFromRequest(req),
+            );
+          } catch (err) {
+            logger.warn({ err, colorId: r.data.id }, "sync outbox enqueue failed after color create");
+          }
+        }
         res.status(201).json(r.data);
       } else {
         res.status(422).json({ code: "VALIDATION", message: r.error });

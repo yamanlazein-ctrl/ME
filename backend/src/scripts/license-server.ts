@@ -21,6 +21,7 @@ import cors from "cors";
 import { config, corsOrigins } from "../infrastructure/config/env.js";
 import { logger } from "../infrastructure/config/logger.js";
 import { db } from "../infrastructure/orm/drizzle.js";
+import { runWithPlatformContext } from "../infrastructure/orm/tenant-context.js";
 import { JwtSigner } from "../infrastructure/auth/JwtSigner.js";
 import { PostgresLicenseRepository } from "../infrastructure/repositories/PostgresLicenseRepository.js";
 import { PostgresAuditRepository } from "../infrastructure/repositories/PostgresAuditRepository.js";
@@ -132,6 +133,14 @@ async function main(): Promise<void> {
   app.use(helmet());
   app.use(cors({ origin: corsOrigins, credentials: true }));
   app.use(express.json({ limit: "1mb" }));
+
+  // Every license-server request is a platform request: it manages licenses,
+  // activations, devices and audit events across ALL tenants and touches
+  // system-owned (NULL-tenant) rows. Establish the platform RLS context for
+  // the whole request so the category-2/3 policies grant visibility.
+  app.use((_req, _res, next) => {
+    runWithPlatformContext(() => next());
+  });
 
   // Public v1 endpoints (called by the customer install).
   registerLicenseV1Routes(app, { licenseRepo, auditRepo, licenseProvider, tokenSigner });

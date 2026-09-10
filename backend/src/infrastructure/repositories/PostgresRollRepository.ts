@@ -92,8 +92,8 @@ export class PostgresRollRepository implements IRollRepository {
           currency: data.currency ?? "SYP",
           supplierId: data.supplierId ?? null,
           entryDate: data.entryDate,
-          widthCm: data.widthCm ? String(data.widthCm) : null,
-          weightGsm: data.weightGsm ? String(data.weightGsm) : null,
+          widthCm: data.widthCm != null ? String(data.widthCm) : null,
+          weightGsm: data.weightGsm != null ? String(data.weightGsm) : null,
         })
         .returning();
       await recordStockMovement(
@@ -131,9 +131,10 @@ export class PostgresRollRepository implements IRollRepository {
     if (data.currency !== undefined) values.currency = data.currency;
     if (data.supplierId !== undefined) values.supplierId = data.supplierId ?? null;
     if (data.entryDate !== undefined) values.entryDate = data.entryDate;
-    if (data.widthCm !== undefined) values.widthCm = data.widthCm ? String(data.widthCm) : null;
+    if (data.widthCm !== undefined)
+      values.widthCm = data.widthCm != null ? String(data.widthCm) : null;
     if (data.weightGsm !== undefined)
-      values.weightGsm = data.weightGsm ? String(data.weightGsm) : null;
+      values.weightGsm = data.weightGsm != null ? String(data.weightGsm) : null;
 
     // Fix BUG-05 (forensic audit 2026-08-15, live-reproduced): PUT
     // /api/inventory/rolls/:id let remainingKg be overwritten directly with

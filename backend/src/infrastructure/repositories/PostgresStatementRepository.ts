@@ -33,6 +33,8 @@ const TYPE_LABEL: Record<string, string> = {
   receipt_in: "سند قبض",
   purchase_return: "مرتجع شراء",
   sales_return: "مرتجع بيع",
+  sales_return_contra: "عكس إيراد مرتجع بيع",
+  purchase_return_contra: "عكس مرتجع شراء",
   expense: "مصروف",
   printing_charge: "أجور طباعة",
   adjustment: "تعديل",
@@ -56,7 +58,8 @@ export class PostgresStatementRepository implements IStatementRepository {
     if (p.kind !== query.kind) {
       throw new Error(p.kind === "customer" ? "الطرف ليس عميلاً" : "الطرف ليس مورداً");
     }
-    const currency = query.currency ?? p.currency ?? "SYP";
+    const allCurrencies = query.currency === "ALL" || query.currency === "all";
+    const currency = allCurrencies ? "ALL" : (query.currency ?? p.currency ?? "SYP");
     const fromDate = query.fromDate ?? null;
     const toDate = query.toDate ?? null;
     const type = query.type ?? null;
@@ -70,7 +73,7 @@ export class PostgresStatementRepository implements IStatementRepository {
 
     // previous balance = signed sum of active movements strictly before `from`
     // (no `from` → nothing is "before", so previous balance is 0)
-    let previousBalance = 0;
+    const prevByCurrency = new Map<string, number>();
     if (fromDate) {
       // The previous balance must respect the same logical filters as the
       // visible window (especially `type`), otherwise the running/final balance
@@ -79,20 +82,24 @@ export class PostgresStatementRepository implements IStatementRepository {
         eq(ledgerEntries.partyId, query.partyId),
         eq(ledgerEntries.tenantId, ctx.tenantId),
         eq(ledgerEntries.status, "active"),
-        eq(ledgerEntries.currency, currency),
         sql`${ledgerEntries.date} < ${fromDate}`,
       ];
+      if (!allCurrencies) prevConditions.push(eq(ledgerEntries.currency, currency));
       if (type) prevConditions.push(eq(ledgerEntries.type, type));
 
       const prevRows = await this.db
         .select({
+          currency: ledgerEntries.currency,
           debit: sql<number>`COALESCE(SUM(${ledgerEntries.debit}), 0)`,
           credit: sql<number>`COALESCE(SUM(${ledgerEntries.credit}), 0)`,
         })
         .from(ledgerEntries)
-        .where(and(...prevConditions));
-      const prevRaw = Number(prevRows[0]?.debit ?? 0) - Number(prevRows[0]?.credit ?? 0);
-      previousBalance = mult * prevRaw;
+        .where(and(...prevConditions))
+        .groupBy(ledgerEntries.currency);
+      for (const row of prevRows) {
+        const prevRaw = Number(row.debit ?? 0) - Number(row.credit ?? 0);
+        prevByCurrency.set(row.currency, mult * prevRaw);
+      }
     }
 
     // statement window = ALL rows within [from, to] (chronological).
@@ -102,8 +109,8 @@ export class PostgresStatementRepository implements IStatementRepository {
     const winConditions = [
       eq(ledgerEntries.partyId, query.partyId),
       eq(ledgerEntries.tenantId, ctx.tenantId),
-      eq(ledgerEntries.currency, currency),
     ];
+    if (!allCurrencies) winConditions.push(eq(ledgerEntries.currency, currency));
     if (fromDate) winConditions.push(gte(ledgerEntries.date, fromDate));
     if (toDate) winConditions.push(lte(ledgerEntries.date, toDate));
     if (type) winConditions.push(eq(ledgerEntries.type, type));
@@ -121,22 +128,25 @@ export class PostgresStatementRepository implements IStatementRepository {
       ctx,
     );
 
-    let running = previousBalance;
-    let totalDebit = 0;
-    let totalCredit = 0;
+    const runningByCurrency = new Map<string, number>(prevByCurrency);
+    const debitByCurrency = new Map<string, number>();
+    const creditByCurrency = new Map<string, number>();
 
     const entries: StatementEntryData[] = window.map((row, i) => {
       const debit = Number(row.debit ?? 0);
       const credit = Number(row.credit ?? 0);
+      const rowCcy = row.currency ?? currency;
       const isCancelled = row.status !== "active";
       // Cancelled movements are displayed but do NOT move the account: skip
       // their margin so runningBalance/totals only reflect active movements
       // (matches the balance semantics used across the rest of the system).
       const margin = mult * (debit - credit);
+      let running = runningByCurrency.get(rowCcy) ?? 0;
       if (!isCancelled) {
         running += margin;
-        totalDebit += debit;
-        totalCredit += credit;
+        runningByCurrency.set(rowCcy, running);
+        debitByCurrency.set(rowCcy, (debitByCurrency.get(rowCcy) ?? 0) + debit);
+        creditByCurrency.set(rowCcy, (creditByCurrency.get(rowCcy) ?? 0) + credit);
       }
 
       const entry: StatementEntryData = {
@@ -145,6 +155,7 @@ export class PostgresStatementRepository implements IStatementRepository {
         date: row.date,
         type: row.type as StatementEntryData["type"],
         status: isCancelled ? "cancelled" : "active",
+        currency: rowCcy,
         referenceType: row.referenceType ?? undefined,
         referenceId: row.referenceId ?? undefined,
         referenceNumber: row.referenceNumber ?? undefined,
@@ -172,6 +183,39 @@ export class PostgresStatementRepository implements IStatementRepository {
       return entry;
     });
 
+    const totalsByCurrency: NonNullable<PartyStatementData["totalsByCurrency"]> = {};
+    const allCcys = new Set<string>([
+      ...prevByCurrency.keys(),
+      ...runningByCurrency.keys(),
+      ...debitByCurrency.keys(),
+      ...creditByCurrency.keys(),
+    ]);
+    if (!allCurrencies) allCcys.add(currency);
+    for (const ccy of allCcys) {
+      totalsByCurrency[ccy] = {
+        previousBalance: round2dp(prevByCurrency.get(ccy) ?? 0),
+        totalDebit: round2dp(debitByCurrency.get(ccy) ?? 0),
+        totalCredit: round2dp(creditByCurrency.get(ccy) ?? 0),
+        finalBalance: round2dp(runningByCurrency.get(ccy) ?? prevByCurrency.get(ccy) ?? 0),
+      };
+    }
+
+    // Single-currency response keeps the classic scalar totals. Multi-currency
+    // zeros the scalars (mixing SYP+USD would lie) and exposes totalsByCurrency.
+    const primary = allCurrencies
+      ? {
+          previousBalance: 0,
+          totalDebit: 0,
+          totalCredit: 0,
+          finalBalance: 0,
+        }
+      : (totalsByCurrency[currency] ?? {
+          previousBalance: 0,
+          totalDebit: 0,
+          totalCredit: 0,
+          finalBalance: 0,
+        });
+
     return {
       partyId: query.partyId,
       partyName: p.name,
@@ -181,10 +225,11 @@ export class PostgresStatementRepository implements IStatementRepository {
       fromDate,
       toDate,
       type,
-      previousBalance: round2dp(previousBalance),
-      totalDebit: round2dp(totalDebit),
-      totalCredit: round2dp(totalCredit),
-      finalBalance: round2dp(running),
+      previousBalance: primary.previousBalance,
+      totalDebit: primary.totalDebit,
+      totalCredit: primary.totalCredit,
+      finalBalance: primary.finalBalance,
+      totalsByCurrency,
       entries,
     };
   }

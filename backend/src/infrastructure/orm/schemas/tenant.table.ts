@@ -36,4 +36,4 @@ export const tenants = pgTable("tenants", {
   updatePolicy: jsonb("update_policy").default("{}"),
   backupPolicy: jsonb("backup_policy").default("{}"),
   transfersUsed: integer("transfers_used").notNull().default(0),
-});
+}).enableRLS();

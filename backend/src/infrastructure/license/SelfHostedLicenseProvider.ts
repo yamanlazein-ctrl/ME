@@ -1,6 +1,7 @@
 import { and, eq, isNull } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
-import { db as defaultDb, withTenantTx, type DB, type Tx } from "../orm/drizzle.js";
+import { db as defaultDb, type DB, type Tx } from "../orm/drizzle.js";
+import { runWithPlatformContext } from "../orm/tenant-context.js";
 import type { ILicenseProvider } from "../../application/ports/ILicenseProvider.js";
 import type {
   ActivationRequest,
@@ -46,7 +47,7 @@ export class SelfHostedLicenseProvider implements ILicenseProvider {
   ) {}
 
   async activate(req: ActivationRequest): Promise<ActivationResult> {
-    return this.db.transaction(async (tx: Tx) => {
+    return runWithPlatformContext(() => this.db.transaction(async (tx: Tx) => {
       // 1. Find the license by key.
       const [lic] = await tx.select().from(licenses).where(eq(licenses.key, req.key)).limit(1);
       if (!lic) {
@@ -229,11 +230,11 @@ export class SelfHostedLicenseProvider implements ILicenseProvider {
         },
         expiresAt: lic.expiresAt,
       };
-    });
+    }));
   }
 
   async refresh(activationId: string): Promise<HeartbeatResult> {
-    return this.db.transaction(async (tx: Tx) => {
+    return runWithPlatformContext(() => this.db.transaction(async (tx: Tx) => {
       const [activation] = await tx
         .select()
         .from(licenseActivations)
@@ -268,11 +269,11 @@ export class SelfHostedLicenseProvider implements ILicenseProvider {
         graceRemainingDays,
         nextCheckAt: new Date(Date.now() + 6 * 60 * 60 * 1000),
       };
-    });
+    }));
   }
 
   async deactivate(activationId: string, reason: string): Promise<void> {
-    await this.db.transaction(async (tx: Tx) => {
+    await runWithPlatformContext(() => this.db.transaction(async (tx: Tx) => {
       const [activation] = await tx
         .select()
         .from(licenseActivations)
@@ -290,11 +291,11 @@ export class SelfHostedLicenseProvider implements ILicenseProvider {
         payload: { reason },
         actor: "system",
       });
-    });
+    }));
   }
 
   async listDevices(activationId: string): Promise<DeviceInfo[]> {
-    return withTenantTx((await this.activationTenantId(activationId)) ?? "", async (tx: Tx) => {
+    return runWithPlatformContext(() => this.db.transaction(async (tx: Tx) => {
       const rows = await tx
         .select()
         .from(deviceRegistrations)
@@ -309,11 +310,11 @@ export class SelfHostedLicenseProvider implements ILicenseProvider {
         lastSeenAt: r.lastSeenAt,
         revokedAt: r.revokedAt,
       }));
-    });
+    }));
   }
 
   async revokeDevice(activationId: string, deviceId: string, reason: string): Promise<void> {
-    await this.db.transaction(async (tx: Tx) => {
+    await runWithPlatformContext(() => this.db.transaction(async (tx: Tx) => {
       const licenseId = await this.activationLicenseId(activationId);
       if (!licenseId) return;
       const [updated] = await tx
@@ -336,7 +337,7 @@ export class SelfHostedLicenseProvider implements ILicenseProvider {
           actor: "admin",
         });
       }
-    });
+    }));
   }
 
   private async activationLicenseId(activationId: string): Promise<string | null> {

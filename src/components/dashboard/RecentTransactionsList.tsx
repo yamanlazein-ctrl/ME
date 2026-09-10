@@ -44,9 +44,7 @@ function partyOf(t: TransactionDTO): string {
 }
 
 function refOf(t: TransactionDTO): string {
-  return t.type === "payment" || t.type === "return"
-    ? t.reference ?? ""
-    : t.invoiceNo ?? "";
+  return t.type === "payment" || t.type === "return" ? (t.reference ?? "") : (t.invoiceNo ?? "");
 }
 
 function detailOf(t: TransactionDTO): string {
@@ -61,7 +59,7 @@ export function RecentTransactionsList() {
   return (
     <div
       data-od-id="panel-recent-transactions"
-      className="flex flex-col rounded-2xl border border-border bg-card shadow-soft"
+      className="flex flex-col rounded-xl border border-border bg-card shadow-soft"
     >
       <div className="flex items-center justify-between border-b border-border px-5 py-4">
         <div className="flex items-center gap-2.5">

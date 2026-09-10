@@ -266,7 +266,7 @@ function BackupPage() {
             </li>
             <li className="flex items-center gap-2">
               <Save className="h-3 w-3 text-primary" />
-              <strong>إعدادات النظام:</strong> العملات، الضرائب، المستخدمين، طباعة
+              <strong>إعدادات النظام:</strong> الشركة، المستخدمين، الطباعة
             </li>
             <li className="flex items-center gap-2">
               <Archive className="h-3 w-3 text-primary" />

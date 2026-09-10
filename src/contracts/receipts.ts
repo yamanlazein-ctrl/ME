@@ -18,6 +18,11 @@ export interface ReceiptDTO {
   invoiceId?: UUID | null;
   amount: number;
   currency: Currency;
+  /** Units of `currency` per 1 USD — frozen at creation. */
+  exchangeRate?: number | null;
+  /** Currency + frozen rate of the linked invoice — absent for standalone payments. */
+  invoiceCurrency?: Currency;
+  invoiceExchangeRate?: number | null;
   method: VoucherMethod;
   notesPrint?: string | null;
   notesInternal?: string | null;

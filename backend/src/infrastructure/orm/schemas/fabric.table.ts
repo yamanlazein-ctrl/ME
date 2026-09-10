@@ -21,4 +21,4 @@ export const fabrics = pgTable(
   (table) => ({
     tenantNameIdx: uniqueIndex("idx_fabrics_tenant_name").on(table.tenantId, table.name),
   }),
-);
+).enableRLS();

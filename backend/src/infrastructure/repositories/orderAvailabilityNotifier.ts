@@ -106,7 +106,7 @@ export async function applyOrderAvailabilityAtCreation(
       `يمكنك بيع الكمية المتوفرة الآن بفاتورة بيع عادية، أو الانتظار حتى تكتمل الكمية.`,
     kind: "info",
     severity: "success",
-    targetPath: "/orders",
+    targetPath: `/orders/${order.id}`,
   });
 }
 
@@ -242,7 +242,7 @@ export async function notifyOrderAvailability(
         `${coverageLines(avails).join(" • ")}.`,
       kind: "info",
       severity: "success",
-      targetPath: "/orders",
+      targetPath: `/orders/${first.order.id}`,
     });
   }
 }

@@ -33,14 +33,23 @@ import {
   type Fabric,
   type Roll,
 } from "@/presentation/hooks/useInventory";
-import { addSupplier, suppliers, supplierById } from "@/presentation/hooks/useParties";
+import { addSupplier, suppliers, supplierById, useParties } from "@/presentation/hooks/useParties";
 import { SectionCard, Field } from "./InventoryHelpers";
 
 type FabricFormState = { open: boolean; editing?: Fabric };
 type ColorFormState = { open: boolean; fabricId: string; editing?: Color };
 type RollFormState = { open: boolean; colorId: string; editing?: Roll };
 
+/** Keep decimal text as typed (supports 0.50 / 0,50) — Number()-on-change drops "0.". */
+function parseDecimalInput(raw: string): number | null {
+  const normalized = raw.trim().replace(",", ".");
+  if (!normalized) return null;
+  const n = Number(normalized);
+  return Number.isFinite(n) ? n : null;
+}
+
 function FabricFormDialog({ state, onClose }: { state: FabricFormState; onClose: () => void }) {
+  useParties();
   const editing = state.editing;
 
   // Section 1
@@ -57,11 +66,11 @@ function FabricFormDialog({ state, onClose }: { state: FabricFormState; onClose:
   const [colorCode, setColorCode] = useState("");
   // Section 4
   const [dyeBatch, setDyeBatch] = useState("");
-  const [widthCm, setWidthCm] = useState<number | "">("");
-  const [weightGsm, setWeightGsm] = useState<number | "">("");
-  const [qty, setQty] = useState<number | "">("");
-  const [purchasePrice, setPurchasePrice] = useState<number | "">("");
-  const [salePrice, setSalePrice] = useState<number | "">("");
+  const [widthCm, setWidthCm] = useState("");
+  const [weightGsm, setWeightGsm] = useState("");
+  const [qty, setQty] = useState("");
+  const [purchasePrice, setPurchasePrice] = useState("");
+  const [salePrice, setSalePrice] = useState("");
   const [currency, setCurrency] = useState<Currency>("SYP");
   // Section 5
   const [notes, setNotes] = useState("");
@@ -138,21 +147,25 @@ function FabricFormDialog({ state, onClose }: { state: FabricFormState; onClose:
       });
       if (colorName.trim() && colorCode.trim()) {
         const col = await addColor({ fabricId: fab.id, name: colorName, code: colorCode });
-        const qNum = Number(qty) || 0;
-        if (dyeBatch.trim() && qNum > 0 && supplierId) {
+        const qNum = parseDecimalInput(qty) ?? 0;
+        const purchaseNum = parseDecimalInput(purchasePrice);
+        const saleNum = parseDecimalInput(salePrice);
+        const widthNum = parseDecimalInput(widthCm);
+        const gsmNum = parseDecimalInput(weightGsm);
+        if (dyeBatch.trim() && qNum > 0 && supplierId && purchaseNum != null && purchaseNum > 0) {
           await addRoll({
             colorId: col.id,
             rollNo: `${Date.now()}`.slice(-4),
             dyeBatch,
             initialKg: qNum,
             pieces: 1,
-            pricePerKg: Number(purchasePrice) || 0,
-            salePricePerKg: Number(salePrice) || undefined,
+            pricePerKg: purchaseNum,
+            salePricePerKg: saleNum != null && saleNum > 0 ? saleNum : undefined,
             currency,
             supplierId,
             entryDate,
-            widthCm: Number(widthCm) || undefined,
-            weightGsm: Number(weightGsm) || undefined,
+            widthCm: widthNum != null && widthNum > 0 ? widthNum : undefined,
+            weightGsm: gsmNum != null && gsmNum > 0 ? gsmNum : undefined,
           });
         }
       }
@@ -166,18 +179,20 @@ function FabricFormDialog({ state, onClose }: { state: FabricFormState; onClose:
     <Dialog open={state.open} onOpenChange={(o) => !o && onClose()}>
       <DialogContent
         dir="rtl"
-        className="!max-w-[960px] w-[calc(100vw-2rem)] p-0 gap-0 max-h-[90vh] flex flex-col"
+        className="!max-w-[960px] w-[calc(100vw-2rem)] p-0 gap-0 max-h-[90vh] flex flex-col overflow-hidden"
       >
-        <DialogHeader className="px-6 py-4 border-b border-border">
+        <DialogHeader className="px-6 py-4 border-b border-border shrink-0">
           <DialogTitle className="text-base">
             {editing ? "تعديل قماش" : "إضافة قماش جديد"}
           </DialogTitle>
           <DialogDescription className="text-xs">
-            عرّف جميع بيانات القماش، اللون، الصبغة الأولى، والمورد.
+            {editing
+              ? "عدّل بيانات القماش الأساسية. الألوان والكميات تُحرَّر من بطاقة القماش."
+              : "عرّف جميع بيانات القماش، اللون، الصبغة الأولى، والمورد."}
           </DialogDescription>
         </DialogHeader>
 
-        <div className="flex-1 overflow-y-auto px-6 py-5 space-y-6 bg-secondary/20">
+        <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5 space-y-6 bg-secondary/20">
           <SectionCard index={1} title="المعلومات الأساسية" desc="تعريف القماش وفئته ووحدة القياس.">
             <Field label="اسم القماش" required error={nameErr ?? undefined}>
               <Input
@@ -223,6 +238,8 @@ function FabricFormDialog({ state, onClose }: { state: FabricFormState; onClose:
             </Field>
           </SectionCard>
 
+          {!editing && (
+            <>
           <SectionCard
             index={2}
             title="بيانات المورد"
@@ -300,24 +317,33 @@ function FabricFormDialog({ state, onClose }: { state: FabricFormState; onClose:
               <Input
                 className="h-10"
                 type="number"
+                inputMode="decimal"
+                step="0.01"
+                min="0"
                 value={widthCm}
-                onChange={(e) => setWidthCm(e.target.value === "" ? "" : Number(e.target.value))}
+                onChange={(e) => setWidthCm(e.target.value)}
               />
             </Field>
             <Field label="الكثافة / الوزن (غ/م²)">
               <Input
                 className="h-10"
                 type="number"
+                inputMode="decimal"
+                step="0.01"
+                min="0"
                 value={weightGsm}
-                onChange={(e) => setWeightGsm(e.target.value === "" ? "" : Number(e.target.value))}
+                onChange={(e) => setWeightGsm(e.target.value)}
               />
             </Field>
             <Field label="الكمية (كغ)">
               <Input
                 className="h-10"
                 type="number"
+                inputMode="decimal"
+                step="0.01"
+                min="0"
                 value={qty}
-                onChange={(e) => setQty(e.target.value === "" ? "" : Number(e.target.value))}
+                onChange={(e) => setQty(e.target.value)}
               />
             </Field>
             <Field label="سعر الشراء / كغ">
@@ -325,10 +351,11 @@ function FabricFormDialog({ state, onClose }: { state: FabricFormState; onClose:
                 <Input
                   className="h-10 flex-1"
                   type="number"
+                  inputMode="decimal"
+                  step="0.01"
+                  min="0"
                   value={purchasePrice}
-                  onChange={(e) =>
-                    setPurchasePrice(e.target.value === "" ? "" : Number(e.target.value))
-                  }
+                  onChange={(e) => setPurchasePrice(e.target.value)}
                 />
                 <Select value={currency} onValueChange={(v) => setCurrency(v as Currency)}>
                   <SelectTrigger className="!h-10 w-24">
@@ -345,11 +372,16 @@ function FabricFormDialog({ state, onClose }: { state: FabricFormState; onClose:
               <Input
                 className="h-10"
                 type="number"
+                inputMode="decimal"
+                step="0.01"
+                min="0"
                 value={salePrice}
-                onChange={(e) => setSalePrice(e.target.value === "" ? "" : Number(e.target.value))}
+                onChange={(e) => setSalePrice(e.target.value)}
               />
             </Field>
           </SectionCard>
+            </>
+          )}
 
           <SectionCard index={5} title="حقول إضافية" desc="ملاحظات وصورة القماش.">
             <Field label="ملاحظات" full>
@@ -473,12 +505,16 @@ function ColorFormDialog({ state, onClose }: { state: ColorFormState; onClose: (
 
   return (
     <Dialog open={state.open} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent dir="rtl" className="max-w-md">
-        <DialogHeader>
+      <DialogContent
+        dir="rtl"
+        className="max-w-md p-0 gap-0 max-h-[90vh] flex flex-col overflow-hidden"
+      >
+        <DialogHeader className="px-6 py-4 border-b border-border shrink-0">
           <DialogTitle>
             {editing ? "تعديل لون" : `إضافة لون جديد — ${fabric?.name ?? ""}`}
           </DialogTitle>
         </DialogHeader>
+        <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5">
         <div className="grid gap-3">
           <div className="flex items-center gap-3">
             <ColorSwatch
@@ -571,7 +607,8 @@ function ColorFormDialog({ state, onClose }: { state: ColorFormState; onClose: (
             </p>
           </div>
         </div>
-        <DialogFooter className="flex-row-reverse gap-2">
+        </div>
+        <DialogFooter className="sticky bottom-0 border-t border-border bg-card px-6 py-4 shrink-0 flex-row-reverse gap-2">
           <Button
             onClick={submit}
             className="bg-primary text-primary-foreground hover:bg-primary/90"
@@ -588,12 +625,17 @@ function ColorFormDialog({ state, onClose }: { state: ColorFormState; onClose: (
 }
 
 function RollFormDialog({ state, onClose }: { state: RollFormState; onClose: () => void }) {
+  useParties();
   const editing = state.editing;
   const [rollNo, setRollNo] = useState(editing?.rollNo ?? "");
   const [dyeBatch, setDyeBatch] = useState(editing?.dyeBatch ?? "");
-  const [qty, setQty] = useState<number>(editing?.initialKg ?? 0);
-  const [remaining, setRemaining] = useState<number>(editing?.remainingKg ?? 0);
-  const [price, setPrice] = useState<number>(editing?.pricePerKg ?? 0);
+  const [qty, setQty] = useState<string>(editing?.initialKg != null ? String(editing.initialKg) : "");
+  const [remaining, setRemaining] = useState<string>(
+    editing?.remainingKg != null ? String(editing.remainingKg) : "",
+  );
+  const [price, setPrice] = useState<string>(
+    editing?.pricePerKg != null ? String(editing.pricePerKg) : "",
+  );
   const [currency, setCurrency] = useState<Currency>(editing?.currency ?? "SYP");
   const [supplierId, setSupplierId] = useState<string>(
     editing?.supplierId ?? suppliers[0]?.id ?? "",
@@ -610,9 +652,15 @@ function RollFormDialog({ state, onClose }: { state: RollFormState; onClose: () 
       const e = state.editing;
       setRollNo(e?.rollNo ?? "");
       setDyeBatch(e?.dyeBatch ?? "");
-      setQty(e?.initialKg ?? 0);
-      setRemaining(e?.remainingKg ?? e?.initialKg ?? 0);
-      setPrice(e?.pricePerKg ?? 0);
+      setQty(e?.initialKg != null ? String(e.initialKg) : "");
+      setRemaining(
+        e?.remainingKg != null
+          ? String(e.remainingKg)
+          : e?.initialKg != null
+            ? String(e.initialKg)
+            : "",
+      );
+      setPrice(e?.pricePerKg != null ? String(e.pricePerKg) : "");
       setCurrency(e?.currency ?? "SYP");
       setSupplierId(e?.supplierId ?? suppliers[0]?.id ?? "");
       setDate(e?.entryDate ?? new Date().toISOString().slice(0, 10));
@@ -632,19 +680,30 @@ function RollFormDialog({ state, onClose }: { state: RollFormState; onClose: () 
       setDyeErr("رقم الدفعة الصبغية مطلوب.");
       valid = false;
     }
-    if (!qty || qty <= 0) {
+    const qtyNum = parseDecimalInput(qty);
+    const remainingNum = parseDecimalInput(remaining);
+    const priceNum = parseDecimalInput(price);
+    if (qtyNum == null || qtyNum <= 0) {
       setQtyErr("أدخل كمية صحيحة أكبر من صفر.");
       valid = false;
     }
-    if (!valid) return;
+    if (editing && (remainingNum == null || remainingNum < 0)) {
+      setQtyErr("أدخل كمية متبقية صحيحة (صفر أو أكثر).");
+      valid = false;
+    }
+    if (priceNum == null || priceNum <= 0) {
+      setQtyErr("أدخل سعر شراء صحيح أكبر من صفر.");
+      valid = false;
+    }
+    if (!valid || qtyNum == null || priceNum == null) return;
     try {
       if (editing) {
         await updateRoll(editing.id, {
           rollNo,
           dyeBatch,
-          initialKg: qty,
-          remainingKg: remaining,
-          pricePerKg: price,
+          initialKg: qtyNum,
+          remainingKg: remainingNum ?? qtyNum,
+          pricePerKg: priceNum,
           currency,
           supplierId,
           entryDate: date,
@@ -654,9 +713,9 @@ function RollFormDialog({ state, onClose }: { state: RollFormState; onClose: () 
           colorId: state.colorId,
           rollNo,
           dyeBatch,
-          initialKg: qty,
+          initialKg: qtyNum,
           pieces: 1,
-          pricePerKg: price,
+          pricePerKg: priceNum,
           currency,
           supplierId,
           entryDate: date,
@@ -670,13 +729,17 @@ function RollFormDialog({ state, onClose }: { state: RollFormState; onClose: () 
 
   return (
     <Dialog open={state.open} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent dir="rtl" className="max-w-xl">
-        <DialogHeader>
+      <DialogContent
+        dir="rtl"
+        className="max-w-xl p-0 gap-0 max-h-[90vh] flex flex-col overflow-hidden"
+      >
+        <DialogHeader className="px-6 py-4 border-b border-border shrink-0">
           <DialogTitle>{editing ? "تعديل صبغة" : "إضافة صبغة جديدة"}</DialogTitle>
         </DialogHeader>
+        <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5">
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <Label>رقم الصبغة *</Label>
+            <Label>رقم البكرة *</Label>
             <Input
               value={rollNo}
               onChange={(e) => {
@@ -701,9 +764,12 @@ function RollFormDialog({ state, onClose }: { state: RollFormState; onClose: () 
             <Label>الكمية (كغ) *</Label>
             <Input
               type="number"
+              inputMode="decimal"
+              step="0.01"
+              min="0"
               value={qty}
               onChange={(e) => {
-                const v = Number(e.target.value) || 0;
+                const v = e.target.value;
                 setQty(v);
                 if (!editing) setRemaining(v);
                 setQtyErr(null);
@@ -716,8 +782,11 @@ function RollFormDialog({ state, onClose }: { state: RollFormState; onClose: () 
               <Label>المتبقي (كغ)</Label>
               <Input
                 type="number"
+                inputMode="decimal"
+                step="0.01"
+                min="0"
                 value={remaining}
-                onChange={(e) => setRemaining(Number(e.target.value) || 0)}
+                onChange={(e) => setRemaining(e.target.value)}
               />
             </div>
           )}
@@ -725,8 +794,11 @@ function RollFormDialog({ state, onClose }: { state: RollFormState; onClose: () 
             <Label>سعر الشراء للكغ</Label>
             <Input
               type="number"
+              inputMode="decimal"
+              step="0.01"
+              min="0"
               value={price}
-              onChange={(e) => setPrice(Number(e.target.value) || 0)}
+              onChange={(e) => setPrice(e.target.value)}
             />
           </div>
           <div>
@@ -761,7 +833,8 @@ function RollFormDialog({ state, onClose }: { state: RollFormState; onClose: () 
             <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
           </div>
         </div>
-        <DialogFooter className="flex-row-reverse gap-2">
+        </div>
+        <DialogFooter className="sticky bottom-0 border-t border-border bg-card px-6 py-4 shrink-0 flex-row-reverse gap-2">
           <Button
             onClick={submit}
             className="bg-primary text-primary-foreground hover:bg-primary/90"

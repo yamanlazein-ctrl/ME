@@ -33,8 +33,6 @@ export interface InvoiceData {
   exchangeRate?: number | null;
   /** USD equivalent of `total` at the frozen exchangeRate. */
   baseTotal?: number | null;
-  /** USD equivalent of `paid` at the frozen exchangeRate. */
-  basePaid?: number | null;
   status: "draft" | "active" | "cancelled";
   lines: readonly InvoiceLineData[];
   discount?: number;
@@ -42,9 +40,9 @@ export interface InvoiceData {
   shipping?: number;
   notes?: string;
   /**
-    * Amount received at sale time. Drives the backend's automatic creation of a
-    * linked receipt voucher (kind=receipt, invoiceId) inside the same transaction.
-    * Not persisted on the invoice — derived from vouchers when reading.
+    * Amount paid — maintained by the backend on every voucher create/cancel
+    * and persisted on the invoice row. Read from the invoice for all display.
+    * Initially set at creation time (sale = receipt, entry = supplier payment).
     */
   paid?: number;
   /** Receipt method used when `paid > 0`. Defaults to "cash". */
@@ -71,8 +69,6 @@ export class Invoice implements InvoiceData {
   readonly exchangeRate?: number | null;
   /** USD equivalent of `total` at the frozen exchangeRate. */
   readonly baseTotal?: number | null;
-  /** USD equivalent of `paid` at the frozen exchangeRate. */
-  readonly basePaid?: number | null;
   status: InvoiceData["status"];
   readonly lines: readonly InvoiceLineData[];
   readonly discount?: number;
@@ -99,7 +95,6 @@ export class Invoice implements InvoiceData {
     this.currency = data.currency;
     this.exchangeRate = data.exchangeRate;
     this.baseTotal = data.baseTotal;
-    this.basePaid = data.basePaid;
     this.status = data.status;
     this.lines = Object.freeze(data.lines);
     this.discount = data.discount;

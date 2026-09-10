@@ -7,10 +7,22 @@ import {
 import { validateUuidParam } from "../../infrastructure/http/middleware/validate-params.middleware.js";
 import { idempotency } from "../../infrastructure/http/middleware/idempotency-handler.middleware.js";
 import type { IOrderRepository } from "../../application/ports/IOrderRepository.js";
+import type { ISyncOutboxRepository } from "../../application/ports/ISyncOutboxRepository.js";
+import type { IPartyRepository } from "../../application/ports/IPartyRepository.js";
 import type { TenantContext } from "../../domain/types/index.js";
+import type { CreateOrderInput } from "../../domain/entities/Order.js";
 import { createOrderSchema, updateOrderSchema, listOrdersSchema, pendingConflictsSchema } from "./order.schema.js";
 import * as uc from "../../application/use-cases/orders/orderUseCases.js";
 import { nextDocumentNumber } from "../../infrastructure/utils/documentNumbers.js";
+import {
+  enqueueOrderCancel,
+  enqueueOrderCreate,
+  isSyncEnqueueEnabled,
+  opIdFromRequest,
+  syncDeviceIdFromRequest,
+} from "../../application/use-cases/sync/syncEnqueue.js";
+import type { InvoiceSyncDependencies } from "../../application/use-cases/sync/syncDependencySnapshots.js";
+import { logger } from "../../infrastructure/config/logger.js";
 
 export function registerOrderRoutes(
   router: Router,
@@ -18,10 +30,55 @@ export function registerOrderRoutes(
   auth: RequestHandler,
   writeGuard: RequestHandler,
   readGuard: RequestHandler,
+  syncOutboxRepo?: ISyncOutboxRepository,
+  partyRepo?: IPartyRepository,
 ) {
   const ctx = (req: Request): TenantContext => req.tenantContext!;
   const pid = (req: Request): string => req.params.id as string;
   const body = <T>(req: Request): T => (req as unknown as { validatedBody: T }).validatedBody;
+
+  async function partyDeps(
+    partyId: string | undefined,
+    tenantCtx: TenantContext,
+  ): Promise<InvoiceSyncDependencies | null> {
+    if (!partyRepo || !partyId) return null;
+    const p = await partyRepo.findById(partyId, tenantCtx);
+    if (!p) return null;
+    return {
+      parties: [
+        {
+          id: p.id,
+          kind: p.kind,
+          code: p.code ?? null,
+          name: p.name,
+          companyName: p.companyName ?? null,
+          commercialReg: p.commercialReg ?? null,
+          category: p.category ?? null,
+          salesRep: p.salesRep ?? null,
+          phone: p.phone ?? null,
+          mobile: p.mobile ?? null,
+          whatsapp: p.whatsapp ?? null,
+          altPhone: p.altPhone ?? null,
+          email: p.email ?? null,
+          website: p.website ?? null,
+          address: p.address ?? null,
+          city: p.city ?? null,
+          country: p.country ?? null,
+          taxNumber: p.taxNumber ?? null,
+          currency: p.currency,
+          paymentTerms: p.paymentTerms ?? null,
+          paymentMethod: p.paymentMethod ?? null,
+          defaultDiscount: p.defaultDiscount,
+          vat: p.vat,
+          status: p.status,
+          notes: p.notes ?? null,
+        },
+      ],
+      fabrics: [],
+      colors: [],
+      rolls: [],
+    };
+  }
 
   router.post(
     "/orders",
@@ -30,13 +87,29 @@ export function registerOrderRoutes(
     idempotency("POST"),
     validateBody(createOrderSchema),
     async (req: Request, res: Response) => {
+      const input = body<CreateOrderInput>(req);
       const r = await uc.createOrderUseCase(
         orderRepo,
-        body(req),
+        input,
         await nextDocumentNumber("order", ctx(req).tenantId),
         ctx(req),
       );
       if (r.ok) {
+        if (syncOutboxRepo && isSyncEnqueueEnabled()) {
+          try {
+            await enqueueOrderCreate(
+              syncOutboxRepo,
+              { id: r.data.id, code: r.data.code },
+              input,
+              ctx(req),
+              syncDeviceIdFromRequest(req),
+              opIdFromRequest(req),
+              await partyDeps(input.customerId, ctx(req)),
+            );
+          } catch (err) {
+            logger.warn({ err, orderId: r.data.id }, "sync outbox enqueue failed after order create");
+          }
+        }
         res.status(201).json(r.data);
       } else {
         res.status(422).json({ code: "VALIDATION", message: r.error });
@@ -139,6 +212,19 @@ export function registerOrderRoutes(
     async (req: Request, res: Response) => {
       const r = await uc.cancelOrderUseCase(orderRepo, pid(req), ctx(req));
       if (r.ok) {
+        if (syncOutboxRepo && isSyncEnqueueEnabled()) {
+          try {
+            await enqueueOrderCancel(
+              syncOutboxRepo,
+              { id: r.data.id, code: r.data.code },
+              ctx(req),
+              syncDeviceIdFromRequest(req),
+              opIdFromRequest(req),
+            );
+          } catch (err) {
+            logger.warn({ err, orderId: r.data.id }, "sync outbox enqueue failed after order cancel");
+          }
+        }
         res.json(r.data);
       } else {
         res.status(422).json({ code: "VALIDATION", message: r.error });

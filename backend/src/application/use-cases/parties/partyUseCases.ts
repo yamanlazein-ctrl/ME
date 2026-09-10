@@ -7,7 +7,7 @@ import type { TenantContext, PaginatedResult } from "../../../domain/types/index
 import type { PartyData } from "../../../domain/entities/Party.js";
 import { ValidationError } from "../../../domain/errors/index.js";
 
-type PartyUseCaseResult = { ok: true; data?: PartyData } | { ok: false; error: string };
+type PartyUseCaseResult = { ok: true; data: PartyData } | { ok: false; error: string };
 
 export async function createPartyUseCase(
   repo: IPartyRepository,

@@ -68,4 +68,4 @@ export const ledgerEntries = pgTable(
       table.currency,
     ),
   }),
-);
+).enableRLS();
