@@ -77,6 +77,7 @@ fn main() {
         license_public_key: license_public_key.clone(),
         db_port,
         backend_port,
+        installation_id: "runtime-probe".into(),
     };
 
     // Optional negative test: ME_PREFLIGHT_MISSING=<filename> makes the probe
@@ -111,6 +112,7 @@ fn main() {
             license_public_key,
             db_port,
             backend_port,
+            installation_id: "runtime-probe".into(),
         };
         eprintln!("[runtime-probe] negative preflight test: expect FAIL listing '{}'", missing);
         match boot_desktop_stack(&cfg2) {

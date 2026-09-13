@@ -453,19 +453,31 @@ async function ensureDesktopSchema(): Promise<void> {
   }
 }
 
+async function prepareDesktopDatabase(): Promise<void> {
+  if (!config.DESKTOP_DEPLOY) return;
+  const { runDesktopMigrations } = await import("../infrastructure/orm/runDesktopMigrations.js");
+  await runDesktopMigrations();
+  await ensureDesktopSchema();
+}
+
 fxRateService.start();
-void ensureDesktopSchema().finally(() => {
-  app.listen(config.PORT, config.HOST, () => {
-    logger.info(
-      `ERP API server listening on ${config.HOST}:${config.PORT} in ${config.NODE_ENV} mode`,
-    );
-    if (getCentralSyncUrl()) {
-      void probeHubReachable(true);
-      setInterval(() => {
-        void probeHubReachable();
-      }, 15_000).unref();
-    }
+void prepareDesktopDatabase()
+  .then(() => {
+    app.listen(config.PORT, config.HOST, () => {
+      logger.info(
+        `ERP API server listening on ${config.HOST}:${config.PORT} in ${config.NODE_ENV} mode`,
+      );
+      if (getCentralSyncUrl()) {
+        void probeHubReachable(true);
+        setInterval(() => {
+          void probeHubReachable();
+        }, 15_000).unref();
+      }
+    });
+  })
+  .catch((err) => {
+    logger.fatal({ err }, "Desktop migrations failed — refusing to listen");
+    process.exit(1);
   });
-});
 
 export default app;

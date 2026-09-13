@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { getApiBaseUrl } from "@/lib/api-base-url";
-import { getHubUrl, isTauri, setHubUrl } from "@/infrastructure/tauri-bridge";
+import { getHubUrl, isTauri, requestFactoryReset, setHubUrl } from "@/infrastructure/tauri-bridge";
 
 const IS_DESKTOP = import.meta.env.VITE_DESKTOP_DEPLOY === "true";
 
@@ -16,6 +16,7 @@ export function DesktopServerSettings() {
   const [password, setPassword] = useState("");
   const [saved, setSaved] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [resetBusy, setResetBusy] = useState(false);
 
   useEffect(() => {
     if (!IS_DESKTOP) return;
@@ -152,6 +153,41 @@ export function DesktopServerSettings() {
         واجهة العمل: {localApi()} (محلي دائماً)
       </p>
       {saved && <p className="mt-2 text-[11px] text-primary">{saved}</p>}
+
+      {isTauri() && (
+        <div className="mt-5 border-t border-border pt-4">
+          <div className="text-sm font-semibold text-foreground">إعادة الضبط المصنعي</div>
+          <p className="mt-1 text-xs leading-6 text-muted-foreground">
+            يحذف قاعدة البيانات المحلية وجلسة المركز عند إعادة التشغيل التالية. ملف ربط
+            الجهاز وأسرار التطبيق تبقى. إلغاء التثبيت العادي من ويندوز لا يحذف البيانات
+            إلا بالخيار الصريح MOTARD_WIPEDATA=1.
+          </p>
+          <button
+            type="button"
+            disabled={resetBusy}
+            onClick={() => {
+              void (async () => {
+                const ok = window.confirm(
+                  "سيتم حذف كل البيانات المحلية عند إعادة تشغيل البرنامج. لا يمكن التراجع. هل أنت متأكد؟",
+                );
+                if (!ok) return;
+                setResetBusy(true);
+                try {
+                  await requestFactoryReset();
+                  setSaved("طُلبت إعادة الضبط. أغلق البرنامج ثم افتحه من جديد.");
+                } catch {
+                  setSaved("تعذّر طلب إعادة الضبط المصنعي.");
+                } finally {
+                  setResetBusy(false);
+                }
+              })();
+            }}
+            className="mt-3 rounded-lg border border-destructive/40 px-3 py-2 text-xs text-destructive"
+          >
+            طلب إعادة ضبط مصنعي
+          </button>
+        </div>
+      )}
     </div>
   );
 }

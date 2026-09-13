@@ -41,32 +41,35 @@ fn main() {
     // Step 0 (L-6 / D4-3): refuse to boot unless this machine+user can decrypt
     // the device-binding blob. A copied/tampered install (different Windows user
     // or PC) cannot decrypt it and must NOT start the bundled stack.
-    if let Err(e) = motard_fabrics_erp::device_binding::ensure_device_binding() {
-        eprintln!("FATAL: device binding failed ({:?}) — refusing to start.", e);
-        let msg = match &e {
-            motard_fabrics_erp::device_binding::DeviceBindError::Tampered => {
-                "تعذّر التحقق من ربط هذا الجهاز بالتثبيت.\n\n\
-                 السبب الأكثر شيوعاً: تم نسخ مجلد البرنامج إلى جهاز أو حساب مستخدم مختلف \
-                 عن الجهاز الذي جرى التثبيت عليه أصلاً.\n\n\
-                 الحل: أعد تثبيت البرنامج على هذا الجهاز بحساب المستخدم الحالي، أو تواصل \
-                 مع الدعم الفني."
-                    .to_string()
-            }
-            motard_fabrics_erp::device_binding::DeviceBindError::Io(detail) => format!(
-                "تعذّر إنشاء أو قراءة ملف ربط الجهاز (device-binding.dat).\n\n\
-                 الخطأ: {}\n\n\
-                 تأكد من:\n\
-                 1) صلاحيات الكتابة في مجلد AppData\\Local\\motard-erp\n\
-                 2) أن برنامج الحماية (Antivirus) لا يمنع الكتابة",
-                detail
-            ),
-        };
-        motard_fabrics_erp::desktop_runtime::show_fatal_dialog(
-            "خطأ في ربط الجهاز — Motard ERP",
-            &msg,
-        );
-        std::process::exit(2);
-    }
+    let installation_id = match motard_fabrics_erp::device_binding::ensure_device_binding() {
+        Ok(id) => id,
+        Err(e) => {
+            eprintln!("FATAL: device binding failed ({:?}) — refusing to start.", e);
+            let msg = match &e {
+                motard_fabrics_erp::device_binding::DeviceBindError::Tampered => {
+                    "تعذّر التحقق من ربط هذا الجهاز بالتثبيت.\n\n\
+                     السبب الأكثر شيوعاً: تم نسخ مجلد البرنامج إلى جهاز أو حساب مستخدم مختلف \
+                     عن الجهاز الذي جرى التثبيت عليه أصلاً.\n\n\
+                     الحل: أعد تثبيت البرنامج على هذا الجهاز بحساب المستخدم الحالي، أو تواصل \
+                     مع الدعم الفني."
+                        .to_string()
+                }
+                motard_fabrics_erp::device_binding::DeviceBindError::Io(detail) => format!(
+                    "تعذّر إنشاء أو قراءة ملف ربط الجهاز (device-binding.dat).\n\n\
+                     الخطأ: {}\n\n\
+                     تأكد من:\n\
+                     1) صلاحيات الكتابة في مجلد AppData\\Local\\motard-erp\n\
+                     2) أن برنامج الحماية (Antivirus) لا يمنع الكتابة",
+                    detail
+                ),
+            };
+            motard_fabrics_erp::desktop_runtime::show_fatal_dialog(
+                "خطأ في ربط الجهاز — Motard ERP",
+                &msg,
+            );
+            std::process::exit(2);
+        }
+    };
 
     let app = match tauri::Builder::default()
         .plugin(tauri_plugin_autostart::init(
@@ -95,6 +98,7 @@ fn main() {
             archive_document_pdf,
             get_hub_url,
             set_hub_url,
+            request_factory_reset,
         ])
         .build(tauri::generate_context!())
     {
@@ -137,7 +141,10 @@ fn main() {
         }
     };
     let cfg = match BootConfig::for_app(resource_dir) {
-        Ok(c) => c,
+        Ok(mut c) => {
+            c.installation_id = installation_id;
+            c
+        }
         Err(e) => {
             eprintln!("FATAL: BootConfig::for_app failed: {}", e);
             motard_fabrics_erp::desktop_runtime::show_fatal_dialog(
@@ -333,6 +340,15 @@ fn get_hub_url() -> Result<String, String> {
 fn set_hub_url(url: String) -> Result<String, String> {
     let root = motard_fabrics_erp::app_data_dir()?;
     motard_fabrics_erp::desktop_runtime::write_hub_url(&root, &url)
+}
+
+/// Queue a factory reset: next boot deletes pgdata + db-meta.json + hub session.
+/// Does not wipe device-binding.dat or secrets.dat. MSI uninstall still preserves
+/// AppData unless MOTARD_WIPEDATA=1.
+#[tauri::command]
+fn request_factory_reset() -> Result<(), String> {
+    let root = motard_fabrics_erp::app_data_dir()?;
+    motard_fabrics_erp::desktop_runtime::request_factory_reset(&root).map_err(|e| e.to_string())
 }
 
 fn get_primary_mac() -> Result<String, String> {

@@ -2,6 +2,7 @@
 // `main` binary and standalone test/diagnostic binaries like `d3_probe`) live
 // here so each bin depends on the library instead of re-declaring `#[path]`
 // module hacks. D4-3's main.rs sidecar logic should pull from this crate too.
+pub mod db_meta;
 pub mod desktop_runtime;
 pub mod device_binding;
 pub mod document_archive;

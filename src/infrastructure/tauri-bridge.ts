@@ -130,6 +130,14 @@ export async function setHubUrl(url: string): Promise<string> {
   return ((await invoke("set_hub_url", { url })) as string) ?? "";
 }
 
+export async function requestFactoryReset(): Promise<void> {
+  if (!isTauri()) {
+    throw new Error("إعادة الضبط المصنعي متاحة في تطبيق سطح المكتب فقط");
+  }
+  const invoke = await getInvoke();
+  await invoke("request_factory_reset");
+}
+
 /** Archive a printed/saved document into the Desktop folder tree. */
 export async function archiveDocumentPdf(
   docType: ArchiveDocType,

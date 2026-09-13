@@ -25,6 +25,10 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::time::{Duration, Instant};
 
+use crate::db_meta::{
+    bundled_pg_major, bundled_schema_journal_idx, evaluate_existing_cluster, stamp_fresh_cluster,
+    ClusterDecision,
+};
 use crate::hidden_process::{HiddenChild, HiddenCommand};
 use crate::secret_store;
 
@@ -57,6 +61,8 @@ pub struct BootConfig {
     pub license_public_key: Option<String>,
     pub db_port: u16,
     pub backend_port: u16,
+    /// Stable install identity from DPAPI `device-binding.dat`. Empty is refused.
+    pub installation_id: String,
 }
 
 impl BootConfig {
@@ -82,6 +88,7 @@ impl BootConfig {
             license_public_key,
             db_port,
             backend_port: 8080,
+            installation_id: String::new(),
         })
     }
 }
@@ -217,15 +224,170 @@ pub fn no_window_command(program: impl AsRef<std::ffi::OsStr>) -> Command {
     cmd
 }
 
-// ── Step 1: ensure a usable PostgreSQL data directory ───────────────────────
-fn ensure_pgdata(resources_root: &Path, app_data_root: &Path) -> io::Result<PathBuf> {
-    let pgdata = app_data_root.join("pgdata");
+const BOOT_DEADLINE: Duration = Duration::from_secs(300);
+const FACTORY_RESET_FLAG: &str = "factory-reset.requested";
+
+fn check_boot_deadline(started: Instant) -> io::Result<()> {
+    if started.elapsed() > BOOT_DEADLINE {
+        return Err(io::Error::new(
+            io::ErrorKind::TimedOut,
+            "تجاوز إقلاع النظام المهلة القصوى (300 ثانية)",
+        ));
+    }
+    Ok(())
+}
+
+#[derive(Debug, PartialEq, Eq)]
+enum PidLock {
+    Stale { pid: u32 },
+    Live { pid: u32 },
+}
+
+fn classify_postmaster_pid(contents: &str, is_running: impl Fn(u32) -> bool) -> PidLock {
+    let pid = contents
+        .lines()
+        .next()
+        .unwrap_or("")
+        .trim()
+        .parse::<u32>()
+        .unwrap_or(0);
+    if pid == 0 {
+        return PidLock::Stale { pid: 0 };
+    }
+    if is_running(pid) {
+        PidLock::Live { pid }
+    } else {
+        PidLock::Stale { pid }
+    }
+}
+
+fn pid_is_running(pid: u32) -> bool {
+    if pid == 0 {
+        return false;
+    }
+    #[cfg(windows)]
+    {
+        use windows::Win32::Foundation::CloseHandle;
+        use windows::Win32::System::Threading::{
+            GetExitCodeProcess, OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION,
+        };
+        unsafe {
+            let Ok(handle) = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid) else {
+                return false;
+            };
+            let mut code = 0u32;
+            let queried = GetExitCodeProcess(handle, &mut code).is_ok();
+            let _ = CloseHandle(handle);
+            queried && code == 259 // STILL_ACTIVE
+        }
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = pid;
+        false
+    }
+}
+
+fn remove_stale_lock_files(pgdata: &Path) {
+    for stale in ["postmaster.pid", "postmaster.opts", "current_logfiles"] {
+        let _ = fs::remove_file(pgdata.join(stale));
+    }
+}
+
+/// P0-3: on reuse, a crash leaves postmaster.pid. Clear it if the PID is dead;
+/// if an orphan postgres is still alive, stop it via pg_ctl before we start.
+fn cleanup_stale_cluster_lock(resources_root: &Path, pgdata: &Path) -> io::Result<()> {
+    let pid_file = pgdata.join("postmaster.pid");
+    if !pid_file.exists() {
+        return Ok(());
+    }
+    let contents = fs::read_to_string(&pid_file).unwrap_or_default();
+    match classify_postmaster_pid(&contents, pid_is_running) {
+        PidLock::Stale { pid } => {
+            log(&format!("removing stale postmaster.pid (pid {pid} not running)"));
+            remove_stale_lock_files(pgdata);
+            Ok(())
+        }
+        PidLock::Live { pid } => {
+            log(&format!("orphan postgres pid {pid} still running — requesting stop"));
+            let _ = stop_postgres(resources_root, pgdata);
+            if pid_is_running(pid) {
+                return Err(io::Error::new(
+                    io::ErrorKind::AddrInUse,
+                    format!(
+                        "عملية PostgreSQL قديمة ما زالت تعمل (PID {pid}) وتشغل مجلد البيانات.\n\
+                         أغلق البرنامج من مدير المهام ثم أعد المحاولة."
+                    ),
+                ));
+            }
+            remove_stale_lock_files(pgdata);
+            Ok(())
+        }
+    }
+}
+
+fn apply_requested_factory_reset(cfg: &BootConfig) -> io::Result<()> {
+    let flag = cfg.app_data_root.join(FACTORY_RESET_FLAG);
+    if !flag.exists() {
+        return Ok(());
+    }
+    log("factory-reset requested — wiping local cluster (binding/secrets kept)");
+    let pgdata = cfg.app_data_root.join("pgdata");
     if pgdata.join("PG_VERSION").exists() {
-        log("pgdata already provisioned — reusing");
-        // Repair any missing empty subdirs left over from an install produced
-        // before the dir-creation fix (WiX strips empty dirs from the MSI).
-        ensure_pg_subdirs(&pgdata)?;
-        return Ok(pgdata);
+        let _ = stop_postgres(&cfg.resources_root, &pgdata);
+        let _ = cleanup_stale_cluster_lock(&cfg.resources_root, &pgdata);
+    }
+    if pgdata.exists() {
+        fs::remove_dir_all(&pgdata)?;
+    }
+    let _ = fs::remove_file(crate::db_meta::meta_path(&cfg.app_data_root));
+    let _ = fs::remove_file(cfg.app_data_root.join("hub-session.json"));
+    let _ = fs::remove_file(&flag);
+    Ok(())
+}
+
+pub fn request_factory_reset(app_data_root: &Path) -> io::Result<()> {
+    fs::create_dir_all(app_data_root)?;
+    fs::write(app_data_root.join(FACTORY_RESET_FLAG), b"1")
+}
+
+// ── Step 1: ensure a usable PostgreSQL data directory ───────────────────────
+fn ensure_pgdata(cfg: &BootConfig) -> io::Result<PathBuf> {
+    let resources_root = &cfg.resources_root;
+    let app_data_root = &cfg.app_data_root;
+    let pgdata = app_data_root.join("pgdata");
+    if cfg.installation_id.trim().is_empty() {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "هوية التثبيت فارغة — تعذّر تجهيز قاعدة البيانات",
+        ));
+    }
+    let pg_major = bundled_pg_major(resources_root).or_else(|_| {
+        if pgdata.join("PG_VERSION").exists() {
+            crate::db_meta::read_pg_major(&pgdata.join("PG_VERSION"))
+        } else {
+            Err(io::Error::new(
+                io::ErrorKind::NotFound,
+                "تعذّر قراءة إصدار PostgreSQL المرفق",
+            ))
+        }
+    })?;
+    let schema_idx = bundled_schema_journal_idx(&cfg.backend_dir);
+
+    match evaluate_existing_cluster(
+        app_data_root,
+        &pgdata,
+        &cfg.installation_id,
+        pg_major,
+        schema_idx,
+    )? {
+        ClusterDecision::Reuse => {
+            log("pgdata already provisioned — reusing after identity/pid checks");
+            ensure_pg_subdirs(&pgdata)?;
+            cleanup_stale_cluster_lock(resources_root, &pgdata)?;
+            return Ok(pgdata);
+        }
+        ClusterDecision::Fresh => {}
     }
 
     // Preferred path: ship a baked, already-migrated+seeded data dir.
@@ -247,6 +409,7 @@ fn ensure_pgdata(resources_root: &Path, app_data_root: &Path) -> io::Result<Path
         for stale in ["postmaster.pid", "postmaster.opts", "current_logfiles"] {
             let _ = fs::remove_file(pgdata.join(stale));
         }
+        stamp_fresh_cluster(app_data_root, &cfg.installation_id, pg_major, 0)?;
         return Ok(pgdata);
     }
 
@@ -275,6 +438,7 @@ fn ensure_pgdata(resources_root: &Path, app_data_root: &Path) -> io::Result<Path
             "initdb failed — see pgdata/pg.log",
         ));
     }
+    stamp_fresh_cluster(app_data_root, &cfg.installation_id, pg_major, 0)?;
     Ok(pgdata)
 }
 
@@ -459,7 +623,7 @@ fn start_postgres(
         .spawn()
         .and_then(|c| c.wait_success());
 
-    wait_tcp("127.0.0.1", db_port, Duration::from_secs(60));
+    wait_tcp("127.0.0.1", db_port, Duration::from_secs(60))?;
     log("postgres is accepting connections");
     Ok(())
 }
@@ -520,6 +684,22 @@ fn spawn_backend(cfg: &BootConfig, store: &secret_store::SecretStore) -> io::Res
             "HUB_SESSION_PATH",
             cfg.app_data_root
                 .join("hub-session.json")
+                .to_string_lossy()
+                .into_owned(),
+        )
+        .env(
+            "DESKTOP_DB_META_PATH",
+            crate::db_meta::meta_path(&cfg.app_data_root)
+                .to_string_lossy()
+                .into_owned(),
+        )
+        .env(
+            "DESKTOP_MIGRATIONS_FOLDER",
+            cfg.backend_dir
+                .join("src")
+                .join("infrastructure")
+                .join("orm")
+                .join("migrations")
                 .to_string_lossy()
                 .into_owned(),
         )
@@ -588,6 +768,7 @@ pub fn boot_desktop_stack_with_progress(
     cfg: &BootConfig,
     progress: &dyn Fn(&str),
 ) -> io::Result<DesktopStack> {
+    let boot_started = Instant::now();
     // Never fail to boot merely because something else already holds the
     // default DB port (a system-installed PostgreSQL service, an orphaned
     // instance of this app) — pick a free one instead. See R-04.
@@ -600,14 +781,13 @@ pub fn boot_desktop_stack_with_progress(
         ));
         cfg.db_port = resolved_db_port;
     }
-    let cfg = &cfg;
 
     progress("فحص ملفات التشغيل…");
     // Step 0: pre-flight — verify every runtime-critical bundled file exists on
     // disk. If an antivirus quarantined one of them post-install (a documented
     // pattern for unsigned postgres binaries), the user gets a clear Arabic
     // message instead of a silent crash on the first pg_ctl call.
-    if let Err(missing) = preflight_check(cfg) {
+    if let Err(missing) = preflight_check(&cfg) {
         let list = missing.join("\n  • ");
         let msg = format!(
             "تعذّر تشغيل النظام: بعض ملفات التشغيل الأساسية مفقودة من مجلد التثبيت.\n\n  • {}\n\n\
@@ -621,9 +801,20 @@ pub fn boot_desktop_stack_with_progress(
             format!("pre-flight: missing bundled files: {}", missing.join(", ")),
         ));
     }
+    check_boot_deadline(boot_started)?;
 
     progress("تجهيز قاعدة البيانات المحلية…");
-    let pgdata = match ensure_pgdata(&cfg.resources_root, &cfg.app_data_root) {        Ok(p) => p,
+    if let Err(e) = apply_requested_factory_reset(&cfg) {
+        let msg = format!(
+            "تعذّر تنفيذ إعادة الضبط المصنعي لمجلد البيانات المحلية.\n\n\
+             الخطأ: {}\n\n\
+             أغلق أي نسخة من البرنامج ثم أعد المحاولة.",
+            e
+        );
+        show_fatal_dialog("خطأ في إعادة الضبط المصنعي — Motard ERP", &msg);
+        return Err(e);
+    }
+    let pgdata = match ensure_pgdata(&cfg) {        Ok(p) => p,
         Err(e) => {
             let msg = format!(
                 "تعذّر تجهيز مجلد قاعدة البيانات المحلية (pgdata).\n\n\
@@ -640,6 +831,16 @@ pub fn boot_desktop_stack_with_progress(
             return Err(e);
         }
     };
+    check_boot_deadline(boot_started)?;
+    // P2-6: re-check immediately before bind to shrink the TOCTOU window.
+    let resolved_again = find_free_db_port(cfg.db_port);
+    if resolved_again != cfg.db_port {
+        log(&format!(
+            "db port {} became busy before start — falling back to {}",
+            cfg.db_port, resolved_again
+        ));
+        cfg.db_port = resolved_again;
+    }
     // Keep postgresql.conf's port in lock-step with the port we pass to
     // postgres below, so pg_ctl -w's readiness check targets the real port.
     if let Err(e) = sync_pg_conf_port(&pgdata, cfg.db_port) {
@@ -674,6 +875,7 @@ pub fn boot_desktop_stack_with_progress(
         show_fatal_dialog("خطأ في تشغيل قاعدة البيانات — Motard ERP", &msg);
         return Err(e);
     }
+    check_boot_deadline(boot_started)?;
 
     let store = match secret_store::load_or_generate() {
         Ok(s) => s,
@@ -702,7 +904,7 @@ pub fn boot_desktop_stack_with_progress(
         }
     };
     progress("تشغيل محرّك النظام…");
-    let backend = match spawn_backend(cfg, &store) {
+    let backend = match spawn_backend(&cfg, &store) {
         Ok(b) => {
             // node.exe still opens its own console despite CREATE_NO_WINDOW +
             // SW_HIDE (verified live, unlike postgres/pg_ctl where those flags
@@ -736,7 +938,7 @@ pub fn boot_desktop_stack_with_progress(
     // backend first, Step 8 waits for SSR after, so the first SSR paint can
     // reach a live API exactly as before.
     progress("تشغيل واجهة العرض…");
-    let ssr = match spawn_ssr(cfg) {
+    let ssr = match spawn_ssr(&cfg) {
         Ok(s) => {
             crate::hidden_process::hide_stray_console_async(s.id());
             s
@@ -808,6 +1010,7 @@ pub fn boot_desktop_stack_with_progress(
             "SSR frontend did not become healthy (http://127.0.0.1:4173/)",
         ));
     }
+    check_boot_deadline(boot_started)?;
     log("SSR frontend is UP");
 
     Ok(DesktopStack {
@@ -873,15 +1076,21 @@ fn find_free_db_port(preferred: u16) -> u16 {
 }
 
 // ── Small network helpers ───────────────────────────────────────────────────
-fn wait_tcp(host: &str, port: u16, timeout: Duration) {
-    let addr: std::net::SocketAddr = format!("{}:{}", host, port).parse().unwrap();
+fn wait_tcp(host: &str, port: u16, timeout: Duration) -> io::Result<()> {
+    let addr: std::net::SocketAddr = format!("{}:{}", host, port)
+        .parse()
+        .map_err(|e| io::Error::new(io::ErrorKind::InvalidInput, e))?;
     let start = Instant::now();
     while start.elapsed() < timeout {
         if std::net::TcpStream::connect_timeout(&addr, Duration::from_millis(500)).is_ok() {
-            return;
+            return Ok(());
         }
         std::thread::sleep(Duration::from_millis(250));
     }
+    Err(io::Error::new(
+        io::ErrorKind::TimedOut,
+        format!("انتهت المهلة بانتظار المنفذ {host}:{port} ({timeout:?})"),
+    ))
 }
 
 fn http_get_ok(host: &str, port: u16, path: &str) -> bool {
@@ -983,5 +1192,41 @@ mod hub_url_tests {
         );
         assert!(write_hub_url(&dir, "not-a-url").is_err());
         let _ = fs::remove_dir_all(&dir);
+    }
+}
+
+#[cfg(test)]
+mod boot_lifecycle_tests {
+    use super::*;
+
+    #[test]
+    fn classify_stale_pid_when_process_dead() {
+        let lock = classify_postmaster_pid("4242\n/pgdata\n", |_| false);
+        assert_eq!(lock, PidLock::Stale { pid: 4242 });
+    }
+
+    #[test]
+    fn classify_live_pid_when_process_running() {
+        let lock = classify_postmaster_pid("4242\n/pgdata\n", |_| true);
+        assert_eq!(lock, PidLock::Live { pid: 4242 });
+    }
+
+    #[test]
+    fn classify_garbage_pid_as_stale() {
+        let lock = classify_postmaster_pid("not-a-pid", |_| true);
+        assert_eq!(lock, PidLock::Stale { pid: 0 });
+    }
+
+    #[test]
+    fn wait_tcp_times_out_with_error() {
+        let err = wait_tcp("127.0.0.1", 1, Duration::from_millis(200)).unwrap_err();
+        assert_eq!(err.kind(), io::ErrorKind::TimedOut);
+        assert!(err.to_string().contains("انتهت المهلة"));
+    }
+
+    #[test]
+    fn pid_is_running_sees_current_process() {
+        assert!(pid_is_running(std::process::id()));
+        assert!(!pid_is_running(0));
     }
 }
