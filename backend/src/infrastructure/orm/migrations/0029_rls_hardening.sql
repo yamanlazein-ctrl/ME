@@ -39,6 +39,13 @@ END $$;
 
 -- Fix policies to use missing_ok (current_setting(..., true)) so unset GUC returns NULL instead of error
 -- Recreate tenant_isolation policies for all tenant tables
+--
+-- NULLIF guard (must match enable-rls.sql): `current_setting(..., true)` returns
+-- NULL only while the GUC was never touched in the session. After
+-- `set_config(guc, NULL)` or `RESET`, PG 17 returns '' (empty string), and
+-- ''::uuid raises `invalid input syntax for type uuid`. Wrapping the value in
+-- NULLIF(..., '') collapses both "unset" states to NULL, so an unscoped
+-- connection matches no rows (safe isolation) instead of erroring out.
 DO $$
 DECLARE
   t text;
@@ -47,7 +54,7 @@ BEGIN
   LOOP
     BEGIN
       EXECUTE format('DROP POLICY IF EXISTS tenant_isolation ON %I', t);
-      EXECUTE format('CREATE POLICY tenant_isolation ON %I FOR ALL USING (tenant_id = current_setting(''app.current_tenant_id'', true)::uuid)', t);
+      EXECUTE format('CREATE POLICY tenant_isolation ON %I FOR ALL USING (tenant_id = NULLIF(current_setting(''app.current_tenant_id'', true), '''')::uuid)', t);
     EXCEPTION WHEN OTHERS THEN NULL;
     END;
   END LOOP;

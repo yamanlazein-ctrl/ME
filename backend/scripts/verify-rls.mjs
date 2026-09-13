@@ -44,12 +44,43 @@ if (!url) {
   process.exit(1);
 }
 
-/** Internal bookkeeping tables intentionally NOT RLS-managed (D-006). */
-const EXEMPT = new Set(["schema_migrations", "__drizzle_migrations"]);
+/**
+ * Internal bookkeeping tables intentionally NOT RLS-managed (D-006).
+ *
+ * `revoked_tokens` (P0-004) is platform-level security bookkeeping that must be
+ * readable *before* a tenant context exists — the auth middleware checks every
+ * bearer token, including on routes that resolve the tenant from the token
+ * itself. A tenant-scoped policy would hide the row on those checkouts and the
+ * revocation would silently fail. See revoked-token.table.ts.
+ */
+const EXEMPT = new Set(["schema_migrations", "__drizzle_migrations", "revoked_tokens"]);
 
-/** Canonical policy family → expected table count (E-2 verified state). */
+/**
+ * Canonical policy family → expected table count.
+ *
+ * These counts are the VERIFIED runtime state produced by applying
+ * `src/infrastructure/orm/rls/enable-rls.sql` to a database that has run all
+ * migrations, and were re-measured after the six sync tables
+ * (sync_devices / sync_outbox / sync_inbox / sync_resource_claims /
+ * sync_state / document_number_blocks) were added to the tenant-scoped
+ * family:
+ *
+ *   tenant_isolation   = 37 array entries - 1 (party_balances is dropped by
+ *                        0038_drop_party_balances) = 36
+ *                        (36 = 34 + sync_tombstones + sync_conflicts, added to
+ *                        the canonical family by 20260914_sync_rls_canonical_policies)
+ *   platform_or_tenant = 8
+ *   tenant_directory   = 1   (tenants)
+ *   platform_only      = 1   (system_admins)
+ *   total              = 46 RLS-enabled business tables, each with exactly
+ *                        one canonical policy.
+ *
+ * Proof command (repeat whenever the policy layer changes):
+ *   select policyname, count(*) from pg_policies
+ *   where schemaname='public' group by 1;
+ */
 const EXPECTED_POLICIES = {
-  tenant_isolation: 29,
+  tenant_isolation: 36,
   platform_or_tenant: 8,
   tenant_directory: 1,
   platform_only: 1,

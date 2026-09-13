@@ -1,32 +1,41 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  wix-cleanup.wxs — INTENTIONAL uninstall behavior (documented, do not "fix").
+  wix-cleanup.wxs — OPT-IN data wipe on uninstall.
 
-  On a TRUE uninstall (REMOVE="ALL", not an upgrade) this deletes the entire
-  per-user data root:
+  On a TRUE uninstall (REMOVE="ALL", not an upgrade) the installer deletes the
+  entire per-user data root:
 
       %LOCALAPPDATA%\motard-erp\   (live pgdata + logs + secrets.dat + device-binding.dat)
 
-  Why: test/dev databases (erp_e2e*, erp_wizard_test*, …) and stale logs otherwise
-  survive uninstalls and get silently reused by the next install, causing
-  confusing "old build" test cycles. For the current TEST phase a full wipe is
-  the required behavior.
+  This is DESTRUCTIVE and is therefore GATED behind an explicit opt-in public
+  property. Default behaviour — property absent — is to PRESERVE the data.
 
-  ⚠️ FUTURE REAL-CUSTOMER WARNING: for a production customer this same step
-  would DESTROY their live database. Before shipping to a real customer, either
-  gate this behind an opt-in (e.g. a checkbox "delete my data", or a
-  MOTARD_WIPEDATA=1 property) or remove it and ship a separate "factory reset"
-  tool. See desktop/BUILD-WINDOWS.md § "Uninstall data policy".
+      msiexec /x motard-erp.msi MOTARD_WIPEDATA=1     -> wipe
+      msiexec /x motard-erp.msi                       -> preserve (default)
+
+  Why the gate exists: test/dev databases (erp_e2e*, erp_wizard_test*, …) and
+  stale logs would otherwise survive uninstalls and get silently reused by the
+  next install, causing confusing "old build" test cycles. During the TEST phase
+  the harness must therefore pass MOTARD_WIPEDATA=1 explicitly. For a production
+  customer an unconditional wipe would DESTROY their live database — hence the
+  opt-in, and the separate "factory reset" path documented in
+  desktop/BUILD-WINDOWS.md § "Uninstall data policy".
 
   Safety properties of this action:
   - Runs only on true uninstall (condition REMOVE="ALL" AND NOT UPGRADINGPRODUCTCODE),
     never on install / repair / major upgrade.
+  - Additionally requires MOTARD_WIPEDATA="1" — absent by default, so a plain
+    uninstall never touches user data.
   - Impersonate="yes": runs as the installing user, so %LOCALAPPDATA% resolves
     to THAT user's folder even when uninstall runs elevated.
   - Return="ignore": a locked file can never fail the uninstall itself.
 -->
 <Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
   <Fragment>
+    <!-- Public (uppercase) so it can be set from the command line.
+         Secure="yes" so the value is carried into the execute sequence. -->
+    <Property Id="MOTARD_WIPEDATA" Secure="yes" />
+
     <CustomAction Id="CleanupMotardAppData"
                   Directory="TARGETDIR"
                   ExeCommand='cmd /c rmdir /s /q "%LOCALAPPDATA%\motard-erp"'
@@ -34,7 +43,7 @@
                   Impersonate="yes"
                   Return="ignore" />
     <InstallExecuteSequence>
-      <Custom Action="CleanupMotardAppData" Before="RemoveFiles">REMOVE="ALL" AND NOT UPGRADINGPRODUCTCODE</Custom>
+      <Custom Action="CleanupMotardAppData" Before="RemoveFiles">REMOVE="ALL" AND NOT UPGRADINGPRODUCTCODE AND MOTARD_WIPEDATA="1"</Custom>
     </InstallExecuteSequence>
   </Fragment>
 </Wix>

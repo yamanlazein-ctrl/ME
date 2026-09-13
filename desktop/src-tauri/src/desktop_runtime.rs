@@ -509,8 +509,26 @@ fn spawn_backend(cfg: &BootConfig, store: &secret_store::SecretStore) -> io::Res
         .env("DATABASE_URL", &database_url)
         .env("JWT_SECRET", &store.jwt_secret)
         .env("APP_MASTER_KEY", &store.app_master_key)
+        // Hub pairing: UI stays on 127.0.0.1:8080; CENTRAL_SYNC_URL is the
+        // outbox target. Paths let the Node process persist hub.json / session
+        // without copying JWT_SECRET between machines.
+        .env(
+            "HUB_CONFIG_PATH",
+            cfg.app_data_root.join("hub.json").to_string_lossy().into_owned(),
+        )
+        .env(
+            "HUB_SESSION_PATH",
+            cfg.app_data_root
+                .join("hub-session.json")
+                .to_string_lossy()
+                .into_owned(),
+        )
         // Defense: never let a stray private key reach the desktop client.
         .env_remove("LICENSE_SIGNING_KEY");
+
+    if let Some(url) = read_hub_url(&cfg.app_data_root) {
+        cmd.env("CENTRAL_SYNC_URL", url);
+    }
 
     if let Some(pk) = &cfg.license_public_key {
         cmd.env("LICENSE_SIGNING_PUBLIC_KEY", pk);
@@ -907,4 +925,63 @@ fn wait_for<F: Fn() -> bool>(pred: F, timeout: Duration) -> bool {
 
 fn log(msg: &str) {
     eprintln!("[desktop-runtime] {}", msg);
+}
+
+pub fn hub_json_path(app_data_root: &Path) -> PathBuf {
+    app_data_root.join("hub.json")
+}
+
+pub fn read_hub_url(app_data_root: &Path) -> Option<String> {
+    let raw = fs::read_to_string(hub_json_path(app_data_root)).ok()?;
+    let parsed: serde_json::Value = serde_json::from_str(&raw).ok()?;
+    let url = parsed.get("url")?.as_str()?.trim();
+    if url.is_empty() {
+        return None;
+    }
+    let trimmed = url.trim_end_matches('/').to_string();
+    if !(trimmed.starts_with("http://") || trimmed.starts_with("https://")) {
+        return None;
+    }
+    Some(trimmed)
+}
+
+pub fn write_hub_url(app_data_root: &Path, url: &str) -> Result<String, String> {
+    fs::create_dir_all(app_data_root).map_err(|e| e.to_string())?;
+    let trimmed = url.trim().trim_end_matches('/');
+    let path = hub_json_path(app_data_root);
+    if trimmed.is_empty() {
+        let _ = fs::remove_file(&path);
+        return Ok(String::new());
+    }
+    if !(trimmed.starts_with("http://") || trimmed.starts_with("https://")) {
+        return Err("رابط المركز يجب أن يبدأ بـ http:// أو https://".into());
+    }
+    let body = serde_json::json!({ "url": trimmed });
+    fs::write(&path, body.to_string()).map_err(|e| e.to_string())?;
+    Ok(trimmed.to_string())
+}
+
+#[cfg(test)]
+mod hub_url_tests {
+    use super::*;
+
+    #[test]
+    fn write_then_read_hub_url_and_backend_would_see_it() {
+        let dir = std::env::temp_dir().join(format!(
+            "motard-erp-hub-test-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let _ = fs::remove_dir_all(&dir);
+        let written = write_hub_url(&dir, "https://erp.example.com/").unwrap();
+        assert_eq!(written, "https://erp.example.com");
+        assert_eq!(
+            read_hub_url(&dir).as_deref(),
+            Some("https://erp.example.com")
+        );
+        assert!(write_hub_url(&dir, "not-a-url").is_err());
+        let _ = fs::remove_dir_all(&dir);
+    }
 }

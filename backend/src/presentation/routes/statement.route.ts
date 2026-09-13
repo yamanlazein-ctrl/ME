@@ -6,7 +6,17 @@ import {
 } from "../../infrastructure/http/middleware/validate.middleware.js";
 import type { IStatementRepository } from "../../application/ports/IStatementRepository.js";
 import type { IPartyRepository } from "../../application/ports/IPartyRepository.js";
+import type { ILedgerRepository } from "../../application/ports/ILedgerRepository.js";
+import type { ISyncOutboxRepository } from "../../application/ports/ISyncOutboxRepository.js";
 import type { TenantContext } from "../../domain/types/index.js";
+import { logger } from "../../infrastructure/config/logger.js";
+import { withTenantTx } from "../../infrastructure/orm/drizzle.js";
+import {
+  enqueueSettlement,
+  isSyncEnqueueEnabled,
+  opIdFromRequest,
+  syncDeviceIdFromRequest,
+} from "../../application/use-cases/sync/syncEnqueue.js";
 import { statementQuerySchema, settlePartySchema } from "./statement.schema.js";
 import { nextDocumentNumber } from "../../infrastructure/utils/documentNumbers.js";
 
@@ -14,9 +24,11 @@ export function registerStatementRoutes(
   router: Router,
   statementRepo: IStatementRepository,
   partyRepo: IPartyRepository,
+  ledgerRepo: ILedgerRepository,
   auth: RequestHandler,
   writeGuard: RequestHandler,
   readGuard: RequestHandler,
+  syncOutboxRepo?: ISyncOutboxRepository,
 ) {
   const ctx = (req: Request): TenantContext => req.tenantContext!;
 
@@ -62,6 +74,10 @@ export function registerStatementRoutes(
     );
 
     // POST /api/customers/:id/statement/settle  ·  POST /api/suppliers/:id/statement/settle
+    // SYNC-13: settlements post settlement ledger rows — they must reach the
+    // hub, serialized per party (the hub replays settle(), which recomputes
+    // the amount from live balance; a concurrent loser 409s and its local
+    // settlement is reversed by reference). Same-transaction enqueue (F-07).
     router.post(
       `${base}/:id/statement/settle`,
       auth,
@@ -82,16 +98,60 @@ export function registerStatementRoutes(
           }
 
           const referenceNumber = await nextDocumentNumber("settlement", c.tenantId);
-          const entry = await statementRepo.settle(
-            req.params.id as string,
-            {
-              date: b.date,
-              currency: b.currency,
-              notesInternal: b.notesInternal,
-              referenceNumber,
-            },
-            c,
-          );
+          const settleInput = {
+            date: b.date,
+            currency: b.currency,
+            notesInternal: b.notesInternal,
+            referenceNumber,
+          };
+          const syncEnabled = Boolean(syncOutboxRepo && isSyncEnqueueEnabled());
+          const runSettle = async () => {
+            const entry = await statementRepo.settle(req.params.id as string, settleInput, c);
+            if (syncOutboxRepo && isSyncEnqueueEnabled()) {
+              // Frozen legs: capture the exact inserted rows so the hub
+              // replays them id-keyed instead of recomputing from its own
+              // (possibly different) balance.
+              let frozen: Array<Record<string, unknown>> = [];
+              if (entry.referenceType && entry.referenceId) {
+                try {
+                  const legs = await ledgerRepo.list(
+                    {
+                      referenceType: entry.referenceType,
+                      referenceId: entry.referenceId,
+                      limit: 10,
+                    },
+                    c,
+                  );
+                  frozen = (legs?.data ?? []) as unknown as Array<Record<string, unknown>>;
+                } catch (err) {
+                  logger.warn({ err }, "settlement frozen-leg capture failed; hub will recompute");
+                }
+              }
+              await enqueueSettlement(
+                syncOutboxRepo,
+                { id: req.params.id as string, kind },
+                settleInput as Record<string, unknown>,
+                entry.referenceType && entry.referenceId
+                  ? { referenceType: entry.referenceType, referenceId: entry.referenceId }
+                  : null,
+                c,
+                syncDeviceIdFromRequest(req),
+                opIdFromRequest(req),
+                frozen,
+              );
+            }
+            return entry;
+          };
+          let entry: Awaited<ReturnType<typeof statementRepo.settle>>;
+          try {
+            entry = syncEnabled ? await withTenantTx(c.tenantId, runSettle) : await runSettle();
+          } catch (txErr) {
+            logger.error({ err: txErr }, "transaction rolled back — settlement dropped (F-07)");
+            return res.status(500).json({
+              code: "SYNC_OUTBOX_FAILED",
+              message: "تعذّر حفظ التسوية مع وحدة المزامنة — لم يُحفظ أي تغيير. أعد المحاولة.",
+            });
+          }
           res.status(201).json({ entry, referenceNumber, kind });
         } catch (err) {
           const message = (err as Error).message;

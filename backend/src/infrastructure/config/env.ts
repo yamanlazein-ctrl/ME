@@ -100,9 +100,10 @@ if (
 if (config.NODE_ENV === "production" && config.CORS_ORIGIN.trim() === "*") {
   throw new Error("CORS_ORIGIN=* is not allowed in production — set an explicit allowlist.");
 }
-// DESKTOP_DEPLOY runs without Redis: the token denylist degrades to a no-op
-// (see TokenDenylist.ts — `redis` is null and every method returns safely).
-// Documented as an accepted trade-off for a single self-contained machine.
+// Server deployments require Redis for the denylist fast path. DESKTOP_DEPLOY is
+// exempt because it ships its own PostgreSQL and no Redis — since P0-004 the
+// denylist is DB-backed (`revoked_tokens`), so revocation is enforced there too
+// and Redis is an optimisation, never a requirement (see TokenDenylist.ts).
 if (
   config.NODE_ENV === "production" &&
   !config.DESKTOP_DEPLOY &&

@@ -169,13 +169,22 @@ export async function updateInvoiceUseCase(
   id: string,
   input: UpdateInvoiceInput,
   ctx: TenantContext,
+  expectedVersion: number,
 ): Promise<Result<InvoiceData> & { code?: string }> {
   if (!input.lines?.length) return { ok: false, error: "يجب إضافة بند واحد على الأقل", code: "VALIDATION" };
   try {
     // Fetch the pre-edit state first so the audit trail can show exactly
     // what changed (invoice-tracking feature).
     const before = await repo.findById(id, ctx);
-    const invoice = await repo.update(id, input, ctx);
+    // P0-001: optimistic concurrency check — expectedVersion is REQUIRED
+    if (before && before.version !== expectedVersion) {
+      return {
+        ok: false,
+        error: `تعارض في الإصدار: الإصدار الحالي ${before.version}، والإصدار المتوقع ${expectedVersion}. يرجى التحديث والمحاولة مرة أخرى.`,
+        code: "STALE_VERSION",
+      };
+    }
+    const invoice = await repo.update(id, input, ctx, expectedVersion);
     audit
       .create({
         tenantId: ctx.tenantId,
@@ -209,6 +218,8 @@ export async function updateInvoiceUseCase(
     if (code === "NOT_FOUND") return { ok: false, error: "الفاتورة غير موجودة.", code };
     if (code === "ALREADY_CANCELLED")
       return { ok: false, error: "لا يمكن تعديل فاتورة ملغاة.", code };
+    if (code === "STALE_VERSION")
+      return { ok: false, error: "تعارض في الإصدار: تم تعديل الفاتورة من قبل جهاز آخر. يرجى التحديث والمحاولة مرة أخرى.", code };
     return { ok: false, error: invoiceErrorMessage(e), code };
   }
 }
@@ -219,9 +230,19 @@ export async function cancelInvoiceUseCase(
   id: string,
   cancelledBy: string,
   ctx: TenantContext,
+  expectedVersion: number,
 ): Promise<Result<InvoiceData> & { code?: string }> {
   try {
-    const invoice = await repo.cancel(id, cancelledBy, ctx);
+    // P0-001: optimistic concurrency check — fetch current state first
+    const current = await repo.findById(id, ctx);
+    if (current && current.version !== expectedVersion) {
+      return {
+        ok: false,
+        error: `تعارض في الإصدار: الإصدار الحالي ${current.version}، والإصدار المتوقع ${expectedVersion}. يرجى التحديث والمحاولة مرة أخرى.`,
+        code: "STALE_VERSION",
+      };
+    }
+    const invoice = await repo.cancel(id, cancelledBy, ctx, expectedVersion);
     audit
       .create({
         tenantId: ctx.tenantId,
@@ -250,6 +271,9 @@ export async function cancelInvoiceUseCase(
     if (code === "NOT_FOUND") return { ok: false, error: "الفاتورة غير موجودة.", code };
     if (code === "INVALID_STATE" || code === "ALREADY_CANCELLED") {
       return { ok: false, error: "لا يمكن إلغاء هذه الفاتورة في حالتها الحالية.", code };
+    }
+    if (code === "STALE_VERSION") {
+      return { ok: false, error: "تعارض في الإصدار: تم تعديل الفاتورة من قبل جهاز آخر. يرجى التحديث والمحاولة مرة أخرى.", code };
     }
     return { ok: false, error: "تعذّر إلغاء الفاتورة بسبب خطأ داخلي. أعد المحاولة.", code };
   }

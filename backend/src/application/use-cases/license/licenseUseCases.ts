@@ -22,14 +22,20 @@ import { config } from "../../../infrastructure/config/env.js";
 type Result<T> = { ok: true; data?: T } | { ok: false; error: string };
 
 /**
- * License actions that need token denylisting. The interface accepts
- * ttlMs (milliseconds) for token blacklisting. RedisTokenDenylist uses
- * ttlSeconds internally, we adapt.
+ * License actions that need token denylisting.
+ *
+ * The denylist contract is **seconds**: `RedisTokenDenylist` calls `setex`
+ * (which takes seconds) and `DbTokenDenylist` stores an absolute
+ * `expires_at`. These call sites previously passed milliseconds, so the
+ * intended 30-day revocation lasted ~82 years on the Redis path.
  */
 type TokenDenylist = {
   has: (jti: string) => Promise<boolean>;
-  add: (jti: string, ttlMs: number) => Promise<void>;
+  add: (jti: string, ttlSeconds: number) => Promise<void>;
 };
+
+/** How long a deactivated licence's offline token stays revoked: 30 days. */
+const LICENSE_REVOCATION_TTL_SECONDS = 30 * 24 * 60 * 60;
 
 const activateInput = z.object({
   key: z.string().min(1),
@@ -165,7 +171,7 @@ export async function deactivateLicenseUseCase(
     // rejected by the enforcement guard immediately.
     const jtiRow = await secretsRepo.get(ctx.tenantId as UUID, "license.token.jti");
     if (jtiRow) {
-      await tokenDenylist.add(String(jtiRow), 30 * 24 * 60 * 60 * 1000);
+      await tokenDenylist.add(String(jtiRow), LICENSE_REVOCATION_TTL_SECONDS);
     }
     return { ok: true, data: true };
   } catch (e) {
@@ -206,7 +212,7 @@ export async function revokeDeviceUseCase(
     // R11: denylist the offline token jti on device revoke too.
     const jtiRow = await secretsRepo.get(ctx.tenantId as UUID, "license.token.jti");
     if (jtiRow) {
-      await tokenDenylist.add(String(jtiRow), 30 * 24 * 60 * 60 * 1000);
+      await tokenDenylist.add(String(jtiRow), LICENSE_REVOCATION_TTL_SECONDS);
     }
     return { ok: true, data: true };
   } catch (e) {

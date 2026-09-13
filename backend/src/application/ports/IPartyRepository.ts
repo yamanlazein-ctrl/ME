@@ -42,6 +42,6 @@ export interface IPartyRepository {
   findByCode(code: string, ctx: TenantContext): Promise<PartyData | null>;
   list(filter: PartyFilter, ctx: TenantContext): Promise<PaginatedResult<PartyData>>;
   create(data: CreatePartyData, ctx: TenantContext): Promise<PartyData>;
-  update(id: string, data: Partial<CreatePartyData>, ctx: TenantContext): Promise<PartyData>;
-  cancel(id: string, cancelledBy: string, ctx: TenantContext): Promise<PartyData>;
+  update(id: string, data: Partial<CreatePartyData>, ctx: TenantContext, expectedVersion: number): Promise<PartyData>;
+  cancel(id: string, cancelledBy: string, ctx: TenantContext, expectedVersion: number): Promise<PartyData>;
 }

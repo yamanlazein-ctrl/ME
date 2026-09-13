@@ -1,10 +1,11 @@
-import { and, asc, eq, gt } from "drizzle-orm";
+import { and, asc, eq, gt, inArray, isNull, ne, or, sql } from "drizzle-orm";
 import type { DB } from "../orm/drizzle.js";
 import { runWithTenantContext } from "../orm/tenant-context.js";
 import type {
   ISyncInboxRepository,
   ReceiveSyncUnitInput,
   SyncInboxRow,
+  SyncInboxStatus,
 } from "../../application/ports/ISyncInboxRepository.js";
 import { syncInbox } from "../orm/schemas/sync-inbox.table.js";
 
@@ -22,6 +23,10 @@ function mapRow(row: typeof syncInbox.$inferSelect): SyncInboxRow {
     rejectReason: row.rejectReason ?? null,
     conflictOpId: row.conflictOpId ?? null,
     conflictDetail: (row.conflictDetail as Record<string, unknown> | null) ?? null,
+    materializeError: (row.materializeError as Record<string, unknown> | null) ?? null,
+    applyAttempts: row.applyAttempts ?? 0,
+    lastAttemptAt: row.lastAttemptAt ?? null,
+    receivedSeq: Number(row.receivedSeq),
     receivedAt: row.receivedAt,
     appliedAt: row.appliedAt,
   };
@@ -103,33 +108,52 @@ export class PostgresSyncInboxRepository implements ISyncInboxRepository {
     });
   }
 
+  /**
+   * Cursor is `received_seq` (monotonic), not `received_at`.
+   *
+   * Two loss modes are closed here:
+   *  1. `received_at` is transaction-start time, so concurrent inserts share it.
+   *     A strict `>` against a timestamp cursor skips every row that ties with
+   *     the cursor, permanently.
+   *  2. A unit received before the cursor but applied after it was previously
+   *     unreachable, because the cursor had already moved past its receive time.
+   *
+   * The excluded device is filtered IN SQL: post-filtering after the LIMIT let
+   * the caller's own units fill the entire window, so a busy device could get
+   * zero rows back forever and never advance its cursor.
+   */
   async listAppliedSince(
     tenantId: string,
-    after: Date | null,
+    afterSeq: number | null,
     opts?: { excludeSyncDeviceId?: string | null; limit?: number },
   ) {
     return runWithTenantContext({ tenantId }, async () => {
-      const limit = opts?.limit ?? 50;
+      const limit = Math.min(Math.max(opts?.limit ?? 50, 1), 100);
       const conditions = [
         eq(syncInbox.tenantId, tenantId),
         eq(syncInbox.status, "applied"),
       ];
-      if (after) {
-        conditions.push(gt(syncInbox.receivedAt, after));
+      if (afterSeq !== null && afterSeq !== undefined) {
+        conditions.push(gt(syncInbox.receivedSeq, afterSeq));
+      }
+      if (opts?.excludeSyncDeviceId) {
+        // Keep units whose device is unknown (NULL) — only exclude our own.
+        conditions.push(
+          or(
+            isNull(syncInbox.syncDeviceId),
+            ne(syncInbox.syncDeviceId, opts.excludeSyncDeviceId),
+          )!,
+        );
       }
 
       const rows = await this.db
         .select()
         .from(syncInbox)
         .where(and(...conditions))
-        .orderBy(asc(syncInbox.receivedAt))
-        .limit(Math.min(Math.max(limit, 1), 100) * 2);
+        .orderBy(asc(syncInbox.receivedSeq))
+        .limit(limit);
 
-      let filtered = rows.map(mapRow);
-      if (opts?.excludeSyncDeviceId) {
-        filtered = filtered.filter((r) => r.syncDeviceId !== opts.excludeSyncDeviceId);
-      }
-      return filtered.slice(0, Math.min(Math.max(limit, 1), 100));
+      return rows.map(mapRow);
     });
   }
 
@@ -137,10 +161,63 @@ export class PostgresSyncInboxRepository implements ISyncInboxRepository {
     return runWithTenantContext({ tenantId }, async () => {
       const [row] = await this.db
         .update(syncInbox)
-        .set({ conflictDetail: detail })
+        .set({
+          materializeError: detail,
+          applyAttempts: sql`${syncInbox.applyAttempts} + 1`,
+          lastAttemptAt: new Date(),
+        })
         .where(and(eq(syncInbox.tenantId, tenantId), eq(syncInbox.opId, opId)))
         .returning();
       return row ? mapRow(row) : null;
+    });
+  }
+
+  async markDead(tenantId: string, opId: string, reason: string) {
+    return runWithTenantContext({ tenantId }, async () => {
+      const [row] = await this.db
+        .update(syncInbox)
+        .set({ status: "dead", rejectReason: reason, lastAttemptAt: new Date() })
+        .where(and(eq(syncInbox.tenantId, tenantId), eq(syncInbox.opId, opId)))
+        .returning();
+      return row ? mapRow(row) : null;
+    });
+  }
+
+  async countByStatus(tenantId: string): Promise<Record<SyncInboxStatus, number>> {
+    const empty: Record<SyncInboxStatus, number> = {
+      received: 0,
+      applied: 0,
+      rejected: 0,
+      dead: 0,
+    };
+    return runWithTenantContext({ tenantId }, async () => {
+      const rows = await this.db
+        .select({ status: syncInbox.status, c: sql<number>`count(*)::int` })
+        .from(syncInbox)
+        .where(eq(syncInbox.tenantId, tenantId))
+        .groupBy(syncInbox.status);
+      for (const r of rows) {
+        const key = r.status as SyncInboxStatus;
+        if (key in empty) empty[key] = Number(r.c);
+      }
+      return empty;
+    });
+  }
+
+  async listByStatus(
+    tenantId: string,
+    statuses: SyncInboxStatus[],
+    limit = 100,
+  ): Promise<SyncInboxRow[]> {
+    if (statuses.length === 0) return [];
+    return runWithTenantContext({ tenantId }, async () => {
+      const rows = await this.db
+        .select()
+        .from(syncInbox)
+        .where(and(eq(syncInbox.tenantId, tenantId), inArray(syncInbox.status, statuses)))
+        .orderBy(asc(syncInbox.receivedSeq))
+        .limit(limit);
+      return rows.map(mapRow);
     });
   }
 }

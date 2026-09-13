@@ -3,7 +3,11 @@ import logoUrl from "@/assets/logo-motard-icon.png";
 import { persistTokens } from "@/infrastructure/auth/TokenProvider";
 import { DesktopServerSettings } from "@/components/auth/DesktopServerSettings";
 import { getApiBaseUrl } from "@/lib/api-base-url";
-import { getInstallTenantId } from "@/lib/license-state";
+import {
+  getInstallTenantId,
+  getDecryptedActivationId,
+  getServerFingerprint,
+} from "@/lib/license-state";
 import { registerCurrentSyncDevice } from "@/lib/sync-device";
 import { useQueryClient } from "@tanstack/react-query";
 
@@ -57,8 +61,21 @@ export function UserPickerPage() {
         return;
       }
       const base = getApiBaseUrl();
+      // Batch 4 / 4C: the roster is pre-auth (this picker has no session yet),
+      // so the hub requires proof that this is a device provisioned for the
+      // tenant — the activation credential the device received, and/or the
+      // hardware fingerprint an invitation registered. The desktop build also
+      // passes on the hub's own machine; a browser elsewhere needs one of
+      // these. Without any of them the hub refuses instead of disclosing a
+      // tenant's users to an anonymous caller.
+      const rosterHeaders: Record<string, string> = {};
+      const activationId = await getDecryptedActivationId().catch(() => null);
+      if (activationId) rosterHeaders["X-Device-Activation-Id"] = activationId;
+      const fingerprint = await getServerFingerprint().catch(() => null);
+      if (fingerprint) rosterHeaders["X-Device-Fingerprint"] = fingerprint;
       const r = await fetch(
         `${base}/api/auth/device-roster?tenantId=${encodeURIComponent(tid)}`,
+        { headers: rosterHeaders },
       );
       const data = (await r.json().catch(() => ({}))) as {
         tenantId?: string;

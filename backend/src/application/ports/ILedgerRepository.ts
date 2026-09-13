@@ -20,6 +20,12 @@ export interface LedgerFilter {
 }
 
 export interface WriteLedgerEntry {
+  /**
+   * Pre-allocated id for sync replay idempotency (same pattern as
+   * preAllocatedId on documents). Omitted locally; the hub replay passes the
+   * origin ids so duplicate deliveries converge per entry.
+   */
+  id?: UUID;
   partyId?: UUID | null;
   date: string;
   type: string;

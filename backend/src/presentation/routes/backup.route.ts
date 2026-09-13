@@ -1,7 +1,7 @@
 import { Router, type Request, type Response } from "express";
 import { spawnSync } from "child_process";
 import { createReadStream, existsSync, readdirSync, statSync } from "fs";
-import { join, resolve } from "path";
+import { join, relative, resolve, sep } from "path";
 import { tmpdir } from "os";
 import { mkdir, rm, writeFile, copyFile } from "fs/promises";
 import { db } from "../../infrastructure/orm/drizzle.js";
@@ -95,15 +95,22 @@ function findTar(): string | null {
   return null;
 }
 async function createArchive(sourceDir: string, outputFile: string): Promise<void> {
+  // GNU tar reads `-f C:\...` as a REMOTE `host:path` spec and dies with
+  // "tar (child): Cannot connect to C: resolve failed" (reproduced live on
+  // Windows with Git's tar first on PATH, which made POST /api/backup/full
+  // return 500). Pass the archive as a path RELATIVE to the cwd we already run
+  // in — both GNU tar and bsdtar accept it, and it can never be mistaken for
+  // `host:path`. The archive still lands in the same (temp) directory.
+  const relativeArchive = relative(sourceDir, outputFile).split(sep).join("/");
   const zipCmd = findZip();
   if (zipCmd) {
-    const r = spawnSync(zipCmd, ["-r", "-q", outputFile, "."], { cwd: sourceDir, stdio: "pipe" });
+    const r = spawnSync(zipCmd, ["-r", "-q", relativeArchive, "."], { cwd: sourceDir, stdio: "pipe" });
     if (r.status !== 0) throw new Error(`zip failed: ${r.stderr?.toString()}`);
     return;
   }
   const tarCmd = findTar();
   if (tarCmd) {
-    const r = spawnSync(tarCmd, ["czf", outputFile, "."], { cwd: sourceDir, stdio: "pipe" });
+    const r = spawnSync(tarCmd, ["czf", relativeArchive, "."], { cwd: sourceDir, stdio: "pipe" });
     if (r.status !== 0) throw new Error(`tar failed: ${r.stderr?.toString()}`);
     return;
   }
@@ -143,6 +150,19 @@ async function dbDumpToJson(outputPath: string, tenantId: string): Promise<void>
     "manual_movements",
     "attachments",
     "company_profiles",
+    // Sync state (REMEDIATION_LOG §8 / V5): a restore that drops the outbox
+    // loses not-yet-pushed local operations; dropping the inbox + cursor
+    // forces peers to replay everything; dropping claims resurrects
+    // double-spend; dropping tombstones resurrects deleted master rows.
+    // Tables created only in newer schemas dump as [] via the catch below.
+    "sync_outbox",
+    "sync_inbox",
+    "sync_state",
+    "sync_devices",
+    "sync_resource_claims",
+    "sync_tombstones",
+    "sync_conflicts",
+    "document_number_blocks",
   ];
   const dump: Record<string, unknown[]> = {};
   const esc = (s: string) => s.replace(/'/g, "''").replace(/"/g, '""');

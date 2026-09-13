@@ -9,6 +9,7 @@ export interface ColorData {
   // Real visual color (e.g. "#000000"). Always separate from `code`.
   hex?: string;
   imageUrl?: string;
+  version: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -25,6 +26,7 @@ export class Color {
       code: input.code?.trim(),
       hex: input.hex?.trim(),
       imageUrl: input.imageUrl?.trim(),
+      version: 1,
       createdAt: "",
       updatedAt: "",
     });
@@ -55,6 +57,9 @@ export class Color {
   }
   get fabricId(): UUID {
     return this.data.fabricId;
+  }
+  get version(): number {
+    return this.data.version;
   }
 }
 

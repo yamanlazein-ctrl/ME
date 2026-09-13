@@ -18,6 +18,27 @@ export const syncDevices = pgTable(
       .notNull()
       .references(() => tenants.id),
     lastSeenByUserId: uuid("last_seen_by_user_id").references(() => users.id),
+    /**
+     * Batch 4 / 4B — the users this device is PROVISIONED for.
+     *
+     * `lastSeenByUserId` records whoever touched the row last (a transient
+     * actor); authority over the device id must never be derived from it. A
+     * device is usable by exactly the users listed here, and a user joins the
+     * list only through an authenticated registration that proves possession
+     * of the device (matching `device_fingerprint`) — see
+     * PostgresSyncDeviceRepository.registerOrTouch. The sync transport gate
+     * (sync-device-gate.middleware.ts) rejects a registered device asserted by
+     * any other user, which is what makes a forged device id detectable.
+     */
+    authorizedUserIds: uuid("authorized_user_ids").array().notNull().default([]),
+    /**
+     * Revocation (operator action): a revoked device is refused on
+     * registration, push and pull. Additive and non-destructive by design: the
+     * row and every unit already attributed to it stay intact, so a revoke
+     * removes authority to act — it never destroys data.
+     */
+    revokedAt: timestamp("revoked_at", { withTimezone: true }),
+    revokeReason: varchar("revoke_reason", { length: 64 }),
     deviceFingerprint: varchar("device_fingerprint", { length: 128 }).notNull(),
     deviceFingerprintVersion: integer("device_fingerprint_version").notNull().default(1),
     platform: varchar("platform", { length: 16 }).notNull(),

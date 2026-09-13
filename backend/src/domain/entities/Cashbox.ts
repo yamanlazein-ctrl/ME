@@ -135,6 +135,12 @@ export interface CreateCashboxSessionInput {
 }
 
 export interface CreateManualMovementInput {
+  /**
+   * Pre-allocated id for sync replay idempotency. Local creates omit it (the
+   * database default applies); hub replay passes the origin device's id so a
+   * duplicate delivery converges instead of duplicating the movement.
+   */
+  id?: UUID;
   date: string;
   type: ManualMovementType;
   direction: MovementDirection;

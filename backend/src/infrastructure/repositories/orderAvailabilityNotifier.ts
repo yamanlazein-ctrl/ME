@@ -104,8 +104,14 @@ export async function applyOrderAvailabilityAtCreation(
       `الطلبية ${order.code}${who}: ` +
       `${coverageLines(avails).join(" • ")}. ` +
       `يمكنك بيع الكمية المتوفرة الآن بفاتورة بيع عادية، أو الانتظار حتى تكتمل الكمية.`,
-    kind: "info",
-    severity: "success",
+    // Domain vocabulary (src/domain/types/index.ts): 'info' is a SEVERITY, not a
+    // kind — and 'success' is not a severity at all. The DB CHECK constraints
+    // (notifications_kind_check / notifications_severity_check) rejected the
+    // insert, rolling back the whole order-create transaction (reproduced live
+    // by verify-offline-runtime-drill.mjs, 2026-09-12). 'order' is the kind the
+    // constraint already reserves for these notices.
+    kind: "order",
+    severity: "info",
     targetPath: `/orders/${order.id}`,
   });
 }
@@ -240,8 +246,9 @@ export async function notifyOrderAvailability(
         `تم تحقيق الطلبية ${first.order.code}${customer} ` +
         `${allFull ? "كاملاً" : "جزئياً"} بعد دخول مخزون جديد. المحتوى: ` +
         `${coverageLines(avails).join(" • ")}.`,
-      kind: "info",
-      severity: "success",
+      // Same vocabulary fix as applyOrderAvailabilityAtCreation above.
+      kind: "order",
+      severity: "info",
       targetPath: `/orders/${first.order.id}`,
     });
   }

@@ -93,6 +93,8 @@ fn main() {
             validate_license,
             ensure_document_folders,
             archive_document_pdf,
+            get_hub_url,
+            set_hub_url,
         ])
         .build(tauri::generate_context!())
     {
@@ -317,6 +319,20 @@ fn archive_document_pdf(
     html: String,
 ) -> Result<motard_fabrics_erp::document_archive::ArchiveResult, String> {
     motard_fabrics_erp::document_archive::archive_document_pdf(doc_type, file_stem, html)
+}
+
+/// Persist the central hub URL for outbox sync. Does not change the UI API base.
+#[tauri::command]
+fn get_hub_url() -> Result<String, String> {
+    let root = motard_fabrics_erp::app_data_dir()?;
+    Ok(motard_fabrics_erp::desktop_runtime::read_hub_url(&root).unwrap_or_default())
+}
+
+/// Persist the central hub URL for outbox sync. Does not change the UI API base.
+#[tauri::command]
+fn set_hub_url(url: String) -> Result<String, String> {
+    let root = motard_fabrics_erp::app_data_dir()?;
+    motard_fabrics_erp::desktop_runtime::write_hub_url(&root, &url)
 }
 
 fn get_primary_mac() -> Result<String, String> {

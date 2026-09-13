@@ -20,6 +20,6 @@ export interface IFabricRepository {
   findById(id: string, ctx: TenantContext): Promise<FabricData | null>;
   list(filter: FabricFilter, ctx: TenantContext): Promise<PaginatedResult<FabricData>>;
   create(data: CreateFabricData, ctx: TenantContext): Promise<FabricData>;
-  update(id: string, data: Partial<CreateFabricData>, ctx: TenantContext): Promise<FabricData>;
+  update(id: string, data: Partial<CreateFabricData>, ctx: TenantContext, expectedVersion: number): Promise<FabricData>;
   delete(id: string, ctx: TenantContext): Promise<boolean>;
 }

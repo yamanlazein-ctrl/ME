@@ -8,6 +8,10 @@ import {
   consumeInvitationCodeUseCase,
 } from "../../application/use-cases/invitation/invitationUseCases.js";
 import type { PostgresInvitationRepository } from "../../infrastructure/repositories/PostgresInvitationRepository.js";
+import {
+  enqueueUserMutation,
+  isSyncEnqueueEnabled,
+} from "../../application/use-cases/sync/syncEnqueue.js";
 
 export function registerInvitationAdminRoutes(
   router: Router,
@@ -116,6 +120,18 @@ export function registerInvitationPublicRoutes(router: Router, container: Contai
       if (!r.ok) {
         res.status(400).json({ message: r.error });
         return;
+      }
+      if (isSyncEnqueueEnabled() && r.data.createdUserId) {
+        const ctx = {
+          tenantId: r.data.tenantId,
+          userId: r.data.createdUserId,
+          userName: "invitation",
+          userRole: "admin" as const,
+        };
+        const snapshot = await container.userRepo.findSyncSnapshot(r.data.createdUserId, ctx);
+        if (snapshot) {
+          await enqueueUserMutation(container.syncOutboxRepo, snapshot, "create", ctx, null);
+        }
       }
       res.json({
         consumed: true,

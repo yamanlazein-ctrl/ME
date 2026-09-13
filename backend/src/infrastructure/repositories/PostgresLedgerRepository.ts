@@ -96,6 +96,7 @@ export class PostgresLedgerRepository implements ILedgerRepository {
       .insert(ledgerEntries)
       .values(
         entries.map((e) => ({
+          ...(e.id ? { id: e.id } : null),
           tenantId: ctx.tenantId,
           partyId: e.partyId ?? null,
           date: e.date,
@@ -228,7 +229,12 @@ export class PostgresLedgerRepository implements ILedgerRepository {
     const d = Number(rows[0]?.debit ?? 0);
     const c = Number(rows[0]?.credit ?? 0);
     // Standard sign: customer (AR) = debit − credit; supplier (AP) = credit − debit.
-    return { partyId, totalDebit: d, totalCredit: c, balance: (await this.partyIsSupplier(partyId, ctx)) ? c - d : d - c };
+    return {
+      partyId,
+      totalDebit: d,
+      totalCredit: c,
+      balance: (await this.partyIsSupplier(partyId, ctx)) ? c - d : d - c,
+    };
   }
 
   async getBalanceByDate(
@@ -255,7 +261,12 @@ export class PostgresLedgerRepository implements ILedgerRepository {
 
     const d = Number(rows[0]?.debit ?? 0);
     const c = Number(rows[0]?.credit ?? 0);
-    return { partyId, totalDebit: d, totalCredit: c, balance: (await this.partyIsSupplier(partyId, ctx)) ? c - d : d - c };
+    return {
+      partyId,
+      totalDebit: d,
+      totalCredit: c,
+      balance: (await this.partyIsSupplier(partyId, ctx)) ? c - d : d - c,
+    };
   }
 
   /** Resolve the party kind to pick the correct sign for the balance. */

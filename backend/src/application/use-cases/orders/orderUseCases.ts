@@ -12,7 +12,7 @@ type Result<T> = { ok: true; data: T } | { ok: false; error: string };
 export async function createOrderUseCase(
   repo: IOrderRepository,
   input: CreateOrderInput,
-  autoCode: string,
+  autoCode: string | undefined,
   ctx: TenantContext,
 ): Promise<Result<OrderData>> {
   if (!input.customerNameSnapshot?.trim()) return { ok: false, error: "اسم العميل مطلوب" };
@@ -30,9 +30,18 @@ export async function updateOrderUseCase(
   id: string,
   input: Partial<CreateOrderInput>,
   ctx: TenantContext,
+  expectedVersion: number,
 ): Promise<Result<OrderData>> {
   try {
-    return { ok: true, data: await repo.update(id, input, ctx) };
+    // P0-001: optimistic concurrency check — expectedVersion is REQUIRED
+    const current = await repo.findById(id, ctx);
+    if (current && current.version !== expectedVersion) {
+      return {
+        ok: false,
+        error: `تعارض في الإصدار: الإصدار الحالي ${current.version}، والإصدار المتوقع ${expectedVersion}. يرجى التحديث والمحاولة مرة أخرى.`,
+      };
+    }
+    return { ok: true, data: await repo.update(id, input, ctx, expectedVersion) };
   } catch (e) {
     return { ok: false, error: "فشل تحديث الطلب" };
   }
@@ -78,9 +87,18 @@ export async function cancelOrderUseCase(
   repo: IOrderRepository,
   id: string,
   ctx: TenantContext,
+  expectedVersion: number,
 ): Promise<Result<OrderData>> {
   try {
-    return { ok: true, data: await repo.cancel(id, ctx) };
+    // P0-001: optimistic concurrency check — expectedVersion is REQUIRED
+    const current = await repo.findById(id, ctx);
+    if (current && current.version !== expectedVersion) {
+      return {
+        ok: false,
+        error: `تعارض في الإصدار: الإصدار الحالي ${current.version}، والإصدار المتوقع ${expectedVersion}. يرجى التحديث والمحاولة مرة أخرى.`,
+      };
+    }
+    return { ok: true, data: await repo.cancel(id, ctx, expectedVersion) };
   } catch (e) {
     return { ok: false, error: "فشل إلغاء الطلب" };
   }

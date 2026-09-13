@@ -5,8 +5,10 @@ import {
   timestamp,
   jsonb,
   text,
+  integer,
   index,
   uniqueIndex,
+  bigserial,
 } from "drizzle-orm/pg-core";
 import { tenants } from "./tenant.table.js";
 import { syncDevices } from "./sync-device.table.js";
@@ -32,11 +34,31 @@ export const syncInbox = pgTable(
     rejectReason: text("reject_reason"),
     conflictOpId: uuid("conflict_op_id"),
     conflictDetail: jsonb("conflict_detail").$type<Record<string, unknown>>(),
+    /** Materialization failure detail — kept separate from conflict provenance. */
+    materializeError: jsonb("materialize_error").$type<Record<string, unknown>>(),
+    applyAttempts: integer("apply_attempts").notNull().default(0),
+    lastAttemptAt: timestamp("last_attempt_at", { withTimezone: true }),
+    /**
+     * Monotonic receive order — the pull cursor. `received_at` is
+     * transaction-start time and therefore unusable as a cursor: rows written
+     * in one transaction share it, so a strict `>` comparison skips them.
+     */
+    receivedSeq: bigserial("received_seq", { mode: "number" }).notNull(),
     receivedAt: timestamp("received_at", { withTimezone: true }).notNull().defaultNow(),
     appliedAt: timestamp("applied_at", { withTimezone: true }),
   },
   (table) => ({
     tenantIdx: index("idx_sync_inbox_tenant").on(table.tenantId),
+    tenantStatusSeqIdx: index("idx_sync_inbox_tenant_status_received_seq").on(
+      table.tenantId,
+      table.status,
+      table.receivedSeq,
+    ),
+    tenantDeviceSeqIdx: index("idx_sync_inbox_tenant_device_received_seq").on(
+      table.tenantId,
+      table.syncDeviceId,
+      table.receivedSeq,
+    ),
     opUnique: uniqueIndex("uq_sync_inbox_tenant_op").on(table.tenantId, table.opId),
   }),
 ).enableRLS();

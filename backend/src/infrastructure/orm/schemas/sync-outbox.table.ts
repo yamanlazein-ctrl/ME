@@ -7,6 +7,7 @@ import {
   jsonb,
   index,
   uniqueIndex,
+  bigserial,
 } from "drizzle-orm/pg-core";
 import { tenants } from "./tenant.table.js";
 import { syncDevices } from "./sync-device.table.js";
@@ -32,12 +33,23 @@ export const syncOutbox = pgTable(
     payload: jsonb("payload").notNull().$type<Record<string, unknown>>(),
     status: varchar("status", { length: 20 }).notNull().default("pending"),
     errorDetail: text("error_detail"),
+    /**
+     * Monotonic insertion order. `created_at` is transaction-start time, so
+     * units enqueued in one transaction share it and cannot be ordered by it.
+     * The hub must replay a device's units in the order they were recorded.
+     */
+    seq: bigserial("seq", { mode: "number" }).notNull(),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
     syncedAt: timestamp("synced_at", { withTimezone: true }),
   },
   (table) => ({
     tenantStatusIdx: index("idx_sync_outbox_tenant_status").on(table.tenantId, table.status),
+    tenantStatusSeqIdx: index("idx_sync_outbox_tenant_status_seq").on(
+      table.tenantId,
+      table.status,
+      table.seq,
+    ),
     opUnique: uniqueIndex("uq_sync_outbox_tenant_op").on(table.tenantId, table.opId),
   }),
 ).enableRLS();

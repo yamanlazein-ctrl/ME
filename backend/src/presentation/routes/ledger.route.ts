@@ -6,7 +6,18 @@ import {
 } from "../../infrastructure/http/middleware/validate.middleware.js";
 import { validateUuidParam } from "../../infrastructure/http/middleware/validate-params.middleware.js";
 import type { ILedgerRepository } from "../../application/ports/ILedgerRepository.js";
+import type { ISyncOutboxRepository } from "../../application/ports/ISyncOutboxRepository.js";
 import type { TenantContext } from "../../domain/types/index.js";
+import { randomUUID } from "node:crypto";
+import { logger } from "../../infrastructure/config/logger.js";
+import { withTenantTx } from "../../infrastructure/orm/drizzle.js";
+import {
+  enqueueLedgerCancel,
+  enqueueLedgerCreate,
+  isSyncEnqueueEnabled,
+  opIdFromRequest,
+  syncDeviceIdFromRequest,
+} from "../../application/use-cases/sync/syncEnqueue.js";
 import { listLedgerSchema, writeLedgerBatchSchema } from "./ledger.schema.js";
 import * as uc from "../../application/use-cases/ledger/ledgerUseCases.js";
 
@@ -16,6 +27,7 @@ export function registerLedgerRoutes(
   auth: RequestHandler,
   writeGuard: RequestHandler,
   readGuard: RequestHandler,
+  syncOutboxRepo?: ISyncOutboxRepository,
 ) {
   const ctx = (req: Request): TenantContext => req.tenantContext!;
   const pid = (req: Request): string => req.params.id as string;
@@ -178,14 +190,45 @@ export function registerLedgerRoutes(
     },
   );
 
+  // SYNC-13: direct ledger writes are business mutations and must reach the
+  // hub. Entry ids are pre-allocated so hub replay converges per entry
+  // instead of duplicating the batch on redelivery.
   router.post(
     "/ledger",
     auth,
     writeGuard,
     validateBody(writeLedgerBatchSchema),
     async (req: Request, res: Response) => {
-      const b = body<{ entries: Parameters<typeof uc.writeLedgerUseCase>[1] }>(req);
-      const r = await uc.writeLedgerUseCase(ledgerRepo, b.entries, ctx(req));
+      const c = ctx(req);
+      const entries = body<{ entries: Parameters<typeof uc.writeLedgerUseCase>[1] }>(req).entries;
+      const syncEnabled = Boolean(syncOutboxRepo && isSyncEnqueueEnabled());
+      const runWrite = async () => {
+        const ids = entries.map(() => randomUUID());
+        const r = await uc.writeLedgerUseCase(
+          ledgerRepo,
+          entries.map((e, i) => ({ ...e, id: ids[i] })),
+          c,
+        );
+        if (!r.ok) return r;
+        if (syncOutboxRepo && isSyncEnqueueEnabled()) {
+          await enqueueLedgerCreate(
+            syncOutboxRepo,
+            ids,
+            entries as unknown as Array<Record<string, unknown>>,
+            c,
+            syncDeviceIdFromRequest(req),
+            opIdFromRequest(req),
+          );
+        }
+        return r;
+      };
+      let r: Awaited<ReturnType<typeof uc.writeLedgerUseCase>>;
+      try {
+        r = syncEnabled ? await withTenantTx(c.tenantId, runWrite) : await runWrite();
+      } catch (err) {
+        logger.error({ err }, "transaction rolled back — ledger write dropped (F-07)");
+        return res.status(500).json({ code: "INTERNAL", message: "فشل تسجيل القيد" });
+      }
       if (r.ok) {
         res.status(201).json(r.data);
       } else {
@@ -214,13 +257,40 @@ export function registerLedgerRoutes(
           message: "هذا القيد ليس له مرجع قابل للإلغاء",
         });
       }
-      const r = await uc.cancelLedgerByReferenceUseCase(
-        ledgerRepo,
-        found.referenceType,
-        found.referenceId,
-        c.userId,
-        c,
-      );
+      // F-07: cancel + enqueue share ONE transaction so a failed enqueue
+      // cannot leave a locally-reversed reference that never reaches the hub.
+      const syncEnabled = Boolean(syncOutboxRepo && isSyncEnqueueEnabled());
+      const runCancel = async () => {
+        const r = await uc.cancelLedgerByReferenceUseCase(
+          ledgerRepo,
+          found.referenceType as string,
+          found.referenceId as string,
+          c.userId,
+          c,
+        );
+        if (!r.ok) return r;
+        if (syncOutboxRepo && isSyncEnqueueEnabled()) {
+          await enqueueLedgerCancel(
+            syncOutboxRepo,
+            found.referenceType as string,
+            found.referenceId as string,
+            c,
+            syncDeviceIdFromRequest(req),
+            opIdFromRequest(req),
+          );
+        }
+        return r;
+      };
+      let r: Awaited<ReturnType<typeof uc.cancelLedgerByReferenceUseCase>>;
+      try {
+        r = syncEnabled ? await withTenantTx(c.tenantId, runCancel) : await runCancel();
+      } catch (err) {
+        logger.error({ err }, "transaction rolled back — ledger cancel dropped (F-07)");
+        return res.status(500).json({
+          code: "SYNC_OUTBOX_FAILED",
+          message: "تعذّر حفظ إلغاء القيد مع وحدة المزامنة — لم يُحفظ أي تغيير. أعد المحاولة.",
+        });
+      }
       if (r.ok) {
         res.json({ ok: true });
       } else if (r.code === "ALREADY_CANCELLED") {

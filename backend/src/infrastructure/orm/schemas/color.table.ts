@@ -1,4 +1,4 @@
-import { pgTable, uuid, varchar, timestamp, text, uniqueIndex } from "drizzle-orm/pg-core";
+import { pgTable, uuid, varchar, timestamp, text, uniqueIndex, integer } from "drizzle-orm/pg-core";
 import { tenants } from "./tenant.table.js";
 import { fabrics } from "./fabric.table.js";
 
@@ -19,6 +19,7 @@ export const colors = pgTable(
     // compatibility — colors created before this column existed have no hex.
     hex: varchar("hex", { length: 9 }),
     imageUrl: text("image_url"),
+    version: integer("version").notNull().default(1),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },

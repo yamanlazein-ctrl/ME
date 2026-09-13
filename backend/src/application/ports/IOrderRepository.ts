@@ -35,9 +35,16 @@ export interface IOrderRepository {
   findById(id: string, ctx: TenantContext): Promise<OrderData | null>;
   findByCode(code: string, ctx: TenantContext): Promise<OrderData | null>;
   list(filter: OrderFilter, ctx: TenantContext): Promise<PaginatedResult<OrderData>>;
-  create(input: CreateOrderInput, autoCode: string, ctx: TenantContext): Promise<OrderData>;
-  update(id: string, data: Partial<CreateOrderInput>, ctx: TenantContext): Promise<OrderData>;
+  create(
+    input: CreateOrderInput,
+    autoCode: string | undefined,
+    ctx: TenantContext,
+  ): Promise<OrderData>;
+  update(id: string, data: Partial<CreateOrderInput>, ctx: TenantContext, expectedVersion: number): Promise<OrderData>;
   fulfill(id: string, invoiceId: UUID, ctx: TenantContext): Promise<OrderData>;
-  cancel(id: string, ctx: TenantContext): Promise<OrderData>;
-  findPendingConflicts(lines: PendingConflictLine[], ctx: TenantContext): Promise<PendingConflict[]>;
+  cancel(id: string, ctx: TenantContext, expectedVersion: number): Promise<OrderData>;
+  findPendingConflicts(
+    lines: PendingConflictLine[],
+    ctx: TenantContext,
+  ): Promise<PendingConflict[]>;
 }

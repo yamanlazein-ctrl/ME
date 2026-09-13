@@ -44,3 +44,6 @@ export * from "./stock-movement.table.js";
 export * from "./idempotency-key.table.js";
 export * from "./ledger-entry-archive.table.js";
 export * from "./yearly-party-summary.table.js";
+
+// P0-004 — durable token revocation (works without Redis)
+export * from "./revoked-token.table.js";

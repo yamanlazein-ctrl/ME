@@ -25,9 +25,18 @@ export async function updateColorUseCase(
   id: string,
   input: Partial<CreateColorData>,
   ctx: TenantContext,
+  expectedVersion: number,
 ): Promise<Result<ColorData>> {
   try {
-    return { ok: true, data: await repo.update(id, input, ctx) };
+    // P0-001: optimistic concurrency check
+    const current = await repo.findById(id, ctx);
+    if (current && current.version !== expectedVersion) {
+      return {
+        ok: false,
+        error: `تعارض في الإصدار: الإصدار الحالي ${current.version}، والإصدار المتوقع ${expectedVersion}. يرجى التحديث والمحاولة مرة أخرى.`,
+      };
+    }
+    return { ok: true, data: await repo.update(id, input, ctx, expectedVersion) };
   } catch (e) {
     return { ok: false, error: "فشل تحديث اللون" };
   }

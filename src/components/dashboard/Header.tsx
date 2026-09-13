@@ -14,7 +14,7 @@ import { cn } from "@/lib/utils";
  */
 export function Header() {
   const connectivity = useConnectivity();
-  useAutoSync();
+  const { deviceGate, deviceTrust } = useAutoSync();
   const online = connectivity === "online";
 
   return (
@@ -65,6 +65,23 @@ export function Header() {
             />
             {online ? "متصل" : "غير متصل"}
           </span>
+          {deviceGate && (
+            <span
+              className="hidden items-center gap-1.5 text-[11px] font-medium text-amber-600 lg:inline-flex dark:text-amber-400"
+              title={
+                deviceTrust?.code === "SYNC_DEVICE_REVOKED"
+                  ? "أُلغي هذا الجهاز من المركز — لم تُحذف أي بيانات محلية. راجع المسؤول لإعادة تفعيل الجهاز"
+                  : deviceTrust?.code === "SYNC_DEVICE_NOT_BOUND"
+                    ? "هذا الجهاز غير مرتبط بحسابك — سجّل الجهاز من حسابك ثم أعد المزامنة"
+                    : "المركز لا يعرف هذا الجهاز — سجّل الجهاز من الإعدادات ثم أعد المزامنة"
+              }
+              role="status"
+              aria-live="polite"
+            >
+              <span className="h-1.5 w-1.5 rounded-full bg-amber-500" aria-hidden />
+              {deviceTrust?.code === "SYNC_DEVICE_REVOKED" ? "الجهاز مُلغى" : "الجهاز غير مسجّل"}
+            </span>
+          )}
 
           <div className="flex items-center gap-0.5 border-s border-border ps-4">
             <ThemeToggle />

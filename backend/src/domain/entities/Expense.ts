@@ -14,8 +14,10 @@ export interface ExpenseData {
   status: EntityStatus;
   notesPrint?: string;
   notesInternal?: string;
+  version: number;
   createdAt: string;
   createdBy?: UUID;
+  updatedAt: string;
   cancelledAt?: string;
   cancelledBy?: UUID;
 }
@@ -38,8 +40,10 @@ export class Expense {
       status: "active" as EntityStatus,
       notesPrint: input.notesPrint?.trim(),
       notesInternal: input.notesInternal?.trim(),
+      version: 1,
       createdAt: "",
       createdBy: undefined,
+      updatedAt: "",
       cancelledAt: undefined,
       cancelledBy: undefined,
     });
@@ -67,6 +71,9 @@ export class Expense {
   }
   get status(): EntityStatus {
     return this.data.status;
+  }
+  get version(): number {
+    return this.data.version;
   }
 }
 

@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import type { PostgresSystemAdminRepository } from "../../../infrastructure/repositories/PostgresSystemAdminRepository.js";
 import type { Argon2PasswordHasher } from "../../../infrastructure/auth/PasswordHasher.js";
 import type { JwtSigner } from "../../../infrastructure/auth/JwtSigner.js";
-import type { RedisTokenDenylist } from "../../../infrastructure/auth/TokenDenylist.js";
+import type { TokenDenylist } from "../../../infrastructure/auth/TokenDenylist.js";
 
 /**
  * Phase 4 — Super Admin authentication (frozen spec §2.1).
@@ -23,7 +23,7 @@ export async function superAdminLoginUseCase(
   repo: PostgresSystemAdminRepository,
   hasher: Argon2PasswordHasher,
   jwtSigner: JwtSigner,
-  denylist: RedisTokenDenylist,
+  denylist: TokenDenylist,
   input: unknown,
 ): Promise<
   Result<{ token: string; admin: { id: string; email: string; name: string | null; role: string } }>

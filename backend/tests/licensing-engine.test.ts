@@ -12,8 +12,13 @@ import { LicenseTokenSigner } from "@/infrastructure/auth/LicenseTokenSigner";
 import type { LicenseTokenPayload } from "@/application/ports/ILicenseTokenSigner.js";
 
 describe("License Engine — plans (frozen spec §5)", () => {
+  // Owner decision 2026-08-28 (recorded in plans.ts): `feature.accounting` is
+  // core and included in EVERY plan, so basic resolves to [inventory, accounting].
   it("resolves a basic plan to its feature set", () => {
-    expect(resolveFeatures("basic")).toEqual([FEATURES.INVENTORY]);
+    const f = resolveFeatures("basic");
+    expect(f).toContain(FEATURES.INVENTORY);
+    expect(f).toContain(FEATURES.ACCOUNTING);
+    expect(f).toHaveLength(2);
   });
 
   it("resolves a premium plan to its feature set", () => {

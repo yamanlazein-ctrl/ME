@@ -1,4 +1,4 @@
-import { pgTable, uuid, varchar, timestamp, decimal, text, uniqueIndex } from "drizzle-orm/pg-core";
+import { pgTable, uuid, varchar, timestamp, decimal, text, uniqueIndex, integer } from "drizzle-orm/pg-core";
 import { tenants } from "./tenant.table.js";
 
 export const fabrics = pgTable(
@@ -14,6 +14,7 @@ export const fabrics = pgTable(
     unit: varchar("unit", { length: 10 }),
     notes: text("notes"),
     imageUrl: text("image_url"),
+    version: integer("version").notNull().default(1),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     createdBy: uuid("created_by"),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),

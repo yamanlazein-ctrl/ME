@@ -176,12 +176,26 @@ export class PostgresPartyRepository implements IPartyRepository {
     return this.db.transaction(async (tx) => {
       // H-NEW: explicit client codes pass through; auto-codes allocate inside
       // this transaction so an insert/ledger failure rolls back the counter.
+      //
+      // Multi-device fix (2026-09-10): the code is allocated from this device's
+      // reserved block when one exists. Previously the call passed no
+      // `syncDeviceId`, so every node drew from its own local
+      // `document_sequences` and two offline devices both produced
+      // `CUS-<year>-0001` — the second one's hub insert then died on
+      // `parties (tenant_id, code)` and the unit never materialized.
+      // `allowGlobalFallback` keeps a never-provisioned device working: it
+      // degrades to the old shared-sequence behaviour (logged) instead of
+      // refusing to save a customer.
       const code =
         data.code?.trim() ||
         (await allocateDocumentNumber(
           tx,
           data.kind === "supplier" ? "supplier" : "customer",
           ctx.tenantId,
+          {
+            syncDeviceId: ctx.syncDeviceId,
+            allowGlobalFallback: true,
+          },
         ));
 
       const [row] = await tx
@@ -279,7 +293,7 @@ export class PostgresPartyRepository implements IPartyRepository {
     });
   }
 
-  async update(id: string, data: Partial<CreatePartyData>, ctx: TenantContext): Promise<PartyData> {
+  async update(id: string, data: Partial<CreatePartyData>, ctx: TenantContext, expectedVersion: number): Promise<PartyData> {
     // TX6 fix: openingBalance cannot be edited after creation. The opening
     // ledger row is written exactly once on create (Phase 0). Allowing a
     // silent change here would leave the ledger and the parties.outstanding
@@ -305,17 +319,26 @@ export class PostgresPartyRepository implements IPartyRepository {
     values.updatedAt = new Date();
     values.version = sql`${parties.version} + 1`;
 
+    // P0-001: atomic version enforcement — WHERE includes expectedVersion
+    const whereConditions = [eq(parties.id, id), eq(parties.tenantId, ctx.tenantId), eq(parties.version, expectedVersion)];
     const [row] = await this.db
       .update(parties)
       .set(values)
-      .where(and(eq(parties.id, id), eq(parties.tenantId, ctx.tenantId)))
+      .where(and(...whereConditions))
       .returning();
 
-    if (!row) throw new Error("Party not found");
+    if (!row) {
+      // P0-001: distinguish "not found" from "stale version"
+      const existing = await this.db.select({ version: parties.version }).from(parties).where(and(eq(parties.id, id), eq(parties.tenantId, ctx.tenantId))).limit(1);
+      if (existing.length > 0) {
+        throw Object.assign(new Error(`Stale version: expected ${expectedVersion}, current ${existing[0].version}`), { code: "STALE_VERSION" as const });
+      }
+      throw new Error("Party not found");
+    }
     return this.toDomain(row);
   }
 
-  async cancel(id: string, cancelledBy: string, ctx: TenantContext): Promise<PartyData> {
+  async cancel(id: string, cancelledBy: string, ctx: TenantContext, expectedVersion: number): Promise<PartyData> {
     // Security guard: refuse to cancel a party that still has active financial
     // documents (invoices or vouchers) linked to it. The party is soft-deleted
     // (status → cancelled), but the FK references remain valid, so this is a
@@ -357,6 +380,8 @@ export class PostgresPartyRepository implements IPartyRepository {
       throw new Error(`لا يمكن حذف ${kindLabel} لوجود سندات قبض/صرف مرتبطة به`);
     }
 
+    // P0-001: atomic version enforcement — WHERE includes expectedVersion
+    const whereConditions = [eq(parties.id, id), eq(parties.tenantId, ctx.tenantId), eq(parties.status, "active"), eq(parties.version, expectedVersion)];
     const [row] = await this.db
       .update(parties)
       .set({
@@ -366,12 +391,17 @@ export class PostgresPartyRepository implements IPartyRepository {
         updatedAt: new Date(),
         version: sql`${parties.version} + 1`,
       })
-      .where(
-        and(eq(parties.id, id), eq(parties.tenantId, ctx.tenantId), eq(parties.status, "active")),
-      )
+      .where(and(...whereConditions))
       .returning();
 
-    if (!row) throw new Error("الطرف غير موجود أو ملغى مسبقاً");
+    if (!row) {
+      // P0-001: distinguish "not found" from "stale version"
+      const existing = await this.db.select({ version: parties.version }).from(parties).where(and(eq(parties.id, id), eq(parties.tenantId, ctx.tenantId))).limit(1);
+      if (existing.length > 0) {
+        throw Object.assign(new Error(`Stale version: expected ${expectedVersion}, current ${existing[0].version}`), { code: "STALE_VERSION" as const });
+      }
+      throw new Error("الطرف غير موجود أو ملغى مسبقاً");
+    }
     return this.toDomain(row);
   }
 

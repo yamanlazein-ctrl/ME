@@ -82,6 +82,7 @@ export class PostgresFabricRepository implements IFabricRepository {
     id: string,
     data: Partial<CreateFabricData>,
     ctx: TenantContext,
+    expectedVersion: number,
   ): Promise<FabricData> {
     const values: Record<string, unknown> = { updatedAt: new Date() };
     if (data.name !== undefined) values.name = data.name;
@@ -90,12 +91,23 @@ export class PostgresFabricRepository implements IFabricRepository {
     if (data.unit !== undefined) values.unit = data.unit ?? null;
     if (data.notes !== undefined) values.notes = data.notes ?? null;
     if (data.imageUrl !== undefined) values.imageUrl = data.imageUrl ?? null;
+    // P0-001: version increment for optimistic concurrency
+    values.version = sql`${fabrics.version} + 1`;
+    // P0-001: atomic version enforcement — WHERE includes expectedVersion
+    const whereConditions = [eq(fabrics.id, id), eq(fabrics.tenantId, ctx.tenantId), eq(fabrics.version, expectedVersion)];
     const [row] = await this.db
       .update(fabrics)
       .set(values)
-      .where(and(eq(fabrics.id, id), eq(fabrics.tenantId, ctx.tenantId)))
+      .where(and(...whereConditions))
       .returning();
-    if (!row) throw new Error("Fabric not found");
+    if (!row) {
+      // P0-001: distinguish "not found" from "stale version"
+      const existing = await this.db.select({ version: fabrics.version }).from(fabrics).where(and(eq(fabrics.id, id), eq(fabrics.tenantId, ctx.tenantId))).limit(1);
+      if (existing.length > 0) {
+        throw Object.assign(new Error(`Stale version: expected ${expectedVersion}, current ${existing[0].version}`), { code: "STALE_VERSION" as const });
+      }
+      throw new Error("Fabric not found");
+    }
     return this.toDomain(row);
   }
 
@@ -152,6 +164,7 @@ export class PostgresFabricRepository implements IFabricRepository {
       unit: n(row.unit),
       notes: n(row.notes),
       imageUrl: n(row.imageUrl),
+      version: row.version ?? 1,
       createdAt: row.createdAt.toISOString(),
       createdBy: n(row.createdBy),
       updatedAt: row.updatedAt.toISOString(),

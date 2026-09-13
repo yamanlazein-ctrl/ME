@@ -14,6 +14,10 @@ export interface ExpenseFilter {
 export interface IExpenseRepository {
   findById(id: string, ctx: TenantContext): Promise<ExpenseData | null>;
   list(filter: ExpenseFilter, ctx: TenantContext): Promise<PaginatedResult<ExpenseData>>;
-  create(input: CreateExpenseInput, autoNumber: string, ctx: TenantContext): Promise<ExpenseData>;
-  cancel(id: string, cancelledBy: string, ctx: TenantContext): Promise<ExpenseData>;
+  create(
+    input: CreateExpenseInput,
+    autoNumber: string | undefined,
+    ctx: TenantContext,
+  ): Promise<ExpenseData>;
+  cancel(id: string, cancelledBy: string, ctx: TenantContext, expectedVersion: number): Promise<ExpenseData>;
 }

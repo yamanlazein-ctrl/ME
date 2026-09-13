@@ -1,6 +1,6 @@
 import type { Request, Response, NextFunction } from "express";
 import type { JwtSigner } from "../../auth/JwtSigner.js";
-import type { RedisTokenDenylist } from "../../auth/TokenDenylist.js";
+import type { TokenDenylist } from "../../auth/TokenDenylist.js";
 
 /**
  * Phase 4 — Super Admin auth middleware (frozen spec §2.1).
@@ -15,7 +15,7 @@ import type { RedisTokenDenylist } from "../../auth/TokenDenylist.js";
  */
 export function createSuperAdminAuthMiddleware(
   jwtSigner: JwtSigner,
-  denylist: RedisTokenDenylist,
+  denylist: TokenDenylist,
   opts?: { fallbackToken?: string },
 ) {
   return async function superAdminAuth(

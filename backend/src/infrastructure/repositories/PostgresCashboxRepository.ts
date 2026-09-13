@@ -86,6 +86,7 @@ export class PostgresCashboxRepository implements ICashboxRepository {
       const [row] = await tx
         .insert(manualMovements)
         .values({
+          ...(input.id ? { id: input.id } : null),
           tenantId: ctx.tenantId,
           date: input.date,
           type: input.type,

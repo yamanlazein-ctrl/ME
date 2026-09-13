@@ -4,8 +4,16 @@ import { randomUUID } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Container } from "../../infrastructure/di/container.js";
+import { logger } from "../../infrastructure/config/logger.js";
+import {
+  enqueueCompanyUpdate,
+  isSyncEnqueueEnabled,
+  opIdFromRequest,
+  syncDeviceIdFromRequest,
+} from "../../application/use-cases/sync/syncEnqueue.js";
 import { createAuthMiddleware } from "../../infrastructure/http/middleware/auth.middleware.js";
 import { rbac } from "../../infrastructure/http/middleware/rbac.middleware.js";
+import { withTenantTx } from "../../infrastructure/orm/drizzle.js";
 
 /**
  * Phase 0 sub-batch 0H — company profile routes.
@@ -59,6 +67,13 @@ export function registerCompanyRoutes(
     }
   });
 
+  // SYNC-13: company profile syncs hub-wins (no claims). Logo bytes stay
+  // device-local (see coverage registry) — only profile fields enqueue.
+  //
+  // F-07: the profile upsert and its outbox unit share ONE `withTenantTx`.
+  // Previously the upsert committed on its own connection and the enqueue ran
+  // after it inside a log-only `try/catch`, so a failed insert left a saved
+  // profile with no sync unit — a silent fork no process could repair.
   router.put("/api/company/profile", authMiddleware, writeGuard, async (req, res, next) => {
     try {
       const ctx = req.tenantContext!;
@@ -69,10 +84,38 @@ export function registerCompanyRoutes(
           .json({ code: "VALIDATION_ERROR", message: "بيانات غير صالحة", statusCode: 422 });
         return;
       }
-      const profile = await container.companyRepo.upsert({
-        tenantId: ctx.tenantId as never,
-        ...parsed.data,
-      });
+      const syncEnabled = Boolean(container.syncOutboxRepo && isSyncEnqueueEnabled());
+      const runUpsert = async () => {
+        const profile = await container.companyRepo.upsert({
+          tenantId: ctx.tenantId as never,
+          ...parsed.data,
+        });
+        if (container.syncOutboxRepo && isSyncEnqueueEnabled()) {
+          await enqueueCompanyUpdate(
+            container.syncOutboxRepo,
+            { ...(parsed.data as object) },
+            new Date().toISOString(),
+            ctx,
+            syncDeviceIdFromRequest(req),
+            opIdFromRequest(req),
+          );
+        }
+        return profile;
+      };
+      let profile: Awaited<ReturnType<typeof container.companyRepo.upsert>>;
+      try {
+        profile = syncEnabled
+          ? await withTenantTx(ctx.tenantId, runUpsert)
+          : await runUpsert();
+      } catch (err) {
+        logger.error({ err }, "transaction rolled back — company profile update dropped (F-07)");
+        res.status(500).json({
+          code: "SYNC_OUTBOX_FAILED",
+          message: "تعذّر حفظ بيانات الشركة مع وحدة المزامنة — لم يُحفظ أي تغيير. أعد المحاولة.",
+          statusCode: 500,
+        });
+        return;
+      }
       res.json(profile);
     } catch (err) {
       next(err);
@@ -96,13 +139,19 @@ export function registerCompanyRoutes(
       const rawExt = (match[1] ?? "").toLowerCase();
       const allowed = new Set(["png", "jpg", "jpeg", "webp"]);
       if (!allowed.has(rawExt)) {
-        res.status(422).json({ code: "VALIDATION_ERROR", message: "امتداد الصورة غير مسموح (png/jpg/webp فقط)", statusCode: 422 });
+        res.status(422).json({
+          code: "VALIDATION_ERROR",
+          message: "امتداد الصورة غير مسموح (png/jpg/webp فقط)",
+          statusCode: 422,
+        });
         return;
       }
       const ext = rawExt === "jpeg" ? "jpg" : rawExt;
       const buffer = Buffer.from(match[2]!, "base64");
       if (buffer.length > 5 * 1024 * 1024) {
-        res.status(422).json({ code: "VALIDATION_ERROR", message: "حجم الصورة يتجاوز 5MB", statusCode: 422 });
+        res
+          .status(422)
+          .json({ code: "VALIDATION_ERROR", message: "حجم الصورة يتجاوز 5MB", statusCode: 422 });
         return;
       }
       const dir = process.env.COMPANY_LOGO_DIR ?? "/var/lib/erp/logos";

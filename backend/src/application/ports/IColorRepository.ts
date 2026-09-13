@@ -20,6 +20,6 @@ export interface IColorRepository {
   findById(id: string, ctx: TenantContext): Promise<ColorData | null>;
   list(filter: ColorFilter, ctx: TenantContext): Promise<PaginatedResult<ColorData>>;
   create(data: CreateColorData, ctx: TenantContext): Promise<ColorData>;
-  update(id: string, data: Partial<CreateColorData>, ctx: TenantContext): Promise<ColorData>;
+  update(id: string, data: Partial<CreateColorData>, ctx: TenantContext, expectedVersion: number): Promise<ColorData>;
   delete(id: string, ctx: TenantContext): Promise<boolean>;
 }

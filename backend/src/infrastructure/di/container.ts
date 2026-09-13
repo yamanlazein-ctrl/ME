@@ -1,5 +1,7 @@
 import { db } from "../orm/drizzle.js";
-import { redis, RedisTokenDenylist } from "../auth/TokenDenylist.js";
+import { ambientDb } from "../orm/ambient-tx.js";
+import { redis, DbTokenDenylist, RedisTokenDenylist, CompositeTokenDenylist } from "../auth/TokenDenylist.js";
+import type { TokenDenylist } from "../auth/TokenDenylist.js";
 import { JwtSigner } from "../auth/JwtSigner.js";
 import { Argon2PasswordHasher } from "../auth/PasswordHasher.js";
 import { config } from "../config/env.js";
@@ -88,7 +90,7 @@ export interface Container {
   db: typeof db;
   jwtSigner: JwtSigner;
   passwordHasher: Argon2PasswordHasher;
-  tokenDenylist: RedisTokenDenylist;
+  tokenDenylist: TokenDenylist;
   authRepo: IAuthRepository;
   partyRepo: IPartyRepository;
   fabricRepo: IFabricRepository;
@@ -131,38 +133,65 @@ export interface Container {
 export function buildContainer(): Container {
   const jwtSigner = new JwtSigner();
   const passwordHasher = new Argon2PasswordHasher();
-  const tokenDenylist = new RedisTokenDenylist(redis);
+  // Revocation is durable in PostgreSQL (always present — desktop ships its own
+  // DB and has no Redis). Redis, when configured, is a fast path in front of it.
+  const tokenDenylist = new CompositeTokenDenylist(
+    new DbTokenDenylist(),
+    redis ? new RedisTokenDenylist(redis) : null,
+  );
 
   const authRepo = new PostgresAuthRepository(db);
-  const partyRepo = new PostgresPartyRepository(db);
-  const fabricRepo = new PostgresFabricRepository(db);
-  const colorRepo = new PostgresColorRepository(db);
-  const rollRepo = new PostgresRollRepository(db);
+  // F-07 (Transactional Outbox): these repositories receive an ambient-aware
+  // proxy instead of the raw pool handle. When a route wraps its work in
+  // `withTenantTx`, `this.db.transaction(...)` inside these repos becomes a
+  // SAVEPOINT on the route's transaction, so the business write and the
+  // `sync_outbox` insert share ONE commit/rollback boundary. Outside such a
+  // route the proxy is a transparent pass-through to `db` (no behaviour change).
+  //
+  // Every repository whose write is enqueued as a sync unit in the SAME route
+  // transaction must be proxied — otherwise its statements run on a DIFFERENT
+  // pooled connection and commit independently of the outbox row, which is the
+  // silent-fork defect F-07 exists to prevent (found live in the ledger,
+  // cashbox, statement/settlement, settings and company routes).
+  //
+  // Deliberately NOT proxied: auditRepo and every other repository. Audit rows
+  // are written fire-and-forget (they must never abort a business transaction),
+  // and unrelated repos have no outbox coupling to make atomic.
+  const dbx = ambientDb(db);
+  const partyRepo = new PostgresPartyRepository(dbx);
+  const fabricRepo = new PostgresFabricRepository(dbx);
+  const colorRepo = new PostgresColorRepository(dbx);
+  const rollRepo = new PostgresRollRepository(dbx);
   const stockMovementRepo = new PostgresStockMovementRepository(db);
-  const orderRepo = new PostgresOrderRepository(db);
-  const invoiceRepo = new PostgresInvoiceRepository(db);
+  const orderRepo = new PostgresOrderRepository(dbx);
+  const invoiceRepo = new PostgresInvoiceRepository(dbx);
   const auditRepo = new PostgresAuditRepository(db);
-  const voucherRepo = new PostgresVoucherRepository(db);
-  const ledgerRepo = new PostgresLedgerRepository(db);
-  const statementRepo = new PostgresStatementRepository(db);
-  const returnRepo = new PostgresReturnRepository(db);
-  const cashboxRepo = new PostgresCashboxRepository(db);
-  const expenseRepo = new PostgresExpenseRepository(db);
+  const voucherRepo = new PostgresVoucherRepository(dbx);
+  const ledgerRepo = new PostgresLedgerRepository(dbx);
+  const statementRepo = new PostgresStatementRepository(dbx);
+  const returnRepo = new PostgresReturnRepository(dbx);
+  const cashboxRepo = new PostgresCashboxRepository(dbx);
+  const expenseRepo = new PostgresExpenseRepository(dbx);
   const printJobRepo = new PostgresPrintJobRepository(db);
   const notificationRepo = new PostgresNotificationRepository(db);
-  const settingsRepo = new PostgresSettingsRepository(db);
+  const settingsRepo = new PostgresSettingsRepository(dbx);
   const dashboardRepo = new PostgresDashboardRepository(db);
   const profitRepo = new PostgresProfitRepository(db);
   const userRepo = new PostgresUserRepository(db);
 
   // ── Phase 0 sub-batch extensions ──
+  // The company profile is enqueued as a sync unit by PUT /api/company/profile.
+  // It needs no proxy: PostgresCompanyRepository opens its own transaction via
+  // `withTenantTx`, which joins the caller's ambient transaction as a savepoint
+  // (see drizzle.ts). It must NOT be moved to the raw handle.
   const companyRepo = new PostgresCompanyRepository(db);
   const invitationRepo = new PostgresInvitationRepository(db);
   const licenseRepo = new PostgresLicenseRepository(db);
   const tenantRepo = new PostgresTenantRepository(db);
   const installationStateRepo = new PostgresInstallationStateRepository(db);
   const syncDeviceRepo = new PostgresSyncDeviceRepository(db);
-  const syncOutboxRepo = new PostgresSyncOutboxRepository(db);
+  // Outbox inserts must land on the caller's transaction (F-07).
+  const syncOutboxRepo = new PostgresSyncOutboxRepository(dbx);
   const syncInboxRepo = new PostgresSyncInboxRepository(db);
   const documentNumberBlockRepo = new PostgresDocumentNumberBlockRepository(db);
   const syncResourceClaimRepo = new PostgresSyncResourceClaimRepository(db);

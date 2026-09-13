@@ -17,6 +17,18 @@ export interface CreateUserData {
   active?: boolean;
 }
 
+export interface UserSyncSnapshot {
+  id: string;
+  tenantId: string;
+  name: string;
+  email: string;
+  role: string;
+  active: boolean;
+  passwordHash: string;
+  pinHash: string | null;
+  updatedAt: string;
+}
+
 export interface IUserRepository {
   findById(id: string, ctx: TenantContext): Promise<UserData | null>;
   findByEmail(email: string, tenantId: string): Promise<UserData | null>;
@@ -24,4 +36,5 @@ export interface IUserRepository {
   create(data: CreateUserData, ctx: TenantContext): Promise<UserData>;
   update(id: string, data: Partial<CreateUserData>, ctx: TenantContext): Promise<UserData>;
   delete(id: string, ctx: TenantContext): Promise<void>;
+  findSyncSnapshot(id: string, ctx: TenantContext): Promise<UserSyncSnapshot | null>;
 }

@@ -30,9 +30,18 @@ export async function updatePartyUseCase(
   id: string,
   input: Partial<CreatePartyData>,
   ctx: TenantContext,
+  expectedVersion: number,
 ): Promise<PartyUseCaseResult> {
   try {
-    const party = await repo.update(id, input, ctx);
+    // P0-001: optimistic concurrency check
+    const current = await repo.findById(id, ctx);
+    if (current && current.version !== expectedVersion) {
+      return {
+        ok: false,
+        error: `تعارض في الإصدار: الإصدار الحالي ${current.version}، والإصدار المتوقع ${expectedVersion}. يرجى التحديث والمحاولة مرة أخرى.`,
+      };
+    }
+    const party = await repo.update(id, input, ctx, expectedVersion);
     return { ok: true, data: party };
   } catch (e) {
     return { ok: false, error: "فشل تحديث الطرف" };
@@ -70,9 +79,18 @@ export async function cancelPartyUseCase(
   id: string,
   cancelledBy: string,
   ctx: TenantContext,
+  expectedVersion: number,
 ): Promise<PartyUseCaseResult> {
   try {
-    const party = await repo.cancel(id, cancelledBy, ctx);
+    // P0-001: optimistic concurrency check
+    const current = await repo.findById(id, ctx);
+    if (current && current.version !== expectedVersion) {
+      return {
+        ok: false,
+        error: `تعارض في الإصدار: الإصدار الحالي ${current.version}، والإصدار المتوقع ${expectedVersion}. يرجى التحديث والمحاولة مرة أخرى.`,
+      };
+    }
+    const party = await repo.cancel(id, cancelledBy, ctx, expectedVersion);
     return { ok: true, data: party };
   } catch (e) {
     // Surface the repository's clear, business-level message (e.g. "لا يمكن

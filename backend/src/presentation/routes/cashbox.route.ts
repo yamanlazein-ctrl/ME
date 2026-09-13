@@ -3,7 +3,20 @@ import { validateBody } from "../../infrastructure/http/middleware/validate.midd
 import { idempotency } from "../../infrastructure/http/middleware/idempotency-handler.middleware.js";
 import type { ICashboxRepository } from "../../application/ports/ICashboxRepository.js";
 import type { ILedgerRepository } from "../../application/ports/ILedgerRepository.js";
+import type { ISyncOutboxRepository } from "../../application/ports/ISyncOutboxRepository.js";
 import type { TenantContext } from "../../domain/types/index.js";
+import { randomUUID } from "node:crypto";
+import { logger } from "../../infrastructure/config/logger.js";
+import { withTenantTx } from "../../infrastructure/orm/drizzle.js";
+import {
+  enqueueCashboxClose,
+  enqueueCashboxMovement,
+  enqueueCashboxMovementCancel,
+  enqueueCashboxOpening,
+  isSyncEnqueueEnabled,
+  opIdFromRequest,
+  syncDeviceIdFromRequest,
+} from "../../application/use-cases/sync/syncEnqueue.js";
 import {
   setOpeningBalanceSchema,
   addManualMovementSchema,
@@ -18,6 +31,7 @@ export function registerCashboxRoutes(
   auth: RequestHandler,
   writeGuard: RequestHandler,
   readGuard: RequestHandler,
+  syncOutboxRepo?: ISyncOutboxRepository,
 ) {
   const ctx = (req: Request): TenantContext => req.tenantContext!;
   const pid = (req: Request): string => req.params.id as string;
@@ -45,12 +59,9 @@ export function registerCashboxRoutes(
       //     dated today zeroed USD from 150 → 0 even though USD receipts exist.
       // Other currencies are independent boxes: full history, no opening.
       const sessionCurrency = state.session?.currency;
-      const opening =
-        currency === sessionCurrency ? (state.session?.openingBalance ?? 0) : 0;
+      const opening = currency === sessionCurrency ? (state.session?.openingBalance ?? 0) : 0;
       const from =
-        currency === sessionCurrency
-          ? (state.session?.openingDate ?? "0001-01-01")
-          : "0001-01-01";
+        currency === sessionCurrency ? (state.session?.openingDate ?? "0001-01-01") : "0001-01-01";
       const [ledger, manual] = await Promise.all([
         ledgerRepo.getCashMovementsOn(from, date, currency, ctx(req)),
         cashboxRepo.listManualMovements(ctx(req)),
@@ -96,6 +107,8 @@ export function registerCashboxRoutes(
     }
   });
 
+  // SYNC-12: opening balance is a tenant-singleton — one winner, serialized
+  // by the cashbox_opening identity claim. Same-transaction enqueue (F-07).
   router.post(
     "/cashbox/opening-balance",
     auth,
@@ -103,14 +116,40 @@ export function registerCashboxRoutes(
     idempotency("POST"),
     validateBody(setOpeningBalanceSchema),
     async (req: Request, res: Response) => {
+      const c = ctx(req);
       const b = body<{ openingBalance: number; openingDate: string; currency?: string }>(req);
-      const r = await uc.setOpeningBalanceUseCase(
-        cashboxRepo,
-        b.openingBalance,
-        b.openingDate,
-        b.currency ?? "SYP",
-        ctx(req),
-      );
+      const syncEnabled = Boolean(syncOutboxRepo && isSyncEnqueueEnabled());
+      const runSet = async () => {
+        const r = await uc.setOpeningBalanceUseCase(
+          cashboxRepo,
+          b.openingBalance,
+          b.openingDate,
+          b.currency ?? "SYP",
+          c,
+        );
+        if (!r.ok) return r;
+        if (syncOutboxRepo && isSyncEnqueueEnabled()) {
+          await enqueueCashboxOpening(
+            syncOutboxRepo,
+            {
+              openingBalance: b.openingBalance,
+              openingDate: b.openingDate,
+              currency: b.currency ?? "SYP",
+            },
+            c,
+            syncDeviceIdFromRequest(req),
+            opIdFromRequest(req),
+          );
+        }
+        return r;
+      };
+      let r: Awaited<ReturnType<typeof uc.setOpeningBalanceUseCase>>;
+      try {
+        r = syncEnabled ? await withTenantTx(c.tenantId, runSet) : await runSet();
+      } catch (err) {
+        logger.error({ err }, "transaction rolled back — opening balance dropped (F-07)");
+        return res.status(500).json({ code: "INTERNAL", message: "فشل تعيين الرصيد الافتتاحي" });
+      }
       if (r.ok) {
         res.json({ ok: true });
       } else {
@@ -119,6 +158,8 @@ export function registerCashboxRoutes(
     },
   );
 
+  // SYNC-12: manual movements are id-keyed appends — the id is pre-allocated
+  // so hub replay converges on redelivery instead of duplicating cash.
   router.post(
     "/cashbox/manual-movements",
     auth,
@@ -126,7 +167,36 @@ export function registerCashboxRoutes(
     idempotency("POST"),
     validateBody(addManualMovementSchema),
     async (req: Request, res: Response) => {
-      const r = await uc.addManualMovementUseCase(cashboxRepo, body(req), ctx(req));
+      const c = ctx(req);
+      const input = body<Record<string, unknown>>(req) as Record<string, unknown>;
+      const syncEnabled = Boolean(syncOutboxRepo && isSyncEnqueueEnabled());
+      const runAdd = async () => {
+        const id = randomUUID();
+        const r = await uc.addManualMovementUseCase(
+          cashboxRepo,
+          { ...(input as object), id } as never,
+          c,
+        );
+        if (!r.ok) return r;
+        if (syncOutboxRepo && isSyncEnqueueEnabled()) {
+          await enqueueCashboxMovement(
+            syncOutboxRepo,
+            { id: r.data.id ?? id },
+            input,
+            c,
+            syncDeviceIdFromRequest(req),
+            opIdFromRequest(req),
+          );
+        }
+        return r;
+      };
+      let r: Awaited<ReturnType<typeof uc.addManualMovementUseCase>>;
+      try {
+        r = syncEnabled ? await withTenantTx(c.tenantId, runAdd) : await runAdd();
+      } catch (err) {
+        logger.error({ err }, "transaction rolled back — manual movement dropped (F-07)");
+        return res.status(500).json({ code: "INTERNAL", message: "فشل إضافة حركة يدوية" });
+      }
       if (r.ok) {
         res.status(201).json(r.data);
       } else {
@@ -153,12 +223,36 @@ export function registerCashboxRoutes(
     }
   });
 
+  // SYNC-12: movement deletion replays by id on the hub.
   router.delete(
     "/cashbox/manual-movements/:id",
     auth,
     writeGuard,
     async (req: Request, res: Response) => {
-      const r = await uc.deleteManualMovementUseCase(cashboxRepo, pid(req), ctx(req));
+      const c = ctx(req);
+      const id = pid(req);
+      const syncEnabled = Boolean(syncOutboxRepo && isSyncEnqueueEnabled());
+      const runDelete = async () => {
+        const r = await uc.deleteManualMovementUseCase(cashboxRepo, id, c);
+        if (!r.ok) return r;
+        if (syncOutboxRepo && isSyncEnqueueEnabled()) {
+          await enqueueCashboxMovementCancel(
+            syncOutboxRepo,
+            id,
+            c,
+            syncDeviceIdFromRequest(req),
+            opIdFromRequest(req),
+          );
+        }
+        return r;
+      };
+      let r: Awaited<ReturnType<typeof uc.deleteManualMovementUseCase>>;
+      try {
+        r = syncEnabled ? await withTenantTx(c.tenantId, runDelete) : await runDelete();
+      } catch (err) {
+        logger.error({ err }, "transaction rolled back — movement delete dropped (F-07)");
+        return res.status(500).json({ code: "INTERNAL", message: "فشل حذف الحركة" });
+      }
       if (r.ok) {
         res.status(204).end();
       } else {
@@ -167,13 +261,39 @@ export function registerCashboxRoutes(
     },
   );
 
+  // SYNC-12: day-close is single-winner per date (cashbox_close claim). The
+  // loser 409s and its local close is flagged — closes are never auto-undone.
   router.post(
     "/cashbox/close-day",
     auth,
     writeGuard,
     validateBody(closeDaySchema),
     async (req: Request, res: Response) => {
-      const r = await uc.closeDayUseCase(cashboxRepo, body(req), ctx(req));
+      const c = ctx(req);
+      const input = body<Record<string, unknown>>(req) as Record<string, unknown>;
+      const syncEnabled = Boolean(syncOutboxRepo && isSyncEnqueueEnabled());
+      const runClose = async () => {
+        const r = await uc.closeDayUseCase(cashboxRepo, input as never, c);
+        if (!r.ok) return r;
+        if (syncOutboxRepo && isSyncEnqueueEnabled()) {
+          await enqueueCashboxClose(
+            syncOutboxRepo,
+            String(input.date ?? ""),
+            input,
+            c,
+            syncDeviceIdFromRequest(req),
+            opIdFromRequest(req),
+          );
+        }
+        return r;
+      };
+      let r: Awaited<ReturnType<typeof uc.closeDayUseCase>>;
+      try {
+        r = syncEnabled ? await withTenantTx(c.tenantId, runClose) : await runClose();
+      } catch (err) {
+        logger.error({ err }, "transaction rolled back — day close dropped (F-07)");
+        return res.status(500).json({ code: "INTERNAL", message: "فشل إقفال اليوم" });
+      }
       if (r.ok) {
         res.status(201).json(r.data);
       } else {

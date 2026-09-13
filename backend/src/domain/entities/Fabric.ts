@@ -10,6 +10,7 @@ export interface FabricData {
   unit?: string;
   notes?: string;
   imageUrl?: string;
+  version: number;
   createdAt: string;
   createdBy?: UUID;
   updatedAt: string;
@@ -36,6 +37,7 @@ export class Fabric {
       unit: base.unit ?? undefined,
       notes: base.notes ?? undefined,
       imageUrl: base.imageUrl ?? undefined,
+      version: 1,
       createdAt: "",
       createdBy: undefined,
       updatedAt: "",
@@ -69,6 +71,9 @@ export class Fabric {
   }
   get minStockKg(): number {
     return this.data.minStockKg;
+  }
+  get version(): number {
+    return this.data.version;
   }
 }
 

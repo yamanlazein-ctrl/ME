@@ -3,9 +3,30 @@ import { z } from "zod";
 import { validateBody } from "../../infrastructure/http/middleware/validate.middleware.js";
 import type { Container } from "../../infrastructure/di/container.js";
 import * as syncUc from "../../application/use-cases/sync/syncUseCases.js";
+import * as syncConflicts from "../../application/use-cases/sync/syncConflicts.js";
 import * as numberBlocksUc from "../../application/use-cases/sync/numberBlockUseCases.js";
 import { logger } from "../../infrastructure/config/logger.js";
+import { config } from "../../infrastructure/config/env.js";
 import { BusinessRuleError } from "../../domain/errors/index.js";
+import {
+  getCentralSyncUrl,
+  pairHubSession,
+  probeHubReachable,
+  setRuntimeCentralSyncUrl,
+} from "../../application/use-cases/sync/hubConfig.js";
+
+const HubConfigSchema = z.object({
+  url: z.string().url().nullable(),
+});
+
+const HubPairSchema = z.object({
+  url: z.string().url(),
+  email: z.string().email().optional(),
+  password: z.string().min(1).optional(),
+  userId: z.string().uuid().optional(),
+  pin: z.string().min(4).max(12).optional(),
+  tenantId: z.string().uuid().optional(),
+});
 
 const PushUnitSchema = z.object({
   opId: z.string().uuid(),
@@ -20,6 +41,9 @@ const ClaimBlockSchema = z.object({
   syncDeviceId: z.string().uuid(),
   entityType: z.string().min(1).max(30),
   size: z.number().int().min(1).max(5000).optional(),
+  // Tip reconciliation: highest number the claiming device already issued
+  // via local fallback. The hub advances its tip past it before carving.
+  knownUsed: z.number().int().min(0).max(999999).optional(),
 });
 
 const EnsureBlocksSchema = z.object({
@@ -31,20 +55,264 @@ const ReclaimBlockSchema = z.object({
   blockId: z.string().uuid(),
 });
 
+const RevokeDeviceSchema = z.object({
+  /** Operator reason, recorded verbatim on the device row for the audit trail. */
+  reason: z.string().trim().min(1).max(64).optional(),
+});
+
+/**
+ * Batch 4 / item 4A — role matrix for the sync surface.
+ *
+ * The guards are injected (same shape as every other route module in the
+ * project: `registerXRoutes(router, repo, auth, writeGuard, readGuard, …)`) so
+ * the matrix stays visible at the registration site in server.ts.
+ *
+ * Two families exist because the sync surface is NOT a normal CRUD surface:
+ *
+ *  - TRANSPORT (`/sync/push`, `/sync/pull`, `/sync/run`): this is the device
+ *    moving work that a route guard ALREADY authorized locally when the user
+ *    created the document. Pushing is not a re-authorization of that action —
+ *    the unit carries the ORIGINAL actor (`replayCtxFromPayload`) — so
+ *    restricting it by the pusher's role would break the offline flow of every
+ *    shared workstation (a `viewer`/`warehouse` session flushing an
+ *    accountant's queued invoice would get a 403 and the queue would never
+ *    drain). Authority on this path is DEVICE trust, enforced by
+ *    `sync-device-gate.middleware.ts`, not role. All four roles therefore keep
+ *    the transport endpoints, exactly as before this batch.
+ *
+ *  - OPERATOR (`/sync/claims/reap`, `/sync/conflicts/resolve`,
+ *    `/sync/number-blocks/*`, `/sync/devices/*`): these mutate sync
+ *    bookkeeping, mint document-number authority, or record a resolution
+ *    decision about documents. They follow the project's existing
+ *    classifications: repairs/administration are `admin` (settings, users,
+ *    license, backup are admin-only), document-number and conflict decisions
+ *    need an operational role and exclude the read-only `viewer` (viewer is
+ *    never in a write guard anywhere in this codebase).
+ */
+export type SyncRouteGuards = {
+  /** Read-only sync diagnostics: every authenticated role (as dashboard/audit). */
+  readGuard: RequestHandler;
+  /** Device transport: writers only on hub ingest; local run uses this too. */
+  transportGuard: RequestHandler;
+  /** Number-block minting/ensuring: operational roles, viewer excluded. */
+  numberingGuard: RequestHandler;
+  /** Conflict resolution + device management decisions. */
+  conflictGuard: RequestHandler;
+  /** Repairs and device lifecycle: admin only. */
+  operatorGuard: RequestHandler;
+};
+
+/**
+ * Device-trust gates, pre-configured with their policy (see
+ * sync-device-gate.middleware.ts):
+ *  - `attributed`: the asserted device must be registered, not revoked and
+ *    bound to the caller. Hub ingestion / device-scoped number blocks.
+ *  - `pull`: same, but the `excludeSyncDeviceId` query parameter counts as the
+ *    caller asserting its own device (that is how the hub pull path carries
+ *    device identity today).
+ *  - `orchestration`: local `/sync/run` trigger. An unregistered local device
+ *    is a supported state (per-unit gating still happens at the hub), but a
+ *    REVOKED device is refused immediately and explicitly.
+ */
+export type SyncDeviceGates = {
+  attributed: RequestHandler;
+  pull: RequestHandler;
+  orchestration: RequestHandler;
+};
+
+function isLoopbackOrLan(ip: string | undefined): boolean {
+  if (!ip) return false;
+  const host = ip.replace(/^::ffff:/, "").split(":")[0];
+  if (host === "127.0.0.1" || host === "localhost" || host === "::1") return true;
+  if (host.startsWith("10.") || host.startsWith("192.168.") || host.startsWith("169.254.")) {
+    return true;
+  }
+  return /^172\.(1[6-9]|2\d|3[01])\./.test(host);
+}
+
+/** Login-screen pairing: desktop SKU on loopback, no JWT (UI stays on local API). */
+export function registerDesktopHubRoutes(router: Router): void {
+  const desktopOnly = (req: Request, res: Response, next: () => void) => {
+    if (!config.DESKTOP_DEPLOY) {
+      res.status(404).json({ code: "NOT_FOUND", message: "غير متاح" });
+      return;
+    }
+    if (!isLoopbackOrLan(req.ip ?? req.socket.remoteAddress)) {
+      res.status(403).json({ code: "FORBIDDEN", message: "ضبط المركز متاح من الجهاز المحلي فقط" });
+      return;
+    }
+    next();
+  };
+
+  router.get("/api/sync/desktop-hub", desktopOnly, async (_req: Request, res: Response) => {
+    const url = getCentralSyncUrl();
+    res.json({ url, hubReachable: url ? await probeHubReachable() : null });
+  });
+
+  router.put(
+    "/api/sync/desktop-hub",
+    desktopOnly,
+    validateBody(HubConfigSchema),
+    async (req: Request, res: Response) => {
+      const body = (req as unknown as { validatedBody: z.infer<typeof HubConfigSchema> })
+        .validatedBody;
+      const url = setRuntimeCentralSyncUrl(body.url);
+      res.json({ url, hubReachable: url ? await probeHubReachable(true) : null });
+    },
+  );
+
+  router.post(
+    "/api/sync/desktop-hub-pair",
+    desktopOnly,
+    validateBody(HubPairSchema),
+    async (req: Request, res: Response) => {
+      const body = (req as unknown as { validatedBody: z.infer<typeof HubPairSchema> }).validatedBody;
+      const result = await pairHubSession(body);
+      if (!result.ok) {
+        res.status(422).json({ code: "HUB_PAIR_FAILED", message: result.error });
+        return;
+      }
+      res.json({ url: result.url, paired: true });
+    },
+  );
+}
+
 export function registerSyncRoutes(
   router: Router,
   container: Container,
   auth: RequestHandler,
+  guards: SyncRouteGuards,
+  gate: SyncDeviceGates,
 ) {
-  router.get("/sync/status", auth, async (req: Request, res: Response) => {
-    const ctx = req.tenantContext!;
-    const status = await syncUc.getSyncStatus(container.syncOutboxRepo, ctx.tenantId);
-    res.json(status);
+  router.get("/sync/hub-config", auth, guards.readGuard, async (_req: Request, res: Response) => {
+    const url = getCentralSyncUrl();
+    const reachable = await probeHubReachable();
+    res.json({ url, hubReachable: url ? reachable : null });
   });
 
-  router.get("/sync/pending", auth, async (req: Request, res: Response) => {
+  router.put(
+    "/sync/hub-config",
+    auth,
+    guards.transportGuard,
+    validateBody(HubConfigSchema),
+    async (req: Request, res: Response) => {
+      const body = (req as unknown as { validatedBody: z.infer<typeof HubConfigSchema> })
+        .validatedBody;
+      const url = setRuntimeCentralSyncUrl(body.url);
+      res.json({ url, hubReachable: url ? await probeHubReachable(true) : null });
+    },
+  );
+
+  router.post(
+    "/sync/hub-pair",
+    auth,
+    guards.transportGuard,
+    validateBody(HubPairSchema),
+    async (req: Request, res: Response) => {
+      const body = (req as unknown as { validatedBody: z.infer<typeof HubPairSchema> }).validatedBody;
+      const ctx = req.tenantContext!;
+      const result = await pairHubSession({
+        ...body,
+        tenantId: body.tenantId ?? ctx.tenantId,
+      });
+      if (!result.ok) {
+        res.status(422).json({ code: "HUB_PAIR_FAILED", message: result.error });
+        return;
+      }
+      res.json({ url: result.url, paired: true });
+    },
+  );
+
+  router.get("/sync/status", auth, guards.readGuard, async (req: Request, res: Response) => {
     const ctx = req.tenantContext!;
-    const rows = await container.syncOutboxRepo.listPending(ctx.tenantId, 100);
+    const status = await syncUc.getSyncStatus(container.syncOutboxRepo, ctx.tenantId);
+
+    // Inbound side (hub role): a unit that failed to materialize used to be
+    // invisible — neither `applied` (so peers never pulled it) nor surfaced
+    // anywhere. Report the breakdown so "stuck" is observable.
+    const inboxStatusCounts = await container.syncInboxRepo.countByStatus(ctx.tenantId);
+
+    // Number-block health (F-10): a device with no active block mints codes
+    // from its own local sequence, which can collide with another node's codes
+    // on the hub. Surfacing it here turns a silent degradation into something
+    // an operator can see and fix by syncing once.
+    let numberBlocks: Array<{
+      entityType: string;
+      year: number;
+      startNumber: number;
+      endNumber: number;
+      nextNumber: number;
+      status: string;
+    }> = [];
+    if (ctx.syncDeviceId) {
+      try {
+        const rows = await container.documentNumberBlockRepo.listForDevice(
+          ctx.tenantId,
+          ctx.syncDeviceId,
+        );
+        numberBlocks = rows.map((r) => ({
+          entityType: r.entityType,
+          year: r.year,
+          startNumber: r.startNumber,
+          endNumber: r.endNumber,
+          nextNumber: r.nextNumber,
+          status: r.status,
+        }));
+      } catch (err) {
+        logger.warn({ err }, "number-block status read failed");
+      }
+    }
+    const blockEntityTypes = new Set(numberBlocks.map((b) => b.entityType));
+    // P4: every auto-provisioned type is health-checked, not just the original
+    // four — an expired/exhausted block for vouchers, returns, expenses or
+    // orders fails loud on next create, so it must be visible here first.
+    const missingBlocks = [
+      "customer",
+      "supplier",
+      "invoice",
+      "invoice_entry",
+      "voucher",
+      "return",
+      "expense",
+      "order",
+    ].filter((t) => !blockEntityTypes.has(t));
+
+    // P1-step-1: outstanding first-write-wins claims, each joined with its
+    // holder op's hub inbox status so a stranded claim (dead holder) is
+    // distinguishable from a live reservation. Best-effort like the block
+    // read above: observability must never fail the status call itself.
+    let claimInventory: syncUc.SyncClaimInventory | null = null;
+    try {
+      claimInventory = await syncUc.getSyncClaimInventory(
+        container.syncInboxRepo,
+        container.syncResourceClaimRepo,
+        ctx.tenantId,
+      );
+    } catch (err) {
+      logger.warn({ err }, "sync claim inventory read failed");
+    }
+
+    res.json({ ...status, inboxStatusCounts, numberBlocks, missingBlocks, claimInventory });
+  });
+
+  /**
+   * Operational visibility: the units that are NOT moving — rejected by a
+   * conflict, or parked as `dead` after their materialization attempts were
+   * exhausted. Without this endpoint a stuck unit is invisible to the operator.
+   */
+  router.get("/sync/inbox", auth, guards.readGuard, async (req: Request, res: Response) => {
+    const ctx = req.tenantContext!;
+    const statusParam = typeof req.query.status === "string" ? req.query.status : "";
+    const allowed: Array<"received" | "applied" | "rejected" | "dead"> = [
+      "received",
+      "applied",
+      "rejected",
+      "dead",
+    ];
+    const statuses = statusParam
+      ? allowed.filter((s) => statusParam.split(",").includes(s))
+      : (["rejected", "dead", "received"] as const);
+    const rows = await container.syncInboxRepo.listByStatus(ctx.tenantId, [...statuses], 200);
     res.json({
       items: rows.map((r) => ({
         id: r.id,
@@ -53,13 +321,141 @@ export function registerSyncRoutes(
         entityId: r.entityId,
         operation: r.operation,
         status: r.status,
+        syncDeviceId: r.syncDeviceId,
+        rejectReason: r.rejectReason,
+        conflictOpId: r.conflictOpId,
+        materializeError: r.materializeError,
+        applyAttempts: r.applyAttempts,
+        lastAttemptAt: r.lastAttemptAt,
+        receivedSeq: r.receivedSeq,
+        receivedAt: r.receivedAt,
+        appliedAt: r.appliedAt,
+      })),
+    });
+  });
+
+  router.get("/sync/pending", auth, guards.readGuard, async (req: Request, res: Response) => {
+    const ctx = req.tenantContext!;
+    // Claimable, not just `pending`: units stranded in `pushing` by a crashed
+    // run are still outstanding work and must be visible here.
+    const rows = await container.syncOutboxRepo.listClaimable(ctx.tenantId, 100);
+    res.json({
+      items: rows.map((r) => ({
+        id: r.id,
+        opId: r.opId,
+        entityType: r.entityType,
+        entityId: r.entityId,
+        operation: r.operation,
+        status: r.status,
+        seq: r.seq,
         createdAt: r.createdAt,
       })),
     });
   });
 
+  /**
+   * P1-step-1: dedicated claim inventory (same payload as the `claimInventory`
+   * section of `/sync/status`, without the unrelated counts).
+   */
+  router.get("/sync/claims", auth, guards.readGuard, async (req: Request, res: Response) => {
+    const ctx = req.tenantContext!;
+    const inventory = await syncUc.getSyncClaimInventory(
+      container.syncInboxRepo,
+      container.syncResourceClaimRepo,
+      ctx.tenantId,
+    );
+    res.json(inventory);
+  });
+
+  /**
+   * P1-step-1: release claims whose holder op reached the terminal `dead`
+   * state. Terminal-gated by construction (see `reapTerminalSyncClaims`):
+   * live reservations are reported as `kept` and never deleted.
+   */
+  router.post("/sync/claims/reap", auth, guards.operatorGuard, async (req: Request, res: Response) => {
+    const ctx = req.tenantContext!;
+    try {
+      const result = await syncUc.reapTerminalSyncClaims(
+        container.syncInboxRepo,
+        container.syncResourceClaimRepo,
+        ctx.tenantId,
+      );
+      logger.info(
+        { tenantId: ctx.tenantId, userId: ctx.userId, ...result },
+        "operator reaped dead sync-unit claims",
+      );
+      res.json(result);
+    } catch (err) {
+      logger.error({ err }, "sync claim reap failed");
+      res.status(500).json({ code: "SYNC_CLAIM_REAP_FAILED", message: "فشل تحرير المطالبات" });
+    }
+  });
+/**
+   * Conflict tracking (plan §4/§11): open update/cancel conflicts that lost on
+   * optimistic concurrency, each carrying the loser op, the base version they
+   * started from, and the server version that actually won. Unresolved by
+   * default — an operator decides, never a silent LWW.
+   */
+  router.get("/sync/conflicts", auth, guards.readGuard, async (req: Request, res: Response) => {
+    const ctx = req.tenantContext!;
+    const all = req.query.all === "1" || req.query.all === "true";
+    const conflicts = await syncConflicts.listSyncConflicts(ctx.tenantId, { openOnly: !all });
+    res.json({ items: conflicts });
+  });
+
+  const ResolveConflictSchema = z.object({
+    conflictId: z.string().uuid(),
+    decision: z.enum(["keep-server", "rebase", "withdraw"]),
+    note: z.string().max(2000).optional(),
+  });
+
+  /**
+   * Explicit conflict resolution — no blind overwrite. The operator records a
+   * decision (keep-server / rebase / withdraw). For `rebase`, the response's
+   * `serverVersion` is the version a legitimate re-submission of the losing
+   * local intent must be based on; the actual re-submit goes through the
+   * normal update path so it is a NEW edit, never an overwrite.
+   */
+  router.post(
+    "/sync/conflicts/resolve",
+    auth,
+    guards.conflictGuard,
+    validateBody(ResolveConflictSchema),
+    async (req: Request, res: Response) => {
+      const ctx = req.tenantContext!;
+      const body = (req as unknown as { validatedBody: z.infer<typeof ResolveConflictSchema> })
+        .validatedBody;
+      const resolved = await syncConflicts.resolveSyncConflict(
+        ctx.tenantId,
+        body.conflictId,
+        body.decision,
+        ctx.userId,
+        body.note,
+      );
+      if (!resolved) {
+        res.status(409).json({
+          code: "SYNC_CONFLICT_NOT_OPEN",
+          message: "التعارض غير موجود أو حُلَّ سابقاً",
+        });
+        return;
+      }
+      logger.info(
+        { conflictId: body.conflictId, decision: body.decision, byUserId: ctx.userId },
+        "operator resolved sync conflict",
+      );
+      res.json({ resolved });
+    },
+  );
+
   /** Push local outbox to hub, then pull peers' applied units. */
-  router.post("/sync/run", auth, async (req: Request, res: Response) => {
+
+  /** Push local outbox to hub, then pull peers' applied units. */
+  router.post(
+    "/sync/run",
+    auth,
+    guards.transportGuard,
+    gate.orchestration,
+    async (req: Request, res: Response) => {
     const ctx = req.tenantContext!;
     const push = await syncUc.runLocalSyncPush(
       container.syncOutboxRepo,
@@ -68,9 +464,30 @@ export function registerSyncRoutes(
       container.notificationRepo,
       ctx,
       req.headers.authorization,
+      // P1-step-1: every created document type needs its cancel use-case wired
+      // so a terminally-rejected unit rolls back locally instead of forking.
+      {
+        voucherRepo: container.voucherRepo,
+        returnRepo: container.returnRepo,
+        orderRepo: container.orderRepo,
+        expenseRepo: container.expenseRepo,
+        ledgerRepo: container.ledgerRepo,
+        cashboxRepo: container.cashboxRepo,
+      },
     );
 
-    let pull = { pulled: 0, applied: 0, skipped: 0, failed: 0 };
+    let pull: Awaited<ReturnType<typeof syncUc.runLocalSyncPull>> = {
+      pulled: 0,
+      applied: 0,
+      skipped: 0,
+      failed: 0,
+      deviceTrust: null,
+    };
+    // P7: a failed pull must be VISIBLE in the run result. The old shape
+    // swallowed the error and returned zeros, which reads exactly like "in
+    // sync, nothing to do" — an operator cannot distinguish success from a
+    // hub outage. Same for the best-effort block refill below.
+    let pullError: string | null = null;
     try {
       pull = await syncUc.runLocalSyncPull(
         container.db,
@@ -81,16 +498,30 @@ export function registerSyncRoutes(
           orderRepo: container.orderRepo,
           expenseRepo: container.expenseRepo,
           auditRepo: container.auditRepo,
+          partyRepo: container.partyRepo,
+          fabricRepo: container.fabricRepo,
+          colorRepo: container.colorRepo,
+          rollRepo: container.rollRepo,
+          ledgerRepo: container.ledgerRepo,
+          statementRepo: container.statementRepo,
+          cashboxRepo: container.cashboxRepo,
+          settingsRepo: container.settingsRepo,
+          companyRepo: container.companyRepo,
         },
         ctx,
         req.headers.authorization,
         ctx.syncDeviceId ?? null,
+        // Local inbox: mirrors pulled units so their retries are bounded and a
+        // permanently-failing unit cannot hold the cursor forever.
+        container.syncInboxRepo,
       );
     } catch (err) {
+      pullError = err instanceof Error ? err.message : "pull failed";
       logger.warn({ err }, "sync pull during sync/run failed");
     }
 
     // Best-effort: refill number blocks while online.
+    let blocksError: string | null = null;
     if (ctx.syncDeviceId) {
       try {
         await numberBlocksUc.ensureDeviceNumberBlocks(
@@ -104,24 +535,48 @@ export function registerSyncRoutes(
           },
         );
       } catch (err) {
+        blocksError = err instanceof Error ? err.message : "number-block ensure failed";
         logger.warn({ err }, "number-block ensure during sync/run failed");
       }
     }
-    res.json({ ...push, pull });
+    // 4B: one device-trust verdict per run, whichever side observed it. The
+    // device must be able to say WHY it stopped (unknown / revoked / not bound)
+    // and that its unsynced documents are still intact.
+    const deviceTrust = push.deviceTrust ?? pull.deviceTrust ?? null;
+    res.json({ ...push, deviceTrust, pull, pullError, blocksError });
   });
 
   /**
    * Hub endpoint: FWW claims + use-case replay (PRE_ALLOCATED invoice create).
+   *
+   * Device gate: the asserted syncDeviceId must be REGISTERED to this tenant.
+   * Device identity is self-asserted by header/body, so registration is what
+   * makes a push attributable — an unknown id is rejected before any inbox,
+   * claim, or materialization work happens. NULL ids stay allowed (local
+   * unregistered flows) but push unattributed units.
    */
   router.post(
     "/sync/push",
     auth,
+    guards.transportGuard,
+    gate.attributed,
     validateBody(PushUnitSchema),
     async (req: Request, res: Response) => {
       const ctx = req.tenantContext!;
       const body = (req as unknown as { validatedBody: z.infer<typeof PushUnitSchema> })
         .validatedBody;
+      const deviceId = body.syncDeviceId ?? ctx.syncDeviceId ?? null;
+      if (!deviceId) {
+        res.status(403).json({
+          code: "SYNC_DEVICE_REQUIRED",
+          message: "دفع المزامنة للمركز يتطلب جهاز مزامنة مسجّل",
+        });
+        return;
+      }
       try {
+        // Device attribution is enforced by `gate.attributed` above (registered,
+        // not revoked, bound to the caller) — one enforcement point, shared with
+        // pull and the number-block endpoints, instead of a per-route copy.
         const result = await syncUc.receiveSyncPush(
           container.syncInboxRepo,
           container.syncResourceClaimRepo,
@@ -133,11 +588,20 @@ export function registerSyncRoutes(
             orderRepo: container.orderRepo,
             expenseRepo: container.expenseRepo,
             auditRepo: container.auditRepo,
+            partyRepo: container.partyRepo,
+            fabricRepo: container.fabricRepo,
+            colorRepo: container.colorRepo,
+            rollRepo: container.rollRepo,
+            ledgerRepo: container.ledgerRepo,
+            statementRepo: container.statementRepo,
+            cashboxRepo: container.cashboxRepo,
+            settingsRepo: container.settingsRepo,
+            companyRepo: container.companyRepo,
           },
           container.db,
           {
             tenantId: ctx.tenantId,
-            syncDeviceId: body.syncDeviceId,
+            syncDeviceId: deviceId,
             opId: body.opId,
             entityType: body.entityType,
             entityId: body.entityId,
@@ -163,6 +627,12 @@ export function registerSyncRoutes(
           accepted: true,
           created: result.created,
           materialized: result.materialized,
+          // P3a-completion: the device must know whether the hub is DONE
+          // (applied/dead → stop retrying) or still working (received →
+          // re-push later). hubStatus/hubReason name the terminal state.
+          terminal: result.terminal,
+          hubStatus: result.row.status,
+          hubReason: result.row.rejectReason,
           inboxId: result.row.id,
           opId: result.row.opId,
           status: result.row.status,
@@ -174,21 +644,35 @@ export function registerSyncRoutes(
     },
   );
 
-  /** Hub → peer: list applied sync units after a cursor. */
-  router.get("/sync/pull", auth, async (req: Request, res: Response) => {
+  /** Hub → peer: list applied sync units after a monotonic cursor. */
+  router.get("/sync/pull", auth, guards.readGuard, gate.pull, async (req: Request, res: Response) => {
     const ctx = req.tenantContext!;
-    const afterRaw = typeof req.query.after === "string" ? req.query.after : null;
-    const after = afterRaw ? new Date(afterRaw) : null;
-    if (afterRaw && Number.isNaN(after?.getTime())) {
-      res.status(400).json({ code: "BAD_REQUEST", message: "after يجب أن يكون ISO datetime" });
-      return;
+    // Cursor is a sequence, not a timestamp: `received_at` is transaction-start
+    // time, so a strict `>` against it permanently skips rows that tie with it.
+    const afterSeqRaw = typeof req.query.afterSeq === "string" ? req.query.afterSeq : null;
+    let afterSeq: number | null = null;
+    if (afterSeqRaw !== null && afterSeqRaw !== "") {
+      const parsed = Number(afterSeqRaw);
+      if (!Number.isFinite(parsed) || parsed < 0) {
+        res.status(400).json({ code: "BAD_REQUEST", message: "afterSeq يجب أن يكون رقماً" });
+        return;
+      }
+      afterSeq = parsed;
     }
-    const exclude =
+    // P6 (SYNC-07): the caller's own device comes from the authenticated
+    // binding (X-Sync-Device-Id, UUID-validated by the auth middleware), not
+    // from the query string. The query param stays as a fallback for old
+    // clients, format-validated as before. Exclusion is only an efficiency
+    // optimization — duplicate-apply safety rests on idempotent materialize
+    // (`exists` on pre-allocated ids), never on this filter — and it discloses
+    // nothing either way: pulls are tenant-scoped regardless.
+    const excludeParam =
       typeof req.query.excludeSyncDeviceId === "string" ? req.query.excludeSyncDeviceId : null;
+    const exclude = ctx.syncDeviceId ?? excludeParam;
     const limitRaw = typeof req.query.limit === "string" ? Number(req.query.limit) : 50;
     const limit = Number.isFinite(limitRaw) ? Math.min(Math.max(limitRaw, 1), 100) : 50;
 
-    const rows = await container.syncInboxRepo.listAppliedSince(ctx.tenantId, after, {
+    const rows = await container.syncInboxRepo.listAppliedSince(ctx.tenantId, afterSeq, {
       excludeSyncDeviceId: exclude && /^[0-9a-f-]{36}$/i.test(exclude) ? exclude : null,
       limit,
     });
@@ -200,6 +684,7 @@ export function registerSyncRoutes(
         entityId: r.entityId,
         operation: r.operation,
         payload: r.payload,
+        receivedSeq: r.receivedSeq,
         receivedAt: r.receivedAt.toISOString(),
         appliedAt: r.appliedAt?.toISOString() ?? null,
       })),
@@ -210,6 +695,8 @@ export function registerSyncRoutes(
   router.post(
     "/sync/number-blocks/claim",
     auth,
+    guards.numberingGuard,
+    gate.attributed,
     validateBody(ClaimBlockSchema),
     async (req: Request, res: Response) => {
       const ctx = req.tenantContext!;
@@ -221,6 +708,7 @@ export function registerSyncRoutes(
           syncDeviceId: body.syncDeviceId,
           entityType: body.entityType,
           size: body.size,
+          knownUsed: body.knownUsed ?? null,
         });
         res.status(201).json({
           ...block,
@@ -232,7 +720,9 @@ export function registerSyncRoutes(
           return;
         }
         logger.error({ err }, "number-block claim failed");
-        res.status(500).json({ code: "NUMBER_BLOCK_CLAIM_FAILED", message: "فشل حجز كتلة الترقيم" });
+        res
+          .status(500)
+          .json({ code: "NUMBER_BLOCK_CLAIM_FAILED", message: "فشل حجز كتلة الترقيم" });
       }
     },
   );
@@ -241,6 +731,8 @@ export function registerSyncRoutes(
   router.post(
     "/sync/number-blocks/ensure",
     auth,
+    guards.numberingGuard,
+    gate.attributed,
     validateBody(EnsureBlocksSchema),
     async (req: Request, res: Response) => {
       const ctx = req.tenantContext!;
@@ -273,7 +765,7 @@ export function registerSyncRoutes(
     },
   );
 
-  router.get("/sync/number-blocks", auth, async (req: Request, res: Response) => {
+  router.get("/sync/number-blocks", auth, guards.readGuard, async (req: Request, res: Response) => {
     const ctx = req.tenantContext!;
     const deviceId =
       (typeof req.query.syncDeviceId === "string" && req.query.syncDeviceId) ||
@@ -303,6 +795,8 @@ export function registerSyncRoutes(
   router.post(
     "/sync/number-blocks/reclaim",
     auth,
+    guards.operatorGuard,
+    gate.attributed,
     validateBody(ReclaimBlockSchema),
     async (req: Request, res: Response) => {
       const ctx = req.tenantContext!;
@@ -325,6 +819,100 @@ export function registerSyncRoutes(
           message: "فشل استرداد ذيل الكتلة",
         });
       }
+    },
+  );
+
+  /* ------------------------------------------------------------------ */
+  /* Device lifecycle (Batch 4 / 4B)                                     */
+  /*                                                                     */
+  /* Revocation is the operator's answer to a lost, stolen, replaced or  */
+  /* compromised device. It is non-destructive: no unit, number block or */
+  /* claim is deleted, and nothing already attributed to the device is   */
+  /* rewritten — the device simply loses its authority to register, push */
+  /* and pull. Units it already pushed stay in the hub inbox and remain  */
+  /* resolvable, so revoking never destroys bookkeeping.                 */
+  /* ------------------------------------------------------------------ */
+
+  /** Operator view of the tenant's devices, revoked ones included. */
+  router.get(
+    "/sync/devices",
+    auth,
+    guards.operatorGuard,
+    async (req: Request, res: Response) => {
+      const ctx = req.tenantContext!;
+      const rows = await container.syncDeviceRepo.listForTenant(ctx.tenantId);
+      res.json({
+        items: rows.map((r) => ({
+          id: r.id,
+          platform: r.platform,
+          hostname: r.hostname,
+          label: r.label,
+          fingerprintVersion: r.deviceFingerprintVersion,
+          authorizedUserIds: r.authorizedUserIds,
+          lastSeenByUserId: r.lastSeenByUserId,
+          lastSeenAt: r.lastSeenAt,
+          createdAt: r.createdAt,
+          revokedAt: r.revokedAt,
+          revokeReason: r.revokeReason,
+        })),
+      });
+    },
+  );
+
+  /** Revoke a device: all subsequent register/push/pull attempts are refused. */
+  router.post(
+    "/sync/devices/:deviceId/revoke",
+    auth,
+    guards.operatorGuard,
+    validateBody(RevokeDeviceSchema),
+    async (req: Request, res: Response) => {
+      const ctx = req.tenantContext!;
+      const deviceId = String(req.params.deviceId ?? "");
+      if (!/^[0-9a-f-]{36}$/i.test(deviceId)) {
+        res.status(400).json({ code: "BAD_REQUEST", message: "معرّف الجهاز غير صالح" });
+        return;
+      }
+      const reason = (req.body as { reason?: string } | undefined)?.reason ?? "operator_action";
+      const row = await container.syncDeviceRepo.setRevoked(ctx.tenantId, deviceId, true, reason);
+      if (!row) {
+        res.status(404).json({ code: "NOT_FOUND", message: "الجهاز غير موجود لدى هذه الشركة" });
+        return;
+      }
+      logger.warn(
+        { tenantId: ctx.tenantId, byUserId: ctx.userId, deviceId, reason },
+        "operator revoked sync device",
+      );
+      res.json({ ok: true, id: row.id, revokedAt: row.revokedAt, revokeReason: row.revokeReason });
+    },
+  );
+
+  /**
+   * Reinstate a revoked device. Explicit and separate from revoke so an
+   * accidental revocation is recoverable without SQL — the row and its
+   * bindings are untouched by revocation, so reinstating restores exactly the
+   * previous authority (users must still be bound, which revocation preserved).
+   */
+  router.post(
+    "/sync/devices/:deviceId/reinstate",
+    auth,
+    guards.operatorGuard,
+    async (req: Request, res: Response) => {
+      const ctx = req.tenantContext!;
+      const deviceId = String(req.params.deviceId ?? "");
+      if (!/^[0-9a-f-]{36}$/i.test(deviceId)) {
+        res.status(400).json({ code: "BAD_REQUEST", message: "معرّف الجهاز غير صالح" });
+        return;
+      }
+      const row = await container.syncDeviceRepo.setRevoked(ctx.tenantId, deviceId, false, null);
+      if (!row) {
+        res.status(404).json({ code: "NOT_FOUND", message: "الجهاز غير موجود لدى هذه الشركة" });
+        return;
+      }
+      logger.warn(
+        { tenantId: ctx.tenantId, byUserId: ctx.userId, deviceId },
+        "operator reinstated sync device",
+      );
+      res.json({ ok: true, id: row.id, revokedAt: row.revokedAt });
     },
   );
 }

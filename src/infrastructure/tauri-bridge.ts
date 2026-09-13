@@ -118,6 +118,18 @@ export async function ensureDocumentFolders(): Promise<string | null> {
   return (await invoke("ensure_document_folders")) as string;
 }
 
+export async function getHubUrl(): Promise<string> {
+  if (!isTauri()) return "";
+  const invoke = await getInvoke();
+  return ((await invoke("get_hub_url")) as string) ?? "";
+}
+
+export async function setHubUrl(url: string): Promise<string> {
+  if (!isTauri()) return url.trim().replace(/\/+$/, "");
+  const invoke = await getInvoke();
+  return ((await invoke("set_hub_url", { url })) as string) ?? "";
+}
+
 /** Archive a printed/saved document into the Desktop folder tree. */
 export async function archiveDocumentPdf(
   docType: ArchiveDocType,

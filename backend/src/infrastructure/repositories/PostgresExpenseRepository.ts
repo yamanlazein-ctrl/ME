@@ -13,6 +13,7 @@ import {
   type ExpenseData,
   type CreateExpenseInput,
 } from "../../domain/entities/Expense.js";
+import { allocateDocumentNumber } from "../utils/documentNumbers.js";
 import type { TenantContext, PaginatedResult } from "../../domain/types/index.js";
 
 export class PostgresExpenseRepository implements IExpenseRepository {
@@ -74,11 +75,20 @@ export class PostgresExpenseRepository implements IExpenseRepository {
 
   async create(
     input: CreateExpenseInput,
-    autoNumber: string,
+    autoNumber: string | undefined,
     ctx: TenantContext,
   ): Promise<ExpenseData> {
     return this.db.transaction(async (tx) => {
       await assertDayUnlocked(tx, ctx.tenantId, input.date);
+      // P4: mint the number INSIDE this transaction from the device's reserved
+      // block (fail-loud when unprovisioned) so two offline devices can never
+      // mint the same number and a guard failure below never burns one. A
+      // supplied number (sync replay) goes through the pre-allocated path,
+      // which honors it verbatim AND raises the sequence floor.
+      const number = await allocateDocumentNumber(tx, "expense", ctx.tenantId, {
+        preAllocatedNumber: autoNumber ?? null,
+        syncDeviceId: ctx.syncDeviceId,
+      });
       // Problem 3 fix: default paidFromCashbox to true ONCE and reuse it, so the
       // ledger cashImpact flag matches what is actually persisted (the raw input
       // field is undefined when omitted, which previously made transfer-method
@@ -146,7 +156,7 @@ export class PostgresExpenseRepository implements IExpenseRepository {
         .values({
           ...(input.preAllocatedId ? { id: input.preAllocatedId } : {}),
           tenantId: ctx.tenantId,
-          number: autoNumber,
+          number,
           category: input.category,
           description: input.description,
           amount: input.amount,
@@ -174,8 +184,8 @@ export class PostgresExpenseRepository implements IExpenseRepository {
           cashImpact: "none",
           referenceType: "expense",
           referenceId: row.id,
-          referenceNumber: autoNumber,
-          description: `Expense ${autoNumber}: ${input.category} - ${input.description}`,
+          referenceNumber: number,
+          description: `Expense ${number}: ${input.category} - ${input.description}`,
           createdBy: ctx.userId,
         },
         {
@@ -189,8 +199,8 @@ export class PostgresExpenseRepository implements IExpenseRepository {
           cashImpact: isCash ? "out" : "none",
           referenceType: "expense",
           referenceId: row.id,
-          referenceNumber: autoNumber,
-          description: `Cash paid ${autoNumber}`,
+          referenceNumber: number,
+          description: `Cash paid ${number}`,
           createdBy: ctx.userId,
         },
       ]);
@@ -199,14 +209,37 @@ export class PostgresExpenseRepository implements IExpenseRepository {
     });
   }
 
-  async cancel(id: string, cancelledBy: string, ctx: TenantContext): Promise<ExpenseData> {
+  async cancel(id: string, cancelledBy: string, ctx: TenantContext, expectedVersion: number): Promise<ExpenseData> {
     return this.db.transaction(async (tx) => {
+      // P0-001: lock the row first for version check
+      const [currentRow] = await tx
+        .select()
+        .from(expenses)
+        .where(
+          and(
+            eq(expenses.id, id),
+            eq(expenses.tenantId, ctx.tenantId),
+            eq(expenses.status, "active"),
+          ),
+        )
+        .for("update")
+        .limit(1);
+      if (!currentRow) throw new Error("Expense not found or already cancelled");
+      // P0-001: optimistic concurrency — fail fast if version mismatch
+      if (currentRow.version !== expectedVersion) {
+        throw Object.assign(new Error(`Stale version: expected ${expectedVersion}, current ${currentRow.version}`), {
+          code: "STALE_VERSION" as const,
+        });
+      }
+
       const [row] = await tx
         .update(expenses)
         .set({
           status: "cancelled",
           cancelledAt: new Date(),
           cancelledBy,
+          updatedAt: new Date(),
+          version: sql`${expenses.version} + 1`,
         })
         .where(
           and(
@@ -260,8 +293,10 @@ export class PostgresExpenseRepository implements IExpenseRepository {
       status: row.status as ExpenseData["status"],
       notesPrint: n(row.notesPrint),
       notesInternal: n(row.notesInternal),
+      version: row.version ?? 1,
       createdAt: row.createdAt.toISOString(),
       createdBy: n(row.createdBy),
+      updatedAt: row.updatedAt?.toISOString() ?? row.createdAt.toISOString(),
       cancelledAt: row.cancelledAt?.toISOString(),
       cancelledBy: n(row.cancelledBy),
     };

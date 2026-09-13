@@ -349,8 +349,29 @@ export class PostgresVoucherRepository implements IVoucherRepository {
     });
   }
 
-  async cancel(id: string, cancelledBy: string, ctx: TenantContext): Promise<VoucherData> {
+  async cancel(id: string, cancelledBy: string, ctx: TenantContext, expectedVersion: number): Promise<VoucherData> {
     return this.db.transaction(async (tx) => {
+      // P0-001: lock the row first for version check
+      const [currentRow] = await tx
+        .select()
+        .from(vouchers)
+        .where(
+          and(
+            eq(vouchers.id, id),
+            eq(vouchers.tenantId, ctx.tenantId),
+            eq(vouchers.status, "active"),
+          ),
+        )
+        .for("update")
+        .limit(1);
+      if (!currentRow) throw new Error("Voucher not found or already cancelled");
+      // P0-001: optimistic concurrency — fail fast if version mismatch
+      if (currentRow.version !== expectedVersion) {
+        throw Object.assign(new Error(`Stale version: expected ${expectedVersion}, current ${currentRow.version}`), {
+          code: "STALE_VERSION" as const,
+        });
+      }
+
       const [row] = await tx
         .update(vouchers)
         .set({

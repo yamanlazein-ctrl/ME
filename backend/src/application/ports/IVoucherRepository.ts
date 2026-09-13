@@ -17,5 +17,5 @@ export interface IVoucherRepository {
   findById(id: string, ctx: TenantContext): Promise<VoucherData | null>;
   list(filter: VoucherFilter, ctx: TenantContext): Promise<PaginatedResult<VoucherData>>;
   create(input: CreateVoucherInput, ctx: TenantContext): Promise<VoucherData>;
-  cancel(id: string, cancelledBy: string, ctx: TenantContext): Promise<VoucherData>;
+  cancel(id: string, cancelledBy: string, ctx: TenantContext, expectedVersion: number): Promise<VoucherData>;
 }

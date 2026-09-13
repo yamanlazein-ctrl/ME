@@ -27,7 +27,7 @@ import { PostgresLicenseRepository } from "../infrastructure/repositories/Postgr
 import { PostgresAuditRepository } from "../infrastructure/repositories/PostgresAuditRepository.js";
 import { PostgresSystemAdminRepository } from "../infrastructure/repositories/PostgresSystemAdminRepository.js";
 import { Argon2PasswordHasher } from "../infrastructure/auth/PasswordHasher.js";
-import { RedisTokenDenylist, redis } from "../infrastructure/auth/TokenDenylist.js";
+import { DbTokenDenylist, RedisTokenDenylist, CompositeTokenDenylist, redis } from "../infrastructure/auth/TokenDenylist.js";
 import { SelfHostedLicenseProvider } from "../infrastructure/license/SelfHostedLicenseProvider.js";
 import { LicenseTokenSigner } from "../infrastructure/auth/LicenseTokenSigner.js";
 import { randomBytes, generateKeyPairSync, createPublicKey } from "node:crypto";
@@ -109,7 +109,10 @@ async function main(): Promise<void> {
   // Super Admin (Phase 4): credential-based auth backed by `system_admins`.
   const systemAdminRepo = new PostgresSystemAdminRepository(db);
   const passwordHasher = new Argon2PasswordHasher();
-  const tokenDenylist = new RedisTokenDenylist(redis);
+  const tokenDenylist = new CompositeTokenDenylist(
+    new DbTokenDenylist(),
+    redis ? new RedisTokenDenylist(redis) : null,
+  );
 
   // First-boot seeding: create the Super Admin from env if none exists.
   if (config.SUPER_ADMIN_EMAIL && config.SUPER_ADMIN_PASSWORD) {

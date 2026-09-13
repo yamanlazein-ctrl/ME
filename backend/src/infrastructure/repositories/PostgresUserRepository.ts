@@ -1,7 +1,12 @@
 import { eq, and, like, or, sql } from "drizzle-orm";
 import type { DB } from "../orm/drizzle.js";
 import { runWithTenantContext } from "../orm/tenant-context.js";
-import type { IUserRepository, UserFilter, CreateUserData } from "../../application/ports/IUserRepository.js";
+import type {
+  IUserRepository,
+  UserFilter,
+  CreateUserData,
+  UserSyncSnapshot,
+} from "../../application/ports/IUserRepository.js";
 import type { UserData } from "../../domain/entities/User.js";
 import type { TenantContext, PaginatedResult } from "../../domain/types/index.js";
 import { users } from "../orm/schemas/user.table.js";
@@ -224,6 +229,39 @@ export class PostgresUserRepository implements IUserRepository {
         .update(users)
         .set({ active: false, updatedAt: new Date() })
         .where(and(eq(users.id, id), eq(users.tenantId, ctx.tenantId)));
+    });
+  }
+
+  async findSyncSnapshot(id: string, ctx: TenantContext): Promise<UserSyncSnapshot | null> {
+    return runWithTenantContext({ tenantId: ctx.tenantId }, async () => {
+      const rows = await this.db
+        .select({
+          id: users.id,
+          tenantId: users.tenantId,
+          name: users.name,
+          email: users.email,
+          role: users.role,
+          active: users.active,
+          passwordHash: users.passwordHash,
+          pinHash: users.pinHash,
+          updatedAt: users.updatedAt,
+        })
+        .from(users)
+        .where(and(eq(users.id, id), eq(users.tenantId, ctx.tenantId)))
+        .limit(1);
+      const u = rows[0];
+      if (!u) return null;
+      return {
+        id: u.id,
+        tenantId: u.tenantId,
+        name: u.name,
+        email: u.email,
+        role: u.role,
+        active: u.active,
+        passwordHash: u.passwordHash,
+        pinHash: u.pinHash,
+        updatedAt: u.updatedAt.toISOString(),
+      };
     });
   }
 }

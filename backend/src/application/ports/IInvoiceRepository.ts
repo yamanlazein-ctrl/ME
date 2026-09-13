@@ -26,7 +26,9 @@ export interface IInvoiceRepository {
    * sale old-new), replaces lines, and rewrites the ledger via reversal
    * entries (append-only trigger forbids UPDATE). partyId/type/currency/
    * paid are immutable — cancel & recreate instead.
+   * P0-001: expectedVersion is REQUIRED for optimistic concurrency control.
+   * If the current version does not match, the update fails with STALE_VERSION code.
    */
-  update(id: string, input: UpdateInvoiceInput, ctx: TenantContext): Promise<InvoiceData>;
-  cancel(id: string, cancelledBy: string, ctx: TenantContext): Promise<InvoiceData>;
+  update(id: string, input: UpdateInvoiceInput, ctx: TenantContext, expectedVersion: number): Promise<InvoiceData>;
+  cancel(id: string, cancelledBy: string, ctx: TenantContext, expectedVersion: number): Promise<InvoiceData>;
 }

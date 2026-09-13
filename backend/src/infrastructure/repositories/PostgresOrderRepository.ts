@@ -10,6 +10,7 @@ import { orders } from "../orm/schemas/order.table.js";
 import { orderItems } from "../orm/schemas/order-item.table.js";
 import { rolls } from "../orm/schemas/roll.table.js";
 import { Order, type OrderData, type CreateOrderInput } from "../../domain/entities/Order.js";
+import { allocateDocumentNumber } from "../utils/documentNumbers.js";
 import { applyOrderAvailabilityAtCreation } from "./orderAvailabilityNotifier.js";
 import type { TenantContext, PaginatedResult, UUID } from "../../domain/types/index.js";
 
@@ -86,14 +87,28 @@ export class PostgresOrderRepository implements IOrderRepository {
     };
   }
 
-  async create(input: CreateOrderInput, autoCode: string, ctx: TenantContext): Promise<OrderData> {
+  async create(
+    input: CreateOrderInput,
+    autoCode: string | undefined,
+    ctx: TenantContext,
+  ): Promise<OrderData> {
     return this.db.transaction(async (tx) => {
+      // P4: mint the code INSIDE this transaction from the device's reserved
+      // block (fail-loud when unprovisioned) so two offline devices can never
+      // mint the same code and a rollback never burns a number. A supplied
+      // code (sync replay) goes through the pre-allocated path, which honors
+      // it verbatim AND raises the sequence floor so later mints cannot
+      // collide with replayed history.
+      const code = await allocateDocumentNumber(tx, "order", ctx.tenantId, {
+        preAllocatedNumber: autoCode ?? null,
+        syncDeviceId: ctx.syncDeviceId,
+      });
       const [row] = await tx
         .insert(orders)
         .values({
           ...(input.preAllocatedId ? { id: input.preAllocatedId } : {}),
           tenantId: ctx.tenantId,
-          code: autoCode,
+          code,
           customerId: input.customerId ?? null,
           customerNameSnapshot: input.customerNameSnapshot,
           customerPhoneSnapshot: input.customerPhoneSnapshot,
@@ -156,6 +171,7 @@ export class PostgresOrderRepository implements IOrderRepository {
     id: string,
     data: Partial<CreateOrderInput>,
     ctx: TenantContext,
+    expectedVersion: number,
   ): Promise<OrderData> {
     const values: Record<string, unknown> = {
       updatedAt: new Date(),
@@ -167,12 +183,21 @@ export class PostgresOrderRepository implements IOrderRepository {
     if (data.customerPhoneSnapshot !== undefined)
       values.customerPhoneSnapshot = data.customerPhoneSnapshot ?? null;
     if (data.date !== undefined) values.date = data.date;
+    // P0-001: atomic version enforcement — WHERE includes expectedVersion
+    const whereConditions = [eq(orders.id, id), eq(orders.tenantId, ctx.tenantId), eq(orders.version, expectedVersion)];
     const [row] = await this.db
       .update(orders)
       .set(values)
-      .where(and(eq(orders.id, id), eq(orders.tenantId, ctx.tenantId)))
+      .where(and(...whereConditions))
       .returning();
-    if (!row) throw new Error("Order not found");
+    if (!row) {
+      // P0-001: distinguish "not found" from "stale version"
+      const existing = await this.db.select({ version: orders.version }).from(orders).where(and(eq(orders.id, id), eq(orders.tenantId, ctx.tenantId))).limit(1);
+      if (existing.length > 0) {
+        throw Object.assign(new Error(`Stale version: expected ${expectedVersion}, current ${existing[0].version}`), { code: "STALE_VERSION" as const });
+      }
+      throw new Error("Order not found");
+    }
     const items = await this.db.select().from(orderItems).where(eq(orderItems.orderId, id));
     return this.toDomain(row, items);
   }
@@ -203,8 +228,15 @@ export class PostgresOrderRepository implements IOrderRepository {
     });
   }
 
-  async cancel(id: string, ctx: TenantContext): Promise<OrderData> {
+  async cancel(id: string, ctx: TenantContext, expectedVersion: number): Promise<OrderData> {
     return this.db.transaction(async (tx) => {
+      // P0-001: atomic version enforcement — WHERE includes expectedVersion
+      const whereConditions = [
+        eq(orders.id, id),
+        eq(orders.tenantId, ctx.tenantId),
+        inArray(orders.status, ["open", "available", "partially_available"]),
+        eq(orders.version, expectedVersion),
+      ];
       const [row] = await tx
         .update(orders)
         .set({
@@ -212,15 +244,16 @@ export class PostgresOrderRepository implements IOrderRepository {
           updatedAt: new Date(),
           version: sql`${orders.version} + 1`,
         })
-        .where(
-          and(
-            eq(orders.id, id),
-            eq(orders.tenantId, ctx.tenantId),
-            inArray(orders.status, ["open", "available", "partially_available"]),
-          ),
-        )
+        .where(and(...whereConditions))
         .returning();
-      if (!row) throw new Error("Order not found or already processed");
+      if (!row) {
+        // P0-001: distinguish "not found" from "stale version"
+        const existing = await tx.select({ version: orders.version }).from(orders).where(and(eq(orders.id, id), eq(orders.tenantId, ctx.tenantId))).limit(1);
+        if (existing.length > 0) {
+          throw Object.assign(new Error(`Stale version: expected ${expectedVersion}, current ${existing[0].version}`), { code: "STALE_VERSION" as const });
+        }
+        throw new Error("Order not found or already processed");
+      }
 
       // BUG-07 — no reservation release needed: rolls are never locked by orders.
       const items = await tx.select().from(orderItems).where(eq(orderItems.orderId, id));
@@ -248,10 +281,7 @@ export class PostgresOrderRepository implements IOrderRepository {
         ),
       );
 
-    const matchesLine = (
-      it: typeof orderItems.$inferSelect,
-      ln: PendingConflictLine,
-    ): boolean => {
+    const matchesLine = (it: typeof orderItems.$inferSelect, ln: PendingConflictLine): boolean => {
       if (ln.colorId) return it.colorId === ln.colorId;
       if (ln.fabricId) return it.fabricId === ln.fabricId;
       return false;

@@ -1,14 +1,17 @@
 import type { Request, Response, NextFunction } from "express";
 import { canWriteOffline } from "../../../domain/sync/offlineWritePolicy.js";
+import { isServerSideOffline } from "../../../application/use-cases/sync/hubConfig.js";
 
 const MUTATING = new Set(["POST", "PUT", "PATCH", "DELETE"]);
 
 /**
- * When the client signals offline mode (`X-Offline-Mode: 1`), block writes
- * for roles that are read-only offline (warehouse / viewer).
+ * Warehouse/viewer may not write while the hub is unreachable, or when the
+ * client reports offline. Admin/accountant keep local-first writes.
  */
 export function offlineWriteGuard(req: Request, res: Response, next: NextFunction): void {
-  if (req.headers["x-offline-mode"] !== "1") {
+  const clientOffline = req.headers["x-offline-mode"] === "1";
+  const hubOffline = isServerSideOffline();
+  if (!clientOffline && !hubOffline) {
     next();
     return;
   }

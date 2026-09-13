@@ -31,8 +31,8 @@ import type { IPartyRepository } from "../../application/ports/IPartyRepository.
 import type { IFabricRepository } from "../../application/ports/IFabricRepository.js";
 import type { IColorRepository } from "../../application/ports/IColorRepository.js";
 import type { IRollRepository } from "../../application/ports/IRollRepository.js";
-import { config } from "../../infrastructure/config/env.js";
 import { logger } from "../../infrastructure/config/logger.js";
+import { withTenantTx } from "../../infrastructure/orm/drizzle.js";
 
 export function registerInvoiceRoutes(
   router: Router,
@@ -61,50 +61,85 @@ export function registerInvoiceRoutes(
     validateBody(createInvoiceSchema),
     async (req: Request, res: Response) => {
       const input = body<CreateInvoiceInput>(req);
+      const c = ctx(req);
       // H-NEW: number allocation moved INSIDE the repository transaction
       // (PostgresInvoiceRepository.create → allocateDocumentNumber), so a
       // failed save no longer burns a number. The route no longer needs to
       // pre-call nextDocumentNumber here.
-      const r = await uc.createInvoiceUseCase(
-        invoiceRepo,
-        auditRepo,
-        input,
-        ctx(req),
-      );
-      if (r.ok) {
-        if (syncOutboxRepo && (config.DESKTOP_DEPLOY || config.CENTRAL_SYNC_URL)) {
-          const deviceHeader = req.headers["x-sync-device-id"];
-          const syncDeviceId =
-            typeof deviceHeader === "string" ? deviceHeader : Array.isArray(deviceHeader) ? deviceHeader[0] : null;
-          const opHeader = req.headers["idempotency-key"];
-          const opId =
-            typeof opHeader === "string" ? opHeader : Array.isArray(opHeader) ? opHeader[0] : undefined;
-          try {
-            const dependencies = dependencyRepos
-              ? await captureInvoiceSyncDependencies(dependencyRepos, input, ctx(req))
-              : null;
-            await enqueueInvoiceCreate(
-              syncOutboxRepo,
-              {
-                id: r.data.id,
-                type: r.data.type,
-                number: r.data.number,
-                partyId: r.data.partyId,
-                lines: r.data.lines.map((l) => ({
-                  rollId: l.rollId,
-                  quantityKg: l.quantityKg,
-                })),
-              },
-              input,
-              ctx(req),
-              syncDeviceId ?? null,
-              opId,
-              dependencies,
-            );
-          } catch (err) {
-            logger.warn({ err, invoiceId: r.data.id }, "sync outbox enqueue failed after invoice create");
-          }
+      const deviceHeader = req.headers["x-sync-device-id"];
+      const syncDeviceId =
+        typeof deviceHeader === "string"
+          ? deviceHeader
+          : Array.isArray(deviceHeader)
+            ? deviceHeader[0]
+            : null;
+      const opHeader = req.headers["idempotency-key"];
+      const opId =
+        typeof opHeader === "string" ? opHeader : Array.isArray(opHeader) ? opHeader[0] : undefined;
+      const syncEnabled = Boolean(syncOutboxRepo && isSyncEnqueueEnabled());
+
+      // F-07 (Transactional Outbox): the business write and its outbox unit are
+      // produced inside ONE `withTenantTx`. `withTenantTx` publishes that
+      // transaction as the ambient tx, so `invoiceRepo`/`syncOutboxRepo`
+      // (built with `ambientDb`) join it as a savepoint rather than opening a
+      // second pooled connection. Either both commit or both roll back — a
+      // document can never be durably saved locally without its sync unit, and
+      // a failed enqueue no longer disappears into a swallowed warn.
+      // When sync is disabled the code path stays exactly as it was before
+      // (no extra transaction is opened) — F-07 only binds the two writes that
+      // must be atomic.
+      const runCreate = async () => {
+        const created = await uc.createInvoiceUseCase(invoiceRepo, auditRepo, input, c);
+        if (!created.ok) return created;
+        if (syncOutboxRepo && isSyncEnqueueEnabled()) {
+          const dependencies = dependencyRepos
+            ? await captureInvoiceSyncDependencies(dependencyRepos, input, c)
+            : null;
+          await enqueueInvoiceCreate(
+            syncOutboxRepo,
+            {
+              id: created.data.id,
+              type: created.data.type,
+              number: created.data.number,
+              partyId: created.data.partyId,
+              lines: created.data.lines.map((l) => ({
+                rollId: l.rollId,
+                quantityKg: l.quantityKg,
+              })),
+            },
+            input,
+            c,
+            syncDeviceId ?? null,
+            opId,
+            dependencies,
+          );
         }
+        return created;
+      };
+
+      // F-07 (Transactional Outbox): the business write and its outbox unit are
+      // produced inside ONE `withTenantTx`. `withTenantTx` publishes that
+      // transaction as the ambient tx, so `invoiceRepo`/`syncOutboxRepo`
+      // (built with `ambientDb`) join it as a savepoint rather than opening a
+      // second pooled connection. Either both commit or both roll back — a
+      // document can never be durably saved locally without its sync unit, and
+      // a failed enqueue no longer disappears into a swallowed warn.
+      let r: Awaited<ReturnType<typeof uc.createInvoiceUseCase>>;
+      try {
+        r = syncEnabled ? await withTenantTx(c.tenantId, runCreate) : await runCreate();
+      } catch (err) {
+        logger.error(
+          { err, opId },
+          "transaction rolled back — business write dropped with its sync unit (F-07)",
+        );
+        return res.status(500).json({
+          code: "SYNC_OUTBOX_FAILED",
+          message: "تعذّر حفظ العملية مع وحدة المزامنة — لم يُحفظ أي تغيير. أعد المحاولة.",
+          statusCode: 500,
+        });
+      }
+
+      if (r.ok) {
         res.status(201).json(r.data);
       } else {
         res.status(422).json({ code: "VALIDATION", message: r.error });
@@ -133,7 +168,9 @@ export function registerInvoiceRoutes(
   router.get("/invoices/next-number", auth, readGuard, async (req: Request, res: Response) => {
     const type = String((req.query.type as string) ?? "sale");
     if (type !== "sale" && type !== "entry") {
-      return res.status(400).json({ code: "BAD_REQUEST", message: "type يجب أن يكون sale أو entry" });
+      return res
+        .status(400)
+        .json({ code: "BAD_REQUEST", message: "type يجب أن يكون sale أو entry" });
     }
     const entityType = type === "entry" ? "invoice_entry" : "invoice";
     try {
@@ -194,50 +231,79 @@ export function registerInvoiceRoutes(
     async (req: Request, res: Response) => {
       const c = ctx(req);
       const updateInput = body<Parameters<typeof uc.updateInvoiceUseCase>[3]>(req);
-      const r = await uc.updateInvoiceUseCase(
-        invoiceRepo,
-        auditRepo,
-        pid(req),
-        updateInput,
-        c,
-      );
-      if (r.ok) {
+      const expectedVersion = req.body?.expectedVersion;
+      if (typeof expectedVersion !== "number") {
+        return res.status(400).json({ code: "EXPECTED_VERSION_REQUIRED", message: "الإصدار المتوقع (expectedVersion) مطلوب للتحديث/الإلغاء" });
+      }
+      const syncEnabled = Boolean(syncOutboxRepo && isSyncEnqueueEnabled());
+
+      // F-07: the update and its outbox unit share ONE transaction.
+      const runUpdate = async () => {
+        // P3b: stamp the pre-edit version into the sync unit in the SAME
+        // transaction, so the hub can refuse a stale edit instead of silently
+        // overwriting a newer one. A missing row here cannot happen (the
+        // update below would 404) — NULL keeps the unit accepted, unchecked.
+        const before = await invoiceRepo.findById(pid(req), c);
+        const updated = await uc.updateInvoiceUseCase(
+          invoiceRepo,
+          auditRepo,
+          pid(req),
+          updateInput,
+          c,
+          expectedVersion,
+        );
+        if (!updated.ok) return updated;
         if (syncOutboxRepo && isSyncEnqueueEnabled()) {
-          try {
-            const dependencies = dependencyRepos
-              ? await captureInvoiceSyncDependencies(
-                  dependencyRepos,
-                  {
-                    type: r.data.type,
-                    partyId: r.data.partyId,
-                    partyType: r.data.partyType,
-                    date: updateInput.date,
-                    currency: r.data.currency,
-                    lines: updateInput.lines,
-                    discount: updateInput.discount,
-                    tax: updateInput.tax,
-                    shipping: updateInput.shipping,
-                    notes: updateInput.notes,
-                  },
-                  c,
-                )
-              : null;
-            await enqueueInvoiceUpdate(
-              syncOutboxRepo,
-              { id: r.data.id, number: r.data.number, type: r.data.type },
-              updateInput,
-              c,
-              syncDeviceIdFromRequest(req),
-              opIdFromRequest(req),
-              dependencies,
-            );
-          } catch (err) {
-            logger.warn({ err, invoiceId: r.data.id }, "sync outbox enqueue failed after invoice update");
-          }
+          const dependencies = dependencyRepos
+            ? await captureInvoiceSyncDependencies(
+                dependencyRepos,
+                {
+                  type: updated.data.type,
+                  partyId: updated.data.partyId,
+                  partyType: updated.data.partyType,
+                  date: updateInput.date,
+                  currency: updated.data.currency,
+                  lines: updateInput.lines,
+                  discount: updateInput.discount,
+                  tax: updateInput.tax,
+                  shipping: updateInput.shipping,
+                  notes: updateInput.notes,
+                },
+                c,
+              )
+            : null;
+          await enqueueInvoiceUpdate(
+            syncOutboxRepo,
+            { id: updated.data.id, number: updated.data.number, type: updated.data.type },
+            updateInput,
+            c,
+            syncDeviceIdFromRequest(req),
+            opIdFromRequest(req),
+            dependencies,
+            before?.version ?? null,
+          );
         }
+        return updated;
+      };
+
+      let r: Awaited<ReturnType<typeof uc.updateInvoiceUseCase>>;
+      try {
+        r = syncEnabled ? await withTenantTx(c.tenantId, runUpdate) : await runUpdate();
+      } catch (err) {
+        logger.error({ err }, "transaction rolled back — invoice update dropped (F-07)");
+        return res.status(500).json({
+          code: "SYNC_OUTBOX_FAILED",
+          message: "تعذّر حفظ التعديل مع وحدة المزامنة — لم يُحفظ أي تغيير. أعد المحاولة.",
+          statusCode: 500,
+        });
+      }
+
+      if (r.ok) {
         res.json(r.data);
       } else if ((r as { code?: string }).code === "NOT_FOUND") {
         res.status(404).json({ code: "NOT_FOUND", message: r.error });
+      } else if ((r as { code?: string }).code === "STALE_VERSION") {
+        res.status(409).json({ code: "STALE_VERSION", message: r.error });
       } else {
         res.status(422).json({ code: "VALIDATION", message: r.error });
       }
@@ -251,24 +317,57 @@ export function registerInvoiceRoutes(
     validateUuidParam("id"),
     async (req: Request, res: Response) => {
       const c = ctx(req);
-      const r = await uc.cancelInvoiceUseCase(invoiceRepo, auditRepo, pid(req), c.userId, c);
-      if (r.ok) {
+      const expectedVersion = req.body?.expectedVersion;
+      if (typeof expectedVersion !== "number") {
+        return res.status(400).json({ code: "EXPECTED_VERSION_REQUIRED", message: "الإصدار المتوقع (expectedVersion) مطلوب للتحديث/الإلغاء" });
+      }
+      const syncEnabled = Boolean(syncOutboxRepo && isSyncEnqueueEnabled());
+
+      // F-07: the cancel and its outbox unit share ONE transaction.
+      const runCancel = async () => {
+        const cancelled = await uc.cancelInvoiceUseCase(
+          invoiceRepo,
+          auditRepo,
+          pid(req),
+          c.userId,
+          c,
+          expectedVersion,
+        );
+        if (!cancelled.ok) return cancelled;
         if (syncOutboxRepo && isSyncEnqueueEnabled()) {
-          try {
-            await enqueueInvoiceCancel(
-              syncOutboxRepo,
-              { id: r.data.id, number: r.data.number, type: r.data.type },
-              c,
-              syncDeviceIdFromRequest(req),
-              opIdFromRequest(req),
-            );
-          } catch (err) {
-            logger.warn({ err, invoiceId: r.data.id }, "sync outbox enqueue failed after invoice cancel");
-          }
+          await enqueueInvoiceCancel(
+            syncOutboxRepo,
+            { id: cancelled.data.id, number: cancelled.data.number, type: cancelled.data.type },
+            c,
+            syncDeviceIdFromRequest(req),
+            opIdFromRequest(req),
+            // The version this cancel was validated against locally. The hub
+            // refuses a cancel whose base is stale (another device edited the
+            // invoice) instead of silently voiding that newer edit.
+            expectedVersion,
+          );
         }
+        return cancelled;
+      };
+
+      let r: Awaited<ReturnType<typeof uc.cancelInvoiceUseCase>>;
+      try {
+        r = syncEnabled ? await withTenantTx(c.tenantId, runCancel) : await runCancel();
+      } catch (err) {
+        logger.error({ err }, "transaction rolled back — invoice cancel dropped (F-07)");
+        return res.status(500).json({
+          code: "SYNC_OUTBOX_FAILED",
+          message: "تعذّر حفظ الإلغاء مع وحدة المزامنة — لم يُحفظ أي تغيير. أعد المحاولة.",
+          statusCode: 500,
+        });
+      }
+
+      if (r.ok) {
         res.json(r.data);
       } else if ((r as { code?: string }).code === "NOT_FOUND") {
         res.status(404).json({ code: "NOT_FOUND", message: r.error });
+      } else if ((r as { code?: string }).code === "STALE_VERSION") {
+        res.status(409).json({ code: "STALE_VERSION", message: r.error });
       } else {
         res.status(422).json({ code: "VALIDATION", message: r.error });
       }

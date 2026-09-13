@@ -68,9 +68,18 @@ export async function cancelVoucherUseCase(
   id: string,
   cancelledBy: string,
   ctx: TenantContext,
+  expectedVersion: number,
 ): Promise<Result<VoucherData>> {
   try {
-    const voucher = await repo.cancel(id, cancelledBy, ctx);
+    // P0-001: optimistic concurrency check
+    const current = await repo.findById(id, ctx);
+    if (current && current.version !== expectedVersion) {
+      return {
+        ok: false,
+        error: `تعارض في الإصدار: الإصدار الحالي ${current.version}، والإصدار المتوقع ${expectedVersion}. يرجى التحديث والمحاولة مرة أخرى.`,
+      };
+    }
+    const voucher = await repo.cancel(id, cancelledBy, ctx, expectedVersion);
     audit
       .create({
         tenantId: ctx.tenantId,

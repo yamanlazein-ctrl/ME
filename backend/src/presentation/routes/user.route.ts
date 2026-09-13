@@ -3,7 +3,14 @@ import { z } from "zod";
 import { validateBody, validateQuery } from "../../infrastructure/http/middleware/validate.middleware.js";
 import { validateUuidParam } from "../../infrastructure/http/middleware/validate-params.middleware.js";
 import type { IUserRepository } from "../../application/ports/IUserRepository.js";
+import type { ISyncOutboxRepository } from "../../application/ports/ISyncOutboxRepository.js";
 import type { TenantContext } from "../../domain/types/index.js";
+import {
+  enqueueUserMutation,
+  isSyncEnqueueEnabled,
+  opIdFromRequest,
+  syncDeviceIdFromRequest,
+} from "../../application/use-cases/sync/syncEnqueue.js";
 
 const listUsersSchema = z.object({
   search: z.string().optional(),
@@ -32,6 +39,7 @@ export function registerUserRoutes(
   passwordHasher: { hash: (password: string) => Promise<string> },
   auth: RequestHandler,
   adminOnly: RequestHandler,
+  syncOutboxRepo: ISyncOutboxRepository,
 ): void {
   const ctxFn = (req: Request): TenantContext => req.tenantContext!;
   const body = <T>(req: Request): T => (req as unknown as { validatedBody: T }).validatedBody;
@@ -100,6 +108,19 @@ export function registerUserRoutes(
 
         const updateData = body<z.infer<typeof updateUserSchema>>(req);
         const result = await userRepo.update(id, updateData, adminCtx);
+        if (isSyncEnqueueEnabled()) {
+          const snapshot = await userRepo.findSyncSnapshot(id, adminCtx);
+          if (snapshot) {
+            await enqueueUserMutation(
+              syncOutboxRepo,
+              snapshot,
+              "update",
+              adminCtx,
+              syncDeviceIdFromRequest(req),
+              opIdFromRequest(req),
+            );
+          }
+        }
         res.json(result);
       } catch (err) {
         if (err instanceof Error && err.message === "User not found") {
@@ -138,6 +159,19 @@ export function registerUserRoutes(
         }
 
         await userRepo.delete(id, adminCtx);
+        if (isSyncEnqueueEnabled()) {
+          const snapshot = await userRepo.findSyncSnapshot(id, adminCtx);
+          if (snapshot) {
+            await enqueueUserMutation(
+              syncOutboxRepo,
+              snapshot,
+              "deactivate",
+              adminCtx,
+              syncDeviceIdFromRequest(req),
+              opIdFromRequest(req),
+            );
+          }
+        }
         res.json({ ok: true, message: "تم تعطيل المستخدم بنجاح" });
       } catch (err) {
         res.status(500).json({ code: "INTERNAL", message: "خطأ في حذف المستخدم" });
@@ -160,6 +194,19 @@ export function registerUserRoutes(
 
         const passwordHash = await passwordHasher.hash(password);
         const result = await userRepo.update(id, { password: passwordHash }, adminCtx);
+        if (isSyncEnqueueEnabled()) {
+          const snapshot = await userRepo.findSyncSnapshot(id, adminCtx);
+          if (snapshot) {
+            await enqueueUserMutation(
+              syncOutboxRepo,
+              snapshot,
+              "update",
+              adminCtx,
+              syncDeviceIdFromRequest(req),
+              opIdFromRequest(req),
+            );
+          }
+        }
         res.json({ ok: true, message: "تم إعادة تعيين كلمة المرور بنجاح", userId: result.id });
       } catch (err) {
         if (err instanceof Error && err.message === "User not found") {

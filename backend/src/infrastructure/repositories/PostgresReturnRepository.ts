@@ -581,7 +581,7 @@ export class PostgresReturnRepository implements IReturnRepository {
     });
   }
 
-  async cancel(id: string, cancelledBy: string, ctx: TenantContext): Promise<ReturnData> {
+  async cancel(id: string, cancelledBy: string, ctx: TenantContext, expectedVersion: number): Promise<ReturnData> {
     return this.db.transaction(async (tx) => {
       const [r] = await tx
         .select()
@@ -592,6 +592,12 @@ export class PostgresReturnRepository implements IReturnRepository {
         .for("update")
         .limit(1);
       if (!r) throw new Error("Return not found or already cancelled");
+      // P0-001: optimistic concurrency — fail fast if version mismatch
+      if (r.version !== expectedVersion) {
+        throw Object.assign(new Error(`Stale version: expected ${expectedVersion}, current ${r.version}`), {
+          code: "STALE_VERSION" as const,
+        });
+      }
 
       const lines = await tx.select().from(returnLines).where(eq(returnLines.returnId, id));
 

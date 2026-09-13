@@ -4,6 +4,8 @@ import { documentNumberBlocks } from "../orm/schemas/document-number-block.table
 import { and, eq, sql } from "drizzle-orm";
 import { BusinessRuleError } from "../../domain/errors/index.js";
 import { config } from "../config/env.js";
+import { getCentralSyncUrl } from "../../application/use-cases/sync/hubConfig.js";
+import { logger } from "../config/logger.js";
 import { consumeNextInTx } from "../repositories/PostgresDocumentNumberBlockRepository.js";
 
 const PREFIXES: Record<string, string> = {
@@ -49,6 +51,13 @@ export const DEFAULT_BLOCK_SIZES: Record<string, number> = {
   voucher: 200,
   expense: 100,
   order: 100,
+  // Master data is created far more often than any single document type and
+  // is the cheapest thing to pre-reserve, so it gets a generous block. Without
+  // a block here two offline devices both mint `CUS-<year>-0001` and the
+  // second one's hub insert dies on `parties (tenant_id, code)` — the exact
+  // collision reproduced in the multi-device acceptance run of 2026-09-10.
+  customer: 500,
+  supplier: 500,
 };
 
 export type AllocateNumberOpts = {
@@ -59,6 +68,18 @@ export type AllocateNumberOpts = {
    * raise the global floor so future claims cannot collide.
    */
   preAllocatedNumber?: string | null;
+  /**
+   * Master data (party/fabric/color/roll) may be created on a device that has
+   * never been provisioned with a reserved block — a fresh install that has
+   * not reached the hub yet. Hard-failing there would block a basic user
+   * action, so those callers opt into the legacy global-sequence fallback.
+   *
+   * Financial documents deliberately do NOT set this: a missing block must
+   * stop the save rather than risk handing out a number that another node has
+   * already used. The fallback is logged as a warning so an unprovisioned
+   * device is visible to operators instead of silently degrading.
+   */
+  allowGlobalFallback?: boolean;
 };
 
 /**
@@ -150,12 +171,18 @@ export async function allocateDocumentNumber(
       entityType,
       yearNum,
     );
-    if (!fromBlock) {
+    if (fromBlock) {
+      return `${prefix}-${year}-${String(fromBlock.numberValue).padStart(width, "0")}`;
+    }
+    if (!opts.allowGlobalFallback) {
       throw new BusinessRuleError(
         "نفدت كتلة الترقيم لهذا الجهاز أو لا توجد كتلة للسنة الحالية — اطلب كتلة جديدة عند الاتصال",
       );
     }
-    return `${prefix}-${year}-${String(fromBlock.numberValue).padStart(width, "0")}`;
+    logger.warn(
+      { entityType, syncDeviceId: opts.syncDeviceId },
+      "no active number block for device — falling back to the shared sequence (code may collide on the hub)",
+    );
   }
 
   const [row] = await tx
@@ -204,7 +231,7 @@ export function defaultBlockSize(entityType: string): number {
 }
 
 function shouldUseNumberBlocks(): boolean {
-  return Boolean(config.DESKTOP_DEPLOY || config.CENTRAL_SYNC_URL);
+  return Boolean(config.DESKTOP_DEPLOY || getCentralSyncUrl());
 }
 
 /**

@@ -32,8 +32,21 @@ const SCHEMAS_DIR = join(BACKEND_ROOT, "src", "infrastructure", "orm", "schemas"
 const RLS_SQL = join(BACKEND_ROOT, "src", "infrastructure", "orm", "rls", "enable-rls.sql");
 const SRC_DIR = join(BACKEND_ROOT, "src");
 
-/** Internal bookkeeping tables intentionally NOT RLS-managed. */
-const RLS_EXEMPT_TABLES = new Set(["schema_migrations", "__drizzle_migrations"]);
+/**
+ * Internal bookkeeping tables intentionally NOT RLS-managed.
+ *
+ * `revoked_tokens` (P0-004) is platform-level security bookkeeping: a random
+ * `jti`, an expiry and a reason — no tenant business data. It MUST be readable
+ * *before* a tenant context exists, because the auth middleware checks every
+ * incoming bearer token on routes that resolve the tenant from the token
+ * itself. A tenant-scoped policy would hide the row on those checkouts and the
+ * revocation would silently fail (fail-open). See revoked-token.table.ts.
+ */
+const RLS_EXEMPT_TABLES = new Set([
+  "schema_migrations",
+  "__drizzle_migrations",
+  "revoked_tokens",
+]);
 
 function listTsFiles(dir: string): string[] {
   return readdirSync(dir, { withFileTypes: true }).flatMap((e) => {
@@ -158,6 +171,66 @@ describe("RLS regression guards (Phase F, D-006)", () => {
     for (const policy of ["tenant_isolation", "platform_or_tenant", "tenant_directory", "platform_only"]) {
       expect(sql, `missing policy family: ${policy}`).toContain(policy);
     }
+  });
+
+  it("no migration reintroduces the unguarded tenant-GUC cast", () => {
+    // Regression (Batch 2, observed live on PG 17.10): 0058_sync_tombstones and
+    // 20260912_batch1_tombstones_conflicts wrote
+    // `current_setting('app.current_tenant_id', true)::uuid` by hand. After
+    // set_config(..., NULL) — which the TenantScopedPool issues on every
+    // no-tenant checkout — that GUC holds '' and `''::uuid` raises 22P02, so
+    // count(*) on sync_tombstones errored instead of returning zero rows. The
+    // tombstone lookup swallows errors, so the failure mode was a MISSED
+    // resurrection guard. enable-rls.sql documents the hazard and guards with
+    // NULLIF; hand-written migrations must follow the same rule.
+    const MIGRATIONS_DIR = join(BACKEND_ROOT, "src", "infrastructure", "orm", "migrations");
+    const unguarded =
+      /(?<!NULLIF\()current_setting\((?:''|')app\.current_tenant_id(?:''|')(?:,\s*(?:missing_ok\s*=\s*)?true)?\)\s*::uuid/g;
+    // Comments are stripped first: migrations legitimately QUOTE the legacy
+    // form when explaining why it is forbidden, and only executable SQL counts.
+    const stripComments = (src: string) =>
+      src
+        .split("\n")
+        .map((line) => (line.trimStart().startsWith("--") ? "" : line))
+        .join("\n");
+    const offenders = readdirSync(MIGRATIONS_DIR)
+      .filter((f) => f.endsWith(".sql"))
+      .flatMap((f) => {
+        const src = stripComments(readFileSync(join(MIGRATIONS_DIR, f), "utf8"));
+        return [...src.matchAll(unguarded)].map((m) => `${f}: ${m[0]}`);
+      });
+    expect(
+      offenders,
+      `unguarded tenant-GUC casts raise 22P02 when the GUC is '' — use NULLIF(..., ''):\n${offenders.join("\n")}`,
+    ).toEqual([]);
+  });
+
+  it("sync tombstones and the conflict ledger stay in the canonical policy layer", () => {
+    const sql = readFileSync(RLS_SQL, "utf8");
+    for (const t of ["sync_tombstones", "sync_conflicts"]) {
+      expect(sql, `${t} must be listed in enable-rls.sql's tenant-scoped family`).toContain(
+        `'${t}'`,
+      );
+    }
+    // The additive migration must (re)assert FORCE, like every other sync
+    // table, so a table-owner connection cannot bypass isolation either, and
+    // must drop the legacy hand-written policy it replaces.
+    const migration = readFileSync(
+      join(
+        BACKEND_ROOT,
+        "src",
+        "infrastructure",
+        "orm",
+        "migrations",
+        "20260914_sync_rls_canonical_policies.sql",
+      ),
+      "utf8",
+    );
+    expect(migration).toMatch(/FORCE ROW LEVEL SECURITY/);
+    expect(migration).toContain("NULLIF(current_setting(''app.current_tenant_id'', true), '''')");
+    expect(migration, "the legacy hand-written policy must be dropped").toContain(
+      "t || '_tenant_isolation'",
+    );
   });
 
   it("db:push stays a guarded scratch-only script", () => {

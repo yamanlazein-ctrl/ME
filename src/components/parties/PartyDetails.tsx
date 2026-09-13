@@ -711,7 +711,10 @@ function StatementTab({ p, kind }: { p: Party; kind: PartyKind }) {
   const displayCcy: Currency =
     !multiCcy && statement?.currency && statement.currency !== "ALL"
       ? statement.currency
-      : !multiCcy && ccy !== "ALL"
+      : // `multiCcy` false already implies ccy !== "ALL" (it is derived from
+        // it), so TS narrows ccy to Currency here; the runtime check is kept
+        // via String() to stay defensive without the impossible comparison.
+        !multiCcy && String(ccy) !== "ALL"
         ? ccy
         : (p.currency ?? "SYP");
   const cur = multiCcy ? "" : currencySymbol(displayCcy);

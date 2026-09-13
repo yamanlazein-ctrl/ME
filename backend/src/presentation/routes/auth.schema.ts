@@ -34,4 +34,11 @@ export const SyncDeviceRegisterSchema = z.object({
   platform: z.enum(["windows", "macos", "linux", "android", "ios", "web"]),
   hostname: z.string().trim().min(1).max(120).optional(),
   label: z.string().trim().min(1).max(120).optional(),
+  /**
+   * Device-gate binding: the UUID this device will assert as X-Sync-Device-Id
+   * / syncDeviceId in pushes. When provided, the registry row uses it as its
+   * id, so the hub's registered-device gate recognizes the device's pushes.
+   * When omitted, the registry mints an id (legacy fingerprint-only flow).
+   */
+  deviceId: z.string().uuid().optional(),
 });

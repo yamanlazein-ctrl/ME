@@ -315,5 +315,166 @@ Working-tree-only sync stack (0047-0051, sync/**, sync.route.ts, sync schemas) �
 bake-desktop-license.ts + license-public.pem + private signing keys + backend/.env + customer DB rows
 Business core accounting correctness: ledger legs, LEDGER_ENTRY_TYPES, frozen exchangeRate/base*, stock_movements append-only, documentNumbers atomic path
 WIP FX/multi-currency diff, admin-dashboard + license-server, prior tags (pre-multi-currency-v2, golden-state-*), backup/ snapshots, large *.log files (archive, don't delete in this task)
-Final Verdict: C. New product built on reusable business core
-A small modification (A) cannot create a client offline store, per-device cursors, updater/differentials, session infrastructure, or cloud ops. A pure migration (B) understates the missing device/cloud/update/session subsystems and overstates reuse of the current localhost-single-node assumptions. The evidence shows a sound, reusable business domain (invoices/ledger/stock/FX-frozen/returns/vouchers/orders/print) plus a promising but uncommitted server sync prototype and a proven single-machine Desktop shell, surrounded by P0 integrity gaps (uninstall wipe, migration skew/bypass, RLS unproven here, backup gaps, Redis-less revocation). The correct path is C: freeze and guard the business core, commit and harden the sync prototype, then build offline store, identity, updater, incremental releases, and cloud operations around it per the phased roadmap above.
+## Batch: Licensing regression fix + tombstone enforcement (2026-09-12)
+
+### STATUS
+Implementing. Licensing test failure diagnosed and fixed (pre-existing, not a sync
+regression). Tombstone enforcement for deleted master data implemented and covered
+by new regression tests. Full suite green except the environmental live-API suite
+(`audit-findings.test.ts`, needs backend on 127.0.0.1:8080).
+
+### REAL PROBLEMS FOUND
+1. `tests/licensing-engine.test.ts` "resolves a basic plan" asserted
+   `resolveFeatures("basic") === [FEATURES.INVENTORY]`, but
+   `src/domain/licensing/plans.ts` (owner decision 2026-08-28, "accounting is
+   core — included in every plan") returns `[feature.inventory, feature.accounting]`.
+   The test was stale, not the code. Doc `VERIFICATION_RESULTS_P0.md` already
+   recorded it as the known pre-existing "P1-004b". Not caused by this session's sync work.
+2. **Tombstones were a table with no enforcement (plan §10).** `sync_tombstones`
+   existed (migrations `0058_sync_tombstones` + `20260912_batch1_*`) and was in the
+   backup dump, but NO sync code wrote or read it. Migration `0058`'s comment
+   referenced a non-existent `ensureTombstoneBeforeMasterMutation` in
+   `syncMaterialize.ts`. Concretely:
+   - `materializeMasterMutation` (delete) hard-deleted the row and reported `created`
+     without recording a tombstone.
+   - `materializeMasterCreate` and `ensureInvoiceSyncDependencies` (insert-if-missing)
+     could silently resurrect a deleted fabric/color/roll when a stale offline
+     create or an invoice/return dependency snapshot replayed after the delete —
+     the exact "resurrected deleted data" convergence failure.
+
+### FALSE POSITIVES
+- The licensing failure was NOT caused by the sync/outbox batch (absent from the
+  earlier 74/74 targeted run); it is a standalone stale unit test.
+
+### CHANGES MADE
+- `backend/tests/licensing-engine.test.ts`: updated the "basic plan" assertion to the
+  current frozen spec — contains inventory AND accounting, length 2 (with explanatory comment).
+- `backend/src/application/use-cases/sync/syncMaterialize.ts`:
+  - Added `pool` + `logger` imports and `SyncMaterializeMeta` (opId + device provenance
+    taken from the INBOX row, never the wire payload — P6/SYNC-06).
+  - Added `tombstoneExists` and `recordTombstone` helpers (idempotent ON CONFLICT).
+  - `materializeSyncUnit` now accepts `meta`; delete branch records a tombstone and the
+    idempotent `!hub` retry re-asserts it; master create is refused (`failed`) when a
+    tombstone exists. No naive "create clears tombstone" rule.
+- `backend/src/application/use-cases/sync/syncDependencySnapshots.ts`: added
+  `syncTombstoneBlocksDependency`; all four dependency-insert loops skip tombstoned masters
+  so document replays cannot resurrect them.
+- `backend/src/application/use-cases/sync/syncUseCases.ts`: both `materializeSyncUnit`
+  call sites pass `{ opId, syncDeviceId }` provenance.
+- `backend/tests/sync-invariants.test.ts`: added 4 tombstone-enforcement regression tests.
+
+### MIGRATIONS
+- None added. `sync_tombstones` schema already present and journal-registered.
+
+### TESTS RUN
+- `npx tsc --noEmit -p tsconfig.json` → clean.
+- `npx vitest run tests/sync-invariants.test.ts` → 70 passed (incl. 4 new tombstone tests).
+- `npx vitest run tests/sync-invariants.test.ts tests/sync-coverage.test.ts
+  tests/sync-claim-release.test.ts tests/migrations-journal-guard.test.ts
+  tests/licensing-engine.test.ts` → 100 passed.
+- `npx vitest run` (full) → 202 passed | 10 skipped | 1 failed (`audit-findings`,
+  live-API-only, environmental).
+
+### ACTUAL RESULTS
+- Licensing "resolves a basic plan" now passes (was the 1 failing test).
+- Tombstone guard wired: delete → record tombstone; create/dependency replay →
+  blocked resurrection (visible `failed` → `dead`, never silent `created`).
+
+### REGRESSION RESULTS
+- Prior baseline full suite was 197 passed + 2 failed (licensing + audit-findings).
+  Now 202 passed + 1 failed (only environmental audit-findings). No regressions.
+
+### REMAINING RISKS
+- `sync_conflicts` table (batch1 migration) is still unread/unwritten — the
+  explicit conflict-tracking flow (update/cancel reconciliation state) is the next
+  piece of this batch, not yet implemented.
+- Tombstone write in `materializeMasterMutation` is not in a single wrapping
+  transaction with the hard delete; a crash between them is recovered by the
+  idempotent `!hub` retry re-asserting the tombstone.
+- Legitimate intentional re-creation of the SAME master UUID after a delete is
+  blocked (visible) rather than auto-cleared, by design (§10: no naive
+  create-clears-tombstone); requires explicit operator reconciliation.
+
+## Batch: F-07 company-profile atomicity (3A) + backup/restore sync state (3B) — verified 2026-09-12
+
+### STATUS
+Complete and verified. The working-tree fix for `PUT /api/company/profile` was already
+written when the previous run was aborted; this batch verified it end to end, swept the
+rest of the codebase for the same defect class, and verified the backup/restore sync-state
+work against live PostgreSQL and three real servers.
+
+### REAL PROBLEMS FOUND
+1. `backend/src/presentation/routes/company.route.ts` (PUT /api/company/profile): the
+   profile upsert and its outbox unit did not share a transaction. On the committed
+   revision the route enqueued nothing at all (the profile was never synced); the
+   intermediate working-tree state enqueued AFTER the repository's own
+   `withTenantTx` had committed, inside a log-only `try/catch`. Counterfactual,
+   reproduced live with a real BEFORE INSERT trigger on `sync_outbox`
+   (`scripts/verify-f07-outbox-atomicity.mjs` §4b): with the pre-fix route the request
+   returned HTTP 200, wrote `company_profiles` and left `sync_outbox` empty — a saved
+   profile with no sync unit. With the fix: HTTP 500 `SYNC_OUTBOX_FAILED`, profile
+   unchanged, no outbox row.
+2. `scripts/test-f08-resource-claims.mjs` (verification only, not product code): ten
+   checks failed with HTTP 400 because the drill predated the `expectedVersion`
+   requirement on update/cancel routes (T9 invoice cancel, T11/T12 party rename,
+   T13/T20 order edit). No product defect — the 400 is the intended P0-001 contract.
+
+### FALSE POSITIVES
+- `tests/audit-findings.test.ts` "fails" only because no backend is listening on
+  127.0.0.1:8080 (ECONNREFUSED) and `erp` has no tenant/admin fixture; environmental,
+  pre-existing, file unmodified.
+- `backend/scripts/verify-rls.mjs` fails against the live `erp` database and against
+  `sync_tpl` because neither has had the canonical policy layer applied
+  (`enable-rls.sql`, not a drizzle migration). A fresh database built with
+  `drizzle-kit migrate` + `scripts/apply-rls.mjs` PASSES the same script
+  (`tenant_isolation=36, platform_or_tenant=8, tenant_directory=1, platform_only=1`,
+  46 tables). The `erp` database is STALE relative to this batch, not broken by it.
+- `statement.route.ts` frozen-leg capture `logger.warn` is NOT a lost sync unit: the
+  read it guards runs inside the settlement transaction, so any Postgres error aborts
+  the transaction and the following enqueue fails loudly (500). Left as-is.
+
+### CHANGES MADE
+- `backend/scripts/test-f08-resource-claims.mjs`: added a `versionOf(db, table, id)`
+  helper (reads the row's version from the DB the request will run against) and passed
+  `expectedVersion` on the five update/cancel calls that require it; corrected the
+  copy-pasted Usage/header text. Drill now 55/55 (was 45/55).
+- No production code changed in this batch — the F-07 route fix was already on disk
+  (mtime 17:09:26) and was only verified here.
+
+### MIGRATIONS
+- `20260915_fabric_color_version.sql` is legitimate and required: `fabrics.version` /
+  `colors.version` are declared in the Drizzle schemas and used by the repositories
+  (optimistic locking + `enqueueMasterUpdate` base version), but no migration created
+  them, so migrated databases failed master creation with 42703. Additive
+  (`ADD COLUMN IF NOT EXISTS ... DEFAULT 1`), re-runnable, journal idx 62 immediately
+  after `20260914_sync_rls_canonical_policies`, and enforced by
+  `tests/schema-migration-parity.test.ts`. Verified applied on a fresh database
+  (63 migrations; both columns present with default 1).
+
+### TESTS RUN (2026-09-12)
+- `npm run typecheck` → exit 0; `npm run typecheck:backend` → exit 0.
+- `npm run test:logic` → exit 0, 22 files / 123 tests.
+- `cd backend && npx vitest run` → exit 1: 23 files passed / 1 failed
+  (`audit-findings.test.ts`, live-API-only), 232 passed | 10 skipped.
+- `npx vitest run tests/restore-sync-state.test.ts tests/sync-outbox-ambient-wiring.test.ts
+  tests/schema-migration-parity.test.ts tests/rls-guard.test.ts
+  tests/migrations-journal-guard.test.ts tests/sync-invariants.test.ts
+  tests/sync-cancel-base-version.test.ts` → 7 files / 115 tests passed.
+- `node backend/scripts/verify-restore-sync-state.mjs` → exit 0, 35/35 checks.
+- `node backend/scripts/test-sync-drills.mjs` → exit 0, 6/6 checks (D1–D4).
+- `node backend/scripts/verify-f07-outbox-atomicity.mjs` → exit 0, 38/38 checks.
+- `node backend/scripts/test-f08-resource-claims.mjs` → exit 0, 55/55 checks.
+- Fresh-DB RLS chain: `drizzle-kit migrate` → `apply-rls.mjs` → `verify-rls.mjs` → exit 0.
+
+### REGRESSION RESULTS
+- No regression: the single failing backend suite is the environmental live-API test.
+- F-08 improved from 45/55 to 55/55 by fixing the stale drill, not the product.
+
+### REMAINING RISKS / NOT CHANGED
+- Live `erp` database still carries pre-batch legacy RLS policy names; applying
+  `scripts/apply-rls.mjs` (or `db:migrate` + re-apply) is an operator step that was
+  NOT performed here because the task forbids modifying `erp`.
+- Restored `document_number_blocks` can be stale if a block tail was reclaimed and
+  re-carved after the backup; the restore script prints blocks vs sequences so this
+  can be checked (documented in the script and SYNC-OPERATIONS.md).
+- `sync_conflicts` resolution flow remains operator-driven (from the previous batch).

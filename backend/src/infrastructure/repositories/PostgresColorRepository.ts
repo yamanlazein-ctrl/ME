@@ -74,18 +74,29 @@ export class PostgresColorRepository implements IColorRepository {
     return this.toDomain(row);
   }
 
-  async update(id: string, data: Partial<CreateColorData>, ctx: TenantContext): Promise<ColorData> {
+  async update(id: string, data: Partial<CreateColorData>, ctx: TenantContext, expectedVersion: number): Promise<ColorData> {
     const values: Record<string, unknown> = { updatedAt: new Date() };
     if (data.name !== undefined) values.name = data.name;
     if (data.code !== undefined) values.code = data.code ?? null;
     if (data.hex !== undefined) values.hex = data.hex ?? null;
     if (data.imageUrl !== undefined) values.imageUrl = data.imageUrl ?? null;
+    // P0-001: version increment for optimistic concurrency
+    values.version = sql`${colors.version} + 1`;
+    // P0-001: atomic version enforcement — WHERE includes expectedVersion
+    const whereConditions = [eq(colors.id, id), eq(colors.tenantId, ctx.tenantId), eq(colors.version, expectedVersion)];
     const [row] = await this.db
       .update(colors)
       .set(values)
-      .where(and(eq(colors.id, id), eq(colors.tenantId, ctx.tenantId)))
+      .where(and(...whereConditions))
       .returning();
-    if (!row) throw new Error("Color not found");
+    if (!row) {
+      // P0-001: distinguish "not found" from "stale version"
+      const existing = await this.db.select({ version: colors.version }).from(colors).where(and(eq(colors.id, id), eq(colors.tenantId, ctx.tenantId))).limit(1);
+      if (existing.length > 0) {
+        throw Object.assign(new Error(`Stale version: expected ${expectedVersion}, current ${existing[0].version}`), { code: "STALE_VERSION" as const });
+      }
+      throw new Error("Color not found");
+    }
     return this.toDomain(row);
   }
 
@@ -126,6 +137,7 @@ export class PostgresColorRepository implements IColorRepository {
       code: n(row.code),
       hex: n(row.hex),
       imageUrl: n(row.imageUrl),
+      version: row.version ?? 1,
       createdAt: row.createdAt.toISOString(),
       updatedAt: row.updatedAt.toISOString(),
     };

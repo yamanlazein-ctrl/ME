@@ -3,6 +3,7 @@ import { sql } from "drizzle-orm";
 import { Pool, PoolClient } from "pg";
 import { config } from "../config/env.js";
 import { tenantContext } from "./tenant-context.js";
+import { runInAmbientTx, getAmbientTx, getAmbientTenantId } from "./ambient-tx.js";
 
 /**
  * A pg Pool that stamps the RLS tenant GUC onto every connection at checkout
@@ -104,9 +105,42 @@ export type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
  * that transaction and is automatically reset on commit/rollback — this
  * is what makes RLS tenant isolation correct for multi-tenant writes.
  * The pooled client is released back to the pool afterwards.
+ *
+ * F-07 (Transactional Outbox): the callback also runs inside
+ * `runInAmbientTx`, so any repository holding an `ambientDb()` proxy executes
+ * its statements on THIS transaction instead of borrowing a second connection
+ * from the pool. That is what makes "business write + outbox enqueue" a single
+ * atomic unit: the route wraps both in one `withTenantTx`, and a failure in
+ * either rolls back both.
+ *
+ * Nested calls join the outer transaction as a savepoint (see below), so a
+ * repository that opens `withTenantTx` internally can never commit behind the
+ * route's back.
  */
 export async function withTenantTx<T>(tenantId: string, fn: (tx: Tx) => Promise<T>): Promise<T> {
   if (!tenantId) throw new Error("tenantId is required");
+  // F-07 nesting: when an ambient tenant transaction is ALREADY active (a
+  // repository that manages its own transaction being called from a route
+  // that opened one), JOIN it as a SAVEPOINT instead of checking out a second
+  // pooled connection. A second connection would commit independently of the
+  // caller's transaction — which is exactly the "business write committed
+  // without its sync unit" divergence this mechanism exists to prevent.
+  // Verified live: PostgresCompanyRepository used to open its own transaction
+  // inside the route's, so PUT /api/company/profile committed the profile even
+  // when the outbox insert failed.
+  const ambient = getAmbientTx<Tx>();
+  if (ambient) {
+    const ambientTenant = getAmbientTenantId();
+    if (ambientTenant && ambientTenant !== tenantId) {
+      throw new Error(
+        `withTenantTx: refusing to join an ambient transaction for tenant ${ambientTenant} with tenant ${tenantId}`,
+      );
+    }
+    // Drizzle maps `tx.transaction(cb)` on an active transaction to a
+    // SAVEPOINT on the SAME connection: an inner failure rolls back only its
+    // own work, and the RLS GUC set by the outer `SET LOCAL` still applies.
+    return ambient.transaction((savepoint) => fn(savepoint as unknown as Tx));
+  }
   const client = await pool.connect();
   try {
     const txDb = drizzle(client);
@@ -116,7 +150,7 @@ export async function withTenantTx<T>(tenantId: string, fn: (tx: Tx) => Promise<
       await tx.execute(
         sql.raw(`SET LOCAL app.current_tenant_id = '${tenantId.replace(/'/g, "''")}'`),
       );
-      return fn(tx);
+      return runInAmbientTx(tx, tenantId, () => fn(tx));
     });
   } finally {
     client.release();

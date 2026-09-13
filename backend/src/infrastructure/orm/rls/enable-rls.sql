@@ -53,7 +53,24 @@ DECLARE
     'manual_movements','notifications','order_items','orders','parties',
     'party_balances','print_jobs','return_lines','returns','rolls','settings',
     'stock_movements','users','vouchers',
-    'yearly_party_summaries'
+    'yearly_party_summaries',
+    -- Sync engine (0047-0051). All six carry a NOT NULL tenant_id, so they
+    -- belong to the tenant-scoped family. They are listed here — and not only
+    -- in their own migration — because this file is the canonical policy
+    -- layer: rls-guard.test.ts asserts every TS business table appears here,
+    -- and verify-rls.mjs counts the tenant_isolation family at runtime.
+    'sync_devices','sync_outbox','sync_inbox',
+    'sync_resource_claims','sync_state',
+    'document_number_blocks',
+    -- Tombstones (0058) and the conflict ledger (batch1) are tenant-scoped
+    -- business data too: a recorded delete, and the losing side of a
+    -- concurrent edit, must be invisible to every other company. They were
+    -- created with a hand-written `::uuid` cast — which raises 22P02 once
+    -- set_config(..., NULL) has stored '' — plus an unnecessary platform
+    -- escape; listing them here keeps them on the canonical NULLIF-guarded
+    -- expression. Migration 20260914_sync_rls_canonical_policies applies the
+    -- same rewrite on databases that only run `db:migrate`.
+    'sync_tombstones','sync_conflicts'
   ];
 BEGIN
   FOREACH t IN ARRAY tables LOOP
@@ -137,6 +154,40 @@ BEGIN
       USING (current_setting('app.platform_mode', true) = 'on')
       WITH CHECK (current_setting('app.platform_mode', true) = 'on');
   END IF;
+END $$;
+
+-- ────────────────────────────────────────────────────────────────────────────
+-- 3b. تنظيف السياسات القديمة (legacy) — إزالة كل سياسة غير معتمدة على جدول
+--     صار له سياسة من العائلات الأربع.
+--
+--     سبب الحاجة: ملفات الترحيل أنشأت سياسات بأسماء لكل جدول
+--     (`licenses_tenant_isolation`, `tenant_isolation_ledger_archive`, ...)،
+--     بينما هذه الطبقة تُنشئ الأسماء المعتمدة. في PostgreSQL السياسات
+--     Permissive تُدمج بـ OR، فوجود الاسمين ليس ثغرة — لكنه يترك نسخة أضعف
+--     (مقارنة نصية بلا NULLIF) ويجعل verify-rls.mjs يفشل بـ "unexpected policy".
+--
+--     القيد الآمن: لا نحذف سياسة إلا إذا كان الجدول نفسه يحمل سياسة معتمدة —
+--     فلا يبقى أي جدول بلا أي سياسة بعد التنظيف.
+-- ────────────────────────────────────────────────────────────────────────────
+DO $$
+DECLARE
+  r record;
+  canonical text[] := ARRAY['tenant_isolation','platform_or_tenant','tenant_directory','platform_only'];
+BEGIN
+  FOR r IN
+    SELECT p.schemaname, p.tablename, p.policyname
+    FROM pg_policies p
+    WHERE p.schemaname = 'public'
+      AND NOT (p.policyname = ANY(canonical))
+      AND EXISTS (
+        SELECT 1 FROM pg_policies c
+        WHERE c.schemaname = p.schemaname
+          AND c.tablename = p.tablename
+          AND c.policyname = ANY(canonical)
+      )
+  LOOP
+    EXECUTE format('DROP POLICY %I ON %I.%I', r.policyname, r.schemaname, r.tablename);
+  END LOOP;
 END $$;
 
 COMMIT;

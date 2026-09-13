@@ -777,7 +777,7 @@ export class PostgresInvoiceRepository implements IInvoiceRepository {
     });
   }
 
-  async update(id: string, input: UpdateInvoiceInput, ctx: TenantContext): Promise<InvoiceData> {
+  async update(id: string, input: UpdateInvoiceInput, ctx: TenantContext, expectedVersion: number): Promise<InvoiceData> {
     const lines = input.lines.map((l) => ({
       fabricId: l.fabricId,
       colorId: l.colorId,
@@ -808,6 +808,12 @@ export class PostgresInvoiceRepository implements IInvoiceRepository {
         throw Object.assign(new Error("Invoice already cancelled"), {
           code: "ALREADY_CANCELLED" as const,
         });
+      // P0-001: optimistic concurrency — fail fast if version mismatch
+      if (inv.version !== expectedVersion) {
+        throw Object.assign(new Error(`Stale version: expected ${expectedVersion}, current ${inv.version}`), {
+          code: "STALE_VERSION" as const,
+        });
+      }
 
       const isSale = inv.type === "sale";
       const invoiceType = isSale ? "sales_invoice" : "purchase_invoice";
@@ -1230,7 +1236,7 @@ export class PostgresInvoiceRepository implements IInvoiceRepository {
     return legs;
   }
 
-  async cancel(id: string, cancelledBy: string, ctx: TenantContext): Promise<InvoiceData> {
+  async cancel(id: string, cancelledBy: string, ctx: TenantContext, expectedVersion: number): Promise<InvoiceData> {
     return this.db.transaction(async (tx) => {
       const [inv] = await tx
         .select()
@@ -1243,6 +1249,12 @@ export class PostgresInvoiceRepository implements IInvoiceRepository {
         throw Object.assign(new Error("Invoice already cancelled"), {
           code: "ALREADY_CANCELLED" as const,
         });
+      // P0-001: optimistic concurrency — fail fast if version mismatch
+      if (inv.version !== expectedVersion) {
+        throw Object.assign(new Error(`Stale version: expected ${expectedVersion}, current ${inv.version}`), {
+          code: "STALE_VERSION" as const,
+        });
+      }
 
       const ilines = await tx.select().from(invoiceLines).where(eq(invoiceLines.invoiceId, id));
 

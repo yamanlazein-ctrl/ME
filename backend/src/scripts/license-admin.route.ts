@@ -6,7 +6,7 @@ import type { PostgresAuditRepository } from "../infrastructure/repositories/Pos
 import type { JwtSigner } from "../infrastructure/auth/JwtSigner.js";
 import type { PostgresSystemAdminRepository } from "../infrastructure/repositories/PostgresSystemAdminRepository.js";
 import type { Argon2PasswordHasher } from "../infrastructure/auth/PasswordHasher.js";
-import type { RedisTokenDenylist } from "../infrastructure/auth/TokenDenylist.js";
+import type { TokenDenylist } from "../infrastructure/auth/TokenDenylist.js";
 import { superAdminLoginUseCase } from "../application/use-cases/super-admin/superAdminUseCases.js";
 import {
   resolveFeatures,
@@ -37,7 +37,7 @@ export function registerLicenseAdminRoutes(
     adminAuth: (req: Request, res: Response, next: NextFunction) => void;
     systemAdminRepo: PostgresSystemAdminRepository;
     passwordHasher: Argon2PasswordHasher;
-    tokenDenylist: RedisTokenDenylist;
+    tokenDenylist: TokenDenylist;
   },
 ): void {
   const {

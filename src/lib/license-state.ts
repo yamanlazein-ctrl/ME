@@ -98,6 +98,22 @@ export function getActivationId(): string | null {
   return raw ?? null;
 }
 
+/**
+ * The activation id in the clear.
+ *
+ * `getActivationId()` returns the value as STORED, which is encrypted at rest
+ * (AES-GCM keyed off the machine fingerprint). The device-roster endpoint needs
+ * the plaintext id as its device-provisioning credential, so it must decrypt —
+ * same fallback semantics as `decryptValue` (a pre-encryption plaintext value
+ * passes through).
+ */
+export async function getDecryptedActivationId(): Promise<string | null> {
+  const raw = readString(ACTIVATION_ID_STORAGE);
+  if (!raw) return null;
+  const value = await decryptValue(raw);
+  return value || null;
+}
+
 export async function setActivationId(id: string): Promise<void> {
   const encrypted = await encryptValue(id);
   writeString(ACTIVATION_ID_STORAGE, encrypted);
