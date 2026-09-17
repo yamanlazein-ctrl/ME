@@ -28,6 +28,16 @@ export const LEDGER_ENTRY_TYPES = [
   "sales_return_contra",
   "settlement",
   "settlement_contra",
+  /** Receipt: Dr when customer pays less cash but full settlement is credited. */
+  "settlement_discount_expense",
+  /** Payment: Cr when supplier accepts less cash but AP is debited in full. */
+  "settlement_discount_income",
+  /** FX-FREEZE: realized gain when a cross-currency voucher settles an invoice at
+   *  a rate more favorable than the invoice's own frozen rate (base credit). */
+  "fx_gain",
+  /** FX-FREEZE: realized loss when the settlement rate is less favorable than the
+   *  invoice's frozen rate (base debit). Balances the base-currency ledger. */
+  "fx_loss",
 ] as const;
 
 export type LedgerEntryType = (typeof LEDGER_ENTRY_TYPES)[number];

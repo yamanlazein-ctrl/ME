@@ -8,12 +8,14 @@ import { InlineFabricCell, InlineColorCell } from "@/components/invoices/InlineF
 import {
   fabricById,
   colorById,
+  colors,
   useInventory,
-  searchColors,
   colorByCode,
+  colorByName,
   fabricByName,
   totalKgOfColor,
 } from "@/presentation/hooks/useInventory";
+import { resolveColorPick } from "@/domain/inventory/colorLookup";
 import { formatQuantity } from "@/shared/utils/formatNumber";
 import { addCustomer, customers, customerById, useParties } from "@/presentation/hooks/useParties";
 import type { Currency } from "@/domain/types";
@@ -134,7 +136,13 @@ function NewOrderPage() {
   const pickColor = (id: string, colorId: string) => {
     const c = colorById(colorId);
     if (!c) return;
-    updateLine(id, { colorId: c.id, colorName: c.name, colorCode: c.code });
+    const line = lines.find((l) => l.id === id);
+    const r = resolveColorPick(c, line?.fabricId || undefined, colors);
+    updateLine(id, {
+      colorId: r.existingColorId ?? "",
+      colorName: r.colorName,
+      colorCode: r.colorCode,
+    });
   };
 
   const save = async () => {
@@ -164,15 +172,10 @@ function NewOrderPage() {
           if (fabricName && !fabricId) fabricId = fabricByName(fabricName)?.id;
           let colorId = l.colorId || undefined;
           if (!colorId && colorName) {
-            const byName = searchColors(colorName, 8).find(
-              (c) => c.name.trim().toLowerCase() === colorName.toLowerCase(),
-            );
+            const byName = colorByName(colorName, fabricId);
             const byCode = l.colorCode ? colorByCode(l.colorCode, fabricId) : undefined;
             const picked = byName ?? byCode;
-            if (picked) {
-              colorId = picked.id;
-              if (!fabricId) fabricId = picked.fabricId;
-            }
+            if (picked) colorId = picked.id;
           }
           return {
             fabricId,

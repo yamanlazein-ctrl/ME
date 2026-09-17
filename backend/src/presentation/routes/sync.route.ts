@@ -14,6 +14,7 @@ import {
   probeHubReachable,
   setRuntimeCentralSyncUrl,
 } from "../../application/use-cases/sync/hubConfig.js";
+import { revokeSubjectSessions } from "../../infrastructure/auth/sessionCutoff.js";
 
 const HubConfigSchema = z.object({
   url: z.string().url().nullable(),
@@ -882,6 +883,9 @@ export function registerSyncRoutes(
         { tenantId: ctx.tenantId, byUserId: ctx.userId, deviceId, reason },
         "operator revoked sync device",
       );
+      for (const uid of row.authorizedUserIds ?? []) {
+        await revokeSubjectSessions(uid, ctx.tenantId);
+      }
       res.json({ ok: true, id: row.id, revokedAt: row.revokedAt, revokeReason: row.revokeReason });
     },
   );

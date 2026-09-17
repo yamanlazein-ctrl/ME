@@ -1,5 +1,6 @@
-import { and, desc, eq, gte, lte, count, isNull, isNotNull, type SQL } from "drizzle-orm";
-import { db as defaultDb, withTenantTx, type DB } from "../orm/drizzle.js";
+import { and, desc, eq, gte, lte, count, isNull, isNotNull, sql, type SQL } from "drizzle-orm";
+import { db as defaultDb, type DB } from "../orm/drizzle.js";
+import { runWithPlatformContext } from "../orm/tenant-context.js";
 import type { UUID } from "../../domain/types/index.js";
 import type {
   ILicenseRepository,
@@ -12,6 +13,7 @@ import { licenses } from "../orm/schemas/license.table.js";
 import { licenseActivations } from "../orm/schemas/license-activation.table.js";
 import { deviceRegistrations } from "../orm/schemas/device-registration.table.js";
 import { licenseAuditEvents } from "../orm/schemas/license-audit-event.table.js";
+import { tenants } from "../orm/schemas/tenant.table.js";
 import type {
   LicenseLimits,
   LicenseModel,
@@ -134,7 +136,16 @@ export class PostgresLicenseRepository implements ILicenseRepository {
   constructor(private readonly db: DB = defaultDb) {}
 
   async findByKey(key: string): Promise<LicenseRow | null> {
-    const [row] = await this.db.select().from(licenses).where(eq(licenses.key, key)).limit(1);
+    // Case-insensitive: ActivationScreen historically uppercased keys; admin/
+    // seed keys may differ in hex case. Exact match first, then lower().
+    const trimmed = key.trim();
+    const [exact] = await this.db.select().from(licenses).where(eq(licenses.key, trimmed)).limit(1);
+    if (exact) return toLicense(exact);
+    const [row] = await this.db
+      .select()
+      .from(licenses)
+      .where(sql`lower(${licenses.key}) = lower(${trimmed})`)
+      .limit(1);
     return row ? toLicense(row) : null;
   }
 
@@ -144,35 +155,155 @@ export class PostgresLicenseRepository implements ILicenseRepository {
   }
 
   async findActiveForTenant(tenantId: UUID): Promise<LicenseRow | null> {
-    return withTenantTx(tenantId, async (tx) => {
-      const [row] = await tx
-        .select()
-        .from(licenses)
-        .where(and(eq(licenses.tenantId, tenantId), eq(licenses.status, "active")))
-        .limit(1);
-      return row ? toLicense(row) : null;
-    });
+    const latest = await this.findLatestForTenant(tenantId);
+    if (latest && latest.status === "active") return latest;
+    return null;
   }
 
   async findLatestForTenant(tenantId: UUID): Promise<LicenseRow | null> {
-    return withTenantTx(tenantId, async (tx) => {
-      const [row] = await tx
+    // Platform read: tenant entitlement pointers + license SoT must resolve
+    // even when the caller's GUC is wrong during bootstrap/auth.
+    return runWithPlatformContext(async () => {
+      const [tenant] = await this.db
+        .select({
+          licenseKey: tenants.licenseKey,
+          activationId: tenants.activationId,
+        })
+        .from(tenants)
+        .where(eq(tenants.id, tenantId))
+        .limit(1);
+      if (!tenant) return null;
+
+      if (tenant.licenseKey) {
+        const trimmed = tenant.licenseKey.trim();
+        const [byKey] = await this.db
+          .select()
+          .from(licenses)
+          .where(eq(licenses.key, trimmed))
+          .limit(1);
+        if (byKey) return toLicense(byKey);
+        const [byKeyCi] = await this.db
+          .select()
+          .from(licenses)
+          .where(sql`lower(${licenses.key}) = lower(${trimmed})`)
+          .limit(1);
+        if (byKeyCi) return toLicense(byKeyCi);
+        // Pointer set but SoT row missing/wrong — do not fall back to a
+        // co-located baked or older license (would silently hijack).
+        return null;
+      }
+
+      if (tenant.activationId) {
+        const [act] = await this.db
+          .select()
+          .from(licenseActivations)
+          .where(eq(licenseActivations.id, tenant.activationId))
+          .limit(1);
+        if (act) {
+          const [lic] = await this.db
+            .select()
+            .from(licenses)
+            .where(eq(licenses.id, act.licenseId))
+            .limit(1);
+          if (lic) return toLicense(lic);
+        }
+      }
+
+      // Live activation for this tenant (reinstall path before cache rewrite).
+      const [liveAct] = await this.db
+        .select()
+        .from(licenseActivations)
+        .where(
+          and(eq(licenseActivations.tenantId, tenantId), isNull(licenseActivations.deactivatedAt)),
+        )
+        .orderBy(desc(licenseActivations.createdAt))
+        .limit(1);
+      if (liveAct) {
+        const [lic] = await this.db
+          .select()
+          .from(licenses)
+          .where(eq(licenses.id, liveAct.licenseId))
+          .limit(1);
+        if (lic) return toLicense(lic);
+      }
+
+      // Pre-activation / test fixtures: prefer a non-baked bound row over a
+      // Desktop offline_token bake so a stale bake cannot win by created_at.
+      const [nonBaked] = await this.db
         .select()
         .from(licenses)
-        .where(eq(licenses.tenantId, tenantId))
+        .where(and(eq(licenses.tenantId, tenantId), isNull(licenses.offlineToken)))
         .orderBy(desc(licenses.createdAt))
         .limit(1);
-      return row ? toLicense(row) : null;
+      if (nonBaked) return toLicense(nonBaked);
+
+      const [bakedOnly] = await this.db
+        .select()
+        .from(licenses)
+        .where(and(eq(licenses.tenantId, tenantId), isNotNull(licenses.offlineToken)))
+        .orderBy(desc(licenses.createdAt))
+        .limit(1);
+      if (bakedOnly) return toLicense(bakedOnly);
+
+      return null;
     });
   }
 
   async findBakedForTenant(tenantId: UUID): Promise<LicenseRow | null> {
-    const [row] = await this.db
-      .select()
-      .from(licenses)
-      .where(and(eq(licenses.tenantId, tenantId), isNotNull(licenses.offlineToken)))
-      .limit(1);
-    return row ? toLicense(row) : null;
+    return runWithPlatformContext(async () => {
+      const [tenant] = await this.db
+        .select({
+          licenseKey: tenants.licenseKey,
+          activationId: tenants.activationId,
+        })
+        .from(tenants)
+        .where(eq(tenants.id, tenantId))
+        .limit(1);
+      if (!tenant) return null;
+
+      // Tenant already bound to a non-baked (or different) key → never return
+      // a mismatched baked row.
+      if (tenant.licenseKey) {
+        const [row] = await this.db
+          .select()
+          .from(licenses)
+          .where(
+            and(
+              eq(licenses.key, tenant.licenseKey),
+              isNotNull(licenses.offlineToken),
+            ),
+          )
+          .limit(1);
+        return row ? toLicense(row) : null;
+      }
+
+      if (tenant.activationId) {
+        const [act] = await this.db
+          .select()
+          .from(licenseActivations)
+          .where(eq(licenseActivations.id, tenant.activationId))
+          .limit(1);
+        if (act) {
+          const [row] = await this.db
+            .select()
+            .from(licenses)
+            .where(
+              and(eq(licenses.id, act.licenseId), isNotNull(licenses.offlineToken)),
+            )
+            .limit(1);
+          return row ? toLicense(row) : null;
+        }
+      }
+
+      // Pre-activation Desktop bake: sole baked row for this tenant.
+      const [row] = await this.db
+        .select()
+        .from(licenses)
+        .where(and(eq(licenses.tenantId, tenantId), isNotNull(licenses.offlineToken)))
+        .orderBy(desc(licenses.createdAt))
+        .limit(1);
+      return row ? toLicense(row) : null;
+    });
   }
 
   async list(filter: { tenantId?: UUID; status?: string }): Promise<LicenseRow[]> {

@@ -43,6 +43,8 @@ export interface LicenseTokenVerification {
 }
 
 export interface ILicenseTokenSigner {
+  /** True when a private key is loaded (License Server / bake). Desktop verify-only → false. */
+  canSign(): boolean;
   sign(
     payload: LicenseTokenPayload,
     opts?: { expiresInSec?: number; jti?: string },

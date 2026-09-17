@@ -6,6 +6,6 @@ export interface IVoucherRepository {
   findById(id: UUID, ctx: TenantContext): Promise<Voucher | null>;
   list(filter: VoucherFilter, ctx: TenantContext): Promise<PaginatedResult<Voucher>>;
   create(voucher: Voucher, ctx: TenantContext): Promise<Voucher>;
-  cancel(id: UUID, ctx: TenantContext): Promise<void>;
+  cancel(id: UUID, ctx: TenantContext, expectedVersion: number): Promise<void>;
   vouchersOfInvoice(invoiceId: UUID, ctx: TenantContext): Promise<Voucher[]>;
 }

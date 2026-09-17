@@ -1,9 +1,11 @@
 /**
  * Shared print / company contact — single source of truth.
  *
- * Print header brand is always PRINT_BRAND_NAME.
- * Print footer contact is ALWAYS FIXED_PRINT_FOOTER_LINES (verbatim) —
- * once only, at the bottom of the document. Never in the header.
+ * Print header brand is always PRINT_BRAND_NAME (once).
+ * Print header contact is ALWAYS FIXED_PRINT_FOOTER_LINES (verbatim),
+ * each line on its own row. Never concatenated, never LTR-reversed,
+ * never taken from settings.company (a corrupted settings write must
+ * not scramble phones into the address).
  */
 export const PRINT_BRAND_NAME = "Motard Fabrics Group";
 
@@ -42,10 +44,10 @@ export function formatCompanyPhoneField(): string {
 }
 
 /**
- * Print footer contact — always the fixed verbatim lines.
+ * Print header contact — always the fixed verbatim lines.
  * `company` is accepted for call-site compatibility but intentionally ignored
  * so a corrupted settings write can never reintroduce the wrong text or
- * duplicate a different format in the header/footer.
+ * duplicate a different format in the header.
  */
 export function getCompanyContactLines(_company?: {
   address?: string | null;

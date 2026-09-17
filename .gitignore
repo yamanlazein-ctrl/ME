@@ -27,7 +27,12 @@ coverage/
 playwright-report/
 *.tsbuildinfo
 /audit/
+.tmp/
 .tmp.driveupload/
+backend/e2e-*.mjs
+backend/e2e-*.result.json
+backend/*drill*
+backend/audit-logs/
 
 # Tool configs (local only)
 .mcp.json
@@ -46,8 +51,6 @@ opencode.jsonc
 *.njsproj
 *.sln
 *.sw?
-# Added by code-review-graph
-.code-review-graph/
 
 # Environment files — never commit real secrets
 .env
@@ -61,6 +64,7 @@ backend/.env.production
 backend/.env.*
 !backend/.env.example
 !backend/.env.test
+!backend/.env.production.example
 admin-dashboard/.env
 admin-dashboard/.env.local
 admin-dashboard/.env.production
@@ -74,7 +78,9 @@ desktop/src-tauri/resources/
 desktop/src-tauri/Cargo.lock
 desktop/src-tauri/gen/
 desktop/package-lock.json
-desktop/pnpm-lock.yaml
+# Tauri updater signing private key — never commit
+desktop/src-tauri/updater.key
+desktop/src-tauri/updater.key.pub
 
 # Local backup snapshots (keep on disk, out of repo)
 backup-pre-redesign/
@@ -87,7 +93,7 @@ backup/pgdump-staging/
 pg_dump.exe
 pg_dumpall.exe
 
-# Install / debug logs (local only, some exceed GitHub 100MB limit)
+# Install / debug logs (local only)
 install_log.txt
 install_log_quiet.txt
 install_*.log
@@ -97,22 +103,46 @@ build-prod*.log
 preview-prod*.log
 mig-out.txt
 
-# AI tool caches & workdirs (local only, thousands of files)
+# AI / scanner / agent workdirs (never ship)
 .scannerwork/
 .claude/
 .workbuddy-ai/
 .code-review-graph/
-.semgrep/
+.commandcode/
+.verboo/
 .tanstack/
-
-# Phase / scratch reports kept locally (regenerable)
+.agents/
+.atlas/
+.codex/
+.continue/
+.cursor/
+.windsurf/
+.claude.json
+agent_workspace/
 PHASE_REPORTS/
+CLAUDE.md
+.cleanup-manifest.json
+
+# Local acceptance/probe scratch (may contain secrets — never ship)
+backend/tmp-acceptance*
+backend/tmp-start-acceptance.ps1
+backend/.tmp-*
+backend/__extract.mjs
+backend/__qa_sql.mjs
+backend/_d.mjs
+backend/dbinspect*.mjs
+backend/plan-snap*.mjs
+backend/sync-audit.mjs
+*.pdf
+
+# Local scratch / plan dumps (never ship)
 MASTER_REMEDIATION_PLAN.md
 EXECUTION_LOG.md
 EXECUTION_STATUS.md
 REPAIR_TRACKER.md
 SESSION-AND-LICENSE-PLAN.md
-CLAUDE.md
+REMEDIATION_LOG.md
+VERIFICATION_RESULTS_P0.md
 1
 1.md.txt
 sonar-project.properties

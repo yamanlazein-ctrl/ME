@@ -11,6 +11,7 @@ import {
   syncDeviceIdFromRequest,
 } from "../../application/use-cases/sync/syncEnqueue.js";
 import * as uc from "../../application/use-cases/settings/settingsUseCases.js";
+import { Settings } from "../../domain/entities/Settings.js";
 
 export function registerSettingsRoutes(
   router: Router,
@@ -25,7 +26,7 @@ export function registerSettingsRoutes(
   router.get("/settings", auth, readGuard, async (req: Request, res: Response) => {
     const r = await uc.getSettingsUseCase(settingsRepo, ctx(req));
     if (r.ok) {
-      res.json(r.data ?? {});
+      res.json(r.data ?? Settings.createDefault(ctx(req).tenantId).toData());
     } else {
       res.status(500).json({ code: "INTERNAL", message: r.error });
     }

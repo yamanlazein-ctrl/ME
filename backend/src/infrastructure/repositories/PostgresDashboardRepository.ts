@@ -203,8 +203,15 @@ export class PostgresDashboardRepository implements IDashboardRepository {
 
     const [todayMovements] = await this.db
       .select({ count: sql<number>`COUNT(*)` })
-      .from(manualMovements)
-      .where(and(eq(manualMovements.tenantId, ctx.tenantId), eq(manualMovements.date, today)));
+      .from(ledgerEntries)
+      .where(
+        and(
+          eq(ledgerEntries.tenantId, ctx.tenantId),
+          eq(ledgerEntries.status, "active"),
+          inArray(ledgerEntries.cashImpact, ["in", "out"]),
+          eq(ledgerEntries.date, today),
+        ),
+      );
     const [dayLock] = await this.db
       .select()
       .from(dayCloses)
@@ -351,36 +358,25 @@ export class PostgresDashboardRepository implements IDashboardRepository {
     }
 
     // ── Unpaid sale invoices (total − paid − returns, per P0-LOGIC-3.6e unified) ──
-    // `paid` is maintained by PostgresVoucherRepository in the invoice's own
-    // currency after FX conversion, so no client-side re-summing is needed.
+    // `paid` is FX-converted in the invoice currency. Returns share that
+    // currency (enforced at create). Do NOT join vouchers here — a receipt
+    // join cartesian-multiplies return lines and inflates remaining.
     const unpaidSub = this.db
       .select({
         id: invoices.id,
         currency: invoices.currency,
-        remaining: sql<number>`${invoices.total} - ${invoices.paid} - COALESCE(SUM(${returnLines.quantityKg} * ${returnLines.pricePerKg}), 0)`.as(
-          "remaining",
-        ),
+        remaining: sql<number>`${invoices.total} - ${invoices.paid} - COALESCE((
+          SELECT SUM(${returnLines.quantityKg} * ${returnLines.pricePerKg})
+          FROM ${returnLines}
+          INNER JOIN ${returns} ON ${returns.id} = ${returnLines.returnId}
+          WHERE ${returns.originalInvoiceId} = ${invoices.id}
+            AND ${returns.tenantId} = ${invoices.tenantId}
+            AND ${returns.status} = 'active'
+            AND ${returns.kind} = 'sale'
+        ), 0)`.as("remaining"),
       })
       .from(invoices)
-      .leftJoin(
-        vouchers,
-        and(
-          eq(vouchers.invoiceId, invoices.id),
-          eq(vouchers.kind, "receipt"),
-          eq(vouchers.status, "active"),
-        ),
-      )
-      .leftJoin(
-        returns,
-        and(
-          eq(returns.originalInvoiceId, invoices.id),
-          eq(returns.kind, "sale"),
-          eq(returns.status, "active"),
-        ),
-      )
-      .leftJoin(returnLines, eq(returnLines.returnId, returns.id))
       .where(and(base, eq(invoices.type, "sale"), eq(invoices.status, "active")))
-      .groupBy(invoices.id, invoices.total, invoices.currency)
       .as("unpaid_sub");
     const unpaidRows = await this.db
       .select({
@@ -505,6 +501,21 @@ export class PostgresDashboardRepository implements IDashboardRepository {
         mIn -
         Number(ledgerCash?.amountOut ?? 0) -
         mOut;
+    } else {
+      const [ledgerCash] = await this.db
+        .select({
+          amountIn: sql<number>`COALESCE(SUM(CASE WHEN ${ledgerEntries.cashImpact} = 'in' THEN ${ledgerEntries.debit} + ${ledgerEntries.credit} ELSE 0 END), 0)`,
+          amountOut: sql<number>`COALESCE(SUM(CASE WHEN ${ledgerEntries.cashImpact} = 'out' THEN ${ledgerEntries.debit} + ${ledgerEntries.credit} ELSE 0 END), 0)`,
+        })
+        .from(ledgerEntries)
+        .where(
+          and(
+            eq(ledgerEntries.tenantId, ctx.tenantId),
+            eq(ledgerEntries.status, "active"),
+            inArray(ledgerEntries.cashImpact, ["in", "out"]),
+          ),
+        );
+      cashBalance = Number(ledgerCash?.amountIn ?? 0) - Number(ledgerCash?.amountOut ?? 0);
     }
 
     // ── Today's invoice count (all types: entry + sale) ─────────────
@@ -706,6 +717,7 @@ export class PostgresDashboardRepository implements IDashboardRepository {
         balance: cashBalance,
         todayMovementCount: Number(todayMovements?.count ?? 0),
         isLocked: !!dayLock,
+        openingDate: cashSession?.openingDate,
       },
       // FIX H-7: byCurrency breakdown instead of one blended
       // receiptsThisMonth/paymentsThisMonth number.

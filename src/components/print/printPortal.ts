@@ -116,7 +116,9 @@ function buildArchiveHtml(container: HTMLElement, title?: string): string {
 ${inline}
 </style>
 <style>
-  @page { size: A4; margin: 12mm; }
+  /* Paper size comes from the inlined stylesheet above (the named @page
+     rules + .print-doc[data-paper] selection) — no separate hardcoded A4
+     override here, so an A5/80mm export gets the correct page size too. */
   body { background: #fff; margin: 0; }
   [data-print-root] { display: block !important; position: static !important; left: auto !important; }
   ${ARCHIVE_ARABIC_FONT_CSS}

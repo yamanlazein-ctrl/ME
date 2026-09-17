@@ -111,8 +111,12 @@ const DB_PORT_RANGE: std::ops::Range<u16> = 40000..60000;
 /// dynamic busy-port fallback in `boot_desktop_stack` (`find_free_db_port`)
 /// remains as a second safety net for the rare case where even this saved
 /// port is occupied on a given boot.
+fn db_port_path(app_data_root: &Path) -> PathBuf {
+    app_data_root.join("db-port.txt")
+}
+
 fn resolve_db_port(app_data_root: &Path) -> u16 {
-    let path = app_data_root.join("db-port.txt");
+    let path = db_port_path(app_data_root);
     if let Ok(text) = fs::read_to_string(&path) {
         if let Ok(port) = text.trim().parse::<u16>() {
             if DB_PORT_RANGE.contains(&port) {
@@ -122,9 +126,19 @@ fn resolve_db_port(app_data_root: &Path) -> u16 {
     }
     use rand::Rng;
     let port = rand::rngs::OsRng.gen_range(DB_PORT_RANGE);
-    let _ = fs::create_dir_all(app_data_root);
-    let _ = fs::write(&path, port.to_string());
+    persist_db_port(app_data_root, port);
     port
+}
+
+/// Persist the live DB port whenever boot falls back to a free port so the
+/// next launch reuses the same value (stable DATABASE_URL / postgresql.conf).
+fn persist_db_port(app_data_root: &Path, port: u16) {
+    let _ = fs::create_dir_all(app_data_root);
+    if let Err(e) = fs::write(db_port_path(app_data_root), port.to_string()) {
+        log(&format!(
+            "warning: could not persist db-port.txt ({port}): {e}"
+        ));
+    }
 }
 
 #[cfg(test)]
@@ -479,28 +493,41 @@ fn ensure_pg_subdirs(pgdata: &Path) -> io::Result<()> {
 /// with the port postgres actually listens on, pg_ctl waits the full timeout
 /// and reports failure even though the server is up. So after provisioning we
 /// force the conf's port to the port we will pass at start time. Idempotent.
+///
+/// initdb ships `#port = 5432` (commented). Skipping commented lines left the
+/// conf without an active `port = N`, so pg_ctl probed 5432 while `-o -p`
+/// listened elsewhere — a full 60s false failure. We therefore uncomment /
+/// replace any port directive, or append one when none exists.
 fn sync_pg_conf_port(pgdata: &Path, db_port: u16) -> io::Result<()> {
     let conf = pgdata.join("postgresql.conf");
     let text = fs::read_to_string(&conf)?;
     let wanted = format!("port = {}", db_port);
     let mut replaced = false;
-    let out = text
+    let mut lines: Vec<String> = text
         .lines()
         .map(|line| {
             let trimmed = line.trim_start();
-            if trimmed.starts_with("port") && trimmed.contains('=') && !replaced {
-                // Only touch the port directive, never commented lines.
-                if trimmed.starts_with('#') {
-                    return line.to_string();
+            let directive = trimmed.strip_prefix('#').unwrap_or(trimmed).trim_start();
+            if !replaced && directive.starts_with("port") && directive.contains('=') {
+                // Match `port =` / `#port =` only — not unrelated `*_port` keys.
+                let rest = directive.trim_start_matches("port").trim_start();
+                if rest.starts_with('=') {
+                    replaced = true;
+                    return wanted.clone();
                 }
-                replaced = true;
-                return line.replace(trimmed, &wanted);
             }
             line.to_string()
         })
-        .collect::<Vec<_>>()
-        .join("\n");
+        .collect();
+    if !replaced {
+        lines.push(wanted.clone());
+        replaced = true;
+    }
     if replaced {
+        let mut out = lines.join("\n");
+        if !out.ends_with('\n') {
+            out.push('\n');
+        }
         fs::write(&conf, out)?;
         log(&format!("postgresql.conf port synced to {}", db_port));
     }
@@ -780,6 +807,7 @@ pub fn boot_desktop_stack_with_progress(
             cfg.db_port, resolved_db_port
         ));
         cfg.db_port = resolved_db_port;
+        persist_db_port(&cfg.app_data_root, cfg.db_port);
     }
 
     progress("فحص ملفات التشغيل…");
@@ -840,6 +868,7 @@ pub fn boot_desktop_stack_with_progress(
             cfg.db_port, resolved_again
         ));
         cfg.db_port = resolved_again;
+        persist_db_port(&cfg.app_data_root, cfg.db_port);
     }
     // Keep postgresql.conf's port in lock-step with the port we pass to
     // postgres below, so pg_ctl -w's readiness check targets the real port.
@@ -1065,14 +1094,20 @@ fn stop_postgres(resources_root: &Path, pgdata: &Path) -> io::Result<()> {
 /// loudly and the existing fatal-dialog path in `boot_desktop_stack` covers
 /// it, same as before this fix existed.
 fn find_free_db_port(preferred: u16) -> u16 {
+    use rand::Rng;
     use std::net::TcpListener;
     if TcpListener::bind(("127.0.0.1", preferred)).is_ok() {
         return preferred;
     }
-    match TcpListener::bind(("127.0.0.1", 0)) {
-        Ok(l) => l.local_addr().map(|a| a.port()).unwrap_or(preferred),
-        Err(_) => preferred,
+    // Stay inside the desktop DB port range — OS ephemeral ports from
+    // bind(..., 0) can land outside 40000..59999 and break db-port.txt reuse.
+    for _ in 0..64 {
+        let candidate = rand::rngs::OsRng.gen_range(DB_PORT_RANGE);
+        if candidate != preferred && TcpListener::bind(("127.0.0.1", candidate)).is_ok() {
+            return candidate;
+        }
     }
+    preferred
 }
 
 // ── Small network helpers ───────────────────────────────────────────────────

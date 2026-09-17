@@ -24,6 +24,6 @@ describe("desktop boot migrator helpers", () => {
 
   it("reads the last journal idx from disk", () => {
     const idx = lastJournalIdx(MIGRATIONS);
-    expect(idx).toBeGreaterThanOrEqual(63);
+    expect(idx).toBeGreaterThanOrEqual(64);
   });
 });

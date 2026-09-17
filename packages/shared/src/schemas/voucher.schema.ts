@@ -8,6 +8,8 @@ export const createVoucherSchema = z.object({
   partyKind: z.enum(["customer", "supplier"]),
   invoiceId: z.string().uuid().optional(),
   amount: z.number().positive(),
+  /** Cash concession — party settlement still uses `amount`; cash leg uses amount − discount. */
+  discount: z.number().min(0).optional().default(0),
   currency: z.enum(["SYP", "USD", "EUR"]).optional(),
   // BUG-03 (same-pattern) frozen FX rate: units of `currency` per 1 USD,
   // required for non-USD vouchers. Mirrors createInvoiceSchema.
@@ -15,6 +17,15 @@ export const createVoucherSchema = z.object({
   method: z.enum(["cash", "transfer", "check", "card"]),
   notesPrint: z.string().max(2000).optional(),
   notesInternal: z.string().max(2000).optional(),
+}).superRefine((data, ctx) => {
+  const discount = data.discount ?? 0;
+  if (discount > data.amount) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "الخصم لا يمكن أن يتجاوز مبلغ السند",
+      path: ["discount"],
+    });
+  }
 });
 
 export const listVouchersSchema = z.object({

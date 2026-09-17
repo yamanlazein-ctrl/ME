@@ -40,6 +40,7 @@ export interface ReturnDTO {
   notesPrint?: string | null;
   notesInternal?: string | null;
   status: ReturnStatus;
+  version: number;
   createdAt: string;
   createdBy: string;
   cancelledAt?: string | null;

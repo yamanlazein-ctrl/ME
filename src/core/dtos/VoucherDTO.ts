@@ -11,6 +11,7 @@ export type VoucherDTO = {
   partyKind: "customer" | "supplier";
   invoiceId?: string | null;
   amount: number;
+  discount?: number;
   currency: Currency;
   method: VoucherMethod;
   notesPrint?: string | null;
@@ -26,6 +27,7 @@ export type CreateVoucherInput = {
   partyKind: "customer" | "supplier";
   invoiceId?: string;
   amount: number;
+  discount?: number;
   currency: Currency;
   /** Units of `currency` per 1 USD — required for non-USD vouchers. */
   exchangeRate?: number;

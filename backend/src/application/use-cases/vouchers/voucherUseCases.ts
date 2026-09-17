@@ -3,7 +3,12 @@ import type { TenantContext, PaginatedResult } from "../../../domain/types/index
 import type { VoucherData, CreateVoucherInput } from "../../../domain/entities/Voucher.js";
 import type { IAuditRepository } from "../../ports/IAuditRepository.js";
 import { logAuditError } from "../../../infrastructure/audit/auditErrorHandler.js";
-import { BusinessRuleError, DayLockedError } from "../../../domain/errors/index.js";
+import {
+  BusinessRuleError,
+  DayLockedError,
+  InsufficientCashboxBalanceError,
+} from "../../../domain/errors/index.js";
+import { persistenceErrorMessage } from "../../../infrastructure/errors/persistenceErrorMessage.js";
 
 type Result<T> = { ok: true; data: T } | { ok: false; error: string };
 
@@ -15,6 +20,9 @@ export async function createVoucherUseCase(
 ): Promise<Result<VoucherData>> {
   if (!input.amount || input.amount <= 0)
     return { ok: false, error: "المبلغ يجب أن يكون أكبر من صفر" };
+  const discount = input.discount ?? 0;
+  if (discount < 0) return { ok: false, error: "الخصم لا يمكن أن يكون سالباً" };
+  if (discount > input.amount) return { ok: false, error: "الخصم لا يمكن أن يتجاوز مبلغ السند" };
   if (!input.partyId) return { ok: false, error: "الطرف مطلوب" };
   try {
     // Document number is allocated INSIDE repo.create (same transaction as
@@ -43,6 +51,8 @@ export async function createVoucherUseCase(
     return { ok: true, data: voucher };
   } catch (e) {
     if (e instanceof DayLockedError) return { ok: false, error: e.message };
+    // F06: insufficient cashbox balance for a cash payment voucher.
+    if (e instanceof InsufficientCashboxBalanceError) return { ok: false, error: e.message };
     // Business rules (cross-currency, over-collection, cancelled invoice…) are
     // already user-safe Arabic messages from the repository guards — pass them
     // through verbatim instead of masking them as "internal errors".
@@ -58,7 +68,7 @@ export async function createVoucherUseCase(
       entityId: input.invoiceId ?? "unknown",
       tenantId: ctx.tenantId,
     });
-    return { ok: false, error: "تعذّر إنشاء السند بسبب خطأ داخلي. أعد المحاولة، وإذا تكرر الأمر راجع مسؤول النظام." };
+    return { ok: false, error: persistenceErrorMessage(e, "voucher") };
   }
 }
 

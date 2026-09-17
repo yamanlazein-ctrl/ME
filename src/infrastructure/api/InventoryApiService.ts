@@ -25,7 +25,10 @@ export class InventoryApiService {
     return res.data;
   }
 
-  async updateFabric(id: string, patch: Partial<FabricData>): Promise<FabricData> {
+  async updateFabric(
+    id: string,
+    patch: Partial<FabricData> & { expectedVersion: number },
+  ): Promise<FabricData> {
     const res = await this.client.put<FabricData>(`/api/inventory/fabrics/${id}`, patch);
     return res.data;
   }
@@ -46,7 +49,10 @@ export class InventoryApiService {
     return res.data;
   }
 
-  async updateColor(id: string, patch: Partial<ColorData>): Promise<ColorData> {
+  async updateColor(
+    id: string,
+    patch: Partial<ColorData> & { expectedVersion: number },
+  ): Promise<ColorData> {
     const res = await this.client.put<ColorData>(`/api/inventory/colors/${id}`, patch);
     return res.data;
   }

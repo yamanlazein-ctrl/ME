@@ -109,10 +109,16 @@ export interface ILicenseRepository {
    * R17: return the most recent license row for a tenant, regardless of
    * status, so the enforcement guard can block on `expired`/`revoked`.
    */
+  /**
+   * Entitlement license for a tenant — prefers `tenants.license_key`, then
+   * `tenants.activation_id` → activation.license_id, then the live activation
+   * row. Never picks an arbitrary newest row (avoids stale baked hijack).
+   */
   findLatestForTenant(tenantId: UUID): Promise<LicenseRow | null>;
   /**
    * Desktop (option d): return the pre-baked signed token row for a tenant,
-   * if one was baked at build time. Returns null when no offline_token is set.
+   * if one was baked at build time. When the tenant already has a different
+   * `license_key`, returns null so a stale baked row cannot hijack activation.
    */
   findBakedForTenant(tenantId: UUID): Promise<LicenseRow | null>;
   list(filter: { tenantId?: UUID; status?: string }): Promise<LicenseRow[]>;

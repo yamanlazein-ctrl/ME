@@ -9,10 +9,9 @@ import type { IAuditRepository } from "../../ports/IAuditRepository.js";
 import { logAuditError } from "../../../infrastructure/audit/auditErrorHandler.js";
 import { DayLockedError, BusinessRuleError } from "../../../domain/errors/index.js";
 import { logger } from "../../../infrastructure/config/logger.js";
+import { persistenceErrorMessage } from "../../../infrastructure/errors/persistenceErrorMessage.js";
 
 type Result<T> = { ok: true; data: T } | { ok: false; error: string };
-
-type Collected = { code?: string; message?: string };
 
 /**
  * Compact invoice snapshot for the audit trail (invoice-tracking feature):
@@ -38,82 +37,8 @@ function invoiceAuditSnapshot(inv: InvoiceData) {
   };
 }
 
-/**
- * Walk an error and its `cause` chain to collect Postgres/Drizzle error
- * codes + messages. Drizzle wraps the real pg error in `cause`, so we must
- * inspect the full chain to find the SQLSTATE `code` (e.g. "23505").
- */
-function collectErrors(e: unknown): Collected[] {
-  const out: Collected[] = [];
-  let cur: unknown = e;
-  let guard = 0;
-  while (cur && guard++ < 10) {
-    if (!(cur instanceof Error)) break;
-    const codeRaw = (cur as Error & { code?: unknown }).code;
-    out.push({
-      code: typeof codeRaw === "string" ? codeRaw : undefined,
-      message: cur.message,
-    });
-    cur = (cur as Error).cause;
-  }
-  return out;
-}
-
-function hasErrorCode(errors: Collected[], code: string): boolean {
-  return errors.some((x) => x.code === code);
-}
-
-function errorsCombined(errors: Collected[]): string {
-  return errors.map((x) => [x.code, x.message].filter(Boolean).join(" ")).join("\n");
-}
-
-/**
- * Map a raw persistence error to a clear, non-misleading Arabic message.
- * Technical SQL/Drizzle details are NEVER returned to the user — they are
- * logged server-side (caller) for diagnosis instead.
- */
 function invoiceErrorMessage(e: unknown): string {
-  // A known business-rule violation carries the precise, actionable Arabic
-  // reason already — return it verbatim instead of masking it. Everything
-  // else is an unexpected fault (mapped to the generic "internal error"
-  // below and logged server-side).
-  if (e instanceof BusinessRuleError) return e.message;
-  if (e instanceof DayLockedError) return e.message;
-  const errs = collectErrors(e);
-  const combined = errorsCombined(errs);
-  const hasCode = (c: string) => hasErrorCode(errs, c);
-
-  // 23505 unique_violation (invoices.tenant_id, type, number)
-  if (
-    hasCode("23505") ||
-    combined.includes("duplicate") ||
-    combined.includes("idx_invoices_tenant_type_number")
-  ) {
-    return "رقم الفاتورة مكرر — فاتورة بهذا الرقم موجودة بالفعل. استخدم رقماً جديداً ثم أعد الحفظ.";
-  }
-  // 23503 foreign_key_violation
-  if (hasCode("23503") || combined.includes("foreign key")) {
-    return "بيانات البند غير صالحة: المورد، أو القماش، أو اللون، أو الصبغة المحددة غير موجودة أو محذوفة.";
-  }
-  // 23514 check_violation (e.g. ledger_entries.type)
-  if (hasCode("23514")) {
-    return "نوع الحركة المحاسبية غير مسموح به — راجع بيانات الفاتورة أو تواصل مع الدعم.";
-  }
-  // 23502 not_null_violation
-  if (hasCode("23502")) {
-    return "حقل إلزامي ناقص في بيانات الفاتورة — أكمل جميع الحقول المطلوبة.";
-  }
-  // 22003 / 22001 / 22P02 numeric/truncation/invalid-identifier
-  if (hasCode("22003") || combined.includes("numeric field overflow")) {
-    return "قيمة الكمية أو السعر خارج النطاق المسموح — راجع الأرقام المدخلة.";
-  }
-  if (hasCode("22001")) {
-    return "أحد النصوص (اسم القماش، المرجع، أو الملاحظات) أطول من الحد المسموح.";
-  }
-  if (hasCode("22P02")) {
-    return "أحد المعرّفات المرسلة غير صالح — أعد فتح الصفحة وحاول مجدداً.";
-  }
-  return "تعذّر حفظ الفاتورة بسبب خطأ داخلي. أعد المحاولة، وإذا تكرر الأمر راجع مسؤول النظام.";
+  return persistenceErrorMessage(e, "invoice");
 }
 
 export async function createInvoiceUseCase(
@@ -157,7 +82,7 @@ export async function createInvoiceUseCase(
     if (e instanceof BusinessRuleError) {
       logger.warn({ err: e.message }, "[createInvoiceUseCase] business rule violation");
     } else {
-      logger.error({ err: collectErrors(e) }, "[createInvoiceUseCase] failed");
+      logger.error({ err: e }, "[createInvoiceUseCase] failed");
     }
     return { ok: false, error: invoiceErrorMessage(e) };
   }
@@ -211,7 +136,7 @@ export async function updateInvoiceUseCase(
     if (e instanceof BusinessRuleError) {
       logger.warn({ err: e.message }, "[updateInvoiceUseCase] business rule violation");
     } else {
-      logger.error({ err: collectErrors(e) }, "[updateInvoiceUseCase] failed");
+      logger.error({ err: e }, "[updateInvoiceUseCase] failed");
     }
     const code =
       e instanceof Error && "code" in e ? (e as { code?: string }).code : undefined;
@@ -265,7 +190,11 @@ export async function cancelInvoiceUseCase(
       );
     return { ok: true, data: invoice };
   } catch (e) {
-    logger.error({ err: collectErrors(e) }, "[cancelInvoiceUseCase] failed");
+    if (e instanceof BusinessRuleError) {
+      logger.warn({ err: e.message }, "[cancelInvoiceUseCase] business rule violation");
+      return { ok: false, error: e.message, code: "BUSINESS_RULE" };
+    }
+    logger.error({ err: e }, "[cancelInvoiceUseCase] failed");
     // TX11: surface the structured code so the route can map NOT_FOUND → 404.
     const code = e instanceof Error && "code" in e ? (e as { code?: string }).code : undefined;
     if (code === "NOT_FOUND") return { ok: false, error: "الفاتورة غير موجودة.", code };

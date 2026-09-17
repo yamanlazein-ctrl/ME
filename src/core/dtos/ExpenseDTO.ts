@@ -19,6 +19,7 @@ export type ExpenseDTO = {
   status: "active" | "cancelled";
   notesPrint?: string;
   notesInternal?: string;
+  version?: number;
 };
 
 export type CreateExpenseInput = {

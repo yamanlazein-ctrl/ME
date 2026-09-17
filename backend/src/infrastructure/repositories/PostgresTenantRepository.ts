@@ -19,6 +19,7 @@ function toRow(r: Row): TenantRow {
     status: r.status,
     licenseStatus: r.licenseStatus,
     licenseType: r.licenseType,
+    licenseKey: r.licenseKey ?? null,
     maxDevices: r.maxDevices,
     activationId: r.activationId,
     serverFingerprint: r.serverFingerprint,

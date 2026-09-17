@@ -27,7 +27,7 @@ import {
   type PrintTotal,
   type PrintParty,
 } from "@/components/print/PrintDocument";
-import { currencySymbol } from "@/presentation/hooks/useCurrency";
+import { currencySymbol, formatAmount } from "@/presentation/hooks/useCurrency";
 import { colorById, fabricById, rollById, useInventory } from "@/presentation/hooks/useInventory";
 import { formatMoney, formatNumber, formatQuantity } from "@/shared/utils/formatNumber";
 import type { ReturnDTO, ReturnReason } from "@/application/ports/IReturnRepository";
@@ -194,7 +194,11 @@ export function ReturnInvoicePrint({
   });
   const totals: PrintTotal[] = [];
   if (vis.showGrandTotal) {
-    totals.push({ label: "إجمالي المرتجع", value: `${fmtMoney(total)} ${sym}`, grand: true });
+    totals.push({
+      label: "إجمالي المرتجع",
+      value: formatAmount(total, r.currency as "SYP" | "USD" | "EUR"),
+      grand: true,
+    });
   }
   const partyBlock: PrintParty | undefined = vis.showPartyName
     ? {

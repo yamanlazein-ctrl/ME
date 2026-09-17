@@ -8,6 +8,7 @@ import type {
   WizardStepName,
 } from "../../application/ports/IInstallationStateRepository.js";
 import { setupWizardState } from "../orm/schemas/setup-wizard-state.table.js";
+import { MultipleTenantsDetectedError } from "../../domain/errors/index.js";
 
 type Row = typeof setupWizardState.$inferSelect;
 
@@ -115,12 +116,19 @@ export class PostgresInstallationStateRepository implements IInstallationStateRe
 
   async findAnyCompleted(): Promise<UUID | null> {
     return runWithPlatformContext(async () => {
-      const [row] = await this.db
+      // Fetch up to 2 so we can distinguish "exactly one" from "more than
+      // one" without a separate COUNT query. StoneERP is single-tenant-per
+      // -install (docs/decisions.md) — a second completed tenant means the
+      // invariant has already been violated (e.g. a cloned/template DB), and
+      // picking one arbitrarily is exactly how F01 (a new license silently
+      // reusing another company's tenant) happened. Fail loudly instead.
+      const rows = await this.db
         .select({ tenantId: setupWizardState.tenantId })
         .from(setupWizardState)
         .where(eq(setupWizardState.isCompleted, true))
-        .limit(1);
-      return row?.tenantId ?? null;
+        .limit(2);
+      if (rows.length > 1) throw new MultipleTenantsDetectedError();
+      return rows[0]?.tenantId ?? null;
     });
   }
 

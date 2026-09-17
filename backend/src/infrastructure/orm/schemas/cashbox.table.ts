@@ -11,19 +11,30 @@ import {
 } from "drizzle-orm/pg-core";
 import { tenants } from "./tenant.table.js";
 
-export const cashboxSessions = pgTable("cashbox_sessions", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  tenantId: uuid("tenant_id")
-    .notNull()
-    .references(() => tenants.id),
-  openingBalance: numeric("opening_balance", { precision: 14, scale: 2, mode: "number" })
-    .notNull()
-    .default(0),
-  openingDate: date("opening_date").notNull(),
-  currency: varchar("currency", { length: 3 }).notNull().default("SYP"),
-  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
-}).enableRLS();
+export const cashboxSessions = pgTable(
+  "cashbox_sessions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id),
+    openingBalance: numeric("opening_balance", { precision: 14, scale: 2, mode: "number" })
+      .notNull()
+      .default(0),
+    openingDate: date("opening_date").notNull(),
+    currency: varchar("currency", { length: 3 }).notNull().default("SYP"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({
+    // One opening-balance session PER CURRENCY, not one per tenant — setting
+    // the USD opening must not overwrite/lose the SYP row and vice versa.
+    tenantCurrencyIdx: uniqueIndex("idx_cashbox_sessions_tenant_currency").on(
+      table.tenantId,
+      table.currency,
+    ),
+  }),
+).enableRLS();
 
 export const manualMovements = pgTable("manual_movements", {
   id: uuid("id").primaryKey().defaultRandom(),

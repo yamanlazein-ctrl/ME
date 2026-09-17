@@ -51,11 +51,23 @@ function toInvoiceCurrency(
 export function VoucherForm({
   kind,
   initialPartyId,
+  initialInvoiceId,
   editId,
 }: {
   kind: VoucherKind;
   /** Prefill party when opened from customer/supplier payments tab. */
   initialPartyId?: string;
+  /**
+   * Prefill the linked invoice when opened from an invoice's own page (F14,
+   * Phase 1 audit — this used to not exist, so "new voucher" from an
+   * invoice landed on a totally empty form with no party or invoice
+   * selected). Only takes effect once the invoice actually appears in
+   * `invoiceOptions` below, which already excludes cancelled invoices — so
+   * a cancelled invoice's id here is harmlessly ignored, not specially
+   * handled; the invoice page itself disables this action for a cancelled
+   * invoice so the link is not reachable in that case at all.
+   */
+  initialInvoiceId?: string;
   /** Amend mode: load voucher, then cancel+recreate on save (no PUT API). */
   editId?: string;
 }) {
@@ -66,8 +78,10 @@ export function VoucherForm({
   const { data: editing } = useVoucher(editId ?? "");
   const isReceipt = kind === "receipt";
   const [partyId, setPartyId] = useState(initialPartyId ?? "");
-  const [invoiceId, setInvoiceId] = useState<string>("");
+  const [invoiceId, setInvoiceId] = useState<string>(initialInvoiceId ?? "");
   const [amount, setAmount] = useState<number | "">("");
+  const [discount, setDiscount] = useState<number | "">("");
+  const [discountError, setDiscountError] = useState<string | null>(null);
   const [currency, setCurrency] = useState<Currency>("SYP");
   const [exchangeRate, setExchangeRate] = useState<number | "">("");
   const [fxError, setFxError] = useState<string | null>(null);
@@ -87,6 +101,7 @@ export function VoucherForm({
     setPartyId(editing.partyId);
     setInvoiceId(editing.invoiceId ?? "");
     setAmount(editing.amount);
+    setDiscount(editing.discount && editing.discount > 0 ? editing.discount : "");
     setCurrency(editing.currency as Currency);
     setExchangeRate(editing.exchangeRate && editing.exchangeRate > 0 ? editing.exchangeRate : "");
     setMethod(editing.method);
@@ -166,6 +181,16 @@ export function VoucherForm({
       setAmountError("المبلغ يجب أن يكون رقماً.");
       valid = false;
     }
+    const discountVal = Number(discount) || 0;
+    if (discountVal < 0) {
+      setDiscountError("الخصم لا يمكن أن يكون سالباً.");
+      valid = false;
+    } else if (amount && discountVal > Number(amount)) {
+      setDiscountError("الخصم لا يمكن أن يتجاوز مبلغ السند.");
+      valid = false;
+    } else {
+      setDiscountError(null);
+    }
     if (currency !== "USD" && !(Number(exchangeRate) > 0)) {
       setFxError("سعر الصرف مطلوب يدوياً لكل عملية ليست بالدولار (عملة الأساس USD)");
       valid = false;
@@ -204,6 +229,7 @@ export function VoucherForm({
       partyKind: isReceipt ? ("customer" as const) : ("supplier" as const),
       invoiceId: invoiceId || undefined,
       amount: Number(amount),
+      discount: discountVal > 0 ? discountVal : undefined,
       currency,
       exchangeRate: Number(exchangeRate) > 0 ? Number(exchangeRate) : undefined,
       method,
@@ -296,7 +322,7 @@ export function VoucherForm({
               className="h-10"
             />
           </Field>
-          <FormField label="المبلغ *" error={amountError ?? undefined}>
+          <FormField label="مبلغ التسوية (الإجمالي) *" error={amountError ?? undefined}>
             <FormattedAmountInput
               value={amount}
               onChange={(v) => {
@@ -304,7 +330,7 @@ export function VoucherForm({
                 setAmountError(null);
               }}
               className="h-10"
-              ariaLabel="المبلغ"
+              ariaLabel="مبلغ التسوية"
             />
             {settlementPreview && selectedInvoice && selectedInvoice.currency !== currency ? (
               <p className="mt-1 text-[11px] leading-snug text-muted-foreground" dir="ltr">
@@ -313,6 +339,25 @@ export function VoucherForm({
                   ? ` (${Number(amount)} × ${settlementPreview.rate})`
                   : ""}
                 {" · "}متبقٍ {formatAmount(selectedInvoice.remaining, selectedInvoice.currency)}
+              </p>
+            ) : null}
+          </FormField>
+          <FormField
+            label="الخصم (يُخصم من النقد)"
+            error={discountError ?? undefined}
+          >
+            <FormattedAmountInput
+              value={discount}
+              onChange={(v) => {
+                setDiscount(v);
+                setDiscountError(null);
+              }}
+              className="h-10"
+              ariaLabel="الخصم"
+            />
+            {amount && Number(amount) > 0 && Number(discount) > 0 ? (
+              <p className="mt-1 text-[11px] leading-snug text-muted-foreground">
+                الصافي نقداً: {formatAmount(Math.max(0, Number(amount) - (Number(discount) || 0)), currency)}
               </p>
             ) : null}
           </FormField>

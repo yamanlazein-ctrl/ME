@@ -25,6 +25,8 @@ export const users = pgTable(
     role: varchar("role", { length: 20 }).notNull(),
     isLicenseOwner: boolean("is_license_owner").notNull().default(false),
     active: boolean("active").notNull().default(true),
+    /** Tokens with iat strictly before this instant are refused (force-logout). */
+    tokensRevokedBefore: timestamp("tokens_revoked_before", { withTimezone: true }),
     permissions: jsonb("permissions").default("[]"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),

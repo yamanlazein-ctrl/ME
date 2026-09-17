@@ -23,6 +23,7 @@ tauri-plugin-shell = "2"
 # Windows boot autostart (HKCU Run). Re-enable on every launch — the upstream
 # plugin is known to lose the Run key after one reboot on some Windows builds.
 tauri-plugin-autostart = "2"
+tauri-plugin-updater = "2"
 # Windows DPAPI (CurrentUser scope) for encrypting locally-generated secrets
 # (JWT_SECRET, APP_MASTER_KEY) so they never ship as plaintext.
 windows = { version = "0.61", features = ["Win32_Security_Cryptography", "Win32_Foundation", "Win32_UI_WindowsAndMessaging", "Win32_System_Threading", "Win32_System_Diagnostics_ToolHelp"] }
@@ -33,14 +34,6 @@ dirs-sys = "0.5"
 [[bin]]
 name = "motard-fabrics-erp"
 path = "src/main.rs"
-
-[[bin]]
-name = "d3_probe"
-path = "src/bin/d3_probe.rs"
-
-[[bin]]
-name = "runtime_probe"
-path = "src/bin/runtime_probe.rs"
 
 # Permanent fast-iteration profile (see desktop/DEV-WORKFLOW.md).
 # Same codegen as dev (opt-level 0) but WITHOUT debuginfo: linking the Tauri

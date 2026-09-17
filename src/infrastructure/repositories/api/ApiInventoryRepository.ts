@@ -34,10 +34,25 @@ export class ApiInventoryRepository implements IInventoryRepository {
 
   async updateFabric(
     id: UUID,
-    patch: Partial<Omit<FabricData, "id" | "tenantId" | "createdAt" | "createdBy">>,
+    patch: Partial<
+      Omit<
+        import("@/domain/entities/Fabric").FabricData,
+        "id" | "tenantId" | "createdAt" | "createdBy"
+      >
+    >,
     ctx: TenantContext,
   ): Promise<Fabric> {
-    const dto = await this.api.updateFabric(id, patch as FabricData);
+    void ctx;
+    const expectedVersion = (patch as { version?: number }).version;
+    if (typeof expectedVersion !== "number") {
+      throw new Error("الإصدار المتوقع (expectedVersion) مطلوب لتحديث القماش");
+    }
+    const { version: _v, ...rest } = patch as Record<string, unknown>;
+    void _v;
+    const dto = await this.api.updateFabric(id, {
+      ...rest,
+      expectedVersion,
+    } as Partial<FabricData> & { expectedVersion: number });
     return Fabric.reconstitute(dto);
   }
 
@@ -66,10 +81,25 @@ export class ApiInventoryRepository implements IInventoryRepository {
 
   async updateColor(
     id: UUID,
-    patch: Partial<Omit<ColorData, "id" | "tenantId" | "fabricId" | "createdAt">>,
+    patch: Partial<
+      Omit<
+        import("@/domain/entities/Color").ColorData,
+        "id" | "tenantId" | "fabricId" | "createdAt"
+      >
+    >,
     ctx: TenantContext,
   ): Promise<Color> {
-    const dto = await this.api.updateColor(id, patch as ColorData);
+    void ctx;
+    const expectedVersion = (patch as { version?: number }).version;
+    if (typeof expectedVersion !== "number") {
+      throw new Error("الإصدار المتوقع (expectedVersion) مطلوب لتحديث اللون");
+    }
+    const { version: _v, ...rest } = patch as Record<string, unknown>;
+    void _v;
+    const dto = await this.api.updateColor(id, {
+      ...rest,
+      expectedVersion,
+    } as Partial<ColorData> & { expectedVersion: number });
     return Color.reconstitute(dto);
   }
 

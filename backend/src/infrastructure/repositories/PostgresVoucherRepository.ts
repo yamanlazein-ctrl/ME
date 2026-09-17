@@ -12,6 +12,7 @@ import { ledgerEntries } from "../orm/schemas/ledger-entry.table.js";
 import { returns } from "../orm/schemas/return.table.js";
 import { returnLines } from "../orm/schemas/return-line.table.js";
 import { assertDayUnlocked } from "./dayLockHelper.js";
+import { assertSufficientCashboxBalance } from "./cashboxBalanceHelper.js";
 import {
   Voucher,
   type VoucherData,
@@ -21,7 +22,6 @@ import {
   BASE_CURRENCY,
   computeBaseEquivalent,
   convertForSettlement,
-  fromBaseEquivalent,
   isValidFxRate,
   round2dp,
   FX_REQUIRED_MESSAGE,
@@ -137,12 +137,38 @@ export class PostgresVoucherRepository implements IVoucherRepository {
       }
       const voucherFx: FxSide = { currency: voucherCurrency, exchangeRate: fxRate };
 
+      const grossAmount = round2dp(input.amount);
+      const discount = round2dp(input.discount ?? 0);
+      if (discount < 0) {
+        throw new BusinessRuleError("الخصم لا يمكن أن يكون سالباً");
+      }
+      if (discount > grossAmount) {
+        throw new BusinessRuleError("الخصم لا يمكن أن يتجاوز مبلغ السند");
+      }
+      const netCash = round2dp(grossAmount - discount);
+
+      // F06 (Phase 1 audit) + product decision: a cash PAYMENT voucher removes
+      // cash from the cashbox and must never take it negative. A cash RECEIPT
+      // adds cash — no guard needed. Bank/transfer vouchers have no cashbox
+      // effect (cashImpact stays "none" below).
+      if (input.method === "cash" && input.kind === "payment") {
+        await assertSufficientCashboxBalance(tx, ctx, voucherCurrency, input.date, netCash);
+      }
+
       // What this voucher actually settles on the linked invoice, restated in the
       // INVOICE's currency. Stays null for a standalone payment (no invoice).
       let settledInInvoiceCurrency: number | null = null;
       // Currency + frozen rate of the invoice we just locked, echoed back on the
       // created voucher so the caller can print the counterpart immediately.
       let linkedInvoiceFx: { currency?: string | null; exchangeRate?: number | null } | undefined;
+      // FX-LEG FIX: the AR/AP (party) sub-ledger is denominated in the INVOICE's
+      // currency — that is the currency the receivable/payable was booked in and
+      // the currency `invoices.paid` advances in. When a voucher settles an
+      // invoice in a DIFFERENT currency, the party leg must therefore be posted
+      // in the invoice currency at the converted amount; posting it in the
+      // voucher currency left the invoice-currency statement blind to the
+      // settlement while invoices.paid moved, so the two diverged forever.
+      let invoiceFx: FxSide | null = null;
 
       if (input.invoiceId) {
         // TX7 fix: lock the invoice row so concurrent voucher inserts serialize
@@ -183,13 +209,13 @@ export class PostgresVoucherRepository implements IVoucherRepository {
         // real conversion" defect: the manual-rate field was collected, validated
         // as required, then thrown away.
         const invRate = Number(inv.exchangeRate);
-        const invoiceFx: FxSide = {
+        invoiceFx = {
           currency: inv.currency ?? "SYP",
           exchangeRate: Number.isFinite(invRate) && invRate > 0 ? invRate : null,
         };
         linkedInvoiceFx = { currency: invoiceFx.currency, exchangeRate: invoiceFx.exchangeRate };
         settledInInvoiceCurrency = convertForSettlement(
-          input.amount,
+          grossAmount,
           voucherCurrency,
           invoiceFx.currency,
           isValidFxRate(input.exchangeRate) ? input.exchangeRate! : null,
@@ -211,14 +237,13 @@ export class PostgresVoucherRepository implements IVoucherRepository {
         // Active returns against this invoice also reduce the amount owed by the
         // party (a sale return credits the customer, mirroring a receipt).
         // Returns carry their own currency/rate, so they convert the same way.
+        // Linked returns MUST match the original invoice currency (enforced at
+        // return create) and reuse that invoice's frozen rate — so the line
+        // totals already live in invoice currency. A USD round-trip at two
+        // rates created leftover lira on remaining vs the party ledger.
         const [retAgg] = await tx
           .select({
-            baseTotal: sql<number>`COALESCE(SUM(
-              CASE
-                WHEN ${returns.currency} = ${BASE_CURRENCY} THEN ${returnLines.quantityKg} * ${returnLines.pricePerKg}
-                ELSE (${returnLines.quantityKg} * ${returnLines.pricePerKg}) / NULLIF(${returns.exchangeRate}, 0)
-              END
-            ), 0)`,
+            total: sql<number>`COALESCE(SUM(${returnLines.quantityKg} * ${returnLines.pricePerKg}), 0)`,
           })
           .from(returnLines)
           .innerJoin(returns, eq(returnLines.returnId, returns.id))
@@ -229,12 +254,7 @@ export class PostgresVoucherRepository implements IVoucherRepository {
               eq(returns.status, "active"),
             ),
           );
-        const returnsAmount =
-          fromBaseEquivalent(
-            Number(retAgg?.baseTotal ?? 0),
-            invoiceFx.currency,
-            invoiceFx.exchangeRate,
-          ) ?? 0;
+        const returnsAmount = round2dp(Number(retAgg?.total ?? 0));
         const remaining = round2dp(Number(inv.total) - paidSoFar - returnsAmount);
         // 0.01 tolerance: the conversion rounds to 2dp once, so a payment that
         // settles the invoice exactly can land a fraction of a cent above it.
@@ -244,11 +264,29 @@ export class PostgresVoucherRepository implements IVoucherRepository {
           );
         }
       }
-      const voucherBaseAmount = computeBaseEquivalent(input.amount, voucherCurrency, fxRate);
+
+      const voucherBaseAmount = computeBaseEquivalent(grossAmount, voucherCurrency, fxRate);
       const legFx = (debit: number, credit: number) => ({
         exchangeRate: fxRate,
         baseDebit: computeBaseEquivalent(debit, voucherCurrency, fxRate),
         baseCredit: computeBaseEquivalent(credit, voucherCurrency, fxRate),
+      });
+
+      // FX-LEG FIX — the party (AR/AP) leg is denominated in the INVOICE's
+      // currency, not the voucher's. A USD receipt against an SYP invoice must
+      // credit the party's SYP sub-ledger by the converted SYP amount (the same
+      // amount that advances invoices.paid), otherwise the SYP statement never
+      // sees the settlement while the invoice shows it paid. The cash leg keeps
+      // the voucher's currency — that is the money that physically moved.
+      // Both legs freeze their own rate; the bases still balance to the same
+      // USD value, so double-entry in the base currency is preserved.
+      const partyCurrency = invoiceFx?.currency ?? voucherCurrency;
+      const partyFx = invoiceFx?.exchangeRate ?? fxRate;
+      const partyAmount = settledInInvoiceCurrency ?? grossAmount;
+      const partyLegFx = (debit: number, credit: number) => ({
+        exchangeRate: partyFx,
+        baseDebit: computeBaseEquivalent(debit, partyCurrency, partyFx),
+        baseCredit: computeBaseEquivalent(credit, partyCurrency, partyFx),
       });
 
       // The rate to PERSIST on the row: whatever the user manually entered,
@@ -272,7 +310,8 @@ export class PostgresVoucherRepository implements IVoucherRepository {
           partyId: input.partyId,
           partyKind: input.partyKind,
           invoiceId: input.invoiceId ?? null,
-          amount: input.amount,
+          amount: grossAmount,
+          discount,
           currency: voucherCurrency,
           exchangeRate: storedExchangeRate,
           baseAmount: voucherBaseAmount,
@@ -283,53 +322,111 @@ export class PostgresVoucherRepository implements IVoucherRepository {
         })
         .returning();
 
-      // Standard double-entry. Party leg mirrors the cash leg so Σdebit=Σcredit:
-      //   receipt_in (customer pays) → Cr party (AR decreases) / Dr cash (received)
-      //   payment_out (we pay supplier) → Dr party (AP decreases) / Cr cash (paid out)
-      // Supplier balance = credit − debit, so Dr payment reduces what we owe.
+      // Standard double-entry with optional settlement discount:
+      //   amount = gross party settlement (AR/AP + invoices.paid)
+      //   discount = cash concession; net cash = amount − discount
+      //   receipt: Dr cash(net) [+ Dr discount_expense] Cr party(gross)
+      //   payment: Dr party(gross) Cr cash(net) [+ Cr discount_income]
       const isPayment = input.kind === "payment";
       const refType = isPayment ? "payment_out" : "receipt_in";
       const cashImpact = input.method === "cash" ? (isPayment ? "out" : "in") : "none";
-      // C4 fix: double-entry. Party leg + balancing cash leg (carries
-      // cashImpact so the cashbox still reads it).
-      await tx.insert(ledgerEntries).values([
+      const discountType = isPayment ? "settlement_discount_income" : "settlement_discount_expense";
+      const ledgerRows = [
         {
-          ...legFx(isPayment ? input.amount : 0, isPayment ? 0 : input.amount),
+          ...partyLegFx(isPayment ? partyAmount : 0, isPayment ? 0 : partyAmount),
           tenantId: ctx.tenantId,
           partyId: input.partyId,
           date: input.date,
           type: refType,
-          debit: isPayment ? input.amount : 0,
-          credit: isPayment ? 0 : input.amount,
-          currency: voucherCurrency,
-          cashImpact: "none",
+          debit: isPayment ? partyAmount : 0,
+          credit: isPayment ? 0 : partyAmount,
+          currency: partyCurrency,
+          cashImpact: "none" as const,
           referenceType: refType,
           referenceId: row.id,
           referenceNumber: autoNumber,
-          description: `${isPayment ? "Payment" : "Receipt"} ${autoNumber}`,
+          description: `${isPayment ? "سند دفع" : "سند قبض"} ${autoNumber}`,
           createdBy: ctx.userId,
         },
         {
-          ...legFx(isPayment ? 0 : input.amount, isPayment ? input.amount : 0),
+          ...legFx(isPayment ? 0 : netCash, isPayment ? netCash : 0),
           tenantId: ctx.tenantId,
           partyId: null,
           date: input.date,
           type: "cash",
-          // Cash leg mirrors the party leg so Σdebit=Σcredit within the same
-          // currency. cashImpact carries the direction (in for receipt, out
-          // for payment) so the cashbox/derived balances remain correct
-          // regardless of which raw side the value lands on.
-          debit: isPayment ? 0 : input.amount,
-          credit: isPayment ? input.amount : 0,
+          debit: isPayment ? 0 : netCash,
+          credit: isPayment ? netCash : 0,
           currency: voucherCurrency,
           cashImpact,
           referenceType: refType,
           referenceId: row.id,
           referenceNumber: autoNumber,
-          description: `${isPayment ? "Cash paid" : "Cash received"} ${autoNumber}`,
+          description: `${isPayment ? "نقدية مدفوعة" : "نقدية مقبوضة"} ${autoNumber}`,
           createdBy: ctx.userId,
         },
-      ]);
+      ];
+      if (discount > 0) {
+        ledgerRows.push({
+          ...legFx(isPayment ? 0 : discount, isPayment ? discount : 0),
+          tenantId: ctx.tenantId,
+          partyId: null,
+          date: input.date,
+          type: discountType,
+          debit: isPayment ? 0 : discount,
+          credit: isPayment ? discount : 0,
+          currency: voucherCurrency,
+          cashImpact: "none" as const,
+          referenceType: refType,
+          referenceId: row.id,
+          referenceNumber: autoNumber,
+          description: `${isPayment ? "دخل خصم تسوية" : "مصروف خصم تسوية"} ${autoNumber}`,
+          createdBy: ctx.userId,
+        });
+      }
+
+      // FX-LEG FIX (balancing side) — when the party leg is posted in the
+      // invoice currency but the cash moved in a different voucher currency,
+      // the two sides carry different USD base values whenever the voucher's
+      // entered rate differs from the invoice's frozen rate. The receivable was
+      // booked at the invoice's rate; the cash moved at the voucher's rate; the
+      // difference is a realized FX gain/loss. It MUST be posted as its own leg
+      // or the base-currency ledger is out of balance by exactly that amount.
+      // Posted in BASE currency with no party: it is a P&L item, and must not
+      // perturb the party's invoice-currency sub-ledger (which reconciles
+      // against invoices.paid).
+      if (partyCurrency !== voucherCurrency) {
+        const partyBase = computeBaseEquivalent(partyAmount, partyCurrency, partyFx) ?? 0;
+        const cashBase = computeBaseEquivalent(grossAmount, voucherCurrency, fxRate) ?? 0;
+        const fxDiff = round2dp(partyBase - cashBase);
+        if (Math.abs(fxDiff) >= 0.01) {
+          // Sign rules (verified by hand on both kinds):
+          //  receipt, fxDiff>0: receivable relief (base) exceeds cash received → LOSS (Dr).
+          //  receipt, fxDiff<0: cash received exceeds receivable relief → GAIN (Cr).
+          //  payment, fxDiff>0: payable relief exceeds cash paid → GAIN (Cr).
+          //  payment, fxDiff<0: cash paid exceeds payable relief → LOSS (Dr).
+          const isDebit = isPayment ? fxDiff < 0 : fxDiff > 0;
+          const abs = Math.abs(fxDiff);
+          ledgerRows.push({
+            tenantId: ctx.tenantId,
+            partyId: null,
+            date: input.date,
+            type: isDebit ? "fx_loss" : "fx_gain",
+            exchangeRate: 1,
+            baseDebit: isDebit ? abs : 0,
+            baseCredit: isDebit ? 0 : abs,
+            debit: isDebit ? abs : 0,
+            credit: isDebit ? 0 : abs,
+            currency: BASE_CURRENCY,
+            cashImpact: "none" as const,
+            referenceType: refType,
+            referenceId: row.id,
+            referenceNumber: autoNumber,
+            description: `فرق سعر الصرف ${autoNumber}`,
+            createdBy: ctx.userId,
+          });
+        }
+      }
+      await tx.insert(ledgerEntries).values(ledgerRows);
 
       // Maintain invoices.paid transactionally so amountDue (total-paid) stays
       // consistent when vouchers are collected or cancelled (fix P0-LOGIC-3).
@@ -339,7 +436,7 @@ export class PostgresVoucherRepository implements IVoucherRepository {
         await tx
           .update(invoices)
           .set({
-            paid: sql`${invoices.paid} + ${settledInInvoiceCurrency ?? input.amount}`,
+            paid: sql`${invoices.paid} + ${settledInInvoiceCurrency ?? grossAmount}`,
             updatedAt: new Date(),
           })
           .where(and(eq(invoices.id, input.invoiceId), eq(invoices.tenantId, ctx.tenantId)));
@@ -371,6 +468,12 @@ export class PostgresVoucherRepository implements IVoucherRepository {
           code: "STALE_VERSION" as const,
         });
       }
+      // Mirror create()'s guard: cancelling reverses the ledger leg and (for
+      // cash) the cashbox balance on the voucher's own date — the same
+      // financial write surface a closed day protects against. Without this,
+      // a receipt/payment/transfer dated on an already-closed day could still
+      // be cancelled, silently altering a reconciled day after the fact.
+      await assertDayUnlocked(tx, ctx.tenantId, currentRow.date);
 
       const [row] = await tx
         .update(vouchers)
@@ -476,6 +579,7 @@ export class PostgresVoucherRepository implements IVoucherRepository {
       partyKind: row.partyKind as VoucherData["partyKind"],
       invoiceId: n(row.invoiceId),
       amount: row.amount,
+      discount: row.discount ?? 0,
       currency: row.currency,
       exchangeRate: row.exchangeRate ?? undefined,
       baseAmount: row.baseAmount ?? undefined,

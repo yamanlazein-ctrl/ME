@@ -54,8 +54,11 @@ export function SaleLineCard({
     : [];
   const roll = rollById(line.rollId);
   const exceeds = roll ? line.quantityKg > roll.remainingKg : false;
+  // Loose remnant stock (remainingPieces === 0, remainingKg > 0) is sold with
+  // pieces explicitly at 0 — do not fold that into the "1 piece" default used
+  // for a genuinely unset value elsewhere.
   const piecesExceeds = roll
-    ? (line.pieces || 1) > (roll.remainingPieces ?? roll.pieces ?? 1)
+    ? (line.pieces ?? 1) > (roll.remainingPieces ?? roll.pieces ?? 1)
     : false;
 
   return (
@@ -211,11 +214,11 @@ export function SaleLineCard({
             <CardField label="الأثواب">
               <Input
                 type="number"
-                min="1"
-                value={line.pieces || ""}
+                min="0"
+                value={line.pieces === 0 ? "0" : line.pieces || ""}
                 onChange={(e) =>
                   onUpdate({
-                    pieces: e.target.value === "" ? 1 : Math.max(1, Number(e.target.value)),
+                    pieces: e.target.value === "" ? 1 : Math.max(0, Math.trunc(Number(e.target.value))),
                   })
                 }
                 className={cn("h-9 text-left tabular-nums", !line.pieces && "text-muted-foreground/70")}

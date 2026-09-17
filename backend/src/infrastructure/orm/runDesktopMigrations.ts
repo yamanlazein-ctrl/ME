@@ -58,8 +58,10 @@ async function stampDbMeta(migrationsFolder: string): Promise<void> {
  *
  * Empty cluster: drizzle migrate() applies the full journal in one transaction.
  * Copied-forward cluster that already has `tenants` but no drizzle history:
- * baseline the latest journal hash so we do not replay CREATE TABLE from 0001,
- * then migrate() applies only newer files (higher `when`).
+ * baseline *every* journal entry (not only the latest) so migrate() does not
+ * replay CREATE TABLE, then `ensureDesktopSchema` (called next, fatally) brings
+ * any missing columns/objects forward. Baselining only the latest hash used to
+ * skip intermediate migrations whose DDL was never applied.
  */
 export async function runDesktopMigrations(): Promise<void> {
   const folder = resolveMigrationsFolder();
@@ -85,15 +87,18 @@ export async function runDesktopMigrations(): Promise<void> {
 
   if (shouldBaselineExistingCluster(hasTenants, drizzleRowCount)) {
     const files = readMigrationFiles({ migrationsFolder: folder });
-    const last = files[files.length - 1];
-    if (last) {
-      logger.warn(
-        { hash: last.hash, folderMillis: last.folderMillis },
-        "Desktop cluster has schema but no drizzle history — baselining latest journal entry",
-      );
+    logger.warn(
+      { count: files.length },
+      "Desktop cluster has schema but no drizzle history — baselining full journal; ensureDesktopSchema must close gaps",
+    );
+    for (const file of files) {
       await pool.query(
-        `INSERT INTO drizzle.__drizzle_migrations (hash, created_at) VALUES ($1, $2)`,
-        [last.hash, last.folderMillis],
+        `INSERT INTO drizzle.__drizzle_migrations (hash, created_at)
+         SELECT $1, $2
+         WHERE NOT EXISTS (
+           SELECT 1 FROM drizzle.__drizzle_migrations WHERE hash = $1
+         )`,
+        [file.hash, file.folderMillis],
       );
     }
   }

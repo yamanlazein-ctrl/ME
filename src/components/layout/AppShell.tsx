@@ -28,11 +28,14 @@ import {
   LogOut,
   Menu,
   X,
+  GitMerge,
 } from "lucide-react";
 import { Header } from "@/components/dashboard/Header";
 import { cn } from "@/lib/utils";
 import { useCurrentUser, useLogout } from "@/presentation/hooks/useAuth";
 import { roleCanAccess, type UserRole } from "@/presentation/hooks/useSettings";
+import { useOpenSyncConflictCount } from "@/presentation/hooks/useSyncConflicts";
+import { ForceUpgradeBanner } from "@/components/desktop/DesktopUpdatesCard";
 
 type NavItem = { to: string; label: string; icon: typeof LayoutDashboard; exact?: boolean };
 type NavGroup = { key: string; label: string; items: NavItem[] };
@@ -59,6 +62,7 @@ const GROUPS: NavGroup[] = [
       { to: "/returns/sale/new", label: "مرتجع بيع", icon: RotateCcw },
       { to: "/returns", label: "سجل المرتجعات", icon: FileStack },
       { to: "/invoices/tracking", label: "تتبع الفواتير", icon: ClipboardList },
+      { to: "/sync/conflicts", label: "تعارضات المزامنة", icon: GitMerge },
       { to: "/orders", label: "طلبات العملاء", icon: ClipboardList },
     ],
   },
@@ -119,6 +123,7 @@ export function AppShell({
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const { data: me } = useCurrentUser();
   const logout = useLogout();
+  const openConflictCount = useOpenSyncConflictCount();
   const visibleGroups: NavGroup[] = me
     ? GROUPS.map((g) => ({
         ...g,
@@ -362,6 +367,11 @@ export function AppShell({
                             >
                               <n.icon className="h-4 w-4 shrink-0 opacity-90" strokeWidth={2} />
                               <span className="truncate">{n.label}</span>
+                              {n.to === "/sync/conflicts" && openConflictCount > 0 && (
+                                <span className="ms-auto rounded-full bg-destructive px-1.5 text-[10px] font-bold text-destructive-foreground tabular-nums">
+                                  {openConflictCount > 9 ? "9+" : openConflictCount}
+                                </span>
+                              )}
                             </Link>
                           </li>
                         );
@@ -450,6 +460,7 @@ export function AppShell({
         </aside>
 
         <main className="min-w-0 flex-1 space-y-4">
+          <ForceUpgradeBanner />
           <div className="flex items-center gap-2.5">
             <button
               type="button"

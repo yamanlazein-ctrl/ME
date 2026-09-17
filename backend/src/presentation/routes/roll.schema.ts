@@ -28,15 +28,25 @@ export const updateRollSchema = createRollSchema
   .partial()
   .omit({ colorId: true })
   .extend({
-    // Align with create: allow 0 (exhausted) and fractional kg such as 0.50.
-    // The previous `.positive()` rejected remainingKg=0 on edit and was
-    // inconsistent with createRollSchema.remainingKg `.min(0)`.
+    // Stock quantity is document-driven (entry/sale/return/print/adjustment
+    // documents). Direct remainingKg on PUT historically allowed silent
+    // inventory bypass; reject it so quantity only moves through controlled
+    // stock paths. Callers may still send the field as undefined/omitted.
     remainingKg: z
       .number()
       .min(0)
       .max(100000)
       .refine(is2dp, { message: MAX_2DP_MESSAGE })
-      .optional(),
+      .optional()
+      .superRefine((val, ctx) => {
+        if (val !== undefined) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message:
+              "لا يمكن تعديل الكمية المتبقية مباشرة من بطاقة الصبغة — استخدم فاتورة/مرتجع/تعديل مخزون معتمد",
+          });
+        }
+      }),
     // Fix H-5: optional optimistic-concurrency token. When sent, the
     // repository enforces it with a real compare-and-swap; omitted means
     // the caller hasn't adopted it yet and gets the legacy blind-write

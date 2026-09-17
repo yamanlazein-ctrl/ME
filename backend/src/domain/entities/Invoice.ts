@@ -10,6 +10,8 @@ export interface InvoiceLineData {
   pieces: number;
   pricePerKg: number;
   discountAmount: number;
+  /** Frozen unit cost at sale (roll price at first capture). */
+  costPerKg?: number | null;
   note?: string;
 }
 
@@ -49,6 +51,8 @@ export interface InvoiceData {
   cancelledAt?: string;
   cancelledBy?: UUID;
   cancellationReferenceId?: UUID;
+  /** Linked at-create receipt/payment voucher id (when paid > 0). */
+  linkedVoucherId?: UUID | null;
 }
 
 export class Invoice {
@@ -162,6 +166,11 @@ export interface CreateInvoiceLineInput {
   pieces?: number;
   pricePerKg: number;
   discountAmount?: number;
+  /**
+   * Optional frozen sale unit cost (sync replay). When present, COGS must use
+   * this value instead of the live roll.pricePerKg on the hub.
+   */
+  costPerKg?: number;
   note?: string;
 }
 
@@ -210,6 +219,12 @@ export interface CreateInvoiceInput {
    * insert the same UUID so cross-device references stay aligned.
    */
   preAllocatedId?: UUID;
+  /**
+   * Stable id for the at-create linked receipt/payment voucher. Without this,
+   * each node allocates a new voucher UUID and standalone voucher cancel cannot
+   * converge across devices.
+   */
+  linkedVoucherId?: UUID;
 }
 
 /** Editable fields for PUT /invoices/:id. partyId/type/currency/paid are

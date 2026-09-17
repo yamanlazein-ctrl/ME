@@ -21,6 +21,7 @@ export interface VoucherData {
   partyKind: "customer" | "supplier";
   invoiceId?: UUID | null;
   amount: number;
+  discount?: number;
   currency: Currency;
   exchangeRate?: number | null;
   /**
@@ -37,6 +38,7 @@ export interface VoucherData {
   status: VoucherStatus;
   createdAt: Timestamp;
   createdBy: string;
+  version: number;
   cancelledAt?: Timestamp | null;
   cancelledBy?: string | null;
 }
@@ -51,6 +53,7 @@ export class Voucher implements VoucherData {
   readonly partyKind: "customer" | "supplier";
   readonly invoiceId?: UUID | null;
   readonly amount: number;
+  readonly discount: number;
   readonly currency: Currency;
   readonly exchangeRate: number | null;
   readonly invoiceCurrency?: Currency;
@@ -62,6 +65,7 @@ export class Voucher implements VoucherData {
   status: VoucherStatus;
   readonly createdAt: Timestamp;
   readonly createdBy: string;
+  readonly version: number;
   readonly cancelledAt?: Timestamp | null;
   readonly cancelledBy?: string | null;
 
@@ -75,6 +79,7 @@ export class Voucher implements VoucherData {
     this.partyKind = data.partyKind;
     this.invoiceId = data.invoiceId;
     this.amount = data.amount;
+    this.discount = data.discount ?? 0;
     this.currency = data.currency;
     this.exchangeRate = data.exchangeRate ?? null;
     this.invoiceCurrency = data.invoiceCurrency;
@@ -86,6 +91,7 @@ export class Voucher implements VoucherData {
     this.status = data.status;
     this.createdAt = data.createdAt;
     this.createdBy = data.createdBy;
+    this.version = data.version ?? 1;
     this.cancelledAt = data.cancelledAt;
     this.cancelledBy = data.cancelledBy;
   }
@@ -107,6 +113,7 @@ export class Voucher implements VoucherData {
       | "cancelledBy"
       | "number"
       | "createdBy"
+      | "version"
     > & { number?: string; id?: UUID; createdBy?: string },
   ): Voucher {
     return new Voucher({
@@ -118,6 +125,7 @@ export class Voucher implements VoucherData {
       attachments: [],
       createdAt: new Date().toISOString(),
       createdBy: props.createdBy ?? "system",
+      version: 1,
     });
   }
 
@@ -133,6 +141,7 @@ export class Voucher implements VoucherData {
       | "cancelledBy"
       | "number"
       | "createdBy"
+      | "version"
     > & { number?: string; id?: UUID; createdBy?: string },
   ): Voucher {
     return new Voucher({
@@ -144,6 +153,7 @@ export class Voucher implements VoucherData {
       attachments: [],
       createdAt: new Date().toISOString(),
       createdBy: props.createdBy ?? "system",
+      version: 1,
     });
   }
 

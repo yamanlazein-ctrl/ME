@@ -34,8 +34,8 @@ export class VoucherApiService {
     return res.data;
   }
 
-  async cancelPayment(id: UUID): Promise<void> {
-    await this.client.post(`/api/payments/${id}/cancel`);
+  async cancelPayment(id: UUID, expectedVersion: number): Promise<void> {
+    await this.client.post(`/api/payments/${id}/cancel`, { expectedVersion });
   }
 
   /* ── Receipts ─────────────────────────────────────────────────── */
@@ -56,7 +56,7 @@ export class VoucherApiService {
     return res.data;
   }
 
-  async cancelReceipt(id: UUID): Promise<void> {
-    await this.client.post(`/api/receipts/${id}/cancel`);
+  async cancelReceipt(id: UUID, expectedVersion: number): Promise<void> {
+    await this.client.post(`/api/receipts/${id}/cancel`, { expectedVersion });
   }
 }

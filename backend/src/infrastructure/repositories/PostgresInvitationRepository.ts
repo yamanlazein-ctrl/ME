@@ -17,6 +17,7 @@ function toRow(r: Row): InvitationRow {
   return {
     id: r.id,
     tenantId: r.tenantId,
+    licenseId: r.licenseId ?? null,
     code: r.code,
     type: r.type as "device" | "user",
     expiresAt: r.expiresAt,
@@ -38,10 +39,19 @@ export class PostgresInvitationRepository implements IInvitationRepository {
     expiresAt: Date;
     metadata?: Record<string, unknown>;
     createdBy: UUID;
+    /** License the invitation belongs to (see `InvitationRow.licenseId`). */
+    licenseId?: UUID | null;
   }): Promise<InvitationRow> {
     const [row] = await this.db
       .insert(invitationCodes)
-      .values({ ...input, metadata: input.metadata ?? {} })
+      .values({
+        ...input,
+        // Explicit rather than relying on `...input`: the column is nullable,
+        // but any invitation created through this path is bound to a real
+        // license (or deliberately left null when the tenant has none).
+        licenseId: input.licenseId ?? null,
+        metadata: input.metadata ?? {},
+      })
       .returning();
     if (!row) throw new Error("INVITATION_CREATE_FAILED");
     return toRow(row);

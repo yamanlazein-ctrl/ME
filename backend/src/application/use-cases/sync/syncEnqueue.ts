@@ -11,6 +11,11 @@ import type { UpdateInvoiceInput } from "../../../domain/entities/Invoice.js";
 import type { InvoiceSyncDependencies } from "./syncDependencySnapshots.js";
 
 export function isSyncEnqueueEnabled(): boolean {
+  return true;
+}
+
+/** Device number blocks are only used when this install participates in sync. */
+export function isOfflineNumberingEnabled(): boolean {
   return Boolean(config.DESKTOP_DEPLOY || getCentralSyncUrl());
 }
 

@@ -2,8 +2,9 @@ import type { CreateExpenseInput, ExpenseDTO, ExpenseFilter } from "@/core/dtos/
 
 export interface IExpenseRepository {
   list(filter?: ExpenseFilter): Promise<ExpenseDTO[]>;
+  findById(id: string): Promise<ExpenseDTO | null>;
   create(input: CreateExpenseInput): Promise<ExpenseDTO>;
-  cancel(id: string): Promise<void>;
+  cancel(id: string, expectedVersion: number): Promise<void>;
 }
 
 export interface IExpenseNamesRepository {

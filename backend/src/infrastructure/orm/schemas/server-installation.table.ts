@@ -2,17 +2,15 @@ import { pgTable, uuid, varchar, timestamp, index, uniqueIndex } from "drizzle-o
 import { tenants } from "./tenant.table.js";
 
 /**
- * Server installations — one row per customer install.
+ * Server installations — canonical Installation registry (one row per install).
  *
- * Populated on first boot of the customer's server. The
- * `installationId` is a UUID generated once and stored in
- * `/var/lib/erp/install-id` (or platform equivalent) so the
- * fingerprint stays stable across container restarts (see
- * PLATFORM_FOUNDATION_NOTES.md §4 in the validation report:
- * MAC-only fingerprinting is unstable).
+ * Populated by `ensureServerInstallation` on activate/boot. The
+ * `installationId` is the on-disk UUID from `InstallationIdStorage`
+ * (`%ProgramData%\ERP\install-id` / `/var/lib/erp/install-id`). Device
+ * fingerprints embed the same id as `hostHash::installationId`.
  *
- * The unique constraint on `installationId` prevents duplicates
- * (e.g. if the on-disk file is copied between two hosts).
+ * Desktop DPAPI `device-binding.dat` is a separate integrity gate and is
+ * not rewritten by this table.
  */
 export const serverInstallations = pgTable(
   "server_installations",

@@ -31,7 +31,7 @@ export interface IOrderRepository {
   list(filter: OrderFilter, ctx: TenantContext): Promise<PaginatedResult<Order>>;
   create(input: CreateOrderInput, ctx: TenantContext): Promise<Order>;
   update(id: UUID, patch: UpdateOrderInput, ctx: TenantContext): Promise<Order>;
-  cancel(id: UUID, ctx: TenantContext): Promise<Order>;
+  cancel(id: UUID, ctx: TenantContext, expectedVersion: number): Promise<Order>;
   fulfill(id: UUID, invoiceId: UUID, ctx: TenantContext): Promise<Order>;
   findPendingConflicts(lines: PendingConflictLine[], ctx: TenantContext): Promise<PendingConflict[]>;
 }

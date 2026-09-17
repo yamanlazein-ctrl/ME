@@ -48,12 +48,21 @@ export class ApiOrderRepository implements IOrderRepository {
   }
 
   async update(id: UUID, patch: UpdateOrderInput, ctx: TenantContext): Promise<Order> {
-    const dto = await this.api.update(id, patch as Record<string, unknown>);
+    void ctx;
+    const expectedVersion =
+      typeof (patch as { version?: number }).version === "number"
+        ? (patch as { version: number }).version
+        : (await this.findById(id, ctx))?.version;
+    if (typeof expectedVersion !== "number") {
+      throw new Error("الإصدار المتوقع (expectedVersion) مطلوب لتحديث الطلب");
+    }
+    const dto = await this.api.update(id, { ...patch, expectedVersion });
     return Order.reconstitute(dto as unknown as OrderData);
   }
 
-  async cancel(id: UUID, ctx: TenantContext): Promise<Order> {
-    const dto = await this.api.cancel(id);
+  async cancel(id: UUID, ctx: TenantContext, expectedVersion: number): Promise<Order> {
+    void ctx;
+    const dto = await this.api.cancel(id, expectedVersion);
     return Order.reconstitute(dto as unknown as OrderData);
   }
 

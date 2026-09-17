@@ -112,7 +112,7 @@ export function LoginPage() {
         <div className="flex flex-col items-center text-center">
           <img
             src={logoUrl}
-            alt="Motard Fabrics Group"
+            alt=""
             className="h-16 w-16 object-contain object-center bg-transparent"
             style={{ background: "transparent" }}
           />

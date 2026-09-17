@@ -16,7 +16,7 @@ export class CancelOrderUseCase {
     if (!order) return Err(new NotFoundError("Order", id));
     if (!order.canCancel())
       return Err(new ValidationError("Order cannot be cancelled in current state.", "status"));
-    const result = await this.orders.cancel(id, ctx);
+    const result = await this.orders.cancel(id, ctx, order.version);
     return Ok(result);
   }
 }

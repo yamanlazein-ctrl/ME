@@ -9,7 +9,11 @@ export class CancelReturnUseCase {
   ) {}
 
   async execute(id: UUID, ctx: TenantContext): Promise<void> {
-    await this.returns.cancel(id, ctx);
+    const current = await this.returns.findById(id, ctx);
+    if (!current) {
+      throw new Error("المرتجع غير موجود");
+    }
+    await this.returns.cancel(id, ctx, current.version);
     await this.ledger.cancelByReference(id, ctx);
   }
 }

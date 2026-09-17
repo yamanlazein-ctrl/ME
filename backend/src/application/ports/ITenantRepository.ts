@@ -15,6 +15,8 @@ export interface TenantRow {
   status: string;
   licenseStatus: string;
   licenseType: string;
+  /** Denormalised entitlement pointer — set on activate; drives license resolution. */
+  licenseKey: string | null;
   maxDevices: number;
   activationId: UUID | null;
   serverFingerprint: string | null;

@@ -637,9 +637,13 @@ function RollFormDialog({ state, onClose }: { state: RollFormState; onClose: () 
     editing?.pricePerKg != null ? String(editing.pricePerKg) : "",
   );
   const [currency, setCurrency] = useState<Currency>(editing?.currency ?? "SYP");
-  const [supplierId, setSupplierId] = useState<string>(
-    editing?.supplierId ?? suppliers[0]?.id ?? "",
-  );
+  // F12 (Phase 1 audit, "stale supplier picker"): a NEW roll used to default
+  // its supplier to `suppliers[0]` — whichever supplier happened to sort
+  // first — instead of requiring an explicit choice. A user who didn't
+  // notice/change it silently attributed the purchase to the wrong
+  // supplier. Only an EDIT should ever pre-fill a supplier (the roll's own
+  // recorded one); a new roll starts unset.
+  const [supplierId, setSupplierId] = useState<string>(editing?.supplierId ?? "");
   const [date, setDate] = useState<string>(
     editing?.entryDate ?? new Date().toISOString().slice(0, 10),
   );
@@ -662,15 +666,18 @@ function RollFormDialog({ state, onClose }: { state: RollFormState; onClose: () 
       );
       setPrice(e?.pricePerKg != null ? String(e.pricePerKg) : "");
       setCurrency(e?.currency ?? "SYP");
-      setSupplierId(e?.supplierId ?? suppliers[0]?.id ?? "");
+      setSupplierId(e?.supplierId ?? "");
       setDate(e?.entryDate ?? new Date().toISOString().slice(0, 10));
     }
   }, [state.open, state.editing]);
+
+  const [supplierErr, setSupplierErr] = useState<string | null>(null);
 
   const submit = async () => {
     setRollErr(null);
     setDyeErr(null);
     setQtyErr(null);
+    setSupplierErr(null);
     let valid = true;
     if (!rollNo.trim()) {
       setRollErr("رقم الصبغة مطلوب.");
@@ -680,15 +687,17 @@ function RollFormDialog({ state, onClose }: { state: RollFormState; onClose: () 
       setDyeErr("رقم الدفعة الصبغية مطلوب.");
       valid = false;
     }
+    // F12 (Phase 1 audit, "stale supplier picker"): this field is no longer
+    // silently defaulted to `suppliers[0]` — it must be explicitly chosen,
+    // same as FabricFormDialog already requires.
+    if (!supplierId) {
+      setSupplierErr("يرجى اختيار مورد.");
+      valid = false;
+    }
     const qtyNum = parseDecimalInput(qty);
-    const remainingNum = parseDecimalInput(remaining);
     const priceNum = parseDecimalInput(price);
     if (qtyNum == null || qtyNum <= 0) {
       setQtyErr("أدخل كمية صحيحة أكبر من صفر.");
-      valid = false;
-    }
-    if (editing && (remainingNum == null || remainingNum < 0)) {
-      setQtyErr("أدخل كمية متبقية صحيحة (صفر أو أكثر).");
       valid = false;
     }
     if (priceNum == null || priceNum <= 0) {
@@ -702,7 +711,7 @@ function RollFormDialog({ state, onClose }: { state: RollFormState; onClose: () 
           rollNo,
           dyeBatch,
           initialKg: qtyNum,
-          remainingKg: remainingNum ?? qtyNum,
+          // remainingKg is intentionally omitted — stock qty is document-driven.
           pricePerKg: priceNum,
           currency,
           supplierId,
@@ -779,15 +788,20 @@ function RollFormDialog({ state, onClose }: { state: RollFormState; onClose: () 
           </div>
           {editing && (
             <div>
-              <Label>المتبقي (كغ)</Label>
+              <Label>المتبقي (كغ) — للعرض فقط</Label>
               <Input
                 type="number"
                 inputMode="decimal"
                 step="0.01"
                 min="0"
                 value={remaining}
-                onChange={(e) => setRemaining(e.target.value)}
+                readOnly
+                disabled
+                title="الكمية المتبقية تُعدَّل عبر الفواتير والمرتجعات فقط"
               />
+              <p className="mt-1 text-[11px] text-muted-foreground">
+                لا يمكن تعديل المخزون من هنا — استخدم فاتورة دخول/بيع أو مرتجع.
+              </p>
             </div>
           )}
           <div>
@@ -814,10 +828,18 @@ function RollFormDialog({ state, onClose }: { state: RollFormState; onClose: () 
             </Select>
           </div>
           <div>
-            <Label>المورد</Label>
-            <Select value={supplierId} onValueChange={setSupplierId}>
-              <SelectTrigger>
-                <SelectValue />
+            <Label>المورد *</Label>
+            <Select
+              value={supplierId}
+              onValueChange={(v) => {
+                setSupplierId(v);
+                setSupplierErr(null);
+              }}
+            >
+              <SelectTrigger
+                className={supplierErr ? "border-destructive/60 ring-1 ring-destructive/30" : undefined}
+              >
+                <SelectValue placeholder="اختر مورداً" />
               </SelectTrigger>
               <SelectContent>
                 {suppliers.map((s) => (
@@ -827,6 +849,7 @@ function RollFormDialog({ state, onClose }: { state: RollFormState; onClose: () 
                 ))}
               </SelectContent>
             </Select>
+            {supplierErr && <p className="mt-1 text-[11px] text-destructive">{supplierErr}</p>}
           </div>
           <div>
             <Label>تاريخ الدخول</Label>

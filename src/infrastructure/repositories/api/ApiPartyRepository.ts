@@ -81,15 +81,26 @@ export class ApiPartyRepository implements IPartyRepository {
     patch: Partial<Party>,
     ctx: TenantContext,
   ): Promise<Party> {
-    const dto = await this.api.update(
-      kind,
-      id,
-      (patch.toJSON ? patch.toJSON() : patch) as Partial<PartyDTO>,
-    );
+    const expectedVersion =
+      typeof patch.version === "number"
+        ? patch.version
+        : (await this.findById(id, kind, ctx))?.version;
+    if (typeof expectedVersion !== "number") {
+      throw new Error("الإصدار المتوقع (expectedVersion) مطلوب لتحديث الحساب");
+    }
+    const raw = (patch.toJSON ? patch.toJSON() : patch) as Record<string, unknown>;
+    const { version: _v, ...rest } = raw;
+    void _v;
+    const dto = await this.api.update(kind, id, {
+      ...rest,
+      expectedVersion,
+    } as Partial<PartyDTO> & { expectedVersion: number });
     return Party.reconstitute(dto as unknown as PartyData);
   }
 
   async delete(id: UUID, kind: "customer" | "supplier", ctx: TenantContext): Promise<void> {
-    await this.api.delete(kind, id);
+    const current = await this.findById(id, kind, ctx);
+    if (!current) return;
+    await this.api.delete(kind, id, current.version);
   }
 }

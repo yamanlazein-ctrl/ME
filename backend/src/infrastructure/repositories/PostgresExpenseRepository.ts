@@ -185,7 +185,7 @@ export class PostgresExpenseRepository implements IExpenseRepository {
           referenceType: "expense",
           referenceId: row.id,
           referenceNumber: number,
-          description: `Expense ${number}: ${input.category} - ${input.description}`,
+          description: `مصروف ${number}: ${input.category} - ${input.description}`,
           createdBy: ctx.userId,
         },
         {
@@ -200,7 +200,7 @@ export class PostgresExpenseRepository implements IExpenseRepository {
           referenceType: "expense",
           referenceId: row.id,
           referenceNumber: number,
-          description: `Cash paid ${number}`,
+          description: `نقدية مدفوعة ${number}`,
           createdBy: ctx.userId,
         },
       ]);

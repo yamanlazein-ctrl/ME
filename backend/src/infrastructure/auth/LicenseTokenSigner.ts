@@ -138,6 +138,10 @@ export class LicenseTokenSigner {
     return { privateJwk, publicJwk };
   }
 
+  canSign(): boolean {
+    return this.privateKeyJwk != null;
+  }
+
   async sign(
     payload: LicenseTokenPayload,
     opts?: { expiresInSec?: number; jti?: string },

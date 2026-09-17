@@ -92,8 +92,9 @@ export const ROLE_ALLOWED_PATHS: Record<UserRole, string[]> = {
     "/print-center",
     "/customers",
     "/suppliers",
+    "/sync/conflicts",
   ],
-  warehouse: ["/", "/inventory", "/invoices/entry", "/returns/entry", "/print-center"],
+  warehouse: ["/", "/inventory", "/invoices/entry", "/returns/entry", "/print-center", "/sync/conflicts"],
   viewer: ["/", "/inventory", "/customers", "/suppliers", "/reports", "/reports/"],
 };
 

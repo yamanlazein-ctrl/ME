@@ -59,11 +59,14 @@ function toMockPatch(patch: Record<string, unknown>): Record<string, unknown> {
 function partySummary(p: Party) {
   const st = p.stats;
   const remaining = st?.remaining ?? 0;
+  const byCurrency = st?.byCurrency ?? {};
+  const currencyEntries = Object.entries(byCurrency).sort(([a], [b]) => a.localeCompare(b));
   return {
     invoicesCount: st?.invoicesCount ?? 0,
     totalAmount: st?.totalAmount ?? 0,
     totalPaid: st?.totalPaid ?? 0,
     remaining,
+    byCurrency: currencyEntries,
     lastDate: st?.lastDate,
     creditLimit: p.creditLimit ?? 0,
     creditUsed: remaining,
@@ -362,16 +365,54 @@ export function PartyListPage({
                     <td className="tabular-nums text-muted-foreground">{p.phone ?? "—"}</td>
                     <td className="text-center tabular-nums text-foreground">{s.invoicesCount}</td>
                     <td className="text-left tabular-nums text-foreground">
-                      {formatMoney(s.totalAmount)}{" "}
-                      <span className="text-[10px] text-muted-foreground">{cur}</span>
+                      {/* F09 fix: s.totalAmount only ever reflects the party's
+                          default currency (by design — money amounts are never
+                          summed across currencies). When invoices exist in more
+                          than one currency, show each one explicitly instead of
+                          silently presenting a partial total as if it were
+                          everything — mirrors the Balance column below. */}
+                      {s.byCurrency.length > 1 ? (
+                        <div className="flex flex-col gap-0.5 items-start">
+                          {s.byCurrency.map(([ccy, b]) => (
+                            <span key={ccy}>
+                              {formatMoney(b.totalAmount)}{" "}
+                              <span className="text-[10px] text-muted-foreground">
+                                {currencySymbol(ccy as "SYP" | "USD" | "EUR")}
+                              </span>
+                            </span>
+                          ))}
+                        </div>
+                      ) : (
+                        <>
+                          {formatMoney(s.totalAmount)}{" "}
+                          <span className="text-[10px] text-muted-foreground">{cur}</span>
+                        </>
+                      )}
                     </td>
                     <td
                       className={`text-left font-semibold tabular-nums ${
-                        s.remaining > 0 ? "text-warning" : "text-success"
+                        s.remaining > 0 || s.byCurrency.some(([, b]) => b.remaining > 0)
+                          ? "text-warning"
+                          : "text-success"
                       }`}
                     >
-                      {formatMoney(s.remaining)}{" "}
-                      <span className="text-[10px] opacity-70">{cur}</span>
+                      {s.byCurrency.length > 1 ? (
+                        <div className="flex flex-col gap-0.5 items-start">
+                          {s.byCurrency.map(([ccy, b]) => (
+                            <span key={ccy}>
+                              {formatMoney(b.remaining)}{" "}
+                              <span className="text-[10px] opacity-70">
+                                {currencySymbol(ccy as "SYP" | "USD" | "EUR")}
+                              </span>
+                            </span>
+                          ))}
+                        </div>
+                      ) : (
+                        <>
+                          {formatMoney(s.remaining)}{" "}
+                          <span className="text-[10px] opacity-70">{cur}</span>
+                        </>
+                      )}
                     </td>
                     <td>
                       {s.creditLimit > 0 ? (

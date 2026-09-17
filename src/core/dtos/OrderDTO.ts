@@ -29,6 +29,7 @@ export interface OrderDTO {
   fulfilledInvoiceId?: UUID | null;
   createdAt: string;
   createdBy: string;
+  version: number;
   cancelledAt?: string | null;
   cancelledBy?: string | null;
 }

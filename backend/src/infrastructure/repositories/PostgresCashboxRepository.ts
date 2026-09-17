@@ -4,6 +4,7 @@ import type { ICashboxRepository } from "../../application/ports/ICashboxReposit
 import { cashboxSessions, manualMovements, dayCloses } from "../orm/schemas/cashbox.table.js";
 import { ledgerEntries } from "../orm/schemas/ledger-entry.table.js";
 import { assertDayUnlocked } from "./dayLockHelper.js";
+import { assertSufficientCashboxBalance } from "./cashboxBalanceHelper.js";
 import type {
   CashboxState,
   DayCloseData,
@@ -18,11 +19,17 @@ export class PostgresCashboxRepository implements ICashboxRepository {
   constructor(private readonly db: DB) {}
 
   async getState(ctx: TenantContext): Promise<CashboxState> {
-    const [session] = await this.db
+    // One session row PER CURRENCY (idx_cashbox_sessions_tenant_currency) — a
+    // tenant with both SYP and USD opening balances has two independent rows
+    // here, neither overwriting the other. `session` keeps the previous
+    // single-session shape for existing callers (SYP preferred, else
+    // whichever currency was opened first); `sessions` exposes all of them.
+    const sessionRows = await this.db
       .select()
       .from(cashboxSessions)
       .where(eq(cashboxSessions.tenantId, ctx.tenantId))
-      .limit(1);
+      .orderBy(cashboxSessions.createdAt);
+    const session = sessionRows.find((s) => s.currency === "SYP") ?? sessionRows[0];
     const [closing] = await this.db
       .select()
       .from(dayCloses)
@@ -37,6 +44,7 @@ export class PostgresCashboxRepository implements ICashboxRepository {
       .limit(1);
     return {
       session: session ? this.toSessionData(session) : null,
+      sessions: sessionRows.map((s) => this.toSessionData(s)),
       isLocked: !!lock,
       lastClosing: closing ? this.toDayCloseDomain(closing) : null,
     };
@@ -60,15 +68,18 @@ export class PostgresCashboxRepository implements ICashboxRepository {
     currency: string,
     ctx: TenantContext,
   ): Promise<void> {
+    // Scoped by (tenantId, currency) — matches idx_cashbox_sessions_tenant_currency.
+    // Setting the USD opening balance must only touch the USD row; it must
+    // never find/overwrite the SYP row (or vice versa).
     const [existing] = await this.db
       .select()
       .from(cashboxSessions)
-      .where(eq(cashboxSessions.tenantId, ctx.tenantId))
+      .where(and(eq(cashboxSessions.tenantId, ctx.tenantId), eq(cashboxSessions.currency, currency)))
       .limit(1);
     if (existing) {
       await this.db
         .update(cashboxSessions)
-        .set({ openingBalance: amount, openingDate: date, currency, updatedAt: new Date() })
+        .set({ openingBalance: amount, openingDate: date, updatedAt: new Date() })
         .where(eq(cashboxSessions.id, existing.id));
     } else {
       await this.db
@@ -83,6 +94,11 @@ export class PostgresCashboxRepository implements ICashboxRepository {
   ): Promise<ManualMovementData> {
     return this.db.transaction(async (tx) => {
       await assertDayUnlocked(tx, ctx.tenantId, input.date);
+      const currency = input.currency ?? "SYP";
+      if (input.direction === "out") {
+        // F06: cash-out must never take the cashbox negative (per-currency).
+        await assertSufficientCashboxBalance(tx, ctx, currency, input.date, input.amount);
+      }
       const [row] = await tx
         .insert(manualMovements)
         .values({
@@ -187,19 +203,18 @@ export class PostgresCashboxRepository implements ICashboxRepository {
       // Derive opening/in/out from the ledger, never from the client. A cashier
       // 500,000 short could previously post an inflated totalOut and store a
       // difference of 0 — a permanent, attacker-chosen control record.
+      const currency = input.currency ?? "SYP";
+      // Each currency has its own session row (idx_cashbox_sessions_tenant_currency)
+      // — look up THIS currency's opening directly instead of the old
+      // "tenant's one session" lookup, which only ever returned the correct
+      // opening for a single currency and silently gave every other one 0.
       const [session] = await tx
         .select()
         .from(cashboxSessions)
-        .where(eq(cashboxSessions.tenantId, ctx.tenantId))
+        .where(and(eq(cashboxSessions.tenantId, ctx.tenantId), eq(cashboxSessions.currency, currency)))
         .limit(1);
-      const currency = input.currency ?? session?.currency ?? "SYP";
-      // Mirror GET /cashbox/balance/:date — opening amount AND opening date
-      // apply only to the session currency. Other currencies keep full history
-      // (no amount leak, no date truncation).
-      const sessionCurrency = session?.currency;
-      const opening = currency === sessionCurrency ? (session?.openingBalance ?? 0) : 0;
-      const from =
-        currency === sessionCurrency ? (session?.openingDate ?? "0001-01-01") : "0001-01-01";
+      const opening = session?.openingBalance ?? 0;
+      const from = session?.openingDate ?? "0001-01-01";
 
       const [ledger] = await tx
         .select({

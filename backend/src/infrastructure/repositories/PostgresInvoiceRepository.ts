@@ -17,15 +17,19 @@ import { vouchers } from "../orm/schemas/voucher.table.js";
 import { recordStockMovement } from "./stockMovementHelper.js";
 import { notifyOrderAvailability } from "./orderAvailabilityNotifier.js";
 import { assertDayUnlocked } from "./dayLockHelper.js";
+import { returns } from "../orm/schemas/return.table.js";
 import type {
   InvoiceData,
   CreateInvoiceInput,
   UpdateInvoiceInput,
 } from "../../domain/entities/Invoice.js";
 import { Invoice, computeSubtotal } from "../../domain/entities/Invoice.js";
-import { round2dp, BASE_CURRENCY, computeBaseEquivalent, isValidFxRate, FX_REQUIRED_MESSAGE, convertForSettlement } from "@erp/shared";
+import { round2dp, BASE_CURRENCY, computeBaseEquivalent, isValidFxRate, FX_REQUIRED_MESSAGE } from "@erp/shared";
 import type { TenantContext, PaginatedResult } from "../../domain/types/index.js";
 import { BusinessRuleError } from "../../domain/errors/index.js";
+import { resolveSaleCostPerKg } from "../../domain/invoices/invoiceCostSnapshot.js";
+import { resolveSaleLineCogs } from "../../domain/invoices/saleCogsConversion.js";
+import { randomUUID } from "node:crypto";
 
 export class PostgresInvoiceRepository implements IInvoiceRepository {
   constructor(private readonly db: DB) {}
@@ -183,9 +187,11 @@ export class PostgresInvoiceRepository implements IInvoiceRepository {
       // Stock validation and deduction only for sale invoices.
       // Entry invoices add stock via roll creation — no deduction needed.
       const expectedVersions = new Map<string, number>();
-      // C4+COGS: cost of goods sold for sale invoices = Σ(quantityKg × roll.pricePerKg),
+      // C4+COGS: cost of goods sold for sale invoices = Σ(quantityKg × unitCost),
       // captured at sale time so it is journaled (not just derived at read time).
+      // Sync replay may pin unitCost via line.costPerKg.
       let cogsTotal = 0;
+      const costByRoll = new Map<string, string>();
       const invoiceCurrency = input.currency ?? "SYP";
       // BUG-03 fix — frozen FX rate for this document (units per 1 USD).
       const fxRate = isValidFxRate(input.exchangeRate)
@@ -259,7 +265,7 @@ export class PostgresInvoiceRepository implements IInvoiceRepository {
         if (r.currency !== invoiceCurrency) {
           if (!isSale) {
             throw new BusinessRuleError(
-              `عملة اللفافة ${line.rollId} (${r.currency}) لا تطابق عملة الفاتورة (${invoiceCurrency}) — لا يمكن خلط العملات في التكلفة`,
+              `عملة اللفافة ${r.rollNo} (${r.currency}) لا تطابق عملة الفاتورة (${invoiceCurrency}) — لا يمكن خلط العملات في التكلفة`,
             );
           }
         }
@@ -273,39 +279,30 @@ export class PostgresInvoiceRepository implements IInvoiceRepository {
         // rolls are rejected too so a sold-out roll cannot be resurrected.
         if (!isSale && (Number(r.kg) > 0 || r.status !== "in_stock")) {
           throw new BusinessRuleError(
-            `فاتورة الدخول يجب أن تشير إلى لفافة جديدة فارغة — اللفافة ${line.rollId} عليها مخزون حالي (${Number(r.kg)} كغ، حالة ${r.status}) ولا يمكن إضافة مخزون فوقها من فاتورة دخول`,
+            `فاتورة الدخول يجب أن تشير إلى لفافة جديدة فارغة — اللفافة ${r.rollNo} عليها مخزون حالي (${Number(r.kg)} كغ، حالة ${r.status}) ولا يمكن إضافة مخزون فوقها من فاتورة دخول`,
           );
         }
         if (isSale) {
           if (Number(r.kg) < line.quantityKg) {
             throw new BusinessRuleError(
-              `اللفافة ${line.rollId} المخزون غير كافٍ (${Number(r.kg)} كغ < ${line.quantityKg} كغ)`,
+              `اللفافة ${r.rollNo} المخزون غير كافٍ (${Number(r.kg)} كغ < ${line.quantityKg} كغ)`,
             );
           }
           if (r.status === "exhausted") {
-            throw new BusinessRuleError(`اللفافة ${line.rollId} نفدت ولا يمكن بيعها`);
+            throw new BusinessRuleError(`اللفافة ${r.rollNo} نفدت ولا يمكن بيعها`);
           }
           expectedVersions.set(line.rollId, Number(r.version));
           const storedQty = Math.round(Number(line.quantityKg) * 100) / 100;
-          const rollCostNative = round2dp(storedQty * Number(r.pricePerKg));
-          if (r.currency === invoiceCurrency) {
-            cogsTotal += rollCostNative;
-          } else {
-            // Never use the synthetic USD rate=1 for cross-currency COGS —
-            // require the caller's manual rate.
-            const rate = isValidFxRate(input.exchangeRate) ? input.exchangeRate! : null;
-            const converted = convertForSettlement(
-              rollCostNative,
-              r.currency,
-              invoiceCurrency,
-              rate,
-            );
-            if (converted === null) {
-              throw new BusinessRuleError(
-                `سعر الصرف مطلوب يدوياً لبيع صبغة بعملة (${r.currency}) بفاتورة (${invoiceCurrency})`,
-              );
-            }
-            cogsTotal += converted;
+          const unitCost = resolveSaleCostPerKg(line.costPerKg, Number(r.pricePerKg));
+          const rollCostNative = round2dp(storedQty * unitCost);
+          cogsTotal += resolveSaleLineCogs(
+            rollCostNative,
+            r.currency,
+            invoiceCurrency,
+            input.exchangeRate,
+          );
+          if (!costByRoll.has(line.rollId)) {
+            costByRoll.set(line.rollId, String(unitCost));
           }
         }
       }
@@ -333,9 +330,9 @@ export class PostgresInvoiceRepository implements IInvoiceRepository {
           paymentMethod: (input.paid ?? 0) > 0 ? (input.paymentMethod ?? "cash") : null,
           notes: input.notes,
           // BUG-03 fix — frozen FX capture at creation time (mirrors fx.ts rule):
-          // USD (base) documents force rate=1/base=amount; non-USD documents use
-          // the caller-supplied rate when present. Legacy rows keep NULL by design
-          // (never guess a current rate for a historical document).
+          // non-USD documents require a positive rate for base_* conversion.
+          // USD documents remain base-native (computeBaseEquivalent ignores rate)
+          // but still persist a caller-supplied market rate when provided.
           exchangeRate: fxRate,
           baseTotal: computeBaseEquivalent(inv.total, invoiceCurrency, fxRate),
           createdBy: ctx.userId,
@@ -343,20 +340,24 @@ export class PostgresInvoiceRepository implements IInvoiceRepository {
         .returning();
 
       // Capture cost snapshot for sale lines so returns can be valued at cost (fix 3.6c)
-      const costByRoll = new Map<string, string>();
+      // (unit costs already collected in costByRoll during the validation loop).
       if (isSale) {
         for (const l of input.lines) {
-          const v = expectedVersions.get(l.rollId);
-          // Reuse the pricePerKg already fetched for cogsTotal (cost), fallback to sale price if not sale
-          // For sale, cost is roll.pricePerKg at sale time (already in cogsTotal calc)
-          // We need to fetch it again if not already cached
           if (!costByRoll.has(l.rollId)) {
             const [rollCost] = await tx
               .select({ pricePerKg: rolls.pricePerKg })
               .from(rolls)
               .where(and(eq(rolls.id, l.rollId), eq(rolls.tenantId, ctx.tenantId)))
               .limit(1);
-            costByRoll.set(l.rollId, rollCost ? String(rollCost.pricePerKg) : String(l.pricePerKg));
+            costByRoll.set(
+              l.rollId,
+              String(
+                resolveSaleCostPerKg(
+                  l.costPerKg,
+                  rollCost ? Number(rollCost.pricePerKg) : Number(l.pricePerKg),
+                ),
+              ),
+            );
           }
         }
       }
@@ -382,7 +383,11 @@ export class PostgresInvoiceRepository implements IInvoiceRepository {
         for (const line of input.lines) {
           const linePieces = line.pieces ?? 1;
           const [r] = await tx
-            .select({ remainingKg: rolls.remainingKg, remainingPieces: rolls.remainingPieces })
+            .select({
+              remainingKg: rolls.remainingKg,
+              remainingPieces: rolls.remainingPieces,
+              rollNo: rolls.rollNo,
+            })
             .from(rolls)
             .where(and(eq(rolls.id, line.rollId), eq(rolls.tenantId, ctx.tenantId)))
             .for("update")
@@ -413,7 +418,9 @@ export class PostgresInvoiceRepository implements IInvoiceRepository {
             )
             .returning({ id: rolls.id });
           if (updated.length === 0) {
-            throw new BusinessRuleError(`Roll ${line.rollId} was modified concurrently. Please retry.`);
+            throw new BusinessRuleError(
+              `تعارض على اللفافة ${r.rollNo} — تم تعديلها من جهاز آخر. حدّث الصفحة وأعد المحاولة.`,
+            );
           }
           await recordStockMovement(
             tx,
@@ -427,7 +434,7 @@ export class PostgresInvoiceRepository implements IInvoiceRepository {
               referenceId: row.id,
               referenceNumber: autoNumber,
               movementDate: input.date,
-              description: `Sale invoice ${autoNumber}`,
+              description: `فاتورة بيع ${autoNumber}`,
             },
             ctx,
           );
@@ -472,7 +479,7 @@ export class PostgresInvoiceRepository implements IInvoiceRepository {
             .where(and(eq(colors.id, before.colorId), eq(colors.tenantId, ctx.tenantId)))
             .limit(1);
           if (!rollColor || line.fabricId !== rollColor.fabricId) {
-            throw new BusinessRuleError(`القماش المحدد للبند لا يطابق قماش لون اللفافة ${line.rollId} الفعلي`);
+            throw new BusinessRuleError(`القماش المحدد للبند لا يطابق قماش لون اللفافة ${before.rollNo} الفعلي`);
           }
           const newKg = Number(before?.remainingKg ?? 0) + line.quantityKg;
           const newPieces = Number(before?.remainingPieces ?? 0) + linePieces;
@@ -498,7 +505,7 @@ export class PostgresInvoiceRepository implements IInvoiceRepository {
               referenceId: row.id,
               referenceNumber: autoNumber,
               movementDate: input.date,
-              description: `Purchase invoice ${autoNumber}`,
+              description: `فاتورة شراء ${autoNumber}`,
             },
             ctx,
           );
@@ -537,7 +544,7 @@ export class PostgresInvoiceRepository implements IInvoiceRepository {
           referenceType: invoiceType,
           referenceId: row.id,
           referenceNumber: autoNumber,
-          description: `${isSale ? "Sale invoice" : "Purchase invoice"} ${autoNumber}`,
+          description: `${isSale ? "فاتورة بيع" : "فاتورة شراء"} ${autoNumber}`,
           createdBy: ctx.userId,
         },
       ];
@@ -556,7 +563,7 @@ export class PostgresInvoiceRepository implements IInvoiceRepository {
           referenceType: invoiceType,
           referenceId: row.id,
           referenceNumber: autoNumber,
-          description: `Sales revenue ${autoNumber}`,
+            description: `إيراد مبيعات ${autoNumber}`,
           createdBy: ctx.userId,
         });
         // COGS legs — Dr COGS Expense / Cr Inventory Asset, journaled so profit is
@@ -575,7 +582,7 @@ export class PostgresInvoiceRepository implements IInvoiceRepository {
             referenceType: invoiceType,
             referenceId: row.id,
             referenceNumber: autoNumber,
-            description: `Cost of goods sold ${autoNumber}`,
+            description: `تكلفة البضاعة المباعة ${autoNumber}`,
             createdBy: ctx.userId,
           });
           legs.push({
@@ -591,7 +598,7 @@ export class PostgresInvoiceRepository implements IInvoiceRepository {
             referenceType: invoiceType,
             referenceId: row.id,
             referenceNumber: autoNumber,
-            description: `Inventory relief ${autoNumber}`,
+            description: `تخفيض مخزون ${autoNumber}`,
             createdBy: ctx.userId,
           });
         }
@@ -611,7 +618,7 @@ export class PostgresInvoiceRepository implements IInvoiceRepository {
           referenceType: invoiceType,
           referenceId: row.id,
           referenceNumber: autoNumber,
-          description: `Inventory received ${autoNumber}`,
+          description: `مخزون مستلم ${autoNumber}`,
           createdBy: ctx.userId,
         });
       }
@@ -627,15 +634,18 @@ export class PostgresInvoiceRepository implements IInvoiceRepository {
       if (paid > 0 && (input.paymentMethod ?? "cash") === "cash") {
         await assertDayUnlocked(tx, ctx.tenantId, input.date);
       }
+      let linkedVoucherId: string | null = null;
       if (isSale && paid > 0) {
         if (paid > inv.total) {
           throw new BusinessRuleError(`المبلغ المدفوع (${paid}) أكبر من إجمالي الفاتورة (${inv.total})`);
         }
         const method = input.paymentMethod ?? "cash";
         const receiptNumber = `RCP-${autoNumber}`;
+        linkedVoucherId = input.linkedVoucherId ?? randomUUID();
         const [voucherRow] = await tx
           .insert(vouchers)
           .values({
+            id: linkedVoucherId,
             tenantId: ctx.tenantId,
             kind: "receipt",
             number: receiptNumber,
@@ -644,6 +654,7 @@ export class PostgresInvoiceRepository implements IInvoiceRepository {
             partyKind: "customer",
             invoiceId: row.id,
             amount: paid,
+            discount: 0,
             currency: input.currency ?? "SYP",
             // QA fix: the linked receipt voucher must freeze the same FX rate
             // as its invoice — it was omitted here, leaving base_amount NULL
@@ -654,7 +665,8 @@ export class PostgresInvoiceRepository implements IInvoiceRepository {
             notesPrint: `قبض مرتبط بالفاتورة ${autoNumber}`,
             createdBy: ctx.userId,
           })
-          .returning();
+          .returning({ id: vouchers.id });
+        linkedVoucherId = voucherRow.id;
 
         await tx.insert(ledgerEntries).values([
           {
@@ -670,7 +682,7 @@ export class PostgresInvoiceRepository implements IInvoiceRepository {
             referenceType: "receipt_in",
             referenceId: voucherRow.id,
             referenceNumber: receiptNumber,
-            description: `Receipt ${receiptNumber}`,
+            description: `سند قبض ${receiptNumber}`,
             createdBy: ctx.userId,
           },
           {
@@ -686,27 +698,26 @@ export class PostgresInvoiceRepository implements IInvoiceRepository {
             referenceType: "receipt_in",
             referenceId: voucherRow.id,
             referenceNumber: receiptNumber,
-            description: `Cash received ${receiptNumber}`,
+            description: `نقدية مقبوضة ${receiptNumber}`,
             createdBy: ctx.userId,
           },
         ]);
       }
 
       // Linked supplier-payment voucher for entry (purchase) invoices paid at
-      // billing time (cash / check / transfer). Mirrors the sale receipt path
-      // above but credits the SUPPLIER and reduces the amount owed (AP), so the
-      // supplier balance becomes total − paid (= invoice.amountDue). Without
-      // this, entry-invoice payments were silently dropped and the supplier
-      // balance was inflated by the paid amount (the bug under fix).
+      // billing time. Posts Dr party / Cr cash (canonical payment) so AP becomes
+      // total − paid (= invoice.amountDue).
       if (!isSale && paid > 0) {
         if (paid > inv.total) {
           throw new BusinessRuleError(`المبلغ المدفوع (${paid}) أكبر من إجمالي الفاتورة (${inv.total})`);
         }
         const method = input.paymentMethod ?? "cash";
         const paymentNumber = `PAY-${autoNumber}`;
+        linkedVoucherId = input.linkedVoucherId ?? randomUUID();
         const [voucherRow] = await tx
           .insert(vouchers)
           .values({
+            id: linkedVoucherId,
             tenantId: ctx.tenantId,
             kind: "payment",
             number: paymentNumber,
@@ -715,6 +726,7 @@ export class PostgresInvoiceRepository implements IInvoiceRepository {
             partyKind: "supplier",
             invoiceId: row.id,
             amount: paid,
+            discount: 0,
             currency: input.currency ?? "SYP",
             // QA fix (ENT-2026-0002): the linked supplier-payment voucher never
             // froze its FX capture — PAY-ENT-2026-0002 shipped with NULL
@@ -725,55 +737,52 @@ export class PostgresInvoiceRepository implements IInvoiceRepository {
             notesPrint: `دفعة مرتبطة بالفاتورة ${autoNumber}`,
             createdBy: ctx.userId,
           })
-          .returning();
+          .returning({ id: vouchers.id });
+        linkedVoucherId = voucherRow.id;
 
         const cashImpact = method === "cash" ? "out" : "none";
         await tx.insert(ledgerEntries).values([
           {
-            ...legFx(0, paid),
+            ...legFx(paid, 0),
             tenantId: ctx.tenantId,
             partyId: input.partyId,
             date: input.date,
             type: "payment_out",
-            // BUG-03 (same-pattern): a supplier payment CREDITS the supplier
-            // (balance = Σ(debit − credit)); it must REDUCE what we owe. This
-            // matches PostgresVoucherRepository's C-8 party leg (always credit)
-            // and migration 0012. The old debit here re-inflated the debt.
-            debit: 0,
-            credit: paid,
+            // Canonical supplier payment: Dr party / Cr cash (same as
+            // PostgresVoucherRepository + migration 0040). Crediting the
+            // supplier here inverted AP and inflated the statement balance.
+            debit: paid,
+            credit: 0,
             currency: input.currency ?? "SYP",
             cashImpact: "none",
             referenceType: "payment_out",
             referenceId: voucherRow.id,
             referenceNumber: paymentNumber,
-            description: `Payment ${paymentNumber}`,
+            description: `سند دفع ${paymentNumber}`,
             createdBy: ctx.userId,
           },
           {
-            ...legFx(paid, 0),
+            ...legFx(0, paid),
             tenantId: ctx.tenantId,
             partyId: null,
             date: input.date,
             type: "cash",
-            // Cash leg balances the always-credit party leg (C-8 convention,
-            // mirrors PostgresVoucherRepository). cashImpact carries the
-            // direction (out for cash payment) for the cashbox, which sums
-            // debit+credit keyed off cashImpact.
-            debit: paid,
-            credit: 0,
+            debit: 0,
+            credit: paid,
             currency: input.currency ?? "SYP",
             cashImpact,
             referenceType: "payment_out",
             referenceId: voucherRow.id,
             referenceNumber: paymentNumber,
-            description: `Cash paid ${paymentNumber}`,
+            description: `نقدية مدفوعة ${paymentNumber}`,
             createdBy: ctx.userId,
           },
         ]);
       }
 
       const lines = await tx.select().from(invoiceLines).where(eq(invoiceLines.invoiceId, row.id));
-      return this.toDomain(row, lines);
+      const domain = this.toDomain(row, lines);
+      return { ...domain, linkedVoucherId };
     });
   }
 
@@ -815,6 +824,18 @@ export class PostgresInvoiceRepository implements IInvoiceRepository {
         });
       }
 
+      // The invoice may already have voucher/settlement payments recorded
+      // against it (`inv.paid`, maintained transactionally by
+      // PostgresVoucherRepository / PostgresStatementRepository). Shrinking
+      // the total below what has already been paid would make amountDue
+      // (total - paid) negative — an invalid state the statement, ledger,
+      // and cashbox all assume can never happen.
+      if (round2dp(total) < round2dp(Number(inv.paid))) {
+        throw new BusinessRuleError(
+          `لا يمكن تعديل إجمالي الفاتورة إلى ${round2dp(total)} لأنه أقل من المبلغ المدفوع بالفعل (${round2dp(Number(inv.paid))}). عدّل بنود الفاتورة بحيث لا يقل الإجمالي عن المبلغ المدفوع، أو ألغِ/عدّل الدفعة أولاً.`,
+        );
+      }
+
       const isSale = inv.type === "sale";
       const invoiceType = isSale ? "sales_invoice" : "purchase_invoice";
 
@@ -826,11 +847,16 @@ export class PostgresInvoiceRepository implements IInvoiceRepository {
       // Aggregate both old and new quantities per roll so a roll moved across
       // lines (or duplicated) nets out to one delta instead of double-counting.
       const oldByRoll = new Map<string, { kg: number; pieces: number }>();
+      const oldCostByRoll = new Map<string, number>();
       for (const l of oldLines) {
         const e = oldByRoll.get(l.rollId) ?? { kg: 0, pieces: 0 };
         e.kg += Number(l.quantityKg);
         e.pieces += Number(l.pieces ?? 1);
         oldByRoll.set(l.rollId, e);
+        if (l.costPerKg != null && !oldCostByRoll.has(l.rollId)) {
+          const n = Number(l.costPerKg);
+          if (Number.isFinite(n)) oldCostByRoll.set(l.rollId, n);
+        }
       }
       const newByRoll = new Map<string, { kg: number; pieces: number; fabricId: string; colorId: string }>();
       for (const l of lines) {
@@ -856,6 +882,7 @@ export class PostgresInvoiceRepository implements IInvoiceRepository {
           currency: string;
           version: number;
           status: string;
+          rollNo: string;
         }
       >();
       const deltas = new Map<string, { kg: number; pieces: number }>();
@@ -876,7 +903,7 @@ export class PostgresInvoiceRepository implements IInvoiceRepository {
           .where(and(eq(rolls.id, rollId), eq(rolls.tenantId, ctx.tenantId)))
           .for("update")
           .limit(1);
-        if (!r) throw new BusinessRuleError(`اللفافة ${rollId} غير موجودة`);
+        if (!r) throw new BusinessRuleError("اللفافة المحددة غير موجودة");
 
         // Cross-currency SALE: deferred FX probe until editFx is resolved below.
         // (ENTRY invoices never reach sale roll deltas with currency mismatch for COGS.)
@@ -892,7 +919,7 @@ export class PostgresInvoiceRepository implements IInvoiceRepository {
             .where(and(eq(colors.id, r.colorId), eq(colors.tenantId, ctx.tenantId)))
             .limit(1);
           if (!rollColor || next.fabricId !== rollColor.fabricId) {
-            throw new BusinessRuleError(`القماش المحدد للبند لا يطابق قماش لون اللفافة ${rollId} الفعلي`);
+            throw new BusinessRuleError(`القماش المحدد للبند لا يطابق قماش لون اللفافة ${r.rollNo} الفعلي`);
           }
         }
 
@@ -910,6 +937,7 @@ export class PostgresInvoiceRepository implements IInvoiceRepository {
           currency: r.currency,
           version: Number(r.version),
           status: r.status,
+          rollNo: r.rollNo,
         });
       }
 
@@ -937,18 +965,18 @@ export class PostgresInvoiceRepository implements IInvoiceRepository {
           if (!oldByRoll.has(rollId)) {
             if (state.remainingKg !== 0 || state.status !== "in_stock") {
               throw new BusinessRuleError(
-                `لا يمكن إدخال اللفافة ${rollId} عبر تعديل فاتورة — عليها مخزون حالي (${state.remainingKg} كغ، حالة ${state.status}). أنشئ فاتورة دخول جديدة.`,
+                `لا يمكن إدخال اللفافة ${state.rollNo} عبر تعديل فاتورة — عليها مخزون حالي (${state.remainingKg} كغ، حالة ${state.status}). أنشئ فاتورة دخول جديدة.`,
               );
             }
           } else {
             if (delta.kg > state.remainingKg) {
               throw new BusinessRuleError(
-                `لا يمكن زيادة كمية الدخول بمقدار ${delta.kg} كغ — المتاح غير المباع في اللفافة ${rollId} هو ${state.remainingKg} كغ فقط`,
+                `لا يمكن زيادة كمية الدخول بمقدار ${delta.kg} كغ — المتاح غير المباع في اللفافة ${state.rollNo} هو ${state.remainingKg} كغ فقط`,
               );
             }
             if (delta.pieces > state.remainingPieces) {
               throw new BusinessRuleError(
-                `لا يمكن زيادة عدد أثواب الدخول بمقدار ${delta.pieces} — المتاح غير المباع في اللفافة ${rollId} هو ${state.remainingPieces} أثواب فقط`,
+                `لا يمكن زيادة عدد أثواب الدخول بمقدار ${delta.pieces} — المتاح غير المباع في اللفافة ${state.rollNo} هو ${state.remainingPieces} أثواب فقط`,
               );
             }
           }
@@ -957,13 +985,13 @@ export class PostgresInvoiceRepository implements IInvoiceRepository {
         if (newKg < 0) {
           throw new BusinessRuleError(
             isSale
-              ? `لا يمكن زيادة كمية البيع — المتاح في اللفافة ${rollId} غير كافٍ`
-              : `لا يمكن إنقاص كمية الدخول — المتاح في اللفافة ${rollId} غير كافٍ`,
+              ? `لا يمكن زيادة كمية البيع — المتاح في اللفافة ${state.rollNo} غير كافٍ`
+              : `لا يمكن إنقاص كمية الدخول — المتاح في اللفافة ${state.rollNo} غير كافٍ`,
           );
         }
         if (newPieces < 0) {
           throw new BusinessRuleError(
-            `الأثواب الناتجة عن التعديل تتجاوز المتاح في اللفافة ${rollId}`,
+            `الأثواب الناتجة عن التعديل تتجاوز المتاح في اللفافة ${state.rollNo}`,
           );
         }
 
@@ -998,20 +1026,34 @@ export class PostgresInvoiceRepository implements IInvoiceRepository {
         }
       }
 
-      // QA fix (ENT-2026-0002): FX re-capture on edit. The update path used to
-      // ignore the rate entirely — rewritten legs carried NULL base_* columns
-      // and the invoice row kept stale/NULL exchange fields. Resolution order:
-      // caller-supplied rate → the frozen rate already on the invoice; USD is
-      // always 1. Non-USD without any resolvable rate fails closed so the base
-      // ledger stays convertible and balanced.
-      const editFx = isValidFxRate(input.exchangeRate)
-        ? input.exchangeRate!
-        : inv.currency === BASE_CURRENCY
-          ? (inv.exchangeRate ?? 1)
-          : (inv.exchangeRate ?? null);
-      if (inv.currency !== BASE_CURRENCY && !isValidFxRate(editFx)) {
+      // Historical FX is frozen at create time. Edits may restate quantities and
+      // unit prices in the document currency, but must NOT revalue the document
+      // by substituting a new exchangeRate (shared schema: never silently
+      // re-value a historical doc). Cross-currency COGS conversion uses the
+      // same frozen rate.
+      // FX-FREEZE FIX: prefer the STORED create-time rate. A USD document may
+      // legitimately carry a manually-supplied rate (needed to convert COGS of
+      // stock priced in another currency), so forcing 1 for every USD invoice
+      // BEFORE consulting the stored rate silently destroyed that frozen rate
+      // on any edit. Fall back to 1 only when no valid rate was ever stored.
+      const storedFx = isValidFxRate(inv.exchangeRate)
+        ? Number(inv.exchangeRate)
+        : null;
+      const frozenFx = storedFx ?? (inv.currency === BASE_CURRENCY ? 1 : null);
+      if (inv.currency !== BASE_CURRENCY && !isValidFxRate(frozenFx)) {
         throw new BusinessRuleError(FX_REQUIRED_MESSAGE);
       }
+      if (
+        input.exchangeRate != null &&
+        isValidFxRate(input.exchangeRate) &&
+        frozenFx != null &&
+        Math.abs(Number(input.exchangeRate) - frozenFx) > 1e-9
+      ) {
+        throw new BusinessRuleError(
+          `لا يمكن تغيير سعر الصرف التاريخي للفاتورة (المجمّد ${frozenFx}). أنشئ مستنداً جديداً إذا تغيّر السعر.`,
+        );
+      }
+      const editFx = frozenFx!;
 
       // Cost snapshot for sale lines — convert roll-native cost → invoice currency via FX.
       let cogsTotal = 0;
@@ -1019,24 +1061,18 @@ export class PostgresInvoiceRepository implements IInvoiceRepository {
         for (const l of lines) {
           const state = rollStates.get(l.rollId)!;
           const storedQty = Math.round(l.quantityKg * 100) / 100;
-          const rollCostNative = round2dp(storedQty * state.pricePerKg);
-          if (state.currency === inv.currency) {
-            cogsTotal += rollCostNative;
-          } else {
-            const rate = isValidFxRate(input.exchangeRate) ? input.exchangeRate! : null;
-            const converted = convertForSettlement(
-              rollCostNative,
-              state.currency,
-              inv.currency,
-              rate,
-            );
-            if (converted === null) {
-              throw new BusinessRuleError(
-                `سعر الصرف مطلوب يدوياً لبيع صبغة بعملة (${state.currency}) بفاتورة (${inv.currency})`,
-              );
-            }
-            cogsTotal += converted;
-          }
+          const unitCost = resolveSaleCostPerKg(oldCostByRoll.get(l.rollId), state.pricePerKg);
+          const rollCostNative = round2dp(storedQty * unitCost);
+          // Prefer the invoice's own frozen rate (edits must not revalue a
+          // historical document via a new rate — see comment above); fall
+          // back to the caller-supplied rate only when the invoice itself
+          // has none (e.g. a USD-native document with no frozen FX yet).
+          const editRate = isValidFxRate(editFx)
+            ? editFx
+            : isValidFxRate(input.exchangeRate)
+              ? input.exchangeRate!
+              : null;
+          cogsTotal += resolveSaleLineCogs(rollCostNative, state.currency, inv.currency, editRate);
         }
       }
       await tx.delete(invoiceLines).where(eq(invoiceLines.invoiceId, id));
@@ -1051,7 +1087,14 @@ export class PostgresInvoiceRepository implements IInvoiceRepository {
           pieces: l.pieces,
           pricePerKg: String(l.pricePerKg),
           discountAmount: l.discountAmount,
-          costPerKg: isSale ? String(rollStates.get(l.rollId)!.pricePerKg) : null,
+          costPerKg: isSale
+            ? String(
+                resolveSaleCostPerKg(
+                  oldCostByRoll.get(l.rollId),
+                  rollStates.get(l.rollId)!.pricePerKg,
+                ),
+              )
+            : null,
           note: l.note,
         })),
       );
@@ -1101,8 +1144,7 @@ export class PostgresInvoiceRepository implements IInvoiceRepository {
           shipping: round2dp(shipping),
           total: round2dp(total),
           notes: input.notes ?? null,
-          // QA fix — persist the (possibly updated) frozen FX capture so
-          // base_total always matches the current document value.
+          // Keep the create-time FX freeze; edits must not rewrite exchangeRate.
           exchangeRate: editFx,
           baseTotal: computeBaseEquivalent(total, inv.currency, editFx),
           updatedAt: new Date(),
@@ -1160,7 +1202,7 @@ export class PostgresInvoiceRepository implements IInvoiceRepository {
         referenceType: invoiceType,
         referenceId: args.referenceId,
         referenceNumber: args.referenceNumber,
-        description: `${args.isSale ? "Sale invoice" : "Purchase invoice"} ${args.referenceNumber}`,
+        description: `${args.isSale ? "فاتورة بيع" : "فاتورة شراء"} ${args.referenceNumber}`,
         createdBy: args.createdBy,
       },
     ];
@@ -1178,7 +1220,7 @@ export class PostgresInvoiceRepository implements IInvoiceRepository {
         referenceType: invoiceType,
         referenceId: args.referenceId,
         referenceNumber: args.referenceNumber,
-        description: `Sales revenue ${args.referenceNumber}`,
+        description: `إيراد مبيعات ${args.referenceNumber}`,
         createdBy: args.createdBy,
       });
       if (args.cogsTotal > 0) {
@@ -1195,7 +1237,7 @@ export class PostgresInvoiceRepository implements IInvoiceRepository {
           referenceType: invoiceType,
           referenceId: args.referenceId,
           referenceNumber: args.referenceNumber,
-          description: `Cost of goods sold ${args.referenceNumber}`,
+          description: `تكلفة البضاعة المباعة ${args.referenceNumber}`,
           createdBy: args.createdBy,
         });
         legs.push({
@@ -1211,7 +1253,7 @@ export class PostgresInvoiceRepository implements IInvoiceRepository {
           referenceType: invoiceType,
           referenceId: args.referenceId,
           referenceNumber: args.referenceNumber,
-          description: `Inventory relief ${args.referenceNumber}`,
+          description: `تخفيض مخزون ${args.referenceNumber}`,
           createdBy: args.createdBy,
         });
       }
@@ -1229,7 +1271,7 @@ export class PostgresInvoiceRepository implements IInvoiceRepository {
         referenceType: invoiceType,
         referenceId: args.referenceId,
         referenceNumber: args.referenceNumber,
-        description: `Inventory received ${args.referenceNumber}`,
+        description: `مخزون مستلم ${args.referenceNumber}`,
         createdBy: args.createdBy,
       });
     }
@@ -1254,6 +1296,23 @@ export class PostgresInvoiceRepository implements IInvoiceRepository {
         throw Object.assign(new Error(`Stale version: expected ${expectedVersion}, current ${inv.version}`), {
           code: "STALE_VERSION" as const,
         });
+      }
+
+      const activeReturns = await tx
+        .select({ id: returns.id, number: returns.number })
+        .from(returns)
+        .where(
+          and(
+            eq(returns.originalInvoiceId, id),
+            eq(returns.tenantId, ctx.tenantId),
+            eq(returns.status, "active"),
+          ),
+        );
+      if (activeReturns.length > 0) {
+        const nums = activeReturns.map((r) => r.number).join("، ");
+        throw new BusinessRuleError(
+          `لا يمكن إلغاء الفاتورة ${inv.number} لوجود مرتجعات نشطة (${nums}). ألغِ المرتجعات أولاً ثم أعد المحاولة.`,
+        );
       }
 
       const ilines = await tx.select().from(invoiceLines).where(eq(invoiceLines.invoiceId, id));
@@ -1293,23 +1352,42 @@ export class PostgresInvoiceRepository implements IInvoiceRepository {
                 referenceId: inv.id,
                 referenceNumber: inv.number,
                 movementDate: inv.date,
-                description: `Cancel sale invoice ${inv.number} (restore stock)`,
+                description: `إلغاء فاتورة بيع ${inv.number} (استعادة المخزون)`,
               },
               ctx,
             );
           }
         }
       } else {
+        // Entry (purchase) cancel reverses stock that was added at create time.
+        // NEVER clamp with Math.max(0,…): if any of the entered quantity has
+        // already been consumed (sale, print-send, etc.), cancelling would
+        // silently wipe remaining stock while leaving downstream documents
+        // active — inventory/COGS corruption. Fail closed unless the full
+        // line quantity is still on the roll.
         for (const l of ilines) {
           const [r] = await tx
-            .select({ remainingKg: rolls.remainingKg, remainingPieces: rolls.remainingPieces })
+            .select({
+              remainingKg: rolls.remainingKg,
+              remainingPieces: rolls.remainingPieces,
+              rollNo: rolls.rollNo,
+            })
             .from(rolls)
             .where(and(eq(rolls.id, l.rollId), eq(rolls.tenantId, ctx.tenantId)))
             .for("update")
             .limit(1);
           if (r) {
-            const newKg = Math.max(0, Number(r.remainingKg) - Number(l.quantityKg));
-            const newPieces = Math.max(0, Number(r.remainingPieces) - Number(l.pieces ?? 1));
+            const lineKg = Number(l.quantityKg);
+            const linePieces = Number(l.pieces ?? 1);
+            const availableKg = Number(r.remainingKg);
+            const availablePieces = Number(r.remainingPieces);
+            if (availableKg + 1e-9 < lineKg || availablePieces < linePieces) {
+              throw new BusinessRuleError(
+                `لا يمكن إلغاء فاتورة الشراء ${inv.number}: اللفافة ${r.rollNo} لم تعد تحتوي كامل كمية الدخول (متاح ${availableKg} كغ / ${availablePieces} ثوب من أصل ${lineKg} كغ / ${linePieces} ثوب). ألغِ فواتير البيع أو الحركات اللاحقة على هذه اللفافة أولاً ثم أعد المحاولة.`,
+              );
+            }
+            const newKg = Math.round((availableKg - lineKg) * 100) / 100;
+            const newPieces = availablePieces - linePieces;
             await tx
               .update(rolls)
               .set({
@@ -1326,13 +1404,13 @@ export class PostgresInvoiceRepository implements IInvoiceRepository {
                 rollId: l.rollId,
                 direction: "out",
                 movementType: "invoice_entry",
-                quantityKg: Number(l.quantityKg),
+                quantityKg: lineKg,
                 balanceAfterKg: newKg,
                 referenceType: "purchase_invoice_cancel",
                 referenceId: inv.id,
                 referenceNumber: inv.number,
                 movementDate: inv.date,
-                description: `Cancel purchase invoice ${inv.number} (reverse stock)`,
+                description: `إلغاء فاتورة شراء ${inv.number} (عكس المخزون)`,
               },
               ctx,
             );
@@ -1497,6 +1575,7 @@ export class PostgresInvoiceRepository implements IInvoiceRepository {
         pieces: Number(l.pieces ?? 1),
         pricePerKg: Number(l.pricePerKg),
         discountAmount: Number(l.discountAmount),
+        costPerKg: l.costPerKg != null ? Number(l.costPerKg) : null,
         note: n(l.note),
       })),
     };

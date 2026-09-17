@@ -31,6 +31,7 @@ export function registerInvitationAdminRoutes(
       const createdBy = ctx?.userId ?? "system";
       const r = await generateInvitationCodeUseCase(
         container.invitationRepo,
+        container.licenseRepo,
         tenantId,
         createdBy,
         String(req.body.type ?? "device") as "device" | "user",

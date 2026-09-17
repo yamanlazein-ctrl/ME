@@ -136,13 +136,13 @@ export function SalesInvoicesTable({ query }: { query: ProfitQueryParams }) {
                 <TableCell className="max-w-[140px] truncate">{partyNameOf(inv)}</TableCell>
                 <TableCell className="tabular-nums">{inv.date}</TableCell>
                 <TableCell className="text-left tabular-nums" dir="ltr">
-                  {formatQuantity(total)} {currencySymbol(inv.currency as Currency)}
+                  {currencySymbol(inv.currency as Currency)} {formatQuantity(total)}
                 </TableCell>
                 <TableCell className="text-left tabular-nums" dir="ltr">
-                  {formatNumber(paid)} {currencySymbol(inv.currency as Currency)}
+                  {currencySymbol(inv.currency as Currency)} {formatNumber(paid)}
                 </TableCell>
                 <TableCell className="text-left font-semibold tabular-nums" dir="ltr">
-                  {formatNumber(remaining)} {currencySymbol(inv.currency as Currency)}
+                  {currencySymbol(inv.currency as Currency)} {formatNumber(remaining)}
                 </TableCell>
                 <TableCell
                   className={`text-left font-bold tabular-nums ${

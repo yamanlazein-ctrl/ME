@@ -17,11 +17,15 @@ async function forceTenantRls(
 }
 
 /**
- * Idempotent desktop schema patches. Baked pgdata templates ship older than
- * the sync protocol (seq cursors, quantity claims, tombstones, RLS FORCE).
+ * Idempotent desktop schema patches for baked pgdata templates that shipped
+ * older than the current drizzle journal. Drizzle migrations
+ * (`backend/src/infrastructure/orm/migrations` + `_journal.json`) are the
+ * source of truth. This file must only ADD COLUMN / CREATE IF NOT EXISTS
+ * objects that already exist in those migrations — never a parallel schema.
  */
 export async function ensureDesktopSchema(query: (sql: string) => Promise<unknown>): Promise<void> {
-  await query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS pin_hash varchar(255)`);
+      await query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS pin_hash varchar(255)`);
+  await query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS tokens_revoked_before timestamptz`);
 
   await query(`
     CREATE TABLE IF NOT EXISTS sync_devices (
@@ -223,6 +227,10 @@ export async function ensureDesktopSchema(query: (sql: string) => Promise<unknow
     `CREATE UNIQUE INDEX IF NOT EXISTS uq_sync_conflicts_tenant_op ON sync_conflicts (tenant_id, op_id)`,
   );
   await forceTenantRls(query, "sync_conflicts");
+
+  await query(
+    `ALTER TABLE vouchers ADD COLUMN IF NOT EXISTS discount numeric(14, 2) NOT NULL DEFAULT 0`,
+  );
 
   logger.info(
     "Desktop schema ensure: sync protocol columns + quantity claims + tombstones + RLS ready",

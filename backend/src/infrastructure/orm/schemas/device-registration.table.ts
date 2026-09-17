@@ -10,10 +10,10 @@ import { licenses } from "./license.table.js";
  * stores the encrypted client-side token (encrypted at rest by
  * `secrets` table — see ISecretsRepository in 0B).
  *
- * The "max_devices" cap from the parent license is enforced at the
- * application level (use-case checks count of non-revoked rows
- * before insert). There is no DB-level CHECK because the cap can
- * change at runtime.
+ * The Max Devices cap from the parent License (`resolveDeviceLimit` —
+ * `limits.devices` SoT with `max_devices` fallback) is enforced at the
+ * application level before insert. There is no DB-level CHECK because the
+ * cap can change at runtime via the Vendor Control Plane.
  */
 export const deviceRegistrations = pgTable(
   "device_registrations",

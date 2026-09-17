@@ -37,6 +37,8 @@ export const LEDGER_TYPE_LABEL: Record<string, string> = {
   sales_invoice: "فاتورة بيع",
   payment_out: "سند صرف",
   receipt_in: "سند قبض",
+  settlement_discount_expense: "خصم على قبض",
+  settlement_discount_income: "خصم على صرف",
   purchase_return: "مرتجع دخول",
   sales_return: "مرتجع بيع",
   expense: "مصروف",
@@ -191,7 +193,9 @@ export function buildFabricHistory(
   }));
 }
 
-/** Build outstanding (unpaid) invoices for a party from real invoices + vouchers. */
+/** Build outstanding (unpaid) invoices for a party from real invoices.
+ *  When `currency` is omitted, every invoice currency is included — callers
+ *  must group/display per currency (never blend SYP+USD into one total). */
 export function buildOutstanding(
   partyId: string,
   invoices: InvoiceData[],
@@ -206,6 +210,8 @@ export function buildOutstanding(
   currency?: string,
 ): OutstandingRow[] {
   const rows: OutstandingRow[] = [];
+  // Prefer invoices.paid (backend-maintained, FX-safe). Voucher sums are a
+  // fallback for older clients that omit paid on the invoice DTO.
   const paidByInvoice = new Map<string, number>();
   for (const v of vouchers) {
     if (v.status !== "active" || !v.invoiceId) continue;
@@ -220,7 +226,11 @@ export function buildOutstanding(
     if (currency && inv.currency !== currency) continue;
     const total = round2dp(invoiceTotal(inv));
     if (total <= 0) continue;
-    const paid = round2dp(paidByInvoice.get(inv.id) ?? 0);
+    const paid = round2dp(
+      inv.paid != null && Number.isFinite(inv.paid)
+        ? inv.paid
+        : (paidByInvoice.get(inv.id) ?? 0),
+    );
     const remaining = Math.max(0, total - paid);
     if (remaining <= 0) continue;
     const d = new Date(inv.date + "T00:00:00");

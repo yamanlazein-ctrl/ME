@@ -13,18 +13,24 @@ import {
   SetPinSchema,
   SyncDeviceRegisterSchema,
 } from "./auth.schema.js";
-import { InvalidCredentialsError } from "../../domain/errors/index.js";
+import { InvalidCredentialsError, InvalidPinError } from "../../domain/errors/index.js";
 import {
   SyncDeviceFingerprintMismatchError,
   SyncDeviceRevokedError,
 } from "../../application/ports/ISyncDeviceRepository.js";
 import { randomUUID } from "crypto";
-import { runWithTenantContext } from "../../infrastructure/orm/tenant-context.js";
+import { runWithTenantContext, runWithPlatformContext } from "../../infrastructure/orm/tenant-context.js";
 import { config } from "../../infrastructure/config/env.js";
+import {
+  isTokenBeforeCutoff,
+  resolveSessionIdentity,
+  SESSION_REVOKED_BODY,
+} from "../../infrastructure/auth/sessionCutoff.js";
 import {
   enqueueUserMutation,
   isSyncEnqueueEnabled,
 } from "../../application/use-cases/sync/syncEnqueue.js";
+import { assertTenantLicenseAllowsAccess } from "../../infrastructure/license/tenantLicenseAccess.js";
 
 // Login-specific rate limiter: 5 attempts per IP per 15 minutes
 const loginRateLimiter = rateLimit({
@@ -33,6 +39,7 @@ const loginRateLimiter = rateLimit({
   skipSuccessfulRequests: true,
   standardHeaders: true,
   legacyHeaders: false,
+  skip: (req) => config.NODE_ENV !== "production" || isLoopback(req.ip),
   keyGenerator: (req) => (req.ip ?? "unknown") + (req.body?.email ?? ""),
   handler: (_req, res) => {
     res.status(429).json({
@@ -58,6 +65,17 @@ function withJwtTenantContext<T>(tenantId: string, fn: () => Promise<T>): Promis
     return runWithTenantContext({ tenantId }, fn);
   }
   return fn();
+}
+
+function isLoopback(ip: string | undefined): boolean {
+  if (!ip) return false;
+  const host = ip.replace(/^::ffff:/, "").split("%")[0];
+  return (
+    host === "127.0.0.1" ||
+    host === "localhost" ||
+    host === "::1" ||
+    host === "0:0:0:0:0:0:0:1"
+  );
 }
 
 /** True when `ip` is loopback, link-local or in an IPv4/IPv6 private range.
@@ -130,10 +148,12 @@ async function hasDeviceProvisioningProof(
   }
 
   // 2. The activation credential issued to this device at activation.
+  // Look up under platform context so RLS cannot hide a valid activation when
+  // the query tenant GUC is briefly wrong; still require tenantId match.
   const activationId = req.headers["x-device-activation-id"];
   if (typeof activationId === "string" && UUID_RE.test(activationId)) {
     try {
-      const activation = await runWithTenantContext({ tenantId }, () =>
+      const activation = await runWithPlatformContext(() =>
         container.licenseRepo.findActivationById(activationId),
       );
       if (activation && activation.tenantId === tenantId && !activation.deactivatedAt) return true;
@@ -143,8 +163,10 @@ async function hasDeviceProvisioningProof(
   }
 
   // 3. An invitation-provisioned device, identified by its hardware fingerprint.
+  // Server-side activate stores `${hash}::${installationId}` — accept either
+  // the full value or the bare client/browser hash prefix.
   const fingerprint = req.headers["x-device-fingerprint"];
-  if (typeof fingerprint === "string" && fingerprint.length >= 16 && fingerprint.length <= 128) {
+  if (typeof fingerprint === "string" && fingerprint.length >= 16 && fingerprint.length <= 256) {
     try {
       const license = await runWithTenantContext({ tenantId }, () =>
         container.licenseRepo.findLatestForTenant(tenantId as never),
@@ -153,9 +175,11 @@ async function hasDeviceProvisioningProof(
         const devices = await runWithTenantContext({ tenantId }, () =>
           container.licenseRepo.listDevices(license.id),
         );
-        if (
-          devices.some((d) => d.deviceFingerprint === fingerprint && d.revokedAt === null)
-        ) {
+        const matches = (stored: string) =>
+          stored === fingerprint ||
+          stored.startsWith(`${fingerprint}::`) ||
+          stored.split("::")[0] === fingerprint;
+        if (devices.some((d) => !d.revokedAt && matches(d.deviceFingerprint))) {
           return true;
         }
       }
@@ -164,9 +188,20 @@ async function hasDeviceProvisioningProof(
     }
   }
 
-  // 4. Desktop SKU: the picker runs on the machine (or the customer's LAN)
-  //    that hosts the hub, and the tenant is already pinned to the baked slug.
-  if (config.DESKTOP_DEPLOY && isLocalOrPrivateLan(req.ip ?? req.socket?.remoteAddress)) {
+  // 4. Local operator on this machine.
+  // Desktop SKU: loopback / private LAN is the hub workstation.
+  // Local development web: Vite + PIN picker also come from loopback.
+  // Without this, a completed install still 401s DEVICE_PROOF_REQUIRED
+  // (or a prior 429) and the operator cannot sign in at :5173.
+  // Production web stays closed.
+  const fromThisMachine = isLoopback(req.ip ?? req.socket?.remoteAddress);
+  if (
+    config.DESKTOP_DEPLOY &&
+    (fromThisMachine || isLocalOrPrivateLan(req.ip ?? req.socket?.remoteAddress))
+  ) {
+    return true;
+  }
+  if (config.NODE_ENV !== "production" && fromThisMachine) {
     return true;
   }
 
@@ -195,6 +230,10 @@ export function registerAuthRoutes(router: Router, container: Container) {
       );
       if (!user || !user.active) {
         return res.status(401).json({ code: "UNAUTHORIZED", message: "المستخدم غير موجود" });
+      }
+      const ident = await resolveSessionIdentity(payload.sub, payload.sub);
+      if (isTokenBeforeCutoff(payload.iat, ident.tokensRevokedBefore)) {
+        return res.status(401).json(SESSION_REVOKED_BODY);
       }
 
       res.status(200).json({
@@ -243,6 +282,13 @@ export function registerAuthRoutes(router: Router, container: Container) {
         if (!valid) {
           throw new InvalidCredentialsError();
         }
+
+        // Post-activation: PIN/password must not bypass suspended/revoked/expired.
+        await assertTenantLicenseAllowsAccess({
+          licenseRepo: container.licenseRepo,
+          tenantRepo: container.tenantRepo,
+          tenantId: user.tenantId,
+        });
 
         const jti = randomUUID();
         const payload = {
@@ -310,6 +356,16 @@ export function registerAuthRoutes(router: Router, container: Container) {
       if (!user || !user.active) {
         throw new InvalidCredentialsError();
       }
+      const ident = await resolveSessionIdentity(payload.sub, payload.sub);
+      if (isTokenBeforeCutoff(payload.iat, ident.tokensRevokedBefore)) {
+        return res.status(401).json(SESSION_REVOKED_BODY);
+      }
+
+      await assertTenantLicenseAllowsAccess({
+        licenseRepo: container.licenseRepo,
+        tenantRepo: container.tenantRepo,
+        tenantId: user.tenantId,
+      });
 
       const jti = randomUUID();
       const newPayload = {
@@ -434,6 +490,11 @@ export function registerAuthRoutes(router: Router, container: Container) {
           statusCode: 401,
         });
       }
+      await assertTenantLicenseAllowsAccess({
+        licenseRepo: container.licenseRepo,
+        tenantRepo: container.tenantRepo,
+        tenantId,
+      });
       const list = await authRepo.listActiveUsersForTenant(tenantId);
       res.status(200).json({ tenantId, users: list });
     } catch (err) {
@@ -452,11 +513,17 @@ export function registerAuthRoutes(router: Router, container: Container) {
           const baked = await container.tenantRepo.findBySlug("default");
           if (baked) tenantId = baked.id;
         }
-        if (!tenantId) throw new InvalidCredentialsError();
+        if (!tenantId) throw new InvalidPinError();
         const user = await authRepo.findUserByIdForAuth(userId, tenantId);
-        if (!user || !user.active || !user.pinHash) throw new InvalidCredentialsError();
+        if (!user || !user.active || !user.pinHash) throw new InvalidPinError();
         const valid = await container.passwordHasher.verify(user.pinHash, pin);
-        if (!valid) throw new InvalidCredentialsError();
+        if (!valid) throw new InvalidPinError();
+
+        await assertTenantLicenseAllowsAccess({
+          licenseRepo: container.licenseRepo,
+          tenantRepo: container.tenantRepo,
+          tenantId: user.tenantId,
+        });
 
         const jti = randomUUID();
         const payload = { sub: user.id, tenantId: user.tenantId, role: user.role, jti };
@@ -493,11 +560,28 @@ export function registerAuthRoutes(router: Router, container: Container) {
         const user = await authRepo.findUserByIdForAuth(userId, tenantId);
         if (!user || !user.active) throw new InvalidCredentialsError();
 
-        const passwordOk = await container.passwordHasher.verify(user.passwordHash, currentSecret);
-        const pinOk = user.pinHash
-          ? await container.passwordHasher.verify(user.pinHash, currentSecret)
-          : false;
-        if (!passwordOk && !pinOk) throw new InvalidCredentialsError();
+        const isFirstPin = !user.pinHash;
+        if (isFirstPin) {
+          // First PIN after license/invite activation: the device already proved
+          // itself to open the roster — do not require a seed password the
+          // customer never chose. Still require the same device proof.
+          const proof = await hasDeviceProvisioningProof(req, container, tenantId, authRepo);
+          if (!proof) {
+            return res.status(401).json({
+              code: "DEVICE_PROOF_REQUIRED",
+              message: "تعذّر التحقق من تفعيل هذا الجهاز — أعد تفعيل الجهاز ثم حاول مجدداً",
+              statusCode: 401,
+            });
+          }
+        } else {
+          if (!currentSecret) throw new InvalidCredentialsError();
+          const passwordOk = await container.passwordHasher.verify(
+            user.passwordHash,
+            currentSecret,
+          );
+          const pinOk = await container.passwordHasher.verify(user.pinHash!, currentSecret);
+          if (!passwordOk && !pinOk) throw new InvalidCredentialsError();
+        }
 
         const pinHash = await container.passwordHasher.hash(pin);
         await authRepo.setPinHash(userId, tenantId, pinHash);
@@ -550,6 +634,10 @@ export function registerAuthRoutes(router: Router, container: Container) {
         );
         if (!user || !user.active) {
           return res.status(401).json({ code: "TOKEN_EXPIRED", message: "انتهت صلاحية الجلسة" });
+        }
+        const ident = await resolveSessionIdentity(payload.sub, payload.sub);
+        if (isTokenBeforeCutoff(payload.iat, ident.tokensRevokedBefore)) {
+          return res.status(401).json(SESSION_REVOKED_BODY);
         }
         const body = req.validatedBody as z.infer<typeof SyncDeviceRegisterSchema>;
         const row = await container.syncDeviceRepo.registerOrTouch({

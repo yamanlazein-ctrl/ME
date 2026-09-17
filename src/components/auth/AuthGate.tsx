@@ -3,10 +3,10 @@ import { useEffect } from "react";
 import { useCurrentUser } from "@/presentation/hooks/useAuth";
 import { UserPickerPage } from "@/components/auth/UserPickerPage";
 import { ensureDocumentFolders, isTauri } from "@/infrastructure/tauri-bridge";
-import { hasStoredSession } from "@/infrastructure/auth/TokenProvider";
+import { clearTokens, hasStoredSession, isAuthFailure } from "@/infrastructure/auth/TokenProvider";
 
 export function AuthGate({ children }: { children: ReactNode }) {
-  const { data: user, isLoading, isFetching } = useCurrentUser();
+  const { data: user, isLoading, isFetching, isError, error, failureCount } = useCurrentUser();
   const sessionPresent = hasStoredSession();
 
   // Issue 12: on desktop login, ensure Desktop archive folders exist.
@@ -17,9 +17,28 @@ export function AuthGate({ children }: { children: ReactNode }) {
     );
   }, [user]);
 
-  // Issue 18: while restoring a stored session (incl. soft retries), hold the gate.
-  // Tokens are NOT cleared on transient errors — only picker after retries settle.
-  if (isLoading || (sessionPresent && !user && isFetching)) return null;
+  // Stale JWT after DB wipe / setup reset — drop tokens so we leave the spinner.
+  useEffect(() => {
+    if (isError && isAuthFailure(error)) clearTokens();
+  }, [isError, error]);
+
+  // Hard stop: never spin forever. After retries settle with no user, show picker.
+  const restoring =
+    Boolean(sessionPresent && !user && !isError && (isLoading || isFetching)) &&
+    failureCount < 2;
+
+  if (restoring) {
+    return (
+      <div
+        className="min-h-screen flex items-center justify-center bg-background text-muted-foreground text-sm"
+        dir="rtl"
+        role="status"
+        aria-live="polite"
+      >
+        جاري استعادة الجلسة…
+      </div>
+    );
+  }
   if (!user) return <UserPickerPage />;
   return <>{children}</>;
 }

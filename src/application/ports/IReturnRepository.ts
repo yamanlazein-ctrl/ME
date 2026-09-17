@@ -28,6 +28,7 @@ export interface ReturnDTO {
   notesPrint?: string | null;
   notesInternal?: string | null;
   status: ReturnStatus;
+  version: number;
   createdAt: string;
   createdBy: string;
   cancelledAt?: string | null;
@@ -60,5 +61,5 @@ export interface IReturnRepository {
   findById(id: UUID, ctx: TenantContext): Promise<ReturnDTO | null>;
   list(filter: ReturnFilter, ctx: TenantContext): Promise<PaginatedResult<ReturnDTO>>;
   create(input: CreateReturnInput, ctx: TenantContext): Promise<ReturnDTO>;
-  cancel(id: UUID, ctx: TenantContext): Promise<void>;
+  cancel(id: UUID, ctx: TenantContext, expectedVersion: number): Promise<void>;
 }

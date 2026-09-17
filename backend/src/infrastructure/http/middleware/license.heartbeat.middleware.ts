@@ -1,5 +1,6 @@
 import type { Request, Response, NextFunction } from "express";
 import type { ILicenseRepository } from "../../../application/ports/ILicenseRepository.js";
+import type { ITenantRepository } from "../../../application/ports/ITenantRepository.js";
 import type { ISecretsRepository } from "../../../application/ports/ISecretsRepository.js";
 import type { ISecretCipher } from "../../../application/ports/ISecretCipher.js";
 import type { ILicenseTokenSigner } from "../../../application/ports/ILicenseTokenSigner.js";
@@ -14,21 +15,25 @@ import type { ILicenseTokenSigner } from "../../../application/ports/ILicenseTok
  *
  * Behaviour:
  *  - If there is no tenant context (unauthenticated request), skip.
- *  - If there is no active license for the tenant, set
- *    `req.license = { status: "no_license" }` and let the route decide.
+ *  - If there is no active license for the tenant:
+ *      - pre-activation → `no_license` (setup may continue)
+ *      - post-activation (license_key / activation_id set) → `missing`
+ *        so the guard blocks (wizard/PIN must not bypass entitlement)
  *  - If a license is active and the cached offline token verifies,
  *    set `req.license = { status: "active", graceRemaining: days }`.
  *  - If the token is missing or invalid, set `req.license = { status:
- *    "expired", graceRemaining: 0 }`. The customer install is then
- *    read-only (enforced in 0K by checking req.license.status in the
- *    write paths).
- *  - Network failure to the License Server: the middleware uses the
- *    CACHED token, not a live call. The 6h heartbeat (sub-batch 0E
- *    use-case) is what would update the cache; that is run by a
- *    separate background job, not by this middleware.
+ *    "expired", graceRemaining: 0 }`.
+ *  - Vendor SoT `suspended`/`revoked` wins over a still-valid offline token.
  */
 export interface RequestLicenseStatus {
-  status: "active" | "expired" | "trial" | "suspended" | "revoked" | "no_license";
+  status:
+    | "active"
+    | "expired"
+    | "trial"
+    | "suspended"
+    | "revoked"
+    | "no_license"
+    | "missing";
   graceRemainingDays?: number;
   licenseId?: string;
 }
@@ -44,6 +49,7 @@ export function createLicenseHeartbeatMiddleware(
   secretsRepo: ISecretsRepository,
   cipher: ISecretCipher,
   signer: ILicenseTokenSigner,
+  tenantRepo?: ITenantRepository,
 ) {
   return async function licenseHeartbeat(
     req: Request,
@@ -56,9 +62,26 @@ export function createLicenseHeartbeatMiddleware(
         next();
         return;
       }
-      const lic = await licenseRepo.findActiveForTenant(ctx.tenantId);
+      const lic = await licenseRepo.findLatestForTenant(ctx.tenantId);
       if (!lic) {
-        req.license = { status: "no_license" };
+        let activated = false;
+        if (tenantRepo) {
+          const tenant = await tenantRepo.findById(ctx.tenantId as never);
+          activated = Boolean(tenant?.activationId || tenant?.licenseKey);
+        }
+        req.license = activated
+          ? { status: "missing", graceRemainingDays: 0 }
+          : { status: "no_license" };
+        next();
+        return;
+      }
+      // Vendor SoT status wins over a still-valid offline token (suspend/revoke).
+      if (lic.status === "suspended" || lic.status === "revoked") {
+        req.license = {
+          status: lic.status as RequestLicenseStatus["status"],
+          graceRemainingDays: 0,
+          licenseId: lic.id,
+        };
         next();
         return;
       }
@@ -80,9 +103,19 @@ export function createLicenseHeartbeatMiddleware(
           algorithm: tokenRow.algorithm,
         });
         const v = await signer.verify(plaintext);
+        // Token licenseId must match the tenant entitlement pointer.
+        if (v.payload.licenseId && v.payload.licenseId !== lic.id) {
+          req.license = {
+            status: "missing",
+            graceRemainingDays: 0,
+            licenseId: lic.id,
+          };
+          next();
+          return;
+        }
         const remaining = Math.max(0, Math.floor((v.exp * 1000 - Date.now()) / 86400000));
         req.license = {
-          status: "active",
+          status: lic.status === "expired" ? "expired" : "active",
           graceRemainingDays: remaining,
           licenseId: v.payload.licenseId,
         };

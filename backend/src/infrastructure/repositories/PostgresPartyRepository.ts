@@ -12,6 +12,7 @@ import { vouchers } from "../orm/schemas/voucher.table.js";
 import { Party, type PartyData, type PartyListStats } from "../../domain/entities/Party.js";
 import type { TenantContext, PaginatedResult } from "../../domain/types/index.js";
 import { allocateDocumentNumber } from "../utils/documentNumbers.js";
+import { aggregatePartyListStats } from "./partyListStatsAggregation.js";
 
 export class PostgresPartyRepository implements IPartyRepository {
   constructor(private readonly db: DB) {}
@@ -100,43 +101,25 @@ export class PostgresPartyRepository implements IPartyRepository {
   }
 
   /**
-   * Compute per-party list stats from the party's own invoices, scoped to the
-   * party's own currency (matching `buildPartyStats`'s single-currency
-   * semantics).
+   * Compute per-party list stats from invoices.
    *
-   * `totalPaid`/`remaining` are read from `invoices.paid` — the same field
-   * the account-statement page (`Outstanding`/aging tabs, `PartyDetails.tsx`)
-   * reads, and which the backend keeps transactionally in sync with every
-   * voucher (`PostgresVoucherRepository.create`/`cancel`), converting a
-   * foreign-currency receipt/payment into the invoice's own currency before
-   * crediting it. This used to instead sum `vouchers.amount` (undercounting
-   * any payment collected in a different currency than the invoice) and,
-   * separately, derive `remaining` from the raw ledger debit/credit balance
-   * — a path that can drift from `invoices.paid` (e.g. rounding, timing) and
-   * did: the party list showed a different رصيد than the account statement
-   * for the exact same party. Reading everything from `invoices.paid`
-   * guarantees the list, the summary card, and the aging tabs always agree.
+   * Scalars (`totalAmount` / `totalPaid` / `remaining`) stay on the party's
+   * default currency so credit-limit UI stays single-currency. `byCurrency`
+   * exposes every invoice currency so list/details can show SYP and USD
+   * outstanding separately (never blended).
    */
   private async computeListStats(
     partyIds: string[],
     kind: "customer" | "supplier",
     tenantId: string,
   ): Promise<Map<string, PartyListStats>> {
-    const map = new Map<string, PartyListStats>();
-    const get = (id: string): PartyListStats => {
-      const existing = map.get(id);
-      if (existing) return existing;
-      const s: PartyListStats = { invoicesCount: 0, totalAmount: 0, totalPaid: 0, remaining: 0 };
-      map.set(id, s);
-      return s;
-    };
-
     const invoiceType = kind === "supplier" ? "entry" : "sale";
 
-    // Invoices: count / total / paid / last date, in the party's currency.
     const invRows = await this.db
       .select({
         partyId: invoices.partyId,
+        partyCurrency: parties.currency,
+        currency: invoices.currency,
         cnt: sql<number>`count(*)::int`,
         total: sql<string>`coalesce(sum(${invoices.total}), 0)::text`,
         paid: sql<string>`coalesce(sum(${invoices.paid}), 0)::text`,
@@ -150,23 +133,25 @@ export class PostgresPartyRepository implements IPartyRepository {
           eq(invoices.type, invoiceType),
           eq(invoices.status, "active"),
           inArray(invoices.partyId, partyIds),
-          eq(invoices.currency, parties.currency),
         ),
       )
-      .groupBy(invoices.partyId);
+      .groupBy(invoices.partyId, parties.currency, invoices.currency);
 
-    for (const r of invRows) {
-      const s = get(r.partyId);
-      s.invoicesCount = Number(r.cnt);
-      s.totalAmount = Number(r.total);
-      s.totalPaid = Number(r.paid);
-      // Deliberately not clamped to 0 — a negative remaining is a real
-      // credit balance (over-payment) and must stay visible as such.
-      s.remaining = s.totalAmount - s.totalPaid;
-      if (r.lastDate) s.lastDate = r.lastDate;
-    }
-
-    return map;
+    // The aggregation itself (default-currency scalars vs. currency-summed
+    // count vs. byCurrency breakdown) lives in a pure, DB-free function —
+    // see partyListStatsAggregation.ts — so it can be unit-tested directly
+    // (F09 regression coverage) without a live database.
+    return aggregatePartyListStats(
+      invRows.map((r) => ({
+        partyId: r.partyId,
+        partyCurrency: r.partyCurrency,
+        currency: r.currency,
+        cnt: Number(r.cnt),
+        total: Number(r.total),
+        paid: Number(r.paid),
+        lastDate: r.lastDate,
+      })),
+    );
   }
 
   async create(data: CreatePartyData, ctx: TenantContext): Promise<PartyData> {

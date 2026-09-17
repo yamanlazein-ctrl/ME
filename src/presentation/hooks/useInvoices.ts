@@ -137,6 +137,7 @@ export function useCancelInvoice() {
         qc.invalidateQueries({ queryKey: ["cashbox"] });
         qc.invalidateQueries({ queryKey: ["ledger"] });
         qc.invalidateQueries({ queryKey: ["profit"] });
+        qc.invalidateQueries({ queryKey: ["statement"] });
       } else {
         const errMsg =
           (res.error as any)?.message ?? (res.error as any)?.toString?.() ?? "فشل إلغاء الفاتورة";

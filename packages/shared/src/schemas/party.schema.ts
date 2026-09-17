@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { is2dp, MAX_2DP_MESSAGE } from "../precision.js";
 
 export const createPartySchema = z.object({
   kind: z.enum(["customer", "supplier"]),
@@ -21,8 +22,8 @@ export const createPartySchema = z.object({
   city: z.string().max(100).optional(),
   country: z.string().max(100).optional(),
   taxNumber: z.string().max(100).optional(),
-  openingBalance: z.number().int().optional(),
-  creditLimit: z.number().int().optional(),
+  openingBalance: z.number().refine(is2dp, { message: MAX_2DP_MESSAGE }).optional(),
+  creditLimit: z.number().refine(is2dp, { message: MAX_2DP_MESSAGE }).optional(),
   currency: z.enum(["SYP", "USD", "EUR"]).optional(),
   paymentTerms: z.string().max(20).optional(),
   paymentMethod: z.string().max(20).optional(),

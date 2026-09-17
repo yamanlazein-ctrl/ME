@@ -11,6 +11,7 @@ import { cleanupRollsForDeletion } from "./rollDeletionHelper.js";
 import { notifyOrderAvailability } from "./orderAvailabilityNotifier.js";
 import { Roll, type RollData } from "../../domain/entities/Roll.js";
 import type { TenantContext, PaginatedResult } from "../../domain/types/index.js";
+import { assertRollPriceEditAllowed } from "../../domain/invoices/rollCostFreeze.js";
 
 export class PostgresRollRepository implements IRollRepository {
   constructor(private readonly db: DB) {}
@@ -105,7 +106,7 @@ export class PostgresRollRepository implements IRollRepository {
           quantityKg: data.remainingKg ?? data.initialKg,
           balanceAfterKg: data.remainingKg ?? data.initialKg,
           movementDate: data.entryDate,
-          description: `Roll created ${data.rollNo}`,
+          description: `إنشاء صبغة ${data.rollNo}`,
         },
         ctx,
       );
@@ -117,6 +118,14 @@ export class PostgresRollRepository implements IRollRepository {
   }
 
   async update(id: string, data: Partial<CreateRollData>, ctx: TenantContext): Promise<RollData> {
+    // Quantity is document-driven. Schema rejects remainingKg; refuse here too
+    // so non-HTTP callers cannot bypass inventory integrity.
+    if (data.remainingKg !== undefined) {
+      throw new Error(
+        "لا يمكن تعديل الكمية المتبقية مباشرة من بطاقة الصبغة — استخدم فاتورة/مرتجع/تعديل مخزون معتمد",
+      );
+    }
+
     const values: Record<string, unknown> = {
       updatedAt: new Date(),
       version: sql`${rolls.version} + 1`,
@@ -124,7 +133,6 @@ export class PostgresRollRepository implements IRollRepository {
     if (data.rollNo !== undefined) values.rollNo = data.rollNo;
     if (data.dyeBatch !== undefined) values.dyeBatch = data.dyeBatch ?? null;
     if (data.initialKg !== undefined) values.initialKg = String(data.initialKg);
-    if (data.remainingKg !== undefined) values.remainingKg = String(data.remainingKg);
     if (data.pricePerKg !== undefined) values.pricePerKg = String(data.pricePerKg);
     if (data.salePricePerKg !== undefined)
       values.salePricePerKg = data.salePricePerKg ? String(data.salePricePerKg) : null;
@@ -168,6 +176,58 @@ export class PostgresRollRepository implements IRollRepository {
         : conditions;
 
     if (data.remainingKg === undefined) {
+      // F05 (Phase 1 foundation audit): pricePerKg is this roll's cost
+      // basis — COGS is frozen from it at the moment of sale
+      // (resolveSaleCostPerKg / saleCogsConversion.ts) and never revalued
+      // afterward, exactly like an invoice's historical FX rate is frozen
+      // and cannot be silently changed after posting (see the FX-freeze
+      // comments in PostgresInvoiceRepository). Once any stock has already
+      // left this roll, its price was already used to post real COGS/GL
+      // entries; editing it further would make the live inventory report
+      // (GET /inventory/rolls, priced at the CURRENT pricePerKg) diverge
+      // from what the GL and already-issued invoices actually recorded —
+      // the exact "inventory cost differs between invoice and report"
+      // symptom. Mirrors the existing remainingKg guard above (BUG-05):
+      // block the direct edit, point the user at the correct flow instead
+      // of silently corrupting the audit trail.
+      if (data.pricePerKg !== undefined) {
+        return this.db.transaction(async (tx) => {
+          const [current] = await tx
+            .select({
+              rollNo: rolls.rollNo,
+              initialKg: rolls.initialKg,
+              remainingKg: rolls.remainingKg,
+              pricePerKg: rolls.pricePerKg,
+            })
+            .from(rolls)
+            .where(and(eq(rolls.id, id), eq(rolls.tenantId, ctx.tenantId)))
+            .for("update")
+            .limit(1);
+          if (!current) throw new Error("Roll not found");
+
+          assertRollPriceEditAllowed({
+            rollNo: current.rollNo,
+            initialKg: Number(current.initialKg),
+            remainingKg: Number(current.remainingKg),
+            currentPricePerKg: Number(current.pricePerKg),
+            newPricePerKg: Number(data.pricePerKg),
+          });
+
+          const [row] = await tx
+            .update(rolls)
+            .set(values)
+            .where(and(...applyVersionGuard([eq(rolls.id, id), eq(rolls.tenantId, ctx.tenantId)])))
+            .returning();
+          if (!row) {
+            if (data.expectedVersion !== undefined) {
+              throw new Error("تم تعديل اللفافة بواسطة عملية أخرى — أعد التحميل والمحاولة مرة أخرى");
+            }
+            throw new Error("Roll not found");
+          }
+          return this.toDomain(row);
+        });
+      }
+
       const [row] = await this.db
         .update(rolls)
         .set(values)

@@ -53,7 +53,12 @@ export type LedgerType =
   | "printing_charge"
   | "adjustment"
   | "settlement"
-  | "cancellation";
+  | "cancellation"
+  // FX-FREEZE: realized FX gain/loss posted when a cross-currency voucher settles
+  // an invoice at a rate differing from the invoice's own frozen rate. Balances
+  // the base-currency ledger; never on a party, never touches cash.
+  | "fx_gain"
+  | "fx_loss";
 
 export type CashImpact = "in" | "out" | "none";
 

@@ -17,6 +17,14 @@ export interface PartyListStats {
   totalPaid: number;
   remaining: number;
   lastDate?: string;
+  /**
+   * Per-currency invoice aggregates. Scalars above stay on the party's
+   * default currency for credit-limit UI; never blend SYP+USD into remaining.
+   */
+  byCurrency?: Record<
+    string,
+    { invoicesCount: number; totalAmount: number; totalPaid: number; remaining: number }
+  >;
 }
 
 export interface PartyData {

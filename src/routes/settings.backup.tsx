@@ -18,6 +18,7 @@ import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { settings, logActivity } from "@/presentation/hooks/useSettings";
 import { getAccessToken } from "@/infrastructure/auth/TokenProvider";
+import { DesktopUpdatesCard } from "@/components/desktop/DesktopUpdatesCard";
 
 const ALLOWED_SETTING_KEYS = [
   "company",
@@ -159,6 +160,8 @@ function BackupPage() {
 
   return (
     <div className="space-y-6">
+      <DesktopUpdatesCard />
+
       {/* ─── النسخة الكاملة ─── */}
       <PageCard
         title="نسخة احتياطية كاملة (ZIP)"

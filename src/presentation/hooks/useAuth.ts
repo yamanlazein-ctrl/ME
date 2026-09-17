@@ -38,7 +38,14 @@ export function useCurrentUser() {
       if (!getAccessToken() && hasStoredSession()) {
         await createTokenProvider().onTokenExpired?.();
       }
-      return container.auth.repository.getCurrentUser(ctx);
+      try {
+        return await container.auth.repository.getCurrentUser(ctx);
+      } catch (err) {
+        // After DB wipe / setup reset, /me returns SETUP_REQUIRED (503) while
+        // stale tokens remain — clear them so AuthGate leaves "استعادة الجلسة".
+        if (isAuthFailure(err)) clearTokens();
+        throw err;
+      }
     },
     staleTime: 60_000,
     // Retry transient failures while a session is stored; never retry hard auth fails.

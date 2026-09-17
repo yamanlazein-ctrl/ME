@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 use std::process::Command;
 use std::sync::{Arc, Mutex};
 use tauri::Manager;
+use tauri_plugin_updater::UpdaterExt;
 
 /// Issue 19: defensively (re)write HKCU Run so Windows starts the app after reboot.
 /// The tauri-plugin-autostart Run key is known to vanish after one boot on some builds.
@@ -76,6 +77,7 @@ fn main() {
             tauri_plugin_autostart::MacosLauncher::LaunchAgent,
             Option::<Vec<&str>>::None,
         ))
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .setup(|app| {
             // Product requirement: open with Windows. Self-heal every launch
             // because HKCU\...\Run can be cleared after one reboot (upstream bug).
@@ -99,6 +101,9 @@ fn main() {
             get_hub_url,
             set_hub_url,
             request_factory_reset,
+            get_app_version,
+            check_desktop_update,
+            install_desktop_update,
         ])
         .build(tauri::generate_context!())
     {
@@ -326,6 +331,56 @@ fn archive_document_pdf(
     html: String,
 ) -> Result<motard_fabrics_erp::document_archive::ArchiveResult, String> {
     motard_fabrics_erp::document_archive::archive_document_pdf(doc_type, file_stem, html)
+}
+
+/// App semver from Cargo (kept in sync with tauri.conf.json `version`).
+#[tauri::command]
+fn get_app_version() -> String {
+    env!("CARGO_PKG_VERSION").to_string()
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct DesktopUpdateCheck {
+    available: bool,
+    version: Option<String>,
+    body: Option<String>,
+    date: Option<String>,
+}
+
+/// CDN check only — call after Control Plane `/api/license/updates/status` allows it.
+#[tauri::command]
+async fn check_desktop_update(app: tauri::AppHandle) -> Result<DesktopUpdateCheck, String> {
+    let updater = app.updater().map_err(|e| e.to_string())?;
+    match updater.check().await.map_err(|e| e.to_string())? {
+        Some(update) => Ok(DesktopUpdateCheck {
+            available: true,
+            version: Some(update.version.clone()),
+            body: update.body.clone(),
+            date: update.date.map(|d| d.to_string()),
+        }),
+        None => Ok(DesktopUpdateCheck {
+            available: false,
+            version: None,
+            body: None,
+            date: None,
+        }),
+    }
+}
+
+/// Re-checks then downloads/installs. Windows installer typically exits the process.
+#[tauri::command]
+async fn install_desktop_update(app: tauri::AppHandle) -> Result<(), String> {
+    let updater = app.updater().map_err(|e| e.to_string())?;
+    let Some(update) = updater.check().await.map_err(|e| e.to_string())? else {
+        return Err("لا يوجد تحديث متاح حالياً".into());
+    };
+    update
+        .download_and_install(|_chunk, _total| {}, || {})
+        .await
+        .map_err(|e| e.to_string())?;
+    // macOS/Linux need an explicit restart; Windows usually exits in install().
+    app.restart();
 }
 
 /// Persist the central hub URL for outbox sync. Does not change the UI API base.

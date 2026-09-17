@@ -25,7 +25,7 @@ import {
   type PrintTotal,
   type PrintParty,
 } from "@/components/print/PrintDocument";
-import { currencySymbol } from "@/presentation/hooks/useCurrency";
+import { currencySymbol, formatAmount } from "@/presentation/hooks/useCurrency";
 import { fabricById, rollById, useInventory } from "@/presentation/hooks/useInventory";
 import { supplierById } from "@/presentation/hooks/useParties";
 import { useVouchersList } from "@/presentation/hooks/useVouchers";
@@ -39,6 +39,7 @@ type EntryInvoicePrintProps = {
   invoice: Invoice;
   totalPages?: number;
   pageNumber?: number;
+  linesOverride?: Invoice["lines"];
 };
 
 // Use formatNumber for unit prices (preserves decimals), formatMoney for totals
@@ -46,10 +47,18 @@ const fmtUnit = (n: number): string => formatNumber(n);
 const fmtMoney = (n: number): string => formatMoney(n);
 const fmtQty = (n: number): string => formatQuantity(n);
 
-export function EntryInvoicePrint({ invoice, totalPages, pageNumber }: EntryInvoicePrintProps) {
+export function EntryInvoicePrint({
+  invoice,
+  totalPages,
+  pageNumber,
+  linesOverride,
+}: EntryInvoicePrintProps) {
   // Ensure inventory cache is subscribed so colour lookups stay reactive.
   useInventory();
   const inv = invoice;
+  const isFirstPage = pageNumber == null || pageNumber === 1;
+  const isLastPage = pageNumber == null || totalPages == null || pageNumber === totalPages;
+  const printLines = linesOverride ?? inv.lines;
   const vis = useInvoiceVisibility("purchase");
   const supplier = supplierById(inv.partyId);
   // Pull vouchers so we can show paid/remaining — same data the detail
@@ -85,11 +94,7 @@ export function EntryInvoicePrint({ invoice, totalPages, pageNumber }: EntryInvo
   const remaining = Math.max(0, grand - paidAmount);
   const sym = currencySymbol(inv.currency);
   const isCancelled = inv.status === "cancelled";
-  const statusLabel = isCancelled
-    ? "ملغاة"
-    : remaining > 0
-      ? `مفتوحة (المتبقي ${fmtMoney(remaining)} ${sym})`
-      : "مقفلة (مدفوعة)";
+  const statusLabel = isCancelled ? "ملغاة" : remaining > 0 ? "مفتوحة" : "مدفوعة";
   // ── Meta grid (only fields the user has not hidden) ──────────────
   const meta: PrintMetaItem[] = [];
   if (vis.showInvoiceNumber)
@@ -149,7 +154,7 @@ export function EntryInvoicePrint({ invoice, totalPages, pageNumber }: EntryInvo
 
   const columns = mainColumns;
   const rows: (string | number | React.ReactNode)[][] = [];
-  for (const l of inv.lines) {
+  for (const l of printLines) {
     const r = buildRow(l);
     rows.push(columns.map((c) => r.main[c.key] ?? "—"));
     if (r.details.length > 0) {
@@ -179,21 +184,21 @@ export function EntryInvoicePrint({ invoice, totalPages, pageNumber }: EntryInvo
   //    when there is data, but the user can override via settings).
   const totals: PrintTotal[] = [];
   if (vis.showSubtotal) {
-    totals.push({ label: "المجموع", value: `${fmtMoney(subtotal)} ${sym}` });
+    totals.push({ label: "المجموع", value: formatAmount(subtotal, inv.currency) });
   }
   if (vis.showDiscountTotal && discount > 0) {
-    totals.push({ label: "الخصم", value: `- ${fmtMoney(discount)} ${sym}` });
+    totals.push({ label: "الخصم", value: `− ${formatAmount(discount, inv.currency)}` });
   }
   if (vis.showTax && tax > 0) {
-    totals.push({ label: "الضريبة", value: `+ ${fmtMoney(tax)} ${sym}` });
+    totals.push({ label: "الضريبة", value: `+ ${formatAmount(tax, inv.currency)}` });
   }
   if (shipping > 0) {
-    totals.push({ label: "الشحن", value: `+ ${fmtMoney(shipping)} ${sym}` });
+    totals.push({ label: "الشحن", value: `+ ${formatAmount(shipping, inv.currency)}` });
   }
   if (vis.showGrandTotal) {
     totals.push({
       label: "الإجمالي النهائي",
-      value: `${fmtMoney(grand)} ${sym}`,
+      value: formatAmount(grand, inv.currency),
       grand: true,
     });
   }
@@ -213,21 +218,26 @@ export function EntryInvoicePrint({ invoice, totalPages, pageNumber }: EntryInvo
   //    linked payment vouchers too, so we show them.
   const payment = vis.showPaymentSummary
     ? [
-        { label: "الإجمالي", value: `${fmtMoney(grand)} ${sym}` },
-        { label: "المدفوع", value: `${fmtMoney(paidAmount)} ${sym}` },
-        { label: "المتبقي", value: `${fmtMoney(remaining)} ${sym}` },
+        { label: "الإجمالي", value: formatAmount(grand, inv.currency) },
+        { label: "المدفوع", value: formatAmount(paidAmount, inv.currency) },
+        { label: "المتبقي", value: formatAmount(remaining, inv.currency) },
       ]
     : undefined;
+  const pageSubtitle =
+    !isFirstPage && totalPages && totalPages > 1
+      ? `تابع — صفحة ${pageNumber} من ${totalPages}`
+      : "إدخال بضاعة إلى المخزون";
+
   return (
     <PrintDocument
       title="فاتورة شراء"
-      subtitle="إدخال بضاعة إلى المخزون"
-      meta={meta}
-      party={party}
-      totals={totals}
-      payment={payment}
-      notes={vis.showNotes ? inv.notes : undefined}
-      signatures={vis.showSignatures ? ["توقيع المستلم", "ختم الشركة"] : undefined}
+      subtitle={pageSubtitle}
+      meta={isFirstPage ? meta : undefined}
+      party={isFirstPage ? party : undefined}
+      totals={isLastPage ? totals : undefined}
+      payment={isLastPage ? payment : undefined}
+      notes={isLastPage && vis.showNotes ? inv.notes : undefined}
+      signatures={isLastPage && vis.showSignatures ? ["توقيع المستلم", "ختم الشركة"] : undefined}
       pageNumber={pageNumber}
       totalPages={totalPages}
       typeBadge={vis.showTypeBadge ? "PURCHASE" : undefined}

@@ -26,13 +26,18 @@ export class ExpenseApiService {
     return res.data;
   }
 
-  async update(id: string, input: Partial<CreateExpenseInput>): Promise<ExpenseDTO> {
+  async update(
+    id: string,
+    input: Partial<CreateExpenseInput> & { expectedVersion: number },
+  ): Promise<ExpenseDTO> {
     const res = await this.client.put<ExpenseDTO>(`/api/expenses/${id}`, input);
     return res.data;
   }
 
-  async cancel(id: string): Promise<ExpenseDTO> {
-    const res = await this.client.post<ExpenseDTO>(`/api/expenses/${id}/cancel`);
+  async cancel(id: string, expectedVersion: number): Promise<ExpenseDTO> {
+    const res = await this.client.post<ExpenseDTO>(`/api/expenses/${id}/cancel`, {
+      expectedVersion,
+    });
     return res.data;
   }
 

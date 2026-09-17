@@ -22,7 +22,9 @@ import { cn } from "@/lib/utils";
  * to the License Server's /v1/activations (which 404s on the customer
  * backend).
  *
- * Steps: init → activate → company → admin → review → done.
+ * Steps: activate → (optional bootstrap password) → done.
+ * License key from the owner dashboard unlocks the install; empty DBs then
+ * only ask for an admin password (company is taken from the license).
  */
 const API_BASE = getApiBaseUrl("");
 const SETUP_TOKEN = import.meta.env.VITE_SETUP_TOKEN as string | undefined;
@@ -33,17 +35,15 @@ const SETUP_TOKEN = import.meta.env.VITE_SETUP_TOKEN as string | undefined;
 // has company + admin); we do NOT collect company/admin again.
 const isDesktopPreBaked = import.meta.env.VITE_DESKTOP_DEPLOY === "true";
 
-type Step = "activate" | "company" | "admin" | "review" | "done";
+type Step = "activate" | "bootstrap" | "done";
 
 function mapBackendStep(currentStep: string | undefined): Step | null {
   switch (currentStep) {
     case "company":
     case "localization":
-      return "company";
     case "admin":
-      return "admin";
     case "review":
-      return "review";
+      return "bootstrap";
     case "done":
       return "done";
     default:
@@ -122,14 +122,11 @@ export function ActivationScreen({ onActivated }: { onActivated: () => void }) {
     };
   }, []);
 
-  // Company
-  const [companyName, setCompanyName] = useState("");
-  const [companyEmail, setCompanyEmail] = useState("");
-  const [companyPhone, setCompanyPhone] = useState("");
-  // Admin
-  const [adminName, setAdminName] = useState("");
-  const [adminEmail, setAdminEmail] = useState("");
+  // Bootstrap after license (empty DB): password only — company comes from license.
+  const [companyName, setCompanyName] = useState("شركتي");
   const [adminPassword, setAdminPassword] = useState("");
+  const [adminPasswordConfirm, setAdminPasswordConfirm] = useState("");
+  const [rememberYear, setRememberYear] = useState(true);
 
   async function submitInvitation(e: FormEvent) {
     e.preventDefault();
@@ -184,7 +181,10 @@ export function ActivationScreen({ onActivated }: { onActivated: () => void }) {
   async function submitActivate(e?: FormEvent | MouseEvent) {
     e?.preventDefault();
     setError(null);
-    const key = licenseKey.trim().toUpperCase();
+    // Do NOT force uppercase: keys are stored/looked up case-sensitively.
+    // Admin-issued LIC-… keys are already uppercase; uppercasing mixed-case
+    // test/seed keys (e.g. P8-E2E-A-9bef…) made activate return INVALID_LICENSE.
+    const key = licenseKey.trim();
     if (!key && !isDesktopPreBaked) {
       setError("الرجاء إدخال مفتاح الترخيص");
       return;
@@ -203,17 +203,13 @@ export function ActivationScreen({ onActivated }: { onActivated: () => void }) {
           tenantId: tid,
           platform: device.platform,
           hostname: device.hostname,
+          fingerprint: device.fingerprint,
         };
         if (key) body.key = key;
         r = await apiPost("/api/setup/wizard/activate", body);
       } catch (netErr) {
         throw new Error(
-          "خطأ شبكة: " +
-            (netErr instanceof Error ? netErr.message : "فشل الاتصال") +
-            " | tenantId=" +
-            tid +
-            " | key=" +
-            key,
+          "تعذّر الاتصال بخادم التفعيل. تحقق من الشبكة ثم أعد المحاولة.",
         );
       }
 
@@ -221,21 +217,17 @@ export function ActivationScreen({ onActivated }: { onActivated: () => void }) {
         const code = r.data?.code || r.data?.message || "";
         if (code === "INVALID_LICENSE" || r.status === 400)
           throw new Error(
-            "فشل التفعيل (400): " +
-              (r.data?.message || code || "رسالة فارغة") +
-              " | tenantId=" +
-              tid,
+            typeof r.data?.message === "string" && r.data.message.trim()
+              ? r.data.message
+              : "مفتاح الترخيص غير صالح",
           );
         if (code === "LICENSE_BOUND_TO_ANOTHER_TENANT" || r.status === 409) {
           throw new Error("المفتاح مُفعّل على تثبيت آخر. استخدم نقل الترخيص أو راجع الدعم");
         }
         throw new Error(
-          "فشل التفعيل (status " +
-            r.status +
-            "): " +
-            (typeof r.data?.message === "string" ? r.data.message : "رسالة غير معروفة") +
-            " | data=" +
-            JSON.stringify(r.data),
+          typeof r.data?.message === "string" && r.data.message.trim()
+            ? r.data.message
+            : "فشل التفعيل. تحقق من المفتاح ثم أعد المحاولة.",
         );
       }
       const resolvedTenantId = (r.data?.tenantId as string | undefined) || tid;
@@ -248,10 +240,11 @@ export function ActivationScreen({ onActivated }: { onActivated: () => void }) {
       const activationId = r.data?.activationId ?? r.data?.id ?? resolvedTenantId;
       setPendingActivationId(activationId);
 
-      // Desktop: seed already has tenant + admin. Backend marks wizard complete
-      // on activate; finish local markers and open AuthGate → login.
-      if (isDesktopPreBaked) {
-        if (!r.data?.isCompleted) {
+      // Pre-provisioned install (desktop baked or seeded web tenant): backend
+      // marks wizard complete on activate — open login, no company/admin forms.
+      const skipWizard = isDesktopPreBaked || r.data?.isCompleted === true;
+      if (skipWizard) {
+        if (isDesktopPreBaked && !r.data?.isCompleted) {
           const cp = await apiPost("/api/setup/wizard/complete", {
             tenantId: resolvedTenantId,
           });
@@ -266,7 +259,20 @@ export function ActivationScreen({ onActivated }: { onActivated: () => void }) {
         return;
       }
 
-      setStep("company");
+      // Empty DB: license unlocks install → one password screen only.
+      const fromLicense =
+        (typeof r.data?.companyName === "string" && r.data.companyName.trim()) || "شركتي";
+      setCompanyName(fromLicense);
+      const co = await apiPost("/api/setup/wizard/company", {
+        tenantId: resolvedTenantId,
+        name: fromLicense,
+      });
+      if (!co.ok && co.data?.code !== "ALREADY_COMPLETED") {
+        throw new Error(co.data?.message || "فشل تهيئة الشركة من الترخيص");
+      }
+      await saveLicenseKey(key);
+      await saveActivationId(activationId);
+      setStep("bootstrap");
     } catch (err) {
       setTenantId("");
       setError(err instanceof Error ? err.message : "حدث خطأ غير متوقع");
@@ -275,79 +281,47 @@ export function ActivationScreen({ onActivated }: { onActivated: () => void }) {
     }
   }
 
-  async function submitCompany(e: FormEvent) {
+  async function submitBootstrap(e: FormEvent) {
     e.preventDefault();
     setError(null);
-    if (!companyName.trim()) {
-      setError("الرجاء إدخال اسم الشركة");
+    if (adminPassword.length < 8) {
+      setError("كلمة المرور يجب أن تكون 8 أحرف على الأقل");
+      return;
+    }
+    if (adminPassword !== adminPasswordConfirm) {
+      setError("كلمتا المرور غير متطابقتين");
       return;
     }
     setLoading(true);
     try {
       const tid = await ensureTenant();
-      const r = await apiPost("/api/setup/wizard/company", {
+      const admin = await apiPost("/api/setup/wizard/admin", {
         tenantId: tid,
-        name: companyName,
-        email: companyEmail || null,
-        phone: companyPhone || null,
-      });
-      if (!r.ok) throw new Error(r.data?.message || "فشل حفظ بيانات الشركة");
-      setStep("admin");
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "حدث خطأ غير متوقع");
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  async function submitAdmin(e: FormEvent) {
-    e.preventDefault();
-    setError(null);
-    if (!adminName.trim() || !adminEmail.trim() || !adminPassword) {
-      setError("الرجاء إدخال بيانات المدير بشكل كامل");
-      return;
-    }
-    setLoading(true);
-    try {
-      const tid = await ensureTenant();
-      const r = await apiPost("/api/setup/wizard/admin", {
-        tenantId: tid,
-        name: adminName,
-        email: adminEmail,
+        name: "المدير",
+        email: "admin@erp.local",
         password: adminPassword,
       });
-      if (!r.ok) throw new Error(r.data?.message || "فشل حفظ حساب المدير");
-      setStep("review");
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "حدث خطأ غير متوقع");
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  async function submitReview(e: FormEvent) {
-    e.preventDefault();
-    setError(null);
-    setLoading(true);
-    try {
-      const tid = await ensureTenant();
+      if (!admin.ok) {
+        throw new Error(
+          admin.data?.message || "فشل حفظ كلمة المرور — تأكد أنها 8 أحرف على الأقل",
+        );
+      }
       const rv = await apiPost("/api/setup/wizard/review", { tenantId: tid, confirmed: true });
       const reviewAlreadyDone = rv.status === 409 || rv.data?.code === "ALREADY_COMPLETED";
-      if (!rv.ok && !reviewAlreadyDone) throw new Error(rv.data?.message || "فشل المراجعة");
-      // `tenantId` goes in the BODY, exactly like the four preceding steps
-      // (activate / company / admin / review). The backend reads it from
-      // `req.body` only (setup.route.ts) and never looks at `req.query`, so the
-      // previous query-string form always failed with 422 "tenantId مطلوب" and
-      // left the install stuck on the review screen.
+      if (!rv.ok && !reviewAlreadyDone) throw new Error(rv.data?.message || "فشل إكمال الإعداد");
       const cp = await apiPost("/api/setup/wizard/complete", { tenantId: tid });
       if (!cp.ok && !reviewAlreadyDone) throw new Error(cp.data?.message || "فشل إكمال الإعداد");
-      // Persist the tenant this install was provisioned with. The login form
-      // reads it instead of the build-time VITE_DEFAULT_TENANT_ID, which
-      // belongs to whatever tenant the bundle was built against and makes a
-      // freshly provisioned install unable to log in (401).
       setInstallTenantId(tid);
-      await saveLicenseKey(licenseKey.trim().toUpperCase() || "DESKTOP");
-      await saveActivationId(pendingActivationId || tid);
+      if (rememberYear) {
+        try {
+          localStorage.setItem(
+            "erp.auth.rememberUntil",
+            String(Date.now() + 365 * 24 * 60 * 60 * 1000),
+          );
+        } catch {
+          /* ignore */
+        }
+      }
       setStep("done");
       onActivated();
     } catch (err) {
@@ -371,9 +345,7 @@ export function ActivationScreen({ onActivated }: { onActivated: () => void }) {
               (isDesktopPreBaked
                 ? "تم تضمين الترخيص مسبقاً في هذا التثبيت"
                 : "تفعيل الجهاز مرة واحدة — ترخيص أو دعوة")}
-            {step === "company" && "بيانات الشركة"}
-            {step === "admin" && "حساب المدير الرئيسي"}
-            {step === "review" && "مراجعة وإكمال"}
+            {step === "bootstrap" && "مبروك — تم تفعيل الترخيص"}
             {step === "done" && "تم تفعيل النظام بنجاح"}
           </p>
         </div>
@@ -580,76 +552,41 @@ export function ActivationScreen({ onActivated }: { onActivated: () => void }) {
           </div>
         )}
 
-        {step === "company" && !isDesktopPreBaked && (
-          <form onSubmit={submitCompany} className="mt-6 space-y-4">
-            <Field label="اسم الشركة">
-              <input
-                className={inputCls}
-                value={companyName}
-                onChange={(e) => setCompanyName(e.target.value)}
-              />
-            </Field>
-            <Field label="البريد الإلكتروني">
-              <input
-                className={inputCls}
-                value={companyEmail}
-                onChange={(e) => setCompanyEmail(e.target.value)}
-              />
-            </Field>
-            <Field label="الهاتف">
-              <input
-                className={inputCls}
-                value={companyPhone}
-                onChange={(e) => setCompanyPhone(e.target.value)}
-              />
-            </Field>
-            <button type="submit" disabled={loading} className={btnCls}>
-              {loading ? "جاري الحفظ…" : "التالي"}
-            </button>
-          </form>
-        )}
-
-        {step === "admin" && !isDesktopPreBaked && (
-          <form onSubmit={submitAdmin} className="mt-6 space-y-4">
-            <Field label="الاسم الكامل">
-              <input
-                className={inputCls}
-                value={adminName}
-                onChange={(e) => setAdminName(e.target.value)}
-              />
-            </Field>
-            <Field label="البريد الإلكتروني">
-              <input
-                className={inputCls}
-                value={adminEmail}
-                onChange={(e) => setAdminEmail(e.target.value)}
-              />
-            </Field>
-            <Field label="كلمة المرور">
+        {step === "bootstrap" && !isDesktopPreBaked && (
+          <form onSubmit={submitBootstrap} className="mt-6 space-y-4">
+            <p className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-3 text-sm text-emerald-700 dark:text-emerald-300">
+              مبروك — تم تفعيل الترخيص لـ «{companyName}». عيّن كلمة مرور المدير للمتابعة.
+            </p>
+            <Field label="كلمة المرور (8 أحرف على الأقل)">
               <input
                 type="password"
                 className={inputCls}
                 value={adminPassword}
                 onChange={(e) => setAdminPassword(e.target.value)}
+                autoComplete="new-password"
+                autoFocus
               />
             </Field>
+            <Field label="تأكيد كلمة المرور">
+              <input
+                type="password"
+                className={inputCls}
+                value={adminPasswordConfirm}
+                onChange={(e) => setAdminPasswordConfirm(e.target.value)}
+                autoComplete="new-password"
+              />
+            </Field>
+            <label className="flex items-center gap-2 text-xs text-muted-foreground">
+              <input
+                type="checkbox"
+                checked={rememberYear}
+                onChange={(e) => setRememberYear(e.target.checked)}
+                className="rounded border-border"
+              />
+              تذكّر هذا الجهاز لمدة سنة
+            </label>
             <button type="submit" disabled={loading} className={btnCls}>
-              {loading ? "جاري الحفظ…" : "التالي"}
-            </button>
-          </form>
-        )}
-
-        {step === "review" && !isDesktopPreBaked && (
-          <form onSubmit={submitReview} className="mt-6 space-y-4">
-            <ul className="space-y-1 text-xs text-muted-foreground">
-              <li>الشركة: {companyName}</li>
-              <li>
-                المدير: {adminName} ({adminEmail})
-              </li>
-              <li>الترخيص: {licenseKey}</li>
-            </ul>
-            <button type="submit" disabled={loading} className={btnCls}>
-              {loading ? "جاري الإكمال…" : "إكمال الإعداد"}
+              {loading ? "جاري الحفظ…" : "تم — ادخل النظام"}
             </button>
           </form>
         )}

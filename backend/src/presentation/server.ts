@@ -117,18 +117,35 @@ app.use(
       "X-Tenant-Id",
       "X-Request-Id",
       "Idempotency-Key",
+      // Device roster (PIN picker) and setup wizard pre-auth flows.
+      "X-Device-Activation-Id",
+      "X-Device-Fingerprint",
+      "X-Setup-Token",
     ],
     maxAge: 86400,
   }),
 );
 
-// Rate limiting
+// Rate limiting — remote clients only. This ERP is used from the same
+// machine (Vite proxy + PIN picker + heartbeats all appear as 127.0.0.1 /
+// ::1), so a global per-IP cap locks the operator out of their own login
+// screen. Health stays unrestricted so probes cannot burn the budget.
+function isLoopbackIp(ip: string | undefined): boolean {
+  if (!ip) return false;
+  const host = ip.replace(/^::ffff:/, "").split("%")[0];
+  return host === "127.0.0.1" || host === "::1" || host === "localhost" || host === "0:0:0:0:0:0:0:1";
+}
 app.use(
   rateLimit({
     windowMs: config.RATE_LIMIT_WINDOW_MS,
     max: config.RATE_LIMIT_RPS,
     standardHeaders: true,
     legacyHeaders: false,
+    skip: (req) =>
+      config.NODE_ENV !== "production" ||
+      isLoopbackIp(req.ip) ||
+      req.path.startsWith("/api/health") ||
+      req.path.includes("device-roster"),
     handler: (_req, res) => {
       res.status(429).json({
         code: "RATE_LIMIT_EXCEEDED",
@@ -154,16 +171,6 @@ app.use((req, _res, next) => {
 // a fresh install can always be provisioned (see ALLOW_LIST in the gate).
 app.use(createInstallGateMiddleware(container.installationStateRepo, container.tenantRepo));
 
-// License heartbeat — sets req.license with status + grace info (never blocks)
-app.use(
-  createLicenseHeartbeatMiddleware(
-    container.licenseRepo,
-    container.secretsRepo,
-    container.secretCipher,
-    container.licenseTokenSigner,
-  ),
-);
-
 // ── Route registration ──────────────────────────────────────────────
 // health + auth already hard-code the `/api` prefix internally → mount at root.
 const router = express.Router();
@@ -184,11 +191,18 @@ app.use(router);
 // so both sides agree.
 const apiRouter = express.Router();
 // License enforcement for business traffic. Runs authMiddleware first so
-// `req.tenantContext` exists (the guard no-ops without it), then the guard:
-// revoked → 403, expired with grace exhausted → 403, expired within grace →
-// allowed + `X-License-Grace` header. `active`/`trial`/`no_license` pass through.
+// `req.tenantContext` exists, then heartbeat (SoT suspend/revoke overrides
+// cached token), then the guard: revoked/suspended → 403, expired with grace
+// exhausted → 403, expired within grace → allowed + `X-License-Grace`.
 apiRouter.use(
   authMiddleware,
+  createLicenseHeartbeatMiddleware(
+    container.licenseRepo,
+    container.secretsRepo,
+    container.secretCipher,
+    container.licenseTokenSigner,
+    container.tenantRepo,
+  ),
   createLicenseGuard({
     licenseRepo: container.licenseRepo,
     secretsRepo: container.secretsRepo,
@@ -439,18 +453,15 @@ app.use(createErrorHandler(logger));
 // Start server
 // Desktop SKU: ensure schema patches that land after a baked pgdata-template
 // was shipped (e.g. users.pin_hash for the PIN picker) exist on the live DB.
-// Idempotent; never blocks boot longer than a single DDL.
+// Idempotent. Failures are fatal — listening with a half-patched schema causes
+// opaque 500s on PIN/auth/sync while /api/health/live still looks healthy.
 async function ensureDesktopSchema(): Promise<void> {
   if (!config.DESKTOP_DEPLOY) return;
-  try {
-    const { pool } = await import("../infrastructure/orm/drizzle.js");
-    const { ensureDesktopSchema: applyDesktopSchema } = await import(
-      "../infrastructure/orm/ensureDesktopSchema.js"
-    );
-    await applyDesktopSchema((sql) => pool.query(sql));
-  } catch (err) {
-    logger.error({ err }, "Desktop schema ensure failed — PIN roster / sync may break");
-  }
+  const { pool } = await import("../infrastructure/orm/drizzle.js");
+  const { ensureDesktopSchema: applyDesktopSchema } = await import(
+    "../infrastructure/orm/ensureDesktopSchema.js"
+  );
+  await applyDesktopSchema((sql) => pool.query(sql));
 }
 
 async function prepareDesktopDatabase(): Promise<void> {
@@ -460,8 +471,18 @@ async function prepareDesktopDatabase(): Promise<void> {
   await ensureDesktopSchema();
 }
 
+/** Detach stale baked Desktop licenses that are not the tenant entitlement. */
+async function prepareLicenseIdentity(): Promise<void> {
+  const { pool } = await import("../infrastructure/orm/drizzle.js");
+  const { detachOrphanBakedLicensesSql } = await import(
+    "../infrastructure/license/detachOrphanBakedLicenses.js"
+  );
+  await detachOrphanBakedLicensesSql((sql) => pool.query(sql));
+}
+
 fxRateService.start();
 void prepareDesktopDatabase()
+  .then(() => prepareLicenseIdentity())
   .then(() => {
     app.listen(config.PORT, config.HOST, () => {
       logger.info(
@@ -476,7 +497,7 @@ void prepareDesktopDatabase()
     });
   })
   .catch((err) => {
-    logger.fatal({ err }, "Desktop migrations failed — refusing to listen");
+    logger.fatal({ err }, "Desktop migrations / license identity prepare failed — refusing to listen");
     process.exit(1);
   });
 

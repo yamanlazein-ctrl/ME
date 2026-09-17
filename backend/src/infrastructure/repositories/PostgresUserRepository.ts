@@ -10,6 +10,7 @@ import type {
 import type { UserData } from "../../domain/entities/User.js";
 import type { TenantContext, PaginatedResult } from "../../domain/types/index.js";
 import { users } from "../orm/schemas/user.table.js";
+import { invalidateIdentityCache } from "../auth/sessionCutoff.js";
 
 export class PostgresUserRepository implements IUserRepository {
   constructor(private readonly db: DB) {}
@@ -225,10 +226,11 @@ export class PostgresUserRepository implements IUserRepository {
     return runWithTenantContext({ tenantId: ctx.tenantId }, async () => {
       // Soft delete: set active=false instead of hard delete
       // This preserves historical references (created_by in invoices/ledger)
-      await this.db
+        await this.db
         .update(users)
-        .set({ active: false, updatedAt: new Date() })
+        .set({ active: false, tokensRevokedBefore: new Date(), updatedAt: new Date() })
         .where(and(eq(users.id, id), eq(users.tenantId, ctx.tenantId)));
+      invalidateIdentityCache(id);
     });
   }
 

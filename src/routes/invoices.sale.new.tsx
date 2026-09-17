@@ -5,7 +5,8 @@ import { AppShell } from "@/components/layout/AppShell";
 import { InvoiceHeader } from "@/components/invoices/InvoiceHeader";
 import { ExitWithoutSavingButton } from "@/components/invoices/ExitWithoutSaving";
 import { PartyCombobox } from "@/components/vouchers/PartyCombobox";
-import { colorById, fabricById, fabricByName, rollById, useInventory } from "@/presentation/hooks/useInventory";
+import { colorById, colors, fabricById, fabricByName, rollById, useInventory } from "@/presentation/hooks/useInventory";
+import { resolveColorPick } from "@/domain/inventory/colorLookup";
 import { addCustomer, customers, useParties } from "@/presentation/hooks/useParties";
 import { currencySymbol } from "@/presentation/hooks/useCurrency";
 import type { Currency } from "@/domain/types";
@@ -542,13 +543,14 @@ function SaleInvoicePage() {
                 }}
                 onPickColor={(cid) => {
                   const c = colorById(cid);
-                  if (c)
-                    updateLine(l.id, {
-                      colorId: c.id,
-                      colorName: c.name,
-                      colorCode: c.code,
-                      rollId: "",
-                    });
+                  if (!c) return;
+                  const r = resolveColorPick(c, l.fabricId || undefined, colors);
+                  updateLine(l.id, {
+                    colorId: r.existingColorId ?? "",
+                    colorName: r.colorName,
+                    colorCode: r.colorCode,
+                    rollId: "",
+                  });
                 }}
                 onAppend={appendRowAndFocus}
                 onAddColor={() => addColorForSameFabric(l.id)}

@@ -1,20 +1,19 @@
 // Inline SSR helpers to avoid Vite module-runner deadlocks while optimizeDeps
  // is still bundling sibling files (fetchModule timeouts on error-*.ts).
 
+import { memoizeUntilRejected } from "./lib/memoizeUntilRejected.js";
+
 type ServerEntry = {
   fetch: (request: Request, env: unknown, ctx: unknown) => Promise<Response> | Response;
 };
 
-let serverEntryPromise: Promise<ServerEntry> | undefined;
-
-async function getServerEntry(): Promise<ServerEntry> {
-  if (!serverEntryPromise) {
-    serverEntryPromise = import("@tanstack/react-start/server-entry").then(
-      (m) => (m.default ?? m) as ServerEntry,
-    );
-  }
-  return serverEntryPromise;
-}
+// F03 (Phase 1 audit): see memoizeUntilRejected.ts — a transient import
+// failure (the known Vite module-runner race noted above) must not poison
+// every request until the process restarts. A rejection here now clears
+// the cache so the next request gets a fresh import attempt.
+const getServerEntry = memoizeUntilRejected<ServerEntry>(() =>
+  import("@tanstack/react-start/server-entry").then((m) => (m.default ?? m) as ServerEntry),
+);
 
 function renderErrorPage(): string {
   return `<!DOCTYPE html>

@@ -37,7 +37,7 @@ export function SupplierInlineCombobox({
   const selected = value ? supplierById(value) : undefined;
   const q = query.trim().toLowerCase();
   const list = useMemo(
-    () => (q ? suppliers.filter((s) => s.name.toLowerCase().includes(q)) : suppliers),
+    () => (q ? suppliers.filter((s) => s.name.toLowerCase().includes(q)) : []),
     [q],
   );
   const noMatch = q.length > 0 && list.length === 0;
@@ -112,6 +112,11 @@ export function SupplierInlineCombobox({
               />
             </div>
             <div className="max-h-56 overflow-y-auto py-1">
+              {!q && (
+                <div className="px-3 py-3 text-xs text-muted-foreground">
+                  اكتب للبحث في الموردين، أو أضف مورداً جديداً.
+                </div>
+              )}
               {list.map((s) => (
                 <button
                   key={s.id}

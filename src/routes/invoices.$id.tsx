@@ -214,12 +214,31 @@ function InvoiceDetailPage() {
         description="المقبوض والمتبقي محسوبان تلقائياً من السندات المرتبطة"
         tone="primary"
         actions={
-          <Link to={`/${voucherKind}/new`}>
-            <Button size="sm" variant="outline" className="h-9 gap-1">
+          isCancelled ? (
+            // F14 (Phase 1 audit): a cancelled invoice must not offer a path
+            // to record a voucher "against" it — creating one here used to
+            // land on an empty, unlinked /payments|receipts/new form (no
+            // invoiceId support existed at all), letting a user record an
+            // unlinked disbursement instead of being stopped, same as Edit
+            // and Cancel above are already disabled for a cancelled invoice.
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-9 gap-1"
+              disabled
+              title="الفاتورة ملغاة — لا يمكن إنشاء سند مرتبط بها"
+            >
               <Plus className="h-4 w-4" />{" "}
               {inv.partyType === "customer" ? "سند قبض جديد" : "سند صرف جديد"}
             </Button>
-          </Link>
+          ) : (
+            <Link to={`/${voucherKind}/new`} search={{ partyId: inv.partyId, invoiceId: inv.id }}>
+              <Button size="sm" variant="outline" className="h-9 gap-1">
+                <Plus className="h-4 w-4" />{" "}
+                {inv.partyType === "customer" ? "سند قبض جديد" : "سند صرف جديد"}
+              </Button>
+            </Link>
+          )
         }
       >
         {/* Financial breakdown — mirrors the print template exactly

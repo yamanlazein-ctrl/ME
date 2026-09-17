@@ -40,7 +40,10 @@ export interface DayCloseData {
 }
 
 export interface CashboxState {
+  /** Back-compat single session (SYP preferred, else the first currency opened). */
   session: CashboxSessionData | null;
+  /** One row per currency — the source of truth for per-currency opening balances. */
+  sessions: CashboxSessionData[];
   isLocked: boolean;
   lastClosing: DayCloseData | null;
 }

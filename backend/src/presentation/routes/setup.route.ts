@@ -2,6 +2,7 @@ import { Router, type Request } from "express";
 import { z } from "zod";
 import { config } from "../../infrastructure/config/env.js";
 import type { Container } from "../../infrastructure/di/container.js";
+import { MultipleTenantsDetectedError } from "../../domain/errors/index.js";
 import {
   startWizardUseCase,
   getStatusUseCase,
@@ -100,27 +101,26 @@ export function registerSetupRoutes(router: Router, container: Container): void 
   router.get("/api/setup/status", async (req, res, next) => {
     try {
       // Resolve the real install the same way the install gate does: the
-      // operator-supplied bootstrap tenant, else the first tenant whose
-      // wizard is already complete. The previous hardcoded "bootstrap" id
-      // matched no row, so a fully provisioned install still reported
-      // `isCompleted: false` and the activation gate would loop forever.
-      let tenantId =
-        process.env.BOOTSTRAP_TENANT_ID ??
-        (await container.installationStateRepo.findAnyCompleted()) ??
-        "bootstrap";
-      if (config.DESKTOP_DEPLOY && !process.env.BOOTSTRAP_TENANT_ID) {
+      // operator-supplied bootstrap tenant, else the desktop-baked "default"
+      // tenant, else the sole completed tenant. A genuinely fresh install
+      // with none of those yet is reported directly as "not completed" —
+      // it must NOT fall through to a placeholder string (the previous
+      // "bootstrap" literal was not a valid UUID and made every fresh-install
+      // status check throw and surface as a 503, see docs/decisions.md).
+      let tenantId = process.env.BOOTSTRAP_TENANT_ID ?? null;
+      if (!tenantId && config.DESKTOP_DEPLOY) {
         const baked = await container.tenantRepo.findBySlug("default");
-        if (baked) tenantId = baked.id;
+        tenantId = baked?.id ?? null;
+      }
+      if (!tenantId) {
+        tenantId = await container.installationStateRepo.findAnyCompleted();
+      }
+      if (!tenantId) {
+        res.json({ isCompleted: false, currentStep: "welcome" });
+        return;
       }
       const r = await getStatusUseCase(container.installationStateRepo, tenantId);
       if (!r.ok) {
-        // Prefer any completed tenant over a hard false — a soft failure must
-        // not re-open the wizard on a provisioned desktop install (P4).
-        const done = await container.installationStateRepo.findAnyCompleted();
-        if (done) {
-          res.json({ isCompleted: true, currentStep: "done" });
-          return;
-        }
         res.status(503).json({
           code: "SETUP_STATUS_UNAVAILABLE",
           message: "تعذّر قراءة حالة الإعداد",
@@ -128,16 +128,13 @@ export function registerSetupRoutes(router: Router, container: Container): void 
         });
         return;
       }
-      res.json(r.data);
-    } catch {
-      try {
-        const done = await container.installationStateRepo.findAnyCompleted();
-        if (done) {
-          res.json({ isCompleted: true, currentStep: "done" });
-          return;
-        }
-      } catch {
-        /* fall through */
+      res.json({ ...r.data, tenantId });
+    } catch (err) {
+      if (err instanceof MultipleTenantsDetectedError) {
+        // A data-integrity violation, not a transport blip — must not be
+        // reported as a generic/retryable 503 (see F01 in the Phase 1 audit).
+        res.status(500).json({ code: err.code, message: err.message, statusCode: 500 });
+        return;
       }
       // Fail the request so ActivationGate's catch can use local markers
       // instead of treating a transport/DB blip as "wizard required".
@@ -166,6 +163,10 @@ export function registerSetupRoutes(router: Router, container: Container): void 
         req.body,
       );
       if (!r.ok) {
+        if (r.code === "MULTIPLE_TENANTS_DETECTED") {
+          res.status(500).json({ code: r.code, message: r.error, statusCode: 500 });
+          return;
+        }
         res.status(422).json({ code: "VALIDATION_ERROR", message: r.error, statusCode: 422 });
         return;
       }
@@ -180,6 +181,11 @@ export function registerSetupRoutes(router: Router, container: Container): void 
     // Desktop pre-baked mode sends an empty key (no customer-entered license).
     key: config.DESKTOP_DEPLOY ? z.string().optional() : z.string().min(1),
     tenantId: z.string().uuid(),
+    platform: z.enum(["windows", "macos", "linux", "android", "ios", "web"]).optional(),
+    hostname: z.string().max(200).optional(),
+    // Browser/device fingerprint from the activating client — registered so the
+    // PIN roster can prove this device after activate (web has no shared server FP).
+    fingerprint: z.string().min(16).max(128).optional(),
   });
   router.post("/api/setup/wizard/activate", async (req, res, next) => {
     try {
@@ -206,9 +212,15 @@ export function registerSetupRoutes(router: Router, container: Container): void 
           installationIdStorage: container.installationIdStorage,
           tokenSigner: container.licenseTokenSigner,
           licenseRepo: container.licenseRepo,
+          authRepo: container.authRepo,
         },
         await resolveWizardTenantId(parsed.data.tenantId),
-        { key: parsed.data.key ?? "" },
+        {
+          key: parsed.data.key ?? "",
+          platform: parsed.data.platform,
+          hostname: parsed.data.hostname,
+          clientFingerprint: parsed.data.fingerprint,
+        },
       );
       if (!r.ok) {
         res.status(400).json({ code: "ACTIVATION_FAILED", message: r.error, statusCode: 400 });

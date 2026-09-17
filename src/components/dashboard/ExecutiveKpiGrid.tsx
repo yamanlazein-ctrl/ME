@@ -6,11 +6,12 @@ import {
 } from "lucide-react";
 import type { ReactNode } from "react";
 import { useDashboard } from "@/presentation/hooks/useDashboard";
-import { useCashboxState } from "@/presentation/hooks/useCashbox";
+import { useCashboxState, useCashBalance } from "@/presentation/hooks/useCashbox";
 import { useOrdersList } from "@/presentation/hooks/useOrders";
 import { formatSYP } from "@/presentation/hooks/useInventory";
 import { useReturnsList } from "@/presentation/hooks/useReturns";
 import { formatNumber, formatMoney } from "@/shared/utils/formatNumber";
+import { formatAmount, currencySymbol, type Currency } from "@/presentation/hooks/useCurrency";
 import { cn } from "@/lib/utils";
 
 function formatUnpaidCurrencies(
@@ -18,7 +19,7 @@ function formatUnpaidCurrencies(
 ): string {
   const parts = Object.entries(byCurrency)
     .filter(([, v]) => v && v.totalDue > 0)
-    .map(([code, v]) => `${formatMoney(v.totalDue)} ${code}`);
+    .map(([code, v]) => `${currencySymbol(code as Currency)} ${formatMoney(v.totalDue)}`);
   return parts.length > 0 ? parts.join(" · ") : formatSYP(0);
 }
 
@@ -113,6 +114,8 @@ export function ExecutiveKpiGrid() {
   const today = new Date().toISOString().slice(0, 10);
   const { data: returnsData } = useReturnsList();
   const { data: cashbox } = useCashboxState();
+  const { data: balSYP } = useCashBalance(today, "SYP");
+  const { data: balUSD } = useCashBalance(today, "USD");
   const { data: ordersData } = useOrdersList();
 
   const {
@@ -132,7 +135,7 @@ export function ExecutiveKpiGrid() {
     (o) => o.status === "available" || o.status === "partially_available",
   ).length;
 
-  const hasSession = cashbox && cashbox.openingBalance > 0;
+  const hasSession = Boolean(data?.session?.open || cashbox?.openingDate);
   const todayCount = todayInvoices?.count ?? 0;
   const low = lowStockRolls?.low ?? 0;
   const out = lowStockRolls?.outOfStock ?? 0;
@@ -168,6 +171,23 @@ export function ExecutiveKpiGrid() {
         </div>
       </section>
 
+      <section data-od-id="kpi-cashbox-section" aria-label="أرصدة الصندوق">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <article className="flex min-h-[108px] flex-col rounded-xl border border-border bg-card p-5 shadow-soft">
+            <h3 className="text-[13px] font-medium text-muted-foreground">صندوق ل.س SYP</h3>
+            <div className="mt-4 text-[1.75rem] font-semibold leading-none tabular-nums tracking-tight" dir="ltr">
+              {formatAmount(balSYP ?? 0, "SYP")}
+            </div>
+          </article>
+          <article className="flex min-h-[108px] flex-col rounded-xl border border-border bg-card p-5 shadow-soft">
+            <h3 className="text-[13px] font-medium text-muted-foreground">صندوق $ USD</h3>
+            <div className="mt-4 text-[1.75rem] font-semibold leading-none tabular-nums tracking-tight" dir="ltr">
+              {formatAmount(balUSD ?? 0, "USD")}
+            </div>
+          </article>
+        </div>
+      </section>
+
       <section data-od-id="kpi-secondary-section" aria-label="نظرة عامة على العمليات">
         <div className="overflow-hidden rounded-xl border border-border bg-card">
           <div className="border-b border-border/80 bg-secondary/25 px-5 py-2">
@@ -180,7 +200,7 @@ export function ExecutiveKpiGrid() {
               id="kpi-secondary-unpaid"
               label="غير مسددة"
               value={<span dir="ltr">{formatNumber(unpaidInvoices?.count ?? 0)}</span>}
-              hint={formatUnpaidCurrencies(unpaidInvoices?.byCurrency)}
+              hint={<span dir="ltr">{formatUnpaidCurrencies(unpaidInvoices?.byCurrency)}</span>}
               emphasize={(unpaidInvoices?.count ?? 0) > 0 ? "warning" : undefined}
             />
             <MetricCell

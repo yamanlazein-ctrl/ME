@@ -26,7 +26,7 @@ import { revokedTokens } from "../orm/schemas/revoked-token.table.js";
 export const redis = config.REDIS_URL ? new Redis(config.REDIS_URL) : null;
 
 export async function checkRedis(): Promise<boolean> {
-  if (!redis) return false;
+  if (!redis) return true;
   try {
     await redis.ping();
     return true;

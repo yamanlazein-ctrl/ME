@@ -23,8 +23,10 @@ import {
 } from "lucide-react";
 import { AppShell } from "@/components/layout/AppShell";
 import { PageCard } from "@/components/layout/PageCard";
-import { printDocument, printDataChanged } from "@/components/print/printPortal";
+import { printDocument, printDataChanged, printOrArchive } from "@/components/print/printPortal";
 import { PartyStatementDocument } from "@/components/print/PartyStatementDocument";
+import { InvoicePrintDocument } from "@/components/print/InvoicePrintDocument";
+import { archiveMeta } from "@/shared/utils/documentArchive";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -65,7 +67,7 @@ import {
   type Currency,
 } from "@/presentation/hooks/useCurrency";
 import type { Party } from "@/domain/entities/Party";
-import { useInvoicesList } from "@/presentation/hooks/useInvoices";
+import { useCancelInvoice, useInvoicesList, type Invoice } from "@/presentation/hooks/useInvoices";
 import { useVouchersList } from "@/presentation/hooks/useVouchers";
 import { invoiceTotal } from "@/core/calculations/invoiceCalc";
 import {
@@ -118,6 +120,115 @@ const METHOD_LABEL: Record<string, string> = {
 };
 
 const fmt = (n: number) => formatMoney(n);
+
+/** Symbol on the left, amount on the right — never mixed across currencies. */
+function MoneyText({
+  amount,
+  currency,
+  className,
+}: {
+  amount: number;
+  currency?: Currency | "";
+  className?: string;
+}) {
+  const sym = currency ? currencySymbol(currency) : "";
+  return (
+    <span
+      dir="ltr"
+      className={`inline-flex items-baseline justify-end gap-1 tabular-nums ${className ?? ""}`}
+    >
+      {sym ? <span className="shrink-0 text-[0.7em] font-medium opacity-70">{sym}</span> : null}
+      <span>{fmt(amount)}</span>
+    </span>
+  );
+}
+
+function isInvoiceStatementRow(r: { referenceType?: string; referenceId?: string }) {
+  if (!r.referenceId) return false;
+  const t = r.referenceType ?? "";
+  return (
+    t === "invoice" ||
+    t === "sales_invoice" ||
+    t === "purchase_invoice" ||
+    t === "sales_invoice_cancel" ||
+    t === "purchase_invoice_cancel"
+  );
+}
+
+function printPartyInvoice(inv: Invoice) {
+  const node = <InvoicePrintDocument invoice={inv} />;
+  if (inv.type === "sale" || inv.type === "entry") {
+    printOrArchive(
+      node,
+      archiveMeta(inv.type, {
+        date: inv.date,
+        typeLabel: inv.type === "entry" ? "ENTRY" : "SALE",
+        number: inv.number || inv.reference || inv.id,
+      }),
+      true,
+    );
+  } else {
+    printDocument(node);
+  }
+}
+
+function StatementInvoiceActions({
+  invoiceId,
+  invoice,
+  onDelete,
+}: {
+  invoiceId: string;
+  invoice?: Invoice;
+  onDelete: (inv: Invoice) => void;
+}) {
+  const cancelled = invoice?.status === "cancelled";
+  const canEdit =
+    !!invoice && !cancelled && (invoice.type === "sale" || invoice.type === "entry");
+  return (
+    <div
+      className="inline-flex flex-nowrap items-center gap-1 whitespace-nowrap text-[11px] font-semibold"
+      onClick={(e) => e.stopPropagation()}
+    >
+      <Link
+        to="/invoices/$id"
+        params={{ id: invoiceId }}
+        className="text-primary hover:underline"
+      >
+        عرض
+      </Link>
+      <span className="text-muted-foreground/50">|</span>
+      {canEdit ? (
+        <Link
+          to={invoice.type === "entry" ? "/invoices/entry/new" : "/invoices/sale/new"}
+          search={{ edit: invoice.id }}
+          className="text-primary hover:underline"
+        >
+          تعديل
+        </Link>
+      ) : (
+        <span className="text-muted-foreground/40">تعديل</span>
+      )}
+      <span className="text-muted-foreground/50">|</span>
+      <button
+        type="button"
+        className="text-primary hover:underline disabled:text-muted-foreground/40"
+        disabled={!invoice}
+        onClick={() => invoice && printPartyInvoice(invoice)}
+      >
+        طباعة
+      </button>
+      <span className="text-muted-foreground/50">|</span>
+      <button
+        type="button"
+        className="text-destructive hover:underline disabled:text-muted-foreground/40"
+        disabled={!invoice || cancelled}
+        onClick={() => invoice && onDelete(invoice)}
+      >
+        حذف
+      </button>
+    </div>
+  );
+}
 
 /**
  * Extract the trailing integer from a human invoice number (e.g. "INV-2864" → 2864).
@@ -683,6 +794,10 @@ function StatementTab({ p, kind }: { p: Party; kind: PartyKind }) {
   const [ccy, setCcy] = useState<Currency | "ALL">("ALL");
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [confirmSettle, setConfirmSettle] = useState(false);
+  const [toDelete, setToDelete] = useState<Invoice | null>(null);
+  const cancelInvoice = useCancelInvoice();
+  const { data: invData } = useInvoicesList({ partyId: p.id, limit: 1000 });
+  const invoicesById = new Map((invData?.data ?? []).map((i) => [i.id, i]));
 
   const filter = {
     from: from || undefined,
@@ -908,14 +1023,21 @@ function StatementTab({ p, kind }: { p: Party; kind: PartyKind }) {
                 عرض كل العملات — الرصيد الجاري لكل صف بعملته. لا يُخلط ل.س مع دولار في رقم واحد.
               </p>
               <div className="grid gap-3 md:grid-cols-3">
-                {(["SYP", "USD", "EUR"] as Currency[])
-                  .filter((c) => totalsByCurrency[c])
-                  .map((c) => {
-                    const t = totalsByCurrency[c]!;
+                {Object.entries(totalsByCurrency)
+                  .filter(
+                    ([, t]) =>
+                      t.previousBalance !== 0 ||
+                      t.totalDebit !== 0 ||
+                      t.totalCredit !== 0 ||
+                      t.finalBalance !== 0,
+                  )
+                  .sort(([a], [b]) => a.localeCompare(b))
+                  .map(([c, t]) => {
+                    const sym = currencySymbol(c as Currency);
                     return (
                       <div key={c} className="rounded-lg border border-primary/30 bg-primary/5 px-4 py-3">
                         <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-                          رصيد {currencySymbol(c)}
+                          الرصيد المستحق — {sym}
                         </div>
                         <div
                           className={`mt-1 text-sm font-bold tabular-nums ${
@@ -926,7 +1048,7 @@ function StatementTab({ p, kind }: { p: Party; kind: PartyKind }) {
                                 : ""
                           }`}
                         >
-                          {fmt(t.finalBalance)} {currencySymbol(c)}
+                          <MoneyText amount={t.finalBalance} currency={c as Currency} />
                         </div>
                         <div className="mt-1 text-[10px] text-muted-foreground tabular-nums">
                           مدين {fmt(t.totalDebit)} · دائن {fmt(t.totalCredit)}
@@ -958,7 +1080,7 @@ function StatementTab({ p, kind }: { p: Party; kind: PartyKind }) {
                       s.bold ? (s.value > 0 ? "text-warning" : s.value < 0 ? "text-success" : "") : ""
                     }`}
                   >
-                    {fmt(s.value)} {cur}
+                    <MoneyText amount={s.value} currency={multiCcy ? "" : displayCcy} />
                   </div>
                 </div>
               ))}
@@ -966,13 +1088,14 @@ function StatementTab({ p, kind }: { p: Party; kind: PartyKind }) {
           )}
 
           <div className="w-full overflow-x-auto">
-            <table className="w-full min-w-[1100px] text-right text-sm">
+            <table className="w-full min-w-[1280px] text-right text-sm">
               <thead className="bg-secondary/60 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
                 <tr className="[&>th]:px-3 [&>th]:py-2.5">
                   <th className="w-10">#</th>
                   <th className="w-28">التاريخ</th>
                   <th className="w-32">النوع</th>
                   <th className="w-28">المرجع</th>
+                  <th className="w-[200px]">إجراءات</th>
                   <th className="min-w-[160px]">البيان</th>
                   {multiCcy && <th className="w-16">العملة</th>}
                   <th className="w-20 text-left">الكمية</th>
@@ -989,7 +1112,7 @@ function StatementTab({ p, kind }: { p: Party; kind: PartyKind }) {
                     <td className="tabular-nums text-muted-foreground">—</td>
                     <td className="tabular-nums text-muted-foreground">—</td>
                     <td className="text-xs font-semibold">رصيد سابق</td>
-                    <td colSpan={multiCcy ? 5 : 4} className="text-muted-foreground">
+                    <td colSpan={multiCcy ? 6 : 5} className="text-muted-foreground">
                       أرصدة قبل تاريخ البداية
                     </td>
                     <td className="text-left tabular-nums" />
@@ -1011,7 +1134,7 @@ function StatementTab({ p, kind }: { p: Party; kind: PartyKind }) {
                 {rows.length === 0 && (
                   <tr>
                     <td
-                      colSpan={multiCcy ? 12 : 11}
+                      colSpan={multiCcy ? 13 : 12}
                       className="px-4 py-10 text-center text-xs text-muted-foreground"
                     >
                       لا حركات في هذه الفترة.
@@ -1027,7 +1150,7 @@ function StatementTab({ p, kind }: { p: Party; kind: PartyKind }) {
                           : "hover:bg-secondary/30"
                       }`}
                       onClick={() => {
-                        if (r.referenceType === "invoice" && r.referenceId) {
+                        if (r.referenceId && isInvoiceStatementRow(r)) {
                           navigate({ to: "/invoices/$id", params: { id: r.referenceId } });
                         }
                       }}
@@ -1058,6 +1181,17 @@ function StatementTab({ p, kind }: { p: Party; kind: PartyKind }) {
                         }`}
                       >
                         {r.referenceNumber}
+                      </td>
+                      <td>
+                        {isInvoiceStatementRow(r) && r.referenceId ? (
+                          <StatementInvoiceActions
+                            invoiceId={r.referenceId}
+                            invoice={invoicesById.get(r.referenceId)}
+                            onDelete={setToDelete}
+                          />
+                        ) : (
+                          <span className="text-muted-foreground">—</span>
+                        )}
                       </td>
                       <td className="text-muted-foreground">{r.description}</td>
                       {multiCcy && (
@@ -1109,12 +1243,12 @@ function StatementTab({ p, kind }: { p: Party; kind: PartyKind }) {
                             : undefined
                         }
                       >
-                        {fmt(r.runningBalance)}
-                        {multiCcy && (
-                          <span className="ms-1 text-[10px] font-normal text-muted-foreground">
-                            {currencySymbol((r.currency as Currency) ?? "SYP")}
-                          </span>
-                        )}
+                        <MoneyText
+                          amount={r.runningBalance}
+                          currency={
+                            multiCcy ? ((r.currency as Currency) ?? "SYP") : ""
+                          }
+                        />
                         {/* #4: make explicit that the cancelled row did NOT move
                             the balance, instead of silently carrying it forward. */}
                         {r.status === "cancelled" && (
@@ -1129,7 +1263,10 @@ function StatementTab({ p, kind }: { p: Party; kind: PartyKind }) {
                             variant="ghost"
                             size="sm"
                             className="h-6 w-6 p-0"
-                            onClick={() => toggleRow(r.id)}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              toggleRow(r.id);
+                            }}
                           >
                             <ChevronDown
                               className={`h-4 w-4 transition-transform ${
@@ -1142,7 +1279,7 @@ function StatementTab({ p, kind }: { p: Party; kind: PartyKind }) {
                     </tr>
                     {expanded.has(r.id) && r.lines && (
                       <tr className="bg-muted/30 align-middle [&>td]:px-3 [&>td]:py-2">
-                        <td colSpan={multiCcy ? 12 : 11}>
+                        <td colSpan={multiCcy ? 13 : 12}>
                           <div className="mb-1 mt-1 rounded-lg border border-border/60 bg-background/40 px-3 py-2">
                             <div className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
                               تفاصيل الأصناف
@@ -1186,7 +1323,7 @@ function StatementTab({ p, kind }: { p: Party; kind: PartyKind }) {
                 <tfoot className="bg-secondary/40 text-xs font-bold">
                   <tr className="[&>td]:px-3 [&>td]:py-2.5">
                     <td colSpan={2} className="text-left" />
-                    <td colSpan={5} className="text-left">
+                    <td colSpan={6} className="text-left">
                       الإجمالي
                     </td>
                     <td className="text-left tabular-nums">{fmt(totalDebit)}</td>
@@ -1235,6 +1372,29 @@ function StatementTab({ p, kind }: { p: Party; kind: PartyKind }) {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <AlertDialog open={!!toDelete} onOpenChange={(o) => !o && setToDelete(null)}>
+        <AlertDialogContent dir="rtl">
+          <AlertDialogHeader>
+            <AlertDialogTitle>تأكيد الحذف</AlertDialogTitle>
+            <AlertDialogDescription>
+              هل أنت متأكد من حذف الفاتورة "{toDelete?.number}"؟ لا يمكن التراجع عن هذا الإجراء.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="flex-row-reverse gap-2">
+            <AlertDialogAction
+              onClick={() => {
+                if (toDelete) void cancelInvoice.mutateAsync(toDelete.id);
+                setToDelete(null);
+              }}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              حذف نهائي
+            </AlertDialogAction>
+            <AlertDialogCancel>إلغاء</AlertDialogCancel>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
@@ -1246,101 +1406,146 @@ function OutstandingTab({ p }: { p: Party }) {
   const invs = invData?.data ?? [];
   const { data: vData } = useVouchersList({ partyId: p.id, limit: 1000 });
   const vchs = vData?.data ?? [];
-  // Currency-filtered outstanding (same pattern as BUG-06 fix) —
-  // avoids mixing SYP+USD+EUR into meaningless blended totals.
-  const rows = buildOutstanding(p.id, invs, vchs, p.currency ?? "SYP");
+  const rows = buildOutstanding(p.id, invs, vchs);
+  const [dueCcy, setDueCcy] = useState<"SYP" | "USD">("SYP");
+  const [dueCcyTouched, setDueCcyTouched] = useState(false);
+  const sypDue = rows.some((r) => r.currency === "SYP");
+  const usdDue = rows.some((r) => r.currency === "USD");
+  useEffect(() => {
+    if (dueCcyTouched) return;
+    if (!sypDue && usdDue) setDueCcy("USD");
+  }, [sypDue, usdDue, dueCcyTouched]);
+  const ccy = dueCcy;
+  const cur = currencySymbol(ccy);
+  const ccyRows = rows.filter((r) => r.currency === ccy);
   const buckets = { "0-30": 0, "31-60": 0, "61-90": 0, "90+": 0 } as Record<
     "0-30" | "31-60" | "61-90" | "90+",
     number
   >;
-  rows.forEach((r) => (buckets[r.bucket] += r.remaining));
-  const cur = currencySymbol(p.currency ?? "SYP");
+  for (const r of ccyRows) {
+    buckets[r.bucket] += r.remaining;
+  }
+  const due = ccyRows.reduce((s, r) => s + r.remaining, 0);
 
   return (
     <div className="space-y-4">
-      <PageCard
-        title="تحليل التقادم"
-        description="توزيع الرصيد المستحق حسب عمر الفاتورة."
-        tone="primary"
-      >
-        <div className="grid gap-3 md:grid-cols-4">
-          {(["0-30", "31-60", "61-90", "90+"] as const).map((b) => (
-            <div key={b} className="rounded-lg border border-primary/20 bg-background/60 px-4 py-3">
-              <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-                {b === "90+" ? "أكثر من 90 يوم" : `${b} يوم`}
-              </div>
-              <div
-                className={`mt-1 text-lg font-bold tabular-nums ${
-                  b === "90+"
-                    ? "text-destructive"
-                    : b === "61-90"
-                      ? "text-warning"
-                      : "text-foreground"
-                }`}
-              >
-                {fmt(buckets[b])}
-                <span className="mr-1 text-xs font-normal opacity-70">{cur}</span>
-              </div>
-            </div>
-          ))}
-        </div>
-      </PageCard>
+      <div className="flex flex-wrap items-center justify-end gap-2">
+        {(["SYP", "USD"] as const).map((code) => {
+          const active = dueCcy === code;
+          return (
+            <Button
+              key={code}
+              type="button"
+              size="sm"
+              variant={active ? "default" : "outline"}
+              className="h-9 min-w-[7.5rem] gap-1.5"
+              aria-pressed={active}
+              onClick={() => {
+                setDueCcyTouched(true);
+                setDueCcy(code);
+              }}
+            >
+              {code === "SYP" ? "ل.س SYP" : "$ USD"}
+            </Button>
+          );
+        })}
+      </div>
 
-      <PageCard
-        title="الفواتير المفتوحة"
-        description="الفواتير التي لم تسدد بالكامل."
-        noBodyPadding
-      >
-        <div className="w-full overflow-x-auto">
-          <table className="w-full min-w-[820px] text-right text-sm">
-            <thead className="bg-secondary/60 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-              <tr className="[&>th]:px-3 [&>th]:py-2.5">
-                <th className="w-32">الرقم</th>
-                <th className="w-28">التاريخ</th>
-                <th className="w-24 text-center">العمر</th>
-                <th className="w-28 text-center">الفئة</th>
-                <th className="w-32 text-left">الإجمالي</th>
-                <th className="w-32 text-left">المدفوع</th>
-                <th className="w-32 text-left">المتبقي</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border">
-              {rows.length === 0 && (
-                <tr>
-                  <td colSpan={7} className="px-4 py-10 text-center text-xs text-muted-foreground">
-                    لا رصيد مستحق — الحساب مسدّد بالكامل.
-                  </td>
-                </tr>
-              )}
-              {rows.map((r) => (
-                <tr key={r.invoiceId} className="h-11 align-middle [&>td]:px-3 [&>td]:py-2">
-                  <td className="tabular-nums font-semibold text-primary">{r.number}</td>
-                  <td className="tabular-nums text-muted-foreground">{r.date}</td>
-                  <td className="text-center tabular-nums">{r.ageDays} يوم</td>
-                  <td className="text-center">
-                    <span
-                      className={`inline-flex items-center rounded px-2 py-0.5 text-[11px] font-semibold ${
-                        r.bucket === "90+"
-                          ? "bg-destructive/15 text-destructive"
-                          : r.bucket === "61-90"
-                            ? "bg-warning/15 text-warning"
-                            : "bg-secondary text-muted-foreground"
-                      }`}
-                    >
-                      {r.bucket}
-                    </span>
-                  </td>
-                  <td className="text-left tabular-nums">{fmt(r.total)}</td>
-                  <td className="text-left tabular-nums text-muted-foreground">{fmt(r.paid)}</td>
-                  <td className="text-left font-semibold tabular-nums text-warning">
-                    {fmt(r.remaining)}
-                  </td>
-                </tr>
+      {ccyRows.length === 0 ? (
+        <PageCard title={`الرصيد المستحق — ${cur}`}>
+          <div className="py-10 text-center text-xs text-muted-foreground">
+            لا رصيد مستحق بهذه العملة.
+          </div>
+        </PageCard>
+      ) : (
+        <>
+          <PageCard
+            title={`تحليل التقادم — ${cur}`}
+            description={`توزيع الرصيد المستحق بعملة ${cur} حسب عمر الفاتورة. الإجمالي المستحق:`}
+            tone="primary"
+          >
+            <div className="mb-3 text-sm font-semibold">
+              <MoneyText amount={due} currency={ccy} />
+            </div>
+            <div className="grid gap-3 md:grid-cols-4">
+              {(["0-30", "31-60", "61-90", "90+"] as const).map((b) => (
+                <div
+                  key={b}
+                  className="rounded-lg border border-primary/20 bg-background/60 px-4 py-3"
+                >
+                  <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                    {b === "90+" ? "أكثر من 90 يوم" : `${b} يوم`}
+                  </div>
+                  <div
+                    className={`mt-1 text-lg font-bold tabular-nums ${
+                      b === "90+"
+                        ? "text-destructive"
+                        : b === "61-90"
+                          ? "text-warning"
+                          : "text-foreground"
+                    }`}
+                  >
+                    <MoneyText amount={buckets[b]} currency={ccy} />
+                  </div>
+                </div>
               ))}
-            </tbody>
-          </table>
-        </div>
-      </PageCard>
+            </div>
+          </PageCard>
+
+          <PageCard
+            title={`الفواتير المفتوحة — ${cur}`}
+            description={`الفواتير غير المسدّدة بالكامل بعملة ${cur}.`}
+            noBodyPadding
+          >
+            <div className="w-full overflow-x-auto">
+              <table className="w-full min-w-[820px] text-right text-sm">
+                <thead className="bg-secondary/60 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  <tr className="[&>th]:px-3 [&>th]:py-2.5">
+                    <th className="w-32">الرقم</th>
+                    <th className="w-28">التاريخ</th>
+                    <th className="w-24 text-center">العمر</th>
+                    <th className="w-28 text-center">الفئة</th>
+                    <th className="w-32 text-left">الإجمالي</th>
+                    <th className="w-32 text-left">المدفوع</th>
+                    <th className="w-32 text-left">المتبقي</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border">
+                  {ccyRows.map((r) => (
+                    <tr key={r.invoiceId} className="h-11 align-middle [&>td]:px-3 [&>td]:py-2">
+                      <td className="tabular-nums font-semibold text-primary">{r.number}</td>
+                      <td className="tabular-nums text-muted-foreground">{r.date}</td>
+                      <td className="text-center tabular-nums">{r.ageDays} يوم</td>
+                      <td className="text-center">
+                        <span
+                          className={`inline-flex items-center rounded px-2 py-0.5 text-[11px] font-semibold ${
+                            r.bucket === "90+"
+                              ? "bg-destructive/15 text-destructive"
+                              : r.bucket === "61-90"
+                                ? "bg-warning/15 text-warning"
+                                : "bg-secondary text-muted-foreground"
+                          }`}
+                        >
+                          {r.bucket}
+                        </span>
+                      </td>
+                      <td className="text-left tabular-nums">
+                        <MoneyText amount={r.total} currency={ccy} />
+                      </td>
+                      <td className="text-left tabular-nums text-muted-foreground">
+                        <MoneyText amount={r.paid} currency={ccy} />
+                      </td>
+                      <td className="text-left font-semibold tabular-nums text-warning">
+                        <MoneyText amount={r.remaining} currency={ccy} />
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </PageCard>
+        </>
+      )}
     </div>
   );
 }
@@ -1356,16 +1561,58 @@ function StatsTab({ p, kind }: { p: Party; kind: PartyKind }) {
   const colorCodes = Object.fromEntries(colors.map((c) => [c.id, c.code ?? ""]));
   const fabricNames = Object.fromEntries(fabrics.map((f) => [f.id, f.name]));
   const hist = buildFabricHistory(p.id, kind, invs, colorNames, colorCodes, fabricNames);
-  const stats = buildPartyStats(p, kind, invs, vchs, p.currency ?? "SYP");
+  const statsByCurrency = buildPartyStatsByCurrency(p, kind, invs, vchs);
+  const currencyKeys = Object.keys(statsByCurrency).sort((a, b) => a.localeCompare(b));
+  const primaryCcy = (p.currency ?? currencyKeys[0] ?? "SYP") as Currency;
+  const stats = statsByCurrency[primaryCcy] ?? {
+    invoicesCount: 0,
+    totalAmount: 0,
+    totalPaid: 0,
+    remaining: 0,
+    avgInvoice: 0,
+    totalKg: 0,
+  };
   const topRows = [...hist].sort((a, b) => b.totalKg - a.totalKg);
   const topFabric = topRows[0]?.fabricName;
   const topColor = topRows[0]?.colorName;
   const topDye = topRows[0]?.dyeBatch;
-  const cur = currencySymbol(p.currency ?? "SYP");
   const isSup = kind === "supplier";
 
   return (
     <div className="space-y-4">
+      {currencyKeys.length > 0 && (
+        <PageCard
+          title="الرصيد حسب العملة"
+          description="لكل عملة على حدة — لا يُخلط السوري بالدولار."
+          tone="primary"
+        >
+          <div className="grid gap-3 md:grid-cols-3">
+            {currencyKeys.map((c) => {
+              const s = statsByCurrency[c]!;
+              const sym = currencySymbol(c as Currency);
+              return (
+                <div key={c} className="rounded-lg border border-primary/20 bg-background/60 px-4 py-3">
+                  <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                    مستحق {sym}
+                  </div>
+                  <div
+                    className={`mt-1 text-lg font-bold tabular-nums ${
+                      s.remaining > 0 ? "text-warning" : s.remaining < 0 ? "text-success" : ""
+                    }`}
+                  >
+                    {fmt(s.remaining)}{" "}
+                    <span className="text-xs font-normal opacity-70">{sym}</span>
+                  </div>
+                  <div className="mt-1 text-[10px] text-muted-foreground tabular-nums">
+                    فواتير {s.invoicesCount} · مدفوع {fmt(s.totalPaid)}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </PageCard>
+      )}
+
       <PageCard
         title="أفضل الأصناف"
         description="أعلى قماش/لون/دفعة صبغ تم التعامل بها."
@@ -1379,9 +1626,13 @@ function StatsTab({ p, kind }: { p: Party; kind: PartyKind }) {
           <Kpi
             label={isSup ? "متوسط سعر الشراء" : "متوسط سعر البيع"}
             value={stats.totalKg > 0 ? fmt(stats.totalAmount / stats.totalKg) : "—"}
-            suffix={cur}
+            suffix={currencySymbol(primaryCcy)}
           />
-          <Kpi label="متوسط قيمة الفاتورة" value={fmt(stats.avgInvoice)} suffix={cur} />
+          <Kpi
+            label="متوسط قيمة الفاتورة"
+            value={fmt(stats.avgInvoice)}
+            suffix={currencySymbol(primaryCcy)}
+          />
         </div>
       </PageCard>
 
@@ -1658,9 +1909,9 @@ function Kpi({
       <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
         {label}
       </div>
-      <div className={`mt-1 text-lg font-bold tabular-nums ${color}`}>
-        {value}
+      <div className={`mt-1 text-lg font-bold tabular-nums ${color}`} dir="ltr">
         {suffix && <span className="mr-1 text-xs font-normal opacity-70">{suffix}</span>}
+        {value}
       </div>
     </div>
   );

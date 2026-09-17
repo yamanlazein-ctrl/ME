@@ -43,6 +43,12 @@ describe("ensureDesktopSchema matches the current sync protocol", () => {
     );
     expect(rls.rows[0]?.relforcerowsecurity).toBe(true);
 
+    const cutoffCol = await pool.query(
+      `SELECT 1 FROM information_schema.columns
+        WHERE table_schema='public' AND table_name='users' AND column_name='tokens_revoked_before'`,
+    );
+    expect(cutoffCol.rowCount).toBe(1);
+
     const tables = await pool.query(
       `SELECT table_name FROM information_schema.tables
         WHERE table_schema='public' AND table_name IN ('sync_tombstones','sync_conflicts')`,

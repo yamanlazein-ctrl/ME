@@ -1,10 +1,7 @@
 import type { CSSProperties, ReactNode } from "react";
 import { useSettings } from "@/presentation/hooks/useSettings";
 import logoUrl from "@/assets/logo-motard-icon.png";
-import {
-  FIXED_PRINT_FOOTER_LINES,
-  PRINT_BRAND_NAME,
-} from "@/shared/constants/printConfig";
+import { getCompanyContactLines, PRINT_BRAND_NAME } from "@/shared/constants/printConfig";
 import "./print.css";
 
 export type PrintMetaItem = { label: string; value: string };
@@ -44,15 +41,16 @@ const BADGE_LABEL: Record<PrintTypeBadge, string> = {
 /**
  * Unified print shell for ALL documents (invoices, vouchers, statements…).
  *
- * Header contract (locked):
- *   • NOTHING above the brand row (no title, no date, no contact)
- *   • Logo on the LEFT · "Motard Fabrics Group" on the RIGHT
- *   • Gold divider
- *   • Then document title + readable party/meta
+ * Header contract (locked — one canonical layout for every invoice):
+ *   • NOTHING above the brand row
+ *   • Logo physical LEFT, isolated in its own column
+ *   • Company identity ONCE on the right (PRINT_BRAND_NAME)
+ *   • Exact five contact lines under it (getCompanyContactLines) — never
+ *     concatenated, never LTR-reversed, never duplicated from settings
+ *   • Gold divider, then document title + party/meta
  *
  * Footer contract (locked):
- *   • Contact lines once only, at the bottom (FIXED_PRINT_FOOTER_LINES)
- *   • Never repeat contact in the header
+ *   • Thanks line on the last page only — contact is NOT repeated here
  */
 export function PrintDocument({
   title,
@@ -91,64 +89,83 @@ export function PrintDocument({
   const p = s.printing;
   const showLogo = p.showLogo !== false;
   const allMeta = [...(meta ?? []), ...(extraMeta ?? [])];
+  const isFirstPage = pageNumber == null || pageNumber === 1;
   const showFooter =
     !hideFooter &&
     (pageNumber == null || totalPages == null || pageNumber === totalPages);
 
+  const contactLines = getCompanyContactLines();
+
   return (
-    <div className="print-doc">
-      {/* ── Brand bar: logo LEFT + Motard RIGHT. Nothing above. ── */}
+    <div className="print-doc" data-paper={p.paperSize || "A4"}>
+      {/* ── Brand bar: logo LEFT (own column) + identity+contact RIGHT, once. ── */}
       <div className="print-brand-bar">
         {showLogo ? (
           <img className="print-logo" src={logoUrl} alt="" />
         ) : (
-          <span />
+          <span className="print-logo-spacer" />
         )}
-        <div className="print-brand-name">{PRINT_BRAND_NAME}</div>
+        {isFirstPage ? (
+          <div className="print-brand-stack">
+            <div className="print-brand-name">{PRINT_BRAND_NAME}</div>
+            {contactLines.map((line) => (
+              <div key={line} className="print-brand-contact-line">
+                {line}
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="print-brand-name print-brand-name--compact">{PRINT_BRAND_NAME}</div>
+        )}
       </div>
 
       <div className="print-header-divider" />
 
-      {/* ── Document title ── */}
-      <div className="print-header-title-area">
-        {typeBadge && (
-          <span className={`print-type-badge print-badge-${typeBadge.toLowerCase()}`}>
-            {BADGE_LABEL[typeBadge]}
-          </span>
-        )}
-        <div className="print-doc-title">{title}</div>
-        {subtitle && <div className="print-doc-subtitle">{subtitle}</div>}
+      <div className="print-masthead">
+        <div className="print-header-title-area">
+          <div className="print-title-row">
+            {typeBadge && (
+              <span className={`print-type-badge print-badge-${typeBadge.toLowerCase()}`}>
+                {BADGE_LABEL[typeBadge]}
+              </span>
+            )}
+            <div className="print-doc-title">{title}</div>
+          </div>
+          {subtitle && <div className="print-doc-subtitle">{subtitle}</div>}
+        </div>
       </div>
 
-      {/* ── Party + meta — stacked for readability, not one jammed strip ── */}
-      {party && (
-        <div className="print-party print-avoid-break">
-          <div className="print-party-side">
-            <div className="print-party-label">{party.label}</div>
-            <div className="print-party-name">{party.name}</div>
-            {party.extra && (
-              <div className="print-party-line">
-                {party.extra.replace(/^رمز .*?: /, "الرمز: ")}
+      {(party || allMeta.length > 0) && (
+        <div className="print-info-row print-avoid-break">
+          {party && (
+            <div className="print-party">
+              <div className="print-party-side">
+                <div className="print-party-label">{party.label}</div>
+                <div className="print-party-name">{party.name}</div>
+                {party.extra && (
+                  <div className="print-party-line">
+                    {party.extra.replace(/^رمز .*?: /, "الرمز: ")}
+                  </div>
+                )}
+                {party.phone && (
+                  <div className="print-party-line">
+                    الهاتف: <span dir="ltr">{party.phone}</span>
+                  </div>
+                )}
+                {party.address && <div className="print-party-line">{party.address}</div>}
               </div>
-            )}
-            {party.phone && (
-              <div className="print-party-line">
-                الهاتف: <span dir="ltr">{party.phone}</span>
-              </div>
-            )}
-            {party.address && <div className="print-party-line">{party.address}</div>}
-          </div>
-        </div>
-      )}
-
-      {allMeta.length > 0 && (
-        <div className="print-meta print-avoid-break">
-          {allMeta.map((m) => (
-            <div key={m.label} className="print-meta-item">
-              <span className="print-meta-label">{m.label}</span>
-              <span className="print-meta-value">{m.value}</span>
             </div>
-          ))}
+          )}
+          {allMeta.length > 0 && (
+            <div className="print-meta">
+              {allMeta.map((m) => (
+                <div key={m.label} className="print-meta-item">
+                  <span className="print-meta-label">{m.label}</span>
+                  <span className="print-meta-value">{m.value}</span>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
 
@@ -161,7 +178,9 @@ export function PrintDocument({
           {totals.map((t) => (
             <div key={t.label} className={`print-total-row ${t.grand ? "print-grand-total" : ""}`}>
               <span>{t.label}</span>
-              <span className="pd-amount">{t.value}</span>
+              <span className="pd-amount pd-money" dir="ltr">
+                {t.value}
+              </span>
             </div>
           ))}
         </div>
@@ -173,7 +192,9 @@ export function PrintDocument({
           {payment.map((item) => (
             <div key={item.label} className="print-payment-item">
               <div className="print-payment-label">{item.label}</div>
-              <div className="print-payment-value">{item.value}</div>
+              <div className="print-payment-value pd-money" dir="ltr">
+                {item.value}
+              </div>
             </div>
           ))}
         </div>
@@ -203,11 +224,6 @@ export function PrintDocument({
           <div className="print-footer-thanks">
             {footerNote || p.footerNote || "شكراً لتعاملكم معنا"}
           </div>
-          {FIXED_PRINT_FOOTER_LINES.map((line) => (
-            <div key={line} className="print-owner-contact">
-              {line}
-            </div>
-          ))}
         </div>
       )}
     </div>

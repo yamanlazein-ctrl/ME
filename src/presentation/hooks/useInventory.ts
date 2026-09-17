@@ -11,6 +11,7 @@ import { Roll, type RollData } from "@/domain/entities/Roll";
 import { UUID, type TenantContext } from "@/domain/types";
 import type { Currency } from "@/domain/types";
 import { formatNumber, formatMoney, formatQuantity } from "@/shared/utils/formatNumber";
+import { colorOnFabric, filterColorsByQuery } from "@/domain/inventory/colorLookup";
 
 export type FabricUnit = "meter" | "yard" | "kg";
 export type RollStatus = "active" | "low" | "out";
@@ -219,27 +220,12 @@ export function totalPiecesOfFabric(fabricId: string): number {
   return colorsOfFabric(fabricId).reduce((s, c) => s + totalPiecesOfColor(c.id), 0);
 }
 
-export function searchColors(term: string, limit = 200): Color[] {
-  // Prefer colours that currently have stock; fall back to full catalogue
-  // when nothing is in stock (still useful for search/create flows).
-  const stocked = colorsCache.filter((c) => totalKgOfColor(c.id) > 0);
-  const all = stocked.length > 0 ? stocked : colorsCache;
-  const q = term.trim().toLowerCase();
-  if (!q) return all;
-  const scored = all
-    .map((c) => {
-      const code = (c.code ?? "").toLowerCase();
-      const name = (c.name ?? "").toLowerCase();
-      if (code === q) return { c, score: 0 };
-      if (name === q) return { c, score: 1 };
-      if (code.startsWith(q)) return { c, score: 2 };
-      if (name.startsWith(q)) return { c, score: 3 };
-      if (code.includes(q) || name.includes(q)) return { c, score: 4 };
-      return null;
-    })
-    .filter((x): x is { c: Color; score: number } => x !== null)
-    .sort((a, b) => a.score - b.score);
-  return scored.slice(0, limit).map((x) => x.c);
+export function searchColors(term: string, limit = 12): Color[] {
+  return filterColorsByQuery(colorsCache, term, limit);
+}
+
+export function colorByName(name: string, fabricId: string | undefined): Color | undefined {
+  return colorOnFabric(colorsCache, fabricId, { name });
 }
 
 /**
@@ -305,7 +291,19 @@ export async function updateFabric(
   patch: Partial<Omit<FabricData, "id" | "createdAt" | "tenantId" | "createdBy">>,
 ) {
   try {
-    const updated = await container.inventory.repository.updateFabric(id, patch, ctx);
+    const cached = fabricsCache.find((f) => f.id === id);
+    const expectedVersion =
+      typeof (patch as { version?: number }).version === "number"
+        ? (patch as { version: number }).version
+        : cached?.version;
+    if (typeof expectedVersion !== "number") {
+      throw new Error("الإصدار المتوقع (expectedVersion) مطلوب لتحديث القماش");
+    }
+    const updated = await container.inventory.repository.updateFabric(
+      id,
+      { ...patch, version: expectedVersion },
+      ctx,
+    );
     const idx = fabricsCache.findIndex((f) => f.id === id);
     if (idx >= 0) fabricsCache[idx] = updated;
     notifyInventoryChange();
@@ -374,7 +372,19 @@ export async function updateColor(
   opts?: { silent?: boolean },
 ) {
   try {
-    const updated = await container.inventory.repository.updateColor(id, patch, ctx);
+    const cached = colorsCache.find((c) => c.id === id);
+    const expectedVersion =
+      typeof (patch as { version?: number }).version === "number"
+        ? (patch as { version: number }).version
+        : cached?.version;
+    if (typeof expectedVersion !== "number") {
+      throw new Error("الإصدار المتوقع (expectedVersion) مطلوب لتحديث اللون");
+    }
+    const updated = await container.inventory.repository.updateColor(
+      id,
+      { ...patch, version: expectedVersion },
+      ctx,
+    );
     const idx = colorsCache.findIndex((c) => c.id === id);
     if (idx >= 0) colorsCache[idx] = updated;
     notifyInventoryChange();

@@ -1,4 +1,4 @@
-import { and, eq, isNull } from "drizzle-orm";
+import { and, eq, isNull, sql } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import { db as defaultDb, type DB, type Tx } from "../orm/drizzle.js";
 import { runWithPlatformContext } from "../orm/tenant-context.js";
@@ -17,11 +17,13 @@ import type {
   UpdatePolicy,
   BackupPolicy,
 } from "../../domain/licensing/license-metadata.js";
+import { resolveDeviceLimit } from "../../domain/licensing/ownership.js";
 import { licenses } from "../orm/schemas/license.table.js";
 import { licenseActivations } from "../orm/schemas/license-activation.table.js";
 import { deviceRegistrations } from "../orm/schemas/device-registration.table.js";
 import { licenseAuditEvents } from "../orm/schemas/license-audit-event.table.js";
 import { tenants } from "../orm/schemas/tenant.table.js";
+import { revokeSyncDevicesByFingerprint } from "../device/linkedDeviceRevocation.js";
 
 /**
  * Phase 0 sub-batch 0E — self-hosted license provider.
@@ -48,8 +50,12 @@ export class SelfHostedLicenseProvider implements ILicenseProvider {
 
   async activate(req: ActivationRequest): Promise<ActivationResult> {
     return runWithPlatformContext(() => this.db.transaction(async (tx: Tx) => {
-      // 1. Find the license by key.
-      const [lic] = await tx.select().from(licenses).where(eq(licenses.key, req.key)).limit(1);
+      // 1. Find the license by key (case-insensitive — UI may normalize case).
+      const [lic] = await tx
+        .select()
+        .from(licenses)
+        .where(sql`lower(${licenses.key}) = lower(${req.key})`)
+        .limit(1);
       if (!lic) {
         throw new Error("INVALID_LICENSE");
       }
@@ -120,7 +126,10 @@ export class SelfHostedLicenseProvider implements ILicenseProvider {
           licenseExpiresAt: lic.expiresAt,
           licenseStatus: lic.status,
           licenseType: lic.type,
-          maxDevices: lic.maxDevices,
+          maxDevices: resolveDeviceLimit({
+            limits: lic.limits as LicenseLimits | null,
+            maxDevices: lic.maxDevices,
+          }),
           activationId: activation.id,
           serverFingerprint: req.serverFingerprint,
           lastHeartbeatAt: new Date(),
@@ -181,41 +190,57 @@ export class SelfHostedLicenseProvider implements ILicenseProvider {
 
       // R6: register the activating server as a device so admins can see
       // and manage installs. Signed token is stored on the device row.
-      // The device cap from the license (`limits.devices`, falling back to
-      // `max_devices`) is enforced here so a key can never be spread over
-      // more machines than it licenses — counting only live (non-revoked)
-      // registrations, so revoking a device frees its slot.
-      const deviceLimit =
-        (lic.limits as LicenseLimits | null)?.devices ?? lic.maxDevices ?? 0;
-      if (deviceLimit > 0) {
-        const live = await tx
-          .select({ fingerprint: deviceRegistrations.deviceFingerprint })
-          .from(deviceRegistrations)
-          .where(
-            and(
-              eq(deviceRegistrations.licenseId, lic.id),
-              isNull(deviceRegistrations.revokedAt),
-            ),
-          );
-        const alreadyRegistered = live.some((d) => d.fingerprint === req.serverFingerprint);
-        if (!alreadyRegistered && live.length >= deviceLimit) {
-          throw new Error("DEVICE_LIMIT_REACHED");
-        }
+      // Max Devices SoT: resolveDeviceLimit (limits.devices → max_devices).
+      const deviceLimit = resolveDeviceLimit({
+        limits: lic.limits as LicenseLimits | null,
+        maxDevices: lic.maxDevices,
+      });
+      const live = await tx
+        .select({ fingerprint: deviceRegistrations.deviceFingerprint })
+        .from(deviceRegistrations)
+        .where(
+          and(
+            eq(deviceRegistrations.licenseId, lic.id),
+            isNull(deviceRegistrations.revokedAt),
+          ),
+        );
+      const alreadyRegistered = live.some((d) => d.fingerprint === req.serverFingerprint);
+      if (deviceLimit > 0 && !alreadyRegistered && live.length >= deviceLimit) {
+        throw new Error("DEVICE_LIMIT_REACHED");
       }
 
       const deviceId = randomUUID();
-      await tx.insert(deviceRegistrations).values({
-        licenseId: lic.id,
-        tenantId,
-        deviceId,
-        deviceFingerprint: req.serverFingerprint,
-        deviceFingerprintVersion: req.serverFingerprintVersion,
-        platform: req.platform ?? "web",
-        name: req.hostname ?? "server",
-        signedToken: token,
-        signedTokenExpiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
-        lastSeenAt: new Date(),
-      });
+      if (alreadyRegistered) {
+        await tx
+          .update(deviceRegistrations)
+          .set({
+            lastSeenAt: new Date(),
+            signedToken: token,
+            signedTokenExpiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+            platform: req.platform ?? "web",
+            name: req.hostname ?? "server",
+          })
+          .where(
+            and(
+              eq(deviceRegistrations.licenseId, lic.id),
+              eq(deviceRegistrations.deviceFingerprint, req.serverFingerprint),
+              isNull(deviceRegistrations.revokedAt),
+            ),
+          );
+      } else {
+        await tx.insert(deviceRegistrations).values({
+          licenseId: lic.id,
+          tenantId,
+          deviceId,
+          deviceFingerprint: req.serverFingerprint,
+          deviceFingerprintVersion: req.serverFingerprintVersion,
+          platform: req.platform ?? "web",
+          name: req.hostname ?? "server",
+          signedToken: token,
+          signedTokenExpiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+          lastSeenAt: new Date(),
+        });
+      }
 
       return {
         activationId: activation.id,
@@ -296,12 +321,12 @@ export class SelfHostedLicenseProvider implements ILicenseProvider {
 
   async listDevices(activationId: string): Promise<DeviceInfo[]> {
     return runWithPlatformContext(() => this.db.transaction(async (tx: Tx) => {
-      const rows = await tx
-        .select()
-        .from(deviceRegistrations)
-        .where(
-          eq(deviceRegistrations.licenseId, (await this.activationLicenseId(activationId)) ?? ""),
-        );
+    const licenseId = await this.activationLicenseId(activationId);
+    if (!licenseId) return [];
+    const rows = await tx
+      .select()
+      .from(deviceRegistrations)
+      .where(eq(deviceRegistrations.licenseId, licenseId));
       return rows.map((r: typeof deviceRegistrations.$inferSelect) => ({
         id: r.id,
         deviceId: r.deviceId,
@@ -314,6 +339,8 @@ export class SelfHostedLicenseProvider implements ILicenseProvider {
   }
 
   async revokeDevice(activationId: string, deviceId: string, reason: string): Promise<void> {
+    let fingerprint: string | null = null;
+    let tenantIdForSync: string | null = null;
     await runWithPlatformContext(() => this.db.transaction(async (tx: Tx) => {
       const licenseId = await this.activationLicenseId(activationId);
       if (!licenseId) return;
@@ -328,6 +355,8 @@ export class SelfHostedLicenseProvider implements ILicenseProvider {
         )
         .returning();
       if (updated) {
+        fingerprint = updated.deviceFingerprint;
+        tenantIdForSync = updated.tenantId;
         const tenantId = await this.activationTenantId(activationId);
         await tx.insert(licenseAuditEvents).values({
           licenseId,
@@ -338,6 +367,9 @@ export class SelfHostedLicenseProvider implements ILicenseProvider {
         });
       }
     }));
+    if (fingerprint && tenantIdForSync) {
+      await revokeSyncDevicesByFingerprint(this.db, tenantIdForSync, fingerprint, true, reason);
+    }
   }
 
   private async activationLicenseId(activationId: string): Promise<string | null> {

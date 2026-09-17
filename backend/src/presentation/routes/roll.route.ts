@@ -5,6 +5,7 @@ import {
   validateQuery,
 } from "../../infrastructure/http/middleware/validate.middleware.js";
 import { validateUuidParam } from "../../infrastructure/http/middleware/validate-params.middleware.js";
+import { idempotency } from "../../infrastructure/http/middleware/idempotency-handler.middleware.js";
 import type { IRollRepository } from "../../application/ports/IRollRepository.js";
 import type { IStockMovementRepository } from "../../application/ports/IStockMovementRepository.js";
 import type { TenantContext } from "../../domain/types/index.js";
@@ -41,10 +42,19 @@ export function registerRollRoutes(
   const pid = (req: Request): string => req.params.id as string;
   const body = <T>(req: Request): T => (req as unknown as { validatedBody: T }).validatedBody;
 
+  // F04 (Phase 1 audit): this route had no idempotency protection at all — a
+  // retried/double-submitted request created a second, genuinely orphaned
+  // roll row (the only guard was a unique (tenant, rollNo) index, which does
+  // not catch a retry that lands a different auto-generated rollNo). The
+  // frontend's HTTP client already generates and reuses an Idempotency-Key
+  // per logical mutation (BaseHttpClient.ts, BUG-16 fix) — this route just
+  // never honored it. Same middleware already used on cashbox manual
+  // movements for the identical reason.
   router.post(
     "/inventory/rolls",
     auth,
     writeGuard,
+    idempotency("POST"),
     validateBody(createRollSchema),
     async (req: Request, res: Response) => {
       const c = ctx(req);

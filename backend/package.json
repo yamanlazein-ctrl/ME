@@ -9,6 +9,8 @@
     "start": "node dist/backend/src/presentation/server.js",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
+    "db:test:setup": "node scripts/ensure-test-db.mjs",
+    "test": "node scripts/ensure-test-db.mjs && vitest run",
     "db:push:scratch": "echo 'WARNING: db:push is scratch-only. It does not emit check() constraints or triggers. Use db:migrate for any real database.' && drizzle-kit push",
     "db:studio": "drizzle-kit studio",
     "db:check": "drizzle-kit check",

@@ -16,5 +16,7 @@ export { PrintJobApiService } from "./PrintJobApiService";
 export { AuthApiService } from "./AuthApiService";
 export { PartyApiService } from "./PartyApiService";
 export { StatementApiService } from "./StatementApiService";
+export { SyncConflictsApiService } from "./SyncConflictsApiService";
+export type { SyncConflictRow, SyncConflictDecision } from "./SyncConflictsApiService";
 export { FxApiService } from "./FxApiService";
 export type { FxReferenceRateResponse } from "./FxApiService";

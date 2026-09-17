@@ -37,13 +37,17 @@ export class PartyApiService {
   async update(
     kind: "customer" | "supplier",
     id: string,
-    input: Partial<PartyDTO>,
+    input: Partial<PartyDTO> & { expectedVersion: number },
   ): Promise<PartyDTO> {
     const res = await this.client.put<PartyDTO>(`${this.path(kind)}/${id}`, input);
     return res.data;
   }
 
-  async delete(kind: "customer" | "supplier", id: string): Promise<void> {
-    await this.client.delete(`${this.path(kind)}/${id}`);
+  async delete(
+    kind: "customer" | "supplier",
+    id: string,
+    expectedVersion: number,
+  ): Promise<void> {
+    await this.client.delete(`${this.path(kind)}/${id}`, { body: { expectedVersion } });
   }
 }

@@ -1,9 +1,10 @@
 import { z } from "zod";
+import { is2dp, MAX_2DP_MESSAGE } from "../precision.js";
 
 export const createExpenseSchema = z.object({
   category: z.string().min(1).max(100),
   description: z.string().min(1).max(500),
-  amount: z.number().int().positive(),
+  amount: z.number().positive().refine(is2dp, { message: MAX_2DP_MESSAGE }),
   currency: z.enum(["SYP", "USD", "EUR"]).optional(),
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   method: z.enum(["cash", "transfer", "check", "card"]),

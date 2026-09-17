@@ -15,7 +15,13 @@ import type { ILicenseTokenSigner } from "../../../application/ports/ILicenseTok
 import type { IInstallationIdStorage } from "../../../application/ports/IInstallationIdStorage.js";
 import { config } from "../../../infrastructure/config/env.js";
 import { runWithTenantContext } from "../../../infrastructure/orm/tenant-context.js";
+import { resolveDeviceLimit } from "../../../domain/licensing/ownership.js";
+import { composeDeviceFingerprint } from "../../../domain/licensing/installationIdentity.js";
+import { ensureServerInstallation } from "../../../infrastructure/installation/ensureServerInstallation.js";
+import { db as defaultDb } from "../../../infrastructure/orm/drizzle.js";
 import { randomUUID } from "node:crypto";
+import { recordDesktopDeviceActivation } from "./recordDesktopDeviceActivation.js";
+import { MultipleTenantsDetectedError } from "../../../domain/errors/index.js";
 
 /**
  * Phase 0 sub-batches 0F + 0G — setup use cases.
@@ -51,6 +57,31 @@ type Result<T> = { ok: true; data?: T } | { ok: false; error: string; code?: str
 // SETUP_TOKEN is configured correctly, because the token never varies
 // per tenant. Once `isCompleted` is true for a tenant, every mutating
 // step must refuse outright, regardless of the token.
+async function tenantAlreadyProvisioned(
+  installationStateRepo: IInstallationStateRepository,
+  authRepo: IAuthRepository,
+  tenantId: string,
+): Promise<boolean> {
+  const state = await installationStateRepo.findByTenant(tenantId);
+  if (state?.isCompleted) return true;
+  const users = await authRepo.listActiveUsersForTenant(tenantId);
+  return users.length > 0;
+}
+
+async function resolveActivationTenantId(
+  deps: { licenseRepo: ILicenseRepository; tenantRepo: ITenantRepository },
+  postedTenantId: string,
+  licenseKey: string | undefined,
+): Promise<string> {
+  if (licenseKey) {
+    const lic = await deps.licenseRepo.findByKey(licenseKey);
+    if (lic?.tenantId) return lic.tenantId;
+  }
+  const defaultTenant = await deps.tenantRepo.findBySlug("default");
+  if (defaultTenant) return defaultTenant.id;
+  return postedTenantId;
+}
+
 async function assertWizardMutable(
   installationStateRepo: IInstallationStateRepository,
   tenantId: string,
@@ -103,6 +134,29 @@ export async function startWizardUseCase(
       }
     }
 
+    // Web / server: reuse pre-provisioned tenant when the DB was seeded
+    // (slug `default`) or a prior install already completed the wizard.
+    const defaultTenant = await tenantRepo.findBySlug("default");
+    if (defaultTenant) {
+      const state =
+        (await installationStateRepo.findByTenant(defaultTenant.id)) ??
+        (await installationStateRepo.create(defaultTenant.id, {
+          bootstrapAt: new Date().toISOString(),
+        }));
+      return {
+        ok: true,
+        data: { tenantId: defaultTenant.id, isCompleted: state.isCompleted },
+      };
+    }
+
+    const completedTenantId = await installationStateRepo.findAnyCompleted();
+    if (completedTenantId) {
+      return {
+        ok: true,
+        data: { tenantId: completedTenantId, isCompleted: true },
+      };
+    }
+
     const companyName = parsed.data.companyName ?? "شركة جديدة";
     const slug = parsed.data.slug ?? `tenant-${Math.random().toString(36).slice(2, 10)}`;
     const existing = await tenantRepo.findBySlug(slug);
@@ -122,6 +176,9 @@ export async function startWizardUseCase(
     });
     return { ok: true, data: { tenantId: state.tenantId, isCompleted: state.isCompleted } };
   } catch (e) {
+    if (e instanceof MultipleTenantsDetectedError) {
+      return { ok: false, error: e.message, code: e.code };
+    }
     return { ok: false, error: "فشل بدء المعالج" };
   }
 }
@@ -144,6 +201,8 @@ const activateInput = z.object({
   hostname: z.string().optional(),
   appVersion: z.string().optional(),
   platform: z.enum(["windows", "macos", "linux", "android", "ios", "web"]).optional(),
+  /** Browser/device fingerprint from the activating client (web PIN roster). */
+  clientFingerprint: z.string().min(16).max(128).optional(),
 });
 
 /**
@@ -206,6 +265,7 @@ export async function activateAndPersistUseCase(
     installationIdStorage: IInstallationIdStorage;
     tokenSigner: ILicenseTokenSigner;
     licenseRepo: ILicenseRepository;
+    authRepo: IAuthRepository;
   },
   tenantId: string,
   input: unknown,
@@ -216,6 +276,13 @@ export async function activateAndPersistUseCase(
     expiresAt: string | null;
     tenantId?: string;
     isCompleted?: boolean;
+    /**
+     * Section 3, Step 2 — the company name shown as "Welcome, <Company>".
+     * It comes from the license the vendor issued (customer_name, or the
+     * vendor metadata's company_name). The end user never types it, so it is
+     * surfaced from the license record rather than from wizard input.
+     */
+    companyName?: string | null;
   }>
 > {
   const parsed = activateInput.safeParse(input);
@@ -227,9 +294,12 @@ export async function activateAndPersistUseCase(
     const fingerprint = await deps.fingerprintProvider.collect();
     const metadata = await deps.fingerprintProvider.getMetadata(fingerprint);
     const installationId = await deps.installationIdStorage.readOrCreate();
-    // Combine the host fingerprint with the installation id so a
-    // re-imaged host with the same MAC still triggers a re-activation.
-    const combined = `${metadata.hash}::${installationId}`;
+    // Canonical Installation fingerprint: hostHash::installationId
+    // Web clients also send a browser fingerprint — prefer that for the seat.
+    const hostCombined = composeDeviceFingerprint(metadata.hash, installationId);
+    const combined = parsed.data.clientFingerprint
+      ? composeDeviceFingerprint(parsed.data.clientFingerprint, installationId)
+      : hostCombined;
 
     // ── D3 / option d: DESKTOP_DEPLOY is verify-only ──
     // The token is pre-baked (signed off-device). We promote it into the
@@ -264,11 +334,42 @@ export async function activateAndPersistUseCase(
 
       if (!lic) return { ok: false, error: "فشل تفعيل الترخيص (لا يوجد ترخيص مخبوز)" };
 
+      let activationId: string;
+      try {
+        const recorded = await recordDesktopDeviceActivation({
+          licenseId: lic.id,
+          tenantId: effectiveTenantId,
+          serverFingerprint: combined,
+          serverFingerprintVersion: metadata.version,
+          hostname: parsed.data.hostname,
+          platform: parsed.data.platform,
+          appVersion: parsed.data.appVersion,
+          maxDevices: resolveDeviceLimit({
+            limits: lic.limits as { devices?: number } | null,
+            maxDevices: lic.maxDevices,
+          }),
+        });
+        activationId = recorded.activationId;
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        if (msg === "DEVICE_LIMIT_REACHED") {
+          return {
+            ok: false,
+            error: "تم بلوغ الحد الأقصى للأجهزة على هذا الترخيص",
+            code: "DEVICE_LIMIT_REACHED",
+          };
+        }
+        throw e;
+      }
+
       await deps.tenantRepo.setLicenseCache(effectiveTenantId, {
         licenseStatus: lic.status ?? "active",
         licenseType: lic.type ?? "full",
-        maxDevices: lic.maxDevices ?? 3,
-        activationId: lic.id,
+        maxDevices: resolveDeviceLimit({
+          limits: lic.limits as { devices?: number } | null,
+          maxDevices: lic.maxDevices,
+        }),
+        activationId,
         serverFingerprint: combined,
         licenseKey: parsed.data.key || lic.key,
         licenseExpiresAt: lic.expiresAt ?? null,
@@ -277,7 +378,7 @@ export async function activateAndPersistUseCase(
 
       await deps.installationStateRepo.saveStep(effectiveTenantId, "activate", {
         key: parsed.data.key,
-        activationId: lic.id,
+        activationId,
       });
 
       // Desktop SKU: seed already provisioned company + admin. Mark the wizard
@@ -287,10 +388,17 @@ export async function activateAndPersistUseCase(
         effectiveTenantId as never,
       );
 
+      await ensureServerInstallation(defaultDb, {
+        installationId,
+        tenantId: effectiveTenantId,
+        hostname: parsed.data.hostname ?? null,
+        appVersion: parsed.data.appVersion ?? null,
+      });
+
       return {
         ok: true,
         data: {
-          activationId: lic.id,
+          activationId,
           features: lic.features ?? [],
           expiresAt: lic.expiresAt?.toISOString() ?? null,
           tenantId: effectiveTenantId,
@@ -299,6 +407,12 @@ export async function activateAndPersistUseCase(
       };
     }
 
+    const effectiveTenantId = await resolveActivationTenantId(
+      deps,
+      tenantId,
+      parsed.data.key,
+    );
+
     const result = await deps.licenseProvider.activate({
       key: parsed.data.key ?? "",
       serverFingerprint: combined,
@@ -306,14 +420,14 @@ export async function activateAndPersistUseCase(
       hostname: parsed.data.hostname,
       appVersion: parsed.data.appVersion,
       platform: parsed.data.platform,
-      tenantId,
+      tenantId: effectiveTenantId,
     });
 
     // Persist the signed offline token in `secrets` (encrypted at
     // rest by the cipher injected into the repo). R11: also persist its jti
     // so deactivation/revoke can denylist it.
-    await deps.secretsRepo.put(tenantId, "license.token.current", result.offlineToken);
-    await deps.secretsRepo.put(tenantId, "license.token.jti", result.jti);
+    await deps.secretsRepo.put(effectiveTenantId, "license.token.current", result.offlineToken);
+    await deps.secretsRepo.put(effectiveTenantId, "license.token.jti", result.jti);
 
     // Update the tenant's denormalized cache with the REAL license values
     // (R7): the provider already wrote correct columns during activate(),
@@ -321,13 +435,16 @@ export async function activateAndPersistUseCase(
     // of truth and never a hardcoded default.
     // Re-assert the cache from the source of truth — the tenant-stamped read
     // (RLS category-2: own-tenant license row) in the same bootstrap flow.
-    const lic = await runWithTenantContext({ tenantId }, () =>
+    const lic = await runWithTenantContext({ tenantId: effectiveTenantId }, () =>
       deps.licenseRepo.findById(result.licenseId as never),
     );
-    await deps.tenantRepo.setLicenseCache(tenantId, {
+    await deps.tenantRepo.setLicenseCache(effectiveTenantId, {
       licenseStatus: lic?.status ?? "active",
       licenseType: lic?.type ?? "full",
-      maxDevices: lic?.maxDevices ?? 3,
+      maxDevices: resolveDeviceLimit({
+        limits: lic?.limits as { devices?: number } | null,
+        maxDevices: lic?.maxDevices,
+      }),
       activationId: result.activationId,
       serverFingerprint: combined,
       licenseKey: lic?.key ?? parsed.data.key,
@@ -336,10 +453,33 @@ export async function activateAndPersistUseCase(
     });
 
     // Advance the wizard.
-    await deps.installationStateRepo.saveStep(tenantId, "activate", {
+    await deps.installationStateRepo.saveStep(effectiveTenantId, "activate", {
       key: parsed.data.key,
       activationId: result.activationId,
     });
+
+    await ensureServerInstallation(defaultDb, {
+      installationId,
+      tenantId: effectiveTenantId,
+      hostname: parsed.data.hostname ?? null,
+      appVersion: parsed.data.appVersion ?? null,
+    });
+
+    // Pre-provisioned installs (seeded admin/company): skip company/admin wizard
+    // after the one-time license activation, same as desktop pre-baked SKU.
+    let isCompleted = false;
+    if (
+      await tenantAlreadyProvisioned(
+        deps.installationStateRepo,
+        deps.authRepo,
+        effectiveTenantId,
+      )
+    ) {
+      const completed = await deps.installationStateRepo.markCompleted(
+        effectiveTenantId as never,
+      );
+      isCompleted = completed.isCompleted;
+    }
 
     return {
       ok: true,
@@ -347,10 +487,40 @@ export async function activateAndPersistUseCase(
         activationId: result.activationId,
         features: result.features,
         expiresAt: result.expiresAt?.toISOString() ?? null,
+        tenantId: effectiveTenantId,
+        isCompleted,
+        companyName:
+          (lic?.customerName && String(lic.customerName).trim()) ||
+          (lic?.vendorMetadata &&
+          typeof lic.vendorMetadata === "object" &&
+          lic.vendorMetadata !== null &&
+          "companyName" in lic.vendorMetadata &&
+          typeof (lic.vendorMetadata as { companyName?: unknown }).companyName === "string"
+            ? String((lic.vendorMetadata as { companyName: string }).companyName).trim()
+            : "") ||
+          null,
       },
     };
   } catch (e) {
-    return { ok: false, error: "فشل التفعيل" };
+    const raw = e instanceof Error ? e.message : String(e ?? "");
+    if (raw === "INVALID_LICENSE") {
+      return { ok: false, error: "مفتاح الترخيص غير صالح أو غير موجود", code: "INVALID_LICENSE" };
+    }
+    if (raw === "DEVICE_LIMIT_REACHED") {
+      return {
+        ok: false,
+        error: "تم بلوغ الحد الأقصى للأجهزة على هذا الترخيص",
+        code: "DEVICE_LIMIT_REACHED",
+      };
+    }
+    if (raw === "ALREADY_ACTIVE") {
+      return { ok: false, error: "الترخيص مفعّل حالياً على جهاز آخر", code: "ALREADY_ACTIVE" };
+    }
+    if (raw.startsWith("LICENSE_")) {
+      return { ok: false, error: "الترخيص غير صالح للاستخدام", code: raw };
+    }
+    // Avoid leaking raw SQL / driver noise to the client; keep known codes above.
+    return { ok: false, error: "فشل التفعيل", code: "ACTIVATION_FAILED" };
   }
 }
 

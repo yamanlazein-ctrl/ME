@@ -17,6 +17,7 @@ function paymentToVoucher(dto: PaymentDTO): Voucher {
     partyKind: "supplier",
     invoiceId: dto.invoiceId ?? null,
     amount: dto.amount,
+    discount: dto.discount ?? 0,
     currency: dto.currency,
     exchangeRate: dto.exchangeRate ?? null,
     invoiceCurrency: dto.invoiceCurrency,
@@ -30,6 +31,7 @@ function paymentToVoucher(dto: PaymentDTO): Voucher {
     createdBy: "",
     cancelledAt: null,
     cancelledBy: null,
+    version: dto.version ?? 1,
   });
 }
 
@@ -44,6 +46,7 @@ function receiptToVoucher(dto: ReceiptDTO): Voucher {
     partyKind: "customer",
     invoiceId: dto.invoiceId ?? null,
     amount: dto.amount,
+    discount: dto.discount ?? 0,
     currency: dto.currency,
     exchangeRate: dto.exchangeRate ?? null,
     invoiceCurrency: dto.invoiceCurrency,
@@ -57,6 +60,7 @@ function receiptToVoucher(dto: ReceiptDTO): Voucher {
     createdBy: "",
     cancelledAt: null,
     cancelledBy: null,
+    version: dto.version ?? 1,
   });
 }
 
@@ -123,6 +127,7 @@ export class ApiVoucherRepository implements IVoucherRepository {
         partyKind: voucher.partyKind ?? "supplier",
         invoiceId: voucher.invoiceId ?? undefined,
         amount: voucher.amount,
+        discount: voucher.discount > 0 ? voucher.discount : undefined,
         currency: voucher.currency,
         exchangeRate: voucher.exchangeRate ?? undefined,
         method: voucher.method,
@@ -138,6 +143,7 @@ export class ApiVoucherRepository implements IVoucherRepository {
       partyKind: voucher.partyKind ?? "customer",
       invoiceId: voucher.invoiceId ?? undefined,
       amount: voucher.amount,
+      discount: voucher.discount > 0 ? voucher.discount : undefined,
       currency: voucher.currency,
       exchangeRate: voucher.exchangeRate ?? undefined,
       method: voucher.method,
@@ -147,8 +153,19 @@ export class ApiVoucherRepository implements IVoucherRepository {
     return receiptToVoucher(dto);
   }
 
-  async cancel(id: UUID, ctx: TenantContext): Promise<void> {
-    await Promise.allSettled([this.api.cancelPayment(id), this.api.cancelReceipt(id)]);
+  async cancel(id: UUID, ctx: TenantContext, expectedVersion: number): Promise<void> {
+    void ctx;
+    try {
+      await this.api.cancelPayment(id, expectedVersion);
+    } catch (e) {
+      const status = (e as unknown as { statusCode?: number }).statusCode;
+      const code = (e as unknown as { code?: string }).code;
+      if (status === 404 || code === "NOT_FOUND") {
+        await this.api.cancelReceipt(id, expectedVersion);
+        return;
+      }
+      throw e;
+    }
   }
 
   async vouchersOfInvoice(invoiceId: UUID, ctx: TenantContext): Promise<Voucher[]> {

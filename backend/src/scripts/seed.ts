@@ -3,6 +3,7 @@ import { db } from "../infrastructure/orm/drizzle.js";
 import { tenants } from "../infrastructure/orm/schemas/tenant.table.js";
 import { users } from "../infrastructure/orm/schemas/user.table.js";
 import { Argon2PasswordHasher } from "../infrastructure/auth/PasswordHasher.js";
+import { runWithPlatformContext } from "../infrastructure/orm/tenant-context.js";
 
 /**
  * Generate a cryptographically-strong random admin password.
@@ -36,52 +37,54 @@ async function seed() {
   // the legacy random+printed-once behaviour is preserved.
   const fixedAdminPassword = process.env.SEED_ADMIN_PASSWORD?.trim() || undefined;
 
-  // Create default tenant
-  const [tenant] = await db
-    .insert(tenants)
-    .values({
-      ...(fixedTenantId ? { id: fixedTenantId } : {}),
-      name: "Default Tenant",
-      slug: "default",
-      status: "active",
-      maxUsers: 10,
-    })
-    .onConflictDoNothing()
-    .returning();
+  await runWithPlatformContext(async () => {
+    // Create default tenant
+    const [tenant] = await db
+      .insert(tenants)
+      .values({
+        ...(fixedTenantId ? { id: fixedTenantId } : {}),
+        name: "Default Tenant",
+        slug: "default",
+        status: "active",
+        maxUsers: 10,
+      })
+      .onConflictDoNothing()
+      .returning();
 
-  if (!tenant) {
-    console.log("Tenant already exists, skipping seed.");
-    process.exit(0);
-  }
+    if (!tenant) {
+      console.log("Tenant already exists, skipping seed.");
+      process.exit(0);
+    }
 
-  console.log("Created tenant:", tenant.id);
+    console.log("Created tenant:", tenant.id);
 
-  // Create admin user.
-  // Task 1.2: the password is generated at seed time (random, 107 bits)
-  // and printed once. It is never committed to source. To regenerate,
-  // delete the seeded rows and re-run the script — there is no default.
-  // D4: a desktop build may pin a known password via SEED_ADMIN_PASSWORD so
-  // the customer can actually log in (the one-time random value would be lost).
-  const adminPassword = fixedAdminPassword ?? generateAdminPassword();
-  const passwordHash = await hasher.hash(adminPassword);
-  const [user] = await db
-    .insert(users)
-    .values({
-      tenantId: tenant.id,
-      name: "مدير النظام",
-      email: "admin@erp.local",
-      passwordHash,
-      role: "admin",
-      active: true,
-    })
-    .returning();
+    // Create admin user.
+    // Task 1.2: the password is generated at seed time (random, 107 bits)
+    // and printed once. It is never committed to source. To regenerate,
+    // delete the seeded rows and re-run the script — there is no default.
+    // D4: a desktop build may pin a known password via SEED_ADMIN_PASSWORD so
+    // the customer can actually log in (the one-time random value would be lost).
+    const adminPassword = fixedAdminPassword ?? generateAdminPassword();
+    const passwordHash = await hasher.hash(adminPassword);
+    const [user] = await db
+      .insert(users)
+      .values({
+        tenantId: tenant.id,
+        name: "مدير النظام",
+        email: "admin@erp.local",
+        passwordHash,
+        role: "admin",
+        active: true,
+      })
+      .returning();
 
-  console.log("Created admin user:", user.id);
-  console.log("Login with: admin@erp.local /", adminPassword);
-  console.log(
-    "SECURITY: this password is shown ONCE and is not stored anywhere. Copy it now. " +
-      "If lost, reset the admin password out-of-band.",
-  );
+    console.log("Created admin user:", user.id);
+    console.log("Login with: admin@erp.local /", adminPassword);
+    console.log(
+      "SECURITY: this password is shown ONCE and is not stored anywhere. Copy it now. " +
+        "If lost, reset the admin password out-of-band.",
+    );
+  });
   process.exit(0);
 }
 

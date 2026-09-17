@@ -11,12 +11,14 @@ import { users } from "../../../infrastructure/orm/schemas/user.table.js";
 import { deviceRegistrations } from "../../../infrastructure/orm/schemas/device-registration.table.js";
 import { eq, count } from "drizzle-orm";
 import { isWithinLimit } from "../../../infrastructure/http/middleware/license.enforcement.middleware.js";
+import { resolveDeviceLimit } from "../../../domain/licensing/ownership.js";
 import { randomBytes } from "node:crypto";
 
 type Result<T> = { ok: true; data: T } | { ok: false; error: string };
 
 export async function generateInvitationCodeUseCase(
   repo: IInvitationRepository,
+  licenseRepo: ILicenseRepository,
   tenantId: string,
   createdBy: string,
   type: "device" | "user",
@@ -44,15 +46,33 @@ export async function generateInvitationCodeUseCase(
     }
   }
   try {
+    // Section 5.1 — an invitation belongs to the tenant's license. Stamping it
+    // here is what keeps License ↔ Invitation ↔ Device a connected chain:
+    // redemption uses this id to register the accepting device, and
+    // `device_registrations.license_id` is NOT NULL with an FK to `licenses.id`.
+    // Without it the FK is simply never set, and redemption has to invent a
+    // placeholder license id (which the FK rejects).
+    const license = await runWithTenantContext({ tenantId }, () =>
+      licenseRepo.findLatestForTenant(tenantId as never),
+    );
+    const licenseId = license?.id ?? null;
     const code = generateCode();
     const expiresAt = new Date(Date.now() + ttl * 60_000);
-    const metadata: Record<string, unknown> = {};
+    const metadata: Record<string, unknown> = { licenseId };
     if (type === "user") {
       metadata.targetName = options.targetName;
       metadata.targetEmail = options.targetEmail;
       metadata.targetRole = options.targetRole;
     }
-    const row = await repo.create({ tenantId, code, type, expiresAt, metadata, createdBy });
+    const row = await repo.create({
+      tenantId,
+      licenseId,
+      code,
+      type,
+      expiresAt,
+      metadata,
+      createdBy,
+    });
     return { ok: true, data: row };
   } catch (e) {
     return { ok: false, error: "فشل إنشاء رمز الدعوة" };
@@ -137,15 +157,41 @@ export async function consumeInvitationCodeUseCase(
     const acceptsDevice =
       row.type === "device" || (row.type === "user" && Boolean(options.deviceFingerprint));
     if (lic) {
+      const effectiveLimits = {
+        ...lic.limits,
+        devices: resolveDeviceLimit({ limits: lic.limits, maxDevices: lic.maxDevices }),
+      };
       if (
         row.type === "user" &&
-        !isWithinLimit(lic.limits, "users", await countUsers(row.tenantId))
+        !isWithinLimit(effectiveLimits, "users", await countUsers(row.tenantId))
       ) {
         return { ok: false, error: "تم الوصول إلى الحد الأقصى للمستخدمين المسموح بهم في الترخيص" };
       }
-      if (acceptsDevice && !isWithinLimit(lic.limits, "devices", await countDevices(row.tenantId))) {
+      if (
+        acceptsDevice &&
+        !isWithinLimit(effectiveLimits, "devices", await countDevices(row.tenantId))
+      ) {
         return { ok: false, error: "تم الوصول إلى الحد الأقصى للأجهزة المسموح بها في الترخيص" };
       }
+    }
+
+    // ── License binding for the accepting device ─────────────────────────
+    // `device_registrations.license_id` is NOT NULL with an FK to
+    // `licenses.id`, so a device can only ever be registered against a REAL
+    // license row. Prefer the license stamped on the invitation (5.1), fall
+    // back to the tenant's current license, and refuse outright when neither
+    // exists. Writing a placeholder uuid instead would violate the FK today and,
+    // if such a row ever existed, would silently bind the device to a license
+    // that is not this tenant's — the exact cross-tenant leak section 7 forbids.
+    // The check runs BEFORE any user/device row is written so a rejected
+    // redemption leaves no partial state behind.
+    const resolvedLicenseId: string | null =
+      (lic?.id as string | undefined) ?? row.licenseId ?? null;
+    if (acceptsDevice && !resolvedLicenseId) {
+      return {
+        ok: false,
+        error: "لا يوجد ترخيص مرتبط بهذه الشركة — تعذّر تسجيل الجهاز بهذه الدعوة",
+      };
     }
 
     const meta = row.metadata as Record<string, unknown>;
@@ -181,21 +227,23 @@ export async function consumeInvitationCodeUseCase(
           .where(eq(users.id, u.id));
       });
       // Device consumption on accept: register the accepting device so it
-      // counts against the license device cap (checked above).
+      // counts against the license device cap (checked above). The license id
+      // was resolved (and proven to exist) before any row was written.
       if (options.deviceFingerprint) {
-        const licenseId =
-          (lic?.id as string | undefined) ?? "00000000-0000-0000-0000-000000000000";
         const d = await repoExtended.registerDevice(
           row.tenantId,
-          licenseId as never,
+          resolvedLicenseId as never,
           options.deviceFingerprint,
         );
         registeredDeviceId = d.id;
       }
     } else if (row.type === "device") {
       const fingerprint = options.deviceFingerprint ?? `auto-${Date.now()}`;
-      const licenseId = (meta.licenseId as string) ?? "00000000-0000-0000-0000-000000000000";
-      const d = await repoExtended.registerDevice(row.tenantId, licenseId, fingerprint);
+      const d = await repoExtended.registerDevice(
+        row.tenantId,
+        resolvedLicenseId as never,
+        fingerprint,
+      );
       registeredDeviceId = d.id;
     }
 

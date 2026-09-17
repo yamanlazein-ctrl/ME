@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { fetchLicenses, fetchActivations, deactivateActivation } from "@/lib/api";
+import { fetchLicenses, fetchActivations, deactivateActivation, suspendLicense, patchLicense } from "@/lib/api";
 import { CreateLicensePage } from "./CreateLicensePage";
 import {
   Key,
@@ -37,7 +37,7 @@ const TYPE_MAP: Record<string, string> = {
   subscription: "اشتراك",
 };
 
-export function LicenseListPage({ onLogout }: { onLogout: () => void }) {
+export function LicenseListPage({ onLogout }: { onLogout?: () => void }) {
   const [search, setSearch] = useState("");
   const [showCreate, setShowCreate] = useState(false);
   const [selectedLicense, setSelectedLicense] = useState<string | null>(null);
@@ -60,18 +60,23 @@ export function LicenseListPage({ onLogout }: { onLogout: () => void }) {
             <Key size={20} className="text-blue-400" />
             <h1 className="text-lg font-semibold text-white">لوحة تحكم التراخيص</h1>
           </div>
-          <button
-            onClick={onLogout}
-            className="text-sm text-zinc-400 hover:text-white px-3 py-1.5 rounded-lg border border-zinc-700 hover:border-zinc-600"
-          >
-            خروج
-          </button>
+          {onLogout ? (
+            <button
+              onClick={onLogout}
+              className="text-sm text-zinc-400 hover:text-white px-3 py-1.5 rounded-lg border border-zinc-700 hover:border-zinc-600"
+            >
+              خروج
+            </button>
+          ) : (
+            <span className="text-xs text-zinc-500">وصول محلي — بدون تسجيل دخول</span>
+          )}
         </div>
       </header>
 
       <div className="max-w-6xl mx-auto px-4 py-6">
         {selectedLicense ? (
           <LicenseDetail
+            key={selectedLicense}
             licenseId={selectedLicense}
             licenses={licenses ?? []}
             onBack={() => setSelectedLicense(null)}
@@ -199,6 +204,37 @@ function LicenseDetail({
     onError: (e) => toast.error(e instanceof Error ? e.message : "فشل إلغاء التفعيل"),
   });
 
+  const suspendMut = useMutation({
+    mutationFn: () => suspendLicense(licenseId),
+    onSuccess: () => {
+      toast.success("تم تعليق الترخيص (Control Plane)");
+      qc.invalidateQueries({ queryKey: ["licenses"] });
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : "فشل تعليق الترخيص"),
+  });
+
+  const [minVersion, setMinVersion] = useState(lic?.updatePolicy?.minimum_version ?? "1.0.0");
+  const [allowUpdates, setAllowUpdates] = useState(lic?.updatePolicy?.allow_updates ?? true);
+  const [channel, setChannel] = useState<"stable" | "beta" | "none">(
+    lic?.updatePolicy?.channel ?? "stable",
+  );
+
+  const updatePolicyMut = useMutation({
+    mutationFn: () =>
+      patchLicense(licenseId, {
+        updatePolicy: {
+          channel,
+          allow_updates: allowUpdates,
+          minimum_version: minVersion.trim() || "1.0.0",
+        },
+      }),
+    onSuccess: () => {
+      toast.success("تم حفظ سياسة التحديث");
+      qc.invalidateQueries({ queryKey: ["licenses"] });
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : "فشل حفظ سياسة التحديث"),
+  });
+
   if (!lic) return null;
 
   return (
@@ -301,6 +337,70 @@ function LicenseDetail({
             <Copy size={14} />
             نسخ المفتاح
           </button>
+
+          {lic.status === "active" && (
+            <button
+              onClick={() => {
+                if (
+                  window.confirm(
+                    "تعليق الترخيص يوقف حقوق الاستخدام عند المورد. هل تريد المتابعة؟",
+                  )
+                ) {
+                  suspendMut.mutate();
+                }
+              }}
+              disabled={suspendMut.isPending}
+              className="flex items-center gap-1 text-sm text-amber-400 hover:text-amber-300 px-2 py-1.5 rounded border border-amber-500/20 hover:border-amber-500/40"
+            >
+              <ShieldX size={14} />
+              تعليق الترخيص
+            </button>
+          )}
+
+          <div className="border-t border-zinc-800 pt-4 space-y-3">
+            <h3 className="text-sm font-semibold text-white">سياسة التحديث (Vendor)</h3>
+            <label className="flex items-center gap-2 text-xs text-zinc-300">
+              <input
+                type="checkbox"
+                checked={allowUpdates}
+                onChange={(e) => setAllowUpdates(e.target.checked)}
+              />
+              السماح بالتحديثات
+            </label>
+            <label className="block text-xs text-zinc-400">
+              القناة
+              <select
+                value={channel}
+                onChange={(e) => setChannel(e.target.value as "stable" | "beta" | "none")}
+                className="mt-1 w-full rounded border border-zinc-700 bg-zinc-800 px-2 py-1.5 text-sm text-white"
+              >
+                <option value="stable">stable</option>
+                <option value="beta">beta</option>
+                <option value="none">none</option>
+              </select>
+            </label>
+            <label className="block text-xs text-zinc-400">
+              الحد الأدنى للإصدار
+              <input
+                value={minVersion}
+                onChange={(e) => setMinVersion(e.target.value)}
+                dir="ltr"
+                className="mt-1 w-full rounded border border-zinc-700 bg-zinc-800 px-2 py-1.5 text-sm text-white font-mono"
+                placeholder="1.0.0"
+              />
+            </label>
+            <button
+              onClick={() => updatePolicyMut.mutate()}
+              disabled={updatePolicyMut.isPending}
+              className="w-full text-sm bg-blue-600 hover:bg-blue-500 text-white rounded-lg py-2"
+            >
+              حفظ سياسة التحديث
+            </button>
+            <p className="text-[11px] text-zinc-500 leading-relaxed">
+              نشر ملفات التثبيت (latest.json) يبقى على CDN التحديثات. هذه السياسة تتحكم هل
+              العميل مسموح له بالتحقق من التحديثات وما هو الحد الأدنى للإصدار.
+            </p>
+          </div>
         </div>
 
         <div className="lg:col-span-2 space-y-4">

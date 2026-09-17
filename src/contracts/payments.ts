@@ -17,6 +17,7 @@ export interface PaymentDTO {
   partyName: string;
   invoiceId?: UUID | null;
   amount: number;
+  discount?: number;
   currency: Currency;
   /** Units of `currency` per 1 USD — frozen at creation. */
   exchangeRate?: number | null;
@@ -28,6 +29,7 @@ export interface PaymentDTO {
   notesInternal?: string | null;
   status: "active" | "cancelled";
   createdAt: string;
+  version?: number;
 }
 
 export interface CreatePaymentRequest {
@@ -37,6 +39,7 @@ export interface CreatePaymentRequest {
   partyKind?: "customer" | "supplier";
   invoiceId?: UUID;
   amount: number;
+  discount?: number;
   currency: Currency;
   /** Units of `currency` per 1 USD — required for non-USD vouchers. */
   exchangeRate?: number;

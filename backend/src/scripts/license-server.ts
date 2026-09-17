@@ -30,12 +30,16 @@ import { Argon2PasswordHasher } from "../infrastructure/auth/PasswordHasher.js";
 import { DbTokenDenylist, RedisTokenDenylist, CompositeTokenDenylist, redis } from "../infrastructure/auth/TokenDenylist.js";
 import { SelfHostedLicenseProvider } from "../infrastructure/license/SelfHostedLicenseProvider.js";
 import { LicenseTokenSigner } from "../infrastructure/auth/LicenseTokenSigner.js";
+import { AesGcmSecretStore, decodeMasterKey } from "../infrastructure/secrets/AesGcmSecretStore.js";
+import { PostgresSecretsRepository } from "../infrastructure/repositories/PostgresSecretsRepository.js";
+import type { ISecretsRepository } from "../application/ports/ISecretsRepository.js";
 import { randomBytes, generateKeyPairSync, createPublicKey } from "node:crypto";
 import { existsSync, readFileSync, appendFileSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { JWK } from "jose";
 import { createSuperAdminAuthMiddleware } from "../infrastructure/http/middleware/super-admin-auth.middleware.js";
+import { createErrorHandler } from "../infrastructure/http/middleware/error-handler.middleware.js";
 import { registerLicenseAdminRoutes } from "./license-admin.route.js";
 import { registerLicenseV1Routes } from "./license-v1.route.js";
 
@@ -114,6 +118,20 @@ async function main(): Promise<void> {
     redis ? new RedisTokenDenylist(redis) : null,
   );
 
+  // When License Server shares APP_MASTER_KEY + Postgres with the ERP install,
+  // refresh can rewrite secrets.license.token.* after Vendor PATCH/suspend.
+  let secretsRepo: ISecretsRepository | undefined;
+  let secretCipher: AesGcmSecretStore | undefined;
+  const masterKey = decodeMasterKey(config.APP_MASTER_KEY);
+  if (masterKey) {
+    secretCipher = new AesGcmSecretStore(masterKey);
+    secretsRepo = new PostgresSecretsRepository(secretCipher, db);
+  } else {
+    logger.warn(
+      "APP_MASTER_KEY unset on License Server — entitlement refresh will update licenses.offline_token only",
+    );
+  }
+
   // First-boot seeding: create the Super Admin from env if none exists.
   if (config.SUPER_ADMIN_EMAIL && config.SUPER_ADMIN_PASSWORD) {
     try {
@@ -151,6 +169,8 @@ async function main(): Promise<void> {
   // Admin API (Super Admin JWT, with LICENSE_ADMIN_TOKEN fallback).
   const adminAuth = createSuperAdminAuthMiddleware(jwtSigner, tokenDenylist, {
     fallbackToken: LICENSE_ADMIN_TOKEN,
+    // Local owner console (QA / single-operator laptop): no email+password on loopback.
+    openLoopback: process.env.LICENSE_ADMIN_OPEN_LOOPBACK === "1",
   });
   registerLicenseAdminRoutes(app, {
     licenseRepo,
@@ -160,7 +180,20 @@ async function main(): Promise<void> {
     systemAdminRepo,
     passwordHasher,
     tokenDenylist,
+    licenseTokenSigner: tokenSigner,
+    secretsRepo,
+    secretCipher,
+    db,
   });
+
+  // Fix (Phase 1 audit, F13 cluster): this app never registered an error
+  // handler, so any thrown/next(err)'d error — including a plain empty-table
+  // query — fell through to Express's default handler and returned an HTML
+  // error page instead of JSON. That's what made "license server lists
+  // licenses" health checks read as `count=undefined`: the caller was
+  // parsing an HTML error page as `{licenses:[...]}`. Must be registered
+  // last, after all routes.
+  app.use(createErrorHandler(logger));
 
   app.listen(LICENSE_SERVER_PORT, () => {
     logger.info(

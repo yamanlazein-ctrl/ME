@@ -31,13 +31,18 @@ export class InvoiceApiService {
     return res.data;
   }
 
-  async update(id: string, input: Partial<CreateInvoiceRequest>): Promise<InvoiceDTO> {
+  async update(
+    id: string,
+    input: Partial<CreateInvoiceRequest> & { expectedVersion: number },
+  ): Promise<InvoiceDTO> {
     const res = await this.client.put<InvoiceDTO>(`/api/invoices/${id}`, input);
     return res.data;
   }
 
-  async cancel(id: string): Promise<InvoiceDTO> {
-    const res = await this.client.post<InvoiceDTO>(`/api/invoices/${id}/cancel`);
+  async cancel(id: string, expectedVersion: number): Promise<InvoiceDTO> {
+    const res = await this.client.post<InvoiceDTO>(`/api/invoices/${id}/cancel`, {
+      expectedVersion,
+    });
     return res.data;
   }
 

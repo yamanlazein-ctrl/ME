@@ -1,8 +1,13 @@
+import { useEffect } from "react";
+import { GitMerge } from "lucide-react";
+import { Link } from "@tanstack/react-router";
+import { useOpenSyncConflictCount } from "@/presentation/hooks/useSyncConflicts";
 import { NotificationsBell } from "./NotificationsBell";
 import { GlobalSearch } from "./GlobalSearch";
 import { ThemeToggle } from "./ThemeToggle";
 import { FxReferenceRate } from "./FxReferenceRate";
 import { PRINT_BRAND_NAME } from "@/shared/constants/printConfig";
+import { useSettings } from "@/presentation/hooks/useSettings";
 import { useConnectivity } from "@/presentation/hooks/useConnectivity";
 import { useAutoSync } from "@/presentation/hooks/useAutoSync";
 import logoUrl from "@/assets/logo-motard-icon.png";
@@ -16,6 +21,22 @@ export function Header() {
   const connectivity = useConnectivity();
   const { deviceGate, deviceTrust } = useAutoSync();
   const online = connectivity === "online";
+  const conflictCount = useOpenSyncConflictCount();
+
+  // F11 (Phase 1 audit): this used to always render PRINT_BRAND_NAME — a
+  // constant, never fetched from anywhere. StoneERP is single-tenant-per
+  // -install, so the live, editable company name from Settings (GET
+  // /settings → PUT /settings/company) IS this install's one real
+  // company identity; the dashboard and browser tab should reflect it,
+  // not a hardcoded string. PRINT_BRAND_NAME stays as-is for PRINTED
+  // documents (its own file documents that as a deliberate, separate,
+  // user-approved constant) — only the live UI surfaces change here.
+  const { company } = useSettings();
+  const companyName = company.name?.trim() || PRINT_BRAND_NAME;
+
+  useEffect(() => {
+    document.title = companyName;
+  }, [companyName]);
 
   return (
     <header
@@ -32,7 +53,7 @@ export function Header() {
             style={{ background: "transparent" }}
           />
           <span className="hidden max-w-[14rem] truncate text-[13px] font-semibold tracking-tight text-foreground sm:inline">
-            {PRINT_BRAND_NAME}
+            {companyName}
           </span>
         </div>
 
@@ -85,6 +106,21 @@ export function Header() {
 
           <div className="flex items-center gap-0.5 border-s border-border ps-4">
             <ThemeToggle />
+            <Link
+              to="/sync/conflicts"
+              aria-label="تعارضات المزامنة"
+              className="relative grid h-9 w-9 place-items-center rounded-lg text-muted-foreground transition hover:bg-secondary hover:text-foreground"
+            >
+              <GitMerge className="h-[18px] w-[18px]" strokeWidth={2} />
+              {conflictCount > 0 && (
+                <span
+                  className="absolute grid h-[18px] min-w-[18px] place-items-center rounded-full bg-destructive px-1 text-[10px] font-bold text-destructive-foreground tabular-nums ring-2 ring-background"
+                  style={{ top: "-0.25rem", insetInlineStart: "-0.25rem" }}
+                >
+                  {conflictCount > 9 ? "9+" : conflictCount}
+                </span>
+              )}
+            </Link>
             <NotificationsBell />
           </div>
         </div>

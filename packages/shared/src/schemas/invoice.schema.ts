@@ -11,7 +11,12 @@ const invoiceLineSchema = z.object({
     .positive("الكمية يجب أن تكون أكبر من صفر")
     .max(100000, "الكمية كبيرة جداً")
     .refine(is2dp, { message: MAX_2DP_MESSAGE }),
-  pieces: z.coerce.number().int().positive().max(100000).optional().default(1),
+  // 0 is valid: a roll can be down to loose remnant kg with no whole pieces
+  // left (remainingPieces === 0, remainingKg > 0) — that stock must still be
+  // sellable by weight without requesting a piece the roll no longer has.
+  // Existing callers that omit `pieces` keep requesting 1 whole piece (the
+  // default is unchanged), so normal piece-based sales are unaffected.
+  pieces: z.coerce.number().int().min(0).max(100000).optional().default(1),
   pricePerKg: z.coerce
     .number()
     .positive("السعر يجب أن يكون أكبر من صفر")
@@ -68,9 +73,9 @@ export const updateInvoiceSchema = z
   .object({
     date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
     lines: z.array(invoiceLineSchema).min(1).max(100),
-    // FX re-capture on edit (mirrors create): optional strictly-positive rate.
-    // Omitted → the repository falls back to the frozen rate already stored on
-    // the invoice (USD is always 1). Never silently re-values a historical doc.
+    // Optional exchangeRate on edit is accepted only when it matches the
+    // frozen create-time rate (or is omitted). The repository rejects a
+    // different rate so historical docs are never revalued via FX rewrite.
     exchangeRate: exchangeRateSchema,
     discount: z.number().min(0, "الخصم لا يمكن أن يكون سالباً").optional(),
     tax: z.number().min(0, "الضريبة لا يمكن أن تكون سالبة").optional(),

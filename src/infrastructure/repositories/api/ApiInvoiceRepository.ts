@@ -79,12 +79,23 @@ export class ApiInvoiceRepository implements IInvoiceRepository {
     patch: Partial<Omit<InvoiceData, "id" | "tenantId" | "number" | "type">>,
     ctx: TenantContext,
   ): Promise<Invoice> {
-    const dto = await this.api.update(id, patch as Record<string, unknown>);
+    const current = await this.findById(id, ctx);
+    const expectedVersion =
+      typeof (patch as { version?: number }).version === "number"
+        ? (patch as { version: number }).version
+        : current?.version;
+    if (typeof expectedVersion !== "number") {
+      throw new Error("الإصدار المتوقع (expectedVersion) مطلوب لتحديث الفاتورة");
+    }
+    const { version: _dropped, ...rest } = patch as Record<string, unknown>;
+    void _dropped;
+    const dto = await this.api.update(id, { ...rest, expectedVersion } as never);
     return Invoice.reconstitute(dto as unknown as InvoiceData);
   }
 
-  async cancel(id: UUID, ctx: TenantContext): Promise<Invoice> {
-    const dto = await this.api.cancel(id);
+  async cancel(id: UUID, ctx: TenantContext, expectedVersion: number): Promise<Invoice> {
+    void ctx;
+    const dto = await this.api.cancel(id, expectedVersion);
     return Invoice.reconstitute(dto as unknown as InvoiceData);
   }
 }

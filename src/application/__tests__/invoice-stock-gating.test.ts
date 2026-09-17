@@ -45,6 +45,7 @@ function savedInvoice(overrides: Record<string, unknown> = {}) {
     partyId: PID,
     partyType: "customer",
     currency: "SYP",
+    version: 1,
     lines: [{ rollId: RID, quantityKg: 10, pricePerKg: 5000 }],
     total: () => 50000,
     ...overrides,
@@ -133,7 +134,7 @@ describe("CancelInvoiceUseCase", () => {
     const uc = await getCancelInvoice();
     const result = await uc.execute(IID, ctx);
     expect(result.ok).toBe(true);
-    expect(mockInvoiceRepo.cancel).toHaveBeenCalledWith(IID, ctx);
+    expect(mockInvoiceRepo.cancel).toHaveBeenCalledWith(IID, ctx, 1);
   });
 
   it("rejects cancelling an invoice that cannot be cancelled", async () => {

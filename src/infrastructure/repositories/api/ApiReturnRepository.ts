@@ -34,6 +34,7 @@ function toPortReturn(dto: ContractReturnDTO): ReturnDTO {
     notesPrint: dto.notesPrint ?? null,
     notesInternal: dto.notesInternal ?? null,
     status: dto.status as "active" | "cancelled",
+    version: dto.version ?? 1,
     createdAt: dto.createdAt,
     createdBy: dto.createdBy,
     cancelledAt: dto.cancelledAt ?? null,
@@ -83,7 +84,8 @@ export class ApiReturnRepository implements IReturnRepository {
     return toPortReturn(dto);
   }
 
-  async cancel(id: UUID, ctx: TenantContext): Promise<void> {
-    await this.api.cancel(id);
+  async cancel(id: UUID, ctx: TenantContext, expectedVersion: number): Promise<void> {
+    void ctx;
+    await this.api.cancel(id, expectedVersion);
   }
 }

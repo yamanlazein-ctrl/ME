@@ -23,6 +23,7 @@ import { db } from "../infrastructure/orm/drizzle.js";
 import { licenses } from "../infrastructure/orm/schemas/license.table.js";
 import { LicenseTokenSigner } from "../infrastructure/auth/LicenseTokenSigner.js";
 import { FEATURES } from "../domain/licensing/features.js";
+import { runWithPlatformContext } from "../infrastructure/orm/tenant-context.js";
 
 const DEFAULT_TENANT = process.env.SEED_TENANT_ID ?? "407fccfc-ba89-41c5-b5b9-ddb2c4f385d9";
 const BAKED_KEY =
@@ -61,43 +62,55 @@ async function main() {
     console.log("[bake] ephemeral PUBLIC JWK (verify with this):\n" + JSON.stringify(kp.publicJwk));
   }
 
-  // 2. Insert the license row (perpetual, single-device, bound to default tenant).
-  const [row] = await db
-    .insert(licenses)
-    .values({
-      key: BAKED_KEY,
-      type: "full",
-      status: "active",
-      expiresAt: null,
-      graceDays: 7,
-      maxDevices: BAKED_LICENSE_DEVICES,
-      features: [
-        FEATURES.INVENTORY,
-        FEATURES.ACCOUNTING,
-        FEATURES.REPORTS,
-        FEATURES.SALES,
-        FEATURES.PURCHASING,
-      ],
-      customerName: "Desktop Baked License",
-      edition: "enterprise",
-      plan: "standard",
-      licenseVersion: "v1",
-      productVersion: "1.0.0",
-      licenseModel: "perpetual",
-      bindingType: "none",
-      bindingValue: null,
-      tenantId: DEFAULT_TENANT as never,
-      limits: {
-        users: 999,
-        devices: BAKED_LICENSE_DEVICES,
-        branches: 1,
-        warehouses: 1,
-        storage_gb: 0,
-        api_calls: 0,
-      },
-    })
-    .returning();
-  console.log(`[bake] inserted licenses row id=${row.id} key=${row.key}`);
+  // 2. Insert (or reuse) the license row under platform RLS context.
+  const row = await runWithPlatformContext(async () => {
+    const [existing] = await db
+      .select()
+      .from(licenses)
+      .where(eq(licenses.key, BAKED_KEY))
+      .limit(1);
+    if (existing) {
+      console.log(`[bake] license key already exists id=${existing.id} — re-baking token`);
+      return existing;
+    }
+    const [created] = await db
+      .insert(licenses)
+      .values({
+        key: BAKED_KEY,
+        type: "full",
+        status: "active",
+        expiresAt: null,
+        graceDays: 7,
+        maxDevices: BAKED_LICENSE_DEVICES,
+        features: [
+          FEATURES.INVENTORY,
+          FEATURES.ACCOUNTING,
+          FEATURES.REPORTS,
+          FEATURES.SALES,
+          FEATURES.PURCHASING,
+        ],
+        customerName: "Desktop Baked License",
+        edition: "enterprise",
+        plan: "standard",
+        licenseVersion: "v1",
+        productVersion: "1.0.0",
+        licenseModel: "perpetual",
+        bindingType: "none",
+        bindingValue: null,
+        tenantId: DEFAULT_TENANT as never,
+        limits: {
+          users: 999,
+          devices: BAKED_LICENSE_DEVICES,
+          branches: 1,
+          warehouses: 1,
+          storage_gb: 0,
+          api_calls: 0,
+        },
+      })
+      .returning();
+    console.log(`[bake] inserted licenses row id=${created.id} key=${created.key}`);
+    return created;
+  });
 
   // 3. Sign the offline token (verify-only at runtime — never re-signed).
   const iat = Math.floor(Date.now() / 1000);
@@ -139,10 +152,12 @@ async function main() {
 
   // 4. Persist the signed token on the row (unencrypted; signed JWT is
   //    integrity-protected, not secret — the runtime migrates it encrypted).
-  await db
-    .update(licenses)
-    .set({ offlineToken: token, offlineTokenJti: jti })
-    .where(eq(licenses.id, row.id));
+  await runWithPlatformContext(async () => {
+    await db
+      .update(licenses)
+      .set({ offlineToken: token, offlineTokenJti: jti, status: "active" })
+      .where(eq(licenses.id, row.id));
+  });
   console.log("[bake] wrote offline_token + offline_token_jti onto the row");
 
   // 5. Self-verify with the public key (no private key needed) + assert validity.
@@ -157,14 +172,17 @@ async function main() {
   console.log(`[bake] OK: token validity matches ~100 years (${EXPIRES_IN_SEC} sec)`);
 
   // 6. Read back the row to confirm persistence of both columns.
-  const [stored] = await db
-    .select({
-      key: licenses.key,
-      off: licenses.offlineToken,
-      jti: licenses.offlineTokenJti,
-    })
-    .from(licenses)
-    .where(eq(licenses.id, row.id));
+  const stored = await runWithPlatformContext(async () => {
+    const [r] = await db
+      .select({
+        key: licenses.key,
+        off: licenses.offlineToken,
+        jti: licenses.offlineTokenJti,
+      })
+      .from(licenses)
+      .where(eq(licenses.id, row.id));
+    return r;
+  });
   console.log(
     `[bake] stored: key=${stored?.key}, offline_token.length=${stored?.off?.length}, jti=${stored?.jti}`,
   );

@@ -107,16 +107,23 @@ export function getActivationId(): string | null {
  * same fallback semantics as `decryptValue` (a pre-encryption plaintext value
  * passes through).
  */
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 export async function getDecryptedActivationId(): Promise<string | null> {
   const raw = readString(ACTIVATION_ID_STORAGE);
   if (!raw) return null;
+  // Current storage is plaintext UUID (roster needs a stable credential).
+  if (UUID_RE.test(raw.trim())) return raw.trim();
+  // Legacy: AES-GCM blob keyed off browser fingerprint (fragile — screen/UA).
   const value = await decryptValue(raw);
-  return value || null;
+  return value && UUID_RE.test(value) ? value : null;
 }
 
 export async function setActivationId(id: string): Promise<void> {
-  const encrypted = await encryptValue(id);
-  writeString(ACTIVATION_ID_STORAGE, encrypted);
+  // Store plaintext — the roster header must survive fingerprint drift.
+  // License key remains encrypted at rest below.
+  writeString(ACTIVATION_ID_STORAGE, id.trim());
 }
 
 export function getStoredHostname(): string | null {
@@ -245,11 +252,11 @@ export async function getActivationDeviceInfo(): Promise<{
 }
 
 async function getBrowserFingerprint(): Promise<string> {
+  // Stable across window resize / monitor changes — screen size used to break
+  // AES decrypt of the activation id and blocked the PIN roster.
   const parts = [
     navigator.userAgent || "",
     navigator.language || "",
-    String(screen.width || 0),
-    String(screen.height || 0),
     String(new Date().getTimezoneOffset()),
   ];
   const raw = parts.join("|");

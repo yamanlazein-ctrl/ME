@@ -33,6 +33,7 @@ import type { IColorRepository } from "../../application/ports/IColorRepository.
 import type { IRollRepository } from "../../application/ports/IRollRepository.js";
 import { logger } from "../../infrastructure/config/logger.js";
 import { withTenantTx } from "../../infrastructure/orm/drizzle.js";
+import { respondTransactionFailure } from "../../infrastructure/http/transactionRouteError.js";
 
 export function registerInvoiceRoutes(
   router: Router,
@@ -102,9 +103,11 @@ export function registerInvoiceRoutes(
               type: created.data.type,
               number: created.data.number,
               partyId: created.data.partyId,
+              linkedVoucherId: created.data.linkedVoucherId ?? null,
               lines: created.data.lines.map((l) => ({
                 rollId: l.rollId,
                 quantityKg: l.quantityKg,
+                costPerKg: l.costPerKg ?? null,
               })),
             },
             input,
@@ -132,11 +135,12 @@ export function registerInvoiceRoutes(
           { err, opId },
           "transaction rolled back — business write dropped with its sync unit (F-07)",
         );
-        return res.status(500).json({
-          code: "SYNC_OUTBOX_FAILED",
-          message: "تعذّر حفظ العملية مع وحدة المزامنة — لم يُحفظ أي تغيير. أعد المحاولة.",
-          statusCode: 500,
-        });
+        return respondTransactionFailure(
+          res,
+          err,
+          "invoice",
+          "تعذّر حفظ الفاتورة مع وحدة المزامنة — لم يُحفظ أي تغيير",
+        );
       }
 
       if (r.ok) {
@@ -291,11 +295,12 @@ export function registerInvoiceRoutes(
         r = syncEnabled ? await withTenantTx(c.tenantId, runUpdate) : await runUpdate();
       } catch (err) {
         logger.error({ err }, "transaction rolled back — invoice update dropped (F-07)");
-        return res.status(500).json({
-          code: "SYNC_OUTBOX_FAILED",
-          message: "تعذّر حفظ التعديل مع وحدة المزامنة — لم يُحفظ أي تغيير. أعد المحاولة.",
-          statusCode: 500,
-        });
+        return respondTransactionFailure(
+          res,
+          err,
+          "invoice",
+          "تعذّر حفظ تعديل الفاتورة مع وحدة المزامنة — لم يُحفظ أي تغيير",
+        );
       }
 
       if (r.ok) {
@@ -355,11 +360,12 @@ export function registerInvoiceRoutes(
         r = syncEnabled ? await withTenantTx(c.tenantId, runCancel) : await runCancel();
       } catch (err) {
         logger.error({ err }, "transaction rolled back — invoice cancel dropped (F-07)");
-        return res.status(500).json({
-          code: "SYNC_OUTBOX_FAILED",
-          message: "تعذّر حفظ الإلغاء مع وحدة المزامنة — لم يُحفظ أي تغيير. أعد المحاولة.",
-          statusCode: 500,
-        });
+        return respondTransactionFailure(
+          res,
+          err,
+          "invoice",
+          "تعذّر إلغاء الفاتورة مع وحدة المزامنة — لم يُحفظ أي تغيير",
+        );
       }
 
       if (r.ok) {

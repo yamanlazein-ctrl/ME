@@ -25,8 +25,19 @@ export default defineConfig({
     holdUntilCrawlEnd: false,
   },
   server: {
+    // Bind IPv4 explicitly — Windows often resolves localhost to ::1 only,
+    // so http://127.0.0.1:5173 fails while http://localhost:5173 works.
+    host: "127.0.0.1",
+    port: 5173,
+    strictPort: true,
+    proxy: {
+      // Same-origin /api in dev — avoids CORS preflight failures on custom headers.
+      "/api": { target: "http://127.0.0.1:8080", changeOrigin: true },
+    },
     warmup: {
       clientFiles: ["./src/routes/__root.tsx", "./src/router.tsx"],
+      // Pre-bundle SSR entry so the first page load does not hit fetchModule 60s timeouts.
+      ssrFiles: ["./src/routes/__root.tsx", "./src/router.tsx", "./src/server.ts"],
     },
   },
   build: {

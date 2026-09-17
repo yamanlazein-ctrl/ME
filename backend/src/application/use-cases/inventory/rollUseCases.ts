@@ -1,6 +1,7 @@
 import type { IRollRepository, RollFilter, CreateRollData } from "../../ports/IRollRepository.js";
 import type { TenantContext, PaginatedResult } from "../../../domain/types/index.js";
 import type { RollData } from "../../../domain/entities/Roll.js";
+import { BusinessRuleError } from "../../../domain/errors/index.js";
 
 type Result<T> = { ok: true; data: T } | { ok: false; error: string };
 
@@ -31,6 +32,11 @@ export async function updateRollUseCase(
   try {
     return { ok: true, data: await repo.update(id, input, ctx) };
   } catch (e) {
+    // F05: the frozen-cost guard (and other business-rule refusals) throw a
+    // precise, already-user-safe Arabic message — pass it through verbatim
+    // instead of masking it behind a generic "update failed", same pattern
+    // used for invoice/voucher business-rule errors elsewhere.
+    if (e instanceof BusinessRuleError) return { ok: false, error: e.message };
     return { ok: false, error: "فشل تحديث الصبغة" };
   }
 }

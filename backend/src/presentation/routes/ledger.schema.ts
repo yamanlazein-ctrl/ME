@@ -1,11 +1,12 @@
 ﻿import { z } from "zod";
+import { is2dp, MAX_2DP_MESSAGE } from "@erp/shared";
 
 export const writeLedgerEntrySchema = z.object({
   partyId: z.string().uuid(),
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   type: z.string().min(1).max(30),
-  debit: z.number().int().min(0).optional(),
-  credit: z.number().int().min(0).optional(),
+  debit: z.number().min(0).refine(is2dp, { message: MAX_2DP_MESSAGE }).optional(),
+  credit: z.number().min(0).refine(is2dp, { message: MAX_2DP_MESSAGE }).optional(),
   currency: z.enum(["SYP", "USD", "EUR"]).optional(),
   cashImpact: z.enum(["in", "out", "none"]).optional(),
   referenceType: z.string().max(50).optional(),

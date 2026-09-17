@@ -345,6 +345,7 @@ export class PostgresReturnRepository implements IReturnRepository {
             remainingKg: rolls.remainingKg,
             remainingPieces: rolls.remainingPieces,
             version: rolls.version,
+            rollNo: rolls.rollNo,
           })
           .from(rolls)
           .where(and(eq(rolls.id, rollId), eq(rolls.tenantId, ctx.tenantId)))
@@ -382,7 +383,7 @@ export class PostgresReturnRepository implements IReturnRepository {
             )
             .returning({ id: rolls.id });
           if (updated.length === 0) {
-            throw new Error(`Roll ${rollId} was modified concurrently. Please retry.`);
+            throw new Error(`تعارض على اللفافة ${r.rollNo} — تم تعديلها من جهاز آخر. حدّث الصفحة وأعد المحاولة.`);
           }
           await recordStockMovement(
             tx,
@@ -396,7 +397,7 @@ export class PostgresReturnRepository implements IReturnRepository {
               referenceId: row.id,
               referenceNumber: autoNumber,
               movementDate: input.date,
-              description: `${input.kind === "entry" ? "Entry return" : "Sale return"} ${autoNumber}`,
+              description: `${input.kind === "entry" ? "مرتجع شراء" : "مرتجع بيع"} ${autoNumber}`,
             },
             ctx,
           );
@@ -452,7 +453,7 @@ export class PostgresReturnRepository implements IReturnRepository {
               referenceType: returnRefType,
               referenceId: row.id,
               referenceNumber: autoNumber,
-              description: `Entry return ${autoNumber}`,
+              description: `مرتجع شراء ${autoNumber}`,
               createdBy: ctx.userId,
             },
             {
@@ -468,7 +469,7 @@ export class PostgresReturnRepository implements IReturnRepository {
               referenceType: returnRefType,
               referenceId: row.id,
               referenceNumber: autoNumber,
-              description: `Inventory returned ${autoNumber}`,
+              description: `مخزون مرتجع ${autoNumber}`,
               createdBy: ctx.userId,
             },
           );
@@ -494,7 +495,7 @@ export class PostgresReturnRepository implements IReturnRepository {
             referenceType: returnRefType,
             referenceId: row.id,
             referenceNumber: autoNumber,
-            description: `Sale return ${autoNumber}`,
+            description: `مرتجع بيع ${autoNumber}`,
             createdBy: ctx.userId,
           });
           // Revenue contra — balances the return group (BUG-02).
@@ -511,7 +512,7 @@ export class PostgresReturnRepository implements IReturnRepository {
             referenceType: returnRefType,
             referenceId: row.id,
             referenceNumber: autoNumber,
-            description: `Revenue contra ${autoNumber}`,
+            description: `عكس إيراد ${autoNumber}`,
             createdBy: ctx.userId,
           });
           // Inventory at cost
@@ -529,7 +530,7 @@ export class PostgresReturnRepository implements IReturnRepository {
               referenceType: returnRefType,
               referenceId: row.id,
               referenceNumber: autoNumber,
-              description: `Inventory reinstated ${autoNumber}`,
+              description: `إعادة مخزون ${autoNumber}`,
               createdBy: ctx.userId,
             });
             // COGS reversal
@@ -546,7 +547,7 @@ export class PostgresReturnRepository implements IReturnRepository {
               referenceType: returnRefType,
               referenceId: row.id,
               referenceNumber: autoNumber,
-              description: `COGS reversed ${autoNumber}`,
+              description: `عكس تكلفة البضاعة ${autoNumber}`,
               createdBy: ctx.userId,
             });
           }
@@ -591,7 +592,7 @@ export class PostgresReturnRepository implements IReturnRepository {
         )
         .for("update")
         .limit(1);
-      if (!r) throw new Error("Return not found or already cancelled");
+      if (!r) throw new Error("المرتجع غير موجود أو ملغى مسبقاً");
       // P0-001: optimistic concurrency — fail fast if version mismatch
       if (r.version !== expectedVersion) {
         throw Object.assign(new Error(`Stale version: expected ${expectedVersion}, current ${r.version}`), {
@@ -607,6 +608,7 @@ export class PostgresReturnRepository implements IReturnRepository {
             remainingKg: rolls.remainingKg,
             remainingPieces: rolls.remainingPieces,
             version: rolls.version,
+            rollNo: rolls.rollNo,
           })
           .from(rolls)
           .where(and(eq(rolls.id, l.rollId), eq(rolls.tenantId, ctx.tenantId)))
@@ -636,7 +638,7 @@ export class PostgresReturnRepository implements IReturnRepository {
             )
             .returning({ id: rolls.id });
           if (updated.length === 0) {
-            throw new Error(`Roll ${l.rollId} was modified concurrently. Please retry.`);
+            throw new Error(`تعارض على اللفافة ${roll.rollNo} — تم تعديلها من جهاز آخر. حدّث الصفحة وأعد المحاولة.`);
           }
           await recordStockMovement(
             tx,
@@ -650,7 +652,7 @@ export class PostgresReturnRepository implements IReturnRepository {
               referenceId: r.id,
               referenceNumber: r.number,
               movementDate: r.date,
-              description: `Cancel ${r.kind === "entry" ? "entry" : "sale"} return ${r.number} (reverse stock)`,
+              description: `إلغاء ${r.kind === "entry" ? "مرتجع شراء" : "مرتجع بيع"} ${r.number} (عكس المخزون)`,
             },
             ctx,
           );

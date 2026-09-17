@@ -104,6 +104,35 @@ export async function deactivateActivation(activationId: string, reason?: string
   });
 }
 
+/** Vendor Control Plane: suspend a license (customer ERP cannot do this). */
+export async function suspendLicense(licenseId: string): Promise<License> {
+  const data = await apiFetch<{ license: License }>(`/license-admin/licenses/${licenseId}/suspend`, {
+    method: "POST",
+    body: JSON.stringify({}),
+  });
+  return data.license;
+}
+
+/** Vendor Control Plane: patch status / limits / update policy / customer fields. */
+export async function patchLicense(
+  licenseId: string,
+  patch: {
+    status?: License["status"];
+    limits?: Partial<License["limits"]>;
+    updatePolicy?: Partial<License["updatePolicy"]>;
+    graceDays?: number;
+    customerName?: string;
+    customerPhone?: string;
+    customerNotes?: string;
+  },
+): Promise<License> {
+  const data = await apiFetch<{ license: License }>(`/license-admin/licenses/${licenseId}`, {
+    method: "PATCH",
+    body: JSON.stringify(patch),
+  });
+  return data.license;
+}
+
 export async function fetchAuditLogs(licenseId: string): Promise<AuditEvent[]> {
   const res = await fetch(`${API_BASE}/license/${licenseId}/audit`, {
     headers: getAuthHeaders(),

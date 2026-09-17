@@ -10,8 +10,11 @@ Arabic-language ERP for fabric & roll trading. Monorepo: React frontend, Express
 | `backend/` | REST API — Express, Drizzle ORM, PostgreSQL 16+, Redis, Zod |
 | `packages/shared/` | Single source of truth — Zod schemas, entities, `is2dp`, money helpers |
 | `public/` | Static assets |
-| `tests/e2e/` | Playwright + API E2E (including `verify-all-fixes`) |
-| `scripts/` | Verification tooling |
+| `tests/e2e/` | Playwright + API E2E |
+| `scripts/` | Ops helpers (backup/restore, ledger integrity) |
+| `docs/` | Delivery docs (decisions, sync ops, disaster recovery) |
+| `desktop/` | Tauri Windows desktop shell |
+| `admin-dashboard/` | License / activation admin panel |
 
 ## Features
 
@@ -54,7 +57,7 @@ cd backend && npm run dev   # http://localhost:8080  (health: /api/health/live)
 npm run dev                 # http://localhost:5173  (VITE_API_BASE_URL=http://localhost:8080)
 ```
 
-First run: open `http://localhost:5173`, the setup wizard at `/api/setup/status` creates the `bootstrap` tenant, then `admin@erp.local` / `admin123` (tenant `407fccfc-ba89-41c5-b5b9-ddb2c4f385d9` in dev seed) can log in. For `fix-admin` scripts: `ADMIN_BOOTSTRAP_PASSWORD=... node backend/scripts/fix-admin.mjs --force`.
+First run: open `http://localhost:5173`, complete one-time device activation, then sign in with the seeded admin (`admin@erp.local` / `admin123` after seed) or set a PIN from the user picker. Reset admin password: `node backend/scripts/reset-admin-password.mjs`.
 
 ## Scripts
 

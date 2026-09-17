@@ -1,9 +1,20 @@
 import { Banknote, DollarSign, Euro, ArrowDownLeft, ArrowUpRight, Activity } from "lucide-react";
 import type { ReactNode } from "react";
-import { formatAmount, CURRENCIES } from "@/presentation/hooks/useCurrency";
+import { CURRENCIES, currencySymbol } from "@/presentation/hooks/useCurrency";
+import { formatMoney } from "@/shared/utils/formatNumber";
 import { useHydrated } from "@/hooks/use-hydrated";
 import { cn } from "@/lib/utils";
 import type { Currency } from "@/domain/types";
+
+/** Symbol on the left, amount on the right — flex so Arabic ل.س cannot bidi-flip. */
+function CashAmount({ n, code, className }: { n: number; code: Currency; className?: string }) {
+  return (
+    <span dir="ltr" className={cn("inline-flex items-baseline gap-1 tabular-nums", className)}>
+      <span className="shrink-0 text-[0.7em] font-medium opacity-80">{currencySymbol(code)}</span>
+      <span>{formatMoney(n)}</span>
+    </span>
+  );
+}
 
 /** Three independent cash boxes — never mixed or FX-converted. */
 const CASH_BOXES: {
@@ -40,7 +51,7 @@ function StatCell({
 }: {
   label: string;
   icon?: ReactNode;
-  value: string;
+  value: ReactNode;
   valueClass: string;
 }) {
   return (
@@ -49,7 +60,7 @@ function StatCell({
         {icon}
         <span>{label}</span>
       </div>
-      <div className={cn("text-sm font-semibold tabular-nums leading-none", valueClass)} dir="ltr">
+      <div className={cn("text-sm font-semibold tabular-nums leading-none", valueClass)}>
         {value}
       </div>
     </div>
@@ -136,7 +147,7 @@ export function FinancialSummary({
                 )}
                 dir="ltr"
               >
-                {formatAmount(balance, code)}
+                <CashAmount n={balance} code={code} />
               </div>
 
               {/* 3. Status row — reserved height so all boxes align */}
@@ -153,18 +164,18 @@ export function FinancialSummary({
                 <StatCell
                   label="وارد"
                   icon={<ArrowDownLeft className="h-3 w-3 text-success" />}
-                  value={formatAmount(flow.in, code)}
+                  value={<CashAmount n={flow.in} code={code} />}
                   valueClass="text-success"
                 />
                 <StatCell
                   label="صادر"
                   icon={<ArrowUpRight className="h-3 w-3 text-destructive" />}
-                  value={formatAmount(flow.out, code)}
+                  value={<CashAmount n={flow.out} code={code} />}
                   valueClass="text-destructive"
                 />
                 <StatCell
                   label="صافي اليوم"
-                  value={formatAmount(net, code)}
+                  value={<CashAmount n={net} code={code} />}
                   valueClass={
                     net > 0
                       ? "text-success"
@@ -180,8 +191,8 @@ export function FinancialSummary({
                 {isOpeningBox ? (
                   <>
                     افتتاحي {openingDate}:{" "}
-                    <span className="font-semibold tabular-nums text-foreground" dir="ltr">
-                      {formatAmount(openingBalance, code)}
+                    <span className="font-semibold tabular-nums text-foreground">
+                      <CashAmount n={openingBalance} code={code} />
                     </span>
                   </>
                 ) : (

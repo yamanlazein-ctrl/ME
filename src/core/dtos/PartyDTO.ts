@@ -28,6 +28,7 @@ export type PartyDTO = {
   vat?: number;
   notes?: string | null;
   status: PartyStatus;
+  version?: number;
   createdAt: string;
   /** Present only for kind-scoped list calls (server-side aggregation). */
   stats?: PartyListStats;

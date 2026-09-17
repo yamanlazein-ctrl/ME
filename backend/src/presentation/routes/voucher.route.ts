@@ -25,6 +25,7 @@ import type { InvoiceSyncDependencies } from "../../application/use-cases/sync/s
 import { capturePartySyncDependencies } from "../../application/use-cases/sync/syncDependencySnapshots.js";
 import { logger } from "../../infrastructure/config/logger.js";
 import { withTenantTx } from "../../infrastructure/orm/drizzle.js";
+import { respondTransactionFailure } from "../../infrastructure/http/transactionRouteError.js";
 
 export function registerVoucherRoutes(
   router: Router,
@@ -84,11 +85,12 @@ export function registerVoucherRoutes(
       r = syncEnabled ? await withTenantTx(c.tenantId, runCreate) : await runCreate();
     } catch (err) {
       logger.error({ err }, "transaction rolled back — voucher create dropped (F-07)");
-      res.status(500).json({
-        code: "SYNC_OUTBOX_FAILED",
-        message: "تعذّر حفظ السند مع وحدة المزامنة — لم يُحفظ أي تغيير. أعد المحاولة.",
-        statusCode: 500,
-      });
+      respondTransactionFailure(
+        res,
+        err,
+        "voucher",
+        "تعذّر حفظ السند مع وحدة المزامنة — لم يُحفظ أي تغيير",
+      );
       return;
     }
     if (!r.ok) {
@@ -215,11 +217,12 @@ export function registerVoucherRoutes(
         r = syncEnabled ? await withTenantTx(c.tenantId, runCancel) : await runCancel();
       } catch (err) {
         logger.error({ err }, "transaction rolled back — voucher cancel dropped (F-07)");
-        return res.status(500).json({
-          code: "SYNC_OUTBOX_FAILED",
-          message: "تعذّر حفظ إلغاء السند مع وحدة المزامنة — لم يُحفظ أي تغيير. أعد المحاولة.",
-          statusCode: 500,
-        });
+        return respondTransactionFailure(
+          res,
+          err,
+          "voucher",
+          "تعذّر إلغاء السند مع وحدة المزامنة — لم يُحفظ أي تغيير",
+        );
       }
       if (r.ok) res.json(r.data);
       else res.status(422).json({ code: "VALIDATION", message: r.error });
@@ -270,11 +273,12 @@ export function registerVoucherRoutes(
         r = syncEnabled ? await withTenantTx(c.tenantId, runCancel) : await runCancel();
       } catch (err) {
         logger.error({ err }, "transaction rolled back — voucher cancel dropped (F-07)");
-        return res.status(500).json({
-          code: "SYNC_OUTBOX_FAILED",
-          message: "تعذّر حفظ إلغاء السند مع وحدة المزامنة — لم يُحفظ أي تغيير. أعد المحاولة.",
-          statusCode: 500,
-        });
+        return respondTransactionFailure(
+          res,
+          err,
+          "voucher",
+          "تعذّر إلغاء السند مع وحدة المزامنة — لم يُحفظ أي تغيير",
+        );
       }
       if (r.ok) res.json(r.data);
       else res.status(422).json({ code: "VALIDATION", message: r.error });

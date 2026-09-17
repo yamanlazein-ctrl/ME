@@ -10,6 +10,7 @@ import {
 import { useDashboard } from "@/presentation/hooks/useDashboard";
 import { type TransactionDTO } from "@/application/ports/IDashboardRepository";
 import { formatAmount, type Currency } from "@/presentation/hooks/useCurrency";
+import { formatDateTime } from "@/lib/utils";
 
 const META: Record<
   TransactionDTO["type"],
@@ -125,7 +126,7 @@ export function RecentTransactionsList() {
                     {formatAmount(t.amount, t.currency as Currency)}
                   </span>
                   <div className="mt-0.5 text-start text-[11px] text-muted-foreground">
-                    {t.time}
+                    {formatDateTime(t.time)}
                   </div>
                 </div>
 

@@ -9,6 +9,10 @@ import {
   type SyncDeviceRow,
 } from "../../application/ports/ISyncDeviceRepository.js";
 import { syncDevices } from "../orm/schemas/sync-device.table.js";
+import {
+  isLicenseFingerprintRevoked,
+  revokeLicenseDevicesByFingerprint,
+} from "../device/linkedDeviceRevocation.js";
 
 export class PostgresSyncDeviceRepository implements ISyncDeviceRepository {
   constructor(private readonly db: DB) {}
@@ -86,6 +90,9 @@ export class PostgresSyncDeviceRepository implements ISyncDeviceRepository {
         if (existing.revokedAt) {
           throw new SyncDeviceRevokedError(existing.revokeReason);
         }
+        if (await isLicenseFingerprintRevoked(this.db, input.tenantId, input.deviceFingerprint)) {
+          throw new SyncDeviceRevokedError("license_revoked");
+        }
         const [updated] = await this.db
           .update(syncDevices)
           .set({
@@ -103,6 +110,10 @@ export class PostgresSyncDeviceRepository implements ISyncDeviceRepository {
           .where(eq(syncDevices.id, existing.id))
           .returning();
         return updated;
+      }
+
+      if (await isLicenseFingerprintRevoked(this.db, input.tenantId, input.deviceFingerprint)) {
+        throw new SyncDeviceRevokedError("license_revoked");
       }
 
       const [created] = await this.db
@@ -128,7 +139,18 @@ export class PostgresSyncDeviceRepository implements ISyncDeviceRepository {
         .from(syncDevices)
         .where(and(eq(syncDevices.tenantId, tenantId), eq(syncDevices.id, deviceId)))
         .limit(1);
-      return row ?? null;
+      if (!row) return null;
+      if (
+        !row.revokedAt &&
+        (await isLicenseFingerprintRevoked(this.db, tenantId, row.deviceFingerprint))
+      ) {
+        return {
+          ...row,
+          revokedAt: new Date(0),
+          revokeReason: row.revokeReason ?? "license_revoked",
+        };
+      }
+      return row;
     });
   }
 
@@ -159,7 +181,15 @@ export class PostgresSyncDeviceRepository implements ISyncDeviceRepository {
         })
         .where(and(eq(syncDevices.tenantId, tenantId), eq(syncDevices.id, deviceId)))
         .returning();
-      return row ?? null;
+      if (!row) return null;
+      await revokeLicenseDevicesByFingerprint(
+        this.db,
+        tenantId,
+        row.deviceFingerprint,
+        revoked,
+        reason,
+      );
+      return row;
     });
   }
 }

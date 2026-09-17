@@ -363,12 +363,37 @@ describe("sync invariants — Transactional Outbox (F-07)", () => {
   it("the failure path is a hard error, never a success response", () => {
     for (const f of ENQUEUING_ROUTES) {
       const src = read(ROUTES_DIR, f);
+      // Two legitimate shapes, both of which answer with a non-2xx + an
+      // explicit code:
+      //  1. the route emits the code inline, or
+      //  2. the route delegates to `respondTransactionFailure` — the shared
+      //     helper that maps a rolled-back transaction onto SYNC_OUTBOX_FAILED.
+      // The helper's own contract is asserted by the next test, so delegating
+      // cannot become a loophole here.
+      const inline = src.includes("SYNC_OUTBOX_FAILED");
+      const viaHelper = src.includes("respondTransactionFailure(");
       expect(
-        src.includes("SYNC_OUTBOX_FAILED"),
+        inline || viaHelper,
         `${f} must surface a failed enqueue as an explicit error code so the ` +
           `caller is not told the mutation succeeded`,
       ).toBe(true);
     }
+  });
+
+  it("the shared transaction-failure helper answers non-business failures with SYNC_OUTBOX_FAILED", () => {
+    // This is what makes the delegation allowed above safe. `respondTransactionFailure`
+    // must default to SYNC_OUTBOX_FAILED and only downgrade to VALIDATION for
+    // real business-rule failures (422) — anything else would report a failed
+    // outbox enqueue as a different kind of problem.
+    const helper = read("src", "infrastructure", "http", "transactionRouteError.ts");
+    expect(
+      helper.includes('syncCode = "SYNC_OUTBOX_FAILED"'),
+      "respondTransactionFailure must default to the SYNC_OUTBOX_FAILED code",
+    ).toBe(true);
+    expect(
+      helper.includes('status === 422 ? "VALIDATION" : syncCode'),
+      "only business-rule/day-locked failures may leave the SYNC_OUTBOX_FAILED path",
+    ).toBe(true);
   });
 });
 
@@ -708,7 +733,8 @@ describe("sync invariants — update base-version (P3b)", () => {
    *      row already reflects the exact intent) instead of failing forever.
    *  (c) A stale base fails retryably with the exact differing fields (for an
    *      operator rebase), never `invalid`, never a silent overwrite.
-   *  (d) Legacy payloads without a base stay accepted and unchecked.
+   *  (d) Payloads without a baseVersion are refused (visible conflict) —
+   *      never applied as last-write-wins against the hub row.
    */
   const MATERIALIZE = read("src", "application", "use-cases", "sync", "syncMaterialize.ts");
   const ENQUEUE = read("src", "application", "use-cases", "sync", "syncEnqueue.ts");
@@ -726,11 +752,15 @@ describe("sync invariants — update base-version (P3b)", () => {
     ).toBe(true);
   });
 
-  it("materialize converges duplicates, rejects stale bases, spares legacy", () => {
+  it("materialize converges duplicates, rejects stale and missing bases", () => {
     const fn = MATERIALIZE.slice(MATERIALIZE.indexOf("async function materializeInvoiceUpdate"));
     expect(
       /differing\.length === 0\) return \{ status: "exists" \}/.test(fn),
       "converged duplicate must be exists",
+    ).toBe(true);
+    expect(
+      /baseVersion === null && !meta\?\.hubCanonical[\s\S]{0,400}status: "failed"/.test(fn),
+      "missing baseVersion must fail visibly (no silent overwrite)",
     ).toBe(true);
     expect(
       /baseVersion !== null && existing\.version !== baseVersion[\s\S]{0,300}status: "failed"/.test(
@@ -852,7 +882,12 @@ describe("sync invariants — voucher cancel coverage (P5)", () => {
       (ROUTE.match(/withTenantTx\(c\.tenantId, runCancel\)/g) ?? []).length >= 2,
       "both cancel paths must share one transaction with their outbox unit (F-07)",
     ).toBe(true);
-    expect(ROUTE.includes("SYNC_OUTBOX_FAILED"), "enqueue failure must be a hard error").toBe(true);
+    expect(
+      ROUTE.includes("SYNC_OUTBOX_FAILED") || ROUTE.includes("respondTransactionFailure("),
+      "enqueue failure must be a hard error — either the inline SYNC_OUTBOX_FAILED " +
+        "code or the shared respondTransactionFailure helper (whose default code " +
+        "is asserted in the outbox section above)",
+    ).toBe(true);
   });
 
   it("the hub materializes voucher/cancel with idempotent states", () => {
@@ -1400,8 +1435,7 @@ describe("sync invariants — cancel replay honours optimistic concurrency", () 
       guard.slice(0, 2600).includes("recordStaleConflict"),
       "a refused cancel must be recorded for the operator",
     ).toBe(true);
-    // the fallback to existing.version must only be reachable for legacy
-    // payloads (no base) — a stale base must never fall through to applying.
+    // the fallback to existing.version is only for hubCanonical / already-guarded paths
     for (const at of ["Order", "Voucher", "Return", "Expense", "Invoice"]) {
       const fn = MAT.slice(MAT.indexOf(`async function materialize${at}Cancel(`));
       const body = fn.slice(0, 2600);
@@ -1414,6 +1448,10 @@ describe("sync invariants — cancel replay honours optimistic concurrency", () 
         applyAt === -1 ? body.length : applyAt,
       );
     }
+    expect(
+      guard.slice(0, 3200).includes("baseVersion === null"),
+      "missing baseVersion on cancel must be refused (no blind apply)",
+    ).toBe(true);
   });
 
   it("cancel routes stamp the version they validated locally", () => {

@@ -42,7 +42,7 @@ export interface IInvoiceRepository {
    * Soft-cancel an active invoice. Returns the cancelled entity.
    * Throws DomainError if already cancelled or not found.
    */
-  cancel(id: UUID, ctx: TenantContext): Promise<Invoice>;
+    cancel(id: UUID, ctx: TenantContext, expectedVersion: number): Promise<Invoice>;
 }
 
 /**

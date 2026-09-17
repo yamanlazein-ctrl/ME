@@ -3,8 +3,10 @@ import type { TenantContext, UUID } from "../../../domain/types/index.js";
 import type { ILicenseProvider } from "../../../application/ports/ILicenseProvider.js";
 import type { ILicenseRepository } from "../../../application/ports/ILicenseRepository.js";
 import type { ISecretsRepository } from "../../../application/ports/ISecretsRepository.js";
+import type { ISecretCipher } from "../../../application/ports/ISecretCipher.js";
 import type { IMachineFingerprintProvider } from "../../../application/ports/IMachineFingerprintProvider.js";
 import type { ILicenseTokenSigner } from "../../../application/ports/ILicenseTokenSigner.js";
+import { collectOfflineTokenJtisForDenylist } from "../../../infrastructure/license/licenseTokenJti.js";
 import { config } from "../../../infrastructure/config/env.js";
 
 /**
@@ -157,6 +159,8 @@ export async function deactivateLicenseUseCase(
   provider: ILicenseProvider,
   licenseRepo: ILicenseRepository,
   secretsRepo: ISecretsRepository,
+  cipher: ISecretCipher,
+  signer: ILicenseTokenSigner,
   tokenDenylist: TokenDenylist,
   ctx: TenantContext,
   reason: string,
@@ -167,12 +171,22 @@ export async function deactivateLicenseUseCase(
     const activation = await licenseRepo.findActiveActivationForLicense(lic.id as UUID);
     if (!activation) return { ok: false, error: "لا يوجد تنشيط نشط" };
     await provider.deactivate(activation.id as UUID, reason);
-    // R11: denylist the offline token's jti so a captured/valid token is
-    // rejected by the enforcement guard immediately.
-    const jtiRow = await secretsRepo.get(ctx.tenantId as UUID, "license.token.jti");
-    if (jtiRow) {
-      await tokenDenylist.add(String(jtiRow), LICENSE_REVOCATION_TTL_SECONDS);
+    // R11: denylist every canonical offline-token jti (SoT column, decrypted
+    // secrets.license.token.jti, and verified token claim). Secrets return
+    // ciphertext records — never coerce the row with String(record).
+    const jtis = await collectOfflineTokenJtisForDenylist({
+      licenseOfflineTokenJti: lic.offlineTokenJti,
+      licenseOfflineToken: lic.offlineToken,
+      tenantId: ctx.tenantId,
+      secretsRepo,
+      cipher,
+      signer,
+    });
+    for (const jti of jtis) {
+      await tokenDenylist.add(jti, LICENSE_REVOCATION_TTL_SECONDS);
     }
+    await secretsRepo.delete(ctx.tenantId as UUID, "license.token.current");
+    await secretsRepo.delete(ctx.tenantId as UUID, "license.token.jti");
     return { ok: true, data: true };
   } catch (e) {
     return { ok: false, error: "فشل إلغاء التنشيط" };
@@ -187,7 +201,9 @@ export async function listDevicesUseCase(
   try {
     const lic = await licenseRepo.findActiveForTenant(ctx.tenantId as UUID);
     if (!lic) return { ok: false, error: "لا توجد ترخيص نشط" };
-    const devices = await provider.listDevices(lic.id as UUID);
+    const activation = await licenseRepo.findActiveActivationForLicense(lic.id as UUID);
+    if (!activation) return { ok: true, data: [] };
+    const devices = await provider.listDevices(activation.id as UUID);
     return { ok: true, data: devices };
   } catch (e) {
     return { ok: false, error: "فشل جلب الأجهزة" };
@@ -197,8 +213,8 @@ export async function listDevicesUseCase(
 export async function revokeDeviceUseCase(
   provider: ILicenseProvider,
   licenseRepo: ILicenseRepository,
-  secretsRepo: ISecretsRepository,
-  tokenDenylist: TokenDenylist,
+  _secretsRepo: ISecretsRepository,
+  _tokenDenylist: TokenDenylist,
   ctx: TenantContext,
   deviceId: string,
   reason: string,
@@ -208,12 +224,10 @@ export async function revokeDeviceUseCase(
     if (!lic) return { ok: false, error: "لا توجد ترخيص نشط" };
     const activation = await licenseRepo.findActiveActivationForLicense(lic.id as UUID);
     if (!activation) return { ok: false, error: "لا يوجد تنشيط نشط" };
+    // Org action: revoke one DeviceSeat only. Do NOT denylist the tenant
+    // offline license jti — that would lock every device on this install.
+    // Full entitlement kill is vendor-only (deactivate / transfer).
     await provider.revokeDevice(activation.id as UUID, deviceId, reason);
-    // R11: denylist the offline token jti on device revoke too.
-    const jtiRow = await secretsRepo.get(ctx.tenantId as UUID, "license.token.jti");
-    if (jtiRow) {
-      await tokenDenylist.add(String(jtiRow), LICENSE_REVOCATION_TTL_SECONDS);
-    }
     return { ok: true, data: true };
   } catch (e) {
     return { ok: false, error: "فشل إلغاء الجهاز" };

@@ -25,7 +25,7 @@ export class CancelVoucherUseCase {
       return Err(new ValidationError("السند ملغى بالفعل."));
     }
 
-    await this.vouchers.cancel(id, ctx);
+    await this.vouchers.cancel(id, ctx, voucher.version);
 
     await this.ledger.cancelByReference(id, ctx);
 

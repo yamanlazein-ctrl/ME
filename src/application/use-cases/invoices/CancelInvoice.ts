@@ -28,8 +28,9 @@ export class CancelInvoiceUseCase {
       return Err(new ValidationError("لا يمكن إلغاء فاتورة أُلغي سابقاً."));
     }
 
-    /* 2 — Cancel invoice (backend handles stock + ledger atomically) */
-    await this.invoices.cancel(id, ctx);
+    /* 2 — Cancel invoice (backend handles stock + ledger atomically).
+     * expectedVersion is the row the UI loaded — backend refuses a stale cancel. */
+    await this.invoices.cancel(id, ctx, invoice.version);
 
     /* 3 — Dispatch domain event */
     const event = InvoiceCancelled(ctx.tenantId, {

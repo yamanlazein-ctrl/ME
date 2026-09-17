@@ -5,6 +5,7 @@ import { DesktopServerSettings } from "@/components/auth/DesktopServerSettings";
 import { getApiBaseUrl } from "@/lib/api-base-url";
 import {
   getInstallTenantId,
+  setInstallTenantId,
   getDecryptedActivationId,
   getServerFingerprint,
 } from "@/lib/license-state";
@@ -19,15 +20,62 @@ type RosterUser = {
   hasPin: boolean;
 };
 
-function resolveTenantId(): string {
-  return (
-    (import.meta.env.VITE_DESKTOP_DEPLOY === "true"
-      ? (import.meta.env.VITE_DEFAULT_TENANT_ID as string | undefined)
-      : null) ??
-    getInstallTenantId() ??
-    (import.meta.env.VITE_DEFAULT_TENANT_ID as string | undefined) ??
-    ""
+export function resolveTenantId(): string {
+  // F08 (Phase 1 audit): the desktop-deploy branch used to check the
+  // build-time VITE_DEFAULT_TENANT_ID BEFORE this device's own recorded
+  // activation. That env var is baked into the installer at build time
+  // (see .env.example) — every copy of the same build shares it. Once a
+  // real tenant activates on a given machine (setInstallTenantId, written
+  // during the actual activation flow), THAT is the tenant this device
+  // belongs to; the baked constant must only be a last-resort fallback for
+  // a machine that has never activated anything, exactly like the web
+  // build already treats it below.
+  return getInstallTenantId() ?? (import.meta.env.VITE_DEFAULT_TENANT_ID as string | undefined) ?? "";
+}
+
+type RosterResponse = {
+  ok: boolean;
+  status: number;
+  tenantId?: string;
+  users?: RosterUser[];
+  message?: string;
+  code?: string;
+};
+
+async function fetchRoster(
+  base: string,
+  tid: string,
+  headers: Record<string, string>,
+): Promise<RosterResponse> {
+  const r = await fetch(
+    `${base}/api/auth/device-roster?tenantId=${encodeURIComponent(tid)}`,
+    { headers },
   );
+  const data = (await r.json().catch(() => ({}))) as {
+    tenantId?: string;
+    users?: RosterUser[];
+    message?: string;
+    code?: string;
+  };
+  return {
+    ok: r.ok,
+    status: r.status,
+    tenantId: data.tenantId,
+    users: data.users,
+    message: data.message,
+    code: data.code,
+  };
+}
+
+async function recoverCompletedTenant(base: string): Promise<string | null> {
+  const r = await fetch(`${base}/api/setup/status`);
+  if (!r.ok) return null;
+  const data = (await r.json().catch(() => ({}))) as {
+    isCompleted?: boolean;
+    tenantId?: string;
+  };
+  if (data.isCompleted === true && data.tenantId) return data.tenantId;
+  return null;
 }
 
 const ROLE_AR: Record<string, string> = {
@@ -45,7 +93,6 @@ export function UserPickerPage() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [selected, setSelected] = useState<RosterUser | null>(null);
   const [pin, setPin] = useState("");
-  const [currentSecret, setCurrentSecret] = useState("");
   const [confirmPin, setConfirmPin] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
@@ -61,34 +108,43 @@ export function UserPickerPage() {
         return;
       }
       const base = getApiBaseUrl();
-      // Batch 4 / 4C: the roster is pre-auth (this picker has no session yet),
-      // so the hub requires proof that this is a device provisioned for the
-      // tenant — the activation credential the device received, and/or the
-      // hardware fingerprint an invitation registered. The desktop build also
-      // passes on the hub's own machine; a browser elsewhere needs one of
-      // these. Without any of them the hub refuses instead of disclosing a
-      // tenant's users to an anonymous caller.
       const rosterHeaders: Record<string, string> = {};
       const activationId = await getDecryptedActivationId().catch(() => null);
       if (activationId) rosterHeaders["X-Device-Activation-Id"] = activationId;
       const fingerprint = await getServerFingerprint().catch(() => null);
       if (fingerprint) rosterHeaders["X-Device-Fingerprint"] = fingerprint;
-      const r = await fetch(
-        `${base}/api/auth/device-roster?tenantId=${encodeURIComponent(tid)}`,
-        { headers: rosterHeaders },
-      );
-      const data = (await r.json().catch(() => ({}))) as {
-        tenantId?: string;
-        users?: RosterUser[];
-        message?: string;
-      };
-      if (!r.ok) {
-        setLoadError(data.message || "تعذّر تحميل قائمة المستخدمين");
+      const data = await fetchRoster(base, tid, rosterHeaders);
+      if (data.ok) {
+        setTenantId(data.tenantId || tid);
+        setUsers(Array.isArray(data.users) ? data.users : []);
+        return;
+      }
+      // Stale local tenant from a half-finished wizard: the live install
+      // is a different completed tenant. Recover from /api/setup/status.
+      if (data.status === 503 && data.code === "SETUP_REQUIRED") {
+        const recovered = await recoverCompletedTenant(base);
+        if (recovered && recovered !== tid) {
+          setInstallTenantId(recovered);
+          const retry = await fetchRoster(base, recovered, rosterHeaders);
+          if (retry.ok) {
+            setTenantId(retry.tenantId || recovered);
+            setUsers(Array.isArray(retry.users) ? retry.users : []);
+            return;
+          }
+          data.message = retry.message || data.message;
+          data.code = retry.code;
+          data.status = retry.status;
+        }
+      }
+      if (data.status === 401 && data.code === "DEVICE_PROOF_REQUIRED") {
+        setLoadError(
+          "تعذّر التحقق من تفعيل هذا الجهاز. أعد المحاولة، وإن استمر الخطأ أعد تفعيل الجهاز من شاشة التفعيل.",
+        );
         setUsers([]);
         return;
       }
-      setTenantId(data.tenantId || tid);
-      setUsers(Array.isArray(data.users) ? data.users : []);
+      setLoadError(data.message || "تعذّر تحميل قائمة المستخدمين");
+      setUsers([]);
     } catch {
       setLoadError("تعذّر الاتصال بالخادم");
       setUsers([]);
@@ -118,10 +174,6 @@ export function UserPickerPage() {
       return;
     }
     if (!selected.hasPin) {
-      if (!currentSecret.trim()) {
-        setError("أدخل كلمة المرور الحالية لتعيين الرقم السري");
-        return;
-      }
       if (pin !== confirmPin) {
         setError("تأكيد الرقم السري غير متطابق");
         return;
@@ -131,13 +183,17 @@ export function UserPickerPage() {
     try {
       const base = getApiBaseUrl();
       if (!selected.hasPin) {
+        const setHeaders: Record<string, string> = { "Content-Type": "application/json" };
+        const activationId = await getDecryptedActivationId().catch(() => null);
+        if (activationId) setHeaders["X-Device-Activation-Id"] = activationId;
+        const fingerprint = await getServerFingerprint().catch(() => null);
+        if (fingerprint) setHeaders["X-Device-Fingerprint"] = fingerprint;
         const setRes = await fetch(`${base}/api/auth/set-pin`, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: setHeaders,
           body: JSON.stringify({
             userId: selected.id,
             pin,
-            currentSecret: currentSecret.trim(),
             tenantId: tenantId || undefined,
           }),
         });
@@ -180,7 +236,7 @@ export function UserPickerPage() {
         <div className="flex flex-col items-center text-center">
           <img
             src={logoUrl}
-            alt="Motard Fabrics Group"
+            alt=""
             className="h-16 w-16 object-contain object-center bg-transparent"
           />
           <h1 className="mt-4 text-2xl font-bold tracking-tight text-foreground">
@@ -225,7 +281,6 @@ export function UserPickerPage() {
                       setSelected(u);
                       setPin("");
                       setConfirmPin("");
-                      setCurrentSecret("");
                       setError(null);
                     }}
                     className="flex w-full items-center justify-between rounded-xl border border-border bg-secondary/50 px-4 py-3 text-start transition hover:border-primary/50 hover:bg-secondary"
@@ -274,29 +329,15 @@ export function UserPickerPage() {
             </div>
 
             {!selected.hasPin && (
-              <>
-                <p className="text-[11px] leading-relaxed text-muted-foreground">
-                  أول دخول لهذا الحساب: أدخل كلمة المرور الحالية ثم عيّن رقماً سرياً من 4 أرقام.
-                </p>
-                <label className="block">
-                  <span className="mb-1.5 block text-xs font-medium text-muted-foreground">
-                    كلمة المرور الحالية
-                  </span>
-                  <input
-                    type="password"
-                    value={currentSecret}
-                    onChange={(e) => setCurrentSecret(e.target.value)}
-                    className="w-full rounded-lg border border-border bg-secondary px-3 py-2.5 text-sm outline-none focus:border-primary"
-                    autoComplete="current-password"
-                    autoFocus
-                  />
-                </label>
-              </>
+              <p className="text-[11px] leading-relaxed text-muted-foreground">
+                أول دخول بعد التفعيل: عيّن رقماً سرياً من 4 أرقام. ستستخدمه في كل دخول لاحق على هذا
+                الجهاز.
+              </p>
             )}
 
             <label className="block">
               <span className="mb-1.5 block text-xs font-medium text-muted-foreground">
-                {selected.hasPin ? "الرقم السري (4 أرقام)" : "رقم سري جديد (4 أرقام)"}
+                {selected.hasPin ? "الرقم السري (4 أرقام)" : "عيّن رقماً سرياً (4 أرقام)"}
               </span>
               <input
                 type="password"
@@ -306,7 +347,7 @@ export function UserPickerPage() {
                 onChange={(e) => setPin(e.target.value.replace(/\D/g, "").slice(0, 4))}
                 className="w-full rounded-lg border border-border bg-secondary px-3 py-2.5 text-center text-lg tracking-[0.4em] outline-none focus:border-primary"
                 autoComplete="one-time-code"
-                autoFocus={selected.hasPin}
+                autoFocus
               />
             </label>
 

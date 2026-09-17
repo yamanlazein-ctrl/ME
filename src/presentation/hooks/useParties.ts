@@ -287,7 +287,13 @@ export async function deleteCustomer(id: string): Promise<void> {
     _allParties = _allParties.filter((p) => p.id !== id);
     syncPartiesCache();
     notifyPartiesChange();
-    toast.error("تم حذف العميل");
+    // F07 (Phase 1 audit): this was toast.error() on the SUCCESS path — a
+    // completed delete rendered with the same red/error styling as a
+    // failure, which is exactly the kind of ambiguous signal that made a
+    // blocked delete (server correctly refuses when invoices/vouchers are
+    // still linked, see PostgresPartyRepository.cancel) hard to tell apart
+    // from a real one at a glance.
+    toast.success("تم حذف العميل");
   } catch (e) {
     toast.error(e instanceof Error ? e.message : "فشل حذف العميل");
   }
@@ -299,7 +305,7 @@ export async function deleteSupplier(id: string): Promise<void> {
     _allParties = _allParties.filter((p) => p.id !== id);
     syncPartiesCache();
     notifyPartiesChange();
-    toast.error("تم حذف المورد");
+    toast.success("تم حذف المورد");
   } catch (e) {
     toast.error(e instanceof Error ? e.message : "فشل حذف المورد");
   }

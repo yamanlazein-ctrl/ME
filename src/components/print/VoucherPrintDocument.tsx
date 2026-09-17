@@ -67,8 +67,19 @@ export function VoucherPrintDocument({ voucher }: { voucher: Voucher }) {
     return { value, sym: currencySymbol(v.invoiceCurrency), rate: v.exchangeRate! };
   })();
 
+  const discount = v.discount ?? 0;
+  const netCash = Math.max(0, v.amount - discount);
+
   const totals: PrintTotal[] = [
-    { label: "المبلغ", value: `${formatMoney(v.amount)} ${sym}`, grand: true },
+    { label: "مبلغ التسوية", value: `${formatMoney(v.amount)} ${sym}` },
+    ...(discount > 0
+      ? [{ label: "الخصم", value: `- ${formatMoney(discount)} ${sym}` }]
+      : []),
+    {
+      label: discount > 0 ? "الصافي نقداً" : "المبلغ",
+      value: `${formatMoney(discount > 0 ? netCash : v.amount)} ${sym}`,
+      grand: true,
+    },
     ...(counterpart
       ? [
           {

@@ -167,11 +167,9 @@ async function tombstoneExists(
     );
     return (r.rowCount ?? 0) > 0;
   } catch (err) {
-    // A lookup failure must not corrupt an otherwise valid materialization;
-    // fail closed is achieved by returning false (proceed) but the guard is
-    // best-effort only — the durable write path below is the load-bearing one.
-    logger.warn({ err, entityType, entityId }, "sync tombstone lookup failed");
-    return false;
+    // Fail closed: a lookup error must not allow recreating a deleted master.
+    logger.error({ err, entityType, entityId }, "sync tombstone lookup failed — blocking recreate");
+    throw err;
   }
 }
 
@@ -356,15 +354,10 @@ export async function materializeSyncUnit(
  * Cancels used to be replayed blindly: the origin device stamped no base
  * version, so the hub fell back to `existing.version` and voided whatever row
  * it held. A cancel issued offline against v2 therefore silently voided v3 —
- * a financial edit another device had already applied. That is exactly the
- * blind-last-write-wins behaviour the convergence rules forbid, and it is
- * asymmetric with updates (which already refuse a stale base).
+ * a financial edit another device had already applied.
  *
- * Returns a retryable `failed` result (with the loss recorded in
- * `sync_conflicts` for the operator) when the hub row moved past the caller's
- * base, or null when the replay may proceed. A unit without a base version
- * (payload enqueued by a build older than this guard) stays unchecked, exactly
- * like the update path — refusing it would strand already-queued work.
+ * Units without `baseVersion` are refused (visible conflict) — never applied
+ * as last-write-wins against whatever the hub currently holds.
  */
 async function refuseStaleCancelBase(
   meta: SyncMaterializeMeta | undefined,
@@ -380,7 +373,26 @@ async function refuseStaleCancelBase(
     typeof payload.baseVersion === "number" && Number.isFinite(payload.baseVersion)
       ? payload.baseVersion
       : null;
-  if (baseVersion === null || serverVersion === null || serverVersion === baseVersion) return null;
+  if (baseVersion === null) {
+    await recordStaleConflict(
+      meta,
+      payload,
+      entityType,
+      entityId,
+      "cancel",
+      null,
+      serverVersion,
+      tenantId,
+    );
+    return {
+      status: "failed",
+      error:
+        `تعارض إلغاء ${documentLabel}: الوحدة بلا رقم إصدار أساسي` +
+        (serverVersion !== null ? ` والمركز على v${serverVersion}` : "") +
+        ` — راجع النسخة الفائزة ثم أعد الإلغاء إن بقي صحيحاً.`,
+    };
+  }
+  if (serverVersion === null || serverVersion === baseVersion) return null;
   await recordStaleConflict(
     meta,
     payload,
@@ -522,11 +534,31 @@ async function materializeInvoiceUpdate(
   // device saw; a hub row on a newer version means another device edited
   // first, and replay would silently overwrite their edit. Retryable `failed`
   // (never `invalid`/dead on first sight) with the exact field list so the
-  // operator can rebase. Legacy payloads without a base stay unchecked.
+  // operator can rebase.
+  // Legacy payloads without baseVersion must NOT fall through to
+  // expectedVersion=existing.version (that was a silent overwrite).
   const baseVersion =
     typeof payload.baseVersion === "number" && Number.isFinite(payload.baseVersion)
       ? payload.baseVersion
       : null;
+  if (baseVersion === null && !meta?.hubCanonical) {
+    await recordStaleConflict(
+      meta,
+      payload,
+      "invoice",
+      invoiceId,
+      "update",
+      null,
+      existing.version,
+      ctx.tenantId,
+    );
+    return {
+      status: "failed",
+      error:
+        `تعارض تعديل: الوحدة بلا رقم إصدار أساسي والمركز على v${existing.version} — ` +
+        `راجع وأعد الإدخال. الحقول المختلفة: ${differing.join(",")}`,
+    };
+  }
   if (baseVersion !== null && existing.version !== baseVersion && !meta?.hubCanonical) {
     await recordStaleConflict(
       meta,
@@ -549,11 +581,7 @@ async function materializeInvoiceUpdate(
   const depErr = await ensureDeps(database, payload, ctx);
   if (depErr) return depErr;
 
-  const expectedVersion = meta?.hubCanonical
-    ? existing.version
-    : typeof payload.baseVersion === "number"
-      ? payload.baseVersion
-      : existing.version;
+  const expectedVersion = meta?.hubCanonical ? existing.version : (baseVersion as number);
 
   const updated = await updateInvoiceUseCase(
     repos.invoiceRepo,
@@ -592,8 +620,10 @@ async function materializeInvoiceCancel(
   );
   if (stale) return stale;
 
-  // P0-001: expectedVersion is REQUIRED - extract from payload (baseVersion at enqueue time)
-  const expectedVersion = typeof payload.baseVersion === "number" ? payload.baseVersion : existing.version;
+  // P0-001: expectedVersion is REQUIRED - refuseStaleCancelBase already rejected
+  // missing baseVersion; hubCanonical may still omit it and use hub version.
+  const expectedVersion =
+    typeof payload.baseVersion === "number" ? payload.baseVersion : existing.version;
 
   const replay = replayCtxFromPayload(payload, ctx);
   const result = await cancelInvoiceUseCase(
@@ -670,8 +700,10 @@ async function materializeVoucherCancel(
   );
   if (stale) return stale;
 
-  // P0-001: expectedVersion is REQUIRED - extract from payload (baseVersion at enqueue time)
-  const expectedVersion = typeof payload.baseVersion === "number" ? payload.baseVersion : existing.version;
+  // P0-001: expectedVersion is REQUIRED - refuseStaleCancelBase already rejected
+  // missing baseVersion; hubCanonical may still omit it and use hub version.
+  const expectedVersion =
+    typeof payload.baseVersion === "number" ? payload.baseVersion : existing.version;
 
   const replay = replayCtxFromPayload(payload, ctx);
   const result = await cancelVoucherUseCase(
@@ -774,8 +806,10 @@ async function materializeReturnCancel(
   );
   if (stale) return stale;
 
-  // P0-001: expectedVersion is REQUIRED - extract from payload (baseVersion at enqueue time)
-  const expectedVersion = typeof payload.baseVersion === "number" ? payload.baseVersion : existing.version;
+  // P0-001: expectedVersion is REQUIRED - refuseStaleCancelBase already rejected
+  // missing baseVersion; hubCanonical may still omit it and use hub version.
+  const expectedVersion =
+    typeof payload.baseVersion === "number" ? payload.baseVersion : existing.version;
 
   const replay = replayCtxFromPayload(payload, ctx);
   const result = await cancelReturnUseCase(
@@ -855,8 +889,10 @@ async function materializeOrderCancel(
   );
   if (stale) return stale;
 
-  // P0-001: expectedVersion is REQUIRED - extract from payload (baseVersion at enqueue time)
-  const expectedVersion = typeof payload.baseVersion === "number" ? payload.baseVersion : existing.version;
+  // P0-001: expectedVersion is REQUIRED - refuseStaleCancelBase already rejected
+  // missing baseVersion; hubCanonical may still omit it and use hub version.
+  const expectedVersion =
+    typeof payload.baseVersion === "number" ? payload.baseVersion : existing.version;
 
   const result = await cancelOrderUseCase(
     repos.orderRepo,
@@ -933,8 +969,10 @@ async function materializeExpenseCancel(
   );
   if (stale) return stale;
 
-  // P0-001: expectedVersion is REQUIRED - extract from payload (baseVersion at enqueue time)
-  const expectedVersion = typeof payload.baseVersion === "number" ? payload.baseVersion : existing.version;
+  // P0-001: expectedVersion is REQUIRED - refuseStaleCancelBase already rejected
+  // missing baseVersion; hubCanonical may still omit it and use hub version.
+  const expectedVersion =
+    typeof payload.baseVersion === "number" ? payload.baseVersion : existing.version;
 
   const replay = replayCtxFromPayload(payload, ctx);
   const result = await cancelExpenseUseCase(
@@ -1279,6 +1317,23 @@ async function materializeMasterMutation(
   const baseUpdatedAt = typeof payload.baseUpdatedAt === "string" ? payload.baseUpdatedAt : null;
   if (
     !meta?.hubCanonical &&
+    baseVersion === null &&
+    baseUpdatedAt === null
+  ) {
+    await recordStaleConflict(
+      meta,
+      payload,
+      entityType,
+      entityId,
+      "update",
+      null,
+      typeof hub.version === "number" ? hub.version : null,
+      ctx.tenantId,
+    );
+    return { status: "failed", error: "stale base: missing baseVersion — rebase the edit" };
+  }
+  if (
+    !meta?.hubCanonical &&
     baseVersion !== null &&
     typeof hub.version === "number" &&
     hub.version !== baseVersion
@@ -1390,6 +1445,22 @@ async function materializeOrderUpdate(
         ? payload.baseVersion
         : null;
     const hubRow = hub as unknown as Record<string, unknown>;
+    if (!meta?.hubCanonical && baseVersion === null) {
+      await recordStaleConflict(
+        meta,
+        payload,
+        "order",
+        orderId,
+        "update",
+        null,
+        typeof hubRow.version === "number" ? hubRow.version : null,
+        ctx.tenantId,
+      );
+      return {
+        status: "failed",
+        error: "تعارض تعديل الطلب: الوحدة بلا رقم إصدار أساسي — راجع وأعد الإدخال",
+      };
+    }
     if (
       !meta?.hubCanonical &&
       baseVersion !== null &&
@@ -1711,8 +1782,8 @@ async function materializeUser(
       : new Date().toISOString();
   try {
     await pool.query(
-      `INSERT INTO users (id, tenant_id, name, email, password_hash, pin_hash, role, active, updated_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9::timestamptz)
+      `INSERT INTO users (id, tenant_id, name, email, password_hash, pin_hash, role, active, updated_at, tokens_revoked_before)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9::timestamptz, CASE WHEN $8 = false THEN now() ELSE NULL END)
        ON CONFLICT (id) DO UPDATE SET
          name = EXCLUDED.name,
          email = EXCLUDED.email,
@@ -1720,6 +1791,7 @@ async function materializeUser(
          pin_hash = EXCLUDED.pin_hash,
          role = EXCLUDED.role,
          active = EXCLUDED.active,
+         tokens_revoked_before = CASE WHEN EXCLUDED.active = false THEN now() ELSE users.tokens_revoked_before END,
          updated_at = EXCLUDED.updated_at
        WHERE users.tenant_id = EXCLUDED.tenant_id
          AND users.updated_at <= EXCLUDED.updated_at`,

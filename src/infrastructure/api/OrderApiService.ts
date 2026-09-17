@@ -34,13 +34,18 @@ export class OrderApiService {
     return res.data;
   }
 
-  async update(id: string, input: Partial<OrderDTO>): Promise<OrderDTO> {
+  async update(
+    id: string,
+    input: Partial<OrderDTO> & { expectedVersion: number },
+  ): Promise<OrderDTO> {
     const res = await this.client.put<OrderDTO>(`/api/orders/${id}`, input);
     return res.data;
   }
 
-  async cancel(id: string): Promise<OrderDTO> {
-    const res = await this.client.post<OrderDTO>(`/api/orders/${id}/cancel`);
+  async cancel(id: string, expectedVersion: number): Promise<OrderDTO> {
+    const res = await this.client.post<OrderDTO>(`/api/orders/${id}/cancel`, {
+      expectedVersion,
+    });
     return res.data;
   }
 

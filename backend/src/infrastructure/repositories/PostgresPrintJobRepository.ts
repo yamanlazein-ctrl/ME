@@ -130,7 +130,7 @@ export class PostgresPrintJobRepository implements IPrintJobRepository {
               referenceType: "print_job",
               referenceId: r.id,
               referenceNumber: number,
-              description: `Printing charge ${number} (${input.quantityKg}kg × ${input.chargePerKg})`,
+              description: `أجرة طباعة ${number} (${input.quantityKg} كغ × ${input.chargePerKg})`,
               createdBy: ctx.userId,
             },
             {
@@ -145,7 +145,7 @@ export class PostgresPrintJobRepository implements IPrintJobRepository {
               referenceType: "print_job",
               referenceId: r.id,
               referenceNumber: number,
-              description: `Printing revenue ${number}`,
+              description: `إيراد طباعة ${number}`,
               createdBy: ctx.userId,
             },
           ]);
@@ -163,7 +163,7 @@ export class PostgresPrintJobRepository implements IPrintJobRepository {
           .where(and(eq(rolls.id, input.sourceRollId), eq(rolls.tenantId, ctx.tenantId)))
           .for("update")
           .limit(1);
-        if (!srcLock) throw new Error("Source roll not found");
+        if (!srcLock) throw new Error("اللفافة المصدر غير موجودة");
         if (Number(srcLock.remainingKg) < input.quantityKg) {
           throw new Error(
             `كمية الإرسال (${input.quantityKg} كغ) تتجاوز المخزون المتاح (${Number(srcLock.remainingKg)} كغ)`,
@@ -191,7 +191,7 @@ export class PostgresPrintJobRepository implements IPrintJobRepository {
             referenceId: r.id,
             referenceNumber: number,
             movementDate: input.date,
-            description: `Print send ${number}`,
+            description: `إرسال طباعة ${number}`,
           },
           ctx,
         );
@@ -215,14 +215,14 @@ export class PostgresPrintJobRepository implements IPrintJobRepository {
         )
         .for("update")
         .limit(1);
-      if (!job) throw new Error("Print job not found or already received");
+      if (!job) throw new Error("أمر الطباعة غير موجود أو تم استلامه مسبقاً");
 
       const [srcRoll] = await tx
         .select()
         .from(rolls)
         .where(and(eq(rolls.id, job.sourceRollId), eq(rolls.tenantId, ctx.tenantId)))
         .limit(1);
-      if (!srcRoll) throw new Error("Source roll not found");
+      if (!srcRoll) throw new Error("اللفافة المصدر غير موجودة");
 
       let resultFabricId = job.resultFabricId;
       let resultColorId = job.resultColorId;
@@ -405,7 +405,7 @@ export class PostgresPrintJobRepository implements IPrintJobRepository {
             referenceId: job.id,
             referenceNumber: job.number ?? newRoll.id,
             movementDate: effectiveDate,
-            description: `Print receive ${job.number} (new roll ${generatedRollNo})`,
+            description: `استلام طباعة ${job.number} (صبغة ${generatedRollNo})`,
           },
           ctx,
         );
@@ -428,7 +428,7 @@ export class PostgresPrintJobRepository implements IPrintJobRepository {
               referenceId: job.id,
               referenceNumber: job.number ?? "",
               movementDate: effectiveDate,
-              description: `Print waste ${job.number} (${wasteKg} kg)`,
+              description: `هدر طباعة ${job.number} (${wasteKg} كغ)`,
             },
             ctx,
           );
@@ -462,7 +462,7 @@ export class PostgresPrintJobRepository implements IPrintJobRepository {
               referenceType: "print_job",
               referenceId: job.id,
               referenceNumber: `EXP-${job.number}`,
-              description: `Printing cost capitalized ${job.number} (${receivedKgNum} kg x ${costPerKg})`,
+              description: `رسملة تكلفة طباعة ${job.number} (${receivedKgNum} كغ × ${costPerKg})`,
               createdBy: ctx.userId,
             },
             {
@@ -477,7 +477,7 @@ export class PostgresPrintJobRepository implements IPrintJobRepository {
               referenceType: "print_job",
               referenceId: job.id,
               referenceNumber: `EXP-${job.number}`,
-              description: `Cash paid to press EXP-${job.number}`,
+              description: `دفع نقدي للمطبعة EXP-${job.number}`,
               createdBy: ctx.userId,
             },
           ]);

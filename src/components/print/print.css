@@ -1,35 +1,30 @@
 /* ============================================================================
-   Unified print design system — Motard Fabrics Group
-   Design principle: classic professional invoice
-     • DARK HEADER BAND with logo + large title + gold bottom rule
-     • Light info block (Total Due / date) for headline facts
-     • GOLD-HEADERED TABLE with hairline rows and alternating background
-     • Gold Grand-Total row that anchors the eye on the final number
-     • Three-zone footer (brand · contact · address) with gold divider
-
-   Palette: gold #C9A227 + black #1A1A1A + white + light gray #FAFAFA
-   Font:    "IBM Plex Sans Arabic" — 400 body / 700 headings
-   Style:   Minimal Luxury — single hairline borders, no gradients, B&W safe
-   All data/fields/columns/calculations are unchanged — only the visual
-   presentation has been restyled to match the reference layout.
+   Motard Fabrics Group — print design
+   Editorial atelier invoice: quiet paper, one gold accent, no box-stack.
+   Data, columns, and calculations are unchanged.
    ============================================================================ */
 
 :root {
-  --mf-gold: #d4af37; /* dark gold per print spec */
-  --mf-gold-dark: #a8861a; /* slightly darker gold for borders / shadows */
-  --mf-gold-soft: #e6c873;
-  --mf-black: #1a1a1a;
-  --mf-ink: #2a2a2a;
-  --mf-gray: #6b6b6b;
-  --mf-line: #000000; /* table cell borders — solid black for clarity */
-  --mf-line-strong: #b5b5b5;
-  --mf-bg: #fafafa;
-  --mf-bg-soft: #f3f3f3;
+  --mf-gold: #b08d2e;
+  --mf-gold-dark: #8c6e20;
+  --mf-black: #161616;
+  --mf-ink: #3d3a36;
+  --mf-gray: #7a736a;
+  --mf-rule: #e6dfd2;
+  --mf-line: #e6dfd2;
+  --mf-line-strong: #d4ccbe;
+  --mf-bg: #f8f5ef;
+  --mf-bg-soft: #f3efe6;
 }
 
-@page {
+/* Paper size / margins per settings.printing.paperSize (A4 default, A5, or
+   80mm thermal). PrintDocument stamps `data-paper` on `.print-doc`, which
+   selects one of these NAMED pages via the `page` property below — the
+   previous single hardcoded `@page` rule ignored the setting entirely, so
+   choosing A5/80mm in Settings never changed the printed page size. */
+@page a4 {
   size: A4 portrait;
-  margin: 15mm; /* per print spec */
+  margin: 14mm 14mm 16mm;
   @bottom-center {
     content: counter(page) " / " counter(pages);
     font-size: 8pt;
@@ -37,17 +32,44 @@
     font-family: "Segoe UI", "Tahoma", "IBM Plex Sans Arabic", "Arial", sans-serif;
   }
 }
-
-@page :first {
-  margin-top: 15mm;
+@page a4:first {
+  margin-top: 12mm;
 }
 
-/* ── The print root is ALWAYS white, regardless of dark mode. ── */
+@page a5 {
+  size: A5 portrait;
+  margin: 10mm 10mm 12mm;
+  @bottom-center {
+    content: counter(page) " / " counter(pages);
+    font-size: 6.5pt;
+    color: var(--mf-gray);
+    font-family: "Segoe UI", "Tahoma", "IBM Plex Sans Arabic", "Arial", sans-serif;
+  }
+}
+@page a5:first {
+  margin-top: 9mm;
+}
+
+/* 80mm thermal roll: continuous height (`auto`), narrow fixed width. */
+@page thermal80mm {
+  size: 80mm auto;
+  margin: 3mm;
+}
+
+.print-doc {
+  page: a4;
+}
+.print-doc[data-paper="A5"] {
+  page: a5;
+}
+.print-doc[data-paper="80mm"] {
+  page: thermal80mm;
+}
+
 [data-print-root] {
   display: block;
   background: #ffffff !important;
   color: var(--mf-black) !important;
-  /* Issue 15: system Arabic fonts first so print/PDF works offline without Google Fonts */
   font-family:
     "Segoe UI",
     "Tahoma",
@@ -56,7 +78,7 @@
     "Arial",
     sans-serif;
   font-size: 9.5pt;
-  line-height: 1.55;
+  line-height: 1.5;
   direction: rtl;
   text-align: right;
   -webkit-print-color-adjust: exact;
@@ -112,42 +134,31 @@
   }
 }
 
-/* ============================================================================
-   Design system (normal + print)
-   ============================================================================ */
-
 .print-doc {
   width: 100%;
   background: #ffffff;
   color: var(--mf-black);
-  padding: 0; /* full-bleed header so the brand band reaches page edge */
+  padding: 0;
 }
 
-/*
-  Brand bar — locked contract:
-  • Nothing above this row
-  • direction:ltr so logo is physical LEFT, name physical RIGHT
-  • Contact never appears here (footer only)
-*/
 .print-brand-bar {
-  display: flex;
+  display: grid;
+  grid-template-columns: 72px minmax(0, 1fr);
   direction: ltr;
-  flex-direction: row;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16pt;
-  padding: 4pt 8pt 10pt;
+  align-items: start;
+  column-gap: 14pt;
+  padding: 0 0 10pt;
   background: #ffffff;
-  min-height: 56pt;
 }
 
-.print-logo {
-  /* logo-motard-icon.png — monogram only, large and clear */
-  height: 56px;
-  width: 70px;
+.print-logo,
+.print-logo-spacer {
+  height: 58px;
+  width: 72px;
   object-fit: contain;
   object-position: center;
-  flex: 0 0 auto;
+  grid-column: 1;
+  grid-row: 1;
   background: transparent !important;
   padding: 0;
   border: none;
@@ -155,25 +166,59 @@
   display: block;
 }
 
+.print-brand-stack {
+  grid-column: 2;
+  min-width: 0;
+  text-align: right;
+  direction: rtl;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 1pt;
+}
+
 .print-brand-name {
   font-family: "Segoe UI", "Tahoma", "Arial", sans-serif;
   font-size: 16pt;
   font-weight: 700;
   color: var(--mf-black);
-  letter-spacing: 0.02em;
-  line-height: 1.2;
+  letter-spacing: 0.01em;
+  line-height: 1.15;
   text-align: right;
   direction: ltr;
+  unicode-bidi: isolate;
+  margin-bottom: 3pt;
+}
+
+.print-brand-name--compact {
+  direction: ltr;
+  text-align: right;
+  white-space: nowrap;
+  grid-column: 2;
+  align-self: center;
+}
+
+.print-brand-en {
+  display: none;
+}
+
+.print-brand-reg,
+.print-brand-contact-line {
+  font-size: 7.5pt;
+  color: var(--mf-gray);
+  line-height: 1.4;
+  direction: rtl;
+  text-align: right;
+  unicode-bidi: plaintext;
   white-space: nowrap;
 }
 
-/* Divider between brand and document title. */
 .print-header-divider {
-  border-top: 1.75px solid var(--mf-gold);
-  margin: 0 0 4pt;
+  border: none;
+  border-top: 1.25pt solid var(--mf-gold);
+  margin: 0;
 }
 
-/* Legacy selectors kept so old snapshots / archive CSS don't break */
 .print-header-logo-row,
 .print-header-brand-below,
 .print-header-brand,
@@ -196,60 +241,49 @@
   text-align: center;
 }
 
-/* Title area: centered, clean — breathing room under the gold rule. */
+.print-masthead {
+  padding: 14pt 0 4pt;
+}
+
 .print-header-title-area {
-  text-align: center;
-  padding: 12pt 8pt 10pt;
-}
-
-.print-company-line {
-  font-size: 8pt;
-  color: var(--mf-gray);
-  margin-top: 1pt;
-  direction: ltr;
   text-align: right;
-  unicode-bidi: plaintext;
+  padding: 0;
 }
 
-.print-doc-title-box {
-  text-align: center;
-  margin-inline: 4pt;
-  flex: 0 0 auto;
+.print-title-row {
   display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
+  align-items: baseline;
+  justify-content: flex-start;
+  gap: 8pt;
+  flex-wrap: wrap;
 }
 
-/* Type badge: clean gold border on white background, no fill. */
 .print-type-badge {
   display: inline-block;
   font-size: 7pt;
   font-weight: 700;
-  letter-spacing: 0.18em;
-  padding: 2pt 8pt;
-  border: 1px solid var(--mf-gold);
+  letter-spacing: 0.16em;
+  padding: 0;
+  border: none;
   color: var(--mf-gold-dark);
   background: transparent;
-  margin-bottom: 4pt;
+  margin: 0;
   text-transform: uppercase;
-  font-family: "Segoe UI", "Tahoma", "IBM Plex Sans Arabic", "Arial", sans-serif;
-  -webkit-print-color-adjust: exact;
-  print-color-adjust: exact;
+  font-family: "Segoe UI", "Tahoma", "Arial", sans-serif;
 }
 
 .print-doc-title {
-  font-size: 18pt;
+  font-size: 20pt;
   font-weight: 700;
   color: var(--mf-black);
-  letter-spacing: -0.01em;
-  line-height: 1.15;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
 }
 
 .print-doc-subtitle {
   font-size: 8.5pt;
   color: var(--mf-gray);
-  margin-top: 2pt;
+  margin-top: 3pt;
 }
 
 .print-page-marker {
@@ -259,37 +293,85 @@
   direction: ltr;
   text-align: left;
   white-space: nowrap;
-  flex: 0 0 auto;
-  align-self: flex-start;
-  padding-top: 4pt;
 }
 
-/* ── Meta grid (number / date / status / currency) — clean info block ──
-   A 1.5px gold top rule ties it visually to the header divider above. */
+.print-info-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 22pt;
+  margin: 10pt 0 16pt;
+  padding: 12pt 0;
+  border-top: 0.75pt solid var(--mf-rule);
+  border-bottom: 0.75pt solid var(--mf-rule);
+}
+
+.print-party {
+  flex: 1.05;
+  min-width: 0;
+  padding: 0;
+  margin: 0;
+  background: transparent;
+  border: none;
+}
+
+.print-party-side {
+  display: flex;
+  flex-direction: column;
+  gap: 2pt;
+}
+
+.print-party-label {
+  font-size: 7pt;
+  color: var(--mf-gold-dark);
+  letter-spacing: 0.04em;
+  font-weight: 600;
+}
+
+.print-party-name {
+  font-size: 12.5pt;
+  font-weight: 700;
+  color: var(--mf-black);
+  line-height: 1.25;
+  padding-bottom: 4pt;
+  border-bottom: 1.25pt solid var(--mf-gold);
+  margin-bottom: 2pt;
+  display: inline-block;
+}
+
+.print-party-line {
+  font-size: 8.5pt;
+  color: var(--mf-ink);
+  direction: rtl;
+  text-align: right;
+  unicode-bidi: plaintext;
+}
+
 .print-meta {
+  flex: 1.35;
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 0;
-  margin-bottom: 14pt;
-  border: 1px solid var(--mf-line-strong);
-  border-top: 1.5px solid var(--mf-gold);
-  border-radius: 0;
-  background: var(--mf-bg);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8pt 14pt;
+  margin: 0;
+  border: none;
+  background: transparent;
 }
 
 .print-meta-item {
   font-size: 8.5pt;
   color: var(--mf-black);
-  padding: 8pt 10pt;
-  border-left: 1px solid var(--mf-line-strong);
+  padding: 0;
+  border: none;
   display: flex;
   flex-direction: column;
-  gap: 3pt;
+  gap: 2pt;
   min-width: 0;
 }
 
-.print-meta-item:last-child {
-  border-left: none;
+.print-meta-label {
+  display: block;
+  color: var(--mf-gray);
+  font-size: 7pt;
+  letter-spacing: 0.02em;
 }
 
 .print-meta-value {
@@ -301,94 +383,36 @@
   unicode-bidi: plaintext;
   word-break: break-word;
   font-size: 10pt;
-  line-height: 1.35;
+  line-height: 1.3;
 }
 
-.print-meta-label {
-  display: block;
-  color: var(--mf-gray);
-  font-size: 7.5pt;
-  text-transform: none;
-  letter-spacing: 0.02em;
-}
-
-/* ── Party block (customer / supplier) — "Invoice to" card ──
-   Surrounded by a hairline border with a 3px gold side rule — the
-   reference's signature way of framing the bill-to block. */
-.print-party {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8pt 24pt;
-  padding: 10pt 14pt;
-  margin-bottom: 10pt;
-  background: #ffffff;
-  border: 1px solid var(--mf-line-strong);
-  border-right: 3px solid var(--mf-gold);
-  border-left: 1px solid var(--mf-line-strong);
-}
-
-.print-party-side {
-  min-width: 40%;
-  display: flex;
-  flex-direction: column;
-  gap: 1pt;
-}
-
-.print-party-label {
-  font-size: 7.5pt;
-  color: var(--mf-gray);
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  font-weight: 400;
-}
-
-.print-party-name {
-  font-size: 11pt;
-  font-weight: 700;
-  color: var(--mf-black);
-  line-height: 1.25;
-}
-
-.print-party-line {
-  font-size: 8.5pt;
-  color: var(--mf-ink);
-  direction: ltr;
-  text-align: right;
-  unicode-bidi: plaintext;
-}
-
-/* ── Tables (items, lines) — light header with hairline rows ── */
 .print-table {
   width: 100%;
   table-layout: fixed;
   border-collapse: collapse;
-  margin-bottom: 10pt;
+  margin: 0 0 14pt;
   word-wrap: break-word;
   overflow-wrap: break-word;
   font-size: 9pt;
 }
 
 .print-table thead tr {
-  background: #f5f0e0;
+  background: var(--mf-bg);
   color: var(--mf-black);
-  -webkit-print-color-adjust: exact;
-  print-color-adjust: exact;
 }
 
 .print-table th {
-  font-size: 8.5pt;
+  font-size: 7.5pt;
   font-weight: 600;
-  color: var(--mf-black);
-  border: 1px solid var(--mf-line-strong);
-  border-bottom: 1.5px solid var(--mf-line-strong);
-  padding: 6pt 8pt;
+  color: var(--mf-ink);
+  border: none;
+  border-bottom: 1.25pt solid var(--mf-gold);
+  padding: 7pt 6pt;
   text-align: right;
   vertical-align: middle;
-  background: #f5f0e0;
-  white-space: nowrap;
-  letter-spacing: 0;
-  -webkit-print-color-adjust: exact;
-  print-color-adjust: exact;
+  background: var(--mf-bg);
+  white-space: normal;
+  line-height: 1.25;
 }
 
 .print-table th.pd-center,
@@ -403,34 +427,27 @@
 }
 
 .print-table td {
-  border: 1px solid var(--mf-line);
+  border: none;
+  border-bottom: 0.6pt solid var(--mf-rule);
   font-size: 8.5pt;
   color: var(--mf-black);
-  padding: 5pt 6pt;
-  vertical-align: top;
+  padding: 7pt 6pt;
+  vertical-align: middle;
   word-wrap: break-word;
   overflow-wrap: break-word;
   white-space: normal;
   background: #ffffff;
+  break-inside: avoid;
+  page-break-inside: avoid;
 }
 
 .print-table tbody tr:nth-child(even) td {
-  background: var(--mf-bg);
+  background: #fcfbf8;
 }
 
-/* Table rows can break across pages when content is tall (multi-color rows).
-   The previous break-inside: avoid caused overflow/cutting on pages.
-   Each row cell keeps its content together, but the row itself can split. */
 .print-table tbody tr {
   break-inside: auto;
   page-break-inside: auto;
-}
-
-/* Cells within a row should stay together to avoid splitting content.
-   The td itself won't break, but the tr can break between tds. */
-.print-table td {
-  break-inside: avoid;
-  page-break-inside: avoid;
 }
 
 .print-table .pd-amount,
@@ -441,7 +458,19 @@
   font-variant-numeric: tabular-nums;
   font-weight: 700;
   font-size: 9.5pt;
-  letter-spacing: 0.01em;
+}
+
+.print-table th.pd-amount {
+  white-space: normal;
+  font-weight: 600;
+  font-size: 7.5pt;
+}
+
+.pd-money {
+  direction: ltr;
+  unicode-bidi: isolate;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
 .print-table td.pd-note {
@@ -449,25 +478,41 @@
   color: var(--mf-ink);
 }
 
-/* ── Color cell — swatch + كود + name (inventory identity) ── */
 .pd-color-cell {
   display: flex;
   align-items: center;
-  gap: 6pt;
+  gap: 5pt;
   direction: rtl;
   text-align: right;
+  min-width: 0;
 }
 
 .pd-color-swatch {
-  height: 14px !important;
-  width: 14px !important;
-  min-height: 14px;
-  min-width: 14px;
+  height: 10px !important;
+  width: 10px !important;
+  min-height: 10px;
+  min-width: 10px;
   border-radius: 999px !important;
   flex-shrink: 0;
-  border: 1px solid rgba(0, 0, 0, 0.25) !important;
-  -webkit-print-color-adjust: exact !important;
-  print-color-adjust: exact !important;
+  border: 1px solid rgba(0, 0, 0, 0.18) !important;
+}
+
+.pd-color-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 8pt;
+  font-weight: 600;
+  color: var(--mf-black);
+}
+
+.pd-color-code {
+  font-weight: 500;
+  color: var(--mf-gray);
+  font-variant-numeric: tabular-nums;
+  direction: ltr;
+  unicode-bidi: isolate;
 }
 
 .pd-color-text {
@@ -475,18 +520,6 @@
   flex-direction: column;
   gap: 1pt;
   min-width: 0;
-  line-height: 1.25;
-}
-
-.pd-color-code {
-  font-weight: 700;
-  color: var(--mf-black);
-  font-variant-numeric: tabular-nums;
-  direction: ltr;
-  unicode-bidi: plaintext;
-  text-align: right;
-  font-size: 8pt;
-  letter-spacing: 0.01em;
 }
 
 .pd-color-name {
@@ -499,31 +532,29 @@
   color: var(--mf-gray);
 }
 
-/* ── Totals panel (right-aligned end in RTL) with a gold Grand-Total row ──
-   The Grand Total row is now a solid gold band with dark bold text, the
-   way the reference anchors the eye on the final number. */
 .print-totals {
-  margin: 8pt 0 12pt;
-  padding: 6pt 12pt;
-  background: var(--mf-bg);
-  border: 1px solid var(--mf-line);
-  border-right: 3px solid var(--mf-gold);
+  margin: 6pt 0 16pt;
+  padding: 2pt 0 0;
+  background: transparent;
+  border: none;
   display: flex;
   flex-direction: column;
-  gap: 2pt;
-  max-width: 50%;
-  margin-inline-start: auto;
+  gap: 0;
+  width: 220pt;
+  max-width: 100%;
+  margin-inline-start: 0;
+  margin-inline-end: auto;
 }
 
 .print-total-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 12pt;
-  padding: 2.5pt 0;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: baseline;
+  gap: 16pt;
+  padding: 5pt 0;
   font-size: 9pt;
   color: var(--mf-ink);
-  border-bottom: 1px dotted var(--mf-line);
+  border-bottom: 0.6pt solid var(--mf-rule);
 }
 
 .print-total-row:last-child {
@@ -538,80 +569,75 @@
   font-weight: 600;
 }
 
-/* Grand-total row — the gold anchor of the whole document */
 .print-grand-total {
-  background: var(--mf-gold) !important;
+  background: transparent !important;
   color: var(--mf-black) !important;
-  border-top: 1.5px solid var(--mf-gold-dark);
-  border-bottom: 1.5px solid var(--mf-gold-dark) !important;
-  margin-top: 4pt;
-  padding: 6pt 10pt !important;
+  border-top: 1.25pt solid var(--mf-gold) !important;
+  border-bottom: none !important;
+  margin-top: 3pt;
+  padding: 7pt 0 2pt !important;
   font-weight: 700;
   font-size: 11pt;
-  -webkit-print-color-adjust: exact;
-  print-color-adjust: exact;
 }
 
 .print-grand-total .pd-amount {
   font-weight: 700;
   color: var(--mf-black) !important;
-  font-size: 11.5pt;
+  font-size: 13pt;
 }
 
-/* ── Payment summary (الإجمالي / المدفوع / المتبقي) — "Payment Info" card ──
-   The "Total / Paid / Remaining" trio is shown as a three-up card with
-   a 3px gold side rule on the first card, matching the way the reference
-   highlights the headline figure. */
 .print-payment {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8pt;
-  margin-bottom: 12pt;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0;
+  margin: 0 0 16pt;
+  border-top: 0.75pt solid var(--mf-rule);
+  border-bottom: 0.75pt solid var(--mf-rule);
 }
 
 .print-payment-item {
-  flex: 1;
-  min-width: 30%;
-  border: 1px solid var(--mf-line);
-  padding: 6pt 10pt;
-  background: #ffffff;
+  min-width: 0;
+  border: none;
+  border-left: 0.6pt solid var(--mf-rule);
+  padding: 9pt 10pt;
+  background: transparent;
+}
+
+.print-payment-item:last-child {
+  border-left: none;
 }
 
 .print-payment-item:first-child {
-  border-right: 3px solid var(--mf-gold);
+  border-right: none;
 }
 
 .print-payment-label {
-  font-size: 7.5pt;
+  font-size: 7pt;
   color: var(--mf-gray);
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  font-weight: 400;
+  font-weight: 500;
+  margin-bottom: 3pt;
 }
 
 .print-payment-value {
-  font-size: 11pt;
+  font-size: 12pt;
   font-weight: 700;
   color: var(--mf-black);
   direction: ltr;
-  text-align: left;
+  text-align: right;
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
 }
 
-/* ── Notes (free text only — no structured data) — "Terms" card ──
-   The free-text notes appear in a light card with a gold side rule —
-   the same shape used for "Terms & Conditions" in the reference. */
 .print-notes {
-  margin-bottom: 12pt;
+  margin-bottom: 14pt;
   font-size: 9pt;
   color: var(--mf-ink);
   word-wrap: break-word;
   overflow-wrap: break-word;
-  padding: 7pt 12pt;
-  background: var(--mf-bg);
-  border: 1px solid var(--mf-line);
-  border-right: 3px solid var(--mf-gold);
+  padding: 8pt 0;
+  background: transparent;
+  border: none;
+  border-top: 0.75pt solid var(--mf-rule);
   line-height: 1.6;
 }
 
@@ -621,13 +647,12 @@
   color: var(--mf-black);
 }
 
-/* ── Signatures — two side-by-side, thin gold line ── */
 .print-signatures {
   display: flex;
   justify-content: space-between;
-  gap: 36pt;
-  margin-top: 32pt;
-  padding: 0 12pt;
+  gap: 40pt;
+  margin-top: 28pt;
+  padding: 0 8pt;
 }
 
 .print-signature {
@@ -635,39 +660,30 @@
   text-align: center;
   font-size: 8.5pt;
   color: var(--mf-gray);
-  max-width: 40%;
+  max-width: 38%;
 }
 
 .print-signature-line {
-  border-top: 1px solid var(--mf-gold);
-  margin-top: 36pt;
-  padding-top: 4pt;
+  border-top: 0.75pt solid var(--mf-gold);
+  margin-top: 34pt;
+  padding-top: 5pt;
   color: var(--mf-black);
-  font-weight: 400;
+  font-weight: 500;
 }
 
-/* ── Footer — gold divider + brand line + owner contact ──
-   The reference's footer is a three-column band of (phone · email ·
-   address) with a gold rule above. We use the same gold rule on the
-   single line of brand text that the document already renders — the
-   data stays exactly as it was. Owner contact is appended below. */
 .print-footer {
-  margin-top: 22pt;
-  border-top: 1.5px solid var(--mf-gold);
-  padding: 10pt 8pt 2pt;
+  margin-top: 20pt;
+  border-top: 1.25pt solid var(--mf-gold);
+  padding: 8pt 0 0;
   text-align: center;
   font-size: 8pt;
   color: var(--mf-gray);
-  word-wrap: break-word;
-  overflow-wrap: break-word;
-  letter-spacing: 0.01em;
 }
 
 .print-footer-thanks {
   font-size: 9pt;
   font-weight: 600;
-  color: var(--mf-black);
-  margin-bottom: 8pt;
+  color: var(--mf-ink);
 }
 
 .print-footer-note {
@@ -680,7 +696,6 @@
   font-weight: 700;
 }
 
-/* Owner contact — once only, at footer (never in header). */
 .print-owner-contact {
   margin-top: 2pt;
   font-size: 8.5pt;
@@ -691,11 +706,11 @@
   unicode-bidi: plaintext;
 }
 
-/* Detail row below main table row — mini grid with label:value cells. */
 .print-detail-row td {
-  padding: 4pt 10pt 6pt;
+  padding: 3pt 8pt 7pt;
   background: var(--mf-bg);
   border: none;
+  border-bottom: 0.6pt solid var(--mf-rule);
 }
 
 .pd-detail-grid {
@@ -715,7 +730,6 @@
   font-size: 6.5pt;
   color: var(--mf-gray);
   font-weight: 500;
-  text-transform: none;
 }
 
 .pd-detail-val {
@@ -731,32 +745,24 @@
   visibility: hidden;
 }
 
-/* Legacy party-bar — unused by PrintDocument (party + meta are separate). */
 .print-header-party-bar,
 .print-header-party-item,
 .print-header {
   display: none;
 }
 
-/* ============================================================================
-   Per-line additional details (machine number, kromaj, GSM, etc.)
-   Rendered as a labeled grid under each table row - never in Notes.
-   ============================================================================ */
 .print-line-details {
   margin: 4pt 0 8pt;
-  padding: 6pt 10pt;
-  background: var(--mf-bg);
-  border: 1px solid var(--mf-line);
-  border-right: 3px solid var(--mf-gold);
-  border-radius: 0;
+  padding: 6pt 0;
+  background: transparent;
+  border: none;
+  border-top: 0.6pt solid var(--mf-rule);
 }
 
 .print-line-details-title {
   font-size: 7.5pt;
   font-weight: 700;
   color: var(--mf-gray);
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
   margin-bottom: 4pt;
 }
 
@@ -776,20 +782,128 @@
 .print-line-detail-label {
   font-size: 6.8pt;
   color: var(--mf-gray);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
 }
 
 .print-line-detail-value {
   font-weight: 600;
   color: var(--mf-black);
   word-break: break-word;
-  overflow-wrap: break-word;
 }
 
 .print-line-free-note {
   margin-top: 3pt;
   font-size: 7.8pt;
   color: var(--mf-ink);
-  font-style: italic;
+}
+
+/* ============================================================================
+   Paper-size content scale — same template/DOM for every size, only type
+   scale, spacing and grid columns shrink so nothing overlaps or spills off
+   a smaller physical page. A4 (above) is the unscaled baseline.
+   ============================================================================ */
+
+.print-doc[data-paper="A5"] {
+  font-size: 8pt;
+}
+.print-doc[data-paper="A5"] .print-brand-name {
+  font-size: 12.5pt;
+}
+.print-doc[data-paper="A5"] .print-doc-title {
+  font-size: 15pt;
+}
+.print-doc[data-paper="A5"] .print-party-name {
+  font-size: 10.5pt;
+}
+.print-doc[data-paper="A5"] .print-meta {
+  gap: 6pt 10pt;
+}
+.print-doc[data-paper="A5"] .print-info-row {
+  gap: 14pt;
+  margin: 8pt 0 12pt;
+}
+.print-doc[data-paper="A5"] .print-table {
+  font-size: 7.5pt;
+}
+.print-doc[data-paper="A5"] .print-table th,
+.print-doc[data-paper="A5"] .print-table td {
+  padding: 5pt 4pt;
+}
+.print-doc[data-paper="A5"] .print-totals {
+  width: 170pt;
+}
+.print-doc[data-paper="A5"] .print-signatures {
+  margin-top: 18pt;
+}
+
+/* 80mm thermal: one narrow column. The brand/meta/payment grids collapse to
+   a single stacked column and type shrinks hard — a 7-column priced table
+   still fits because `.print-table` is already `table-layout: fixed` with
+   percentage widths, so columns compress instead of overflowing the roll. */
+.print-doc[data-paper="80mm"] {
+  font-size: 6.5pt;
+}
+.print-doc[data-paper="80mm"] .print-brand-bar {
+  grid-template-columns: 34px minmax(0, 1fr);
+  column-gap: 6pt;
+  padding-bottom: 6pt;
+}
+.print-doc[data-paper="80mm"] .print-logo,
+.print-doc[data-paper="80mm"] .print-logo-spacer {
+  width: 34px;
+  height: 27px;
+}
+.print-doc[data-paper="80mm"] .print-brand-name {
+  font-size: 9.5pt;
+}
+.print-doc[data-paper="80mm"] .print-brand-contact-line {
+  font-size: 6pt;
+}
+.print-doc[data-paper="80mm"] .print-masthead {
+  padding: 8pt 0 3pt;
+}
+.print-doc[data-paper="80mm"] .print-doc-title {
+  font-size: 11pt;
+}
+.print-doc[data-paper="80mm"] .print-type-badge {
+  font-size: 6pt;
+}
+.print-doc[data-paper="80mm"] .print-info-row {
+  flex-direction: column;
+  gap: 6pt;
+  margin: 6pt 0 8pt;
+  padding: 6pt 0;
+}
+.print-doc[data-paper="80mm"] .print-party-name {
+  font-size: 9pt;
+}
+.print-doc[data-paper="80mm"] .print-meta {
+  grid-template-columns: 1fr;
+  gap: 4pt;
+}
+.print-doc[data-paper="80mm"] .print-table {
+  font-size: 6pt;
+}
+.print-doc[data-paper="80mm"] .print-table th,
+.print-doc[data-paper="80mm"] .print-table td {
+  padding: 3pt 2pt;
+  font-size: 6pt;
+}
+.print-doc[data-paper="80mm"] .print-totals {
+  width: 100%;
+}
+.print-doc[data-paper="80mm"] .print-payment {
+  grid-template-columns: 1fr;
+}
+.print-doc[data-paper="80mm"] .print-payment-item {
+  border-left: none;
+  border-bottom: 0.6pt solid var(--mf-rule);
+  padding: 6pt 0;
+}
+.print-doc[data-paper="80mm"] .print-signatures {
+  flex-direction: column;
+  gap: 14pt;
+  margin-top: 16pt;
+}
+.print-doc[data-paper="80mm"] .print-signature {
+  max-width: 100%;
 }

@@ -1,20 +1,22 @@
 import { useMemo, useRef, useState, type KeyboardEvent } from "react";
-import { Check, ImagePlus, Sparkles, X } from "lucide-react";
+import { Check, ImagePlus, Plus, Sparkles, X } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
-import { colorByCode, searchColors, type Color } from "@/presentation/hooks/useInventory";
+import {
+  colorByCode,
+  colorByName,
+  fabricById,
+  searchColors,
+  type Color,
+} from "@/presentation/hooks/useInventory";
 import { ColorSwatch } from "@/components/common/ColorSwatch";
 
 /**
- * Search-first colour picker linked to inventory.
+ * Search-first colour picker.
  *
- * As the operator types in "رقم اللون" (or the name field), we search all
- * registered colours by code OR name — the same "search existing first"
- * pattern used for fabrics on this screen. An exact code/name match
- * auto-selects that colour and fills the other field. If no match is
- * found the input is clearly flagged as "لون جديد" and the operator can
- * proceed to create it as part of this invoice, with an optional swatch
- * image.
+ * Types a name/code → lists matching colours (never the whole catalogue).
+ * A hit on another fabric copies the name; it does not bind that fabric's
+ * color id. No match → "+ إضافة لون" and the parent creates a row on save.
  */
 export function ColorSearchCell({
   name,
@@ -36,23 +38,13 @@ export function ColorSearchCell({
   hex?: string;
   existingColorId?: string;
   imageUrl?: string;
-  /**
-   * Fix C-11 (forensic audit 2026-08-15): the code-match preview below
-   * must be scoped to the fabric this line actually resolves to. While
-   * the fabric hasn't been resolved yet (still-unmatched free text), this
-   * is undefined and colorByCode() correctly returns "no match" rather
-   * than searching every fabric in the tenant — the same cross-fabric
-   * merge this fix closes at save time in invoices.entry.new.tsx.
-   */
   fabricId?: string;
   onPickExisting: (color: Color) => void;
   onSetName: (name: string) => void;
   onSetCode: (code: string) => void;
   onSetHex?: (hex: string | undefined) => void;
   onSetImage?: (dataUrl: string | undefined) => void;
-  /** Locked when the line is bound to a saved lot — lot colors are immutable. */
   disabled?: boolean;
-  /** Bound-lot rename mode: a new typed name RENAMES the color on save. */
   renameMode?: boolean;
 }) {
   const [open, setOpen] = useState(false);
@@ -60,15 +52,14 @@ export function ColorSearchCell({
   const fileRef = useRef<HTMLInputElement>(null);
 
   const query = activeField === "code" ? code : name;
-  const matches = useMemo(() => searchColors(query), [query]);
-  const codeMatch = useMemo(() => colorByCode(code, fabricId), [code, fabricId]);
-  const nameMatch = useMemo(() => {
-    const q = name.trim().toLowerCase();
-    if (!q) return undefined;
-    return matches.find((c) => c.name.toLowerCase() === q);
-  }, [name, matches]);
-  const matched = existingColorId ? true : Boolean(codeMatch ?? nameMatch);
-  const isNew = !matched && (code.trim().length > 0 || name.trim().length > 0);
+  const matches = useMemo(() => searchColors(query, 12), [query]);
+  const localByCode = useMemo(() => colorByCode(code, fabricId), [code, fabricId]);
+  const localByName = useMemo(() => colorByName(name, fabricId), [name, fabricId]);
+  const local = localByCode ?? localByName;
+  const matched = Boolean(existingColorId || local);
+  const typed = code.trim().length > 0 || name.trim().length > 0;
+  const isNew = typed && !matched;
+  const createLabel = (name.trim() || code.trim() || "لون").trim();
 
   const pick = (c: Color) => {
     onPickExisting(c);
@@ -77,9 +68,9 @@ export function ColorSearchCell({
 
   const handleKey = (e: KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Escape") setOpen(false);
-    if (e.key === "Enter" && matches.length === 1 && !existingColorId) {
+    if (e.key === "Enter" && local && !existingColorId) {
       e.preventDefault();
-      pick(matches[0]);
+      pick(local);
     }
   };
 
@@ -90,8 +81,7 @@ export function ColorSearchCell({
     reader.readAsDataURL(file);
   };
 
-  // Show the matched color's swatch even before the parent commits its ID
-  const previewColor = existingColorId ? (codeMatch ?? nameMatch) : (codeMatch ?? nameMatch);
+  const previewColor = existingColorId ? (localByCode ?? localByName) : (localByCode ?? localByName);
   const displaySwatch =
     previewColor ??
     (isNew && (imageUrl || hex)
@@ -103,10 +93,11 @@ export function ColorSearchCell({
         })
       : null);
 
+  const showMenu = open && !disabled && (matches.length > 0 || isNew);
+
   return (
     <div className="space-y-2">
       <div className="grid grid-cols-[auto_minmax(0,1fr)_minmax(0,1.4fr)] items-center gap-2">
-        {/* Swatch preview / upload for new colours */}
         <div className="relative">
           {displaySwatch ? (
             <ColorSwatch color={displaySwatch} size="lg" />
@@ -148,13 +139,11 @@ export function ColorSearchCell({
           )}
         </div>
 
-        {/* Colour code — the search anchor */}
         <div className="relative">
           <Input
             value={code}
             onChange={(e) => {
-              const v = e.target.value;
-              onSetCode(v);
+              onSetCode(e.target.value);
               setActiveField("code");
               setOpen(true);
             }}
@@ -176,7 +165,6 @@ export function ColorSearchCell({
           />
         </div>
 
-        {/* Colour name — auto-filled on match, editable for new */}
         <div className="relative">
           <Input
             value={name}
@@ -192,7 +180,7 @@ export function ColorSearchCell({
             }}
             onBlur={() => setTimeout(() => setOpen(false), 140)}
             onKeyDown={handleKey}
-            placeholder="اسم اللون"
+            placeholder="ابحث أو اكتب اسم اللون..."
             className={cn("h-9", matched && "border-primary/40 bg-primary/[0.03]")}
             disabled={disabled}
             aria-label="اسم اللون"
@@ -200,18 +188,18 @@ export function ColorSearchCell({
         </div>
       </div>
 
-      {/* Status line */}
       <div className="flex items-center gap-2 text-[10.5px]">
         {matched ? (
           <span className="inline-flex items-center gap-1 rounded bg-primary/10 px-1.5 py-0.5 font-semibold text-primary">
-            <Check className="h-3 w-3" /> لون مسجّل
+            <Check className="h-3 w-3" /> لون مسجّل لهذا القماش
           </span>
         ) : isNew ? (
           <span className="inline-flex items-center gap-1 rounded bg-secondary px-1.5 py-0.5 font-semibold text-muted-foreground">
-            <Sparkles className="h-3 w-3" /> {renameMode ? 'سيتم تحديث اسم اللون عند الحفظ' : 'لون جديد — سيُسجَّل عند الحفظ'}
+            <Sparkles className="h-3 w-3" />{" "}
+            {renameMode ? "سيتم تحديث اسم اللون عند الحفظ" : `لا يوجد — سيُضاف «${createLabel}» عند الحفظ`}
           </span>
         ) : (
-          <span className="text-muted-foreground">اكتب الرقم أو الاسم للبحث في المخزون</span>
+          <span className="text-muted-foreground">اكتب الاسم للبحث في الألوان المسجّلة</span>
         )}
         {onSetImage && (
           <button
@@ -227,7 +215,6 @@ export function ColorSearchCell({
         )}
       </div>
 
-      {/* Real colour picker (hex) — only for new / editable colours */}
       {onSetHex && !existingColorId && (
         <div className="flex items-center gap-2">
           <label className="flex items-center gap-1.5 text-[10.5px] font-semibold text-muted-foreground">
@@ -250,37 +237,51 @@ export function ColorSearchCell({
             className="h-7 w-32 text-[11px] tabular-nums"
             aria-label="قيمة اللون (hex)"
           />
-          <span className="text-[10px] text-muted-foreground">تُخزَّن هذه القيمة وتعرض كما هي</span>
         </div>
       )}
 
-      {/* Autocomplete popover */}
-      {open && matches.length > 0 && (
+      {showMenu && (
         <div className="relative">
           <div className="absolute right-0 top-0 z-20 mt-1 w-full max-w-[380px] overflow-hidden rounded-md border border-border bg-popover shadow-lg">
-            <div className="border-b border-border bg-secondary/40 px-3 py-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-              الألوان المسجّلة
+            <div className="border-b border-border bg-secondary/40 px-3 py-1 text-[10px] font-semibold text-muted-foreground">
+              نتائج البحث
             </div>
-            {matches.map((c) => (
-              <button
-                key={c.id}
-                type="button"
-                onMouseDown={(e) => {
-                  e.preventDefault();
-                  pick(c);
-                }}
-                className="flex w-full items-center gap-2 px-3 py-1.5 text-right text-sm hover:bg-secondary"
-              >
-                <ColorSwatch color={c} size="sm" />
-                <div className="min-w-0 flex-1">
-                  <div className="truncate font-medium text-foreground">{c.name}</div>
-                  <div className="truncate text-[10px] tabular-nums text-muted-foreground">
-                    {c.code}
+            {matches.map((c) => {
+              const fab = fabricById(c.fabricId);
+              const sameFabric = fabricId ? c.fabricId === fabricId : false;
+              return (
+                <button
+                  key={c.id}
+                  type="button"
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    pick(c);
+                  }}
+                  className="flex w-full items-center gap-2 px-3 py-1.5 text-right text-sm hover:bg-secondary"
+                >
+                  <ColorSwatch color={c} size="sm" />
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate font-medium text-foreground">{c.name}</div>
+                    <div className="truncate text-[10px] text-muted-foreground">
+                      {fab?.name ?? "قماش"}
+                      {c.code ? ` · ${c.code}` : ""}
+                      {!sameFabric && fabricId ? " — يُنسخ الاسم لهذا القماش" : ""}
+                    </div>
                   </div>
-                </div>
-                {c.id === existingColorId && <Check className="h-3.5 w-3.5 text-primary" />}
-              </button>
-            ))}
+                  {c.id === existingColorId && <Check className="h-3.5 w-3.5 text-primary" />}
+                </button>
+              );
+            })}
+            {isNew && (
+              <div className="flex items-center gap-2 border-t border-border bg-primary/5 px-3 py-2 text-[12px] font-semibold text-primary">
+                <Plus className="h-3.5 w-3.5" />
+                إضافة لون «{createLabel}»
+                <span className="font-normal text-muted-foreground">— يُحفظ مع الفاتورة</span>
+              </div>
+            )}
+            {matches.length === 0 && !isNew && (
+              <div className="px-3 py-2 text-xs text-muted-foreground">اكتب حرفاً واحداً على الأقل</div>
+            )}
           </div>
         </div>
       )}

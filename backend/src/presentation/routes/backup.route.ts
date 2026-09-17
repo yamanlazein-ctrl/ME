@@ -150,7 +150,7 @@ async function dbDumpToJson(outputPath: string, tenantId: string): Promise<void>
     "manual_movements",
     "attachments",
     "company_profiles",
-    // Sync state (REMEDIATION_LOG §8 / V5): a restore that drops the outbox
+    // Sync state (docs/SYNC-OPERATIONS.md backup/restore): a restore that drops the outbox
     // loses not-yet-pushed local operations; dropping the inbox + cursor
     // forces peers to replay everything; dropping claims resurrects
     // double-spend; dropping tombstones resurrects deleted master rows.

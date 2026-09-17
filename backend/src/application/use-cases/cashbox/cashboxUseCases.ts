@@ -7,7 +7,7 @@ import type {
   CreateManualMovementInput,
   CloseDayRequestInput,
 } from "../../../domain/entities/Cashbox.js";
-import { DayLockedError } from "../../../domain/errors/index.js";
+import { DayLockedError, InsufficientCashboxBalanceError } from "../../../domain/errors/index.js";
 
 type Result<T> = { ok: true; data: T } | { ok: false; error: string };
 
@@ -41,13 +41,16 @@ export async function addManualMovementUseCase(
   repo: ICashboxRepository,
   input: CreateManualMovementInput,
   ctx: TenantContext,
-): Promise<Result<ManualMovementData>> {
+): Promise<Result<ManualMovementData> | { ok: false; error: string; code: string }> {
   if (!input.amount || input.amount <= 0)
     return { ok: false, error: "المبلغ يجب أن يكون أكبر من صفر" };
   try {
     return { ok: true, data: await repo.addManualMovement(input, ctx) };
   } catch (e) {
     if (e instanceof DayLockedError) return { ok: false, error: e.message };
+    if (e instanceof InsufficientCashboxBalanceError) {
+      return { ok: false, error: e.message, code: e.code };
+    }
     return { ok: false, error: "فشل إضافة حركة يدوية" };
   }
 }

@@ -22,6 +22,7 @@ import { rolls } from "../orm/schemas/roll.table.js";
 import { invoices } from "../orm/schemas/invoice.table.js";
 import { allocateDocumentNumber } from "../utils/documentNumbers.js";
 import { round2dp } from "@erp/shared";
+import { BusinessRuleError } from "../../domain/errors/index.js";
 
 const INVOICE_TYPES = ["sales_invoice", "purchase_invoice"];
 
@@ -31,6 +32,8 @@ const TYPE_LABEL: Record<string, string> = {
   sales_invoice: "فاتورة بيع",
   payment_out: "سند دفع",
   receipt_in: "سند قبض",
+  settlement_discount_expense: "خصم على قبض",
+  settlement_discount_income: "خصم على صرف",
   purchase_return: "مرتجع شراء",
   sales_return: "مرتجع بيع",
   sales_return_contra: "عكس إيراد مرتجع بيع",
@@ -40,6 +43,8 @@ const TYPE_LABEL: Record<string, string> = {
   adjustment: "تعديل",
   settlement: "تسوية حساب",
   cancellation: "إلغاء",
+  fx_gain: "ربح فرق عملة",
+  fx_loss: "خسارة فرق عملة",
 };
 
 type LedgerRow = typeof ledgerEntries.$inferSelect;
@@ -283,7 +288,7 @@ export class PostgresStatementRepository implements IStatementRepository {
         );
 
       const net = Number(rows[0]?.debit ?? 0) - Number(rows[0]?.credit ?? 0);
-      if (net === 0) throw new Error("الرصيد صفر لا يحتاج تسوية");
+      if (net === 0) throw new BusinessRuleError("الرصيد صفر لا يحتاج تسوية");
       const amount = Math.abs(net);
 
       // H-NEW (forensic audit 2026-08-25): the SET reference number is

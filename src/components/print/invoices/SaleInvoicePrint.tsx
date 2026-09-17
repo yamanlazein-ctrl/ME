@@ -24,7 +24,7 @@ import {
   type PrintTotal,
   type PrintParty,
 } from "@/components/print/PrintDocument";
-import { currencySymbol } from "@/presentation/hooks/useCurrency";
+import { currencySymbol, formatAmount } from "@/presentation/hooks/useCurrency";
 import { customerById } from "@/presentation/hooks/useParties";
 import { useVouchersList } from "@/presentation/hooks/useVouchers";
 import { useInvoiceVisibility } from "./visibility";
@@ -38,6 +38,7 @@ type SaleInvoicePrintProps = {
   invoice: Invoice;
   totalPages?: number;
   pageNumber?: number;
+  linesOverride?: Invoice["lines"];
 };
 
 // Use formatNumber for unit prices (preserves decimals), formatMoney for totals
@@ -45,9 +46,17 @@ const fmtUnit = (n: number): string => formatNumber(n);
 const fmtMoney = (n: number): string => formatMoney(n);
 const fmtQty = (n: number): string => formatQuantity(n);
 
-export function SaleInvoicePrint({ invoice, totalPages, pageNumber }: SaleInvoicePrintProps) {
+export function SaleInvoicePrint({
+  invoice,
+  totalPages,
+  pageNumber,
+  linesOverride,
+}: SaleInvoicePrintProps) {
   useInventory();
   const inv = invoice;
+  const isFirstPage = pageNumber == null || pageNumber === 1;
+  const isLastPage = pageNumber == null || totalPages == null || pageNumber === totalPages;
+  const printLines = linesOverride ?? inv.lines;
   const vis = useInvoiceVisibility("sale");
   const customer = customerById(inv.partyId);
   const { data: vouchersData } = useVouchersList();
@@ -80,11 +89,7 @@ export function SaleInvoicePrint({ invoice, totalPages, pageNumber }: SaleInvoic
   const remaining = Math.max(0, grand - paid);
   const sym = currencySymbol(inv.currency);
   const isCancelled = inv.status === "cancelled";
-  const statusLabel = isCancelled
-    ? "ملغاة"
-    : remaining > 0
-      ? `مفتوحة (المتبقي ${fmtMoney(remaining)} ${sym})`
-      : "مقفلة (مدفوعة)";
+  const statusLabel = isCancelled ? "ملغاة" : remaining > 0 ? "مفتوحة" : "مدفوعة";
   const meta: PrintMetaItem[] = [];
   if (vis.showInvoiceNumber)
     meta.push({ label: "رقم الفاتورة", value: inv.reference || inv.number });
@@ -102,13 +107,13 @@ export function SaleInvoicePrint({ invoice, totalPages, pageNumber }: SaleInvoic
   }
   // ── Items table — rolls + pieces in the MAIN row (Issue 13), not nested.
   const mainColumns: PrintColumn[] = [
-    { key: "fabric", label: "الصنف", width: "22%" },
-    { key: "color", label: "اللون", width: "14%" },
+    { key: "fabric", label: "الصنف", width: "24%" },
+    { key: "color", label: "اللون", width: "18%" },
     { key: "roll", label: "رقم الصبغة", width: "14%" },
     { key: "pieces", label: "الأثواب", align: "center", width: "8%" },
-    { key: "qty", label: "الكمية (كغ)", align: "center", width: "12%" },
+    { key: "qty", label: "الكمية (كغ)", align: "center", width: "10%" },
     { key: "price", label: "السعر/كغ", align: "left", amount: true, width: "12%" },
-    { key: "gross", label: "الإجمالي", align: "left", amount: true, width: "18%" },
+    { key: "gross", label: "الإجمالي", align: "left", amount: true, width: "16%" },
   ];
 
   /** Build a row: main cells + optional secondary detail (machine/kromaj only). */
@@ -145,7 +150,7 @@ export function SaleInvoicePrint({ invoice, totalPages, pageNumber }: SaleInvoic
 
   const columns = mainColumns;
   const rows: (string | number | React.ReactNode)[][] = [];
-  for (const l of inv.lines) {
+  for (const l of printLines) {
     const r = buildRow(l);
     rows.push(columns.map((c) => r.main[c.key] ?? "—"));
     if (r.details.length > 0) {
@@ -170,21 +175,21 @@ export function SaleInvoicePrint({ invoice, totalPages, pageNumber }: SaleInvoic
   }
   const totals: PrintTotal[] = [];
   if (vis.showSubtotal) {
-    totals.push({ label: "المجموع", value: `${fmtMoney(subtotal)} ${sym}` });
+    totals.push({ label: "المجموع", value: formatAmount(subtotal, inv.currency) });
   }
   if (vis.showDiscountTotal && discount > 0) {
-    totals.push({ label: "الخصم", value: `- ${fmtMoney(discount)} ${sym}` });
+    totals.push({ label: "الخصم", value: `− ${formatAmount(discount, inv.currency)}` });
   }
   if (vis.showTax && tax > 0) {
-    totals.push({ label: "الضريبة", value: `+ ${fmtMoney(tax)} ${sym}` });
+    totals.push({ label: "الضريبة", value: `+ ${formatAmount(tax, inv.currency)}` });
   }
   if (shipping > 0) {
-    totals.push({ label: "الشحن", value: `+ ${fmtMoney(shipping)} ${sym}` });
+    totals.push({ label: "الشحن", value: `+ ${formatAmount(shipping, inv.currency)}` });
   }
   if (vis.showGrandTotal) {
     totals.push({
       label: "الإجمالي النهائي",
-      value: `${fmtMoney(grand)} ${sym}`,
+      value: formatAmount(grand, inv.currency),
       grand: true,
     });
   }
@@ -201,21 +206,26 @@ export function SaleInvoicePrint({ invoice, totalPages, pageNumber }: SaleInvoic
     : undefined;
   const payment = vis.showPaymentSummary
     ? [
-        { label: "الإجمالي", value: `${fmtMoney(grand)} ${sym}` },
-        { label: "المقبوض", value: `${fmtMoney(paid)} ${sym}` },
-        { label: "الباقي", value: `${fmtMoney(remaining)} ${sym}` },
+        { label: "الإجمالي", value: formatAmount(grand, inv.currency) },
+        { label: "المقبوض", value: formatAmount(paid, inv.currency) },
+        { label: "الباقي", value: formatAmount(remaining, inv.currency) },
       ]
     : undefined;
+  const pageSubtitle =
+    !isFirstPage && totalPages && totalPages > 1
+      ? `تابع — صفحة ${pageNumber} من ${totalPages}`
+      : "بيع بضاعة للعميل";
+
   return (
     <PrintDocument
       title="فاتورة بيع"
-      subtitle="بيع بضاعة للعميل"
-      meta={meta}
-      party={party}
-      totals={totals}
-      payment={payment}
-      notes={vis.showNotes ? inv.notes : undefined}
-      signatures={vis.showSignatures ? ["توقيع المستلم", "ختم الشركة"] : undefined}
+      subtitle={pageSubtitle}
+      meta={isFirstPage ? meta : undefined}
+      party={isFirstPage ? party : undefined}
+      totals={isLastPage ? totals : undefined}
+      payment={isLastPage ? payment : undefined}
+      notes={isLastPage && vis.showNotes ? inv.notes : undefined}
+      signatures={isLastPage && vis.showSignatures ? ["توقيع المستلم", "ختم الشركة"] : undefined}
       pageNumber={pageNumber}
       totalPages={totalPages}
       typeBadge={vis.showTypeBadge ? "SALE" : undefined}

@@ -10,6 +10,8 @@ export interface VoucherData {
   partyKind: "customer" | "supplier";
   invoiceId?: UUID;
   amount: number;
+  /** Cash concession — net cash = amount − discount. */
+  discount?: number;
   currency: string;
   /** Units of `currency` per 1 USD — frozen at creation. */
   exchangeRate?: number | null;
@@ -50,6 +52,7 @@ export class Voucher {
       partyKind: input.partyKind,
       invoiceId: input.invoiceId,
       amount: input.amount,
+      discount: input.discount ?? 0,
       currency: input.currency ?? "SYP",
       method: input.method,
       status: "active" as EntityStatus,
@@ -115,6 +118,7 @@ export interface CreateVoucherInput {
   partyKind: "customer" | "supplier";
   invoiceId?: UUID;
   amount: number;
+  discount?: number;
   currency?: string;
   /** Units of `currency` per 1 USD — frozen at creation. */
   exchangeRate?: number;

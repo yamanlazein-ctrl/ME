@@ -15,6 +15,13 @@ import {
   isEdition,
   type Plan,
 } from "../domain/licensing/plans.js";
+import { resolveDeviceLimit } from "../domain/licensing/ownership.js";
+import { syncTenantLicenseCacheFromLicenseRow } from "../infrastructure/license/syncTenantLicenseCache.js";
+import { refreshOfflineEntitlement } from "../infrastructure/license/refreshOfflineEntitlement.js";
+import type { ILicenseTokenSigner } from "../application/ports/ILicenseTokenSigner.js";
+import type { ISecretsRepository } from "../application/ports/ISecretsRepository.js";
+import type { ISecretCipher } from "../application/ports/ISecretCipher.js";
+import type { DB } from "../infrastructure/orm/drizzle.js";
 
 /**
  * Phase 4 — license admin API (frozen spec §2.1, §6).
@@ -38,6 +45,12 @@ export function registerLicenseAdminRoutes(
     systemAdminRepo: PostgresSystemAdminRepository;
     passwordHasher: Argon2PasswordHasher;
     tokenDenylist: TokenDenylist;
+    /** License Server always has a private key; used to re-sign offline grants. */
+    licenseTokenSigner?: ILicenseTokenSigner;
+    /** Optional — when License Server shares APP_MASTER_KEY + DB with ERP. */
+    secretsRepo?: ISecretsRepository;
+    secretCipher?: ISecretCipher;
+    db?: DB;
   },
 ): void {
   const {
@@ -48,6 +61,9 @@ export function registerLicenseAdminRoutes(
     systemAdminRepo,
     passwordHasher,
     tokenDenylist,
+    licenseTokenSigner,
+    secretCipher,
+    secretsRepo,
   } = deps;
 
   // ── Public: Super Admin login ──────────────────────────────────────
@@ -150,7 +166,13 @@ export function registerLicenseAdminRoutes(
         add: d.featureAdd,
         remove: d.featureRemove,
       });
-      const limits = d.limits ?? defaultLimits(d.plan as Plan);
+      const baseLimits = d.limits ?? defaultLimits(d.plan as Plan);
+      // Control Plane SoT: keep max_devices column and limits.devices identical.
+      const deviceLimit = resolveDeviceLimit({
+        limits: baseLimits,
+        maxDevices: d.maxDevices,
+      });
+      const limits = { ...baseLimits, devices: deviceLimit };
 
       const { db } = await import("../infrastructure/orm/drizzle.js");
       const { licenses } = await import("../infrastructure/orm/schemas/license.table.js");
@@ -162,7 +184,7 @@ export function registerLicenseAdminRoutes(
           status: d.status,
           expiresAt: d.expiresAt ? new Date(d.expiresAt) : null,
           graceDays: d.graceDays,
-          maxDevices: d.maxDevices,
+          maxDevices: deviceLimit,
           features,
           vendorMetadata: d.companyName ? { companyName: d.companyName } : null,
           // Customer directory columns. `customerName` falls back to
@@ -225,6 +247,122 @@ export function registerLicenseAdminRoutes(
         .returning();
       res.json({ activation: row });
       void auditRepo;
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  /**
+   * Vendor Control Plane — mutate License rights (status / limits).
+   * Customer ERP must never expose equivalent mutations.
+   */
+  const patchLicenseBody = z.object({
+    status: z.enum(["active", "suspended", "expired", "revoked"]).optional(),
+    limits: limitsSchema.partial().optional(),
+    updatePolicy: updatePolicySchema.partial().optional(),
+    graceDays: z.number().int().min(0).max(60).optional(),
+    customerName: z.string().max(200).optional(),
+    customerPhone: z.string().max(40).optional(),
+    customerNotes: z.string().max(2000).optional(),
+  });
+
+  app.patch("/license-admin/licenses/:id", adminAuth, async (req, res, next) => {
+    try {
+      const parsed = patchLicenseBody.safeParse(req.body);
+      if (!parsed.success) {
+        res
+          .status(422)
+          .json({ code: "VALIDATION_ERROR", message: "بيانات غير صالحة", statusCode: 422 });
+        return;
+      }
+      const { db } = await import("../infrastructure/orm/drizzle.js");
+      const { licenses } = await import("../infrastructure/orm/schemas/license.table.js");
+      const { eq } = await import("drizzle-orm");
+      const id = String(req.params.id);
+      const [current] = await db.select().from(licenses).where(eq(licenses.id, id as never)).limit(1);
+      if (!current) {
+        res.status(404).json({ code: "NOT_FOUND", message: "الترخيص غير موجود", statusCode: 404 });
+        return;
+      }
+      const patch = parsed.data;
+      const nextLimits = patch.limits
+        ? { ...(current.limits as Record<string, number>), ...patch.limits }
+        : (current.limits as Record<string, number>);
+      const deviceLimit = resolveDeviceLimit({
+        limits: nextLimits as { devices?: number },
+        maxDevices: current.maxDevices,
+      });
+      const limits = { ...nextLimits, devices: deviceLimit };
+      const nextUpdatePolicy = patch.updatePolicy
+        ? {
+            ...(current.updatePolicy as Record<string, unknown>),
+            ...patch.updatePolicy,
+          }
+        : current.updatePolicy;
+      const [row] = await db
+        .update(licenses)
+        .set({
+          ...(patch.status ? { status: patch.status } : {}),
+          ...(patch.graceDays !== undefined ? { graceDays: patch.graceDays } : {}),
+          ...(patch.customerName !== undefined ? { customerName: patch.customerName } : {}),
+          ...(patch.customerPhone !== undefined ? { customerPhone: patch.customerPhone } : {}),
+          ...(patch.customerNotes !== undefined ? { customerNotes: patch.customerNotes } : {}),
+          ...(patch.updatePolicy ? { updatePolicy: nextUpdatePolicy } : {}),
+          limits,
+          maxDevices: deviceLimit,
+          updatedAt: new Date(),
+        })
+        .where(eq(licenses.id, id as never))
+        .returning();
+      if (row) {
+        await syncTenantLicenseCacheFromLicenseRow(db, row);
+        if (licenseTokenSigner) {
+          const refresh = await refreshOfflineEntitlement({
+            db,
+            signer: licenseTokenSigner,
+            license: row as never,
+            secretsRepo: secretsRepo ?? null,
+            cipher: secretCipher ?? null,
+            tokenDenylist,
+          });
+          res.json({ license: row, entitlementRefresh: refresh });
+          return;
+        }
+      }
+      res.json({ license: row });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  app.post("/license-admin/licenses/:id/suspend", adminAuth, async (req, res, next) => {
+    try {
+      const { db } = await import("../infrastructure/orm/drizzle.js");
+      const { licenses } = await import("../infrastructure/orm/schemas/license.table.js");
+      const { eq } = await import("drizzle-orm");
+      const id = String(req.params.id);
+      const [row] = await db
+        .update(licenses)
+        .set({ status: "suspended", updatedAt: new Date() })
+        .where(eq(licenses.id, id as never))
+        .returning();
+      if (!row) {
+        res.status(404).json({ code: "NOT_FOUND", message: "الترخيص غير موجود", statusCode: 404 });
+        return;
+      }
+      await syncTenantLicenseCacheFromLicenseRow(db, row);
+      let entitlementRefresh = undefined;
+      if (licenseTokenSigner) {
+        entitlementRefresh = await refreshOfflineEntitlement({
+          db,
+          signer: licenseTokenSigner,
+          license: row as never,
+          secretsRepo: secretsRepo ?? null,
+          cipher: secretCipher ?? null,
+          tokenDenylist,
+        });
+      }
+      res.json({ license: row, entitlementRefresh });
     } catch (err) {
       next(err);
     }

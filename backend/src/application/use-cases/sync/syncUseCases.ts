@@ -54,7 +54,8 @@ export async function enqueueInvoiceCreate(
     type: string;
     number: string;
     partyId?: string;
-    lines?: Array<{ rollId: string; quantityKg: number }>;
+    linkedVoucherId?: string | null;
+    lines?: Array<{ rollId: string; quantityKg: number; costPerKg?: number | null }>;
   },
   createInput: CreateInvoiceInput,
   ctx: TenantContext,
@@ -65,6 +66,24 @@ export async function enqueueInvoiceCreate(
   const rollIds = (invoice.lines ?? createInput.lines ?? [])
     .map((l) => l.rollId)
     .filter((id): id is string => Boolean(id) && isUuid(id));
+
+  // Pin sale unit costs into createInput so hub/peer replay journals the same
+  // COGS even if roll.pricePerKg changed after the origin capture.
+  const costByRoll = new Map<string, number>();
+  for (const l of invoice.lines ?? []) {
+    if (l.costPerKg != null && Number.isFinite(Number(l.costPerKg))) {
+      costByRoll.set(l.rollId, Number(l.costPerKg));
+    }
+  }
+  const pinnedCreateInput: CreateInvoiceInput = {
+    ...createInput,
+    linkedVoucherId:
+      createInput.linkedVoucherId ?? invoice.linkedVoucherId ?? undefined,
+    lines: createInput.lines.map((l) => ({
+      ...l,
+      costPerKg: l.costPerKg ?? costByRoll.get(l.rollId),
+    })),
+  };
 
   return outbox.enqueue({
     tenantId: ctx.tenantId,
@@ -81,11 +100,12 @@ export async function enqueueInvoiceCreate(
       rollIds,
       lines:
         invoice.lines ??
-        createInput.lines.map((l) => ({
+        pinnedCreateInput.lines.map((l) => ({
           rollId: l.rollId,
           quantityKg: l.quantityKg,
+          costPerKg: l.costPerKg ?? null,
         })),
-      createInput,
+      createInput: pinnedCreateInput,
       dependencies: dependencies ?? null,
       preAllocated: true,
       actorUserId: ctx.userId,

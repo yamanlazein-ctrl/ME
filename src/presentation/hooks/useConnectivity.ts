@@ -1,12 +1,14 @@
 import { useEffect, useState } from "react";
 import { setOfflineModeFlag } from "@/infrastructure/http/interceptors";
+import { getApiBaseUrl } from "@/lib/api-base-url";
 
 export type ConnectivityStatus = "online" | "offline";
 
 /**
  * Real connectivity for the top-bar indicator.
- * Online = browser reports online AND `/api/health/live` responds OK.
- * Offline otherwise (red). Never a static "متصل" label.
+ * Online = browser reports online AND local API `/api/health/live` responds OK.
+ * Uses `getApiBaseUrl()` so desktop (SSR on :4173, API on :8080) does not probe
+ * the wrong origin via a relative `/api/...` URL.
  */
 export function useConnectivity(pollMs = 15_000): ConnectivityStatus {
   const [status, setStatus] = useState<ConnectivityStatus>(() =>
@@ -31,7 +33,7 @@ export function useConnectivity(pollMs = 15_000): ConnectivityStatus {
       try {
         const ctrl = new AbortController();
         const kill = setTimeout(() => ctrl.abort(), 4_000);
-        const res = await fetch("/api/health/live", {
+        const res = await fetch(`${getApiBaseUrl()}/api/health/live`, {
           method: "GET",
           cache: "no-store",
           signal: ctrl.signal,

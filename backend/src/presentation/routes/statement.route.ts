@@ -11,6 +11,7 @@ import type { ISyncOutboxRepository } from "../../application/ports/ISyncOutboxR
 import type { TenantContext } from "../../domain/types/index.js";
 import { logger } from "../../infrastructure/config/logger.js";
 import { withTenantTx } from "../../infrastructure/orm/drizzle.js";
+import { respondTransactionFailure } from "../../infrastructure/http/transactionRouteError.js";
 import {
   enqueueSettlement,
   isSyncEnqueueEnabled,
@@ -146,11 +147,18 @@ export function registerStatementRoutes(
           try {
             entry = syncEnabled ? await withTenantTx(c.tenantId, runSettle) : await runSettle();
           } catch (txErr) {
-            logger.error({ err: txErr }, "transaction rolled back — settlement dropped (F-07)");
-            return res.status(500).json({
-              code: "SYNC_OUTBOX_FAILED",
-              message: "تعذّر حفظ التسوية مع وحدة المزامنة — لم يُحفظ أي تغيير. أعد المحاولة.",
-            });
+            // Known business-rule failures (e.g. a concurrent settlement that
+            // already zeroed the balance) are NOT sync/outbox failures — the
+            // transaction rolled back cleanly with no partial writes, and the
+            // caller just lost a race. Report them as 422 VALIDATION so the
+            // client can show the real reason instead of a generic 500.
+            logger.warn({ err: txErr }, "settlement transaction rolled back");
+            return respondTransactionFailure(
+              res,
+              txErr,
+              "generic",
+              "تعذّر حفظ التسوية مع وحدة المزامنة — لم يُحفظ أي تغيير. أعد المحاولة.",
+            );
           }
           res.status(201).json({ entry, referenceNumber, kind });
         } catch (err) {

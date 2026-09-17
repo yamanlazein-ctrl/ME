@@ -13,16 +13,33 @@ import type { TokenDenylist } from "../../auth/TokenDenylist.js";
  *
  * On success sets `req.systemAdmin = { id, email, role }`.
  */
+function isLoopbackAddress(addr: string | undefined): boolean {
+  if (!addr) return false;
+  const a = addr.replace(/^::ffff:/, "");
+  return a === "127.0.0.1" || a === "::1" || a === "localhost";
+}
+
 export function createSuperAdminAuthMiddleware(
   jwtSigner: JwtSigner,
   denylist: TokenDenylist,
-  opts?: { fallbackToken?: string },
+  opts?: { fallbackToken?: string; openLoopback?: boolean },
 ) {
   return async function superAdminAuth(
     req: Request,
     res: Response,
     next: NextFunction,
   ): Promise<void> {
+    // Owner-only local license console: when enabled, loopback callers need no
+    // email/password. Remote clients still require JWT / static token.
+    if (
+      opts?.openLoopback &&
+      (isLoopbackAddress(req.ip) || isLoopbackAddress(req.socket?.remoteAddress))
+    ) {
+      req.systemAdmin = { id: "local-loopback", email: "local@loopback", role: "super_admin" };
+      next();
+      return;
+    }
+
     const header = req.headers.authorization;
     if (!header?.startsWith("Bearer ")) {
       res

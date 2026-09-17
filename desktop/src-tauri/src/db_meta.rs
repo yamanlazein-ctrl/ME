@@ -6,10 +6,10 @@
 //!   * `schema_journal_idx` — last Drizzle journal idx this binary understands;
 //!     a *newer* on-disk value means this binary is too old (refuse, no down-migrate)
 //!
-//! Missing metadata next to an existing PG_VERSION is treated as a foreign /
-//! leftover cluster and refused, except a one-time adopt of a *legacy* cluster
-//! (no meta yet, pg major matches) onto the current binding — the upgrade path
-//! for installs that predate this file.
+//! Missing metadata next to an existing PG_VERSION is refused unless this is a
+//! genuine same-machine upgrade (legacy cluster predating db-meta.json): that
+//! path requires a local `secrets.dat` so a copied-in foreign pgdata alone
+//! cannot be adopted onto a new install.
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::io::{self, ErrorKind};
@@ -137,7 +137,9 @@ pub enum ClusterDecision {
 ///
 /// * No `PG_VERSION` → Fresh.
 /// * `PG_VERSION` + matching meta (id + pg major, schema not newer than binary) → Reuse.
-/// * `PG_VERSION` + no meta + matching pg major → adopt onto this installation_id (upgrade).
+/// * `PG_VERSION` + no meta + matching pg major + local `secrets.dat` → adopt
+///   onto this installation_id (upgrade from pre-meta installs on the same machine).
+/// * `PG_VERSION` + no meta + no secrets → refuse (foreign/copied cluster).
 /// * Anything else → Err with an Arabic operator message.
 pub fn evaluate_existing_cluster(
     app_data_root: &Path,
@@ -190,7 +192,17 @@ pub fn evaluate_existing_cluster(
             Ok(ClusterDecision::Reuse)
         }
         None => {
-            // One-time adopt of pre-identity pgdata on THIS machine+user.
+            // Legacy same-machine upgrade only: pgdata without meta is safe to
+            // adopt when this AppData already holds secrets from a prior boot
+            // of this product. A bare copied pgdata (no secrets) is foreign.
+            if !app_data_root.join("secrets.dat").exists() {
+                return Err(io::Error::new(
+                    ErrorKind::PermissionDenied,
+                    "مجلد قاعدة البيانات المحلية موجود بدون هوية تثبيت (db-meta.json) وبدون أسرار محلية.\n\
+                     لن يُعاد استخدامه — قد يكون منسوخاً من تثبيت أو جهاز آخر.\n\
+                     انقل نسخة احتياطية إن لزم، ثم استخدم إعادة الضبط المصنعي أو احذف مجلد pgdata يدوياً.",
+                ));
+            }
             let meta = DbMeta {
                 installation_id: installation_id.to_string(),
                 pg_major: bundled_pg_major,
@@ -319,11 +331,23 @@ mod tests {
     }
 
     #[test]
-    fn absent_meta_adopts_when_pg_major_matches() {
+    fn absent_meta_without_secrets_refuses() {
         let dir = scratch();
         let pgdata = dir.join("pgdata");
         fs::create_dir_all(&pgdata).unwrap();
         fs::write(pgdata.join("PG_VERSION"), "16\n").unwrap();
+        let err = evaluate_existing_cluster(&dir, &pgdata, "id-a", 16, 63).unwrap_err();
+        assert!(err.to_string().contains("db-meta.json"));
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn absent_meta_adopts_when_secrets_present() {
+        let dir = scratch();
+        let pgdata = dir.join("pgdata");
+        fs::create_dir_all(&pgdata).unwrap();
+        fs::write(pgdata.join("PG_VERSION"), "16\n").unwrap();
+        fs::write(dir.join("secrets.dat"), b"legacy").unwrap();
         let d = evaluate_existing_cluster(&dir, &pgdata, "id-a", 16, 63).unwrap();
         assert!(matches!(d, ClusterDecision::Reuse));
         let meta = read_meta(&dir).unwrap().unwrap();

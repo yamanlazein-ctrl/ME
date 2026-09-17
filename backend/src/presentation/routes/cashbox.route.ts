@@ -51,17 +51,16 @@ export function registerCashboxRoutes(
       const date = req.params.date as string;
       const state = await cashboxRepo.getState(ctx(req));
       const currency = (req.query.currency as string) || state.session?.currency || "SYP";
-      // Opening balance + opening DATE belong to the session's currency only.
+      // Each currency has its own session row — opening balance + opening DATE
+      // come from THAT currency's own session, never another currency's:
       // (1) Amount leak: adding opening to every currency made USD/EUR show the
       //     SYP opening (FIX-02).
-      // (2) Date leak: applying session.openingDate to every currency truncated
-      //     foreign-currency history — confirmed live: setting SYP opening
-      //     dated today zeroed USD from 150 → 0 even though USD receipts exist.
-      // Other currencies are independent boxes: full history, no opening.
-      const sessionCurrency = state.session?.currency;
-      const opening = currency === sessionCurrency ? (state.session?.openingBalance ?? 0) : 0;
-      const from =
-        currency === sessionCurrency ? (state.session?.openingDate ?? "0001-01-01") : "0001-01-01";
+      // (2) Date leak: applying another currency's openingDate truncated this
+      //     currency's history — confirmed live: setting SYP opening dated
+      //     today zeroed USD from 150 → 0 even though USD receipts exist.
+      const currencySession = state.sessions.find((s) => s.currency === currency);
+      const opening = currencySession?.openingBalance ?? 0;
+      const from = currencySession?.openingDate ?? "0001-01-01";
       const [ledger, manual] = await Promise.all([
         ledgerRepo.getCashMovementsOn(from, date, currency, ctx(req)),
         cashboxRepo.listManualMovements(ctx(req)),
@@ -200,7 +199,8 @@ export function registerCashboxRoutes(
       if (r.ok) {
         res.status(201).json(r.data);
       } else {
-        res.status(422).json({ code: "VALIDATION", message: r.error });
+        const code = "code" in r && r.code ? r.code : "VALIDATION";
+        res.status(422).json({ code, message: r.error });
       }
     },
   );

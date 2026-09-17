@@ -182,7 +182,7 @@ describe("cancel replay — stale base is refused, not applied blind", () => {
     expect(cancelInvoice).not.toHaveBeenCalled();
   });
 
-  it("legacy payload without a base version keeps the previous (unchecked) behaviour", async () => {
+  it("payload without a base version is refused (no silent cancel)", async () => {
     const cancelInvoice = vi.fn(async () => invoiceRow(2, "cancelled"));
     const repos = makeRepos({
       invoice: invoiceRow(1, "active"),
@@ -201,9 +201,7 @@ describe("cancel replay — stale base is refused, not applied blind", () => {
       { opId: OP_ID, syncDeviceId: null },
     );
 
-    expect(result.status).toBe("created");
-    // The hub still passes the CURRENT version to the use-case, exactly as
-    // before, so already-queued units from an older build are not stranded.
-    expect(cancelInvoice.mock.calls[0]![3]).toBe(1);
+    expect(result.status).toBe("failed");
+    expect(cancelInvoice).not.toHaveBeenCalled();
   });
 });

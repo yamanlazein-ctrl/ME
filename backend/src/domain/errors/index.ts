@@ -31,6 +31,12 @@ export class AuthError extends DomainError {
   }
 }
 
+export class InvalidPinError extends AuthError {
+  constructor() {
+    super("INVALID_PIN", "الرقم السري غير صحيح");
+  }
+}
+
 export class InvalidCredentialsError extends AuthError {
   constructor() {
     super("INVALID_CREDENTIALS", "البريد الإلكتروني أو كلمة المرور غير صحيحة");
@@ -115,5 +121,45 @@ export class BusinessRuleError extends DomainError {
 export class RateLimitExceededError extends DomainError {
   constructor() {
     super("RATE_LIMIT_EXCEEDED", "تم تجاوز الحد المسموح من الطلبات. يرجى المحاولة لاحقاً");
+  }
+}
+
+/**
+ * StoneERP is single-tenant-per-install: every database should contain at
+ * most one company/tenant (see docs/decisions.md). `findAnyCompleted()`
+ * used to pick an arbitrary completed tenant when more than one existed,
+ * which let a brand-new license activation silently bind to a different,
+ * pre-existing company's tenant (forensic audit finding F01). Finding more
+ * than one completed tenant means the single-tenant invariant has already
+ * been violated (e.g. a cloned/template database, or a prior run of this
+ * same bug) — that must fail loudly for an operator to resolve, never be
+ * silently picked around.
+ */
+export class MultipleTenantsDetectedError extends DomainError {
+  constructor() {
+    super(
+      "MULTIPLE_TENANTS_DETECTED",
+      "تم العثور على أكثر من مستأجر واحد مكتمل في قاعدة البيانات — يجب أن يحتوي كل تثبيت على شركة واحدة فقط. يرجى مراجعة الدعم الفني.",
+    );
+  }
+}
+
+/**
+ * F06 (Phase 1 audit) + product decision: cashbox withdrawals and cash
+ * payment vouchers must be hard-blocked when they would take the cashbox
+ * balance negative, per-currency. Previously there was no server-side
+ * balance-sufficiency check anywhere in the cash-out write paths (manual
+ * movements, cash payment vouchers) — SYP reached -14,110 with no guard.
+ */
+export class InsufficientCashboxBalanceError extends DomainError {
+  constructor(
+    public readonly currency: string,
+    public readonly available: number,
+    public readonly requested: number,
+  ) {
+    super(
+      "INSUFFICIENT_CASHBOX_BALANCE",
+      `الرصيد غير كافٍ (${currency}): المتاح ${available}، المطلوب ${requested}. لا يمكن أن يصبح رصيد الصندوق سالباً.`,
+    );
   }
 }

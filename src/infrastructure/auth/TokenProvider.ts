@@ -5,12 +5,30 @@ const REFRESH_KEY = "erp.auth.refreshToken";
 
 function isDefinitiveAuthFailure(err: unknown): boolean {
   if (!err || typeof err !== "object") return false;
-  const e = err as { code?: string; statusCode?: number; status?: number };
+  const e = err as {
+    code?: string;
+    statusCode?: number;
+    status?: number;
+    responseBody?: { code?: string };
+  };
   if (
     e.code === "UNAUTHORIZED" ||
     e.code === "FORBIDDEN" ||
     e.code === "TOKEN_EXPIRED" ||
-    e.code === "INVALID_CREDENTIALS"
+    e.code === "INVALID_CREDENTIALS" ||
+    e.code === "SETUP_REQUIRED" ||
+    e.code === "SETUP_STATUS_UNAVAILABLE"
+  ) {
+    return true;
+  }
+  // Http client maps unknown 4xx/5xx to ApiError(code=API_ERROR); body keeps
+  // the server code. After erp_test wipe, /me returns 503 SETUP_REQUIRED.
+  const bodyCode = e.responseBody?.code;
+  if (
+    bodyCode === "SETUP_REQUIRED" ||
+    bodyCode === "SETUP_STATUS_UNAVAILABLE" ||
+    bodyCode === "TOKEN_EXPIRED" ||
+    bodyCode === "UNAUTHORIZED"
   ) {
     return true;
   }

@@ -29,6 +29,14 @@ export interface PartyListStats {
   totalPaid: number;
   remaining: number;
   lastDate?: string;
+  /**
+   * Per-currency invoice aggregates. Scalars above stay on the party's
+   * default currency for credit-limit UI; never blend SYP+USD into remaining.
+   */
+  byCurrency?: Record<
+    string,
+    { invoicesCount: number; totalAmount: number; totalPaid: number; remaining: number }
+  >;
 }
 
 export interface PartyData {
@@ -64,6 +72,7 @@ export interface PartyData {
   activity: ActivityEntry[];
   createdAt: Timestamp;
   createdBy?: string | null;
+  version?: number;
   cancelledAt?: Timestamp | null;
   cancelledBy?: string | null;
   stats?: PartyListStats;
@@ -102,6 +111,7 @@ export class Party implements PartyData {
   readonly activity: ActivityEntry[];
   readonly createdAt: Timestamp;
   readonly createdBy: string | null;
+  readonly version: number;
   readonly cancelledAt?: Timestamp | null;
   readonly cancelledBy?: string | null;
   readonly stats?: PartyListStats;
@@ -139,6 +149,7 @@ export class Party implements PartyData {
     this.activity = data.activity;
     this.createdAt = data.createdAt;
     this.createdBy = data.createdBy ?? null;
+    this.version = data.version ?? 1;
     this.cancelledAt = data.cancelledAt ?? null;
     this.cancelledBy = data.cancelledBy ?? null;
     this.stats = data.stats;

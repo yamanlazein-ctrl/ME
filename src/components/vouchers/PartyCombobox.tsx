@@ -37,7 +37,7 @@ export function PartyCombobox({
   const q = query.trim().toLowerCase();
 
   const filtered = useMemo(() => {
-    if (!q) return list.slice(0, 50);
+    if (!q) return [];
     return list.filter(
       (p) =>
         (p.name ?? "").toLowerCase().includes(q) ||
@@ -76,6 +76,9 @@ export function PartyCombobox({
           />
         </div>
         <div className="max-h-56 overflow-y-auto py-1">
+          {!q && !noMatch && (
+            <div className="px-3 py-3 text-xs text-muted-foreground">اكتب للبحث بالاسم أو الهاتف.</div>
+          )}
           {noMatch && (
             <div className="px-3 py-3 text-xs text-muted-foreground">
               لا توجد نتائج مطابقة لـ «{query}».

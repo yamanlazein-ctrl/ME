@@ -46,6 +46,7 @@ import { Route as SettingsUsersRouteImport } from './routes/settings.users'
 import { Route as SettingsWarehousesRouteImport } from './routes/settings.warehouses'
 import { Route as SuppliersIndexRouteImport } from './routes/suppliers.index'
 import { Route as SuppliersIdRouteImport } from './routes/suppliers.$id'
+import { Route as SyncConflictsRouteImport } from './routes/sync.conflicts'
 import { Route as InvoicesEntryNewRouteImport } from './routes/invoices.entry.new'
 import { Route as InvoicesPrintReceiveNewRouteImport } from './routes/invoices.print-receive.new'
 import { Route as InvoicesPrintSendNewRouteImport } from './routes/invoices.print-send.new'
@@ -238,6 +239,11 @@ const SuppliersIdRoute = SuppliersIdRouteImport.update({
   path: '/suppliers/$id',
   getParentRoute: () => rootRouteImport,
 } as any)
+const SyncConflictsRoute = SyncConflictsRouteImport.update({
+  id: '/sync/conflicts',
+  path: '/sync/conflicts',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const InvoicesEntryNewRoute = InvoicesEntryNewRouteImport.update({
   id: '/invoices/entry/new',
   path: '/invoices/entry/new',
@@ -297,6 +303,7 @@ export interface FileRoutesByFullPath {
   '/settings/users': typeof SettingsUsersRoute
   '/settings/warehouses': typeof SettingsWarehousesRoute
   '/suppliers/$id': typeof SuppliersIdRoute
+  '/sync/conflicts': typeof SyncConflictsRoute
   '/customers/': typeof CustomersIndexRoute
   '/expenses/': typeof ExpensesIndexRoute
   '/invoices/': typeof InvoicesIndexRoute
@@ -340,6 +347,7 @@ export interface FileRoutesByTo {
   '/settings/users': typeof SettingsUsersRoute
   '/settings/warehouses': typeof SettingsWarehousesRoute
   '/suppliers/$id': typeof SuppliersIdRoute
+  '/sync/conflicts': typeof SyncConflictsRoute
   '/customers': typeof CustomersIndexRoute
   '/expenses': typeof ExpensesIndexRoute
   '/invoices': typeof InvoicesIndexRoute
@@ -386,6 +394,7 @@ export interface FileRoutesById {
   '/settings/users': typeof SettingsUsersRoute
   '/settings/warehouses': typeof SettingsWarehousesRoute
   '/suppliers/$id': typeof SuppliersIdRoute
+  '/sync/conflicts': typeof SyncConflictsRoute
   '/customers/': typeof CustomersIndexRoute
   '/expenses/': typeof ExpensesIndexRoute
   '/invoices/': typeof InvoicesIndexRoute
@@ -433,6 +442,7 @@ export interface FileRouteTypes {
     | '/settings/users'
     | '/settings/warehouses'
     | '/suppliers/$id'
+    | '/sync/conflicts'
     | '/customers/'
     | '/expenses/'
     | '/invoices/'
@@ -476,6 +486,7 @@ export interface FileRouteTypes {
     | '/settings/users'
     | '/settings/warehouses'
     | '/suppliers/$id'
+    | '/sync/conflicts'
     | '/customers'
     | '/expenses'
     | '/invoices'
@@ -521,6 +532,7 @@ export interface FileRouteTypes {
     | '/settings/users'
     | '/settings/warehouses'
     | '/suppliers/$id'
+    | '/sync/conflicts'
     | '/customers/'
     | '/expenses/'
     | '/invoices/'
@@ -557,6 +569,7 @@ export interface RootRouteChildren {
   PaymentsNewRoute: typeof PaymentsNewRoute
   ReceiptsNewRoute: typeof ReceiptsNewRoute
   SuppliersIdRoute: typeof SuppliersIdRoute
+  SyncConflictsRoute: typeof SyncConflictsRoute
   CustomersIndexRoute: typeof CustomersIndexRoute
   ExpensesIndexRoute: typeof ExpensesIndexRoute
   InvoicesIndexRoute: typeof InvoicesIndexRoute
@@ -834,6 +847,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SuppliersIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/sync/conflicts': {
+      id: '/sync/conflicts'
+      path: '/sync/conflicts'
+      fullPath: '/sync/conflicts'
+      preLoaderRoute: typeof SyncConflictsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/invoices/entry/new': {
       id: '/invoices/entry/new'
       path: '/invoices/entry/new'
@@ -940,6 +960,7 @@ const rootRouteChildren: RootRouteChildren = {
   PaymentsNewRoute: PaymentsNewRoute,
   ReceiptsNewRoute: ReceiptsNewRoute,
   SuppliersIdRoute: SuppliersIdRoute,
+  SyncConflictsRoute: SyncConflictsRoute,
   CustomersIndexRoute: CustomersIndexRoute,
   ExpensesIndexRoute: ExpensesIndexRoute,
   InvoicesIndexRoute: InvoicesIndexRoute,

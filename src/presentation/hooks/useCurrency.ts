@@ -62,7 +62,9 @@ export function currencySymbol(c: Currency | ""): string {
 
 export function formatAmount(n: number, c: Currency): string {
   const sym = currencySymbol(c);
-  return `${formatMoney(n)} ${sym}`;
+  // Isolate the (possibly Arabic) symbol so RTL text cannot flip past the amount.
+  // LTR parent: symbol on the left, amount on the right.
+  return `\u2066${sym}\u2069 ${formatMoney(n)}`;
 }
 
 /**

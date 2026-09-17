@@ -11,6 +11,7 @@ import {
   opIdFromRequest,
   syncDeviceIdFromRequest,
 } from "../../application/use-cases/sync/syncEnqueue.js";
+import { revokeSubjectSessions } from "../../infrastructure/auth/sessionCutoff.js";
 
 const listUsersSchema = z.object({
   search: z.string().optional(),
@@ -194,6 +195,7 @@ export function registerUserRoutes(
 
         const passwordHash = await passwordHasher.hash(password);
         const result = await userRepo.update(id, { password: passwordHash }, adminCtx);
+        await revokeSubjectSessions(id, adminCtx.tenantId);
         if (isSyncEnqueueEnabled()) {
           const snapshot = await userRepo.findSyncSnapshot(id, adminCtx);
           if (snapshot) {

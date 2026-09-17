@@ -1,8 +1,8 @@
 import { useMemo, useRef, useState, forwardRef, type KeyboardEvent } from "react";
-import { Check, Plus, Sparkles } from "lucide-react";
+import { Check, Plus } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
-import { colors, colorsOfFabric, fabrics, fabricById } from "@/presentation/hooks/useInventory";
+import { colors, fabrics, fabricById, searchColors, colorByName } from "@/presentation/hooks/useInventory";
 
 /**
  * Inline fabric autocomplete for a table cell.
@@ -29,7 +29,7 @@ export const InlineFabricCell = forwardRef<
   const q = value.trim().toLowerCase();
 
   const matches = useMemo(() => {
-    if (!q) return fabrics.slice(0, 8);
+    if (!q) return [];
     return fabrics.filter((f) => f.name.toLowerCase().includes(q)).slice(0, 8);
   }, [q]);
 
@@ -109,11 +109,10 @@ export const InlineFabricCell = forwardRef<
 });
 
 /**
- * Inline color autocomplete for a table cell.
- * - When a fabric is picked (existingFabricId set): shows registered colors of
- *   that fabric AND allows adding a new one by typing a fresh name.
- * - When the fabric is new (no existingFabricId): pure free-text; parent will
- *   register the color on save.
+ * Inline color autocomplete.
+ * Search is by typed name across the catalogue (never a dump of every color).
+ * A hit on another fabric copies the name; binding the id is the parent's job
+ * via resolveColorPick. No match → create on save.
  */
 export const InlineColorCell = forwardRef<
   HTMLInputElement,
@@ -125,7 +124,6 @@ export const InlineColorCell = forwardRef<
     onPickExisting: (colorId: string) => void;
     onSetName: (name: string) => void;
     onSetCode: (code: string) => void;
-    /** "both" = name+code side by side; "name"/"code" = single field for split layouts */
     mode?: "both" | "name" | "code";
   }
 >(function InlineColorCell(
@@ -135,14 +133,10 @@ export const InlineColorCell = forwardRef<
   const [open, setOpen] = useState(false);
   const codeRef = useRef<HTMLInputElement>(null);
 
-  const options = useMemo(() => (fabricId ? colorsOfFabric(fabricId) : []), [fabricId]);
   const q = name.trim().toLowerCase();
-  const matches = useMemo(
-    () => (q ? options.filter((c) => c.name.toLowerCase().includes(q)) : options),
-    [options, q],
-  );
-  const exact = options.find((c) => c.name.toLowerCase() === q);
-  const isNew = q.length > 0 && !exact && !!fabricId;
+  const matches = useMemo(() => searchColors(name, 12), [name]);
+  const local = colorByName(name, fabricId);
+  const isNew = q.length > 0 && !local;
 
   const nameInput = (
     <Input
@@ -155,14 +149,14 @@ export const InlineColorCell = forwardRef<
       onFocus={() => setOpen(true)}
       onBlur={() => setTimeout(() => setOpen(false), 120)}
       onKeyDown={(e) => {
-        if (e.key === "Enter" && matches.length === 1) {
+        if (e.key === "Enter" && local) {
           e.preventDefault();
-          onPickExisting(matches[0].id);
+          onPickExisting(local.id);
           setOpen(false);
         }
         if (e.key === "Escape") setOpen(false);
       }}
-      placeholder="اللون"
+      placeholder="ابحث أو اكتب اسم اللون..."
       className={cn(
         "h-9 min-w-0 w-full border-border bg-background px-2 text-sm focus:border-primary",
         isNew && "text-primary",
@@ -183,8 +177,8 @@ export const InlineColorCell = forwardRef<
   );
 
   const dropdown =
-    open && matches.length > 0 && mode !== "code" ? (
-      <div className="absolute right-0 top-full z-20 mt-1 w-full min-w-[220px] rounded-md border border-border bg-popover shadow-lg">
+    open && mode !== "code" && (matches.length > 0 || isNew) ? (
+      <div className="absolute right-0 top-full z-20 mt-1 w-full min-w-[240px] rounded-md border border-border bg-popover shadow-lg">
         {matches.map((c) => (
           <button
             key={c.id}
@@ -194,12 +188,24 @@ export const InlineColorCell = forwardRef<
               onPickExisting(c.id);
               setOpen(false);
             }}
-            className="flex w-full items-center justify-between px-3 py-1.5 text-right text-sm hover:bg-secondary"
+            className="flex w-full items-center justify-between gap-2 px-3 py-1.5 text-right text-sm hover:bg-secondary"
           >
-            <span className="truncate font-medium text-foreground">{c.name}</span>
-            <span className="tabular-nums text-[10px] text-muted-foreground">{c.code}</span>
+            <div className="min-w-0">
+              <div className="truncate font-medium text-foreground">{c.name}</div>
+              <div className="truncate text-[10px] text-muted-foreground">
+                {fabricById(c.fabricId)?.name ?? ""}
+                {c.code ? ` · ${c.code}` : ""}
+              </div>
+            </div>
+            {c.id === existingColorId && <Check className="h-3.5 w-3.5 shrink-0 text-primary" />}
           </button>
         ))}
+        {isNew && (
+          <div className="flex items-center gap-2 border-t border-border bg-primary/5 px-3 py-1.5 text-[11px] font-semibold text-primary">
+            <Plus className="h-3.5 w-3.5" />
+            إضافة لون «{name.trim()}»
+          </div>
+        )}
       </div>
     ) : null;
 

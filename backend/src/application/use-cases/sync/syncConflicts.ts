@@ -49,6 +49,7 @@ export type SyncConflictRow = {
   createdAt: string;
   resolvedAt: string | null;
   resolution: Record<string, unknown> | null;
+  localIntent: Record<string, unknown> | null;
 };
 
 function mapConflict(r: Record<string, unknown>): SyncConflictRow {
@@ -64,6 +65,7 @@ function mapConflict(r: Record<string, unknown>): SyncConflictRow {
     createdAt: (r.created_at as Date).toISOString(),
     resolvedAt: r.resolved_at ? (r.resolved_at as Date).toISOString() : null,
     resolution: r.resolution ? (r.resolution as Record<string, unknown>) : null,
+    localIntent: (r.local_intent as Record<string, unknown> | null) ?? null,
   };
 }
 
@@ -114,7 +116,7 @@ export async function listSyncConflicts(
   try {
     const r = await pool.query(
       `SELECT id, op_id, entity_type, entity_id, operation, base_version,
-              server_version, status, created_at, resolved_at, resolution
+              server_version, status, created_at, resolved_at, resolution, local_intent
          FROM sync_conflicts
         WHERE tenant_id = $1 ${openOnly ? "AND status = 'open'" : ""}
         ORDER BY created_at DESC
@@ -156,7 +158,7 @@ export async function resolveSyncConflict(
               )
         WHERE id = $2 AND tenant_id = $1 AND status = 'open'
         RETURNING id, op_id, entity_type, entity_id, operation, base_version,
-                  server_version, status, created_at, resolved_at, resolution`,
+                  server_version, status, created_at, resolved_at, resolution, local_intent`,
       [tenantId, conflictId, decision, byUserId, note ?? null],
     );
     return r.rowCount ? mapConflict(r.rows[0]) : null;

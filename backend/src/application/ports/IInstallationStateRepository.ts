@@ -44,9 +44,16 @@ export interface IInstallationStateRepository {
 
   /**
    * R13: resolve the bootstrap/primary tenant. Returns the tenant id of
-   * the first wizard that has been marked completed, or null if none has
-   * finished setup yet. Used by the install gate so it does not depend on
-   * a hardcoded/operator-supplied BOOTSTRAP_TENANT_ID.
+   * the sole completed wizard, or null if none has finished setup yet.
+   * Used by the install gate so it does not depend on a hardcoded/
+   * operator-supplied BOOTSTRAP_TENANT_ID.
+   *
+   * StoneERP is single-tenant-per-install: every database must contain at
+   * most one completed tenant. If more than one is found, implementations
+   * MUST throw MultipleTenantsDetectedError instead of returning an
+   * arbitrary one — silently picking a tenant here is how a fresh license
+   * activation ended up bound to a different, pre-existing company's data
+   * (forensic audit finding F01).
    */
   findAnyCompleted(): Promise<UUID | null>;
 

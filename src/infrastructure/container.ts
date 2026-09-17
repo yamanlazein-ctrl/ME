@@ -96,6 +96,7 @@ import {
   ReturnApiService,
   SettingsApiService,
   StatementApiService,
+  SyncConflictsApiService,
   VoucherApiService,
   FxApiService,
 } from "./api";
@@ -146,6 +147,7 @@ const statementApi = new StatementApiService(apiClient);
 const profitApi = new ProfitApiService(apiClient);
 const dashboardRepo = new ApiDashboardRepository(new DashboardApiService(apiClient));
 const notificationRepo = new ApiNotificationRepository(new NotificationApiService(apiClient));
+const syncConflictsApi = new SyncConflictsApiService(apiClient);
 const printJobRepo = new ApiPrintJobRepository(new PrintJobApiService(apiClient));
 const authRepo = new ApiAuthRepository(new AuthApiService(apiClient));
 // Header reference-rate widget only (⛔ display-only — never billing logic).
@@ -292,6 +294,10 @@ export const container = {
 
   notifications: {
     list: new ListNotificationsUseCase(notificationRepo),
+  },
+
+  syncConflicts: {
+    api: syncConflictsApi,
   },
 
   printJobs: {

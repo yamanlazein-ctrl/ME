@@ -5,6 +5,10 @@
  *
  * `features[]` + `limits{}` are the RUNTIME SOURCE OF TRUTH. `plan`/`edition`
  * are issuance-time inputs only and are never read for gating (§5.3).
+ *
+ * Device seat cap: use `resolveDeviceLimit` from `./ownership.js` so
+ * `limits.devices` and the denormalised `max_devices` column stay one SoT.
+ * Plane ownership (vendor vs customer org vs local ERP) lives in ownership.ts.
  */
 
 import type { FeatureId } from "./features.js";

@@ -30,6 +30,7 @@ export interface OrderData {
   fulfilledInvoiceId?: UUID | null;
   createdAt: Timestamp;
   createdBy: string;
+  version: number;
   cancelledAt?: Timestamp | null;
   cancelledBy?: string | null;
 }
@@ -49,6 +50,7 @@ export class Order implements OrderData {
   fulfilledInvoiceId: UUID | null;
   readonly createdAt: Timestamp;
   readonly createdBy: string;
+  readonly version: number;
   cancelledAt: Timestamp | null;
   cancelledBy: string | null;
 
@@ -67,6 +69,7 @@ export class Order implements OrderData {
     this.fulfilledInvoiceId = data.fulfilledInvoiceId ?? null;
     this.createdAt = data.createdAt;
     this.createdBy = data.createdBy;
+    this.version = data.version ?? 1;
     this.cancelledAt = data.cancelledAt ?? null;
     this.cancelledBy = data.cancelledBy ?? null;
   }
@@ -118,6 +121,7 @@ export class Order implements OrderData {
       fulfilledInvoiceId: null,
       createdAt: now,
       createdBy: props.createdBy ?? "system",
+      version: 1,
       cancelledAt: null,
       cancelledBy: null,
     } as OrderData);

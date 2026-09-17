@@ -21,7 +21,7 @@ function readRuntimeOverride(): string | null {
   }
 }
 
-export function getApiBaseUrl(emptyFallback: "" | "/api" = "/api"): "" | "/api" | string {
+export function getApiBaseUrl(emptyFallback: "" | "/api" = ""): "" | "/api" | string {
   if (isDesktopDeploy()) {
     const envValue = import.meta.env.VITE_API_BASE_URL as string | undefined;
     const fromEnv = normalize(envValue, emptyFallback);

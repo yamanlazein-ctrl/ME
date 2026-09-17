@@ -11,6 +11,7 @@ export interface ColorData {
   hex?: string | null;
   imageUrl?: string | null;
   createdAt: Timestamp;
+  version?: number;
 }
 
 export class Color implements ColorData {
@@ -22,6 +23,7 @@ export class Color implements ColorData {
   readonly hex: string | null;
   readonly imageUrl: string | null;
   readonly createdAt: Timestamp;
+  readonly version: number;
 
   private constructor(data: ColorData) {
     this.id = data.id;
@@ -32,6 +34,7 @@ export class Color implements ColorData {
     this.hex = data.hex ?? null;
     this.imageUrl = data.imageUrl ?? null;
     this.createdAt = data.createdAt;
+    this.version = data.version ?? 1;
   }
 
   static reconstitute(data: ColorData): Color {

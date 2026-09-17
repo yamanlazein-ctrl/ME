@@ -152,3 +152,36 @@ export async function archiveDocumentPdf(
     html,
   })) as ArchiveDocumentResult;
 }
+
+/** Desktop shell semver (`CARGO_PKG_VERSION`). Falls back for web builds. */
+export async function getDesktopAppVersion(fallback = "1.0.0"): Promise<string> {
+  if (!isTauri()) return fallback;
+  const invoke = await getInvoke();
+  const v = (await invoke("get_app_version")) as string;
+  return (v && String(v).trim()) || fallback;
+}
+
+export type DesktopUpdateCheckResult = {
+  available: boolean;
+  version?: string | null;
+  body?: string | null;
+  date?: string | null;
+};
+
+/** CDN/latest.json probe — only after license update gate allows it. */
+export async function checkDesktopUpdate(): Promise<DesktopUpdateCheckResult> {
+  if (!isTauri()) {
+    throw new Error("التحقق من التحديثات متاح في تطبيق سطح المكتب فقط");
+  }
+  const invoke = await getInvoke();
+  return (await invoke("check_desktop_update")) as DesktopUpdateCheckResult;
+}
+
+/** Download + install from CDN endpoint configured in tauri.conf.json. */
+export async function installDesktopUpdate(): Promise<void> {
+  if (!isTauri()) {
+    throw new Error("تثبيت التحديث متاح في تطبيق سطح المكتب فقط");
+  }
+  const invoke = await getInvoke();
+  await invoke("install_desktop_update");
+}

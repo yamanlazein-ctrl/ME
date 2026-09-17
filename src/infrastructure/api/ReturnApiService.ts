@@ -26,7 +26,7 @@ export class ReturnApiService {
     return res.data;
   }
 
-  async cancel(id: string): Promise<void> {
-    await this.client.post(`/api/returns/${id}/cancel`);
+  async cancel(id: string, expectedVersion: number): Promise<void> {
+    await this.client.post(`/api/returns/${id}/cancel`, { expectedVersion });
   }
 }

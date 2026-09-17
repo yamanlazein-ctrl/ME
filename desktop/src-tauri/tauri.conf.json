@@ -46,7 +46,7 @@
   },
   "bundle": {
     "active": true,
-    "targets": ["msi"],
+    "targets": ["msi", "nsis"],
     "windows": {
       "webviewInstallMode": { "type": "downloadBootstrapper" },
       "wix": {
@@ -55,6 +55,7 @@
       }
     },
     "icon": ["icons/icon.ico", "icons/icon.png"],
+    "createUpdaterArtifacts": true,
     "resources": {
       "resources/postgres": "postgres",
       "resources/node.exe": "node.exe",
@@ -62,6 +63,15 @@
       "resources/license-public.pem": "license-public.pem",
       "resources/ssr": "ssr",
       "resources/node_modules": "node_modules"
+    }
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "REPLACE_WITH_TAURI_UPDATER_PUBKEY",
+      "endpoints": ["https://updates.motardfabrics.com/desktop/latest.json"],
+      "windows": {
+        "installMode": "passive"
+      }
     }
   }
 }

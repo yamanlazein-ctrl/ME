@@ -12,6 +12,7 @@ export interface FabricData {
   imageUrl?: string | null;
   createdBy?: string | null;
   createdAt: Timestamp;
+  version?: number;
 }
 
 export class Fabric implements FabricData {
@@ -25,6 +26,7 @@ export class Fabric implements FabricData {
   readonly imageUrl: string | null;
   readonly createdBy: string | null;
   readonly createdAt: Timestamp;
+  readonly version: number;
 
   private constructor(data: FabricData) {
     this.id = data.id;
@@ -37,6 +39,7 @@ export class Fabric implements FabricData {
     this.imageUrl = data.imageUrl ?? null;
     this.createdBy = data.createdBy ?? null;
     this.createdAt = data.createdAt;
+    this.version = data.version ?? 1;
   }
 
   static reconstitute(data: FabricData): Fabric {

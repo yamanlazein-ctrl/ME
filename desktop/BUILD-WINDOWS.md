@@ -206,20 +206,20 @@ signtool sign /f certificate.pfx /p password /t http://timestamp.digicert.com Mo
 
 ## التحديث التلقائي (Auto-Update)
 
-> **⚠️ غير مُفعَّل حالياً.** `Cargo.toml` الحالي لا يتضمن تبعية `tauri-plugin-updater`، و`tauri.conf.json` لا يحتوي قسم `plugins`. الخطوات أدناه توضيحية لتفعيله **مستقبلاً** فقط — تتطلب أولاً إضافة `tauri-plugin-updater = "2"` إلى `[dependencies]` في `Cargo.toml` وتسجيله في `main.rs` عبر `.plugin(tauri_plugin_updater::Builder::new().build())`.
+مفعّل في الكود: `tauri-plugin-updater` + `bundle.createUpdaterArtifacts` + قسم `plugins.updater` في `tauri.conf.json`.
 
-لتفعيل التحديث التلقائي:
+بيانات العميل تبقى في `%LOCALAPPDATA%\motard-erp` (خارج مجلد التثبيت). ترقية MSI/NSIS لا تشغّل `wix-cleanup.wxs` (ذلك المسار فقط عند `REMOVE=ALL AND NOT UPGRADINGPRODUCTCODE AND MOTARD_WIPEDATA=1`). إعادة ضبط المصنع من داخل التطبيق منفصلة.
 
-1. استضف ملف `latest.json` على خادمك
-2. عدّل `tauri.conf.json`:
+قبل أول إصدار موقّع، ولّد المفتاح على جهاز البناء (لا يُحفظ المفتاح الخاص في git):
 
-```json
-{
-  "plugins": {
-    "updater": {
-      "active": true,
-      "endpoints": ["https://yourdomain.com/latest.json"]
-    }
-  }
-}
 ```
+npx @tauri-apps/cli signer generate --ci -w desktop/src-tauri/updater.key
+```
+
+انسخ الـpubkey المطبوع إلى `plugins.updater.pubkey`. ابنِ الحزمة ثم:
+
+```
+node desktop/scripts/write-latest-json.mjs --version 1.0.1 --url <URL-NSIS> --signature <ملف .sig> --out latest.json
+```
+
+انشر `latest.json` على `https://updates.motardfabrics.com/desktop/latest.json`. المثبّت المفضّل للتحديث هو NSIS؛ MSI يبقى للتثبيت الكامل الأول.

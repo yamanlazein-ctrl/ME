@@ -150,7 +150,10 @@ export class BaseHttpClient {
         signal: combinedSignal,
       };
 
-      if (body !== undefined && method !== "GET" && method !== "DELETE") {
+      // DELETE may carry a JSON body (expectedVersion for party cancel). Fetch
+      // and Express both accept it; dropping the body made every delete fail
+      // the concurrency contract.
+      if (body !== undefined && method !== "GET") {
         init.body = JSON.stringify(body);
       }
 

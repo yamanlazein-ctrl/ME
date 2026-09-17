@@ -13,6 +13,7 @@ import {
   addRoll,
   colorByCode,
   colorById,
+  colors,
   colorsOfFabric,
   updateColor,
   fabricById,
@@ -20,6 +21,7 @@ import {
   rollById,
   useInventory,
 } from "@/presentation/hooks/useInventory";
+import { resolveColorPick } from "@/domain/inventory/colorLookup";
 import { supplierById } from "@/presentation/hooks/useParties";
 import { currencySymbol } from "@/presentation/hooks/useCurrency";
 import type { Currency } from "@/domain/types";
@@ -329,14 +331,16 @@ function EntryInvoicePage() {
   };
   const pickExistingColorObj = (
     id: string,
-    c: { id: string; name: string; code: string; hex?: string | null; imageUrl?: string | null },
+    c: { id: string; fabricId: string; name: string; code: string; hex?: string | null; imageUrl?: string | null },
   ) => {
+    const line = lines.find((l) => l.id === id);
+    const r = resolveColorPick(c, line?.existingFabricId, colors);
     updateLine(id, {
-      existingColorId: c.id,
-      colorName: c.name,
-      colorCode: c.code,
-      colorHex: c.hex ?? undefined,
-      colorImageUrl: c.imageUrl ?? undefined,
+      existingColorId: r.existingColorId,
+      colorName: r.colorName,
+      colorCode: r.colorCode,
+      colorHex: r.hex,
+      colorImageUrl: r.imageUrl,
     });
   };
 
@@ -583,7 +587,12 @@ function EntryInvoicePage() {
             return;
           }
           colorId = boundId;
-        } else if (!colorId) {
+        } else {
+          if (colorId) {
+            const bound = colorById(colorId);
+            if (!bound || bound.fabricId !== fabricId) colorId = undefined;
+          }
+          if (!colorId) {
           const codeKey = l.colorCode.trim();
           // Fix C-11: fabricId is resolved above (existing or just
           // created) before we ever look up a color code — pass it so the
@@ -618,6 +627,7 @@ function EntryInvoicePage() {
               colorId = col.id;
               newColors += 1;
             }
+          }
           }
         }
         // ── Rename sync: typed name/code/hex ≠ stored → rename the color ──
@@ -767,12 +777,10 @@ function EntryInvoicePage() {
           shipping: Number(shipping) || 0,
           notes: advParts.join(" • "),
           lines: invLines,
-          // QA fix (Part 2): forward the (possibly updated) frozen FX rate so
-          // the backend re-captures base_total / base_paid and re-values the
-          // ledger legs with the same division rule used at creation time.
-          ...(currency === "USD"
-            ? {}
-            : { exchangeRate: Number(exchangeRate) > 0 ? Number(exchangeRate) : undefined }),
+          // Forward manual FX whenever entered — including USD (market reference
+          // rate). Base totals stay USD-native; the stored rate is still useful
+          // for print/reporting and for later SYP conversions.
+          ...(Number(exchangeRate) > 0 ? { exchangeRate: Number(exchangeRate) } : {}),
         },
       });
       if (!res.ok) {
@@ -829,11 +837,9 @@ function EntryInvoicePage() {
       notes: advParts.join(" • "),
       paid: paidAmount > 0 ? paidAmount : undefined,
       paymentMethod: paidAmount > 0 ? mapPaymentMethod(paymentMethod) : undefined,
-      // FX rule (frozen at creation). The container's use case forwards this
-      // to Postgres unchanged; the Zod schema on the backend accepts it.
-      ...(currency === "USD"
-        ? {}
-        : { exchangeRate: Number(exchangeRate) > 0 ? Number(exchangeRate) : undefined }),
+      // FX frozen at creation. Always forward when the user typed a rate —
+      // including USD invoices (reference market rate; base_* stay USD amounts).
+      ...(Number(exchangeRate) > 0 ? { exchangeRate: Number(exchangeRate) } : {}),
     } as unknown as Parameters<typeof create.mutateAsync>[0]);
 
     if (!res.ok) {
@@ -933,28 +939,18 @@ function EntryInvoicePage() {
               </Select>
             </HeaderField>
             <HeaderField label="سعر الصرف (ل.س / $)">
-              {currency === "USD" ? (
-                <Input
-                  value="1"
-                  readOnly
-                  disabled
-                  dir="ltr"
-                  className="!h-9 bg-muted/40 text-muted-foreground"
-                />
-              ) : (
-                <Input
-                  type="number"
-                  min={1}
-                  step="any"
-                  value={exchangeRate}
-                  onChange={(e) =>
-                    setExchangeRate(e.target.value === "" ? "" : Number(e.target.value))
-                  }
-                  placeholder="أدخل سعر الصرف يدوياً"
-                  dir="ltr"
-                  className="!h-9"
-                />
-              )}
+              <Input
+                type="number"
+                min={1}
+                step="any"
+                value={exchangeRate}
+                onChange={(e) =>
+                  setExchangeRate(e.target.value === "" ? "" : Number(e.target.value))
+                }
+                placeholder={isUSD ? "اختياري للدولار (سعر مرجعي)" : "أدخل سعر الصرف يدوياً"}
+                dir="ltr"
+                className="!h-9"
+              />
             </HeaderField>
             <HeaderField label="الدفع">
               <Select value={paymentMethod} onValueChange={(v) => setPaymentMethod(v)}>
