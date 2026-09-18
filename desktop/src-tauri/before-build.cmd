@@ -11,3 +11,18 @@ for /d %%D in ("resources\postgres\pgdata-template.bak*") do (
 )
 
 call "%~dp0..\build-frontend.cmd"
+if errorlevel 1 exit /b 1
+
+rem Packaging parity (no stale backend ships): rebuild the backend from
+rem source and mirror its exact runtime tree. Fails loudly when the
+rem portable node.exe runtime has not been staged.
+node "%~dp0..\scripts\stage-backend.mjs"
+if errorlevel 1 exit /b 1
+
+rem Packaging parity (FIX-PLAN 3.1 lesson): mirror the EXACT resolved SSR
+rem runtime deps from root node_modules — never `npm install` with caret
+rem ranges here (that once shipped a newer router-core than the inlined
+rem start-server-core expected: "matchedRoutes is not iterable" at customer
+rem runtime only). Fails the build loudly on any unresolvable external.
+node "%~dp0..\scripts\sync-ssr-deps.mjs"
+if errorlevel 1 exit /b 1

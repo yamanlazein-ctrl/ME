@@ -1,6 +1,6 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-use motard_fabrics_erp::desktop_runtime::{
+use motard_fabrics_erp::runtime::{
     boot_desktop_stack_with_progress, no_window_command, shutdown, BootConfig, DesktopStack,
 };
 use serde::{Deserialize, Serialize};
@@ -39,15 +39,17 @@ fn ensure_windows_autostart_run_key() {
 }
 
 fn main() {
-    // Step 0 (L-6 / D4-3): refuse to boot unless this machine+user can decrypt
-    // the device-binding blob. A copied/tampered install (different Windows user
-    // or PC) cannot decrypt it and must NOT start the bundled stack.
-    let installation_id = match motard_fabrics_erp::device_binding::ensure_device_binding() {
+    // Step 0 (Plan §2 — License ≠ Company ≠ Installation ≠ User): refuse to
+    // boot unless this machine+user can decrypt the device-binding blob. A
+    // copied/tampered install (different Windows user or PC) cannot decrypt
+    // it and must NOT start the bundled stack. Fresh installs mint a new
+    // installation identity here; company/user setup happens later in the ERP.
+    let installation_id = match motard_fabrics_erp::identity::ensure_fresh_installation() {
         Ok(id) => id,
         Err(e) => {
             eprintln!("FATAL: device binding failed ({:?}) — refusing to start.", e);
             let msg = match &e {
-                motard_fabrics_erp::device_binding::DeviceBindError::Tampered => {
+                motard_fabrics_erp::identity::DeviceBindError::Tampered => {
                     "تعذّر التحقق من ربط هذا الجهاز بالتثبيت.\n\n\
                      السبب الأكثر شيوعاً: تم نسخ مجلد البرنامج إلى جهاز أو حساب مستخدم مختلف \
                      عن الجهاز الذي جرى التثبيت عليه أصلاً.\n\n\
@@ -55,7 +57,7 @@ fn main() {
                      مع الدعم الفني."
                         .to_string()
                 }
-                motard_fabrics_erp::device_binding::DeviceBindError::Io(detail) => format!(
+                motard_fabrics_erp::identity::DeviceBindError::Io(detail) => format!(
                     "تعذّر إنشاء أو قراءة ملف ربط الجهاز (device-binding.dat).\n\n\
                      الخطأ: {}\n\n\
                      تأكد من:\n\
@@ -64,7 +66,7 @@ fn main() {
                     detail
                 ),
             };
-            motard_fabrics_erp::desktop_runtime::show_fatal_dialog(
+            motard_fabrics_erp::runtime::show_fatal_dialog(
                 "خطأ في ربط الجهاز — Motard ERP",
                 &msg,
             );
@@ -110,7 +112,7 @@ fn main() {
         Ok(a) => a,
         Err(e) => {
             eprintln!("FATAL: tauri builder failed: {}", e);
-            motard_fabrics_erp::desktop_runtime::show_fatal_dialog(
+            motard_fabrics_erp::runtime::show_fatal_dialog(
                 "خطأ في تشغيل التطبيق — Motard ERP",
                 &format!(
                     "تعذّر تهيئة إطار التطبيق.\n\n\
@@ -132,7 +134,7 @@ fn main() {
         Ok(d) => d,
         Err(e) => {
             eprintln!("FATAL: resource dir unavailable: {}", e);
-            motard_fabrics_erp::desktop_runtime::show_fatal_dialog(
+            motard_fabrics_erp::runtime::show_fatal_dialog(
                 "خطأ في ملفات التثبيت — Motard ERP",
                 &format!(
                     "تعذّر تحديد مجلد موارد التطبيق.\n\n\
@@ -152,7 +154,7 @@ fn main() {
         }
         Err(e) => {
             eprintln!("FATAL: BootConfig::for_app failed: {}", e);
-            motard_fabrics_erp::desktop_runtime::show_fatal_dialog(
+            motard_fabrics_erp::runtime::show_fatal_dialog(
                 "خطأ في إعداد بيانات التطبيق — Motard ERP",
                 &format!(
                     "تعذّر تحديد مجلد بيانات المستخدم (AppData\\Local\\motard-erp).\n\n\
@@ -387,14 +389,14 @@ async fn install_desktop_update(app: tauri::AppHandle) -> Result<(), String> {
 #[tauri::command]
 fn get_hub_url() -> Result<String, String> {
     let root = motard_fabrics_erp::app_data_dir()?;
-    Ok(motard_fabrics_erp::desktop_runtime::read_hub_url(&root).unwrap_or_default())
+    Ok(motard_fabrics_erp::runtime::read_hub_url(&root).unwrap_or_default())
 }
 
 /// Persist the central hub URL for outbox sync. Does not change the UI API base.
 #[tauri::command]
 fn set_hub_url(url: String) -> Result<String, String> {
     let root = motard_fabrics_erp::app_data_dir()?;
-    motard_fabrics_erp::desktop_runtime::write_hub_url(&root, &url)
+    motard_fabrics_erp::runtime::write_hub_url(&root, &url)
 }
 
 /// Queue a factory reset: next boot deletes pgdata + db-meta.json + hub session.
@@ -403,7 +405,7 @@ fn set_hub_url(url: String) -> Result<String, String> {
 #[tauri::command]
 fn request_factory_reset() -> Result<(), String> {
     let root = motard_fabrics_erp::app_data_dir()?;
-    motard_fabrics_erp::desktop_runtime::request_factory_reset(&root).map_err(|e| e.to_string())
+    motard_fabrics_erp::runtime::request_factory_reset(&root).map_err(|e| e.to_string())
 }
 
 fn get_primary_mac() -> Result<String, String> {

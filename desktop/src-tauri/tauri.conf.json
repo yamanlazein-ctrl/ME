@@ -41,7 +41,7 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob:; connect-src 'self' http://localhost:* http://127.0.0.1:* ws://localhost:* ws://127.0.0.1:* https://* wss://*"
+      "csp": "default-src 'self'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob:; connect-src 'self' http://127.0.0.1:* ws://127.0.0.1:*"
     }
   },
   "bundle": {
@@ -49,9 +49,13 @@
     "targets": ["msi", "nsis"],
     "windows": {
       "webviewInstallMode": { "type": "downloadBootstrapper" },
+      "nsis": {
+        "installerHooks": "./windows/hooks.nsh"
+      },
       "wix": {
         "language": ["ar-SA"],
-        "fragmentPaths": ["./wix-cleanup.wxs"]
+        "fragmentPaths": ["./wix-cleanup.wxs"],
+        "componentRefs": ["MotardRunKeyCleanup"]
       }
     },
     "icon": ["icons/icon.ico", "icons/icon.png"],
@@ -67,7 +71,7 @@
   },
   "plugins": {
     "updater": {
-      "pubkey": "REPLACE_WITH_TAURI_UPDATER_PUBKEY",
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDg0QzhCQTU2RDdDMzIzQTEKUldTaEk4UFhWcnJJaE1vNVJGMnlyWWlya2NtcVhXSVlqWStkNGNJa2J2cE1MNXdTMUFtOW5PNnAK",
       "endpoints": ["https://updates.motardfabrics.com/desktop/latest.json"],
       "windows": {
         "installMode": "passive"

@@ -1,29 +1,44 @@
-// D4-3 — Desktop runtime orchestration.
+// Stack — process lifecycle for the self-contained Windows Desktop build.
 //
-// This module is the heart of the "self-contained Windows Desktop" build. On a
-// client machine there is no PostgreSQL, no Node, and no operator. The Tauri
-// sidecar (this Rust code) must, with no manual steps:
+// This module owns WHAT runs (PostgreSQL + Node backend + SSR frontend,
+// in that order) while the sibling modules own the cross-cutting rules:
+//   - `stages`  — the explicit boot order + splash labels,
+//   - `error`   — one failure ⟹ one originating stage + one dialog,
+//   - `ports`   — dynamic DB-port management (never 5432 by default),
+//   - `health`  — bounded readiness gates with hard deadlines.
 //
-//   step 0  device-binding gate        (handled in main.rs before this runs)
+// The ERP business logic itself is untouched: this layer only prepares the
+// database directory, starts processes, injects env, waits for the backend's
+// OWN health signal, and shuts everything down on exit. No business logic
+// is forked, reimplemented, or duplicated here (Plan §1.1).
+//
+// Boot order (mirrors `stages::ALL`; DeviceBinding runs in main.rs first):
 //   step 1  provision a PostgreSQL data dir (copy baked template OR initdb+createdb)
 //   step 2  start postgres.exe (bundled under resources/postgres/bin)
 //   step 3  wait until the DB accepts TCP connections
 //   step 4  generate/load locally-encrypted secrets (DPAPI) for the backend
 //   step 5  start the Node backend (bundled node.exe + dist) with those secrets
 //           injected via env (JWT_SECRET, APP_MASTER_KEY, DATABASE_URL, ...)
-//   step 6  wait until /api/health/live returns 200
-//   step 7  (in main.rs) point the Tauri window at 127.0.0.1:<backend_port>
+//   step 6  start the SSR frontend server (parallel with backend init)
+//   step 7  wait until /api/health/live returns 200
+//   step 8  wait until /__health returns 200, then show the main window
 //   shutdown: stop the backend child and stop postgres (pg_ctl stop -m fast)
 //
-// All paths are configurable via `BootConfig` so a standalone probe binary can
-// exercise the exact same logic against the dev tree (system node + already
-// built backend) without a GUI.
+// Failure rule: the FIRST failing step shows ONE dialog naming the true
+// cause, cleans up everything already started, and returns a `BootFailure`
+// carrying the originating stage — downstream layers never get to report
+// their own noise (Plan §0.2).
 use std::fs;
-use std::io::{self, Read, Write};
+use std::io;
 use std::os::windows::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::time::{Duration, Instant};
+
+use super::error::BootFailure;
+use super::health::{check_boot_deadline, http_get_ok, wait_for, wait_tcp};
+use super::ports::{find_free_db_port, persist_db_port, resolve_db_port, sync_pg_conf_port};
+use super::stages::BootStage;
 
 use crate::db_meta::{
     bundled_pg_major, bundled_schema_journal_idx, evaluate_existing_cluster, stamp_fresh_cluster,
@@ -93,87 +108,7 @@ impl BootConfig {
     }
 }
 
-/// High, uncommon port range for the bundled PostgreSQL's default. Deliberately
-/// far from 5432 (PostgreSQL's universally-known standard port) and from other
-/// common service ranges.
-const DB_PORT_RANGE: std::ops::Range<u16> = 40000..60000;
-
-/// Structural fix for R-04/R-05 (see REMEDIATION_LOG.md): never default the
-/// bundled postgres to 5432. That is PostgreSQL's well-known standard port, so
-/// defaulting to it guarantees an eventual collision with *any* other
-/// PostgreSQL on the machine — a system-installed service, another vendor's
-/// bundled Postgres, a developer's local instance — on some fraction of
-/// customer machines, with zero way for a non-technical customer to
-/// understand or resolve a "port 5432 in use" dialog. Instead: pick a random
-/// port from a high, uncommon range ONCE on first launch, persist it next to
-/// pgdata/secrets.dat in the per-user app-data dir, and reuse the same value
-/// on every subsequent launch (stable DATABASE_URL, no per-boot churn). The
-/// dynamic busy-port fallback in `boot_desktop_stack` (`find_free_db_port`)
-/// remains as a second safety net for the rare case where even this saved
-/// port is occupied on a given boot.
-fn db_port_path(app_data_root: &Path) -> PathBuf {
-    app_data_root.join("db-port.txt")
-}
-
-fn resolve_db_port(app_data_root: &Path) -> u16 {
-    let path = db_port_path(app_data_root);
-    if let Ok(text) = fs::read_to_string(&path) {
-        if let Ok(port) = text.trim().parse::<u16>() {
-            if DB_PORT_RANGE.contains(&port) {
-                return port;
-            }
-        }
-    }
-    use rand::Rng;
-    let port = rand::rngs::OsRng.gen_range(DB_PORT_RANGE);
-    persist_db_port(app_data_root, port);
-    port
-}
-
-/// Persist the live DB port whenever boot falls back to a free port so the
-/// next launch reuses the same value (stable DATABASE_URL / postgresql.conf).
-fn persist_db_port(app_data_root: &Path, port: u16) {
-    let _ = fs::create_dir_all(app_data_root);
-    if let Err(e) = fs::write(db_port_path(app_data_root), port.to_string()) {
-        log(&format!(
-            "warning: could not persist db-port.txt ({port}): {e}"
-        ));
-    }
-}
-
-#[cfg(test)]
-mod db_port_tests {
-    use super::*;
-
-    #[test]
-    fn resolve_db_port_never_returns_5432_and_persists_across_calls() {
-        let dir = std::env::temp_dir().join(format!(
-            "motard-erp-dbport-test-{}",
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_nanos()
-        ));
-        let _ = fs::remove_dir_all(&dir);
-
-        let first = resolve_db_port(&dir);
-        assert!(
-            DB_PORT_RANGE.contains(&first),
-            "port {} outside the intended high/uncommon range",
-            first
-        );
-        assert_ne!(first, 5432, "must never default to the standard PostgreSQL port");
-
-        // Second call must reuse the SAME persisted port, not roll a new one.
-        let second = resolve_db_port(&dir);
-        assert_eq!(first, second, "port must be stable across launches");
-
-        let saved = fs::read_to_string(dir.join("db-port.txt")).unwrap();
-        assert_eq!(saved.trim().parse::<u16>().unwrap(), first);
-
-        let _ = fs::remove_dir_all(&dir);
-    }
-}
+// ── Port management lives in `super::ports` (never default to 5432).
 
 pub struct DesktopStack {
     pub resources_root: PathBuf,
@@ -238,18 +173,9 @@ pub fn no_window_command(program: impl AsRef<std::ffi::OsStr>) -> Command {
     cmd
 }
 
-const BOOT_DEADLINE: Duration = Duration::from_secs(300);
-const FACTORY_RESET_FLAG: &str = "factory-reset.requested";
+// (Boot deadline accounting lives in `super::health`.)
 
-fn check_boot_deadline(started: Instant) -> io::Result<()> {
-    if started.elapsed() > BOOT_DEADLINE {
-        return Err(io::Error::new(
-            io::ErrorKind::TimedOut,
-            "تجاوز إقلاع النظام المهلة القصوى (300 ثانية)",
-        ));
-    }
-    Ok(())
-}
+const FACTORY_RESET_FLAG: &str = "factory-reset.requested";
 
 #[derive(Debug, PartialEq, Eq)]
 enum PidLock {
@@ -488,51 +414,7 @@ fn ensure_pg_subdirs(pgdata: &Path) -> io::Result<()> {
     Ok(())
 }
 
-/// pg_ctl's `-w` readiness probe reads the port from postgresql.conf (NOT from
-/// the `-o "-p ..."` we pass to postgres). If the conf's port ever disagrees
-/// with the port postgres actually listens on, pg_ctl waits the full timeout
-/// and reports failure even though the server is up. So after provisioning we
-/// force the conf's port to the port we will pass at start time. Idempotent.
-///
-/// initdb ships `#port = 5432` (commented). Skipping commented lines left the
-/// conf without an active `port = N`, so pg_ctl probed 5432 while `-o -p`
-/// listened elsewhere — a full 60s false failure. We therefore uncomment /
-/// replace any port directive, or append one when none exists.
-fn sync_pg_conf_port(pgdata: &Path, db_port: u16) -> io::Result<()> {
-    let conf = pgdata.join("postgresql.conf");
-    let text = fs::read_to_string(&conf)?;
-    let wanted = format!("port = {}", db_port);
-    let mut replaced = false;
-    let mut lines: Vec<String> = text
-        .lines()
-        .map(|line| {
-            let trimmed = line.trim_start();
-            let directive = trimmed.strip_prefix('#').unwrap_or(trimmed).trim_start();
-            if !replaced && directive.starts_with("port") && directive.contains('=') {
-                // Match `port =` / `#port =` only — not unrelated `*_port` keys.
-                let rest = directive.trim_start_matches("port").trim_start();
-                if rest.starts_with('=') {
-                    replaced = true;
-                    return wanted.clone();
-                }
-            }
-            line.to_string()
-        })
-        .collect();
-    if !replaced {
-        lines.push(wanted.clone());
-        replaced = true;
-    }
-    if replaced {
-        let mut out = lines.join("\n");
-        if !out.ends_with('\n') {
-            out.push('\n');
-        }
-        fs::write(&conf, out)?;
-        log(&format!("postgresql.conf port synced to {}", db_port));
-    }
-    Ok(())
-}
+// (postgresql.conf port sync lives in `super::ports::sync_pg_conf_port`.)
 
 /// Runtime-critical bundled files. If any of these is missing at boot the stack
 /// cannot start. The check is cheap (a handful of stat()s) and turns a silent,
@@ -783,8 +665,11 @@ fn spawn_ssr(cfg: &BootConfig) -> io::Result<HiddenChild> {
 }
 
 // ── Public entry point ──────────────────────────────────────────────────────
+// Order is `stages::ALL` made executable: each step reports its stage label,
+// and each failure returns a `BootFailure` naming the originating stage, so a
+// failure can never surface as downstream noise (Plan §0.2).
 /// Boot with no progress reporting (probes, tests).
-pub fn boot_desktop_stack(cfg: &BootConfig) -> io::Result<DesktopStack> {
+pub fn boot_desktop_stack(cfg: &BootConfig) -> Result<DesktopStack, BootFailure> {
     boot_desktop_stack_with_progress(cfg, &|_| {})
 }
 
@@ -794,7 +679,7 @@ pub fn boot_desktop_stack(cfg: &BootConfig) -> io::Result<DesktopStack> {
 pub fn boot_desktop_stack_with_progress(
     cfg: &BootConfig,
     progress: &dyn Fn(&str),
-) -> io::Result<DesktopStack> {
+) -> Result<DesktopStack, BootFailure> {
     let boot_started = Instant::now();
     // Never fail to boot merely because something else already holds the
     // default DB port (a system-installed PostgreSQL service, an orphaned
@@ -810,7 +695,7 @@ pub fn boot_desktop_stack_with_progress(
         persist_db_port(&cfg.app_data_root, cfg.db_port);
     }
 
-    progress("فحص ملفات التشغيل…");
+    progress(BootStage::Preflight.label());
     // Step 0: pre-flight — verify every runtime-critical bundled file exists on
     // disk. If an antivirus quarantined one of them post-install (a documented
     // pattern for unsigned postgres binaries), the user gets a clear Arabic
@@ -824,14 +709,16 @@ pub fn boot_desktop_stack_with_progress(
             list
         );
         show_fatal_dialog("خطأ في ملفات التشغيل — Motard ERP", &msg);
-        return Err(io::Error::new(
-            io::ErrorKind::NotFound,
+        return Err(BootFailure::new(
+            BootStage::Preflight,
+            "preflight-missing-files",
             format!("pre-flight: missing bundled files: {}", missing.join(", ")),
         ));
     }
-    check_boot_deadline(boot_started)?;
+    check_boot_deadline(boot_started)
+        .map_err(|e| BootFailure::new(BootStage::Preflight, "boot-deadline", e.to_string()))?;
 
-    progress("تجهيز قاعدة البيانات المحلية…");
+    progress(BootStage::FactoryReset.label());
     if let Err(e) = apply_requested_factory_reset(&cfg) {
         let msg = format!(
             "تعذّر تنفيذ إعادة الضبط المصنعي لمجلد البيانات المحلية.\n\n\
@@ -840,8 +727,13 @@ pub fn boot_desktop_stack_with_progress(
             e
         );
         show_fatal_dialog("خطأ في إعادة الضبط المصنعي — Motard ERP", &msg);
-        return Err(e);
+        return Err(BootFailure::new(
+            BootStage::FactoryReset,
+            "factory-reset",
+            e.to_string(),
+        ));
     }
+    progress(BootStage::ProvisionDatabase.label());
     let pgdata = match ensure_pgdata(&cfg) {        Ok(p) => p,
         Err(e) => {
             let msg = format!(
@@ -856,10 +748,15 @@ pub fn boot_desktop_stack_with_progress(
                 e
             );
             show_fatal_dialog("خطأ في تجهيز قاعدة البيانات — Motard ERP", &msg);
-            return Err(e);
+            return Err(BootFailure::new(
+                BootStage::ProvisionDatabase,
+                "provision-db",
+                e.to_string(),
+            ));
         }
     };
-    check_boot_deadline(boot_started)?;
+    check_boot_deadline(boot_started)
+        .map_err(|e| BootFailure::new(BootStage::ProvisionDatabase, "boot-deadline", e.to_string()))?;
     // P2-6: re-check immediately before bind to shrink the TOCTOU window.
     let resolved_again = find_free_db_port(cfg.db_port);
     if resolved_again != cfg.db_port {
@@ -882,9 +779,13 @@ pub fn boot_desktop_stack_with_progress(
             e
         );
         show_fatal_dialog("خطأ في إعدادات قاعدة البيانات — Motard ERP", &msg);
-        return Err(e);
+        return Err(BootFailure::new(
+            BootStage::SyncDbPort,
+            "sync-db-port",
+            e.to_string(),
+        ));
     }
-    progress("تشغيل قاعدة البيانات…");
+    progress(BootStage::StartDatabase.label());
     if let Err(e) = start_postgres(&cfg.resources_root, &pgdata, cfg.db_port) {
         let msg = format!(
             "تعذّر تشغيل قاعدة البيانات المحلية (PostgreSQL).\n\n\
@@ -902,10 +803,16 @@ pub fn boot_desktop_stack_with_progress(
             pgdata.display()
         );
         show_fatal_dialog("خطأ في تشغيل قاعدة البيانات — Motard ERP", &msg);
-        return Err(e);
+        return Err(BootFailure::new(
+            BootStage::StartDatabase,
+            "pg_ctl-start",
+            e.to_string(),
+        ));
     }
-    check_boot_deadline(boot_started)?;
+    check_boot_deadline(boot_started)
+        .map_err(|e| BootFailure::new(BootStage::StartDatabase, "boot-deadline", e.to_string()))?;
 
+    progress(BootStage::LoadSecrets.label());
     let store = match secret_store::load_or_generate() {
         Ok(s) => s,
         Err(e) => {
@@ -926,13 +833,14 @@ pub fn boot_desktop_stack_with_progress(
                 e
             );
             show_fatal_dialog("خطأ في ملف الأسرار — Motard ERP", &msg);
-            return Err(io::Error::new(
-                io::ErrorKind::PermissionDenied,
+            return Err(BootFailure::new(
+                BootStage::LoadSecrets,
+                "load-secrets",
                 format!("secret_store: {}", e),
             ));
         }
     };
-    progress("تشغيل محرّك النظام…");
+    progress(BootStage::StartBackend.label());
     let backend = match spawn_backend(&cfg, &store) {
         Ok(b) => {
             // node.exe still opens its own console despite CREATE_NO_WINDOW +
@@ -955,7 +863,11 @@ pub fn boot_desktop_stack_with_progress(
                 cfg.node_exe.display()
             );
             show_fatal_dialog("خطأ في تشغيل محرّك النظام — Motard ERP", &msg);
-            return Err(e);
+            return Err(BootFailure::new(
+                BootStage::StartBackend,
+                "spawn-backend",
+                e.to_string(),
+            ));
         }
     };
 
@@ -966,7 +878,7 @@ pub fn boot_desktop_stack_with_progress(
     // critical path. Ordering is still guaranteed: Step 7 waits for the
     // backend first, Step 8 waits for SSR after, so the first SSR paint can
     // reach a live API exactly as before.
-    progress("تشغيل واجهة العرض…");
+    progress(BootStage::StartFrontend.label());
     let ssr = match spawn_ssr(&cfg) {
         Ok(s) => {
             crate::hidden_process::hide_stray_console_async(s.id());
@@ -983,12 +895,16 @@ pub fn boot_desktop_stack_with_progress(
                 e
             );
             show_fatal_dialog("خطأ في تشغيل واجهة العرض — Motard ERP", &msg);
-            return Err(e);
+            return Err(BootFailure::new(
+                BootStage::StartFrontend,
+                "spawn-ssr",
+                e.to_string(),
+            ));
         }
     };
 
     // Step 7: wait for the backend to report live.
-    progress("انتظار محرّك النظام…");
+    progress(BootStage::WaitBackend.label());
     let live = wait_for(
         || http_get_ok("127.0.0.1", cfg.backend_port, "/api/health/live"),
         Duration::from_secs(60),
@@ -1005,12 +921,13 @@ pub fn boot_desktop_stack_with_progress(
             cfg.backend_port
         );
         show_fatal_dialog("خطأ: محرّك النظام لم يستجب — Motard ERP", &msg);
-        return Err(io::Error::new(
-            io::ErrorKind::Other,
+        return Err(BootFailure::new(
+            BootStage::WaitBackend,
+            "backend-not-live",
             "backend did not become healthy (/api/health/live)",
         ));
     }
-    log("desktop stack is UP (postgres + backend)");
+    super::log("desktop stack is UP (postgres + backend)");
 
     // Step 8 (already running, see Step 6): wait for the SSR frontend to
     // answer on its LIGHTWEIGHT readiness probe. Polling "/" here was the
@@ -1019,7 +936,7 @@ pub fn boot_desktop_stack_with_progress(
     // timeout fired while the server was actually fine — then the fatal path
     // below orphaned the backend on 8080 and EVERY later boot failed too.
     // "/__health" (serve.mjs) answers from the node event loop with no render.
-    progress("انتظار واجهة العرض…");
+    progress(BootStage::WaitFrontend.label());
     let ssr_live = wait_for(
         || http_get_ok("127.0.0.1", SSR_PORT, "/__health"),
         Duration::from_secs(120),
@@ -1034,13 +951,15 @@ pub fn boot_desktop_stack_with_progress(
         let msg = "بدأت واجهة العرض لكنها لم تستجب خلال المهلة المتوقَّعة (120 ثانية).\n\n\
                      أعد فتح البرنامج مرة أخرى، وإن تكررت المشكلة تواصل مع الدعم الفني.";
         show_fatal_dialog("خطأ: واجهة العرض لم تستجب — Motard ERP", msg);
-        return Err(io::Error::new(
-            io::ErrorKind::Other,
+        return Err(BootFailure::new(
+            BootStage::WaitFrontend,
+            "ssr-not-ready",
             "SSR frontend did not become healthy (http://127.0.0.1:4173/)",
         ));
     }
-    check_boot_deadline(boot_started)?;
-    log("SSR frontend is UP");
+    check_boot_deadline(boot_started)
+        .map_err(|e| BootFailure::new(BootStage::WaitFrontend, "boot-deadline", e.to_string()))?;
+    super::log("SSR frontend is UP");
 
     Ok(DesktopStack {
         resources_root: cfg.resources_root.clone(),
@@ -1076,100 +995,16 @@ fn stop_postgres(resources_root: &Path, pgdata: &Path) -> io::Result<()> {
         .map(|_| ())
 }
 
-/// Return `preferred` if free, otherwise an OS-assigned free port.
-///
-/// Root cause this closes (see REMEDIATION_LOG.md R-04): `db_port` was
-/// hardcoded to 5432 with no conflict handling, so any other program already
-/// bound to it (a system-installed PostgreSQL service, an orphaned instance
-/// of this same app from a previous hard-kill) made `pg_ctl start` fail
-/// outright. The bundled postgres is purely internal — the Node backend we
-/// spawn ourselves is the only thing that ever needs `DATABASE_URL`, nothing
-/// external is hardcoded to 5432 — so it is always safe to move it. (Do NOT
-/// apply this same pattern to `backend_port`: the prebuilt SSR/frontend
-/// bundle has that port baked in at build time and cannot discover a moved
-/// one at runtime.)
-///
-/// Small TOCTOU race (something else could grab the port between this check
-/// and postgres's own bind) is accepted: postgres/pg_ctl will simply fail
-/// loudly and the existing fatal-dialog path in `boot_desktop_stack` covers
-/// it, same as before this fix existed.
-fn find_free_db_port(preferred: u16) -> u16 {
-    use rand::Rng;
-    use std::net::TcpListener;
-    if TcpListener::bind(("127.0.0.1", preferred)).is_ok() {
-        return preferred;
-    }
-    // Stay inside the desktop DB port range — OS ephemeral ports from
-    // bind(..., 0) can land outside 40000..59999 and break db-port.txt reuse.
-    for _ in 0..64 {
-        let candidate = rand::rngs::OsRng.gen_range(DB_PORT_RANGE);
-        if candidate != preferred && TcpListener::bind(("127.0.0.1", candidate)).is_ok() {
-            return candidate;
-        }
-    }
-    preferred
-}
+// Port fallback lives in `super::ports::find_free_db_port` (Plan §9.2).
 
 // ── Small network helpers ───────────────────────────────────────────────────
-fn wait_tcp(host: &str, port: u16, timeout: Duration) -> io::Result<()> {
-    let addr: std::net::SocketAddr = format!("{}:{}", host, port)
-        .parse()
-        .map_err(|e| io::Error::new(io::ErrorKind::InvalidInput, e))?;
-    let start = Instant::now();
-    while start.elapsed() < timeout {
-        if std::net::TcpStream::connect_timeout(&addr, Duration::from_millis(500)).is_ok() {
-            return Ok(());
-        }
-        std::thread::sleep(Duration::from_millis(250));
-    }
-    Err(io::Error::new(
-        io::ErrorKind::TimedOut,
-        format!("انتهت المهلة بانتظار المنفذ {host}:{port} ({timeout:?})"),
-    ))
-}
+// (TCP/HTTP readiness gates live in `super::health`.)
 
-fn http_get_ok(host: &str, port: u16, path: &str) -> bool {
-    use std::net::TcpStream;
-    let addr: std::net::SocketAddr = format!("{}:{}", host, port).parse().unwrap();
-    let timeout = Duration::from_secs(2);
-    let mut stream = match TcpStream::connect_timeout(&addr, timeout) {
-        Ok(s) => s,
-        Err(_) => return false,
-    };
-    stream
-        .set_read_timeout(Some(timeout))
-        .ok();
-    let req = format!(
-        "GET {} HTTP/1.1\r\nHost: {}\r\nConnection: close\r\n\r\n",
-        path, host
-    );
-    if stream.write_all(req.as_bytes()).is_err() {
-        return false;
-    }
-    let mut buf = [0u8; 1024];
-    match stream.read(&mut buf) {
-        Ok(n) if n > 0 => {
-            let resp = String::from_utf8_lossy(&buf[..n]);
-            resp.contains("HTTP/1.1 2")
-        }
-        _ => false,
-    }
-}
+// (HTTP readiness probe lives in `super::health::http_get_ok`.)
 
-fn wait_for<F: Fn() -> bool>(pred: F, timeout: Duration) -> bool {
-    let start = Instant::now();
-    while start.elapsed() < timeout {
-        if pred() {
-            return true;
-        }
-        std::thread::sleep(Duration::from_millis(300));
-    }
-    false
-}
+// (Bounded readiness wait lives in `super::health::wait_for`.)
 
-fn log(msg: &str) {
-    eprintln!("[desktop-runtime] {}", msg);
-}
+use super::log;
 
 pub fn hub_json_path(app_data_root: &Path) -> PathBuf {
     app_data_root.join("hub.json")
@@ -1250,13 +1085,6 @@ mod boot_lifecycle_tests {
     fn classify_garbage_pid_as_stale() {
         let lock = classify_postmaster_pid("not-a-pid", |_| true);
         assert_eq!(lock, PidLock::Stale { pid: 0 });
-    }
-
-    #[test]
-    fn wait_tcp_times_out_with_error() {
-        let err = wait_tcp("127.0.0.1", 1, Duration::from_millis(200)).unwrap_err();
-        assert_eq!(err.kind(), io::ErrorKind::TimedOut);
-        assert!(err.to_string().contains("انتهت المهلة"));
     }
 
     #[test]

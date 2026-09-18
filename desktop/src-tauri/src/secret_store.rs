@@ -148,3 +148,37 @@ fn base64_encode(bytes: &[u8]) -> String {
     use base64::Engine;
     base64::engine::general_purpose::STANDARD.encode(bytes)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// DPAPI roundtrip on THIS machine/user (Plan §2 step-0 gate depends on
+    /// it: a copied install fails decrypt and refuses boot). Touches no
+    /// files — pure encrypt/decrypt of in-memory bytes.
+    #[test]
+    fn dpapi_roundtrip_current_user() {
+        let plain = b"motard-erp device-binding probe";
+        let cipher = dpapi_encrypt(plain).expect("DPAPI encrypt must succeed");
+        assert_ne!(cipher, plain.to_vec(), "ciphertext must differ from plaintext");
+        let back = dpapi_decrypt(&cipher).expect("DPAPI decrypt must succeed");
+        assert_eq!(back, plain);
+    }
+
+    #[test]
+    fn dpapi_rejects_tampered_blob() {
+        let mut cipher = dpapi_encrypt(b"hello").expect("encrypt");
+        let last = cipher.len() - 1;
+        cipher[last] ^= 0xff;
+        assert!(dpapi_decrypt(&cipher).is_err(), "tampered blob must not decrypt");
+    }
+
+    #[test]
+    fn generated_store_has_both_secrets() {
+        // load_or_generate touches the REAL %LOCALAPPDATA% store: only assert
+        // shape, never delete or overwrite the operator's file.
+        let store = load_or_generate().expect("load_or_generate must succeed");
+        assert!(!store.jwt_secret.is_empty());
+        assert!(!store.app_master_key.is_empty());
+    }
+}
