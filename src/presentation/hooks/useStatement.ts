@@ -3,7 +3,7 @@ import { container } from "@/infrastructure/container";
 import { toast } from "sonner";
 import type { Currency } from "@/domain/types";
 import type { PartyKind } from "@/domain/entities/Party";
-import type { StatementFilter } from "@/contracts/statement";
+import type { StatementFilter, SettleInvoicesInput } from "@/contracts/statement";
 
 /**
  * Party statement (كشف حساب) hooks.
@@ -44,6 +44,17 @@ export function useStatement(
   });
 }
 
+function invalidateAfterSettlement(qc: ReturnType<typeof useQueryClient>) {
+  qc.invalidateQueries({ queryKey: KEYS.root });
+  qc.invalidateQueries({ queryKey: ["ledger"] });
+  qc.invalidateQueries({ queryKey: ["parties"] });
+  qc.invalidateQueries({ queryKey: ["dashboard"] });
+  qc.invalidateQueries({ queryKey: ["invoices"] });
+  qc.invalidateQueries({ queryKey: ["vouchers"] });
+  qc.invalidateQueries({ queryKey: ["returns"] });
+  qc.invalidateQueries({ queryKey: ["cashbox"] });
+}
+
 export function useSettleParty(partyId: string | undefined, kind: PartyKind) {
   const qc = useQueryClient();
   return useMutation({
@@ -59,13 +70,26 @@ export function useSettleParty(partyId: string | undefined, kind: PartyKind) {
     onSuccess: (res) => {
       if (res.ok) {
         toast.success(`تمت التسوية (${res.referenceNumber})`);
-        qc.invalidateQueries({ queryKey: KEYS.root });
-        qc.invalidateQueries({ queryKey: ["ledger"] });
-        qc.invalidateQueries({ queryKey: ["parties"] });
-        qc.invalidateQueries({ queryKey: ["dashboard"] });
+        invalidateAfterSettlement(qc);
       } else {
         toast.error(res.error);
       }
+    },
+  });
+}
+
+/** Multi-invoice cash settlement (سند تسوية مجمّع). */
+export function useSettleInvoices(partyId: string | undefined, kind: PartyKind) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: SettleInvoicesInput) =>
+      container.statement.api.settleInvoices(partyId ?? "", kind, input),
+    onSuccess: (res) => {
+      toast.success(`تمت تسوية الحساب (${res.batchNumber})`);
+      invalidateAfterSettlement(qc);
+    },
+    onError: (e: unknown) => {
+      toast.error(e instanceof Error ? e.message : "فشلت تسوية الحساب");
     },
   });
 }

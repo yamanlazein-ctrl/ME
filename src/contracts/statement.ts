@@ -87,6 +87,49 @@ export interface SettleInput {
   notesInternal?: string;
 }
 
+/** One line in a multi-invoice cash settlement batch. */
+export interface SettleInvoicesAllocationDTO {
+  invoiceId: UUID;
+  invoiceNumber: string;
+  invoiceCurrency: Currency | string;
+  remainingBefore: number;
+  amountInSettlementCurrency: number;
+  amountInInvoiceCurrency: number;
+  remainingAfter: number;
+  voucherId: UUID;
+  voucherNumber: string;
+}
+
+export interface SettleInvoicesInput {
+  invoiceIds: UUID[];
+  amountPaid: number;
+  currency: Currency;
+  exchangeRate?: number;
+  date?: string;
+  method?: "cash" | "transfer" | "check" | "card";
+  notesInternal?: string;
+  notesPrint?: string;
+}
+
+export interface SettleInvoicesResponse {
+  batchNumber: string;
+  currency: Currency | string;
+  exchangeRate: number | null;
+  amountPaid: number;
+  totalDueInSettlement: number;
+  totalAllocated: number;
+  date: string;
+  method: string;
+  allocations: SettleInvoicesAllocationDTO[];
+  vouchers: Array<{
+    id: UUID;
+    number: string;
+    amount: number;
+    currency: string;
+    invoiceId?: UUID;
+  }>;
+}
+
 export type GetCustomerStatementResponse = PartyStatementDTO;
 export type GetCustomerStatementError = ApiError;
 export const GetCustomerStatementEndpoint: EndpointMeta = {
@@ -117,4 +160,18 @@ export const SettleSupplierEndpoint: EndpointMeta = {
   method: "POST",
   auth: { required: true, roles: ["admin", "accountant"] },
   description: "Zero a supplier's balance via a settlement entry",
+};
+
+export const SettleCustomerInvoicesEndpoint: EndpointMeta = {
+  path: "/api/customers/:id/statement/settle-invoices",
+  method: "POST",
+  auth: { required: true, roles: ["admin", "accountant"] },
+  description: "Cash-settle selected open invoices in one settlement batch",
+};
+
+export const SettleSupplierInvoicesEndpoint: EndpointMeta = {
+  path: "/api/suppliers/:id/statement/settle-invoices",
+  method: "POST",
+  auth: { required: true, roles: ["admin", "accountant"] },
+  description: "Cash-settle selected open invoices in one settlement batch",
 };

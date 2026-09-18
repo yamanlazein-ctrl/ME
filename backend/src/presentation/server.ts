@@ -315,6 +315,8 @@ registerStatementRoutes(
   rbac(["admin", "accountant"]),
   rbac(["admin", "accountant", "warehouse", "viewer"]),
   container.syncOutboxRepo,
+  container.voucherRepo,
+  container.auditRepo,
 );
 registerReturnRoutes(
   apiRouter,

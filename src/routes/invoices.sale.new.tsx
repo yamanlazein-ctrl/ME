@@ -5,8 +5,9 @@ import { AppShell } from "@/components/layout/AppShell";
 import { InvoiceHeader } from "@/components/invoices/InvoiceHeader";
 import { ExitWithoutSavingButton } from "@/components/invoices/ExitWithoutSaving";
 import { PartyCombobox } from "@/components/vouchers/PartyCombobox";
-import { colorById, colors, fabricById, fabricByName, rollById, useInventory } from "@/presentation/hooks/useInventory";
-import { resolveColorPick } from "@/domain/inventory/colorLookup";
+import { colorById, colorsOfFabric, fabricById, fabricByName, rollById, rollsOfColor, useInventory } from "@/presentation/hooks/useInventory";
+import { normalizeInventoryName } from "@/domain/inventory/normalizeInventoryName";
+import { showError } from "@/components/common/toast-helpers";
 import { addCustomer, customers, useParties } from "@/presentation/hooks/useParties";
 import { currencySymbol } from "@/presentation/hooks/useCurrency";
 import type { Currency } from "@/domain/types";
@@ -283,12 +284,17 @@ function SaleInvoicePage() {
       if (!edit && roll && l.quantityKg > roll.remainingKg) {
         return setError(`الكمية في الصبغة #${roll.rollNo} تتجاوز المتاح (${roll.remainingKg} كغ).`);
       }
-      if ((l.pieces || 1) < 1 || !Number.isInteger(l.pieces || 1)) {
-        return setError("عدد الأثواب يجب أن يكون عدداً صحيحاً ≥ 1.");
+      if ((l.pieces ?? 1) < 0 || !Number.isInteger(l.pieces ?? 1)) {
+        return setError("عدد الأثواب يجب أن يكون عدداً صحيحاً ≥ 0.");
       }
-      if (!edit && roll && (l.pieces || 1) > (roll.remainingPieces ?? roll.pieces ?? 1)) {
+      const rollPiecesAvail = roll
+        ? (roll.remainingPieces ?? roll.pieces ?? 1)
+        : 0;
+      // Default UI pieces=1 must not block remnant stock (remainingPieces === 0).
+      const requestedPieces = l.pieces === 0 ? 0 : (l.pieces ?? 1);
+      if (!edit && roll && requestedPieces > rollPiecesAvail) {
         return setError(
-          `الأثواب في الصبغة #${roll.rollNo} تتجاوز المتاح (${roll.remainingPieces ?? roll.pieces ?? 1} أثواب).`,
+          `الأثواب في الصبغة #${roll.rollNo} تتجاوز المتاح (${rollPiecesAvail} أثواب).`,
         );
       }
     }
@@ -544,12 +550,35 @@ function SaleInvoicePage() {
                 onPickColor={(cid) => {
                   const c = colorById(cid);
                   if (!c) return;
-                  const r = resolveColorPick(c, l.fabricId || undefined, colors);
+                  // Sale must bind a real colour of THIS fabric — never a
+                  // cross-fabric name copy with empty colorId (that blocked save).
+                  if (l.fabricId && c.fabricId !== l.fabricId) {
+                    const local = colorsOfFabric(l.fabricId).find(
+                      (x) =>
+                        normalizeInventoryName(x.name) ===
+                        normalizeInventoryName(c.name),
+                    );
+                    if (!local) {
+                      showError(
+                        `اللون «${c.name}» ليس من قماش «${l.fabricName || "المختار"}». اختر لوناً من ألوان هذا القماش.`,
+                      );
+                      return;
+                    }
+                    const rolls = rollsOfColor(local.id).filter((r) => r.remainingKg > 0);
+                    updateLine(l.id, {
+                      colorId: local.id,
+                      colorName: local.name,
+                      colorCode: local.code ?? "",
+                      rollId: rolls.length === 1 ? rolls[0].id : "",
+                    });
+                    return;
+                  }
+                  const rolls = rollsOfColor(c.id).filter((r) => r.remainingKg > 0);
                   updateLine(l.id, {
-                    colorId: r.existingColorId ?? "",
-                    colorName: r.colorName,
-                    colorCode: r.colorCode,
-                    rollId: "",
+                    colorId: c.id,
+                    colorName: c.name,
+                    colorCode: c.code ?? "",
+                    rollId: rolls.length === 1 ? rolls[0].id : "",
                   });
                 }}
                 onAppend={appendRowAndFocus}

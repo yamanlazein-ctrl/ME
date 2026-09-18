@@ -358,42 +358,56 @@ export class PostgresDashboardRepository implements IDashboardRepository {
     }
 
     // ── Unpaid sale invoices (total − paid − returns, per P0-LOGIC-3.6e unified) ──
-    // `paid` is FX-converted in the invoice currency. Returns share that
-    // currency (enforced at create). Do NOT join vouchers here — a receipt
-    // join cartesian-multiplies return lines and inflates remaining.
-    const unpaidSub = this.db
-      .select({
-        id: invoices.id,
-        currency: invoices.currency,
-        remaining: sql<number>`${invoices.total} - ${invoices.paid} - COALESCE((
-          SELECT SUM(${returnLines.quantityKg} * ${returnLines.pricePerKg})
-          FROM ${returnLines}
-          INNER JOIN ${returns} ON ${returns.id} = ${returnLines.returnId}
-          WHERE ${returns.originalInvoiceId} = ${invoices.id}
-            AND ${returns.tenantId} = ${invoices.tenantId}
-            AND ${returns.status} = 'active'
-            AND ${returns.kind} = 'sale'
-        ), 0)`.as("remaining"),
-      })
-      .from(invoices)
-      .where(and(base, eq(invoices.type, "sale"), eq(invoices.status, "active")))
-      .as("unpaid_sub");
-    const unpaidRows = await this.db
-      .select({
-        currency: unpaidSub.currency,
-        count: sql<number>`COUNT(*)`,
-        totalDue: sql<number>`COALESCE(SUM(${unpaidSub.remaining}), 0)`,
-      })
-      .from(unpaidSub)
-      .where(sql`${unpaidSub.remaining} > 0`)
-      .groupBy(unpaidSub.currency);
+    // Do NOT nest a drizzle `.as()` subquery with a correlated returns SELECT:
+    // drizzle flattens column refs inside the alias (`id`/`tenant_id`) and the
+    // query fails → whole GET /api/dashboard 500s (dashboard looks "frozen").
+    const unpaidRows = await this.db.execute<{
+      currency: string;
+      count: number;
+      total_due: number;
+    }>(sql`
+      SELECT
+        i.currency AS currency,
+        COUNT(*)::int AS count,
+        COALESCE(SUM(
+          i.total - i.paid - COALESCE((
+            SELECT SUM(rl.quantity_kg * rl.price_per_kg)
+            FROM return_lines rl
+            INNER JOIN returns r ON r.id = rl.return_id
+            WHERE r.original_invoice_id = i.id
+              AND r.tenant_id = i.tenant_id
+              AND r.status = 'active'
+              AND r.kind = 'sale'
+          ), 0)
+        ), 0)::float AS total_due
+      FROM invoices i
+      WHERE i.tenant_id = ${ctx.tenantId}
+        AND i.type = 'sale'
+        AND i.status = 'active'
+        AND (
+          i.total - i.paid - COALESCE((
+            SELECT SUM(rl.quantity_kg * rl.price_per_kg)
+            FROM return_lines rl
+            INNER JOIN returns r ON r.id = rl.return_id
+            WHERE r.original_invoice_id = i.id
+              AND r.tenant_id = i.tenant_id
+              AND r.status = 'active'
+              AND r.kind = 'sale'
+          ), 0)
+        ) > 0
+      GROUP BY i.currency
+    `);
 
     const unpaidByCurrency: Record<string, { count: number; totalDue: number }> = {};
     let unpaidTotalCount = 0;
-    for (const row of unpaidRows) {
+    const unpaidList = Array.isArray(unpaidRows)
+      ? unpaidRows
+      : ((unpaidRows as { rows?: Array<{ currency: string; count: number; total_due: number }> })
+          .rows ?? []);
+    for (const row of unpaidList) {
       unpaidByCurrency[row.currency] = {
         count: Number(row.count),
-        totalDue: Number(row.totalDue),
+        totalDue: Number(row.total_due),
       };
       unpaidTotalCount += Number(row.count);
     }

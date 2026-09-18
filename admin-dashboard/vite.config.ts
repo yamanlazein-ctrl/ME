@@ -17,6 +17,9 @@ export default defineConfig({
   },
   server: {
     port: 5174,
+    // Listen on 0.0.0.0 so both 127.0.0.1 and localhost work on Windows
+    // (default can bind [::1] only → 127.0.0.1:5174 connection refused).
+    host: true,
     proxy: {
       "/license-admin": {
         target: licenseProxyTarget,

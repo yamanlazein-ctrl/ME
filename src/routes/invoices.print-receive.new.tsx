@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
-import { Inbox, Palette, Plus, Printer, Save, Search, Trash2 } from "lucide-react";
+import { Palette, Plus, Printer, Save, Search, Trash2 } from "lucide-react";
 import { AppShell } from "@/components/layout/AppShell";
 import { PageCard } from "@/components/layout/PageCard";
 import { Input } from "@/components/ui/input";
@@ -15,7 +15,7 @@ import {
 } from "@/components/ui/select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
-import { colorById, fabricById, rollById, useInventory } from "@/presentation/hooks/useInventory";
+import { colorById, colors, fabricById, rollById, useInventory } from "@/presentation/hooks/useInventory";
 import { currencySymbol } from "@/presentation/hooks/useCurrency";
 import type { Currency } from "@/domain/types";
 import { usePrintJobs, useOpenPrintJobs, useReceivePrint } from "@/presentation/hooks/usePrintJobs";
@@ -23,7 +23,11 @@ import { printOrArchive } from "@/components/print/printPortal";
 import { archiveMeta } from "@/shared/utils/documentArchive";
 import { PrintJobDocument } from "@/components/print/PrintJobDocument";
 import { PrintPageBreak } from "@/components/print/PrintDocument";
-import { formatNumber, formatMoney, formatQuantity } from "@/shared/utils/formatNumber";
+import { formatNumber, formatQuantity } from "@/shared/utils/formatNumber";
+import { ColorSearchCell } from "@/components/invoices/ColorSearchCell";
+import { CardField, GroupSection } from "@/components/invoices/InvoiceFormLayout";
+import { showError, showSuccess } from "@/components/common/toast-helpers";
+import { resolveColorPick } from "@/domain/inventory/colorLookup";
 
 type DocOption = { id: string; title: string; subtitle?: string };
 
@@ -37,6 +41,8 @@ type ReceiveLine = {
   newName: string;
   newColorName: string;
   newColorCode: string;
+  newColorHex?: string;
+  newColorImageUrl?: string;
   newSalePrice: number | "";
 };
 
@@ -48,6 +54,8 @@ const emptyReceiveLine = (): ReceiveLine => ({
   newName: "",
   newColorName: "",
   newColorCode: "",
+  newColorHex: undefined,
+  newColorImageUrl: undefined,
   newSalePrice: "",
 });
 
@@ -230,14 +238,13 @@ function PrintReceivePage() {
         if (isNaN(c) || c < 0) throw new Error("أدخل تكلفة طباعة صحيحة لكل بند");
       }
       if (!newCategory.trim()) throw new Error("أدخل التصنيف");
+      // FX must be entered in-app — never a browser confirm/alert.
       if (needsManualFx && !(Number(exchangeRate) > 0)) {
-        const proceed = window.confirm(
-          "عملة الاستلام تختلف عن المصدر أو ليست بالدولار، ولم يُدخل سعر صرف.\n\nموافق = المتابعة بدون تحويل (تكلفة المصدر كما هي)\nإلغاء = الرجوع لإدخال سعر الصرف يدوياً",
-        );
-        if (!proceed) {
-          setError("أدخل سعر الصرف يدوياً ثم أعد الحفظ.");
-          return;
-        }
+        const msg =
+          "سعر الصرف مطلوب لهذه العملية (عملة الاستلام ليست بالدولار، أو تختلف عن عملة المصدر). أدخله في الحقل أعلاه ثم أعد الحفظ.";
+        setError(msg);
+        showError(msg);
+        return;
       }
 
       // One composite request → one receive per sent voucher, sequentially.
@@ -256,6 +263,7 @@ function PrintReceivePage() {
           newCategory,
           newColorName: l.newColorName.trim() || undefined,
           newColorCode: l.newColorCode.trim() || undefined,
+          newColorHex: l.newColorHex?.trim() || undefined,
           newSalePricePerKg: l.newSalePrice === "" ? undefined : Number(l.newSalePrice),
           notes,
         });
@@ -285,15 +293,18 @@ function PrintReceivePage() {
           thenPrint,
         );
       }
-      setOk(
+      const okMsg =
         created.length === 1
           ? `تم استلام السند ${numbers} وإدخال الصنف الجديد إلى المخزون.`
-          : `تم استلام ${created.length} سنادات بنجاح: ${numbers}`,
-      );
+          : `تم استلام ${created.length} سنادات بنجاح: ${numbers}`;
+      setOk(okMsg);
+      showSuccess(okMsg);
       setLines([emptyReceiveLine()]);
       setNotes("");
     } catch (e) {
-      setError((e as Error).message);
+      const msg = (e as Error).message || "فشل الحفظ";
+      setError(msg);
+      showError(msg);
     }
   };
 
@@ -381,9 +392,18 @@ function PrintReceivePage() {
                   onChange={(e) =>
                     setExchangeRate(e.target.value === "" ? "" : Number(e.target.value))
                   }
-                  placeholder="أدخل سعر الصرف يدوياً"
+                  placeholder="مطلوب — أدخل سعر الصرف"
                   dir="ltr"
+                  className={cn(
+                    !(Number(exchangeRate) > 0) &&
+                      "border-destructive/50 focus-visible:ring-destructive/30",
+                  )}
                 />
+              )}
+              {needsManualFx && !(Number(exchangeRate) > 0) && (
+                <p className="mt-1 text-[10px] font-medium text-destructive">
+                  مطلوب لإتمام الاستلام بعملة غير الدولار أو عند اختلاف عملة المصدر.
+                </p>
               )}
             </Field>
           </div>
@@ -435,92 +455,115 @@ function PrintReceivePage() {
                     </div>
                   </div>
 
-                  <div className="grid gap-3 md:grid-cols-4">
-                    <div className="md:col-span-2">
-                      <Field label="سند الإرسال *">
-                        <DocumentAutocomplete
-                          selectedLabel={labelForLine(line)}
-                          placeholder="ابحث برقم السند أو القماش أو المطبعة..."
-                          options={optionsForLine(line)}
-                          onPick={(id) => updateLine(line.key, { jobId: id })}
-                        />
-                      </Field>
-                    </div>
-                    <Field label="اسم التصميم / الصنف الجديد *">
-                      <Input
-                        value={line.newName}
-                        onChange={(e) => updateLine(line.key, { newName: e.target.value })}
-                        placeholder="مثال: قطن مطبوع — تصميم 12"
-                      />
-                    </Field>
-                    <div className="grid grid-cols-2 gap-2">
-                      <Field label="اسم اللون">
-                        <Input
-                          value={line.newColorName}
-                          onChange={(e) => updateLine(line.key, { newColorName: e.target.value })}
-                          placeholder={srcCol?.name || ""}
-                        />
-                      </Field>
-                      <Field label="كود اللون">
-                        <Input
-                          value={line.newColorCode}
-                          onChange={(e) => updateLine(line.key, { newColorCode: e.target.value })}
-                          placeholder="تلقائي"
-                        />
-                      </Field>
-                    </div>
-
-                    <Field label="الكمية الفعلية المستلمة (كغ) *">
-                      <Input
-                        type="number"
-                        inputMode="decimal"
-                        min={0}
-                        step={0.01}
-                        value={line.receivedKg}
-                        onChange={(e) => {
-                          const v = e.target.value;
-                          if (v === "") return updateLine(line.key, { receivedKg: "" });
-                          const n = Number(v);
-                          if (Number.isFinite(n) && n >= 0) updateLine(line.key, { receivedKg: n });
-                        }}
-                        placeholder={job ? `حتى ${formatQuantity(job.sentKg)}` : ""}
-                      />
-                    </Field>
-                    <Field label="تكلفة الطباعة للكيلو *">
-                      <Input
-                        type="number"
-                        min={0}
-                        value={line.printCostPerKg}
-                        onChange={(e) =>
-                          updateLine(line.key, {
-                            printCostPerKg: e.target.value === "" ? "" : Number(e.target.value),
-                          })
-                        }
-                      />
-                    </Field>
-                    <Field label="سعر البيع للكيلو (اختياري)">
-                      <Input
-                        type="number"
-                        min={0}
-                        value={line.newSalePrice}
-                        onChange={(e) =>
-                          updateLine(line.key, {
-                            newSalePrice: e.target.value === "" ? "" : Number(e.target.value),
-                          })
-                        }
-                      />
-                    </Field>
-                    {job && (
-                      <div className="flex items-end">
-                        <div className="w-full rounded-md border border-border bg-background/40 px-3 py-2 text-[11px] text-muted-foreground">
-                          التكلفة الإجمالية للكيلو ={" "}
-                          <span className="font-bold tabular-nums text-foreground">
-                            {formatNumber(totalCost)}
-                          </span>{" "}
-                          (تكلفة القماش + الطباعة)
-                        </div>
+                  <div className="space-y-3">
+                    <GroupSection title="سند الإرسال والصنف">
+                      <div className="grid gap-3 md:grid-cols-2">
+                        <CardField label="سند الإرسال" required>
+                          <DocumentAutocomplete
+                            selectedLabel={labelForLine(line)}
+                            placeholder="ابحث برقم السند أو القماش أو المطبعة..."
+                            options={optionsForLine(line)}
+                            onPick={(id) => updateLine(line.key, { jobId: id })}
+                          />
+                        </CardField>
+                        <CardField label="اسم التصميم / الصنف الجديد" required>
+                          <Input
+                            value={line.newName}
+                            onChange={(e) => updateLine(line.key, { newName: e.target.value })}
+                            className="h-9"
+                            placeholder="مثال: قطن مطبوع — تصميم 12"
+                          />
+                        </CardField>
                       </div>
-                    )}
+                    </GroupSection>
+
+                    <GroupSection title="بيانات اللون">
+                      <ColorSearchCell
+                        name={line.newColorName}
+                        code={line.newColorCode}
+                        hex={line.newColorHex}
+                        imageUrl={line.newColorImageUrl}
+                        fabricId={job?.sourceFabricId}
+                        onPickExisting={(c) => {
+                          const r = resolveColorPick(c, job?.sourceFabricId, colors);
+                          updateLine(line.key, {
+                            newColorName: r.colorName,
+                            newColorCode: r.colorCode,
+                            newColorHex: r.hex,
+                            newColorImageUrl: r.imageUrl,
+                          });
+                        }}
+                        onSetName={(v) => updateLine(line.key, { newColorName: v })}
+                        onSetCode={(v) => updateLine(line.key, { newColorCode: v })}
+                        onSetHex={(hex) => updateLine(line.key, { newColorHex: hex })}
+                        onSetImage={(url) => updateLine(line.key, { newColorImageUrl: url })}
+                      />
+                      {srcCol && (
+                        <p className="mt-1 text-[10px] text-muted-foreground">
+                          لون المصدر: {srcCol.name}
+                          {srcCol.code ? ` · ${srcCol.code}` : ""}
+                        </p>
+                      )}
+                    </GroupSection>
+
+                    <GroupSection title="الكمية والتكلفة">
+                      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                        <CardField label="الكمية المستلمة (كغ)" required>
+                          <Input
+                            type="number"
+                            inputMode="decimal"
+                            min={0}
+                            step={0.01}
+                            value={line.receivedKg}
+                            onChange={(e) => {
+                              const v = e.target.value;
+                              if (v === "") return updateLine(line.key, { receivedKg: "" });
+                              const n = Number(v);
+                              if (Number.isFinite(n) && n >= 0)
+                                updateLine(line.key, { receivedKg: n });
+                            }}
+                            className="h-9 tabular-nums"
+                            placeholder={job ? `حتى ${formatQuantity(job.sentKg)}` : ""}
+                          />
+                        </CardField>
+                        <CardField label="تكلفة الطباعة / كغ" required>
+                          <Input
+                            type="number"
+                            min={0}
+                            value={line.printCostPerKg}
+                            onChange={(e) =>
+                              updateLine(line.key, {
+                                printCostPerKg: e.target.value === "" ? "" : Number(e.target.value),
+                              })
+                            }
+                            className="h-9 tabular-nums"
+                          />
+                        </CardField>
+                        <CardField label="سعر البيع / كغ (اختياري)">
+                          <Input
+                            type="number"
+                            min={0}
+                            value={line.newSalePrice}
+                            onChange={(e) =>
+                              updateLine(line.key, {
+                                newSalePrice: e.target.value === "" ? "" : Number(e.target.value),
+                              })
+                            }
+                            className="h-9 tabular-nums"
+                          />
+                        </CardField>
+                        {job && (
+                          <div className="flex items-end">
+                            <div className="w-full rounded-md border border-border bg-secondary/30 px-3 py-2 text-[11px] text-muted-foreground">
+                              التكلفة الإجمالية / كغ ={" "}
+                              <span className="font-bold tabular-nums text-foreground">
+                                {formatNumber(totalCost)}
+                              </span>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </GroupSection>
                   </div>
                 </div>
               );

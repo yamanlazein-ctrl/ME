@@ -48,6 +48,8 @@ export interface ReceivePrintInput {
   newCategory?: string;
   newColorName?: string;
   newColorCode?: string;
+  /** Optional visual hex for the new inventory colour (same as entry invoice). */
+  newColorHex?: string;
   newSalePricePerKg?: number;
   notes?: string;
 }

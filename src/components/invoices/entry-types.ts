@@ -54,24 +54,27 @@ export const emptyLine = (): EntryLine => ({
   pieces: 1,
 });
 
+/** Sticky fields for a new entry row: fabric + pricing + production meta only.
+ * Never copy color/roll identity — a new row is a new lot (often a new colour).
+ * Copying existingColorId/colorCode caused two lines to silently share one
+ * colour master; editing the second line then RENAMED the shared colour.
+ */
 export const cloneStickyFields = (prev: EntryLine): Partial<EntryLine> => ({
   existingFabricId: prev.existingFabricId,
-  existingColorId: prev.existingColorId,
-  rollId: prev.rollId,
   fabricName: prev.fabricName,
   category: prev.category,
   unit: prev.unit,
-  colorName: prev.colorName,
-  colorCode: prev.colorCode,
   widthCm: prev.widthCm,
   weightGsm: prev.weightGsm,
   pricePerKg: prev.pricePerKg,
   discountAmount: prev.discountAmount,
+  salePricePerKg: prev.salePricePerKg,
   marjaiya: prev.marjaiya,
   masader: prev.masader,
   machineNumber: prev.machineNumber,
   kromaj: prev.kromaj,
   gsm: prev.gsm,
+  sahb: prev.sahb,
   pieces: prev.pieces,
 });
 

@@ -17,57 +17,66 @@
   --mf-bg-soft: #f3efe6;
 }
 
-/* Paper size / margins per settings.printing.paperSize (A4 default, A5, or
-   80mm thermal). PrintDocument stamps `data-paper` on `.print-doc`, which
-   selects one of these NAMED pages via the `page` property below — the
-   previous single hardcoded `@page` rule ignored the setting entirely, so
-   choosing A5/80mm in Settings never changed the printed page size. */
+/* Paper size. Default @page has ZERO margin so Chrome/Edge have nowhere to
+   draw their Headers/Footers chrome (URL, date, 1/1). Padding lives on
+   `.print-doc` instead — that is the real printable inset.
+
+   Blank first page: named `page` must start on `[data-print-root]`, never on
+   an inner `.print-doc` (a page-name change forces a break → empty sheet). */
+@page {
+  size: A4 portrait;
+  margin: 0;
+}
+
 @page a4 {
   size: A4 portrait;
-  margin: 14mm 14mm 16mm;
-  @bottom-center {
-    content: counter(page) " / " counter(pages);
-    font-size: 8pt;
-    color: var(--mf-gray);
-    font-family: "Segoe UI", "Tahoma", "IBM Plex Sans Arabic", "Arial", sans-serif;
-  }
-}
-@page a4:first {
-  margin-top: 12mm;
+  margin: 0;
 }
 
 @page a5 {
   size: A5 portrait;
-  margin: 10mm 10mm 12mm;
-  @bottom-center {
-    content: counter(page) " / " counter(pages);
-    font-size: 6.5pt;
-    color: var(--mf-gray);
-    font-family: "Segoe UI", "Tahoma", "IBM Plex Sans Arabic", "Arial", sans-serif;
-  }
-}
-@page a5:first {
-  margin-top: 9mm;
+  margin: 0;
 }
 
-/* 80mm thermal roll: continuous height (`auto`), narrow fixed width. */
 @page thermal80mm {
   size: 80mm auto;
-  margin: 3mm;
+  margin: 0;
+}
+
+[data-print-root] {
+  page: a4;
+}
+[data-print-root][data-paper="A5"] {
+  page: a5;
+}
+[data-print-root][data-paper="80mm"] {
+  page: thermal80mm;
 }
 
 .print-doc {
-  page: a4;
+  page: auto;
+  width: 100%;
+  max-width: none;
+  box-sizing: border-box;
+  padding: 10mm 12mm 12mm;
+  background: #ffffff;
+  color: var(--mf-black);
 }
+
 .print-doc[data-paper="A5"] {
-  page: a5;
+  padding: 8mm;
 }
+
 .print-doc[data-paper="80mm"] {
-  page: thermal80mm;
+  padding: 3mm;
 }
 
 [data-print-root] {
   display: block;
+  width: 100%;
+  max-width: none;
+  margin: 0;
+  padding: 0;
   background: #ffffff !important;
   color: var(--mf-black) !important;
   font-family:
@@ -98,26 +107,51 @@
   display: none !important;
 }
 
+/* Screen: park the portal off-canvas. Never use a fixed mm width here —
+   that value survives into print and makes Chrome "fit to page" shrink the
+   invoice, leaving a huge empty band on one side. */
+@media screen {
+  [data-print-root] {
+    position: fixed !important;
+    left: -100vw !important;
+    top: 0 !important;
+    width: 100% !important;
+    max-width: none !important;
+    pointer-events: none;
+    z-index: -1;
+  }
+}
+
 @media print {
   html,
   body {
     margin: 0 !important;
     padding: 0 !important;
     height: auto !important;
+    width: 100% !important;
     overflow: visible !important;
     background: #fff !important;
   }
 
   body > *:not([data-print-root]) {
     display: none !important;
-    visibility: hidden !important;
   }
 
   [data-print-root] {
+    display: block !important;
     position: static !important;
-    overflow: visible !important;
+    inset: auto !important;
+    left: auto !important;
+    top: auto !important;
+    right: auto !important;
+    bottom: auto !important;
+    width: 100% !important;
+    max-width: none !important;
+    min-width: 0 !important;
     margin: 0 !important;
     padding: 0 !important;
+    overflow: visible !important;
+    transform: none !important;
   }
 
   .print-page-break {
@@ -134,29 +168,24 @@
   }
 }
 
-.print-doc {
-  width: 100%;
-  background: #ffffff;
-  color: var(--mf-black);
-  padding: 0;
-}
-
+/* Logo LEFT | company name + contact RIGHT — full paper width, no crop. */
 .print-brand-bar {
   display: grid;
-  grid-template-columns: 72px minmax(0, 1fr);
+  grid-template-columns: 70px minmax(0, 1fr);
   direction: ltr;
-  align-items: start;
-  column-gap: 14pt;
+  align-items: center;
+  column-gap: 16pt;
+  width: 100%;
   padding: 0 0 10pt;
   background: #ffffff;
 }
 
 .print-logo,
 .print-logo-spacer {
-  height: 58px;
-  width: 72px;
+  height: 60px;
+  width: 70px;
   object-fit: contain;
-  object-position: center;
+  object-position: left center;
   grid-column: 1;
   grid-row: 1;
   background: transparent !important;
@@ -164,17 +193,29 @@
   border: none;
   box-shadow: none !important;
   display: block;
+  justify-self: start;
+  overflow: visible;
 }
 
-.print-brand-stack {
+.print-brand-identity {
   grid-column: 2;
   min-width: 0;
+  width: 100%;
   text-align: right;
   direction: rtl;
   display: flex;
   flex-direction: column;
-  align-items: flex-end;
-  gap: 1pt;
+  align-items: stretch;
+  justify-content: center;
+  gap: 2pt;
+}
+
+.print-brand-identity--compact .print-brand-contact {
+  display: none;
+}
+
+.print-brand-stack {
+  display: none;
 }
 
 .print-brand-name {
@@ -183,34 +224,46 @@
   font-weight: 700;
   color: var(--mf-black);
   letter-spacing: 0.01em;
-  line-height: 1.15;
+  line-height: 1.2;
   text-align: right;
   direction: ltr;
   unicode-bidi: isolate;
-  margin-bottom: 3pt;
-}
-
-.print-brand-name--compact {
-  direction: ltr;
-  text-align: right;
-  white-space: nowrap;
-  grid-column: 2;
-  align-self: center;
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
+  max-width: none;
+  width: 100%;
 }
 
 .print-brand-en {
   display: none;
 }
 
+.print-brand-contact {
+  width: 100%;
+  text-align: right;
+  direction: rtl;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.5pt;
+}
+
+.print-brand-contact--compact {
+  min-height: 0;
+}
+
 .print-brand-reg,
 .print-brand-contact-line {
   font-size: 7.5pt;
   color: var(--mf-gray);
-  line-height: 1.4;
+  line-height: 1.35;
   direction: rtl;
   text-align: right;
   unicode-bidi: plaintext;
-  white-space: nowrap;
+  white-space: normal;
+  max-width: none;
+  width: 100%;
 }
 
 .print-header-divider {
@@ -295,23 +348,41 @@
   white-space: nowrap;
 }
 
-.print-info-row {
-  display: flex;
-  align-items: flex-start;
-  gap: 22pt;
+.print-info-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10pt 14pt;
+  width: 100%;
   margin: 10pt 0 16pt;
   padding: 12pt 0;
   border-top: 0.75pt solid var(--mf-rule);
   border-bottom: 0.75pt solid var(--mf-rule);
+  direction: rtl;
+}
+
+.print-info-row {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10pt 14pt;
+  width: 100%;
+  margin: 10pt 0 16pt;
+  padding: 12pt 0;
+  border-top: 0.75pt solid var(--mf-rule);
+  border-bottom: 0.75pt solid var(--mf-rule);
+  direction: rtl;
 }
 
 .print-party {
-  flex: 1.05;
   min-width: 0;
   padding: 0;
   margin: 0;
   background: transparent;
   border: none;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 2pt;
+  grid-column: span 1;
 }
 
 .print-party-side {
@@ -328,32 +399,29 @@
 }
 
 .print-party-name {
-  font-size: 12.5pt;
+  font-size: 11pt;
   font-weight: 700;
   color: var(--mf-black);
   line-height: 1.25;
-  padding-bottom: 4pt;
-  border-bottom: 1.25pt solid var(--mf-gold);
-  margin-bottom: 2pt;
-  display: inline-block;
+  padding-bottom: 0;
+  border-bottom: none;
+  margin-bottom: 0;
+  display: block;
+  width: 100%;
+  text-align: right;
 }
 
 .print-party-line {
-  font-size: 8.5pt;
+  font-size: 8pt;
   color: var(--mf-ink);
   direction: rtl;
   text-align: right;
   unicode-bidi: plaintext;
+  width: 100%;
 }
 
 .print-meta {
-  flex: 1.35;
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8pt 14pt;
-  margin: 0;
-  border: none;
-  background: transparent;
+  display: contents;
 }
 
 .print-meta-item {
@@ -363,8 +431,12 @@
   border: none;
   display: flex;
   flex-direction: column;
+  align-items: stretch;
+  justify-content: flex-start;
   gap: 2pt;
   min-width: 0;
+  width: 100%;
+  text-align: right;
 }
 
 .print-meta-label {
@@ -372,9 +444,14 @@
   color: var(--mf-gray);
   font-size: 7pt;
   letter-spacing: 0.02em;
+  font-weight: 600;
+  line-height: 1.2;
+  width: 100%;
+  text-align: right;
 }
 
 .print-meta-value {
+  display: block;
   font-variant-numeric: tabular-nums;
   color: var(--mf-black);
   font-weight: 700;
@@ -382,18 +459,22 @@
   text-align: right;
   unicode-bidi: plaintext;
   word-break: break-word;
+  overflow-wrap: anywhere;
   font-size: 10pt;
   line-height: 1.3;
+  width: 100%;
 }
 
 .print-table {
   width: 100%;
+  max-width: 100%;
   table-layout: fixed;
   border-collapse: collapse;
   margin: 0 0 14pt;
   word-wrap: break-word;
   overflow-wrap: break-word;
   font-size: 9pt;
+  direction: rtl;
 }
 
 .print-table thead tr {
@@ -481,23 +562,26 @@
 .pd-color-cell {
   display: flex;
   align-items: center;
-  gap: 5pt;
+  gap: 4pt;
   direction: rtl;
   text-align: right;
   min-width: 0;
+  max-width: 100%;
+  flex-wrap: nowrap;
 }
 
 .pd-color-swatch {
-  height: 10px !important;
-  width: 10px !important;
-  min-height: 10px;
-  min-width: 10px;
+  height: 11px !important;
+  width: 11px !important;
+  min-height: 11px;
+  min-width: 11px;
   border-radius: 999px !important;
-  flex-shrink: 0;
+  flex: 0 0 auto;
   border: 1px solid rgba(0, 0, 0, 0.18) !important;
 }
 
-.pd-color-label {
+.pd-color-name {
+  flex: 1 1 auto;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -505,14 +589,32 @@
   font-size: 8pt;
   font-weight: 600;
   color: var(--mf-black);
+  line-height: 1.2;
 }
 
 .pd-color-code {
-  font-weight: 500;
-  color: var(--mf-gray);
+  flex: 0 0 auto;
+  max-width: 46%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 7.5pt;
+  font-weight: 600;
+  color: var(--mf-ink);
   font-variant-numeric: tabular-nums;
   direction: ltr;
   unicode-bidi: isolate;
+  line-height: 1.2;
+}
+
+.pd-color-label {
+  /* legacy — kept so older markup does not break */
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 8pt;
+  font-weight: 600;
 }
 
 .pd-color-text {
@@ -520,12 +622,6 @@
   flex-direction: column;
   gap: 1pt;
   min-width: 0;
-}
-
-.pd-color-name {
-  color: var(--mf-ink);
-  font-size: 8.5pt;
-  font-weight: 600;
 }
 
 .pd-color-missing {
@@ -588,9 +684,10 @@
 
 .print-payment {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 0;
   margin: 0 0 16pt;
+  width: 100%;
   border-top: 0.75pt solid var(--mf-rule);
   border-bottom: 0.75pt solid var(--mf-rule);
 }
@@ -805,6 +902,10 @@
 .print-doc[data-paper="A5"] {
   font-size: 8pt;
 }
+.print-doc[data-paper="A5"] .print-brand-bar {
+  grid-template-columns: 48px minmax(0, 1fr);
+  column-gap: 8pt;
+}
 .print-doc[data-paper="A5"] .print-brand-name {
   font-size: 12.5pt;
 }
@@ -814,11 +915,10 @@
 .print-doc[data-paper="A5"] .print-party-name {
   font-size: 10.5pt;
 }
-.print-doc[data-paper="A5"] .print-meta {
-  gap: 6pt 10pt;
-}
+.print-doc[data-paper="A5"] .print-info-grid,
 .print-doc[data-paper="A5"] .print-info-row {
-  gap: 14pt;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6pt 10pt;
   margin: 8pt 0 12pt;
 }
 .print-doc[data-paper="A5"] .print-table {
@@ -844,8 +944,9 @@
 }
 .print-doc[data-paper="80mm"] .print-brand-bar {
   grid-template-columns: 34px minmax(0, 1fr);
-  column-gap: 6pt;
+  column-gap: 4pt;
   padding-bottom: 6pt;
+  align-items: start;
 }
 .print-doc[data-paper="80mm"] .print-logo,
 .print-doc[data-paper="80mm"] .print-logo-spacer {
@@ -853,10 +954,14 @@
   height: 27px;
 }
 .print-doc[data-paper="80mm"] .print-brand-name {
-  font-size: 9.5pt;
+  font-size: 8pt;
+  max-width: none;
+  white-space: normal;
+  text-align: right;
 }
 .print-doc[data-paper="80mm"] .print-brand-contact-line {
-  font-size: 6pt;
+  font-size: 5.5pt;
+  white-space: normal;
 }
 .print-doc[data-paper="80mm"] .print-masthead {
   padding: 8pt 0 3pt;
@@ -867,18 +972,15 @@
 .print-doc[data-paper="80mm"] .print-type-badge {
   font-size: 6pt;
 }
+.print-doc[data-paper="80mm"] .print-info-grid,
 .print-doc[data-paper="80mm"] .print-info-row {
-  flex-direction: column;
+  grid-template-columns: 1fr 1fr;
   gap: 6pt;
   margin: 6pt 0 8pt;
   padding: 6pt 0;
 }
 .print-doc[data-paper="80mm"] .print-party-name {
   font-size: 9pt;
-}
-.print-doc[data-paper="80mm"] .print-meta {
-  grid-template-columns: 1fr;
-  gap: 4pt;
 }
 .print-doc[data-paper="80mm"] .print-table {
   font-size: 6pt;

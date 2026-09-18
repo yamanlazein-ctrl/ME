@@ -4,6 +4,8 @@ import type {
   StatementFilter,
   SettleResponse,
   SettleInput,
+  SettleInvoicesInput,
+  SettleInvoicesResponse,
 } from "@/contracts/statement";
 import type { PartyKind } from "@/domain/entities/Party";
 
@@ -26,6 +28,18 @@ export class StatementApiService {
     const res = await this.client.post<SettleResponse>(
       `/api/${kind === "customer" ? "customers" : "suppliers"}/${partyId}/statement/settle`,
       input ?? {},
+    );
+    return res.data;
+  }
+
+  async settleInvoices(
+    partyId: string,
+    kind: PartyKind,
+    input: SettleInvoicesInput,
+  ): Promise<SettleInvoicesResponse> {
+    const res = await this.client.post<SettleInvoicesResponse>(
+      `/api/${kind === "customer" ? "customers" : "suppliers"}/${partyId}/statement/settle-invoices`,
+      input,
     );
     return res.data;
   }

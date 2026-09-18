@@ -1,4 +1,5 @@
 import type { CSSProperties, ReactNode } from "react";
+import { useEffect } from "react";
 import { useSettings } from "@/presentation/hooks/useSettings";
 import logoUrl from "@/assets/logo-motard-icon.png";
 import { getCompanyContactLines, PRINT_BRAND_NAME } from "@/shared/constants/printConfig";
@@ -43,11 +44,12 @@ const BADGE_LABEL: Record<PrintTypeBadge, string> = {
  *
  * Header contract (locked — one canonical layout for every invoice):
  *   • NOTHING above the brand row
- *   • Logo physical LEFT, isolated in its own column
- *   • Company identity ONCE on the right (PRINT_BRAND_NAME)
- *   • Exact five contact lines under it (getCompanyContactLines) — never
+ *   • Two physical columns (LTR grid, full paper width):
+ *       LEFT  = logo alone
+ *       RIGHT = company name + address/phone lines (stacked)
+ *   • Exact five contact lines (getCompanyContactLines) — never
  *     concatenated, never LTR-reversed, never duplicated from settings
- *   • Gold divider, then document title + party/meta
+ *   • Gold divider, then document title + party/meta grid
  *
  * Footer contract (locked):
  *   • Thanks line on the last page only — contact is NOT repeated here
@@ -88,6 +90,7 @@ export function PrintDocument({
   const s = useSettings();
   const p = s.printing;
   const showLogo = p.showLogo !== false;
+  const paper = p.paperSize || "A4";
   const allMeta = [...(meta ?? []), ...(extraMeta ?? [])];
   const isFirstPage = pageNumber == null || pageNumber === 1;
   const showFooter =
@@ -96,27 +99,34 @@ export function PrintDocument({
 
   const contactLines = getCompanyContactLines();
 
+  // Stamp paper size on the print portal root so named @page starts THERE
+  // (not on an inner .print-doc) — avoids Chrome's blank first page.
+  useEffect(() => {
+    const root = document.querySelector("[data-print-root]");
+    if (root instanceof HTMLElement) root.dataset.paper = paper;
+  }, [paper]);
+
   return (
-    <div className="print-doc" data-paper={p.paperSize || "A4"}>
-      {/* ── Brand bar: logo LEFT (own column) + identity+contact RIGHT, once. ── */}
+    <div className="print-doc" data-paper={paper}>
+      {/* ── Brand bar: logo LEFT | company + contact RIGHT (full width). ── */}
       <div className="print-brand-bar">
         {showLogo ? (
           <img className="print-logo" src={logoUrl} alt="" />
         ) : (
-          <span className="print-logo-spacer" />
+          <span className="print-logo-spacer" aria-hidden="true" />
         )}
-        {isFirstPage ? (
-          <div className="print-brand-stack">
-            <div className="print-brand-name">{PRINT_BRAND_NAME}</div>
-            {contactLines.map((line) => (
-              <div key={line} className="print-brand-contact-line">
-                {line}
-              </div>
-            ))}
-          </div>
-        ) : (
-          <div className="print-brand-name print-brand-name--compact">{PRINT_BRAND_NAME}</div>
-        )}
+        <div className={`print-brand-identity${isFirstPage ? "" : " print-brand-identity--compact"}`}>
+          <div className="print-brand-name">{PRINT_BRAND_NAME}</div>
+          {isFirstPage && (
+            <div className="print-brand-contact">
+              {contactLines.map((line) => (
+                <div key={line} className="print-brand-contact-line">
+                  {line}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
 
       <div className="print-header-divider" />
@@ -136,43 +146,35 @@ export function PrintDocument({
       </div>
 
       {(party || allMeta.length > 0) && (
-        <div className="print-info-row print-avoid-break">
+        <div className="print-info-grid print-avoid-break">
           {party && (
-            <div className="print-party">
-              <div className="print-party-side">
-                <div className="print-party-label">{party.label}</div>
-                <div className="print-party-name">{party.name}</div>
-                {party.extra && (
-                  <div className="print-party-line">
-                    {party.extra.replace(/^رمز .*?: /, "الرمز: ")}
-                  </div>
-                )}
-                {party.phone && (
-                  <div className="print-party-line">
-                    الهاتف: <span dir="ltr">{party.phone}</span>
-                  </div>
-                )}
-                {party.address && <div className="print-party-line">{party.address}</div>}
-              </div>
+            <div className="print-party print-meta-item">
+              <span className="print-meta-label">{party.label}</span>
+              <span className="print-meta-value print-party-name">{party.name}</span>
+              {party.extra && (
+                <span className="print-party-line">
+                  {party.extra.replace(/^رمز .*?: /, "الرمز: ")}
+                </span>
+              )}
+              {party.phone && (
+                <span className="print-party-line">
+                  الهاتف: <span dir="ltr">{party.phone}</span>
+                </span>
+              )}
+              {party.address && <span className="print-party-line">{party.address}</span>}
             </div>
           )}
-          {allMeta.length > 0 && (
-            <div className="print-meta">
-              {allMeta.map((m) => (
-                <div key={m.label} className="print-meta-item">
-                  <span className="print-meta-label">{m.label}</span>
-                  <span className="print-meta-value">{m.value}</span>
-                </div>
-              ))}
+          {allMeta.map((m) => (
+            <div key={m.label} className="print-meta-item">
+              <span className="print-meta-label">{m.label}</span>
+              <span className="print-meta-value">{m.value}</span>
             </div>
-          )}
+          ))}
         </div>
       )}
 
-      {/* ── Body ── */}
       {children}
 
-      {/* ── Totals ── */}
       {totals && totals.length > 0 && (
         <div className="print-totals print-avoid-break">
           {totals.map((t) => (
@@ -186,7 +188,6 @@ export function PrintDocument({
         </div>
       )}
 
-      {/* ── Payment summary ── */}
       {payment && payment.length > 0 && (
         <div className="print-payment print-avoid-break">
           {payment.map((item) => (
@@ -200,14 +201,12 @@ export function PrintDocument({
         </div>
       )}
 
-      {/* ── Notes ── */}
       {notes && (
         <div className="print-notes print-avoid-break">
           <span className="print-notes-label">ملاحظات:</span> {notes}
         </div>
       )}
 
-      {/* ── Signatures ── */}
       {signatures && signatures.length > 0 && (
         <div className="print-signatures print-avoid-break">
           {signatures.map((sig) => (
@@ -218,7 +217,6 @@ export function PrintDocument({
         </div>
       )}
 
-      {/* ── Footer: contact once, last page only ── */}
       {showFooter && (
         <div className="print-footer">
           <div className="print-footer-thanks">

@@ -12,7 +12,7 @@ import {
 import { InlineFabricCell, InlineColorCell } from "@/components/invoices/InlineFabricCell";
 import { currencySymbol } from "@/presentation/hooks/useCurrency";
 import type { Currency } from "@/domain/types";
-import { rollsOfColor, rollById } from "@/presentation/hooks/useInventory";
+import { rollsOfColor, rollById, fabricByName } from "@/presentation/hooks/useInventory";
 import { cn } from "@/lib/utils";
 import { formatNumber, formatQuantity, formatMoney } from "@/shared/utils/formatNumber";
 import { CardField, FormattedAmountInput, GroupSection } from "./InvoiceFormLayout";
@@ -116,16 +116,21 @@ export function SaleLineCard({
                 value={line.fabricName}
                 existingFabricId={line.fabricId || undefined}
                 onPickExisting={onPickFabric}
-                onSetName={(name) =>
-                  onUpdate({
-                    fabricName: name,
-                    fabricId: "",
-                    colorId: "",
-                    colorName: "",
-                    colorCode: "",
-                    rollId: "",
-                  })
-                }
+                onSetName={(name) => {
+                  const match = fabricByName(name);
+                  if (match) {
+                    onPickFabric(match.id);
+                  } else {
+                    onUpdate({
+                      fabricName: name,
+                      fabricId: "",
+                      colorId: "",
+                      colorName: "",
+                      colorCode: "",
+                      rollId: "",
+                    });
+                  }
+                }}
               />
             </CardField>
             <CardField label="اسم اللون" required>
@@ -160,7 +165,15 @@ export function SaleLineCard({
             <CardField label="رقم الصبغة" required>
               <Select
                 value={line.rollId}
-                onValueChange={(v) => onUpdate({ rollId: v })}
+                onValueChange={(v) => {
+                  const r = rollById(v);
+                  const remPieces = r ? (r.remainingPieces ?? r.pieces ?? 1) : 1;
+                  onUpdate({
+                    rollId: v,
+                    // Remnant lots with 0 pieces must not keep the default 1.
+                    pieces: remPieces <= 0 ? 0 : line.pieces || 1,
+                  });
+                }}
                 disabled={!line.colorId}
               >
                 <SelectTrigger className="!h-9">

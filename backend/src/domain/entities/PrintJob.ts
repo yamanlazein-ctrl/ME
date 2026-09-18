@@ -108,6 +108,8 @@ export interface ReceivePrintJobInput {
   newCategory?: string;
   newColorName?: string;
   newColorCode?: string;
+  /** Optional swatch hex for the new inventory colour. */
+  newColorHex?: string;
   newSalePricePerKg?: number;
   notes?: string;
 }

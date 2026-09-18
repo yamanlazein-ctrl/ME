@@ -38,6 +38,14 @@ export const receivePrintJobSchema = z.object({
   newCategory: z.string().max(100).optional(),
   newColorName: z.string().max(255).optional(),
   newColorCode: z.string().max(50).optional(),
+  newColorHex: z
+    .preprocess(
+      (v) => (v === "" || v === null ? undefined : v),
+      z
+        .string()
+        .regex(/^#([0-9A-Fa-f]{3}|[0-9A-Fa-f]{6}|[0-9A-Fa-f]{8})$/, "لون غير صالح")
+        .optional(),
+    ),
   newSalePricePerKg: z.number().min(0).optional(),
   notes: z.string().max(2000).optional(),
 });

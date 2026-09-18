@@ -42,10 +42,11 @@ export function LicenseListPage({ onLogout }: { onLogout?: () => void }) {
   const [showCreate, setShowCreate] = useState(false);
   const [selectedLicense, setSelectedLicense] = useState<string | null>(null);
 
-  const { data: licenses, isLoading } = useQuery({
+  const { data: licenses, isLoading, isError, error, refetch } = useQuery({
     queryKey: ["licenses"],
     queryFn: fetchLicenses,
     refetchInterval: 30_000,
+    retry: 1,
   });
 
   const filtered = (licenses ?? []).filter(
@@ -108,6 +109,20 @@ export function LicenseListPage({ onLogout }: { onLogout?: () => void }) {
             {isLoading ? (
               <div className="flex items-center justify-center py-20">
                 <Loader2 size={24} className="animate-spin text-zinc-500" />
+              </div>
+            ) : isError ? (
+              <div className="text-center py-20 space-y-3">
+                <Key size={40} className="mx-auto text-red-500/40 mb-3" />
+                <p className="text-red-400">
+                  {error instanceof Error ? error.message : "فشل تحميل التراخيص"}
+                </p>
+                <button
+                  type="button"
+                  onClick={() => void refetch()}
+                  className="text-sm text-blue-400 hover:text-blue-300 underline"
+                >
+                  إعادة المحاولة
+                </button>
               </div>
             ) : filtered.length === 0 ? (
               <div className="text-center py-20">

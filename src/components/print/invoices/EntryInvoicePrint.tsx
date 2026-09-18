@@ -111,11 +111,11 @@ export function EntryInvoicePrint({
   }
   // ── Items table — rolls + pieces in the MAIN row (Issue 13), not nested.
   const mainColumns: PrintColumn[] = [
-    { key: "fabric", label: "الصنف", width: "22%" },
-    { key: "color", label: "اللون", width: "14%" },
-    { key: "roll", label: "رقم الصبغة", width: "14%" },
-    { key: "pieces", label: "الأثواب", align: "center", width: "8%" },
-    { key: "qty", label: "الكمية (كغ)", align: "center", width: "12%" },
+    { key: "fabric", label: "الصنف", width: "20%" },
+    { key: "color", label: "اللون", width: "20%" },
+    { key: "roll", label: "رقم الصبغة", width: "12%" },
+    { key: "pieces", label: "الأنواع", align: "center", width: "7%" },
+    { key: "qty", label: "الكمية (كغ)", align: "center", width: "11%" },
     { key: "price", label: "السعر/كغ", align: "left", amount: true, width: "12%" },
     { key: "gross", label: "الإجمالي", align: "left", amount: true, width: "18%" },
   ];

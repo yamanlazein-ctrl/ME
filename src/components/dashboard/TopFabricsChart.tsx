@@ -58,10 +58,9 @@ function EmptyState({ icon: Icon, text }: { icon: typeof Trophy; text: string })
 }
 
 export function TopFabricsChart() {
-  const { data: dashboardData } = useDashboard();
+  const { data: dashboardData, isLoading, isError } = useDashboard();
   const data = dashboardData?.topFabrics ?? [];
   const maxIdx = data.reduce((m, d, i) => (d.salesK > data[m].salesK ? i : m), 0);
-  const loading = !dashboardData;
 
   return (
     <div
@@ -78,8 +77,10 @@ export function TopFabricsChart() {
         </div>
       </div>
 
-      {loading ? (
+      {isLoading ? (
         <ChartSkeleton />
+      ) : isError ? (
+        <EmptyState icon={Trophy} text="تعذّر تحميل الأكثر مبيعاً" />
       ) : data.length === 0 ? (
         <EmptyState icon={Trophy} text="لا توجد أقمشة لعرضها" />
       ) : (

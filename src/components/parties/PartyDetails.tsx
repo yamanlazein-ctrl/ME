@@ -69,6 +69,7 @@ import {
 import type { Party } from "@/domain/entities/Party";
 import { useCancelInvoice, useInvoicesList, type Invoice } from "@/presentation/hooks/useInvoices";
 import { useVouchersList } from "@/presentation/hooks/useVouchers";
+import { useReturnsList, returnAmount } from "@/presentation/hooks/useReturns";
 import { invoiceTotal } from "@/core/calculations/invoiceCalc";
 import {
   buildFabricHistory,
@@ -79,7 +80,8 @@ import {
   useLedgerEntries,
   type LedgerType,
 } from "@/presentation/hooks/useLedger";
-import { useStatement, useSettleParty } from "@/presentation/hooks/useStatement";
+import { useStatement } from "@/presentation/hooks/useStatement";
+import { SettlementDialog } from "@/components/parties/SettlementDialog";
 import { formatNumber, formatMoney, formatQuantity } from "@/shared/utils/formatNumber";
 
 const _nextFormId = 0;
@@ -256,6 +258,15 @@ export function PartyDetailsPage({ kind, id }: { kind: PartyKind; id: string }) 
     p ? { partyId: p.id, limit: 1000 } : undefined,
   );
   const allVouchers = vouchersData?.data ?? [];
+  const { data: returnsData } = useReturnsList(
+    p ? { partyId: p.id, status: "active", limit: 1000 } : undefined,
+  );
+  const allReturns = (returnsData?.data ?? []).map((r) => ({
+    originalInvoiceId: r.originalInvoiceId,
+    status: r.status,
+    currency: r.currency,
+    amount: returnAmount(r),
+  }));
   const { data: ledgerEntries = [] } = useLedgerEntries(
     p ? { partyId: p.id, limit: 1000 } : undefined,
   );
@@ -282,7 +293,7 @@ export function PartyDetailsPage({ kind, id }: { kind: PartyKind; id: string }) 
     );
   }
 
-  const statsByCurrency = buildPartyStatsByCurrency(p, kind, allInvoices, allVouchers);
+  const statsByCurrency = buildPartyStatsByCurrency(p, kind, allInvoices, allVouchers, allReturns);
   // N14: summary «المتبقي» must match open-invoices / aging on this same page
   // (invoice total − paid), not a separate ledger debit−credit path that drifts.
   const overviewStats = statsByCurrency;
@@ -793,11 +804,28 @@ function StatementTab({ p, kind }: { p: Party; kind: PartyKind }) {
   // "فقط آخر فاتورة".
   const [ccy, setCcy] = useState<Currency | "ALL">("ALL");
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
-  const [confirmSettle, setConfirmSettle] = useState(false);
+  const [settleOpen, setSettleOpen] = useState(false);
   const [toDelete, setToDelete] = useState<Invoice | null>(null);
   const cancelInvoice = useCancelInvoice();
   const { data: invData } = useInvoicesList({ partyId: p.id, limit: 1000 });
+  const { data: vDataForSettle } = useVouchersList({ partyId: p.id, limit: 1000 });
+  const { data: returnsForSettle } = useReturnsList({
+    partyId: p.id,
+    status: "active",
+    limit: 1000,
+  });
   const invoicesById = new Map((invData?.data ?? []).map((i) => [i.id, i]));
+  const outstandingForSettle = buildOutstanding(
+    p.id,
+    invData?.data ?? [],
+    vDataForSettle?.data ?? [],
+    undefined,
+    (returnsForSettle?.data ?? []).map((r) => ({
+      originalInvoiceId: r.originalInvoiceId,
+      status: r.status,
+      amount: returnAmount(r),
+    })),
+  );
 
   const filter = {
     from: from || undefined,
@@ -814,7 +842,6 @@ function StatementTab({ p, kind }: { p: Party; kind: PartyKind }) {
   }, [printFilterKey]);
 
   const { data: statement, isLoading } = useStatement(p.id, kind, filter);
-  const settle = useSettleParty(p.id, kind);
 
   const rows = statement?.entries ?? [];
   const previousBalance = statement?.previousBalance ?? 0;
@@ -993,12 +1020,11 @@ function StatementTab({ p, kind }: { p: Party; kind: PartyKind }) {
           <Button variant="outline" className="h-9 gap-2" onClick={exportCsv}>
             <Download className="h-4 w-4" /> تصدير Excel
           </Button>
-          {!multiCcy && finalBalance !== 0 && (
+          {outstandingForSettle.length > 0 && (
             <Button
               variant="default"
               className="h-9 gap-2 bg-warning text-warning-foreground hover:bg-warning/90"
-              onClick={() => setConfirmSettle(true)}
-              disabled={settle.isPending}
+              onClick={() => setSettleOpen(true)}
             >
               <Scale className="h-4 w-4" /> تسوية الحساب
             </Button>
@@ -1344,34 +1370,15 @@ function StatementTab({ p, kind }: { p: Party; kind: PartyKind }) {
         </PageCard>
       )}
 
-      {/* Settle confirmation */}
-      <AlertDialog open={confirmSettle} onOpenChange={setConfirmSettle}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>تسوية الحساب</AlertDialogTitle>
-            <AlertDialogDescription>
-              سيتم إنشاء سند تسوية بمبلغ {fmt(Math.abs(finalBalance))} {cur} لإلغاء الرصيد الحالي (
-              {finalBalance > 0 ? "مدين" : "دائن"}). هل أنت متأكد؟
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>إلغاء</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={(e) => {
-                e.preventDefault();
-                settle.mutate(
-                  { currency: ccy === "ALL" ? (p.currency ?? "SYP") : ccy },
-                  {
-                    onSettled: () => setConfirmSettle(false),
-                  },
-                );
-              }}
-            >
-              {settle.isPending ? "جارٍ التسوية…" : "تأكيد التسوية"}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <SettlementDialog
+        open={settleOpen}
+        onOpenChange={setSettleOpen}
+        partyId={p.id}
+        partyName={p.name}
+        partyCode={p.code}
+        kind={kind}
+        outstanding={outstandingForSettle}
+      />
 
       <AlertDialog open={!!toDelete} onOpenChange={(o) => !o && setToDelete(null)}>
         <AlertDialogContent dir="rtl">
@@ -1406,7 +1413,22 @@ function OutstandingTab({ p }: { p: Party }) {
   const invs = invData?.data ?? [];
   const { data: vData } = useVouchersList({ partyId: p.id, limit: 1000 });
   const vchs = vData?.data ?? [];
-  const rows = buildOutstanding(p.id, invs, vchs);
+  const { data: returnsData } = useReturnsList({
+    partyId: p.id,
+    status: "active",
+    limit: 1000,
+  });
+  const rows = buildOutstanding(
+    p.id,
+    invs,
+    vchs,
+    undefined,
+    (returnsData?.data ?? []).map((r) => ({
+      originalInvoiceId: r.originalInvoiceId,
+      status: r.status,
+      amount: returnAmount(r),
+    })),
+  );
   const [dueCcy, setDueCcy] = useState<"SYP" | "USD">("SYP");
   const [dueCcyTouched, setDueCcyTouched] = useState(false);
   const sypDue = rows.some((r) => r.currency === "SYP");
@@ -1557,11 +1579,26 @@ function StatsTab({ p, kind }: { p: Party; kind: PartyKind }) {
   const invs = invData?.data ?? [];
   const { data: vData } = useVouchersList({ partyId: p.id, limit: 1000 });
   const vchs = vData?.data ?? [];
+  const { data: returnsData } = useReturnsList({
+    partyId: p.id,
+    status: "active",
+    limit: 1000,
+  });
   const colorNames = Object.fromEntries(colors.map((c) => [c.id, c.name]));
   const colorCodes = Object.fromEntries(colors.map((c) => [c.id, c.code ?? ""]));
   const fabricNames = Object.fromEntries(fabrics.map((f) => [f.id, f.name]));
   const hist = buildFabricHistory(p.id, kind, invs, colorNames, colorCodes, fabricNames);
-  const statsByCurrency = buildPartyStatsByCurrency(p, kind, invs, vchs);
+  const statsByCurrency = buildPartyStatsByCurrency(
+    p,
+    kind,
+    invs,
+    vchs,
+    (returnsData?.data ?? []).map((r) => ({
+      originalInvoiceId: r.originalInvoiceId,
+      status: r.status,
+      amount: returnAmount(r),
+    })),
+  );
   const currencyKeys = Object.keys(statsByCurrency).sort((a, b) => a.localeCompare(b));
   const primaryCcy = (p.currency ?? currencyKeys[0] ?? "SYP") as Currency;
   const stats = statsByCurrency[primaryCcy] ?? {

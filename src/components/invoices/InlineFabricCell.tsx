@@ -3,13 +3,14 @@ import { Check, Plus } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { colors, fabrics, fabricById, searchColors, colorByName } from "@/presentation/hooks/useInventory";
+import { normalizeInventoryName } from "@/domain/inventory/normalizeInventoryName";
 
 /**
  * Inline fabric autocomplete for a table cell.
  * - Free-text input, filters existing fabrics as the user types.
  * - Selecting a match calls onPickExisting(fabricId).
- * - Typing a name and pressing Enter/Tab that doesn't match commits the typed
- *   name via onSetName — the parent will register a NEW fabric on save.
+ * - Typing a name that already exists keeps the existing master bound;
+ *   only a truly new name is marked as "جديد" and created on save.
  */
 export const InlineFabricCell = forwardRef<
   HTMLInputElement,
@@ -26,14 +27,16 @@ export const InlineFabricCell = forwardRef<
   ref,
 ) {
   const [open, setOpen] = useState(false);
-  const q = value.trim().toLowerCase();
+  const q = normalizeInventoryName(value);
 
   const matches = useMemo(() => {
     if (!q) return [];
-    return fabrics.filter((f) => f.name.toLowerCase().includes(q)).slice(0, 8);
+    return fabrics
+      .filter((f) => normalizeInventoryName(f.name).includes(q))
+      .slice(0, 8);
   }, [q]);
 
-  const exactMatch = fabrics.find((f) => f.name.toLowerCase() === q);
+  const exactMatch = fabrics.find((f) => normalizeInventoryName(f.name) === q);
   const isNew = q.length > 0 && !exactMatch;
 
   const handleKey = (e: KeyboardEvent<HTMLInputElement>) => {
@@ -110,9 +113,8 @@ export const InlineFabricCell = forwardRef<
 
 /**
  * Inline color autocomplete.
- * Search is by typed name across the catalogue (never a dump of every color).
- * A hit on another fabric copies the name; binding the id is the parent's job
- * via resolveColorPick. No match → create on save.
+ * When fabricId is set, only colours of that fabric are listed (and an empty
+ * query shows that fabric's stock colours). Cross-fabric hits are never shown.
  */
 export const InlineColorCell = forwardRef<
   HTMLInputElement,
@@ -133,10 +135,13 @@ export const InlineColorCell = forwardRef<
   const [open, setOpen] = useState(false);
   const codeRef = useRef<HTMLInputElement>(null);
 
-  const q = name.trim().toLowerCase();
-  const matches = useMemo(() => searchColors(name, 12), [name]);
+  const q = normalizeInventoryName(name);
+  const matches = useMemo(
+    () => searchColors(name, 12, fabricId),
+    [name, fabricId],
+  );
   const local = colorByName(name, fabricId);
-  const isNew = q.length > 0 && !local;
+  const isNew = q.length > 0 && !local && !!fabricId;
 
   const nameInput = (
     <Input
@@ -177,7 +182,7 @@ export const InlineColorCell = forwardRef<
   );
 
   const dropdown =
-    open && mode !== "code" && (matches.length > 0 || isNew) ? (
+    open && mode !== "code" && (matches.length > 0 || isNew || (!!fabricId && !q)) ? (
       <div className="absolute right-0 top-full z-20 mt-1 w-full min-w-[240px] rounded-md border border-border bg-popover shadow-lg">
         {matches.map((c) => (
           <button
@@ -193,8 +198,10 @@ export const InlineColorCell = forwardRef<
             <div className="min-w-0">
               <div className="truncate font-medium text-foreground">{c.name}</div>
               <div className="truncate text-[10px] text-muted-foreground">
-                {fabricById(c.fabricId)?.name ?? ""}
-                {c.code ? ` · ${c.code}` : ""}
+                {c.code ? c.code : "بدون كود"}
+                {!fabricId && fabricById(c.fabricId)?.name
+                  ? ` · ${fabricById(c.fabricId)?.name}`
+                  : ""}
               </div>
             </div>
             {c.id === existingColorId && <Check className="h-3.5 w-3.5 shrink-0 text-primary" />}

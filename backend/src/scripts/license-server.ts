@@ -167,10 +167,16 @@ async function main(): Promise<void> {
   registerLicenseV1Routes(app, { licenseRepo, auditRepo, licenseProvider, tokenSigner });
 
   // Admin API (Super Admin JWT, with LICENSE_ADMIN_TOKEN fallback).
+  // Local owner console (admin-dashboard on loopback) skips login — must match
+  // App.tsx `isLoopbackHost()`. Opt out with LICENSE_ADMIN_OPEN_LOOPBACK=0.
+  // Production stays closed unless explicitly set to "1".
+  const openLoopbackEnv = process.env.LICENSE_ADMIN_OPEN_LOOPBACK;
+  const openLoopback =
+    openLoopbackEnv === "1" ||
+    (openLoopbackEnv !== "0" && process.env.NODE_ENV !== "production");
   const adminAuth = createSuperAdminAuthMiddleware(jwtSigner, tokenDenylist, {
     fallbackToken: LICENSE_ADMIN_TOKEN,
-    // Local owner console (QA / single-operator laptop): no email+password on loopback.
-    openLoopback: process.env.LICENSE_ADMIN_OPEN_LOOPBACK === "1",
+    openLoopback,
   });
   registerLicenseAdminRoutes(app, {
     licenseRepo,
@@ -200,6 +206,7 @@ async function main(): Promise<void> {
       {
         port: LICENSE_SERVER_PORT,
         adminTokenSet: !!process.env.LICENSE_ADMIN_TOKEN,
+        openLoopback,
       },
       "License Server listening",
     );

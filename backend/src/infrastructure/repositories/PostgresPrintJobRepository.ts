@@ -293,6 +293,7 @@ export class PostgresPrintJobRepository implements IPrintJobRepository {
                   fabricId: resultFabricId,
                   name: colorName,
                   code: input.newColorCode ?? null,
+                  hex: input.newColorHex ?? null,
                 })
                 .returning();
               resultColorId = col.id;

@@ -12,6 +12,8 @@ import { UUID, type TenantContext } from "@/domain/types";
 import type { Currency } from "@/domain/types";
 import { formatNumber, formatMoney, formatQuantity } from "@/shared/utils/formatNumber";
 import { colorOnFabric, filterColorsByQuery } from "@/domain/inventory/colorLookup";
+import { normalizeInventoryName } from "@/domain/inventory/normalizeInventoryName";
+import { NotFoundError, ValidationError } from "@/core/errors";
 
 export type FabricUnit = "meter" | "yard" | "kg";
 export type RollStatus = "active" | "low" | "out";
@@ -177,15 +179,17 @@ export function fabricById(id: string): Fabric | null {
 }
 
 export function fabricByName(name: string): Fabric | undefined {
-  const q = name.trim().toLowerCase();
+  const q = normalizeInventoryName(name);
   if (!q) return undefined;
-  return fabricsCache.find((f) => (f.name ?? "").trim().toLowerCase() === q);
+  return fabricsCache.find((f) => normalizeInventoryName(f.name ?? "") === q);
 }
 
 export function searchFabrics(term: string, limit = 8): Fabric[] {
-  const q = term.trim().toLowerCase();
+  const q = normalizeInventoryName(term);
   if (!q) return fabricsCache.slice(0, limit);
-  return fabricsCache.filter((f) => (f.name ?? "").toLowerCase().includes(q)).slice(0, limit);
+  return fabricsCache
+    .filter((f) => normalizeInventoryName(f.name ?? "").includes(q))
+    .slice(0, limit);
 }
 
 export function colorById(id: string): Color | null {
@@ -220,8 +224,8 @@ export function totalPiecesOfFabric(fabricId: string): number {
   return colorsOfFabric(fabricId).reduce((s, c) => s + totalPiecesOfColor(c.id), 0);
 }
 
-export function searchColors(term: string, limit = 12): Color[] {
-  return filterColorsByQuery(colorsCache, term, limit);
+export function searchColors(term: string, limit = 12, fabricId?: string): Color[] {
+  return filterColorsByQuery(colorsCache, term, limit, fabricId);
 }
 
 export function colorByName(name: string, fabricId: string | undefined): Color | undefined {
@@ -247,10 +251,10 @@ export function colorByName(name: string, fabricId: string | undefined): Color |
  * "search everywhere and hope".
  */
 export function colorByCode(code: string, fabricId: string | undefined): Color | undefined {
-  const q = code.trim().toLowerCase();
+  const q = normalizeInventoryName(code);
   if (!q || !fabricId) return undefined;
   return colorsCache.find(
-    (c) => c.fabricId === fabricId && (c.code ?? "").trim().toLowerCase() === q,
+    (c) => c.fabricId === fabricId && normalizeInventoryName(c.code ?? "") === q,
   );
 }
 
@@ -316,29 +320,36 @@ export async function updateFabric(
 export async function deleteFabric(id: string) {
   try {
     const ok = await container.inventory.repository.deleteFabric(id, ctx);
-    if (ok) {
-      const idx = fabricsCache.findIndex((f) => f.id === id);
-      if (idx >= 0) fabricsCache.splice(idx, 1);
-      const removedColorIds = new Set(
-        colorsCache.filter((c) => c.fabricId === id).map((c) => c.id),
-      );
-      if (removedColorIds.size > 0) {
-        for (let i = colorsCache.length - 1; i >= 0; i--) {
-          if (removedColorIds.has(colorsCache[i].id)) colorsCache.splice(i, 1);
-        }
-        for (let i = rollsCache.length - 1; i >= 0; i--) {
-          if (removedColorIds.has(rollsCache[i].colorId)) rollsCache.splice(i, 1);
-        }
-      }
-      notifyInventoryChange();
-      toast.success("تم حذف القماش");
-    } else {
-      // The backend rejected the delete (e.g. the fabric or its colors/rolls
-      // are referenced by invoices, returns, print jobs, …). Do NOT remove it
-      // from the cache — otherwise it vanishes visually but reappears on reload.
-      toast.error("فشل حذف القماش: العنصر غير موجود أو مرتبط بمعاملات موجودة");
+    if (!ok) {
+      // Repository returns false only for a confirmed 404 (fabric missing).
+      toast.error("فشل حذف القماش: العنصر غير موجود");
+      return;
     }
+    const idx = fabricsCache.findIndex((f) => f.id === id);
+    if (idx >= 0) fabricsCache.splice(idx, 1);
+    const removedColorIds = new Set(
+      colorsCache.filter((c) => c.fabricId === id).map((c) => c.id),
+    );
+    if (removedColorIds.size > 0) {
+      for (let i = colorsCache.length - 1; i >= 0; i--) {
+        if (removedColorIds.has(colorsCache[i].id)) colorsCache.splice(i, 1);
+      }
+      for (let i = rollsCache.length - 1; i >= 0; i--) {
+        if (removedColorIds.has(rollsCache[i].colorId)) rollsCache.splice(i, 1);
+      }
+    }
+    notifyInventoryChange();
+    toast.success("تم حذف القماش");
   } catch (e) {
+    // Keep masters in cache on linked/validation failures — they are still live.
+    if (e instanceof ValidationError) {
+      toast.error(`فشل حذف القماش: ${e.message}`);
+      return;
+    }
+    if (e instanceof NotFoundError) {
+      toast.error("فشل حذف القماش: العنصر غير موجود");
+      return;
+    }
     toast.error(`فشل حذف القماش: ${e instanceof Error ? e.message : "خطأ غير معروف"}`);
   }
 }

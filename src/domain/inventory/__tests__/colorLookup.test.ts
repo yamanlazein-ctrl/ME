@@ -28,15 +28,31 @@ const cottonRed = {
 const catalog: ColorLookupRow[] = [cotton, jeansOlive, cottonRed];
 
 describe("filterColorsByQuery", () => {
-  it("does not dump the catalogue when the query is empty", () => {
+  it("does not dump the catalogue when the query is empty and unscoped", () => {
     expect(filterColorsByQuery(catalog, "")).toEqual([]);
     expect(filterColorsByQuery(catalog, "   ")).toEqual([]);
+  });
+
+  it("lists a fabric's colours when scoped and query is empty", () => {
+    expect(filterColorsByQuery(catalog, "", 12, "fab-cotton").map((c) => c.id).sort()).toEqual([
+      "c-olive-cotton",
+      "c-red-cotton",
+    ]);
+    expect(filterColorsByQuery(catalog, "", 12, "fab-jeans").map((c) => c.id)).toEqual([
+      "c-olive-jeans",
+    ]);
   });
 
   it("returns only names/codes related to the typed term", () => {
     const hits = filterColorsByQuery(catalog, "زيتي");
     expect(hits.map((c) => c.id).sort()).toEqual(["c-olive-cotton", "c-olive-jeans"]);
     expect(filterColorsByQuery(catalog, "أحمر").map((c) => c.id)).toEqual(["c-red-cotton"]);
+  });
+
+  it("scopes typed search to one fabric", () => {
+    expect(filterColorsByQuery(catalog, "زيتي", 12, "fab-jeans").map((c) => c.id)).toEqual([
+      "c-olive-jeans",
+    ]);
   });
 });
 

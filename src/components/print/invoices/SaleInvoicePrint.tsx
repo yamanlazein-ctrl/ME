@@ -107,13 +107,13 @@ export function SaleInvoicePrint({
   }
   // ── Items table — rolls + pieces in the MAIN row (Issue 13), not nested.
   const mainColumns: PrintColumn[] = [
-    { key: "fabric", label: "الصنف", width: "24%" },
-    { key: "color", label: "اللون", width: "18%" },
-    { key: "roll", label: "رقم الصبغة", width: "14%" },
-    { key: "pieces", label: "الأثواب", align: "center", width: "8%" },
+    { key: "fabric", label: "الصنف", width: "22%" },
+    { key: "color", label: "اللون", width: "22%" },
+    { key: "roll", label: "رقم الصبغة", width: "12%" },
+    { key: "pieces", label: "الأنواع", align: "center", width: "7%" },
     { key: "qty", label: "الكمية (كغ)", align: "center", width: "10%" },
     { key: "price", label: "السعر/كغ", align: "left", amount: true, width: "12%" },
-    { key: "gross", label: "الإجمالي", align: "left", amount: true, width: "16%" },
+    { key: "gross", label: "الإجمالي", align: "left", amount: true, width: "15%" },
   ];
 
   /** Build a row: main cells + optional secondary detail (machine/kromaj only). */

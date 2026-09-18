@@ -8,6 +8,7 @@ import {
   InsufficientStockError,
   ConcurrentModificationError,
 } from "@/domain/errors";
+import { NotFoundError as HttpNotFoundError, ValidationError } from "@/core/errors";
 import type {
   IInventoryRepository,
   InventoryFilter,
@@ -57,11 +58,16 @@ export class ApiInventoryRepository implements IInventoryRepository {
   }
 
   async deleteFabric(id: UUID, ctx: TenantContext): Promise<boolean> {
+    void ctx;
     try {
       await this.api.deleteFabric(id);
       return true;
-    } catch {
-      return false;
+    } catch (e) {
+      // Preserve 404 vs linked/validation so callers can show distinct messages.
+      // Returning false only for confirmed not-found keeps the repository contract.
+      if (e instanceof HttpNotFoundError) return false;
+      if (e instanceof ValidationError) throw e;
+      throw e;
     }
   }
 
@@ -104,11 +110,14 @@ export class ApiInventoryRepository implements IInventoryRepository {
   }
 
   async deleteColor(id: UUID, ctx: TenantContext): Promise<boolean> {
+    void ctx;
     try {
       await this.api.deleteColor(id);
       return true;
-    } catch {
-      return false;
+    } catch (e) {
+      if (e instanceof HttpNotFoundError) return false;
+      if (e instanceof ValidationError) throw e;
+      throw e;
     }
   }
 
@@ -146,11 +155,14 @@ export class ApiInventoryRepository implements IInventoryRepository {
   }
 
   async deleteRoll(id: UUID, ctx: TenantContext): Promise<boolean> {
+    void ctx;
     try {
       await this.api.deleteRoll(id);
       return true;
-    } catch {
-      return false;
+    } catch (e) {
+      if (e instanceof HttpNotFoundError) return false;
+      if (e instanceof ValidationError) throw e;
+      throw e;
     }
   }
 

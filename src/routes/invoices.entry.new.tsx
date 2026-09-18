@@ -18,10 +18,12 @@ import {
   updateColor,
   fabricById,
   fabricByName,
+  refreshInventory,
   rollById,
   useInventory,
 } from "@/presentation/hooks/useInventory";
 import { resolveColorPick } from "@/domain/inventory/colorLookup";
+import { normalizeInventoryName } from "@/domain/inventory/normalizeInventoryName";
 import { supplierById } from "@/presentation/hooks/useParties";
 import { currencySymbol } from "@/presentation/hooks/useCurrency";
 import type { Currency } from "@/domain/types";
@@ -539,28 +541,43 @@ function EntryInvoicePage() {
     const invLines = [];
     const isEdit = !!edit;
     try {
+      // Refresh masters before resolve so typed names re-bind to live IDs
+      // instead of silently creating near-duplicate fabrics/colors.
+      await refreshInventory();
+
       for (const l of rows) {
+        const typedFabricName = l.fabricName.trim();
         let fabricId = l.existingFabricId;
         let colorId = l.existingColorId;
-        if (!fabricId) {
-          const existing = fabricByName(l.fabricName.trim());
-          if (existing) {
-            fabricId = existing.id;
-          } else {
-            const fab = await addFabric(
-              {
-                name: l.fabricName.trim(),
-                category: l.category,
-                minStockKg: 10,
-                notes: l.notes,
-                unit: l.unit,
-                imageUrl: l.imageUrl ?? undefined,
-              },
-              { silent: true },
-            );
-            fabricId = fab.id;
-            newFabrics += 1;
+
+        const nameMatch = typedFabricName ? fabricByName(typedFabricName) : undefined;
+        if (fabricId) {
+          const bound = fabricById(fabricId);
+          const boundMatchesName =
+            !!bound &&
+            normalizeInventoryName(bound.name ?? "") === normalizeInventoryName(typedFabricName);
+          if (!boundMatchesName) {
+            // Stale id or typed name diverged — prefer the live name match.
+            fabricId = nameMatch?.id;
           }
+        } else if (nameMatch) {
+          fabricId = nameMatch.id;
+        }
+
+        if (!fabricId) {
+          const fab = await addFabric(
+            {
+              name: typedFabricName,
+              category: l.category,
+              minStockKg: 10,
+              notes: l.notes,
+              unit: l.unit,
+              imageUrl: l.imageUrl ?? undefined,
+            },
+            { silent: true },
+          );
+          fabricId = fab.id;
+          newFabrics += 1;
         }
         // ── Color resolution: bound lot vs new lot (edit mode) ──
         // A bound (saved) lot keeps its colorId forever, BUT its name/code/hex
@@ -570,14 +587,20 @@ function EntryInvoicePage() {
         const rawSaved = isEdit
           ? editRawLinesRef.current?.find((r) => r.rollId === l.rollId)
           : undefined;
+        // Rename only for edit-bound lots or an explicit UI pick — never after
+        // a code/name lookup reused another line's colour master.
+        let mayRenameColor = false;
         if (rawSaved) {
           const boundId = rawSaved.colorId;
           const col0Name = colorById(boundId)?.name ?? "";
           const codeKey = l.colorCode.trim();
-          const nameKey = l.colorName.trim().toLowerCase();
+          const nameKey = l.colorName.trim();
           const byCode = codeKey ? colorByCode(codeKey, fabricId) : undefined;
           const byName = nameKey
-            ? colorsOfFabric(fabricId).find((c) => c.name.toLowerCase() === nameKey)
+            ? colorsOfFabric(fabricId).find(
+                (c) =>
+                  normalizeInventoryName(c.name) === normalizeInventoryName(nameKey),
+              )
             : undefined;
           if ((byCode && byCode.id !== boundId) || (byName && byName.id !== boundId)) {
             const other = byCode && byCode.id !== boundId ? byCode : byName;
@@ -587,51 +610,70 @@ function EntryInvoicePage() {
             return;
           }
           colorId = boundId;
+          mayRenameColor = true;
         } else {
           if (colorId) {
             const bound = colorById(colorId);
             if (!bound || bound.fabricId !== fabricId) colorId = undefined;
           }
+          const explicitlyBoundId = colorId;
           if (!colorId) {
-          const codeKey = l.colorCode.trim();
-          // Fix C-11: fabricId is resolved above (existing or just
-          // created) before we ever look up a color code — pass it so the
-          // lookup can never merge into a same-code color under a
-          // different fabric.
-          const existingColor = codeKey ? colorByCode(codeKey, fabricId) : undefined;
-          if (existingColor) {
-            colorId = existingColor.id;
-          } else {
-            // Name match too: on EDIT, the operator usually fixes a typo in
-            // the color NAME while the code stays — resolve to the same
-            // color so it becomes a RENAME, never a duplicate.
+            const codeKey = l.colorCode.trim();
             const nameKey = l.colorName.trim();
-            const byName = nameKey
-              ? colorsOfFabric(fabricId).find(
-                  (c) => c.name.toLowerCase() === nameKey.toLowerCase(),
-                )
-              : undefined;
-            if (byName) {
-              colorId = byName.id;
-            } else {
-              const col = await addColor(
-                {
-                  fabricId,
-                  name: l.colorName.trim(),
-                  code: codeKey || `C-${Date.now().toString().slice(-3)}`,
-                  hex: l.colorHex ?? undefined,
-                  imageUrl: l.colorImageUrl ?? undefined,
-                },
-                { silent: true },
-              );
-              colorId = col.id;
-              newColors += 1;
+            // Fix C-11: fabricId is resolved above (existing or just
+            // created) before we ever look up a color code — pass it so the
+            // lookup can never merge into a same-code color under a
+            // different fabric.
+            const existingColor = codeKey ? colorByCode(codeKey, fabricId) : undefined;
+            if (existingColor) {
+              const sameName =
+                !nameKey ||
+                normalizeInventoryName(existingColor.name) ===
+                  normalizeInventoryName(nameKey);
+              if (sameName) {
+                colorId = existingColor.id;
+              }
+              // else: leftover code from a sticky/previous line with a NEW
+              // typed name → create a distinct colour below (do not rename).
+            }
+            if (!colorId) {
+              const byName = nameKey
+                ? colorsOfFabric(fabricId).find(
+                    (c) =>
+                      normalizeInventoryName(c.name) ===
+                      normalizeInventoryName(nameKey),
+                  )
+                : undefined;
+              if (byName) {
+                colorId = byName.id;
+              } else {
+                const byCodeConflict = codeKey ? colorByCode(codeKey, fabricId) : undefined;
+                const codeTaken =
+                  !!byCodeConflict &&
+                  normalizeInventoryName(byCodeConflict.name) !==
+                    normalizeInventoryName(nameKey);
+                const col = await addColor(
+                  {
+                    fabricId,
+                    name: nameKey,
+                    code:
+                      codeKey && !codeTaken
+                        ? codeKey
+                        : `C-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`,
+                    hex: l.colorHex ?? undefined,
+                    imageUrl: l.colorImageUrl ?? undefined,
+                  },
+                  { silent: true },
+                );
+                colorId = col.id;
+                newColors += 1;
+              }
             }
           }
-          }
+          mayRenameColor = !!explicitlyBoundId && explicitlyBoundId === colorId;
         }
         // ── Rename sync: typed name/code/hex ≠ stored → rename the color ──
-        if (colorId) {
+        if (colorId && mayRenameColor) {
           const col = colorById(colorId);
           if (col) {
             const newName = l.colorName.trim();
@@ -643,7 +685,9 @@ function EntryInvoicePage() {
               (newHex && newHex !== (col.hex ?? ""));
             if (renamed) {
               const conflict = colorsOfFabric(fabricId).find(
-                (c) => c.id !== colorId && c.name.toLowerCase() === newName.toLowerCase(),
+                (c) =>
+                  c.id !== colorId &&
+                  normalizeInventoryName(c.name) === normalizeInventoryName(newName),
               );
               if (conflict) {
                 const msg = `الاسم «${newName}» مستخدم أصلاً لصبغة أخرى من نفس القماش — اختر اسماً مختلفاً لإعادة التسمية.`;
@@ -1104,12 +1148,24 @@ function EntryInvoicePage() {
                             existingFabricId={l.existingFabricId}
                             className={fieldHasError(l.id, "fabricName") ? invalidCls : undefined}
                             onPickExisting={(fid) => pickExistingFabric(l.id, fid)}
-                            onSetName={(name) =>
-                              updateLine(l.id, {
-                                fabricName: name,
-                                existingFabricId: undefined,
-                              })
-                            }
+                            onSetName={(name) => {
+                              const match = fabricByName(name);
+                              if (match) {
+                                // Re-bind to the existing master while typing the same name
+                                // (including after a prior keystroke cleared existingFabricId).
+                                updateLine(l.id, {
+                                  fabricName: name,
+                                  existingFabricId: match.id,
+                                  category: match.category ?? l.category,
+                                  unit: match.unit ?? l.unit,
+                                });
+                              } else {
+                                updateLine(l.id, {
+                                  fabricName: name,
+                                  existingFabricId: undefined,
+                                });
+                              }
+                            }}
                           />
                         </CardField>
                         <CardField label="المرجعية">

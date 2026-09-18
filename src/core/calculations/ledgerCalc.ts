@@ -75,6 +75,15 @@ export type OutstandingRow = {
   currency: Currency;
 };
 
+/** Minimal return shape for remaining = total − paid − returns (matches voucher/settle). */
+export type ReturnCreditInput = {
+  originalInvoiceId?: string | null;
+  status?: string;
+  currency?: string;
+  amount?: number;
+  lines?: { quantityKg: number; pricePerKg: number }[];
+};
+
 export type PartyStats = {
   invoicesCount: number;
   totalAmount: number;
@@ -105,6 +114,25 @@ export type PartyStatsByCurrency = {
 type FsParty = { id: string; creditLimit?: number };
 
 const isActive = (e: { status?: string }) => !e.status || e.status === "active";
+
+function returnCreditAmount(r: ReturnCreditInput): number {
+  if (typeof r.amount === "number" && Number.isFinite(r.amount)) return round2dp(r.amount);
+  return round2dp(
+    (r.lines ?? []).reduce((s, l) => s + Number(l.quantityKg) * Number(l.pricePerKg), 0),
+  );
+}
+
+/** Active returns keyed by original invoice id (invoice-currency amounts). */
+export function returnsAmountByInvoice(returns: ReturnCreditInput[] = []): Map<string, number> {
+  const map = new Map<string, number>();
+  for (const r of returns) {
+    if (!isActive(r) || !r.originalInvoiceId) continue;
+    const amt = returnCreditAmount(r);
+    if (amt <= 0) continue;
+    map.set(r.originalInvoiceId, round2dp((map.get(r.originalInvoiceId) ?? 0) + amt));
+  }
+  return map;
+}
 
 export function filterLedger(
   entries: LedgerEntry[],
@@ -208,6 +236,7 @@ export function buildOutstanding(
     currency?: string;
   }[],
   currency?: string,
+  returns: ReturnCreditInput[] = [],
 ): OutstandingRow[] {
   const rows: OutstandingRow[] = [];
   // Prefer invoices.paid (backend-maintained, FX-safe). Voucher sums are a
@@ -219,6 +248,7 @@ export function buildOutstanding(
     if (currency && v.currency !== currency) continue;
     paidByInvoice.set(v.invoiceId, (paidByInvoice.get(v.invoiceId) ?? 0) + v.amount);
   }
+  const returnsByInv = returnsAmountByInvoice(returns);
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   for (const inv of invoices) {
@@ -231,7 +261,8 @@ export function buildOutstanding(
         ? inv.paid
         : (paidByInvoice.get(inv.id) ?? 0),
     );
-    const remaining = Math.max(0, total - paid);
+    // Same formula as settleInvoicesUseCase / voucher create: total − paid − returns.
+    const remaining = round2dp(total - paid - (returnsByInv.get(inv.id) ?? 0));
     if (remaining <= 0) continue;
     const d = new Date(inv.date + "T00:00:00");
     const ageDays = Math.max(0, Math.floor((today.getTime() - d.getTime()) / 86_400_000));
@@ -259,6 +290,7 @@ export function buildPartyStats(
   invoices: InvoiceData[],
   vouchers: { partyId: string; kind: string; status: string; amount: number; currency?: string }[],
   currency?: string,
+  returns: ReturnCreditInput[] = [],
 ): PartyStats {
   const expectedType = kind === "supplier" ? "entry" : "sale";
   let invs = invoices.filter(
@@ -267,12 +299,14 @@ export function buildPartyStats(
   if (currency) {
     invs = invs.filter((i) => i.currency === currency);
   }
+  const returnsByInv = returnsAmountByInvoice(returns);
   const totalAmount = invs.reduce((s, i) => s + round2dp(invoiceTotal(i)), 0);
   // Read paid directly from invoice rows (backend-maintained, FX-converted).
   const paid = invs.reduce((s, i) => s + (i.paid ?? 0), 0);
+  const returnsCredit = invs.reduce((s, i) => s + (returnsByInv.get(i.id) ?? 0), 0);
   // No Math.max clamp — a negative remaining is a real credit balance and
   // hiding it corrupts the summary card (H2 fix).
-  const remaining = totalAmount - paid;
+  const remaining = totalAmount - paid - returnsCredit;
   const totalKg = invs.reduce((s, i) => s + i.lines.reduce((a, l) => a + l.quantityKg, 0), 0);
   const dates = invs
     .map((i) => i.date)
@@ -301,11 +335,13 @@ export function buildPartyStatsByCurrency(
   kind: PartyKind,
   invoices: InvoiceData[],
   vouchers: { partyId: string; kind: string; status: string; amount: number; currency?: string }[],
+  returns: ReturnCreditInput[] = [],
 ): Record<string, PartyStatsByCurrency> {
   const expectedType = kind === "supplier" ? "entry" : "sale";
   const invs = invoices.filter(
     (i) => i.partyId === party.id && isActive(i) && i.type === expectedType,
   );
+  const returnsByInv = returnsAmountByInvoice(returns);
 
   const out: Record<string, PartyStatsByCurrency> = {};
   for (const inv of invs) {
@@ -317,17 +353,23 @@ export function buildPartyStatsByCurrency(
       remaining: 0,
       avgInvoice: 0,
       totalKg: 0,
+      lastDate: undefined as string | undefined,
     };
     cur.invoicesCount += 1;
     cur.totalAmount += round2dp(invoiceTotal(inv));
     cur.totalPaid += inv.paid ?? 0;
     cur.totalKg += inv.lines.reduce((a, l) => a + l.quantityKg, 0);
+    if (inv.date && (!cur.lastDate || inv.date > cur.lastDate)) cur.lastDate = inv.date;
     out[c] = cur;
   }
   for (const c of Object.keys(out)) {
     const cur = out[c];
+    const returnsCredit = invs
+      .filter((i) => i.currency === c)
+      .reduce((s, i) => s + (returnsByInv.get(i.id) ?? 0), 0);
     // H2 fix: keep negative (credit) balances visible instead of clamping.
-    cur.remaining = cur.totalAmount - cur.totalPaid;
+    // Returns reduce what is still owed — same as settle/voucher remaining.
+    cur.remaining = cur.totalAmount - cur.totalPaid - returnsCredit;
     cur.avgInvoice = cur.invoicesCount ? round2dp(cur.totalAmount / cur.invoicesCount) : 0;
     cur.totalKg = Math.round(cur.totalKg);
   }

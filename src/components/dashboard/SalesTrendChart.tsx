@@ -63,9 +63,8 @@ function EmptyState({ icon: Icon, text }: { icon: typeof TrendingUp; text: strin
 
 export function SalesTrendChart() {
   const [range, setRange] = useState<Range>("7");
-  const { data } = useDashboard();
+  const { data, isLoading, isError } = useDashboard();
   const chartData = data?.salesTrend?.[range] ?? [];
-  const loading = !data;
 
   return (
     <div
@@ -100,8 +99,10 @@ export function SalesTrendChart() {
         </div>
       </div>
 
-      {loading ? (
+      {isLoading ? (
         <ChartSkeleton />
+      ) : isError ? (
+        <EmptyState icon={TrendingUp} text="تعذّر تحميل اتجاه المبيعات" />
       ) : chartData.length === 0 ? (
         <EmptyState icon={TrendingUp} text="لا توجد بيانات كافية لعرض الاتجاه" />
       ) : (

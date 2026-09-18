@@ -52,7 +52,10 @@ export function ColorSearchCell({
   const fileRef = useRef<HTMLInputElement>(null);
 
   const query = activeField === "code" ? code : name;
-  const matches = useMemo(() => searchColors(query, 12), [query]);
+  const matches = useMemo(
+    () => searchColors(query, 12, fabricId),
+    [query, fabricId],
+  );
   const localByCode = useMemo(() => colorByCode(code, fabricId), [code, fabricId]);
   const localByName = useMemo(() => colorByName(name, fabricId), [name, fabricId]);
   const local = localByCode ?? localByName;
@@ -93,7 +96,10 @@ export function ColorSearchCell({
         })
       : null);
 
-  const showMenu = open && !disabled && (matches.length > 0 || isNew);
+  const showMenu =
+    open &&
+    !disabled &&
+    (matches.length > 0 || isNew || (!!fabricId && !query.trim()));
 
   return (
     <div className="space-y-2">

@@ -120,7 +120,7 @@ ${inline}
      rules + .print-doc[data-paper] selection) — no separate hardcoded A4
      override here, so an A5/80mm export gets the correct page size too. */
   body { background: #fff; margin: 0; }
-  [data-print-root] { display: block !important; position: static !important; left: auto !important; }
+  [data-print-root] { display: block !important; position: static !important; left: auto !important; width: 100% !important; max-width: none !important; }
   ${ARCHIVE_ARABIC_FONT_CSS}
 </style>
 </head>
@@ -184,8 +184,10 @@ export function printDocument(
 
     window.setTimeout(() => {
       void archiveIfDesktop(container, archive).finally(() => {
-        // Blank the tab title so Chrome/Edge print headers don't show
-        // "نظام إدارة…" or a date line above the logo.
+        // Strip any leftover inline geometry so print.css owns width 100%.
+        // A fixed mm width here used to make Chrome shrink-to-fit and leave
+        // a huge empty band beside the invoice.
+        container.removeAttribute("style");
         if (previousDocumentTitle === null) {
           previousDocumentTitle = document.title;
         }
@@ -221,7 +223,7 @@ export function archiveDocument(
 
   const container = document.createElement("div");
   container.setAttribute("data-print-root", "true");
-  container.style.cssText = "position:fixed;left:-10000px;top:0;width:210mm;";
+  container.style.cssText = "position:fixed;left:-100vw;top:0;width:100%;";
   document.body.appendChild(container);
   const root = createRoot(container);
 

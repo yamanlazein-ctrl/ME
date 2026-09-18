@@ -106,7 +106,16 @@ function assertCanonicalHeader(html: string) {
     expect(count(html, line)).toBe(1);
   }
   expect(html).toContain("print-logo");
-  expect(html).toContain("print-brand-stack");
+  expect(html).toContain("print-brand-contact");
+  expect(html).toContain("print-brand-name");
+  expect(html).toContain("print-brand-identity");
+  // Logo first, then identity block (name + contact) — physical LTR columns.
+  expect(brandBlock.indexOf("print-logo")).toBeLessThan(
+    brandBlock.indexOf("print-brand-identity"),
+  );
+  expect(brandBlock.indexOf("print-brand-name")).toBeLessThan(
+    brandBlock.indexOf("print-brand-contact"),
+  );
 }
 
 function makeInvoice(type: "sale" | "entry"): Invoice {

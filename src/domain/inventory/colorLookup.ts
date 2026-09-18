@@ -4,6 +4,8 @@
  * Turkish jeans — callers must never bind that other fabric's id.
  */
 
+import { normalizeInventoryName } from "./normalizeInventoryName";
+
 export type ColorLookupRow = {
   id: string;
   fabricId: string;
@@ -13,17 +15,21 @@ export type ColorLookupRow = {
   imageUrl?: string | null;
 };
 
-export function filterColorsByQuery<T extends { name: string; code?: string | null }>(
+export function filterColorsByQuery<T extends { name: string; code?: string | null; fabricId?: string }>(
   catalog: T[],
   term: string,
   limit = 12,
+  fabricId?: string,
 ): T[] {
-  const q = term.trim().toLowerCase();
-  if (!q) return [];
-  const scored = catalog
+  const pool = fabricId ? catalog.filter((c) => c.fabricId === fabricId) : catalog;
+  const q = normalizeInventoryName(term);
+  // Scoped to a fabric: empty query lists that fabric's colours (sale/entry pickers).
+  // Unscoped: never dump the whole catalogue.
+  if (!q) return fabricId ? pool.slice(0, limit) : [];
+  const scored = pool
     .map((c) => {
-      const code = (c.code ?? "").toLowerCase();
-      const name = (c.name ?? "").toLowerCase();
+      const code = normalizeInventoryName(c.code ?? "");
+      const name = normalizeInventoryName(c.name ?? "");
       if (code === q) return { c, score: 0 };
       if (name === q) return { c, score: 1 };
       if (code.startsWith(q)) return { c, score: 2 };
@@ -42,16 +48,18 @@ export function colorOnFabric<T extends ColorLookupRow>(
   opts: { name?: string; code?: string },
 ): T | undefined {
   if (!fabricId) return undefined;
-  const code = opts.code?.trim().toLowerCase();
-  const name = opts.name?.trim().toLowerCase();
+  const code = opts.code ? normalizeInventoryName(opts.code) : "";
+  const name = opts.name ? normalizeInventoryName(opts.name) : "";
   if (code) {
     const byCode = catalog.find(
-      (c) => c.fabricId === fabricId && (c.code ?? "").trim().toLowerCase() === code,
+      (c) => c.fabricId === fabricId && normalizeInventoryName(c.code ?? "") === code,
     );
     if (byCode) return byCode;
   }
   if (name) {
-    return catalog.find((c) => c.fabricId === fabricId && c.name.trim().toLowerCase() === name);
+    return catalog.find(
+      (c) => c.fabricId === fabricId && normalizeInventoryName(c.name) === name,
+    );
   }
   return undefined;
 }

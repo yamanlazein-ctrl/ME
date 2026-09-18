@@ -149,12 +149,12 @@ export function ReturnInvoicePrint({
     { key: "fabric", cfg: { key: "fabric", label: "القماش", width: "20%" }, on: vis.showFabric },
     {
       key: "color",
-      cfg: { key: "color", label: "اللون", width: "18%" },
+      cfg: { key: "color", label: "اللون", width: "22%" },
       on: vis.showColorCode || vis.showColorName,
     },
     {
       key: "pieces",
-      cfg: { key: "pieces", label: "الأثواب", align: "center", width: "7%" },
+      cfg: { key: "pieces", label: "الأنواع", align: "center", width: "7%" },
       on: vis.showQuantity,
     },
     {

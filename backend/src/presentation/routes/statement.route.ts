@@ -7,6 +7,8 @@ import {
 import type { IStatementRepository } from "../../application/ports/IStatementRepository.js";
 import type { IPartyRepository } from "../../application/ports/IPartyRepository.js";
 import type { ILedgerRepository } from "../../application/ports/ILedgerRepository.js";
+import type { IVoucherRepository } from "../../application/ports/IVoucherRepository.js";
+import type { IAuditRepository } from "../../application/ports/IAuditRepository.js";
 import type { ISyncOutboxRepository } from "../../application/ports/ISyncOutboxRepository.js";
 import type { TenantContext } from "../../domain/types/index.js";
 import { logger } from "../../infrastructure/config/logger.js";
@@ -14,12 +16,16 @@ import { withTenantTx } from "../../infrastructure/orm/drizzle.js";
 import { respondTransactionFailure } from "../../infrastructure/http/transactionRouteError.js";
 import {
   enqueueSettlement,
+  enqueueVoucherCreate,
   isSyncEnqueueEnabled,
   opIdFromRequest,
   syncDeviceIdFromRequest,
 } from "../../application/use-cases/sync/syncEnqueue.js";
-import { statementQuerySchema, settlePartySchema } from "./statement.schema.js";
+import { capturePartySyncDependencies } from "../../application/use-cases/sync/syncDependencySnapshots.js";
+import { statementQuerySchema, settlePartySchema, settleInvoicesSchema } from "./statement.schema.js";
 import { nextDocumentNumber } from "../../infrastructure/utils/documentNumbers.js";
+import { settleInvoicesUseCase } from "../../application/use-cases/statements/settleInvoicesUseCase.js";
+import { BusinessRuleError } from "../../domain/errors/index.js";
 
 export function registerStatementRoutes(
   router: Router,
@@ -30,6 +36,8 @@ export function registerStatementRoutes(
   writeGuard: RequestHandler,
   readGuard: RequestHandler,
   syncOutboxRepo?: ISyncOutboxRepository,
+  voucherRepo?: IVoucherRepository,
+  auditRepo?: IAuditRepository,
 ) {
   const ctx = (req: Request): TenantContext => req.tenantContext!;
 
@@ -70,6 +78,96 @@ export function registerStatementRoutes(
           res.json(statement);
         } catch (err) {
           res.status(422).json({ code: "VALIDATION", message: (err as Error).message });
+        }
+      },
+    );
+
+    // POST /api/customers/:id/statement/settle-invoices
+    // Multi-invoice cash settlement → one SET batch + N linked vouchers.
+    router.post(
+      `${base}/:id/statement/settle-invoices`,
+      auth,
+      writeGuard,
+      validateBody(settleInvoicesSchema),
+      async (req: Request, res: Response) => {
+        if (!voucherRepo || !auditRepo) {
+          return res.status(500).json({
+            code: "INTERNAL",
+            message: "تسوية الفواتير غير مفعّلة على الخادم",
+          });
+        }
+        const c = ctx(req);
+        const b = req.validatedBody as z.infer<typeof settleInvoicesSchema>;
+        const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+        if (!UUID_RE.test(req.params.id as string)) {
+          return res.status(400).json({ code: "BAD_REQUEST", message: "صيغة المعرف غير صالحة" });
+        }
+
+        const run = async () => {
+          const result = await settleInvoicesUseCase(
+            voucherRepo,
+            auditRepo,
+            partyRepo,
+            req.params.id as string,
+            kind,
+            {
+              invoiceIds: b.invoiceIds,
+              amountPaid: b.amountPaid,
+              currency: b.currency,
+              exchangeRate: b.exchangeRate,
+              date: b.date,
+              method: b.method,
+              notesInternal: b.notesInternal,
+              notesPrint: b.notesPrint,
+            },
+            c,
+          );
+          if (!result.ok) {
+            throw new BusinessRuleError(result.error);
+          }
+          if (syncOutboxRepo && isSyncEnqueueEnabled()) {
+            const deps = await capturePartySyncDependencies(partyRepo, [req.params.id as string], c);
+            for (const v of result.data.vouchers) {
+              await enqueueVoucherCreate(
+                syncOutboxRepo,
+                { id: v.id, kind: v.kind, number: v.number, partyId: v.partyId },
+                {
+                  kind: v.kind,
+                  date: v.date,
+                  partyId: v.partyId,
+                  partyKind: v.partyKind,
+                  invoiceId: v.invoiceId,
+                  amount: v.amount,
+                  discount: v.discount,
+                  currency: v.currency,
+                  exchangeRate: v.exchangeRate ?? undefined,
+                  method: v.method,
+                  notesPrint: v.notesPrint,
+                  notesInternal: v.notesInternal,
+                  preAllocatedNumber: v.number,
+                  preAllocatedId: v.id,
+                },
+                c,
+                syncDeviceIdFromRequest(req),
+                opIdFromRequest(req),
+                deps,
+              );
+            }
+          }
+          return result.data;
+        };
+
+        try {
+          const data = await withTenantTx(c.tenantId, run);
+          res.status(201).json(data);
+        } catch (txErr) {
+          logger.warn({ err: txErr }, "settle-invoices transaction rolled back");
+          return respondTransactionFailure(
+            res,
+            txErr,
+            "voucher",
+            "تعذّر حفظ تسوية الحساب — لم يُحفظ أي تغيير. أعد المحاولة.",
+          );
         }
       },
     );
