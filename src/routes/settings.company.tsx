@@ -16,6 +16,14 @@ function CompanyPage() {
       title="معلومات الشركة"
       description="اسم الشركة والعنوان وبيانات التواصل — مصدر واحد لكل قوالب الطباعة (فواتير / مرتجعات / مطبعة)."
     >
+      <p
+        className="mb-3 rounded-md border border-amber-200/80 bg-amber-50 px-3 py-2 text-[12px] leading-relaxed text-amber-950"
+        data-od-id="logo-sync-notice"
+      >
+        شعار الشركة (إن رُفع عبر واجهة الشعار) يبقى محلياً على هذا الجهاز ولا يُزامَن
+        مع الأجهزة الأخرى حتى يتوفر مزامنة المرفقات. حقول الملف التعريفي أدناه تُزامَن
+        كالمعتاد.
+      </p>
       <div className="grid gap-3 md:grid-cols-2">
         <Field label="اسم الشركة">
           <Input value={c.name} onChange={(e) => setC({ ...c, name: e.target.value })} />

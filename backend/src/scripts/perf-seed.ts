@@ -24,8 +24,12 @@ import { and, eq } from "drizzle-orm";
 import type { TenantContext } from "../domain/types/index.js";
 import type { CreateInvoiceLineInput } from "../domain/entities/Invoice.js";
 
-const TENANT_ID = "ddb8adcd-fa06-4743-a8bb-9fb4e7a03691";
-const ADMIN_EMAIL = "qa-admin@erp-audit.local";
+const TENANT_ID = process.env.PERF_TENANT_ID?.trim();
+const ADMIN_EMAIL = process.env.PERF_ADMIN_EMAIL?.trim() || "qa-admin@erp-audit.local";
+if (!TENANT_ID) {
+  throw new Error("PERF_TENANT_ID is required; refuse to seed an unspecified tenant");
+}
+const REQUIRED_TENANT_ID: string = TENANT_ID;
 const OUT_DIR = "C:\\Users\\Taw\\AppData\\Local\\Temp\\claude\\C--Users-Taw-Downloads-Compressed-q-ME-main\\6e664f75-3223-4d68-95e9-2b27d532c03e\\scratchpad";
 const N_INVOICES = Number(process.env.PERF_N ?? 20000);
 const CONCURRENCY = Number(process.env.PERF_CONCURRENCY ?? 20);
@@ -79,16 +83,16 @@ async function main() {
   console.log("DATABASE_URL in use:", process.env.DATABASE_URL);
   const c = buildContainer();
 
-  await runWithTenantContext({ tenantId: TENANT_ID }, async () => {
+  await runWithTenantContext({ tenantId: REQUIRED_TENANT_ID }, async () => {
     const [admin] = await db
       .select()
       .from(users)
-      .where(and(eq(users.tenantId, TENANT_ID), eq(users.email, ADMIN_EMAIL)))
+      .where(and(eq(users.tenantId, REQUIRED_TENANT_ID), eq(users.email, ADMIN_EMAIL)))
       .limit(1);
-    if (!admin) throw new Error(`admin user ${ADMIN_EMAIL} not found for tenant ${TENANT_ID}`);
+    if (!admin) throw new Error(`admin user ${ADMIN_EMAIL} not found for tenant ${REQUIRED_TENANT_ID}`);
 
     const ctx: TenantContext = {
-      tenantId: TENANT_ID,
+      tenantId: REQUIRED_TENANT_ID,
       userId: admin.id,
       userRole: "admin",
       userName: "QA Perf Seed",

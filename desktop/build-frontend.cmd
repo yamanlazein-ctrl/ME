@@ -36,8 +36,26 @@ robocopy dist desktop\src-tauri\resources\ssr\dist /MIR /R:1 /W:1 /NFL /NDL /NJH
 rem robocopy exit codes >= 8 are real failures; 0-7 mean "copied/skipped" (ok).
 if errorlevel 8 exit /b 1
 
-rem P1: drop ALL source maps from the MSI payload (InstallerFiles count/size).
-rem Maps are not needed at runtime — including those inside bundled node_modules.
-del /s /q "desktop\src-tauri\resources\*.map" >nul 2>&1
+rem DFP-001: checked-in SSR launcher (source of truth: desktop/ssr/serve.mjs).
+rem before-build also runs stage-ssr.mjs; this copy keeps a partial frontend-only
+rem rebuild self-bootable for local probes.
+if not exist "desktop\src-tauri\resources\ssr" mkdir "desktop\src-tauri\resources\ssr"
+copy /y "desktop\ssr\serve.mjs" "desktop\src-tauri\resources\ssr\serve.mjs"
+if errorlevel 1 exit /b 1
 
+rem DFP-036: source maps are stripped from the customer MSI by default.
+rem Keep a private copy under resources/_symbols for support/symbolication.
+rem Set ME_KEEP_SOURCEMAPS=1 to leave maps inside the packaged tree (dev only).
+if /I not "%ME_KEEP_SOURCEMAPS%"=="1" (
+  if not exist "desktop\src-tauri\resources\_symbols" mkdir "desktop\src-tauri\resources\_symbols"
+  robocopy "desktop\src-tauri\resources" "desktop\src-tauri\resources\_symbols" *.map /S /R:1 /W:1 /NFL /NDL /NJH /NJS >nul
+  del /s /q "desktop\src-tauri\resources\*.map" >nul 2>&1
+  rem Never ship the private symbol store inside the installer payload.
+  if exist "desktop\src-tauri\resources\_symbols" (
+    rem _symbols stays on the build machine / CI artifact, not under Tauri resources that are bundled —
+    rem move it beside the build output instead of inside resources/.
+    if not exist "desktop\src-tauri\target\symbols" mkdir "desktop\src-tauri\target\symbols"
+    robocopy "desktop\src-tauri\resources\_symbols" "desktop\src-tauri\target\symbols" /E /MOVE /R:1 /W:1 /NFL /NDL /NJH /NJS >nul
+  )
+)
 exit /b 0

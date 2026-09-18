@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { mkdtempSync, rmSync, existsSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { NodeFingerprintProvider } from "@/infrastructure/fingerprint/NodeFingerprintProvider";
+import { NodeFingerprintProvider, TauriDesktopFingerprintProvider, TauriMobileFingerprintProvider } from "@/infrastructure/fingerprint/NodeFingerprintProvider";
 import { InstallationIdStorage } from "@/infrastructure/installation/InstallationIdStorage";
 
 describe("NodeFingerprintProvider", () => {
@@ -41,6 +41,73 @@ describe("NodeFingerprintProvider", () => {
     expect(meta.version).toBe(1);
     expect(meta.signals.length).toBeGreaterThan(0);
     expect(["low", "medium", "high"]).toContain(meta.confidence);
+  });
+
+  it("DFP-039 canonical envelope hash is stable for a known vector", async () => {
+    const provider = new NodeFingerprintProvider();
+    const input = {
+      platform: "node" as const,
+      version: 1,
+      signals: {
+        cpu_model: "x",
+        hostname: "h",
+        platform_release: "win32 10",
+      },
+    };
+    expect(await provider.compute(input)).toBe(
+      "6caa9e386ac42f8a20edb067201db3d1784c14f3fd8b6e9ed977f9cd10a05481",
+    );
+    expect(await provider.compute({ ...input, platform: "tauri-desktop" })).toBe(
+      "d8c84ceade7eb700c75a2f606c5aa4ac8184ac57942dcb7792e48ca8da88d59f",
+    );
+  });
+
+  it("DFP-039 platform providers are reachable and share the algorithm", async () => {
+    for (const Provider of [TauriDesktopFingerprintProvider, TauriMobileFingerprintProvider]) {
+      const provider = new Provider();
+      const input = await provider.collect();
+      expect(input.platform).toMatch(/^tauri-/);
+      expect(await provider.compute(input)).toMatch(/^[0-9a-f]{64}$/);
+      expect((await provider.getMetadata(input)).hash).toMatch(/^[0-9a-f]{64}$/);
+    }
+  });
+
+  it("DFP-039 missing signals still hash from present keys only", async () => {
+    const provider = new NodeFingerprintProvider();
+    const minimal = {
+      platform: "node" as const,
+      version: 1,
+      signals: { hostname: "only-host" },
+    };
+    const hash = await provider.compute(minimal);
+    expect(hash).toMatch(/^[0-9a-f]{64}$/);
+    const meta = await provider.getMetadata(minimal);
+    expect(meta.signals).toEqual(["hostname"]);
+    expect(meta.confidence).toBe("low");
+  });
+
+  it("DFP-039 hardware-change policy: signal change ⇒ new fingerprint (re-activation)", async () => {
+    // Product policy: when durable signals change (MAC/machine_id/hostname),
+    // the hash changes and the device must re-activate — we never rewrite
+    // history to keep a stale binding.
+    const provider = new NodeFingerprintProvider();
+    const before = {
+      platform: "node" as const,
+      version: 1,
+      signals: {
+        hostname: "desk-a",
+        primary_mac: "aa:bb:cc:dd:ee:ff",
+        machine_id: "mid-1",
+      },
+    };
+    const afterNicSwap = {
+      ...before,
+      signals: { ...before.signals, primary_mac: "11:22:33:44:55:66" },
+    };
+    const h1 = await provider.compute(before);
+    const h2 = await provider.compute(afterNicSwap);
+    expect(h1).not.toBe(h2);
+    expect(await provider.getMetadata(before)).toMatchObject({ confidence: "high" });
   });
 });
 

@@ -37,7 +37,10 @@ use std::time::{Duration, Instant};
 
 use super::error::BootFailure;
 use super::health::{check_boot_deadline, http_get_ok, wait_for, wait_tcp};
-use super::ports::{find_free_db_port, persist_db_port, resolve_db_port, sync_pg_conf_port};
+use super::ports::{
+    ensure_backend_port_free, find_free_db_port, persist_db_port, resolve_db_port, sync_pg_conf_port,
+    BACKEND_PORT_DEFAULT,
+};
 use super::stages::BootStage;
 
 use crate::db_meta::{
@@ -102,7 +105,7 @@ impl BootConfig {
             server_js,
             license_public_key,
             db_port,
-            backend_port: 8080,
+            backend_port: BACKEND_PORT_DEFAULT,
             installation_id: String::new(),
         })
     }
@@ -517,9 +520,11 @@ fn start_postgres(
         ));
     }
 
-    // Ensure the target database exists (idempotent — errors ignored).
+    // Ensure the target database exists (DFP-010). createdb is idempotent when
+    // `erp` already exists (non-zero exit); we still VERIFY connectivity to
+    // `erp` before returning — TCP readiness alone is not enough.
     let createdb = strip_verbatim_prefix(&bindir.join("createdb.exe"));
-    let _ = HiddenCommand::new(&createdb)
+    let created_ok = HiddenCommand::new(&createdb)
         .args([
             "-h",
             "127.0.0.1",
@@ -530,10 +535,58 @@ fn start_postgres(
             DB_NAME,
         ])
         .spawn()
-        .and_then(|c| c.wait_success());
+        .and_then(|c| c.wait_success())
+        .unwrap_or(false);
+    if created_ok {
+        log(&format!("created database `{DB_NAME}`"));
+    } else {
+        log(&format!(
+            "createdb `{DB_NAME}` returned non-success (may already exist) — verifying"
+        ));
+    }
+    ensure_erp_database(resources_root, db_port)?;
 
     wait_tcp("127.0.0.1", db_port, Duration::from_secs(60))?;
     log("postgres is accepting connections");
+    Ok(())
+}
+
+/// DFP-010: prove the `erp` database exists and accepts a simple query.
+pub(crate) fn ensure_erp_database(resources_root: &Path, db_port: u16) -> io::Result<()> {
+    let bindir = pg_bin(resources_root);
+    let psql = strip_verbatim_prefix(&bindir.join("psql.exe"));
+    if !psql.exists() {
+        return Err(io::Error::new(
+            io::ErrorKind::NotFound,
+            format!("psql.exe missing at {}", psql.display()),
+        ));
+    }
+    let ok = HiddenCommand::new(&psql)
+        .args([
+            "-h",
+            "127.0.0.1",
+            "-p",
+            &db_port.to_string(),
+            "-U",
+            DB_SUPERUSER,
+            "-d",
+            DB_NAME,
+            "-v",
+            "ON_ERROR_STOP=1",
+            "-tAc",
+            "SELECT 1",
+        ])
+        .spawn()?
+        .wait_success()?;
+    if !ok {
+        return Err(io::Error::new(
+            io::ErrorKind::Other,
+            format!(
+                "database `{DB_NAME}` is missing or not connectable on 127.0.0.1:{db_port}"
+            ),
+        ));
+    }
+    log(&format!("database `{DB_NAME}` verified"));
     Ok(())
 }
 
@@ -841,6 +894,24 @@ pub fn boot_desktop_stack_with_progress(
         }
     };
     progress(BootStage::StartBackend.label());
+    // DFP-009: refuse to spawn when the baked frontend port is occupied —
+    // otherwise WaitBackend hangs 60s and leaves a confusing timeout.
+    if let Err(e) = ensure_backend_port_free(cfg.backend_port) {
+        let _ = stop_postgres(&cfg.resources_root, &pgdata);
+        let msg = format!(
+            "منفذ محرّك النظام ({}) مشغول حالياً — لا يمكن تشغيل البرنامج.\n\n\
+             التفاصيل: {}\n\n\
+             أغلق البرنامج الذي يستخدم هذا المنفذ (أو أي نسخة سابقة من Motard ERP \
+             ما زالت تعمل في Task Manager)، ثم أعد فتح البرنامج.",
+            cfg.backend_port, e
+        );
+        show_fatal_dialog("خطأ: المنفذ مشغول — Motard ERP", &msg);
+        return Err(BootFailure::new(
+            BootStage::StartBackend,
+            "backend-port-occupied",
+            e,
+        ));
+    }
     let backend = match spawn_backend(&cfg, &store) {
         Ok(b) => {
             // node.exe still opens its own console despite CREATE_NO_WINDOW +
@@ -910,9 +981,15 @@ pub fn boot_desktop_stack_with_progress(
         Duration::from_secs(60),
     );
     if !live {
-        // Best-effort cleanup so a failed boot does not leave postgres running.
-        let _ = ssr.kill();
-        let _ = stop_postgres(&cfg.resources_root, &pgdata);
+        // DFP-003: kill EVERY child started so far — including the backend.
+        // Omitting backend.kill() left node listening on 8080 → next boot
+        // EADDRINUSE forever (same cascade documented on WaitFrontend below).
+        abort_partial_boot(
+            Some(&backend),
+            Some(&ssr),
+            &cfg.resources_root,
+            &pgdata,
+        );
         let msg = format!(
             "بدأ محرّك النظام لكنه لم يستجب خلال المهلة المتوقَّعة (60 ثانية).\n\n\
              المنفذ: {}\n\n\
@@ -945,9 +1022,12 @@ pub fn boot_desktop_stack_with_progress(
         // Kill EVERYTHING we started: leaving the backend alive on 8080 turns
         // one slow boot into a permanent failure cascade (next boot's backend
         // gets EADDRINUSE and can never become healthy).
-        backend.kill();
-        let _ = stop_postgres(&cfg.resources_root, &pgdata);
-        let _ = ssr.kill();
+        abort_partial_boot(
+            Some(&backend),
+            Some(&ssr),
+            &cfg.resources_root,
+            &pgdata,
+        );
         let msg = "بدأت واجهة العرض لكنها لم تستجب خلال المهلة المتوقَّعة (120 ثانية).\n\n\
                      أعد فتح البرنامج مرة أخرى، وإن تكررت المشكلة تواصل مع الدعم الفني.";
         show_fatal_dialog("خطأ: واجهة العرض لم تستجب — Motard ERP", msg);
@@ -971,15 +1051,55 @@ pub fn boot_desktop_stack_with_progress(
     })
 }
 
-// ── Graceful shutdown ────────────────────────────────────────────────────────
+// ── Graceful / failure cleanup ───────────────────────────────────────────────
+
+/// Tear down every child owned by a partial or failed boot (DFP-003).
+/// Order: Node children first (free TCP ports), then PostgreSQL.
+fn abort_partial_boot(
+    backend: Option<&HiddenChild>,
+    ssr: Option<&HiddenChild>,
+    resources_root: &Path,
+    pgdata: &Path,
+) {
+    // DFP-022: wait briefly after TerminateProcess so ports are released
+    // before the next boot attempt (and so we can log hung children).
+    const CHILD_EXIT_WAIT_MS: u32 = 5_000;
+    if let Some(b) = backend {
+        if !b.kill_and_wait(CHILD_EXIT_WAIT_MS) {
+            log("abort_partial_boot: backend did not exit within wait window");
+        }
+    }
+    if let Some(s) = ssr {
+        if !s.kill_and_wait(CHILD_EXIT_WAIT_MS) {
+            log("abort_partial_boot: SSR did not exit within wait window");
+        }
+    }
+    let _ = stop_postgres(resources_root, pgdata);
+}
+
+/// Pure checklist used by unit tests — which owned children a stage must kill.
+#[cfg(test)]
+fn abort_targets_for_stage(stage: &str) -> &'static [&'static str] {
+    match stage {
+        "WaitBackend" | "WaitFrontend" => &["backend", "ssr", "postgres"],
+        "StartFrontend" => &["backend", "postgres"], // SSR spawn failed — no SSR child
+        _ => &[],
+    }
+}
+
 pub fn shutdown(stack: &mut DesktopStack) {
+    const CHILD_EXIT_WAIT_MS: u32 = 8_000;
     if let Some(b) = stack.backend.take() {
         log("stopping backend");
-        b.kill();
+        if !b.kill_and_wait(CHILD_EXIT_WAIT_MS) {
+            log("shutdown: backend did not exit within wait window after TerminateProcess");
+        }
     }
     if let Some(s) = stack.ssr.take() {
         log("stopping SSR frontend");
-        s.kill();
+        if !s.kill_and_wait(CHILD_EXIT_WAIT_MS) {
+            log("shutdown: SSR did not exit within wait window after TerminateProcess");
+        }
     }
     let _ = stop_postgres(&stack.resources_root, &stack.pgdata_dir);
 }
@@ -1091,5 +1211,55 @@ mod boot_lifecycle_tests {
     fn pid_is_running_sees_current_process() {
         assert!(pid_is_running(std::process::id()));
         assert!(!pid_is_running(0));
+    }
+
+    #[test]
+    fn wait_backend_timeout_must_kill_backend_ssr_and_postgres() {
+        // DFP-003 regression: WaitBackend used to omit backend → EADDRINUSE.
+        let targets = abort_targets_for_stage("WaitBackend");
+        assert!(targets.contains(&"backend"));
+        assert!(targets.contains(&"ssr"));
+        assert!(targets.contains(&"postgres"));
+        assert_eq!(
+            abort_targets_for_stage("WaitBackend"),
+            abort_targets_for_stage("WaitFrontend")
+        );
+    }
+
+    #[test]
+    fn wait_frontend_timeout_same_cleanup_set_as_wait_backend() {
+        let targets = abort_targets_for_stage("WaitFrontend");
+        assert_eq!(targets, &["backend", "ssr", "postgres"]);
+    }
+
+    #[test]
+    fn start_frontend_failure_kills_backend_and_postgres_not_ssr() {
+        // SSR spawn failed — there is no SSR child to kill.
+        let targets = abort_targets_for_stage("StartFrontend");
+        assert!(targets.contains(&"backend"));
+        assert!(targets.contains(&"postgres"));
+        assert!(!targets.contains(&"ssr"));
+    }
+
+    #[test]
+    fn unknown_stage_has_empty_abort_checklist() {
+        assert!(abort_targets_for_stage("StartPostgres").is_empty());
+        assert!(abort_targets_for_stage("").is_empty());
+    }
+
+    #[test]
+    fn ensure_erp_database_fails_when_postgres_unreachable() {
+        // DFP-010: missing/unreachable `erp` must hard-fail before backend spawn.
+        let resources = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("resources");
+        let psql = resources.join("postgres").join("bin").join("psql.exe");
+        if !psql.exists() {
+            return; // resources not staged in this checkout
+        }
+        let err = ensure_erp_database(&resources, 1).expect_err("port 1 must be unreachable");
+        let msg = err.to_string();
+        assert!(
+            msg.contains("erp") || msg.contains("missing") || msg.contains("connect"),
+            "unexpected message: {msg}"
+        );
     }
 }

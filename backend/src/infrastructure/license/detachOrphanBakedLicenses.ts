@@ -50,36 +50,3 @@ export async function detachOrphanBakedLicenses(db: DB): Promise<number> {
     return orphans.length;
   });
 }
-
-/**
- * SQL variant for pool.query boot path (desktop / ERP startup).
- */
-export async function detachOrphanBakedLicensesSql(
-  query: (sqlText: string) => Promise<unknown>,
-): Promise<number> {
-  // Platform mode so RLS on licenses/tenants does not hide rows.
-  await query(`SELECT set_config('app.platform_mode', 'on', false)`);
-  const result = (await query(`
-    WITH orphaned AS (
-      SELECT l.id
-      FROM licenses l
-      INNER JOIN tenants t ON t.id = l.tenant_id
-      WHERE l.offline_token IS NOT NULL
-        AND t.license_key IS NOT NULL
-        AND t.license_key <> l.key
-    ),
-    updated AS (
-      UPDATE licenses
-      SET tenant_id = NULL, updated_at = now()
-      WHERE id IN (SELECT id FROM orphaned)
-      RETURNING id
-    )
-    SELECT count(*)::int AS n FROM updated
-  `)) as { rows?: Array<{ n: number }> };
-
-  const n = Number(result?.rows?.[0]?.n ?? 0);
-  if (n > 0) {
-    logger.info({ count: n }, "Detached orphan baked licenses from active tenant entitlement");
-  }
-  return n;
-}

@@ -34,5 +34,7 @@ export const users = pgTable(
   (table) => ({
     tenantEmailIdx: uniqueIndex("idx_users_tenant_email").on(table.tenantId, table.email),
     licenseOwnerIdx: index("idx_users_license_owner").on(table.tenantId, table.isLicenseOwner),
+    // DFP-014 composite FK target for sync_device_authorized_users.
+    tenantIdUidx: uniqueIndex("users_tenant_id_uidx").on(table.tenantId, table.id),
   }),
 ).enableRLS();

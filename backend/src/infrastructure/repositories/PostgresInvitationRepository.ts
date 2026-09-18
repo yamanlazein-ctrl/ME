@@ -1,7 +1,13 @@
-import { eq, and, isNull } from "drizzle-orm";
+import { eq, and, isNull, count } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
-import { db as defaultDb, withTenantTx, type DB } from "../orm/drizzle.js";
+import {
+  db as defaultDb,
+  ambientDb,
+  withTenantTx,
+  type DB,
+} from "../orm/drizzle.js";
 import { runWithTenantContext, runWithPlatformContext } from "../orm/tenant-context.js";
+import { getAmbientTx } from "../orm/ambient-tx.js";
 import type { UUID } from "../../domain/types/index.js";
 import type {
   IInvitationRepository,
@@ -10,6 +16,7 @@ import type {
 import { invitationCodes } from "../orm/schemas/invitation-code.table.js";
 import { users } from "../orm/schemas/user.table.js";
 import { deviceRegistrations } from "../orm/schemas/device-registration.table.js";
+import { licenses } from "../orm/schemas/license.table.js";
 
 type Row = typeof invitationCodes.$inferSelect;
 
@@ -29,8 +36,63 @@ function toRow(r: Row): InvitationRow {
   };
 }
 
+/**
+ * Invitation repository.
+ *
+ * Uses `ambientDb` so every write joins an outer `withTenantTx` when the
+ * consume use case opens one (DFP-005 / DFP-006). Without an ambient
+ * transaction, statements use the pool as before.
+ */
 export class PostgresInvitationRepository implements IInvitationRepository {
-  constructor(private readonly db: DB = defaultDb) {}
+  constructor(private readonly db: DB = ambientDb(defaultDb) as DB) {}
+
+  /** Run `fn` inside a single tenant-scoped transaction (ambient for this.db). */
+  async runInTenantTransaction<T>(tenantId: UUID, fn: () => Promise<T>): Promise<T> {
+    return withTenantTx(tenantId, () => fn());
+  }
+
+  /**
+   * Lock the invitation row for the duration of the ambient transaction.
+   * Callers MUST be inside `runInTenantTransaction` / `withTenantTx`.
+   */
+  async lockByIdForUpdate(id: UUID, tenantId: UUID): Promise<InvitationRow | null> {
+    const [row] = await this.db
+      .select()
+      .from(invitationCodes)
+      .where(and(eq(invitationCodes.id, id), eq(invitationCodes.tenantId, tenantId)))
+      .for("update")
+      .limit(1);
+    return row ? toRow(row) : null;
+  }
+
+  /**
+   * Serialize device/user seat allocation for a license (DFP-006).
+   * No-op when licenseId is null.
+   */
+  async lockLicenseForUpdate(licenseId: UUID): Promise<void> {
+    await this.db
+      .select({ id: licenses.id })
+      .from(licenses)
+      .where(eq(licenses.id, licenseId))
+      .for("update")
+      .limit(1);
+  }
+
+  async countUsersInTenant(tenantId: UUID): Promise<number> {
+    const [{ c }] = await this.db
+      .select({ c: count() })
+      .from(users)
+      .where(eq(users.tenantId, tenantId));
+    return Number(c);
+  }
+
+  async countDevicesInTenant(tenantId: UUID): Promise<number> {
+    const [{ c }] = await this.db
+      .select({ c: count() })
+      .from(deviceRegistrations)
+      .where(eq(deviceRegistrations.tenantId, tenantId));
+    return Number(c);
+  }
 
   async create(input: {
     tenantId: UUID;
@@ -93,7 +155,8 @@ export class PostgresInvitationRepository implements IInvitationRepository {
   async consume(id: UUID, tenantId: UUID): Promise<InvitationRow> {
     // Called from the pre-auth consume flow — stamp the invitation's own
     // tenant GUC so the UPDATE passes WITH CHECK (category-1 RLS).
-    return runWithTenantContext({ tenantId }, async () => {
+    // When an ambient withTenantTx is active, this.db is already on that tx.
+    const run = async () => {
       const [row] = await this.db
         .update(invitationCodes)
         .set({ useCount: 1 })
@@ -107,7 +170,14 @@ export class PostgresInvitationRepository implements IInvitationRepository {
         .returning();
       if (!row) throw new Error("INVITATION_ALREADY_CONSUMED");
       return toRow(row);
-    });
+    };
+    // Avoid nested withTenantTx savepoint noise when already ambient.
+    if (this.inAmbient()) return run();
+    return runWithTenantContext({ tenantId }, run);
+  }
+
+  private inAmbient(): boolean {
+    return getAmbientTx() != null;
   }
 
   async createUserFromInvitation(
@@ -118,9 +188,7 @@ export class PostgresInvitationRepository implements IInvitationRepository {
     role: string,
     passwordHash: string,
   ): Promise<{ id: UUID }> {
-    // Pre-auth flow (no JWT yet) — stamp the tenant GUC from the invitation's
-    // tenant so the `users` insert passes WITH CHECK (category-1 RLS).
-    return runWithTenantContext({ tenantId }, async () => {
+    const run = async () => {
       const [u] = await this.db
         .insert(users)
         .values({
@@ -133,8 +201,22 @@ export class PostgresInvitationRepository implements IInvitationRepository {
         })
         .returning({ id: users.id });
       if (!u) throw new Error("USER_CREATE_FAILED");
+      void invitationId;
       return u;
-    });
+    };
+    if (this.inAmbient()) return run();
+    return runWithTenantContext({ tenantId }, run);
+  }
+
+  async setUserPinHash(tenantId: UUID, userId: UUID, pinHash: string): Promise<void> {
+    const run = async () => {
+      await this.db
+        .update(users)
+        .set({ pinHash, updatedAt: new Date() })
+        .where(eq(users.id, userId));
+    };
+    if (this.inAmbient()) return run();
+    return runWithTenantContext({ tenantId }, run);
   }
 
   async registerDevice(
@@ -142,9 +224,7 @@ export class PostgresInvitationRepository implements IInvitationRepository {
     licenseId: UUID,
     fingerprint: string,
   ): Promise<{ id: UUID }> {
-    // Pre-auth flow — same tenant-stamping rationale as above; the device
-    // row is category-2 and must match either the tenant GUC or platform.
-    return runWithTenantContext({ tenantId }, async () => {
+    const run = async () => {
       const [d] = await this.db
         .insert(deviceRegistrations)
         .values({
@@ -159,6 +239,8 @@ export class PostgresInvitationRepository implements IInvitationRepository {
         .returning({ id: deviceRegistrations.id });
       if (!d) throw new Error("DEVICE_REGISTER_FAILED");
       return d;
-    });
+    };
+    if (this.inAmbient()) return run();
+    return runWithTenantContext({ tenantId }, run);
   }
 }

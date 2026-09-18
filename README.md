@@ -1,6 +1,8 @@
-# Motard Fabrics Group ERP — Production Ready
+# Motard Fabrics Group ERP
 
 Arabic-language ERP for fabric & roll trading. Monorepo: React frontend, Express + PostgreSQL API, and shared domain.
+
+> Desktop customer-delivery readiness is tracked in `docs/DESKTOP-FORENSIC-FIX-PLAN.md` — clean-machine MSI lifecycle (DFP-004) remains unproven until a Windows VM gate exists.
 
 ## Monorepo Layout
 
@@ -31,9 +33,11 @@ Arabic-language ERP for fabric & roll trading. Monorepo: React frontend, Express
 
 ## Tech Stack
 
+- **Package manager / runtime (DFP-032):** **npm** + `package-lock.json` are the release source of truth. CI and Desktop staging use **Node 22**. Do not use `bun.lock` for customer builds.
 - **Frontend:** React 19, TanStack Start/Router/Query, Tailwind 4, Zod, `is2dp` from `@erp/shared`
 - **Backend:** Node 22, Express, Drizzle, Zod via `@erp/shared`, `bigint` money, `withTenantTx`
 - **Shared:** `@erp/shared` — `precision`, `money`, 6 Zod schemas, `Invoice/Party/Roll/Fabric` helpers, `contracts` `z.infer`
+- **Company logo sync (DFP-035):** binary logo upload (`POST /api/company/logo`) is **device-local** until attachment sync ships; profile text fields still sync via `PUT /api/company/profile`. Expect different logos on peer devices until then.
 
 ## Quick Start
 
@@ -57,7 +61,7 @@ cd backend && npm run dev   # http://localhost:8080  (health: /api/health/live)
 npm run dev                 # http://localhost:5173  (VITE_API_BASE_URL=http://localhost:8080)
 ```
 
-First run: open `http://localhost:5173`, complete one-time device activation, then sign in with the seeded admin (`admin@erp.local` / `admin123` after seed) or set a PIN from the user picker. Reset admin password: `node backend/scripts/reset-admin-password.mjs`.
+First run: open `http://localhost:5173`, complete one-time device activation, then sign in with the admin created during setup (or seed a **local test** admin via `NODE_ENV=test E2E_ADMIN_PASSWORD=… node backend/seed-test-admin.mjs`). Reset admin password: `node backend/scripts/reset-admin-password.mjs`. Do **not** commit reusable passwords (DFP-029).
 
 ## Scripts
 
@@ -87,7 +91,7 @@ First run: open `http://localhost:5173`, complete one-time device activation, th
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `DATABASE_URL` | `postgresql://postgres:postgres@localhost:5432/erp` | PG |
+| `DATABASE_URL` | *(required — local example in `.env.example`)* | PG connection string |
 | `REDIS_URL` | `redis://localhost:6379` | Required in `production` |
 | `JWT_SECRET` | — | ≥32 chars |
 | `CORS_ORIGIN` | `http://localhost:5173` | Refuses `*` in `production` |

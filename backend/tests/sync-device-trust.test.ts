@@ -27,6 +27,7 @@ import type {
 import { materializeSyncUnit } from "../src/application/use-cases/sync/syncMaterialize.js";
 import type { SyncMaterializeRepos } from "../src/application/use-cases/sync/syncMaterialize.js";
 import type { TenantContext } from "../src/domain/types/index.js";
+import { runWithTenantContext } from "../src/infrastructure/orm/tenant-context.js";
 
 const TENANT = "11111111-1111-4111-8111-111111111111";
 const USER_A = "22222222-2222-4222-8222-222222222222";
@@ -66,6 +67,7 @@ function fakeRepo(row: SyncDeviceRow | null): ISyncDeviceRepository {
     findById: vi.fn(async () => row),
     listForTenant: vi.fn(async () => (row ? [row] : [])),
     setRevoked: vi.fn(),
+    revokeUserAuthorization: vi.fn(),
   } as unknown as ISyncDeviceRepository;
 }
 
@@ -278,6 +280,13 @@ const ctx: TenantContext = {
   userName: "tester",
 };
 
+/** DFP-019: materialize conflict writes require ALS tenant context. */
+function materializeUnderTenant(
+  ...args: Parameters<typeof materializeSyncUnit>
+): ReturnType<typeof materializeSyncUnit> {
+  return runWithTenantContext({ tenantId: TENANT }, () => materializeSyncUnit(...args));
+}
+
 type MasterKind = "party" | "fabric" | "color" | "roll";
 
 function makeMasterRepos(
@@ -309,7 +318,7 @@ describe("4D — master delete refuses a stale base", () => {
       const deleteFn = vi.fn();
       const repos = makeMasterRepos(kind, { id: FABRIC_ID, version: 3 }, { deleteFn });
 
-      const result = await materializeSyncUnit(
+      const result = await materializeUnderTenant(
         database,
         repos,
         { entityType: kind, operation: "delete", payload: { entityId: FABRIC_ID, baseVersion: 2 } },
@@ -330,7 +339,7 @@ describe("4D — master delete refuses a stale base", () => {
       const deleteFn = vi.fn(async () => true);
       const repos = makeMasterRepos(kind, { id: FABRIC_ID, version: 4 }, { deleteFn });
 
-      const result = await materializeSyncUnit(
+      const result = await materializeUnderTenant(
         database,
         repos,
         { entityType: kind, operation: "delete", payload: { entityId: FABRIC_ID, baseVersion: 4 } },
@@ -350,7 +359,7 @@ describe("4D — master delete refuses a stale base", () => {
     const deleteFn = vi.fn(async () => true);
     const repos = makeMasterRepos("fabric", { id: FABRIC_ID, version: 9 }, { deleteFn });
 
-    const result = await materializeSyncUnit(
+    const result = await materializeUnderTenant(
       database,
       repos,
       { entityType: "fabric", operation: "delete", payload: { entityId: FABRIC_ID } },
@@ -370,7 +379,7 @@ describe("4D — master delete refuses a stale base", () => {
       { deleteFn },
     );
 
-    const result = await materializeSyncUnit(
+    const result = await materializeUnderTenant(
       database,
       repos,
       {
@@ -390,7 +399,7 @@ describe("4D — master delete refuses a stale base", () => {
     const deleteFn = vi.fn();
     const repos = makeMasterRepos("color", null, { deleteFn });
 
-    const result = await materializeSyncUnit(
+    const result = await materializeUnderTenant(
       database,
       repos,
       { entityType: "color", operation: "delete", payload: { entityId: FABRIC_ID, baseVersion: 1 } },

@@ -4,8 +4,14 @@ import dotenv from "dotenv";
 import path from "node:path";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
+// Allow CI/agent live proofs to point DATABASE_URL at a disposable PG without
+// .env.test (port 5432) clobbering it. Other keys still come from .env.test.
+const preservedDbUrl = process.env.DATABASE_URL;
+const preservedTestDbUrl = process.env.TEST_DB_URL;
 dotenv.config({ path: path.join(here, ".env.test"), override: true });
 dotenv.config({ path: path.join(here, ".env") });
+if (preservedDbUrl) process.env.DATABASE_URL = preservedDbUrl;
+if (preservedTestDbUrl) process.env.TEST_DB_URL = preservedTestDbUrl;
 
 export default defineConfig({
   test: {

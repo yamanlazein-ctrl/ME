@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 import { hostname, networkInterfaces, cpus, platform, release } from "node:os";
 import { readFile } from "node:fs/promises";
 import { execFile } from "node:child_process";
@@ -8,6 +7,7 @@ import type {
   FingerprintInput,
   FingerprintMetadata,
 } from "../../application/ports/IMachineFingerprintProvider.js";
+import { canonicalFingerprintHash } from "./canonical.js";
 
 const execFileP = promisify(execFile);
 
@@ -109,16 +109,7 @@ export class NodeFingerprintProvider implements IMachineFingerprintProvider {
   }
 
   async compute(input: FingerprintInput): Promise<string> {
-    // Deterministic JSON serialisation: sort keys, no whitespace.
-    const keys = Object.keys(input.signals).sort();
-    const ordered: Record<string, string> = {};
-    for (const k of keys) ordered[k] = input.signals[k]!;
-    const payload = JSON.stringify({
-      platform: input.platform,
-      version: input.version,
-      signals: ordered,
-    });
-    return createHash("sha256").update(payload).digest("hex");
+    return canonicalFingerprintHash(input);
   }
 
   async getMetadata(input: FingerprintInput): Promise<FingerprintMetadata> {
@@ -148,29 +139,19 @@ export class NodeFingerprintProvider implements IMachineFingerprintProvider {
  * the `tauri-plugin-machine-id` crate). Phase 0 only defines the
  * interface; the real implementation lands in Phase 4.
  */
-export class TauriDesktopFingerprintProvider implements IMachineFingerprintProvider {
+export class TauriDesktopFingerprintProvider extends NodeFingerprintProvider {
   async collect(): Promise<FingerprintInput> {
-    throw new Error("TauriDesktopFingerprintProvider is a Phase 4 implementation");
-  }
-  async compute(): Promise<string> {
-    throw new Error("TauriDesktopFingerprintProvider is a Phase 4 implementation");
-  }
-  async getMetadata(): Promise<FingerprintMetadata> {
-    throw new Error("TauriDesktopFingerprintProvider is a Phase 4 implementation");
+    const input = await super.collect();
+    return { ...input, platform: "tauri-desktop" };
   }
 }
 
 /**
  * Stub provider for Tauri mobile. Same status as desktop.
  */
-export class TauriMobileFingerprintProvider implements IMachineFingerprintProvider {
+export class TauriMobileFingerprintProvider extends NodeFingerprintProvider {
   async collect(): Promise<FingerprintInput> {
-    throw new Error("TauriMobileFingerprintProvider is a Phase 4 implementation");
-  }
-  async compute(): Promise<string> {
-    throw new Error("TauriMobileFingerprintProvider is a Phase 4 implementation");
-  }
-  async getMetadata(): Promise<FingerprintMetadata> {
-    throw new Error("TauriMobileFingerprintProvider is a Phase 4 implementation");
+    const input = await super.collect();
+    return { ...input, platform: "tauri-mobile" };
   }
 }

@@ -16,7 +16,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "22"
           cache: "npm"
 
       - name: Install root dependencies
@@ -34,6 +34,46 @@ jobs:
       - name: Run unit tests
         run: npm run test:logic
 
+      - name: Desktop resource-manifest unit gate (DFP-001 / DFP-008)
+        run: node --test desktop/scripts/validate-resource-manifest.test.mjs
+
+      - name: Print blank-first-page contract (DFP-002)
+        run: npx vitest run src/components/print/blankFirstPage.test.ts src/components/print/PrintDocument.header.test.tsx
+
+      - name: Invitation atomic redeem unit gate (DFP-005 / DFP-006)
+        run: cd backend && npx vitest run tests/invitation-atomic-redeem.test.ts tests/invitation-license-link.test.ts
+
+      - name: Desktop symbols + CSP + backup + docs + staging + CI gates (DFP-036 / 026 / 028 / 025 / 037 / 001 / 008)
+        run: node --test desktop/scripts/dfp036-symbols.test.mjs desktop/scripts/dfp026-csp.test.mjs desktop/scripts/dfp028-backup.test.mjs desktop/scripts/dfp025-doc-targets.test.mjs desktop/scripts/dfp037-docs.test.mjs desktop/scripts/dfp001-staging-gate.test.mjs desktop/scripts/dfp008-ci-gates.test.mjs
+
+      - name: Credential / lockfile / audit / backup fixture (DFP-029 / 032 / 031 / 028)
+        run: npx vitest run src/dfp029-credentials.test.ts src/dfp032-lockfile.test.ts src/dfp031-audit-hygiene.test.ts src/dfp028-verify-fixture.test.ts
+
+      - name: Loopback bind + refresh + FX schema (DFP-030 / DFP-038 / DFP-034)
+        run: cd backend && npx vitest run tests/dfp030-loopback-bind.test.ts tests/dfp038-refresh-policy.test.ts tests/dfp034-fx-settlement-schema.test.ts
+
+      - name: Fingerprint envelope contract (DFP-039)
+        run: cd backend && npx vitest run tests/fingerprint.test.ts
+
+      - name: SyncConflicts tenant guard + report contracts (DFP-019 / DFP-015)
+        run: |
+          cd backend && npx vitest run tests/sync-conflicts-tenant-guard.test.ts
+          npx vitest run src/contracts/reports.dfp015.test.ts
+
+      - name: Setup Python (Semgrep DFP-008)
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Semgrep security gate (DFP-008)
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install semgrep
+          semgrep scan --config .semgrep/rules.yml --error .
+
+      - name: Frontend production build gate (DFP-008)
+        run: npm run build
+
       - name: Provision Postgres + Redis for backend integration tests
         run: |
           docker compose -f backend/docker-compose.yml up -d postgres redis
@@ -44,9 +84,97 @@ jobs:
 
       - name: Run backend integration tests
         run: cd backend && npx vitest run
+        env:
+          E2E_ADMIN_PASSWORD: CiTestAdmin!Pass9
+          ALLOW_TEST_SEED: "1"
+          NODE_ENV: test
 
+      - name: Seed admin + API smoke gate (DFP-008)
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/erp_test
+          E2E_ADMIN_PASSWORD: CiTestAdmin!Pass9
+          ALLOW_TEST_SEED: "1"
+          NODE_ENV: test
+          JWT_SECRET: test-secret-32-chars-minimum-padding-paddingxx
+          APP_MASTER_KEY: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa=
+          PORT: "8080"
+          HOST: "127.0.0.1"
+        run: |
+          cd backend
+          node seed-test-admin.mjs
+          npx tsx src/presentation/server.ts > /tmp/erp-api.log 2>&1 &
+          echo $! > /tmp/erp-api.pid
+          for i in $(seq 1 45); do
+            if curl -sf http://127.0.0.1:8080/api/health/live >/dev/null; then
+              echo "API ready"
+              break
+            fi
+            sleep 1
+          done
+          curl -sf http://127.0.0.1:8080/api/health/live
+          cd ..
+          npm run test:api
+          kill "$(cat /tmp/erp-api.pid)" || true
+
+      - name: DFP-008 CI gate contract
+        run: node --test desktop/scripts/dfp008-ci-gates.test.mjs
+
+      # DFP-031: M4/M5 flipped to `it(...)` — AUDIT_STRICT optional for audit-findings
+      # when run via test:integration against a live API.
       - name: Lint
         run: npm run lint
 
       - name: Dependency audit (advisory)
         run: npm run clean:code || echo "Knip advisory only"
+
+  # DFP-008: Windows packaging gates that cannot run on ubuntu-latest.
+  desktop-windows:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+
+      - name: Install root dependencies
+        run: npm ci
+
+      - name: Stage portable Node runtime (DFP-001)
+        run: node desktop/scripts/stage-node-runtime.mjs
+
+      - name: Resource manifest unit tests
+        run: node --test desktop/scripts/validate-resource-manifest.test.mjs
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Desktop Rust boot-cleanup unit tests (DFP-003)
+        working-directory: desktop/src-tauri
+        run: cargo test boot_lifecycle -- --nocapture
+
+      - name: Desktop Rust kill_and_wait process-tree (DFP-003 / DFP-022)
+        working-directory: desktop/src-tauri
+        run: cargo test kill_and_wait_terminates -- --nocapture
+
+      - name: Desktop Rust env allowlist live dump (DFP-012)
+        working-directory: desktop/src-tauri
+        run: cargo test live_child_env_dump_omits_parent_secret_sentinels -- --nocapture
+
+      - name: Desktop Rust backend port free gate (DFP-009)
+        working-directory: desktop/src-tauri
+        run: cargo test ensure_backend_port_free_rejects_occupied_port -- --nocapture
+
+      - name: Desktop Rust erp database gate (DFP-010)
+        working-directory: desktop/src-tauri
+        run: cargo test ensure_erp_database_fails_when_postgres_unreachable -- --nocapture
+
+      - name: Desktop Rust secret-store fail-closed (DFP-011)
+        working-directory: desktop/src-tauri
+        run: cargo test corrupt_fail_message_documents_explicit_reset_env -- --nocapture
+
+      # Full MSI/NSIS build + clean-machine lifecycle remain DFP-004 (manual/VM).
+      # This job fails the PR when Node staging or Rust cleanup regressions land.

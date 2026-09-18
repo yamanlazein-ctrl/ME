@@ -98,5 +98,7 @@ export const licenses = pgTable(
     keyIdx: uniqueIndex("idx_licenses_key").on(table.key),
     tenantIdx: index("idx_licenses_tenant").on(table.tenantId),
     statusIdx: index("idx_licenses_status").on(table.status),
+    // DFP-013 composite FK target for invitation_codes / device_registrations.
+    tenantIdUidx: uniqueIndex("licenses_tenant_id_uidx").on(table.tenantId, table.id),
   }),
 ).enableRLS();

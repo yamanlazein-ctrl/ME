@@ -90,23 +90,55 @@ pub fn dpapi_decrypt(cipher: &[u8]) -> windows::core::Result<Vec<u8>> {
     Ok(result)
 }
 
-// Load the store, generating + persisting it on first launch. A corrupt /
-// unreadable / undecryptable store is treated as "first launch" and regenerated
-// (no panic / uncontrolled crash) — satisfies the desktop robustness requirement.
+// Load the store, generating + persisting it on first launch only when no
+// secrets.dat exists. DFP-011: an existing but undecryptable/corrupt store
+// fails closed — we preserve the original as secrets.dat.corrupt-<ts> and
+// refuse to silently rotate JWT/APP keys (would invalidate sessions / crypto).
 pub fn load_or_generate() -> Result<SecretStore, String> {
     let path = secrets_path()?;
     if path.exists() {
-        if let Ok(raw) = fs::read(&path) {
-            if let Ok(json) = dpapi_decrypt(&raw) {
-                if let Ok(s) = serde_json::from_slice::<SecretStore>(&json) {
-                    if !s.jwt_secret.is_empty() && !s.app_master_key.is_empty() {
+        match fs::read(&path) {
+            Ok(raw) => match dpapi_decrypt(&raw) {
+                Ok(json) => match serde_json::from_slice::<SecretStore>(&json) {
+                    Ok(s) if !s.jwt_secret.is_empty() && !s.app_master_key.is_empty() => {
                         return Ok(s);
                     }
+                    Ok(_) => {
+                        let msg = preserve_corrupt_and_fail(
+                            &path,
+                            "secrets.dat decrypted but JWT/APP keys are empty",
+                        );
+                        if !explicit_secrets_reset_allowed() {
+                            return Err(msg);
+                        }
+                    }
+                    Err(e) => {
+                        let msg = preserve_corrupt_and_fail(
+                            &path,
+                            &format!("secrets.dat JSON parse failed: {e}"),
+                        );
+                        if !explicit_secrets_reset_allowed() {
+                            return Err(msg);
+                        }
+                    }
+                },
+                Err(e) => {
+                    let msg = preserve_corrupt_and_fail(
+                        &path,
+                        &format!("secrets.dat DPAPI decrypt failed: {e}"),
+                    );
+                    if !explicit_secrets_reset_allowed() {
+                        return Err(msg);
+                    }
                 }
+            },
+            Err(e) => {
+                return Err(format!(
+                    "secrets.dat exists but cannot be read at {}: {e}",
+                    path.display()
+                ));
             }
         }
-        // Corrupt / undecryptable store: drop it and regenerate below.
-        let _ = fs::remove_file(&path);
     }
     let store = SecretStore {
         jwt_secret: base64_encode(&random_bytes(32)),
@@ -116,8 +148,32 @@ pub fn load_or_generate() -> Result<SecretStore, String> {
     Ok(store)
 }
 
-// Persist (encrypt + write). Returns Ok on success or a human-readable error
-// string describing exactly what failed and why.
+fn preserve_corrupt_and_fail(path: &std::path::Path, reason: &str) -> String {
+    let ts = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    let backup = path.with_extension(format!("dat.corrupt-{ts}"));
+    let _ = fs::rename(path, &backup);
+    format!(
+        "رفض تحميل secrets.dat التالف/غير القابل للفك — لم تُستبدل المفاتيح تلقائياً.\n\
+         السبب: {reason}\n\
+         نُقلت النسخة الأصلية إلى: {}\n\
+         للاستعادة: أعد تسمية الملف إلى secrets.dat بعد إصلاح DPAPI/المستخدم، \
+         أو اضبط MOTARD_RESET_SECRETS=1 بعد موافقة صريحة ثم أعد التشغيل \
+         لإعادة توليد مفاتيح جديدة (سيُبطل الجلسات الحالية).",
+        backup.display()
+    )
+}
+
+fn explicit_secrets_reset_allowed() -> bool {
+    matches!(
+        std::env::var("MOTARD_RESET_SECRETS").ok().as_deref(),
+        Some("1") | Some("true") | Some("TRUE")
+    )
+}
+
+// Persist (encrypt + write) via temp file + rename (DFP-011 atomic write).
 pub fn persist(store: &SecretStore) -> Result<(), String> {
     let json = serde_json::to_vec(store).map_err(|e| format!("serialize secrets: {}", e))?;
     let enc = dpapi_encrypt(&json)?;
@@ -125,8 +181,24 @@ pub fn persist(store: &SecretStore) -> Result<(), String> {
     fs::create_dir_all(&dir)
         .map_err(|e| format!("create data directory '{}': {}", dir.display(), e))?;
     let sp = secrets_path()?;
-    fs::write(&sp, &enc)
-        .map_err(|e| format!("write '{}': {} (os error {})", sp.display(), e, e.raw_os_error().unwrap_or(0)))?;
+    let tmp = sp.with_extension("dat.tmp");
+    fs::write(&tmp, &enc).map_err(|e| {
+        format!(
+            "write '{}': {} (os error {})",
+            tmp.display(),
+            e,
+            e.raw_os_error().unwrap_or(0)
+        )
+    })?;
+    fs::rename(&tmp, &sp).map_err(|e| {
+        let _ = fs::remove_file(&tmp);
+        format!(
+            "rename '{}' -> '{}': {}",
+            tmp.display(),
+            sp.display(),
+            e
+        )
+    })?;
     Ok(())
 }
 
@@ -171,6 +243,52 @@ mod tests {
         let last = cipher.len() - 1;
         cipher[last] ^= 0xff;
         assert!(dpapi_decrypt(&cipher).is_err(), "tampered blob must not decrypt");
+    }
+
+    #[test]
+    fn preserve_corrupt_renames_and_does_not_delete() {
+        let dir = std::env::temp_dir().join(format!(
+            "motard-secrets-corrupt-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("secrets.dat");
+        fs::write(&path, b"not-a-dpapi-blob").unwrap();
+        let msg = preserve_corrupt_and_fail(&path, "unit-test");
+        assert!(!path.exists(), "original path must be renamed away");
+        assert!(msg.contains("corrupt"), "message must mention backup: {msg}");
+        let backups: Vec<_> = fs::read_dir(&dir)
+            .unwrap()
+            .filter_map(|e| e.ok())
+            .filter(|e| {
+                e.file_name()
+                    .to_string_lossy()
+                    .contains("corrupt")
+            })
+            .collect();
+        assert_eq!(backups.len(), 1, "exactly one backup must remain");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn corrupt_fail_message_documents_explicit_reset_env() {
+        let dir = std::env::temp_dir().join(format!(
+            "motard-secrets-msg-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("secrets.dat");
+        fs::write(&path, b"garbage").unwrap();
+        let msg = preserve_corrupt_and_fail(&path, "unit");
+        assert!(msg.contains("MOTARD_RESET_SECRETS"), "recovery path must be documented: {msg}");
+        assert!(!path.exists());
+        let _ = fs::remove_dir_all(&dir);
     }
 
     #[test]

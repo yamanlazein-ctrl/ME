@@ -98,4 +98,9 @@ export interface ISyncDeviceRepository {
     revoked: boolean,
     reason: string | null,
   ): Promise<SyncDeviceRow | null>;
+  /**
+   * DFP-014: remove a user from every device authorization join (and rebuild
+   * denormalized caches). Called on soft-delete / deactivation.
+   */
+  revokeUserAuthorization(tenantId: UUID, userId: UUID): Promise<void>;
 }

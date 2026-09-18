@@ -9,6 +9,8 @@ import {
   type SyncDeviceRow,
 } from "../../application/ports/ISyncDeviceRepository.js";
 import { syncDevices } from "../orm/schemas/sync-device.table.js";
+import { syncDeviceAuthorizedUsers } from "../orm/schemas/sync-device-authorized-user.table.js";
+import { users } from "../orm/schemas/user.table.js";
 import {
   isLicenseFingerprintRevoked,
   revokeLicenseDevicesByFingerprint,
@@ -16,6 +18,62 @@ import {
 
 export class PostgresSyncDeviceRepository implements ISyncDeviceRepository {
   constructor(private readonly db: DB) {}
+
+  /** Insert join row + rebuild denormalized authorized_user_ids cache. */
+  private async bindUser(deviceId: string, tenantId: string, userId: string): Promise<string[]> {
+    await this.db
+      .insert(syncDeviceAuthorizedUsers)
+      .values({ deviceId, tenantId, userId })
+      .onConflictDoNothing();
+
+    // Drop bindings for inactive / wrong-tenant users (soft-delete cleanup).
+    await this.db.execute(sql`
+      DELETE FROM sync_device_authorized_users AS a
+      USING users AS u
+      WHERE a.device_id = ${deviceId}::uuid
+        AND a.tenant_id = ${tenantId}::uuid
+        AND a.user_id = u.id
+        AND (u.tenant_id IS DISTINCT FROM ${tenantId}::uuid OR u.active = false)
+    `);
+
+    const rows = await this.db
+      .select({ userId: syncDeviceAuthorizedUsers.userId })
+      .from(syncDeviceAuthorizedUsers)
+      .where(
+        and(
+          eq(syncDeviceAuthorizedUsers.deviceId, deviceId),
+          eq(syncDeviceAuthorizedUsers.tenantId, tenantId),
+        ),
+      );
+
+    const ids = rows.map((r) => r.userId);
+    await this.db
+      .update(syncDevices)
+      .set({ authorizedUserIds: ids })
+      .where(and(eq(syncDevices.id, deviceId), eq(syncDevices.tenantId, tenantId)));
+    return ids;
+  }
+
+  private async hydrateAuthorized(row: SyncDeviceRow): Promise<SyncDeviceRow> {
+    const bound = await this.db
+      .select({ userId: syncDeviceAuthorizedUsers.userId })
+      .from(syncDeviceAuthorizedUsers)
+      .innerJoin(
+        users,
+        and(
+          eq(users.id, syncDeviceAuthorizedUsers.userId),
+          eq(users.tenantId, syncDeviceAuthorizedUsers.tenantId),
+          eq(users.active, true),
+        ),
+      )
+      .where(
+        and(
+          eq(syncDeviceAuthorizedUsers.deviceId, row.id),
+          eq(syncDeviceAuthorizedUsers.tenantId, row.tenantId),
+        ),
+      );
+    return { ...row, authorizedUserIds: bound.map((b) => b.userId) };
+  }
 
   async registerOrTouch(input: IRegisterSyncDeviceInput): Promise<SyncDeviceRow> {
     return runWithTenantContext({ tenantId: input.tenantId }, async () => {
@@ -30,13 +88,6 @@ export class PostgresSyncDeviceRepository implements ISyncDeviceRepository {
         updatedAt: new Date(),
       };
 
-      // Device-gate binding: when the device asserts its own UUID, the row
-      // uses it as its id so hub push/pull gates recognize it.
-      //
-      // 4B: an existing row is only adopted by a caller who can prove it is
-      // that device (fingerprint match). Previously the fingerprint was
-      // OVERWRITTEN from input, so any tenant user could take over any device
-      // id — the forged-device-id hole.
       let existing: SyncDeviceRow | undefined;
       if (input.deviceId) {
         const [byId] = await this.db
@@ -52,11 +103,6 @@ export class PostgresSyncDeviceRepository implements ISyncDeviceRepository {
           }
           existing = byId;
         } else {
-          // The asserted id is unknown, but this fingerprint may already be
-          // registered under a different id (the client-asserted-id path is
-          // optional). Resolving by fingerprint keeps the
-          // (tenant, fingerprint) uniqueness invariant instead of crashing on
-          // it, and returns the canonical id to the caller.
           const [byFp] = await this.db
             .select()
             .from(syncDevices)
@@ -84,9 +130,6 @@ export class PostgresSyncDeviceRepository implements ISyncDeviceRepository {
       }
 
       if (existing) {
-        // 4B: revocation is terminal for the device itself — registration is
-        // the first thing a compromised device would use to re-establish
-        // authority, so it must be refused here rather than only on push.
         if (existing.revokedAt) {
           throw new SyncDeviceRevokedError(existing.revokeReason);
         }
@@ -95,21 +138,11 @@ export class PostgresSyncDeviceRepository implements ISyncDeviceRepository {
         }
         const [updated] = await this.db
           .update(syncDevices)
-          .set({
-            ...touch,
-            // 4B binding: add the registering user to the device's authorized
-            // set. `CASE` keeps the value stable for an already-bound user and
-            // makes concurrent registrations safe (the UPDATE re-reads under
-            // row lock; no read-modify-write race, no duplicate entries).
-            authorizedUserIds: sql`CASE
-              WHEN ${input.userId}::uuid = ANY(${syncDevices.authorizedUserIds})
-                THEN ${syncDevices.authorizedUserIds}
-              ELSE array_append(${syncDevices.authorizedUserIds}, ${input.userId}::uuid)
-            END`,
-          })
+          .set(touch)
           .where(eq(syncDevices.id, existing.id))
           .returning();
-        return updated;
+        const authorizedUserIds = await this.bindUser(updated.id, input.tenantId, input.userId);
+        return { ...updated, authorizedUserIds };
       }
 
       if (await isLicenseFingerprintRevoked(this.db, input.tenantId, input.deviceFingerprint)) {
@@ -123,12 +156,11 @@ export class PostgresSyncDeviceRepository implements ISyncDeviceRepository {
           tenantId: input.tenantId,
           deviceFingerprint: input.deviceFingerprint,
           ...touch,
-          // First registration binds its user; the device can only be used by
-          // users who later prove possession of the same machine.
-          authorizedUserIds: [input.userId],
+          authorizedUserIds: [],
         })
         .returning();
-      return created;
+      const authorizedUserIds = await this.bindUser(created.id, input.tenantId, input.userId);
+      return { ...created, authorizedUserIds };
     });
   }
 
@@ -140,28 +172,30 @@ export class PostgresSyncDeviceRepository implements ISyncDeviceRepository {
         .where(and(eq(syncDevices.tenantId, tenantId), eq(syncDevices.id, deviceId)))
         .limit(1);
       if (!row) return null;
+      const hydrated = await this.hydrateAuthorized(row);
       if (
-        !row.revokedAt &&
-        (await isLicenseFingerprintRevoked(this.db, tenantId, row.deviceFingerprint))
+        !hydrated.revokedAt &&
+        (await isLicenseFingerprintRevoked(this.db, tenantId, hydrated.deviceFingerprint))
       ) {
         return {
-          ...row,
+          ...hydrated,
           revokedAt: new Date(0),
-          revokeReason: row.revokeReason ?? "license_revoked",
+          revokeReason: hydrated.revokeReason ?? "license_revoked",
         };
       }
-      return row;
+      return hydrated;
     });
   }
 
   async listForTenant(tenantId: string, limit = 200): Promise<SyncDeviceRow[]> {
     return runWithTenantContext({ tenantId }, async () => {
-      return this.db
+      const rows = await this.db
         .select()
         .from(syncDevices)
         .where(eq(syncDevices.tenantId, tenantId))
         .orderBy(desc(syncDevices.lastSeenAt))
         .limit(Math.min(Math.max(limit, 1), 500));
+      return Promise.all(rows.map((r) => this.hydrateAuthorized(r)));
     });
   }
 
@@ -189,7 +223,49 @@ export class PostgresSyncDeviceRepository implements ISyncDeviceRepository {
         revoked,
         reason,
       );
-      return row;
+      return this.hydrateAuthorized(row);
+    });
+  }
+
+  /** DFP-014: soft-deleted / deactivated users lose device authority immediately. */
+  async revokeUserAuthorization(tenantId: string, userId: string): Promise<void> {
+    return runWithTenantContext({ tenantId }, async () => {
+      const affected = await this.db
+        .select({ deviceId: syncDeviceAuthorizedUsers.deviceId })
+        .from(syncDeviceAuthorizedUsers)
+        .where(
+          and(
+            eq(syncDeviceAuthorizedUsers.tenantId, tenantId),
+            eq(syncDeviceAuthorizedUsers.userId, userId),
+          ),
+        );
+      if (affected.length === 0) return;
+
+      await this.db
+        .delete(syncDeviceAuthorizedUsers)
+        .where(
+          and(
+            eq(syncDeviceAuthorizedUsers.tenantId, tenantId),
+            eq(syncDeviceAuthorizedUsers.userId, userId),
+          ),
+        );
+
+      const deviceIds = affected.map((a) => a.deviceId);
+      for (const deviceId of deviceIds) {
+        const remaining = await this.db
+          .select({ userId: syncDeviceAuthorizedUsers.userId })
+          .from(syncDeviceAuthorizedUsers)
+          .where(
+            and(
+              eq(syncDeviceAuthorizedUsers.deviceId, deviceId),
+              eq(syncDeviceAuthorizedUsers.tenantId, tenantId),
+            ),
+          );
+        await this.db
+          .update(syncDevices)
+          .set({ authorizedUserIds: remaining.map((r) => r.userId), updatedAt: new Date() })
+          .where(and(eq(syncDevices.id, deviceId), eq(syncDevices.tenantId, tenantId)));
+      }
     });
   }
 }

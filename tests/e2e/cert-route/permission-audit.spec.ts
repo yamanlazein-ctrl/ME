@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { loginAs, logout } from "../_helpers/login";
+import { loginAs, logout, e2eRoleAuth } from "../_helpers/login";
 import { assertRouteOk } from "../_helpers/test-helpers";
 
 type UserRole = "admin" | "accountant" | "warehouse" | "viewer";
@@ -13,10 +13,13 @@ type UserDef = {
   blocked: string[];
 };
 
+function roleCreds(role: UserRole): { username: string; password: string } {
+  return e2eRoleAuth(role);
+}
+
 const ADMIN: UserDef = {
   role: "admin",
-  username: "admin",
-  password: "admin",
+  ...roleCreds("admin"),
   label: "Admin",
   allowed: [
     "/",
@@ -59,8 +62,7 @@ const ADMIN: UserDef = {
 
 const WAREHOUSE: UserDef = {
   role: "warehouse",
-  username: "warehouse",
-  password: "warehouse",
+  ...roleCreds("warehouse"),
   label: "Warehouse",
   allowed: ["/", "/inventory", "/invoices/entry/new", "/returns/entry/new", "/print-center"],
   blocked: ["/settings", "/settings/users", "/reports", "/expenses/new"],
@@ -68,8 +70,7 @@ const WAREHOUSE: UserDef = {
 
 const ACCOUNTANT: UserDef = {
   role: "accountant",
-  username: "accountant",
-  password: "accountant",
+  ...roleCreds("accountant"),
   label: "Accountant",
   allowed: [
     "/",
@@ -99,8 +100,7 @@ const ACCOUNTANT: UserDef = {
 
 const VIEWER: UserDef = {
   role: "viewer",
-  username: "viewer",
-  password: "viewer",
+  ...roleCreds("viewer"),
   label: "Viewer",
   allowed: ["/", "/inventory", "/customers", "/suppliers", "/reports"],
   blocked: ["/expenses/new", "/invoices/entry/new", "/orders/new", "/settings"],

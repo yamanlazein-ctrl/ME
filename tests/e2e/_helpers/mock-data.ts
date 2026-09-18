@@ -7,19 +7,20 @@
  */
 
 import type { APIRequestContext } from "@playwright/test";
+import { e2eAdminAuth } from "./testCredentials.js";
 
 const BACKEND = process.env.PLAYWRIGHT_BACKEND_URL ?? "http://localhost:8080";
-const ADMIN = { username: "admin", password: "admin" };
 
 let _cachedToken = "";
 
 /** Obtain an admin JWT token (cached per process). */
 export async function getAdminToken(request: APIRequestContext): Promise<string> {
   if (_cachedToken) return _cachedToken;
+  const ADMIN = e2eAdminAuth();
   const ctx = await fetch(`${BACKEND}/api/auth/login`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(ADMIN),
+    body: JSON.stringify({ email: ADMIN.email, password: ADMIN.password }),
   }).then((r) => r.json());
   _cachedToken = ctx.accessToken ?? ctx.token ?? "";
   return _cachedToken;

@@ -226,36 +226,92 @@ struct FingerprintResult {
     os: String,
 }
 
+#[cfg(test)]
+mod fingerprint_tests {
+    use super::canonical_fingerprint_hash;
+    use serde_json::json;
+
+    #[test]
+    fn dfp039_cross_language_golden_vector() {
+        let mut signals = serde_json::Map::new();
+        signals.insert("cpu_model".into(), json!("x"));
+        signals.insert("hostname".into(), json!("h"));
+        signals.insert("platform_release".into(), json!("win32 10"));
+        assert_eq!(
+            canonical_fingerprint_hash("tauri-desktop", 1, &signals).unwrap(),
+            "d8c84ceade7eb700c75a2f606c5aa4ac8184ac57942dcb7792e48ca8da88d59f"
+        );
+    }
+}
+
+fn canonical_fingerprint_hash(
+    platform: &str,
+    version: u32,
+    signals: &serde_json::Map<String, serde_json::Value>,
+) -> Result<String, String> {
+    use sha2::{Digest, Sha256};
+    let mut keys: Vec<&String> = signals.keys().collect();
+    keys.sort();
+    let mut ordered = serde_json::Map::new();
+    for key in keys {
+        ordered.insert(key.clone(), signals[key].clone());
+    }
+    #[derive(Serialize)]
+    struct Envelope<'a> {
+        platform: &'a str,
+        version: u32,
+        signals: serde_json::Map<String, serde_json::Value>,
+    }
+    let payload = serde_json::to_string(&Envelope { platform, version, signals: ordered })
+        .map_err(|e| e.to_string())?;
+    Ok(Sha256::digest(payload.as_bytes())
+        .iter()
+        .map(|b| format!("{b:02x}"))
+        .collect())
+}
+
 /// Collect machine fingerprint for license binding.
-/// Deterministic SHA-256 of hardware signals.
+/// DFP-039: SHA-256 of the same versioned envelope as NodeFingerprintProvider
+/// (`platform` + `version` + sorted signal keys), not DefaultHasher.
 #[tauri::command]
 fn get_fingerprint() -> Result<FingerprintResult, String> {
+    use sha2::{Digest, Sha256};
+
+    const VERSION: u32 = 1;
     let hostname = hostname::get()
         .unwrap_or_default()
         .to_string_lossy()
         .into_owned();
-    let os = format!("{} {}", std::env::consts::OS, std::env::consts::ARCH);
+    let os_label = format!("{} {}", std::env::consts::OS, std::env::consts::ARCH);
 
-    // Collect hardware signals (same pattern as NodeFingerprintProvider)
-    let mac = get_primary_mac().unwrap_or_default();
-    let machine_id = get_machine_id().unwrap_or_default();
-    let cpu = get_cpu_model().unwrap_or_default();
-
-    // Deterministic ordered JSON
-    let signals = format!(
-        "{{\"cpu\":\"{}\",\"hostname\":\"{}\",\"mac\":\"{}\",\"machine_id\":\"{}\",\"os\":\"{}\"}}",
-        cpu, hostname, mac, machine_id, os
+    let mut signals = serde_json::Map::new();
+    signals.insert("hostname".into(), serde_json::Value::String(hostname.clone()));
+    signals.insert(
+        "platform_release".into(),
+        serde_json::Value::String(os_label.clone()),
     );
+    if let Ok(mac) = get_primary_mac() {
+        if !mac.is_empty() {
+            signals.insert("primary_mac".into(), serde_json::Value::String(mac));
+        }
+    }
+    if let Ok(machine_id) = get_machine_id() {
+        if !machine_id.is_empty() {
+            signals.insert("machine_id".into(), serde_json::Value::String(machine_id));
+        }
+    }
+    if let Ok(cpu) = get_cpu_model() {
+        if !cpu.is_empty() {
+            signals.insert("cpu_model".into(), serde_json::Value::String(cpu));
+        }
+    }
 
-    use std::hash::{Hash, Hasher};
-    let mut hasher = std::collections::hash_map::DefaultHasher::new();
-    signals.hash(&mut hasher);
-    let hash = format!("{:x}", hasher.finish());
+    let hash = canonical_fingerprint_hash("tauri-desktop", VERSION, &signals)?;
 
     Ok(FingerprintResult {
         hash,
         hostname,
-        os,
+        os: os_label,
     })
 }
 

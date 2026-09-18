@@ -16,8 +16,9 @@ const adminUrl =
   `postgresql://postgres:postgres@${app.hostname}:${app.port || 5432}/erp`;
 
 const USER_ID = "3cc49d25-9614-40f0-a61d-9f8aacc14e0d";
-const PASSWORD = "admin123";
-const PIN = "4829";
+const PASSWORD = process.env.E2E_ADMIN_PASSWORD;
+if (!PASSWORD) throw new Error("E2E_ADMIN_PASSWORD required (DFP-029)");
+const PIN = process.env.E2E_ADMIN_PIN ?? "4829";
 
 const c = new pg.Client({ connectionString: adminUrl });
 await c.connect();

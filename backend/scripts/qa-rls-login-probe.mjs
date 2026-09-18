@@ -15,7 +15,9 @@ const r = await c.query(
 );
 console.log("rows", r.rows.map((x) => ({ id: x.id, email: x.email, active: x.active })));
 if (r.rows[0]) {
-  console.log("pw", await verify(r.rows[0].password_hash, "admin123"));
+  const _pw = process.env.E2E_ADMIN_PASSWORD;
+  if (!_pw) throw new Error("E2E_ADMIN_PASSWORD required (DFP-029)");
+  console.log("pw", await verify(r.rows[0].password_hash, _pw));
   console.log("pin", await verify(r.rows[0].pin_hash, "4829"));
 }
 await c.end();

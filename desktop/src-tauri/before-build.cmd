@@ -10,7 +10,16 @@ for /d %%D in ("resources\postgres\pgdata-template.bak*") do (
   exit /b 1
 )
 
+rem DFP-001: portable Node must exist before backend staging (and before SSR).
+node "%~dp0..\scripts\stage-node-runtime.mjs"
+if errorlevel 1 exit /b 1
+
 call "%~dp0..\build-frontend.cmd"
+if errorlevel 1 exit /b 1
+
+rem DFP-001: copy checked-in desktop/ssr/serve.mjs into resources and assert
+rem the SSR handler from build-frontend robocopy is present.
+node "%~dp0..\scripts\stage-ssr.mjs"
 if errorlevel 1 exit /b 1
 
 rem Packaging parity (no stale backend ships): rebuild the backend from
@@ -25,4 +34,8 @@ rem ranges here (that once shipped a newer router-core than the inlined
 rem start-server-core expected: "matchedRoutes is not iterable" at customer
 rem runtime only). Fails the build loudly on any unresolvable external.
 node "%~dp0..\scripts\sync-ssr-deps.mjs"
+if errorlevel 1 exit /b 1
+
+rem DFP-001 hard release gate: every preflight_check path + packaging peers.
+node "%~dp0..\scripts\validate-resource-manifest.mjs"
 if errorlevel 1 exit /b 1

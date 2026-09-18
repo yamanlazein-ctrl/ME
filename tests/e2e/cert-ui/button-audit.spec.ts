@@ -176,13 +176,12 @@ test.describe("Cert UI — Ledger Buttons", () => {
     });
 
     const printBtn = page.locator("button:has-text('طباعة')").first();
-    if (await printBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
-      await printBtn.click();
-      await page.waitForTimeout(500);
-      printCalled = await page.evaluate(() => !!(window as any).__printCalled);
-    }
-
-    expect(printCalled || true).toBe(true);
+    const visible = await printBtn.isVisible({ timeout: 3000 }).catch(() => false);
+    test.skip(!visible, "ledger print button not present in this build");
+    await printBtn.click();
+    await page.waitForTimeout(500);
+    printCalled = await page.evaluate(() => !!(window as any).__printCalled);
+    expect(printCalled, "print button must invoke window.print (DFP-031)").toBe(true);
   });
 
   test("ledger export CSV button exists", async ({ page }) => {

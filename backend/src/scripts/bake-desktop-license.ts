@@ -25,7 +25,11 @@ import { LicenseTokenSigner } from "../infrastructure/auth/LicenseTokenSigner.js
 import { FEATURES } from "../domain/licensing/features.js";
 import { runWithPlatformContext } from "../infrastructure/orm/tenant-context.js";
 
-const DEFAULT_TENANT = process.env.SEED_TENANT_ID ?? "407fccfc-ba89-41c5-b5b9-ddb2c4f385d9";
+const DEFAULT_TENANT = process.env.SEED_TENANT_ID?.trim();
+if (!DEFAULT_TENANT) {
+  throw new Error("SEED_TENANT_ID is required; refuse to bake a license for an implicit tenant");
+}
+const REQUIRED_TENANT_ID: string = DEFAULT_TENANT;
 const BAKED_KEY =
   process.env.BAKED_LICENSE_KEY ?? `LIC-DESKTOP-${randomBytes(8).toString("hex").toUpperCase()}`;
 // ~100 years. The runtime guard reads only the signature + this `exp`, never the
@@ -119,7 +123,7 @@ async function main() {
   const token = await signer.sign(
     {
       licenseId: row.id as string,
-      tenantId: DEFAULT_TENANT,
+      tenantId: REQUIRED_TENANT_ID,
       features: row.features as string[],
       expiresAt,
       serverFingerprint: "desktop-pre-baked",

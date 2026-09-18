@@ -3,7 +3,7 @@ import { sql } from "drizzle-orm";
 import { Pool, PoolClient } from "pg";
 import { config } from "../config/env.js";
 import { tenantContext } from "./tenant-context.js";
-import { runInAmbientTx, getAmbientTx, getAmbientTenantId } from "./ambient-tx.js";
+import { runInAmbientTx, getAmbientTx, getAmbientTenantId, ambientDb } from "./ambient-tx.js";
 
 /**
  * A pg Pool that stamps the RLS tenant GUC onto every connection at checkout
@@ -89,7 +89,12 @@ export const pool = new TenantScopedPool({
 
 export const db = drizzle(pool);
 
+/** Pool-backed db that joins an ambient `withTenantTx` when one is active. */
+export const txDb = ambientDb(db);
+
 export type DB = typeof db;
+
+export { ambientDb };
 
 /**
  * The transaction type used by `withTenantTx`. Derived from drizzle's

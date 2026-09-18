@@ -99,11 +99,12 @@ export function PrintDocument({
 
   const contactLines = getCompanyContactLines();
 
-  // Stamp paper size on the print portal root so named @page starts THERE
-  // (not on an inner .print-doc) — avoids Chrome's blank first page.
+  // Backup stamp if PrintDocument mounts outside printPortal (tests/preview).
+  // Primary path: printPortal.syncPrintPaper() before window.print() (DFP-002).
   useEffect(() => {
     const root = document.querySelector("[data-print-root]");
     if (root instanceof HTMLElement) root.dataset.paper = paper;
+    document.documentElement.dataset.paper = paper;
   }, [paper]);
 
   return (

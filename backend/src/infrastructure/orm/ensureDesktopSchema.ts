@@ -59,6 +59,44 @@ export async function ensureDesktopSchema(query: (sql: string) => Promise<unknow
   );
   await forceTenantRls(query, "sync_devices");
 
+  // DFP-014 — relational device↔user authorization (SoT for authorized_user_ids cache).
+  await query(`CREATE UNIQUE INDEX IF NOT EXISTS users_tenant_id_uidx ON users (tenant_id, id)`);
+  await query(
+    `CREATE UNIQUE INDEX IF NOT EXISTS sync_devices_tenant_id_uidx ON sync_devices (tenant_id, id)`,
+  );
+  await query(`
+    CREATE TABLE IF NOT EXISTS sync_device_authorized_users (
+      device_id uuid NOT NULL,
+      user_id uuid NOT NULL,
+      tenant_id uuid NOT NULL,
+      created_at timestamptz NOT NULL DEFAULT now(),
+      PRIMARY KEY (device_id, user_id)
+    )
+  `);
+  await query(`
+    DO $$ BEGIN
+      ALTER TABLE sync_device_authorized_users
+        ADD CONSTRAINT sync_device_authorized_users_device_fk
+        FOREIGN KEY (tenant_id, device_id) REFERENCES sync_devices (tenant_id, id) ON DELETE CASCADE;
+    EXCEPTION WHEN duplicate_object THEN NULL;
+    END $$
+  `);
+  await query(`
+    DO $$ BEGIN
+      ALTER TABLE sync_device_authorized_users
+        ADD CONSTRAINT sync_device_authorized_users_user_fk
+        FOREIGN KEY (tenant_id, user_id) REFERENCES users (tenant_id, id) ON DELETE CASCADE;
+    EXCEPTION WHEN duplicate_object THEN NULL;
+    END $$
+  `);
+  await query(
+    `CREATE INDEX IF NOT EXISTS idx_sync_device_auth_users_user ON sync_device_authorized_users (tenant_id, user_id)`,
+  );
+  await query(
+    `CREATE INDEX IF NOT EXISTS idx_sync_device_auth_users_device ON sync_device_authorized_users (tenant_id, device_id)`,
+  );
+  await forceTenantRls(query, "sync_device_authorized_users");
+
   await query(`
     CREATE TABLE IF NOT EXISTS sync_outbox (
       id uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,

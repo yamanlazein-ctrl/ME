@@ -1,4 +1,4 @@
-// Reset admin@erp.local password to "admin123" — no questions asked.
+// Reset admin@erp.local password from ADMIN_BOOTSTRAP_PASSWORD — requires --force.
 // Idempotent. Replaces the existing hash with a fresh Argon2id hash.
 
 import { readFileSync } from "node:fs";

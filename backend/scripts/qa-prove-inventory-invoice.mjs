@@ -24,7 +24,8 @@ function normalizeInventoryName(name) {
 const BASE = "http://127.0.0.1:8080";
 const TENANT = "d9b59c10-1875-4cfd-8da7-1fea2c4944fd";
 const EMAIL = "firstrun.admin+1789646561009@erp.test";
-const PASSWORD = "admin123";
+const PASSWORD = process.env.E2E_ADMIN_PASSWORD;
+if (!PASSWORD) throw new Error("E2E_ADMIN_PASSWORD required (DFP-029)");
 const FABRIC_NAME = "قطن مصري فاخر";
 const COLOR_NAME = "أبيض ثلجي";
 

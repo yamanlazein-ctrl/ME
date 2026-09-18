@@ -76,7 +76,10 @@ test.describe("Cert UI — Form Audit", () => {
           .isVisible({ timeout: 3000 })
           .catch(() => false);
 
-        expect(anyValidation || anyError || true).toBe(true);
+        expect(
+          anyValidation || anyError,
+          "empty required submit must show validation UI (DFP-031: soft-pass forbidden)",
+        ).toBe(true);
       });
     }
   }

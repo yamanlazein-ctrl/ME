@@ -22,9 +22,10 @@
 // apart, corrupting the running instance until the next automatic WAL
 // recovery). No console at all means no such surface exists.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashSet};
 use std::ffi::{c_void, OsStr};
 use std::fs::File;
+use std::fs;
 use std::io;
 use std::os::windows::ffi::OsStrExt;
 use std::os::windows::io::AsRawHandle;
@@ -32,7 +33,7 @@ use std::path::{Path, PathBuf};
 
 use windows::core::{BOOL, PWSTR};
 use windows::Win32::Foundation::{
-    CloseHandle, SetHandleInformation, HANDLE, HANDLE_FLAG_INHERIT, HWND, LPARAM,
+    CloseHandle, SetHandleInformation, HANDLE, HANDLE_FLAG_INHERIT, HWND, LPARAM, WAIT_OBJECT_0,
 };
 use windows::Win32::System::Diagnostics::ToolHelp::{
     CreateToolhelp32Snapshot, Process32FirstW, Process32NextW, PROCESSENTRY32W,
@@ -128,6 +129,16 @@ impl HiddenChild {
     pub fn kill(&self) {
         unsafe {
             let _ = TerminateProcess(self.process, 1);
+        }
+    }
+
+    /// DFP-022: terminate then wait up to `timeout_ms` for the process to exit.
+    /// Returns true if the process handle signaled within the timeout.
+    pub fn kill_and_wait(&self, timeout_ms: u32) -> bool {
+        self.kill();
+        unsafe {
+            let r = WaitForSingleObject(self.process, timeout_ms);
+            r == WAIT_OBJECT_0
         }
     }
 }
@@ -234,6 +245,65 @@ pub struct HiddenCommand {
     stderr: Option<File>,
 }
 
+/// OS / locale keys safe to pass to bundled sidecars (DFP-012).
+const ENV_ALLOWLIST: &[&str] = &[
+    "SystemRoot",
+    "SYSTEMROOT",
+    "SystemDrive",
+    "windir",
+    "WINDIR",
+    "PATH",
+    "Path",
+    "TEMP",
+    "TMP",
+    "TMPDIR",
+    "USERPROFILE",
+    "APPDATA",
+    "LOCALAPPDATA",
+    "HOME",
+    "USERNAME",
+    "USERDOMAIN",
+    "COMPUTERNAME",
+    "NUMBER_OF_PROCESSORS",
+    "PROCESSOR_ARCHITECTURE",
+    "PROCESSOR_IDENTIFIER",
+    "ComSpec",
+    "COMSPEC",
+    "PATHEXT",
+    "ProgramData",
+    "ProgramFiles",
+    "ProgramFiles(x86)",
+    "CommonProgramFiles",
+    "PUBLIC",
+    "ALLUSERSPROFILE",
+    "LANG",
+    "LC_ALL",
+    "LANGUAGE",
+];
+
+fn allowlisted_parent_env() -> BTreeMap<String, String> {
+    let allow: HashSet<String> = ENV_ALLOWLIST
+        .iter()
+        .map(|k| k.to_ascii_uppercase())
+        .collect();
+    let mut out = BTreeMap::new();
+    for (k, v) in std::env::vars() {
+        if allow.contains(&k.to_ascii_uppercase()) {
+            out.insert(k, v);
+        }
+    }
+    out
+}
+
+/// True when `name` would be inherited under the sidecar allowlist (unit tests).
+#[cfg(test)]
+pub fn env_key_is_allowlisted(name: &str) -> bool {
+    let upper = name.to_ascii_uppercase();
+    ENV_ALLOWLIST
+        .iter()
+        .any(|k| k.to_ascii_uppercase() == upper)
+}
+
 impl HiddenCommand {
     pub fn new(program: impl AsRef<OsStr>) -> Self {
         HiddenCommand {
@@ -306,11 +376,15 @@ impl HiddenCommand {
 
         let cwd_wide = self.current_dir.as_ref().map(|d| to_wide_null(&d.to_string_lossy()));
 
-        // Inherit this process's environment, then apply overrides/removals —
-        // the same semantics as std::process::Command.
-        let mut env_map: BTreeMap<String, String> = std::env::vars().collect();
+        // DFP-012: allowlisted base environment only — never inherit arbitrary
+        // parent/CI secrets (AWS_*, GITHUB_*, NPM_TOKEN, etc.). Explicit
+        // `.env()` / `.env_remove()` still apply on top.
+        let mut env_map = allowlisted_parent_env();
         for k in &self.env_remove {
             env_map.remove(k);
+            // Windows env is case-insensitive; drop case variants too.
+            let upper = k.to_ascii_uppercase();
+            env_map.retain(|existing, _| existing.to_ascii_uppercase() != upper);
         }
         for (k, v) in &self.env {
             env_map.insert(k.clone(), v.clone());
@@ -373,5 +447,98 @@ impl HiddenCommand {
             _stdout: self.stdout.take(),
             _stderr: self.stderr.take(),
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn allowlist_keeps_path_and_rejects_secret_sentinels() {
+        assert!(env_key_is_allowlisted("PATH"));
+        assert!(env_key_is_allowlisted("SystemRoot"));
+        assert!(!env_key_is_allowlisted("AWS_SECRET_ACCESS_KEY"));
+        assert!(!env_key_is_allowlisted("GITHUB_TOKEN"));
+        assert!(!env_key_is_allowlisted("NPM_TOKEN"));
+        assert!(!env_key_is_allowlisted("LICENSE_SIGNING_KEY"));
+        let map = allowlisted_parent_env();
+        assert!(
+            !map.keys().any(|k| k.to_ascii_uppercase().contains("SECRET")
+                || k.to_ascii_uppercase().contains("TOKEN")
+                || k.to_ascii_uppercase().contains("AWS_")),
+            "allowlisted map must not contain secret-like keys: {:?}",
+            map.keys().collect::<Vec<_>>()
+        );
+    }
+
+    #[test]
+    fn kill_and_wait_terminates_long_running_child() {
+        // DFP-003 / DFP-022: process-tree proof that TerminateProcess + wait
+        // actually reaps a live Windows child (port reuse depends on this).
+        let child = HiddenCommand::new("ping.exe")
+            .args(["-t", "127.0.0.1"])
+            .spawn()
+            .expect("spawn ping -t");
+        assert!(child.id() > 0);
+        assert!(
+            child.kill_and_wait(5_000),
+            "child must exit within wait window after TerminateProcess"
+        );
+    }
+
+    #[test]
+    fn live_child_env_dump_omits_parent_secret_sentinels() {
+        // DFP-012: spawn a real Windows child and dump its environment.
+        // Parent has secret sentinels; child must not inherit them.
+        let sentinel = "DFP012_LIVE_SECRET_SENTINEL";
+        let sentinel_val = "must-not-appear-in-sidecar";
+        // SAFETY: test-only env mutation; restored below.
+        unsafe { std::env::set_var(sentinel, sentinel_val) };
+        unsafe { std::env::set_var("AWS_SECRET_ACCESS_KEY", "aws-live-sentinel") };
+        unsafe { std::env::set_var("GITHUB_TOKEN", "gh-live-sentinel") };
+
+        let out_path = std::env::temp_dir().join(format!(
+            "dfp012-env-{}.txt",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let out_file = File::create(&out_path).expect("create env dump file");
+
+        let child = HiddenCommand::new("cmd.exe")
+            .args(["/C", "set"])
+            .stdout_file(out_file)
+            .spawn()
+            .expect("spawn cmd /C set");
+        let _ = child.wait_success();
+        drop(child);
+
+        let dump = fs::read_to_string(&out_path).unwrap_or_default();
+        let _ = fs::remove_file(&out_path);
+
+        unsafe { std::env::remove_var(sentinel) };
+        unsafe { std::env::remove_var("AWS_SECRET_ACCESS_KEY") };
+        unsafe { std::env::remove_var("GITHUB_TOKEN") };
+
+        assert!(
+            !dump.contains(sentinel_val),
+            "child must not inherit DFP012 sentinel; dump sample: {}",
+            dump.chars().take(200).collect::<String>()
+        );
+        assert!(
+            !dump.to_ascii_uppercase().contains("AWS_SECRET_ACCESS_KEY"),
+            "child must not inherit AWS_SECRET_ACCESS_KEY"
+        );
+        assert!(
+            !dump.to_ascii_uppercase().contains("GITHUB_TOKEN"),
+            "child must not inherit GITHUB_TOKEN"
+        );
+        assert!(
+            dump.to_ascii_uppercase().contains("PATH="),
+            "child must still receive allowlisted PATH; dump empty? len={}",
+            dump.len()
+        );
     }
 }

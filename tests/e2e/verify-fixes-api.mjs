@@ -2,7 +2,7 @@
 /**
  * Verify All Fixes — API-level E2E (no browser, no cache, fresh view)
  * Run: node tests/e2e/verify-fixes-api.mjs
- * Requires: backend running on http://localhost:8080, DB migrated, admin@erp.local/admin123 exists
+ * Requires: backend running on http://localhost:8080, DB migrated, admin seeded via E2E_ADMIN_PASSWORD
  *
  * Each test starts fresh (no reliance on prior state, no localStorage) and
  * verifies one defect fix via direct API calls. This is the "delete your cache
@@ -25,8 +25,17 @@ async function test(name, fn) {
 }
 function skip(msg) { throw new Error(`SKIP: ${msg}`); }
 async function login() {
-  const r = await fetch(`${API}/auth/login`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email: "admin@erp.local", password: "admin123", tenantId: "407fccfc-ba89-41c5-b5b9-ddb2c4f385d9" }) });
-  if (r.status !== 200) skip(`login failed ${r.status} ${await r.text().catch(()=> "")}`);
+  const email = process.env.E2E_ADMIN_EMAIL ?? "admin@erp.local";
+  const password = process.env.E2E_ADMIN_PASSWORD;
+  if (!password) throw new Error("SKIP: set E2E_ADMIN_PASSWORD (DFP-029)");
+  const body = { email, password };
+  if (process.env.E2E_TENANT_ID) body.tenantId = process.env.E2E_TENANT_ID;
+  const r = await fetch(`${API}/auth/login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (r.status !== 200) skip(`login failed ${r.status} ${await r.text().catch(() => "")}`);
   const j = await r.json();
   return j.accessToken;
 }

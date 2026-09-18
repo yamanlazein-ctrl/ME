@@ -50,29 +50,42 @@ export function registerCashboxRoutes(
     try {
       const date = req.params.date as string;
       const state = await cashboxRepo.getState(ctx(req));
-      const currency = (req.query.currency as string) || state.session?.currency || "SYP";
-      // Each currency has its own session row — opening balance + opening DATE
-      // come from THAT currency's own session, never another currency's:
-      // (1) Amount leak: adding opening to every currency made USD/EUR show the
-      //     SYP opening (FIX-02).
-      // (2) Date leak: applying another currency's openingDate truncated this
-      //     currency's history — confirmed live: setting SYP opening dated
-      //     today zeroed USD from 150 → 0 even though USD receipts exist.
-      const currencySession = state.sessions.find((s) => s.currency === currency);
-      const opening = currencySession?.openingBalance ?? 0;
-      const from = currencySession?.openingDate ?? "0001-01-01";
-      const [ledger, manual] = await Promise.all([
-        ledgerRepo.getCashMovementsOn(from, date, currency, ctx(req)),
-        cashboxRepo.listManualMovements(ctx(req)),
-      ]);
-      let mIn = 0;
-      let mOut = 0;
-      for (const m of manual) {
-        if (m.currency !== currency || m.date > date || m.date < from) continue;
-        if (m.direction === "in") mIn += m.amount;
-        else mOut += m.amount;
+      const requested = (req.query.currency as string | undefined)?.trim();
+      const manual = await cashboxRepo.listManualMovements(ctx(req));
+
+      const balanceFor = async (currency: string): Promise<number> => {
+        // Each currency has its own session row — opening balance + opening DATE
+        // come from THAT currency's own session, never another currency's.
+        const currencySession = state.sessions.find((s) => s.currency === currency);
+        const opening = currencySession?.openingBalance ?? 0;
+        const from = currencySession?.openingDate ?? "0001-01-01";
+        const ledger = await ledgerRepo.getCashMovementsOn(from, date, currency, ctx(req));
+        let mIn = 0;
+        let mOut = 0;
+        for (const m of manual) {
+          if (m.currency !== currency || m.date > date || m.date < from) continue;
+          if (m.direction === "in") mIn += m.amount;
+          else mOut += m.amount;
+        }
+        return opening + ledger.in + mIn - ledger.out - mOut;
+      };
+
+      // DFP-031 M5: without ?currency=, return a per-currency map so multi-currency
+      // cash is visible. With ?currency=, keep the historical scalar number.
+      if (requested) {
+        res.json(await balanceFor(requested));
+        return;
       }
-      res.json(opening + ledger.in + mIn - ledger.out - mOut);
+
+      const currencies = new Set<string>(["SYP", "USD"]);
+      for (const s of state.sessions) currencies.add(s.currency);
+      for (const m of manual) currencies.add(m.currency);
+
+      const byCurrency: Record<string, number> = {};
+      for (const c of currencies) {
+        byCurrency[c] = await balanceFor(c);
+      }
+      res.json(byCurrency);
     } catch (e) {
       res.status(500).json({
         code: "INTERNAL",

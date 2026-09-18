@@ -46,9 +46,13 @@ cd .. && npm run tauri:build
 
 | الملف       | الوصف                           |
 | ----------- | ------------------------------- |
-| `msi/*.msi` | Windows Installer (recommended) |
+| `msi/*.msi` | Windows Installer (MSI / WiX)   |
+| `nsis/*.exe` | NSIS installer (also built)    |
 
-> ملاحظة: `tauri.conf.json` الحالي يحدد `"targets": ["msi"]` فقط. لتفعيل NSIS أو exe محمول، أضف `"nsis"` أو `"app"` إلى مصفوفة `bundle.targets` أولاً.
+> `tauri.conf.json` ships `"targets": ["msi", "nsis"]`. Both are release
+> artifacts. WiX language is `ar-SA` only (see `bundle.windows.wix.language`);
+> NSIS hooks live in `windows/hooks.nsh`; WiX cleanup fragment is
+> `wix-cleanup.wxs` (`MotardRunKeyCleanup`).
 
 ## خصائص التطبيق
 
@@ -159,10 +163,15 @@ pgdata بحجم ~177MB). لا نفرض أي استثناء برمجياً من �
 ```json
 {
   "bundle": {
+    "targets": ["msi", "nsis"],
     "windows": {
       "wix": {
-        "language": ["ar-SA", "en-US"],
-        "license": "../../LICENSE.txt"
+        "language": ["ar-SA"],
+        "fragmentPaths": ["./wix-cleanup.wxs"],
+        "componentRefs": ["MotardRunKeyCleanup"]
+      },
+      "nsis": {
+        "installerHooks": "./windows/hooks.nsh"
       }
     }
   }

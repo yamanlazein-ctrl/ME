@@ -118,7 +118,7 @@ function assertCanonicalHeader(html: string) {
   );
 }
 
-function makeInvoice(type: "sale" | "entry"): Invoice {
+function makeInvoice(type: "sale" | "entry") {
   return Invoice.create({
     tenantId: "t1",
     number: type === "sale" ? "SALE-1" : "ENT-1",
@@ -150,11 +150,10 @@ function makeInvoice(type: "sale" | "entry"): Invoice {
 describe("canonical print header", () => {
   it("renders brand once and the five verbatim contact lines", () => {
     const html = renderToString(
-      React.createElement(
-        PrintDocument,
-        { title: "فاتورة بيع" },
-        React.createElement("div", null, "body"),
-      ),
+      React.createElement(PrintDocument, {
+        title: "فاتورة بيع",
+        children: React.createElement("div", null, "body"),
+      }),
     );
     assertCanonicalHeader(html);
     expect(html).toContain("فاتورة بيع");
@@ -162,11 +161,10 @@ describe("canonical print header", () => {
 
   it("does not repeat contact in the footer", () => {
     const html = renderToString(
-      React.createElement(
-        PrintDocument,
-        { title: "فاتورة بيع" },
-        React.createElement("div", null, "body"),
-      ),
+      React.createElement(PrintDocument, {
+        title: "فاتورة بيع",
+        children: React.createElement("div", null, "body"),
+      }),
     );
     const footerIdx = html.indexOf("print-footer");
     expect(footerIdx).toBeGreaterThan(0);

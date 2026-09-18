@@ -14,14 +14,17 @@ const envSchema = z.object({
   // auth/RLS hardening — those still fail closed.
   DESKTOP_DEPLOY: z.coerce.boolean().default(false),
   PORT: z.coerce.number().default(8080),
-  HOST: z.string().default("0.0.0.0"),
+  // Desktop sidecars must bind loopback. Server installs may use 0.0.0.0 but
+  // then DFP-030 forbids loopback auth bypass (see license-server.ts).
+  HOST: z.string().default(process.env.DESKTOP_DEPLOY === "true" || process.env.DESKTOP_DEPLOY === "1" ? "127.0.0.1" : "0.0.0.0"),
   DATABASE_URL: z.string().url(),
   REDIS_URL: z.string().url().optional(),
   JWT_SECRET: z.string().min(32),
   JWT_EXPIRY_MS: z.coerce.number().default(1_800_000), // 30 minutes
   // Desktop SKU keeps the operator signed in across reboots until explicit
-  // logout; 365 days avoids a silent cliff after a month of daily use.
-  REFRESH_TOKEN_EXPIRY_MS: z.coerce.number().default(31_536_000_000), // 365 days
+  // logout. DFP-038: 30 days (was 365) — still long-lived for kiosk use, but
+  // forces periodic re-auth; override via REFRESH_TOKEN_EXPIRY_MS if needed.
+  REFRESH_TOKEN_EXPIRY_MS: z.coerce.number().default(2_592_000_000), // 30 days
   // Comma-separated allowlist. Default covers Vite (5173), SSR sidecar (4173),
   // and the license admin dashboard (5174) on both localhost and 127.0.0.1 —
   // browsers treat those as different origins (local web test on :4173 was

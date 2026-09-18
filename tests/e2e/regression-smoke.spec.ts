@@ -1,16 +1,5 @@
 import { test, expect, type Page } from "@playwright/test";
-
-const ADMIN = { email: "admin@erp.local", password: "admin123" };
-
-async function loginAsAdmin(page: Page): Promise<void> {
-  await page.goto("/", { waitUntil: "domcontentloaded" });
-  const emailInput = page.locator('input[placeholder="admin@erp.local"]');
-  await emailInput.waitFor({ state: "visible", timeout: 20_000 });
-  await emailInput.fill(ADMIN.email);
-  await page.locator('input[type="password"]').fill(ADMIN.password);
-  await page.locator('button[type="submit"]').click();
-  await expect(page.locator("body")).toContainText("لوحة التحكم", { timeout: 30_000 });
-}
+import { loginAsAdmin } from "./_helpers/login.js";
 
 test("Ledger screen loads and renders entries (incl. cancelled rows)", async ({ page }) => {
   await loginAsAdmin(page);

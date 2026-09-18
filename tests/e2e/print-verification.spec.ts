@@ -9,10 +9,11 @@
  * Uses Playwright with @axe-core/playwright for accessibility checks.
  */
 import { test, expect } from "@playwright/test";
+import { e2eAdminAuth } from "./_helpers/testCredentials.js";
 import { loginIfNeeded } from "./_helpers/login";
 
 const API = "http://localhost:8080/api";
-const AUTH = { email: "admin@erp.local", password: "Admin@12345" };
+const AUTH = e2eAdminAuth();
 let token = "";
 
 async function api(path: string, opts: RequestInit = {}) {

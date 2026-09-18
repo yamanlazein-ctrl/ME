@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import { e2eAdminAuth } from "./_helpers/testCredentials.js";
 
 /**
  * Verify All Fixes — E2E suite for every defect fixed in Phases 0-5.
@@ -20,6 +21,12 @@ import { test, expect } from "@playwright/test";
 
 const API = process.env.API_URL ?? "http://localhost:8080/api";
 const FRONTEND = process.env.FRONTEND_URL ?? "http://localhost:5173";
+const adminLoginBody = () => {
+  const { email, password } = e2eAdminAuth();
+  const body = { email, password };
+  if (process.env.E2E_TENANT_ID) body.tenantId = process.env.E2E_TENANT_ID;
+  return body;
+};
 
 test.beforeEach(async ({ context }) => {
   await context.clearCookies();
@@ -47,8 +54,14 @@ test.describe("Phase 0 — Repository trustworthy (fresh clone)", () => {
     await page.goto(FRONTEND);
     await page.waitForTimeout(1000);
     // Check that the page doesn't show a JS error about total()
-    const hasTotalFn = await page.evaluate(() => typeof (window as unknown as { Invoice?: unknown }).Invoice !== "undefined" || true);
-    expect(hasTotalFn).toBeTruthy();
+    const pageErrors: string[] = [];
+    page.on("pageerror", (e) => pageErrors.push(e.message));
+    await page.waitForTimeout(500);
+    expect(pageErrors.filter((e) => !e.includes("favicon"))).toEqual([]);
+    // Shared invoice total() helper is covered by unit tests; this smoke only
+    // asserts the app shell stayed healthy after load.
+    const bodyLen = await page.evaluate(() => document.body.innerText.trim().length);
+    expect(bodyLen).toBeGreaterThan(0);
   });
 });
 
@@ -56,7 +69,7 @@ test.describe("Phase 1 — Database real", () => {
   test("ledger CHECK allows all 20 types (no 23514 on sale invoice)", async ({ request }) => {
     // Try to create a sale invoice via API (should not get 23514)
     // First login to get token
-    const login = await request.post(`${API}/auth/login`, { data: { email: "admin@erp.local", password: "admin123", tenantId: "407fccfc-ba89-41c5-b5b9-ddb2c4f385d9" } });
+    const login = await request.post(`${API}/auth/login`, { data: adminLoginBody() });
     if (login.status() !== 200) test.skip();
     const { accessToken } = await login.json();
     const headers = { Authorization: `Bearer ${accessToken}` };
@@ -72,7 +85,7 @@ test.describe("Phase 1 — Database real", () => {
 
 test.describe("Phase 2 — Money", () => {
   test("bigint money: large amounts round-trip exactly (no float32 loss)", async ({ request }) => {
-    const login = await request.post(`${API}/auth/login`, { data: { email: "admin@erp.local", password: "admin123", tenantId: "407fccfc-ba89-41c5-b5b9-ddb2c4f385d9" } });
+    const login = await request.post(`${API}/auth/login`, { data: adminLoginBody() });
     if (login.status() !== 200) test.skip();
     // The shared money helper uses bigint whole units, so 260,000,005 should not become 260,000,000
     // We verify via the frontend's precision helper (is2dp) is single-sourced
@@ -86,7 +99,7 @@ test.describe("Phase 3 — Financial logic", () => {
     // These are the two cases from the brief that previously diverged 3 vs 2 and 317205 vs 317206
     // We verify via the shared Invoice helper (both trees now use Math.round per line)
     // For now, we just check that the API rejects discount > subtotal (3.6g) which proves parity logic is active
-    const login = await request.post(`${API}/auth/login`, { data: { email: "admin@erp.local", password: "admin123", tenantId: "407fccfc-ba89-41c5-b5b9-ddb2c4f385d9" } });
+    const login = await request.post(`${API}/auth/login`, { data: adminLoginBody() });
     if (login.status() !== 200) test.skip();
     const { accessToken } = await login.json();
     const headers = { Authorization: `Bearer ${accessToken}` };
@@ -105,7 +118,7 @@ test.describe("Phase 3 — Financial logic", () => {
   });
 
   test("3.2 returns: duplicate rollId lines, price spoof, currency mismatch are rejected", async ({ request }) => {
-    const login = await request.post(`${API}/auth/login`, { data: { email: "admin@erp.local", password: "admin123", tenantId: "407fccfc-ba89-41c5-b5b9-ddb2c4f385d9" } });
+    const login = await request.post(`${API}/auth/login`, { data: adminLoginBody() });
     if (login.status() !== 200) test.skip();
     const { accessToken } = await login.json();
     const headers = { Authorization: `Bearer ${accessToken}` };
@@ -117,7 +130,7 @@ test.describe("Phase 3 — Financial logic", () => {
   });
 
   test("3.3 paid is maintained: invoice list shows amountDue derived from vouchers", async ({ request }) => {
-    const login = await request.post(`${API}/auth/login`, { data: { email: "admin@erp.local", password: "admin123", tenantId: "407fccfc-ba89-41c5-b5b9-ddb2c4f385d9" } });
+    const login = await request.post(`${API}/auth/login`, { data: adminLoginBody() });
     if (login.status() !== 200) test.skip();
     const { accessToken } = await login.json();
     const headers = { Authorization: `Bearer ${accessToken}` };
@@ -135,7 +148,7 @@ test.describe("Phase 3 — Financial logic", () => {
   });
 
   test("3.5 cash close: only date/counted/currency accepted, server derives rest", async ({ request }) => {
-    const login = await request.post(`${API}/auth/login`, { data: { email: "admin@erp.local", password: "admin123", tenantId: "407fccfc-ba89-41c5-b5b9-ddb2c4f385d9" } });
+    const login = await request.post(`${API}/auth/login`, { data: adminLoginBody() });
     if (login.status() !== 200) test.skip();
     const { accessToken } = await login.json();
     const headers = { Authorization: `Bearer ${accessToken}` };
@@ -154,7 +167,7 @@ test.describe("Phase 4 — Security", () => {
     const noAuth = await request.post(`${API}/backup/full`);
     expect(noAuth.status()).toBe(401);
     // Try with non-admin if we had a viewer token, but we can at least check admin gets 200 or 429 or filtered
-    const login = await request.post(`${API}/auth/login`, { data: { email: "admin@erp.local", password: "admin123", tenantId: "407fccfc-ba89-41c5-b5b9-ddb2c4f385d9" } });
+    const login = await request.post(`${API}/auth/login`, { data: adminLoginBody() });
     if (login.status() === 200) {
       const { accessToken } = await login.json();
       const adminRes = await request.post(`${API}/backup/full`, { headers: { Authorization: `Bearer ${accessToken}` } });
@@ -165,7 +178,7 @@ test.describe("Phase 4 — Security", () => {
   });
 
   test("4.3 invitation revoke is tenant-scoped", async ({ request }) => {
-    const login = await request.post(`${API}/auth/login`, { data: { email: "admin@erp.local", password: "admin123", tenantId: "407fccfc-ba89-41c5-b5b9-ddb2c4f385d9" } });
+    const login = await request.post(`${API}/auth/login`, { data: adminLoginBody() });
     if (login.status() !== 200) test.skip();
     const { accessToken } = await login.json();
     const headers = { Authorization: `Bearer ${accessToken}` };
@@ -194,7 +207,7 @@ test.describe("Phase 4 — Security", () => {
     // Health deep should now require auth (was rbac only)
     const noAuth = await request.get(`${API}/health/deep`);
     expect([401, 403].includes(noAuth.status())).toBeTruthy();
-    const login = await request.post(`${API}/auth/login`, { data: { email: "admin@erp.local", password: "admin123", tenantId: "407fccfc-ba89-41c5-b5b9-ddb2c4f385d9" } });
+    const login = await request.post(`${API}/auth/login`, { data: adminLoginBody() });
     if (login.status() === 200) {
       const { accessToken } = await login.json();
       const headers = { Authorization: `Bearer ${accessToken}` };
@@ -220,7 +233,7 @@ test.describe("Phase 5 — Structural", () => {
 
   test("5.3 createdBy is UUID, print shows raw id not Admin fallback", async ({ page, request }) => {
     // Login and check that an invoice's createdBy is a UUID, not a display name
-    const login = await request.post(`${API}/auth/login`, { data: { email: "admin@erp.local", password: "admin123", tenantId: "407fccfc-ba89-41c5-b5b9-ddb2c4f385d9" } });
+    const login = await request.post(`${API}/auth/login`, { data: adminLoginBody() });
     if (login.status() !== 200) test.skip();
     const { accessToken } = await login.json();
     const headers = { Authorization: `Bearer ${accessToken}` };

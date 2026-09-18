@@ -19,6 +19,7 @@ import express from "express";
 import helmet from "helmet";
 import cors from "cors";
 import { config, corsOrigins } from "../infrastructure/config/env.js";
+import { resolveLicenseListenHost } from "../infrastructure/config/licenseListenHost.js";
 import { logger } from "../infrastructure/config/logger.js";
 import { db } from "../infrastructure/orm/drizzle.js";
 import { runWithPlatformContext } from "../infrastructure/orm/tenant-context.js";
@@ -174,6 +175,11 @@ async function main(): Promise<void> {
   const openLoopback =
     openLoopbackEnv === "1" ||
     (openLoopbackEnv !== "0" && process.env.NODE_ENV !== "production");
+
+  // DFP-030: open loopback privilege must never be reachable on a LAN/WAN bind.
+  const requestedHost = (process.env.HOST ?? process.env.LICENSE_SERVER_HOST ?? "0.0.0.0").trim();
+  const { listenHost } = resolveLicenseListenHost(openLoopback, requestedHost);
+
   const adminAuth = createSuperAdminAuthMiddleware(jwtSigner, tokenDenylist, {
     fallbackToken: LICENSE_ADMIN_TOKEN,
     openLoopback,
@@ -201,10 +207,11 @@ async function main(): Promise<void> {
   // last, after all routes.
   app.use(createErrorHandler(logger));
 
-  app.listen(LICENSE_SERVER_PORT, () => {
+  app.listen(LICENSE_SERVER_PORT, listenHost, () => {
     logger.info(
       {
         port: LICENSE_SERVER_PORT,
+        host: listenHost,
         adminTokenSet: !!process.env.LICENSE_ADMIN_TOKEN,
         openLoopback,
       },

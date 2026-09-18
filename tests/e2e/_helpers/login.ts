@@ -1,56 +1,43 @@
-import type { Page, Expect } from "@playwright/test";
-import { expect } from "@playwright/test";
-
 /**
- * Sign in as the dev seed user (admin / admin) if the page is on the
- * login form. Idempotent — silently returns if already authenticated.
- *
- * The form's username/password fields are pre-filled with admin/admin
- * (see src/components/auth/AuthGate.tsx), so submitting is enough.
- *
- * For new tests that need a non-default user, prefer the
- * `loginAs(page, { username, password })` variant.
+ * Shared Playwright login using env-backed credentials (DFP-029).
  */
-export async function loginIfNeeded(page: Page): Promise<void> {
-  await page.goto("/", { waitUntil: "networkidle" });
+import type { Page } from "@playwright/test";
+import { expect } from "@playwright/test";
+import { e2eAdminAuth, e2eRoleAuth } from "./testCredentials.js";
 
-  const submitBtn = page.locator('button[type="submit"]');
-  try {
-    await submitBtn.waitFor({ state: "visible", timeout: 5_000 });
-    await submitBtn.click();
-  } catch {
-    // already logged in
-  }
-
-  await expect(page.locator("body")).toContainText("لوحة التحكم", { timeout: 20_000 });
+export async function loginAsAdmin(page: Page): Promise<void> {
+  const { email, password } = e2eAdminAuth();
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+  const emailInput = page.locator('input[placeholder="admin@erp.local"], input[type="email"]').first();
+  await emailInput.waitFor({ state: "visible", timeout: 20_000 });
+  await emailInput.fill(email);
+  await page.locator('input[type="password"]').first().fill(password);
+  await page.locator('button[type="submit"]').first().click();
+  await expect(page.locator("body")).toContainText(/لوحة التحكم|Dashboard/i, { timeout: 30_000 });
 }
 
-/**
- * Sign in as a specific user. Clears the form first, then types and submits.
- */
+/** Cert-route login with username/password (env-backed via e2eRoleAuth). */
 export async function loginAs(
   page: Page,
   creds: { username: string; password: string },
 ): Promise<void> {
-  await page.goto("/", { waitUntil: "networkidle" });
-  const usernameInput = page.locator('input[name="username"], input[type="text"]').first();
-  const passwordInput = page.locator('input[type="password"]').first();
-  await usernameInput.fill(creds.username);
-  await passwordInput.fill(creds.password);
-  await page.locator('button[type="submit"]').click();
-  await expect(page.locator("body")).toContainText("لوحة التحكم", { timeout: 20_000 });
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+  const userInput = page
+    .locator('input[placeholder="admin@erp.local"], input[type="email"], input[autocomplete="username"]')
+    .first();
+  await userInput.waitFor({ state: "visible", timeout: 20_000 });
+  await userInput.fill(creds.username);
+  await page.locator('input[type="password"]').first().fill(creds.password);
+  await page.locator('button[type="submit"]').first().click();
+  await page.waitForTimeout(500);
 }
 
-/**
- * Clear the dev session and force the login form to appear on next navigation.
- */
 export async function logout(page: Page): Promise<void> {
   await page.evaluate(() => {
-    try {
-      localStorage.removeItem("erp.auth.userId");
-      localStorage.removeItem("erp.auth.accessToken");
-    } catch {
-      /* ignore */
-    }
+    localStorage.clear();
+    sessionStorage.clear();
   });
+  await page.context().clearCookies();
 }
+
+export { e2eAdminAuth, e2eRoleAuth };

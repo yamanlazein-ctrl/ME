@@ -138,67 +138,33 @@ export async function consumeInvitationCodeUseCase(
   if (!trimmed) return { ok: false, error: "الرجاء إدخال رمز الدعوة" };
 
   try {
-    const row = await repo.findByCode(trimmed);
-    if (!row) return { ok: false, error: "رمز الدعوة غير صالح" };
-    if (row.revokedAt) return { ok: false, error: "تم إلغاء رمز الدعوة" };
-    if (row.expiresAt < new Date()) return { ok: false, error: "انتهت صلاحية رمز الدعوة" };
-    if (row.useCount >= 1) return { ok: false, error: "تم استخدام رمز الدعوة مسبقاً" };
+    const discovered = await repo.findByCode(trimmed);
+    if (!discovered) return { ok: false, error: "رمز الدعوة غير صالح" };
+    if (discovered.revokedAt) return { ok: false, error: "تم إلغاء رمز الدعوة" };
+    if (discovered.expiresAt < new Date()) return { ok: false, error: "انتهت صلاحية رمز الدعوة" };
+    if (discovered.useCount >= 1) return { ok: false, error: "تم استخدام رمز الدعوة مسبقاً" };
 
-    // Phase 5 — enforce license limits at the business layer.
-    // A user invitation that carries a device fingerprint also consumes a
-    // device slot ("device consumption on accept"), so the device cap must be
-    // checked for device invitations AND for user invitations being accepted
-    // on a device.
-    // Pre-auth consume flow: no ALS context exists, so stamp the invitation's
-    // tenant GUC for the license lookup (RLS category-2, own-tenant rows).
-    const lic = await runWithTenantContext({ tenantId: row.tenantId }, () =>
-      licenseRepo.findLatestForTenant(row.tenantId as never),
-    );
     const acceptsDevice =
-      row.type === "device" || (row.type === "user" && Boolean(options.deviceFingerprint));
-    if (lic) {
-      const effectiveLimits = {
-        ...lic.limits,
-        devices: resolveDeviceLimit({ limits: lic.limits, maxDevices: lic.maxDevices }),
-      };
-      if (
-        row.type === "user" &&
-        !isWithinLimit(effectiveLimits, "users", await countUsers(row.tenantId))
-      ) {
-        return { ok: false, error: "تم الوصول إلى الحد الأقصى للمستخدمين المسموح بهم في الترخيص" };
-      }
-      if (
-        acceptsDevice &&
-        !isWithinLimit(effectiveLimits, "devices", await countDevices(row.tenantId))
-      ) {
-        return { ok: false, error: "تم الوصول إلى الحد الأقصى للأجهزة المسموح بها في الترخيص" };
-      }
-    }
+      discovered.type === "device" ||
+      (discovered.type === "user" && Boolean(options.deviceFingerprint));
 
-    // ── License binding for the accepting device ─────────────────────────
-    // `device_registrations.license_id` is NOT NULL with an FK to
-    // `licenses.id`, so a device can only ever be registered against a REAL
-    // license row. Prefer the license stamped on the invitation (5.1), fall
-    // back to the tenant's current license, and refuse outright when neither
-    // exists. Writing a placeholder uuid instead would violate the FK today and,
-    // if such a row ever existed, would silently bind the device to a license
-    // that is not this tenant's — the exact cross-tenant leak section 7 forbids.
-    // The check runs BEFORE any user/device row is written so a rejected
-    // redemption leaves no partial state behind.
-    const resolvedLicenseId: string | null =
-      (lic?.id as string | undefined) ?? row.licenseId ?? null;
-    if (acceptsDevice && !resolvedLicenseId) {
+    // Cheap fail-closed license presence check BEFORE Argon2 (and before any write).
+    const licPreview = await runWithTenantContext({ tenantId: discovered.tenantId }, () =>
+      licenseRepo.findLatestForTenant(discovered.tenantId as never),
+    );
+    const previewLicenseId: string | null =
+      (licPreview?.id as string | undefined) ?? discovered.licenseId ?? null;
+    if (acceptsDevice && !previewLicenseId) {
       return {
         ok: false,
         error: "لا يوجد ترخيص مرتبط بهذه الشركة — تعذّر تسجيل الجهاز بهذه الدعوة",
       };
     }
 
-    const meta = row.metadata as Record<string, unknown>;
-    let createdUserId: string | undefined;
-    let registeredDeviceId: string | undefined;
-
-    if (row.type === "user") {
+    // Hash outside the DB transaction — Argon2 is slow; do not hold row locks.
+    let passwordHash: string | undefined;
+    if (discovered.type === "user") {
+      const meta = discovered.metadata as Record<string, unknown>;
       const targetName = meta.targetName as string | undefined;
       const targetEmail = meta.targetEmail as string | undefined;
       const targetRole = meta.targetRole as string | undefined;
@@ -209,47 +175,121 @@ export async function consumeInvitationCodeUseCase(
       if (!pw || !/^\d{4}$/.test(pw)) {
         return { ok: false, error: "الرقم السري مطلوب (4 أرقام)" };
       }
-      const hash = await passwordHasher.hash(pw);
-      const u = await repoExtended.createUserFromInvitation(
-        row.tenantId,
-        row.id,
-        targetName,
-        targetEmail,
-        targetRole,
-        hash,
+      passwordHash = await passwordHasher.hash(pw);
+    }
+
+    const runRedeem = async (): Promise<
+      Result<InvitationRow & { createdUserId?: string; registeredDeviceId?: string }>
+    > => {
+      // DFP-005/006: re-read under FOR UPDATE so concurrent redeemers serialize.
+      const row =
+        typeof repoExtended.lockByIdForUpdate === "function"
+          ? await repoExtended.lockByIdForUpdate(discovered.id, discovered.tenantId)
+          : discovered;
+      if (!row) return { ok: false, error: "رمز الدعوة غير صالح" };
+      if (row.revokedAt) return { ok: false, error: "تم إلغاء رمز الدعوة" };
+      if (row.expiresAt < new Date()) return { ok: false, error: "انتهت صلاحية رمز الدعوة" };
+      if (row.useCount >= 1) return { ok: false, error: "تم استخدام رمز الدعوة مسبقاً" };
+
+      const lic = await runWithTenantContext({ tenantId: row.tenantId }, () =>
+        licenseRepo.findLatestForTenant(row.tenantId as never),
       );
-      createdUserId = u.id;
-      // Same PIN unlocks the device picker (pin_hash).
-      await runWithTenantContext({ tenantId: row.tenantId }, async () => {
-        await db
-          .update(users)
-          .set({ pinHash: hash, updatedAt: new Date() })
-          .where(eq(users.id, u.id));
-      });
-      // Device consumption on accept: register the accepting device so it
-      // counts against the license device cap (checked above). The license id
-      // was resolved (and proven to exist) before any row was written.
-      if (options.deviceFingerprint) {
+
+      const resolvedLicenseId: string | null =
+        (lic?.id as string | undefined) ?? row.licenseId ?? null;
+      if (acceptsDevice && !resolvedLicenseId) {
+        return {
+          ok: false,
+          error: "لا يوجد ترخيص مرتبط بهذه الشركة — تعذّر تسجيل الجهاز بهذه الدعوة",
+        };
+      }
+
+      // DFP-006: lock the license row so seat counts cannot race across invitations.
+      if (resolvedLicenseId && typeof repoExtended.lockLicenseForUpdate === "function") {
+        await repoExtended.lockLicenseForUpdate(resolvedLicenseId as never);
+      }
+
+      if (lic) {
+        const effectiveLimits = {
+          ...lic.limits,
+          devices: resolveDeviceLimit({ limits: lic.limits, maxDevices: lic.maxDevices }),
+        };
+        const userCount =
+          typeof repoExtended.countUsersInTenant === "function"
+            ? await repoExtended.countUsersInTenant(row.tenantId)
+            : await countUsers(row.tenantId);
+        const deviceCount =
+          typeof repoExtended.countDevicesInTenant === "function"
+            ? await repoExtended.countDevicesInTenant(row.tenantId)
+            : await countDevices(row.tenantId);
+        if (row.type === "user" && !isWithinLimit(effectiveLimits, "users", userCount)) {
+          return { ok: false, error: "تم الوصول إلى الحد الأقصى للمستخدمين المسموح بهم في الترخيص" };
+        }
+        if (acceptsDevice && !isWithinLimit(effectiveLimits, "devices", deviceCount)) {
+          return { ok: false, error: "تم الوصول إلى الحد الأقصى للأجهزة المسموح بها في الترخيص" };
+        }
+      }
+
+      const meta = row.metadata as Record<string, unknown>;
+      let createdUserId: string | undefined;
+      let registeredDeviceId: string | undefined;
+
+      if (row.type === "user") {
+        const targetName = meta.targetName as string;
+        const targetEmail = meta.targetEmail as string;
+        const targetRole = meta.targetRole as string;
+        const u = await repoExtended.createUserFromInvitation(
+          row.tenantId,
+          row.id,
+          targetName,
+          targetEmail,
+          targetRole,
+          passwordHash!,
+        );
+        createdUserId = u.id;
+        if (typeof repoExtended.setUserPinHash === "function") {
+          await repoExtended.setUserPinHash(row.tenantId, u.id, passwordHash!);
+        } else {
+          await runWithTenantContext({ tenantId: row.tenantId }, async () => {
+            await db
+              .update(users)
+              .set({ pinHash: passwordHash!, updatedAt: new Date() })
+              .where(eq(users.id, u.id));
+          });
+        }
+        if (options.deviceFingerprint) {
+          const d = await repoExtended.registerDevice(
+            row.tenantId,
+            resolvedLicenseId as never,
+            options.deviceFingerprint,
+          );
+          registeredDeviceId = d.id;
+        }
+      } else if (row.type === "device") {
+        const fingerprint = options.deviceFingerprint ?? `auto-${Date.now()}`;
         const d = await repoExtended.registerDevice(
           row.tenantId,
           resolvedLicenseId as never,
-          options.deviceFingerprint,
+          fingerprint,
         );
         registeredDeviceId = d.id;
       }
-    } else if (row.type === "device") {
-      const fingerprint = options.deviceFingerprint ?? `auto-${Date.now()}`;
-      const d = await repoExtended.registerDevice(
-        row.tenantId,
-        resolvedLicenseId as never,
-        fingerprint,
-      );
-      registeredDeviceId = d.id;
-    }
 
-    const updated = await repo.consume(row.id, row.tenantId);
-    return { ok: true, data: { ...updated, createdUserId, registeredDeviceId } };
+      const updated = await repo.consume(row.id, row.tenantId);
+      return { ok: true, data: { ...updated, createdUserId, registeredDeviceId } };
+    };
+
+    // Prefer a single tenant transaction when the Postgres repository provides it.
+    if (typeof repoExtended.runInTenantTransaction === "function") {
+      return await repoExtended.runInTenantTransaction(discovered.tenantId, runRedeem);
+    }
+    return await runRedeem();
   } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    if (msg === "INVITATION_ALREADY_CONSUMED") {
+      return { ok: false, error: "تم استخدام رمز الدعوة مسبقاً" };
+    }
+    console.error("[invitation.consume]", msg);
     return { ok: false, error: "فشل استهلاك رمز الدعوة" };
   }
 }

@@ -6,7 +6,8 @@ import pg from "pg";
 const DATABASE_URL = process.env.DATABASE_URL;
 const tenantId = "d9b59c10-1875-4cfd-8da7-1fea2c4944fd";
 const email = "firstrun.admin+1789646561009@erp.test";
-const password = "admin123";
+const password = process.env.E2E_ADMIN_PASSWORD;
+if (!password) throw new Error("E2E_ADMIN_PASSWORD required (DFP-029)");
 
 const pool = new pg.Pool({ connectionString: DATABASE_URL });
 const client = await pool.connect();

@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { loginAs, logout } from "../_helpers/login";
+import { loginAs, logout, e2eRoleAuth } from "../_helpers/login";
 import { assertRouteOk } from "../_helpers/test-helpers";
 
 type UserRole = "admin" | "accountant" | "warehouse" | "viewer";
@@ -64,11 +64,17 @@ const ALL_ROUTES = [
   "/settings/warehouses",
 ];
 
-const USERS: { name: string; role: UserRole; username: string; password: string }[] = [
-  { name: "Warehouse", role: "warehouse", username: "warehouse", password: "warehouse" },
-  { name: "Accountant", role: "accountant", username: "accountant", password: "accountant" },
-  { name: "Viewer", role: "viewer", username: "viewer", password: "viewer" },
-];
+const USERS: { name: string; role: UserRole; username: string; password: string }[] = (
+  ["warehouse", "accountant", "viewer"] as const
+).map((role) => {
+  const creds = e2eRoleAuth(role);
+  return {
+    name: role[0]!.toUpperCase() + role.slice(1),
+    role,
+    username: creds.username,
+    password: creds.password,
+  };
+});
 
 function isAllowed(role: UserRole, path: string): boolean {
   const list = ROLE_ALLOWED_PATHS[role];

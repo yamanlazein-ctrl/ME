@@ -1,5 +1,6 @@
 import { test, expect, type Page, type APIRequestContext } from "@playwright/test";
 import { createRequire } from "module";
+import { e2eAdminAuth, testDatabaseUrl } from "./_helpers/testCredentials.js";
 
 /**
  * Customer statement (كشف حساب) — E2E verification with direct SQL cross-checks.
@@ -17,13 +18,13 @@ import { createRequire } from "module";
  */
 
 const BACKEND = process.env.PLAYWRIGHT_BACKEND_URL ?? "http://localhost:8080";
-const ADMIN = { email: "admin@erp.local", password: "admin123" };
+const ADMIN = e2eAdminAuth();
 
 // pg resolves from the backend's own node_modules (repo-root node_modules has no pg).
 const require = createRequire(import.meta.url);
 const { Pool } = require("../../backend/node_modules/pg");
 const pool = new Pool({
-  connectionString: process.env.DATABASE_URL ?? "postgresql://postgres:postgres@localhost:5432/erp",
+  connectionString: testDatabaseUrl("erp"),
 });
 
 const TENANT_ID = "f7a54ec6-0802-48da-a03c-9474b526e081"; // admin@erp.local tenant

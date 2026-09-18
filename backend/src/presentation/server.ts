@@ -475,11 +475,11 @@ async function prepareDesktopDatabase(): Promise<void> {
 
 /** Detach stale baked Desktop licenses that are not the tenant entitlement. */
 async function prepareLicenseIdentity(): Promise<void> {
-  const { pool } = await import("../infrastructure/orm/drizzle.js");
-  const { detachOrphanBakedLicensesSql } = await import(
+  const { db } = await import("../infrastructure/orm/drizzle.js");
+  const { detachOrphanBakedLicenses } = await import(
     "../infrastructure/license/detachOrphanBakedLicenses.js"
   );
-  await detachOrphanBakedLicensesSql((sql) => pool.query(sql));
+  await detachOrphanBakedLicenses(db);
 }
 
 fxRateService.start();

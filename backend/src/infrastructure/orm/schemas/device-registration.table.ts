@@ -1,4 +1,4 @@
-import { pgTable, uuid, varchar, timestamp, integer, text, index } from "drizzle-orm/pg-core";
+import { pgTable, uuid, varchar, timestamp, integer, text, index, foreignKey } from "drizzle-orm/pg-core";
 import { tenants } from "./tenant.table.js";
 import { licenses } from "./license.table.js";
 
@@ -14,14 +14,15 @@ import { licenses } from "./license.table.js";
  * `limits.devices` SoT with `max_devices` fallback) is enforced at the
  * application level before insert. There is no DB-level CHECK because the
  * cap can change at runtime via the Vendor Control Plane.
+ *
+ * DFP-013: license_id is bound via composite FK (tenant_id, license_id) so a
+ * device cannot reference another tenant's license.
  */
 export const deviceRegistrations = pgTable(
   "device_registrations",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    licenseId: uuid("license_id")
-      .notNull()
-      .references(() => licenses.id),
+    licenseId: uuid("license_id").notNull(),
     tenantId: uuid("tenant_id")
       .notNull()
       .references(() => tenants.id),
@@ -42,5 +43,10 @@ export const deviceRegistrations = pgTable(
     tenantIdx: index("idx_device_registrations_tenant").on(table.tenantId),
     // Fast lookup when a client hits /v1/activations/:id/devices.
     deviceIdIdx: index("idx_device_registrations_device_id").on(table.deviceId),
+    tenantLicenseFk: foreignKey({
+      columns: [table.tenantId, table.licenseId],
+      foreignColumns: [licenses.tenantId, licenses.id],
+      name: "device_registrations_tenant_license_fk",
+    }),
   }),
 ).enableRLS();

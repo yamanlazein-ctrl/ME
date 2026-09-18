@@ -13,11 +13,13 @@ const u = await c.query("SELECT password_hash, pin_hash, active, email FROM user
 ]);
 const row = u.rows[0];
 console.log("email", row.email, "active", row.active);
-console.log("pw_ok", await verify(row.password_hash, "admin123"));
+const _pw = process.env.E2E_ADMIN_PASSWORD;
+if (!_pw) throw new Error("E2E_ADMIN_PASSWORD required (DFP-029)");
+console.log("pw_ok", await verify(row.password_hash, _pw));
 console.log("pin_ok", await verify(row.pin_hash, "4829"));
 
 const opts = { memoryCost: 65536, timeCost: 3, parallelism: 4, algorithm: 2 };
-const pwHash = await hash("admin123", opts);
+const pwHash = await hash(_pw, opts);
 const pinHash = await hash("4829", opts);
 await c.query(
   "UPDATE users SET password_hash = $1, pin_hash = $2, active = true, updated_at = now() WHERE id = $3",
@@ -31,7 +33,7 @@ const r = await fetch("http://127.0.0.1:8080/api/auth/login", {
   headers: { "Content-Type": "application/json" },
   body: JSON.stringify({
     email: "firstrun.admin+1789646561009@erp.test",
-    password: "admin123",
+    password: process.env.E2E_ADMIN_PASSWORD ?? (() => { throw new Error("E2E_ADMIN_PASSWORD required (DFP-029)"); })(),
     tenantId: "d9b59c10-1875-4cfd-8da7-1fea2c4944fd",
   }),
 });

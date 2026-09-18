@@ -42,6 +42,47 @@ export type PrintArchiveMeta = {
   fileStem: string;
 };
 
+const PRINT_PAGE_STYLE_ID = "me-print-page-size";
+
+function paperSizeCss(paper: string): string {
+  switch (paper) {
+    case "A5":
+      return "A5 portrait";
+    case "80mm":
+      return "80mm auto";
+    default:
+      return "A4 portrait";
+  }
+}
+
+/**
+ * DFP-002: drive paper size via the unnamed `@page` rule only.
+ * Injecting/updating a single style tag avoids CSS named-page transitions that
+ * Chromium turns into a blank first sheet.
+ */
+function syncPrintPaper(container: HTMLElement): void {
+  const docEl = container.querySelector(".print-doc");
+  const paper =
+    (docEl instanceof HTMLElement && docEl.dataset.paper) ||
+    container.dataset.paper ||
+    "A4";
+  container.dataset.paper = paper;
+  document.documentElement.dataset.paper = paper;
+
+  let styleEl = document.getElementById(PRINT_PAGE_STYLE_ID) as HTMLStyleElement | null;
+  if (!styleEl) {
+    styleEl = document.createElement("style");
+    styleEl.id = PRINT_PAGE_STYLE_ID;
+    document.head.appendChild(styleEl);
+  }
+  styleEl.textContent = `@page { size: ${paperSizeCss(paper)}; margin: 0; }`;
+}
+
+function clearPrintPaper(): void {
+  document.documentElement.removeAttribute("data-paper");
+  document.getElementById(PRINT_PAGE_STYLE_ID)?.remove();
+}
+
 function cleanup() {
   if (activeRoot) {
     try {
@@ -56,6 +97,7 @@ function cleanup() {
     activeContainer = null;
   }
   activeFingerprint = null;
+  clearPrintPaper();
 }
 
 function afterPrint() {
@@ -107,8 +149,12 @@ const ARCHIVE_ARABIC_FONT_CSS = `
 function buildArchiveHtml(container: HTMLElement, title?: string): string {
   const inline = collectInlineCss();
   const safeTitle = (title || "archive").replace(/[<>&"]/g, "");
+  const paper =
+    container.dataset.paper ||
+    (container.querySelector(".print-doc") as HTMLElement | null)?.dataset.paper ||
+    "A4";
   return `<!DOCTYPE html>
-<html lang="ar" dir="rtl">
+<html lang="ar" dir="rtl" data-paper="${paper}">
 <head>
 <meta charset="utf-8" />
 <title>${safeTitle}</title>
@@ -116,9 +162,8 @@ function buildArchiveHtml(container: HTMLElement, title?: string): string {
 ${inline}
 </style>
 <style>
-  /* Paper size comes from the inlined stylesheet above (the named @page
-     rules + .print-doc[data-paper] selection) — no separate hardcoded A4
-     override here, so an A5/80mm export gets the correct page size too. */
+  /* Unnamed @page only (DFP-002) — size matches the printed paper setting. */
+  @page { size: ${paperSizeCss(paper)}; margin: 0; }
   body { background: #fff; margin: 0; }
   [data-print-root] { display: block !important; position: static !important; left: auto !important; width: 100% !important; max-width: none !important; }
   ${ARCHIVE_ARABIC_FONT_CSS}
@@ -183,11 +228,15 @@ export function printDocument(
     }
 
     window.setTimeout(() => {
+      // Paper must be stamped before archive HTML snapshot AND before print().
+      syncPrintPaper(container);
       void archiveIfDesktop(container, archive).finally(() => {
         // Strip any leftover inline geometry so print.css owns width 100%.
         // A fixed mm width here used to make Chrome shrink-to-fit and leave
         // a huge empty band beside the invoice.
-        container.removeAttribute("style");
+        // Keep data-paper — required for named @page alignment (DFP-002).
+        container.style.cssText = "";
+        syncPrintPaper(container);
         if (previousDocumentTitle === null) {
           previousDocumentTitle = document.title;
         }
@@ -234,6 +283,7 @@ export function archiveDocument(
         flushSync(() => {
           root.render(createElement(QueryClientProvider, { client: getQueryClient() }, node));
         });
+        syncPrintPaper(container);
       } catch (e) {
         console.warn("[print-archive] render failed:", e);
         try {
@@ -242,6 +292,7 @@ export function archiveDocument(
           /* ignore */
         }
         container.remove();
+        clearPrintPaper();
         return;
       }
       void archiveIfDesktop(container, archive).finally(() => {
@@ -251,6 +302,7 @@ export function archiveDocument(
           /* ignore */
         }
         container.remove();
+        clearPrintPaper();
       });
     })();
   }, 200);

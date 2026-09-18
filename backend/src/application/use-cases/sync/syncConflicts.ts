@@ -1,4 +1,6 @@
 import { pool } from "../../../infrastructure/orm/drizzle.js";
+import { getAmbientTenantId } from "../../../infrastructure/orm/ambient-tx.js";
+import { tenantContext } from "../../../infrastructure/orm/tenant-context.js";
 import { logger } from "../../../infrastructure/config/logger.js";
 
 /**
@@ -17,7 +19,33 @@ import { logger } from "../../../infrastructure/config/logger.js";
  * sighting wins and retries are no-ops. It is marked `resolved` when the
  * losing unit is later applied (it converged) or when an operator records an
  * explicit resolution decision.
+ *
+ * DFP-019: every entry point asserts that AsyncLocalStorage / ambient tx
+ * tenant equals the explicit `tenantId` argument before touching the pool.
  */
+
+/**
+ * Fail closed when a direct pool path would run under missing/mismatched
+ * tenant context (DFP-019). Prefer ambient tx tenant, then ALS request store.
+ */
+export function assertSyncConflictTenantContext(tenantId: string): void {
+  if (!tenantId) {
+    throw new Error("syncConflicts: tenantId is required");
+  }
+  const ambient = getAmbientTenantId();
+  const als = tenantContext.getStore()?.tenantId;
+  const effective = ambient ?? als;
+  if (!effective) {
+    throw new Error(
+      `syncConflicts: refusing query without tenant context (arg=${tenantId})`,
+    );
+  }
+  if (effective !== tenantId) {
+    throw new Error(
+      `syncConflicts: tenant mismatch context=${effective} arg=${tenantId}`,
+    );
+  }
+}
 
 export type SyncConflictOperation = "update" | "cancel";
 
@@ -75,6 +103,7 @@ function mapConflict(r: Record<string, unknown>): SyncConflictRow {
  * Returns true if a new row was written.
  */
 export async function recordSyncConflict(input: RecordSyncConflictInput): Promise<boolean> {
+  assertSyncConflictTenantContext(input.tenantId);
   try {
     const r = await pool.query(
       `INSERT INTO sync_conflicts
@@ -111,6 +140,7 @@ export async function listSyncConflicts(
   tenantId: string,
   opts?: { openOnly?: boolean; limit?: number },
 ): Promise<SyncConflictRow[]> {
+  assertSyncConflictTenantContext(tenantId);
   const openOnly = opts?.openOnly ?? true;
   const limit = Math.min(Math.max(opts?.limit ?? 200, 1), 1000);
   try {
@@ -145,6 +175,7 @@ export async function resolveSyncConflict(
   byUserId: string | null,
   note?: string,
 ): Promise<SyncConflictRow | null> {
+  assertSyncConflictTenantContext(tenantId);
   try {
     const r = await pool.query(
       `UPDATE sync_conflicts
@@ -178,6 +209,7 @@ export async function resolveSyncConflictByOp(
   opId: string,
   reason: string,
 ): Promise<void> {
+  assertSyncConflictTenantContext(tenantId);
   try {
     await pool.query(
       `UPDATE sync_conflicts

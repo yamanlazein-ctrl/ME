@@ -1,6 +1,10 @@
 {
   "name": "fabric-erp",
   "private": true,
+  "engines": {
+    "node": ">=22 <23"
+  },
+  "packageManager": "npm@10.9.2",
   "sideEffects": false,
   "type": "module",
   "workspaces": [

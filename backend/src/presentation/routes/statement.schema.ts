@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { exchangeRateSchema } from "@erp/shared";
+import { exchangeRateSchema, requireFxRate, FX_REQUIRED_MESSAGE } from "@erp/shared";
 
 export const statementQuerySchema = z.object({
   from: z
@@ -25,16 +25,27 @@ export const settlePartySchema = z.object({
 });
 
 /** Multi-invoice cash settlement (سند تسوية مجمّع). */
-export const settleInvoicesSchema = z.object({
-  invoiceIds: z.array(z.string().uuid()).min(1).max(200),
-  amountPaid: z.number().positive().finite(),
-  currency: z.enum(["SYP", "USD", "EUR"]),
-  exchangeRate: exchangeRateSchema,
-  date: z
-    .string()
-    .regex(/^\d{4}-\d{2}-\d{2}$/)
-    .optional(),
-  method: z.enum(["cash", "transfer", "check", "card"]).optional(),
-  notesInternal: z.string().max(500).optional(),
-  notesPrint: z.string().max(500).optional(),
-});
+export const settleInvoicesSchema = z
+  .object({
+    invoiceIds: z.array(z.string().uuid()).min(1).max(200),
+    amountPaid: z.number().positive().finite(),
+    currency: z.enum(["SYP", "USD", "EUR"]),
+    exchangeRate: exchangeRateSchema,
+    date: z
+      .string()
+      .regex(/^\d{4}-\d{2}-\d{2}$/)
+      .optional(),
+    method: z.enum(["cash", "transfer", "check", "card"]).optional(),
+    notesInternal: z.string().max(500).optional(),
+    notesPrint: z.string().max(500).optional(),
+  })
+  .superRefine((val, ctx) => {
+    // DFP-034: non-USD settlements must carry an explicit rate (never silent FX).
+    if (!requireFxRate(val.currency, val.exchangeRate)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["exchangeRate"],
+        message: FX_REQUIRED_MESSAGE,
+      });
+    }
+  });

@@ -1,8 +1,11 @@
 import { test, expect } from "@playwright/test";
+import { e2eAdminAuth } from "./_helpers/testCredentials.js";
+const __e2eAdmin = e2eAdminAuth();
 
 const BASE = "http://localhost:5173";
 const API = "http://localhost:8080/api";
-const TENANT = "407fccfc-ba89-41c5-b5b9-ddb2c4f385d9";
+const TENANT = process.env.ERP_TENANT_ID;
+if (!TENANT) throw new Error("ERP_TENANT_ID is required for tenant login coverage");
 
 const PAGES = [
   { name: "entry", path: "/invoices/entry/new", colorBtn: true },
@@ -30,8 +33,8 @@ test.describe("login + page load (tenantId fix)", () => {
     await page.goto(`${BASE}/login`, { waitUntil: "networkidle" });
 
     // Fill the login form
-    await page.fill('input[autocomplete="username"]', "admin@erp.local");
-    await page.fill('input[type="password"]', "admin123");
+    await page.fill('input[autocomplete="username"]', __e2eAdmin.email);
+    await page.fill('input[type="password"]', __e2eAdmin.password);
     await page.click('button[type="submit"]');
 
     // Wait to land somewhere other than /login

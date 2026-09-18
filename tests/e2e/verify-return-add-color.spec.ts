@@ -1,4 +1,6 @@
 import { test, expect } from "@playwright/test";
+import { e2eAdminAuth } from "./_helpers/testCredentials.js";
+const __e2eAdmin = e2eAdminAuth();
 
 const BASE = "http://localhost:5173";
 
@@ -10,8 +12,8 @@ test.describe("return add-color button (conditional)", () => {
     await page.goto(`${BASE}/login`, { waitUntil: "networkidle" });
     await page.evaluate(() => localStorage.clear());
     await page.goto(`${BASE}/login`, { waitUntil: "networkidle" });
-    await page.fill('input[autocomplete="username"]', "admin@erp.local");
-    await page.fill('input[type="password"]', "admin123");
+    await page.fill('input[autocomplete="username"]', __e2eAdmin.email);
+    await page.fill('input[type="password"]', __e2eAdmin.password);
     await page.click('button[type="submit"]');
     await page.waitForURL((url) => !url.pathname.startsWith("/login"), { timeout: 20000 });
     await page.waitForSelector('nav[aria-label="القائمة الجانبية"]', { timeout: 15000 }).catch(() => {});

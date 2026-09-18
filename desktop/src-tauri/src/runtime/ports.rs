@@ -84,6 +84,22 @@ pub fn find_free_db_port(preferred: u16) -> u16 {
     preferred
 }
 
+/// Default Desktop API port — baked into the prebuilt frontend (`VITE_API_BASE_URL`).
+pub const BACKEND_PORT_DEFAULT: u16 = 8080;
+
+/// DFP-009: the packaged frontend cannot discover a relocated backend port, so
+/// we refuse to boot when the fixed port is occupied instead of hanging on
+/// `/api/health/live` for 60s. Returns Ok when a probe bind succeeds.
+pub fn ensure_backend_port_free(port: u16) -> Result<(), String> {
+    use std::net::TcpListener;
+    match TcpListener::bind(("127.0.0.1", port)) {
+        Ok(_listener) => Ok(()),
+        Err(e) => Err(format!(
+            "backend port {port} is occupied (cannot bind 127.0.0.1:{port}): {e}"
+        )),
+    }
+}
+
 /// Force `postgresql.conf`'s port to the port postgres will actually bind.
 ///
 /// pg_ctl's `-w` probe reads the port from the conf, not from `-o "-p ..."`.
@@ -201,5 +217,16 @@ mod tests {
         let out = fs::read_to_string(dir.join("postgresql.conf")).unwrap();
         assert!(out.contains("port = 41235"));
         let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn ensure_backend_port_free_rejects_occupied_port() {
+        let listener = std::net::TcpListener::bind(("127.0.0.1", 0)).unwrap();
+        let occupied = listener.local_addr().unwrap().port();
+        assert!(
+            ensure_backend_port_free(occupied).is_err(),
+            "occupied port must fail"
+        );
+        drop(listener);
     }
 }

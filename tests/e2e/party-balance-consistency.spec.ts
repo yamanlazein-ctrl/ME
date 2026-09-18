@@ -46,14 +46,15 @@ import { createRequire } from "module";
 const require = createRequire(import.meta.url);
 const { Pool } = require("../../backend/node_modules/pg");
 const pool = new Pool({
-  connectionString: process.env.DATABASE_URL ?? "postgresql://postgres:postgres@localhost:5432/erp",
+  connectionString: process.env.DATABASE_URL ?? (() => { throw new Error("DATABASE_URL is required"); })(),
 });
 
 const FRONT = process.env.ERP_FRONTEND_URL ?? "http://localhost:5173";
 const BACKEND = process.env.ERP_BACKEND_URL ?? "http://127.0.0.1:8080";
-const TENANT_ID = process.env.ERP_TENANT_ID ?? "407fccfc-ba89-41c5-b5b9-ddb2c4f385d9";
-const EMAIL = process.env.ERP_ADMIN_EMAIL ?? "admin@erp.local";
-const PASSWORD = process.env.ERP_ADMIN_PASSWORD ?? "FxTest@2026!";
+const TENANT_ID = process.env.ERP_TENANT_ID;
+const EMAIL = process.env.ERP_ADMIN_EMAIL;
+const PASSWORD = process.env.ERP_ADMIN_PASSWORD;
+if (!TENANT_ID || !EMAIL || !PASSWORD) throw new Error("ERP_TENANT_ID, ERP_ADMIN_EMAIL, and ERP_ADMIN_PASSWORD are required");
 
 // ── Ground-truth أرقام (تُسجَّل قبل إدخالها) ────────────────────────────────
 const INVOICE_TOTAL = 100_000; // 10 كغ × 10,000

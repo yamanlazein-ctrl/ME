@@ -26,8 +26,17 @@ export class CashboxApiService {
 
   async cashBalanceOn(date: string, currency?: string): Promise<number> {
     const q = currency ? `?currency=${encodeURIComponent(currency)}` : "";
-    const res = await this.client.get<number>(`/api/cashbox/balance/${date}${q}`);
-    return res.data;
+    const res = await this.client.get<number | Record<string, number>>(
+      `/api/cashbox/balance/${date}${q}`,
+    );
+    const data = res.data;
+    if (typeof data === "number") return data;
+    // Unscoped response is a per-currency map (DFP-031 M5). Prefer requested
+    // currency, then SYP, then first entry.
+    if (currency && typeof data[currency] === "number") return data[currency]!;
+    if (typeof data.SYP === "number") return data.SYP;
+    const first = Object.values(data)[0];
+    return typeof first === "number" ? first : 0;
   }
 
   async cashMovementsOn(date: string): Promise<DayCashFlowDTO> {

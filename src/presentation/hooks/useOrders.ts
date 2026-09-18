@@ -9,6 +9,7 @@ import type { CreateOrderInput, UpdateOrderInput } from "@/core/dtos/OrderDTO";
 import type { Order } from "@/domain/entities/Order";
 import { UUID } from "@/domain/types";
 import { rolls, refreshInventory } from "@/presentation/hooks/useInventory";
+import { invalidateFinancialViews } from "./invalidateFinancialViews";
 
 const ctx = buildTenantContext();
 
@@ -85,6 +86,7 @@ export function useCreateOrder() {
       // Order create reserves rolls → stock availability changed.
       void refreshInventory();
       qc.invalidateQueries({ queryKey: ["inventory"] });
+      invalidateFinancialViews(qc);
     },
     onError: (e: Error) => {
       const det = orderDetailsText((e as { details?: Record<string, string[]> })?.details);
@@ -107,6 +109,7 @@ export function useCancelOrder() {
       // Order cancel releases reservations → stock availability changed.
       void refreshInventory();
       qc.invalidateQueries({ queryKey: ["inventory"] });
+      invalidateFinancialViews(qc);
     },
     onError: (e: Error) => {
       toast.error(`فشل إلغاء الطلب: ${e.message}`);
@@ -128,7 +131,7 @@ export function useFulfillOrder() {
       // Fulfill releases reservations → stock availability changed.
       void refreshInventory();
       qc.invalidateQueries({ queryKey: ["inventory"] });
-      qc.invalidateQueries({ queryKey: ["dashboard"] });
+      invalidateFinancialViews(qc, { refetchDashboard: true });
     },
     onError: (e: Error) => {
       toast.error(`فشل تنفيذ الطلب: ${e.message}`);

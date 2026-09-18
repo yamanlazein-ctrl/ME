@@ -15,6 +15,33 @@ import { invalidateIdentityCache } from "../auth/sessionCutoff.js";
 export class PostgresUserRepository implements IUserRepository {
   constructor(private readonly db: DB) {}
 
+  /** DFP-014: soft-deactivated users must lose sync-device authority immediately. */
+  private async revokeSyncDeviceAuthorization(tenantId: string, userId: string): Promise<void> {
+    await this.db.execute(sql`
+      WITH removed AS (
+        DELETE FROM sync_device_authorized_users
+        WHERE tenant_id = ${tenantId}::uuid AND user_id = ${userId}::uuid
+        RETURNING device_id
+      ),
+      rebuilt AS (
+        SELECT d.id AS device_id,
+               COALESCE(
+                 (SELECT array_agg(a.user_id ORDER BY a.created_at)
+                  FROM sync_device_authorized_users a
+                  WHERE a.device_id = d.id AND a.tenant_id = d.tenant_id),
+                 '{}'::uuid[]
+               ) AS ids
+        FROM sync_devices d
+        WHERE d.tenant_id = ${tenantId}::uuid
+          AND d.id IN (SELECT device_id FROM removed)
+      )
+      UPDATE sync_devices s
+      SET authorized_user_ids = r.ids, updated_at = now()
+      FROM rebuilt r
+      WHERE s.id = r.device_id AND s.tenant_id = ${tenantId}::uuid
+    `);
+  }
+
   async findById(id: string, ctx: TenantContext): Promise<UserData | null> {
     return runWithTenantContext({ tenantId: ctx.tenantId }, async () => {
       const rows = await this.db
@@ -210,6 +237,11 @@ export class PostgresUserRepository implements IUserRepository {
         throw new Error("User not found");
       }
 
+      if (data.active === false) {
+        await this.revokeSyncDeviceAuthorization(ctx.tenantId, id);
+        invalidateIdentityCache(id);
+      }
+
       return {
         id: u.id,
         tenantId: u.tenantId,
@@ -226,10 +258,12 @@ export class PostgresUserRepository implements IUserRepository {
     return runWithTenantContext({ tenantId: ctx.tenantId }, async () => {
       // Soft delete: set active=false instead of hard delete
       // This preserves historical references (created_by in invoices/ledger)
-        await this.db
+      await this.db
         .update(users)
         .set({ active: false, tokensRevokedBefore: new Date(), updatedAt: new Date() })
         .where(and(eq(users.id, id), eq(users.tenantId, ctx.tenantId)));
+
+      await this.revokeSyncDeviceAuthorization(ctx.tenantId, id);
       invalidateIdentityCache(id);
     });
   }

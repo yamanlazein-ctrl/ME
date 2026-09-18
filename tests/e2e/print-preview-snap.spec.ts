@@ -2,6 +2,8 @@
  * Visual verification of the new print design across ALL document types.
  */
 import { test, expect } from "@playwright/test";
+import { e2eAdminAuth } from "./_helpers/testCredentials.js";
+const __e2eAdmin = e2eAdminAuth();
 
 const PRINT_PREVIEW_DIR = "test-results/print-preview";
 const SALE_INVOICE_ID = "767242c2-6f87-4e02-98d9-8e5f09ec1534";
@@ -23,8 +25,8 @@ test.describe("Print Preview — Visual Verification (All Doc Types)", () => {
     const usernameInput = page.locator('input[name="username"], input[type="text"]').first();
     const isLogin = await usernameInput.isVisible({ timeout: 5_000 }).catch(() => false);
     if (isLogin) {
-      await usernameInput.fill("admin@erp.local");
-      await page.locator('input[type="password"]').first().fill("admin123");
+      await usernameInput.fill(__e2eAdmin.email);
+      await page.locator('input[type="password"]').first().fill(__e2eAdmin.password);
       await page.locator('button[type="submit"]').click();
       await waitForApp(page);
     }
@@ -50,8 +52,8 @@ test.describe("Print Preview — Visual Verification (All Doc Types)", () => {
       await page
         .locator('input[name="username"], input[type="text"]')
         .first()
-        .fill("admin@erp.local");
-      await page.locator('input[type="password"]').first().fill("admin123");
+        .fill(__e2eAdmin.email);
+      await page.locator('input[type="password"]').first().fill(__e2eAdmin.password);
       await page.locator('button[type="submit"]').click();
       await waitForApp(page);
       await page.goto(route, { waitUntil: "domcontentloaded" });

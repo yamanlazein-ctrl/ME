@@ -8,6 +8,7 @@ import { PartyFilter } from "@/core/dtos/PartyDTO";
 import type { Party, PartyKind } from "@/domain/entities/Party";
 import type { CreatePartyInput } from "@/core/dtos/PartyDTO";
 import type { Currency } from "@/domain/types";
+import { invalidateFinancialViews } from "./invalidateFinancialViews";
 
 const ctx = buildTenantContext();
 
@@ -124,7 +125,10 @@ export function useCreateParty() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (input: CreatePartyInput) => container.parties.create.execute(input, ctx),
-    onSuccess: () => qc.invalidateQueries({ queryKey: KEYS.root }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: KEYS.root });
+      invalidateFinancialViews(qc, { refetchDashboard: true });
+    },
   });
 }
 
@@ -133,7 +137,10 @@ export function useUpdateParty() {
   return useMutation({
     mutationFn: (params: { id: string; kind: "customer" | "supplier"; patch: Partial<Party> }) =>
       container.parties.repository.update(params.id, params.kind, params.patch, ctx),
-    onSuccess: () => qc.invalidateQueries({ queryKey: KEYS.root }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: KEYS.root });
+      invalidateFinancialViews(qc, { refetchDashboard: true });
+    },
   });
 }
 

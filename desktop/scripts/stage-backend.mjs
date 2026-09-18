@@ -12,9 +12,9 @@
  * the exact runtime tree. Stale reuse is impossible by construction.
  *
  * Steps:
- *   1. Require resources/node.exe to exist (portable Node runtime, placed by
- *      release engineering — download the matching LTS portable zip and copy
- *      node.exe here). FAIL loudly if absent; never substitute silently.
+ *   1. Require resources/node.exe to exist (portable Node runtime, staged by
+ *      stage-node-runtime.mjs in before-build.cmd). FAIL loudly if absent;
+ *      never substitute silently with PATH node.
  *   2. `npm run build` in backend/ (tsc). Any type error fails packaging.
  *   3. Mirror into resources/backend: dist/, package.json, backend
  *      node_modules (runtime deps server.js resolves from backend_dir), and

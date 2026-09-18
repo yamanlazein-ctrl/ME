@@ -29,6 +29,7 @@ export * from "./license.table.js";
 export * from "./license-activation.table.js";
 export * from "./device-registration.table.js";
 export * from "./sync-device.table.js";
+export * from "./sync-device-authorized-user.table.js";
 export * from "./sync-outbox.table.js";
 export * from "./sync-inbox.table.js";
 export * from "./sync-resource-claim.table.js";

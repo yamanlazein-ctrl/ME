@@ -5,7 +5,7 @@
 const base = "http://127.0.0.1:8080";
 const body = {
   email: "firstrun.admin+1789646561009@erp.test",
-  password: "admin123",
+  password: process.env.E2E_ADMIN_PASSWORD ?? (() => { throw new Error("E2E_ADMIN_PASSWORD required (DFP-029)"); })(),
   tenantId: "d9b59c10-1875-4cfd-8da7-1fea2c4944fd",
 };
 
@@ -25,7 +25,7 @@ const r2 = await fetch(`${base}/api/auth/login`, {
   headers: { "Content-Type": "application/json" },
   body: JSON.stringify({
     email: "admin@erp.local",
-    password: "admin123",
+    password: process.env.E2E_ADMIN_PASSWORD ?? (() => { throw new Error("E2E_ADMIN_PASSWORD required (DFP-029)"); })(),
     tenantId: "407fccfc-ba89-41c5-b5b9-ddb2c4f385d9",
   }),
 });

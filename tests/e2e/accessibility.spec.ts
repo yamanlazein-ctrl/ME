@@ -1,7 +1,8 @@
 import { test, expect, type Page } from "@playwright/test";
+import { e2eAdminAuth } from "./_helpers/testCredentials.js";
 import AxeBuilder from "@axe-core/playwright";
 
-const ADMIN = { email: "admin@erp.local", password: "admin123" };
+const ADMIN = e2eAdminAuth();
 
 async function loginAsAdmin(page: Page): Promise<void> {
   await page.goto("/", { waitUntil: "domcontentloaded" });

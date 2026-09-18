@@ -26,7 +26,7 @@ async function api(path, opts = {}) {
     const r = await fetch(`${API}/auth/login`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email: "admin@erp.local", password: "Admin@12345" }),
+      body: JSON.stringify((() => { const email = process.env.E2E_ADMIN_EMAIL ?? "admin@erp.local"; const password = process.env.E2E_ADMIN_PASSWORD; if (!password) throw new Error("E2E_ADMIN_PASSWORD required (DFP-029)"); return { email, password }; })()),
     });
     const data = await r.json().catch(() => ({}));
     token = data.accessToken || data.token || "";

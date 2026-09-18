@@ -60,7 +60,7 @@ DECLARE
     -- layer: rls-guard.test.ts asserts every TS business table appears here,
     -- and verify-rls.mjs counts the tenant_isolation family at runtime.
     'sync_devices','sync_outbox','sync_inbox',
-    'sync_resource_claims','sync_state',
+    'sync_resource_claims','sync_state','sync_device_authorized_users',
     'document_number_blocks',
     -- Tombstones (0058) and the conflict ledger (batch1) are tenant-scoped
     -- business data too: a recorded delete, and the losing side of a
@@ -193,16 +193,31 @@ END $$;
 COMMIT;
 
 -- ────────────────────────────────────────────────────────────────────────────
--- 4. FORCE ROW LEVEL SECURITY (D5) — منفصل اختياري، يقيّد حتى المالك postgres.
---    يُطبَّق في staging أولاً، ثم dev بعد نجاح مصفوفة العزل.
--- ============================================================================
--- DO $$
--- DECLARE t text;
--- BEGIN
---   FOR t IN SELECT tablename FROM pg_tables WHERE schemaname='public' LOOP
---     EXECUTE format('ALTER TABLE %I FORCE ROW LEVEL SECURITY', t);
---   END LOOP;
--- END $$;
+-- 4. FORCE ROW LEVEL SECURITY (D5 / DFP-018) — restricts even table owner.
+--    Applied to every public table that carries tenant_id. Idempotent.
+-- ────────────────────────────────────────────────────────────────────────────
+DO $$
+DECLARE
+  t text;
+BEGIN
+  FOR t IN
+    SELECT c.relname
+    FROM pg_class c
+    JOIN pg_namespace n ON n.oid = c.relnamespace
+    WHERE n.nspname = 'public'
+      AND c.relkind = 'r'
+      AND EXISTS (
+        SELECT 1 FROM pg_attribute a
+        WHERE a.attrelid = c.oid
+          AND a.attname = 'tenant_id'
+          AND a.attnum > 0
+          AND NOT a.attisdropped
+      )
+  LOOP
+    EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY', t);
+    EXECUTE format('ALTER TABLE %I FORCE ROW LEVEL SECURITY', t);
+  END LOOP;
+END $$;
 
 -- ============================================================================
 -- 5. ROLLBACK (الطوارئ) — تعطيل RLS كاملاً على كل جداول public

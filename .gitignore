@@ -16,6 +16,10 @@ dist-ssr
 .nitro
 *.local
 
+# DFP-032: npm + package-lock.json is the sole package manager SoT.
+bun.lock
+bun.lockb
+
 # Wrangler / Cloudflare
 .wrangler/
 .dev.vars

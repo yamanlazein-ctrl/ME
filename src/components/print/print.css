@@ -21,40 +21,24 @@
    draw their Headers/Footers chrome (URL, date, 1/1). Padding lives on
    `.print-doc` instead — that is the real printable inset.
 
-   Blank first page: named `page` must start on `[data-print-root]`, never on
-   an inner `.print-doc` (a page-name change forces a break → empty sheet). */
+   Blank first page (DFP-002 / CSS Paged Media):
+   A named page at-rule plus the CSS page property on any element forces a
+   page-name change (and a forced break) when the previous page type differs.
+   Putting a named page on an inner `.print-doc` — or only on
+   `[data-print-root]` while html/body stay unnamed — produced an empty
+   sheet 1 before invoice content.
+
+   Contract (no named pages at all):
+   1. Only the unnamed `@page` rule sets `size` / `margin`.
+   2. printPortal injects `#me-print-page-size` to set `@page { size: … }`
+      for A4 / A5 / 80mm BEFORE window.print() / archive PDF.
+   3. Never use the CSS `page` property on print roots or documents. */
 @page {
   size: A4 portrait;
   margin: 0;
 }
 
-@page a4 {
-  size: A4 portrait;
-  margin: 0;
-}
-
-@page a5 {
-  size: A5 portrait;
-  margin: 0;
-}
-
-@page thermal80mm {
-  size: 80mm auto;
-  margin: 0;
-}
-
-[data-print-root] {
-  page: a4;
-}
-[data-print-root][data-paper="A5"] {
-  page: a5;
-}
-[data-print-root][data-paper="80mm"] {
-  page: thermal80mm;
-}
-
 .print-doc {
-  page: auto;
   width: 100%;
   max-width: none;
   box-sizing: border-box;

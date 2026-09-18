@@ -176,7 +176,9 @@ async function prepare(pems) {
     );
   }
 
-  const pwHash = await hash("admin123");
+  const seedPw = process.env.E2E_ADMIN_PASSWORD;
+  if (!seedPw) throw new Error("E2E_ADMIN_PASSWORD required (DFP-029)");
+  const pwHash = await hash(seedPw);
   await c.query(
     `UPDATE users SET password_hash=$2, active=true, role='admin'
      WHERE email='admin@erp.local' AND tenant_id=$1::uuid`,
@@ -390,8 +392,11 @@ async function main() {
 
     const auth = { authorization: `Bearer ${ADMIN_TOKEN}` };
 
+    const seedPw = process.env.E2E_ADMIN_PASSWORD;
+    if (!seedPw) throw new Error("E2E_ADMIN_PASSWORD required (DFP-029)");
+
     // 1) active → business API
-    const loginA = await login("admin@erp.local", "admin123", fx.tenantA);
+    const loginA = await login("admin@erp.local", seedPw, fx.tenantA);
     const tokenA = loginA.body?.accessToken;
     record("e2e.login_active_tenant", loginA.status === 200 && !!tokenA, `status=${loginA.status}`);
     const partiesActive = await getParties(tokenA);
@@ -401,11 +406,11 @@ async function main() {
       `status=${partiesActive.status} code=${partiesActive.body?.code ?? "ok"} raw=${(partiesActive.raw || "").slice(0, 160)}`,
     );
 
-    const loginB = await login(fx.tenantBEmail, "admin123", fx.tenantB);
+    const loginB = await login(fx.tenantBEmail, seedPw, fx.tenantB);
     const tokenB = loginB.body?.accessToken;
     record("e2e.tenant_b_baseline", (await getParties(tokenB)).status === 200, `login=${loginB.status}`);
 
-    const loginA2 = await login(fx.userA2Email, "admin123", fx.tenantA);
+    const loginA2 = await login(fx.userA2Email, seedPw, fx.tenantA);
     const tokenA2 = loginA2.body?.accessToken;
     record("e2e.same_tenant_user2_baseline", (await getParties(tokenA2)).status === 200, `login=${loginA2.status}`);
 

@@ -19,16 +19,9 @@ export const syncDevices = pgTable(
       .references(() => tenants.id),
     lastSeenByUserId: uuid("last_seen_by_user_id").references(() => users.id),
     /**
-     * Batch 4 / 4B — the users this device is PROVISIONED for.
-     *
-     * `lastSeenByUserId` records whoever touched the row last (a transient
-     * actor); authority over the device id must never be derived from it. A
-     * device is usable by exactly the users listed here, and a user joins the
-     * list only through an authenticated registration that proves possession
-     * of the device (matching `device_fingerprint`) — see
-     * PostgresSyncDeviceRepository.registerOrTouch. The sync transport gate
-     * (sync-device-gate.middleware.ts) rejects a registered device asserted by
-     * any other user, which is what makes a forged device id detectable.
+     * Denormalized cache of users provisioned for this device (DFP-014).
+     * Source of truth: `sync_device_authorized_users` join table (tenant+user FKs).
+     * Rebuilt by PostgresSyncDeviceRepository; gate still reads this field.
      */
     authorizedUserIds: uuid("authorized_user_ids").array().notNull().default([]),
     /**
@@ -55,5 +48,7 @@ export const syncDevices = pgTable(
       table.tenantId,
       table.deviceFingerprint,
     ),
+    // DFP-014 composite FK target for sync_device_authorized_users.
+    tenantIdUidx: uniqueIndex("sync_devices_tenant_id_uidx").on(table.tenantId, table.id),
   }),
 ).enableRLS();
