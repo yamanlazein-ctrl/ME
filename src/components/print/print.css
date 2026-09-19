@@ -515,6 +515,15 @@
   page-break-inside: auto;
 }
 
+/* Thin vertical dividers between every column — editorial grid, same palette
+   but slightly stronger than horizontal rules so the column rhythm reads
+   clearly on paper. `+` keeps the first column clean and leaves the
+   full-width detail row (colspan) untouched. */
+.print-table th + th,
+.print-table td + td {
+  border-inline-start: 0.6pt solid var(--mf-rule);
+}
+
 .print-table .pd-amount,
 .print-table td.pd-amount {
   text-align: left;
@@ -545,12 +554,20 @@
 
 .pd-color-cell {
   display: flex;
-  align-items: center;
-  gap: 4pt;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 2pt;
   direction: rtl;
   text-align: right;
   min-width: 0;
   max-width: 100%;
+}
+
+.pd-color-top {
+  display: flex;
+  align-items: center;
+  gap: 4pt;
+  min-width: 0;
   flex-wrap: nowrap;
 }
 
@@ -577,18 +594,23 @@
 }
 
 .pd-color-code {
-  flex: 0 0 auto;
-  max-width: 46%;
+  display: block;
+  width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 7.5pt;
+  font-size: 6.5pt;
   font-weight: 600;
   color: var(--mf-ink);
   font-variant-numeric: tabular-nums;
   direction: ltr;
   unicode-bidi: isolate;
   line-height: 1.2;
+  border-top: 0.5pt solid var(--mf-rule);
+  padding-top: 1.5pt;
+  margin-top: 0.5pt;
+  text-align: right;
+  letter-spacing: 0.02em;
 }
 
 .pd-color-label {

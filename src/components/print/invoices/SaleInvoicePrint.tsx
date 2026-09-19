@@ -110,7 +110,7 @@ export function SaleInvoicePrint({
     { key: "fabric", label: "الصنف", width: "22%" },
     { key: "color", label: "اللون", width: "22%" },
     { key: "roll", label: "رقم الصبغة", width: "12%" },
-    { key: "pieces", label: "الأنواع", align: "center", width: "7%" },
+    { key: "pieces", label: "الأثواب", align: "center", width: "7%" },
     { key: "qty", label: "الكمية (كغ)", align: "center", width: "10%" },
     { key: "price", label: "السعر/كغ", align: "left", amount: true, width: "12%" },
     { key: "gross", label: "الإجمالي", align: "left", amount: true, width: "15%" },
@@ -177,10 +177,11 @@ export function SaleInvoicePrint({
   if (vis.showSubtotal) {
     totals.push({ label: "المجموع", value: formatAmount(subtotal, inv.currency) });
   }
-  if (vis.showDiscountTotal && discount > 0) {
+  // الخصم/الضريبة/الشحن: تظهر دائماً عند وجود قيمة (>0) حتى لو أخفاها الإعداد — طلب طباعي صريح
+  if (discount > 0) {
     totals.push({ label: "الخصم", value: `− ${formatAmount(discount, inv.currency)}` });
   }
-  if (vis.showTax && tax > 0) {
+  if (tax > 0) {
     totals.push({ label: "الضريبة", value: `+ ${formatAmount(tax, inv.currency)}` });
   }
   if (shipping > 0) {
@@ -231,19 +232,24 @@ export function SaleInvoicePrint({
       typeBadge={vis.showTypeBadge ? "SALE" : undefined}
       hideFooter={!vis.showFooter}
       extraMeta={[
-        // QA fix (Part 2): show the frozen FX rate on printed paper when the
-        // document currency is NOT the base currency (USD) and a real rate
-        // (> 1) was captured at creation time.
-        ...(inv.currency !== "USD" && Number(inv.exchangeRate) > 1
+        // يظهر سعر الصرف في كل فاتورة عند إدخاله (طلب المستخدم) — نفس الخط ونفس الألوان
+        ...(inv.exchangeRate != null &&
+        String(inv.exchangeRate).trim() !== "" &&
+        Number(inv.exchangeRate) > 0 &&
+        String(Number(inv.exchangeRate)) !== "1"
           ? [
               {
                 label: "سعر الصرف",
                 value: `${formatNumber(Number(inv.exchangeRate))} (بتاريخ ${inv.date})`,
               },
-              {
-                label: "المعادل بالدولار",
-                value: `$${formatNumber(Number(inv.baseTotal) || 0)}`,
-              },
+              ...(inv.currency !== "USD"
+                ? [
+                    {
+                      label: "المعادل بالدولار",
+                      value: `$${formatNumber(Number(inv.baseTotal) || 0)}`,
+                    },
+                  ]
+                : []),
             ]
           : []),
         ...(vis.showPaymentMethod && paymentMethod

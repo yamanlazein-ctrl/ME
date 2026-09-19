@@ -19,8 +19,10 @@ export function PrintColorCell({ colorId }: { colorId?: string | null }) {
 
   return (
     <div className="pd-color-cell" data-color-id={colorId}>
-      <ColorSwatch color={col} size="sm" className="pd-color-swatch" />
-      <span className="pd-color-name">{name || "—"}</span>
+      <div className="pd-color-top">
+        <ColorSwatch color={col} size="sm" className="pd-color-swatch" />
+        <span className="pd-color-name">{name || "—"}</span>
+      </div>
       {code ? (
         <span className="pd-color-code" dir="ltr">
           {code}

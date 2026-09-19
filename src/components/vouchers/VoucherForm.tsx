@@ -27,6 +27,7 @@ import {
   type VoucherMethod,
 } from "@/presentation/hooks/useVouchers";
 import { useInvoicesList } from "@/presentation/hooks/useInvoices";
+import { useReturnsList } from "@/presentation/hooks/useReturns";
 import { invoiceTotal } from "@/core/calculations/invoiceCalc";
 import { convertForSettlement } from "@erp/shared";
 import { Save, X, Lock } from "lucide-react";
@@ -117,6 +118,22 @@ export function VoucherForm({
     partyId ? { partyId, limit: 1000 } : { limit: 1000 },
   );
   const allInvoices = invoicesData?.data ?? [];
+  // Returns are needed to compute the true remaining: backend does total - paid - activeReturns
+  // (sale return credits the customer). Without this, the UI shows 44 while the backend correctly sees -72.
+  const { data: returnsData } = useReturnsList({ limit: 1000 });
+  const returnsByInvoice = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const r of (returnsData?.data ?? []) as Array<{
+      originalInvoiceId?: string | null;
+      status: string;
+      lines: Array<{ quantityKg: number; pricePerKg: number }>;
+    }>) {
+      if (!r.originalInvoiceId || r.status !== "active") continue;
+      const sum = r.lines.reduce((s, l) => s + Number(l.quantityKg) * Number(l.pricePerKg), 0);
+      map.set(r.originalInvoiceId, (map.get(r.originalInvoiceId) ?? 0) + sum);
+    }
+    return map;
+  }, [returnsData]);
 
   const invoiceOptions = useMemo(() => {
     if (!partyId) return [];
@@ -144,9 +161,13 @@ export function VoucherForm({
     return allInvoices
       .filter((i) => i.type === wantedType && i.status !== "cancelled" && i.partyId === partyId)
       .map((i) => {
-        let remaining = Math.max(0, invoiceTotal(i) - (i.paid ?? 0));
+        const returnsSum = returnsByInvoice.get(i.id) ?? 0;
+        // Backend: remaining = total - paid - activeReturns (can be negative = credit)
+        const rawRemaining = invoiceTotal(i) - (i.paid ?? 0) - returnsSum;
+        let remaining = Math.max(0, rawRemaining);
+        // Show credit as 0 remaining (cannot collect more), but keep raw for validation message
         if (editInvoiceId && i.id === editInvoiceId) remaining = Math.max(0, remaining + creditBack);
-        return { ...i, remaining };
+        return { ...i, remaining, rawRemaining, returnsSum };
       })
       .filter((i) => {
         // Keep the linked invoice visible while amending even if remaining was 0
@@ -156,7 +177,7 @@ export function VoucherForm({
         seen.add(i.id);
         return true;
       });
-  }, [partyId, isReceipt, allInvoices, editing]);
+  }, [partyId, isReceipt, allInvoices, editing, returnsByInvoice]);
 
   // Dynamic helper text so the "الفاتورة المرتبطة" field is self-explanatory:
   // it only shows a party's unpaid invoices AFTER a party is chosen.
