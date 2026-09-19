@@ -15,7 +15,9 @@ import { refreshInventory } from "./useInventory";
  * with React Query, providing caching, invalidation, and mutation helpers.
  */
 
-const ctx = buildTenantContext();
+const ctx = new Proxy({} as import("@/domain/types").TenantContext, {
+  get: (_target, property: string) => buildTenantContext()[property as keyof import("@/domain/types").TenantContext],
+});
 
 const KEYS = {
   root: ["invoices"] as const,

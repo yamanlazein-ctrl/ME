@@ -4,7 +4,9 @@ import { buildTenantContext } from "@/infrastructure/di/auth-context";
 import type { CreatePrintSendInput } from "@/application/ports/IPrintJobRepository";
 import { refreshInventory } from "@/presentation/hooks/useInventory";
 
-const ctx = buildTenantContext();
+const ctx = new Proxy({} as import("@/domain/types").TenantContext, {
+  get: (_target, property: string) => buildTenantContext()[property as keyof import("@/domain/types").TenantContext],
+});
 
 const KEYS = {
   all: ["print-jobs"] as const,

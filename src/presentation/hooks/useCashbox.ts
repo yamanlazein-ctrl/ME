@@ -7,9 +7,6 @@ import type {
   CloseDayInput,
 } from "@/application/ports/ICashboxRepository";
 export type { ManualMovementType } from "@/application/ports/ICashboxRepository";
-
-const ctx = buildTenantContext();
-
 const KEYS = {
   state: ["cashbox", "state"] as const,
   movements: ["cashbox", "movements"] as const,
@@ -27,7 +24,7 @@ export const MANUAL_TYPE_LABEL: Record<string, string> = {
 export function useCashboxState() {
   return useQuery({
     queryKey: KEYS.state,
-    queryFn: ({ signal }) => container.cashbox.state.getState(ctx),
+    queryFn: ({ signal }) => container.cashbox.state.getState(buildTenantContext()),
     staleTime: 15_000,
   });
 }
@@ -37,8 +34,8 @@ export function useCashBalance(date?: string, currency?: string) {
     queryKey: [...KEYS.state, "balance", date ?? "today", currency ?? "SYP"],
     queryFn: ({ signal }) => {
       void signal;
-      if (date) return container.cashbox.state.cashBalanceOn(date, ctx, currency);
-      return container.cashbox.state.currentBalance(ctx, currency);
+      if (date) return container.cashbox.state.cashBalanceOn(date, buildTenantContext(), currency);
+      return container.cashbox.state.currentBalance(buildTenantContext(), currency);
     },
     staleTime: 15_000,
   });
@@ -49,7 +46,7 @@ export function useManualMovements() {
     queryKey: KEYS.movements,
     queryFn: ({ signal }) => {
       void signal;
-      return container.cashbox.movements.listManual(ctx);
+      return container.cashbox.movements.listManual(buildTenantContext());
     },
     staleTime: 15_000,
   });
@@ -59,7 +56,7 @@ export function useAddManualMovement() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (input: CreateManualMovementInput) =>
-      container.cashbox.addMovement.execute(input, ctx),
+      container.cashbox.addMovement.execute(input, buildTenantContext()),
     onSuccess: () => {
       toast.success("تمت إضافة الحركة اليدوية");
       qc.invalidateQueries({ queryKey: KEYS.state });
@@ -75,7 +72,7 @@ export function useAddManualMovement() {
 export function useDeleteManualMovement() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (id: string) => container.cashbox.state.deleteManualMovement(id, ctx),
+    mutationFn: (id: string) => container.cashbox.state.deleteManualMovement(id, buildTenantContext()),
     onSuccess: () => {
       toast.error("تم حذف الحركة اليدوية");
       qc.invalidateQueries({ queryKey: KEYS.state });
@@ -102,7 +99,7 @@ export function useSetOpeningBalance() {
         input.balance,
         input.date,
         input.currency as import("@/domain/types").Currency,
-        ctx,
+        buildTenantContext(),
       ),
     onSuccess: () => {
       toast.success("تم تعيين الرصيد الافتتاحي");
@@ -118,7 +115,7 @@ export function useSetOpeningBalance() {
 export function useCloseDay() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (input: CloseDayInput) => container.cashbox.closeDay.execute(input, ctx),
+    mutationFn: (input: CloseDayInput) => container.cashbox.closeDay.execute(input, buildTenantContext()),
     onSuccess: () => {
       toast.info("تم إقفال اليوم");
       qc.invalidateQueries({ queryKey: KEYS.state });
@@ -136,7 +133,7 @@ export function useDayLock(date: string) {
     queryKey: [...KEYS.state, "lock", date],
     queryFn: ({ signal }) => {
       void signal;
-      return container.cashbox.state.isDayLocked(date, ctx);
+      return container.cashbox.state.isDayLocked(date, buildTenantContext());
     },
   });
 }
@@ -146,7 +143,7 @@ export function useLastClosing() {
     queryKey: KEYS.closings,
     queryFn: ({ signal }) => {
       void signal;
-      return container.cashbox.state.lastClosing(ctx);
+      return container.cashbox.state.lastClosing(buildTenantContext());
     },
     staleTime: 30_000,
   });

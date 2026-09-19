@@ -14,9 +14,6 @@ import { refreshInventory } from "@/presentation/hooks/useInventory";
 import { setRememberedEmail } from "@/lib/license-state";
 import { registerCurrentSyncDevice } from "@/lib/sync-device";
 import type { LoginInput } from "@/application/ports/IAuthRepository";
-
-const ctx = buildTenantContext();
-
 const KEYS = {
   me: ["auth", "me"] as const,
 };
@@ -39,7 +36,7 @@ export function useCurrentUser() {
         await createTokenProvider().onTokenExpired?.();
       }
       try {
-        return await container.auth.repository.getCurrentUser(ctx);
+        return await container.auth.repository.getCurrentUser(buildTenantContext());
       } catch (err) {
         // After DB wipe / setup reset, /me returns SETUP_REQUIRED (503) while
         // stale tokens remain — clear them so AuthGate leaves "استعادة الجلسة".
@@ -84,7 +81,7 @@ export function useLogout() {
       const cached = qc.getQueryData<{ email?: string }>(KEYS.me);
       if (cached?.email) setRememberedEmail(cached.email);
       try {
-        await container.auth.repository.logout(ctx);
+        await container.auth.repository.logout(buildTenantContext());
       } catch {
         /* still clear local tokens */
       }
