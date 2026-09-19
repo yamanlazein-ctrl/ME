@@ -46,5 +46,8 @@ export function runWithTenantContext<T>(
  * for tenant business flows.
  */
 export function runWithPlatformContext<T>(fn: () => T): T {
-  return tenantContext.run({ platformMode: true }, fn);
+  return tenantContext.run(
+    { ...tenantContext.getStore(), platformMode: true },
+    fn,
+  );
 }
