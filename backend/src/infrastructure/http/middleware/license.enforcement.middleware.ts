@@ -5,6 +5,7 @@ import type {
   LicenseRow,
 } from "../../../application/ports/ILicenseRepository.js";
 import type { LicenseLimits } from "../../../domain/licensing/license-metadata.js";
+import type { ITenantRepository } from "../../../application/ports/ITenantRepository.js";
 
 /**
  * Phase 5 — License enforcement (frozen spec §9, §6).
@@ -20,7 +21,11 @@ import type { LicenseLimits } from "../../../domain/licensing/license-metadata.j
  * `edition` are never consulted here.
  */
 
-export function requireFeature(licenseRepo: ILicenseRepository, ...needed: string[]) {
+export function requireFeature(
+  licenseRepo: ILicenseRepository,
+  tenantRepo: ITenantRepository | undefined,
+  ...needed: string[]
+) {
   return async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     const ctx = req.tenantContext;
     if (!ctx) {
@@ -29,8 +34,18 @@ export function requireFeature(licenseRepo: ILicenseRepository, ...needed: strin
     }
     try {
       const lic = await licenseRepo.findLatestForTenant(ctx.tenantId as UUID);
-      // No license yet (setup/activation in progress) → do not gate.
+      // Missing is setup-safe only before this tenant has been provisioned.
+      // An activated tenant with a deleted license must fail closed.
       if (!lic) {
+        const tenant = tenantRepo ? await tenantRepo.findById(ctx.tenantId as never) : null;
+        if (tenant?.activationId || tenant?.licenseKey) {
+          res.status(403).json({
+            code: "LICENSE_MISSING",
+            message: "الترخيص مفقود لهذا الحساب",
+            statusCode: 403,
+          });
+          return;
+        }
         next();
         return;
       }

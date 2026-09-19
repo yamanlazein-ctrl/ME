@@ -498,6 +498,13 @@
       "when": 1789099000000,
       "tag": "20260923_force_rls_all_tenant_tables",
       "breakpoints": true
+    },
+    {
+      "idx": 71,
+      "version": 7,
+      "when": 1789101000000,
+      "tag": "20260924_unified_device_identity",
+      "breakpoints": true
     }
   ]
 }

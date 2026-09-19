@@ -20,6 +20,10 @@ use windows::Win32::Security::Cryptography::{
 pub struct SecretStore {
     pub jwt_secret: String,
     pub app_master_key: String,
+    /// Password for the bundled PostgreSQL role; persisted DPAPI-encrypted
+    /// alongside the application secrets and never shipped in pgdata.
+    #[serde(default)]
+    pub db_password: String,
 }
 
 pub fn secrets_path() -> Result<PathBuf, String> {
@@ -101,6 +105,17 @@ pub fn load_or_generate() -> Result<SecretStore, String> {
             Ok(raw) => match dpapi_decrypt(&raw) {
                 Ok(json) => match serde_json::from_slice::<SecretStore>(&json) {
                     Ok(s) if !s.jwt_secret.is_empty() && !s.app_master_key.is_empty() => {
+                        // P2-5: a store from before the scram-sha-256 migration
+                        // has no db_password. Provisioning one is NOT a key
+                        // rotation (JWT/APP keys are untouched) — it is the
+                        // creation of the role secret the bundled PostgreSQL
+                        // needs so `trust` auth can be retired.
+                        if s.db_password.is_empty() {
+                            let mut upgraded = s.clone();
+                            upgraded.db_password = generate_db_password();
+                            persist(&upgraded)?;
+                            return Ok(upgraded);
+                        }
                         return Ok(s);
                     }
                     Ok(_) => {
@@ -143,9 +158,25 @@ pub fn load_or_generate() -> Result<SecretStore, String> {
     let store = SecretStore {
         jwt_secret: base64_encode(&random_bytes(32)),
         app_master_key: base64_encode(&random_bytes(32)),
+        db_password: generate_db_password(),
     };
     persist(&store)?;
     Ok(store)
+}
+
+/// P2-5: the password for the bundled PostgreSQL superuser role.
+///
+/// Deliberately restricted to `[A-Za-z0-9]` so the value needs no
+/// percent-encoding when placed in `DATABASE_URL` (a `$`, `/`, `:` or `@`
+/// would change the URL grammar, and libpq would silently mis-parse it).
+fn generate_db_password() -> String {
+    const ALPHABET: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+    let bytes = random_bytes(28);
+    let mut out = String::with_capacity(bytes.len());
+    for b in bytes {
+        out.push(ALPHABET[b as usize % ALPHABET.len()] as char);
+    }
+    out
 }
 
 fn preserve_corrupt_and_fail(path: &std::path::Path, reason: &str) -> String {
@@ -207,6 +238,13 @@ pub fn clear_for_test() {
     if let Ok(p) = secrets_path() {
         let _ = fs::remove_file(p);
     }
+}
+
+/// P2-5: the bundled PostgreSQL superuser password. Loaded (and, for a store
+/// that predates the scram migration, provisioned) BEFORE the database starts,
+/// so the boot can retire `trust` authentication on the very first launch.
+pub fn db_password() -> Result<String, String> {
+    Ok(load_or_generate()?.db_password)
 }
 
 fn random_bytes(n: usize) -> Vec<u8> {
@@ -298,5 +336,23 @@ mod tests {
         let store = load_or_generate().expect("load_or_generate must succeed");
         assert!(!store.jwt_secret.is_empty());
         assert!(!store.app_master_key.is_empty());
+    }
+
+    /// P2-5: the bundled PostgreSQL superuser password must exist and be
+    /// URL-safe, because it is injected into `DATABASE_URL` verbatim — a
+    /// metacharacter there would silently corrupt the connection string and
+    /// look like an unrelated "backend cannot reach the database" crash.
+    #[test]
+    fn db_password_is_url_safe() {
+        let store = load_or_generate().expect("load_or_generate must succeed");
+        assert!(!store.db_password.is_empty(), "db_password must be provisioned");
+        assert!(
+            store
+                .db_password
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric()),
+            "db_password must need no URL encoding: {}",
+            store.db_password
+        );
     }
 }

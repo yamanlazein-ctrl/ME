@@ -218,11 +218,11 @@ apiRouter.use(
 // FINAL DECISION (owner, 2026-08-28): accounting is available in every plan
 // (`feature.accounting` is in all PLANS entries) and its routes stay
 // un-gated by design — this is a final decision, not an open item.
-apiRouter.use("/inventory", requireFeature(container.licenseRepo, FEATURES.INVENTORY));
-apiRouter.use("/invoices", requireFeature(container.licenseRepo, FEATURES.SALES));
-apiRouter.use("/orders", requireFeature(container.licenseRepo, FEATURES.SALES));
-apiRouter.use("/returns", requireFeature(container.licenseRepo, FEATURES.SALES));
-apiRouter.use("/profit", requireFeature(container.licenseRepo, FEATURES.REPORTS));
+apiRouter.use("/inventory", requireFeature(container.licenseRepo, container.tenantRepo, FEATURES.INVENTORY));
+apiRouter.use("/invoices", requireFeature(container.licenseRepo, container.tenantRepo, FEATURES.SALES));
+apiRouter.use("/orders", requireFeature(container.licenseRepo, container.tenantRepo, FEATURES.SALES));
+apiRouter.use("/returns", requireFeature(container.licenseRepo, container.tenantRepo, FEATURES.SALES));
+apiRouter.use("/profit", requireFeature(container.licenseRepo, container.tenantRepo, FEATURES.REPORTS));
 registerPartyRoutes(
   apiRouter,
   container.partyRepo,
@@ -452,25 +452,12 @@ Sentry.setupExpressErrorHandler(app);
 // Global error handler
 app.use(createErrorHandler(logger));
 
-// Start server
-// Desktop SKU: ensure schema patches that land after a baked pgdata-template
-// was shipped (e.g. users.pin_hash for the PIN picker) exist on the live DB.
-// Idempotent. Failures are fatal — listening with a half-patched schema causes
-// opaque 500s on PIN/auth/sync while /api/health/live still looks healthy.
-async function ensureDesktopSchema(): Promise<void> {
-  if (!config.DESKTOP_DEPLOY) return;
-  const { pool } = await import("../infrastructure/orm/drizzle.js");
-  const { ensureDesktopSchema: applyDesktopSchema } = await import(
-    "../infrastructure/orm/ensureDesktopSchema.js"
-  );
-  await applyDesktopSchema((sql) => pool.query(sql));
-}
-
+// Start server. Desktop boot has one schema authority: the Drizzle migration
+// runner. Do not patch the live database with bespoke CREATE/ALTER statements.
 async function prepareDesktopDatabase(): Promise<void> {
   if (!config.DESKTOP_DEPLOY) return;
   const { runDesktopMigrations } = await import("../infrastructure/orm/runDesktopMigrations.js");
   await runDesktopMigrations();
-  await ensureDesktopSchema();
 }
 
 /** Detach stale baked Desktop licenses that are not the tenant entitlement. */

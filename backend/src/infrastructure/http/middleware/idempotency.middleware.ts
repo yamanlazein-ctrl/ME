@@ -36,6 +36,11 @@ import { pool } from "../../orm/drizzle.js";
  * Key format: `idempotency:<tenantId>:<method>:<path>:<key>` to avoid cross-tenant
  * collisions and allow scoped replay when the same key is intentionally used
  * across different endpoints.
+ *
+ * Scope boundary (P3-2): this is an HTTP retry guard only. It expires after five
+ * minutes and never deduplicates sync operations. Sync durability is provided by
+ * the `(tenant_id, op_id)` uniqueness constraints on sync inbox/outbox; callers
+ * must retain the same op_id when replaying a sync unit.
  */
 
 export const IDEMPOTENCY_TTL_SECONDS = 300; // 5 minutes

@@ -1524,3 +1524,31 @@ describe("sync invariants — number-block tip reconciliation", () => {
     );
   });
 });
+
+describe("P3 consolidation contracts", () => {
+  const NUMBERS = read("src", "infrastructure", "utils", "documentNumbers.ts");
+  const HTTP_IDEMPOTENCY = read("src", "infrastructure", "http", "middleware", "idempotency.middleware.ts");
+  const RUNBOOK = readFileSync(join(BACKEND_ROOT, "..", "docs", "SYNC-OPERATIONS.md"), "utf8");
+  const PLAN = readFileSync(join(BACKEND_ROOT, "..", "MOTARD-COMPLETE-REMEDIATION-PLAN.md"), "utf8");
+
+  it("documents block authority and explicit global fallback", () => {
+    expect(NUMBERS).toContain("documentNumberBlocks");
+    expect(NUMBERS).toContain("allowGlobalFallback");
+    expect(NUMBERS).toContain("Financial documents deliberately do NOT set this");
+    expect(RUNBOOK).toContain("canonical");
+  });
+
+  it("keeps HTTP and sync idempotency scopes non-overlapping", () => {
+    expect(HTTP_IDEMPOTENCY).toContain("HTTP retry guard only");
+    expect(HTTP_IDEMPOTENCY).toContain("(tenant_id, op_id)");
+    expect(RUNBOOK).toContain("Sync retries");
+    expect(RUNBOOK).toContain("five minutes");
+  });
+
+  it("uses the remediation plan as current P3 tracking", () => {
+    expect(PLAN).toContain("P3-1");
+    expect(PLAN).toContain("P3-2");
+    expect(PLAN).toContain("P3-3");
+    expect(PLAN).toContain("no runtime PASS claim");
+  });
+});

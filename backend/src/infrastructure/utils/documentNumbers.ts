@@ -69,15 +69,14 @@ export type AllocateNumberOpts = {
    */
   preAllocatedNumber?: string | null;
   /**
-   * Master data (party/fabric/color/roll) may be created on a device that has
-   * never been provisioned with a reserved block — a fresh install that has
-   * not reached the hub yet. Hard-failing there would block a basic user
-   * action, so those callers opt into the legacy global-sequence fallback.
+   * Transitional master-data exception only (party/fabric/color/roll): a fresh
+   * install may not have received its first block yet, so those callers may use
+   * the legacy global sequence until provisioning completes. This is NOT a
+   * second authority for synced financial documents.
    *
-   * Financial documents deliberately do NOT set this: a missing block must
-   * stop the save rather than risk handing out a number that another node has
-   * already used. The fallback is logged as a warning so an unprovisioned
-   * device is visible to operators instead of silently degrading.
+   * Financial documents deliberately do NOT set this: a missing block must stop
+   * the save rather than risk handing out a number another device already used.
+   * The fallback is logged so an unprovisioned device is visible to operators.
    */
   allowGlobalFallback?: boolean;
 };

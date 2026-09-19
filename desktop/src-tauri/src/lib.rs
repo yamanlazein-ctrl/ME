@@ -15,6 +15,7 @@
 pub mod db_meta;
 pub mod device_binding;
 pub mod document_archive;
+pub mod fingerprint;
 pub mod hidden_process;
 pub mod identity;
 pub mod runtime;

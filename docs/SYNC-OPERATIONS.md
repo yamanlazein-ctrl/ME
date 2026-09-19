@@ -59,6 +59,24 @@ concurrency skip reports `reason: "sync already running"` and is not an error.
 If the backlog is large it drains in 50-unit batches — `pendingCount` falling
 across runs is the healthy signal.
 
+## Numbering and idempotency boundaries
+
+- **Synced document numbering:** `document_number_blocks` is the canonical
+  allocator for a provisioned device. `document_sequences` is retained for
+  reconciliation/floor tracking, read-only previews, and the explicitly
+  transitional master-data fallback before first provisioning. Financial
+  document writes must fail when a block is unavailable; they must not silently
+  switch authorities. The fallback path logs a warning and is not a collision
+  guarantee until provisioning completes.
+- **HTTP retries:** `Idempotency-Key` protects one HTTP method/path/tenant for
+  `IDEMPOTENCY_TTL_SECONDS` (currently five minutes). It caches the response and
+  prevents concurrent duplicate handlers, but is intentionally temporary.
+- **Sync retries:** sync units use durable `op_id` uniqueness per tenant in the
+  inbox/outbox. Replays must preserve `op_id`; this layer survives restarts and
+  is independent of the HTTP cache. An HTTP key expiring does not authorize a
+  new sync operation with a new `op_id`, and a sync replay does not depend on an
+  HTTP cache entry.
+
 ## Desktop update with pending outbox
 
 1. `GET /api/sync/pending` — record the count.
@@ -106,13 +124,23 @@ half-restored) — transfer ownership with
 refuses to run at all when the schema is missing, and fails (exit 1) if any
 un-pushed unit failed to come back.
 
-## Device reinstall / re-registration
+## Device update / restore / re-registration
 
-Device identity lives in `localStorage` (`erp.sync.deviceId`) plus the hub
-`sync_devices` row. After reinstall the device registers a NEW id: old number
-blocks stay reserved under the old id (visible in balance reports — reclaim
-only confirmed-unused tails), and the pull cursor restarts (re-pulled units
-converge via idempotency). Prefer repair over reinstall when a backlog exists.
+The canonical physical identity is the fingerprint-backed `device_registrations`
+row. `sync_devices.device_registration_id` links the transport identity to that
+license identity when activation exists; the hub migration backfills matching
+same-tenant fingerprints. An application update must preserve `%LOCALAPPDATA%\motard-erp`
+(including `secrets.dat`, `device-binding.dat`, `pgdata`, and sync state).
+
+Before reinstall, export a full backup and copy the app-data directory while the
+app is stopped. Restore the app-data directory before first launch so the DPAPI
+binding and pending outbox survive. If the Windows user or machine changed,
+DPAPI correctly refuses the old binding: do not delete the backup or mint a new
+identity silently; perform a documented support rebind, then register the new
+fingerprint and reconcile any orphaned number blocks. A reinstall that creates a
+new sync id without this procedure leaves old blocks reserved and must be treated
+as an operational incident, not a normal sync reset. Prefer repair over reinstall
+when a backlog exists.
 
 ## Device gate (SYNC_UNKNOWN_DEVICE)
 

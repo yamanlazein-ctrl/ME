@@ -162,8 +162,15 @@ export class PostgresOrderRepository implements IOrderRepository {
       // (informational only: sell now or wait is their decision).
       await applyOrderAvailabilityAtCreation(tx, ctx, row.id);
 
+      // Availability may transition the order after insertion. Re-read the
+      // persisted row so the creation response reports the final status.
+      const [finalRow] = await tx
+        .select()
+        .from(orders)
+        .where(and(eq(orders.id, row.id), eq(orders.tenantId, ctx.tenantId)))
+        .limit(1);
       const items = await tx.select().from(orderItems).where(eq(orderItems.orderId, row.id));
-      return this.toDomain(row, items);
+      return this.toDomain(finalRow ?? row, items);
     });
   }
 

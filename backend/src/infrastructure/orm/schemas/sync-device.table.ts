@@ -6,9 +6,11 @@ import {
   integer,
   index,
   uniqueIndex,
+  foreignKey,
 } from "drizzle-orm/pg-core";
 import { tenants } from "./tenant.table.js";
 import { users } from "./user.table.js";
+import { deviceRegistrations } from "./device-registration.table.js";
 
 export const syncDevices = pgTable(
   "sync_devices",
@@ -17,6 +19,8 @@ export const syncDevices = pgTable(
     tenantId: uuid("tenant_id")
       .notNull()
       .references(() => tenants.id),
+    /** Canonical license/device registration link (P1-13). */
+    deviceRegistrationId: uuid("device_registration_id"),
     lastSeenByUserId: uuid("last_seen_by_user_id").references(() => users.id),
     /**
      * Denormalized cache of users provisioned for this device (DFP-014).
@@ -50,5 +54,10 @@ export const syncDevices = pgTable(
     ),
     // DFP-014 composite FK target for sync_device_authorized_users.
     tenantIdUidx: uniqueIndex("sync_devices_tenant_id_uidx").on(table.tenantId, table.id),
+    deviceRegistrationFk: foreignKey({
+      columns: [table.deviceRegistrationId],
+      foreignColumns: [deviceRegistrations.id],
+      name: "sync_devices_device_registration_fk",
+    }),
   }),
 ).enableRLS();

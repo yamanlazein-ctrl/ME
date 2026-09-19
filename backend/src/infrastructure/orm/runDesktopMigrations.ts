@@ -59,9 +59,10 @@ async function stampDbMeta(migrationsFolder: string): Promise<void> {
  * Empty cluster: drizzle migrate() applies the full journal in one transaction.
  * Copied-forward cluster that already has `tenants` but no drizzle history:
  * baseline *every* journal entry (not only the latest) so migrate() does not
- * replay CREATE TABLE, then `ensureDesktopSchema` (called next, fatally) brings
- * any missing columns/objects forward. Baselining only the latest hash used to
- * skip intermediate migrations whose DDL was never applied.
+ * replay CREATE TABLE. Baselining only the latest hash used to skip
+ * intermediate migrations whose DDL was never applied. Baked templates must
+ * therefore be built from a fully migrated cluster; this runner intentionally
+ * has no ad-hoc schema repair path.
  */
 export async function runDesktopMigrations(): Promise<void> {
   const folder = resolveMigrationsFolder();

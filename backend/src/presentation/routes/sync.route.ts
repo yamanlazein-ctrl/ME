@@ -660,16 +660,13 @@ export function registerSyncRoutes(
       }
       afterSeq = parsed;
     }
-    // P6 (SYNC-07): the caller's own device comes from the authenticated
-    // binding (X-Sync-Device-Id, UUID-validated by the auth middleware), not
-    // from the query string. The query param stays as a fallback for old
-    // clients, format-validated as before. Exclusion is only an efficiency
-    // optimization — duplicate-apply safety rests on idempotent materialize
-    // (`exists` on pre-allocated ids), never on this filter — and it discloses
-    // nothing either way: pulls are tenant-scoped regardless.
-    const excludeParam =
-      typeof req.query.excludeSyncDeviceId === "string" ? req.query.excludeSyncDeviceId : null;
-    const exclude = ctx.syncDeviceId ?? excludeParam;
+    // P1-4 / SYNC-07: exclusion is derived exclusively from the authenticated
+    // device binding. Never trust a client-supplied query parameter here: a
+    // caller could otherwise hide another device's units or influence cursor
+    // progress by naming an arbitrary tenant device. The query parameter is
+    // intentionally ignored (legacy clients remain safe; idempotent replay
+    // handles any duplicate delivery).
+    const exclude = ctx.syncDeviceId ?? null;
     const limitRaw = typeof req.query.limit === "string" ? Number(req.query.limit) : 50;
     const limit = Number.isFinite(limitRaw) ? Math.min(Math.max(limitRaw, 1), 100) : 50;
 

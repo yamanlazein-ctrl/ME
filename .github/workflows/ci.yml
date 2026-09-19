@@ -31,6 +31,11 @@ jobs:
       - name: Typecheck backend
         run: npm run typecheck:backend
 
+      # FND-1/FND-2: Drizzle migrations are the sole schema authority and the
+      # journal must resolve every on-disk migration exactly once.
+      - name: Migration and schema authority guards
+        run: npx vitest run backend/tests/migrations-journal-guard.test.ts backend/tests/schema-migration-parity.test.ts
+
       - name: Run unit tests
         run: npm run test:logic
 

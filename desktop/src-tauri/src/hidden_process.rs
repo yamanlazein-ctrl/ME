@@ -25,7 +25,6 @@
 use std::collections::{BTreeMap, HashSet};
 use std::ffi::{c_void, OsStr};
 use std::fs::File;
-use std::fs;
 use std::io;
 use std::os::windows::ffi::OsStrExt;
 use std::os::windows::io::AsRawHandle;
@@ -453,6 +452,7 @@ impl HiddenCommand {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::fs;
 
     #[test]
     fn allowlist_keeps_path_and_rejects_secret_sentinels() {

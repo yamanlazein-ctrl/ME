@@ -4,7 +4,6 @@ use motard_fabrics_erp::runtime::{
     boot_desktop_stack_with_progress, no_window_command, shutdown, BootConfig, DesktopStack,
 };
 use serde::{Deserialize, Serialize};
-use std::process::Command;
 use std::sync::{Arc, Mutex};
 use tauri::Manager;
 use tauri_plugin_updater::UpdaterExt;
@@ -55,6 +54,11 @@ fn main() {
                      عن الجهاز الذي جرى التثبيت عليه أصلاً.\n\n\
                      الحل: أعد تثبيت البرنامج على هذا الجهاز بحساب المستخدم الحالي، أو تواصل \
                      مع الدعم الفني."
+                        .to_string()
+                }
+                motard_fabrics_erp::identity::DeviceBindError::FingerprintMismatch => {
+                    "تغيّر تعريف الجهاز منذ أول تشغيل، لذلك تم إيقاف التشغيل لحماية التثبيت.\n\n\
+                     إذا كان هذا التغيير متوقعاً بعد صيانة العتاد، تواصل مع الدعم لإجراء إعادة ربط موثّقة."
                         .to_string()
                 }
                 motard_fabrics_erp::identity::DeviceBindError::Io(detail) => format!(
@@ -226,93 +230,26 @@ struct FingerprintResult {
     os: String,
 }
 
-#[cfg(test)]
-mod fingerprint_tests {
-    use super::canonical_fingerprint_hash;
-    use serde_json::json;
-
-    #[test]
-    fn dfp039_cross_language_golden_vector() {
-        let mut signals = serde_json::Map::new();
-        signals.insert("cpu_model".into(), json!("x"));
-        signals.insert("hostname".into(), json!("h"));
-        signals.insert("platform_release".into(), json!("win32 10"));
-        assert_eq!(
-            canonical_fingerprint_hash("tauri-desktop", 1, &signals).unwrap(),
-            "d8c84ceade7eb700c75a2f606c5aa4ac8184ac57942dcb7792e48ca8da88d59f"
-        );
-    }
-}
-
-fn canonical_fingerprint_hash(
-    platform: &str,
-    version: u32,
-    signals: &serde_json::Map<String, serde_json::Value>,
-) -> Result<String, String> {
-    use sha2::{Digest, Sha256};
-    let mut keys: Vec<&String> = signals.keys().collect();
-    keys.sort();
-    let mut ordered = serde_json::Map::new();
-    for key in keys {
-        ordered.insert(key.clone(), signals[key].clone());
-    }
-    #[derive(Serialize)]
-    struct Envelope<'a> {
-        platform: &'a str,
-        version: u32,
-        signals: serde_json::Map<String, serde_json::Value>,
-    }
-    let payload = serde_json::to_string(&Envelope { platform, version, signals: ordered })
-        .map_err(|e| e.to_string())?;
-    Ok(Sha256::digest(payload.as_bytes())
-        .iter()
-        .map(|b| format!("{b:02x}"))
-        .collect())
-}
-
 /// Collect machine fingerprint for license binding.
-/// DFP-039: SHA-256 of the same versioned envelope as NodeFingerprintProvider
-/// (`platform` + `version` + sorted signal keys), not DefaultHasher.
+/// DFP-039 / P0-1: SHA-256 of the same versioned envelope as the Node
+/// `NodeFingerprintProvider` — implemented in exactly one place
+/// (`crate::fingerprint`) so the shell and the boot gate can never diverge.
 #[tauri::command]
 fn get_fingerprint() -> Result<FingerprintResult, String> {
-    use sha2::{Digest, Sha256};
-
-    const VERSION: u32 = 1;
-    let hostname = hostname::get()
+    let signals = motard_fabrics_erp::fingerprint::collect_signals();
+    let hostname = signals
+        .get("hostname")
+        .and_then(|v| v.as_str())
         .unwrap_or_default()
-        .to_string_lossy()
-        .into_owned();
-    let os_label = format!("{} {}", std::env::consts::OS, std::env::consts::ARCH);
+        .to_string();
+    let os = signals
+        .get("platform_release")
+        .and_then(|v| v.as_str())
+        .unwrap_or_default()
+        .to_string();
+    let hash = motard_fabrics_erp::fingerprint::desktop_fingerprint()?;
 
-    let mut signals = serde_json::Map::new();
-    signals.insert("hostname".into(), serde_json::Value::String(hostname.clone()));
-    signals.insert(
-        "platform_release".into(),
-        serde_json::Value::String(os_label.clone()),
-    );
-    if let Ok(mac) = get_primary_mac() {
-        if !mac.is_empty() {
-            signals.insert("primary_mac".into(), serde_json::Value::String(mac));
-        }
-    }
-    if let Ok(machine_id) = get_machine_id() {
-        if !machine_id.is_empty() {
-            signals.insert("machine_id".into(), serde_json::Value::String(machine_id));
-        }
-    }
-    if let Ok(cpu) = get_cpu_model() {
-        if !cpu.is_empty() {
-            signals.insert("cpu_model".into(), serde_json::Value::String(cpu));
-        }
-    }
-
-    let hash = canonical_fingerprint_hash("tauri-desktop", VERSION, &signals)?;
-
-    Ok(FingerprintResult {
-        hash,
-        hostname,
-        os: os_label,
-    })
+    Ok(FingerprintResult { hash, hostname, os })
 }
 
 // `license_key`/`fingerprint` arrive in the payload for wire compatibility with
@@ -462,109 +399,4 @@ fn set_hub_url(url: String) -> Result<String, String> {
 fn request_factory_reset() -> Result<(), String> {
     let root = motard_fabrics_erp::app_data_dir()?;
     motard_fabrics_erp::runtime::request_factory_reset(&root).map_err(|e| e.to_string())
-}
-
-fn get_primary_mac() -> Result<String, String> {
-    let output = if cfg!(target_os = "windows") {
-        no_window_command("getmac")
-            .args(["/fo", "csv", "/nh"])
-            .output()
-    } else {
-        Command::new("sh")
-            .args(["-c", "ip link show 2>/dev/null | grep -oP 'link/ether \\K[^ ]+' | head -1"])
-            .output()
-    };
-
-    match output {
-        Ok(o) if o.status.success() => {
-            let s = String::from_utf8_lossy(&o.stdout).trim().to_string();
-            // Windows getmac returns quoted CSV: "device","MAC"
-            let mac = if s.contains(',') {
-                s.split(',').nth(1).unwrap_or(&s).trim_matches('"').to_string()
-            } else {
-                s
-            };
-            if mac.is_empty() {
-                Err("no MAC found".into())
-            } else {
-                Ok(mac)
-            }
-        }
-        _ => Err("failed to get MAC".into()),
-    }
-}
-
-fn get_machine_id() -> Result<String, String> {
-    if cfg!(target_os = "linux") {
-        std::fs::read_to_string("/etc/machine-id")
-            .map(|s| s.trim().to_string())
-            .map_err(|_| "no machine-id".into())
-    } else if cfg!(target_os = "windows") {
-        let output = no_window_command("reg")
-            .args(["query", "HKLM\\SOFTWARE\\Microsoft\\Cryptography", "/v", "MachineGuid"])
-            .output();
-        match output {
-            Ok(o) if o.status.success() => {
-                let s = String::from_utf8_lossy(&o.stdout);
-                let id = s
-                    .lines()
-                    .find(|l| l.contains("MachineGuid"))
-                    .and_then(|l| l.split("REG_SZ").nth(1))
-                    .map(|s| s.trim().to_string())
-                    .unwrap_or_default();
-                Ok(id)
-            }
-            _ => Err("no MachineGuid".into()),
-        }
-    } else if cfg!(target_os = "macos") {
-        let output = Command::new("ioreg")
-            .args(["-rd1", "-c", "IOPlatformExpertDevice"])
-            .output();
-        match output {
-            Ok(o) if o.status.success() => {
-                let s = String::from_utf8_lossy(&o.stdout);
-                let id = s
-                    .lines()
-                    .find(|l| l.contains("IOPlatformUUID"))
-                    .and_then(|l| l.split('"').nth(3))
-                    .map(|s| s.to_string())
-                    .unwrap_or_default();
-                Ok(id)
-            }
-            _ => Err("no IOPlatformUUID".into()),
-        }
-    } else {
-        Err("unsupported platform".into())
-    }
-}
-
-fn get_cpu_model() -> Result<String, String> {
-    if cfg!(target_os = "windows") {
-        let output = no_window_command("wmic")
-            .args(["cpu", "get", "name", "/format:value"])
-            .output();
-        match output {
-            Ok(o) if o.status.success() => {
-                let s = String::from_utf8_lossy(&o.stdout);
-                let cpu = s
-                    .lines()
-                    .find(|l| l.starts_with("Name="))
-                    .map(|l| l.trim_start_matches("Name=").trim().to_string())
-                    .unwrap_or_default();
-                Ok(cpu)
-            }
-            _ => Err("no CPU info".into()),
-        }
-    } else {
-        let output = Command::new("sh")
-            .args(["-c", "lscpu 2>/dev/null | grep 'Model name' | cut -d: -f2"])
-            .output();
-        match output {
-            Ok(o) if o.status.success() => {
-                let s = String::from_utf8_lossy(&o.stdout).trim().to_string();
-                Ok(s)
-            }
-            _ => Err("no CPU info".into()),
-        }
-    }
 }

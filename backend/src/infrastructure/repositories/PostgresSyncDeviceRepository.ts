@@ -1,4 +1,4 @@
-import { and, desc, eq, sql } from "drizzle-orm";
+import { and, desc, eq, isNull, sql } from "drizzle-orm";
 import type { DB } from "../orm/drizzle.js";
 import { runWithTenantContext } from "../orm/tenant-context.js";
 import {
@@ -9,6 +9,7 @@ import {
   type SyncDeviceRow,
 } from "../../application/ports/ISyncDeviceRepository.js";
 import { syncDevices } from "../orm/schemas/sync-device.table.js";
+import { deviceRegistrations } from "../orm/schemas/device-registration.table.js";
 import { syncDeviceAuthorizedUsers } from "../orm/schemas/sync-device-authorized-user.table.js";
 import { users } from "../orm/schemas/user.table.js";
 import {
@@ -78,6 +79,20 @@ export class PostgresSyncDeviceRepository implements ISyncDeviceRepository {
   async registerOrTouch(input: IRegisterSyncDeviceInput): Promise<SyncDeviceRow> {
     return runWithTenantContext({ tenantId: input.tenantId }, async () => {
       const fingerprintVersion = input.deviceFingerprintVersion ?? 1;
+      // P1-13: resolve the canonical license registration by tenant +
+      // fingerprint. A sync-only legacy row is allowed to register once, but
+      // new rows are always linked when activation already exists.
+      const [registration] = await this.db
+        .select({ id: deviceRegistrations.id })
+        .from(deviceRegistrations)
+        .where(
+          and(
+            eq(deviceRegistrations.tenantId, input.tenantId),
+            eq(deviceRegistrations.deviceFingerprint, input.deviceFingerprint),
+            isNull(deviceRegistrations.revokedAt),
+          ),
+        )
+        .limit(1);
       const touch = {
         lastSeenByUserId: input.userId,
         deviceFingerprintVersion: fingerprintVersion,
@@ -133,12 +148,16 @@ export class PostgresSyncDeviceRepository implements ISyncDeviceRepository {
         if (existing.revokedAt) {
           throw new SyncDeviceRevokedError(existing.revokeReason);
         }
+        const touchWithRegistration = {
+          ...touch,
+          ...(registration ? { deviceRegistrationId: registration.id } : {}),
+        };
         if (await isLicenseFingerprintRevoked(this.db, input.tenantId, input.deviceFingerprint)) {
           throw new SyncDeviceRevokedError("license_revoked");
         }
         const [updated] = await this.db
           .update(syncDevices)
-          .set(touch)
+          .set(touchWithRegistration)
           .where(eq(syncDevices.id, existing.id))
           .returning();
         const authorizedUserIds = await this.bindUser(updated.id, input.tenantId, input.userId);
@@ -154,6 +173,7 @@ export class PostgresSyncDeviceRepository implements ISyncDeviceRepository {
         .values({
           ...(input.deviceId ? { id: input.deviceId } : {}),
           tenantId: input.tenantId,
+          ...(registration ? { deviceRegistrationId: registration.id } : {}),
           deviceFingerprint: input.deviceFingerprint,
           ...touch,
           authorizedUserIds: [],

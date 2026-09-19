@@ -200,24 +200,18 @@ describe("4B — sync device gate", () => {
     expect(out.next).toBe(true);
   });
 
-  it("treats excludeSyncDeviceId as the asserted device only for the pull policy", async () => {
-    const q = { excludeSyncDeviceId: DEVICE_1 };
+  it("never treats excludeSyncDeviceId as device authority", async () => {
     const withQuery = createSyncDeviceGate(fakeRepo(deviceRow()), {
       unknownDevice: "reject",
       unboundUser: "reject",
       assertFromQuery: true,
     });
-    const pullOut = await runGate(
+    const out = await runGate(
       withQuery,
-      makeReq({ ctx: { tenantId: TENANT, userId: USER_A }, query: q }),
+      makeReq({ ctx: { tenantId: TENANT, userId: USER_A }, query: { excludeSyncDeviceId: DEVICE_1 } }),
     );
-    expect(pullOut.next).toBe(true);
-
-    const otherOut = await runGate(
-      attributed(),
-      makeReq({ ctx: { tenantId: TENANT, userId: USER_B }, query: q }),
-    );
-    expect(otherOut.next, "a query id is not authority on non-pull routes").toBe(true);
+    expect(out.next, "query-only device assertions must be ignored").toBe(true);
+    expect((fakeRepo(deviceRow()).findById as unknown as { mock?: unknown }).mock).toBeUndefined();
   });
 
   it("lets an UNSIGNED device through the local orchestration trigger but still blocks revocation", async () => {

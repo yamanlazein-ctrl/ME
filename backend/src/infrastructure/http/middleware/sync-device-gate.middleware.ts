@@ -38,8 +38,8 @@ export type SyncDeviceGatePolicy = {
   /** "reject": only users bound to the device may assert it. */
   unboundUser: "reject" | "allow";
   /**
-   * Whether the `excludeSyncDeviceId` query parameter counts as the caller
-   * asserting its own device. Only the hub's pull endpoint uses it that way.
+   * Deprecated compatibility option. Query parameters are never trusted for
+   * device exclusion; authenticated tenantContext.syncDeviceId is required.
    */
   assertFromQuery?: boolean;
 };
@@ -62,10 +62,12 @@ export function createSyncDeviceGate(
     }
 
     const body = (req.body ?? {}) as Record<string, unknown>;
-    const asserted =
-      asUuid(body.syncDeviceId) ??
-      asUuid(ctx.syncDeviceId) ??
-      (policy.assertFromQuery ? asUuid(req.query.excludeSyncDeviceId) : null);
+    // Pull exclusion authority comes from the authenticated binding only.
+    // Other transport calls may assert their device in the body, but query
+    // parameters are never an authority source.
+    const asserted = policy.assertFromQuery
+      ? asUuid(ctx.syncDeviceId)
+      : asUuid(body.syncDeviceId) ?? asUuid(ctx.syncDeviceId);
 
     // No device asserted: unattributed local flow. Allowed by design — it
     // carries no device authority.

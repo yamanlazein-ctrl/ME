@@ -54,6 +54,13 @@ use crate::secret_store;
 const DB_NAME: &str = "erp";
 const DB_SUPERUSER: &str = "postgres";
 
+/// P2-5: present once the bundled cluster's superuser password has been set
+/// from the DPAPI store and pg_hba.conf flipped to scram-sha-256. Absent on a
+/// freshly copied template (which still trusts localhost) — the boot then
+/// performs the one-time password establishment described in
+/// `establish_scram_auth`, and never trusts again.
+const SCRAM_PW_SET_MARKER: &str = ".motard-scram-pw-set";
+
 // Port the bundled SSR frontend server (resources/ssr/serve.mjs) listens on.
 // MUST match `app.windows[].url` in tauri.conf.json.
 const SSR_PORT: u16 = 4173;
@@ -295,7 +302,7 @@ pub fn request_factory_reset(app_data_root: &Path) -> io::Result<()> {
 }
 
 // ── Step 1: ensure a usable PostgreSQL data directory ───────────────────────
-fn ensure_pgdata(cfg: &BootConfig) -> io::Result<PathBuf> {
+fn ensure_pgdata(cfg: &BootConfig, db_password: &str) -> io::Result<PathBuf> {
     let resources_root = &cfg.resources_root;
     let app_data_root = &cfg.app_data_root;
     let pgdata = app_data_root.join("pgdata");
@@ -358,23 +365,32 @@ fn ensure_pgdata(cfg: &BootConfig) -> io::Result<PathBuf> {
 
     // Fallback (never used in the final package, only for first-run safety):
     // initialize a fresh cluster and create the `erp` database.
+    // P2-5: scram-sha-256 from the very first initdb — the bundled cluster
+    // never trusts any connection, and the superuser password lives only in
+    // the DPAPI-encrypted secrets store (never in the installer payload).
     log("no pgdata-template — running initdb");
     let bindir = pg_bin(resources_root);
     let initdb = strip_verbatim_prefix(&bindir.join("initdb.exe"));
     let pgdata_str = pgdata.to_string_lossy().into_owned();
     fs::create_dir_all(&pgdata).ok();
+    let pwfile = pgdata.join(".initdb-pwfile");
+    fs::write(&pwfile, db_password)?;
+    let pwfile_str = pwfile.to_string_lossy().into_owned();
     let ok = HiddenCommand::new(&initdb)
         .args([
             "-D",
             &pgdata_str,
             "-U",
             DB_SUPERUSER,
-            "--auth=trust",
+            "--pwfile",
+            &pwfile_str,
+            "--auth=scram-sha-256",
             "-E",
             "UTF8",
         ])
         .spawn()?
         .wait_success()?;
+    let _ = fs::remove_file(&pwfile);
     if !ok {
         return Err(io::Error::new(
             io::ErrorKind::Other,
@@ -382,7 +398,59 @@ fn ensure_pgdata(cfg: &BootConfig) -> io::Result<PathBuf> {
         ));
     }
     stamp_fresh_cluster(app_data_root, &cfg.installation_id, pg_major, 0)?;
+    // initdb already wrote a scram-sha-256 pg_hba.conf and set the superuser
+    // password — record that so start_postgres skips the trust bootstrap.
+    fs::write(pgdata.join(SCRAM_PW_SET_MARKER), b"initdb-scram")?;
     Ok(pgdata)
+}
+
+/// P2-5: rewrite pg_hba.conf so every TCP connection requires scram-sha-256.
+///
+/// The bundled PostgreSQL binds to 127.0.0.1 only, but `trust` still let any
+/// local process (including unrelated software running on the customer's
+/// machine) connect as the superuser and read every tenant's rows. This
+/// converts active `host` lines whose auth method is not already
+/// `scram-sha-256`. `local` lines are left alone: unix sockets are disabled
+/// (`unix_socket_directories=`) on Windows, so they are unreachable.
+///
+/// Returns true when the file changed, so the caller can `pg_ctl reload`
+/// before relying on the new policy.
+fn harden_pg_hba(pgdata: &Path) -> io::Result<bool> {
+    let path = pgdata.join("pg_hba.conf");
+    if !path.exists() {
+        return Err(io::Error::new(
+            io::ErrorKind::NotFound,
+            format!("pg_hba.conf missing at {}", path.display()),
+        ));
+    }
+    let original = fs::read_to_string(&path)?;
+    let mut changed = false;
+    let mut out = String::with_capacity(original.len());
+    for line in original.lines() {
+        // Preserve comments and blank lines verbatim.
+        let trimmed = line.trim_start();
+        if trimmed.is_empty() || trimmed.starts_with('#') {
+            out.push_str(line);
+            out.push('\n');
+            continue;
+        }
+        let mut fields: Vec<&str> = line.split_whitespace().collect();
+        // Only TCP entries: local/replication socket lines are inert here.
+        let is_tcp = matches!(fields.first(), Some(&"host" | &"hostssl" | &"hostnossl"));
+        if is_tcp && fields.len() >= 4 {
+            let method = fields.last_mut().unwrap();
+            if *method != "scram-sha-256" {
+                *method = "scram-sha-256";
+                changed = true;
+            }
+        }
+        out.push_str(&fields.join(" "));
+        out.push('\n');
+    }
+    if changed {
+        fs::write(&path, out)?;
+    }
+    Ok(changed)
 }
 
 /// PostgreSQL requires these subdirectories to exist inside a data dir.
@@ -487,6 +555,7 @@ fn start_postgres(
     resources_root: &Path,
     pgdata: &Path,
     db_port: u16,
+    db_password: &str,
 ) -> io::Result<()> {
     let bindir = pg_bin(resources_root);
     let pg_ctl = strip_verbatim_prefix(&bindir.join("pg_ctl.exe"));
@@ -520,6 +589,18 @@ fn start_postgres(
         ));
     }
 
+    // P2-5: on the first launch of a copied template the cluster still trusts
+    // localhost. Set the superuser password from the DPAPI store NOW, over
+    // that trust connection, then flip pg_hba.conf to scram-sha-256 and reload
+    // it — after this the cluster never trusts a connection again.
+    if !pgdata.join(SCRAM_PW_SET_MARKER).exists() {
+        establish_scram_auth(resources_root, pgdata, db_port, db_password)?;
+    } else if harden_pg_hba(pgdata)? {
+        // A hand-edited or restored pg_hba.conf regressed to trust: re-harden.
+        reload_pg_hba(resources_root, pgdata)?;
+        log("pg_hba.conf re-hardened to scram-sha-256");
+    }
+
     // Ensure the target database exists (DFP-010). createdb is idempotent when
     // `erp` already exists (non-zero exit); we still VERIFY connectivity to
     // `erp` before returning — TCP readiness alone is not enough.
@@ -534,6 +615,7 @@ fn start_postgres(
             DB_SUPERUSER,
             DB_NAME,
         ])
+        .env("PGPASSWORD", db_password)
         .spawn()
         .and_then(|c| c.wait_success())
         .unwrap_or(false);
@@ -544,15 +626,127 @@ fn start_postgres(
             "createdb `{DB_NAME}` returned non-success (may already exist) — verifying"
         ));
     }
-    ensure_erp_database(resources_root, db_port)?;
+    ensure_erp_database(resources_root, db_port, db_password)?;
 
     wait_tcp("127.0.0.1", db_port, Duration::from_secs(60))?;
     log("postgres is accepting connections");
     Ok(())
 }
 
+/// P2-5 one-time bootstrap: set the superuser password, then retire `trust`.
+///
+/// The baked template is produced on the build machine, where its `postgres`
+/// role has no password and pg_hba.conf trusts localhost. Both are fixed here
+/// on the customer's first launch:
+///   1. pg_hba.conf is written in *bootstrap* form (localhost trust) — this is
+///      the ONLY moment trust is ever active on the installed cluster.
+///   2. `ALTER ROLE postgres PASSWORD` stores the DPAPI-generated secret.
+///   3. pg_hba.conf is flipped to scram-sha-256 and reloaded (pg_ctl reload
+///      signals the postmaster; it needs no database connection).
+///   4. The marker is written, so every later boot starts already hardened.
+fn establish_scram_auth(
+    resources_root: &Path,
+    pgdata: &Path,
+    db_port: u16,
+    db_password: &str,
+) -> io::Result<()> {
+    log("first launch: establishing scram-sha-256 auth for the bundled cluster");
+    write_bootstrap_pg_hba(pgdata)?;
+    reload_pg_hba(resources_root, pgdata)?;
+
+    let bindir = pg_bin(resources_root);
+    let psql = strip_verbatim_prefix(&bindir.join("psql.exe"));
+    let stmt = format!(
+        "ALTER ROLE {} PASSWORD '{}'",
+        DB_SUPERUSER,
+        db_password.replace('\'', "''")
+    );
+    let ok = HiddenCommand::new(&psql)
+        .args([
+            "-h",
+            "127.0.0.1",
+            "-p",
+            &db_port.to_string(),
+            "-U",
+            DB_SUPERUSER,
+            "-d",
+            "postgres",
+            "-v",
+            "ON_ERROR_STOP=1",
+            "-tAc",
+            &stmt,
+        ])
+        .spawn()?
+        .wait_success()?;
+    if !ok {
+        return Err(io::Error::new(
+            io::ErrorKind::Other,
+            "ALTER ROLE postgres PASSWORD failed — cannot retire trust auth",
+        ));
+    }
+
+    // Flip to the hardened policy and make postgres re-read it before we
+    // connect again — the createdb/psql probes below rely on the password.
+    harden_pg_hba(pgdata)?;
+    reload_pg_hba(resources_root, pgdata)?;
+    fs::write(pgdata.join(SCRAM_PW_SET_MARKER), b"scram-sha-256")?;
+    log("bundled cluster now requires scram-sha-256 (trust retired)");
+    Ok(())
+}
+
+/// Bootstrap pg_hba.conf: trust localhost for the single ALTER ROLE statement.
+/// Overwritten by `harden_pg_hba` within the same boot.
+fn write_bootstrap_pg_hba(pgdata: &Path) -> io::Result<()> {
+    let path = pgdata.join("pg_hba.conf");
+    let original = fs::read_to_string(&path)?;
+    let mut out = String::with_capacity(original.len() + 128);
+    out.push_str("# MOTARD BOOTSTRAP (P2-5) — temporary localhost trust for ALTER ROLE only.\n");
+    out.push_str("# Replaced by scram-sha-256 in the same boot; never persisted as final policy.\n");
+    for line in original.lines() {
+        let trimmed = line.trim_start();
+        if trimmed.is_empty() || trimmed.starts_with('#') {
+            out.push_str(line);
+            out.push('\n');
+            continue;
+        }
+        let mut fields: Vec<&str> = line.split_whitespace().collect();
+        let is_tcp = matches!(fields.first(), Some(&"host" | &"hostssl" | &"hostnossl"));
+        if is_tcp && fields.len() >= 4 {
+            *fields.last_mut().unwrap() = "trust";
+            out.push_str(&fields.join(" "));
+        } else {
+            out.push_str(line);
+        }
+        out.push('\n');
+    }
+    fs::write(path, out)
+}
+
+/// Ask the postmaster to re-read pg_hba.conf. `pg_ctl reload` signals the
+/// postmaster directly (no database connection, so no auth is involved).
+fn reload_pg_hba(resources_root: &Path, pgdata: &Path) -> io::Result<()> {
+    let bindir = pg_bin(resources_root);
+    let pg_ctl = strip_verbatim_prefix(&bindir.join("pg_ctl.exe"));
+    let pgdata_str = pgdata.to_string_lossy().into_owned();
+    let ok = HiddenCommand::new(&pg_ctl)
+        .args(["reload", "-D", &pgdata_str])
+        .spawn()?
+        .wait_success()?;
+    if !ok {
+        return Err(io::Error::new(
+            io::ErrorKind::Other,
+            "pg_ctl reload failed — pg_hba.conf not applied",
+        ));
+    }
+    Ok(())
+}
+
 /// DFP-010: prove the `erp` database exists and accepts a simple query.
-pub(crate) fn ensure_erp_database(resources_root: &Path, db_port: u16) -> io::Result<()> {
+pub(crate) fn ensure_erp_database(
+    resources_root: &Path,
+    db_port: u16,
+    db_password: &str,
+) -> io::Result<()> {
     let bindir = pg_bin(resources_root);
     let psql = strip_verbatim_prefix(&bindir.join("psql.exe"));
     if !psql.exists() {
@@ -576,6 +770,7 @@ pub(crate) fn ensure_erp_database(resources_root: &Path, db_port: u16) -> io::Re
             "-tAc",
             "SELECT 1",
         ])
+        .env("PGPASSWORD", db_password)
         .spawn()?
         .wait_success()?;
     if !ok {
@@ -592,9 +787,12 @@ pub(crate) fn ensure_erp_database(resources_root: &Path, db_port: u16) -> io::Re
 
 // ── Step 5: spawn the Node backend with injected secrets ────────────────────
 fn spawn_backend(cfg: &BootConfig, store: &secret_store::SecretStore) -> io::Result<HiddenChild> {
+    // P2-5: the password is URL-safe by construction (alphanumeric only) and
+    // is never persisted in the connection string — it is injected into the
+    // child's environment at spawn time only.
     let database_url = format!(
-        "postgresql://{}@127.0.0.1:{}/{}",
-        DB_SUPERUSER, cfg.db_port, DB_NAME
+        "postgresql://{}:{}@127.0.0.1:{}/{}",
+        DB_SUPERUSER, store.db_password, cfg.db_port, DB_NAME
     );
     log(&format!(
         "starting backend (node {}) on port {}",
@@ -786,8 +984,31 @@ pub fn boot_desktop_stack_with_progress(
             e.to_string(),
         ));
     }
+    // Load the DPAPI store before PostgreSQL starts. The bundled cluster now
+    // requires its generated role password, so secrets must exist before the
+    // ProvisionDatabase/StartDatabase stages (the progress enum keeps the
+    // historical LoadSecrets label for UI compatibility).
+    let store = match secret_store::load_or_generate() {
+        Ok(s) => s,
+        Err(e) => {
+            let msg = format!(
+                "تعذّر إنشاء أو تحميل ملف الأسرار المحلي (secrets.dat).\\n\\nالمسار: {}\\n\\nالخطأ: {}",
+                secret_store::secrets_path()
+                    .map(|p| p.display().to_string())
+                    .unwrap_or_else(|_| "<غير معروف>".to_string()),
+                e
+            );
+            show_fatal_dialog("خطأ في ملف الأسرار — Motard ERP", &msg);
+            return Err(BootFailure::new(
+                BootStage::LoadSecrets,
+                "load-secrets",
+                format!("secret_store: {}", e),
+            ));
+        }
+    };
+
     progress(BootStage::ProvisionDatabase.label());
-    let pgdata = match ensure_pgdata(&cfg) {        Ok(p) => p,
+    let pgdata = match ensure_pgdata(&cfg, &store.db_password) {        Ok(p) => p,
         Err(e) => {
             let msg = format!(
                 "تعذّر تجهيز مجلد قاعدة البيانات المحلية (pgdata).\n\n\
@@ -839,7 +1060,7 @@ pub fn boot_desktop_stack_with_progress(
         ));
     }
     progress(BootStage::StartDatabase.label());
-    if let Err(e) = start_postgres(&cfg.resources_root, &pgdata, cfg.db_port) {
+    if let Err(e) = start_postgres(&cfg.resources_root, &pgdata, cfg.db_port, &store.db_password) {
         let msg = format!(
             "تعذّر تشغيل قاعدة البيانات المحلية (PostgreSQL).\n\n\
              الخطأ: {}\n\n\
@@ -865,34 +1086,10 @@ pub fn boot_desktop_stack_with_progress(
     check_boot_deadline(boot_started)
         .map_err(|e| BootFailure::new(BootStage::StartDatabase, "boot-deadline", e.to_string()))?;
 
+    // The store was loaded before provisioning because PostgreSQL now needs
+    // its DPAPI-backed role password. Keep the explicit stage/progress event,
+    // but do not decrypt or regenerate the file a second time.
     progress(BootStage::LoadSecrets.label());
-    let store = match secret_store::load_or_generate() {
-        Ok(s) => s,
-        Err(e) => {
-            // Clean up postgres before showing the dialog so the user
-            // does not accumulate orphaned processes on every retry.
-            let _ = stop_postgres(&cfg.resources_root, &pgdata);
-            let msg = format!(
-                "تعذّر إنشاء أو تحميل ملف الأسرار المحلي (secrets.dat).\n\n\
-                 المسار: {}\n\n\
-                 الخطأ: {}\n\n\
-                 تأكد من:\n\
-                 1) صلاحيات الكتابة في مجلد AppData\\Local\\motard-erp\n\
-                 2) أن برنامج الحماية (Antivirus) لا يمنع التطبيق من كتابة الملفات\n\
-                 3) عدم وجود ملف تالف بنفس الاسم",
-                secret_store::secrets_path()
-                    .map(|p| p.display().to_string())
-                    .unwrap_or_else(|_| "<غير معروف>".to_string()),
-                e
-            );
-            show_fatal_dialog("خطأ في ملف الأسرار — Motard ERP", &msg);
-            return Err(BootFailure::new(
-                BootStage::LoadSecrets,
-                "load-secrets",
-                format!("secret_store: {}", e),
-            ));
-        }
-    };
     progress(BootStage::StartBackend.label());
     // DFP-009: refuse to spawn when the baked frontend port is occupied —
     // otherwise WaitBackend hangs 60s and leaves a confusing timeout.
@@ -1255,7 +1452,7 @@ mod boot_lifecycle_tests {
         if !psql.exists() {
             return; // resources not staged in this checkout
         }
-        let err = ensure_erp_database(&resources, 1).expect_err("port 1 must be unreachable");
+        let err = ensure_erp_database(&resources, 1, "test-password").expect_err("port 1 must be unreachable");
         let msg = err.to_string();
         assert!(
             msg.contains("erp") || msg.contains("missing") || msg.contains("connect"),

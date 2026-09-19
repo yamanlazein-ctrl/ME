@@ -336,6 +336,9 @@ mod tests {
         let pgdata = dir.join("pgdata");
         fs::create_dir_all(&pgdata).unwrap();
         fs::write(pgdata.join("PG_VERSION"), "16\n").unwrap();
+        // Ensure this test cannot observe a real operator's AppData secrets
+        // through a shared temp-path collision.
+        let _ = fs::remove_file(dir.join("secrets.dat"));
         let err = evaluate_existing_cluster(&dir, &pgdata, "id-a", 16, 63).unwrap_err();
         assert!(err.to_string().contains("db-meta.json"));
         let _ = fs::remove_dir_all(&dir);
