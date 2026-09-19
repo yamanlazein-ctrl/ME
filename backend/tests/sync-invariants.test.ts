@@ -954,8 +954,9 @@ describe("sync invariants — replay trust boundary (P6)", () => {
 
   it("pull exclusion prefers the authenticated device binding", () => {
     expect(
-      ROUTE.includes("ctx.syncDeviceId ?? excludeParam"),
-      "header binding (middleware-validated) must win over the query string",
+      ROUTE.includes("const exclude = ctx.syncDeviceId ?? null") &&
+        /query parameter[\s\S]+intentionally ignored/.test(ROUTE),
+      "the exclusion must come only from the middleware-validated device binding",
     ).toBe(true);
   });
 });
