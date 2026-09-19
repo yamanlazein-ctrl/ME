@@ -1,5 +1,4 @@
 export * from "./precision.js";
-export * from "./money.js";
 export * from "./fx.js";
 export * from "./settlementAllocation.js";
 export * from "./schemas/invoice.schema.js";

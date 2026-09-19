@@ -41,21 +41,28 @@ export function parseDeviceFingerprint(fingerprint: string): {
 
 /**
  * True when two fingerprints refer to the same install/device seat.
- * Accepts bare host hash, bare installation id suffix, or full composed form.
+ * Seat enforcement requires both host hash and installation id. Legacy matching
+ * is opt-in for migration-only callers.
  */
-export function fingerprintsMatch(a: string, b: string): boolean {
-  if (a === b) return true;
+export function fingerprintsMatch(
+  a: string,
+  b: string,
+  options: { allowLegacy?: boolean } = {},
+): boolean {
   const pa = parseDeviceFingerprint(a);
   const pb = parseDeviceFingerprint(b);
-  if (pa.hostHash && pa.hostHash === pb.hostHash) return true;
   if (
     pa.installationId &&
     pb.installationId &&
+    pa.hostHash === pb.hostHash &&
     pa.installationId === pb.installationId
-  ) {
+  ) return true;
+
+  if (!options.allowLegacy) return false;
+  if (a === b) return true;
+  if (pa.hostHash && pa.hostHash === pb.hostHash) return true;
+  if (pa.installationId && pb.installationId && pa.installationId === pb.installationId) {
     return true;
   }
-  // Legacy: one side bare hash, other composed.
-  if (pa.hostHash === b || pb.hostHash === a) return true;
-  return false;
+  return pa.hostHash === b || pb.hostHash === a;
 }

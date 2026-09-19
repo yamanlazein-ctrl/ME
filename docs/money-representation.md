@@ -20,24 +20,17 @@ precision and a trial balance never balances exactly.
 
 ## Decision
 
-Store every monetary amount as **integer minor units in `bigint`**
-(option (a) from the brief). SYP has no subunits in practice; the entire
-codebase already treats money as whole integer units (every test, entity and
-form uses whole numbers). `bigint` is exact over the full range of the system
-and — because drizzle maps `bigint` with `mode: 'number'` to a JS `number`
-on both read and write — it keeps every repository code path unchanged.
+Store monetary amounts as decimal values with at most two fractional digits.
+The canonical precision authority is `packages/shared/src/precision.ts`:
+validate at the boundary with `is2dp` and apply `round2dp` once at the
+calculation/display edge. Do not multiply values by 100 or reinterpret them as
+integer minor units.
 
-- **DB columns:** `bigint` — declared in the drizzle schemas and enforced by
-  migration `0026_monetary_amounts_to_bigint.sql`.
-- **Reads:** repository boundary yields JS `number` directly (drizzle
-  `bigint`/`mode: number`). Exact for magnitudes ≤ 2^53.
-- **Quantities / unit prices** (`quantity_kg`, `price_per_kg`) remain
-  `decimal` because they are fractional; the existing repositories already map
-  those decimal strings to `Number()`.
-- **Precision policy:** one shared constant governs validation and display (see
-  `packages/shared` in Phase 5.1); fractional money beyond 0 decimals is
-  rejected at validation for SYP, and USD/EUR may adopt a per-currency scale
-  later without a schema change (bigint minor units).
+- **DB columns:** `numeric(14,2)` for monetary values.
+- **Reads:** Drizzle maps monetary numerics to JavaScript numbers at the
+  repository boundary.
+- **Precision policy:** fractional values up to two decimal places are valid
+  for currencies such as USD and EUR; SYP whole-unit display remains unchanged.
 
 ## Update — 2026-08-23: decimal completion (QA decimal-fraction audit)
 

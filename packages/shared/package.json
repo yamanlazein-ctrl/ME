@@ -7,7 +7,6 @@
   "exports": {
     ".": "./src/index.ts",
     "./precision": "./src/precision.ts",
-    "./money": "./src/money.ts",
     "./invoice": "./src/entities/Invoice.ts"
   }
 }

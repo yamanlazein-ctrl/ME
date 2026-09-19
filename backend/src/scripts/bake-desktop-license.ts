@@ -7,14 +7,12 @@
  * (DESKTOP_DEPLOY) reads this via bootstrapDesktopLicenseUseCase and migrates
  * it into the encrypted `secrets` store — no private key is ever shipped.
  *
- * If LICENSE_SIGNING_KEY / LICENSE_SIGNING_PUBLIC_KEY are absent, an ephemeral
- * Ed25519 keypair is generated for the run (useful for local testing; the
- * public JWK is printed so the token can be verified). For production, set both
- * env vars to your real license-signing keypair PEMs.
+ * Release builds require LICENSE_SIGNING_KEY and LICENSE_SIGNING_PUBLIC_KEY.
+ * An ephemeral keypair is available only with the explicit --dev-ephemeral flag.
  *
  * Usage:
  *   DATABASE_URL=postgresql://postgres@localhost:5432/erp_bake \
- *   [LICENSE_SIGNING_KEY=... LICENSE_SIGNING_PUBLIC_KEY=...] \
+ *   LICENSE_SIGNING_KEY=... LICENSE_SIGNING_PUBLIC_KEY=... \
  *   npx tsx src/scripts/bake-desktop-license.ts
  */
 import { randomBytes } from "node:crypto";
@@ -30,6 +28,7 @@ if (!DEFAULT_TENANT) {
   throw new Error("SEED_TENANT_ID is required; refuse to bake a license for an implicit tenant");
 }
 const REQUIRED_TENANT_ID: string = DEFAULT_TENANT;
+const DEV_EPHEMERAL = process.argv.includes("--dev-ephemeral");
 const BAKED_KEY =
   process.env.BAKED_LICENSE_KEY ?? `LIC-DESKTOP-${randomBytes(8).toString("hex").toUpperCase()}`;
 // ~100 years. The runtime guard reads only the signature + this `exp`, never the
@@ -52,18 +51,22 @@ if (!Number.isInteger(BAKED_LICENSE_DEVICES) || BAKED_LICENSE_DEVICES < 1) {
 }
 
 async function main() {
-  // 1. Signer: real keypair from env, or ephemeral for testing.
+  // 1. Signer: real keypair, or an explicitly requested local-only keypair.
   let signer: LicenseTokenSigner;
   const priv = process.env.LICENSE_SIGNING_KEY?.trim();
   const pub = process.env.LICENSE_SIGNING_PUBLIC_KEY?.trim();
   if (priv && pub) {
     signer = LicenseTokenSigner.fromPems(priv, pub);
     console.log("[bake] using provided LICENSE_SIGNING_KEY (production mode)");
-  } else {
+  } else if (DEV_EPHEMERAL) {
     const kp = await LicenseTokenSigner.generateKeyPair();
     signer = await LicenseTokenSigner.fromJwk(kp.publicJwk, kp.privateJwk);
     console.log("[bake] no LICENSE_SIGNING_KEY set — generated EPHEMERAL keypair for this run");
     console.log("[bake] ephemeral PUBLIC JWK (verify with this):\n" + JSON.stringify(kp.publicJwk));
+  } else {
+    throw new Error(
+      "LICENSE_SIGNING_KEY and LICENSE_SIGNING_PUBLIC_KEY are required; use --dev-ephemeral only for local development",
+    );
   }
 
   // 2. Insert (or reuse) the license row under platform RLS context.

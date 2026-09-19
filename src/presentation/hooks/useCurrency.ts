@@ -24,7 +24,7 @@ export const CURRENCIES: { code: Currency; label: string; symbol: string }[] = [
 /** Default currency used throughout the app as the primary display currency. */
 export const DEFAULT_CURRENCY: Currency = "USD";
 
-/** Default exchange rates relative to SYP (1 SYP = rate) — fallback until the user sets real rates in Settings. */
+/** Fallback exchange rates relative to SYP until a live/settings rate is loaded. */
 export const EXCHANGE_RATES: Record<Currency, number> = {
   SYP: 1,
   USD: 13500,
@@ -40,7 +40,7 @@ export const currencyState: {
 } = {
   defaultCurrency: DEFAULT_CURRENCY,
   rates: { ...EXCHANGE_RATES },
-  lastUpdated: "2026-07-01",
+  lastUpdated: new Date().toISOString().slice(0, 10),
 };
 
 /**

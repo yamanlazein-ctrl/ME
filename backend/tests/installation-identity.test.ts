@@ -25,9 +25,11 @@ describe("installationIdentity", () => {
     expect(parseDeviceFingerprint("bare")).toEqual({ hostHash: "bare", installationId: null });
   });
 
-  it("matches bare hash to composed fingerprint", () => {
-    expect(fingerprintsMatch("host", "host::inst")).toBe(true);
+  it("requires both host hash and installation id for seat matching", () => {
+    expect(fingerprintsMatch("host", "host::inst")).toBe(false);
     expect(fingerprintsMatch("host::inst", "host::inst")).toBe(true);
+    expect(fingerprintsMatch("host::other", "host::inst")).toBe(false);
+    expect(fingerprintsMatch("host", "host::inst", { allowLegacy: true })).toBe(true);
     expect(fingerprintsMatch("a::x", "b::y")).toBe(false);
   });
 });

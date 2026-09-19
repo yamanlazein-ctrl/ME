@@ -1,4 +1,5 @@
-import { pgTable, uuid, varchar, timestamp, integer, text, index, foreignKey } from "drizzle-orm/pg-core";
+import { pgTable, uuid, varchar, timestamp, integer, text, index, uniqueIndex, foreignKey } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 import { tenants } from "./tenant.table.js";
 import { licenses } from "./license.table.js";
 
@@ -40,6 +41,9 @@ export const deviceRegistrations = pgTable(
   },
   (table) => ({
     licenseIdx: index("idx_device_registrations_license").on(table.licenseId),
+    liveFingerprintUidx: uniqueIndex("device_registrations_live_license_fingerprint_uidx")
+      .on(table.licenseId, table.deviceFingerprint)
+      .where(sql`revoked_at IS NULL`),
     tenantIdx: index("idx_device_registrations_tenant").on(table.tenantId),
     // Fast lookup when a client hits /v1/activations/:id/devices.
     deviceIdIdx: index("idx_device_registrations_device_id").on(table.deviceId),

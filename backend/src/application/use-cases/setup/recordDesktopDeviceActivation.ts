@@ -6,6 +6,7 @@ import { licenseActivations } from "../../../infrastructure/orm/schemas/license-
 import { deviceRegistrations } from "../../../infrastructure/orm/schemas/device-registration.table.js";
 import { tenants } from "../../../infrastructure/orm/schemas/tenant.table.js";
 import { licenseAuditEvents } from "../../../infrastructure/orm/schemas/license-audit-event.table.js";
+import { licenses } from "../../../infrastructure/orm/schemas/license.table.js";
 import { fingerprintsMatch } from "../../../domain/licensing/installationIdentity.js";
 
 /**
@@ -32,6 +33,14 @@ export async function recordDesktopDeviceActivation(
 ): Promise<{ activationId: string }> {
   return runWithPlatformContext(() =>
     database.transaction(async (tx) => {
+      // Serialize the count-then-insert against every activation for this license.
+      const [license] = await tx
+        .select({ id: licenses.id })
+        .from(licenses)
+        .where(eq(licenses.id, input.licenseId))
+        .for("update");
+      if (!license) throw new Error("LICENSE_NOT_FOUND");
+
       const [existingActive] = await tx
         .select()
         .from(licenseActivations)
