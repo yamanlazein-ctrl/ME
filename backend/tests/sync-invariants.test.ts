@@ -161,8 +161,11 @@ describe("sync invariants — monotonic cursors, not timestamps", () => {
    * a strict `>`. `received_at` is transaction-start time, so rows sharing a
    * timestamp were skipped forever and units received before the cursor but
    * applied after it were unreachable.
+   *
+   * Behavioral proof (out-of-order apply still surfaces by received_seq):
+   * tests/sync-behavioral-pull-cursor.test.ts
    */
-  it("the pull cursor is a bigint sequence", () => {
+  it("the pull cursor schema is a bigint sequence (not a timestamp watermark)", () => {
     const stateSchema = read("src", "infrastructure", "orm", "schemas", "sync-state.table.ts");
     expect(stateSchema.includes("lastPullSeq")).toBe(true);
     expect(stateSchema.includes("bigint")).toBe(true);
@@ -1267,12 +1270,11 @@ describe("sync invariants — conflict tracking (plan §4/§11)", () => {
     expect(allMigrationsSql()).toMatch(/UNIQUE\s*\(tenant_id,\s*op_id\)/i);
   });
 
-  it("recording is idempotent per (tenant, op_id) — one conflict row per loser op", () => {
-    expect(
-      CONFLICTS.includes("ON CONFLICT (tenant_id, op_id) DO NOTHING"),
-      "first sighting of an op wins; retries are no-ops",
-    ).toBe(true);
+  it("conflict recording is wired (behavioral idempotency lives in sync-behavioral-idempotency)", () => {
+    // SQL snippet presence is not a gate — live Postgres proves (tenant_id, op_id)
+    // idempotency in tests/sync-behavioral-idempotency.test.ts.
     expect(CONFLICTS.includes("recordSyncConflict")).toBe(true);
+    expect(CONFLICTS.includes("assertSyncConflictTenantContext")).toBe(true);
   });
 
   it("records who lost, on which document, with base and server versions", () => {

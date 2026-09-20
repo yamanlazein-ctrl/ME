@@ -9,7 +9,8 @@ import { db } from "@/infrastructure/orm/drizzle.js";
  * Policy:
  *   - CI / any environment that declares DATABASE_URL: an unreachable database
  *     is a HARD FAILURE. A gate that cannot run is not a gate that passed.
- *   - Local machine with no DATABASE_URL: the suite may skip, but visibly.
+ *   - Local machine with no DATABASE_URL: the suite may skip, but visibly
+ *     (use `skipUnlessDatabase` / vitest `ctx.skip()`, never a silent return).
  */
 export async function databaseReachable(): Promise<boolean> {
   try {
@@ -23,5 +24,15 @@ export async function databaseReachable(): Promise<boolean> {
       );
     }
     return false;
+  }
+}
+
+/** Visible skip when DATABASE_URL is unset (databaseReachable returned false). */
+export function skipUnlessDatabase(
+  reachable: boolean,
+  skip: (reason?: string) => void,
+): asserts reachable is true {
+  if (!reachable) {
+    skip("DATABASE_URL unset — live Postgres suite skipped");
   }
 }

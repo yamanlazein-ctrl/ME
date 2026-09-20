@@ -47,6 +47,19 @@ See `docs/REMEDIATION-FULL-CLEANUP-BASELINE.md`. Gates after Phase 1:
 - Opening-balance edits shift all daily closings via `cashbox_daily_shift_all`.
 - Tests: migration contract + live fast-path==recompute after 3200 movements (when DB reachable).
 
+## Phase 6 — DONE
+
+- Behavioral sync suites: `sync-behavioral-idempotency`, `sync-behavioral-pull-cursor`, `sync-behavioral-claims-fww` (Postgres when reachable).
+- Hermetic self-seed/cleanup for session-cutoff, device-identity-link, sync-conflicts-resolve, sync-identity-claims.
+- `audit-findings.test.ts` excluded from unit vitest unless `API_BASE` set; run via `test:integration` / `test:integration:audit`.
+- `skipUnlessDatabase` for visible skips; `fileParallelism: false` for fixture isolation.
+
+## Phase 7 — DONE
+
+- `resource-manifest.json` v2 with sha256 for sealed SSR launcher files.
+- `validate-resource-manifest.mjs` verifies digests; corruption test fails on flipped byte.
+- Rust `preflight_check` verifies sha256 entries from staged `resources/resource-manifest.json`.
+
 ## Next
 
-Phases 6–8 per user brief.
+Phase 8 — knip / ts-prune / script+docs cleanup.

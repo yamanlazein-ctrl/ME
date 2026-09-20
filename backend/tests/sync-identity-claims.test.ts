@@ -8,18 +8,14 @@ import { sql } from "drizzle-orm";
 import { db } from "@/infrastructure/orm/drizzle.js";
 import { runWithTenantContext, runWithPlatformContext } from "@/infrastructure/orm/tenant-context.js";
 import { PostgresSyncResourceClaimRepository } from "@/infrastructure/repositories/PostgresSyncResourceClaimRepository.js";
-import { databaseReachable } from "./_helpers/requireDatabase.js";
+import { databaseReachable, skipUnlessDatabase } from "./_helpers/requireDatabase.js";
 
 let reachable = false;
 let tenantId = "";
 
-// FIN-09: an unreachable database is a hard failure when DATABASE_URL is set,
-// so this suite can no longer pass without exercising its assertions.
-const canConnect = databaseReachable;
-
 describe("identity claims — applied holders do not lock forever", () => {
   beforeAll(async () => {
-    reachable = await canConnect();
+    reachable = await databaseReachable();
     if (!reachable) return;
     tenantId = randomUUID();
     await runWithPlatformContext(async () => {
@@ -33,7 +29,7 @@ describe("identity claims — applied holders do not lock forever", () => {
   });
 
   afterAll(async () => {
-    if (!reachable) return;
+    if (!reachable || !tenantId) return;
     await runWithPlatformContext(async () => {
       await db.execute(sql`delete from sync_resource_claims where tenant_id = ${tenantId}`);
       await db.execute(sql`delete from sync_inbox where tenant_id = ${tenantId}`);
@@ -41,8 +37,8 @@ describe("identity claims — applied holders do not lock forever", () => {
     });
   });
 
-  it("second identity claim succeeds after the first holder is applied", async () => {
-    if (!reachable) return;
+  it("second identity claim succeeds after the first holder is applied", async (ctx) => {
+    skipUnlessDatabase(reachable, ctx.skip);
     const partyId = randomUUID();
     const op1 = randomUUID();
     const op2 = randomUUID();
@@ -70,8 +66,8 @@ describe("identity claims — applied holders do not lock forever", () => {
     });
   });
 
-  it("two received holders on the same identity still 409", async () => {
-    if (!reachable) return;
+  it("two received holders on the same identity still 409", async (ctx) => {
+    skipUnlessDatabase(reachable, ctx.skip);
     const partyId = randomUUID();
     const op1 = randomUUID();
     const op2 = randomUUID();

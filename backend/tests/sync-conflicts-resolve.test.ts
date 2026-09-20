@@ -2,40 +2,51 @@
  * Conflict ledger: list returns local intent; resolve closes the row and
  * never mutates the underlying invoice (rebase is a NEW edit via the
  * normal update path, not an overwrite here).
+ *
+ * Hermetic: seeds its own tenant, runs under runWithTenantContext so
+ * TenantScopedPool stamps app.current_tenant_id on every pool.query
+ * checkout used by record/list/resolve (never a one-shot pool SET).
  */
-import { describe, expect, it, beforeAll } from "vitest";
+import { describe, expect, it, beforeAll, afterAll } from "vitest";
 import { randomUUID } from "node:crypto";
-import { pool } from "../src/infrastructure/orm/drizzle.js";
-import { runWithTenantContext } from "../src/infrastructure/orm/tenant-context.js";
+import { sql } from "drizzle-orm";
+import { db, pool } from "@/infrastructure/orm/drizzle.js";
+import { runWithTenantContext, runWithPlatformContext } from "@/infrastructure/orm/tenant-context.js";
 import {
   listSyncConflicts,
   recordSyncConflict,
   resolveSyncConflict,
-} from "../src/application/use-cases/sync/syncConflicts.js";
-import { databaseReachable } from "./_helpers/requireDatabase.js";
+} from "@/application/use-cases/sync/syncConflicts.js";
+import { databaseReachable, skipUnlessDatabase } from "./_helpers/requireDatabase.js";
 
 let reachable = false;
 let tenantId = "";
 
 describe("sync conflict resolution (no silent overwrite)", () => {
   beforeAll(async () => {
-    // FIN-09: an unreachable database is a hard failure when DATABASE_URL is
-    // set, and the suite seeds its OWN tenant instead of depending on whatever
-    // happens to already exist (an empty DB used to pass vacuously).
     reachable = await databaseReachable();
     if (!reachable) return;
     tenantId = randomUUID();
-    await pool.query(
-      `INSERT INTO tenants (id, name, slug, status, license_status, license_type)
-       VALUES ($1, 'Conflict Resolve Tenant', $2, 'active', 'no_license', 'trial')
-       ON CONFLICT (id) DO NOTHING`,
-      [tenantId, `cfr-${tenantId.slice(0, 8)}`],
-    );
-    await pool.query(`SELECT set_config('app.current_tenant_id', $1, false)`, [tenantId]);
+    await runWithPlatformContext(async () => {
+      await db.execute(sql`
+        insert into tenants (id, name, slug, status, license_status, license_type)
+        values (${tenantId}, 'Conflict Resolve Tenant', ${`cfr-${tenantId.slice(0, 8)}`},
+                'active', 'no_license', 'trial')
+        on conflict (id) do nothing
+      `);
+    });
   });
 
-  it("keep-server and withdraw close the conflict; rebase returns serverVersion without applying intent", async () => {
-    if (!reachable) return;
+  afterAll(async () => {
+    if (!reachable || !tenantId) return;
+    await runWithPlatformContext(async () => {
+      await db.execute(sql`delete from sync_conflicts where tenant_id = ${tenantId}`);
+      await db.execute(sql`delete from tenants where id = ${tenantId}`);
+    });
+  });
+
+  it("keep-server and withdraw close the conflict; rebase returns serverVersion without applying intent", async (ctx) => {
+    skipUnlessDatabase(reachable, ctx.skip);
 
     await runWithTenantContext({ tenantId }, async () => {
       const invoiceId = randomUUID();

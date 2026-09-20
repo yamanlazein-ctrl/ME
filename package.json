@@ -18,6 +18,8 @@
     "typecheck": "tsc --noEmit",
     "typecheck:backend": "cd backend && npm run typecheck",
     "test": "vitest run",
+    "test:backend": "npm run test --prefix backend",
+    "test:integration": "npm run test:integration --prefix backend",
     "test:api": "node tests/e2e/comprehensive-api.mjs",
     "test:full": "node tests/e2e/full-project-e2e.mjs",
     "test:financial": "node tests/e2e/financial-lock-in.mjs",

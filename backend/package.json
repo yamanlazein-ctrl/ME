@@ -18,6 +18,7 @@
     "typecheck": "tsc --noEmit",
     "test:lock": "node tests/lock-in.test.mjs",
     "test:integration": "node scripts/run-integration.mjs",
+    "test:integration:audit": "node scripts/run-integration.mjs run tests/audit-findings.test.ts",
     "license-server": "node scripts/run-license-server.mjs",
     "license:genkey": "node scripts/generate-license-signing-key.mjs",
     "test:sync-multidevice": "node scripts/verify-sync-multidevice.mjs --refresh-template",

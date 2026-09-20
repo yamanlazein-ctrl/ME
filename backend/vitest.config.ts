@@ -18,11 +18,15 @@ export default defineConfig({
     globals: true,
     environment: "node",
     include: ["tests/**/*.test.ts", "src/**/*.test.ts"],
-    exclude: ["node_modules", "dist"],
+    exclude: [
+      "node_modules",
+      "dist",
+      // Live-API E2E (needs server on API_BASE). Run via `npm run test:integration`.
+      ...(process.env.API_BASE ? [] : ["tests/audit-findings.test.ts"]),
+    ],
     setupFiles: ["tests/setup.ts"],
-    // Integration suites share one test database (erp_test) and audit-findings
-    // is a live-API E2E — parallel workers race on tenant rows and crash under
-    // load. Sequential files keep runs deterministic.
+    // Integration suites share one test database (erp_test). Sequential files
+    // keep hermetic tenant fixtures deterministic across workers.
     fileParallelism: false,
     coverage: {
       provider: "v8",
