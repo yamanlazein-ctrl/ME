@@ -40,6 +40,13 @@ See `docs/REMEDIATION-FULL-CLEANUP-BASELINE.md`. Gates after Phase 1:
 - Desktop frontend uses same-origin (empty API base) so CSP/`connect-src` stay on SSR; no baked `127.0.0.1:8080`.
 - Tests: Rust `backend_port` filter (occupy preferred → alternate); Node `resolve-api-proxy.test.mjs`.
 
+## Phase 5 — DONE
+
+- New `cashbox_daily_balances` table + `cashbox_daily_apply_delta` / triggers on `ledger_entries` and `manual_movements`.
+- `getCashboxBalanceAsOf` is O(1) from daily rows; `recomputeCashboxBalanceAsOf` kept for parity/fallback.
+- Opening-balance edits shift all daily closings via `cashbox_daily_shift_all`.
+- Tests: migration contract + live fast-path==recompute after 3200 movements (when DB reachable).
+
 ## Next
 
-Phases 5–8 per user brief.
+Phases 6–8 per user brief.

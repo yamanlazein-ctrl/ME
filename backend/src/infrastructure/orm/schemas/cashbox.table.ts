@@ -3,11 +3,11 @@ import {
   uuid,
   varchar,
   timestamp,
-  integer,
   numeric,
   date,
   text,
   uniqueIndex,
+  primaryKey,
 } from "drizzle-orm/pg-core";
 import { tenants } from "./tenant.table.js";
 
@@ -76,5 +76,27 @@ export const dayCloses = pgTable(
   },
   (table) => ({
     tenantDateIdx: uniqueIndex("idx_day_closes_tenant_date").on(table.tenantId, table.date),
+  }),
+).enableRLS();
+
+/** Rolling end-of-day cashbox balance — maintained by DB triggers (Phase 5). */
+export const cashboxDailyBalances = pgTable(
+  "cashbox_daily_balances",
+  {
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id),
+    currency: varchar("currency", { length: 3 }).notNull(),
+    balanceDate: date("balance_date").notNull(),
+    closingBalance: numeric("closing_balance", { precision: 14, scale: 2, mode: "number" })
+      .notNull()
+      .default(0),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({
+    pk: primaryKey({
+      name: "cashbox_daily_balances_pkey",
+      columns: [table.tenantId, table.currency, table.balanceDate],
+    }),
   }),
 ).enableRLS();

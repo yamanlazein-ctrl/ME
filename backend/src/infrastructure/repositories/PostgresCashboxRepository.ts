@@ -71,21 +71,29 @@ export class PostgresCashboxRepository implements ICashboxRepository {
     // Scoped by (tenantId, currency) — matches idx_cashbox_sessions_tenant_currency.
     // Setting the USD opening balance must only touch the USD row; it must
     // never find/overwrite the SYP row (or vice versa).
-    const [existing] = await this.db
-      .select()
-      .from(cashboxSessions)
-      .where(and(eq(cashboxSessions.tenantId, ctx.tenantId), eq(cashboxSessions.currency, currency)))
-      .limit(1);
-    if (existing) {
-      await this.db
-        .update(cashboxSessions)
-        .set({ openingBalance: amount, openingDate: date, updatedAt: new Date() })
-        .where(eq(cashboxSessions.id, existing.id));
-    } else {
-      await this.db
-        .insert(cashboxSessions)
-        .values({ tenantId: ctx.tenantId, openingBalance: amount, openingDate: date, currency });
-    }
+    await this.db.transaction(async (tx) => {
+      const [existing] = await tx
+        .select()
+        .from(cashboxSessions)
+        .where(and(eq(cashboxSessions.tenantId, ctx.tenantId), eq(cashboxSessions.currency, currency)))
+        .limit(1);
+      if (existing) {
+        const delta = amount - Number(existing.openingBalance);
+        await tx
+          .update(cashboxSessions)
+          .set({ openingBalance: amount, openingDate: date, updatedAt: new Date() })
+          .where(eq(cashboxSessions.id, existing.id));
+        if (delta !== 0) {
+          await tx.execute(
+            sql`SELECT cashbox_daily_shift_all(${ctx.tenantId}::uuid, ${currency}, ${delta}::numeric)`,
+          );
+        }
+      } else {
+        await tx
+          .insert(cashboxSessions)
+          .values({ tenantId: ctx.tenantId, openingBalance: amount, openingDate: date, currency });
+      }
+    });
   }
 
   async addManualMovement(

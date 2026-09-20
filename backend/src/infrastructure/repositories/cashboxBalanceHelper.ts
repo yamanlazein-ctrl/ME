@@ -1,18 +1,20 @@
-import { and, eq, inArray, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, lte, sql } from "drizzle-orm";
 import type { Tx } from "../orm/drizzle.js";
-import { cashboxSessions, manualMovements } from "../orm/schemas/cashbox.table.js";
+import {
+  cashboxDailyBalances,
+  cashboxSessions,
+  manualMovements,
+} from "../orm/schemas/cashbox.table.js";
 import { ledgerEntries } from "../orm/schemas/ledger-entry.table.js";
 import type { TenantContext } from "../../domain/types/index.js";
 import { InsufficientCashboxBalanceError } from "../../domain/errors/index.js";
 
 /**
- * Current cashbox balance for `currency` as of `asOfDate`, computed the same
- * way GET /cashbox/balance/:date and closeDay() do (opening balance + ledger
- * cash movements + manual movements, date-bounded to the session's own
- * opening date for its own currency). Must run inside the caller's
- * transaction (`tx`) so the read is consistent with the write it is guarding.
+ * Full recompute of cashbox balance for `currency` as of `asOfDate`
+ * (opening + ledger cash legs + manual movements). Used as the source of
+ * truth for parity tests and as a fallback when no daily row exists yet.
  */
-export async function getCashboxBalanceAsOf(
+export async function recomputeCashboxBalanceAsOf(
   tx: Tx,
   ctx: TenantContext,
   currency: string,
@@ -21,11 +23,12 @@ export async function getCashboxBalanceAsOf(
   const [session] = await tx
     .select()
     .from(cashboxSessions)
-    .where(eq(cashboxSessions.tenantId, ctx.tenantId))
+    .where(
+      and(eq(cashboxSessions.tenantId, ctx.tenantId), eq(cashboxSessions.currency, currency)),
+    )
     .limit(1);
-  const sessionCurrency = session?.currency;
-  const opening = currency === sessionCurrency ? (session?.openingBalance ?? 0) : 0;
-  const from = currency === sessionCurrency ? (session?.openingDate ?? "0001-01-01") : "0001-01-01";
+  const opening = session?.openingBalance ?? 0;
+  const from = session?.openingDate ?? "0001-01-01";
 
   const [ledger] = await tx
     .select({
@@ -57,6 +60,53 @@ export async function getCashboxBalanceAsOf(
   }
 
   return opening + Number(ledger?.amountIn ?? 0) + mIn - Number(ledger?.amountOut ?? 0) - mOut;
+}
+
+/**
+ * Apply a signed cash delta (+in / -out) to the rolling daily table.
+ * Prefer DB triggers for normal writes; call this for opening-balance shifts
+ * and tests that seed without going through ledger/manual tables.
+ */
+export async function applyCashboxDailyDelta(
+  tx: Tx,
+  ctx: TenantContext,
+  currency: string,
+  date: string,
+  signedDelta: number,
+): Promise<void> {
+  if (!signedDelta) return;
+  await tx.execute(
+    sql`SELECT cashbox_daily_apply_delta(${ctx.tenantId}::uuid, ${currency}, ${date}::date, ${signedDelta}::numeric)`,
+  );
+}
+
+/**
+ * O(1) balance read from `cashbox_daily_balances` (latest row ≤ asOfDate).
+ * Falls back to full recompute when no daily row has been written yet.
+ */
+export async function getCashboxBalanceAsOf(
+  tx: Tx,
+  ctx: TenantContext,
+  currency: string,
+  asOfDate: string,
+): Promise<number> {
+  const [row] = await tx
+    .select({ closing: cashboxDailyBalances.closingBalance })
+    .from(cashboxDailyBalances)
+    .where(
+      and(
+        eq(cashboxDailyBalances.tenantId, ctx.tenantId),
+        eq(cashboxDailyBalances.currency, currency),
+        lte(cashboxDailyBalances.balanceDate, asOfDate),
+      ),
+    )
+    .orderBy(desc(cashboxDailyBalances.balanceDate))
+    .limit(1);
+
+  if (row) return Number(row.closing);
+
+  // No daily row yet (fresh tenant, or migration just applied without backfill).
+  return recomputeCashboxBalanceAsOf(tx, ctx, currency, asOfDate);
 }
 
 /**

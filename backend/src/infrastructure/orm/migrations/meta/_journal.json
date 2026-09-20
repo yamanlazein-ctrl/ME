@@ -526,6 +526,13 @@
       "when": 1789107000000,
       "tag": "20260927_revoked_tokens_no_rls",
       "breakpoints": true
+    },
+    {
+      "idx": 75,
+      "version": 7,
+      "when": 1789109000000,
+      "tag": "20260928_cashbox_daily_balances",
+      "breakpoints": true
     }
   ]
 }
