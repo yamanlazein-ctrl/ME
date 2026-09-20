@@ -4,6 +4,7 @@ import type { PostgresLicenseRepository } from "../infrastructure/repositories/P
 import type { PostgresAuditRepository } from "../infrastructure/repositories/PostgresAuditRepository.js";
 import type { SelfHostedLicenseProvider } from "../infrastructure/license/SelfHostedLicenseProvider.js";
 import type { LicenseTokenSigner } from "../infrastructure/auth/LicenseTokenSigner.js";
+import { mapActivationError } from "../domain/licensing/activationHttpStatus.js";
 
 /**
  * Phase 0 sub-batch 0J — public License Server v1 endpoints.
@@ -62,9 +63,10 @@ export function registerLicenseV1Routes(
         });
         res.json(result);
       } catch (e) {
-        const msg = e instanceof Error ? e.message : "فشل التفعيل";
-        const status = msg === "INVALID_LICENSE" ? 400 : msg === "ALREADY_ACTIVE" ? 409 : 500;
-        res.status(status).json({ code: msg, message: msg, statusCode: status });
+        const mapped = mapActivationError(e);
+        res
+          .status(mapped.status)
+          .json({ code: mapped.code, message: mapped.message, statusCode: mapped.status });
       }
     } catch (err) {
       next(err);

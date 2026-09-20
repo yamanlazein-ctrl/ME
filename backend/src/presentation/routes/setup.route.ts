@@ -12,6 +12,7 @@ import {
   saveReviewStepUseCase,
   completeWizardUseCase,
 } from "../../application/use-cases/setup/setupUseCases.js";
+import { mapActivationFailure } from "../../domain/licensing/activationHttpStatus.js";
 
 /**
  * Phase 0 sub-batch 0F — setup routes.
@@ -223,7 +224,13 @@ export function registerSetupRoutes(router: Router, container: Container): void 
         },
       );
       if (!r.ok) {
-        res.status(400).json({ code: "ACTIVATION_FAILED", message: r.error, statusCode: 400 });
+        // Prefer machine `code` for status (Arabic `error` alone never matches).
+        const mapped = mapActivationFailure({ code: r.code, error: r.error });
+        res.status(mapped.status).json({
+          code: mapped.code,
+          message: mapped.message,
+          statusCode: mapped.status,
+        });
         return;
       }
       res.json(r.data);

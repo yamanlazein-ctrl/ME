@@ -10,9 +10,9 @@
  * The materializers take repositories through `SyncMaterializeRepos`, so the
  * test injects in-memory fakes: no database is required, and the assertions
  * are about the DECISION (refuse vs apply) plus the version actually handed to
- * the domain use-case. The conflict row write (`recordSyncConflict`) is
- * best-effort by design (it swallows storage errors) and is asserted
- * structurally in tests/sync-invariants.test.ts.
+ * the domain use-case. The conflict row write (`recordSyncConflict`)
+ * fails closed (throws on insert errors; see sync-conflict-record-fail-closed)
+ * and is also asserted structurally in tests/sync-invariants.test.ts.
  */
 import { describe, expect, it, vi } from "vitest";
 import { materializeSyncUnit } from "../src/application/use-cases/sync/syncMaterialize.js";

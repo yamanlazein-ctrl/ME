@@ -104,32 +104,27 @@ function mapConflict(r: Record<string, unknown>): SyncConflictRow {
  */
 export async function recordSyncConflict(input: RecordSyncConflictInput): Promise<boolean> {
   assertSyncConflictTenantContext(input.tenantId);
-  try {
-    const r = await pool.query(
-      `INSERT INTO sync_conflicts
-         (id, tenant_id, op_id, entity_type, entity_id, operation,
-          base_version, server_version, local_intent, status)
-       VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, $8, 'open')
-       ON CONFLICT (tenant_id, op_id) DO NOTHING`,
-      [
-        input.tenantId,
-        input.opId,
-        input.entityType,
-        input.entityId,
-        input.operation,
-        input.baseVersion,
-        input.serverVersion,
-        JSON.stringify(input.localIntent),
-      ],
-    );
-    return (r.rowCount ?? 0) > 0;
-  } catch (err) {
-    logger.warn(
-      { err, opId: input.opId, entityType: input.entityType, entityId: input.entityId },
-      "recordSyncConflict failed (best-effort)",
-    );
-    return false;
-  }
+  // Phase 2: never swallow insert failures — a rejected sync unit without a
+  // conflict row leaves operators blind. Callers must handle thrown errors
+  // (and preferably share a transaction with markRejected).
+  const r = await pool.query(
+    `INSERT INTO sync_conflicts
+       (id, tenant_id, op_id, entity_type, entity_id, operation,
+        base_version, server_version, local_intent, status)
+     VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, $8, 'open')
+     ON CONFLICT (tenant_id, op_id) DO NOTHING`,
+    [
+      input.tenantId,
+      input.opId,
+      input.entityType,
+      input.entityId,
+      input.operation,
+      input.baseVersion,
+      input.serverVersion,
+      JSON.stringify(input.localIntent),
+    ],
+  );
+  return (r.rowCount ?? 0) > 0;
 }
 
 /**

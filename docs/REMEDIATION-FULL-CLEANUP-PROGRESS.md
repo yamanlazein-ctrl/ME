@@ -19,6 +19,13 @@ See `docs/REMEDIATION-FULL-CLEANUP-BASELINE.md`. Gates after Phase 1:
 - Create path uses `invoiceLedgerLegs` only; balance test in `backend/tests/invoice-ledger-legs-balance.test.ts`.
 - Gate hygiene: font package install, auth-context empty-env fix, tsconfig/eslint scope for operational code.
 
+## Phase 2 — DONE
+
+- `recordSyncConflict` no longer swallows insert failures (throws).
+- Claim conflict path records the conflict **before** `markRejected`.
+- Shared `mapActivationError` used by license-v1 + setup activate routes.
+- Tests: `activation-http-status.test.ts`, `sync-conflict-record-fail-closed.test.ts`.
+
 ## Next
 
-Phases 2–8 per user brief.
+Phases 3–8 per user brief.

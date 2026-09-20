@@ -1032,6 +1032,23 @@ export async function receiveSyncPush(
           typeof input.payload.invoiceNumber === "string" ? input.payload.invoiceNumber : null,
       };
 
+      // Track the update/cancel loser in the conflict ledger (plan §4/§11)
+      // BEFORE terminal reject so a failed insert cannot leave "rejected
+      // without conflict record" (Phase 2).
+      if (input.operation === "update" || input.operation === "cancel") {
+        await recordSyncConflict({
+          tenantId: input.tenantId,
+          opId: input.opId,
+          entityType: input.entityType,
+          entityId: input.entityId,
+          operation: input.operation === "cancel" ? "cancel" : "update",
+          baseVersion:
+            typeof input.payload.baseVersion === "number" ? input.payload.baseVersion : null,
+          serverVersion: null, // claim conflict: winner is the claim holder (see conflictDetail)
+          localIntent: input.payload,
+        });
+      }
+
       // Insufficient-stock has no winner to blame — the roll itself is short.
       // Recording the loser's own op as conflictOpId would corrupt the
       // provenance chain, so it stays null with the figures in the detail.
@@ -1044,28 +1061,6 @@ export async function receiveSyncPush(
         conflictOpId,
         conflictDetail,
       );
-
-      // Track the update/cancel loser in the conflict ledger (plan §4/§11).
-      // The claim detail already names the winner (claim holder); base version
-      // comes from the loser's own payload. Resolution is a separate explicit
-      // operator step — never an automatic LWW.
-      if (input.operation === "update" || input.operation === "cancel") {
-        try {
-          await recordSyncConflict({
-            tenantId: input.tenantId,
-            opId: input.opId,
-            entityType: input.entityType,
-            entityId: input.entityId,
-            operation: input.operation === "cancel" ? "cancel" : "update",
-            baseVersion:
-              typeof input.payload.baseVersion === "number" ? input.payload.baseVersion : null,
-            serverVersion: null, // claim conflict: winner is the claim holder (see conflictDetail)
-            localIntent: input.payload,
-          });
-        } catch (err) {
-          logger.warn({ err, opId: input.opId }, "recordSyncConflict (claim) failed");
-        }
-      }
 
       const actorUserId =
         typeof input.payload.actorUserId === "string" && isUuid(input.payload.actorUserId)
