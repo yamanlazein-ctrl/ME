@@ -150,3 +150,11 @@ VERIFICATION_RESULTS_P0.md
 1
 1.md.txt
 sonar-project.properties
+
+# Local bundled Postgres + one-off probe scripts (never push)
+.tmp-pgdata-dev/
+.tmp-migrate-out.txt
+backend/tmp-*.mjs
+backend/tmp-*.ts
+backend/tmp-*.ps1
+

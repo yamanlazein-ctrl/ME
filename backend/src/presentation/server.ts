@@ -462,11 +462,15 @@ async function prepareDesktopDatabase(): Promise<void> {
 
 /** Detach stale baked Desktop licenses that are not the tenant entitlement. */
 async function prepareLicenseIdentity(): Promise<void> {
-  const { db } = await import("../infrastructure/orm/drizzle.js");
-  const { detachOrphanBakedLicenses } = await import(
-    "../infrastructure/license/detachOrphanBakedLicenses.js"
-  );
-  await detachOrphanBakedLicenses(db);
+  try {
+    const { db } = await import("../infrastructure/orm/drizzle.js");
+    const { detachOrphanBakedLicenses } = await import(
+      "../infrastructure/license/detachOrphanBakedLicenses.js"
+    );
+    await detachOrphanBakedLicenses(db);
+  } catch (err) {
+    logger.warn({ err }, "License identity prepare skipped (non-fatal)");
+  }
 }
 
 fxRateService.start();
