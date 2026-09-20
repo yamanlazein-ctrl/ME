@@ -1,3 +1,4 @@
+import { lineTotal as sharedLineTotal, type InvoiceLineData } from "@erp/shared";
 import type { FabricUnit, Color } from "@/presentation/hooks/useInventory";
 
 export type EntryLine = {
@@ -81,11 +82,14 @@ export const cloneStickyFields = (prev: EntryLine): Partial<EntryLine> => ({
 export const lineHasData = (l: EntryLine) =>
   l.fabricName.trim() !== "" || l.quantity > 0 || l.pricePerKg > 0;
 
-export const lineSubtotal = (l: EntryLine) => {
-  const gross = (l.quantity || 0) * (l.pricePerKg || 0);
-  // Fixed-amount (not percentage) line discount, floored at zero.
-  return Math.max(0, gross - (l.discountAmount || 0));
-};
+// FIN-01: same 2dp money authority as the backend subtotal. Fixed-amount (not
+// percentage) line discount, floored at zero.
+export const lineSubtotal = (l: EntryLine) =>
+  sharedLineTotal({
+    quantityKg: l.quantity || 0,
+    pricePerKg: l.pricePerKg || 0,
+    discountAmount: l.discountAmount || 0,
+  } as InvoiceLineData);
 
 export const pickExistingFabric = (
   fabricId: string,

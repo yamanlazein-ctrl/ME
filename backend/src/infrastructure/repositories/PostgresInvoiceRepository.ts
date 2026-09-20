@@ -24,7 +24,14 @@ import type {
   UpdateInvoiceInput,
 } from "../../domain/entities/Invoice.js";
 import { Invoice, computeSubtotal } from "../../domain/entities/Invoice.js";
-import { round2dp, BASE_CURRENCY, computeBaseEquivalent, isValidFxRate, FX_REQUIRED_MESSAGE } from "@erp/shared";
+import {
+  round2dp,
+  invoiceTotal,
+  BASE_CURRENCY,
+  computeBaseEquivalent,
+  isValidFxRate,
+  FX_REQUIRED_MESSAGE,
+} from "@erp/shared";
 import type { TenantContext, PaginatedResult } from "../../domain/types/index.js";
 import { BusinessRuleError } from "../../domain/errors/index.js";
 import { resolveSaleCostPerKg } from "../../domain/invoices/invoiceCostSnapshot.js";
@@ -797,13 +804,12 @@ export class PostgresInvoiceRepository implements IInvoiceRepository {
       discountAmount: l.discountAmount ?? 0,
       note: l.note?.trim(),
     }));
-    const subtotal = round2dp(
-      lines.reduce((s, l) => s + Math.max(0, round2dp(l.quantityKg * l.pricePerKg - l.discountAmount)), 0),
-    );
+    // FIN-01: the edit path reuses the same money authority as create/validate.
+    const subtotal = computeSubtotal(lines as never);
     const discount = input.discount ?? 0;
     const tax = input.tax ?? 0;
     const shipping = input.shipping ?? 0;
-    const total = subtotal - discount + tax + shipping;
+    const total = invoiceTotal({ lines: lines as never, discount, tax, shipping });
 
     return this.db.transaction(async (tx) => {
       const [inv] = await tx

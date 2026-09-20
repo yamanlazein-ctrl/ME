@@ -227,25 +227,11 @@ export function useInvoices() {
 /**
  * Sequential, traceable invoice number generator.
  * Produces: ENT-2026-0001, INV-2026-0001, RET-2026-0001
- * Each type has its own counter that increments per call within the session.
- * The 4-digit sequence number makes invoices easy to track and reference.
+ * FIN-02: the session-local `nextInvoiceNumber` counter was removed. Numbers
+ * are allocated exclusively server-side (shared sequence tip + per-device
+ * number blocks), so a client-fabricated number can no longer collide with a
+ * carved block. Use `useNextInvoiceNumber` for the on-screen preview.
  */
-const invoiceCounters: Record<string, number> = {};
-
-/**
- * DEPRECATED session-local preview counter — kept only as a synchronous
- * fallback while the real next-number query loads. The REAL number is always
- * allocated server-side at save time (see #7); use `useNextInvoiceNumber`
- * for the on-screen preview.
- */
-export function nextInvoiceNumber(type: string): string {
-  const prefix = type === "entry" ? "ENT" : type === "return" ? "RET" : "INV";
-  const year = new Date().getFullYear();
-  const key = `${prefix}-${year}`;
-  invoiceCounters[key] = (invoiceCounters[key] ?? 0) + 1;
-  const seq = String(invoiceCounters[key]).padStart(4, "0");
-  return `${key}-${seq}`;
-}
 
 /**
  * #7: preview of the NEXT invoice number from the REAL source

@@ -26,14 +26,24 @@ END $$;
 -- Deterministically link existing same-tenant, same-fingerprint rows. When
 -- multiple historical registrations exist, choose the oldest registration so
 -- the migration never invents a second device identity.
+--
+-- NOTE: this MUST be a correlated scalar subquery, not `FROM LATERAL (...)`.
+-- PostgreSQL does not expose the UPDATE target row to a FROM-clause LATERAL
+-- item ("invalid reference to FROM-clause entry for table s"), so the LATERAL
+-- form aborted the ENTIRE migration run on every fresh database.
 UPDATE "sync_devices" s
-SET "device_registration_id" = chosen.id
-FROM LATERAL (
+SET "device_registration_id" = (
   SELECT d.id
   FROM "device_registrations" d
   WHERE d.tenant_id = s.tenant_id
     AND d.device_fingerprint = s.device_fingerprint
   ORDER BY d.created_at ASC, d.id ASC
   LIMIT 1
-) chosen
-WHERE s."device_registration_id" IS NULL;
+)
+WHERE s."device_registration_id" IS NULL
+  AND EXISTS (
+    SELECT 1
+    FROM "device_registrations" d
+    WHERE d.tenant_id = s.tenant_id
+      AND d.device_fingerprint = s.device_fingerprint
+  );

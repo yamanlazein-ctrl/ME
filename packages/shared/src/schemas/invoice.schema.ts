@@ -1,6 +1,25 @@
 import { z } from "zod";
 import { is2dp, MAX_2DP_MESSAGE, round2dp } from "../precision.js";
 import { exchangeRateSchema } from "../fx.js";
+import { computeSubtotal, invoiceTotal, type InvoiceLineData } from "../entities/Invoice.js";
+
+/**
+ * FIN-01: the money formula has exactly one executed implementation
+ * (entities/Invoice.ts). Schema refinements adapt their input to it instead of
+ * re-deriving it, so a formula change cannot drift between layers.
+ */
+function linesForMath(
+  lines: ReadonlyArray<{ quantityKg: unknown; pricePerKg: unknown; discountAmount?: unknown }>,
+): InvoiceLineData[] {
+  return lines.map(
+    (l) =>
+      ({
+        quantityKg: Number(l.quantityKg),
+        pricePerKg: Number(l.pricePerKg),
+        discountAmount: Number(l.discountAmount ?? 0),
+      }) as InvoiceLineData,
+  );
+}
 
 const invoiceLineSchema = z.object({
   fabricId: z.string().uuid(),
@@ -48,19 +67,18 @@ export const createInvoiceSchema = z
     orderId: z.string().uuid().optional(),
   })
   .superRefine((data, ctx) => {
-    // 2dp per-line rounding + one edge round on the sum — mirrors
-    // packages/shared/src/entities/Invoice.ts computeSubtotal exactly.
-    const subtotal = round2dp(
-      data.lines.reduce(
-        (s, l) => s + Math.max(0, round2dp(Number(l.quantityKg) * Number(l.pricePerKg) - Number(l.discountAmount ?? 0))),
-        0,
-      ),
-    );
+    const mathLines = linesForMath(data.lines);
+    const subtotal = computeSubtotal(mathLines);
     const discount = data.discount ?? 0;
     if (discount > subtotal) {
       ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["discount"], message: "الخصم لا يمكن أن يتجاوز المجموع الفرعي" });
     }
-    const total = subtotal - discount + (data.tax ?? 0) + (data.shipping ?? 0);
+    const total = invoiceTotal({
+      lines: mathLines,
+      discount,
+      tax: data.tax ?? 0,
+      shipping: data.shipping ?? 0,
+    });
     if (total <= 0) {
       ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["discount"], message: "مجموع الفاتورة يجب أن يكون موجباً" });
     }
@@ -83,17 +101,18 @@ export const updateInvoiceSchema = z
     notes: z.string().max(2000).optional(),
   })
   .superRefine((data, ctx) => {
-    const subtotal = round2dp(
-      data.lines.reduce(
-        (s, l) => s + Math.max(0, round2dp(Number(l.quantityKg) * Number(l.pricePerKg) - Number(l.discountAmount ?? 0))),
-        0,
-      ),
-    );
+    const mathLines = linesForMath(data.lines);
+    const subtotal = computeSubtotal(mathLines);
     const discount = data.discount ?? 0;
     if (discount > subtotal) {
       ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["discount"], message: "الخصم لا يمكن أن يتجاوز المجموع الفرعي" });
     }
-    const total = subtotal - discount + (data.tax ?? 0) + (data.shipping ?? 0);
+    const total = invoiceTotal({
+      lines: mathLines,
+      discount,
+      tax: data.tax ?? 0,
+      shipping: data.shipping ?? 0,
+    });
     if (total <= 0) {
       ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["discount"], message: "مجموع الفاتورة يجب أن يكون موجباً" });
     }

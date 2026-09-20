@@ -17,6 +17,10 @@ export const tenants = pgTable("tenants", {
   licenseStatus: varchar("license_status", { length: 20 }).notNull().default("trial"),
   licenseType: varchar("license_type", { length: 20 }).notNull().default("trial"),
   maxDevices: integer("max_devices").notNull().default(3),
+  // FIN-03: FK to license_activations(id) ON DELETE SET NULL is created in
+  // migration 20260926_tenant_activation_fk.sql. It cannot be declared with
+  // .references() here because license_activations references tenants, which
+  // would create an import cycle between the two schema modules.
   activationId: uuid("activation_id"),
   serverFingerprint: varchar("server_fingerprint", { length: 128 }),
   lastHeartbeatAt: timestamp("last_heartbeat_at", { withTimezone: true }),

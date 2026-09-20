@@ -2,6 +2,7 @@ import { pgTable, uuid, varchar, timestamp, integer, text, index, uniqueIndex, f
 import { sql } from "drizzle-orm";
 import { tenants } from "./tenant.table.js";
 import { licenses } from "./license.table.js";
+import { users } from "./user.table.js";
 
 /**
  * Device registrations — one row per (license, client device) pairing.
@@ -28,6 +29,9 @@ export const deviceRegistrations = pgTable(
       .notNull()
       .references(() => tenants.id),
     deviceId: uuid("device_id").notNull(),
+    // FIN-04: created by migration 0021; declaring it here keeps
+    // `drizzle-kit generate` from proposing a destructive drop.
+    userId: uuid("user_id").references(() => users.id),
     deviceFingerprint: varchar("device_fingerprint", { length: 128 }).notNull(),
     deviceFingerprintVersion: integer("device_fingerprint_version").notNull().default(1),
     platform: varchar("platform", { length: 16 }).notNull(), // windows | macos | linux | android | ios | web
@@ -47,6 +51,7 @@ export const deviceRegistrations = pgTable(
     tenantIdx: index("idx_device_registrations_tenant").on(table.tenantId),
     // Fast lookup when a client hits /v1/activations/:id/devices.
     deviceIdIdx: index("idx_device_registrations_device_id").on(table.deviceId),
+    userIdx: index("idx_device_registrations_user").on(table.userId),
     tenantLicenseFk: foreignKey({
       columns: [table.tenantId, table.licenseId],
       foreignColumns: [licenses.tenantId, licenses.id],

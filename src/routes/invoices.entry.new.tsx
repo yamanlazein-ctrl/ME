@@ -27,7 +27,8 @@ import { normalizeInventoryName } from "@/domain/inventory/normalizeInventoryNam
 import { supplierById } from "@/presentation/hooks/useParties";
 import { currencySymbol } from "@/presentation/hooks/useCurrency";
 import type { Currency } from "@/domain/types";
-import { useCreateInvoice, useUpdateInvoice, useNextInvoiceNumber, nextInvoiceNumber } from "@/presentation/hooks/useInvoices";
+import { useCreateInvoice, useUpdateInvoice, useNextInvoiceNumber } from "@/presentation/hooks/useInvoices";
+import { invoiceSubtotal, invoiceTotal } from "@/core/calculations/invoiceCalc";
 import { printOrArchive } from "@/components/print/printPortal";
 import { archiveMeta } from "@/shared/utils/documentArchive";
 import { InvoicePrintDocument } from "@/components/print/InvoicePrintDocument";
@@ -136,7 +137,8 @@ function EntryInvoicePage() {
   // #7 preview from the server's document_sequences (estimate — real number is
   // allocated at save time and may differ under concurrency).
   const { data: previewNumber } = useNextInvoiceNumber("entry");
-  const invoiceNo = previewNumber ?? nextInvoiceNumber("entry");
+  // FIN-02: no client-side fabrication — the server allocates the real number.
+  const invoiceNo = previewNumber ?? "…";
 
   // Always keep a trailing empty row so operator can type immediately.
   const [lines, setLines] = useState<EntryLine[]>(() => [emptyLine()]);
@@ -167,10 +169,20 @@ function EntryInvoicePage() {
   const fabricRefs = useRef<Record<string, HTMLInputElement | null>>({});
 
   const dataLines = lines.filter(lineHasData);
-  const subtotal = dataLines.reduce((s, l) => s + lineSubtotal(l), 0);
+  const mathLines = dataLines.map((l) => ({
+    quantityKg: l.quantity || 0,
+    pricePerKg: l.pricePerKg || 0,
+    discountAmount: l.discountAmount || 0,
+  }));
+  // FIN-01: shared money authority — identical rounding to the backend.
+  const subtotal = invoiceSubtotal({ lines: mathLines });
   const totalQty = dataLines.reduce((s, l) => s + (l.quantity || 0), 0);
-  const grandTotal =
-    subtotal - (Number(discount) || 0) + (Number(tax) || 0) + (Number(shipping) || 0);
+  const grandTotal = invoiceTotal({
+    lines: mathLines,
+    discount: Number(discount) || 0,
+    tax: Number(tax) || 0,
+    shipping: Number(shipping) || 0,
+  });
 
   const isUSD = currency === "USD";
   const moneyClass = isUSD ? "text-success" : "text-foreground";
@@ -866,7 +878,8 @@ function EntryInvoicePage() {
 
     const res = await create.mutateAsync({
       tenantId: buildTenantContext().tenantId,
-      number: nextInvoiceNumber("entry"),
+      // FIN-02: server allocates the authoritative number.
+      number: "",
       type: "entry",
       date,
       partyId: supplierId,

@@ -1,3 +1,5 @@
+import { lineTotal as sharedLineTotal, type InvoiceLineData } from "@erp/shared";
+
 export type SaleLine = {
   id: string;
   fabricId: string;
@@ -58,10 +60,13 @@ export const lineHasData = (l: SaleLine) =>
   l.fabricName.trim() !== "" || l.rollId !== "" || l.quantityKg > 0;
 
 export const lineGross = (l: SaleLine) => (l.quantityKg || 0) * (l.pricePerKg || 0);
-export const lineTotal = (l: SaleLine) => {
-  const gross = lineGross(l);
-  // Fixed-amount (not percentage) line discount. Guards against a missing/zero
-  // quantity or price so a discounted line never yields NaN or a negative/sub-zero
-  // total while the operator is still typing.
-  return Math.max(0, gross - (l.discountAmount || 0));
-};
+
+// FIN-01: delegates to the single money authority so the on-screen line total
+// uses the same 2dp rounding as the journaled subtotal. Guards against a
+// missing/zero quantity or price while the operator is still typing.
+export const lineTotal = (l: SaleLine) =>
+  sharedLineTotal({
+    quantityKg: l.quantityKg || 0,
+    pricePerKg: l.pricePerKg || 0,
+    discountAmount: l.discountAmount || 0,
+  } as InvoiceLineData);

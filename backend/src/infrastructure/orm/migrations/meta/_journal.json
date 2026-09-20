@@ -505,6 +505,20 @@
       "when": 1789101000000,
       "tag": "20260924_unified_device_identity",
       "breakpoints": true
+    },
+    {
+      "idx": 72,
+      "version": 7,
+      "when": 1789103000000,
+      "tag": "20260925_device_registration_live_fingerprint",
+      "breakpoints": true
+    },
+    {
+      "idx": 73,
+      "version": 7,
+      "when": 1789105000000,
+      "tag": "20260926_tenant_activation_fk",
+      "breakpoints": true
     }
   ]
 }

@@ -16,8 +16,8 @@ import {
   useUpdateInvoice,
   useInvoice,
   useNextInvoiceNumber,
-  nextInvoiceNumber,
 } from "@/presentation/hooks/useInvoices";
+import { invoiceSubtotal, invoiceTotal, invoiceRemaining } from "@/core/calculations/invoiceCalc";
 import { toast } from "sonner";
 import { printOrArchive } from "@/components/print/printPortal";
 import { archiveMeta } from "@/shared/utils/documentArchive";
@@ -99,7 +99,8 @@ function SaleInvoicePage() {
   // #7 preview from the server's document_sequences (estimate — real number is
   // allocated at save time and may differ under concurrency).
   const { data: previewNumber } = useNextInvoiceNumber("sale");
-  const invoiceNo = previewNumber ?? nextInvoiceNumber("sale");
+  // FIN-02: no client-side fabrication — the server allocates the real number.
+  const invoiceNo = previewNumber ?? "…";
 
   const [lines, setLines] = useState<SaleLine[]>([emptyLine()]);
   const [discount, setDiscount] = useState<number | "">("");
@@ -202,14 +203,23 @@ function SaleInvoicePage() {
   }, [fromOrderId, fromOrder.data]);
 
   const dataLines = lines.filter(lineHasData);
+  const mathLines = dataLines.map((l) => ({
+    quantityKg: l.quantityKg || 0,
+    pricePerKg: l.pricePerKg || 0,
+    discountAmount: l.discountAmount || 0,
+  }));
   const subtotal = dataLines.reduce((s, l) => s + l.quantityKg * l.pricePerKg, 0);
   const totalQty = dataLines.reduce((s, l) => s + (l.quantityKg || 0), 0);
-  const totalAfter = dataLines.reduce((s, l) => s + lineTotal(l), 0);
-  // Same canonical formula as the entry form and the backend entity:
-  // total = subtotal − discount + tax + shipping; remaining = total − paid.
-  const netTotal =
-    totalAfter - (Number(discount) || 0) + (Number(tax) || 0) + (Number(shipping) || 0);
-  const remaining = Math.max(0, netTotal - (Number(paid) || 0));
+  // FIN-01: preview totals run the shared money authority, so they cannot
+  // diverge from the subtotal/total the backend journals.
+  const totalAfter = invoiceSubtotal({ lines: mathLines });
+  const netTotal = invoiceTotal({
+    lines: mathLines,
+    discount: Number(discount) || 0,
+    tax: Number(tax) || 0,
+    shipping: Number(shipping) || 0,
+  });
+  const remaining = invoiceRemaining(netTotal, Number(paid) || 0);
   const isUSD = currency === "USD";
   const moneyClass = isUSD ? "text-success" : "text-foreground";
 
@@ -416,7 +426,8 @@ function SaleInvoicePage() {
 
     const res = await create.mutateAsync({
       tenantId: "dev-tenant",
-      number: nextInvoiceNumber("sale"),
+      // FIN-02: server allocates the authoritative number.
+      number: "",
       type: "sale",
       date,
       partyId: customerId,
