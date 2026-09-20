@@ -20,6 +20,7 @@
     "test:integration": "node scripts/run-integration.mjs",
     "license-server": "node scripts/run-license-server.mjs",
     "license:genkey": "node scripts/generate-license-signing-key.mjs",
+    "test:sync-multidevice": "node scripts/verify-sync-multidevice.mjs --refresh-template",
     "db:restore": "node scripts/restore-from-backup.mjs"
   },
   "dependencies": {

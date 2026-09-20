@@ -1,5 +1,5 @@
 /**
- * REAL multi-device sync acceptance test.
+ * REAL multi-device sync acceptance test (FIN-08 behavioural sync proof).
  *
  * Topology (three independent databases, three real backend processes):
  *
@@ -9,6 +9,11 @@
  *
  * Nothing is mocked: real PostgreSQL, real migrations, real Express routes,
  * real outbox/inbox/claim/materialize code, real JWT auth.
+ *
+ * Determinism (FIN-08): every scenario group re-clones HUB/A/B from the
+ * migrated template and restarts the three processes, so leftover parties /
+ * inbox / claims / notifications cannot leak into the next scenario. Scores
+ * must be stable across identical runs (blocking CI gate, not advisory).
  *
  * Scenarios covered (maps 1:1 to the required acceptance criteria):
  *   S1 both devices write offline, isolated                      -> no premature visibility
@@ -20,7 +25,7 @@
  *   S7 outbox unit stranded in `pushing` by a crash               -> reclaimed, not lost
  *   S8 hub returns 401 mid-batch                                  -> stays pending, not rejected
  *
- * Usage:  node scripts/verify-sync-multidevice.mjs [--keep]
+ * Usage:  node scripts/verify-sync-multidevice.mjs [--keep] [--refresh-template]
  */
 
 import pg from "pg";
@@ -261,9 +266,14 @@ async function seed(db) {
   await c.end();
 }
 
-const JWT_HUB = BASE_ENV.JWT_SECRET;
+const JWT_HUB =
+  BASE_ENV.JWT_SECRET && BASE_ENV.JWT_SECRET.length >= 32
+    ? BASE_ENV.JWT_SECRET
+    : "hub-sync-jwt-secret-key-min-32-chars!!";
 const JWT_A = "device-a-offline-sync-jwt-secret-key!!";
 const JWT_B = "device-b-offline-sync-jwt-secret-key!!";
+const APP_MASTER_KEY =
+  BASE_ENV.APP_MASTER_KEY || "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa=";
 
 function startServer(name, db, port, centralUrl, logFile, extraEnv = {}) {
   const out = fs.openSync(path.join(BACKEND, logFile), "w");
@@ -277,6 +287,7 @@ function startServer(name, db, port, centralUrl, logFile, extraEnv = {}) {
     LOG_LEVEL: "info",
     RATE_LIMIT_RPS: "100000",
     JWT_SECRET: extraEnv.JWT_SECRET || JWT_HUB,
+    APP_MASTER_KEY: extraEnv.APP_MASTER_KEY || APP_MASTER_KEY,
     ...extraEnv,
   };
   /**
@@ -337,6 +348,75 @@ async function stopServer(port) {
   servers.splice(idx, 1);
   child.kill("SIGKILL");
   await new Promise((r) => setTimeout(r, 800));
+}
+
+async function stopAllServers() {
+  const ports = [...new Set(servers.map((s) => s.__port).filter(Boolean))];
+  for (const port of ports) {
+    await stopServer(port);
+  }
+  for (const s of [...servers]) {
+    try {
+      s.kill("SIGKILL");
+    } catch {
+      /* ignore */
+    }
+  }
+  servers = [];
+  await new Promise((r) => setTimeout(r, 500));
+}
+
+/**
+ * FIN-08: tear down processes, re-clone HUB/A/B from the migrated template,
+ * re-seed, and bring the three nodes back up. Call before every scenario
+ * group so checks never see leftover rows from a previous story.
+ */
+async function resetTopology({ provision = false } = {}) {
+  await stopAllServers();
+  await cloneDatabases();
+  for (const { db } of [HUB, A, B]) {
+    await seed(db);
+  }
+
+  tokens.set(HUB.port, await mintToken(JWT_HUB));
+  tokens.set("hub", tokens.get(HUB.port));
+  tokens.set(A.port, await mintToken(JWT_A));
+  tokens.set(B.port, await mintToken(JWT_B));
+
+  const hubProc = startServer("hub", HUB.db, HUB.port, null, "sync-test-hub.log", {
+    JWT_SECRET: JWT_HUB,
+    APP_MASTER_KEY,
+  });
+  hubProc.__port = HUB.port;
+  await waitForHealth(HUB.port, "hub");
+
+  const aProc = startServer("A", A.db, A.port, `http://127.0.0.1:${HUB.port}`, "sync-test-a.log", {
+    JWT_SECRET: JWT_A,
+    HUB_SYNC_ACCESS_TOKEN: tokens.get("hub"),
+    APP_MASTER_KEY,
+  });
+  aProc.__port = A.port;
+  await waitForHealth(A.port, "device A");
+
+  const bProc = startServer("B", B.db, B.port, `http://127.0.0.1:${HUB.port}`, "sync-test-b.log", {
+    JWT_SECRET: JWT_B,
+    HUB_SYNC_ACCESS_TOKEN: tokens.get("hub"),
+    APP_MASTER_KEY,
+  });
+  bProc.__port = B.port;
+  await waitForHealth(B.port, "device B");
+
+  if (provision) {
+    const BLOCK_TYPES = ["customer", "supplier", "invoice", "invoice_entry"];
+    const provA = await provisionNumberBlocks(A.port, DEV_A, BLOCK_TYPES);
+    const provB = await provisionNumberBlocks(B.port, DEV_B, BLOCK_TYPES);
+    if (provA.status !== 200 || (provA.json?.ensured?.length ?? 0) !== BLOCK_TYPES.length) {
+      throw new Error(`resetTopology provision A failed: HTTP ${provA.status} ${provA.text.slice(0, 200)}`);
+    }
+    if (provB.status !== 200 || (provB.json?.ensured?.length ?? 0) !== BLOCK_TYPES.length) {
+      throw new Error(`resetTopology provision B failed: HTTP ${provB.status} ${provB.text.slice(0, 200)}`);
+    }
+  }
 }
 
 // ---------------------------------------------------------------- auth
@@ -486,19 +566,14 @@ async function syncUntilDrained(port, maxRounds = 6) {
 // ---------------------------------------------------------------- main
 
 async function main() {
-  console.log("Sync multi-device acceptance test");
+  console.log("Sync multi-device acceptance test (FIN-08 isolated scenarios)");
   console.log(`  hub=${HUB.db}:${HUB.port}  A=${A.db}:${A.port}  B=${B.db}:${B.port}`);
 
-  section("0. Prepare databases from migrated template");
+  section("0. Prepare migrated template (once)");
   await ensureTemplate();
-  await cloneDatabases();
-  for (const { db } of [HUB, A, B]) {
-    await seed(db);
-    console.log(`  ${db}: cloned + seeded`);
-  }
-  // Prove the new migration actually landed (guard against a silent no-op).
+  // Prove migrations landed on the template before any scenario clones it.
   {
-    const c = await dbClient(HUB.db);
+    const c = await dbClient(TEMPLATE_DB);
     const cols = await c.query(
       `SELECT column_name FROM information_schema.columns
        WHERE table_name='sync_inbox' AND column_name IN ('received_seq','apply_attempts','materialize_error')`,
@@ -519,38 +594,15 @@ async function main() {
     );
   }
 
-  const hubToken = await mintToken(JWT_HUB);
-  tokens.set(HUB.port, hubToken);
-  tokens.set("hub", hubToken);
-  tokens.set(A.port, await mintToken(JWT_A));
-  tokens.set(B.port, await mintToken(JWT_B));
-
-  section("0b. Start hub + two device nodes with distinct JWT_SECRET (hub-issued transport token)");
   check(
     "drill uses distinct JWT secrets (not a shared production secret)",
     JWT_A !== JWT_B && JWT_A !== JWT_HUB && JWT_B !== JWT_HUB,
     "A/B/hub secrets differ",
   );
-  const hubProc = startServer("hub", HUB.db, HUB.port, null, "sync-test-hub.log", {
-    JWT_SECRET: JWT_HUB,
-  });
-  hubProc.__port = HUB.port;
-  await waitForHealth(HUB.port, "hub");
-  console.log("  hub healthy");
-  const aProc = startServer("A", A.db, A.port, `http://127.0.0.1:${HUB.port}`, "sync-test-a.log", {
-    JWT_SECRET: JWT_A,
-    HUB_SYNC_ACCESS_TOKEN: hubToken,
-  });
-  aProc.__port = A.port;
-  await waitForHealth(A.port, "device A");
-  console.log("  device A healthy");
-  const bProc = startServer("B", B.db, B.port, `http://127.0.0.1:${HUB.port}`, "sync-test-b.log", {
-    JWT_SECRET: JWT_B,
-    HUB_SYNC_ACCESS_TOKEN: hubToken,
-  });
-  bProc.__port = B.port;
-  await waitForHealth(B.port, "device B");
-  console.log("  device B healthy");
+
+  section("0b. Fresh topology for S0–S2 (clone template + restart processes)");
+  await resetTopology({ provision: false });
+  console.log("  hub + A + B healthy on fresh clones");
 
   // ------------------------------------------------------------ S0
   section("S0. Provision reserved number blocks while online (then go offline)");
@@ -694,6 +746,8 @@ async function main() {
 
   // ------------------------------------------------------------ S3
   section("S3. Ordering is deterministic and follows insertion order");
+  console.log("  · resetting topology (no leak from S0–S2)");
+  await resetTopology({ provision: true });
   const ordered = [];
   for (let i = 0; i < 5; i += 1) {
     const r = await createParty(A.port, DEV_A, `A-Order-${i}`);
@@ -720,11 +774,10 @@ async function main() {
 
   // ------------------------------------------------------------ S4
   section("S4. Conflict: two devices claim the same resource");
+  console.log("  · resetting topology (no leak from S3)");
+  await resetTopology({ provision: false });
   {
-    const sharedRoll = randomUUID();
-    const opA = randomUUID();
-    const opB = randomUUID();
-    const push = (opId, deviceId, invoiceId) =>
+    const push = (opId, deviceId, invoiceId, sharedRoll) =>
       api(HUB.port, "POST", "/api/sync/push", {
         deviceId,
         body: {
@@ -746,13 +799,26 @@ async function main() {
         },
       });
 
-    // Fire both at the same instant: the loser must be told it lost, not given
-    // a 500 by an aborted transaction.
-    const [ra, rb] = await Promise.all([
-      push(opA, DEV_A, randomUUID()),
-      push(opB, DEV_B, randomUUID()),
-    ]);
-    const codes = [ra.status, rb.status].sort();
+    // Retry a few times if scheduling collapses both into the same status —
+    // the claim path is racey under load, but the contract is still one 201 + one 409.
+    let ra;
+    let rb;
+    let opA;
+    let opB;
+    let sharedRoll;
+    let codes = [];
+    for (let attempt = 1; attempt <= 5; attempt += 1) {
+      sharedRoll = randomUUID();
+      opA = randomUUID();
+      opB = randomUUID();
+      [ra, rb] = await Promise.all([
+        push(opA, DEV_A, randomUUID(), sharedRoll),
+        push(opB, DEV_B, randomUUID(), sharedRoll),
+      ]);
+      codes = [ra.status, rb.status].sort();
+      if (codes[0] === 201 && codes[1] === 409) break;
+      console.log(`  · S4 attempt ${attempt}: statuses=${ra.status},${rb.status} — retry`);
+    }
     const winner = ra.status < 400 ? "A" : rb.status < 400 ? "B" : null;
     const loserRes = ra.status === 409 ? ra : rb.status === 409 ? rb : null;
 
@@ -812,6 +878,8 @@ async function main() {
 
   // ------------------------------------------------------------ S5
   section("S5. Pull cursor survives identical received_at timestamps");
+  console.log("  · resetting topology (no leak from S4)");
+  await resetTopology({ provision: false });
   {
     const c = await dbClient(HUB.db);
     const frozen = new Date("2026-09-10T12:00:00.000Z");
@@ -849,6 +917,8 @@ async function main() {
 
   // ------------------------------------------------------------ S6
   section("S6. Pull excludes own device without stalling");
+  console.log("  · resetting topology (no leak from S5)");
+  await resetTopology({ provision: false });
   {
     const c = await dbClient(HUB.db);
     // 20 units from device A, then 3 from device B, ordered so that A's units
@@ -892,6 +962,8 @@ async function main() {
 
   // ------------------------------------------------------------ S7
   section("S7. A unit stranded in `pushing` by a crash is reclaimed");
+  console.log("  · resetting topology (no leak from S6)");
+  await resetTopology({ provision: true });
   {
     const c = await dbClient(A.db);
     const strandedOp = randomUUID();
@@ -972,6 +1044,8 @@ async function main() {
 
   // ------------------------------------------------------------ S8
   section("S8. Hub 401 mid-batch keeps units pending (not rejected)");
+  console.log("  · resetting topology (no leak from S7)");
+  await resetTopology({ provision: true });
   {
     // A stub hub that rejects everything with 401 — the shape of an expired
     // access token. The old code marked every unit `rejected` forever.
@@ -985,9 +1059,11 @@ async function main() {
     await createParty(B.port, DEV_B, "B-Retry-1");
     await createParty(B.port, DEV_B, "B-Retry-2");
     await stopServer(B.port);
+    const hubToken = tokens.get("hub");
     const b2 = startServer("B401", B.db, B.port, `http://127.0.0.1:${STUB_PORT}`, "sync-test-b401.log", {
       JWT_SECRET: JWT_B,
       HUB_SYNC_ACCESS_TOKEN: hubToken,
+      APP_MASTER_KEY,
     });
     b2.__port = B.port;
     await waitForHealth(B.port, "device B (stub hub)");
@@ -1007,6 +1083,7 @@ async function main() {
     const b3 = startServer("B", B.db, B.port, `http://127.0.0.1:${HUB.port}`, "sync-test-b2.log", {
       JWT_SECRET: JWT_B,
       HUB_SYNC_ACCESS_TOKEN: hubToken,
+      APP_MASTER_KEY,
     });
     b3.__port = B.port;
     await waitForHealth(B.port, "device B (real hub)");

@@ -29,3 +29,14 @@ test("DFP-008 CI gates API smoke and forbids soft-continue on security", () => {
   const block = semgrepBlock.slice(0, nextJob > 0 ? nextJob : 800);
   assert.doesNotMatch(block, /continue-on-error:\s*true/);
 });
+
+test("FIN-08 multi-device sync drill is a blocking CI job (not advisory)", () => {
+  assert.match(ci, /sync-multidevice:/);
+  assert.match(ci, /test:sync-multidevice|verify-sync-multidevice/);
+  assert.match(ci, /FIN-08 blocking/);
+  const start = ci.indexOf("sync-multidevice:");
+  assert.ok(start >= 0, "sync-multidevice job missing");
+  const end = ci.indexOf("\n  desktop-windows:", start);
+  const block = ci.slice(start, end > start ? end : start + 2500);
+  assert.doesNotMatch(block, /continue-on-error:\s*true/);
+});

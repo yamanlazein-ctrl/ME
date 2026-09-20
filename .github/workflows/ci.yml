@@ -160,6 +160,48 @@ jobs:
       - name: Dependency audit (advisory)
         run: npm run clean:code || echo "Knip advisory only"
 
+  # FIN-08: behavioural multi-device sync proof — blocking (not advisory).
+  # Harness re-clones HUB/A/B from a migrated template between scenario groups
+  # so leftover rows cannot leak and scores stay deterministic.
+  sync-multidevice:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      JWT_SECRET: hub-sync-jwt-secret-key-min-32-chars!!
+      APP_MASTER_KEY: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa=
+      NODE_ENV: test
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+
+      - name: Install backend dependencies
+        working-directory: backend
+        run: npm ci
+
+      - name: Multi-device sync drill (FIN-08 blocking)
+        working-directory: backend
+        run: npm run test:sync-multidevice
+
   # DFP-008: Windows packaging gates that cannot run on ubuntu-latest.
   desktop-windows:
     runs-on: windows-latest
