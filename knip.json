@@ -17,7 +17,9 @@
     "backend/**",
     "admin-dashboard/**",
     "desktop/**",
-    "docs/**"
+    "docs/**",
+    "tools/**",
+    "src/components/ui/**"
   ],
   "ignoreDependencies": [
     "@tanstack/react-router",

@@ -9,21 +9,6 @@ export {
 export type { InvoiceLineCalc, InvoiceCalc } from "./invoiceCalc";
 
 export {
-  matchRollsForItem,
-  computeOrderAvailability,
-  decrementRollKg,
-  incrementRollKg,
-} from "./stockAllocation";
-export type {
-  RollInfo,
-  ColorInfo,
-  FabricInfo,
-  OrderItemForMatching,
-  RollMatch,
-  OrderAvailability,
-} from "./stockAllocation";
-
-export {
   LEDGER_TYPE_LABEL,
   filterLedger,
   buildLedger,

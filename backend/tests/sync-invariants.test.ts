@@ -1532,7 +1532,10 @@ describe("P3 consolidation contracts", () => {
   const NUMBERS = read("src", "infrastructure", "utils", "documentNumbers.ts");
   const HTTP_IDEMPOTENCY = read("src", "infrastructure", "http", "middleware", "idempotency.middleware.ts");
   const RUNBOOK = readFileSync(join(BACKEND_ROOT, "..", "docs", "SYNC-OPERATIONS.md"), "utf8");
-  const PLAN = readFileSync(join(BACKEND_ROOT, "..", "MOTARD-COMPLETE-REMEDIATION-PLAN.md"), "utf8");
+  const PLAN = readFileSync(
+    join(BACKEND_ROOT, "..", "docs", "archive", "MOTARD-COMPLETE-REMEDIATION-PLAN.md"),
+    "utf8",
+  );
 
   it("documents block authority and explicit global fallback", () => {
     expect(NUMBERS).toContain("documentNumberBlocks");

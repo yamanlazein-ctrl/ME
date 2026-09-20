@@ -60,6 +60,13 @@ See `docs/REMEDIATION-FULL-CLEANUP-BASELINE.md`. Gates after Phase 1:
 - `validate-resource-manifest.mjs` verifies digests; corruption test fails on flipped byte.
 - Rust `preflight_check` verifies sha256 entries from staged `resources/resource-manifest.json`.
 
-## Next
+## Phase 8 — DONE
 
-Phase 8 — knip / ts-prune / script+docs cleanup.
+- Moved unreferenced `qa-*.mjs`, `phase8-runtime-e2e.mjs`, `verify-multicolor-fix.mjs`, `verify-sync-env.mjs` → `tools/dev/`.
+- Archived `MOTARD-COMPLETE-REMEDIATION-PLAN.md` → `docs/archive/` (sync-invariants path updated).
+- Deleted proven-unused: `LoginPage.tsx`, supabase client, `FabricCombobox`, `useFormValidation`, `stockAllocation.ts`.
+- Knip: ignore design-system `src/components/ui/**` and `tools/**` (false positives).
+
+## Branch status
+
+`remediation/full-cleanup` — Phases 1–8 complete. Do not push unless requested.
