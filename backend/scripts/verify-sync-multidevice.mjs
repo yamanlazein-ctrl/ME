@@ -77,6 +77,13 @@ function loadEnv() {
       env[m[1]] = v;
     }
   }
+  // FIN-08: CI has no .env file — it exports the secrets as real environment
+  // variables. Without this the harness minted a JWT with `undefined` as the
+  // key and died before running a single scenario, so it could never be used
+  // as a gate.
+  for (const key of ["JWT_SECRET", "APP_MASTER_KEY", "LICENSE_SIGNING_KEY", "LICENSE_SIGNING_PUBLIC_KEY"]) {
+    if (!env[key] && process.env[key]) env[key] = process.env[key];
+  }
   return env;
 }
 
@@ -229,6 +236,20 @@ async function seed(db) {
      ON CONFLICT (id) DO NOTHING`,
     [DEV_B, TENANT_ID, `fp-device-b-${db}`, "device-b", USER_ID],
   );
+  // Migration 20260922 moved device↔user authorization into its own table;
+  // `sync_devices.authorized_user_ids` is now a denormalized cache that the
+  // repository OVERWRITES from `sync_device_authorized_users` on every read.
+  // Seeding only the array column left the gate seeing an empty binding, so
+  // every device call answered 403 SYNC_DEVICE_NOT_BOUND and the whole drill
+  // collapsed before exercising convergence.
+  for (const deviceId of [DEV_A, DEV_B]) {
+    await c.query(
+      `INSERT INTO sync_device_authorized_users (tenant_id, device_id, user_id)
+       VALUES ($1, $2, $3)
+       ON CONFLICT DO NOTHING`,
+      [TENANT_ID, deviceId, USER_ID],
+    );
+  }
   // The install gate returns 503 for every non-allow-listed path until the
   // setup wizard is marked complete, so the tenant must look installed.
   await c.query(
@@ -332,7 +353,10 @@ async function mintToken(secret = JWT_HUB) {
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt()
     .setExpirationTime(Math.floor(Date.now() / 1000) + 7200)
-    .sign(secret);
+    // jose requires a key object / Uint8Array, never a raw string: passing the
+    // string threw "Key for the HS256 algorithm must be one of type ..." and
+    // aborted the whole drill.
+    .sign(key);
 }
 
 const tokens = new Map();
