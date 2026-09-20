@@ -1,34 +1,49 @@
 import { describe, expect, it } from "vitest";
+import { randomUUID } from "node:crypto";
 import { pool } from "../src/infrastructure/orm/drizzle.js";
 import {
   revokeLicenseDevicesByFingerprint,
   revokeSyncDevicesByFingerprint,
 } from "../src/infrastructure/device/linkedDeviceRevocation.js";
 import { db } from "../src/infrastructure/orm/drizzle.js";
+import { databaseReachable } from "./_helpers/requireDatabase.js";
 
 describe("license ↔ sync device fingerprint link", () => {
   it("revoking sync by fingerprint stamps matching license rows, and vice versa", async () => {
-    const t = await pool.query<{ id: string }>(`SELECT id::text AS id FROM tenants LIMIT 1`);
-    const tenantId = t.rows[0]?.id;
-    if (!tenantId) throw new Error("no tenant");
-    await pool.query(`SELECT set_config('app.current_tenant_id', $1, false)`, [tenantId]);
-    const pair = await pool.query<{
-      tenant_id: string;
-      fingerprint: string;
-      sync_id: string;
-      lic_id: string;
-    }>(`
-      SELECT s.tenant_id::text, s.device_fingerprint AS fingerprint, s.id::text AS sync_id, d.id::text AS lic_id
-        FROM sync_devices s
-        JOIN device_registrations d
-          ON d.tenant_id = s.tenant_id AND d.device_fingerprint = s.device_fingerprint
-       WHERE s.revoked_at IS NULL AND d.revoked_at IS NULL
-       LIMIT 1
-    `);
-    if (!pair.rows[0]) {
-      throw new Error("no matching fingerprint on sync_devices and device_registrations");
-    }
-    const { tenant_id, fingerprint, sync_id, lic_id } = pair.rows[0];
+    // FIN-09: this used to hunt for a pre-existing sync_devices ↔
+    // device_registrations pair, so it only ran on a database that happened to
+    // carry one and threw on a clean one. It now seeds its own linked pair.
+    if (!(await databaseReachable())) return;
+
+    const tenant_id = randomUUID();
+    const fingerprint = `fp-${randomUUID()}`;
+    const licenseId = randomUUID();
+    const sync_id = randomUUID();
+    const lic_id = randomUUID();
+
+    await pool.query(
+      `INSERT INTO tenants (id, name, slug, status, license_status, license_type)
+       VALUES ($1, 'Device Link Tenant', $2, 'active', 'no_license', 'trial')`,
+      [tenant_id, `dlk-${tenant_id.slice(0, 8)}`],
+    );
+    await pool.query(`SELECT set_config('app.current_tenant_id', $1, false)`, [tenant_id]);
+    await pool.query(
+      `INSERT INTO licenses (id, key, type, status, max_devices, tenant_id)
+       VALUES ($1, $2, 'full', 'active', 5, $3)`,
+      [licenseId, `KEY-${licenseId.slice(0, 8)}`, tenant_id],
+    );
+    await pool.query(
+      `INSERT INTO sync_devices (id, tenant_id, device_fingerprint, platform, last_seen_at)
+       VALUES ($1, $2, $3, 'windows', now())`,
+      [sync_id, tenant_id, fingerprint],
+    );
+    await pool.query(
+      `INSERT INTO device_registrations
+         (id, license_id, tenant_id, device_id, device_fingerprint, platform, last_seen_at)
+       VALUES ($1, $2, $3, $4, $5, 'windows', now())`,
+      [lic_id, licenseId, tenant_id, randomUUID(), fingerprint],
+    );
+
     try {
       await revokeSyncDevicesByFingerprint(db, tenant_id, fingerprint, true, "test_link");
       const afterSync = await pool.query<{ ra: Date | null }>(

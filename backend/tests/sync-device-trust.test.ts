@@ -163,16 +163,26 @@ describe("4B — sync device gate", () => {
 
   it("refuses a REVOKED device with SYNC_DEVICE_REVOKED (push, pull, orchestration)", async () => {
     const revoked = fakeRepo(deviceRow({ revokedAt: new Date(), revokeReason: "stolen" }));
-    for (const policy of [
-      { unknownDevice: "reject", unboundUser: "reject" } as const,
-      { unknownDevice: "allow", unboundUser: "allow" } as const,
-      { unknownDevice: "reject", unboundUser: "reject", assertFromQuery: true } as const,
+    // `assertFromQuery` policies (pull/run) take the device from the
+    // AUTHENTICATED binding, never from the body — so that case must supply
+    // the header binding, otherwise nothing is asserted and the gate
+    // legitimately passes an unattributed request through.
+    for (const { policy, req } of [
+      {
+        policy: { unknownDevice: "reject", unboundUser: "reject" } as const,
+        req: makeReq({ ctx: { tenantId: TENANT, userId: USER_A }, body: { syncDeviceId: DEVICE_1 } }),
+      },
+      {
+        policy: { unknownDevice: "allow", unboundUser: "allow" } as const,
+        req: makeReq({ ctx: { tenantId: TENANT, userId: USER_A }, body: { syncDeviceId: DEVICE_1 } }),
+      },
+      {
+        policy: { unknownDevice: "reject", unboundUser: "reject", assertFromQuery: true } as const,
+        req: makeReq({ ctx: { tenantId: TENANT, userId: USER_A }, headerDevice: DEVICE_1 }),
+      },
     ]) {
       const gate = createSyncDeviceGate(revoked, policy);
-      const out = await runGate(
-        gate,
-        makeReq({ ctx: { tenantId: TENANT, userId: USER_A }, body: { syncDeviceId: DEVICE_1 } }),
-      );
+      const out = await runGate(gate, req);
       expect(out.next, JSON.stringify(policy)).toBe(false);
       expect(out.status).toBe(403);
       expect(out.body?.code).toBe("SYNC_DEVICE_REVOKED");
@@ -201,7 +211,11 @@ describe("4B — sync device gate", () => {
   });
 
   it("never treats excludeSyncDeviceId as device authority", async () => {
-    const withQuery = createSyncDeviceGate(fakeRepo(deviceRow()), {
+    // The repo must be captured so the assertion inspects the SAME mock the
+    // gate was given (a freshly built fake always has an empty `.mock`, which
+    // made the previous assertion vacuous).
+    const repo = fakeRepo(deviceRow());
+    const withQuery = createSyncDeviceGate(repo, {
       unknownDevice: "reject",
       unboundUser: "reject",
       assertFromQuery: true,
@@ -211,7 +225,10 @@ describe("4B — sync device gate", () => {
       makeReq({ ctx: { tenantId: TENANT, userId: USER_A }, query: { excludeSyncDeviceId: DEVICE_1 } }),
     );
     expect(out.next, "query-only device assertions must be ignored").toBe(true);
-    expect((fakeRepo(deviceRow()).findById as unknown as { mock?: unknown }).mock).toBeUndefined();
+    expect(
+      repo.findById,
+      "a query parameter must never trigger a device authority lookup",
+    ).not.toHaveBeenCalled();
   });
 
   it("lets an UNSIGNED device through the local orchestration trigger but still blocks revocation", async () => {

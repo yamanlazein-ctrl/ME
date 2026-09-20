@@ -182,9 +182,9 @@ export async function resolveSyncConflict(
           SET status = 'resolved',
               resolved_at = now(),
               resolution = jsonb_build_object(
-                'decision', $3,
-                'by_user_id', $4,
-                'note', $5,
+                'decision', $3::text,
+                'by_user_id', $4::text,
+                'note', $5::text,
                 'resolved_at', now()
               )
         WHERE id = $2 AND tenant_id = $1 AND status = 'open'
@@ -215,7 +215,7 @@ export async function resolveSyncConflictByOp(
       `UPDATE sync_conflicts
           SET status = 'resolved',
               resolved_at = now(),
-              resolution = jsonb_build_object('decision', 'applied', 'note', $3, 'resolved_at', now())
+              resolution = jsonb_build_object('decision', 'applied', 'note', $3::text, 'resolved_at', now())
         WHERE tenant_id = $1 AND op_id = $2 AND status = 'open'`,
       [tenantId, opId, reason],
     );

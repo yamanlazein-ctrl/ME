@@ -1,4 +1,4 @@
-import { and, asc, eq, inArray, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull, sql } from "drizzle-orm";
 import type { DB } from "../orm/drizzle.js";
 import { runWithTenantContext } from "../orm/tenant-context.js";
 import type {
@@ -340,6 +340,44 @@ export class PostgresSyncResourceClaimRepository implements ISyncResourceClaimRe
         }
         if (stockConflicts.length > 0) {
           return { ok: false as const, conflicts: stockConflicts };
+        }
+
+        /**
+         * Release SETTLED identity rows before inserting.
+         *
+         * The whole-resource pre-check above already lets a request through
+         * when every existing holder is settled (applied/dead) — those holders
+         * never retry and their effect is persisted. But the row itself stays,
+         * and `uq_sync_claims_identity` is unique on
+         * (tenant, resource_type, resource_id) for NULL-quantity rows. So the
+         * insert hit a unique violation and the catch below reported the
+         * settled holder as a live conflict: an applied holder became a
+         * PERMANENT lock, and every later settlement/party update on that
+         * resource failed with a 409 that could never clear.
+         */
+        if (whole.length > 0) {
+          const staleIdentity = await tx
+            .select({ id: syncResourceClaims.id, opId: syncResourceClaims.claimedByOpId })
+            .from(syncResourceClaims)
+            .where(
+              and(
+                eq(syncResourceClaims.tenantId, input.tenantId),
+                inArray(
+                  syncResourceClaims.resourceId,
+                  whole.map((r) => r.resourceId),
+                ),
+                isNull(syncResourceClaims.quantityKg),
+                isNull(syncResourceClaims.quantityPieces),
+              ),
+            );
+          const removable = staleIdentity
+            .filter((h) => h.opId !== input.opId)
+            .map((h) => h.id);
+          if (removable.length > 0) {
+            await tx
+              .delete(syncResourceClaims)
+              .where(inArray(syncResourceClaims.id, removable));
+          }
         }
 
         try {

@@ -519,6 +519,13 @@
       "when": 1789105000000,
       "tag": "20260926_tenant_activation_fk",
       "breakpoints": true
+    },
+    {
+      "idx": 74,
+      "version": 7,
+      "when": 1789107000000,
+      "tag": "20260927_revoked_tokens_no_rls",
+      "breakpoints": true
     }
   ]
 }

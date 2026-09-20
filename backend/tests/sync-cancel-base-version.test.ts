@@ -17,6 +17,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { materializeSyncUnit } from "../src/application/use-cases/sync/syncMaterialize.js";
 import type { SyncMaterializeRepos } from "../src/application/use-cases/sync/syncMaterialize.js";
+import { runWithTenantContext } from "../src/infrastructure/orm/tenant-context.js";
 import type { TenantContext } from "../src/domain/types/index.js";
 import type { InvoiceData } from "../src/domain/entities/Invoice.js";
 import type { VoucherData } from "../src/domain/entities/Voucher.js";
@@ -29,6 +30,18 @@ const ctx: TenantContext = {
 };
 
 const OP_ID = "33333333-3333-4333-8333-333333333333";
+
+/**
+ * Production always reaches a materializer inside a tenant scope: the auth
+ * middleware opens `runWithTenantContext` for every request, and the inbox
+ * drain inherits it. `recordSyncConflict` fails closed without that scope
+ * (DFP-019), so the harness must reproduce it instead of calling the
+ * materializer bare — otherwise the test exercises a state production never
+ * has.
+ */
+function inTenantScope<T>(fn: () => Promise<T>): Promise<T> {
+  return runWithTenantContext({ tenantId: ctx.tenantId }, fn);
+}
 const INVOICE_ID = "44444444-4444-4444-8444-444444444444";
 const VOUCHER_ID = "55555555-5555-4555-8555-555555555555";
 
@@ -90,16 +103,18 @@ describe("cancel replay — stale base is refused, not applied blind", () => {
       cancelInvoice,
     });
 
-    const result = await materializeSyncUnit(
-      database,
-      repos,
-      {
-        entityType: "invoice",
-        operation: "cancel",
-        payload: { invoiceId: INVOICE_ID, baseVersion: 2 },
-      },
-      ctx,
-      { opId: OP_ID, syncDeviceId: null },
+    const result = await inTenantScope(() =>
+      materializeSyncUnit(
+        database,
+        repos,
+        {
+          entityType: "invoice",
+          operation: "cancel",
+          payload: { invoiceId: INVOICE_ID, baseVersion: 2 },
+        },
+        ctx,
+        { opId: OP_ID, syncDeviceId: null },
+      ),
     );
 
     expect(result.status).toBe("failed");
@@ -115,16 +130,18 @@ describe("cancel replay — stale base is refused, not applied blind", () => {
       cancelVoucher,
     });
 
-    const result = await materializeSyncUnit(
-      database,
-      repos,
-      {
-        entityType: "voucher",
-        operation: "cancel",
-        payload: { voucherId: VOUCHER_ID, baseVersion: 1 },
-      },
-      ctx,
-      { opId: OP_ID, syncDeviceId: null },
+    const result = await inTenantScope(() =>
+      materializeSyncUnit(
+        database,
+        repos,
+        {
+          entityType: "voucher",
+          operation: "cancel",
+          payload: { voucherId: VOUCHER_ID, baseVersion: 1 },
+        },
+        ctx,
+        { opId: OP_ID, syncDeviceId: null },
+      ),
     );
 
     expect(result.status).toBe("failed");
@@ -139,16 +156,18 @@ describe("cancel replay — stale base is refused, not applied blind", () => {
       cancelInvoice,
     });
 
-    const result = await materializeSyncUnit(
-      database,
-      repos,
-      {
-        entityType: "invoice",
-        operation: "cancel",
-        payload: { invoiceId: INVOICE_ID, baseVersion: 2 },
-      },
-      ctx,
-      { opId: OP_ID, syncDeviceId: null },
+    const result = await inTenantScope(() =>
+      materializeSyncUnit(
+        database,
+        repos,
+        {
+          entityType: "invoice",
+          operation: "cancel",
+          payload: { invoiceId: INVOICE_ID, baseVersion: 2 },
+        },
+        ctx,
+        { opId: OP_ID, syncDeviceId: null },
+      ),
     );
 
     expect(result.status).toBe("created");
@@ -164,16 +183,18 @@ describe("cancel replay — stale base is refused, not applied blind", () => {
       cancelInvoice,
     });
 
-    const result = await materializeSyncUnit(
-      database,
-      repos,
-      {
-        entityType: "invoice",
-        operation: "cancel",
-        payload: { invoiceId: INVOICE_ID, baseVersion: 2 },
-      },
-      ctx,
-      { opId: OP_ID, syncDeviceId: null },
+    const result = await inTenantScope(() =>
+      materializeSyncUnit(
+        database,
+        repos,
+        {
+          entityType: "invoice",
+          operation: "cancel",
+          payload: { invoiceId: INVOICE_ID, baseVersion: 2 },
+        },
+        ctx,
+        { opId: OP_ID, syncDeviceId: null },
+      ),
     );
 
     // Idempotency wins over the stale check: the intent is already satisfied,
@@ -189,16 +210,18 @@ describe("cancel replay — stale base is refused, not applied blind", () => {
       cancelInvoice,
     });
 
-    const result = await materializeSyncUnit(
-      database,
-      repos,
-      {
-        entityType: "invoice",
-        operation: "cancel",
-        payload: { invoiceId: INVOICE_ID },
-      },
-      ctx,
-      { opId: OP_ID, syncDeviceId: null },
+    const result = await inTenantScope(() =>
+      materializeSyncUnit(
+        database,
+        repos,
+        {
+          entityType: "invoice",
+          operation: "cancel",
+          payload: { invoiceId: INVOICE_ID },
+        },
+        ctx,
+        { opId: OP_ID, syncDeviceId: null },
+      ),
     );
 
     expect(result.status).toBe("failed");
