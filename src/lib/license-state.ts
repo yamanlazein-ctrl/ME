@@ -234,6 +234,8 @@ export async function getActivationDeviceInfo(): Promise<{
   fingerprint: string;
   platform: ReturnType<typeof detectPlatform>;
   hostname?: string;
+  /** False for browser builds — must not claim a device seat. */
+  bindingCapable: boolean;
 }> {
   if (isTauri()) {
     // FIN-13: on desktop the OS fingerprint is the ONLY acceptable identity.
@@ -245,9 +247,15 @@ export async function getActivationDeviceInfo(): Promise<{
       fingerprint: fp.hash,
       platform: detectPlatform(fp.os),
       hostname: fp.hostname,
+      bindingCapable: true,
     };
   }
-  return { fingerprint: await getBrowserFingerprint(), platform: detectPlatform() };
+  // Phase 3: web browser fingerprint is explicitly non-binding.
+  return {
+    fingerprint: `web:${await getBrowserFingerprint()}`,
+    platform: detectPlatform(),
+    bindingCapable: false,
+  };
 }
 
 /**

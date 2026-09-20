@@ -7,7 +7,7 @@ import { deviceRegistrations } from "../../../infrastructure/orm/schemas/device-
 import { tenants } from "../../../infrastructure/orm/schemas/tenant.table.js";
 import { licenseAuditEvents } from "../../../infrastructure/orm/schemas/license-audit-event.table.js";
 import { licenses } from "../../../infrastructure/orm/schemas/license.table.js";
-import { fingerprintsMatch } from "../../../domain/licensing/installationIdentity.js";
+import { fingerprintsMatch, isBindingFingerprint } from "../../../domain/licensing/installationIdentity.js";
 
 /**
  * Desktop verify-only activation must still mint a real `license_activations`
@@ -33,6 +33,11 @@ export async function recordDesktopDeviceActivation(
 ): Promise<{ activationId: string }> {
   return runWithPlatformContext(() =>
     database.transaction(async (tx) => {
+      // Phase 3: web / browser fingerprints cannot claim a device seat.
+      if (!isBindingFingerprint(input.serverFingerprint)) {
+        throw new Error("WEB_FINGERPRINT_NON_BINDING");
+      }
+
       // Serialize the count-then-insert against every activation for this license.
       const [license] = await tx
         .select({ id: licenses.id })

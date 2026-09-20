@@ -26,6 +26,13 @@ See `docs/REMEDIATION-FULL-CLEANUP-BASELINE.md`. Gates after Phase 1:
 - Shared `mapActivationError` used by license-v1 + setup activate routes.
 - Tests: `activation-http-status.test.ts`, `sync-conflict-record-fail-closed.test.ts`.
 
+## Phase 3 — DONE
+
+- Removed `allowLegacy` fingerprint matching; cloned installs (same install-id, new host) do not match.
+- `isBindingFingerprint` + reject `web:` / bare hashes in `recordDesktopDeviceActivation`.
+- Web `getActivationDeviceInfo` returns `bindingCapable: false` and `web:` prefix.
+- Tests: installation-identity, license-state.web-binding.
+
 ## Next
 
-Phases 3–8 per user brief.
+Phases 4–8 per user brief.

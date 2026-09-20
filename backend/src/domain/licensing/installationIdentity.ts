@@ -41,28 +41,19 @@ export function parseDeviceFingerprint(fingerprint: string): {
 
 /**
  * True when two fingerprints refer to the same install/device seat.
- * Seat enforcement requires both host hash and installation id. Legacy matching
- * is opt-in for migration-only callers.
+ * Both sides must carry host-hash AND installation-id, and both must match.
+ * Legacy host-only / install-id-only matching is removed (Phase 3) — a cloned
+ * disk image that keeps the install-id but runs on a new host must NOT match.
  */
-export function fingerprintsMatch(
-  a: string,
-  b: string,
-  options: { allowLegacy?: boolean } = {},
-): boolean {
+export function fingerprintsMatch(a: string, b: string): boolean {
   const pa = parseDeviceFingerprint(a);
   const pb = parseDeviceFingerprint(b);
-  if (
-    pa.installationId &&
-    pb.installationId &&
-    pa.hostHash === pb.hostHash &&
-    pa.installationId === pb.installationId
-  ) return true;
+  if (!pa.installationId || !pb.installationId) return false;
+  return pa.hostHash === pb.hostHash && pa.installationId === pb.installationId;
+}
 
-  if (!options.allowLegacy) return false;
-  if (a === b) return true;
-  if (pa.hostHash && pa.hostHash === pb.hostHash) return true;
-  if (pa.installationId && pb.installationId && pa.installationId === pb.installationId) {
-    return true;
-  }
-  return pa.hostHash === b || pb.hostHash === a;
+/** Hardware-bound seat fingerprints embed `hostHash::installationId`. */
+export function isBindingFingerprint(fingerprint: string): boolean {
+  const p = parseDeviceFingerprint(fingerprint);
+  return Boolean(p.hostHash && p.installationId && !fingerprint.trim().startsWith("web:"));
 }

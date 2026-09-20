@@ -20,7 +20,12 @@ vi.mock("@/lib/license-state", () => ({
   setInstallTenantId: () => {},
   getInstallTenantId: () => null,
   getServerFingerprint: async () => "test-fp",
-  getActivationDeviceInfo: async () => ({ platform: "web", hostname: "test" }),
+  getActivationDeviceInfo: async () => ({
+    fingerprint: "web:test",
+    platform: "web",
+    hostname: "test",
+    bindingCapable: false,
+  }),
 }));
 
 vi.mock("@/lib/invitations", () => ({
