@@ -2,7 +2,9 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { container } from "@/infrastructure/container";
 import { buildTenantContext } from "@/infrastructure/di/auth-context";
 
-const ctx = buildTenantContext();
+const ctx = new Proxy({} as import("@/domain/types").TenantContext, {
+  get: (_target, property: string) => buildTenantContext()[property as keyof import("@/domain/types").TenantContext],
+});
 
 const KEYS = {
   all: ["notifications"] as const,

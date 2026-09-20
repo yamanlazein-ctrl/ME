@@ -18,12 +18,13 @@ import { NotFoundError, ValidationError } from "@/core/errors";
 export type FabricUnit = "meter" | "yard" | "kg";
 export type RollStatus = "active" | "low" | "out";
 
-const ctx = buildTenantContext();
-
 const KEYS = {
-  fabrics: ["inventory", "fabrics", ctx.tenantId] as const,
-  rolls: ["inventory", "rolls", ctx.tenantId] as const,
+  fabrics: () => ["inventory", "fabrics", buildTenantContext().tenantId] as const,
+  rolls: () => ["inventory", "rolls", buildTenantContext().tenantId] as const,
 };
+const ctx = new Proxy({} as TenantContext, {
+  get: (_target, property: string) => buildTenantContext()[property as keyof TenantContext],
+});
 
 /* ── Module-level reactive cache (single source of truth for the      */
 /*    synchronous inventory API used by legacy components).            ── */
@@ -59,6 +60,8 @@ function getVersion() {
 
 let loadPromise: Promise<void> | null = null;
 let loaded = false;
+let retryTimer: ReturnType<typeof setTimeout> | null = null;
+let retryAttempts = 0;
 
 function isPaginated<T>(x: unknown): x is { data: T[] } {
   return Array.isArray((x as { data?: unknown })?.data);
@@ -72,6 +75,7 @@ async function loadAll(force = false): Promise<void> {
   }
   loadPromise = (async () => {
     try {
+      const ctx = buildTenantContext();
       const [fRes, cRes, rRes] = await Promise.all([
         container.inventory.listFabrics.execute({ limit: 1000 }, ctx),
         container.inventory.listColors.execute({ limit: 1000 }, ctx),
@@ -84,9 +88,17 @@ async function loadAll(force = false): Promise<void> {
       colorsCache.splice(0, colorsCache.length, ...cData);
       rollsCache.splice(0, rollsCache.length, ...rData);
       loaded = true;
+      retryAttempts = 0;
       notifyInventoryChange();
     } catch (e) {
       console.error("[useInventory] load failed", e);
+      if (getAccessToken() && retryAttempts < 3 && !retryTimer) {
+        retryAttempts += 1;
+        retryTimer = setTimeout(() => {
+          retryTimer = null;
+          void loadAll(true);
+        }, 1_000);
+      }
     } finally {
       loadPromise = null;
     }
@@ -107,10 +119,10 @@ if (typeof window !== "undefined" && getAccessToken()) {
 export function useFabrics(filter: InventoryFilter = {}) {
   useInventory();
   return useQuery({
-    queryKey: [...KEYS.fabrics, filter],
+    queryKey: [...KEYS.fabrics(), filter],
     queryFn: ({ signal }) => {
       void signal;
-      return container.inventory.listFabrics.execute(filter, ctx);
+      return container.inventory.listFabrics.execute(filter, buildTenantContext());
     },
     staleTime: 30_000,
   });
@@ -119,10 +131,10 @@ export function useFabrics(filter: InventoryFilter = {}) {
 export function useRolls(filter: InventoryFilter = {}) {
   useInventory();
   return useQuery({
-    queryKey: [...KEYS.rolls, filter],
+    queryKey: [...KEYS.rolls(), filter],
     queryFn: ({ signal }) => {
       void signal;
-      return container.inventory.listRolls.execute(filter, ctx);
+      return container.inventory.listRolls.execute(filter, buildTenantContext());
     },
     staleTime: 30_000,
   });
@@ -146,7 +158,7 @@ export function useCreateFabric() {
         ctx,
       );
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: KEYS.fabrics }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: KEYS.fabrics() }),
   });
 }
 
@@ -168,7 +180,7 @@ export function useCreateRoll() {
         } as RollData,
         ctx,
       ),
-    onSuccess: () => qc.invalidateQueries({ queryKey: KEYS.rolls }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: KEYS.rolls() }),
   });
 }
 
@@ -590,14 +602,14 @@ export function rollStatus(r: Roll, minStockKg: number): RollStatus {
 /* ── helpers for route preloading (SSR-friendly) ───────────────────── */
 export const inventoryQueryOptions = {
   fabrics: (filter: InventoryFilter = {}) => ({
-    queryKey: [...KEYS.fabrics, filter],
+    queryKey: [...KEYS.fabrics(), filter],
     queryFn: ({ signal }: { signal: AbortSignal }) => {
       void signal;
       return container.inventory.listFabrics.execute(filter, ctx);
     },
   }),
   rolls: (filter: InventoryFilter = {}) => ({
-    queryKey: [...KEYS.rolls, filter],
+    queryKey: [...KEYS.rolls(), filter],
     queryFn: ({ signal }: { signal: AbortSignal }) => {
       void signal;
       return container.inventory.listRolls.execute(filter, ctx);

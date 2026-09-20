@@ -37,9 +37,10 @@ export function buildTenantContext(): TenantContext {
 
 function getTokenProvider(): { getToken(): string | null } | null {
   try {
-    const token =
-      typeof window !== "undefined" ? localStorage.getItem("erp.auth.accessToken") : null;
-    return { getToken: () => token };
+    return {
+      getToken: () =>
+        typeof window !== "undefined" ? localStorage.getItem("erp.auth.accessToken") : null,
+    };
   } catch {
     return null;
   }
@@ -57,5 +58,7 @@ function parseJwtPayload(token: string): Record<string, unknown> | null {
 
 /** React hook wrapper so components can react to auth changes. */
 export function useTenantContext(): TenantContext {
-  return useMemo(() => buildTenantContext(), []);
+  return useMemo(() => buildTenantContext(), [
+    typeof window !== "undefined" ? localStorage.getItem("erp.auth.accessToken") : null,
+  ]);
 }

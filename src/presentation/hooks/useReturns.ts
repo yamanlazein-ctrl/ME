@@ -5,7 +5,9 @@ import { toast } from "sonner";
 import type { ReturnFilter, ReturnDTO } from "@/application/ports/IReturnRepository";
 import { refreshInventory } from "./useInventory";
 
-const ctx = buildTenantContext();
+const ctx = new Proxy({} as import("@/domain/types").TenantContext, {
+  get: (_target, property: string) => buildTenantContext()[property as keyof import("@/domain/types").TenantContext],
+});
 
 const KEYS = {
   root: ["returns"] as const,

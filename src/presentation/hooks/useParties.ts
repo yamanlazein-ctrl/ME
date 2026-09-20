@@ -9,8 +9,9 @@ import type { Party, PartyKind } from "@/domain/entities/Party";
 import type { CreatePartyInput } from "@/core/dtos/PartyDTO";
 import type { Currency } from "@/domain/types";
 import { invalidateFinancialViews } from "./invalidateFinancialViews";
-
-const ctx = buildTenantContext();
+const ctx = new Proxy({} as import("@/domain/types").TenantContext, {
+  get: (_target, property: string) => buildTenantContext()[property as keyof import("@/domain/types").TenantContext],
+});
 
 const KEYS = {
   root: ["parties"] as const,
@@ -52,6 +53,7 @@ function getVersion() {
 
 let loadPromise: Promise<void> | null = null;
 let loaded = false;
+let retryAttempts = 0;
 
 function isPaginated<T>(x: unknown): x is { data: T[] } {
   return Array.isArray((x as { data?: unknown })?.data);
@@ -61,6 +63,7 @@ async function loadAll(force = false): Promise<void> {
   if ((loaded && !force) || loadPromise) return loadPromise ?? Promise.resolve();
   loadPromise = (async () => {
     try {
+      const ctx = buildTenantContext();
       const [cRes, sRes] = await Promise.all([
         container.parties.list.execute({ kind: "customer", limit: 1000, offset: 0 }, ctx),
         container.parties.list.execute({ kind: "supplier", limit: 1000, offset: 0 }, ctx),
@@ -71,9 +74,14 @@ async function loadAll(force = false): Promise<void> {
       _customers.splice(0, _customers.length, ...cData);
       _suppliers.splice(0, _suppliers.length, ...sData);
       loaded = true;
+      retryAttempts = 0;
       notifyPartiesChange();
     } catch (e) {
       console.error("[useParties] load failed", e);
+      if (getAccessToken() && retryAttempts < 3) {
+        retryAttempts += 1;
+        setTimeout(() => void loadAll(true), 1_000);
+      }
     } finally {
       loadPromise = null;
     }

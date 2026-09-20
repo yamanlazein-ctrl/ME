@@ -11,7 +11,9 @@ import { UUID } from "@/domain/types";
 import { rolls, refreshInventory } from "@/presentation/hooks/useInventory";
 import { invalidateFinancialViews } from "./invalidateFinancialViews";
 
-const ctx = buildTenantContext();
+const ctx = new Proxy({} as import("@/domain/types").TenantContext, {
+  get: (_target, property: string) => buildTenantContext()[property as keyof import("@/domain/types").TenantContext],
+});
 
 const KEYS = {
   root: ["orders"] as const,
