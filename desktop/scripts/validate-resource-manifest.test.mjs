@@ -1,21 +1,24 @@
 /**
- * validate-resource-manifest.test.mjs — regression for DFP-001 hard gate.
+ * validate-resource-manifest.test.mjs — regression for DFP-001 / Phase 7.
  *
  * Runs the validator against a temporary fixture tree so CI can prove:
  *   - missing required path → exit 1
  *   - zero-byte required file → exit 1
- *   - complete tree → exit 0
+ *   - sha256 mismatch (corrupted byte) → exit 1
+ *   - complete tree with matching hashes → exit 0
  *
  * Invoked via: node --test desktop/scripts/validate-resource-manifest.test.mjs
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import {
   mkdtempSync,
   mkdirSync,
   writeFileSync,
   readFileSync,
   rmSync,
+  copyFileSync,
 } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -26,10 +29,10 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const VALIDATOR = join(HERE, "validate-resource-manifest.mjs");
 const MANIFEST = JSON.parse(readFileSync(join(HERE, "resource-manifest.json"), "utf8"));
 
-function runValidator(resourcesDir) {
-  return spawnSync(process.execPath, [VALIDATOR, "--resources", resourcesDir], {
-    encoding: "utf8",
-  });
+function runValidator(resourcesDir, manifestPath) {
+  const args = [VALIDATOR, "--resources", resourcesDir];
+  if (manifestPath) args.push("--manifest", manifestPath);
+  return spawnSync(process.execPath, args, { encoding: "utf8" });
 }
 
 function populateComplete(root) {
@@ -40,7 +43,14 @@ function populateComplete(root) {
       writeFileSync(join(full, ".keep"), "x");
     } else {
       mkdirSync(dirname(full), { recursive: true });
-      writeFileSync(full, "non-empty");
+      // Prefer real SSR sources so checked-in sha256 matches.
+      if (entry.path === "ssr/serve.mjs") {
+        copyFileSync(join(HERE, "..", "ssr", "serve.mjs"), full);
+      } else if (entry.path === "ssr/resolve-api-proxy.mjs") {
+        copyFileSync(join(HERE, "..", "ssr", "resolve-api-proxy.mjs"), full);
+      } else {
+        writeFileSync(full, "non-empty");
+      }
     }
   }
 }
@@ -80,6 +90,32 @@ test("zero-byte required file fails", () => {
     assert.equal(r.status, 1);
     assert.match(r.stderr, /empty/);
     assert.match(r.stderr, /serve\.mjs/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("corrupting one byte fails sha256 validation", () => {
+  const root = mkdtempSync(join(tmpdir(), "dfp001-hash-"));
+  const manPath = join(root, "manifest.json");
+  try {
+    const payload = "integrity-payload-v1";
+    const good = createHash("sha256").update(payload).digest("hex");
+    const mini = {
+      version: 2,
+      required: [{ path: "sealed.txt", kind: "file", sha256: good }],
+    };
+    writeFileSync(manPath, JSON.stringify(mini));
+    mkdirSync(root, { recursive: true });
+    writeFileSync(join(root, "sealed.txt"), payload);
+    assert.equal(runValidator(root, manPath).status, 0);
+
+    // Flip one byte → digest must fail.
+    writeFileSync(join(root, "sealed.txt"), "integrity-payload-v2");
+    const bad = runValidator(root, manPath);
+    assert.equal(bad.status, 1, bad.stderr || bad.stdout);
+    assert.match(bad.stderr, /sha256 mismatch/);
+    assert.match(bad.stderr, /sealed\.txt/);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

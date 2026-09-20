@@ -491,6 +491,9 @@ fn ensure_pg_subdirs(pgdata: &Path) -> io::Result<()> {
 /// Runtime-critical bundled files. If any of these is missing at boot the stack
 /// cannot start. The check is cheap (a handful of stat()s) and turns a silent,
 /// baffling crash into an actionable message for the user.
+///
+/// Phase 7: when `resources/resource-manifest.json` is present, also verify
+/// any entry that carries a 64-hex `sha256` (tamper / AV-quarantine detection).
 fn preflight_check(cfg: &BootConfig) -> Result<(), Vec<String>> {
     let bin = cfg.resources_root.join("postgres").join("bin");
     let required = vec![
@@ -512,15 +515,84 @@ fn preflight_check(cfg: &BootConfig) -> Result<(), Vec<String>> {
             .join("pgdata-template")
             .join("PG_VERSION"),
     ];
-    let missing: Vec<String> = required
+    let mut problems: Vec<String> = required
         .iter()
         .filter(|f| !f.exists())
         .map(|f| f.display().to_string())
         .collect();
-    if missing.is_empty() {
+    if let Err(integrity) = verify_resource_sha256s(&cfg.resources_root) {
+        problems.extend(integrity);
+    }
+    if problems.is_empty() {
         Ok(())
     } else {
-        Err(missing)
+        Err(problems)
+    }
+}
+
+#[derive(serde::Deserialize)]
+struct ResourceManifestFile {
+    required: Vec<ResourceManifestEntry>,
+}
+
+#[derive(serde::Deserialize)]
+struct ResourceManifestEntry {
+    path: String,
+    kind: String,
+    #[serde(default)]
+    sha256: Option<String>,
+}
+
+fn verify_resource_sha256s(resources_root: &Path) -> Result<(), Vec<String>> {
+    use sha2::{Digest, Sha256};
+    let manifest_path = resources_root.join("resource-manifest.json");
+    if !manifest_path.exists() {
+        return Ok(());
+    }
+    let text = match fs::read_to_string(&manifest_path) {
+        Ok(t) => t,
+        Err(e) => {
+            return Err(vec![format!(
+                "resource-manifest.json unreadable: {e}"
+            )]);
+        }
+    };
+    let manifest: ResourceManifestFile = match serde_json::from_str(&text) {
+        Ok(m) => m,
+        Err(e) => {
+            return Err(vec![format!("resource-manifest.json invalid JSON: {e}")]);
+        }
+    };
+    let mut mismatches = Vec::new();
+    for entry in manifest.required {
+        let Some(expected) = entry.sha256.filter(|h| {
+            h.len() == 64 && h.chars().all(|c| c.is_ascii_hexdigit())
+        }) else {
+            continue;
+        };
+        if entry.kind != "file" {
+            continue;
+        }
+        let full = resources_root.join(&entry.path);
+        let bytes = match fs::read(&full) {
+            Ok(b) => b,
+            Err(e) => {
+                mismatches.push(format!("{}: cannot read for sha256 ({e})", entry.path));
+                continue;
+            }
+        };
+        let actual = format!("{:x}", Sha256::digest(&bytes));
+        if !actual.eq_ignore_ascii_case(&expected) {
+            mismatches.push(format!(
+                "{}: sha256 mismatch (expected {}, got {})",
+                entry.path, expected, actual
+            ));
+        }
+    }
+    if mismatches.is_empty() {
+        Ok(())
+    } else {
+        Err(mismatches)
     }
 }
 
@@ -1463,5 +1535,32 @@ mod boot_lifecycle_tests {
             msg.contains("erp") || msg.contains("missing") || msg.contains("connect"),
             "unexpected message: {msg}"
         );
+    }
+
+    #[test]
+    fn verify_resource_sha256s_detects_corruption() {
+        use sha2::{Digest, Sha256};
+        let dir = std::env::temp_dir().join(format!(
+            "motard-integrity-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        let payload = b"integrity-payload-v1";
+        let good = format!("{:x}", Sha256::digest(payload));
+        fs::write(dir.join("sealed.txt"), payload).unwrap();
+        let manifest = format!(
+            r#"{{"required":[{{"path":"sealed.txt","kind":"file","sha256":"{good}"}}]}}"#
+        );
+        fs::write(dir.join("resource-manifest.json"), &manifest).unwrap();
+        assert!(verify_resource_sha256s(&dir).is_ok());
+
+        fs::write(dir.join("sealed.txt"), b"integrity-payload-v2").unwrap();
+        let err = verify_resource_sha256s(&dir).expect_err("corrupted file must fail");
+        assert!(err.iter().any(|e| e.contains("sha256 mismatch")));
+        let _ = fs::remove_dir_all(&dir);
     }
 }

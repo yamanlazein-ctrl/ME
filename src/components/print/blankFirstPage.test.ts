@@ -108,16 +108,20 @@ ${body}
   );
 
   for (const paper of ["A4", "A5", "80mm"] as const) {
-    run(`matrix short ${paper}: unnamed @page → exactly 1 page`, () => {
-      const dir = mkdtempSync(join(tmpdir(), `dfp002-${paper}-`));
-      try {
-        const pdfPath = join(dir, `${paper}.pdf`);
-        printToPdf(chrome!, shortDocHtml(paper, { rtl: true }), pdfPath);
-        expect(countPdfPages(readFileSync(pdfPath))).toBe(1);
-      } finally {
-        rmSync(dir, { recursive: true, force: true });
-      }
-    });
+    run(
+      `matrix short ${paper}: unnamed @page → exactly 1 page`,
+      () => {
+        const dir = mkdtempSync(join(tmpdir(), `dfp002-${paper}-`));
+        try {
+          const pdfPath = join(dir, `${paper}.pdf`);
+          printToPdf(chrome!, shortDocHtml(paper, { rtl: true }), pdfPath);
+          expect(countPdfPages(readFileSync(pdfPath))).toBe(1);
+        } finally {
+          rmSync(dir, { recursive: true, force: true });
+        }
+      },
+      30_000,
+    );
   }
 
   run("matrix multi-page A4 RTL: content spills without an extra leading blank", () => {

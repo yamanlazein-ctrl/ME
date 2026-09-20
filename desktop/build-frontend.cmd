@@ -45,6 +45,8 @@ copy /y "desktop\ssr\serve.mjs" "desktop\src-tauri\resources\ssr\serve.mjs"
 if errorlevel 1 exit /b 1
 copy /y "desktop\ssr\resolve-api-proxy.mjs" "desktop\src-tauri\resources\ssr\resolve-api-proxy.mjs"
 if errorlevel 1 exit /b 1
+copy /y "desktop\scripts\resource-manifest.json" "desktop\src-tauri\resources\resource-manifest.json"
+if errorlevel 1 exit /b 1
 
 rem DFP-036: source maps are stripped from the customer MSI by default.
 rem Keep a private copy under resources/_symbols for support/symbolication.

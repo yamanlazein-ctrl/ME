@@ -35,6 +35,13 @@ for (const name of FILES) {
   console.log(`[stage-ssr] copied ${src} -> ${dest}`);
 }
 
+const MANIFEST_SRC = join(HERE, "resource-manifest.json");
+const MANIFEST_DEST = join(DEST_DIR, "..", "resource-manifest.json");
+if (existsSync(MANIFEST_SRC)) {
+  copyFileSync(MANIFEST_SRC, MANIFEST_DEST);
+  console.log(`[stage-ssr] copied ${MANIFEST_SRC} -> ${MANIFEST_DEST}`);
+}
+
 if (!existsSync(HANDLER) || statSync(HANDLER).size <= 0) {
   fail(
     `ssr handler missing: ${HANDLER}\n` +
