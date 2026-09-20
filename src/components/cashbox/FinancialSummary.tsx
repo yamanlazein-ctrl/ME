@@ -177,11 +177,7 @@ export function FinancialSummary({
                   label="صافي اليوم"
                   value={<CashAmount n={net} code={code} />}
                   valueClass={
-                    net > 0
-                      ? "text-success"
-                      : net < 0
-                        ? "text-destructive"
-                        : "text-foreground"
+                    net > 0 ? "text-success" : net < 0 ? "text-destructive" : "text-foreground"
                   }
                 />
               </div>

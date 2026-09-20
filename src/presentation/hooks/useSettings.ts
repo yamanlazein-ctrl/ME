@@ -3,10 +3,7 @@ import { toast } from "sonner";
 import { container } from "@/infrastructure/container";
 import type { SettingsSection } from "@/infrastructure/api";
 import { setExchangeRate, type Currency } from "@/presentation/hooks/useCurrency";
-import {
-  FIXED_COMPANY_CONTACT,
-  formatCompanyPhoneField,
-} from "@/shared/constants/printConfig";
+import { FIXED_COMPANY_CONTACT, formatCompanyPhoneField } from "@/shared/constants/printConfig";
 
 export type ActivityEntry = {
   id: string;
@@ -94,7 +91,14 @@ export const ROLE_ALLOWED_PATHS: Record<UserRole, string[]> = {
     "/suppliers",
     "/sync/conflicts",
   ],
-  warehouse: ["/", "/inventory", "/invoices/entry", "/returns/entry", "/print-center", "/sync/conflicts"],
+  warehouse: [
+    "/",
+    "/inventory",
+    "/invoices/entry",
+    "/returns/entry",
+    "/print-center",
+    "/sync/conflicts",
+  ],
   viewer: ["/", "/inventory", "/customers", "/suppliers", "/reports", "/reports/"],
 };
 

@@ -16,6 +16,11 @@ export async function loginAsAdmin(page: Page): Promise<void> {
   await expect(page.locator("body")).toContainText(/لوحة التحكم|Dashboard/i, { timeout: 30_000 });
 }
 
+/** Cert suites historically imported this name — alias of admin login. */
+export async function loginIfNeeded(page: Page): Promise<void> {
+  await loginAsAdmin(page);
+}
+
 /** Cert-route login with username/password (env-backed via e2eRoleAuth). */
 export async function loginAs(
   page: Page,

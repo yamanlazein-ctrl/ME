@@ -3,12 +3,7 @@ import { Check, ChevronDown, Search } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
-import {
-  colorById,
-  fabricById,
-  rollById,
-  type Roll,
-} from "@/presentation/hooks/useInventory";
+import { colorById, fabricById, rollById, type Roll } from "@/presentation/hooks/useInventory";
 import { formatQuantity } from "@/shared/utils/formatNumber";
 
 function rollLabel(r: Roll): string {
@@ -65,9 +60,7 @@ export function RollSearchCombobox({
             !selected && "font-normal text-muted-foreground",
           )}
         >
-          <span className="min-w-0 truncate">
-            {selected ? rollLabel(selected) : placeholder}
-          </span>
+          <span className="min-w-0 truncate">{selected ? rollLabel(selected) : placeholder}</span>
           <ChevronDown className="h-4 w-4 shrink-0 opacity-60" />
         </button>
       </PopoverTrigger>

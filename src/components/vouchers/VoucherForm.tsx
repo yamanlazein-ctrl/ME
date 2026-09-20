@@ -146,7 +146,7 @@ export function VoucherForm({
     // add it back so the same (or smaller) amount still validates.
     const creditBack =
       editing && editing.status === "active" && editing.invoiceId
-        ? toInvoiceCurrency(
+        ? (toInvoiceCurrency(
             editing.amount,
             {
               currency: editing.currency,
@@ -154,7 +154,7 @@ export function VoucherForm({
             },
             // settled into invoice currency — look up invoice below
             allInvoices.find((i) => i.id === editing.invoiceId)?.currency ?? editing.currency,
-          ) ?? 0
+          ) ?? 0)
         : 0;
     const editInvoiceId = editing?.invoiceId ?? "";
 
@@ -166,7 +166,8 @@ export function VoucherForm({
         const rawRemaining = invoiceTotal(i) - (i.paid ?? 0) - returnsSum;
         let remaining = Math.max(0, rawRemaining);
         // Show credit as 0 remaining (cannot collect more), but keep raw for validation message
-        if (editInvoiceId && i.id === editInvoiceId) remaining = Math.max(0, remaining + creditBack);
+        if (editInvoiceId && i.id === editInvoiceId)
+          remaining = Math.max(0, remaining + creditBack);
         return { ...i, remaining, rawRemaining, returnsSum };
       })
       .filter((i) => {
@@ -271,8 +272,7 @@ export function VoucherForm({
 
   const selectedInvoice = invoiceOptions.find((i) => i.id === invoiceId);
   const showFxField =
-    currency !== "USD" ||
-    Boolean(selectedInvoice && selectedInvoice.currency !== currency);
+    currency !== "USD" || Boolean(selectedInvoice && selectedInvoice.currency !== currency);
 
   // Live preview of settlement math (multiply when paying USD against SYP):
   // amount × rate → invoice currency. Shown whenever both amount and rate
@@ -297,7 +297,8 @@ export function VoucherForm({
     <>
       {editId && editing?.status === "active" && (
         <div className="mb-3 rounded-lg border border-warning/40 bg-warning/10 px-4 py-2 text-sm text-warning-foreground">
-          تعديل السند {editing.number} — عند الحفظ يُلغى السند الحالي ويُنشأ سند جديد بالقيم المعدّلة.
+          تعديل السند {editing.number} — عند الحفظ يُلغى السند الحالي ويُنشأ سند جديد بالقيم
+          المعدّلة.
         </div>
       )}
       <PageCard title="بيانات السند" description="اختر الطرف والمبلغ وطريقة الاستلام / الدفع.">
@@ -363,10 +364,7 @@ export function VoucherForm({
               </p>
             ) : null}
           </FormField>
-          <FormField
-            label="الخصم (يُخصم من النقد)"
-            error={discountError ?? undefined}
-          >
+          <FormField label="الخصم (يُخصم من النقد)" error={discountError ?? undefined}>
             <FormattedAmountInput
               value={discount}
               onChange={(v) => {
@@ -378,7 +376,8 @@ export function VoucherForm({
             />
             {amount && Number(amount) > 0 && Number(discount) > 0 ? (
               <p className="mt-1 text-[11px] leading-snug text-muted-foreground">
-                الصافي نقداً: {formatAmount(Math.max(0, Number(amount) - (Number(discount) || 0)), currency)}
+                الصافي نقداً:{" "}
+                {formatAmount(Math.max(0, Number(amount) - (Number(discount) || 0)), currency)}
               </p>
             ) : null}
           </FormField>

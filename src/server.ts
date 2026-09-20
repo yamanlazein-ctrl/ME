@@ -1,5 +1,5 @@
 // Inline SSR helpers to avoid Vite module-runner deadlocks while optimizeDeps
- // is still bundling sibling files (fetchModule timeouts on error-*.ts).
+// is still bundling sibling files (fetchModule timeouts on error-*.ts).
 
 import { memoizeUntilRejected } from "./lib/memoizeUntilRejected.js";
 

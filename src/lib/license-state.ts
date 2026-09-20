@@ -107,8 +107,7 @@ export function getActivationId(): string | null {
  * same fallback semantics as `decryptValue` (a pre-encryption plaintext value
  * passes through).
  */
-const UUID_RE =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export async function getDecryptedActivationId(): Promise<string | null> {
   const raw = readString(ACTIVATION_ID_STORAGE);

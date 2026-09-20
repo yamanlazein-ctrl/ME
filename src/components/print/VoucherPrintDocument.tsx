@@ -60,7 +60,12 @@ export function VoucherPrintDocument({ voucher }: { voucher: Voucher }) {
    */
   const counterpart = (() => {
     if (!v.invoiceCurrency || v.invoiceCurrency === v.currency) return null;
-    const value = convertForSettlement(v.amount, v.currency, v.invoiceCurrency, v.exchangeRate ?? null);
+    const value = convertForSettlement(
+      v.amount,
+      v.currency,
+      v.invoiceCurrency,
+      v.exchangeRate ?? null,
+    );
     // No usable rate: the amount is not expressible, so print nothing rather
     // than a silently wrong number.
     if (value === null) return null;
@@ -72,9 +77,7 @@ export function VoucherPrintDocument({ voucher }: { voucher: Voucher }) {
 
   const totals: PrintTotal[] = [
     { label: "مبلغ التسوية", value: `${formatMoney(v.amount)} ${sym}` },
-    ...(discount > 0
-      ? [{ label: "الخصم", value: `- ${formatMoney(discount)} ${sym}` }]
-      : []),
+    ...(discount > 0 ? [{ label: "الخصم", value: `- ${formatMoney(discount)} ${sym}` }] : []),
     {
       label: discount > 0 ? "الصافي نقداً" : "المبلغ",
       value: `${formatMoney(discount > 0 ? netCash : v.amount)} ${sym}`,

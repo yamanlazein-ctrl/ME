@@ -105,4 +105,3 @@ export const PendingConflictsEndpoint: EndpointMeta = {
   description:
     "Informational check: which pending customer orders want the same fabric/color about to be sold. Never blocks.",
 };
-

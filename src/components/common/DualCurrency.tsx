@@ -71,7 +71,9 @@ export function DualCurrency({
         </span>
       )}
       {hasSyp && hasUsd && (
-        <span className="text-[10px] text-muted-foreground">سعر {rateUsd} ل.س — {rateDate}</span>
+        <span className="text-[10px] text-muted-foreground">
+          سعر {rateUsd} ل.س — {rateDate}
+        </span>
       )}
     </div>
   );

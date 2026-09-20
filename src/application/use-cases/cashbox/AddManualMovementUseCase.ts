@@ -21,7 +21,10 @@ export class AddManualMovementUseCase {
       return Err(new ValidationError(first.message, first.path.join(".")));
     }
 
-    const saved = await this.cashbox.addManualMovement(parsed.data as CreateManualMovementInput, ctx);
+    const saved = await this.cashbox.addManualMovement(
+      parsed.data as CreateManualMovementInput,
+      ctx,
+    );
     return Ok(saved);
   }
 }

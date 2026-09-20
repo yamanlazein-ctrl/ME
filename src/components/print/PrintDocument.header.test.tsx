@@ -110,9 +110,7 @@ function assertCanonicalHeader(html: string) {
   expect(html).toContain("print-brand-name");
   expect(html).toContain("print-brand-identity");
   // Logo first, then identity block (name + contact) — physical LTR columns.
-  expect(brandBlock.indexOf("print-logo")).toBeLessThan(
-    brandBlock.indexOf("print-brand-identity"),
-  );
+  expect(brandBlock.indexOf("print-logo")).toBeLessThan(brandBlock.indexOf("print-brand-identity"));
   expect(brandBlock.indexOf("print-brand-name")).toBeLessThan(
     brandBlock.indexOf("print-brand-contact"),
   );

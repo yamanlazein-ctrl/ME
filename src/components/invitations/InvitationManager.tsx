@@ -1,5 +1,14 @@
 import { useCallback, useEffect, useState } from "react";
-import { Plus, Copy, Check, Ban, Ticket, RefreshCw, UserPlus, MonitorSmartphone } from "lucide-react";
+import {
+  Plus,
+  Copy,
+  Check,
+  Ban,
+  Ticket,
+  RefreshCw,
+  UserPlus,
+  MonitorSmartphone,
+} from "lucide-react";
 import { toast } from "sonner";
 import { PageCard } from "@/components/layout/PageCard";
 import { Button } from "@/components/ui/button";
@@ -282,11 +291,7 @@ function CopyCode({ value }: { value: string }) {
         }
       }}
     >
-      {done ? (
-        <Check className="h-3.5 w-3.5 text-success" />
-      ) : (
-        <Copy className="h-3.5 w-3.5" />
-      )}
+      {done ? <Check className="h-3.5 w-3.5 text-success" /> : <Copy className="h-3.5 w-3.5" />}
     </Button>
   );
 }

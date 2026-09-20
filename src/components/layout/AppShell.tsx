@@ -197,8 +197,7 @@ export function AppShell({
     "group/item relative flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-[13px] font-medium transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
   const navItemActive =
     "bg-primary/15 text-primary font-semibold shadow-[inset_3px_0_0_0_var(--primary)]";
-  const navItemInactive =
-    "text-foreground/65 hover:bg-secondary/80 hover:text-foreground";
+  const navItemInactive = "text-foreground/65 hover:bg-secondary/80 hover:text-foreground";
 
   const renderNav = (isMobile: boolean) => {
     const collapsedDesktop = !isMobile && collapsed;
@@ -337,7 +336,9 @@ export function AppShell({
                       <span
                         className={cn(
                           "h-1.5 w-1.5 rounded-full",
-                          containsActive ? "bg-primary shadow-[0_0_6px_var(--primary)]" : "bg-border",
+                          containsActive
+                            ? "bg-primary shadow-[0_0_6px_var(--primary)]"
+                            : "bg-border",
                         )}
                         aria-hidden
                       />
@@ -360,10 +361,7 @@ export function AppShell({
                             <Link
                               to={n.to}
                               title={n.label}
-                              className={cn(
-                                navItemBase,
-                                active ? navItemActive : navItemInactive,
-                              )}
+                              className={cn(navItemBase, active ? navItemActive : navItemInactive)}
                             >
                               <n.icon className="h-4 w-4 shrink-0 opacity-90" strokeWidth={2} />
                               <span className="truncate">{n.label}</span>
@@ -393,7 +391,9 @@ export function AppShell({
                   {me.name?.trim()?.charAt(0) || "م"}
                 </div>
                 <div className="min-w-0 flex-1">
-                  <div className="truncate text-[12px] font-semibold text-foreground">{me.name}</div>
+                  <div className="truncate text-[12px] font-semibold text-foreground">
+                    {me.name}
+                  </div>
                   <div className="truncate text-[10px] text-muted-foreground">{me.role}</div>
                 </div>
               </div>

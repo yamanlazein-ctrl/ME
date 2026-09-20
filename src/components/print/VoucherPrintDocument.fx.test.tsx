@@ -84,9 +84,7 @@ describe("VoucherPrintDocument cross-currency counterpart", () => {
   it("prints no counterpart line when the voucher itself has no usable rate", () => {
     // invoiceExchangeRate is irrelevant to the counterpart now — only the
     // voucher's own (unset here) rate is.
-    const html = render(
-      makeVoucher({ invoiceCurrency: "SYP", invoiceExchangeRate: 132 }),
-    );
+    const html = render(makeVoucher({ invoiceCurrency: "SYP", invoiceExchangeRate: 132 }));
     expect(html).not.toContain("المقابل");
   });
 });

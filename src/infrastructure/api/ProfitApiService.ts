@@ -1,9 +1,5 @@
 import type { BaseHttpClient } from "@/infrastructure/http";
-import type {
-  ProfitSummaryDTO,
-  ProfitDetailsDTO,
-  ProfitQueryParams,
-} from "@/contracts/profit";
+import type { ProfitSummaryDTO, ProfitDetailsDTO, ProfitQueryParams } from "@/contracts/profit";
 
 /**
  * HTTP access to the server-authoritative profit endpoints.

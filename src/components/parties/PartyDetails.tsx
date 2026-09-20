@@ -184,18 +184,13 @@ function StatementInvoiceActions({
   onDelete: (inv: Invoice) => void;
 }) {
   const cancelled = invoice?.status === "cancelled";
-  const canEdit =
-    !!invoice && !cancelled && (invoice.type === "sale" || invoice.type === "entry");
+  const canEdit = !!invoice && !cancelled && (invoice.type === "sale" || invoice.type === "entry");
   return (
     <div
       className="inline-flex flex-nowrap items-center gap-1 whitespace-nowrap text-[11px] font-semibold"
       onClick={(e) => e.stopPropagation()}
     >
-      <Link
-        to="/invoices/$id"
-        params={{ id: invoiceId }}
-        className="text-primary hover:underline"
-      >
+      <Link to="/invoices/$id" params={{ id: invoiceId }} className="text-primary hover:underline">
         عرض
       </Link>
       <span className="text-muted-foreground/50">|</span>
@@ -254,9 +249,7 @@ export function PartyDetailsPage({ kind, id }: { kind: PartyKind; id: string }) 
     p ? { partyId: p.id, type: isSup ? "entry" : "sale", limit: 1000 } : undefined,
   );
   const allInvoices = invoicesData?.data ?? [];
-  const { data: vouchersData } = useVouchersList(
-    p ? { partyId: p.id, limit: 1000 } : undefined,
-  );
+  const { data: vouchersData } = useVouchersList(p ? { partyId: p.id, limit: 1000 } : undefined);
   const allVouchers = vouchersData?.data ?? [];
   const { data: returnsData } = useReturnsList(
     p ? { partyId: p.id, status: "active", limit: 1000 } : undefined,
@@ -1014,7 +1007,11 @@ function StatementTab({ p, kind }: { p: Party; kind: PartyKind }) {
           </div>
         </div>
         <div className="mt-3 flex flex-wrap items-center gap-2">
-          <Button variant="outline" className="h-9 gap-2" onClick={() => printDocument(printDoc, printFilterKey)}>
+          <Button
+            variant="outline"
+            className="h-9 gap-2"
+            onClick={() => printDocument(printDoc, printFilterKey)}
+          >
             <Printer className="h-4 w-4" /> طباعة / PDF
           </Button>
           <Button variant="outline" className="h-9 gap-2" onClick={exportCsv}>
@@ -1061,7 +1058,10 @@ function StatementTab({ p, kind }: { p: Party; kind: PartyKind }) {
                   .map(([c, t]) => {
                     const sym = currencySymbol(c as Currency);
                     return (
-                      <div key={c} className="rounded-lg border border-primary/30 bg-primary/5 px-4 py-3">
+                      <div
+                        key={c}
+                        className="rounded-lg border border-primary/30 bg-primary/5 px-4 py-3"
+                      >
                         <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
                           الرصيد المستحق — {sym}
                         </div>
@@ -1103,7 +1103,13 @@ function StatementTab({ p, kind }: { p: Party; kind: PartyKind }) {
                   </div>
                   <div
                     className={`mt-1 text-sm font-bold tabular-nums ${
-                      s.bold ? (s.value > 0 ? "text-warning" : s.value < 0 ? "text-success" : "") : ""
+                      s.bold
+                        ? s.value > 0
+                          ? "text-warning"
+                          : s.value < 0
+                            ? "text-success"
+                            : ""
+                        : ""
                     }`}
                   >
                     <MoneyText amount={s.value} currency={multiCcy ? "" : displayCcy} />
@@ -1271,9 +1277,7 @@ function StatementTab({ p, kind }: { p: Party; kind: PartyKind }) {
                       >
                         <MoneyText
                           amount={r.runningBalance}
-                          currency={
-                            multiCcy ? ((r.currency as Currency) ?? "SYP") : ""
-                          }
+                          currency={multiCcy ? ((r.currency as Currency) ?? "SYP") : ""}
                         />
                         {/* #4: make explicit that the cancelled row did NOT move
                             the balance, instead of silently carrying it forward. */}
@@ -1628,7 +1632,10 @@ function StatsTab({ p, kind }: { p: Party; kind: PartyKind }) {
               const s = statsByCurrency[c]!;
               const sym = currencySymbol(c as Currency);
               return (
-                <div key={c} className="rounded-lg border border-primary/20 bg-background/60 px-4 py-3">
+                <div
+                  key={c}
+                  className="rounded-lg border border-primary/20 bg-background/60 px-4 py-3"
+                >
                   <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
                     مستحق {sym}
                   </div>
@@ -1637,8 +1644,7 @@ function StatsTab({ p, kind }: { p: Party; kind: PartyKind }) {
                       s.remaining > 0 ? "text-warning" : s.remaining < 0 ? "text-success" : ""
                     }`}
                   >
-                    {fmt(s.remaining)}{" "}
-                    <span className="text-xs font-normal opacity-70">{sym}</span>
+                    {fmt(s.remaining)} <span className="text-xs font-normal opacity-70">{sym}</span>
                   </div>
                   <div className="mt-1 text-[10px] text-muted-foreground tabular-nums">
                     فواتير {s.invoicesCount} · مدفوع {fmt(s.totalPaid)}

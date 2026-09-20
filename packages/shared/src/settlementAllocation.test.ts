@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { allocateSettlementPayment, settlementRequiresExchangeRate } from "./settlementAllocation.js";
+import {
+  allocateSettlementPayment,
+  settlementRequiresExchangeRate,
+} from "./settlementAllocation.js";
 
 describe("settlementRequiresExchangeRate", () => {
   it("requires rate for non-USD settlement currency", () => {
@@ -38,7 +41,13 @@ describe("allocateSettlementPayment", () => {
           currency: "SYP",
           remaining: 1_000_000,
         },
-        { invoiceId: "usd", number: "INV-002", date: "2026-01-02", currency: "USD", remaining: 200 },
+        {
+          invoiceId: "usd",
+          number: "INV-002",
+          date: "2026-01-02",
+          currency: "USD",
+          remaining: 200,
+        },
       ],
       amountPaid: 300,
       settlementCurrency: "USD",

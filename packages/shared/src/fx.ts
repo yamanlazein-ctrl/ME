@@ -86,11 +86,7 @@ export function fromBaseEquivalent(
  *
  * Returns null when either side is non-USD and missing its rate.
  */
-export function convertAmount(
-  amount: number,
-  from: FxSide,
-  to: FxSide,
-): number | null {
+export function convertAmount(amount: number, from: FxSide, to: FxSide): number | null {
   if (!Number.isFinite(amount)) return null;
   if (from.currency === to.currency) return round2dp(amount);
   const fromRate = from.currency === BASE_CURRENCY ? 1 : from.exchangeRate;

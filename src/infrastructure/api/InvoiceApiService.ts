@@ -54,9 +54,8 @@ export class InvoiceApiService {
   async nextNumber(
     type: "sale" | "entry",
   ): Promise<{ data: { number: string; estimate: boolean } }> {
-    return this.client.get<{ number: string; estimate: boolean }>(
-      "/api/invoices/next-number",
-      { params: { type } },
-    );
+    return this.client.get<{ number: string; estimate: boolean }>("/api/invoices/next-number", {
+      params: { type },
+    });
   }
 }

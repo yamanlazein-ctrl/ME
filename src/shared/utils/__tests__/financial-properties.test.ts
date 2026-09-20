@@ -131,7 +131,8 @@ describe("Invoice financial properties (fast-check)", () => {
             });
 
             const expectedSum = invoiceLines.reduce(
-              (sum, l) => sum + Math.max(0, round2dp(l.quantityKg * l.pricePerKg - l.discountAmount)),
+              (sum, l) =>
+                sum + Math.max(0, round2dp(l.quantityKg * l.pricePerKg - l.discountAmount)),
               0,
             );
             expect(invoice.total()).toBeCloseTo(expectedSum, 5);

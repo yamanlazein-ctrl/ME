@@ -45,10 +45,10 @@ export interface InvoiceData {
   shipping?: number;
   notes?: string;
   /**
-    * Amount paid — maintained by the backend on every voucher create/cancel
-    * and persisted on the invoice row. Read from the invoice for all display.
-    * Initially set at creation time (sale = receipt, entry = supplier payment).
-    */
+   * Amount paid — maintained by the backend on every voucher create/cancel
+   * and persisted on the invoice row. Read from the invoice for all display.
+   * Initially set at creation time (sale = receipt, entry = supplier payment).
+   */
   paid?: number;
   /** Receipt method used when `paid > 0`. Defaults to "cash". */
   paymentMethod?: "cash" | "transfer" | "check" | "card";

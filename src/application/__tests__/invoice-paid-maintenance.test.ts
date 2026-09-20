@@ -27,7 +27,7 @@ describe("Invoice paid maintenance [P0-LOGIC-3.3]", () => {
     expect(amountDue()).toBe(600_000); // ledger correctly shows 600k still due after cancellation
 
     // Second scenario: created with paid 0, then collect 1_000_000 via voucher
-    let total2 = 1_000_000;
+    const total2 = 1_000_000;
     let paid2 = 0;
     const amountDue2 = () => total2 - paid2;
     expect(amountDue2()).toBe(1_000_000);

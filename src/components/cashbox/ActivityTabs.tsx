@@ -15,10 +15,7 @@ import { ErrorState } from "@/components/ui/error-state";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import {
-  useLedgerEntries,
-  LEDGER_TYPE_LABEL,
-} from "@/presentation/hooks/useLedger";
+import { useLedgerEntries, LEDGER_TYPE_LABEL } from "@/presentation/hooks/useLedger";
 import { MANUAL_TYPE_LABEL } from "@/presentation/hooks/useCashbox";
 import { formatAmount } from "@/presentation/hooks/useCurrency";
 import { useHydrated } from "@/hooks/use-hydrated";
@@ -58,7 +55,13 @@ export function ActivityTabs({
   onDeleteManual: (id: string) => void;
 }) {
   const hydrated = useHydrated();
-  const { data: ledgerResult, isLoading, isError, refetch, error } = useLedgerEntries({
+  const {
+    data: ledgerResult,
+    isLoading,
+    isError,
+    refetch,
+    error,
+  } = useLedgerEntries({
     fromDate: query.fromDate,
     toDate: query.toDate,
     limit: 500,
@@ -79,9 +82,7 @@ export function ActivityTabs({
   );
 
   const manualRows = manualMoves.filter(
-    (m) =>
-      (period.currency === "all" || m.currency === period.currency) &&
-      inPeriod(m.date),
+    (m) => (period.currency === "all" || m.currency === period.currency) && inPeriod(m.date),
   );
 
   const rows = [
@@ -98,9 +99,7 @@ export function ActivityTabs({
               كل الحركات
               <CountBadge n={rows.length} />
             </TabsTrigger>
-            <TabsTrigger value="invoices">
-              فواتير البيع
-            </TabsTrigger>
+            <TabsTrigger value="invoices">فواتير البيع</TabsTrigger>
             <TabsTrigger value="receipts">سندات القبض</TabsTrigger>
             <TabsTrigger value="payments">سندات الصرف</TabsTrigger>
           </TabsList>
@@ -140,7 +139,12 @@ export function ActivityTabs({
                     r.kind === "ledger" ? (
                       <LedgerRow key={r.entry.id} e={r.entry} hydrated={hydrated} />
                     ) : (
-                      <ManualRow key={r.move.id} m={r.move} hydrated={hydrated} onDelete={onDeleteManual} />
+                      <ManualRow
+                        key={r.move.id}
+                        m={r.move}
+                        hydrated={hydrated}
+                        onDelete={onDeleteManual}
+                      />
                     ),
                   )}
                 </TableBody>
@@ -264,5 +268,3 @@ function ManualRow({
     </TableRow>
   );
 }
-
-

@@ -240,146 +240,146 @@ function FabricFormDialog({ state, onClose }: { state: FabricFormState; onClose:
 
           {!editing && (
             <>
-          <SectionCard
-            index={2}
-            title="بيانات المورد"
-            desc="المورد وتاريخ الإدخال والمستخدم المسؤول."
-          >
-            <Field label="المورد">
-              <Select value={supplierId} onValueChange={setSupplierId}>
-                <SelectTrigger className="!h-10">
-                  <SelectValue placeholder="ابحث واختر مورداً" />
-                </SelectTrigger>
-                <SelectContent>
-                  {suppliers.map((s) => (
-                    <SelectItem key={s.id} value={s.id}>
-                      {s.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </Field>
-            <Field label="تاريخ الإدخال">
-              <Input
-                className="h-10"
-                type="date"
-                value={entryDate}
-                onChange={(e) => setEntryDate(e.target.value)}
-              />
-            </Field>
-            <Field label="الشخص الذي قام بالإضافة" full>
-              <Select value={createdBy} onValueChange={setCreatedBy}>
-                <SelectTrigger className="!h-10">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="أحمد الشامي">أحمد الشامي</SelectItem>
-                  <SelectItem value="محمد الحلبي">محمد الحلبي</SelectItem>
-                  <SelectItem value="خالد الأحمد">خالد الأحمد</SelectItem>
-                </SelectContent>
-              </Select>
-            </Field>
-          </SectionCard>
+              <SectionCard
+                index={2}
+                title="بيانات المورد"
+                desc="المورد وتاريخ الإدخال والمستخدم المسؤول."
+              >
+                <Field label="المورد">
+                  <Select value={supplierId} onValueChange={setSupplierId}>
+                    <SelectTrigger className="!h-10">
+                      <SelectValue placeholder="ابحث واختر مورداً" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {suppliers.map((s) => (
+                        <SelectItem key={s.id} value={s.id}>
+                          {s.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </Field>
+                <Field label="تاريخ الإدخال">
+                  <Input
+                    className="h-10"
+                    type="date"
+                    value={entryDate}
+                    onChange={(e) => setEntryDate(e.target.value)}
+                  />
+                </Field>
+                <Field label="الشخص الذي قام بالإضافة" full>
+                  <Select value={createdBy} onValueChange={setCreatedBy}>
+                    <SelectTrigger className="!h-10">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="أحمد الشامي">أحمد الشامي</SelectItem>
+                      <SelectItem value="محمد الحلبي">محمد الحلبي</SelectItem>
+                      <SelectItem value="خالد الأحمد">خالد الأحمد</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </Field>
+              </SectionCard>
 
-          <SectionCard index={3} title="بيانات اللون" desc="اسم اللون ورقمه — حقلان منفصلان.">
-            <Field label="اسم اللون">
-              <Input
-                className="h-10"
-                value={colorName}
-                onChange={(e) => setColorName(e.target.value)}
-                placeholder="مثال: أزرق سماوي"
-              />
-            </Field>
-            <Field label="رقم اللون">
-              <Input
-                className="h-10 tabular-nums"
-                value={colorCode}
-                onChange={(e) => setColorCode(e.target.value)}
-                placeholder="C-014"
-              />
-            </Field>
-          </SectionCard>
+              <SectionCard index={3} title="بيانات اللون" desc="اسم اللون ورقمه — حقلان منفصلان.">
+                <Field label="اسم اللون">
+                  <Input
+                    className="h-10"
+                    value={colorName}
+                    onChange={(e) => setColorName(e.target.value)}
+                    placeholder="مثال: أزرق سماوي"
+                  />
+                </Field>
+                <Field label="رقم اللون">
+                  <Input
+                    className="h-10 tabular-nums"
+                    value={colorCode}
+                    onChange={(e) => setColorCode(e.target.value)}
+                    placeholder="C-014"
+                  />
+                </Field>
+              </SectionCard>
 
-          <SectionCard
-            index={4}
-            title="بيانات الصبغة"
-            desc="الصبغة الأولى الواردة مع هذا القماش (اختياري)."
-          >
-            <Field label="رقم الصبغة">
-              <Input
-                className="h-10"
-                value={dyeBatch}
-                onChange={(e) => setDyeBatch(e.target.value)}
-                placeholder="D-8801"
-              />
-            </Field>
-            <Field label="العرض (سم)">
-              <Input
-                className="h-10"
-                type="number"
-                inputMode="decimal"
-                step="0.01"
-                min="0"
-                value={widthCm}
-                onChange={(e) => setWidthCm(e.target.value)}
-              />
-            </Field>
-            <Field label="الكثافة / الوزن (غ/م²)">
-              <Input
-                className="h-10"
-                type="number"
-                inputMode="decimal"
-                step="0.01"
-                min="0"
-                value={weightGsm}
-                onChange={(e) => setWeightGsm(e.target.value)}
-              />
-            </Field>
-            <Field label="الكمية (كغ)">
-              <Input
-                className="h-10"
-                type="number"
-                inputMode="decimal"
-                step="0.01"
-                min="0"
-                value={qty}
-                onChange={(e) => setQty(e.target.value)}
-              />
-            </Field>
-            <Field label="سعر الشراء / كغ">
-              <div className="flex gap-2">
-                <Input
-                  className="h-10 flex-1"
-                  type="number"
-                  inputMode="decimal"
-                  step="0.01"
-                  min="0"
-                  value={purchasePrice}
-                  onChange={(e) => setPurchasePrice(e.target.value)}
-                />
-                <Select value={currency} onValueChange={(v) => setCurrency(v as Currency)}>
-                  <SelectTrigger className="!h-10 w-24">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="SYP">ل.س</SelectItem>
-                    <SelectItem value="USD">$</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </Field>
-            <Field label="سعر البيع / كغ">
-              <Input
-                className="h-10"
-                type="number"
-                inputMode="decimal"
-                step="0.01"
-                min="0"
-                value={salePrice}
-                onChange={(e) => setSalePrice(e.target.value)}
-              />
-            </Field>
-          </SectionCard>
+              <SectionCard
+                index={4}
+                title="بيانات الصبغة"
+                desc="الصبغة الأولى الواردة مع هذا القماش (اختياري)."
+              >
+                <Field label="رقم الصبغة">
+                  <Input
+                    className="h-10"
+                    value={dyeBatch}
+                    onChange={(e) => setDyeBatch(e.target.value)}
+                    placeholder="D-8801"
+                  />
+                </Field>
+                <Field label="العرض (سم)">
+                  <Input
+                    className="h-10"
+                    type="number"
+                    inputMode="decimal"
+                    step="0.01"
+                    min="0"
+                    value={widthCm}
+                    onChange={(e) => setWidthCm(e.target.value)}
+                  />
+                </Field>
+                <Field label="الكثافة / الوزن (غ/م²)">
+                  <Input
+                    className="h-10"
+                    type="number"
+                    inputMode="decimal"
+                    step="0.01"
+                    min="0"
+                    value={weightGsm}
+                    onChange={(e) => setWeightGsm(e.target.value)}
+                  />
+                </Field>
+                <Field label="الكمية (كغ)">
+                  <Input
+                    className="h-10"
+                    type="number"
+                    inputMode="decimal"
+                    step="0.01"
+                    min="0"
+                    value={qty}
+                    onChange={(e) => setQty(e.target.value)}
+                  />
+                </Field>
+                <Field label="سعر الشراء / كغ">
+                  <div className="flex gap-2">
+                    <Input
+                      className="h-10 flex-1"
+                      type="number"
+                      inputMode="decimal"
+                      step="0.01"
+                      min="0"
+                      value={purchasePrice}
+                      onChange={(e) => setPurchasePrice(e.target.value)}
+                    />
+                    <Select value={currency} onValueChange={(v) => setCurrency(v as Currency)}>
+                      <SelectTrigger className="!h-10 w-24">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="SYP">ل.س</SelectItem>
+                        <SelectItem value="USD">$</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </Field>
+                <Field label="سعر البيع / كغ">
+                  <Input
+                    className="h-10"
+                    type="number"
+                    inputMode="decimal"
+                    step="0.01"
+                    min="0"
+                    value={salePrice}
+                    onChange={(e) => setSalePrice(e.target.value)}
+                  />
+                </Field>
+              </SectionCard>
             </>
           )}
 
@@ -515,98 +515,98 @@ function ColorFormDialog({ state, onClose }: { state: ColorFormState; onClose: (
           </DialogTitle>
         </DialogHeader>
         <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5">
-        <div className="grid gap-3">
-          <div className="flex items-center gap-3">
-            <ColorSwatch
-              color={{ name, code, hex: hex ?? null, imageUrl: imageUrl ?? null }}
-              size="lg"
-            />
-            <div className="flex-1">
-              <Label>صورة اللون (اختياري)</Label>
-              <div className="mt-1 flex gap-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => fileRef.current?.click()}
-                >
-                  رفع صورة
-                </Button>
-                {imageUrl && (
+          <div className="grid gap-3">
+            <div className="flex items-center gap-3">
+              <ColorSwatch
+                color={{ name, code, hex: hex ?? null, imageUrl: imageUrl ?? null }}
+                size="lg"
+              />
+              <div className="flex-1">
+                <Label>صورة اللون (اختياري)</Label>
+                <div className="mt-1 flex gap-2">
                   <Button
                     type="button"
-                    variant="ghost"
+                    variant="outline"
                     size="sm"
-                    onClick={() => setImageUrl(undefined)}
+                    onClick={() => fileRef.current?.click()}
                   >
-                    حذف
+                    رفع صورة
+                  </Button>
+                  {imageUrl && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setImageUrl(undefined)}
+                    >
+                      حذف
+                    </Button>
+                  )}
+                </div>
+                <input
+                  ref={fileRef}
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={(e) => onFile(e.target.files?.[0])}
+                />
+              </div>
+            </div>
+            <div>
+              <Label>اسم اللون *</Label>
+              <Input
+                value={name}
+                onChange={(e) => {
+                  setName(e.target.value);
+                  setNameErr(null);
+                }}
+              />
+              {nameErr && <p className="mt-1 text-[11px] text-destructive">{nameErr}</p>}
+            </div>
+            <div>
+              <Label>رقم اللون (Color Code) *</Label>
+              <Input
+                value={code}
+                onChange={(e) => {
+                  setCode(e.target.value);
+                  setCodeErr(null);
+                }}
+                placeholder="مثال: C-014"
+              />
+            </div>
+            <div className="rounded-md border border-border bg-secondary/30 p-2.5">
+              <Label>اللون الحقيقي (Hex) — اختياري</Label>
+              <div className="mt-2 flex items-center gap-3">
+                <div className="grid h-10 w-14 shrink-0 place-items-center overflow-hidden rounded-md border border-border">
+                  <input
+                    type="color"
+                    value={/^#[0-9a-fA-F]{6}$/.test(hex ?? "") ? hex!.toLowerCase() : "#000000"}
+                    onChange={(e) => setHex(e.target.value.toLowerCase())}
+                    className="h-full w-full cursor-pointer p-0"
+                    aria-label="اختر اللون الحقيقي"
+                    title="اختر القيمة البصرية الحقيقية للون"
+                  />
+                </div>
+                <Input
+                  value={hex ?? ""}
+                  onChange={(e) =>
+                    setHex(e.target.value.startsWith("#") ? e.target.value : `#${e.target.value}`)
+                  }
+                  placeholder="#000000"
+                  className="flex-1 text-[12px] tabular-nums"
+                  aria-label="قيمة اللون (Hex)"
+                />
+                {hex && (
+                  <Button type="button" variant="ghost" size="sm" onClick={() => setHex(undefined)}>
+                    مسح
                   </Button>
                 )}
               </div>
-              <input
-                ref={fileRef}
-                type="file"
-                accept="image/*"
-                className="hidden"
-                onChange={(e) => onFile(e.target.files?.[0])}
-              />
+              <p className="mt-1.5 text-[10.5px] text-muted-foreground">
+                تُخزَّن هذه القيمة وتُعرض كما هي في المخزون. <code>code</code> يبقى كود تعريف منفصل.
+              </p>
             </div>
           </div>
-          <div>
-            <Label>اسم اللون *</Label>
-            <Input
-              value={name}
-              onChange={(e) => {
-                setName(e.target.value);
-                setNameErr(null);
-              }}
-            />
-            {nameErr && <p className="mt-1 text-[11px] text-destructive">{nameErr}</p>}
-          </div>
-          <div>
-            <Label>رقم اللون (Color Code) *</Label>
-            <Input
-              value={code}
-              onChange={(e) => {
-                setCode(e.target.value);
-                setCodeErr(null);
-              }}
-              placeholder="مثال: C-014"
-            />
-          </div>
-          <div className="rounded-md border border-border bg-secondary/30 p-2.5">
-            <Label>اللون الحقيقي (Hex) — اختياري</Label>
-            <div className="mt-2 flex items-center gap-3">
-              <div className="grid h-10 w-14 shrink-0 place-items-center overflow-hidden rounded-md border border-border">
-                <input
-                  type="color"
-                  value={/^#[0-9a-fA-F]{6}$/.test(hex ?? "") ? hex!.toLowerCase() : "#000000"}
-                  onChange={(e) => setHex(e.target.value.toLowerCase())}
-                  className="h-full w-full cursor-pointer p-0"
-                  aria-label="اختر اللون الحقيقي"
-                  title="اختر القيمة البصرية الحقيقية للون"
-                />
-              </div>
-              <Input
-                value={hex ?? ""}
-                onChange={(e) =>
-                  setHex(e.target.value.startsWith("#") ? e.target.value : `#${e.target.value}`)
-                }
-                placeholder="#000000"
-                className="flex-1 text-[12px] tabular-nums"
-                aria-label="قيمة اللون (Hex)"
-              />
-              {hex && (
-                <Button type="button" variant="ghost" size="sm" onClick={() => setHex(undefined)}>
-                  مسح
-                </Button>
-              )}
-            </div>
-            <p className="mt-1.5 text-[10.5px] text-muted-foreground">
-              تُخزَّن هذه القيمة وتُعرض كما هي في المخزون. <code>code</code> يبقى كود تعريف منفصل.
-            </p>
-          </div>
-        </div>
         </div>
         <DialogFooter className="sticky bottom-0 border-t border-border bg-card px-6 py-4 shrink-0 flex-row-reverse gap-2">
           <Button
@@ -629,7 +629,9 @@ function RollFormDialog({ state, onClose }: { state: RollFormState; onClose: () 
   const editing = state.editing;
   const [rollNo, setRollNo] = useState(editing?.rollNo ?? "");
   const [dyeBatch, setDyeBatch] = useState(editing?.dyeBatch ?? "");
-  const [qty, setQty] = useState<string>(editing?.initialKg != null ? String(editing.initialKg) : "");
+  const [qty, setQty] = useState<string>(
+    editing?.initialKg != null ? String(editing.initialKg) : "",
+  );
   const [remaining, setRemaining] = useState<string>(
     editing?.remainingKg != null ? String(editing.remainingKg) : "",
   );
@@ -746,116 +748,118 @@ function RollFormDialog({ state, onClose }: { state: RollFormState; onClose: () 
           <DialogTitle>{editing ? "تعديل صبغة" : "إضافة صبغة جديدة"}</DialogTitle>
         </DialogHeader>
         <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5">
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <Label>رقم البكرة *</Label>
-            <Input
-              value={rollNo}
-              onChange={(e) => {
-                setRollNo(e.target.value);
-                setRollErr(null);
-              }}
-            />
-            {rollErr && <p className="mt-1 text-[11px] text-destructive">{rollErr}</p>}
-          </div>
-          <div>
-            <Label>رقم الصبغة *</Label>
-            <Input
-              value={dyeBatch}
-              onChange={(e) => {
-                setDyeBatch(e.target.value);
-                setDyeErr(null);
-              }}
-            />
-            {dyeErr && <p className="mt-1 text-[11px] text-destructive">{dyeErr}</p>}
-          </div>
-          <div>
-            <Label>الكمية (كغ) *</Label>
-            <Input
-              type="number"
-              inputMode="decimal"
-              step="0.01"
-              min="0"
-              value={qty}
-              onChange={(e) => {
-                const v = e.target.value;
-                setQty(v);
-                if (!editing) setRemaining(v);
-                setQtyErr(null);
-              }}
-            />
-            {qtyErr && <p className="mt-1 text-[11px] text-destructive">{qtyErr}</p>}
-          </div>
-          {editing && (
+          <div className="grid grid-cols-2 gap-3">
             <div>
-              <Label>المتبقي (كغ) — للعرض فقط</Label>
+              <Label>رقم البكرة *</Label>
+              <Input
+                value={rollNo}
+                onChange={(e) => {
+                  setRollNo(e.target.value);
+                  setRollErr(null);
+                }}
+              />
+              {rollErr && <p className="mt-1 text-[11px] text-destructive">{rollErr}</p>}
+            </div>
+            <div>
+              <Label>رقم الصبغة *</Label>
+              <Input
+                value={dyeBatch}
+                onChange={(e) => {
+                  setDyeBatch(e.target.value);
+                  setDyeErr(null);
+                }}
+              />
+              {dyeErr && <p className="mt-1 text-[11px] text-destructive">{dyeErr}</p>}
+            </div>
+            <div>
+              <Label>الكمية (كغ) *</Label>
               <Input
                 type="number"
                 inputMode="decimal"
                 step="0.01"
                 min="0"
-                value={remaining}
-                readOnly
-                disabled
-                title="الكمية المتبقية تُعدَّل عبر الفواتير والمرتجعات فقط"
+                value={qty}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  setQty(v);
+                  if (!editing) setRemaining(v);
+                  setQtyErr(null);
+                }}
               />
-              <p className="mt-1 text-[11px] text-muted-foreground">
-                لا يمكن تعديل المخزون من هنا — استخدم فاتورة دخول/بيع أو مرتجع.
-              </p>
+              {qtyErr && <p className="mt-1 text-[11px] text-destructive">{qtyErr}</p>}
             </div>
-          )}
-          <div>
-            <Label>سعر الشراء للكغ</Label>
-            <Input
-              type="number"
-              inputMode="decimal"
-              step="0.01"
-              min="0"
-              value={price}
-              onChange={(e) => setPrice(e.target.value)}
-            />
-          </div>
-          <div>
-            <Label>العملة</Label>
-            <Select value={currency} onValueChange={(v) => setCurrency(v as Currency)}>
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="SYP">ل.س (ليرة سورية)</SelectItem>
-                <SelectItem value="USD">$ (دولار)</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <div>
-            <Label>المورد *</Label>
-            <Select
-              value={supplierId}
-              onValueChange={(v) => {
-                setSupplierId(v);
-                setSupplierErr(null);
-              }}
-            >
-              <SelectTrigger
-                className={supplierErr ? "border-destructive/60 ring-1 ring-destructive/30" : undefined}
+            {editing && (
+              <div>
+                <Label>المتبقي (كغ) — للعرض فقط</Label>
+                <Input
+                  type="number"
+                  inputMode="decimal"
+                  step="0.01"
+                  min="0"
+                  value={remaining}
+                  readOnly
+                  disabled
+                  title="الكمية المتبقية تُعدَّل عبر الفواتير والمرتجعات فقط"
+                />
+                <p className="mt-1 text-[11px] text-muted-foreground">
+                  لا يمكن تعديل المخزون من هنا — استخدم فاتورة دخول/بيع أو مرتجع.
+                </p>
+              </div>
+            )}
+            <div>
+              <Label>سعر الشراء للكغ</Label>
+              <Input
+                type="number"
+                inputMode="decimal"
+                step="0.01"
+                min="0"
+                value={price}
+                onChange={(e) => setPrice(e.target.value)}
+              />
+            </div>
+            <div>
+              <Label>العملة</Label>
+              <Select value={currency} onValueChange={(v) => setCurrency(v as Currency)}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="SYP">ل.س (ليرة سورية)</SelectItem>
+                  <SelectItem value="USD">$ (دولار)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label>المورد *</Label>
+              <Select
+                value={supplierId}
+                onValueChange={(v) => {
+                  setSupplierId(v);
+                  setSupplierErr(null);
+                }}
               >
-                <SelectValue placeholder="اختر مورداً" />
-              </SelectTrigger>
-              <SelectContent>
-                {suppliers.map((s) => (
-                  <SelectItem key={s.id} value={s.id}>
-                    {s.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            {supplierErr && <p className="mt-1 text-[11px] text-destructive">{supplierErr}</p>}
+                <SelectTrigger
+                  className={
+                    supplierErr ? "border-destructive/60 ring-1 ring-destructive/30" : undefined
+                  }
+                >
+                  <SelectValue placeholder="اختر مورداً" />
+                </SelectTrigger>
+                <SelectContent>
+                  {suppliers.map((s) => (
+                    <SelectItem key={s.id} value={s.id}>
+                      {s.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {supplierErr && <p className="mt-1 text-[11px] text-destructive">{supplierErr}</p>}
+            </div>
+            <div>
+              <Label>تاريخ الدخول</Label>
+              <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+            </div>
           </div>
-          <div>
-            <Label>تاريخ الدخول</Label>
-            <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
-          </div>
-        </div>
         </div>
         <DialogFooter className="sticky bottom-0 border-t border-border bg-card px-6 py-4 shrink-0 flex-row-reverse gap-2">
           <Button

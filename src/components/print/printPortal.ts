@@ -63,9 +63,7 @@ function paperSizeCss(paper: string): string {
 function syncPrintPaper(container: HTMLElement): void {
   const docEl = container.querySelector(".print-doc");
   const paper =
-    (docEl instanceof HTMLElement && docEl.dataset.paper) ||
-    container.dataset.paper ||
-    "A4";
+    (docEl instanceof HTMLElement && docEl.dataset.paper) || container.dataset.paper || "A4";
   container.dataset.paper = paper;
   document.documentElement.dataset.paper = paper;
 
@@ -264,10 +262,7 @@ export function printOrArchive(
  * Issue 12: archive without opening the print dialog (used on save).
  * Renders `node` off-screen, writes PDF/HTML to Desktop folders, then cleans up.
  */
-export function archiveDocument(
-  node: ReactNode,
-  archive: PrintArchiveMeta,
-): void {
+export function archiveDocument(node: ReactNode, archive: PrintArchiveMeta): void {
   if (!isTauri()) return;
 
   const container = document.createElement("div");

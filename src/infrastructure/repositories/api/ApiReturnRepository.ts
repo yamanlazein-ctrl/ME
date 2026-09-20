@@ -51,7 +51,8 @@ export class ApiReturnRepository implements IReturnRepository {
       const dto = await this.api.findById(id);
       return toPortReturn(dto);
     } catch (e) {
-      if (e instanceof Error && (e as unknown as { statusCode?: number }).statusCode === 404) return null;
+      if (e instanceof Error && (e as unknown as { statusCode?: number }).statusCode === 404)
+        return null;
       if ((e as unknown as { code?: string }).code === "NOT_FOUND") return null;
       throw e;
     }

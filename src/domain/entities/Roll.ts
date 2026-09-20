@@ -1,5 +1,9 @@
 import { Timestamp, UUID, Currency, Mutable } from "@/domain/types";
-import { reserveStock as sharedReserve, releaseStock as sharedRelease, isOutOfStock as sharedIsOutOfStock } from "@erp/shared";
+import {
+  reserveStock as sharedReserve,
+  releaseStock as sharedRelease,
+  isOutOfStock as sharedIsOutOfStock,
+} from "@erp/shared";
 
 /* ────────────────────────────────────────────────────────────────────────
  *  Roll Entity — physical stock unit. Optimistic-locking via version.
@@ -80,8 +84,7 @@ export class Roll implements RollData {
       pieces: props.pieces ?? 1,
       id: crypto.randomUUID(),
       remainingKg: initial,
-      remainingPieces:
-        props.remainingPieces ?? (initial > 0 ? (props.pieces ?? 1) : 0),
+      remainingPieces: props.remainingPieces ?? (initial > 0 ? (props.pieces ?? 1) : 0),
       version: 1,
       createdAt: new Date().toISOString(),
     });

@@ -35,7 +35,8 @@ export function createRollData(input: {
   pieces?: number;
   widthCm?: number;
   weightGsm?: number;
-}): Omit<RollData, "id" | "tenantId" | "remainingKg" | "version" | "createdAt" | "status"> & Partial<RollData> {
+}): Omit<RollData, "id" | "tenantId" | "remainingKg" | "version" | "createdAt" | "status"> &
+  Partial<RollData> {
   return {
     colorId: input.colorId,
     rollNo: input.rollNo.trim(),
@@ -54,7 +55,10 @@ export function createRollData(input: {
 
 export function reserveStock(data: RollData, kg: number, pieces?: number): void {
   if (kg <= 0) throw new Error("reserve() requires positive kg");
-  if (data.remainingKg < kg) throw new Error(`Insufficient stock: requested ${kg}, available ${data.remainingKg} on roll ${data.rollNo}`);
+  if (data.remainingKg < kg)
+    throw new Error(
+      `Insufficient stock: requested ${kg}, available ${data.remainingKg} on roll ${data.rollNo}`,
+    );
   data.remainingKg = Math.round((data.remainingKg - kg) * 100) / 100;
   if (pieces !== undefined && data.remainingPieces !== undefined) {
     data.remainingPieces = Math.max(0, data.remainingPieces - pieces);

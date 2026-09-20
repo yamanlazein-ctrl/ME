@@ -17,7 +17,8 @@ export class ApiPartyRepository implements IPartyRepository {
       const dto = await this.api.findById(kind, id);
       return Party.reconstitute(dto as unknown as PartyData);
     } catch (e) {
-      if (e instanceof Error && (e as unknown as { statusCode?: number }).statusCode === 404) return null;
+      if (e instanceof Error && (e as unknown as { statusCode?: number }).statusCode === 404)
+        return null;
       if ((e as unknown as { code?: string }).code === "NOT_FOUND") return null;
       throw e;
     }
@@ -33,7 +34,8 @@ export class ApiPartyRepository implements IPartyRepository {
       const dto = await this.api.findByCode(kind, code);
       return Party.reconstitute(dto as unknown as PartyData);
     } catch (e) {
-      if (e instanceof Error && (e as unknown as { statusCode?: number }).statusCode === 404) return null;
+      if (e instanceof Error && (e as unknown as { statusCode?: number }).statusCode === 404)
+        return null;
       if ((e as unknown as { code?: string }).code === "NOT_FOUND") return null;
       throw e;
     }

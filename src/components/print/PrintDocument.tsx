@@ -94,8 +94,7 @@ export function PrintDocument({
   const allMeta = [...(meta ?? []), ...(extraMeta ?? [])];
   const isFirstPage = pageNumber == null || pageNumber === 1;
   const showFooter =
-    !hideFooter &&
-    (pageNumber == null || totalPages == null || pageNumber === totalPages);
+    !hideFooter && (pageNumber == null || totalPages == null || pageNumber === totalPages);
 
   const contactLines = getCompanyContactLines();
 
@@ -116,7 +115,9 @@ export function PrintDocument({
         ) : (
           <span className="print-logo-spacer" aria-hidden="true" />
         )}
-        <div className={`print-brand-identity${isFirstPage ? "" : " print-brand-identity--compact"}`}>
+        <div
+          className={`print-brand-identity${isFirstPage ? "" : " print-brand-identity--compact"}`}
+        >
           <div className="print-brand-name">{PRINT_BRAND_NAME}</div>
           {isFirstPage && (
             <div className="print-brand-contact">

@@ -3,6 +3,7 @@ import {
   lineTotal as sharedLineTotal,
   computeSubtotal as sharedSubtotal,
   invoiceTotal as sharedInvoiceTotal,
+  invoiceRemaining as sharedInvoiceRemaining,
   type InvoiceLineData,
 } from "@erp/shared";
 
@@ -61,6 +62,10 @@ export function invoiceTotal(inv: InvoiceCalc): number {
   });
 }
 
-export function invoiceRemaining(total: number, paid: number): number {
-  return Math.max(0, round2dp(total - paid));
+/**
+ * FIN-08 / Phase 1: single remaining authority is `@erp/shared` (accounts for
+ * returns). Frontend keeps `round2dp` so UI preview stays 2-dp consistent.
+ */
+export function invoiceRemaining(total: number, paid: number, returns: number = 0): number {
+  return round2dp(sharedInvoiceRemaining(total, paid, returns));
 }

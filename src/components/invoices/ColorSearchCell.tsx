@@ -52,10 +52,7 @@ export function ColorSearchCell({
   const fileRef = useRef<HTMLInputElement>(null);
 
   const query = activeField === "code" ? code : name;
-  const matches = useMemo(
-    () => searchColors(query, 12, fabricId),
-    [query, fabricId],
-  );
+  const matches = useMemo(() => searchColors(query, 12, fabricId), [query, fabricId]);
   const localByCode = useMemo(() => colorByCode(code, fabricId), [code, fabricId]);
   const localByName = useMemo(() => colorByName(name, fabricId), [name, fabricId]);
   const local = localByCode ?? localByName;
@@ -84,7 +81,9 @@ export function ColorSearchCell({
     reader.readAsDataURL(file);
   };
 
-  const previewColor = existingColorId ? (localByCode ?? localByName) : (localByCode ?? localByName);
+  const previewColor = existingColorId
+    ? (localByCode ?? localByName)
+    : (localByCode ?? localByName);
   const displaySwatch =
     previewColor ??
     (isNew && (imageUrl || hex)
@@ -97,9 +96,7 @@ export function ColorSearchCell({
       : null);
 
   const showMenu =
-    open &&
-    !disabled &&
-    (matches.length > 0 || isNew || (!!fabricId && !query.trim()));
+    open && !disabled && (matches.length > 0 || isNew || (!!fabricId && !query.trim()));
 
   return (
     <div className="space-y-2">
@@ -202,7 +199,9 @@ export function ColorSearchCell({
         ) : isNew ? (
           <span className="inline-flex items-center gap-1 rounded bg-secondary px-1.5 py-0.5 font-semibold text-muted-foreground">
             <Sparkles className="h-3 w-3" />{" "}
-            {renameMode ? "سيتم تحديث اسم اللون عند الحفظ" : `لا يوجد — سيُضاف «${createLabel}» عند الحفظ`}
+            {renameMode
+              ? "سيتم تحديث اسم اللون عند الحفظ"
+              : `لا يوجد — سيُضاف «${createLabel}» عند الحفظ`}
           </span>
         ) : (
           <span className="text-muted-foreground">اكتب الاسم للبحث في الألوان المسجّلة</span>
@@ -286,7 +285,9 @@ export function ColorSearchCell({
               </div>
             )}
             {matches.length === 0 && !isNew && (
-              <div className="px-3 py-2 text-xs text-muted-foreground">اكتب حرفاً واحداً على الأقل</div>
+              <div className="px-3 py-2 text-xs text-muted-foreground">
+                اكتب حرفاً واحداً على الأقل
+              </div>
             )}
           </div>
         </div>

@@ -54,7 +54,10 @@ export interface PartyStatementDTO {
   totalCredit: number;
   finalBalance: number;
   totalsByCurrency?: Partial<
-    Record<Currency, { previousBalance: number; totalDebit: number; totalCredit: number; finalBalance: number }>
+    Record<
+      Currency,
+      { previousBalance: number; totalDebit: number; totalCredit: number; finalBalance: number }
+    >
   >;
   entries: StatementEntryDTO[];
 }

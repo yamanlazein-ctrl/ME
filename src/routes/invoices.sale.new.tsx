@@ -5,7 +5,15 @@ import { AppShell } from "@/components/layout/AppShell";
 import { InvoiceHeader } from "@/components/invoices/InvoiceHeader";
 import { ExitWithoutSavingButton } from "@/components/invoices/ExitWithoutSaving";
 import { PartyCombobox } from "@/components/vouchers/PartyCombobox";
-import { colorById, colorsOfFabric, fabricById, fabricByName, rollById, rollsOfColor, useInventory } from "@/presentation/hooks/useInventory";
+import {
+  colorById,
+  colorsOfFabric,
+  fabricById,
+  fabricByName,
+  rollById,
+  rollsOfColor,
+  useInventory,
+} from "@/presentation/hooks/useInventory";
 import { normalizeInventoryName } from "@/domain/inventory/normalizeInventoryName";
 import { showError } from "@/components/common/toast-helpers";
 import { addCustomer, customers, useParties } from "@/presentation/hooks/useParties";
@@ -23,7 +31,12 @@ import { printOrArchive } from "@/components/print/printPortal";
 import { archiveMeta } from "@/shared/utils/documentArchive";
 import { InvoicePrintDocument } from "@/components/print/InvoicePrintDocument";
 import { useSettings } from "@/presentation/hooks/useSettings";
-import { useOrder, useFulfillOrder, matchRollsForItem, fetchPendingOrderConflicts } from "@/presentation/hooks/useOrders";
+import {
+  useOrder,
+  useFulfillOrder,
+  matchRollsForItem,
+  fetchPendingOrderConflicts,
+} from "@/presentation/hooks/useOrders";
 import type { PendingConflict } from "@/application/ports/IOrderRepository";
 import { PendingOrderConflictDialog } from "@/components/invoices/PendingOrderConflictDialog";
 import { DocumentFooter } from "@/components/layout/DocumentFooter";
@@ -59,6 +72,18 @@ import { formatNumber, formatMoney, formatQuantity } from "@/shared/utils/format
 import { parseInvoiceNotes } from "@/components/print/noteParser";
 
 type SaleSearch = { fromOrder?: string; edit?: string };
+
+function formatMutationError(error: unknown, fallback: string): string {
+  if (typeof error === "string") return error;
+  if (!error || typeof error !== "object") return fallback;
+  const raw = error as { message?: string; details?: Record<string, string[]> };
+  const details = raw.details;
+  const firstDetail = details ? details[Object.keys(details)[0] ?? ""]?.[0] : undefined;
+  if (firstDetail && raw.message) return `${raw.message} — ${firstDetail}`;
+  if (firstDetail) return firstDetail;
+  if (raw.message) return raw.message;
+  return fallback;
+}
 
 export const Route = createFileRoute("/invoices/sale/new")({
   validateSearch: (s: Record<string, unknown>): SaleSearch => ({
@@ -219,7 +244,7 @@ function SaleInvoicePage() {
     tax: Number(tax) || 0,
     shipping: Number(shipping) || 0,
   });
-  const remaining = invoiceRemaining(netTotal, Number(paid) || 0);
+  const remaining = invoiceRemaining(netTotal, Number(paid) || 0, 0);
   const isUSD = currency === "USD";
   const moneyClass = isUSD ? "text-success" : "text-foreground";
 
@@ -248,7 +273,11 @@ function SaleInvoicePage() {
     const fabric = fabricById(fabricId);
     const newLine: SaleLine = {
       ...emptyLine(),
-      ...cloneFabricOnly({ ...currentLine, fabricId, fabricName: fabric?.name ?? currentLine.fabricName }),
+      ...cloneFabricOnly({
+        ...currentLine,
+        fabricId,
+        fabricName: fabric?.name ?? currentLine.fabricName,
+      }),
     };
     const idx = lines.findIndex((l) => l.id === lineId);
     setLines((p) => {
@@ -297,9 +326,7 @@ function SaleInvoicePage() {
       if ((l.pieces ?? 1) < 0 || !Number.isInteger(l.pieces ?? 1)) {
         return setError("عدد الأثواب يجب أن يكون عدداً صحيحاً ≥ 0.");
       }
-      const rollPiecesAvail = roll
-        ? (roll.remainingPieces ?? roll.pieces ?? 1)
-        : 0;
+      const rollPiecesAvail = roll ? (roll.remainingPieces ?? roll.pieces ?? 1) : 0;
       // Default UI pieces=1 must not block remnant stock (remainingPieces === 0).
       const requestedPieces = l.pieces === 0 ? 0 : (l.pieces ?? 1);
       if (!edit && roll && requestedPieces > rollPiecesAvail) {
@@ -395,15 +422,8 @@ function SaleInvoicePage() {
         },
       });
       if (!res.ok) {
-        const rawErr = (res as any).error ?? {};
-        const details = rawErr.details as Record<string, string[]> | undefined;
-        const firstDetail = details ? details[Object.keys(details)[0]]?.[0] : undefined;
         return setError(
-          typeof rawErr === "string"
-            ? rawErr
-            : firstDetail
-              ? `${rawErr.message} — ${firstDetail}`
-              : (rawErr.message ?? "فشل تحديث الفاتورة"),
+          formatMutationError((res as { error?: unknown }).error, "فشل تحديث الفاتورة"),
         );
       }
       toast.success(`تم حفظ تعديلات الفاتورة ${res.value.number}`);
@@ -448,15 +468,8 @@ function SaleInvoicePage() {
       ...(Number(exchangeRate) > 0 ? { exchangeRate: Number(exchangeRate) } : {}),
     } as unknown as Parameters<typeof create.mutateAsync>[0]);
     if (!res.ok) {
-      const rawErr = (res as any).error ?? {};
-      const details = rawErr.details as Record<string, string[]> | undefined;
-      const firstDetail = details ? details[Object.keys(details)[0]]?.[0] : undefined;
       return setError(
-        typeof rawErr === "string"
-          ? rawErr
-          : firstDetail
-            ? `${rawErr.message} — ${firstDetail}`
-            : (rawErr.message ?? "فشل إنشاء الفاتورة"),
+        formatMutationError((res as { error?: unknown }).error, "فشل إنشاء الفاتورة"),
       );
     }
     const inv = res.value;
@@ -565,9 +578,7 @@ function SaleInvoicePage() {
                   // cross-fabric name copy with empty colorId (that blocked save).
                   if (l.fabricId && c.fabricId !== l.fabricId) {
                     const local = colorsOfFabric(l.fabricId).find(
-                      (x) =>
-                        normalizeInventoryName(x.name) ===
-                        normalizeInventoryName(c.name),
+                      (x) => normalizeInventoryName(x.name) === normalizeInventoryName(c.name),
                     );
                     if (!local) {
                       showError(

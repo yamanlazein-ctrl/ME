@@ -17,7 +17,6 @@ export function useConnectivity(pollMs = 15_000): ConnectivityStatus {
 
   useEffect(() => {
     let cancelled = false;
-    let timer: ReturnType<typeof setInterval> | undefined;
 
     const apply = (next: ConnectivityStatus) => {
       if (cancelled) return;
@@ -53,13 +52,13 @@ export function useConnectivity(pollMs = 15_000): ConnectivityStatus {
     };
 
     void probe();
-    timer = setInterval(() => void probe(), pollMs);
+    const timer = setInterval(() => void probe(), pollMs);
     window.addEventListener("online", onOnline);
     window.addEventListener("offline", onOffline);
 
     return () => {
       cancelled = true;
-      if (timer) clearInterval(timer);
+      clearInterval(timer);
       window.removeEventListener("online", onOnline);
       window.removeEventListener("offline", onOffline);
     };

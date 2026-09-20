@@ -339,9 +339,7 @@ export async function deleteFabric(id: string) {
     }
     const idx = fabricsCache.findIndex((f) => f.id === id);
     if (idx >= 0) fabricsCache.splice(idx, 1);
-    const removedColorIds = new Set(
-      colorsCache.filter((c) => c.fabricId === id).map((c) => c.id),
-    );
+    const removedColorIds = new Set(colorsCache.filter((c) => c.fabricId === id).map((c) => c.id));
     if (removedColorIds.size > 0) {
       for (let i = colorsCache.length - 1; i >= 0; i--) {
         if (removedColorIds.has(colorsCache[i].id)) colorsCache.splice(i, 1);

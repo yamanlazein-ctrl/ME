@@ -44,7 +44,13 @@ function printToPdf(chrome: string, html: string, pdfPath: string): void {
   const fileUrl = `file:///${htmlPath.replace(/\\/g, "/")}`;
   const r = spawnSync(
     chrome,
-    ["--headless=new", "--disable-gpu", "--no-pdf-header-footer", `--print-to-pdf=${pdfPath}`, fileUrl],
+    [
+      "--headless=new",
+      "--disable-gpu",
+      "--no-pdf-header-footer",
+      `--print-to-pdf=${pdfPath}`,
+      fileUrl,
+    ],
     { encoding: "utf8", timeout: 60_000 },
   );
   expect(r.status, r.stderr || r.stdout).toBe(0);
@@ -72,12 +78,9 @@ describe("DFP-002 chrome print-to-pdf", () => {
   const run = chrome ? it : it.skip;
 
   function shortDocHtml(paper: string, opts: { rtl?: boolean; body?: string } = {}): string {
-    const size =
-      paper === "A5" ? "A5 portrait" : paper === "80mm" ? "80mm auto" : "A4 portrait";
+    const size = paper === "A5" ? "A5 portrait" : paper === "80mm" ? "80mm auto" : "A4 portrait";
     const dir = opts.rtl ? 'dir="rtl" lang="ar"' : 'lang="en"';
-    const body =
-      opts.body ??
-      `<h1>DFP002_${paper}</h1><p>فاتورة بيع — اختبار الصفحة الأولى</p>`;
+    const body = opts.body ?? `<h1>DFP002_${paper}</h1><p>فاتورة بيع — اختبار الصفحة الأولى</p>`;
     return `<!DOCTYPE html><html ${dir} data-paper="${paper}"><head><meta charset="utf-8"/><style>
 @page { size: ${size}; margin: 0; }
 @media print { body > *:not([data-print-root]) { display: none !important; } }
@@ -89,16 +92,20 @@ ${body}
 </div></div></body></html>`;
   }
 
-  run("current contract: unnamed @page only → exactly 1 page for a short doc", () => {
-    const dir = mkdtempSync(join(tmpdir(), "dfp002-ok-"));
-    try {
-      const pdfPath = join(dir, "ok.pdf");
-      printToPdf(chrome!, shortDocHtml("A4"), pdfPath);
-      expect(countPdfPages(readFileSync(pdfPath))).toBe(1);
-    } finally {
-      rmSync(dir, { recursive: true, force: true });
-    }
-  });
+  run(
+    "current contract: unnamed @page only → exactly 1 page for a short doc",
+    () => {
+      const dir = mkdtempSync(join(tmpdir(), "dfp002-ok-"));
+      try {
+        const pdfPath = join(dir, "ok.pdf");
+        printToPdf(chrome!, shortDocHtml("A4"), pdfPath);
+        expect(countPdfPages(readFileSync(pdfPath))).toBe(1);
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
+    },
+    30_000,
+  );
 
   for (const paper of ["A4", "A5", "80mm"] as const) {
     run(`matrix short ${paper}: unnamed @page → exactly 1 page`, () => {
@@ -116,11 +123,16 @@ ${body}
   run("matrix multi-page A4 RTL: content spills without an extra leading blank", () => {
     const dir = mkdtempSync(join(tmpdir(), "dfp002-multi-"));
     try {
-      const lines = Array.from({ length: 80 }, (_, i) => `<p>سطر محتوى طويل للاختبار رقم ${i + 1}</p>`).join(
-        "\n",
-      );
+      const lines = Array.from(
+        { length: 80 },
+        (_, i) => `<p>سطر محتوى طويل للاختبار رقم ${i + 1}</p>`,
+      ).join("\n");
       const pdfPath = join(dir, "multi.pdf");
-      printToPdf(chrome!, shortDocHtml("A4", { rtl: true, body: `<h1>MULTI</h1>${lines}` }), pdfPath);
+      printToPdf(
+        chrome!,
+        shortDocHtml("A4", { rtl: true, body: `<h1>MULTI</h1>${lines}` }),
+        pdfPath,
+      );
       const pages = countPdfPages(readFileSync(pdfPath));
       // Enough content for ≥2 pages; blank-first would typically inflate by +1
       // relative to content alone — we require multi-page and a sane upper bound.

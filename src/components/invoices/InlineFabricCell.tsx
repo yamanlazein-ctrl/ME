@@ -2,7 +2,13 @@ import { useMemo, useRef, useState, forwardRef, type KeyboardEvent } from "react
 import { Check, Plus } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
-import { colors, fabrics, fabricById, searchColors, colorByName } from "@/presentation/hooks/useInventory";
+import {
+  colors,
+  fabrics,
+  fabricById,
+  searchColors,
+  colorByName,
+} from "@/presentation/hooks/useInventory";
 import { normalizeInventoryName } from "@/domain/inventory/normalizeInventoryName";
 
 /**
@@ -31,9 +37,7 @@ export const InlineFabricCell = forwardRef<
 
   const matches = useMemo(() => {
     if (!q) return [];
-    return fabrics
-      .filter((f) => normalizeInventoryName(f.name).includes(q))
-      .slice(0, 8);
+    return fabrics.filter((f) => normalizeInventoryName(f.name).includes(q)).slice(0, 8);
   }, [q]);
 
   const exactMatch = fabrics.find((f) => normalizeInventoryName(f.name) === q);
@@ -136,10 +140,7 @@ export const InlineColorCell = forwardRef<
   const codeRef = useRef<HTMLInputElement>(null);
 
   const q = normalizeInventoryName(name);
-  const matches = useMemo(
-    () => searchColors(name, 12, fabricId),
-    [name, fabricId],
-  );
+  const matches = useMemo(() => searchColors(name, 12, fabricId), [name, fabricId]);
   const local = colorByName(name, fabricId);
   const isNew = q.length > 0 && !local && !!fabricId;
 

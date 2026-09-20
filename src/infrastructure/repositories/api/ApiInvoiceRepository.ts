@@ -13,7 +13,8 @@ export class ApiInvoiceRepository implements IInvoiceRepository {
       const dto = await this.api.findById(id);
       return Invoice.reconstitute(dto as unknown as InvoiceData);
     } catch (e) {
-      if (e instanceof Error && (e as unknown as { statusCode?: number }).statusCode === 404) return null;
+      if (e instanceof Error && (e as unknown as { statusCode?: number }).statusCode === 404)
+        return null;
       if ((e as unknown as { code?: string }).code === "NOT_FOUND") return null;
       throw e;
     }
@@ -25,7 +26,8 @@ export class ApiInvoiceRepository implements IInvoiceRepository {
       const dto = await this.api.findByNumber(number);
       return Invoice.reconstitute(dto as unknown as InvoiceData);
     } catch (e) {
-      if (e instanceof Error && (e as unknown as { statusCode?: number }).statusCode === 404) return null;
+      if (e instanceof Error && (e as unknown as { statusCode?: number }).statusCode === 404)
+        return null;
       if ((e as unknown as { code?: string }).code === "NOT_FOUND") return null;
       throw e;
     }

@@ -57,8 +57,8 @@ export function PendingOrderConflictDialog({
                 c.items.map((it, i) => (
                   <p key={`${c.code}-${i}`}>
                     هذه الكمية مسجّلة ضمن طلبية معلّقة للعميل{" "}
-                    <span className="font-bold text-foreground">{c.customerNameSnapshot}</span> — رقم
-                    الطلبية <span className="font-bold text-foreground">{c.code}</span> (
+                    <span className="font-bold text-foreground">{c.customerNameSnapshot}</span> —
+                    رقم الطلبية <span className="font-bold text-foreground">{c.code}</span> (
                     {it.fabricName}/{it.colorName} — المطلوب {formatQuantity(it.requestedKg)} كغ).
                   </p>
                 )),

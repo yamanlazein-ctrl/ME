@@ -69,7 +69,10 @@ export function SettlementPrintDocument({
       party={party}
       totals={totals}
     >
-      <table className="print-table" style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+      <table
+        className="print-table"
+        style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}
+      >
         <thead>
           <tr>
             <th style={{ textAlign: "right", padding: "4px 6px", borderBottom: "1px solid #ccc" }}>
@@ -100,16 +103,41 @@ export function SettlementPrintDocument({
             <tr key={a.invoiceId}>
               <td style={{ padding: "4px 6px" }}>{a.invoiceNumber}</td>
               <td style={{ padding: "4px 6px" }}>{a.invoiceCurrency}</td>
-              <td style={{ padding: "4px 6px", textAlign: "left", fontVariantNumeric: "tabular-nums" }}>
+              <td
+                style={{
+                  padding: "4px 6px",
+                  textAlign: "left",
+                  fontVariantNumeric: "tabular-nums",
+                }}
+              >
                 {formatMoney(a.remainingBefore)}
               </td>
-              <td style={{ padding: "4px 6px", textAlign: "left", fontVariantNumeric: "tabular-nums" }}>
+              <td
+                style={{
+                  padding: "4px 6px",
+                  textAlign: "left",
+                  fontVariantNumeric: "tabular-nums",
+                }}
+              >
                 {formatMoney(a.amountInSettlementCurrency)}
               </td>
-              <td style={{ padding: "4px 6px", textAlign: "left", fontVariantNumeric: "tabular-nums" }}>
-                {formatMoney(a.amountInInvoiceCurrency)} {currencySymbol(a.invoiceCurrency as "SYP" | "USD" | "EUR")}
+              <td
+                style={{
+                  padding: "4px 6px",
+                  textAlign: "left",
+                  fontVariantNumeric: "tabular-nums",
+                }}
+              >
+                {formatMoney(a.amountInInvoiceCurrency)}{" "}
+                {currencySymbol(a.invoiceCurrency as "SYP" | "USD" | "EUR")}
               </td>
-              <td style={{ padding: "4px 6px", textAlign: "left", fontVariantNumeric: "tabular-nums" }}>
+              <td
+                style={{
+                  padding: "4px 6px",
+                  textAlign: "left",
+                  fontVariantNumeric: "tabular-nums",
+                }}
+              >
                 {formatMoney(a.remainingAfter)}
               </td>
               <td style={{ padding: "4px 6px" }}>{a.voucherNumber}</td>

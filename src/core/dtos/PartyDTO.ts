@@ -1,5 +1,10 @@
 import type { Currency } from "@/domain/types";
-import type { PartyKind, PaymentMethod, PartyStatus, PartyListStats } from "@/domain/entities/Party";
+import type {
+  PartyKind,
+  PaymentMethod,
+  PartyStatus,
+  PartyListStats,
+} from "@/domain/entities/Party";
 
 export type PartyDTO = {
   id: string;

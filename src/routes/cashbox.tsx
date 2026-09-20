@@ -36,10 +36,7 @@ import { useLedgerEntries, useCashMovementsOn } from "@/presentation/hooks/useLe
 import { formatAmount } from "@/presentation/hooks/useCurrency";
 import { Lock, Plus, RotateCw, Settings2 } from "lucide-react";
 import { FinancialSummary } from "@/components/cashbox/FinancialSummary";
-import {
-  PeriodFilterCard,
-  type CashboxPeriodFilter,
-} from "@/components/cashbox/PeriodFilterCard";
+import { PeriodFilterCard, type CashboxPeriodFilter } from "@/components/cashbox/PeriodFilterCard";
 import { FinancialOverview } from "@/components/cashbox/FinancialOverview";
 import { ActivityTabs } from "@/components/cashbox/ActivityTabs";
 import type { ProfitQueryParams } from "@/contracts/profit";
@@ -288,9 +285,7 @@ function OpeningDialog({ open, onClose }: { open: boolean; onClose: () => void }
     openingDate: "",
   };
   const [v, setV] = useState(cs.openingBalance);
-  const [currency, setCurrency] = useState<"SYP" | "USD">(
-    cs.currency === "USD" ? "USD" : "SYP",
-  );
+  const [currency, setCurrency] = useState<"SYP" | "USD">(cs.currency === "USD" ? "USD" : "SYP");
   const [balErr, setBalErr] = useState<string | null>(null);
   const setOpening = useSetOpeningBalance();
   const today = new Date().toISOString().slice(0, 10);
@@ -312,10 +307,7 @@ function OpeningDialog({ open, onClose }: { open: boolean; onClose: () => void }
         <div className="space-y-2">
           <div>
             <Label>عملة الصندوق</Label>
-            <Select
-              value={currency}
-              onValueChange={(v) => setCurrency(v as "SYP" | "USD")}
-            >
+            <Select value={currency} onValueChange={(v) => setCurrency(v as "SYP" | "USD")}>
               <SelectTrigger>
                 <SelectValue />
               </SelectTrigger>
@@ -360,9 +352,7 @@ function ManualDialog({ open, onClose }: { open: boolean; onClose: () => void })
   const [type, setType] = useState<ManualMovementType>("adjustment");
   const [dir, setDir] = useState<"in" | "out">("in");
   const [amount, setAmount] = useState<number | "">("");
-  const [currency, setCurrency] = useState<"SYP" | "USD">(
-    cs.currency === "USD" ? "USD" : "SYP",
-  );
+  const [currency, setCurrency] = useState<"SYP" | "USD">(cs.currency === "USD" ? "USD" : "SYP");
   const [desc, setDesc] = useState("");
   const [amtErr, setAmtErr] = useState<string | null>(null);
   const [descErr, setDescErr] = useState<string | null>(null);
@@ -433,10 +423,7 @@ function ManualDialog({ open, onClose }: { open: boolean; onClose: () => void })
           </div>
           <div>
             <Label>العملة (صندوق مستقل)</Label>
-            <Select
-              value={currency}
-              onValueChange={(v) => setCurrency(v as "SYP" | "USD")}
-            >
+            <Select value={currency} onValueChange={(v) => setCurrency(v as "SYP" | "USD")}>
               <SelectTrigger>
                 <SelectValue />
               </SelectTrigger>
@@ -559,9 +546,3 @@ function Row({ label, value, bold }: { label: string; value: string; bold?: bool
     </div>
   );
 }
-
-
-
-
-
-

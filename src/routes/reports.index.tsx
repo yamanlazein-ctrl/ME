@@ -44,11 +44,7 @@ import { useInvoicesList } from "@/presentation/hooks/useInvoices";
 import { useReturnsList } from "@/presentation/hooks/useReturns";
 import { useExpensesList } from "@/presentation/hooks/useExpenses";
 import { useCashBalance } from "@/presentation/hooks/useCashbox";
-import {
-  useInventory,
-  rolls,
-  fabricById,
-} from "@/presentation/hooks/useInventory";
+import { useInventory, rolls, fabricById } from "@/presentation/hooks/useInventory";
 import { suppliers, customers, useParties } from "@/presentation/hooks/useParties";
 import { invoiceTotal } from "@/core/calculations/invoiceCalc";
 import {
@@ -476,18 +472,15 @@ function ReportsPage() {
             </DialogTitle>
             <DialogDescription className="text-start leading-relaxed">
               يعرض أرقام التقارير بعملة واحدة تختارها حسب سعر الصرف الذي تدخله.{" "}
-              <strong className="text-foreground">لا يغيّر الفواتير ولا الصندوق ولا القيود</strong>
-              — للفهم والمقارنة فقط.
+              <strong className="text-foreground">لا يغيّر الفواتير ولا الصندوق ولا القيود</strong>—
+              للفهم والمقارنة فقط.
             </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-4 py-2">
             <div className="space-y-2">
               <Label>العملة المعروضة</Label>
-              <Select
-                value={draftTarget}
-                onValueChange={(v) => setDraftTarget(v as Currency)}
-              >
+              <Select value={draftTarget} onValueChange={(v) => setDraftTarget(v as Currency)}>
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
@@ -551,8 +544,7 @@ function ReportsPage() {
             <AlertDialogTitle>تأكيد العرض التحويلي</AlertDialogTitle>
             <AlertDialogDescription className="text-start text-sm leading-relaxed text-foreground/80">
               سيتم تحويل أرقام التقارير (سوري / دولار
-              {hasEur ? " / يورو" : ""}) إلى{" "}
-              <strong>{targetLabel}</strong> بسعر{" "}
+              {hasEur ? " / يورو" : ""}) إلى <strong>{targetLabel}</strong> بسعر{" "}
               <strong dir="ltr">{Number(draftSypRate).toLocaleString("en-US")} ل.س/$</strong>
               {hasEur && draftEurRate ? (
                 <>
@@ -615,7 +607,11 @@ function CurrencyPanel({
     { label: "مرتجعات المشتريات", value: metrics.entryReturns, tone: "text-destructive" },
     { label: "المصاريف", value: metrics.expenses, tone: "text-destructive" },
     { label: "رصيد الصندوق", value: metrics.cash, tone: "text-sky-600 dark:text-sky-400" },
-    { label: "ذمم العملاء", value: metrics.receivables, tone: "text-amber-700 dark:text-amber-400" },
+    {
+      label: "ذمم العملاء",
+      value: metrics.receivables,
+      tone: "text-amber-700 dark:text-amber-400",
+    },
     { label: "ذمم الموردين", value: metrics.payables, tone: "text-amber-700 dark:text-amber-400" },
     { label: "قيمة المخزون", value: metrics.inventory },
   ];

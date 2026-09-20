@@ -6,7 +6,8 @@ import type { ReturnFilter, ReturnDTO } from "@/application/ports/IReturnReposit
 import { refreshInventory } from "./useInventory";
 
 const ctx = new Proxy({} as import("@/domain/types").TenantContext, {
-  get: (_target, property: string) => buildTenantContext()[property as keyof import("@/domain/types").TenantContext],
+  get: (_target, property: string) =>
+    buildTenantContext()[property as keyof import("@/domain/types").TenantContext],
 });
 
 const KEYS = {
@@ -42,7 +43,9 @@ export function useCreateReturn() {
     },
     onError: (e: Error) => {
       toast.error(
-        e instanceof Error && e.message && !/INSERT|UPDATE|SELECT|constraint|violates/i.test(e.message)
+        e instanceof Error &&
+          e.message &&
+          !/INSERT|UPDATE|SELECT|constraint|violates/i.test(e.message)
           ? `فشل إنشاء المرتجع: ${e.message}`
           : "حدث خطأ، يرجى المحاولة مرة أخرى أو التواصل مع الدعم",
       );
@@ -65,7 +68,9 @@ export function useCancelReturn() {
     },
     onError: (e: Error) => {
       toast.error(
-        e instanceof Error && e.message && !/INSERT|UPDATE|SELECT|constraint|violates/i.test(e.message)
+        e instanceof Error &&
+          e.message &&
+          !/INSERT|UPDATE|SELECT|constraint|violates/i.test(e.message)
           ? `فشل إلغاء المرتجع: ${e.message}`
           : "حدث خطأ، يرجى المحاولة مرة أخرى أو التواصل مع الدعم",
       );

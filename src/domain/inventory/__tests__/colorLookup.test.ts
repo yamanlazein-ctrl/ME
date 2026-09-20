@@ -34,10 +34,11 @@ describe("filterColorsByQuery", () => {
   });
 
   it("lists a fabric's colours when scoped and query is empty", () => {
-    expect(filterColorsByQuery(catalog, "", 12, "fab-cotton").map((c) => c.id).sort()).toEqual([
-      "c-olive-cotton",
-      "c-red-cotton",
-    ]);
+    expect(
+      filterColorsByQuery(catalog, "", 12, "fab-cotton")
+        .map((c) => c.id)
+        .sort(),
+    ).toEqual(["c-olive-cotton", "c-red-cotton"]);
     expect(filterColorsByQuery(catalog, "", 12, "fab-jeans").map((c) => c.id)).toEqual([
       "c-olive-jeans",
     ]);

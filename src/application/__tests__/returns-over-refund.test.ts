@@ -59,7 +59,11 @@ function simulateFixedGuard(
       // weighted average price if multiple lines same roll (rare)
       existing.pricePerKg = ol.pricePerKg; // simplified: last wins, but sum handled
     } else {
-      map.set(ol.rollId, { original: Number(ol.quantityKg), returned: 0, pricePerKg: ol.pricePerKg });
+      map.set(ol.rollId, {
+        original: Number(ol.quantityKg),
+        returned: 0,
+        pricePerKg: ol.pricePerKg,
+      });
     }
   }
   // Count all active returns for party+kind (includes unlinked), not just same invoice
@@ -75,7 +79,8 @@ function simulateFixedGuard(
   }
   // Aggregate input lines by rollId
   const inputByRoll = new Map<string, number>();
-  for (const l of input.lines) inputByRoll.set(l.rollId, (inputByRoll.get(l.rollId) ?? 0) + l.quantityKg);
+  for (const l of input.lines)
+    inputByRoll.set(l.rollId, (inputByRoll.get(l.rollId) ?? 0) + l.quantityKg);
   // Currency check
   if (input.currency) {
     for (const ol of invoiceLines) {
@@ -99,7 +104,9 @@ function simulateFixedGuard(
 describe("Returns over-refund [P0-LOGIC-3.2]", () => {
   it("3.2a: unlinked return must be visible to later linked return (should reject third return)", () => {
     // Sale 50kg, then unlinked return 50kg, then linked return 50kg should fail (50 already returned)
-    const invoiceLines: InvoiceLine[] = [{ rollId: "roll-1", quantityKg: 50, pricePerKg: 8000, currency: "SYP" }];
+    const invoiceLines: InvoiceLine[] = [
+      { rollId: "roll-1", quantityKg: 50, pricePerKg: 8000, currency: "SYP" },
+    ];
     const prevReturnsForParty: ReturnLine[] = [{ rollId: "roll-1", quantityKg: 50 }]; // unlinked
     const prevReturnsForInvoice: ReturnLine[] = []; // current code scopes only to same invoice, so misses party returns
 
@@ -111,13 +118,19 @@ describe("Returns over-refund [P0-LOGIC-3.2]", () => {
       currency: "SYP",
     };
     // Current guard only checks prevReturnsForInvoice -> allows over-return (bug)
-    expect(() => simulateCurrentGuard(input, invoiceLines, prevReturnsForInvoice, prevReturnsForParty)).not.toThrow();
+    expect(() =>
+      simulateCurrentGuard(input, invoiceLines, prevReturnsForInvoice, prevReturnsForParty),
+    ).not.toThrow();
     // Fixed guard checks all -> rejects
-    expect(() => simulateFixedGuard(input, invoiceLines, prevReturnsForInvoice, prevReturnsForParty)).toThrow("over-return");
+    expect(() =>
+      simulateFixedGuard(input, invoiceLines, prevReturnsForInvoice, prevReturnsForParty),
+    ).toThrow("over-return");
   });
 
   it("3.2b: duplicate rollId lines in one request must be aggregated and rejected", () => {
-    const invoiceLines: InvoiceLine[] = [{ rollId: "roll-1", quantityKg: 50, pricePerKg: 8000, currency: "SYP" }];
+    const invoiceLines: InvoiceLine[] = [
+      { rollId: "roll-1", quantityKg: 50, pricePerKg: 8000, currency: "SYP" },
+    ];
     const input: GuardInput = {
       kind: "sale",
       partyId: "cust-1",
@@ -154,7 +167,9 @@ describe("Returns over-refund [P0-LOGIC-3.2]", () => {
   });
 
   it("3.2c: inflated pricePerKg must be ignored and server price used", () => {
-    const invoiceLines: InvoiceLine[] = [{ rollId: "roll-1", quantityKg: 10, pricePerKg: 8000, currency: "SYP" }];
+    const invoiceLines: InvoiceLine[] = [
+      { rollId: "roll-1", quantityKg: 10, pricePerKg: 8000, currency: "SYP" },
+    ];
     const input: GuardInput = {
       kind: "sale",
       partyId: "cust-1",
@@ -169,7 +184,9 @@ describe("Returns over-refund [P0-LOGIC-3.2]", () => {
   });
 
   it("3.2c: currency mismatch must be rejected", () => {
-    const invoiceLines: InvoiceLine[] = [{ rollId: "roll-1", quantityKg: 10, pricePerKg: 8000, currency: "SYP" }];
+    const invoiceLines: InvoiceLine[] = [
+      { rollId: "roll-1", quantityKg: 10, pricePerKg: 8000, currency: "SYP" },
+    ];
     const input: GuardInput = {
       kind: "sale",
       partyId: "cust-1",

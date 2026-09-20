@@ -44,6 +44,6 @@ export function reportError(error: unknown, context: Record<string, unknown> = {
   }
 
   // Fallback: console only
-  // eslint-disable-next-line no-console
+
   console.error("[ErrorBoundary]", error, context);
 }

@@ -525,110 +525,23 @@ export class PostgresInvoiceRepository implements IInvoiceRepository {
         );
       }
 
-      // Write ledger entry — C4 fix: double-entry. Each transaction writes a
-      // balanced set (Σdebit = Σcredit). All legs share the same referenceType +
-      // referenceId so existing cancel-by-reference reverses every leg together.
-      // Only the party leg carries partyId (drives the party statement/balance);
-      // non-party legs (revenue / COGS / inventory) carry partyId = null.
+      // Write ledger entry — C4 fix: double-entry via shared invoiceLedgerLegs
+      // so create and update cannot drift. Paid-linked voucher legs stay below.
       const invoiceType = isSale ? "sales_invoice" : "purchase_invoice";
       const currency = invoiceCurrency;
-      const legs: (typeof ledgerEntries.$inferInsert)[] = [
-        {
-          ...legFx(isSale ? inv.total : 0, isSale ? 0 : inv.total),
-          tenantId: ctx.tenantId,
-          partyId: input.partyId,
-          date: input.date,
-          type: invoiceType,
-          // Standard double-entry (Dr inventory / Cr AP for purchases):
-          //   sale     → Dr party (customer AR: they owe us)
-          //   purchase → Cr party (supplier AP: we owe them)
-          // Party balance: customer = debit − credit, supplier = credit − debit.
-          // legFx keeps base_debit/base_credit aligned with the raw columns.
-          debit: isSale ? inv.total : 0,
-          credit: isSale ? 0 : inv.total,
-          currency,
-          cashImpact: "none",
-          referenceType: invoiceType,
-          referenceId: row.id,
-          referenceNumber: autoNumber,
-          description: `${isSale ? "فاتورة بيع" : "فاتورة شراء"} ${autoNumber}`,
-          createdBy: ctx.userId,
-        },
-      ];
-      if (isSale) {
-        // Revenue leg — balances the AR debit.
-        legs.push({
-          ...legFx(0, inv.total),
-          tenantId: ctx.tenantId,
-          partyId: null,
-          date: input.date,
-          type: "sales_revenue",
-          debit: 0,
-          credit: inv.total,
-          currency,
-          cashImpact: "none",
-          referenceType: invoiceType,
-          referenceId: row.id,
-          referenceNumber: autoNumber,
-            description: `إيراد مبيعات ${autoNumber}`,
-          createdBy: ctx.userId,
-        });
-        // COGS legs — Dr COGS Expense / Cr Inventory Asset, journaled so profit is
-        // auditable from the ledger (not only a read-time dashboard formula).
-        if (cogsTotal > 0) {
-          legs.push({
-            ...legFx(cogsTotal, 0),
-            tenantId: ctx.tenantId,
-            partyId: null,
-            date: input.date,
-            type: "cogs_expense",
-            debit: cogsTotal,
-            credit: 0,
-            currency,
-            cashImpact: "none",
-            referenceType: invoiceType,
-            referenceId: row.id,
-            referenceNumber: autoNumber,
-            description: `تكلفة البضاعة المباعة ${autoNumber}`,
-            createdBy: ctx.userId,
-          });
-          legs.push({
-            ...legFx(0, cogsTotal),
-            tenantId: ctx.tenantId,
-            partyId: null,
-            date: input.date,
-            type: "inventory_asset",
-            debit: 0,
-            credit: cogsTotal,
-            currency,
-            cashImpact: "none",
-            referenceType: invoiceType,
-            referenceId: row.id,
-            referenceNumber: autoNumber,
-            description: `تخفيض مخزون ${autoNumber}`,
-            createdBy: ctx.userId,
-          });
-        }
-      } else {
-        // Purchase invoice — Dr inventory (asset increases) / Cr party (AP increases).
-        // Σdebit = Σcredit = total (balanced double-entry).
-        legs.push({
-          ...legFx(inv.total, 0),
-          tenantId: ctx.tenantId,
-          partyId: null,
-          date: input.date,
-          type: "inventory_asset",
-          debit: inv.total,
-          credit: 0,
-          currency,
-          cashImpact: "none",
-          referenceType: invoiceType,
-          referenceId: row.id,
-          referenceNumber: autoNumber,
-          description: `مخزون مستلم ${autoNumber}`,
-          createdBy: ctx.userId,
-        });
-      }
+      const legs = this.invoiceLedgerLegs({
+        tenantId: ctx.tenantId,
+        partyId: input.partyId,
+        date: input.date,
+        currency,
+        fxRate,
+        isSale,
+        total: inv.total,
+        cogsTotal,
+        referenceId: row.id,
+        referenceNumber: autoNumber,
+        createdBy: ctx.userId,
+      });
       await tx.insert(ledgerEntries).values(legs);
 
       // Linked receipt voucher for cash/on-account payments at sale time.

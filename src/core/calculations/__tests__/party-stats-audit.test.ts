@@ -29,9 +29,17 @@ import { buildPartyStatsByCurrency } from "@/core/calculations/ledgerCalc";
 const party = { id: "p1" } as any;
 
 const inv = (n: number, currency: string, total: number, paid = 0) => ({
-  id: `i${n}`, partyId: "p1", status: "active", type: "sale", currency, paid,
+  id: `i${n}`,
+  partyId: "p1",
+  status: "active",
+  type: "sale",
+  currency,
+  paid,
   date: `2026-01-${String((n % 28) + 1).padStart(2, "0")}`,
-  lines: [{ quantityKg: 1, pricePerKg: total, discountAmount: 0 }], discount: 0, tax: 0, shipping: 0,
+  lines: [{ quantityKg: 1, pricePerKg: total, discountAmount: 0 }],
+  discount: 0,
+  tax: 0,
+  shipping: 0,
 });
 
 describe("buildPartyStatsByCurrency — full-dataset contract (audit H2)", () => {
@@ -65,9 +73,7 @@ describe("buildPartyStatsByCurrency — full-dataset contract (audit H2)", () =>
   it("subtracts active returns from remaining (same rule as settle/voucher)", () => {
     // INV total 17_015_000, paid 8_515_000, return 8_500_000 → remaining 0
     const invoices = [inv(1, "SYP", 17_015_000, 8_515_000)];
-    const returns = [
-      { originalInvoiceId: "i1", status: "active", amount: 8_500_000 },
-    ];
+    const returns = [{ originalInvoiceId: "i1", status: "active", amount: 8_500_000 }];
     const stats = buildPartyStatsByCurrency(party, "customer", invoices as any, [], returns);
     expect(stats["SYP"].totalPaid).toBe(8_515_000);
     expect(stats["SYP"].remaining).toBe(0);
@@ -75,10 +81,7 @@ describe("buildPartyStatsByCurrency — full-dataset contract (audit H2)", () =>
   });
 
   it("ignores cancelled invoices and vouchers", () => {
-    const invoices = [
-      { ...inv(1, "SYP", 1000), status: "cancelled" },
-      inv(2, "SYP", 500),
-    ];
+    const invoices = [{ ...inv(1, "SYP", 1000), status: "cancelled" }, inv(2, "SYP", 500)];
     const vouchers = [
       { partyId: "p1", kind: "receipt", status: "cancelled", amount: 100, currency: "SYP" },
     ];

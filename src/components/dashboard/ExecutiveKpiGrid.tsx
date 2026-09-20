@@ -1,9 +1,4 @@
-import {
-  Receipt,
-  Box,
-  Users,
-  type LucideIcon,
-} from "lucide-react";
+import { Receipt, Box, Users, type LucideIcon } from "lucide-react";
 import type { ReactNode } from "react";
 import { useDashboard } from "@/presentation/hooks/useDashboard";
 import { useCashboxState, useCashBalance } from "@/presentation/hooks/useCashbox";
@@ -87,9 +82,7 @@ function MetricCell({
       data-od-id={id}
       className="flex min-w-0 flex-col gap-3 border-border px-5 py-4 sm:border-s sm:first:border-s-0"
     >
-      <div className="text-[10px] font-medium tracking-[0.12em] text-muted-foreground">
-        {label}
-      </div>
+      <div className="text-[10px] font-medium tracking-[0.12em] text-muted-foreground">{label}</div>
       <div
         className={cn(
           "text-[1.5rem] font-semibold leading-none tabular-nums tracking-tight",
@@ -175,13 +168,19 @@ export function ExecutiveKpiGrid() {
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <article className="flex min-h-[108px] flex-col rounded-xl border border-border bg-card p-5 shadow-soft">
             <h3 className="text-[13px] font-medium text-muted-foreground">صندوق ل.س SYP</h3>
-            <div className="mt-4 text-[1.75rem] font-semibold leading-none tabular-nums tracking-tight" dir="ltr">
+            <div
+              className="mt-4 text-[1.75rem] font-semibold leading-none tabular-nums tracking-tight"
+              dir="ltr"
+            >
               {formatAmount(balSYP ?? 0, "SYP")}
             </div>
           </article>
           <article className="flex min-h-[108px] flex-col rounded-xl border border-border bg-card p-5 shadow-soft">
             <h3 className="text-[13px] font-medium text-muted-foreground">صندوق $ USD</h3>
-            <div className="mt-4 text-[1.75rem] font-semibold leading-none tabular-nums tracking-tight" dir="ltr">
+            <div
+              className="mt-4 text-[1.75rem] font-semibold leading-none tabular-nums tracking-tight"
+              dir="ltr"
+            >
               {formatAmount(balUSD ?? 0, "USD")}
             </div>
           </article>

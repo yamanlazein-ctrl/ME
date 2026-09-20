@@ -231,10 +231,14 @@ export function SaleLineCard({
                 value={line.pieces === 0 ? "0" : line.pieces || ""}
                 onChange={(e) =>
                   onUpdate({
-                    pieces: e.target.value === "" ? 1 : Math.max(0, Math.trunc(Number(e.target.value))),
+                    pieces:
+                      e.target.value === "" ? 1 : Math.max(0, Math.trunc(Number(e.target.value))),
                   })
                 }
-                className={cn("h-9 text-left tabular-nums", !line.pieces && "text-muted-foreground/70")}
+                className={cn(
+                  "h-9 text-left tabular-nums",
+                  !line.pieces && "text-muted-foreground/70",
+                )}
                 placeholder="1"
                 aria-label="عدد الأثواب"
               />
@@ -246,32 +250,39 @@ export function SaleLineCard({
               <FormattedAmountInput
                 value={line.pricePerKg}
                 onChange={(v) => onUpdate({ pricePerKg: v === "" ? 0 : v })}
-                className={cn("h-9 text-left tabular-nums", !line.pricePerKg && "text-muted-foreground/70", isUSD && line.pricePerKg > 0 && "text-success font-semibold")}
+                className={cn(
+                  "h-9 text-left tabular-nums",
+                  !line.pricePerKg && "text-muted-foreground/70",
+                  isUSD && line.pricePerKg > 0 && "text-success font-semibold",
+                )}
                 placeholder="0"
                 ariaLabel="سعر الوحدة"
               />
             </CardField>
             <CardField label="الخصم">
               <FormattedAmountInput
-                  value={line.discountAmount}
-                  onChange={(v) => onUpdate({ discountAmount: v === "" ? 0 : Math.max(0, v) })}
-                  onKeyDown={(e: KeyboardEvent<HTMLInputElement>) => {
-                    if (e.key === "Enter") {
-                      e.preventDefault();
-                      if (isLast) {
-                        onAppend();
-                      } else {
-                        const next = allLines[index + 1];
-                        if (next) {
-                          // Focus next fabric input — handled by caller via ref
-                        }
+                value={line.discountAmount}
+                onChange={(v) => onUpdate({ discountAmount: v === "" ? 0 : Math.max(0, v) })}
+                onKeyDown={(e: KeyboardEvent<HTMLInputElement>) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    if (isLast) {
+                      onAppend();
+                    } else {
+                      const next = allLines[index + 1];
+                      if (next) {
+                        // Focus next fabric input — handled by caller via ref
                       }
                     }
-                  }}
-                  className={cn("h-9 text-left tabular-nums", !line.discountAmount && "text-muted-foreground/70")}
-                  placeholder="0"
-                  ariaLabel="الخصم"
-                />
+                  }
+                }}
+                className={cn(
+                  "h-9 text-left tabular-nums",
+                  !line.discountAmount && "text-muted-foreground/70",
+                )}
+                placeholder="0"
+                ariaLabel="الخصم"
+              />
             </CardField>
             <div className="flex items-end justify-end">
               <div className="flex flex-col items-end">
@@ -326,8 +337,7 @@ export function SaleLineCard({
               title="إضافة لون آخر لنفس القماش"
               aria-label="إضافة لون آخر لنفس القماش"
             >
-              <Palette className="h-3.5 w-3.5" />
-              + إضافة لون آخر لنفس القماش
+              <Palette className="h-3.5 w-3.5" />+ إضافة لون آخر لنفس القماش
             </button>
           )}
           {!rowIsEmpty && (

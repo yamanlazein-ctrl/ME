@@ -38,17 +38,36 @@ describe("invalidateFinancialViews (DFP-016/017)", () => {
     const qc = new QueryClient({
       defaultOptions: { queries: { retry: false } },
     });
-    for (const key of ["dashboard", "cashbox", "ledger", "profit", "statement", "party", "invoices"] as const) {
+    for (const key of [
+      "dashboard",
+      "cashbox",
+      "ledger",
+      "profit",
+      "statement",
+      "party",
+      "invoices",
+    ] as const) {
       qc.setQueryData([key], { seed: key });
     }
     invalidateFinancialViews(qc);
-    for (const key of ["dashboard", "cashbox", "ledger", "profit", "statement", "party", "invoices"] as const) {
+    for (const key of [
+      "dashboard",
+      "cashbox",
+      "ledger",
+      "profit",
+      "statement",
+      "party",
+      "invoices",
+    ] as const) {
       expect(qc.getQueryState([key])?.isInvalidated, key).toBe(true);
     }
   });
 
   it("useParties create/update call invalidateFinancialViews", () => {
-    const src = readFileSync(resolve(process.cwd(), "src/presentation/hooks/useParties.ts"), "utf8");
+    const src = readFileSync(
+      resolve(process.cwd(), "src/presentation/hooks/useParties.ts"),
+      "utf8",
+    );
     expect(src).toMatch(/invalidateFinancialViews/);
     expect(src.match(/invalidateFinancialViews/g)?.length ?? 0).toBeGreaterThanOrEqual(2);
   });

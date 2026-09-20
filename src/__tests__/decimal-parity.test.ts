@@ -1,13 +1,7 @@
 import { describe, it, expect } from "vitest";
-import {
-  computeSubtotal,
-  lineTotal as sharedLineTotal,
-} from "@erp/shared";
+import { computeSubtotal, lineTotal as sharedLineTotal } from "@erp/shared";
 import { round2dp } from "@erp/shared";
-import {
-  lineTotal,
-  invoiceSubtotal,
-} from "@/core/calculations/invoiceCalc";
+import { lineTotal, invoiceSubtotal } from "@/core/calculations/invoiceCalc";
 
 /**
  * Decimal-fraction audit (2026-08-23) — pins the 2-decimal money policy that
@@ -46,7 +40,9 @@ describe("decimal money parity (shared ↔ frontend preview)", () => {
     expect(invoiceSubtotal({ lines })).toBe(expected);
     expect(computeSubtotal(lines as never)).toBe(expected);
     for (const l of lines) {
-      expect(lineTotal(l)).toBe(Math.max(0, round2dp(l.quantityKg * l.pricePerKg - l.discountAmount)));
+      expect(lineTotal(l)).toBe(
+        Math.max(0, round2dp(l.quantityKg * l.pricePerKg - l.discountAmount)),
+      );
       expect(sharedLineTotal(l as never)).toBe(lineTotal(l));
     }
   });

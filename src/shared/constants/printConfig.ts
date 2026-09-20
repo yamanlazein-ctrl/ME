@@ -37,9 +37,7 @@ export const FIXED_COMPANY_CONTACT = {
 
 /** Single-line phone field for settings.company.phone (DB has one column). */
 export function formatCompanyPhoneField(): string {
-  const mobiles = FIXED_COMPANY_CONTACT.phones
-    .map((p) => `${p.label}: ${p.phone}`)
-    .join(" · ");
+  const mobiles = FIXED_COMPANY_CONTACT.phones.map((p) => `${p.label}: ${p.phone}`).join(" · ");
   return `${FIXED_COMPANY_CONTACT.landline} · ${mobiles}`;
 }
 

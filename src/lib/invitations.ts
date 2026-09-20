@@ -72,9 +72,7 @@ async function post<T>(path: string, body: unknown, withAuth: boolean): Promise<
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
-    throw new Error(
-      (data as { message?: string }).message || `فشل الطلب (${res.status})`,
-    );
+    throw new Error((data as { message?: string }).message || `فشل الطلب (${res.status})`);
   }
   return data as T;
 }
@@ -95,9 +93,7 @@ export function generateInvitation(input: GenerateInvitationInput): Promise<Invi
 
 /** Admin: list the tenant's invitation codes. */
 export async function listInvitations(): Promise<Invitation[]> {
-  const data = await get<{ invitations?: Invitation[] } | Invitation[]>(
-    "/api/invitations/list",
-  );
+  const data = await get<{ invitations?: Invitation[] } | Invitation[]>("/api/invitations/list");
   return Array.isArray(data) ? data : (data.invitations ?? []);
 }
 
@@ -123,8 +119,6 @@ export function validateInvitation(
  * the accepting device against the license device cap. The new user appears on
  * GET /api/auth/device-roster for the PIN picker.
  */
-export function consumeInvitation(
-  input: ConsumeInvitationInput,
-): Promise<ConsumeInvitationResult> {
+export function consumeInvitation(input: ConsumeInvitationInput): Promise<ConsumeInvitationResult> {
   return post<ConsumeInvitationResult>("/api/invitations/consume", input, false);
 }

@@ -5,11 +5,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { ErrorState } from "@/components/ui/error-state";
 import { EmptyState } from "@/components/ui/empty-state";
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/components/ui/collapsible";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { useProfitDetails, useProfitSummary } from "@/presentation/hooks/useProfit";
 import { formatAmount } from "@/presentation/hooks/useCurrency";
 import type { Currency } from "@/domain/types";
@@ -70,10 +66,7 @@ export function FinancialOverview({ query }: { query: ProfitQueryParams }) {
   return (
     <section aria-label="النظرة المالية العامة" className="grid gap-3 lg:grid-cols-2">
       <ProfitabilityCard summary={summary} details={details} />
-      <DebtsCard
-        state={summary}
-        invoiceLines={details.data?.invoiceLines ?? []}
-      />
+      <DebtsCard state={summary} invoiceLines={details.data?.invoiceLines ?? []} />
     </section>
   );
 }
@@ -81,13 +74,7 @@ export function FinancialOverview({ query }: { query: ProfitQueryParams }) {
 type SummaryQuery = ReturnType<typeof useProfitSummary>;
 type DetailsQuery = ReturnType<typeof useProfitDetails>;
 
-function ProfitabilityCard({
-  summary,
-  details,
-}: {
-  summary: SummaryQuery;
-  details: DetailsQuery;
-}) {
+function ProfitabilityCard({ summary, details }: { summary: SummaryQuery; details: DetailsQuery }) {
   const [open, setOpen] = useState(false);
 
   return (
@@ -122,9 +109,7 @@ function ProfitabilityCard({
                 <div className="flex items-baseline justify-between">
                   <span className="text-xs font-semibold text-muted-foreground">
                     صافي الربح
-                    <span className="mr-1 rounded bg-secondary px-1 text-[10px]">
-                      {b.currency}
-                    </span>
+                    <span className="mr-1 rounded bg-secondary px-1 text-[10px]">{b.currency}</span>
                   </span>
                   <span
                     className={`text-xl font-extrabold tabular-nums ${
@@ -151,7 +136,12 @@ function ProfitabilityCard({
           {/* تفاصيل قابلة للطي */}
           <Collapsible open={open} onOpenChange={setOpen}>
             <CollapsibleTrigger asChild>
-              <Button type="button" variant="ghost" size="sm" className="mt-2 w-full gap-1 text-primary">
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="mt-2 w-full gap-1 text-primary"
+              >
                 <ChevronDown
                   className={`h-4 w-4 transition-transform ${open ? "rotate-180" : ""}`}
                 />
@@ -247,7 +237,11 @@ function DebtsCard({
       {state.isLoading ? (
         <CardLoading label="جارٍ تحميل الذمم" />
       ) : state.isError ? (
-        <ErrorState title="تعذر تحميل الذمم" onRetry={() => void state.refetch()} className="py-6" />
+        <ErrorState
+          title="تعذر تحميل الذمم"
+          onRetry={() => void state.refetch()}
+          className="py-6"
+        />
       ) : (
         <>
           <div className="grid grid-cols-3 gap-2">
@@ -271,7 +265,12 @@ function DebtsCard({
           ) : (
             <Collapsible open={open} onOpenChange={setOpen}>
               <CollapsibleTrigger asChild>
-                <Button type="button" variant="ghost" size="sm" className="mt-2 w-full gap-1 text-primary">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="mt-2 w-full gap-1 text-primary"
+                >
                   <ChevronDown
                     className={`h-4 w-4 transition-transform ${open ? "rotate-180" : ""}`}
                   />
@@ -376,6 +375,3 @@ function DebtTable({ title, items }: { title: string; items: DebtItemDTO[] }) {
     </div>
   );
 }
-
-
-

@@ -33,9 +33,7 @@ describe("L-5 ActivationScreen desktop pre-baked license key field", () => {
     vi.resetModules();
     vi.stubEnv("VITE_DESKTOP_DEPLOY", "true");
     const { ActivationScreen } = await import("./ActivationScreen");
-    const html = renderToString(
-      React.createElement(ActivationScreen, { onActivated: () => {} }),
-    );
+    const html = renderToString(React.createElement(ActivationScreen, { onActivated: () => {} }));
     expect(html).not.toContain("LIC-XXXX-XXXX-XXXX");
     expect(html).not.toContain("مفتاح الترخيص");
     expect(html).toContain("متابعة");
@@ -46,9 +44,7 @@ describe("L-5 ActivationScreen desktop pre-baked license key field", () => {
     vi.resetModules();
     vi.stubEnv("VITE_DESKTOP_DEPLOY", "false");
     const { ActivationScreen } = await import("./ActivationScreen");
-    const html = renderToString(
-      React.createElement(ActivationScreen, { onActivated: () => {} }),
-    );
+    const html = renderToString(React.createElement(ActivationScreen, { onActivated: () => {} }));
     expect(html).toContain("LIC-XXXX-XXXX-XXXX");
     expect(html).toContain("مفتاح الترخيص");
     expect(html).toContain("رمز دعوة");

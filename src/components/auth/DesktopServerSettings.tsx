@@ -158,9 +158,9 @@ export function DesktopServerSettings() {
         <div className="mt-5 border-t border-border pt-4">
           <div className="text-sm font-semibold text-foreground">إعادة الضبط المصنعي</div>
           <p className="mt-1 text-xs leading-6 text-muted-foreground">
-            يحذف قاعدة البيانات المحلية وجلسة المركز عند إعادة التشغيل التالية. ملف ربط
-            الجهاز وأسرار التطبيق تبقى. إلغاء التثبيت العادي من ويندوز لا يحذف البيانات
-            إلا بالخيار الصريح MOTARD_WIPEDATA=1.
+            يحذف قاعدة البيانات المحلية وجلسة المركز عند إعادة التشغيل التالية. ملف ربط الجهاز
+            وأسرار التطبيق تبقى. إلغاء التثبيت العادي من ويندوز لا يحذف البيانات إلا بالخيار الصريح
+            MOTARD_WIPEDATA=1.
           </p>
           <button
             type="button"

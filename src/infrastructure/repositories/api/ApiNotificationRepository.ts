@@ -15,7 +15,7 @@ export class ApiNotificationRepository implements INotificationRepository {
       const path = raw.to?.path ?? raw.targetPath;
       return {
         ...raw,
-        to: path ? { path } : raw.to ?? null,
+        to: path ? { path } : (raw.to ?? null),
       };
     });
   }

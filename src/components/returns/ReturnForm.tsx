@@ -171,7 +171,10 @@ export function ReturnForm({ kind }: { kind: ReturnKind }) {
 
   return (
     <>
-      <PageCard title="بيانات المرتجع" description="الطرف والفاتورة الأصلية أولاً، ثم التاريخ والسبب والعملة.">
+      <PageCard
+        title="بيانات المرتجع"
+        description="الطرف والفاتورة الأصلية أولاً، ثم التاريخ والسبب والعملة."
+      >
         <div className="space-y-4">
           <div className="grid gap-3 md:grid-cols-2">
             <Field label={kind === "entry" ? "المورد *" : "العميل *"}>
@@ -182,9 +185,7 @@ export function ReturnForm({ kind }: { kind: ReturnKind }) {
                   setPartyId(id);
                   setInvoiceId("");
                 }}
-                onCreateNew={() =>
-                  navigate({ to: kind === "entry" ? "/suppliers" : "/customers" })
-                }
+                onCreateNew={() => navigate({ to: kind === "entry" ? "/suppliers" : "/customers" })}
                 placeholder={kind === "entry" ? "ابحث عن مورد..." : "ابحث عن عميل..."}
               />
             </Field>
@@ -292,14 +293,11 @@ export function ReturnForm({ kind }: { kind: ReturnKind }) {
                         <RollSearchCombobox
                           value={l.rollId}
                           options={poolForLine(l)}
-                          placeholder={
-                            l.fabricId ? "صبغة أخرى لنفس القماش..." : "ابحث عن صبغة..."
-                          }
+                          placeholder={l.fabricId ? "صبغة أخرى لنفس القماش..." : "ابحث عن صبغة..."}
                           onChange={(v) => {
                             const rr = rollById(v);
                             const cc = rr && colorById(rr.colorId);
-                            const defaultPrice =
-                              invoicePriceByRoll.get(v) ?? rr?.pricePerKg ?? 0;
+                            const defaultPrice = invoicePriceByRoll.get(v) ?? rr?.pricePerKg ?? 0;
                             update(l.id, {
                               rollId: v,
                               pricePerKg: defaultPrice,
@@ -315,8 +313,7 @@ export function ReturnForm({ kind }: { kind: ReturnKind }) {
                             title={`إضافة لون آخر لـ ${f.name}`}
                             aria-label="إضافة لون آخر لنفس القماش"
                           >
-                            <Palette className="h-3 w-3" />
-                            + لون آخر لنفس القماش
+                            <Palette className="h-3 w-3" />+ لون آخر لنفس القماش
                           </button>
                         )}
                       </div>

@@ -12,9 +12,7 @@ export function AuthGate({ children }: { children: ReactNode }) {
   // Issue 12: on desktop login, ensure Desktop archive folders exist.
   useEffect(() => {
     if (!user || !isTauri()) return;
-    void ensureDocumentFolders().catch((e) =>
-      console.warn("[archive] ensure folders failed:", e),
-    );
+    void ensureDocumentFolders().catch((e) => console.warn("[archive] ensure folders failed:", e));
   }, [user]);
 
   // Stale JWT after DB wipe / setup reset — drop tokens so we leave the spinner.
@@ -24,8 +22,7 @@ export function AuthGate({ children }: { children: ReactNode }) {
 
   // Hard stop: never spin forever. After retries settle with no user, show picker.
   const restoring =
-    Boolean(sessionPresent && !user && !isError && (isLoading || isFetching)) &&
-    failureCount < 2;
+    Boolean(sessionPresent && !user && !isError && (isLoading || isFetching)) && failureCount < 2;
 
   if (restoring) {
     return (

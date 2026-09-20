@@ -224,6 +224,3 @@ export function SalesInvoicesTable({ query }: { query: ProfitQueryParams }) {
 function partyNameOf(inv: Invoice): string {
   return customerById(inv.partyId)?.name ?? supplierById(inv.partyId)?.name ?? "—";
 }
-
-
-

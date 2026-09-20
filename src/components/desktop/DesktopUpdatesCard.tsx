@@ -9,10 +9,7 @@ import {
   installDesktopUpdate,
   isTauri,
 } from "@/infrastructure/tauri-bridge";
-import {
-  fetchUpdateStatus,
-  type UpdateGateResponse,
-} from "@/lib/license-update-status";
+import { fetchUpdateStatus, type UpdateGateResponse } from "@/lib/license-update-status";
 
 const IS_DESKTOP = import.meta.env.VITE_DESKTOP_DEPLOY === "true";
 
@@ -29,7 +26,9 @@ export function DesktopUpdatesCard() {
 
   useEffect(() => {
     if (!IS_DESKTOP) return;
-    void getDesktopAppVersion().then(setVersion).catch(() => setVersion("1.0.0"));
+    void getDesktopAppVersion()
+      .then(setVersion)
+      .catch(() => setVersion("1.0.0"));
   }, []);
 
   if (!IS_DESKTOP) return null;

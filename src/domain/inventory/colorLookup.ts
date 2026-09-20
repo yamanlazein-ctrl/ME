@@ -15,12 +15,9 @@ export type ColorLookupRow = {
   imageUrl?: string | null;
 };
 
-export function filterColorsByQuery<T extends { name: string; code?: string | null; fabricId?: string }>(
-  catalog: T[],
-  term: string,
-  limit = 12,
-  fabricId?: string,
-): T[] {
+export function filterColorsByQuery<
+  T extends { name: string; code?: string | null; fabricId?: string },
+>(catalog: T[], term: string, limit = 12, fabricId?: string): T[] {
   const pool = fabricId ? catalog.filter((c) => c.fabricId === fabricId) : catalog;
   const q = normalizeInventoryName(term);
   // Scoped to a fabric: empty query lists that fabric's colours (sale/entry pickers).
@@ -57,9 +54,7 @@ export function colorOnFabric<T extends ColorLookupRow>(
     if (byCode) return byCode;
   }
   if (name) {
-    return catalog.find(
-      (c) => c.fabricId === fabricId && normalizeInventoryName(c.name) === name,
-    );
+    return catalog.find((c) => c.fabricId === fabricId && normalizeInventoryName(c.name) === name);
   }
   return undefined;
 }

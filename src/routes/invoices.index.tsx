@@ -285,7 +285,9 @@ function InvoicesIndexPage() {
                           </Button>
                           {!isCancelled && (inv.type === "sale" || inv.type === "entry") && (
                             <Link
-                              to={inv.type === "entry" ? "/invoices/entry/new" : "/invoices/sale/new"}
+                              to={
+                                inv.type === "entry" ? "/invoices/entry/new" : "/invoices/sale/new"
+                              }
                               search={{ edit: inv.id }}
                             >
                               <Button size="sm" variant="ghost">

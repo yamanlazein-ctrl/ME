@@ -102,7 +102,8 @@ export function EntryInvoicePrint({
   if (vis.showDate) meta.push({ label: "التاريخ", value: inv.date });
   if (vis.showStatus) meta.push({ label: "الحالة", value: statusLabel });
   if (vis.showCurrency) meta.push({ label: "العملة", value: `${inv.currency} (${sym})` });
-  if (vis.showCreatedBy) meta.push({ label: "أنشأ بواسطة", value: inv.createdBy ? String(inv.createdBy) : "" });
+  if (vis.showCreatedBy)
+    meta.push({ label: "أنشأ بواسطة", value: inv.createdBy ? String(inv.createdBy) : "" });
   if (vis.showCancelledInfo && isCancelled && inv.cancelledAt) {
     meta.push({
       label: "تاريخ الإلغاء",

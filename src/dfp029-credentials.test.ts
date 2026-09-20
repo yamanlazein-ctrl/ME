@@ -3,7 +3,8 @@ import { readFileSync, readdirSync, statSync } from "node:fs";
 import { resolve, join, extname } from "node:path";
 
 const BANNED = /admin123|Admin@12345/;
-const FIXED_TENANT = /(?:407fccfc-ba89-41c5-b5b9-ddb2c4f385d9|ddb8adcd-fa06-4743-a8bb-9fb4e7a03691)/i;
+const FIXED_TENANT =
+  /(?:407fccfc-ba89-41c5-b5b9-ddb2c4f385d9|ddb8adcd-fa06-4743-a8bb-9fb4e7a03691)/i;
 const REUSABLE_DB_CREDENTIAL = /postgres(?:ql)?:\/\/[^\s:@]+:[^\s@]+@/i;
 
 function walk(dir: string, out: string[] = []): string[] {
@@ -15,7 +16,8 @@ function walk(dir: string, out: string[] = []): string[] {
       name === ".git" ||
       name === ".tmp" ||
       name === ".tmp-pgdata-dfp"
-    ) continue;
+    )
+      continue;
     const p = join(dir, name);
     if (statSync(p).isDirectory()) walk(p, out);
     else if (/\.(ts|tsx|js|mjs|md)$/.test(extname(p)) || name.endsWith(".spec.ts")) out.push(p);
@@ -25,10 +27,7 @@ function walk(dir: string, out: string[] = []): string[] {
 
 describe("DFP-029 credential hygiene", () => {
   it("seed-test-admin refuses outside test mode and requires E2E_ADMIN_PASSWORD", () => {
-    const src = readFileSync(
-      resolve(process.cwd(), "backend/seed-test-admin.mjs"),
-      "utf8",
-    );
+    const src = readFileSync(resolve(process.cwd(), "backend/seed-test-admin.mjs"), "utf8");
     expect(src).toMatch(/ALLOW_TEST_SEED/);
     expect(src).toMatch(/E2E_ADMIN_PASSWORD/);
     expect(src).not.toMatch(/hash\("admin123"\)/);
@@ -62,7 +61,7 @@ describe("DFP-029 credential hygiene", () => {
     for (const root of roots) {
       for (const file of walk(root)) {
         if (file.endsWith("dfp029-credentials.test.ts")) continue;
-      const src = readFileSync(file, "utf8");
+        const src = readFileSync(file, "utf8");
         if (BANNED.test(src) || FIXED_TENANT.test(src) || REUSABLE_DB_CREDENTIAL.test(src)) {
           hits.push(file.replace(process.cwd() + "\\", "").replace(process.cwd() + "/", ""));
         }

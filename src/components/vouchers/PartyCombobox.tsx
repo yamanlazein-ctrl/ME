@@ -77,7 +77,9 @@ export function PartyCombobox({
         </div>
         <div className="max-h-56 overflow-y-auto py-1">
           {!q && !noMatch && (
-            <div className="px-3 py-3 text-xs text-muted-foreground">اكتب للبحث بالاسم أو الهاتف.</div>
+            <div className="px-3 py-3 text-xs text-muted-foreground">
+              اكتب للبحث بالاسم أو الهاتف.
+            </div>
           )}
           {noMatch && (
             <div className="px-3 py-3 text-xs text-muted-foreground">

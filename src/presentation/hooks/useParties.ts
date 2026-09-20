@@ -10,7 +10,8 @@ import type { CreatePartyInput } from "@/core/dtos/PartyDTO";
 import type { Currency } from "@/domain/types";
 import { invalidateFinancialViews } from "./invalidateFinancialViews";
 const ctx = new Proxy({} as import("@/domain/types").TenantContext, {
-  get: (_target, property: string) => buildTenantContext()[property as keyof import("@/domain/types").TenantContext],
+  get: (_target, property: string) =>
+    buildTenantContext()[property as keyof import("@/domain/types").TenantContext],
 });
 
 const KEYS = {

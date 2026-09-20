@@ -30,7 +30,9 @@ export function resolveTenantId(): string {
   // belongs to; the baked constant must only be a last-resort fallback for
   // a machine that has never activated anything, exactly like the web
   // build already treats it below.
-  return getInstallTenantId() ?? (import.meta.env.VITE_DEFAULT_TENANT_ID as string | undefined) ?? "";
+  return (
+    getInstallTenantId() ?? (import.meta.env.VITE_DEFAULT_TENANT_ID as string | undefined) ?? ""
+  );
 }
 
 type RosterResponse = {
@@ -47,10 +49,9 @@ async function fetchRoster(
   tid: string,
   headers: Record<string, string>,
 ): Promise<RosterResponse> {
-  const r = await fetch(
-    `${base}/api/auth/device-roster?tenantId=${encodeURIComponent(tid)}`,
-    { headers },
-  );
+  const r = await fetch(`${base}/api/auth/device-roster?tenantId=${encodeURIComponent(tid)}`, {
+    headers,
+  });
   const data = (await r.json().catch(() => ({}))) as {
     tenantId?: string;
     users?: RosterUser[];
@@ -378,11 +379,7 @@ export function UserPickerPage() {
               disabled={pending}
               className="w-full rounded-lg bg-primary px-4 py-3 text-sm font-bold text-primary-foreground disabled:opacity-60"
             >
-              {pending
-                ? "جاري الدخول…"
-                : selected.hasPin
-                  ? "دخول"
-                  : "تعيين الرقم السري والدخول"}
+              {pending ? "جاري الدخول…" : selected.hasPin ? "دخول" : "تعيين الرقم السري والدخول"}
             </button>
           </form>
         )}

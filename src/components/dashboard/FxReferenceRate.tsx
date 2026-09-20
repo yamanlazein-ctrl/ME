@@ -133,9 +133,7 @@ export function FxReferenceRate() {
   const ago = snapshot?.fetchedAt ? formatAgo(snapshot.fetchedAt, nowMs) : "";
   const sourceName = snapshot?.sourceName ?? "LiraScope";
   const sourceUrl = snapshot?.sourceUrl ?? SOURCE_URL_FALLBACK;
-  const meta = [ago ? `آخر تحديث ${ago}` : stale ? "سعر قديم" : null]
-    .filter(Boolean)
-    .join(" · ");
+  const meta = [ago ? `آخر تحديث ${ago}` : stale ? "سعر قديم" : null].filter(Boolean).join(" · ");
 
   return (
     <div

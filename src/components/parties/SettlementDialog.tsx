@@ -22,10 +22,7 @@ import type { OutstandingRow } from "@/core/calculations/ledgerCalc";
 import type { PartyKind } from "@/domain/entities/Party";
 import type { SettleInvoicesResponse } from "@/contracts/statement";
 import { useSettleInvoices } from "@/presentation/hooks/useStatement";
-import {
-  allocateSettlementPayment,
-  settlementRequiresExchangeRate,
-} from "@erp/shared";
+import { allocateSettlementPayment, settlementRequiresExchangeRate } from "@erp/shared";
 import { printDocument } from "@/components/print/printPortal";
 import { SettlementPrintDocument } from "@/components/print/SettlementPrintDocument";
 
@@ -159,11 +156,7 @@ export function SettlementDialog({
   };
 
   const effectiveAmount =
-    mode === "full"
-      ? preview.totalDue
-      : typeof amountPaid === "number"
-        ? amountPaid
-        : 0;
+    mode === "full" ? preview.totalDue : typeof amountPaid === "number" ? amountPaid : 0;
 
   const canSubmit =
     selectedRows.length > 0 &&
@@ -338,9 +331,7 @@ export function SettlementDialog({
                 className="h-9 w-40 tabular-nums"
                 placeholder={`المبلغ ${settleSym}`}
                 value={amountPaid}
-                onChange={(e) =>
-                  setAmountPaid(e.target.value === "" ? "" : Number(e.target.value))
-                }
+                onChange={(e) => setAmountPaid(e.target.value === "" ? "" : Number(e.target.value))}
               />
             )}
           </div>

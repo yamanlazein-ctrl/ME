@@ -63,7 +63,9 @@ function SyncConflictsPage() {
       >
         {isLoading && <p className="p-4 text-sm text-muted-foreground">جاري التحميل…</p>}
         {error && (
-          <p className="p-4 text-sm text-destructive">تعذّر جلب التعارضات. تحقق من الجلسة والصلاحية.</p>
+          <p className="p-4 text-sm text-destructive">
+            تعذّر جلب التعارضات. تحقق من الجلسة والصلاحية.
+          </p>
         )}
         {!isLoading && items.length === 0 && (
           <p className="p-6 text-center text-sm text-muted-foreground">لا توجد تعارضات مفتوحة.</p>
@@ -126,7 +128,10 @@ function ConflictCard({
           </Link>
         )}
         {row.entityType === "return" && (
-          <Link to="/returns" className="text-xs font-medium text-primary underline-offset-2 hover:underline">
+          <Link
+            to="/returns"
+            className="text-xs font-medium text-primary underline-offset-2 hover:underline"
+          >
             سجل المرتجعات
           </Link>
         )}
@@ -137,7 +142,9 @@ function ConflictCard({
       </p>
       {diffs.length > 0 && (
         <div className="rounded-lg border border-border bg-secondary/40 p-3">
-          <div className="mb-2 text-[11px] font-semibold text-foreground">حقول النية المحلية (ما حاول الجهاز حفظه)</div>
+          <div className="mb-2 text-[11px] font-semibold text-foreground">
+            حقول النية المحلية (ما حاول الجهاز حفظه)
+          </div>
           <dl className="grid gap-1 text-[11px]">
             {diffs.map(([k, v]) => (
               <div key={k} className="flex justify-between gap-4">
@@ -172,7 +179,8 @@ function ConflictCard({
         </Button>
       </div>
       <p className="text-[11px] leading-5 text-muted-foreground">
-        إبقاء المركز يغلق التعارض دون تطبيق نيتك. السحب يلغي النية المحلية. إعادة الإرسال تسجّل القرار ثم يجب فتح المستند وحفظ التعديل من جديد على النسخة الحالية — ليس استبدالاً صامتاً.
+        إبقاء المركز يغلق التعارض دون تطبيق نيتك. السحب يلغي النية المحلية. إعادة الإرسال تسجّل
+        القرار ثم يجب فتح المستند وحفظ التعديل من جديد على النسخة الحالية — ليس استبدالاً صامتاً.
       </p>
     </li>
   );

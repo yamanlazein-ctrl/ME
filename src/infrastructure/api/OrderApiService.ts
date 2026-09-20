@@ -57,10 +57,9 @@ export class OrderApiService {
 
   /** BUG-07 — informational: pending orders matching the lines about to be sold. */
   async pendingConflicts(lines: PendingConflictLine[]): Promise<PendingConflictsResponse> {
-    const res = await this.client.post<PendingConflictsResponse>(
-      "/api/orders/pending-conflicts",
-      { lines },
-    );
+    const res = await this.client.post<PendingConflictsResponse>("/api/orders/pending-conflicts", {
+      lines,
+    });
     return res.data;
   }
 }

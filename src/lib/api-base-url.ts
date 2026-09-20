@@ -3,7 +3,10 @@ function isDesktopDeploy(): boolean {
   return import.meta.env.VITE_DESKTOP_DEPLOY === "true";
 }
 
-function normalize(raw: string | null | undefined, emptyFallback: "" | "/api"): "" | "/api" | string {
+function normalize(
+  raw: string | null | undefined,
+  emptyFallback: "" | "/api",
+): "" | "/api" | string {
   const trimmed = raw?.trim();
   if (!trimmed || trimmed === "/api") return emptyFallback;
   return trimmed.replace(/\/+$/, "");

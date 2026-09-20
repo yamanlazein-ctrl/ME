@@ -3,11 +3,10 @@
     "src/**/*.ts",
     "src/**/*.tsx",
     "scripts/**/*.ts",
-    "tests/**/*.ts",
-    "tests/**/*.tsx",
     "vite.config.ts",
     "eslint.config.js"
   ],
+  "exclude": ["tests/e2e/**", "node_modules", "dist", ".output"],
   "compilerOptions": {
     "target": "ES2022",
     "jsx": "react-jsx",

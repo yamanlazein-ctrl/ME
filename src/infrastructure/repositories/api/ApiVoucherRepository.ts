@@ -73,10 +73,16 @@ export class ApiVoucherRepository implements IVoucherRepository {
       const payment = await this.api.findPaymentById(id);
       return paymentToVoucher(payment);
     } catch (e) {
-      if (e instanceof Error && (e as unknown as { statusCode?: number }).statusCode !== 404 && (e as unknown as { code?: string }).code !== "NOT_FOUND") {
+      if (
+        e instanceof Error &&
+        (e as unknown as { statusCode?: number }).statusCode !== 404 &&
+        (e as unknown as { code?: string }).code !== "NOT_FOUND"
+      ) {
         // not a 404, don't fallback silently — but still try receipt for 404 case
         // fall through to receipt try only if 404
-        const is404 = (e as unknown as { statusCode?: number }).statusCode === 404 || (e as unknown as { code?: string }).code === "NOT_FOUND";
+        const is404 =
+          (e as unknown as { statusCode?: number }).statusCode === 404 ||
+          (e as unknown as { code?: string }).code === "NOT_FOUND";
         if (!is404) throw e;
       }
     }
@@ -84,7 +90,8 @@ export class ApiVoucherRepository implements IVoucherRepository {
       const receipt = await this.api.findReceiptById(id);
       return receiptToVoucher(receipt);
     } catch (e) {
-      if (e instanceof Error && (e as unknown as { statusCode?: number }).statusCode === 404) return null;
+      if (e instanceof Error && (e as unknown as { statusCode?: number }).statusCode === 404)
+        return null;
       if ((e as unknown as { code?: string }).code === "NOT_FOUND") return null;
       throw e;
     }

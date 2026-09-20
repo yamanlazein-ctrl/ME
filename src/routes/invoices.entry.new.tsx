@@ -27,7 +27,11 @@ import { normalizeInventoryName } from "@/domain/inventory/normalizeInventoryNam
 import { supplierById } from "@/presentation/hooks/useParties";
 import { currencySymbol } from "@/presentation/hooks/useCurrency";
 import type { Currency } from "@/domain/types";
-import { useCreateInvoice, useUpdateInvoice, useNextInvoiceNumber } from "@/presentation/hooks/useInvoices";
+import {
+  useCreateInvoice,
+  useUpdateInvoice,
+  useNextInvoiceNumber,
+} from "@/presentation/hooks/useInvoices";
 import { invoiceSubtotal, invoiceTotal } from "@/core/calculations/invoiceCalc";
 import { printOrArchive } from "@/components/print/printPortal";
 import { archiveMeta } from "@/shared/utils/documentArchive";
@@ -345,7 +349,14 @@ function EntryInvoicePage() {
   };
   const pickExistingColorObj = (
     id: string,
-    c: { id: string; fabricId: string; name: string; code: string; hex?: string | null; imageUrl?: string | null },
+    c: {
+      id: string;
+      fabricId: string;
+      name: string;
+      code: string;
+      hex?: string | null;
+      imageUrl?: string | null;
+    },
   ) => {
     const line = lines.find((l) => l.id === id);
     const r = resolveColorPick(c, line?.existingFabricId, colors);
@@ -610,8 +621,7 @@ function EntryInvoicePage() {
           const byCode = codeKey ? colorByCode(codeKey, fabricId) : undefined;
           const byName = nameKey
             ? colorsOfFabric(fabricId).find(
-                (c) =>
-                  normalizeInventoryName(c.name) === normalizeInventoryName(nameKey),
+                (c) => normalizeInventoryName(c.name) === normalizeInventoryName(nameKey),
               )
             : undefined;
           if ((byCode && byCode.id !== boundId) || (byName && byName.id !== boundId)) {
@@ -640,8 +650,7 @@ function EntryInvoicePage() {
             if (existingColor) {
               const sameName =
                 !nameKey ||
-                normalizeInventoryName(existingColor.name) ===
-                  normalizeInventoryName(nameKey);
+                normalizeInventoryName(existingColor.name) === normalizeInventoryName(nameKey);
               if (sameName) {
                 colorId = existingColor.id;
               }
@@ -651,9 +660,7 @@ function EntryInvoicePage() {
             if (!colorId) {
               const byName = nameKey
                 ? colorsOfFabric(fabricId).find(
-                    (c) =>
-                      normalizeInventoryName(c.name) ===
-                      normalizeInventoryName(nameKey),
+                    (c) => normalizeInventoryName(c.name) === normalizeInventoryName(nameKey),
                   )
                 : undefined;
               if (byName) {
@@ -662,8 +669,7 @@ function EntryInvoicePage() {
                 const byCodeConflict = codeKey ? colorByCode(codeKey, fabricId) : undefined;
                 const codeTaken =
                   !!byCodeConflict &&
-                  normalizeInventoryName(byCodeConflict.name) !==
-                    normalizeInventoryName(nameKey);
+                  normalizeInventoryName(byCodeConflict.name) !== normalizeInventoryName(nameKey);
                 const col = await addColor(
                   {
                     fabricId,
@@ -855,9 +861,7 @@ function EntryInvoicePage() {
           ? " — وأُعيدت تسمية " + (renamedColors === 1 ? "لون واحد" : renamedColors + " ألوان")
           : "";
       const addedNote =
-        createdRollIds.length > 0
-          ? ` — وأُضيفت ${createdRollIds.length} صبغة جديدة للمخزون`
-          : "";
+        createdRollIds.length > 0 ? ` — وأُضيفت ${createdRollIds.length} صبغة جديدة للمخزون` : "";
       showSuccess(`تم حفظ تعديلات فاتورة الدخول ${res.value.number}${renameNote}${addedNote}`);
       printOrArchive(
         <InvoicePrintDocument invoice={res.value} />,
@@ -1213,7 +1217,10 @@ function EntryInvoicePage() {
                             onChange={(e) =>
                               updateLine(l.id, { pieces: Math.max(1, Number(e.target.value)) })
                             }
-                            className={cn("h-9 tabular-nums", !l.pieces && "text-muted-foreground/70")}
+                            className={cn(
+                              "h-9 tabular-nums",
+                              !l.pieces && "text-muted-foreground/70",
+                            )}
                             placeholder="1"
                             aria-label="عدد الأثواب"
                           />
@@ -1243,7 +1250,10 @@ function EntryInvoicePage() {
                           <Input
                             value={l.sahb}
                             onChange={(e) => updateLine(l.id, { sahb: e.target.value })}
-                            className={cn("h-9 tabular-nums", !l.sahb && "text-muted-foreground/70")}
+                            className={cn(
+                              "h-9 tabular-nums",
+                              !l.sahb && "text-muted-foreground/70",
+                            )}
                             placeholder="—"
                             aria-label="السحب"
                           />
@@ -1279,7 +1289,8 @@ function EntryInvoicePage() {
                       />
                       {!!edit && !!l.existingColorId && (
                         <p className="mt-1 text-[10px] leading-tight text-muted-foreground">
-                          ✏️ تعديل الاسم/الكود يعيد تسمية لون هذه الصبغة في المخزون — وتحويل اللفافة نفسها إلى صبغة أخرى محفوظة غير مسموح.
+                          ✏️ تعديل الاسم/الكود يعيد تسمية لون هذه الصبغة في المخزون — وتحويل اللفافة
+                          نفسها إلى صبغة أخرى محفوظة غير مسموح.
                         </p>
                       )}
                     </GroupSection>
@@ -1297,7 +1308,10 @@ function EntryInvoicePage() {
                                 grossKg: e.target.value === "" ? 0 : Number(e.target.value),
                               })
                             }
-                            className={cn("h-9 text-left tabular-nums", !l.grossKg && "text-muted-foreground/70")}
+                            className={cn(
+                              "h-9 text-left tabular-nums",
+                              !l.grossKg && "text-muted-foreground/70",
+                            )}
                             placeholder="0"
                             aria-label="الوزن القائم"
                           />
@@ -1312,7 +1326,10 @@ function EntryInvoicePage() {
                                 quantity: e.target.value === "" ? 0 : Number(e.target.value),
                               })
                             }
-                            className={cn("h-9 text-left tabular-nums", !l.quantity && "text-muted-foreground/70")}
+                            className={cn(
+                              "h-9 text-left tabular-nums",
+                              !l.quantity && "text-muted-foreground/70",
+                            )}
                             placeholder="0"
                             aria-label="الوزن الصافي"
                           />
@@ -1327,7 +1344,10 @@ function EntryInvoicePage() {
                           <Input
                             value={l.dyeBatch}
                             onChange={(e) => updateLine(l.id, { dyeBatch: e.target.value })}
-                            className={cn("h-9 tabular-nums", !l.dyeBatch && "text-muted-foreground/70")}
+                            className={cn(
+                              "h-9 tabular-nums",
+                              !l.dyeBatch && "text-muted-foreground/70",
+                            )}
                             placeholder="DY-…"
                             aria-label="رقم الصبغة"
                           />
@@ -1341,9 +1361,7 @@ function EntryInvoicePage() {
                         <CardField label={`السعر / كغ (${currencySymbol(currency)})`} required>
                           <FormattedAmountInput
                             value={l.pricePerKg}
-                            onChange={(v) =>
-                              updateLine(l.id, { pricePerKg: v === "" ? 0 : v })
-                            }
+                            onChange={(v) => updateLine(l.id, { pricePerKg: v === "" ? 0 : v })}
                             className={cn(
                               "h-9 text-left tabular-nums",
                               !l.pricePerKg && "text-muted-foreground/70",
@@ -1361,7 +1379,10 @@ function EntryInvoicePage() {
                               updateLine(l.id, { discountAmount: v === "" ? 0 : Math.max(0, v) })
                             }
                             onKeyDown={(e) => handleRowEnd(e, l.id)}
-                            className={cn("h-9 text-left tabular-nums", !l.discountAmount && "text-muted-foreground/70")}
+                            className={cn(
+                              "h-9 text-left tabular-nums",
+                              !l.discountAmount && "text-muted-foreground/70",
+                            )}
                             placeholder="0"
                             ariaLabel="الخصم"
                           />
@@ -1425,11 +1446,7 @@ function EntryInvoicePage() {
         </section>
 
         {/* ── Totals ─────────────────────────────────────────────── */}
-        <section
-          className={cn(
-            "overflow-hidden rounded-lg border border-border bg-card",
-          )}
-        >
+        <section className={cn("overflow-hidden rounded-lg border border-border bg-card")}>
           <div className="flex items-center gap-2 border-b border-border/60 bg-secondary/20 px-4 py-2">
             <div className="h-[3px] w-5 bg-primary/25 rounded-sm" />
             <span className="text-[11px] font-bold uppercase tracking-[0.16em] text-muted-foreground">
@@ -1438,11 +1455,7 @@ function EntryInvoicePage() {
           </div>
           <div className="grid gap-x-6 gap-y-2 px-4 py-3 sm:grid-cols-2">
             <TotalCell label="الكمية" value={`${formatNumber(totalQty)} كغ`} />
-            <TotalCell
-              label="المجموع"
-              value={`${formatMoney(subtotal)}`}
-              tone={moneyClass}
-            />
+            <TotalCell label="المجموع" value={`${formatMoney(subtotal)}`} tone={moneyClass} />
           </div>
           <div className="grid gap-x-6 gap-y-3 border-t border-border/60 px-4 py-3 sm:grid-cols-2 lg:grid-cols-4">
             <TotalInputCell

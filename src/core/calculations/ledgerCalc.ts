@@ -257,9 +257,7 @@ export function buildOutstanding(
     const total = round2dp(invoiceTotal(inv));
     if (total <= 0) continue;
     const paid = round2dp(
-      inv.paid != null && Number.isFinite(inv.paid)
-        ? inv.paid
-        : (paidByInvoice.get(inv.id) ?? 0),
+      inv.paid != null && Number.isFinite(inv.paid) ? inv.paid : (paidByInvoice.get(inv.id) ?? 0),
     );
     // Same formula as settleInvoicesUseCase / voucher create: total − paid − returns.
     const remaining = round2dp(total - paid - (returnsByInv.get(inv.id) ?? 0));

@@ -4,7 +4,11 @@ import { createReturnSchema, listReturnsSchema } from "./schemas/return.schema.j
 import { createVoucherSchema, listVouchersSchema } from "./schemas/voucher.schema.js";
 import { createExpenseSchema, listExpensesSchema } from "./schemas/expense.schema.js";
 import { createPartySchema, listPartiesSchema } from "./schemas/party.schema.js";
-import { closeDaySchema, addManualMovementSchema, setOpeningBalanceSchema } from "./schemas/cashbox.schema.js";
+import {
+  closeDaySchema,
+  addManualMovementSchema,
+  setOpeningBalanceSchema,
+} from "./schemas/cashbox.schema.js";
 
 export type CreateInvoiceRequest = z.infer<typeof createInvoiceSchema>;
 export type ListInvoicesRequest = z.infer<typeof listInvoicesSchema>;

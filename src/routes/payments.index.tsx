@@ -162,7 +162,9 @@ function PaymentsList() {
                         <Button
                           size="sm"
                           variant="ghost"
-                          onClick={() => printDocument(<VoucherPrintDocument voucher={v as never} />)}
+                          onClick={() =>
+                            printDocument(<VoucherPrintDocument voucher={v as never} />)
+                          }
                         >
                           <Printer className="ml-1 h-4 w-4" /> طباعة
                         </Button>

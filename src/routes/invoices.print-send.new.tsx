@@ -418,7 +418,8 @@ function PrintSendPage() {
                             const v = e.target.value;
                             if (v === "") return updateLine(line.key, { quantityKg: "" });
                             const n = Number(v);
-                            if (Number.isFinite(n) && n >= 0) updateLine(line.key, { quantityKg: n });
+                            if (Number.isFinite(n) && n >= 0)
+                              updateLine(line.key, { quantityKg: n });
                           }}
                           placeholder={src ? `حد أقصى ${formatQuantity(src.remainingKg)}` : ""}
                         />
@@ -571,9 +572,7 @@ function PrintSendPage() {
                         <td className="p-2">{j.pressName}</td>
                         <td className="p-2 tabular-nums font-semibold">{j.sentKg}</td>
                         <td className="p-2 tabular-nums">{j.receivedKg ?? "—"}</td>
-                        <td className="p-2">
-                          {j.status === "received" ? "مستلم" : "قيد التشغيل"}
-                        </td>
+                        <td className="p-2">{j.status === "received" ? "مستلم" : "قيد التشغيل"}</td>
                       </tr>
                     );
                   })}

@@ -50,7 +50,9 @@ export function computeSubtotal(lines: readonly InvoiceLineData[]): number {
   return round2dp(lines.reduce((s, l) => s + lineTotal(l), 0));
 }
 
-export function invoiceTotal(data: Pick<InvoiceData, "lines" | "discount" | "tax" | "shipping">): number {
+export function invoiceTotal(
+  data: Pick<InvoiceData, "lines" | "discount" | "tax" | "shipping">,
+): number {
   const subtotal = computeSubtotal(data.lines);
   return round2dp(subtotal - (data.discount ?? 0) + (data.tax ?? 0) + (data.shipping ?? 0));
 }

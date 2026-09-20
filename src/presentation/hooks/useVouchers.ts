@@ -18,7 +18,8 @@ export type Voucher = {
 };
 
 const ctx = new Proxy({} as import("@/domain/types").TenantContext, {
-  get: (_target, property: string) => buildTenantContext()[property as keyof import("@/domain/types").TenantContext],
+  get: (_target, property: string) =>
+    buildTenantContext()[property as keyof import("@/domain/types").TenantContext],
 });
 
 const KEYS = {

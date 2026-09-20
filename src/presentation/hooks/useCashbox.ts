@@ -72,7 +72,8 @@ export function useAddManualMovement() {
 export function useDeleteManualMovement() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (id: string) => container.cashbox.state.deleteManualMovement(id, buildTenantContext()),
+    mutationFn: (id: string) =>
+      container.cashbox.state.deleteManualMovement(id, buildTenantContext()),
     onSuccess: () => {
       toast.error("تم حذف الحركة اليدوية");
       qc.invalidateQueries({ queryKey: KEYS.state });
@@ -115,7 +116,8 @@ export function useSetOpeningBalance() {
 export function useCloseDay() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (input: CloseDayInput) => container.cashbox.closeDay.execute(input, buildTenantContext()),
+    mutationFn: (input: CloseDayInput) =>
+      container.cashbox.closeDay.execute(input, buildTenantContext()),
     onSuccess: () => {
       toast.info("تم إقفال اليوم");
       qc.invalidateQueries({ queryKey: KEYS.state });

@@ -43,11 +43,7 @@ export class PartyApiService {
     return res.data;
   }
 
-  async delete(
-    kind: "customer" | "supplier",
-    id: string,
-    expectedVersion: number,
-  ): Promise<void> {
+  async delete(kind: "customer" | "supplier", id: string, expectedVersion: number): Promise<void> {
     await this.client.delete(`${this.path(kind)}/${id}`, { body: { expectedVersion } });
   }
 }

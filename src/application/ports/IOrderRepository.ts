@@ -33,13 +33,10 @@ export interface IOrderRepository {
   update(id: UUID, patch: UpdateOrderInput, ctx: TenantContext): Promise<Order>;
   cancel(id: UUID, ctx: TenantContext, expectedVersion: number): Promise<Order>;
   fulfill(id: UUID, invoiceId: UUID, ctx: TenantContext): Promise<Order>;
-  findPendingConflicts(lines: PendingConflictLine[], ctx: TenantContext): Promise<PendingConflict[]>;
+  findPendingConflicts(
+    lines: PendingConflictLine[],
+    ctx: TenantContext,
+  ): Promise<PendingConflict[]>;
 }
 
-export type {
-  OrderDTO,
-  CreateOrderInput,
-  UpdateOrderInput,
-  OrderFilter,
-};
-
+export type { OrderDTO, CreateOrderInput, UpdateOrderInput, OrderFilter };

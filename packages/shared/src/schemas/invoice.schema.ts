@@ -49,10 +49,10 @@ export const createInvoiceSchema = z
     type: z.enum(["entry", "sale"]),
     date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
     partyId: z.string().uuid(),
-   partyType: z.enum(["customer", "supplier"]),
-   // Human-readable reference (ENT-2026-0001 / INV-2026-0001). Optional —
-   // the server falls back to its generated number when omitted.
-   reference: z.string().max(100).optional(),
+    partyType: z.enum(["customer", "supplier"]),
+    // Human-readable reference (ENT-2026-0001 / INV-2026-0001). Optional —
+    // the server falls back to its generated number when omitted.
+    reference: z.string().max(100).optional(),
     currency: z.enum(["SYP", "USD", "EUR"]).optional(),
     // BUG-03 fix: frozen FX rate (units of `currency` per 1 USD). Required
     // semantics: forced to 1 for USD; optional-but-honored for non-USD.
@@ -71,7 +71,11 @@ export const createInvoiceSchema = z
     const subtotal = computeSubtotal(mathLines);
     const discount = data.discount ?? 0;
     if (discount > subtotal) {
-      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["discount"], message: "الخصم لا يمكن أن يتجاوز المجموع الفرعي" });
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["discount"],
+        message: "الخصم لا يمكن أن يتجاوز المجموع الفرعي",
+      });
     }
     const total = invoiceTotal({
       lines: mathLines,
@@ -80,10 +84,18 @@ export const createInvoiceSchema = z
       shipping: data.shipping ?? 0,
     });
     if (total <= 0) {
-      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["discount"], message: "مجموع الفاتورة يجب أن يكون موجباً" });
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["discount"],
+        message: "مجموع الفاتورة يجب أن يكون موجباً",
+      });
     }
     if ((data.paid ?? 0) > total) {
-      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["paid"], message: "المبلغ المدفوع لا يمكن أن يتجاوز الإجمالي" });
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["paid"],
+        message: "المبلغ المدفوع لا يمكن أن يتجاوز الإجمالي",
+      });
     }
   });
 
@@ -105,7 +117,11 @@ export const updateInvoiceSchema = z
     const subtotal = computeSubtotal(mathLines);
     const discount = data.discount ?? 0;
     if (discount > subtotal) {
-      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["discount"], message: "الخصم لا يمكن أن يتجاوز المجموع الفرعي" });
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["discount"],
+        message: "الخصم لا يمكن أن يتجاوز المجموع الفرعي",
+      });
     }
     const total = invoiceTotal({
       lines: mathLines,
@@ -114,7 +130,11 @@ export const updateInvoiceSchema = z
       shipping: data.shipping ?? 0,
     });
     if (total <= 0) {
-      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["discount"], message: "مجموع الفاتورة يجب أن يكون موجباً" });
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["discount"],
+        message: "مجموع الفاتورة يجب أن يكون موجباً",
+      });
     }
   });
 
@@ -122,8 +142,14 @@ export const listInvoicesSchema = z.object({
   partyId: z.string().uuid().optional(),
   type: z.enum(["entry", "sale"]).optional(),
   status: z.enum(["active", "cancelled"]).optional(),
-  fromDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
-  toDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  fromDate: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .optional(),
+  toDate: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .optional(),
   search: z.string().max(200).optional(),
   page: z.coerce.number().int().min(0).optional().default(0),
   limit: z.coerce.number().int().min(1).max(1000).optional().default(20),
@@ -131,4 +157,3 @@ export const listInvoicesSchema = z.object({
 
 export type CreateInvoiceInput = z.infer<typeof createInvoiceSchema>;
 export type InvoiceLineInput = z.infer<typeof invoiceLineSchema>;
-

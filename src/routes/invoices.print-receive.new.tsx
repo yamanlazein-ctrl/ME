@@ -15,7 +15,13 @@ import {
 } from "@/components/ui/select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
-import { colorById, colors, fabricById, rollById, useInventory } from "@/presentation/hooks/useInventory";
+import {
+  colorById,
+  colors,
+  fabricById,
+  rollById,
+  useInventory,
+} from "@/presentation/hooks/useInventory";
 import { currencySymbol } from "@/presentation/hooks/useCurrency";
 import type { Currency } from "@/domain/types";
 import { usePrintJobs, useOpenPrintJobs, useReceivePrint } from "@/presentation/hooks/usePrintJobs";
@@ -228,7 +234,8 @@ function PrintReceivePage() {
     setError(null);
     setOk(null);
     const valid = lines.filter(
-      (l) => !l.jobId.startsWith("fabric:") && l.jobId && Number(l.receivedKg) > 0 && l.newName.trim(),
+      (l) =>
+        !l.jobId.startsWith("fabric:") && l.jobId && Number(l.receivedKg) > 0 && l.newName.trim(),
     );
     try {
       if (valid.length === 0)
@@ -419,7 +426,10 @@ function PrintReceivePage() {
               const srcCost = src?.pricePerKg ?? 0;
               const totalCost = srcCost + (Number(line.printCostPerKg) || 0);
               return (
-                <div key={line.key} className="rounded-lg border border-border bg-background/50 p-3">
+                <div
+                  key={line.key}
+                  className="rounded-lg border border-border bg-background/50 p-3"
+                >
                   <div className="mb-2 flex items-center justify-between gap-2">
                     <div className="flex items-center gap-2">
                       <span className="grid h-6 min-w-[28px] place-items-center rounded-md bg-primary/10 px-2 text-[11px] font-bold text-primary tabular-nums">

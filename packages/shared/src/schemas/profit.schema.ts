@@ -7,8 +7,14 @@ import { z } from "zod";
  * in its own bucket, never mixed).
  */
 export const profitQuerySchema = z.object({
-  fromDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
-  toDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  fromDate: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .optional(),
+  toDate: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .optional(),
   currency: z.enum(["SYP", "USD", "EUR"]).optional(),
 });
 

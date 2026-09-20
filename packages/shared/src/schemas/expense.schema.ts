@@ -20,8 +20,14 @@ export const addExpenseNameSchema = z.object({
 export const listExpensesSchema = z.object({
   category: z.string().optional(),
   status: z.enum(["active", "cancelled"]).optional(),
-  fromDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
-  toDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  fromDate: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .optional(),
+  toDate: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .optional(),
   search: z.string().max(200).optional(),
   page: z.coerce.number().int().min(0).optional().default(0),
   limit: z.coerce.number().int().min(1).max(1000).optional().default(20),

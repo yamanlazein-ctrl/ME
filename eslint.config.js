@@ -6,7 +6,23 @@ import reactRefresh from "eslint-plugin-react-refresh";
 import tseslint from "typescript-eslint";
 
 export default tseslint.config(
-  { ignores: ["dist", ".output", ".vinxi"] },
+  {
+    ignores: [
+      "dist",
+      ".output",
+      ".vinxi",
+      // Playwright / packaging / backend scripts are not the app lint surface.
+      "tests/**",
+      "backend/**",
+      "desktop/**",
+      "admin-dashboard/**",
+      "packages/**",
+      "scripts/**",
+      "tools/**",
+      "vitest.config.ts",
+      ".tmp-pgdata-dev/**",
+    ],
+  },
   {
     extends: [js.configs.recommended, ...tseslint.configs.recommended],
     files: ["**/*.{ts,tsx}"],
@@ -34,6 +50,8 @@ export default tseslint.config(
       ],
       "react-refresh/only-export-components": ["warn", { allowConstantExport: true }],
       "@typescript-eslint/no-unused-vars": "off",
+      "@typescript-eslint/no-explicit-any": "warn",
+      "react-hooks/exhaustive-deps": "warn",
     },
   },
   // Architecture boundary: routes/components must go through presentation hooks,

@@ -1,6 +1,19 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
-import { Eye, FileStack, History, Pencil, Printer, Trash2, Plus, Minus, ArrowLeftRight, XCircle, CheckCircle2, PencilLine } from "lucide-react";
+import {
+  Eye,
+  FileStack,
+  History,
+  Pencil,
+  Printer,
+  Trash2,
+  Plus,
+  Minus,
+  ArrowLeftRight,
+  XCircle,
+  CheckCircle2,
+  PencilLine,
+} from "lucide-react";
 import { AppShell } from "@/components/layout/AppShell";
 import { PageCard } from "@/components/layout/PageCard";
 import { Button } from "@/components/ui/button";
@@ -127,7 +140,9 @@ function InvoicesTrackingPage() {
   }, [q, invoiceTypeFilter, status, partyId, from, to, page, pageSize]);
 
   const { data, isLoading, error } = useInvoicesList(
-    type === "return" || type === "print_send" || type === "print_receive" ? { ...filter, limit: 1 } : filter,
+    type === "return" || type === "print_send" || type === "print_receive"
+      ? { ...filter, limit: 1 }
+      : filter,
   );
   const invoices = useMemo(() => {
     if (type === "return" || type === "print_send" || type === "print_receive") return [];
@@ -194,7 +209,12 @@ function InvoicesTrackingPage() {
   }, [returnsData, printJobs, type, status, partyId, from, to, q]);
 
   const invoiceTotal = useMemo(() => data?.total ?? 0, [data]);
-  const total = type === "all" ? invoiceTotal + extraRows.length : type === "entry" || type === "sale" ? invoiceTotal : extraRows.length;
+  const total =
+    type === "all"
+      ? invoiceTotal + extraRows.length
+      : type === "entry" || type === "sale"
+        ? invoiceTotal
+        : extraRows.length;
 
   useEffect(() => setPage(0), [q, type, status, partyId, from, to]);
 
@@ -401,7 +421,9 @@ function InvoicesTrackingPage() {
                               <History className="ml-1 h-4 w-4" /> السجل
                             </Button>
                             <Link
-                              to={inv.type === "entry" ? "/invoices/entry/new" : "/invoices/sale/new"}
+                              to={
+                                inv.type === "entry" ? "/invoices/entry/new" : "/invoices/sale/new"
+                              }
                               search={{ edit: inv.id }}
                               className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-muted-foreground transition hover:bg-secondary hover:text-foreground"
                             >
@@ -484,10 +506,7 @@ function InvoicesTrackingPage() {
             <Button variant="outline" onClick={() => setPreview(null)}>
               إغلاق
             </Button>
-            <Button
-              className="gap-2"
-              onClick={() => preview && printInvoiceWithArchive(preview)}
-            >
+            <Button className="gap-2" onClick={() => preview && printInvoiceWithArchive(preview)}>
               <Printer className="h-4 w-4" /> طباعة
             </Button>
           </div>
@@ -523,7 +542,6 @@ function InvoicesTrackingPage() {
     </AppShell>
   );
 }
-
 
 /* ═══════════════ Invoice Audit Timeline (tracking feature) ═══════════════ */
 
@@ -602,7 +620,10 @@ function TimelineRow({ entry }: { entry: AuditLogDTO }) {
   return (
     <li className="relative pr-8 pb-5 last:pb-0">
       {/* timeline rail */}
-      <span className="absolute right-[11px] top-6 bottom-0 w-px bg-border last:hidden" aria-hidden />
+      <span
+        className="absolute right-[11px] top-6 bottom-0 w-px bg-border last:hidden"
+        aria-hidden
+      />
       <span
         className={`absolute right-0 top-0 grid h-6 w-6 place-items-center rounded-full ${meta.cls}`}
       >
@@ -617,9 +638,7 @@ function TimelineRow({ entry }: { entry: AuditLogDTO }) {
           {formatDateTime(entry.createdAt)}
         </span>
       </div>
-      {entry.detail && (
-        <div className="mt-0.5 text-xs text-muted-foreground">{entry.detail}</div>
-      )}
+      {entry.detail && <div className="mt-0.5 text-xs text-muted-foreground">{entry.detail}</div>}
       {diffs.length > 0 && (
         <details className="mt-1.5 rounded-md border border-border bg-secondary/30 px-2.5 py-1.5">
           <summary className="cursor-pointer text-[11px] font-semibold text-primary">
@@ -627,8 +646,19 @@ function TimelineRow({ entry }: { entry: AuditLogDTO }) {
           </summary>
           <ul className="mt-1 space-y-0.5">
             {diffs.map((d, i) => (
-              <li key={i} className="flex items-center gap-1.5 text-[11px] text-foreground tabular-nums">
-                {d.includes("←") ? <ArrowLeftRight className="h-3 w-3 text-muted-foreground" /> : d.includes("جديد") ? <Plus className="h-3 w-3 text-success" /> : d.includes("محذوف") ? <Minus className="h-3 w-3 text-destructive" /> : <ArrowLeftRight className="h-3 w-3 text-muted-foreground" />}
+              <li
+                key={i}
+                className="flex items-center gap-1.5 text-[11px] text-foreground tabular-nums"
+              >
+                {d.includes("←") ? (
+                  <ArrowLeftRight className="h-3 w-3 text-muted-foreground" />
+                ) : d.includes("جديد") ? (
+                  <Plus className="h-3 w-3 text-success" />
+                ) : d.includes("محذوف") ? (
+                  <Minus className="h-3 w-3 text-destructive" />
+                ) : (
+                  <ArrowLeftRight className="h-3 w-3 text-muted-foreground" />
+                )}
                 <span dir="auto">{d}</span>
               </li>
             ))}
@@ -651,7 +681,10 @@ function InvoiceTimelineDialog({
   const party = [...customers, ...suppliers].find((p) => p.id === invoice?.partyId);
   return (
     <Dialog open={invoice !== null} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent dir="rtl" className="!max-w-2xl w-[calc(100vw-2rem)] overflow-y-auto max-h-[90vh]">
+      <DialogContent
+        dir="rtl"
+        className="!max-w-2xl w-[calc(100vw-2rem)] overflow-y-auto max-h-[90vh]"
+      >
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <History className="h-5 w-5 text-primary" />
@@ -666,7 +699,9 @@ function InvoiceTimelineDialog({
           <div className="grid grid-cols-2 gap-2 rounded-lg border border-border bg-secondary/30 p-3 text-xs md:grid-cols-4">
             <div>
               <div className="text-[10px] text-muted-foreground">الرقم</div>
-              <div className="font-bold text-primary" dir="ltr">{invoice.number}</div>
+              <div className="font-bold text-primary" dir="ltr">
+                {invoice.number}
+              </div>
             </div>
             <div>
               <div className="text-[10px] text-muted-foreground">النوع</div>
@@ -678,14 +713,18 @@ function InvoiceTimelineDialog({
             </div>
             <div>
               <div className="text-[10px] text-muted-foreground">الحالة</div>
-              <div className={`font-semibold ${invoice.status === "cancelled" ? "text-destructive" : "text-success"}`}>
+              <div
+                className={`font-semibold ${invoice.status === "cancelled" ? "text-destructive" : "text-success"}`}
+              >
                 {STATUS_LABEL[invoice.status as Invoice["status"]]}
               </div>
             </div>
           </div>
         )}
 
-        {isLoading && <div className="py-8 text-center text-sm text-muted-foreground">جاري تحميل السجل…</div>}
+        {isLoading && (
+          <div className="py-8 text-center text-sm text-muted-foreground">جاري تحميل السجل…</div>
+        )}
         {error && (
           <div className="py-6 text-center text-sm text-destructive">تعذّر تحميل سجل التدقيق.</div>
         )}

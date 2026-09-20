@@ -112,7 +112,8 @@ export function ReturnInvoicePrint({
   if (vis.showCurrency) meta.push({ label: "العملة", value: `${r.currency} (${sym})` });
   // L10: the hardcoded exchange-rate line was removed — it was cosmetic,
   // never used in any accounting computation, and misleading on documents.
-  if (vis.showCreatedBy) meta.push({ label: "أنشأ بواسطة", value: r.createdBy ? String(r.createdBy) : "" });
+  if (vis.showCreatedBy)
+    meta.push({ label: "أنشأ بواسطة", value: r.createdBy ? String(r.createdBy) : "" });
   if (vis.showCreatedAt && r.createdAt) {
     meta.push({
       label: "تاريخ الإنشاء",

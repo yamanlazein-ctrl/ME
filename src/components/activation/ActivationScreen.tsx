@@ -208,9 +208,7 @@ export function ActivationScreen({ onActivated }: { onActivated: () => void }) {
         if (key) body.key = key;
         r = await apiPost("/api/setup/wizard/activate", body);
       } catch (netErr) {
-        throw new Error(
-          "تعذّر الاتصال بخادم التفعيل. تحقق من الشبكة ثم أعد المحاولة.",
-        );
+        throw new Error("تعذّر الاتصال بخادم التفعيل. تحقق من الشبكة ثم أعد المحاولة.");
       }
 
       if (!r.ok) {
@@ -302,9 +300,7 @@ export function ActivationScreen({ onActivated }: { onActivated: () => void }) {
         password: adminPassword,
       });
       if (!admin.ok) {
-        throw new Error(
-          admin.data?.message || "فشل حفظ كلمة المرور — تأكد أنها 8 أحرف على الأقل",
-        );
+        throw new Error(admin.data?.message || "فشل حفظ كلمة المرور — تأكد أنها 8 أحرف على الأقل");
       }
       const rv = await apiPost("/api/setup/wizard/review", { tenantId: tid, confirmed: true });
       const reviewAlreadyDone = rv.status === 409 || rv.data?.code === "ALREADY_COMPLETED";
@@ -338,7 +334,11 @@ export function ActivationScreen({ onActivated }: { onActivated: () => void }) {
     >
       <div className="w-full max-w-md rounded-2xl border border-border bg-card p-8 shadow-2xl">
         <div className="flex flex-col items-center text-center">
-          <img src={logoUrl} alt="أقمشة ومنسوجات" className="h-16 w-16 object-contain object-center" />
+          <img
+            src={logoUrl}
+            alt="أقمشة ومنسوجات"
+            className="h-16 w-16 object-contain object-center"
+          />
           <h1 className="mt-4 text-2xl font-bold tracking-tight text-foreground">إعداد النظام</h1>
           <p className="mt-1 text-xs text-muted-foreground">
             {step === "activate" &&

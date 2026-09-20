@@ -361,7 +361,11 @@ function PartyBalances({
       const total = groupAmountsByCurrency(invs, invoiceTotal, (i) => i.currency);
       // Read paid from the invoice row (backend-maintained, FX-converted) —
       // never sum voucher amounts raw across currencies.
-      const paid = groupAmountsByCurrency(invs, (i) => i.paid ?? 0, (i) => i.currency);
+      const paid = groupAmountsByCurrency(
+        invs,
+        (i) => i.paid ?? 0,
+        (i) => i.currency,
+      );
       const remaining = remainingOf(p.id);
       return { p, total, paid, remaining, count: invs.length };
     })

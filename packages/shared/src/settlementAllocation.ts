@@ -84,12 +84,7 @@ export function allocateSettlementPayment(opts: {
   }
 
   const withDue = sorted.map((inv) => {
-    const due = convertForSettlement(
-      inv.remaining,
-      inv.currency,
-      opts.settlementCurrency,
-      rate,
-    );
+    const due = convertForSettlement(inv.remaining, inv.currency, opts.settlementCurrency, rate);
     if (due === null) {
       throw new Error(
         `لا يمكن تحويل فاتورة ${inv.number ?? inv.invoiceId} من ${inv.currency} إلى ${opts.settlementCurrency} — ${FX_REQUIRED_MESSAGE}`,
@@ -107,8 +102,7 @@ export function allocateSettlementPayment(opts: {
     const take = round2dp(Math.min(dueInSettlement, left));
     if (take <= 0) continue;
 
-    const inInvoice =
-      convertForSettlement(take, opts.settlementCurrency, inv.currency, rate);
+    const inInvoice = convertForSettlement(take, opts.settlementCurrency, inv.currency, rate);
     if (inInvoice === null) {
       throw new Error(
         `لا يمكن تحويل مبلغ التسوية إلى عملة الفاتورة ${inv.currency} — ${FX_REQUIRED_MESSAGE}`,

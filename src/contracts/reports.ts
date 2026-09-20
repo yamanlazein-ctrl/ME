@@ -170,10 +170,7 @@ export const SHIPPED_REPORT_ENDPOINTS = [
 ] as const;
 
 /** Explicitly out of release scope until dedicated routes exist. */
-export const UNSHIPPED_REPORT_PLACEHOLDERS = [
-  TaxReportEndpoint,
-  CashFlowReportEndpoint,
-] as const;
+export const UNSHIPPED_REPORT_PLACEHOLDERS = [TaxReportEndpoint, CashFlowReportEndpoint] as const;
 
 /** Paths that must NEVER appear as mounted report hubs (regression for DFP-015). */
 export const FORBIDDEN_PHANTOM_REPORT_PATHS = [
