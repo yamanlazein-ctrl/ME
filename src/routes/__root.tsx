@@ -99,12 +99,9 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { rel: "icon", href: "/favicon.png?v=2", type: "image/png" },
       { rel: "icon", href: "/favicon.ico?v=2", type: "image/x-icon", sizes: "48x48" },
       { rel: "apple-touch-icon", href: "/favicon.png?v=2" },
-      { rel: "preconnect", href: "https://fonts.googleapis.com" },
-      { rel: "preconnect", href: "https://fonts.gstatic.com", crossOrigin: "anonymous" },
-      {
-        rel: "stylesheet",
-        href: "https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&display=swap",
-      },
+      // FIN-12: the IBM Plex Sans Arabic webfont is self-hosted via
+      // @fontsource (imported in styles.css). No remote font/style request is
+      // issued, so the packaged desktop app renders correctly offline.
     ],
   }),
   shellComponent: RootShell,

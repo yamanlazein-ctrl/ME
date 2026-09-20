@@ -94,6 +94,26 @@ jobs:
           ALLOW_TEST_SEED: "1"
           NODE_ENV: test
 
+      # FIN-08: behavioural sync proof against REAL Postgres. The static
+      # text-shape assertions in sync-invariants.test.ts cannot catch a
+      # refactor that preserves source text but breaks convergence, so the
+      # multi-device and restore harnesses are hard CI gates.
+      - name: Multi-device sync convergence gate (FIN-08 / S1–S8)
+        run: cd backend && node scripts/verify-sync-multidevice.mjs
+        env:
+          NODE_ENV: test
+          ALLOW_TEST_SEED: "1"
+          JWT_SECRET: test-secret-32-chars-minimum-padding-paddingxx
+          APP_MASTER_KEY: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa=
+
+      - name: Restore/sync-state recovery gate (FIN-08)
+        run: cd backend && node scripts/verify-restore-sync-state.mjs
+        env:
+          NODE_ENV: test
+          ALLOW_TEST_SEED: "1"
+          JWT_SECRET: test-secret-32-chars-minimum-padding-paddingxx
+          APP_MASTER_KEY: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa=
+
       - name: Seed admin + API smoke gate (DFP-008)
         env:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/erp_test

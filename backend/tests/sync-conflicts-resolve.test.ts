@@ -12,23 +12,26 @@ import {
   recordSyncConflict,
   resolveSyncConflict,
 } from "../src/application/use-cases/sync/syncConflicts.js";
+import { databaseReachable } from "./_helpers/requireDatabase.js";
 
 let reachable = false;
 let tenantId = "";
 
 describe("sync conflict resolution (no silent overwrite)", () => {
   beforeAll(async () => {
-    try {
-      await pool.query("select 1");
-      const t = await pool.query<{ id: string }>(`SELECT id::text AS id FROM tenants LIMIT 1`);
-      tenantId = t.rows[0]?.id ?? "";
-      reachable = Boolean(tenantId);
-      if (reachable) {
-        await pool.query(`SELECT set_config('app.current_tenant_id', $1, false)`, [tenantId]);
-      }
-    } catch {
-      reachable = false;
-    }
+    // FIN-09: an unreachable database is a hard failure when DATABASE_URL is
+    // set, and the suite seeds its OWN tenant instead of depending on whatever
+    // happens to already exist (an empty DB used to pass vacuously).
+    reachable = await databaseReachable();
+    if (!reachable) return;
+    tenantId = randomUUID();
+    await pool.query(
+      `INSERT INTO tenants (id, name, slug, status, license_status, license_type)
+       VALUES ($1, 'Conflict Resolve Tenant', $2, 'active', 'no_license', 'trial')
+       ON CONFLICT (id) DO NOTHING`,
+      [tenantId, `cfr-${tenantId.slice(0, 8)}`],
+    );
+    await pool.query(`SELECT set_config('app.current_tenant_id', $1, false)`, [tenantId]);
   });
 
   it("keep-server and withdraw close the conflict; rebase returns serverVersion without applying intent", async () => {

@@ -19,18 +19,13 @@ import { sql } from "drizzle-orm";
 import { db } from "@/infrastructure/orm/drizzle.js";
 import { runWithTenantContext, runWithPlatformContext } from "@/infrastructure/orm/tenant-context.js";
 import { PostgresSyncResourceClaimRepository } from "@/infrastructure/repositories/PostgresSyncResourceClaimRepository.js";
+import { databaseReachable } from "./_helpers/requireDatabase.js";
 
 let reachable = false;
 let tenantId = "";
 
-async function canConnect(): Promise<boolean> {
-  try {
-    await db.execute(sql`select 1`);
-    return true;
-  } catch {
-    return false;
-  }
-}
+// FIN-09: hard failure when DATABASE_URL is set — no vacuous pass.
+const canConnect = databaseReachable;
 
 async function seedTenant(): Promise<void> {
   await runWithPlatformContext(async () => {

@@ -8,6 +8,7 @@ import { vouchers } from "@/infrastructure/orm/schemas/voucher.table.js";
 import { ledgerEntries } from "@/infrastructure/orm/schemas/ledger-entry.table.js";
 import { PostgresVoucherRepository } from "@/infrastructure/repositories/PostgresVoucherRepository.js";
 import type { TenantContext } from "@/domain/types/index.js";
+import { databaseReachable } from "./_helpers/requireDatabase.js";
 
 let reachable = false;
 const tenantId = randomUUID();
@@ -22,9 +23,10 @@ const ctx: TenantContext = {
 
 describe("voucher settlement discount", () => {
   beforeAll(async () => {
+    // FIN-09: hard failure when DATABASE_URL is set — no vacuous pass.
+    reachable = await databaseReachable();
+    if (!reachable) return;
     try {
-      await db.execute(sql`select 1`);
-      reachable = true;
       await db.insert(tenants).values({ id: tenantId, name: "Discount Tenant", slug: `disc-${tenantId.slice(0, 8)}` });
       await db.insert(parties).values([
         {

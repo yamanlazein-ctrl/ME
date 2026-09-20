@@ -237,20 +237,28 @@ export async function getActivationDeviceInfo(): Promise<{
   hostname?: string;
 }> {
   if (isTauri()) {
-    try {
-      const fp = await getDesktopFingerprint();
-      return {
-        fingerprint: fp.hash,
-        platform: detectPlatform(fp.os),
-        hostname: fp.hostname,
-      };
-    } catch {
-      // fall through to the browser values
-    }
+    // FIN-13: on desktop the OS fingerprint is the ONLY acceptable identity.
+    // Falling back to the weak browser value here would let a seat be claimed
+    // (and matched against other devices) on UA + language + timezone alone.
+    // Fail closed instead.
+    const fp = await getDesktopFingerprint();
+    return {
+      fingerprint: fp.hash,
+      platform: detectPlatform(fp.os),
+      hostname: fp.hostname,
+    };
   }
   return { fingerprint: await getBrowserFingerprint(), platform: detectPlatform() };
 }
 
+/**
+ * FIN-13: WEB-ONLY, NON-AUTHORITATIVE.
+ *
+ * This value keys local at-rest encryption in the browser build, where no OS
+ * fingerprint is available. It is deliberately weak (UA + language + timezone
+ * offset) and MUST NOT drive any licensing, seat-counting or authorization
+ * decision — the desktop build always resolves the Rust `desktop_fingerprint`.
+ */
 async function getBrowserFingerprint(): Promise<string> {
   // Stable across window resize / monitor changes — screen size used to break
   // AES decrypt of the activation id and blocked the PIN roster.

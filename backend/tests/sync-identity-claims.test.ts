@@ -8,18 +8,14 @@ import { sql } from "drizzle-orm";
 import { db } from "@/infrastructure/orm/drizzle.js";
 import { runWithTenantContext, runWithPlatformContext } from "@/infrastructure/orm/tenant-context.js";
 import { PostgresSyncResourceClaimRepository } from "@/infrastructure/repositories/PostgresSyncResourceClaimRepository.js";
+import { databaseReachable } from "./_helpers/requireDatabase.js";
 
 let reachable = false;
 let tenantId = "";
 
-async function canConnect(): Promise<boolean> {
-  try {
-    await db.execute(sql`select 1`);
-    return true;
-  } catch {
-    return false;
-  }
-}
+// FIN-09: an unreachable database is a hard failure when DATABASE_URL is set,
+// so this suite can no longer pass without exercising its assertions.
+const canConnect = databaseReachable;
 
 describe("identity claims — applied holders do not lock forever", () => {
   beforeAll(async () => {

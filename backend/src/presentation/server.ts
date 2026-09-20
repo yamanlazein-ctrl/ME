@@ -53,6 +53,7 @@ import { createInstallGateMiddleware } from "../infrastructure/http/middleware/i
 import { createLicenseGuard } from "../infrastructure/http/middleware/license.guard.middleware.js";
 import { requireFeature } from "../infrastructure/http/middleware/license.enforcement.middleware.js";
 import { FEATURES } from "../domain/licensing/features.js";
+import { setLicenseIdentityDegraded } from "../infrastructure/license/licenseIdentityHealth.js";
 
 // Crash reporting & APM — guarded so it never blocks startup
 if (config.SENTRY_DSN) {
@@ -468,8 +469,15 @@ async function prepareLicenseIdentity(): Promise<void> {
       "../infrastructure/license/detachOrphanBakedLicenses.js"
     );
     await detachOrphanBakedLicenses(db);
+    setLicenseIdentityDegraded(null);
   } catch (err) {
-    logger.warn({ err }, "License identity prepare skipped (non-fatal)");
+    // FIN-18: a desktop app must still start if this maintenance step fails,
+    // but a stale cross-tenant baked license must never be SILENTLY active.
+    // Record the condition so /api/health/deep reports it instead of the
+    // failure vanishing into a warn nobody reads.
+    const reason = err instanceof Error ? err.message : "orphan baked license detach failed";
+    setLicenseIdentityDegraded(reason);
+    logger.error({ err }, "license identity preparation failed — state marked degraded");
   }
 }
 

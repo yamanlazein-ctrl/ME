@@ -1,6 +1,7 @@
 import { Router, type Request, type Response, type RequestHandler } from "express";
 import { db } from "../../infrastructure/orm/drizzle.js";
 import { sql } from "drizzle-orm";
+import { getLicenseIdentityDegradedReason } from "../../infrastructure/license/licenseIdentityHealth.js";
 
 export function registerHealthRoutes(
   router: Router,
@@ -54,6 +55,13 @@ export function registerHealthRoutes(
     } catch (e) {
       checks.redis = { status: "error", details: e instanceof Error ? e.message : "unknown" };
     }
+
+    // FIN-18: boot-time license identity preparation. A failed orphan-baked
+    // license detach must be visible, never a silent warn.
+    const licenseIdentityDegraded = getLicenseIdentityDegradedReason();
+    checks.licenseIdentity = licenseIdentityDegraded
+      ? { status: "error", details: licenseIdentityDegraded }
+      : { status: "ok" };
 
     // 3. Memory check
     try {

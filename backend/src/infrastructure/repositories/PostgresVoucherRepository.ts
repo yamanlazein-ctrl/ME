@@ -395,8 +395,17 @@ export class PostgresVoucherRepository implements IVoucherRepository {
       // perturb the party's invoice-currency sub-ledger (which reconciles
       // against invoices.paid).
       if (partyCurrency !== voucherCurrency) {
-        const partyBase = computeBaseEquivalent(partyAmount, partyCurrency, partyFx) ?? 0;
-        const cashBase = computeBaseEquivalent(grossAmount, voucherCurrency, fxRate) ?? 0;
+        // FIN-17: `?? 0` used to substitute zero for an unconvertible side,
+        // which fabricates an fx_gain/fx_loss leg equal to the OTHER side's
+        // full base value and unbalances the base-currency ledger. Both sides
+        // must be restatable in base currency or the voucher is refused.
+        const partyBase = computeBaseEquivalent(partyAmount, partyCurrency, partyFx);
+        const cashBase = computeBaseEquivalent(grossAmount, voucherCurrency, fxRate);
+        if (partyBase === null || cashBase === null) {
+          throw new BusinessRuleError(
+            `تعذّر احتساب فرق الصرف بين عملة الطرف ${partyCurrency} وعملة السند ${voucherCurrency} — ${FX_REQUIRED_MESSAGE}`,
+          );
+        }
         const fxDiff = round2dp(partyBase - cashBase);
         if (Math.abs(fxDiff) >= 0.01) {
           // Sign rules (verified by hand on both kinds):
@@ -535,17 +544,25 @@ export class PostgresVoucherRepository implements IVoucherRepository {
         // using the voucher's OWN recorded rate) — not `convertAmount`, which
         // would settle/reverse against the invoice's frozen rate instead of the
         // rate this specific voucher was actually entered and credited at.
-        // Falling back to the raw amount only when conversion is impossible
-        // (both sides non-USD and the voucher has no usable rate) — the same
-        // value the legacy code subtracted, so the counter still unwinds
-        // instead of sticking.
-        const reversed =
-          convertForSettlement(
-            Number(row.amount),
-            row.currency ?? "SYP",
-            invoiceFx.currency,
-            isValidFxRate(row.exchangeRate) ? Number(row.exchangeRate) : null,
-          ) ?? Number(row.amount);
+        //
+        // FIN-17: this used to fall back to the RAW amount when conversion was
+        // impossible, subtracting e.g. EUR units from a SYP `paid` counter —
+        // the exact cross-currency corruption create() refuses to commit. A
+        // voucher can only exist if its settlement converted, so a null here
+        // means the stored rate is unusable; fail closed instead of corrupting
+        // the invoice balance.
+        const voucherCurrencyOnCancel = row.currency ?? "SYP";
+        const reversed = convertForSettlement(
+          Number(row.amount),
+          voucherCurrencyOnCancel,
+          invoiceFx.currency,
+          isValidFxRate(row.exchangeRate) ? Number(row.exchangeRate) : null,
+        );
+        if (reversed === null) {
+          throw new BusinessRuleError(
+            `لا يمكن إلغاء سند بعملة ${voucherCurrencyOnCancel} مرتبط بفاتورة بعملة ${invoiceFx.currency} — ${FX_REQUIRED_MESSAGE}`,
+          );
+        }
         await tx
           .update(invoices)
           .set({ paid: sql`GREATEST(0, ${invoices.paid} - ${reversed})`, updatedAt: new Date() })

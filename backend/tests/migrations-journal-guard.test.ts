@@ -149,4 +149,78 @@ describe("migration journal ↔ disk parity guards (P0-001)", () => {
 
     expect(wouldRun, "a fully migrated DB must apply nothing on re-run").toEqual([]);
   });
+
+  /**
+   * FIN-07: filename prefixes are NOT the ordering authority (meta/_journal.json
+   * is), but a duplicate prefix makes ordering ambiguous to every human reader
+   * and invites a future collision. History carries one known duplicate
+   * (`0020_`), which is allowlisted; any NEW duplicate must fail.
+   */
+  it("no new duplicate numeric migration prefixes are introduced", () => {
+    const ALLOWED_HISTORICAL_DUPLICATES = new Set(["0020"]);
+
+    const byPrefix = new Map<string, string[]>();
+    for (const tag of sqlTagsOnDisk()) {
+      const prefix = tag.split("_")[0];
+      if (!/^\d+$/.test(prefix)) continue;
+      byPrefix.set(prefix, [...(byPrefix.get(prefix) ?? []), tag]);
+    }
+
+    const duplicates = [...byPrefix.entries()]
+      .filter(([prefix, tags]) => tags.length > 1 && !ALLOWED_HISTORICAL_DUPLICATES.has(prefix))
+      .map(([prefix, tags]) => `${prefix}: ${tags.join(", ")}`);
+
+    expect(
+      duplicates,
+      `duplicate migration prefixes:\n${duplicates.join("\n")}`,
+    ).toEqual([]);
+  });
+
+  /**
+   * FIN-06: the production path must use the fail-loud wrapper. `drizzle-kit
+   * migrate` can present a failed run as a silent no-op, which is how a broken
+   * upgrade reaches a customer machine.
+   */
+  it("db:migrate runs the fail-loud wrapper, not drizzle-kit", () => {
+    const pkg = JSON.parse(readFileSync(join(BACKEND_ROOT, "package.json"), "utf8")) as {
+      scripts: Record<string, string>;
+    };
+
+    expect(pkg.scripts["db:migrate"]).toBe("node scripts/migrate.mjs");
+
+    const wrapper = readFileSync(join(BACKEND_ROOT, "scripts", "migrate.mjs"), "utf8");
+    expect(wrapper, "must drive drizzle-orm's own migrator").toContain(
+      'from "drizzle-orm/node-postgres/migrator"',
+    );
+    expect(wrapper, "must print the cause").toContain("process.stderr.write");
+    expect(wrapper, "must exit non-zero on failure").toContain("process.exit(1)");
+  });
+
+  /**
+   * Regression: `UPDATE ... FROM LATERAL (...)` cannot reference the UPDATE
+   * target row in PostgreSQL ("invalid reference to FROM-clause entry for
+   * table s"). 20260924_unified_device_identity shipped exactly that form and
+   * aborted the ENTIRE migration run on every fresh database — no table
+   * created after it existed, and `drizzle-kit migrate` reported nothing.
+   *
+   * A regex cannot decide this reliably, so the invariant is pinned on the one
+   * migration that carried the bug: the correlated scalar-subquery form must
+   * stay, and the LATERAL form must not come back.
+   */
+  it("the device-identity backfill uses a correlated subquery, not FROM LATERAL", () => {
+    const sqlText = readFileSync(
+      join(MIGRATIONS_DIR, "20260924_unified_device_identity.sql"),
+      "utf8",
+    );
+
+    const backfill = sqlText.slice(sqlText.indexOf('UPDATE "sync_devices"'));
+    expect(
+      /FROM\s+LATERAL/i.test(backfill),
+      "UPDATE ... FROM LATERAL cannot see the update target row — every fresh migrate aborts here",
+    ).toBe(false);
+    expect(
+      backfill.includes('SET "device_registration_id" = ('),
+      "the backfill must assign from a correlated scalar subquery",
+    ).toBe(true);
+  });
 });

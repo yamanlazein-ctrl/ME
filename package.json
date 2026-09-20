@@ -41,6 +41,7 @@
     "check:deps": "node --input-type=module -e \"const pkgs=['drizzle-orm','@supabase/supabase-js','pg','dotenv']; for(const p of pkgs){ try{ await import(p); console.log('OK',p); } catch(e){ console.error('MISSING',p); process.exit(1); } }\""
   },
   "dependencies": {
+    "@fontsource/ibm-plex-sans-arabic": "^5.3.0",
     "@hookform/resolvers": "^5.2.2",
     "@playwright/test": "^1.62.1",
     "@radix-ui/react-accordion": "^1.2.12",
