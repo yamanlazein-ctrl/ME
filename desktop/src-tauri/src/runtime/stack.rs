@@ -38,8 +38,8 @@ use std::time::{Duration, Instant};
 use super::error::BootFailure;
 use super::health::{check_boot_deadline, http_get_ok, wait_for, wait_tcp};
 use super::ports::{
-    ensure_backend_port_free, find_free_db_port, persist_db_port, resolve_db_port, sync_pg_conf_port,
-    BACKEND_PORT_DEFAULT,
+    find_free_backend_port, find_free_db_port, persist_backend_port, persist_db_port,
+    resolve_backend_port, resolve_db_port, sync_pg_conf_port,
 };
 use super::stages::BootStage;
 
@@ -104,6 +104,7 @@ impl BootConfig {
             fs::read_to_string(resource_dir.join("license-public.pem")).ok();
         let app_data_root = crate::app_data_dir()?;
         let db_port = resolve_db_port(&app_data_root);
+        let backend_port = resolve_backend_port(&app_data_root);
         Ok(BootConfig {
             resources_root: resource_dir.clone(),
             app_data_root,
@@ -112,7 +113,7 @@ impl BootConfig {
             server_js,
             license_public_key,
             db_port,
-            backend_port: BACKEND_PORT_DEFAULT,
+            backend_port,
             installation_id: String::new(),
         })
     }
@@ -500,6 +501,7 @@ fn preflight_check(cfg: &BootConfig) -> Result<(), Vec<String>> {
         cfg.node_exe.clone(),
         cfg.server_js.clone(),
         cfg.resources_root.join("ssr").join("serve.mjs"),
+        cfg.resources_root.join("ssr").join("resolve-api-proxy.mjs"),
         cfg.resources_root
             .join("ssr")
             .join("dist")
@@ -833,7 +835,7 @@ fn spawn_backend(cfg: &BootConfig, store: &secret_store::SecretStore) -> io::Res
         .env("DATABASE_URL", &database_url)
         .env("JWT_SECRET", &store.jwt_secret)
         .env("APP_MASTER_KEY", &store.app_master_key)
-        // Hub pairing: UI stays on 127.0.0.1:8080; CENTRAL_SYNC_URL is the
+        // Hub pairing: UI stays on the local SSR origin; CENTRAL_SYNC_URL is the
         // outbox target. Paths let the Node process persist hub.json / session
         // without copying JWT_SECRET between machines.
         .env(
@@ -899,12 +901,20 @@ fn spawn_ssr(cfg: &BootConfig) -> io::Result<HiddenChild> {
         "starting SSR frontend server on http://127.0.0.1:{}",
         SSR_PORT
     ));
+    let api_proxy = format!("http://127.0.0.1:{}", cfg.backend_port);
+    let runtime_config = cfg.app_data_root.join("runtime-config.json");
     let mut cmd = HiddenCommand::new(strip_verbatim_prefix(&cfg.node_exe));
     cmd.arg(strip_verbatim_prefix(&ssr_script))
         .current_dir(strip_verbatim_prefix(&cfg.resources_root))
         .env("NODE_ENV", "production")
         .env("SSR_PORT", SSR_PORT.to_string())
         .env("SSR_HOST", "127.0.0.1")
+        // Discoverable backend port (Phase 4): SSR proxies /api here — never bake 8080.
+        .env("SSR_API_PROXY", &api_proxy)
+        .env(
+            "RUNTIME_CONFIG_PATH",
+            runtime_config.to_string_lossy().into_owned(),
+        )
         .env_remove("LICENSE_SIGNING_KEY");
     let log_path = cfg.app_data_root.join("ssr.log");
     let out_log = fs::File::create(&log_path)?;
@@ -945,6 +955,18 @@ pub fn boot_desktop_stack_with_progress(
         cfg.db_port = resolved_db_port;
         persist_db_port(&cfg.app_data_root, cfg.db_port);
     }
+
+    // Same pattern as the DB: prefer the persisted/default API port (8080), but
+    // relocate when occupied and publish runtime-config.json for SSR/frontend.
+    let resolved_backend_port = find_free_backend_port(cfg.backend_port);
+    if resolved_backend_port != cfg.backend_port {
+        log(&format!(
+            "backend port {} busy — falling back to {}",
+            cfg.backend_port, resolved_backend_port
+        ));
+        cfg.backend_port = resolved_backend_port;
+    }
+    persist_backend_port(&cfg.app_data_root, cfg.backend_port);
 
     progress(BootStage::Preflight.label());
     // Step 0: pre-flight — verify every runtime-critical bundled file exists on
@@ -1091,24 +1113,7 @@ pub fn boot_desktop_stack_with_progress(
     // but do not decrypt or regenerate the file a second time.
     progress(BootStage::LoadSecrets.label());
     progress(BootStage::StartBackend.label());
-    // DFP-009: refuse to spawn when the baked frontend port is occupied —
-    // otherwise WaitBackend hangs 60s and leaves a confusing timeout.
-    if let Err(e) = ensure_backend_port_free(cfg.backend_port) {
-        let _ = stop_postgres(&cfg.resources_root, &pgdata);
-        let msg = format!(
-            "منفذ محرّك النظام ({}) مشغول حالياً — لا يمكن تشغيل البرنامج.\n\n\
-             التفاصيل: {}\n\n\
-             أغلق البرنامج الذي يستخدم هذا المنفذ (أو أي نسخة سابقة من Motard ERP \
-             ما زالت تعمل في Task Manager)، ثم أعد فتح البرنامج.",
-            cfg.backend_port, e
-        );
-        show_fatal_dialog("خطأ: المنفذ مشغول — Motard ERP", &msg);
-        return Err(BootFailure::new(
-            BootStage::StartBackend,
-            "backend-port-occupied",
-            e,
-        ));
-    }
+    // Backend port already resolved + persisted above (find_free_backend_port).
     let backend = match spawn_backend(&cfg, &store) {
         Ok(b) => {
             // node.exe still opens its own console despite CREATE_NO_WINDOW +

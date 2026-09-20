@@ -15,9 +15,10 @@ rem ----------------------------------------------------------------------------
 cd /d "%~dp0.."
 if errorlevel 1 exit /b 1
 
-rem Desktop pre-baked mode: license baked in the bundled DB, API on localhost.
+rem Desktop pre-baked mode: license baked in the bundled DB.
+rem API base is empty → same-origin SSR proxy (runtime-config / SSR_API_PROXY).
 set "VITE_DESKTOP_DEPLOY=true"
-set "VITE_API_BASE_URL=http://127.0.0.1:8080"
+set "VITE_API_BASE_URL="
 set "VITE_DEFAULT_TENANT_ID=407fccfc-ba89-41c5-b5b9-ddb2c4f385d9"
 
 call npm run build
@@ -41,6 +42,8 @@ rem before-build also runs stage-ssr.mjs; this copy keeps a partial frontend-onl
 rem rebuild self-bootable for local probes.
 if not exist "desktop\src-tauri\resources\ssr" mkdir "desktop\src-tauri\resources\ssr"
 copy /y "desktop\ssr\serve.mjs" "desktop\src-tauri\resources\ssr\serve.mjs"
+if errorlevel 1 exit /b 1
+copy /y "desktop\ssr\resolve-api-proxy.mjs" "desktop\src-tauri\resources\ssr\resolve-api-proxy.mjs"
 if errorlevel 1 exit /b 1
 
 rem DFP-036: source maps are stripped from the customer MSI by default.

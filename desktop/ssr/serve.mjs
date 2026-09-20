@@ -8,8 +8,10 @@
  *
  * Contract with desktop/src-tauri/src/runtime/stack.rs `spawn_ssr`:
  *   - cwd = resources_root
- *   - env: NODE_ENV=production, SSR_PORT (default 4173), SSR_HOST (127.0.0.1)
+ *   - env: NODE_ENV=production, SSR_PORT (default 4173), SSR_HOST (127.0.0.1),
+ *     SSR_API_PROXY (live backend), RUNTIME_CONFIG_PATH (AppData JSON)
  *   - GET /__health → 200 "ok" (no SSR render — boot readiness probe)
+ *   - GET /__runtime-config → JSON { backendPort, apiBaseUrl }
  *   - load Nitro/TanStack handler from ./ssr/dist/server/server.js
  *     (path relative to resources_root when cwd is resources_root)
  *
@@ -21,11 +23,12 @@ import { createReadStream, existsSync, statSync } from "node:fs";
 import { extname, join, normalize, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { dirname } from "node:path";
+import { resolveApiProxy, readRuntimeConfig } from "./resolve-api-proxy.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.env.SSR_PORT || 4173);
 const HOST = process.env.SSR_HOST || "127.0.0.1";
-const API_PROXY = (process.env.SSR_API_PROXY || "http://127.0.0.1:8080").replace(/\/+$/, "");
+const API_PROXY = resolveApiProxy(process.env).replace(/\/+$/, "");
 
 const MIME = {
   ".html": "text/html; charset=utf-8",
@@ -128,6 +131,16 @@ const server = createServer(async (req, res) => {
       res.end("ok");
       return;
     }
+    if (url.pathname === "/__runtime-config") {
+      const fromFile = readRuntimeConfig(process.env.RUNTIME_CONFIG_PATH);
+      const body = fromFile ?? {
+        apiBaseUrl: API_PROXY,
+        backendPort: Number(new URL(API_PROXY).port) || 8080,
+      };
+      res.writeHead(200, { "content-type": "application/json; charset=utf-8" });
+      res.end(JSON.stringify(body));
+      return;
+    }
     if (await proxyApi(req, res)) return;
     if (tryStatic(req, res)) return;
 
@@ -147,5 +160,5 @@ const server = createServer(async (req, res) => {
 });
 
 server.listen(PORT, HOST, () => {
-  console.log(`[ssr] listening on http://${HOST}:${PORT}`);
+  console.log(`[ssr] listening on http://${HOST}:${PORT} (api → ${API_PROXY})`);
 });

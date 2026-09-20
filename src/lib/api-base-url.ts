@@ -24,12 +24,21 @@ function readRuntimeOverride(): string | null {
   }
 }
 
+/**
+ * Desktop packaged UI talks to the API via same-origin SSR proxy (`/api` →
+ * live backend port from AppData `runtime-config.json`). Absolute `127.0.0.1:8080`
+ * is only the non-desktop / explicit-env default — never baked as the sole option.
+ */
 export function getApiBaseUrl(emptyFallback: "" | "/api" = ""): "" | "/api" | string {
   if (isDesktopDeploy()) {
     const envValue = import.meta.env.VITE_API_BASE_URL as string | undefined;
     const fromEnv = normalize(envValue, emptyFallback);
-    if (fromEnv && fromEnv !== "/api" && fromEnv !== "") return fromEnv;
-    return "http://127.0.0.1:8080";
+    // Allow an explicit absolute override for lab builds; otherwise same-origin.
+    if (fromEnv && fromEnv !== "/api" && fromEnv !== "" && !fromEnv.includes("127.0.0.1:8080")) {
+      return fromEnv;
+    }
+    // Same-origin: SSR (serve.mjs) proxies /api using SSR_API_PROXY / runtime-config.
+    return emptyFallback;
   }
   const runtime = readRuntimeOverride();
   if (runtime) return runtime;
@@ -63,5 +72,18 @@ export function clearRuntimeApiBaseUrl(): void {
     localStorage.removeItem(STORAGE_KEY);
   } catch {
     // ignore
+  }
+}
+
+/** Optional absolute API URL from SSR `/__runtime-config` (desktop display/debug). */
+export async function fetchDesktopRuntimeApiBaseUrl(): Promise<string> {
+  if (!isDesktopDeploy() || typeof window === "undefined") return "";
+  try {
+    const res = await fetch("/__runtime-config");
+    if (!res.ok) return "";
+    const json = (await res.json()) as { apiBaseUrl?: string };
+    return typeof json.apiBaseUrl === "string" ? json.apiBaseUrl.replace(/\/+$/, "") : "";
+  } catch {
+    return "";
   }
 }

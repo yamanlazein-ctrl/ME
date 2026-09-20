@@ -2,8 +2,8 @@
 /**
  * stage-ssr.mjs — copy checked-in SSR launcher into packaged resources.
  *
- * Source of truth: desktop/ssr/serve.mjs (in git)
- * Target:          desktop/src-tauri/resources/ssr/serve.mjs
+ * Source of truth: desktop/ssr/{serve,resolve-api-proxy}.mjs (in git)
+ * Target:          desktop/src-tauri/resources/ssr/
  *
  * Also verifies ssr/dist/server/server.js exists (produced by build-frontend.cmd
  * robocopy of dist/ → resources/ssr/dist/). Fails loud if missing so the
@@ -14,24 +14,26 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-const ROOT = join(HERE, "..", "..");
-const SRC = join(HERE, "..", "ssr", "serve.mjs");
+const SSR_SRC = join(HERE, "..", "ssr");
 const DEST_DIR = join(HERE, "..", "src-tauri", "resources", "ssr");
-const DEST = join(DEST_DIR, "serve.mjs");
 const HANDLER = join(DEST_DIR, "dist", "server", "server.js");
+const FILES = ["serve.mjs", "resolve-api-proxy.mjs"];
 
 function fail(msg) {
   console.error(`[stage-ssr] ${msg}`);
   process.exit(1);
 }
 
-if (!existsSync(SRC) || statSync(SRC).size <= 0) {
-  fail(`source missing or empty: ${SRC}`);
-}
-
 mkdirSync(DEST_DIR, { recursive: true });
-copyFileSync(SRC, DEST);
-console.log(`[stage-ssr] copied ${SRC} -> ${DEST}`);
+for (const name of FILES) {
+  const src = join(SSR_SRC, name);
+  const dest = join(DEST_DIR, name);
+  if (!existsSync(src) || statSync(src).size <= 0) {
+    fail(`source missing or empty: ${src}`);
+  }
+  copyFileSync(src, dest);
+  console.log(`[stage-ssr] copied ${src} -> ${dest}`);
+}
 
 if (!existsSync(HANDLER) || statSync(HANDLER).size <= 0) {
   fail(

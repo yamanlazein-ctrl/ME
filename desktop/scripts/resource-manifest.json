@@ -10,6 +10,7 @@
     { "path": "node.exe", "kind": "file" },
     { "path": "backend/dist/backend/src/presentation/server.js", "kind": "file" },
     { "path": "ssr/serve.mjs", "kind": "file" },
+    { "path": "ssr/resolve-api-proxy.mjs", "kind": "file" },
     { "path": "ssr/dist/server/server.js", "kind": "file" },
     { "path": "license-public.pem", "kind": "file" },
     { "path": "node_modules", "kind": "dir" },

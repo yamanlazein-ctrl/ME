@@ -21,6 +21,7 @@ describe("getApiBaseUrl desktop deploy", () => {
     }
     setRuntimeApiBaseUrl("https://hub.example.com");
     expect(getRuntimeApiBaseUrl()).toBe("");
-    expect(getApiBaseUrl()).toBe("http://127.0.0.1:8080");
+    // Desktop uses same-origin SSR proxy; hub URL must not redirect API traffic.
+    expect(getApiBaseUrl()).toBe("");
   });
 });

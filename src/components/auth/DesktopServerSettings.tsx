@@ -6,7 +6,8 @@ const IS_DESKTOP = import.meta.env.VITE_DESKTOP_DEPLOY === "true";
 
 function localApi(): string {
   const base = getApiBaseUrl();
-  if (!base || base === "/api") return "http://127.0.0.1:8080";
+  // Empty / "/api" → same-origin SSR proxy (discoverable backend port).
+  if (!base || base === "/api") return "";
   return base;
 }
 

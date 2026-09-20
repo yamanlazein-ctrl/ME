@@ -33,6 +33,13 @@ See `docs/REMEDIATION-FULL-CLEANUP-BASELINE.md`. Gates after Phase 1:
 - Web `getActivationDeviceInfo` returns `bindingCapable: false` and `web:` prefix.
 - Tests: installation-identity, license-state.web-binding.
 
+## Phase 4 — DONE
+
+- Backend port mirrors DB: prefer 8080, fall back to `18080..19000`, persist `backend-port.txt` + `runtime-config.json` in AppData.
+- SSR gets `SSR_API_PROXY` + `RUNTIME_CONFIG_PATH`; `resolve-api-proxy.mjs` + `/__runtime-config`.
+- Desktop frontend uses same-origin (empty API base) so CSP/`connect-src` stay on SSR; no baked `127.0.0.1:8080`.
+- Tests: Rust `backend_port` filter (occupy preferred → alternate); Node `resolve-api-proxy.test.mjs`.
+
 ## Next
 
-Phases 4–8 per user brief.
+Phases 5–8 per user brief.

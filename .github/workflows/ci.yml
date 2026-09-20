@@ -239,9 +239,9 @@ jobs:
         working-directory: desktop/src-tauri
         run: cargo test live_child_env_dump_omits_parent_secret_sentinels -- --nocapture
 
-      - name: Desktop Rust backend port free gate (DFP-009)
+      - name: Desktop Rust backend port discovery (DFP-009 / Phase 4)
         working-directory: desktop/src-tauri
-        run: cargo test ensure_backend_port_free_rejects_occupied_port -- --nocapture
+        run: cargo test backend_port -- --nocapture
 
       - name: Desktop Rust erp database gate (DFP-010)
         working-directory: desktop/src-tauri

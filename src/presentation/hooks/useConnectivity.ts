@@ -7,7 +7,8 @@ export type ConnectivityStatus = "online" | "offline";
 /**
  * Real connectivity for the top-bar indicator.
  * Online = browser reports online AND local API `/api/health/live` responds OK.
- * Uses `getApiBaseUrl()` so desktop (SSR on :4173, API on :8080) does not probe
+ * Uses `getApiBaseUrl()` so desktop (SSR same-origin proxy) does not probe
+ * a hardcoded absolute backend port.
  * the wrong origin via a relative `/api/...` URL.
  */
 export function useConnectivity(pollMs = 15_000): ConnectivityStatus {
