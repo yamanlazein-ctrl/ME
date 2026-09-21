@@ -240,7 +240,7 @@ export function useInvoices() {
  * The backend still allocates its own number at save time, so this stays
  * an estimate under concurrency — the UI labels it as such.
  */
-export function useNextInvoiceNumber(type: "sale" | "entry") {
+export function useNextInvoiceNumber(type: "sale" | "entry" | "print") {
   return useQuery({
     queryKey: [...KEYS.root, "next-number", type],
     queryFn: async () => {

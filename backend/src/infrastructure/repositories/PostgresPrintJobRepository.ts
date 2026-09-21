@@ -8,7 +8,7 @@ import { colors } from "../orm/schemas/color.table.js";
 import { fabrics } from "../orm/schemas/fabric.table.js";
 import { recordStockMovement } from "./stockMovementHelper.js";
 import { assertDayUnlocked } from "./dayLockHelper.js";
-import { nextDocumentNumber } from "../utils/documentNumbers.js";
+import { allocateDocumentNumber } from "../utils/documentNumbers.js";
 import {
   type PrintJobData,
   type CreatePrintJobInput,
@@ -50,7 +50,7 @@ export class PostgresPrintJobRepository implements IPrintJobRepository {
 
   async create(
     input: CreatePrintJobInput,
-    number: string,
+    number: string | null,
     ctx: TenantContext,
   ): Promise<PrintJobData> {
     let sourceFabricId = input.sourceFabricId;
@@ -82,11 +82,18 @@ export class PostgresPrintJobRepository implements IPrintJobRepository {
       }
     }
     const row = await this.db.transaction(async (tx) => {
+      // Allocated inside the save transaction: any later failure rolls the
+      // counter back with the insert, so a failed send never burns a number.
+      const jobNumber =
+        number ??
+        (await allocateDocumentNumber(tx, "print", ctx.tenantId, {
+          syncDeviceId: ctx.syncDeviceId,
+        }));
       const [r] = await tx
         .insert(printJobs)
         .values({
           tenantId: ctx.tenantId,
-          number,
+          number: jobNumber,
           date: input.date,
           sourceRollId: input.sourceRollId,
           sourceFabricId: sourceFabricId ?? null,
@@ -129,8 +136,8 @@ export class PostgresPrintJobRepository implements IPrintJobRepository {
               cashImpact: "none",
               referenceType: "print_job",
               referenceId: r.id,
-              referenceNumber: number,
-              description: `أجرة طباعة ${number} (${input.quantityKg} كغ × ${input.chargePerKg})`,
+              referenceNumber: jobNumber,
+              description: `أجرة طباعة ${jobNumber} (${input.quantityKg} كغ × ${input.chargePerKg})`,
               createdBy: ctx.userId,
             },
             {
@@ -144,8 +151,8 @@ export class PostgresPrintJobRepository implements IPrintJobRepository {
               cashImpact: "none",
               referenceType: "print_job",
               referenceId: r.id,
-              referenceNumber: number,
-              description: `إيراد طباعة ${number}`,
+              referenceNumber: jobNumber,
+              description: `إيراد طباعة ${jobNumber}`,
               createdBy: ctx.userId,
             },
           ]);
@@ -189,9 +196,9 @@ export class PostgresPrintJobRepository implements IPrintJobRepository {
             balanceAfterKg: newSrcKg,
             referenceType: "print_job",
             referenceId: r.id,
-            referenceNumber: number,
+            referenceNumber: jobNumber,
             movementDate: input.date,
-            description: `إرسال طباعة ${number}`,
+            description: `إرسال طباعة ${jobNumber}`,
           },
           ctx,
         );
@@ -314,7 +321,7 @@ export class PostgresPrintJobRepository implements IPrintJobRepository {
         // Routed through the shared nextDocumentNumber() sequence generator
         // (same atomic INSERT...ON CONFLICT DO UPDATE used by every other
         // document type), which is race-free by construction.
-        const generatedRollNo = await nextDocumentNumber("print_roll", ctx.tenantId);
+        const generatedRollNo = await allocateDocumentNumber(tx, "print_roll", ctx.tenantId);
 
         const srcPrice = Number(srcRoll.pricePerKg ?? 0);
         const printCost = input.printCostPerKg != null ? Number(input.printCostPerKg) : 0;

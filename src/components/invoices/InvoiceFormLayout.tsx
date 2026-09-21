@@ -2,6 +2,13 @@ import { type ReactNode, useState } from "react";
 import { cn } from "@/lib/utils";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { formatThousands, parseAmount } from "@/presentation/hooks/useCurrency";
 
 /**
@@ -19,6 +26,7 @@ export function FormattedAmountInput({
   placeholder,
   ariaLabel,
   onKeyDown,
+  showZero,
 }: {
   value: number | "";
   onChange: (v: number | "") => void;
@@ -26,6 +34,8 @@ export function FormattedAmountInput({
   placeholder?: string;
   ariaLabel?: string;
   onKeyDown?: (e: React.KeyboardEvent<HTMLInputElement>) => void;
+  /** Render an explicit 0 instead of an empty box (e.g. a genuine 0-piece count). */
+  showZero?: boolean;
 }) {
   const [raw, setRaw] = useState<string | null>(null);
   const endsWithSeparator = (s: string) => /[.,]\s*$/.test(s);
@@ -38,7 +48,7 @@ export function FormattedAmountInput({
           : Number.isNaN(parseAmount(raw))
             ? raw
             : formatThousands(parseAmount(raw))
-      : value === "" || value === 0
+      : value === "" || (value === 0 && !showZero)
         ? ""
         : formatThousands(value);
   return (
@@ -66,6 +76,42 @@ export function FormattedAmountInput({
       placeholder={placeholder}
       aria-label={ariaLabel}
     />
+  );
+}
+
+/**
+ * "الدفع" dropdown shared by the sale and purchase invoice headers.
+ * Always lists the current value even if it is not among the enabled methods
+ * (disabled later, edit of an old invoice, settings still loading) so the box
+ * is never rendered blank.
+ */
+export function PaymentMethodSelect({
+  value,
+  onChange,
+  methods,
+}: {
+  value: string;
+  onChange: (name: string) => void;
+  methods: { id: string; name: string }[];
+}) {
+  const options = methods.some((m) => m.name === value)
+    ? methods
+    : value
+      ? [...methods, { id: `current:${value}`, name: value }]
+      : methods;
+  return (
+    <Select value={value} onValueChange={onChange}>
+      <SelectTrigger className="!h-9">
+        <SelectValue placeholder="اختر طريقة الدفع" />
+      </SelectTrigger>
+      <SelectContent>
+        {options.map((m) => (
+          <SelectItem key={m.id} value={m.name}>
+            {m.name}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
   );
 }
 

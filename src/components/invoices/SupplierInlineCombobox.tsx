@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { Check, ChevronDown, Plus, Search } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Input } from "@/components/ui/input";
@@ -6,10 +6,11 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 import { addSupplier, supplierById, suppliers, useParties } from "@/presentation/hooks/useParties";
+import { recentSuggestions } from "@/shared/utils/suggestions";
 
 /**
  * Compact supplier picker for use in the invoice header.
- * - Type to search existing suppliers.
+ * - Opens with the most recent suppliers; type to search existing ones.
  * - If no match, an inline quick-add form appears (name + phone + notes).
  * - Saving quick-add registers the supplier in the global list AND selects it
  *   for the current invoice — no navigation off the page.
@@ -36,10 +37,12 @@ export function SupplierInlineCombobox({
 
   const selected = value ? supplierById(value) : undefined;
   const q = query.trim().toLowerCase();
-  const list = useMemo(
-    () => (q ? suppliers.filter((s) => s.name.toLowerCase().includes(q)) : []),
-    [q],
-  );
+  // `suppliers` is a mutable module cache (re-rendered via useParties), so it is
+  // read directly rather than memoised on `q` alone — otherwise the empty-query
+  // defaults would stay stale after the list loads.
+  const list = q
+    ? suppliers.filter((s) => s.name.toLowerCase().includes(q))
+    : recentSuggestions(suppliers);
   const noMatch = q.length > 0 && list.length === 0;
 
   const openAdd = () => {
@@ -112,9 +115,9 @@ export function SupplierInlineCombobox({
               />
             </div>
             <div className="max-h-56 overflow-y-auto py-1">
-              {!q && (
+              {!q && list.length === 0 && (
                 <div className="px-3 py-3 text-xs text-muted-foreground">
-                  اكتب للبحث في الموردين، أو أضف مورداً جديداً.
+                  لا يوجد موردون بعد، أضف مورداً جديداً.
                 </div>
               )}
               {list.map((s) => (

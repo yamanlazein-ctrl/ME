@@ -16,6 +16,26 @@ export interface StatementLineDTO {
   amount: number;
 }
 
+/**
+ * The original document behind a statement row, as entered. For a payment made
+ * in another currency than the invoice it settles, `debit`/`credit` on the row
+ * is the CONVERTED equivalent (in the row's currency) while this carries the
+ * payment's own currency/amount and the rate captured at payment time.
+ */
+export interface StatementDocumentDTO {
+  kind: "invoice" | "voucher";
+  number: string;
+  currency: Currency | string;
+  amount: number;
+  /** Units of `currency` per 1 USD, frozen on the document. Null when none applied. */
+  exchangeRate: number | null;
+  discount?: number;
+  method?: string;
+  appliedToInvoiceNumber?: string;
+  appliedToInvoiceCurrency?: Currency | string;
+  crossCurrency?: boolean;
+}
+
 /** One statement row with its running balance already computed server-side. */
 export interface StatementEntryDTO {
   id: UUID;
@@ -36,6 +56,7 @@ export interface StatementEntryDTO {
   credit: number;
   runningBalance: number;
   lines?: StatementLineDTO[];
+  document?: StatementDocumentDTO;
 }
 
 /** Full party statement (كشف حساب). */

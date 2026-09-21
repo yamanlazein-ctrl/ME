@@ -229,8 +229,16 @@ export function defaultBlockSize(entityType: string): number {
   return DEFAULT_BLOCK_SIZES[entityType] ?? 100;
 }
 
+/**
+ * Offline number blocks are opt-in (NUMBER_BLOCKS_ENABLED). With blocks off, all
+ * numbers come from the single in-transaction counter, which is gapless.
+ */
+export function numberBlocksEnabled(): boolean {
+  return config.NUMBER_BLOCKS_ENABLED;
+}
+
 function shouldUseNumberBlocks(): boolean {
-  return Boolean(config.DESKTOP_DEPLOY || getCentralSyncUrl());
+  return numberBlocksEnabled() && Boolean(config.DESKTOP_DEPLOY || getCentralSyncUrl());
 }
 
 /**

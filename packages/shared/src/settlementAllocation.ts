@@ -59,7 +59,7 @@ export function allocateSettlementPayment(opts: {
 }): AllocateSettlementResult {
   const amountPaid = round2dp(opts.amountPaid);
   if (!(amountPaid > 0)) {
-    throw new Error("مبلغ التسوية يجب أن يكون أكبر من صفر");
+    throw new Error("مبلغ الدفعة يجب أن يكون أكبر من صفر");
   }
 
   const sorted = [...opts.invoices]
@@ -71,7 +71,7 @@ export function allocateSettlementPayment(opts: {
     });
 
   if (sorted.length === 0) {
-    throw new Error("لا توجد فواتير مفتوحة للتسوية");
+    throw new Error("لا توجد فواتير مفتوحة للسداد");
   }
 
   const needsRate = settlementRequiresExchangeRate(
@@ -105,7 +105,7 @@ export function allocateSettlementPayment(opts: {
     const inInvoice = convertForSettlement(take, opts.settlementCurrency, inv.currency, rate);
     if (inInvoice === null) {
       throw new Error(
-        `لا يمكن تحويل مبلغ التسوية إلى عملة الفاتورة ${inv.currency} — ${FX_REQUIRED_MESSAGE}`,
+        `لا يمكن تحويل مبلغ الدفعة إلى عملة الفاتورة ${inv.currency} — ${FX_REQUIRED_MESSAGE}`,
       );
     }
     // Cap at remaining so voucher create's over-collection guard never trips on 0.01.
@@ -144,7 +144,7 @@ export function allocateSettlementPayment(opts: {
     allocations.reduce((s, a) => s + a.amountInSettlementCurrency, 0),
   );
   if (totalAllocated <= 0) {
-    throw new Error("تعذّر توزيع مبلغ التسوية على الفواتير");
+    throw new Error("تعذّر توزيع مبلغ الدفعة على الفواتير");
   }
 
   return { allocations, totalDueInSettlement, totalAllocated };

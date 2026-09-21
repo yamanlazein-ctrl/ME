@@ -2,6 +2,7 @@ import { useMemo, useState, useRef, useEffect } from "react";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { Plus, Check } from "lucide-react";
+import { DEFAULT_SUGGESTION_COUNT } from "@/shared/utils/suggestions";
 
 /**
  * Free-text combobox: type any value. Existing values autocomplete.
@@ -32,7 +33,7 @@ export function NameCombobox({
 
   const q = value.trim();
   const matches = useMemo(() => {
-    if (!q) return options.slice(0, 20);
+    if (!q) return options.slice(0, DEFAULT_SUGGESTION_COUNT);
     return options.filter((o) => o.toLowerCase().includes(q.toLowerCase())).slice(0, 20);
   }, [q, options]);
   const exact = q && options.some((o) => o === q);
@@ -66,6 +67,7 @@ export function NameCombobox({
           setFocus(0);
         }}
         onFocus={() => setOpen(true)}
+        onClick={() => setOpen(true)}
         onKeyDown={(e) => {
           if (e.key === "ArrowDown") {
             e.preventDefault();

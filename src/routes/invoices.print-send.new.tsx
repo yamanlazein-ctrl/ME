@@ -15,16 +15,14 @@ import {
   rolls,
   useInventory,
 } from "@/presentation/hooks/useInventory";
-import {
-  usePrintJobs,
-  useCreatePrintSend,
-  nextPrintJobNumber,
-} from "@/presentation/hooks/usePrintJobs";
+import { usePrintJobs, useCreatePrintSend } from "@/presentation/hooks/usePrintJobs";
+import { useNextInvoiceNumber } from "@/presentation/hooks/useInvoices";
 import { printOrArchive } from "@/components/print/printPortal";
 import { archiveMeta } from "@/shared/utils/documentArchive";
 import { PrintJobDocument } from "@/components/print/PrintJobDocument";
 import { PrintPageBreak } from "@/components/print/PrintDocument";
 import { formatQuantity } from "@/shared/utils/formatNumber";
+import { DEFAULT_SUGGESTION_COUNT } from "@/shared/utils/suggestions";
 
 type DocOption = { id: string; title: string; subtitle?: string };
 
@@ -59,7 +57,7 @@ function DocumentAutocomplete({
   const [query, setQuery] = useState("");
   const q = query.trim().toLowerCase();
   const list = useMemo(() => {
-    if (!q) return options.slice(0, 30);
+    if (!q) return options.slice(0, DEFAULT_SUGGESTION_COUNT);
     return options
       .filter((o) => `${o.title} ${o.subtitle ?? ""}`.toLowerCase().includes(q))
       .slice(0, 30);
@@ -133,7 +131,10 @@ function PrintSendPage() {
   const invVersion = useInventory();
   const { data: jobs = [] } = usePrintJobs();
   const createPrintSend = useCreatePrintSend();
-  const number = useMemo(() => nextPrintJobNumber(), []);
+  // Server-side read-only preview of the next PRT number (estimate; the real
+  // number is allocated inside the save transaction).
+  const { data: previewNumber } = useNextInvoiceNumber("print");
+  const number = previewNumber ?? "…";
 
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
   const [lines, setLines] = useState<SendLine[]>([emptySendLine()]);

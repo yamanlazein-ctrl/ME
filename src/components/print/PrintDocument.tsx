@@ -238,6 +238,8 @@ export type PrintColumn = {
   align?: "right" | "center" | "left";
   amount?: boolean;
   width?: string;
+  /** Draw a vertical rule on the physical LEFT edge of this column (table is RTL, so it separates it from the next column). */
+  dividerAfter?: boolean;
 };
 
 export function PrintTable({
@@ -260,6 +262,7 @@ export function PrintTable({
             const cls = [
               c.align === "center" ? "pd-center" : "",
               c.amount ? "pd-amount amount-col" : "",
+              c.dividerAfter ? "pd-divider-after" : "",
             ]
               .filter(Boolean)
               .join(" ");
@@ -290,6 +293,7 @@ export function PrintTable({
                 const cls = [
                   c?.align === "center" ? "pd-center" : "",
                   c?.amount ? "pd-amount amount-col" : "",
+                  c?.dividerAfter ? "pd-divider-after" : "",
                 ]
                   .filter(Boolean)
                   .join(" ");

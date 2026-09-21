@@ -73,7 +73,7 @@ export async function settleInvoicesUseCase(
 
     const ids = [...new Set(input.invoiceIds.filter(Boolean))];
     if (ids.length === 0) return { ok: false, error: "اختر فاتورة واحدة على الأقل" };
-    if (!(input.amountPaid > 0)) return { ok: false, error: "مبلغ التسوية يجب أن يكون أكبر من صفر" };
+    if (!(input.amountPaid > 0)) return { ok: false, error: "مبلغ الدفعة يجب أن يكون أكبر من صفر" };
 
     const date = input.date ?? new Date().toISOString().slice(0, 10);
     const method: VoucherMethod = input.method ?? "cash";
@@ -153,15 +153,22 @@ export async function settleInvoicesUseCase(
         exchangeRate: input.exchangeRate,
       });
     } catch (e) {
-      return { ok: false, error: e instanceof Error ? e.message : "تعذّر توزيع التسوية" };
+      return { ok: false, error: e instanceof Error ? e.message : "تعذّر توزيع الدفعة" };
     }
 
     const batchNumber = await nextDocumentNumber("settlement", ctx.tenantId);
-    const notesInternal =
-      input.notesInternal?.trim() ||
-      `تسوية حساب ${batchNumber} — ${allocated.allocations.length} فاتورة`;
-    const notesPrint =
-      input.notesPrint?.trim() || `جزء من تسوية حساب ${batchNumber}`;
+    // The SET batch number is what ties the N vouchers back into one settlement
+    // (invoice tracking groups by it), so it must survive custom user notes too.
+    const withBatch = (text: string | undefined, fallback: string) => {
+      const t = text?.trim();
+      if (!t) return fallback;
+      return t.includes(batchNumber) ? t : `${t} — ${batchNumber}`;
+    };
+    const notesInternal = withBatch(
+      input.notesInternal,
+      `دفعة ${batchNumber} — ${allocated.allocations.length} فاتورة`,
+    );
+    const notesPrint = withBatch(input.notesPrint, `جزء من الدفعة ${batchNumber}`);
 
     const vouchers: VoucherData[] = [];
     const resultLines: SettleInvoicesResult["allocations"] = [];
@@ -188,7 +195,7 @@ export async function settleInvoicesUseCase(
       if (!created.ok) {
         // Throw so an outer withTenantTx rolls back every prior voucher in the batch.
         throw new BusinessRuleError(
-          `فشلت تسوية الفاتورة ${line.number ?? line.invoiceId}: ${created.error}`,
+          `فشل تسديد الفاتورة ${line.number ?? line.invoiceId}: ${created.error}`,
         );
       }
       vouchers.push(created.data);
@@ -222,6 +229,6 @@ export async function settleInvoicesUseCase(
     };
   } catch (e) {
     if (e instanceof BusinessRuleError) return { ok: false, error: e.message };
-    return { ok: false, error: e instanceof Error ? e.message : "فشلت تسوية الحساب" };
+    return { ok: false, error: e instanceof Error ? e.message : "فشل تسجيل الدفعة" };
   }
 }

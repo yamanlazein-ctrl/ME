@@ -4,10 +4,11 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { customers, suppliers, useParties } from "@/presentation/hooks/useParties";
+import { recentSuggestions } from "@/shared/utils/suggestions";
 
 /**
  * Searchable party (customer/supplier) combobox for use in forms.
- * - Type to filter the party list by name / phone / city immediately.
+ * - Opens with the most recent parties; type to filter by name / phone / city.
  * - If no match exists, an "add new" empty-state action is shown.
  *
  * Mirrors the app's existing comboboxes (SupplierInlineCombobox / FabricCombobox)
@@ -37,7 +38,7 @@ export function PartyCombobox({
   const q = query.trim().toLowerCase();
 
   const filtered = useMemo(() => {
-    if (!q) return [];
+    if (!q) return recentSuggestions(list);
     return list.filter(
       (p) =>
         (p.name ?? "").toLowerCase().includes(q) ||
@@ -76,9 +77,9 @@ export function PartyCombobox({
           />
         </div>
         <div className="max-h-56 overflow-y-auto py-1">
-          {!q && !noMatch && (
+          {!q && filtered.length === 0 && (
             <div className="px-3 py-3 text-xs text-muted-foreground">
-              اكتب للبحث بالاسم أو الهاتف.
+              لا يوجد {entity} مسجّل بعد.
             </div>
           )}
           {noMatch && (

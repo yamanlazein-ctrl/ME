@@ -222,7 +222,7 @@ export class PostgresVoucherRepository implements IVoucherRepository {
         );
         if (settledInInvoiceCurrency === null) {
           throw new BusinessRuleError(
-            `لا يمكن تسوية فاتورة بعملة ${invoiceFx.currency} بسند بعملة ${voucherCurrency} — ${FX_REQUIRED_MESSAGE}`,
+            `لا يمكن تسديد فاتورة بعملة ${invoiceFx.currency} بسند بعملة ${voucherCurrency} — ${FX_REQUIRED_MESSAGE}`,
           );
         }
 
@@ -379,7 +379,7 @@ export class PostgresVoucherRepository implements IVoucherRepository {
           referenceType: refType,
           referenceId: row.id,
           referenceNumber: autoNumber,
-          description: `${isPayment ? "دخل خصم تسوية" : "مصروف خصم تسوية"} ${autoNumber}`,
+          description: `${isPayment ? "دخل خصم دفعة" : "مصروف خصم دفعة"} ${autoNumber}`,
           createdBy: ctx.userId,
         });
       }

@@ -257,7 +257,10 @@ export async function loadSettings(): Promise<void> {
     if (Array.isArray(data.units)) merged.units = data.units;
     if (Array.isArray(data.taxes)) merged.taxes = data.taxes;
     if (Array.isArray(data.warehouses)) merged.warehouses = data.warehouses;
-    if (Array.isArray(data.paymentMethods)) merged.paymentMethods = data.paymentMethods;
+    // An empty server list (fresh tenant row defaults to []) must not wipe the
+    // built-in methods — the invoice "الدفع" dropdown would render blank.
+    if (Array.isArray(data.paymentMethods) && data.paymentMethods.length)
+      merged.paymentMethods = data.paymentMethods;
     if (Array.isArray(data.currencies) && data.currencies.length)
       merged.currencies = data.currencies;
     if (data.printing && typeof data.printing === "object" && Object.keys(data.printing).length) {

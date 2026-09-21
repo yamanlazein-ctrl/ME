@@ -13,6 +13,16 @@ const envSchema = z.object({
   // Does NOT relax APP_MASTER_KEY, JWT_SECRET, DATABASE_URL, CORS, or any
   // auth/RLS hardening — those still fail closed.
   DESKTOP_DEPLOY: z.coerce.boolean().default(false),
+  // Offline number blocks (per-device pre-reserved ranges of document numbers).
+  // OFF by default: every document number then comes from the single tenant
+  // counter inside the save transaction, so numbering is gapless (0001, 0002…).
+  // Turn ON only for multi-device OFFLINE deployments — reserving blocks jumps the
+  // shared counter by the block size per device (e.g. ENT-2026-0001 → 0602).
+  // Parsed explicitly: z.coerce.boolean() would read the string "false" as true.
+  NUMBER_BLOCKS_ENABLED: z
+    .enum(["true", "false", "1", "0"])
+    .default("false")
+    .transform((v) => v === "true" || v === "1"),
   PORT: z.coerce.number().default(8080),
   // Desktop sidecars must bind loopback. Server installs may use 0.0.0.0 but
   // then DFP-030 forbids loopback auth bypass (see license-server.ts).

@@ -11,6 +11,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { addCustomer } from "@/presentation/hooks/useParties";
+import { PARTY_EMAIL_INPUT_PROPS, partyEmailError } from "@/lib/partyEmail";
 
 export function QuickCustomerDialog({
   open,
@@ -37,6 +38,9 @@ export function QuickCustomerDialog({
 
   const submit = async () => {
     if (!name.trim()) return setErr("الاسم مطلوب.");
+    const emailErr = partyEmailError(email);
+    if (emailErr) return setErr(emailErr);
+    setErr(null);
     try {
       const c = await addCustomer({
         name: name.trim(),
@@ -61,12 +65,18 @@ export function QuickCustomerDialog({
         <div className="space-y-3">
           <div>
             <Label className="text-xs">الاسم *</Label>
-            <Input value={name} onChange={(e) => setName(e.target.value)} className="h-10" />
+            <Input
+              autoComplete="off"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              className="h-10"
+            />
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
               <Label className="text-xs">الهاتف</Label>
               <Input
+                autoComplete="off"
                 value={phone}
                 onChange={(e) => setPhone(e.target.value)}
                 className="h-10 tabular-nums"
@@ -74,7 +84,15 @@ export function QuickCustomerDialog({
             </div>
             <div>
               <Label className="text-xs">البريد الإلكتروني</Label>
-              <Input value={email} onChange={(e) => setEmail(e.target.value)} className="h-10" />
+              <Input
+                {...PARTY_EMAIL_INPUT_PROPS}
+                value={email}
+                onChange={(e) => {
+                  setEmail(e.target.value);
+                  setErr(null);
+                }}
+                className="h-10"
+              />
             </div>
           </div>
           {err && (

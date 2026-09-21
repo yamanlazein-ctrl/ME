@@ -524,6 +524,15 @@
   border-inline-start: 0.6pt solid var(--mf-rule);
 }
 
+/* Explicit rule between two specific columns (e.g. الكمية | السعر). The generic
+   inline-start dividers above land on the wrong edge next to `.pd-amount`
+   cells (forced direction:ltr), so this uses a physical edge: the table is RTL,
+   so a column's physical left edge is the boundary with the next column. */
+.print-table th.pd-divider-after,
+.print-table td.pd-divider-after {
+  border-left: 0.6pt solid var(--mf-rule);
+}
+
 .print-table .pd-amount,
 .print-table td.pd-amount {
   text-align: left;

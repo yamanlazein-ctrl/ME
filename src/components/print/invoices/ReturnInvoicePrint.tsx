@@ -160,7 +160,13 @@ export function ReturnInvoicePrint({
     },
     {
       key: "qty",
-      cfg: { key: "qty", label: "الكمية (كغ)", align: "center", width: "11%" },
+      cfg: {
+        key: "qty",
+        label: "الكمية (كغ)",
+        align: "center",
+        width: "11%",
+        dividerAfter: vis.showUnitPrice,
+      },
       on: vis.showQuantity,
     },
     {

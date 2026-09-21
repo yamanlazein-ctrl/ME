@@ -30,12 +30,12 @@ export function SettlementPrintDocument({
   const partyLabel = partyKind === "customer" ? "العميل" : "المورّد";
 
   const meta: PrintMetaItem[] = [
-    { label: "رقم التسوية", value: settlement.batchNumber },
+    { label: "رقم الدفعة", value: settlement.batchNumber },
     { label: "التاريخ", value: settlement.date },
-    { label: "عملة التسوية", value: `${settlement.currency} (${sym})` },
+    { label: "عملة الدفعة", value: `${settlement.currency} (${sym})` },
     { label: "طريقة الدفع", value: METHOD_LABEL[settlement.method] ?? settlement.method },
     ...(settlement.exchangeRate != null && settlement.exchangeRate > 0
-      ? [{ label: "سعر صرف التسوية", value: formatMoney(settlement.exchangeRate) }]
+      ? [{ label: "سعر صرف الدفعة", value: formatMoney(settlement.exchangeRate) }]
       : []),
   ];
 
@@ -63,8 +63,8 @@ export function SettlementPrintDocument({
 
   return (
     <PrintDocument
-      title="تسوية حساب"
-      subtitle={partyKind === "customer" ? "سند قبض تسوية مجمّع" : "سند صرف تسوية مجمّع"}
+      title="دفعة على الحساب"
+      subtitle={partyKind === "customer" ? "سند قبض مجمّع لعدة فواتير" : "سند صرف مجمّع لعدة فواتير"}
       meta={meta}
       party={party}
       totals={totals}

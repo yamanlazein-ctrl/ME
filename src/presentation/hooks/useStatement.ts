@@ -78,14 +78,14 @@ export function useSettleParty(partyId: string | undefined, kind: PartyKind) {
   });
 }
 
-/** Multi-invoice cash settlement (سند تسوية مجمّع). */
+/** Multi-invoice cash settlement (سند دفعة مجمّع لعدة فواتير). */
 export function useSettleInvoices(partyId: string | undefined, kind: PartyKind) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (input: SettleInvoicesInput) =>
       container.statement.api.settleInvoices(partyId ?? "", kind, input),
     onSuccess: (res) => {
-      toast.success(`تمت تسوية الحساب (${res.batchNumber})`);
+      toast.success(`تم تسجيل الدفعة (${res.batchNumber})`);
       invalidateAfterSettlement(qc);
     },
     onError: (e: unknown) => {

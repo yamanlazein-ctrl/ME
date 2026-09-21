@@ -25,6 +25,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { formatNumber, formatMoney, formatQuantity } from "@/shared/utils/formatNumber";
+import { convertForSettlement } from "@erp/shared";
 
 export const Route = createFileRoute("/invoices/$id")({
   component: InvoiceDetailPage,
@@ -266,16 +267,40 @@ function InvoiceDetailPage() {
           <div className="mt-4">
             <div className="mb-2 text-xs font-semibold text-muted-foreground">السندات المرتبطة</div>
             <ul className="divide-y divide-border rounded-lg border border-border">
-              {linkedVouchers.map((v) => (
-                <li key={v.id} className="flex items-center justify-between px-3 py-2 text-sm">
-                  <span className="text-muted-foreground tabular-nums">
-                    {v.number} — {v.date}
-                  </span>
-                  <span className="font-semibold text-foreground tabular-nums">
-                    {formatNumber(v.amount)} {currencySymbol(v.currency as Currency)}
-                  </span>
-                </li>
-              ))}
+              {linkedVouchers.map((v) => {
+                // Paid in another currency than the invoice: show the rate captured at payment
+                // time and the equivalent that reduced the invoice (never the invoice's own rate).
+                const equivalent =
+                  v.currency !== inv.currency
+                    ? convertForSettlement(
+                        v.amount,
+                        v.currency,
+                        inv.currency,
+                        v.exchangeRate ?? null,
+                      )
+                    : null;
+                return (
+                  <li key={v.id} className="flex items-center justify-between px-3 py-2 text-sm">
+                    <span className="text-muted-foreground tabular-nums">
+                      {v.number} — {v.date}
+                    </span>
+                    <span className="text-left">
+                      <span className="font-semibold text-foreground tabular-nums">
+                        {formatNumber(v.amount)} {currencySymbol(v.currency as Currency)}
+                      </span>
+                      {equivalent != null && v.exchangeRate ? (
+                        <span
+                          className="block text-[11px] text-muted-foreground tabular-nums"
+                          data-testid="linked-voucher-equivalent"
+                        >
+                          × {formatNumber(v.exchangeRate)} = {formatNumber(equivalent)}{" "}
+                          {currencySymbol(inv.currency as Currency)}
+                        </span>
+                      ) : null}
+                    </span>
+                  </li>
+                );
+              })}
             </ul>
           </div>
         )}

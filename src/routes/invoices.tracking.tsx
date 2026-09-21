@@ -62,8 +62,10 @@ import { printDocument, printOrArchive } from "@/components/print/printPortal";
 import { archiveMeta } from "@/shared/utils/documentArchive";
 import { PrintPageBreak } from "@/components/print/PrintDocument";
 import { InvoicePrintDocument } from "@/components/print/InvoicePrintDocument";
+import { groupSettlementBatches } from "@/lib/settlementBatches";
 
-type TrackKind = "all" | "entry" | "sale" | "return" | "print_send" | "print_receive";
+type TrackKind =
+  "all" | "entry" | "sale" | "return" | "print_send" | "print_receive" | "settlement";
 
 type TrackRow = {
   id: string;
@@ -74,6 +76,8 @@ type TrackRow = {
   totalLabel: string;
   statusLabel: string;
   href: string;
+  /** Party page to open for settlement rows (their document lives on the party statement). */
+  party?: { kind: "customer" | "supplier"; id: string };
 };
 
 function printInvoiceWithArchive(inv: Invoice) {
@@ -140,18 +144,24 @@ function InvoicesTrackingPage() {
   }, [q, invoiceTypeFilter, status, partyId, from, to, page, pageSize]);
 
   const { data, isLoading, error } = useInvoicesList(
-    type === "return" || type === "print_send" || type === "print_receive"
+    type === "return" || type === "print_send" || type === "print_receive" || type === "settlement"
       ? { ...filter, limit: 1 }
       : filter,
   );
   const invoices = useMemo(() => {
-    if (type === "return" || type === "print_send" || type === "print_receive") return [];
+    if (
+      type === "return" ||
+      type === "print_send" ||
+      type === "print_receive" ||
+      type === "settlement"
+    )
+      return [];
     return data?.data ?? [];
   }, [data, type]);
   const { data: returnsData } = useReturnsList({ limit: 500 });
   const { data: printJobs = [] } = usePrintJobs();
   const allParties = [...customers, ...suppliers];
-  const { data: vouchersData } = useVouchersList();
+  const { data: vouchersData } = useVouchersList({ limit: 1000 });
   const allVouchers = vouchersData?.data ?? [];
 
   const cancelInvoice = useCancelInvoice();
@@ -205,8 +215,39 @@ function InvoicesTrackingPage() {
         });
       }
     }
+    if (type === "all" || type === "settlement") {
+      for (const b of groupSettlementBatches(allVouchers)) {
+        if (status === "active" && b.status !== "active") continue;
+        if (status === "cancelled" && b.status !== "cancelled") continue;
+        if (status === "draft") continue;
+        if (partyId !== "all" && b.partyId !== partyId) continue;
+        if (from && b.date < from) continue;
+        if (to && b.date > to) continue;
+        const party = (b.partyKind === "customer" ? customers : suppliers).find(
+          (p) => p.id === b.partyId,
+        );
+        if (
+          qLower &&
+          !`${b.batchNumber} ${party?.name ?? ""} دفعة تسوية`.toLowerCase().includes(qLower)
+        ) {
+          continue;
+        }
+        rows.push({
+          id: `settle-${b.partyId}-${b.batchNumber}`,
+          kind: "settlement",
+          number: b.batchNumber,
+          date: b.date,
+          partyName: party?.name ?? "—",
+          totalLabel: formatAmount(b.total, b.currency as never),
+          statusLabel: b.status === "active" ? "نشطة" : "ملغاة",
+          href: b.partyKind === "customer" ? "/customers" : "/suppliers",
+          party: { kind: b.partyKind, id: b.partyId },
+        });
+      }
+    }
     return rows;
-  }, [returnsData, printJobs, type, status, partyId, from, to, q]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [returnsData, printJobs, allVouchers, type, status, partyId, from, to, q]);
 
   const invoiceTotal = useMemo(() => data?.total ?? 0, [data]);
   const total =
@@ -279,6 +320,7 @@ function InvoicesTrackingPage() {
                   <SelectItem value="return">مرتجع</SelectItem>
                   <SelectItem value="print_send">إرسال مطبعة</SelectItem>
                   <SelectItem value="print_receive">استلام مطبعة</SelectItem>
+                  <SelectItem value="settlement">دفعة تسوية</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -338,7 +380,7 @@ function InvoicesTrackingPage() {
 
         <PageCard
           title="سجل الفواتير"
-          description={`عرض ${invoices.length + extraRows.length} مستنداً (فواتير + مرتجعات + مطبعة).`}
+          description={`عرض ${invoices.length + extraRows.length} مستنداً (فواتير + مرتجعات + مطبعة + دفعات تسوية).`}
           noBodyPadding
         >
           {isLoading && <div className="p-8 text-center text-muted-foreground">جاري التحميل…</div>}
@@ -440,21 +482,33 @@ function InvoicesTrackingPage() {
                       <td className="px-3 py-2">
                         {row.kind === "return"
                           ? "مرتجع"
-                          : row.kind === "print_send"
-                            ? "إرسال مطبعة"
-                            : "استلام مطبعة"}
+                          : row.kind === "settlement"
+                            ? "دفعة تسوية"
+                            : row.kind === "print_send"
+                              ? "إرسال مطبعة"
+                              : "استلام مطبعة"}
                       </td>
                       <td className="px-3 py-2">{row.partyName}</td>
                       <td className="px-3 py-2 tabular-nums">{row.date}</td>
                       <td className="px-3 py-2 text-left tabular-nums">{row.totalLabel}</td>
                       <td className="px-3 py-2">{row.statusLabel}</td>
                       <td className="px-3 py-2 text-left">
-                        <Link
-                          to={row.href}
-                          className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-primary hover:underline"
-                        >
-                          فتح
-                        </Link>
+                        {row.party ? (
+                          <Link
+                            to={row.party.kind === "customer" ? "/customers/$id" : "/suppliers/$id"}
+                            params={{ id: row.party.id }}
+                            className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-primary hover:underline"
+                          >
+                            فتح كشف الحساب
+                          </Link>
+                        ) : (
+                          <Link
+                            to={row.href}
+                            className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-primary hover:underline"
+                          >
+                            فتح
+                          </Link>
+                        )}
                       </td>
                     </tr>
                   ))}

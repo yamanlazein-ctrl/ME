@@ -71,10 +71,6 @@ export function useReceivePrint() {
   });
 }
 
-export function nextPrintJobNumber(): string {
-  return `PRT-${Date.now().toString(36).toUpperCase()}`;
-}
-
 export async function printJobById(id: string) {
   return container.printJobs.repository.findById(id, ctx);
 }

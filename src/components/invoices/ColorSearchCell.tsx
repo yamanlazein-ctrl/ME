@@ -5,15 +5,18 @@ import { cn } from "@/lib/utils";
 import {
   colorByCode,
   colorByName,
+  colors,
   fabricById,
   searchColors,
   type Color,
 } from "@/presentation/hooks/useInventory";
 import { ColorSwatch } from "@/components/common/ColorSwatch";
+import { recentSuggestions } from "@/shared/utils/suggestions";
 
 /**
  * Search-first colour picker.
  *
+ * Focus/click with empty fields → the most recent colours (of the fabric when scoped).
  * Types a name/code → lists matching colours (never the whole catalogue).
  * A hit on another fabric copies the name; it does not bind that fabric's
  * color id. No match → "+ إضافة لون" and the parent creates a row on save.
@@ -52,7 +55,14 @@ export function ColorSearchCell({
   const fileRef = useRef<HTMLInputElement>(null);
 
   const query = activeField === "code" ? code : name;
-  const matches = useMemo(() => searchColors(query, 12, fabricId), [query, fabricId]);
+  const matches = useMemo(
+    () =>
+      query.trim()
+        ? searchColors(query, 12, fabricId)
+        : recentSuggestions(fabricId ? colors.filter((c) => c.fabricId === fabricId) : colors),
+    // `colors` is a mutable module cache; its length changes when the list loads/grows.
+    [query, fabricId, colors.length],
+  );
   const localByCode = useMemo(() => colorByCode(code, fabricId), [code, fabricId]);
   const localByName = useMemo(() => colorByName(name, fabricId), [name, fabricId]);
   const local = localByCode ?? localByName;
@@ -95,8 +105,7 @@ export function ColorSearchCell({
         })
       : null);
 
-  const showMenu =
-    open && !disabled && (matches.length > 0 || isNew || (!!fabricId && !query.trim()));
+  const showMenu = open && !disabled && (matches.length > 0 || isNew);
 
   return (
     <div className="space-y-2">
@@ -155,6 +164,11 @@ export function ColorSearchCell({
               setActiveField("code");
               setOpen(true);
             }}
+            onClick={() => {
+              if (disabled) return;
+              setActiveField("code");
+              setOpen(true);
+            }}
             onBlur={() => setTimeout(() => setOpen(false), 140)}
             onKeyDown={handleKey}
             placeholder="C-000"
@@ -177,6 +191,11 @@ export function ColorSearchCell({
               setOpen(true);
             }}
             onFocus={() => {
+              if (disabled) return;
+              setActiveField("name");
+              setOpen(true);
+            }}
+            onClick={() => {
               if (disabled) return;
               setActiveField("name");
               setOpen(true);
@@ -204,7 +223,7 @@ export function ColorSearchCell({
               : `لا يوجد — سيُضاف «${createLabel}» عند الحفظ`}
           </span>
         ) : (
-          <span className="text-muted-foreground">اكتب الاسم للبحث في الألوان المسجّلة</span>
+          <span className="text-muted-foreground">اختر من الألوان المسجّلة أو اكتب للبحث</span>
         )}
         {onSetImage && (
           <button
@@ -282,11 +301,6 @@ export function ColorSearchCell({
                 <Plus className="h-3.5 w-3.5" />
                 إضافة لون «{createLabel}»
                 <span className="font-normal text-muted-foreground">— يُحفظ مع الفاتورة</span>
-              </div>
-            )}
-            {matches.length === 0 && !isNew && (
-              <div className="px-3 py-2 text-xs text-muted-foreground">
-                اكتب حرفاً واحداً على الأقل
               </div>
             )}
           </div>

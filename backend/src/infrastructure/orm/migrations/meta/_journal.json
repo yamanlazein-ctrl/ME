@@ -533,6 +533,13 @@
       "when": 1789109000000,
       "tag": "20260928_cashbox_daily_balances",
       "breakpoints": true
+    },
+    {
+      "idx": 76,
+      "version": 7,
+      "when": 1789110000000,
+      "tag": "20260929_rls_nullif_guard_license_platform",
+      "breakpoints": true
     }
   ]
 }

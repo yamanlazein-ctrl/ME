@@ -17,7 +17,7 @@ import { FormattedAmountInput } from "@/components/invoices/InvoiceFormLayout";
 import { PartyCombobox } from "@/components/vouchers/PartyCombobox";
 import { PartyFormDialog } from "@/components/parties/PartyFormDialog";
 import { addCustomer, addSupplier, type Currency } from "@/presentation/hooks/useParties";
-import { CURRENCIES, formatAmount } from "@/presentation/hooks/useCurrency";
+import { CURRENCIES, currencySymbol, formatAmount } from "@/presentation/hooks/useCurrency";
 import {
   useCreateReceiptVoucher,
   useCreatePaymentVoucher,
@@ -30,7 +30,7 @@ import { useInvoicesList } from "@/presentation/hooks/useInvoices";
 import { useReturnsList } from "@/presentation/hooks/useReturns";
 import { invoiceTotal } from "@/core/calculations/invoiceCalc";
 import { convertForSettlement } from "@erp/shared";
-import { Save, X, Lock } from "lucide-react";
+import { AlertTriangle, Save, X, Lock } from "lucide-react";
 
 /**
  * Restate an amount in the linked invoice's currency using the rate entered
@@ -188,7 +188,14 @@ export function VoucherForm({
       : "اختر المورد أولاً لتظهر الفواتير غير المسددة"
     : invoiceOptions.length === 0
       ? "لا توجد فواتير غير مسددة لهذا الطرف — سيُسجَّل المبلغ كدفعة على الحساب"
-      : "اختر فاتورة لتسوية رصيدها، أو اترك «دفعة على الحساب» لسداد عام";
+      : "اختر فاتورة لتسديدها، أو اترك «دفعة على الحساب» لسداد عام";
+
+  // A payment left "on account" is NOT converted: it is booked as an independent credit in its
+  // own currency and never reduces open invoices in another currency. Surface that before
+  // saving so the operator picks the invoice (which applies the payment-time exchange rate).
+  const offCurrencyOpenInvoices = !invoiceId
+    ? invoiceOptions.filter((i) => i.currency !== currency)
+    : [];
 
   const save = async () => {
     let valid = true;
@@ -335,6 +342,26 @@ export function VoucherForm({
               </SelectContent>
             </Select>
             <p className="mt-1 text-[11px] leading-snug text-muted-foreground">{invoiceHint}</p>
+            {offCurrencyOpenInvoices.length > 0 && (
+              <div
+                role="alert"
+                data-testid="on-account-fx-warning"
+                className="mt-1 flex items-start gap-2 rounded-md border border-warning/40 bg-warning/10 px-2.5 py-2 text-[11px] leading-snug text-foreground"
+              >
+                <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-warning" />
+                <p>
+                  <span className="font-bold text-warning">تنبيه:</span> لدى هذا الطرف{" "}
+                  {offCurrencyOpenInvoices.length} فاتورة مفتوحة بعملة{" "}
+                  {[
+                    ...new Set(
+                      offCurrencyOpenInvoices.map((i) => currencySymbol(i.currency as Currency)),
+                    ),
+                  ].join(" / ")}
+                  . الدفعة على الحساب بعملة {currencySymbol(currency)} تُسجَّل رصيداً مستقلاً
+                  بعملتها ولا تخفض رصيد تلك الفواتير — اختر الفاتورة ليُطبَّق سعر الصرف وقت الدفع.
+                </p>
+              </div>
+            )}
           </Field>
           <Field label="التاريخ">
             <Input
@@ -344,7 +371,7 @@ export function VoucherForm({
               className="h-10"
             />
           </Field>
-          <FormField label="مبلغ التسوية (الإجمالي) *" error={amountError ?? undefined}>
+          <FormField label="مبلغ الدفعة (الإجمالي) *" error={amountError ?? undefined}>
             <FormattedAmountInput
               value={amount}
               onChange={(v) => {
@@ -352,7 +379,7 @@ export function VoucherForm({
                 setAmountError(null);
               }}
               className="h-10"
-              ariaLabel="مبلغ التسوية"
+              ariaLabel="مبلغ الدفعة"
             />
             {settlementPreview && selectedInvoice && selectedInvoice.currency !== currency ? (
               <p className="mt-1 text-[11px] leading-snug text-muted-foreground" dir="ltr">

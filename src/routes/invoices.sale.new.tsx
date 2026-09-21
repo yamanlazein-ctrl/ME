@@ -53,7 +53,9 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
+  FormattedAmountInput,
   HeaderField,
+  PaymentMethodSelect,
   TotalCell,
   TotalInputCell,
   MoneyInputCell,
@@ -688,32 +690,20 @@ function SaleInvoicePage() {
               </Select>
             </HeaderField>
             <HeaderField label="سعر الصرف (ل.س / $)">
-              <Input
-                type="number"
-                min={1}
-                step="any"
+              <FormattedAmountInput
                 value={exchangeRate}
-                onChange={(e) =>
-                  setExchangeRate(e.target.value === "" ? "" : Number(e.target.value))
-                }
+                onChange={setExchangeRate}
                 placeholder="أدخل سعر الصرف يدوياً"
-                dir="ltr"
-                className="!h-9"
+                ariaLabel="سعر الصرف"
+                className="!h-9 text-left tabular-nums"
               />
             </HeaderField>
             <HeaderField label="الدفع">
-              <Select value={paymentMethod} onValueChange={setPaymentMethod}>
-                <SelectTrigger className="!h-9">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {enabledPaymentMethods.map((m) => (
-                    <SelectItem key={m.id} value={m.name}>
-                      {m.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <PaymentMethodSelect
+                value={paymentMethod}
+                onChange={setPaymentMethod}
+                methods={enabledPaymentMethods}
+              />
             </HeaderField>
           </div>
           <div className="grid gap-x-4 gap-y-3 border-t border-border/70 bg-secondary/20 p-4 md:grid-cols-[minmax(0,0.4fr)_minmax(0,1.6fr)]">

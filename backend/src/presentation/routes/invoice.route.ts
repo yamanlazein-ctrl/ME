@@ -171,12 +171,12 @@ export function registerInvoiceRoutes(
   // registered before "/invoices/:id" so "next-number" isn't captured as an id.
   router.get("/invoices/next-number", auth, readGuard, async (req: Request, res: Response) => {
     const type = String((req.query.type as string) ?? "sale");
-    if (type !== "sale" && type !== "entry") {
+    if (type !== "sale" && type !== "entry" && type !== "print") {
       return res
         .status(400)
-        .json({ code: "BAD_REQUEST", message: "type يجب أن يكون sale أو entry" });
+        .json({ code: "BAD_REQUEST", message: "type يجب أن يكون sale أو entry أو print" });
     }
-    const entityType = type === "entry" ? "invoice_entry" : "invoice";
+    const entityType = type === "entry" ? "invoice_entry" : type === "print" ? "print" : "invoice";
     try {
       const number = await peekNextDocumentNumber(
         entityType,

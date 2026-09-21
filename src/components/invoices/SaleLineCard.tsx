@@ -225,22 +225,16 @@ export function SaleLineCard({
               />
             </CardField>
             <CardField label="الأثواب">
-              <Input
-                type="number"
-                min="0"
-                value={line.pieces === 0 ? "0" : line.pieces || ""}
-                onChange={(e) =>
-                  onUpdate({
-                    pieces:
-                      e.target.value === "" ? 1 : Math.max(0, Math.trunc(Number(e.target.value))),
-                  })
-                }
+              <FormattedAmountInput
+                value={line.pieces === 0 ? 0 : line.pieces || ""}
+                showZero
+                onChange={(v) => onUpdate({ pieces: v === "" ? 1 : Math.max(0, Math.trunc(v)) })}
                 className={cn(
                   "h-9 text-left tabular-nums",
                   !line.pieces && "text-muted-foreground/70",
                 )}
                 placeholder="1"
-                aria-label="عدد الأثواب"
+                ariaLabel="عدد الأثواب"
               />
             </CardField>
             <CardField

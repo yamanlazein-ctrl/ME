@@ -5,6 +5,7 @@ import { getCentralSyncUrl, resolveHubAuthHeader } from "./hubConfig.js";
 import {
   claimNumberBlockInTx,
   defaultBlockSize,
+  numberBlocksEnabled,
   reclaimNumberBlockTailInTx,
   resolveNumberFormat,
 } from "../../../infrastructure/utils/documentNumbers.js";
@@ -58,6 +59,13 @@ export async function claimNumberBlock(input: {
    */
   knownUsed?: number | null;
 }) {
+  if (!numberBlocksEnabled()) {
+    // Reserving a block advances the shared counter by the block size, which is
+    // exactly the "ENT-2026-0001 → ENT-2026-0602" jump. Refuse instead.
+    throw new BusinessRuleError(
+      "حجز كتل الترقيم معطّل — الترقيم يتم من عدّاد واحد متسلسل داخل السيرفر",
+    );
+  }
   await assertDeviceBelongsToTenant(input.tenantId, input.syncDeviceId);
   const year = new Date().getFullYear();
   return db.transaction(async (tx) => {
@@ -130,6 +138,9 @@ export async function ensureDeviceNumberBlocks(
   skipped: boolean;
   reason?: string;
 }> {
+  if (!numberBlocksEnabled()) {
+    return { ensured: [], skipped: true, reason: "number blocks disabled (single-counter numbering)" };
+  }
   await assertDeviceBelongsToTenant(input.tenantId, input.syncDeviceId);
   const year = new Date().getFullYear();
   const types = input.entityTypes?.length ? input.entityTypes : [...PRIMARY_ENTITY_TYPES];

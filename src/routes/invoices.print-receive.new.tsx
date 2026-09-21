@@ -30,6 +30,7 @@ import { archiveMeta } from "@/shared/utils/documentArchive";
 import { PrintJobDocument } from "@/components/print/PrintJobDocument";
 import { PrintPageBreak } from "@/components/print/PrintDocument";
 import { formatNumber, formatQuantity } from "@/shared/utils/formatNumber";
+import { DEFAULT_SUGGESTION_COUNT } from "@/shared/utils/suggestions";
 import { ColorSearchCell } from "@/components/invoices/ColorSearchCell";
 import { CardField, GroupSection } from "@/components/invoices/InvoiceFormLayout";
 import { showError, showSuccess } from "@/components/common/toast-helpers";
@@ -81,7 +82,7 @@ function DocumentAutocomplete({
   const [query, setQuery] = useState("");
   const q = query.trim().toLowerCase();
   const list = useMemo(() => {
-    if (!q) return options.slice(0, 30);
+    if (!q) return options.slice(0, DEFAULT_SUGGESTION_COUNT);
     return options
       .filter((o) => `${o.title} ${o.subtitle ?? ""}`.toLowerCase().includes(q))
       .slice(0, 30);

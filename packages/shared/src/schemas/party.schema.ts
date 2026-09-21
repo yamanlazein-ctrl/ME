@@ -13,10 +13,15 @@ export const createPartySchema = z.object({
   mobile: z.string().max(30).optional(),
   whatsapp: z.string().max(30).optional(),
   altPhone: z.string().max(30).optional(),
-  email: z.preprocess(
-    (v) => (v === "" || v === null ? undefined : v),
-    z.string().email().max(320).optional(),
-  ),
+  // Optional. Blank/whitespace counts as "not provided"; stray spaces are trimmed.
+  // Anything else must be a real email — with a readable Arabic message (the
+  // default "Invalid email" leaked to users when a form field held a name/phone).
+  email: z.preprocess((v) => {
+    if (v === null) return undefined;
+    if (typeof v !== "string") return v;
+    const t = v.trim();
+    return t === "" ? undefined : t;
+  }, z.string().email("صيغة البريد الإلكتروني غير صحيحة").max(320).optional()),
   website: z.string().max(500).optional(),
   address: z.string().optional(),
   city: z.string().max(100).optional(),

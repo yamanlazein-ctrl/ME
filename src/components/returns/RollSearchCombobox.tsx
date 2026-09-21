@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { colorById, fabricById, rollById, type Roll } from "@/presentation/hooks/useInventory";
 import { formatQuantity } from "@/shared/utils/formatNumber";
+import { recentSuggestions } from "@/shared/utils/suggestions";
 
 function rollLabel(r: Roll): string {
   const c = colorById(r.colorId);
@@ -14,7 +15,7 @@ function rollLabel(r: Roll): string {
 
 /**
  * Search-as-you-type dye/roll picker for return lines.
- * Empty query shows a capped list; typing filters by fabric, color, or roll no.
+ * Empty query shows the most recent lots; typing filters by fabric, color, or roll no.
  */
 export function RollSearchCombobox({
   value,
@@ -33,7 +34,7 @@ export function RollSearchCombobox({
   const q = query.trim().toLowerCase();
 
   const filtered = useMemo(() => {
-    if (!q) return options.slice(0, 40);
+    if (!q) return recentSuggestions(options);
     return options
       .filter((r) => {
         const c = colorById(r.colorId);

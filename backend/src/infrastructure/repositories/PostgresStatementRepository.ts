@@ -7,6 +7,7 @@ import type {
 } from "../../application/ports/IStatementRepository.js";
 import type {
   PartyStatementData,
+  StatementDocumentInfo,
   StatementEntryData,
   StatementLineDetail,
   StatementQuery,
@@ -20,11 +21,13 @@ import { fabrics } from "../orm/schemas/fabric.table.js";
 import { colors } from "../orm/schemas/color.table.js";
 import { rolls } from "../orm/schemas/roll.table.js";
 import { invoices } from "../orm/schemas/invoice.table.js";
+import { vouchers } from "../orm/schemas/voucher.table.js";
 import { allocateDocumentNumber } from "../utils/documentNumbers.js";
 import { round2dp } from "@erp/shared";
 import { BusinessRuleError } from "../../domain/errors/index.js";
 
 const INVOICE_TYPES = ["sales_invoice", "purchase_invoice"];
+const VOUCHER_REF_TYPES = ["receipt_in", "payment_out"];
 
 const TYPE_LABEL: Record<string, string> = {
   opening: "الرصيد الافتتاحي",
@@ -133,6 +136,8 @@ export class PostgresStatementRepository implements IStatementRepository {
       ctx,
     );
 
+    const documentsByRef = await this.loadDocuments(window, ctx);
+
     const runningByCurrency = new Map<string, number>(prevByCurrency);
     const debitByCurrency = new Map<string, number>();
     const creditByCurrency = new Map<string, number>();
@@ -173,6 +178,14 @@ export class PostgresStatementRepository implements IStatementRepository {
         credit: round2dp(credit),
         runningBalance: round2dp(running),
       };
+
+      const doc = row.referenceId ? documentsByRef.get(`${row.type}:${row.referenceId}`) : undefined;
+      if (doc) {
+        entry.document =
+          doc.info.kind === "voucher"
+            ? { ...doc.info, crossCurrency: doc.info.currency !== rowCcy }
+            : doc.info;
+      }
 
       if (INVOICE_TYPES.includes(row.type) && row.referenceId) {
         const lines = linesByInvoice.get(row.referenceId) ?? [];
@@ -342,6 +355,104 @@ export class PostgresStatementRepository implements IStatementRepository {
 
       return this.mapEntry(inserted[0]);
     });
+  }
+
+  /**
+   * Original documents behind the party-leg rows of the window: the invoice
+   * (own currency + frozen historical rate) for invoice rows, and the voucher
+   * (payment currency, amount, rate captured at payment time, the invoice it
+   * was applied to) for receipt/payment rows. Keyed `${ledgerType}:${referenceId}`.
+   */
+  private async loadDocuments(
+    window: LedgerRow[],
+    ctx: TenantContext,
+  ): Promise<Map<string, { info: StatementDocumentInfo }>> {
+    const out = new Map<string, { info: StatementDocumentInfo }>();
+
+    const invoiceIds = [
+      ...new Set(
+        window
+          .filter((r) => INVOICE_TYPES.includes(r.type) && r.referenceId)
+          .map((r) => r.referenceId as string),
+      ),
+    ];
+    if (invoiceIds.length > 0) {
+      const rows = await this.db
+        .select({
+          id: invoices.id,
+          number: invoices.number,
+          currency: invoices.currency,
+          exchangeRate: invoices.exchangeRate,
+          total: invoices.total,
+        })
+        .from(invoices)
+        .where(and(inArray(invoices.id, invoiceIds), eq(invoices.tenantId, ctx.tenantId)));
+      const byId = new Map(rows.map((r) => [r.id, r]));
+      for (const r of window) {
+        if (!INVOICE_TYPES.includes(r.type) || !r.referenceId) continue;
+        const inv = byId.get(r.referenceId);
+        if (!inv) continue;
+        out.set(`${r.type}:${r.referenceId}`, {
+          info: {
+            kind: "invoice",
+            number: inv.number,
+            currency: inv.currency ?? r.currency,
+            amount: round2dp(Number(inv.total)),
+            exchangeRate: inv.exchangeRate != null ? Number(inv.exchangeRate) : null,
+          },
+        });
+      }
+    }
+
+    const voucherIds = [
+      ...new Set(
+        window
+          .filter((r) => VOUCHER_REF_TYPES.includes(r.type) && r.referenceId)
+          .map((r) => r.referenceId as string),
+      ),
+    ];
+    if (voucherIds.length > 0) {
+      const rows = await this.db
+        .select({
+          id: vouchers.id,
+          number: vouchers.number,
+          currency: vouchers.currency,
+          exchangeRate: vouchers.exchangeRate,
+          amount: vouchers.amount,
+          discount: vouchers.discount,
+          method: vouchers.method,
+          invoiceNumber: invoices.number,
+          invoiceCurrency: invoices.currency,
+        })
+        .from(vouchers)
+        .leftJoin(invoices, eq(vouchers.invoiceId, invoices.id))
+        .where(and(inArray(vouchers.id, voucherIds), eq(vouchers.tenantId, ctx.tenantId)));
+      const byId = new Map(rows.map((r) => [r.id, r]));
+      for (const r of window) {
+        if (!VOUCHER_REF_TYPES.includes(r.type) || !r.referenceId) continue;
+        const v = byId.get(r.referenceId);
+        if (!v) continue;
+        const rate = v.exchangeRate != null ? Number(v.exchangeRate) : null;
+        out.set(`${r.type}:${r.referenceId}`, {
+          info: {
+            kind: "voucher",
+            number: v.number,
+            currency: v.currency,
+            amount: round2dp(Number(v.amount)),
+            exchangeRate: rate != null && rate > 0 ? rate : null,
+            discount: round2dp(Number(v.discount ?? 0)),
+            method: v.method,
+            ...(v.invoiceNumber
+              ? {
+                  appliedToInvoiceNumber: v.invoiceNumber,
+                  appliedToInvoiceCurrency: v.invoiceCurrency ?? undefined,
+                }
+              : {}),
+          },
+        });
+      }
+    }
+    return out;
   }
 
   /** Load invoice line details (fabric/color/roll + qty/price) for the given invoices. */

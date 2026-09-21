@@ -23,6 +23,21 @@ export type StatementRow = {
   credit: number;
   runningBalance: number;
   status?: "active" | "cancelled";
+  /** Symbol of the row's ledger currency (shown in multi-currency statements). */
+  currencySymbol?: string;
+  /** Document amount in the currency it was entered in, e.g. "10 $". */
+  originalAmount?: string | null;
+  /** Rate frozen on the document (payment-time rate for cross-currency payments). */
+  exchangeRate?: string | null;
+  /** How a payment was applied: rate × amount = equivalent → invoice. */
+  paymentNote?: string | null;
+};
+
+export type StatementCurrencyTotals = {
+  symbol: string;
+  debit: number;
+  credit: number;
+  running: number;
 };
 
 export function PartyStatementDocument({
@@ -33,6 +48,7 @@ export function PartyStatementDocument({
   previousBalance,
   rows,
   totals,
+  totalsByCurrency,
 }: {
   partyName: string;
   partyCode?: string;
@@ -41,6 +57,8 @@ export function PartyStatementDocument({
   previousBalance: number;
   rows: StatementRow[];
   totals: { debit: number; credit: number; running: number };
+  /** Multi-currency statements list one totals block per currency instead of a blended 0. */
+  totalsByCurrency?: StatementCurrencyTotals[];
 }) {
   const meta: PrintMetaItem[] = [
     { label: "الطرف", value: partyName },
@@ -54,12 +72,14 @@ export function PartyStatementDocument({
     { key: "date", label: "التاريخ", width: "10%" },
     { key: "type", label: "النوع", width: "12%" },
     { key: "ref", label: "المرجع", width: "12%" },
-    { key: "desc", label: "البيان", width: "20%" },
-    { key: "qty", label: "الكمية", align: "center", width: "8%" },
-    { key: "price", label: "السعر", align: "left", amount: true, width: "9%" },
-    { key: "debit", label: "مدين", align: "left", amount: true, width: "10%" },
-    { key: "credit", label: "دائن", align: "left", amount: true, width: "10%" },
-    { key: "bal", label: "الرصيد", align: "left", amount: true, width: "11%" },
+    { key: "desc", label: "البيان", width: "18%" },
+    { key: "orig", label: "المبلغ الأصلي", align: "left", width: "9%" },
+    { key: "rate", label: "سعر الصرف", align: "left", width: "7%" },
+    { key: "qty", label: "الكمية", align: "center", width: "6%" },
+    { key: "price", label: "السعر", align: "left", amount: true, width: "7%" },
+    { key: "debit", label: "مدين", align: "left", amount: true, width: "9%" },
+    { key: "credit", label: "دائن", align: "left", amount: true, width: "9%" },
+    { key: "bal", label: "الرصيد", align: "left", amount: true, width: "9%" },
   ];
 
   const tableRows: (string | ReactNode)[][] = [];
@@ -70,6 +90,8 @@ export function PartyStatementDocument({
       "رصيد سابق",
       "—",
       "أرصدة قبل تاريخ البداية",
+      "—",
+      "—",
       "—",
       "—",
       "—",
@@ -93,21 +115,41 @@ export function PartyStatementDocument({
       cell(r.type === "opening" ? "—" : r.date, m),
       cell(`${LEDGER_TYPE_LABEL[r.type] ?? r.type}${m ? " (ملغاة)" : ""}`, m),
       cell(r.referenceNumber ?? "—", m),
-      cell(r.description, m),
+      cell(r.paymentNote ? `${r.description} — ${r.paymentNote}` : r.description, m),
+      cell(r.originalAmount ?? "—", m),
+      cell(r.exchangeRate ?? "—", m),
       cell(r.quantityKg ? `${fmtQty(r.quantityKg)} كجم` : "—", m),
       cell(r.pricePerKg ? fmtMoney(r.pricePerKg) : "—", m),
       cell(r.debit ? fmtMoney(r.debit) : "—", m),
       cell(r.credit ? fmtMoney(r.credit) : "—", m),
-      cell(fmtMoney(r.runningBalance), m),
+      cell(`${fmtMoney(r.runningBalance)}${r.currencySymbol ? ` ${r.currencySymbol}` : ""}`, m),
     ]);
   });
 
-  const totalsList = [
-    { label: "رصيد سابق", value: `${fmtMoney(previousBalance)} ${currency}`, grand: false },
-    { label: "إجمالي مدين", value: `${fmtMoney(totals.debit)} ${currency}`, grand: false },
-    { label: "إجمالي دائن", value: `${fmtMoney(totals.credit)} ${currency}`, grand: false },
-    { label: "الرصيد النهائي", value: `${fmtMoney(totals.running)} ${currency}`, grand: true },
-  ];
+  const totalsList = totalsByCurrency
+    ? totalsByCurrency.flatMap((t) => [
+        {
+          label: `إجمالي مدين — ${t.symbol}`,
+          value: `${fmtMoney(t.debit)} ${t.symbol}`,
+          grand: false,
+        },
+        {
+          label: `إجمالي دائن — ${t.symbol}`,
+          value: `${fmtMoney(t.credit)} ${t.symbol}`,
+          grand: false,
+        },
+        {
+          label: `الرصيد النهائي — ${t.symbol}`,
+          value: `${fmtMoney(t.running)} ${t.symbol}`,
+          grand: true,
+        },
+      ])
+    : [
+        { label: "رصيد سابق", value: `${fmtMoney(previousBalance)} ${currency}`, grand: false },
+        { label: "إجمالي مدين", value: `${fmtMoney(totals.debit)} ${currency}`, grand: false },
+        { label: "إجمالي دائن", value: `${fmtMoney(totals.credit)} ${currency}`, grand: false },
+        { label: "الرصيد النهائي", value: `${fmtMoney(totals.running)} ${currency}`, grand: true },
+      ];
 
   return (
     <PrintDocument

@@ -58,6 +58,7 @@ import {
   TotalCell,
   TotalInputCell,
   FormattedAmountInput,
+  PaymentMethodSelect,
 } from "@/components/invoices/InvoiceFormLayout";
 import {
   type EntryLine,
@@ -1000,32 +1001,20 @@ function EntryInvoicePage() {
               </Select>
             </HeaderField>
             <HeaderField label="سعر الصرف (ل.س / $)">
-              <Input
-                type="number"
-                min={1}
-                step="any"
+              <FormattedAmountInput
                 value={exchangeRate}
-                onChange={(e) =>
-                  setExchangeRate(e.target.value === "" ? "" : Number(e.target.value))
-                }
+                onChange={setExchangeRate}
                 placeholder={isUSD ? "اختياري للدولار (سعر مرجعي)" : "أدخل سعر الصرف يدوياً"}
-                dir="ltr"
-                className="!h-9"
+                ariaLabel="سعر الصرف"
+                className="!h-9 text-left tabular-nums"
               />
             </HeaderField>
             <HeaderField label="الدفع">
-              <Select value={paymentMethod} onValueChange={(v) => setPaymentMethod(v)}>
-                <SelectTrigger className="!h-9">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {enabledPaymentMethods.map((m) => (
-                    <SelectItem key={m.id} value={m.name}>
-                      {m.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <PaymentMethodSelect
+                value={paymentMethod}
+                onChange={setPaymentMethod}
+                methods={enabledPaymentMethods}
+              />
             </HeaderField>
           </div>
           {supplier && (supplier.code || supplier.city || supplier.phone) && (
@@ -1210,19 +1199,19 @@ function EntryInvoicePage() {
                     <GroupSection title="بيانات الإنتاج">
                       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
                         <CardField label="الأثواب">
-                          <Input
-                            type="number"
-                            min="1"
+                          <FormattedAmountInput
                             value={l.pieces || ""}
-                            onChange={(e) =>
-                              updateLine(l.id, { pieces: Math.max(1, Number(e.target.value)) })
+                            onChange={(v) =>
+                              updateLine(l.id, {
+                                pieces: v === "" ? 1 : Math.max(1, Math.trunc(v)),
+                              })
                             }
                             className={cn(
-                              "h-9 tabular-nums",
+                              "h-9 text-left tabular-nums",
                               !l.pieces && "text-muted-foreground/70",
                             )}
                             placeholder="1"
-                            aria-label="عدد الأثواب"
+                            ariaLabel="عدد الأثواب"
                           />
                           <p className="mt-0.5 text-[10px] leading-tight text-muted-foreground">
                             يُضاف للمخزون ويُخصم عند البيع ويظهر في الطباعة.
@@ -1299,39 +1288,27 @@ function EntryInvoicePage() {
                     <GroupSection title="بيانات الوزن">
                       <div className="grid grid-cols-2 gap-3">
                         <CardField label="الوزن القائم (كغ)">
-                          <Input
-                            type="number"
-                            step="0.01"
+                          <FormattedAmountInput
                             value={l.grossKg || ""}
-                            onChange={(e) =>
-                              updateLine(l.id, {
-                                grossKg: e.target.value === "" ? 0 : Number(e.target.value),
-                              })
-                            }
+                            onChange={(v) => updateLine(l.id, { grossKg: v === "" ? 0 : v })}
                             className={cn(
                               "h-9 text-left tabular-nums",
                               !l.grossKg && "text-muted-foreground/70",
                             )}
                             placeholder="0"
-                            aria-label="الوزن القائم"
+                            ariaLabel="الوزن القائم"
                           />
                         </CardField>
                         <CardField label="الوزن الصافي (كغ)" required>
-                          <Input
-                            type="number"
-                            step="0.01"
+                          <FormattedAmountInput
                             value={l.quantity || ""}
-                            onChange={(e) =>
-                              updateLine(l.id, {
-                                quantity: e.target.value === "" ? 0 : Number(e.target.value),
-                              })
-                            }
+                            onChange={(v) => updateLine(l.id, { quantity: v === "" ? 0 : v })}
                             className={cn(
                               "h-9 text-left tabular-nums",
                               !l.quantity && "text-muted-foreground/70",
                             )}
                             placeholder="0"
-                            aria-label="الوزن الصافي"
+                            ariaLabel="الوزن الصافي"
                           />
                         </CardField>
                       </div>

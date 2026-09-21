@@ -16,6 +16,35 @@ export interface StatementLineDetail {
 }
 
 /**
+ * The original document behind a statement row, exactly as it was entered.
+ *
+ * `debit`/`credit` on the row are the party sub-ledger figures (always in the
+ * row's `currency`). When a payment is made in another currency than the
+ * invoice it settles, the row figure is the CONVERTED equivalent while this
+ * block carries the payment's own currency, amount and the rate captured at
+ * payment time. Invoices carry their own frozen historical rate. Nothing here
+ * is ever re-valued at a later rate.
+ */
+export interface StatementDocumentInfo {
+  kind: "invoice" | "voucher";
+  number: string;
+  /** Currency the document was entered in. */
+  currency: string;
+  /** Gross amount in `currency`. */
+  amount: number;
+  /** Rate frozen on the document (units of `currency` per 1 USD); null when unknown. */
+  exchangeRate: number | null;
+  /** Vouchers: settlement discount in `currency` (cash concession). */
+  discount?: number;
+  method?: string;
+  /** Vouchers: the invoice this payment was applied to, when linked. */
+  appliedToInvoiceNumber?: string;
+  appliedToInvoiceCurrency?: string;
+  /** Vouchers: payment currency differs from the currency of the row (the invoice). */
+  crossCurrency?: boolean;
+}
+
+/**
  * One statement row. Entries are chronological (date ASC, createdAt ASC) and
  * each row carries its running balance so the UI never has to re-accumulate.
  *
@@ -41,6 +70,7 @@ export interface StatementEntryData {
   credit: number;
   runningBalance: number;
   lines?: StatementLineDetail[];
+  document?: StatementDocumentInfo;
 }
 
 /**

@@ -6,7 +6,6 @@ import type { IPrintJobRepository } from "../../application/ports/IPrintJobRepos
 import type { TenantContext } from "../../domain/types/index.js";
 import { createPrintJobSchema, receivePrintJobSchema } from "./print.schema.js";
 import * as uc from "../../application/use-cases/printing/printJobUseCases.js";
-import { nextDocumentNumber } from "../../infrastructure/utils/documentNumbers.js";
 
 export function registerPrintRoutes(
   router: Router,
@@ -28,7 +27,9 @@ export function registerPrintRoutes(
       const r = await uc.createPrintJobUseCase(
         printJobRepo,
         body(req),
-        await nextDocumentNumber("print", ctx(req).tenantId),
+        // null → allocated inside the save transaction, so a rejected send
+        // (stock guard, validation) never burns a PRT number.
+        null,
         ctx(req),
       );
       if (r.ok) {

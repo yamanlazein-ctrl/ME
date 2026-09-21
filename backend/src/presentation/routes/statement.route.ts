@@ -93,7 +93,7 @@ export function registerStatementRoutes(
         if (!voucherRepo || !auditRepo) {
           return res.status(500).json({
             code: "INTERNAL",
-            message: "تسوية الفواتير غير مفعّلة على الخادم",
+            message: "تسجيل الدفعات على الفواتير غير مفعّل على الخادم",
           });
         }
         const c = ctx(req);
@@ -166,7 +166,7 @@ export function registerStatementRoutes(
             res,
             txErr,
             "voucher",
-            "تعذّر حفظ تسوية الحساب — لم يُحفظ أي تغيير. أعد المحاولة.",
+            "تعذّر حفظ الدفعة — لم يُحفظ أي تغيير. أعد المحاولة.",
           );
         }
       },

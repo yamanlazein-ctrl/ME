@@ -10,10 +10,12 @@ import {
   colorByName,
 } from "@/presentation/hooks/useInventory";
 import { normalizeInventoryName } from "@/domain/inventory/normalizeInventoryName";
+import { recentSuggestions } from "@/shared/utils/suggestions";
 
 /**
  * Inline fabric autocomplete for a table cell.
- * - Free-text input, filters existing fabrics as the user types.
+ * - Free-text input; focus/click with an empty box lists the most recent fabrics,
+ *   typing filters existing fabrics live.
  * - Selecting a match calls onPickExisting(fabricId).
  * - Typing a name that already exists keeps the existing master bound;
  *   only a truly new name is marked as "جديد" and created on save.
@@ -36,16 +38,18 @@ export const InlineFabricCell = forwardRef<
   const q = normalizeInventoryName(value);
 
   const matches = useMemo(() => {
-    if (!q) return [];
+    if (!q) return recentSuggestions(fabrics);
     return fabrics.filter((f) => normalizeInventoryName(f.name).includes(q)).slice(0, 8);
-  }, [q]);
+    // `fabrics` is a mutable module cache; its length changes when the list loads/grows.
+  }, [q, fabrics.length]);
 
   const exactMatch = fabrics.find((f) => normalizeInventoryName(f.name) === q);
   const isNew = q.length > 0 && !exactMatch;
 
   const handleKey = (e: KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Enter") {
-      if (matches.length === 1 && !existingFabricId) {
+      // Only auto-pick on Enter for a typed query — an empty box shows defaults.
+      if (q && matches.length === 1 && !existingFabricId) {
         e.preventDefault();
         onPickExisting(matches[0].id);
         setOpen(false);
@@ -66,6 +70,7 @@ export const InlineFabricCell = forwardRef<
           setOpen(true);
         }}
         onFocus={() => setOpen(true)}
+        onClick={() => setOpen(true)}
         onBlur={() => setTimeout(() => setOpen(false), 120)}
         onKeyDown={handleKey}
         placeholder="اكتب اسم القماش..."
@@ -140,7 +145,14 @@ export const InlineColorCell = forwardRef<
   const codeRef = useRef<HTMLInputElement>(null);
 
   const q = normalizeInventoryName(name);
-  const matches = useMemo(() => searchColors(name, 12, fabricId), [name, fabricId]);
+  const matches = useMemo(
+    () =>
+      q
+        ? searchColors(name, 12, fabricId)
+        : recentSuggestions(fabricId ? colors.filter((c) => c.fabricId === fabricId) : colors),
+    // `colors` is a mutable module cache; its length changes when the list loads/grows.
+    [q, name, fabricId, colors.length],
+  );
   const local = colorByName(name, fabricId);
   const isNew = q.length > 0 && !local && !!fabricId;
 
@@ -153,6 +165,7 @@ export const InlineColorCell = forwardRef<
         setOpen(true);
       }}
       onFocus={() => setOpen(true)}
+      onClick={() => setOpen(true)}
       onBlur={() => setTimeout(() => setOpen(false), 120)}
       onKeyDown={(e) => {
         if (e.key === "Enter" && local) {
@@ -183,7 +196,7 @@ export const InlineColorCell = forwardRef<
   );
 
   const dropdown =
-    open && mode !== "code" && (matches.length > 0 || isNew || (!!fabricId && !q)) ? (
+    open && mode !== "code" && (matches.length > 0 || isNew) ? (
       <div className="absolute right-0 top-full z-20 mt-1 w-full min-w-[240px] rounded-md border border-border bg-popover shadow-lg">
         {matches.map((c) => (
           <button

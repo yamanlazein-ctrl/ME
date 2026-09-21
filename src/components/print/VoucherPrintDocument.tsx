@@ -76,7 +76,7 @@ export function VoucherPrintDocument({ voucher }: { voucher: Voucher }) {
   const netCash = Math.max(0, v.amount - discount);
 
   const totals: PrintTotal[] = [
-    { label: "مبلغ التسوية", value: `${formatMoney(v.amount)} ${sym}` },
+    { label: "مبلغ الدفعة", value: `${formatMoney(v.amount)} ${sym}` },
     ...(discount > 0 ? [{ label: "الخصم", value: `- ${formatMoney(discount)} ${sym}` }] : []),
     {
       label: discount > 0 ? "الصافي نقداً" : "المبلغ",

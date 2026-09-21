@@ -136,7 +136,7 @@ export function SettlementDialog({
       return {
         totalDue: 0,
         allocations: [],
-        error: e instanceof Error ? e.message : "تعذّر احتساب التسوية",
+        error: e instanceof Error ? e.message : "تعذّر احتساب الدفعة",
       };
     }
   }, [selectedRows, settlementCurrency, exchangeRate, needsRate, mode, amountPaid]);
@@ -199,7 +199,7 @@ export function SettlementDialog({
         className="!max-w-4xl w-[calc(100vw-2rem)] max-h-[92vh] overflow-y-auto"
       >
         <DialogHeader>
-          <DialogTitle>تسوية الحساب</DialogTitle>
+          <DialogTitle>تسجيل دفعة على الفواتير</DialogTitle>
         </DialogHeader>
 
         <div className="space-y-4 text-sm">
@@ -253,7 +253,7 @@ export function SettlementDialog({
           <div className="grid gap-3 md:grid-cols-3">
             <div>
               <Label className="mb-1 block text-[11px] font-semibold text-muted-foreground">
-                عملة التسوية
+                عملة الدفعة
               </Label>
               <Select
                 value={settlementCurrency}
@@ -271,7 +271,7 @@ export function SettlementDialog({
             </div>
             <div>
               <Label className="mb-1 block text-[11px] font-semibold text-muted-foreground">
-                سعر صرف التسوية {needsRate ? "(مطلوب)" : "(اختياري)"}
+                سعر صرف الدفعة (وقت الدفع) {needsRate ? "(مطلوب)" : "(اختياري)"}
               </Label>
               <Input
                 type="number"
@@ -313,7 +313,7 @@ export function SettlementDialog({
                 setAmountPaid("");
               }}
             >
-              تسوية كاملة
+              دفعة كاملة
             </Button>
             <Button
               type="button"
@@ -321,7 +321,7 @@ export function SettlementDialog({
               variant={mode === "partial" ? "default" : "outline"}
               onClick={() => setMode("partial")}
             >
-              تسوية جزئية
+              دفعة جزئية
             </Button>
             {mode === "partial" && (
               <Input
@@ -338,7 +338,7 @@ export function SettlementDialog({
 
           <div className="rounded-md border bg-secondary/30 px-4 py-3 space-y-1">
             <div>
-              إجمالي التسوية المستحق:{" "}
+              إجمالي المستحق بعملة الدفعة:{" "}
               <span className="font-bold">
                 <Amt amount={preview.totalDue} currency={settlementCurrency} />
               </span>
@@ -365,7 +365,7 @@ export function SettlementDialog({
                   <tr className="[&>th]:px-3 [&>th]:py-1.5 text-muted-foreground">
                     <th>الفاتورة</th>
                     <th>من المتبقي</th>
-                    <th className="text-left">بالتسوية ({settleSym})</th>
+                    <th className="text-left">بعملة الدفعة ({settleSym})</th>
                     <th className="text-left">بعملة الفاتورة</th>
                     <th className="text-left">المتبقي بعد</th>
                   </tr>
@@ -399,7 +399,7 @@ export function SettlementDialog({
             إلغاء
           </Button>
           <Button type="button" disabled={!canSubmit} onClick={() => void onSubmit()}>
-            {settle.isPending ? "جارٍ التسوية…" : "تأكيد التسوية وطباعة"}
+            {settle.isPending ? "جارٍ التسجيل…" : "تأكيد الدفعة وطباعة"}
           </Button>
         </DialogFooter>
       </DialogContent>

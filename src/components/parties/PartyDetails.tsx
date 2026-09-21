@@ -83,6 +83,11 @@ import {
 import { useStatement } from "@/presentation/hooks/useStatement";
 import { SettlementDialog } from "@/components/parties/SettlementDialog";
 import { formatNumber, formatMoney, formatQuantity } from "@/shared/utils/formatNumber";
+import {
+  statementOriginalAmount,
+  statementPaymentNote,
+  statementRateToShow,
+} from "@/lib/statementDocument";
 
 const _nextFormId = 0;
 function toMockPatch(patch: Record<string, unknown>): Record<string, unknown> {
@@ -853,6 +858,26 @@ function StatementTab({ p, kind }: { p: Party; kind: PartyKind }) {
         ? ccy
         : (p.currency ?? "SYP");
   const cur = multiCcy ? "" : currencySymbol(displayCcy);
+  // # date type ref actions desc [ccy] origAmount rate qty price debit credit balance chevron
+  const colCount = multiCcy ? 15 : 14;
+  // "كل العملات" zeroes the scalar totals (SYP + USD must never be one number), so the
+  // footer lists one totals row per currency instead of a misleading 0 / 0 / 0.
+  const footerTotals: Array<{
+    currency: string;
+    totalDebit: number;
+    totalCredit: number;
+    finalBalance: number;
+  }> = multiCcy
+    ? Object.entries(totalsByCurrency)
+        .filter(([, t]) => t && (t.totalDebit !== 0 || t.totalCredit !== 0 || t.finalBalance !== 0))
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([currency, t]) => ({
+          currency,
+          totalDebit: t!.totalDebit,
+          totalCredit: t!.totalCredit,
+          finalBalance: t!.finalBalance,
+        }))
+    : [{ currency: "", totalDebit, totalCredit, finalBalance }];
 
   const toggleRow = (id: string) =>
     setExpanded((prev) => {
@@ -871,6 +896,9 @@ function StatementTab({ p, kind }: { p: Party; kind: PartyKind }) {
       "النوع",
       "المرجع",
       "البيان",
+      "العملة",
+      "المبلغ الأصلي",
+      "سعر الصرف",
       "الكمية",
       "السعر",
       "مدين",
@@ -879,7 +907,21 @@ function StatementTab({ p, kind }: { p: Party; kind: PartyKind }) {
     ];
     const body: string[][] = [];
     if (previousBalance !== 0 || rows.length > 0) {
-      body.push(["", "—", "رصيد سابق", "", "", "", "", "", "", String(previousBalance)]);
+      body.push([
+        "",
+        "—",
+        "رصيد سابق",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        String(previousBalance),
+      ]);
     }
     rows.forEach((r) => {
       body.push([
@@ -887,26 +929,40 @@ function StatementTab({ p, kind }: { p: Party; kind: PartyKind }) {
         r.date,
         `${LEDGER_TYPE_LABEL[r.type] ?? r.type}${r.status === "cancelled" ? " (ملغاة)" : ""}`,
         r.referenceNumber ?? "",
-        r.description ?? "",
+        [
+          r.description ?? "",
+          statementPaymentNote(r.document, r.currency ?? "SYP", r.debit || r.credit),
+        ]
+          .filter(Boolean)
+          .join(" — "),
+        r.currency ?? "",
+        statementOriginalAmount(r.document) ?? "",
+        statementRateToShow(r.document) != null ? String(statementRateToShow(r.document)) : "",
         r.quantityKg ? String(r.quantityKg) : "",
         r.pricePerKg ? String(r.pricePerKg) : "",
-        String(Math.round(r.debit)),
-        String(Math.round(r.credit)),
-        String(Math.round(r.runningBalance)),
+        String(r.debit),
+        String(r.credit),
+        String(r.runningBalance),
       ]);
     });
-    body.push([
-      "",
-      "",
-      "الإجمالي",
-      "",
-      "",
-      "",
-      "",
-      String(Math.round(totalDebit)),
-      String(Math.round(totalCredit)),
-      String(Math.round(finalBalance)),
-    ]);
+    // One totals row per currency ("كل العملات" never blends SYP with USD).
+    for (const t of footerTotals) {
+      body.push([
+        "",
+        "",
+        multiCcy ? `الإجمالي — ${t.currency}` : "الإجمالي",
+        "",
+        "",
+        multiCcy ? t.currency : "",
+        "",
+        "",
+        "",
+        "",
+        String(t.totalDebit),
+        String(t.totalCredit),
+        String(t.finalBalance),
+      ]);
+    }
     const csv = [header, ...body]
       .map((r) => r.map((c) => `"${String(c).replaceAll('"', '""')}"`).join(","))
       .join("\n");
@@ -940,8 +996,25 @@ function StatementTab({ p, kind }: { p: Party; kind: PartyKind }) {
         credit: r.credit,
         runningBalance: r.runningBalance,
         status: r.status,
+        currencySymbol: multiCcy ? currencySymbol((r.currency as Currency) ?? "SYP") : undefined,
+        originalAmount: statementOriginalAmount(r.document),
+        exchangeRate:
+          statementRateToShow(r.document) != null
+            ? fmt(statementRateToShow(r.document) as number)
+            : null,
+        paymentNote: statementPaymentNote(r.document, r.currency ?? "SYP", r.debit || r.credit),
       }))}
       totals={{ debit: totalDebit, credit: totalCredit, running: finalBalance }}
+      totalsByCurrency={
+        multiCcy
+          ? footerTotals.map((t) => ({
+              symbol: currencySymbol(t.currency as Currency),
+              debit: t.totalDebit,
+              credit: t.totalCredit,
+              running: t.finalBalance,
+            }))
+          : undefined
+      }
     />
   );
 
@@ -1023,7 +1096,7 @@ function StatementTab({ p, kind }: { p: Party; kind: PartyKind }) {
               className="h-9 gap-2 bg-warning text-warning-foreground hover:bg-warning/90"
               onClick={() => setSettleOpen(true)}
             >
-              <Scale className="h-4 w-4" /> تسوية الحساب
+              <Scale className="h-4 w-4" /> تسجيل دفعة
             </Button>
           )}
         </div>
@@ -1120,7 +1193,7 @@ function StatementTab({ p, kind }: { p: Party; kind: PartyKind }) {
           )}
 
           <div className="w-full overflow-x-auto">
-            <table className="w-full min-w-[1280px] text-right text-sm">
+            <table className="w-full min-w-[1560px] text-right text-sm">
               <thead className="bg-secondary/60 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
                 <tr className="[&>th]:px-3 [&>th]:py-2.5">
                   <th className="w-10">#</th>
@@ -1128,8 +1201,10 @@ function StatementTab({ p, kind }: { p: Party; kind: PartyKind }) {
                   <th className="w-32">النوع</th>
                   <th className="w-28">المرجع</th>
                   <th className="w-[200px]">إجراءات</th>
-                  <th className="min-w-[160px]">البيان</th>
+                  <th className="min-w-[200px]">البيان</th>
                   {multiCcy && <th className="w-16">العملة</th>}
+                  <th className="w-28 text-left">المبلغ الأصلي</th>
+                  <th className="w-24 text-left">سعر الصرف</th>
                   <th className="w-20 text-left">الكمية</th>
                   <th className="w-24 text-left">السعر</th>
                   <th className="w-28 text-left">مدين</th>
@@ -1144,7 +1219,7 @@ function StatementTab({ p, kind }: { p: Party; kind: PartyKind }) {
                     <td className="tabular-nums text-muted-foreground">—</td>
                     <td className="tabular-nums text-muted-foreground">—</td>
                     <td className="text-xs font-semibold">رصيد سابق</td>
-                    <td colSpan={multiCcy ? 6 : 5} className="text-muted-foreground">
+                    <td colSpan={multiCcy ? 8 : 7} className="text-muted-foreground">
                       أرصدة قبل تاريخ البداية
                     </td>
                     <td className="text-left tabular-nums" />
@@ -1166,7 +1241,7 @@ function StatementTab({ p, kind }: { p: Party; kind: PartyKind }) {
                 {rows.length === 0 && (
                   <tr>
                     <td
-                      colSpan={multiCcy ? 13 : 12}
+                      colSpan={colCount}
                       className="px-4 py-10 text-center text-xs text-muted-foreground"
                     >
                       لا حركات في هذه الفترة.
@@ -1225,12 +1300,49 @@ function StatementTab({ p, kind }: { p: Party; kind: PartyKind }) {
                           <span className="text-muted-foreground">—</span>
                         )}
                       </td>
-                      <td className="text-muted-foreground">{r.description}</td>
+                      <td className="text-muted-foreground">
+                        {r.description}
+                        {(() => {
+                          const note = statementPaymentNote(
+                            r.document,
+                            r.currency ?? "SYP",
+                            r.debit || r.credit,
+                          );
+                          return note ? (
+                            <span className="mt-0.5 block text-[10px] leading-snug text-primary/80">
+                              {note}
+                            </span>
+                          ) : null;
+                        })()}
+                      </td>
                       {multiCcy && (
                         <td className="tabular-nums text-xs text-muted-foreground">
                           {currencySymbol((r.currency as Currency) ?? "SYP")}
                         </td>
                       )}
+                      <td
+                        className={`text-left tabular-nums ${
+                          r.status === "cancelled" ? "text-destructive/50 line-through" : ""
+                        }`}
+                        data-testid="stmt-original-amount"
+                      >
+                        {statementOriginalAmount(r.document) ?? "—"}
+                      </td>
+                      <td
+                        className={`text-left tabular-nums text-muted-foreground ${
+                          r.status === "cancelled" ? "text-destructive/50 line-through" : ""
+                        }`}
+                        data-testid="stmt-rate"
+                        title={
+                          r.document?.kind === "invoice"
+                            ? "سعر الصرف التاريخي المثبّت على الفاتورة"
+                            : "سعر الصرف وقت الدفع"
+                        }
+                      >
+                        {statementRateToShow(r.document) != null
+                          ? fmt(statementRateToShow(r.document) as number)
+                          : "—"}
+                      </td>
                       <td
                         className={`text-left tabular-nums ${
                           r.status === "cancelled" ? "text-destructive/50 line-through" : ""
@@ -1309,7 +1421,7 @@ function StatementTab({ p, kind }: { p: Party; kind: PartyKind }) {
                     </tr>
                     {expanded.has(r.id) && r.lines && (
                       <tr className="bg-muted/30 align-middle [&>td]:px-3 [&>td]:py-2">
-                        <td colSpan={multiCcy ? 13 : 12}>
+                        <td colSpan={colCount}>
                           <div className="mb-1 mt-1 rounded-lg border border-border/60 bg-background/40 px-3 py-2">
                             <div className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
                               تفاصيل الأصناف
@@ -1351,22 +1463,30 @@ function StatementTab({ p, kind }: { p: Party; kind: PartyKind }) {
               </tbody>
               {rows.length > 0 && (
                 <tfoot className="bg-secondary/40 text-xs font-bold">
-                  <tr className="[&>td]:px-3 [&>td]:py-2.5">
-                    <td colSpan={2} className="text-left" />
-                    <td colSpan={6} className="text-left">
-                      الإجمالي
-                    </td>
-                    <td className="text-left tabular-nums">{fmt(totalDebit)}</td>
-                    <td className="text-left tabular-nums">{fmt(totalCredit)}</td>
-                    <td
-                      className={`text-left tabular-nums ${
-                        finalBalance > 0 ? "text-warning" : finalBalance < 0 ? "text-success" : ""
-                      }`}
-                    >
-                      {fmt(finalBalance)} {cur}
-                    </td>
-                    <td />
-                  </tr>
+                  {footerTotals.map((t) => (
+                    <tr key={t.currency || "single"} className="[&>td]:px-3 [&>td]:py-2.5">
+                      <td colSpan={colCount - 4} className="text-left">
+                        {multiCcy
+                          ? `الإجمالي — ${currencySymbol(t.currency as Currency)}`
+                          : "الإجمالي"}
+                      </td>
+                      <td className="text-left tabular-nums">{fmt(t.totalDebit)}</td>
+                      <td className="text-left tabular-nums">{fmt(t.totalCredit)}</td>
+                      <td
+                        className={`text-left tabular-nums ${
+                          t.finalBalance > 0
+                            ? "text-warning"
+                            : t.finalBalance < 0
+                              ? "text-success"
+                              : ""
+                        }`}
+                      >
+                        {fmt(t.finalBalance)}{" "}
+                        {multiCcy ? currencySymbol(t.currency as Currency) : cur}
+                      </td>
+                      <td />
+                    </tr>
+                  ))}
                 </tfoot>
               )}
             </table>

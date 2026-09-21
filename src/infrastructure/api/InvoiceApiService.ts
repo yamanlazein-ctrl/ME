@@ -52,7 +52,7 @@ export class InvoiceApiService {
    * still allocated atomically at save time.
    */
   async nextNumber(
-    type: "sale" | "entry",
+    type: "sale" | "entry" | "print",
   ): Promise<{ data: { number: string; estimate: boolean } }> {
     return this.client.get<{ number: string; estimate: boolean }>("/api/invoices/next-number", {
       params: { type },

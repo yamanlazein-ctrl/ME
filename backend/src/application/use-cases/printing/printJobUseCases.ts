@@ -11,7 +11,7 @@ type Result<T> = { ok: true; data: T } | { ok: false; error: string };
 export async function createPrintJobUseCase(
   repo: IPrintJobRepository,
   input: CreatePrintJobInput,
-  number: string,
+  number: string | null,
   ctx: TenantContext,
 ): Promise<Result<PrintJobData>> {
   try {

@@ -19,6 +19,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import type { Currency } from "@/domain/types";
+import { PARTY_EMAIL_INPUT_PROPS, partyEmailError } from "@/lib/partyEmail";
 import type { PartyStatus, PaymentMethod, PaymentTerms } from "@/domain/entities/Party";
 
 export type PartyKind = "supplier" | "customer";
@@ -216,6 +217,13 @@ export function PartyFormDialog({
       setTab("basic");
       return;
     }
+    const emailErr = partyEmailError(draft.email);
+    if (emailErr) {
+      setErr(emailErr);
+      setTab("contact");
+      return;
+    }
+    setErr(null);
     onSubmit(toPatch(draft, kind));
   };
 
@@ -358,9 +366,14 @@ export function PartyFormDialog({
               </Field>
               <Field label="البريد الإلكتروني">
                 <Input
+                  {...PARTY_EMAIL_INPUT_PROPS}
                   className="h-10"
                   value={draft.email}
-                  onChange={(e) => patch("email", e.target.value)}
+                  onChange={(e) => {
+                    patch("email", e.target.value);
+                    setErr(null);
+                  }}
+                  aria-invalid={Boolean(partyEmailError(draft.email))}
                 />
               </Field>
               <Field label="الموقع الإلكتروني" className="md:col-span-2">
