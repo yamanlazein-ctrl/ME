@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { settleAmountAgainstRemaining } from "./fx.js";
-import { allocateSettlementPayment } from "./settlementAllocation.js";
-import { round2dp } from "./precision.js";
+import { settleAmountAgainstRemaining } from "@erp/shared";
+import { allocateSettlementPayment } from "@erp/shared";
+import { round2dp } from "@erp/shared";
 
 describe("settleAmountAgainstRemaining — exact closure", () => {
   it("10 USD at 136,500 SYP/USD settles a 1,365,000 SYP invoice exactly", () => {
