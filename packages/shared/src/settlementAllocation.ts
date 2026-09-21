@@ -109,10 +109,16 @@ export function allocateSettlementPayment(opts: {
       );
     }
     // Cap at remaining so voucher create's over-collection guard never trips on 0.01.
-    const amountInInvoiceCurrency = round2dp(Math.min(inInvoice, inv.remaining));
+    // A `take` that covers this invoice's full due (remaining restated in the
+    // settlement currency) closes it EXACTLY — converting `take` back would drift
+    // by the settlement currency's rounding quantum (USD→SYP→USD residual).
+    const closesInvoice = take === dueInSettlement;
+    const amountInInvoiceCurrency = closesInvoice
+      ? round2dp(inv.remaining)
+      : round2dp(Math.min(inInvoice, inv.remaining));
     // If we capped the invoice side, restate settlement amount from that (same-currency noop).
     let amountInSettlementCurrency = take;
-    if (Math.abs(amountInInvoiceCurrency - inInvoice) >= 0.01) {
+    if (!closesInvoice && Math.abs(amountInInvoiceCurrency - inInvoice) >= 0.01) {
       const restated = convertForSettlement(
         amountInInvoiceCurrency,
         inv.currency,

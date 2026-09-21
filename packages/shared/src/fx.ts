@@ -137,6 +137,49 @@ export function convertForSettlement(
   return null;
 }
 
+/**
+ * How much of an invoice's REMAINING balance a payment settles, in the
+ * invoice's currency — with exact closure.
+ *
+ * A payment is entered in its own currency to that currency's smallest unit
+ * (0.01). Converting it into the invoice currency therefore cannot hit an
+ * arbitrary remaining balance: paying the exact USD amount for a 1,000,000 SYP
+ * invoice at 13,500 is 74.07 USD (the true 74.0740… cannot be typed), which
+ * converts to 999,945 SYP and used to leave 55 SYP forever — or, entered as
+ * 74.08, was rejected as over-payment. Neither is a real debt: it is the
+ * payment currency's rounding quantum.
+ *
+ * Rule: when the payment equals the remaining balance restated in the payment
+ * currency and rounded to that currency's smallest unit, it settles the
+ * remaining balance EXACTLY (so paid == total and the balance is exactly 0).
+ * Any other amount settles its plain conversion (`convertForSettlement`), so a
+ * genuinely short or excessive payment is never silently rounded to "full".
+ *
+ * Same-currency payments reduce to the ordinary comparison. Returns null when
+ * the conversion is impossible (missing rate).
+ */
+export function settleAmountAgainstRemaining(
+  amount: number,
+  paymentCurrency: string,
+  invoiceCurrency: string,
+  enteredRate: number | null | undefined,
+  remaining: number,
+): number | null {
+  const plain = convertForSettlement(amount, paymentCurrency, invoiceCurrency, enteredRate);
+  if (plain === null) return null;
+  if (!(remaining > 0)) return plain;
+  const remainingInPaymentCurrency = convertForSettlement(
+    remaining,
+    invoiceCurrency,
+    paymentCurrency,
+    enteredRate,
+  );
+  if (remainingInPaymentCurrency !== null && round2dp(amount) === remainingInPaymentCurrency) {
+    return round2dp(remaining);
+  }
+  return plain;
+}
+
 export const FX_REQUIRED_MESSAGE = "سعر الصرف مطلوب لكل عملية ليست بالدولار (عملة الأساس USD)";
 
 /** Zod fragment: optional but strictly-positive exchange rate field. */

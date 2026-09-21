@@ -29,7 +29,7 @@ import {
 import { useInvoicesList } from "@/presentation/hooks/useInvoices";
 import { useReturnsList } from "@/presentation/hooks/useReturns";
 import { invoiceTotal } from "@/core/calculations/invoiceCalc";
-import { convertForSettlement } from "@erp/shared";
+import { convertForSettlement, round2dp, settleAmountAgainstRemaining } from "@erp/shared";
 import { AlertTriangle, Save, X, Lock } from "lucide-react";
 
 /**
@@ -163,7 +163,7 @@ export function VoucherForm({
       .map((i) => {
         const returnsSum = returnsByInvoice.get(i.id) ?? 0;
         // Backend: remaining = total - paid - activeReturns (can be negative = credit)
-        const rawRemaining = invoiceTotal(i) - (i.paid ?? 0) - returnsSum;
+        const rawRemaining = round2dp(invoiceTotal(i) - (i.paid ?? 0) - returnsSum);
         let remaining = Math.max(0, rawRemaining);
         // Show credit as 0 remaining (cannot collect more), but keep raw for validation message
         if (editInvoiceId && i.id === editInvoiceId)
@@ -237,7 +237,15 @@ export function VoucherForm({
           setFxError("عملة السند تختلف عن عملة الفاتورة — أدخل سعر الصرف يدوياً أولاً");
           valid = false;
         } else {
-          const settled = toInvoiceCurrency(Number(amount), voucherFx, opt.currency);
+          // Same closure rule as the backend: paying the exact remaining (to the
+          // payment currency's smallest unit) settles it exactly.
+          const settled = settleAmountAgainstRemaining(
+            Number(amount),
+            currency,
+            opt.currency,
+            voucherFx.exchangeRate,
+            opt.remaining,
+          );
           if (settled == null) {
             setFxError("تعذر التحويل — أدخل سعر صرف صحيح لهذه العملية");
             valid = false;
@@ -291,10 +299,12 @@ export function VoucherForm({
     }
     const rate = Number(exchangeRate);
     if (!(rate > 0)) return null;
-    const settled = toInvoiceCurrency(
+    const settled = settleAmountAgainstRemaining(
       Number(amount),
-      { currency, exchangeRate: rate },
+      currency,
       selectedInvoice.currency,
+      rate,
+      selectedInvoice.remaining,
     );
     if (settled == null) return null;
     return { settled, rate };

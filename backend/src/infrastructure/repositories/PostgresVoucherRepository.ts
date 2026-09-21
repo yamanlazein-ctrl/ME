@@ -1,4 +1,4 @@
-import { eq, and, desc, ilike, or, sql, gte, lte } from "drizzle-orm";
+import { eq, and, desc, ilike, or, sql, gte, lte, isNotNull } from "drizzle-orm";
 import { BusinessRuleError } from "../../domain/errors/index.js";
 import { allocateDocumentNumber } from "../utils/documentNumbers.js";
 import type { DB } from "../orm/drizzle.js";
@@ -24,6 +24,7 @@ import {
   convertForSettlement,
   isValidFxRate,
   round2dp,
+  settleAmountAgainstRemaining,
   FX_REQUIRED_MESSAGE,
   type FxSide,
 } from "@erp/shared";
@@ -103,10 +104,7 @@ export class PostgresVoucherRepository implements IVoucherRepository {
     };
   }
 
-  async create(
-    input: CreateVoucherInput,
-    ctx: TenantContext,
-  ): Promise<VoucherData> {
+  async create(input: CreateVoucherInput, ctx: TenantContext): Promise<VoucherData> {
     return this.db.transaction(async (tx) => {
       await assertDayUnlocked(tx, ctx.tenantId, input.date);
       // H-NEW (forensic audit 2026-08-25, voucher numbering): allocate the
@@ -214,13 +212,17 @@ export class PostgresVoucherRepository implements IVoucherRepository {
           exchangeRate: Number.isFinite(invRate) && invRate > 0 ? invRate : null,
         };
         linkedInvoiceFx = { currency: invoiceFx.currency, exchangeRate: invoiceFx.exchangeRate };
-        settledInInvoiceCurrency = convertForSettlement(
+        const enteredRate = isValidFxRate(input.exchangeRate) ? input.exchangeRate! : null;
+        // Plain conversion first: only to fail closed when FX is unusable. The
+        // amount actually credited is decided below, once the remaining balance
+        // is known (`settleAmountAgainstRemaining`).
+        const plainSettled = convertForSettlement(
           grossAmount,
           voucherCurrency,
           invoiceFx.currency,
-          isValidFxRate(input.exchangeRate) ? input.exchangeRate! : null,
+          enteredRate,
         );
-        if (settledInInvoiceCurrency === null) {
+        if (plainSettled === null) {
           throw new BusinessRuleError(
             `لا يمكن تسديد فاتورة بعملة ${invoiceFx.currency} بسند بعملة ${voucherCurrency} — ${FX_REQUIRED_MESSAGE}`,
           );
@@ -256,6 +258,21 @@ export class PostgresVoucherRepository implements IVoucherRepository {
           );
         const returnsAmount = round2dp(Number(retAgg?.total ?? 0));
         const remaining = round2dp(Number(inv.total) - paidSoFar - returnsAmount);
+        // A payment equal to the remaining balance (to the payment currency's
+        // smallest unit) settles it EXACTLY — no USD→SYP rounding residual and no
+        // false over-payment rejection. Any other amount keeps its plain conversion.
+        settledInInvoiceCurrency = settleAmountAgainstRemaining(
+          grossAmount,
+          voucherCurrency,
+          invoiceFx.currency,
+          enteredRate,
+          remaining,
+        );
+        if (settledInInvoiceCurrency === null) {
+          throw new BusinessRuleError(
+            `لا يمكن تسديد فاتورة بعملة ${invoiceFx.currency} بسند بعملة ${voucherCurrency} — ${FX_REQUIRED_MESSAGE}`,
+          );
+        }
         // 0.01 tolerance: the conversion rounds to 2dp once, so a payment that
         // settles the invoice exactly can land a fraction of a cent above it.
         if (settledInInvoiceCurrency > remaining + 0.01) {
@@ -455,7 +472,12 @@ export class PostgresVoucherRepository implements IVoucherRepository {
     });
   }
 
-  async cancel(id: string, cancelledBy: string, ctx: TenantContext, expectedVersion: number): Promise<VoucherData> {
+  async cancel(
+    id: string,
+    cancelledBy: string,
+    ctx: TenantContext,
+    expectedVersion: number,
+  ): Promise<VoucherData> {
     return this.db.transaction(async (tx) => {
       // P0-001: lock the row first for version check
       const [currentRow] = await tx
@@ -473,9 +495,12 @@ export class PostgresVoucherRepository implements IVoucherRepository {
       if (!currentRow) throw new Error("Voucher not found or already cancelled");
       // P0-001: optimistic concurrency — fail fast if version mismatch
       if (currentRow.version !== expectedVersion) {
-        throw Object.assign(new Error(`Stale version: expected ${expectedVersion}, current ${currentRow.version}`), {
-          code: "STALE_VERSION" as const,
-        });
+        throw Object.assign(
+          new Error(`Stale version: expected ${expectedVersion}, current ${currentRow.version}`),
+          {
+            code: "STALE_VERSION" as const,
+          },
+        );
       }
       // Mirror create()'s guard: cancelling reverses the ledger leg and (for
       // cash) the cashbox balance on the voucher's own date — the same
@@ -502,6 +527,30 @@ export class PostgresVoucherRepository implements IVoucherRepository {
         )
         .returning();
       if (!row) throw new Error("Voucher not found or already cancelled");
+
+      // Read the party (AR/AP) leg BEFORE it is cancelled: it is the exact amount
+      // create() credited to invoices.paid, including an exact-closure amount that
+      // a plain re-conversion of the voucher amount would not reproduce.
+      const [postedPartyLeg] = await tx
+        .select({ debit: ledgerEntries.debit, credit: ledgerEntries.credit })
+        .from(ledgerEntries)
+        .where(
+          and(
+            eq(ledgerEntries.referenceId, id),
+            eq(ledgerEntries.tenantId, ctx.tenantId),
+            or(
+              eq(ledgerEntries.referenceType, "payment_out"),
+              eq(ledgerEntries.referenceType, "receipt_in"),
+            ),
+            isNotNull(ledgerEntries.partyId),
+            eq(ledgerEntries.status, "active"),
+          ),
+        )
+        .limit(1);
+      const postedPartyAmount =
+        postedPartyLeg != null
+          ? Number(row.kind === "payment" ? postedPartyLeg.debit : postedPartyLeg.credit)
+          : null;
 
       // Reverse the linked ledger entry atomically (mirrors invoice cancel).
       await tx
@@ -552,12 +601,15 @@ export class PostgresVoucherRepository implements IVoucherRepository {
         // means the stored rate is unusable; fail closed instead of corrupting
         // the invoice balance.
         const voucherCurrencyOnCancel = row.currency ?? "SYP";
-        const reversed = convertForSettlement(
-          Number(row.amount),
-          voucherCurrencyOnCancel,
-          invoiceFx.currency,
-          isValidFxRate(row.exchangeRate) ? Number(row.exchangeRate) : null,
-        );
+        const reversed =
+          postedPartyAmount !== null && Number.isFinite(postedPartyAmount) && postedPartyAmount > 0
+            ? round2dp(postedPartyAmount)
+            : convertForSettlement(
+                Number(row.amount),
+                voucherCurrencyOnCancel,
+                invoiceFx.currency,
+                isValidFxRate(row.exchangeRate) ? Number(row.exchangeRate) : null,
+              );
         if (reversed === null) {
           throw new BusinessRuleError(
             `لا يمكن إلغاء سند بعملة ${voucherCurrencyOnCancel} مرتبط بفاتورة بعملة ${invoiceFx.currency} — ${FX_REQUIRED_MESSAGE}`,
