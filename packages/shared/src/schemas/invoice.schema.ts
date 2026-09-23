@@ -40,7 +40,11 @@ const invoiceLineSchema = z.object({
     .number()
     .positive("السعر يجب أن يكون أكبر من صفر")
     .refine(is2dp, { message: MAX_2DP_MESSAGE }),
-  discountAmount: z.coerce.number().min(0, "الخصم لا يمكن أن يكون سالباً").optional(),
+  discountAmount: z.coerce
+    .number()
+    .min(0, "الخصم لا يمكن أن يكون سالباً")
+    .refine(is2dp, { message: MAX_2DP_MESSAGE })
+    .optional(),
   note: z.string().max(500).optional(),
 });
 
@@ -58,11 +62,27 @@ export const createInvoiceSchema = z
     // semantics: forced to 1 for USD; optional-but-honored for non-USD.
     exchangeRate: exchangeRateSchema,
     lines: z.array(invoiceLineSchema).min(1).max(100),
-    discount: z.number().min(0, "الخصم لا يمكن أن يكون سالباً").optional(),
-    tax: z.number().min(0, "الضريبة لا يمكن أن تكون سالبة").optional(),
-    shipping: z.number().min(0, "الشحن لا يمكن أن يكون سالباً").optional(),
+    discount: z
+      .number()
+      .min(0, "الخصم لا يمكن أن يكون سالباً")
+      .refine(is2dp, { message: MAX_2DP_MESSAGE })
+      .optional(),
+    tax: z
+      .number()
+      .min(0, "الضريبة لا يمكن أن تكون سالبة")
+      .refine(is2dp, { message: MAX_2DP_MESSAGE })
+      .optional(),
+    shipping: z
+      .number()
+      .min(0, "الشحن لا يمكن أن يكون سالباً")
+      .refine(is2dp, { message: MAX_2DP_MESSAGE })
+      .optional(),
     notes: z.string().max(2000).optional(),
-    paid: z.number().min(0, "المبلغ المدفوع لا يمكن أن يكون سالباً").optional(),
+    paid: z
+      .number()
+      .min(0, "المبلغ المدفوع لا يمكن أن يكون سالباً")
+      .refine(is2dp, { message: MAX_2DP_MESSAGE })
+      .optional(),
     paymentMethod: z.enum(["cash", "transfer", "check", "card"]).optional(),
     // Sale invoices: part of the total settled from the customer's existing
     // credit balance (advance payments / earlier overpayments). The server
@@ -133,9 +153,21 @@ export const updateInvoiceSchema = z
     // frozen create-time rate (or is omitted). The repository rejects a
     // different rate so historical docs are never revalued via FX rewrite.
     exchangeRate: exchangeRateSchema,
-    discount: z.number().min(0, "الخصم لا يمكن أن يكون سالباً").optional(),
-    tax: z.number().min(0, "الضريبة لا يمكن أن تكون سالبة").optional(),
-    shipping: z.number().min(0, "الشحن لا يمكن أن يكون سالباً").optional(),
+    discount: z
+      .number()
+      .min(0, "الخصم لا يمكن أن يكون سالباً")
+      .refine(is2dp, { message: MAX_2DP_MESSAGE })
+      .optional(),
+    tax: z
+      .number()
+      .min(0, "الضريبة لا يمكن أن تكون سالبة")
+      .refine(is2dp, { message: MAX_2DP_MESSAGE })
+      .optional(),
+    shipping: z
+      .number()
+      .min(0, "الشحن لا يمكن أن يكون سالباً")
+      .refine(is2dp, { message: MAX_2DP_MESSAGE })
+      .optional(),
     notes: z.string().max(2000).optional(),
   })
   .superRefine((data, ctx) => {

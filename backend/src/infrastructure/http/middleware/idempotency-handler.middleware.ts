@@ -13,9 +13,18 @@ import { NotFoundError } from "../../../domain/errors/index.js";
  * I3 fix: the key is claimed ATOMICALLY (tryClaim, SET NX) before the handler
  * runs, so two concurrent in-flight requests with the same key do not both
  * execute — the loser gets a 409 duplicate-in-flight response.
+ *
+ * REPAIR-008: pass `{ required: true }` on financial mutations so a missing
+ * key yields HTTP 428 `IDEMPOTENCY_KEY_REQUIRED`.
  */
-export function idempotency(...methods: string[]): RequestHandler {
-  const allowed = new Set(methods.map((m) => m.toUpperCase()));
+export function idempotency(
+  methods: string | string[],
+  options?: { required?: boolean },
+): RequestHandler {
+  const normalizedMethods = Array.isArray(methods) ? methods : [methods];
+  const optionsValue = options;
+  const allowed = new Set(normalizedMethods.map((m) => m.toUpperCase()));
+  const required = Boolean(optionsValue?.required);
   return async (req: Request, res: Response, next: NextFunction) => {
     // Fix C-6 (forensic audit 2026-08-15): track whether the client actually
     // asked for idempotency protection (sent a valid key), captured outside
@@ -28,6 +37,14 @@ export function idempotency(...methods: string[]): RequestHandler {
       }
       const key = getIdempotencyKey(req);
       if (!key) {
+        if (required) {
+          res.status(428).json({
+            code: "IDEMPOTENCY_KEY_REQUIRED",
+            message: "مطلوب رأس Idempotency-Key لهذا الطلب المالي",
+            statusCode: 428,
+          });
+          return;
+        }
         return next(); // no key, no idempotency — treat as fresh request
       }
       requestedProtection = true;
@@ -35,6 +52,15 @@ export function idempotency(...methods: string[]): RequestHandler {
       if (!tenantId) {
         // No tenant context — skip idempotency (middleware order issue)
         return next();
+      }
+      // REPAIR-008 B: expose Idempotency-Key as durable client_operation_id.
+      // Only UUID-shaped keys are persisted (partial unique indexes are uuid).
+      const uuidLike =
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+          key,
+        );
+      if (uuidLike && req.tenantContext) {
+        req.tenantContext.clientOperationId = key;
       }
       const cached = await readCached(tenantId, req.method, req.path, key);
       if (cached && cached.status > 0) {
@@ -49,6 +75,15 @@ export function idempotency(...methods: string[]): RequestHandler {
       // concurrent request already claimed it, refuse as a duplicate in-flight.
       const claimed = await tryClaim(tenantId, req.method, req.path, key);
       if (!claimed) {
+        const again = await readCached(tenantId, req.method, req.path, key);
+        if (again && again.status > 0) {
+          res
+            .status(again.status)
+            .setHeader("Content-Type", again.contentType)
+            .setHeader("Idempotency-Replay", "true")
+            .send(again.body);
+          return;
+        }
         res.status(409).json({
           code: "DUPLICATE_IN_FLIGHT",
           message: "طلب مكرر قيد المعالجة",

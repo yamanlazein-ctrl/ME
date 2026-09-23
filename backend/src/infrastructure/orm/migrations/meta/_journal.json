@@ -554,6 +554,76 @@
       "when": 1789282800000,
       "tag": "20261001_customer_credit_application",
       "breakpoints": true
+    },
+    {
+      "idx": 79,
+      "version": 7,
+      "when": 1789369200000,
+      "tag": "20261002_returns_original_invoice_idx",
+      "breakpoints": true
+    },
+    {
+      "idx": 80,
+      "version": 7,
+      "when": 1789455600000,
+      "tag": "20261003_manual_movements_indexes",
+      "breakpoints": true
+    },
+    {
+      "idx": 81,
+      "version": 7,
+      "when": 1789542000000,
+      "tag": "20261004_sync_outbox_lease",
+      "breakpoints": true
+    },
+    {
+      "idx": 82,
+      "version": 7,
+      "when": 1789628400000,
+      "tag": "20261005_sync_outbox_retention_idx",
+      "breakpoints": true
+    },
+    {
+      "idx": 83,
+      "version": 7,
+      "when": 1789714800000,
+      "tag": "20261006_idempotency_keys_expires_idx",
+      "breakpoints": true
+    },
+    {
+      "idx": 84,
+      "version": 7,
+      "when": 1789801200000,
+      "tag": "20261007_client_operation_id",
+      "breakpoints": true
+    },
+    {
+      "idx": 85,
+      "version": 7,
+      "when": 1789887600000,
+      "tag": "20261008_cost_per_kg_backfill",
+      "breakpoints": true
+    },
+    {
+      "idx": 86,
+      "version": 7,
+      "when": 1789974000000,
+      "tag": "20261009_financial_operations",
+      "breakpoints": true
+    },
+    {
+      "idx": 87,
+      "version": 7,
+      "when": 1790060400000,
+      "tag": "20261010_returns_date_idx",
+      "breakpoints": true
+    },
+    {
+      "idx": 88,
+      "version": 7,
+      "when": 1790146800000,
+      "tag": "20261011_ledger_party_remap",
+      "breakpoints": true
     }
   ]
 }

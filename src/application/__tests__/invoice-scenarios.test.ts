@@ -31,7 +31,7 @@ function makeInvoice(
   overrides: {
     lines?: InvoiceLineData[];
     partyId?: UUID;
-    type?: "entry" | "sale" | "return";
+    type?: "entry" | "sale";
     tax?: number;
     discount?: number;
     shipping?: number;
@@ -310,26 +310,9 @@ describe("Invoice scenarios: 50 invoices tracking", () => {
     expect(saleInvoice.type).toBe("sale");
     expect(saleInvoice.partyType).toBe("customer");
 
-    // Return invoice
-    const returnInvoice = Invoice.create({
-      id: crypto.randomUUID() as UUID,
-      tenantId: TENANT_ID,
-      number: "RET-001",
-      type: "return",
-      date: "2026-01-15",
-      partyId: CUSTOMER_ID,
-      partyType: "customer",
-      currency: CURRENCY,
-      lines: [makeLine({ quantityKg: 5, pricePerKg: 5000 })],
-      createdBy: "tester",
-      createdAt: "2026-01-01T00:00:00.000Z",
-    });
-    expect(returnInvoice.type).toBe("return");
-
-    // Verify totals for each
+    // Returns are separate return documents, not invoices. Verify totals for each
     expect(entryInvoice.total()).toBe(300000);
     expect(saleInvoice.total()).toBe(150000);
-    expect(returnInvoice.total()).toBe(25000);
   });
 });
 

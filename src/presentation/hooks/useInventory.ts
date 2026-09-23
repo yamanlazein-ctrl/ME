@@ -77,10 +77,12 @@ async function loadAll(force = false): Promise<void> {
   loadPromise = (async () => {
     try {
       const ctx = buildTenantContext();
+      // OLD-PLAN Phase 2: first page only — pickers must use /api/*/search typeahead.
+      const pageSize = 50;
       const [fRes, cRes, rRes] = await Promise.all([
-        container.inventory.listFabrics.execute({ limit: 1000 }, ctx),
-        container.inventory.listColors.execute({ limit: 1000 }, ctx),
-        container.inventory.listRolls.execute({ limit: 1000 }, ctx),
+        container.inventory.listFabrics.execute({ limit: pageSize, page: 0 }, ctx),
+        container.inventory.listColors.execute({ limit: pageSize, page: 0 }, ctx),
+        container.inventory.listRolls.execute({ limit: pageSize, page: 0 }, ctx),
       ]);
       const fData = isPaginated<Fabric>(fRes) ? fRes.data : (fRes as Fabric[]);
       const cData = isPaginated<Color>(cRes) ? cRes.data : (cRes as Color[]);

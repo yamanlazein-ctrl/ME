@@ -1,4 +1,5 @@
 import { eq, and, ilike, or, sql, desc, asc, gte, lte, inArray } from "drizzle-orm";
+import { likeContains } from "../utils/likeEscape.js";
 import type { DB } from "../orm/drizzle.js";
 import type {
   ILedgerRepository,
@@ -42,7 +43,7 @@ export class PostgresLedgerRepository implements ILedgerRepository {
     if (filter.fromDate) conditions.push(gte(ledgerEntries.date, filter.fromDate));
     if (filter.toDate) conditions.push(lte(ledgerEntries.date, filter.toDate));
     if (filter.search)
-      conditions.push(or(ilike(ledgerEntries.description!, `%${filter.search}%`))!);
+      conditions.push(or(ilike(ledgerEntries.description!, likeContains(filter.search)))!);
     const where = and(...conditions);
     const page = Math.max(0, filter.page ?? 0);
     const limit = Math.min(1000, Math.max(1, filter.limit ?? 20));

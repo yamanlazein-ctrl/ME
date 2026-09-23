@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { exchangeRateSchema } from "../fx.js";
+import { is2dp, MAX_2DP_MESSAGE } from "../precision.js";
 
 export const createVoucherSchema = z
   .object({
@@ -9,9 +10,9 @@ export const createVoucherSchema = z
     partyKind: z.enum(["customer", "supplier"]),
     invoiceId: z.string().uuid().optional(),
     /** Actual cash that moves. Discount is added on top — never subtracted. */
-    amount: z.number().min(0),
+    amount: z.number().min(0).refine(is2dp, { message: MAX_2DP_MESSAGE }),
     /** Settlement adjustment (مسامحة / خصم مكتسب). Party reduction = amount + discount. */
-    discount: z.number().min(0).optional().default(0),
+    discount: z.number().min(0).refine(is2dp, { message: MAX_2DP_MESSAGE }).optional().default(0),
     currency: z.enum(["SYP", "USD", "EUR"]).optional(),
     // BUG-03 (same-pattern) frozen FX rate: units of `currency` per 1 USD,
     // required for non-USD vouchers. Mirrors createInvoiceSchema.

@@ -127,7 +127,7 @@ export function registerCashboxRoutes(
     "/cashbox/opening-balance",
     auth,
     writeGuard,
-    idempotency("POST"),
+    idempotency("POST", { required: true }),
     validateBody(setOpeningBalanceSchema),
     async (req: Request, res: Response) => {
       const c = ctx(req);
@@ -178,7 +178,7 @@ export function registerCashboxRoutes(
     "/cashbox/manual-movements",
     auth,
     writeGuard,
-    idempotency("POST"),
+    idempotency("POST", { required: true }),
     validateBody(addManualMovementSchema),
     async (req: Request, res: Response) => {
       const c = ctx(req);

@@ -288,17 +288,84 @@ fn apply_requested_factory_reset(cfg: &BootConfig) -> io::Result<()> {
         return Ok(());
     }
     log("factory-reset requested — wiping local cluster (binding/secrets kept)");
+    let mut details = serde_json::Map::new();
+    details.insert(
+        "reason".into(),
+        serde_json::Value::String("factory-reset-flag".into()),
+    );
+    details.insert(
+        "pgdataExists".into(),
+        serde_json::Value::Bool(cfg.app_data_root.join("pgdata").join("PG_VERSION").exists()),
+    );
+
     let pgdata = cfg.app_data_root.join("pgdata");
     if pgdata.join("PG_VERSION").exists() {
         let _ = stop_postgres(&cfg.resources_root, &pgdata);
         let _ = cleanup_stale_cluster_lock(&cfg.resources_root, &pgdata);
+        // REPAIR-024: folder snapshot of stopped cluster before wipe.
+        let stamp = chrono_like_utc_stamp();
+        let snap_dir = cfg
+            .app_data_root
+            .join("snapshots")
+            .join(format!("{stamp}_factory_reset"));
+        if let Err(e) = copy_dir_recursive(&pgdata, &snap_dir) {
+            details.insert(
+                "snapshotError".into(),
+                serde_json::Value::String(e.to_string()),
+            );
+            super::boot_log::event("SNAPSHOT_FAILED", "factory_reset", details);
+            return Err(io::Error::new(
+                io::ErrorKind::Other,
+                format!(
+                    "تعذّر أخذ نسخة أمان قبل إعادة الضبط المصنعي: {e} — لن تُحذف قاعدة البيانات"
+                ),
+            ));
+        }
+        let sidecar = snap_dir.with_extension("json");
+        let _ = fs::write(
+            &sidecar,
+            format!(
+                "{{\n  \"operation\": \"factory_reset\",\n  \"createdAt\": \"{stamp}\",\n  \"path\": \"{}\"\n}}\n",
+                snap_dir.to_string_lossy().replace('\\', "\\\\")
+            ),
+        );
+        details.insert(
+            "snapshotPath".into(),
+            serde_json::Value::String(snap_dir.to_string_lossy().into_owned()),
+        );
     }
+    super::boot_log::event("FACTORY_RESET", "factory_reset", details);
+
     if pgdata.exists() {
         fs::remove_dir_all(&pgdata)?;
     }
     let _ = fs::remove_file(crate::db_meta::meta_path(&cfg.app_data_root));
     let _ = fs::remove_file(cfg.app_data_root.join("hub-session.json"));
     let _ = fs::remove_file(&flag);
+    Ok(())
+}
+
+fn chrono_like_utc_stamp() -> String {
+    use std::time::{SystemTime, UNIX_EPOCH};
+    let secs = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    format!("utc-{secs}")
+}
+
+fn copy_dir_recursive(src: &Path, dst: &Path) -> io::Result<()> {
+    fs::create_dir_all(dst)?;
+    for entry in fs::read_dir(src)? {
+        let entry = entry?;
+        let ty = entry.file_type()?;
+        let to = dst.join(entry.file_name());
+        if ty.is_dir() {
+            copy_dir_recursive(&entry.path(), &to)?;
+        } else if ty.is_file() {
+            fs::copy(entry.path(), &to)?;
+        }
+    }
     Ok(())
 }
 
@@ -339,6 +406,20 @@ fn ensure_pgdata(cfg: &BootConfig, db_password: &str) -> io::Result<PathBuf> {
     )? {
         ClusterDecision::Reuse => {
             log("pgdata already provisioned — reusing after identity/pid checks");
+            let mut details = serde_json::Map::new();
+            details.insert("pgdataExists".into(), serde_json::Value::Bool(true));
+            details.insert(
+                "metaPresent".into(),
+                serde_json::Value::Bool(crate::db_meta::meta_path(app_data_root).exists()),
+            );
+            details.insert("schemaIdx".into(), serde_json::json!(schema_idx));
+            details.insert("bundledSchemaIdx".into(), serde_json::json!(schema_idx));
+            details.insert("pgMajor".into(), serde_json::json!(pg_major));
+            details.insert(
+                "installationIdPrefix".into(),
+                serde_json::Value::String(cfg.installation_id.chars().take(8).collect()),
+            );
+            super::boot_log::event("REUSE", "ensure_pgdata", details);
             ensure_pg_subdirs(&pgdata)?;
             cleanup_stale_cluster_lock(resources_root, &pgdata)?;
             return Ok(pgdata);
@@ -366,6 +447,18 @@ fn ensure_pgdata(cfg: &BootConfig, db_password: &str) -> io::Result<PathBuf> {
             let _ = fs::remove_file(pgdata.join(stale));
         }
         stamp_fresh_cluster(app_data_root, &cfg.installation_id, pg_major, 0)?;
+        let mut details = serde_json::Map::new();
+        details.insert("pgdataExists".into(), serde_json::Value::Bool(false));
+        details.insert(
+            "reason".into(),
+            serde_json::Value::String("baked-template".into()),
+        );
+        details.insert("pgMajor".into(), serde_json::json!(pg_major));
+        details.insert(
+            "installationIdPrefix".into(),
+            serde_json::Value::String(cfg.installation_id.chars().take(8).collect()),
+        );
+        super::boot_log::event("FRESH_TEMPLATE", "ensure_pgdata", details);
         return Ok(pgdata);
     }
 
@@ -407,6 +500,17 @@ fn ensure_pgdata(cfg: &BootConfig, db_password: &str) -> io::Result<PathBuf> {
     // initdb already wrote a scram-sha-256 pg_hba.conf and set the superuser
     // password — record that so start_postgres skips the trust bootstrap.
     fs::write(pgdata.join(SCRAM_PW_SET_MARKER), b"initdb-scram")?;
+    let mut details = serde_json::Map::new();
+    details.insert(
+        "reason".into(),
+        serde_json::Value::String("initdb".into()),
+    );
+    details.insert("pgMajor".into(), serde_json::json!(pg_major));
+    details.insert(
+        "installationIdPrefix".into(),
+        serde_json::Value::String(cfg.installation_id.chars().take(8).collect()),
+    );
+    super::boot_log::event("FRESH_INITDB", "ensure_pgdata", details);
     Ok(pgdata)
 }
 
@@ -505,6 +609,8 @@ fn preflight_check(cfg: &BootConfig) -> Result<(), Vec<String>> {
         bin.join("postgres.exe"),
         bin.join("pg_ctl.exe"),
         bin.join("initdb.exe"),
+        bin.join("pg_dump.exe"),
+        bin.join("pg_restore.exe"),
         bin.join("libpq.dll"),
         cfg.node_exe.clone(),
         cfg.server_js.clone(),
@@ -950,6 +1056,22 @@ fn spawn_server(cfg: &BootConfig, store: &secret_store::SecretStore) -> io::Resu
                 .to_string_lossy()
                 .into_owned(),
         )
+        .env("MOTARD_BOOT_ID", super::boot_log::boot_id())
+        .env(
+            "DATA_INTEGRITY_PATH",
+            cfg.app_data_root
+                .join("data-integrity.json")
+                .to_string_lossy()
+                .into_owned(),
+        )
+        .env(
+            "POSTGRES_BIN",
+            cfg.resources_root
+                .join("postgres")
+                .join("bin")
+                .to_string_lossy()
+                .into_owned(),
+        )
         // Defense: never let a stray private key reach the desktop client.
         .env_remove("LICENSE_SIGNING_KEY");
 
@@ -965,8 +1087,9 @@ fn spawn_server(cfg: &BootConfig, store: &secret_store::SecretStore) -> io::Resu
     // it — same file redirection as before, now via hidden_process so the
     // window suppression is actually reliable (see the CREATE_NO_WINDOW note
     // above spawn_backend's old Command-based version).
+    // REPAIR-013: rotate previous server.log generations before truncating.
     let log_path = cfg.app_data_root.join("server.log");
-    let out_log = fs::File::create(&log_path)?;
+    let out_log = super::boot_log::rotate_server_log(&log_path)?;
     let err_log = out_log.try_clone()?;
     cmd.stdin_null()?
         .stdout_file(out_log)
@@ -990,6 +1113,9 @@ pub fn boot_desktop_stack_with_progress(
     cfg: &BootConfig,
     progress: &dyn Fn(&str),
 ) -> Result<DesktopStack, BootFailure> {
+    // REPAIR-013: durable boot log under AppData/logs (correlation id + decisions).
+    super::boot_log::init(cfg.app_data_root.join("logs"));
+
     // Never fail to boot merely because something else already holds the
     // default DB port (a system-installed PostgreSQL service, an orphaned
     // instance of this app) — pick a free one instead. See R-04.
@@ -1218,6 +1344,11 @@ pub fn boot_desktop_stack_with_progress(
             let reason = last_fatal_reason(&log_text)
                 .map(|r| format!("\n\nالسبب: {r}"))
                 .unwrap_or_default();
+            if let Some(fatal) = last_fatal_reason(&log_text) {
+                let mut details = serde_json::Map::new();
+                details.insert("reason".into(), serde_json::Value::String(fatal));
+                super::boot_log::event("MIGRATION_FAILED", "wait_server", details);
+            }
             let msg = format!(
                 "{}{}\n\nآخر سطور السجل ({}):\n{}\n\n\
                  أعد فتح البرنامج، وإن تكررت المشكلة أرسل هذا الملف للدعم الفني.",

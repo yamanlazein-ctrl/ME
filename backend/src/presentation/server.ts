@@ -46,8 +46,13 @@ import {
 } from "./routes/invitation.route.js";
 import { registerAuditRoutes } from "./routes/audit.route.js";
 import { createBackupRouter } from "./routes/backup.route.js";
+import { createIntegrityRouter } from "./routes/integrity.route.js";
+import { dataSafeModeGuard } from "../infrastructure/http/middleware/dataSafeMode.middleware.js";
 import { registerFxRoutes } from "./routes/fx.route.js";
 import { registerSyncRoutes } from "./routes/sync.route.js";
+import { registerSearchRoutes } from "./routes/search.route.js";
+import { registerReportRoutes } from "./routes/reports.route.js";
+import { registerSyncBootstrapRoutes } from "./routes/syncBootstrap.route.js";
 import { getCentralSyncUrl, probeHubReachable } from "../application/use-cases/sync/hubConfig.js";
 import { FxRateService } from "../infrastructure/fx/FxRateService.js";
 import { offlineWriteGuard } from "../infrastructure/http/middleware/offline-write.middleware.js";
@@ -182,6 +187,7 @@ app.use((req, _res, next) => {
 // setup wizard is completed. Health/setup/invitation-entry paths stay open so
 // a fresh install can always be provisioned (see ALLOW_LIST in the gate).
 app.use(createInstallGateMiddleware(container.installationStateRepo, container.tenantRepo));
+app.use(dataSafeModeGuard());
 
 // ── Route registration ──────────────────────────────────────────────
 // health + auth already hard-code the `/api` prefix internally → mount at root.
@@ -405,6 +411,17 @@ registerDashboardRoutes(
   authMiddleware,
   rbac(["admin", "accountant", "warehouse", "viewer"]),
 );
+registerSearchRoutes(
+  apiRouter,
+  authMiddleware,
+  rbac(["admin", "accountant", "warehouse", "viewer"]),
+);
+registerReportRoutes(
+  apiRouter,
+  authMiddleware,
+  rbac(["admin", "accountant", "warehouse", "viewer"]),
+);
+registerSyncBootstrapRoutes(apiRouter, authMiddleware);
 // Profit endpoints were fully implemented but never mounted — the cashbox
 // financial overview got 404s. Mounting the EXISTING route (no API changes).
 registerProfitRoutes(
@@ -465,6 +482,7 @@ apiRouter.use(
     statementRepo: container.statementRepo,
   }),
 );
+apiRouter.use(createIntegrityRouter(authMiddleware));
 
 app.use("/api", apiRouter);
 
@@ -493,6 +511,47 @@ async function prepareDesktopDatabase(): Promise<void> {
   if (!config.DESKTOP_DEPLOY) return;
   const { runDesktopMigrations } = await import("../infrastructure/orm/runDesktopMigrations.js");
   await runDesktopMigrations();
+  // REPAIR-023 / REPAIR-026: integrity + tenant visibility after migrations.
+  try {
+    const { pool } = await import("../infrastructure/orm/drizzle.js");
+    const { verifyDataAgainstManifest } =
+      await import("../infrastructure/integrity/dataIntegrityManifest.js");
+    const tenantRes = await pool.query<{ id: string }>(
+      `SELECT id FROM tenants WHERE slug = 'default' LIMIT 1`,
+    );
+    const tenantId = tenantRes.rows[0]?.id;
+    if (tenantId) {
+      await verifyDataAgainstManifest(pool, tenantId);
+      // Tenant visibility check (REPAIR-026)
+      const byTenant = await pool.query<{ tenant_id: string; n: number }>(
+        `SELECT tenant_id, count(*)::int AS n FROM invoices GROUP BY tenant_id`,
+      );
+      const effective = byTenant.rows.find((r) => r.tenant_id === tenantId);
+      const other = byTenant.rows.find((r) => r.tenant_id !== tenantId && Number(r.n) > 0);
+      logger.info(
+        {
+          bootId: process.env.MOTARD_BOOT_ID,
+          tenantIdPrefix: tenantId.slice(0, 8),
+          rows: Number(effective?.n ?? 0),
+        },
+        "TENANT_SELECTED",
+      );
+      if (other && Number(effective?.n ?? 0) === 0) {
+        const { enterSafeMode } =
+          await import("../infrastructure/integrity/dataIntegrityManifest.js");
+        enterSafeMode("TENANT_MISMATCH");
+        logger.fatal(
+          { bootId: process.env.MOTARD_BOOT_ID, otherTenantPrefix: other.tenant_id.slice(0, 8) },
+          "TENANT_MISMATCH",
+        );
+      }
+    }
+  } catch (err) {
+    const { enterSafeMode } =
+      await import("../infrastructure/integrity/dataIntegrityManifest.js");
+    enterSafeMode("INTEGRITY_CHECK_FAILED");
+    logger.fatal({ err, bootId: process.env.MOTARD_BOOT_ID }, "DATA_INTEGRITY_CHECK_FAILED");
+  }
 }
 
 /** Detach stale baked Desktop licenses that are not the tenant entitlement. */
@@ -534,6 +593,16 @@ void prepareDesktopDatabase()
         setInterval(() => {
           void probeHubReachable();
         }, 15_000).unref();
+      }
+      if (config.DESKTOP_DEPLOY) {
+        void import("../infrastructure/backup/backupScheduler.js").then((m) =>
+          m.startBackupScheduler(),
+        );
+        void import("../infrastructure/orm/drizzle.js").then(({ pool }) =>
+          import("../infrastructure/integrity/retentionJobs.js").then((m) =>
+            m.startRetentionJobs(pool),
+          ),
+        );
       }
     });
   })

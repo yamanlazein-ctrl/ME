@@ -1,4 +1,5 @@
 import { eq, and, ilike, or, sql, inArray, gte, lte, desc } from "drizzle-orm";
+import { likeContains } from "../utils/likeEscape.js";
 import { allocateDocumentNumber } from "../utils/documentNumbers.js";
 import type { DB } from "../orm/drizzle.js";
 import type {
@@ -92,8 +93,8 @@ export class PostgresInvoiceRepository implements IInvoiceRepository {
     if (filter.search) {
       conditions.push(
         or(
-          ilike(invoices.number, `%${filter.search}%`),
-          ilike(invoices.reference, `%${filter.search}%`),
+          ilike(invoices.number, likeContains(filter.search)),
+          ilike(invoices.reference, likeContains(filter.search)),
         )!,
       );
     }
@@ -264,36 +265,31 @@ export class PostgresInvoiceRepository implements IInvoiceRepository {
       // the entry arm gets the H1 cross-currency guard (NEW-03) and the
       // color/fabric integrity check. Stock sufficiency and COGS
       // accumulation are sale-only.
+      // REPAIR-012: lock all rolls once, ascending id order.
+      const { lockRollsOrdered } = await import("./rollLocking.js");
+      const lockedRolls = await lockRollsOrdered(
+        tx,
+        ctx.tenantId,
+        input.lines.map((l) => l.rollId),
+      );
       for (const line of input.lines) {
-        const [r] = await tx
-          .select({
-            kg: rolls.remainingKg,
-            version: rolls.version,
-            status: rolls.status,
-            pricePerKg: rolls.pricePerKg,
-            colorId: rolls.colorId,
-            currency: rolls.currency,
-            rollNo: rolls.rollNo,
-          })
-          .from(rolls)
-          .where(and(eq(rolls.id, line.rollId), eq(rolls.tenantId, ctx.tenantId)))
-          .for("update")
-          .limit(1);
-        if (!r) {
-          throw new BusinessRuleError("الصبغة المحددة لأحد البنود غير موجودة (ربما حُذفت) — أعد اختيار الصبغة");
-        }
+        const locked = lockedRolls.get(line.rollId)!;
+        const r = {
+          kg: locked.remainingKg,
+          version: locked.version,
+          status: locked.status,
+          pricePerKg: locked.pricePerKg,
+          colorId: locked.colorId,
+          currency: locked.currency,
+          rollNo: locked.rollNo,
+        };
         // BUG-04 / H-2: line.colorId must match the roll's real color.
         if (line.colorId !== r.colorId) {
           throw new BusinessRuleError(
             `لا يمكن تغيير لون الصبغة #${r.rollNo} بعد حفظها — لون البند المختار لا يطابق لون الصبغة المحفوظة. احذف البند وأضف صبغة جديدة باللون الصحيح.`,
           );
         }
-        const [rollColor] = await tx
-          .select({ fabricId: colors.fabricId })
-          .from(colors)
-          .where(and(eq(colors.id, r.colorId), eq(colors.tenantId, ctx.tenantId)))
-          .limit(1);
-        if (!rollColor || line.fabricId !== rollColor.fabricId) {
+        if (line.fabricId !== locked.fabricId) {
           throw new BusinessRuleError(
             `لا يمكن تغيير قماش الصبغة #${r.rollNo} بعد حفظها — قماش البند المختار لا يطابق قماش الصبغة المحفوظة.`,
           );
@@ -376,6 +372,7 @@ export class PostgresInvoiceRepository implements IInvoiceRepository {
           exchangeRate: fxRate,
           baseTotal: computeBaseEquivalent(inv.total, invoiceCurrency, fxRate),
           createdBy: ctx.userId,
+          clientOperationId: ctx.clientOperationId ?? null,
         })
         .returning();
 
@@ -417,29 +414,33 @@ export class PostgresInvoiceRepository implements IInvoiceRepository {
         })),
       );
 
-      // Deduct stock — sale invoices only, with optimistic locking.
-      // Dual-unit: pieces deducted alongside kg (P0-LOGIC-pieces).
+      // Deduct stock — sale invoices only. Rolls already locked via lockRollsOrdered;
+      // aggregate by rollId and apply updates in ascending id order (REPAIR-012).
       if (isSale) {
+        const saleAgg = new Map<string, { kg: number; pieces: number }>();
         for (const line of input.lines) {
-          const linePieces = line.pieces ?? 1;
-          const [r] = await tx
-            .select({
-              remainingKg: rolls.remainingKg,
-              remainingPieces: rolls.remainingPieces,
-              rollNo: rolls.rollNo,
-            })
-            .from(rolls)
-            .where(and(eq(rolls.id, line.rollId), eq(rolls.tenantId, ctx.tenantId)))
-            .for("update")
-            .limit(1);
-          if (linePieces > Number(r!.remainingPieces)) {
+          const prev = saleAgg.get(line.rollId) ?? { kg: 0, pieces: 0 };
+          saleAgg.set(line.rollId, {
+            kg: prev.kg + line.quantityKg,
+            pieces: prev.pieces + (line.pieces ?? 1),
+          });
+        }
+        for (const rollId of [...saleAgg.keys()].sort()) {
+          const agg = saleAgg.get(rollId)!;
+          const locked = lockedRolls.get(rollId)!;
+          const r = {
+            remainingKg: Number(locked.remainingKg),
+            remainingPieces: Number(locked.remainingPieces),
+            rollNo: locked.rollNo,
+          };
+          if (agg.pieces > r.remainingPieces) {
             throw new BusinessRuleError(
-              `عدد الأثواب المطلوب (${linePieces}) يتجاوز المتاح في الصبغة (${Number(r!.remainingPieces)} أثواب)`,
+              `عدد الأثواب المطلوب (${agg.pieces}) يتجاوز المتاح في الصبغة (${r.remainingPieces} أثواب)`,
             );
           }
-          const newKg = Math.max(0, Number(r!.remainingKg) - line.quantityKg);
-          const newPieces = Math.max(0, Number(r!.remainingPieces) - linePieces);
-          const expectedVersion = expectedVersions.get(line.rollId);
+          const newKg = Math.max(0, r.remainingKg - agg.kg);
+          const newPieces = Math.max(0, r.remainingPieces - agg.pieces);
+          const expectedVersion = expectedVersions.get(rollId);
           const updated = await tx
             .update(rolls)
             .set({
@@ -451,7 +452,7 @@ export class PostgresInvoiceRepository implements IInvoiceRepository {
             })
             .where(
               and(
-                eq(rolls.id, line.rollId),
+                eq(rolls.id, rollId),
                 eq(rolls.tenantId, ctx.tenantId),
                 eq(rolls.version, expectedVersion ?? 0),
               ),
@@ -465,10 +466,10 @@ export class PostgresInvoiceRepository implements IInvoiceRepository {
           await recordStockMovement(
             tx,
             {
-              rollId: line.rollId,
+              rollId,
               direction: "out",
               movementType: "invoice_sale",
-              quantityKg: line.quantityKg,
+              quantityKg: agg.kg,
               balanceAfterKg: newKg,
               referenceType: "sales_invoice",
               referenceId: row.id,
@@ -481,65 +482,61 @@ export class PostgresInvoiceRepository implements IInvoiceRepository {
         }
       }
 
-      // Entry invoices ADD stock to the referenced rolls. The frontend creates
-      // each roll with remainingKg = 0 so this increment brings stock to the
-      // real quantity. direct API callers referencing existing rolls see stock
-      // increase by the invoice quantity (this is the documented behavior).
+      // Entry invoices ADD stock. Rolls already locked; apply in id order.
       if (!isSale) {
+        const entryAgg = new Map<
+          string,
+          { kg: number; pieces: number; colorId: string; fabricId: string }
+        >();
         for (const line of input.lines) {
-          const linePieces = line.pieces ?? 1;
-          const [before] = await tx
-            .select({
-              remainingKg: rolls.remainingKg,
-              remainingPieces: rolls.remainingPieces,
-              colorId: rolls.colorId,
-              rollNo: rolls.rollNo,
-            })
-            .from(rolls)
-            .where(and(eq(rolls.id, line.rollId), eq(rolls.tenantId, ctx.tenantId)))
-            .for("update")
-            .limit(1);
-          // Fix BUG-04 / H-2: the entry-invoice increment path had NO
-          // existence check at all — a nonexistent rollId silently defaulted
-          // to `remainingKg ?? 0`, so the subsequent UPDATE matched zero rows
-          // while recordStockMovement below still wrote a movement claiming
-          // success. It also never checked line.colorId/fabricId against the
-          // roll's real color, same gap as the sale path above.
-          if (!before) {
-            throw new BusinessRuleError("الصبغة المحددة لأحد البنود غير موجودة (ربما حُذفت) — أعد اختيار الصبغة");
+          const prev = entryAgg.get(line.rollId);
+          if (prev) {
+            entryAgg.set(line.rollId, {
+              kg: prev.kg + line.quantityKg,
+              pieces: prev.pieces + (line.pieces ?? 1),
+              colorId: prev.colorId,
+              fabricId: prev.fabricId,
+            });
+          } else {
+            entryAgg.set(line.rollId, {
+              kg: line.quantityKg,
+              pieces: line.pieces ?? 1,
+              colorId: line.colorId,
+              fabricId: line.fabricId,
+            });
           }
-          if (line.colorId !== before.colorId) {
+        }
+        for (const rollId of [...entryAgg.keys()].sort()) {
+          const agg = entryAgg.get(rollId)!;
+          const locked = lockedRolls.get(rollId)!;
+          if (agg.colorId !== locked.colorId) {
             throw new BusinessRuleError(
-              `لا يمكن تغيير لون الصبغة #${before.rollNo} بعد حفظها — لون البند المختار لا يطابق لون الصبغة المحفوظة. احذف البند وأضف صبغة جديدة باللون الصحيح.`,
+              `لا يمكن تغيير لون الصبغة #${locked.rollNo} بعد حفظها — لون البند المختار لا يطابق لون الصبغة المحفوظة. احذف البند وأضف صبغة جديدة باللون الصحيح.`,
             );
           }
-          const [rollColor] = await tx
-            .select({ fabricId: colors.fabricId })
-            .from(colors)
-            .where(and(eq(colors.id, before.colorId), eq(colors.tenantId, ctx.tenantId)))
-            .limit(1);
-          if (!rollColor || line.fabricId !== rollColor.fabricId) {
-            throw new BusinessRuleError(`القماش المحدد للبند لا يطابق قماش لون اللفافة ${before.rollNo} الفعلي`);
+          if (agg.fabricId !== locked.fabricId) {
+            throw new BusinessRuleError(
+              `القماش المحدد للبند لا يطابق قماش لون اللفافة ${locked.rollNo} الفعلي`,
+            );
           }
-          const newKg = Number(before?.remainingKg ?? 0) + line.quantityKg;
-          const newPieces = Number(before?.remainingPieces ?? 0) + linePieces;
+          const newKg = Number(locked.remainingKg) + agg.kg;
           await tx
             .update(rolls)
             .set({
-              remainingKg: sql`${rolls.remainingKg} + ${line.quantityKg}`,
-              remainingPieces: sql`${rolls.remainingPieces} + ${linePieces}`,
-              status: sql`CASE WHEN ${rolls.remainingKg} + ${line.quantityKg} > 0 THEN 'in_stock' ELSE ${rolls.status} END`,
+              remainingKg: sql`${rolls.remainingKg} + ${agg.kg}`,
+              remainingPieces: sql`${rolls.remainingPieces} + ${agg.pieces}`,
+              status: sql`CASE WHEN ${rolls.remainingKg} + ${agg.kg} > 0 THEN 'in_stock' ELSE ${rolls.status} END`,
               version: sql`${rolls.version} + 1`,
               updatedAt: new Date(),
             })
-            .where(and(eq(rolls.id, line.rollId), eq(rolls.tenantId, ctx.tenantId)));
+            .where(and(eq(rolls.id, rollId), eq(rolls.tenantId, ctx.tenantId)));
           await recordStockMovement(
             tx,
             {
-              rollId: line.rollId,
+              rollId,
               direction: "in",
               movementType: "invoice_entry",
-              quantityKg: line.quantityKg,
+              quantityKg: agg.kg,
               balanceAfterKg: newKg,
               referenceType: "purchase_invoice",
               referenceId: row.id,
@@ -550,7 +547,6 @@ export class PostgresInvoiceRepository implements IInvoiceRepository {
             ctx,
           );
         }
-        // C2 — auto-link: promote matching open customer orders and notify.
         await notifyOrderAvailability(
           tx,
           ctx,
@@ -855,38 +851,17 @@ export class PostgresInvoiceRepository implements IInvoiceRepository {
       >();
       const deltas = new Map<string, { kg: number; pieces: number }>();
 
-      for (const rollId of rollIds) {
-        const [r] = await tx
-          .select({
-            remainingKg: rolls.remainingKg,
-            remainingPieces: rolls.remainingPieces,
-            pricePerKg: rolls.pricePerKg,
-            colorId: rolls.colorId,
-            currency: rolls.currency,
-            version: rolls.version,
-            status: rolls.status,
-            rollNo: rolls.rollNo,
-          })
-          .from(rolls)
-          .where(and(eq(rolls.id, rollId), eq(rolls.tenantId, ctx.tenantId)))
-          .for("update")
-          .limit(1);
-        if (!r) throw new BusinessRuleError("اللفافة المحددة غير موجودة");
-
-        // Cross-currency SALE: deferred FX probe until editFx is resolved below.
-        // (ENTRY invoices never reach sale roll deltas with currency mismatch for COGS.)
-
+      // REPAIR-012: lock all rolls once in ascending id order.
+      const { lockRollsOrdered } = await import("./rollLocking.js");
+      const lockedRolls = await lockRollsOrdered(tx, ctx.tenantId, [...rollIds]);
+      for (const rollId of [...rollIds].sort()) {
+        const r = lockedRolls.get(rollId)!;
         const next = newByRoll.get(rollId);
         if (next) {
           if (next.colorId !== r.colorId) {
             throw new BusinessRuleError(`لا يمكن تغيير لون الصبغة #${r.rollNo} بعد حفظها — لون البند المختار لا يطابق لون الصبغة المحفوظة. احذف البند وأضف صبغة جديدة باللون الصحيح.`);
           }
-          const [rollColor] = await tx
-            .select({ fabricId: colors.fabricId })
-            .from(colors)
-            .where(and(eq(colors.id, r.colorId), eq(colors.tenantId, ctx.tenantId)))
-            .limit(1);
-          if (!rollColor || next.fabricId !== rollColor.fabricId) {
+          if (next.fabricId !== r.fabricId) {
             throw new BusinessRuleError(`القماش المحدد للبند لا يطابق قماش لون اللفافة ${r.rollNo} الفعلي`);
           }
         }

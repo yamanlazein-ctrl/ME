@@ -1,4 +1,5 @@
 import { eq, and, desc, ilike, or, sql, inArray } from "drizzle-orm";
+import { likeContains } from "../utils/likeEscape.js";
 import type { DB } from "../orm/drizzle.js";
 import type {
   IFabricRepository,
@@ -28,7 +29,7 @@ export class PostgresFabricRepository implements IFabricRepository {
   async list(filter: FabricFilter, ctx: TenantContext): Promise<PaginatedResult<FabricData>> {
     const conditions = [eq(fabrics.tenantId, ctx.tenantId)];
     if (filter.search) {
-      conditions.push(ilike(fabrics.name, `%${filter.search}%`));
+      conditions.push(ilike(fabrics.name, likeContains(filter.search)));
     }
     const where = and(...conditions);
     const page = Math.max(0, filter.page ?? 0);

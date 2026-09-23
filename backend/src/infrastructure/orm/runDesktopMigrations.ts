@@ -2,7 +2,6 @@ import { existsSync, readFileSync } from "node:fs";
 import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { migrate } from "drizzle-orm/node-postgres/migrator";
-import { readMigrationFiles } from "drizzle-orm/migrator";
 import { logger } from "../config/logger.js";
 
 export function shouldBaselineExistingCluster(
@@ -116,6 +115,7 @@ async function stampDbMeta(migrationsFolder: string): Promise<void> {
 export async function runDesktopMigrations(): Promise<void> {
   const folder = resolveMigrationsFolder();
   const { db, pool } = await import("./drizzle.js");
+  const { config } = await import("../config/env.js");
 
   const tenants = await pool.query<{ t: string | null }>(
     `SELECT to_regclass('public.tenants') AS t`,
@@ -134,26 +134,121 @@ export async function runDesktopMigrations(): Promise<void> {
     `SELECT count(*)::int AS n FROM drizzle.__drizzle_migrations`,
   );
   const drizzleRowCount = counted.rows[0]?.n ?? 0;
+  const journalIdx = lastJournalIdx(folder);
 
+  // REPAIR-025: legacy baseline only when full fingerprint matches.
   if (shouldBaselineExistingCluster(hasTenants, drizzleRowCount)) {
+    const { loadCommittedFingerprint, readLiveFingerprint, diffFingerprint } =
+      await import("./schemaFingerprint.js");
+    const expected = loadCommittedFingerprint(folder);
+    if (!expected) {
+      logger.fatal(
+        { bootId: process.env.MOTARD_BOOT_ID },
+        "[FATAL] SCHEMA_UNVERIFIED: no committed schema fingerprint — baselining refused.",
+      );
+      throw new Error("SCHEMA_UNVERIFIED: missing schema-fingerprint.json");
+    }
+    const live = await readLiveFingerprint(pool);
+    const diff = diffFingerprint(expected, live);
+    if (diff.missing.length || diff.changed.length) {
+      const { takePreOpSnapshot } = await import("../integrity/snapshot.js");
+      await takePreOpSnapshot({
+        databaseUrl: config.DATABASE_URL,
+        operation: "migrate",
+        operationId: process.env.MOTARD_BOOT_ID ?? `boot-${Date.now()}`,
+        schemaJournalIdx: journalIdx,
+      });
+      logger.fatal(
+        { bootId: process.env.MOTARD_BOOT_ID, diff },
+        "[FATAL] SCHEMA_UNVERIFIED: legacy cluster fingerprint mismatch",
+      );
+      throw new Error("SCHEMA_UNVERIFIED: fingerprint mismatch — baselining refused");
+    }
+    // Fingerprint matches — safe to baseline full journal (REPAIR-025).
+    const { readMigrationFiles } = await import("drizzle-orm/migrator");
     const files = readMigrationFiles({ migrationsFolder: folder });
-    logger.warn(
-      { count: files.length },
-      "Desktop cluster has schema but no drizzle history — baselining full journal; ensureDesktopSchema must close gaps",
-    );
     for (const file of files) {
       await pool.query(
         `INSERT INTO drizzle.__drizzle_migrations (hash, created_at)
          SELECT $1, $2
-         WHERE NOT EXISTS (
-           SELECT 1 FROM drizzle.__drizzle_migrations WHERE hash = $1
-         )`,
+         WHERE NOT EXISTS (SELECT 1 FROM drizzle.__drizzle_migrations WHERE hash = $1)`,
         [file.hash, file.folderMillis],
       );
     }
+    logger.warn(
+      { count: files.length, bootId: process.env.MOTARD_BOOT_ID },
+      "SCHEMA fingerprint matched — baselined full journal (REPAIR-025)",
+    );
   }
 
-  await repairLegacyLicenseTenantPairing(pool);
-  await migrate(db, { migrationsFolder: folder });
-  await stampDbMeta(folder);
+  // REPAIR-024: snapshot when pending migrations exist.
+  const metaPath = process.env.DESKTOP_DB_META_PATH;
+  let currentIdx = 0;
+  if (metaPath && existsSync(metaPath)) {
+    try {
+      const meta = JSON.parse(await readFile(metaPath, "utf8")) as { schema_journal_idx?: number };
+      currentIdx = Number(meta.schema_journal_idx ?? 0);
+    } catch {
+      /* ignore */
+    }
+  }
+  if (journalIdx > currentIdx && hasTenants) {
+    const { takePreOpSnapshot } = await import("../integrity/snapshot.js");
+    const snap = await takePreOpSnapshot({
+      databaseUrl: config.DATABASE_URL,
+      operation: "migrate",
+      operationId: process.env.MOTARD_BOOT_ID ?? `boot-${Date.now()}`,
+      schemaJournalIdx: currentIdx,
+    });
+    if (!snap.ok) {
+      throw new Error(snap.reason);
+    }
+  }
+
+  logger.info(
+    { bootId: process.env.MOTARD_BOOT_ID, folder },
+    "MIGRATION_STARTED",
+  );
+  try {
+    const repairSnapNeeded = true;
+    if (repairSnapNeeded && hasTenants) {
+      const { takePreOpSnapshot } = await import("../integrity/snapshot.js");
+      // Snapshot before legacy repair (idempotent if already taken this boot — retention handles dupes)
+      await takePreOpSnapshot({
+        databaseUrl: config.DATABASE_URL,
+        operation: "legacy_repair",
+        operationId: `${process.env.MOTARD_BOOT_ID ?? "boot"}-legacy`,
+        schemaJournalIdx: currentIdx,
+      });
+    }
+    await repairLegacyLicenseTenantPairing(pool);
+    await migrate(db, { migrationsFolder: folder });
+
+    // REPAIR-025: verify fingerprint after migrate (desktop strict).
+    if (config.DESKTOP_DEPLOY) {
+      const { loadCommittedFingerprint, readLiveFingerprint, diffFingerprint } =
+        await import("./schemaFingerprint.js");
+      const expected = loadCommittedFingerprint(folder);
+      if (expected) {
+        const live = await readLiveFingerprint(pool);
+        const diff = diffFingerprint(expected, live);
+        if (diff.missing.length || diff.changed.length) {
+          logger.fatal(
+            { bootId: process.env.MOTARD_BOOT_ID, diff },
+            "[FATAL] SCHEMA_UNVERIFIED after migrate",
+          );
+          throw new Error("SCHEMA_UNVERIFIED: post-migrate fingerprint mismatch");
+        }
+        if (diff.extra.length) {
+          logger.warn({ extra: diff.extra }, "schema fingerprint extras (ignored)");
+        }
+      }
+    }
+
+    await stampDbMeta(folder);
+    logger.info({ bootId: process.env.MOTARD_BOOT_ID }, "MIGRATION_OK");
+  } catch (err) {
+    logger.fatal({ err, bootId: process.env.MOTARD_BOOT_ID }, "MIGRATION_FAILED");
+    throw err;
+  }
 }

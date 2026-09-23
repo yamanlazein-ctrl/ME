@@ -25,7 +25,9 @@ import {
   syncDeviceIdFromRequest,
 } from "../../application/use-cases/sync/syncEnqueue.js";
 import { logger } from "../../infrastructure/config/logger.js";
-import { withTenantTx } from "../../infrastructure/orm/drizzle.js";
+import { withTenantTx, db } from "../../infrastructure/orm/drizzle.js";
+import { mergePartiesUseCase } from "../../application/use-cases/parties/mergePartiesUseCase.js";
+import { idempotency } from "../../infrastructure/http/middleware/idempotency-handler.middleware.js";
 
 export function registerPartyRoutes(
   router: Router,
@@ -335,5 +337,28 @@ export function registerPartyRoutes(
     accountantAndUp,
     validateUuidParam("id"),
     deletePartyAndEnqueue,
+  );
+
+  const mergeBody = z.object({
+    survivorId: z.string().uuid(),
+    sourceId: z.string().uuid(),
+  });
+
+  router.post(
+    "/parties/merge",
+    auth,
+    accountantAndUp,
+    idempotency("POST", { required: true }),
+    validateBody(mergeBody),
+    async (req: Request, res: Response) => {
+      try {
+        const b = body<{ survivorId: string; sourceId: string }>(req);
+        const result = await mergePartiesUseCase(db, b.survivorId, b.sourceId, ctxFn(req));
+        return res.status(200).json(result);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : "فشل دمج الأطراف";
+        return res.status(422).json({ code: "VALIDATION", message: msg });
+      }
+    },
   );
 }

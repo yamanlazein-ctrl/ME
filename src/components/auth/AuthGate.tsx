@@ -4,6 +4,8 @@ import { useCurrentUser } from "@/presentation/hooks/useAuth";
 import { UserPickerPage } from "@/components/auth/UserPickerPage";
 import { ensureDocumentFolders, isTauri } from "@/infrastructure/tauri-bridge";
 import { clearTokens, hasStoredSession, isAuthFailure } from "@/infrastructure/auth/TokenProvider";
+import { DataSafetyScreen } from "@/components/integrity/DataSafetyScreen";
+import { container } from "@/infrastructure/container";
 
 export function AuthGate({ children }: { children: ReactNode }) {
   const { data: user, isLoading, isFetching, isError, error, failureCount } = useCurrentUser();
@@ -37,5 +39,10 @@ export function AuthGate({ children }: { children: ReactNode }) {
     );
   }
   if (!user) return <UserPickerPage />;
-  return <>{children}</>;
+  return (
+    <>
+      <DataSafetyScreen client={container.http} />
+      {children}
+    </>
+  );
 }

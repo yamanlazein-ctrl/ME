@@ -143,6 +143,17 @@ if (!tenantId || typeof tables !== "object") {
   console.error("Invalid backup format (missing tenantId / tables).");
   process.exit(1);
 }
+// Incomplete backups are never safe to apply to an existing tenant. The old
+// --allow-incomplete escape hatch could still wipe tables that were absent from
+// the archive, so it is intentionally rejected until a staging restore exists.
+if (Array.isArray(dump.warnings) && dump.warnings.length > 0) {
+  console.error(
+    `Backup has ${dump.warnings.length} warning(s) — refusing restore before any target DELETE. ` +
+      `Create a complete verified backup instead.`,
+  );
+  console.error(JSON.stringify(dump.warnings, null, 2));
+  process.exit(1);
+}
 console.log(`Backup: exported ${dump.exportedAt} · tenant ${tenantId}`);
 console.log(`Target DB: ${DATABASE_URL}`);
 
@@ -267,8 +278,7 @@ await c.query(
    BEFORE UPDATE OR DELETE ON ledger_entries
    FOR EACH ROW EXECUTE FUNCTION fn_ledger_entries_append_only()`,
 );
-await c.query("COMMIT");
-console.log("Existing tenant rows cleared.");
+console.log("Existing tenant rows cleared in the pending restore transaction.");
 
 // ── 4. insert in FK-safe order ──
 // Arrays must be passed AS-IS (node-pg converts JS arrays to Postgres
@@ -293,30 +303,23 @@ for (const table of INSERT_ORDER) {
 
   let count = 0;
   let attempted = 0;
-  await c.query("BEGIN");
   try {
     for (const row of rows) {
       const values = cols.map((col) => jsonReplacer(row[col]));
       const placeholders = cols.map((_, i) => `$${i + 1}`).join(", ");
       const colList = cols.map((cl) => `"${cl}"`).join(", ");
       const res = await c.query(
-        `INSERT INTO "${table}" (${colList}) VALUES (${placeholders}) ON CONFLICT DO NOTHING`,
+        `INSERT INTO "${table}" (${colList}) VALUES (${placeholders})`,
         values,
       );
       attempted++;
       count += res.rowCount ?? 0;
     }
-    await c.query("COMMIT");
     console.log(`restored ${table}: ${count} rows`);
     if (count !== attempted) {
-      // ON CONFLICT DO NOTHING silently drops a row that violates a unique
-      // index. For sync state that is a LOST OPERATION, not a cosmetic skip —
-      // say so instead of reporting a clean restore.
-      console.warn(
-        `  ⚠ ${table}: ${attempted - count} of ${attempted} rows were skipped by ON CONFLICT ` +
-          "(duplicate key already present). Investigate before trusting this restore.",
-      );
+      throw new Error(`Restore skipped ${attempted - count} rows in ${table}; refusing partial restore`);
     }
+
   } catch (e) {
     await c.query("ROLLBACK");
     console.error(`FAILED on ${table}:`, e.message.split("\n")[0]);
@@ -508,5 +511,7 @@ console.log(
   `PENDING-OUTBOX INVARIANT: ${expectPending} un-pushed unit(s) in the backup, ${actualPending} restored — no operation lost.`,
 );
 
+// Commit only after all inserts, sequence fixes, cursor checks, and invariants pass.
+await c.query("COMMIT");
 console.log("✅ Restore complete.");
 await c.end();

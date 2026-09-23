@@ -86,6 +86,12 @@ export const pool = new TenantScopedPool({
   max: 20,
   idleTimeoutMillis: 30000,
   connectionTimeoutMillis: 5000,
+  // REPAIR-013: appear in PostgreSQL log_line_prefix when desktop sets MOTARD_BOOT_ID.
+  ...(config.DESKTOP_DEPLOY && process.env.MOTARD_BOOT_ID
+    ? {
+        application_name: `motard-${String(process.env.MOTARD_BOOT_ID).slice(0, 36)}`,
+      }
+    : {}),
 });
 
 export const db = drizzle(pool);

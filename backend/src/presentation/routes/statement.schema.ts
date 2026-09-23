@@ -13,6 +13,10 @@ export const statementQuerySchema = z.object({
   /** `"ALL"` returns every ledger currency (running balance is per-currency). */
   currency: z.enum(["SYP", "USD", "EUR", "ALL"]).optional(),
   type: z.string().max(30).optional(),
+  /** Page size (clamped server-side to 500). Default 200. */
+  limit: z.coerce.number().int().min(1).max(500).optional(),
+  /** Opaque cursor from previous page (`date|createdAtIso|id`). */
+  cursor: z.string().max(200).optional(),
 });
 
 export const settlePartySchema = z.object({

@@ -18,6 +18,10 @@ export interface SyncOutboxRow {
   createdAt: Date;
   updatedAt: Date;
   syncedAt: Date | null;
+  /** REPAIR-027: present after claimBatch; required to finalize. */
+  leaseToken?: UUID | null;
+  leaseOwner?: string | null;
+  leaseUntil?: Date | null;
 }
 
 export interface EnqueueSyncOutboxInput {
@@ -46,11 +50,32 @@ export interface ISyncOutboxRepository {
     limit?: number,
     stalePushingMs?: number,
   ): Promise<SyncOutboxRow[]>;
+  /** @deprecated Prefer claimBatch (REPAIR-007). */
   markPushing(ids: UUID[], tenantId: UUID): Promise<void>;
-  markSynced(id: UUID, tenantId: UUID): Promise<void>;
-  markRejected(id: UUID, tenantId: UUID, errorDetail: string): Promise<void>;
+  /**
+   * Atomic claim (REPAIR-007 + REPAIR-027): SELECT … FOR UPDATE SKIP LOCKED
+   * then stamp lease_owner / lease_token / lease_until in one statement.
+   */
+  claimBatch(
+    tenantId: UUID,
+    limit: number,
+    leaseMs: number,
+    owner: string,
+  ): Promise<SyncOutboxRow[]>;
+  markSynced(id: UUID, tenantId: UUID, leaseToken: UUID): Promise<number>;
+  markRejected(
+    id: UUID,
+    tenantId: UUID,
+    errorDetail: string,
+    leaseToken: UUID,
+  ): Promise<number>;
   /** Soft failure — keep unit eligible for the next sync run. */
-  resetToPending(id: UUID, tenantId: UUID, errorDetail?: string): Promise<void>;
+  resetToPending(
+    id: UUID,
+    tenantId: UUID,
+    errorDetail: string | undefined,
+    leaseToken: UUID,
+  ): Promise<number>;
   /** pending + pushing — everything not yet settled. Drives the UI counter. */
   countOutstanding(tenantId: UUID): Promise<number>;
   /** Per-status counts so stuck work is observable instead of invisible. */

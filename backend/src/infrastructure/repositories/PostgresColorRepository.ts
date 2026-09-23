@@ -1,4 +1,5 @@
 import { eq, and, desc, ilike, sql, inArray } from "drizzle-orm";
+import { likeContains } from "../utils/likeEscape.js";
 import type { DB } from "../orm/drizzle.js";
 import type {
   IColorRepository,
@@ -27,7 +28,7 @@ export class PostgresColorRepository implements IColorRepository {
   async list(filter: ColorFilter, ctx: TenantContext): Promise<PaginatedResult<ColorData>> {
     const conditions = [eq(colors.tenantId, ctx.tenantId)];
     if (filter.fabricId) conditions.push(eq(colors.fabricId, filter.fabricId));
-    if (filter.search) conditions.push(ilike(colors.name!, `%${filter.search}%`)!);
+    if (filter.search) conditions.push(ilike(colors.name!, likeContains(filter.search))!);
     const where = and(...conditions);
     const page = Math.max(0, filter.page ?? 0);
     const limit = Math.min(1000, Math.max(1, filter.limit ?? 20));

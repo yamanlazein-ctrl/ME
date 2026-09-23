@@ -21,5 +21,36 @@ export function hasMoreThan2dp(n: number): boolean {
 }
 
 export function round2dp(n: number): number {
+  // Preserve the established project rounding behavior until an explicit
+  // business decision approves a decimal-string/SQL-aligned replacement.
   return Math.round((Number.isFinite(n) ? n : 0) * 100) / 100;
+}
+
+/** Round money fields in a createInput for historical sync replay (REPAIR-009). */
+export function normalizeMoney2dp<T extends Record<string, unknown>>(input: T): T {
+  const moneyKeys = new Set([
+    "discount",
+    "tax",
+    "shipping",
+    "paid",
+    "discountAmount",
+    "amount",
+    "creditApplied",
+    "quantityKg",
+    "pricePerKg",
+    "openingBalance",
+    "creditLimit",
+  ]);
+  const out: Record<string, unknown> = { ...input };
+  for (const [k, v] of Object.entries(out)) {
+    if (moneyKeys.has(k) && typeof v === "number") out[k] = round2dp(v);
+    if (k === "lines" && Array.isArray(v)) {
+      out[k] = v.map((line) =>
+        line && typeof line === "object"
+          ? normalizeMoney2dp(line as Record<string, unknown>)
+          : line,
+      );
+    }
+  }
+  return out as T;
 }

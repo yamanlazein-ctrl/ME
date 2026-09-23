@@ -8,6 +8,7 @@ import {
   text,
   uniqueIndex,
   numeric,
+  index,
 } from "drizzle-orm/pg-core";
 import { tenants } from "./tenant.table.js";
 import { parties } from "./party.table.js";
@@ -40,12 +41,19 @@ export const returns = pgTable(
     createdBy: uuid("created_by"),
     cancelledAt: timestamp("cancelled_at", { withTimezone: true }),
     cancelledBy: uuid("cancelled_by"),
+    /** REPAIR-008 B */
+    clientOperationId: uuid("client_operation_id"),
   },
   (table) => ({
     tenantKindNumberIdx: uniqueIndex("idx_returns_tenant_kind_number").on(
       table.tenantId,
       table.kind,
       table.number,
+    ),
+    // REPAIR-003
+    originalInvoiceIdx: index("idx_returns_tenant_original_invoice").on(
+      table.tenantId,
+      table.originalInvoiceId,
     ),
   }),
 ).enableRLS();

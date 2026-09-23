@@ -87,6 +87,13 @@ export interface StatementEntryData {
  * previousBalance: sum of signed movements strictly before fromDate.
  * finalBalance: previousBalance + (totalDebit − totalCredit) for a customer,
  * or previousBalance + (totalCredit − totalDebit) for a supplier.
+ *
+ * Display names (`partyName`, fabric/color names on lines) are the **current**
+ * master-data labels (business decision: no historical name snapshots). Monetary
+ * amounts, document numbers, and IDs remain historically frozen on ledger/documents.
+ *
+ * Pagination (OLD-PLAN Phase 2): when `limit` is set, `entries` is a page of the
+ * register; totals/previousBalance/finalBalance always cover the full filter window.
  */
 export interface PartyStatementData {
   partyId: UUID;
@@ -102,7 +109,6 @@ export interface PartyStatementData {
   totalDebit: number;
   totalCredit: number;
   finalBalance: number;
-  /** Per-currency totals — populated when `currency === "ALL"`, else a single-key map. */
   totalsByCurrency?: Record<
     string,
     {
@@ -110,13 +116,19 @@ export interface PartyStatementData {
       totalDebit: number;
       totalCredit: number;
       finalBalance: number;
-      /** Customers: which side the final balance is on (مدين / دائن). */
       balanceSide?: "debit" | "credit" | "zero";
-      /** Customers: credit not yet attached to any invoice (spendable on a new sale). */
       availableCredit?: number;
     }
   >;
   entries: StatementEntryData[];
+  /** Present when the request asked for a bounded page. */
+  page?: {
+    limit: number;
+    hasMore: boolean;
+    nextCursor: string | null;
+    /** Signed balance immediately before the first entry of this page (per primary currency semantics). */
+    balanceBeforePage: number;
+  };
 }
 
 export interface StatementQuery {
@@ -126,4 +138,8 @@ export interface StatementQuery {
   toDate?: string;
   currency?: string;
   type?: string;
+  /** Max entries to return (server clamps to STATEMENT_MAX_LIMIT). Omit for legacy full window (still capped). */
+  limit?: number;
+  /** Opaque cursor from a previous page (`date|createdAtIso|id`). */
+  cursor?: string;
 }

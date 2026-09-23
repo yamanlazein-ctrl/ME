@@ -40,7 +40,7 @@ export function registerExpenseRoutes(
     "/expenses",
     auth,
     writeGuard,
-    idempotency("POST"),
+    idempotency("POST", { required: true }),
     validateBody(createExpenseSchema),
     async (req: Request, res: Response) => {
       const input = body<CreateExpenseInput>(req);
@@ -106,12 +106,19 @@ export function registerExpenseRoutes(
   // `/names` MUST be registered before `/expenses/:id` so it is not swallowed
   // by the `:id` parameter route (Express matches in registration order).
   router.get("/expenses/names", auth, readGuard, async (req: Request, res: Response) => {
-    const r = await uc.listExpensesUseCase(expenseRepo, { limit: 1000 }, ctx(req));
-    if (r.ok) {
-      res.json(r.data.data.map((e) => e.category).filter((v, i, a) => a.indexOf(v) === i));
-    } else {
-      res.status(500).json({ code: "INTERNAL", message: r.error });
+    // REPAIR-001: page through until exhausted — never treat one 1,000-row page as "all".
+    const names = new Set<string>();
+    const c = ctx(req);
+    for (let page = 0; page < 50; page++) {
+      const r = await uc.listExpensesUseCase(expenseRepo, { limit: 200, page }, c);
+      if (!r.ok) {
+        res.status(500).json({ code: "INTERNAL", message: r.error });
+        return;
+      }
+      for (const e of r.data.data) names.add(e.category);
+      if (!r.data.meta?.hasNext || r.data.data.length === 0) break;
     }
+    res.json([...names]);
   });
 
   // Expense names are derived from expense categories (see GET /expenses/names).

@@ -94,6 +94,8 @@ export interface DashboardDataDTO {
   user: UserSessionDTO;
   session: SessionStatusDTO;
   cashBalance: DualCurrencyAmountDTO;
+  /** Additive (REPAIR-004a): per-currency cash balances; never blended. */
+  cashBalanceByCurrency?: Record<string, number>;
   todayProfit: ProfitDTO;
   todaySales: { syp: number; usd: number; changeVsYesterday: number };
   activeRolls: ActiveRollsDTO;

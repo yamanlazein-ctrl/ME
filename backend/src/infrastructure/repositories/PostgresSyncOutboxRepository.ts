@@ -33,6 +33,9 @@ function mapRow(row: typeof syncOutbox.$inferSelect): SyncOutboxRow {
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
     syncedAt: row.syncedAt,
+    leaseToken: row.leaseToken ?? null,
+    leaseOwner: row.leaseOwner ?? null,
+    leaseUntil: row.leaseUntil ?? null,
   };
 }
 
@@ -108,34 +111,114 @@ export class PostgresSyncOutboxRepository implements ISyncOutboxRepository {
     });
   }
 
-  async markSynced(id: string, tenantId: string): Promise<void> {
-    await runWithTenantContext({ tenantId }, async () => {
-      await this.db
-        .update(syncOutbox)
-        .set({ status: "synced", syncedAt: new Date(), updatedAt: new Date(), errorDetail: null })
-        .where(and(eq(syncOutbox.id, id), eq(syncOutbox.tenantId, tenantId)));
+  /** REPAIR-007 / REPAIR-027: atomic claim with lease token. */
+  async claimBatch(
+    tenantId: string,
+    limit: number,
+    leaseMs: number,
+    owner: string,
+  ): Promise<SyncOutboxRow[]> {
+    return runWithTenantContext({ tenantId }, async () => {
+      const result = await this.db.execute(sql`
+        UPDATE sync_outbox o
+           SET status = 'pushing',
+               lease_owner = ${owner},
+               lease_token = gen_random_uuid(),
+               lease_until = now() + (${leaseMs}::text || ' milliseconds')::interval,
+               claimed_at = now(),
+               updated_at = now()
+         WHERE o.id IN (
+               SELECT id FROM sync_outbox
+                WHERE tenant_id = ${tenantId}::uuid
+                  AND (
+                    status = 'pending'
+                    OR (status = 'pushing' AND (lease_until IS NULL OR lease_until < now()))
+                  )
+                ORDER BY seq
+                LIMIT ${limit}
+                FOR UPDATE SKIP LOCKED
+         )
+         RETURNING o.*
+      `);
+      const rows = (result as unknown as { rows: Array<typeof syncOutbox.$inferSelect> }).rows ?? [];
+      return rows.map(mapRow).sort((a, b) => a.seq - b.seq);
     });
   }
 
-  async markRejected(id: string, tenantId: string, errorDetail: string): Promise<void> {
-    await runWithTenantContext({ tenantId }, async () => {
-      await this.db
+  async markSynced(id: string, tenantId: string, leaseToken: string): Promise<number> {
+    return runWithTenantContext({ tenantId }, async () => {
+      const result = await this.db
         .update(syncOutbox)
-        .set({ status: "rejected", errorDetail, updatedAt: new Date() })
-        .where(and(eq(syncOutbox.id, id), eq(syncOutbox.tenantId, tenantId)));
+        .set({
+          status: "synced",
+          syncedAt: new Date(),
+          updatedAt: new Date(),
+          errorDetail: null,
+          leaseOwner: null,
+          leaseToken: null,
+          leaseUntil: null,
+        })
+        .where(and(
+          eq(syncOutbox.id, id),
+          eq(syncOutbox.tenantId, tenantId),
+          eq(syncOutbox.status, "pushing"),
+          eq(syncOutbox.leaseToken, leaseToken),
+        ));
+      return result.rowCount ?? 0;
     });
   }
 
-  async resetToPending(id: string, tenantId: string, errorDetail?: string): Promise<void> {
-    await runWithTenantContext({ tenantId }, async () => {
-      await this.db
+  async markRejected(
+    id: string,
+    tenantId: string,
+    errorDetail: string,
+    leaseToken: string,
+  ): Promise<number> {
+    return runWithTenantContext({ tenantId }, async () => {
+      const result = await this.db
+        .update(syncOutbox)
+        .set({
+          status: "rejected",
+          errorDetail,
+          updatedAt: new Date(),
+          leaseOwner: null,
+          leaseToken: null,
+          leaseUntil: null,
+        })
+        .where(and(
+          eq(syncOutbox.id, id),
+          eq(syncOutbox.tenantId, tenantId),
+          eq(syncOutbox.status, "pushing"),
+          eq(syncOutbox.leaseToken, leaseToken),
+        ));
+      return result.rowCount ?? 0;
+    });
+  }
+
+  async resetToPending(
+    id: string,
+    tenantId: string,
+    errorDetail: string | undefined,
+    leaseToken: string,
+  ): Promise<number> {
+    return runWithTenantContext({ tenantId }, async () => {
+      const result = await this.db
         .update(syncOutbox)
         .set({
           status: "pending",
           errorDetail: errorDetail ?? null,
           updatedAt: new Date(),
+          leaseOwner: null,
+          leaseToken: null,
+          leaseUntil: null,
         })
-        .where(and(eq(syncOutbox.id, id), eq(syncOutbox.tenantId, tenantId)));
+        .where(and(
+          eq(syncOutbox.id, id),
+          eq(syncOutbox.tenantId, tenantId),
+          eq(syncOutbox.status, "pushing"),
+          eq(syncOutbox.leaseToken, leaseToken),
+        ));
+      return result.rowCount ?? 0;
     });
   }
 

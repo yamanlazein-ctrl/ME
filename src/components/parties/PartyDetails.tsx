@@ -258,13 +258,13 @@ export function PartyDetailsPage({ kind, id }: { kind: PartyKind; id: string }) 
   // not page 1 of an unscoped global list. Both endpoints accept partyId +
   // limit (server caps at 1000), so the totals below are truly cumulative.
   const { data: invoicesData } = useInvoicesList(
-    p ? { partyId: p.id, type: isSup ? "entry" : "sale", limit: 1000 } : undefined,
+    p ? { partyId: p.id, type: isSup ? "entry" : "sale", limit: 50 } : undefined,
   );
   const allInvoices = invoicesData?.data ?? [];
-  const { data: vouchersData } = useVouchersList(p ? { partyId: p.id, limit: 1000 } : undefined);
+  const { data: vouchersData } = useVouchersList(p ? { partyId: p.id, limit: 50 } : undefined);
   const allVouchers = vouchersData?.data ?? [];
   const { data: returnsData } = useReturnsList(
-    p ? { partyId: p.id, status: "active", limit: 1000 } : undefined,
+    p ? { partyId: p.id, status: "active", limit: 50 } : undefined,
   );
   const allReturns = (returnsData?.data ?? []).map((r) => ({
     originalInvoiceId: r.originalInvoiceId,
@@ -273,7 +273,7 @@ export function PartyDetailsPage({ kind, id }: { kind: PartyKind; id: string }) 
     amount: returnAmount(r),
   }));
   const { data: ledgerEntries = [] } = useLedgerEntries(
-    p ? { partyId: p.id, limit: 1000 } : undefined,
+    p ? { partyId: p.id, limit: 50 } : undefined,
   );
 
   const [tab, setTab] = useState<TabId>("overview");
@@ -575,7 +575,7 @@ function InvoicesTab({ p, kind }: { p: Party; kind: PartyKind }) {
   const [to, setTo] = useState("");
   const { data: invData } = useInvoicesList({
     partyId: p.id,
-    limit: 1000,
+    limit: 50,
     fromDate: from || undefined,
     toDate: to || undefined,
   });
@@ -663,7 +663,7 @@ function InvoicesTab({ p, kind }: { p: Party; kind: PartyKind }) {
               const t = invoiceTotal(i);
               const paid = paidByInvoice.get(i.id) ?? 0;
               const r = Math.max(0, t - paid);
-              const label = i.type === "entry" ? "شراء" : i.type === "return" ? "مرتجع" : "بيع";
+              const label = i.type === "entry" ? "شراء" : "بيع";
               return (
                 <tr
                   key={i.id}
@@ -711,8 +711,8 @@ function InvoicesTab({ p, kind }: { p: Party; kind: PartyKind }) {
 function PaymentsTab({ p, kind }: { p: Party; kind: PartyKind }) {
   const navigate = useNavigate();
   const isSup = kind === "supplier";
-  const { data: invData } = useInvoicesList({ partyId: p.id, limit: 1000 });
-  const { data: vData } = useVouchersList({ partyId: p.id, limit: 1000 });
+  const { data: invData } = useInvoicesList({ partyId: p.id, limit: 50 });
+  const { data: vData } = useVouchersList({ partyId: p.id, limit: 50 });
   const invs = (invData?.data ?? []).filter((i) => i.partyId === p.id && i.status === "active");
   // BUG-9 fix: show actual payment/receipt vouchers linked to this party.
   const payments = (vData?.data ?? [])
@@ -856,12 +856,12 @@ function StatementTab({ p, kind }: { p: Party; kind: PartyKind }) {
   const [settleOpen, setSettleOpen] = useState(false);
   const [toDelete, setToDelete] = useState<Invoice | null>(null);
   const cancelInvoice = useCancelInvoice();
-  const { data: invData } = useInvoicesList({ partyId: p.id, limit: 1000 });
-  const { data: vDataForSettle } = useVouchersList({ partyId: p.id, limit: 1000 });
+  const { data: invData } = useInvoicesList({ partyId: p.id, limit: 50 });
+  const { data: vDataForSettle } = useVouchersList({ partyId: p.id, limit: 50 });
   const { data: returnsForSettle } = useReturnsList({
     partyId: p.id,
     status: "active",
-    limit: 1000,
+    limit: 50,
   });
   const invoicesById = new Map((invData?.data ?? []).map((i) => [i.id, i]));
   const outstandingForSettle = buildOutstanding(
@@ -1632,14 +1632,14 @@ function StatementTab({ p, kind }: { p: Party; kind: PartyKind }) {
 /* ---------------- Outstanding ---------------- */
 
 function OutstandingTab({ p }: { p: Party }) {
-  const { data: invData } = useInvoicesList({ partyId: p.id, limit: 1000 });
+  const { data: invData } = useInvoicesList({ partyId: p.id, limit: 50 });
   const invs = invData?.data ?? [];
-  const { data: vData } = useVouchersList({ partyId: p.id, limit: 1000 });
+  const { data: vData } = useVouchersList({ partyId: p.id, limit: 50 });
   const vchs = vData?.data ?? [];
   const { data: returnsData } = useReturnsList({
     partyId: p.id,
     status: "active",
-    limit: 1000,
+    limit: 50,
   });
   const rows = buildOutstanding(
     p.id,
@@ -1798,14 +1798,14 @@ function OutstandingTab({ p }: { p: Party }) {
 /* ---------------- Stats / History ---------------- */
 
 function StatsTab({ p, kind }: { p: Party; kind: PartyKind }) {
-  const { data: invData } = useInvoicesList({ partyId: p.id, limit: 1000 });
+  const { data: invData } = useInvoicesList({ partyId: p.id, limit: 50 });
   const invs = invData?.data ?? [];
-  const { data: vData } = useVouchersList({ partyId: p.id, limit: 1000 });
+  const { data: vData } = useVouchersList({ partyId: p.id, limit: 50 });
   const vchs = vData?.data ?? [];
   const { data: returnsData } = useReturnsList({
     partyId: p.id,
     status: "active",
-    limit: 1000,
+    limit: 50,
   });
   const colorNames = Object.fromEntries(colors.map((c) => [c.id, c.name]));
   const colorCodes = Object.fromEntries(colors.map((c) => [c.id, c.code ?? ""]));
@@ -2056,9 +2056,9 @@ function NotesTab({ p, kind }: { p: Party; kind: PartyKind }) {
 /** Derive activity timeline from real data sources (invoices, vouchers, party changes)
  *  — avoids a non-existent activity table. Sorted newest-first. */
 function ActivityTab({ p, kind }: { p: Party; kind: PartyKind }) {
-  const { data: invData } = useInvoicesList({ partyId: p.id, limit: 1000 });
+  const { data: invData } = useInvoicesList({ partyId: p.id, limit: 50 });
   const invs = (invData?.data ?? []).filter((i) => i.partyId === p.id && i.status !== "cancelled");
-  const { data: vData } = useVouchersList({ partyId: p.id, limit: 1000 });
+  const { data: vData } = useVouchersList({ partyId: p.id, limit: 50 });
   const vchs = (vData?.data ?? []).filter((v) => v.partyId === p.id && v.status === "active");
 
   const items: {
@@ -2080,7 +2080,7 @@ function ActivityTab({ p, kind }: { p: Party; kind: PartyKind }) {
 
   // Invoices (sales/entries/returns)
   for (const inv of invs) {
-    const label = inv.type === "entry" ? "شراء" : inv.type === "return" ? "مرتجع" : "بيع";
+    const label = inv.type === "entry" ? "شراء" : "بيع";
     items.push({
       id: `inv-${inv.id}`,
       kind: "invoice",

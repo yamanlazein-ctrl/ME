@@ -1,10 +1,11 @@
 import { randomUUID, createHash } from "node:crypto";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { logger } from "../../../infrastructure/config/logger.js";
 import { db, type DB } from "../../../infrastructure/orm/drizzle.js";
 import { runWithTenantContext } from "../../../infrastructure/orm/tenant-context.js";
 import { syncState } from "../../../infrastructure/orm/schemas/sync-state.table.js";
 import type { ISyncOutboxRepository } from "../../ports/ISyncOutboxRepository.js";
+import { DEFAULT_PUSHING_LEASE_MS } from "../../../infrastructure/repositories/PostgresSyncOutboxRepository.js";
 import type { ISyncInboxRepository, SyncInboxRow } from "../../ports/ISyncInboxRepository.js";
 import type { ISyncResourceClaimRepository } from "../../ports/ISyncResourceClaimRepository.js";
 import type { INotificationRepository } from "../../ports/INotificationRepository.js";
@@ -246,9 +247,13 @@ export async function runLocalSyncPush(
     };
   }
 
-  // Includes units abandoned in `pushing` by a previous crashed run, once their
-  // lease expires — otherwise they would never be retried and never counted.
-  const pending = await outbox.listClaimable(ctx.tenantId, 50);
+  // REPAIR-007: atomic claim replaces listClaimable + markPushing.
+  const pending = await outbox.claimBatch(
+    ctx.tenantId,
+    50,
+    DEFAULT_PUSHING_LEASE_MS,
+    `device:${ctx.syncDeviceId ?? "local"}:${process.pid}`,
+  );
   if (pending.length === 0) {
     return {
       pushed: 0,
@@ -261,11 +266,6 @@ export async function runLocalSyncPush(
       skipped: false,
     };
   }
-
-  await outbox.markPushing(
-    pending.map((p) => p.id),
-    ctx.tenantId,
-  );
 
   let pushed = 0;
   let failed = 0;
@@ -322,6 +322,11 @@ export async function runLocalSyncPush(
     deviceGate: boolean;
     deviceTrust: SyncDeviceTrustFailure;
   }> => {
+    const leaseToken = unit.leaseToken;
+    if (!leaseToken) {
+      logger.error({ opId: unit.opId }, "SYNC_LEASE_MISSING");
+      return { pushed: 0, failed: 1, rejected: 0, hubDead: 0, hubDeadOps: [], deviceGate: false, deviceTrust: null };
+    }
     const delta = {
       pushed: 0,
       failed: 0,
@@ -382,7 +387,7 @@ export async function runLocalSyncPush(
           // reason so the UI can ask the operator to act instead of spinning
           // silently. Retrying cannot help until the device is
           // registered/reinstated.
-          await outbox.resetToPending(unit.id, ctx.tenantId, detail);
+          await outbox.resetToPending(unit.id, ctx.tenantId, detail, leaseToken);
           delta.failed += 1;
           delta.deviceGate = true;
           delta.deviceTrust = {
@@ -393,7 +398,7 @@ export async function runLocalSyncPush(
         }
 
         if (res.status === 409 || parsed.code === "SYNC_CONFLICT") {
-          await outbox.markRejected(unit.id, ctx.tenantId, detail);
+          await outbox.markRejected(unit.id, ctx.tenantId, detail, leaseToken);
           delta.rejected += 1;
           await rollbackRejectedUnitLocally(
             invoiceRepo,
@@ -414,13 +419,13 @@ export async function runLocalSyncPush(
           // as terminal meant one 401 mid-batch marked all remaining units
           // rejected forever — and since the terminal path skips the local
           // rollback, the device kept records that could never reach the hub.
-          await outbox.resetToPending(unit.id, ctx.tenantId, detail);
+          await outbox.resetToPending(unit.id, ctx.tenantId, detail, leaseToken);
         } else {
           // Permanent rejection (not a conflict, not retryable): the hub will
           // never accept this unit, so the local record must be reconciled
           // exactly like a conflict loser — otherwise the device keeps a
           // document the hub refuses, a silent permanent fork.
-          await outbox.markRejected(unit.id, ctx.tenantId, detail);
+          await outbox.markRejected(unit.id, ctx.tenantId, detail, leaseToken);
           delta.rejected += 1;
           await rollbackRejectedUnitLocally(
             invoiceRepo,
@@ -455,7 +460,7 @@ export async function runLocalSyncPush(
         hubReason?: string | null;
       };
       if (ack.materialized) {
-        await outbox.markSynced(unit.id, ctx.tenantId);
+        await outbox.markSynced(unit.id, ctx.tenantId, leaseToken);
         delta.pushed += 1;
         return delta;
       }
@@ -469,6 +474,7 @@ export async function runLocalSyncPush(
           unit.id,
           ctx.tenantId,
           `hubDead: ${ack.hubReason ?? ack.hubStatus ?? "dead"}`,
+          leaseToken,
         );
         delta.rejected += 1;
         delta.hubDead += 1;
@@ -506,6 +512,7 @@ export async function runLocalSyncPush(
         unit.id,
         ctx.tenantId,
         "hub accepted but not yet applied — retrying",
+        leaseToken,
       );
       delta.failed += 1;
       return delta;
@@ -516,6 +523,7 @@ export async function runLocalSyncPush(
         unit.id,
         ctx.tenantId,
         err instanceof Error ? err.message : "push failed",
+        leaseToken,
       );
       delta.failed += 1;
     }
@@ -2050,6 +2058,7 @@ async function setPullCursor(tenantId: string, seq: number, at: Date | null): Pr
       .onConflictDoUpdate({
         target: [syncState.tenantId],
         set: { lastPullSeq: seq, lastPullAt: at, updatedAt: new Date() },
+        setWhere: sql`sync_state.last_pull_seq IS NULL OR sync_state.last_pull_seq <= ${seq}`,
       });
   });
 }

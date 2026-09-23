@@ -23,6 +23,8 @@ function normalizeFilter(filter: StatementFilter): StatementFilter {
     to: filter.to || undefined,
     currency: filter.currency || undefined,
     type: filter.type || undefined,
+    limit: filter.limit ?? 200,
+    cursor: filter.cursor || undefined,
   };
 }
 

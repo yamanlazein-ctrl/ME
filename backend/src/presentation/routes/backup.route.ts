@@ -48,7 +48,40 @@ export function createBackupRouter(deps: BackupRouteDeps): Router {
     const zipFile = join(tmpdir(), `${backupId}.zip`);
     try {
       await mkdir(tmpDir, { recursive: true });
-      await dbDumpToJson(join(tmpDir, "database.json"), tenantId);
+      const dumpResult = await dbDumpToJson(join(tmpDir, "database.json"), tenantId);
+      // REPAIR-028 A: never report success when any table dump failed.
+      if (dumpResult.warnings.length > 0) {
+        await rm(tmpDir, { recursive: true, force: true }).catch(() => {});
+        await rm(zipFile, { force: true }).catch(() => {});
+        res.status(500).json({
+          code: "BACKUP_INCOMPLETE",
+          message: "فشلت النسخة الاحتياطية — جدول واحد أو أكثر لم يُصدَّر بالكامل.",
+          warnings: dumpResult.warnings,
+        });
+        return;
+      }
+      const { createHash } = await import("node:crypto");
+      const dbJson = await import("node:fs/promises").then((fs) =>
+        fs.readFile(join(tmpDir, "database.json")),
+      );
+      const sha256 = createHash("sha256").update(dbJson).digest("hex");
+      // metadata.json — restore verification (REPAIR-028)
+      await writeFile(
+        join(tmpDir, "metadata.json"),
+        JSON.stringify(
+          {
+            operationId: backupId,
+            tenantId,
+            schemaJournalIdx: null,
+            createdAt: new Date().toISOString(),
+            rowCounts: dumpResult.rowCounts,
+            sha256,
+            appVersion: process.env.npm_package_version || "1.0.0",
+          },
+          null,
+          2,
+        ),
+      );
       // Human-browsable folders alongside the technical dump above — the dump
       // stays the restore source of truth (`npm run db:restore` reads only
       // `database.json`); these are purely additive read copies per document.
@@ -101,6 +134,20 @@ export function createBackupRouter(deps: BackupRouteDeps): Router {
         { backupId, tenantId, sizeMB: (stats.size / 1024 / 1024).toFixed(1), durationMs: duration },
         "Backup completed",
       );
+      try {
+        const { readManifest, writeManifestAtomic } = await import(
+          "../../infrastructure/integrity/dataIntegrityManifest.js"
+        );
+        const m = await readManifest();
+        if (m) {
+          await writeManifestAtomic({
+            ...m,
+            lastSuccessfulBackupAt: new Date().toISOString(),
+          });
+        }
+      } catch (err) {
+        logger.warn({ err }, "failed to stamp lastSuccessfulBackupAt");
+      }
     } catch (error) {
       logger.error({ backupId, err: (error as Error)?.message }, "Backup failed");
       rm(tmpDir, { recursive: true, force: true }).catch(() => {});
@@ -156,7 +203,13 @@ async function createArchive(sourceDir: string, outputFile: string): Promise<voi
   }
   throw new Error("Neither 'zip' nor 'tar' command found.");
 }
-async function dbDumpToJson(outputPath: string, tenantId: string): Promise<void> {
+async function dbDumpToJson(
+  outputPath: string,
+  tenantId: string,
+): Promise<{
+  warnings: Array<{ table: string; code?: string; message: string }>;
+  rowCounts: Record<string, number>;
+}> {
   const tenantTables = [
     "tenants",
     "users",
@@ -212,6 +265,7 @@ async function dbDumpToJson(outputPath: string, tenantId: string): Promise<void>
   // before a table was added — see the sync_* comment below) is expected;
   // everything else is now logged AND recorded in the dump itself.
   const warnings: Array<{ table: string; code?: string; message: string }> = [];
+  const rowCounts: Record<string, number> = {};
   const esc = (s: string) => s.replace(/'/g, "''").replace(/"/g, '""');
   for (const table of tenantTables) {
     try {
@@ -221,10 +275,12 @@ async function dbDumpToJson(outputPath: string, tenantId: string): Promise<void>
           : `SELECT * FROM "${esc(table)}" WHERE tenant_id = '${esc(tenantId)}'`;
       const result = (await db.execute(sql.raw(raw))) as unknown as { rows: unknown[] };
       dump[table] = result.rows as unknown[];
+      rowCounts[table] = result.rows.length;
     } catch (err) {
       const code = (err as { code?: string } | undefined)?.code;
       const message = err instanceof Error ? err.message : String(err);
       dump[table] = [];
+      rowCounts[table] = 0;
       if (code === "42P01") continue; // undefined_table: expected on an older schema.
       warnings.push({ table, code, message });
       logger.error(
@@ -241,6 +297,56 @@ async function dbDumpToJson(outputPath: string, tenantId: string): Promise<void>
       2,
     ),
   );
+  return { warnings, rowCounts };
+}
+
+/**
+ * REPAIR-028 B — shared path for HTTP backup and automatic scheduler.
+ * Writes a ZIP to `outZipPath`. Returns ok:false when warnings present.
+ */
+export async function runTenantFullBackup(
+  tenantId: string,
+  outZipPath: string,
+): Promise<
+  | { ok: true; rowCounts: Record<string, number> }
+  | { ok: false; warnings: Array<{ table: string; code?: string; message: string }> }
+> {
+  const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+  const tmpDir = join(tmpdir(), `auto-backup-${tenantId}-${timestamp}`);
+  try {
+    await mkdir(tmpDir, { recursive: true });
+    const dumpResult = await dbDumpToJson(join(tmpDir, "database.json"), tenantId);
+    if (dumpResult.warnings.length > 0) {
+      await rm(tmpDir, { recursive: true, force: true }).catch(() => {});
+      return { ok: false, warnings: dumpResult.warnings };
+    }
+    const { createHash } = await import("node:crypto");
+    const dbJson = await import("node:fs/promises").then((fs) =>
+      fs.readFile(join(tmpDir, "database.json")),
+    );
+    const sha256 = createHash("sha256").update(dbJson).digest("hex");
+    await writeFile(
+      join(tmpDir, "metadata.json"),
+      JSON.stringify(
+        {
+          operationId: `auto-${timestamp}`,
+          tenantId,
+          createdAt: new Date().toISOString(),
+          rowCounts: dumpResult.rowCounts,
+          sha256,
+          appVersion: process.env.npm_package_version || "1.0.0",
+        },
+        null,
+        2,
+      ),
+    );
+    await createArchive(tmpDir, outZipPath);
+    await rm(tmpDir, { recursive: true, force: true }).catch(() => {});
+    return { ok: true, rowCounts: dumpResult.rowCounts };
+  } catch (err) {
+    await rm(tmpDir, { recursive: true, force: true }).catch(() => {});
+    throw err;
+  }
 }
 
 export async function fetchAllPages<T>(

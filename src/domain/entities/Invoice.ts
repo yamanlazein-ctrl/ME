@@ -29,7 +29,7 @@ export interface InvoiceData {
   number: string;
   /** Manual/reference invoice number (e.g. "ENT-2026-TMI7"). Optional. */
   reference?: string | null;
-  type: "entry" | "sale" | "return";
+  type: "entry" | "sale";
   date: string; // yyyy-mm-dd
   partyId: UUID;
   partyType: "customer" | "supplier";

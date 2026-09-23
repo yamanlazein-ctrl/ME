@@ -54,6 +54,8 @@ export const vouchers = pgTable(
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
     cancelledAt: timestamp("cancelled_at", { withTimezone: true }),
     cancelledBy: uuid("cancelled_by"),
+    /** REPAIR-008 B */
+    clientOperationId: uuid("client_operation_id"),
   },
   (table) => ({
     tenantKindNumberIdx: uniqueIndex("idx_vouchers_tenant_kind_number").on(

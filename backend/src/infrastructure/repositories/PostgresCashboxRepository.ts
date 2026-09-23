@@ -104,7 +104,7 @@ export class PostgresCashboxRepository implements ICashboxRepository {
       await assertDayUnlocked(tx, ctx.tenantId, input.date);
       const currency = input.currency ?? "SYP";
       if (input.direction === "out") {
-        // F06: cash-out must never take the cashbox negative (per-currency).
+        // Negative cash is allowed with a UI warning (REPAIR-021).
         await assertSufficientCashboxBalance(tx, ctx, currency, input.date, input.amount);
       }
       const [row] = await tx
@@ -120,6 +120,7 @@ export class PostgresCashboxRepository implements ICashboxRepository {
           description: input.description,
           notesInternal: input.notesInternal,
           createdBy: ctx.userId,
+          clientOperationId: ctx.clientOperationId ?? null,
         })
         .returning();
       // Accounting traceability: reflect the manual cashbox movement in the

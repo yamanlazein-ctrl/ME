@@ -1,4 +1,4 @@
-import { eq, and, sql, gte, lte, inArray } from "drizzle-orm";
+import { eq, and, sql, gte, lte } from "drizzle-orm";
 import type { DB } from "../orm/drizzle.js";
 import type { IProfitRepository } from "../../application/ports/IProfitRepository.js";
 import type {
@@ -12,7 +12,6 @@ import type {
 import type { TenantContext } from "../../domain/types/index.js";
 import { invoices } from "../orm/schemas/invoice.table.js";
 import { invoiceLines } from "../orm/schemas/invoice-line.table.js";
-import { rolls } from "../orm/schemas/roll.table.js";
 import { expenses } from "../orm/schemas/expense.table.js";
 import { parties } from "../orm/schemas/party.table.js";
 import { returns } from "../orm/schemas/return.table.js";
@@ -20,22 +19,15 @@ import { returnLines } from "../orm/schemas/return-line.table.js";
 import { ledgerEntries } from "../orm/schemas/ledger-entry.table.js";
 
 /**
- * PostgresProfitRepository — computes net profit directly from live data.
+ * PostgresProfitRepository — net profit from live data.
  *
- * STRICT ACCOUNTING EQUATION (never deviate):
  *   netProfit = salesRevenue − COGS − expenses
  *
- *   salesRevenue = SUM(invoices.subtotal − invoices.discount)  [active SALE]
- *   COGS = posted `cogs_expense` ledger legs (already converted into the
- *          invoice currency at sale time). Line qty × costPerKg is only a
- *          fallback for legacy invoices that have no COGS journal.
- *   expenses = SUM(expenses.amount)  [active expenses in period]
- *
- * RECEIVABLES/PAYABLES ARE ASSETS/LIABILITIES, NOT EXPENSES — they are
- * returned separately and NEVER subtracted from netProfit.
- *
- * Multi-currency: every aggregate groups by currency. Currencies are NEVER
- * mixed, summed, or converted.
+ * Period rules (OLD-PLAN 2ب):
+ *   - Sale invoices contribute when invoice.date ∈ period.
+ *   - Returns reduce the period when returns.date ∈ period (not invoice date).
+ *   - COGS: posted cogs_expense ledger first; else qty × invoice_lines.cost_per_kg
+ *     (never live rolls.price_per_kg).
  */
 export class PostgresProfitRepository implements IProfitRepository {
   constructor(private readonly db: DB) {}
@@ -47,6 +39,13 @@ export class PostgresProfitRepository implements IProfitRepository {
     return conds;
   }
 
+  private returnDateRange(query: ProfitQuery) {
+    const conds: ReturnType<typeof gte>[] = [];
+    if (query.fromDate) conds.push(gte(returns.date, query.fromDate) as ReturnType<typeof gte>);
+    if (query.toDate) conds.push(lte(returns.date, query.toDate) as ReturnType<typeof gte>);
+    return conds;
+  }
+
   private expenseDateRange(query: ProfitQuery) {
     const conds: ReturnType<typeof gte>[] = [];
     if (query.fromDate) conds.push(gte(expenses.date, query.fromDate) as ReturnType<typeof gte>);
@@ -54,10 +53,7 @@ export class PostgresProfitRepository implements IProfitRepository {
     return conds;
   }
 
-  /**
-   * Per-invoice revenue + COGS for active sale invoices in the period.
-   * Uses costPerKg snapshot (fallback to roll price for pre-migration rows).
-   */
+  /** Per-invoice revenue + COGS for active sale invoices in the period (no return subtraction). */
   private async getInvoiceProfitRows(
     query: ProfitQuery,
     ctx: TenantContext,
@@ -82,6 +78,7 @@ export class PostgresProfitRepository implements IProfitRepository {
       ...(query.currency ? [eq(invoices.currency, query.currency)] : []),
     );
 
+    // cost_per_kg only — never live roll price (legacy rows backfilled by 20261008).
     const rows = await this.db
       .select({
         invoiceId: invoices.id,
@@ -92,13 +89,21 @@ export class PostgresProfitRepository implements IProfitRepository {
         currency: invoices.currency,
         revenue: invoices.subtotal,
         discount: invoices.discount,
-        cogs: sql<number>`COALESCE(SUM(
-          ROUND(${invoiceLines.quantityKg}::numeric * COALESCE(${invoiceLines.costPerKg}, ${rolls.pricePerKg})::numeric)
+        lineCogs: sql<number>`COALESCE(SUM(
+          ROUND(${invoiceLines.quantityKg}::numeric * COALESCE(${invoiceLines.costPerKg}, 0)::numeric)
+        ), 0)`,
+        ledgerCogs: sql<number>`COALESCE((
+          SELECT SUM(${ledgerEntries.debit} - ${ledgerEntries.credit})
+          FROM ${ledgerEntries}
+          WHERE ${ledgerEntries.tenantId} = ${invoices.tenantId}
+            AND ${ledgerEntries.status} = 'active'
+            AND ${ledgerEntries.type} = 'cogs_expense'
+            AND ${ledgerEntries.referenceType} = 'sales_invoice'
+            AND ${ledgerEntries.referenceId} = ${invoices.id}
         ), 0)`,
       })
       .from(invoices)
       .innerJoin(invoiceLines, eq(invoiceLines.invoiceId, invoices.id))
-      .innerJoin(rolls, eq(rolls.id, invoiceLines.rollId))
       .leftJoin(parties, eq(parties.id, invoices.partyId))
       .where(saleBase)
       .groupBy(
@@ -110,28 +115,13 @@ export class PostgresProfitRepository implements IProfitRepository {
         invoices.currency,
         invoices.subtotal,
         invoices.discount,
+        invoices.tenantId,
       )
       .orderBy(sql`${invoices.date} DESC, ${invoices.number} DESC`);
 
-    // BUG-04 fix: active sale returns must reduce BOTH the revenue AND the COGS
-    // of their original invoice (previously the report ignored returns entirely
-    // and kept showing phantom profit). Returns are valued at the invoice's own
-    // cost snapshot (invoice_lines.cost_per_kg → rolls.price_per_kg fallback).
-    const returnAdj = await this.getReturnAdjustments(
-      rows.map((r) => r.invoiceId),
-      ctx,
-    );
-    const postedCogs = await this.getPostedCogsByInvoice(
-      rows.map((r) => r.invoiceId),
-      ctx,
-    );
-
     return rows.map((r) => {
-      const adj = returnAdj.get(r.invoiceId) ?? { revenue: 0, cogs: 0 };
-      const ledgerCogs = postedCogs.get(r.invoiceId);
-      const rawCogs = ledgerCogs != null ? ledgerCogs : Number(r.cogs);
-      const revenue = Math.max(0, Number(r.revenue) - Number(r.discount) - adj.revenue);
-      const cogs = Math.max(0, rawCogs - adj.cogs);
+      const ledger = Number(r.ledgerCogs);
+      const rawCogs = ledger !== 0 ? ledger : Number(r.lineCogs);
       return {
         invoiceId: r.invoiceId,
         number: r.number,
@@ -139,106 +129,79 @@ export class PostgresProfitRepository implements IProfitRepository {
         partyId: r.partyId,
         partyName: r.partyName ?? "",
         currency: r.currency,
-        // revenue for profit = subtotal − discount (excludes tax + shipping, per P0-LOGIC-3.6d)
-        revenue,
-        cogs,
+        revenue: Math.max(0, Number(r.revenue) - Number(r.discount)),
+        cogs: Math.max(0, rawCogs),
       };
     });
   }
 
   /**
-   * Posted COGS in invoice currency from the journal written at sale time
-   * (`cogs_expense` debit on the sales_invoice). That journal already ran
-   * convertForSettlement, so profit never mixes roll-currency unit cost
-   * with invoice-currency revenue.
+   * Sale returns whose returns.date falls in the query window.
+   * Affects the period even when the original invoice is outside it.
    */
-  private async getPostedCogsByInvoice(
-    invoiceIds: string[],
+  private async getPeriodReturnRows(
+    query: ProfitQuery,
     ctx: TenantContext,
-  ): Promise<Map<string, number>> {
-    const out = new Map<string, number>();
-    if (invoiceIds.length === 0) return out;
-    const rows = await this.db
-      .select({
-        invoiceId: ledgerEntries.referenceId,
-        cogs: sql<number>`COALESCE(SUM(${ledgerEntries.debit} - ${ledgerEntries.credit}), 0)`,
-      })
-      .from(ledgerEntries)
-      .where(
-        and(
-          eq(ledgerEntries.tenantId, ctx.tenantId),
-          eq(ledgerEntries.status, "active"),
-          eq(ledgerEntries.type, "cogs_expense"),
-          eq(ledgerEntries.referenceType, "sales_invoice"),
-          inArray(ledgerEntries.referenceId, invoiceIds),
-        ),
-      )
-      .groupBy(ledgerEntries.referenceId);
-    for (const r of rows) {
-      if (r.invoiceId) out.set(r.invoiceId, Number(r.cogs));
-    }
-    return out;
-  }
-
-  /**
-   * BUG-04 fix — per-invoice adjustments for ACTIVE returns linked to it.
-   * revenue  = Σ(return_lines.qty × return_lines.pricePerKg)
-   * cogs     = posted COGS reversal on the return (`cogs_expense` credit)
-   */
-  private async getReturnAdjustments(
-    invoiceIds: string[],
-    ctx: TenantContext,
-  ): Promise<Map<string, { revenue: number; cogs: number }>> {
-    const out = new Map<string, { revenue: number; cogs: number }>();
-    if (invoiceIds.length === 0) return out;
+  ): Promise<
+    Array<{
+      returnId: string;
+      number: string;
+      date: string;
+      originalInvoiceId: string | null;
+      currency: string;
+      revenue: number;
+      cogs: number;
+    }>
+  > {
+    const dateConds = this.returnDateRange(query);
+    const base = and(
+      eq(returns.tenantId, ctx.tenantId),
+      eq(returns.status, "active"),
+      eq(returns.kind, "sale"),
+      ...dateConds,
+      ...(query.currency ? [eq(returns.currency, query.currency)] : []),
+    );
 
     const revRows = await this.db
       .select({
-        invoiceId: returns.originalInvoiceId,
-        total: sql<number>`COALESCE(SUM(${returnLines.quantityKg} * ${returnLines.pricePerKg}), 0)`,
+        returnId: returns.id,
+        number: returns.number,
+        date: returns.date,
+        originalInvoiceId: returns.originalInvoiceId,
+        currency: returns.currency,
+        revenue: sql<number>`COALESCE(SUM(${returnLines.quantityKg} * ${returnLines.pricePerKg}), 0)`,
+        cogs: sql<number>`COALESCE((
+          SELECT SUM(${ledgerEntries.credit} - ${ledgerEntries.debit})
+          FROM ${ledgerEntries}
+          WHERE ${ledgerEntries.tenantId} = ${returns.tenantId}
+            AND ${ledgerEntries.status} = 'active'
+            AND ${ledgerEntries.type} = 'cogs_expense'
+            AND ${ledgerEntries.referenceId} = ${returns.id}
+        ), 0)`,
       })
       .from(returns)
-      .innerJoin(returnLines, eq(returnLines.returnId, returns.id))
-      .where(
-        and(
-          eq(returns.tenantId, ctx.tenantId),
-          eq(returns.status, "active"),
-          inArray(returns.originalInvoiceId, invoiceIds),
-        ),
-      )
-      .groupBy(returns.originalInvoiceId);
-    for (const r of revRows) {
-      if (r.invoiceId) out.set(r.invoiceId, { revenue: Number(r.total), cogs: 0 });
-    }
+      .leftJoin(returnLines, eq(returnLines.returnId, returns.id))
+      .where(base)
+      .groupBy(
+        returns.id,
+        returns.number,
+        returns.date,
+        returns.originalInvoiceId,
+        returns.currency,
+        returns.tenantId,
+      );
 
-    const retCogsRows = await this.db
-      .select({
-        invoiceId: returns.originalInvoiceId,
-        cogs: sql<number>`COALESCE(SUM(${ledgerEntries.credit} - ${ledgerEntries.debit}), 0)`,
-      })
-      .from(returns)
-      .innerJoin(ledgerEntries, eq(ledgerEntries.referenceId, returns.id))
-      .where(
-        and(
-          eq(returns.tenantId, ctx.tenantId),
-          eq(returns.status, "active"),
-          inArray(returns.originalInvoiceId, invoiceIds),
-          eq(ledgerEntries.tenantId, ctx.tenantId),
-          eq(ledgerEntries.status, "active"),
-          eq(ledgerEntries.type, "cogs_expense"),
-        ),
-      )
-      .groupBy(returns.originalInvoiceId);
-    for (const r of retCogsRows) {
-      if (!r.invoiceId) continue;
-      const cur = out.get(r.invoiceId) ?? { revenue: 0, cogs: 0 };
-      cur.cogs = Number(r.cogs);
-      out.set(r.invoiceId, cur);
-    }
-    return out;
+    return revRows.map((r) => ({
+      returnId: r.returnId,
+      number: r.number,
+      date: r.date,
+      originalInvoiceId: r.originalInvoiceId,
+      currency: r.currency,
+      revenue: Number(r.revenue),
+      cogs: Math.max(0, Number(r.cogs)),
+    }));
   }
 
-  /** Aggregated expense totals per currency for the period. */
   private async getExpenseTotals(
     query: ProfitQuery,
     ctx: TenantContext,
@@ -265,6 +228,7 @@ export class PostgresProfitRepository implements IProfitRepository {
 
   private buildSummary(
     invoiceRows: Array<{ currency: string; revenue: number; cogs: number }>,
+    returnRows: Array<{ currency: string; revenue: number; cogs: number }>,
     expenseMap: Map<string, number>,
   ): ProfitSummaryByCurrency[] {
     const byCurrency = new Map<
@@ -273,6 +237,7 @@ export class PostgresProfitRepository implements IProfitRepository {
         salesRevenue: number;
         cogs: number;
         invoiceCount: number;
+        returnCount: number;
       }
     >();
 
@@ -281,6 +246,7 @@ export class PostgresProfitRepository implements IProfitRepository {
         salesRevenue: 0,
         cogs: 0,
         invoiceCount: 0,
+        returnCount: 0,
       };
       cur.salesRevenue += r.revenue;
       cur.cogs += r.cogs;
@@ -288,25 +254,43 @@ export class PostgresProfitRepository implements IProfitRepository {
       byCurrency.set(r.currency, cur);
     }
 
+    for (const r of returnRows) {
+      const cur = byCurrency.get(r.currency) ?? {
+        salesRevenue: 0,
+        cogs: 0,
+        invoiceCount: 0,
+        returnCount: 0,
+      };
+      cur.salesRevenue -= r.revenue;
+      cur.cogs -= r.cogs;
+      cur.returnCount += 1;
+      byCurrency.set(r.currency, cur);
+    }
+
     const result: ProfitSummaryByCurrency[] = [];
     for (const [currency, agg] of byCurrency) {
+      // Allow negative period revenue/COGS when returns in the window exceed period sales
+      // (e.g. 2027 return of a 2024 invoice with no 2027 sales).
+      const salesRevenue = agg.salesRevenue;
+      const cogsAmt = agg.cogs;
       const expensesAmount = expenseMap.get(currency) ?? 0;
-      const grossProfit = agg.salesRevenue - agg.cogs;
+      const grossProfit = salesRevenue - cogsAmt;
       const netProfit = grossProfit - expensesAmount;
-      const marginPercent = agg.salesRevenue > 0 ? (grossProfit / agg.salesRevenue) * 100 : 0;
+      const marginBase = Math.abs(salesRevenue) > 0 ? salesRevenue : 0;
+      const marginPercent = marginBase !== 0 ? (grossProfit / marginBase) * 100 : 0;
       result.push({
         currency,
-        salesRevenue: agg.salesRevenue,
-        cogs: agg.cogs,
+        salesRevenue,
+        cogs: cogsAmt,
         expenses: expensesAmount,
         grossProfit,
         netProfit,
         marginPercent: Math.round(marginPercent * 100) / 100,
         invoiceCount: agg.invoiceCount,
+        returnCount: agg.returnCount,
       });
     }
 
-    // Stable ordering: SYP first, then USD, EUR, then alphabetical.
     const order = ["SYP", "USD", "EUR"];
     result.sort((a, b) => {
       const ia = order.indexOf(a.currency);
@@ -318,32 +302,33 @@ export class PostgresProfitRepository implements IProfitRepository {
   }
 
   async getSummary(query: ProfitQuery, ctx: TenantContext): Promise<ProfitSummary> {
-    const [invoiceRows, expenseMap, debts] = await Promise.all([
+    const [invoiceRows, returnRows, expenseMap, debts] = await Promise.all([
       this.getInvoiceProfitRows(query, ctx),
+      this.getPeriodReturnRows(query, ctx),
       this.getExpenseTotals(query, ctx),
       this.getDebts(query, ctx),
     ]);
 
-    const byCurrency = this.buildSummary(invoiceRows, expenseMap);
-
-    // Split debts into receivables (customers owe us) and payables (we owe suppliers)
-    const totalReceivables = debts.filter((d) => d.kind === "receivable");
-    const totalPayables = debts.filter((d) => d.kind === "payable");
-
-    return { byCurrency, totalReceivables, totalPayables };
+    const byCurrency = this.buildSummary(invoiceRows, returnRows, expenseMap);
+    return {
+      byCurrency,
+      totalReceivables: debts.filter((d) => d.kind === "receivable"),
+      totalPayables: debts.filter((d) => d.kind === "payable"),
+    };
   }
 
   async getDetails(query: ProfitQuery, ctx: TenantContext): Promise<ProfitDetails> {
-    const [invoiceRows, expenseMap, debts, expenseRows] = await Promise.all([
+    const [invoiceRows, returnRows, expenseMap, debts, expenseRows] = await Promise.all([
       this.getInvoiceProfitRows(query, ctx),
+      this.getPeriodReturnRows(query, ctx),
       this.getExpenseTotals(query, ctx),
       this.getDebts(query, ctx),
       this.getExpenseRows(query, ctx),
     ]);
 
-    const byCurrency = this.buildSummary(invoiceRows, expenseMap);
+    const byCurrency = this.buildSummary(invoiceRows, returnRows, expenseMap);
 
-    const invoiceLines: ProfitDetailLine[] = invoiceRows.map((r) => {
+    const detailLines: ProfitDetailLine[] = invoiceRows.map((r) => {
       const grossProfit = r.revenue - r.cogs;
       const marginPercent = r.revenue > 0 ? (grossProfit / r.revenue) * 100 : 0;
       return {
@@ -362,31 +347,24 @@ export class PostgresProfitRepository implements IProfitRepository {
 
     return {
       byCurrency,
-      invoiceLines,
+      invoiceLines: detailLines,
+      returnAdjustments: returnRows.map((r) => ({
+        returnId: r.returnId,
+        number: r.number,
+        date: r.date,
+        originalInvoiceId: r.originalInvoiceId,
+        currency: r.currency,
+        revenue: r.revenue,
+        cogs: r.cogs,
+      })),
       expenses: expenseRows,
       receivables: debts.filter((d) => d.kind === "receivable"),
       payables: debts.filter((d) => d.kind === "payable"),
     };
   }
 
-  /**
-   * Outstanding receivables (unpaid sale invoices) and payables (unpaid entry
-   * invoices). These are ASSETS/LIABILITIES — never subtracted from profit.
-   *
-   * remaining = total − invoices.paid − returns
-   *
-   * `invoices.paid` is the FX-converted running total (voucher create/cancel
-   * restates each receipt/payment into the invoice currency at THAT voucher's
-   * frozen rate). Summing raw `vouchers.amount` here mixed 100 USD into a
-   * 1,000,000 SYP invoice (and vice versa) and a join onto return lines
-   * cartesian-inflated both sides. Returns are the same currency as the
-   * original invoice (enforced at return create), so line totals subtract
-   * directly. Only includes rows where remaining > 0.
-   */
   private async getDebts(query: ProfitQuery, ctx: TenantContext): Promise<DebtItem[]> {
     const dateConds = this.dateRange(query);
-
-    // Active sale invoices = receivables; active entry invoices = payables.
     const invoiceBase = and(
       eq(invoices.tenantId, ctx.tenantId),
       eq(invoices.status, "active"),
@@ -413,7 +391,6 @@ export class PostgresProfitRepository implements IProfitRepository {
         currency: invoices.currency,
         total: invoices.total,
         invoiceType: invoices.type,
-        partyType: invoices.partyType,
         paid: invoices.paid,
         returns: returnTotalSql,
       })
@@ -429,17 +406,11 @@ export class PostgresProfitRepository implements IProfitRepository {
       const returnsAmount = Number(r.returns);
       const remaining = total - paid - returnsAmount;
       if (remaining <= 0) continue;
-
-      // Receivable: customer owes us (sale invoice). Payable: we owe supplier (entry invoice).
-      const kind: DebtItem["kind"] =
-        r.invoiceType === "sale" ? "receivable" : "payable";
-
-      // Days overdue = days since invoice date (simple aging).
+      const kind: DebtItem["kind"] = r.invoiceType === "sale" ? "receivable" : "payable";
       const daysOverdue = Math.max(
         0,
         Math.floor((new Date(today).getTime() - new Date(r.date).getTime()) / 86400000),
       );
-
       out.push({
         invoiceId: r.invoiceId,
         number: r.number,
@@ -456,13 +427,6 @@ export class PostgresProfitRepository implements IProfitRepository {
       });
     }
 
-    // Authoritative reconciliation (fix): a party balance is a PARTY-level figure —
-    // receipts can be unlinked (invoice_id NULL), and returns + settlements also post
-    // to the ledger — so summing per-invoice `total − paid − returns` drifts from the
-    // true outstanding. Reconcile each party+currency group to its LEDGER balance
-    // (identical to the كشف الحساب / getBalance): reduce the group's invoice remainings
-    // (oldest invoices absorb the reduction first) until they sum exactly to the ledger
-    // balance. Fully-settled / overpaid groups drop out (remaining <= 0).
     const balRows = await this.db
       .select({
         partyId: ledgerEntries.partyId,
@@ -503,9 +467,8 @@ export class PostgresProfitRepository implements IProfitRepository {
       if (!bal) continue;
       const isPayable = items[0].kind === "payable";
       const target = isPayable ? bal.cred - bal.deb : bal.deb - bal.cred;
-      items.sort((a, b) => (a.date < b.date ? -1 : 1)); // oldest absorbs first
-      let current = items.reduce((s, it) => s + it.remaining, 0);
-      let diff = target - current;
+      items.sort((a, b) => (a.date < b.date ? -1 : 1));
+      let diff = target - items.reduce((s, it) => s + it.remaining, 0);
       for (const it of items) {
         if (diff >= 0) break;
         const take = Math.min(it.remaining, Math.abs(diff));
@@ -517,7 +480,6 @@ export class PostgresProfitRepository implements IProfitRepository {
     return out.filter((it) => it.remaining > 0).sort((a, b) => b.remaining - a.remaining);
   }
 
-  /** Individual expense rows for the details drill-down. */
   private async getExpenseRows(
     query: ProfitQuery,
     ctx: TenantContext,

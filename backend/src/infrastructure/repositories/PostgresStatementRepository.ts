@@ -111,10 +111,8 @@ export class PostgresStatementRepository implements IStatementRepository {
       }
     }
 
-    // statement window = ALL rows within [from, to] (chronological).
-    // Cancelled rows are kept in the register (never dropped from the query)
-    // so the statement shows the full history; they are struck through by the
-    // UI and excluded from balances/totals below.
+    // Window filters (full register for totals; page may be a slice).
+    // Cancelled rows stay in the register; balances/totals exclude them.
     const winConditions = [
       eq(ledgerEntries.partyId, query.partyId),
       eq(ledgerEntries.tenantId, ctx.tenantId),
@@ -124,40 +122,118 @@ export class PostgresStatementRepository implements IStatementRepository {
     if (toDate) winConditions.push(lte(ledgerEntries.date, toDate));
     if (type) winConditions.push(eq(ledgerEntries.type, type));
 
+    const STATEMENT_DEFAULT_LIMIT = 200;
+    const STATEMENT_MAX_LIMIT = 500;
+    const requestedLimit = query.limit;
+    const pageLimit = Math.min(
+      STATEMENT_MAX_LIMIT,
+      Math.max(1, requestedLimit ?? STATEMENT_DEFAULT_LIMIT),
+    );
+    // Legacy callers that omit limit still get a hard cap (never unbounded).
+    const hardCap = requestedLimit == null;
+
+    type Cursor = { date: string; createdAt: string; id: string };
+    const parseCursor = (raw?: string): Cursor | null => {
+      if (!raw) return null;
+      const parts = raw.split("|");
+      if (parts.length !== 3) return null;
+      return { date: parts[0]!, createdAt: parts[1]!, id: parts[2]! };
+    };
+    const cursor = parseCursor(query.cursor);
+
+    const pageConditions = [...winConditions];
+    if (cursor) {
+      pageConditions.push(
+        sql`(
+          ${ledgerEntries.date} > ${cursor.date}
+          OR (${ledgerEntries.date} = ${cursor.date} AND ${ledgerEntries.createdAt} > ${cursor.createdAt}::timestamptz)
+          OR (${ledgerEntries.date} = ${cursor.date} AND ${ledgerEntries.createdAt} = ${cursor.createdAt}::timestamptz AND ${ledgerEntries.id} > ${cursor.id}::uuid)
+        )`,
+      );
+    }
+
+    // Active totals for the FULL window (independent of page).
+    const totalRows = await this.db
+      .select({
+        currency: ledgerEntries.currency,
+        debit: sql<number>`COALESCE(SUM(CASE WHEN ${ledgerEntries.status} = 'active' THEN ${ledgerEntries.debit} ELSE 0 END), 0)`,
+        credit: sql<number>`COALESCE(SUM(CASE WHEN ${ledgerEntries.status} = 'active' THEN ${ledgerEntries.credit} ELSE 0 END), 0)`,
+      })
+      .from(ledgerEntries)
+      .where(and(...winConditions))
+      .groupBy(ledgerEntries.currency);
+
+    const debitByCurrency = new Map<string, number>();
+    const creditByCurrency = new Map<string, number>();
+    const runningByCurrency = new Map<string, number>(prevByCurrency);
+    for (const row of totalRows) {
+      const d = Number(row.debit ?? 0);
+      const c = Number(row.credit ?? 0);
+      debitByCurrency.set(row.currency, d);
+      creditByCurrency.set(row.currency, c);
+      const prev = prevByCurrency.get(row.currency) ?? 0;
+      runningByCurrency.set(row.currency, round2dp(prev + mult * (d - c)));
+    }
+
+    // Balance immediately before this page (for runningBalance continuity).
+    const beforePageByCurrency = new Map<string, number>(prevByCurrency);
+    if (cursor) {
+      const beforeConds = [
+        ...winConditions,
+        sql`(
+          ${ledgerEntries.date} < ${cursor.date}
+          OR (${ledgerEntries.date} = ${cursor.date} AND ${ledgerEntries.createdAt} < ${cursor.createdAt}::timestamptz)
+          OR (${ledgerEntries.date} = ${cursor.date} AND ${ledgerEntries.createdAt} = ${cursor.createdAt}::timestamptz AND ${ledgerEntries.id} <= ${cursor.id}::uuid)
+        )`,
+      ];
+      const beforeRows = await this.db
+        .select({
+          currency: ledgerEntries.currency,
+          debit: sql<number>`COALESCE(SUM(CASE WHEN ${ledgerEntries.status} = 'active' THEN ${ledgerEntries.debit} ELSE 0 END), 0)`,
+          credit: sql<number>`COALESCE(SUM(CASE WHEN ${ledgerEntries.status} = 'active' THEN ${ledgerEntries.credit} ELSE 0 END), 0)`,
+        })
+        .from(ledgerEntries)
+        .where(and(...beforeConds))
+        .groupBy(ledgerEntries.currency);
+      for (const row of beforeRows) {
+        const prev = prevByCurrency.get(row.currency) ?? 0;
+        beforePageByCurrency.set(
+          row.currency,
+          round2dp(prev + mult * (Number(row.debit ?? 0) - Number(row.credit ?? 0))),
+        );
+      }
+    }
+
+    const fetchLimit = pageLimit + 1;
     const window = await this.db
       .select()
       .from(ledgerEntries)
-      .where(and(...winConditions))
-      .orderBy(asc(ledgerEntries.date), asc(ledgerEntries.createdAt));
+      .where(and(...pageConditions))
+      .orderBy(asc(ledgerEntries.date), asc(ledgerEntries.createdAt), asc(ledgerEntries.id))
+      .limit(fetchLimit);
 
-    // line details for invoice rows (sales_invoice / purchase_invoice)
-    const invoiceEntries = window.filter((r) => INVOICE_TYPES.includes(r.type) && r.referenceId);
+    const hasMore = window.length > pageLimit;
+    const pageRows = hasMore ? window.slice(0, pageLimit) : window;
+
+    const invoiceEntries = pageRows.filter((r) => INVOICE_TYPES.includes(r.type) && r.referenceId);
     const linesByInvoice = await this.loadLineDetails(
       invoiceEntries.map((r) => r.referenceId as string),
       ctx,
     );
 
-    const documentsByRef = await this.loadDocuments(window, ctx);
+    const documentsByRef = await this.loadDocuments(pageRows, ctx);
 
-    const runningByCurrency = new Map<string, number>(prevByCurrency);
-    const debitByCurrency = new Map<string, number>();
-    const creditByCurrency = new Map<string, number>();
-
-    const entries: StatementEntryData[] = window.map((row, i) => {
+    const pageRunning = new Map<string, number>(beforePageByCurrency);
+    const entries: StatementEntryData[] = pageRows.map((row, i) => {
       const debit = Number(row.debit ?? 0);
       const credit = Number(row.credit ?? 0);
       const rowCcy = row.currency ?? currency;
       const isCancelled = row.status !== "active";
-      // Cancelled movements are displayed but do NOT move the account: skip
-      // their margin so runningBalance/totals only reflect active movements
-      // (matches the balance semantics used across the rest of the system).
       const margin = mult * (debit - credit);
-      let running = runningByCurrency.get(rowCcy) ?? 0;
+      let running = pageRunning.get(rowCcy) ?? 0;
       if (!isCancelled) {
         running += margin;
-        runningByCurrency.set(rowCcy, running);
-        debitByCurrency.set(rowCcy, (debitByCurrency.get(rowCcy) ?? 0) + debit);
-        creditByCurrency.set(rowCcy, (creditByCurrency.get(rowCcy) ?? 0) + credit);
+        pageRunning.set(rowCcy, running);
       }
 
       const entry: StatementEntryData = {
@@ -202,6 +278,8 @@ export class PostgresStatementRepository implements IStatementRepository {
       return entry;
     });
 
+    void hardCap; // hard cap always applied via pageLimit default
+
     const totalsByCurrency: NonNullable<PartyStatementData["totalsByCurrency"]> = {};
     const allCcys = new Set<string>([
       ...prevByCurrency.keys(),
@@ -212,8 +290,6 @@ export class PostgresStatementRepository implements IStatementRepository {
     if (!allCurrencies) allCcys.add(currency);
     for (const ccy of allCcys) {
       const finalBalance = round2dp(runningByCurrency.get(ccy) ?? prevByCurrency.get(ccy) ?? 0);
-      // finalBalance is signed per party kind (customer: + = owes us; supplier:
-      // + = we owe them) — translate to the accounting side for the KPI label.
       const side: "debit" | "credit" | "zero" =
         Math.abs(finalBalance) < 0.01
           ? "zero"
@@ -226,7 +302,6 @@ export class PostgresStatementRepository implements IStatementRepository {
         totalCredit: round2dp(creditByCurrency.get(ccy) ?? 0),
         finalBalance,
         balanceSide: side,
-        // Current (not window-bound) spendable credit — what the next sale can use.
         ...(p.kind === "customer"
           ? {
               availableCredit: (
@@ -237,8 +312,6 @@ export class PostgresStatementRepository implements IStatementRepository {
       };
     }
 
-    // Single-currency response keeps the classic scalar totals. Multi-currency
-    // zeros the scalars (mixing SYP+USD would lie) and exposes totalsByCurrency.
     const primary = allCurrencies
       ? {
           previousBalance: 0,
@@ -252,6 +325,17 @@ export class PostgresStatementRepository implements IStatementRepository {
           totalCredit: 0,
           finalBalance: 0,
         });
+
+    const last = pageRows[pageRows.length - 1];
+    const nextCursor =
+      hasMore && last
+        ? `${last.date}|${last.createdAt.toISOString()}|${last.id}`
+        : null;
+
+    const primaryBefore =
+      !allCurrencies
+        ? round2dp(beforePageByCurrency.get(currency) ?? prevByCurrency.get(currency) ?? 0)
+        : 0;
 
     return {
       partyId: query.partyId,
@@ -268,6 +352,12 @@ export class PostgresStatementRepository implements IStatementRepository {
       finalBalance: primary.finalBalance,
       totalsByCurrency,
       entries,
+      page: {
+        limit: pageLimit,
+        hasMore,
+        nextCursor,
+        balanceBeforePage: primaryBefore,
+      },
     };
   }
 

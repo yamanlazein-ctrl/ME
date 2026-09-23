@@ -38,7 +38,6 @@ import { InvoicePrintDocument } from "@/components/print/InvoicePrintDocument";
 const TYPE_LABEL: Record<Invoice["type"], string> = {
   entry: "فاتورة دخول",
   sale: "فاتورة بيع",
-  return: "مرتجع",
 };
 
 const STATUS_LABEL: Record<NonNullable<InvoiceFilter["status"]>, string> = {

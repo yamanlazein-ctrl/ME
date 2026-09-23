@@ -1,4 +1,5 @@
 import { eq, and, desc, ilike, or, sql, gte, lte } from "drizzle-orm";
+import { likeContains } from "../utils/likeEscape.js";
 import type { DB } from "../orm/drizzle.js";
 import type {
   IExpenseRepository,
@@ -38,8 +39,8 @@ export class PostgresExpenseRepository implements IExpenseRepository {
     if (filter.search)
       conditions.push(
         or(
-          ilike(expenses.number!, `%${filter.search}%`),
-          ilike(expenses.description!, `%${filter.search}%`),
+          ilike(expenses.number!, likeContains(filter.search)),
+          ilike(expenses.description!, likeContains(filter.search)),
         )!,
       );
     const where = and(...conditions);
@@ -123,6 +124,7 @@ export class PostgresExpenseRepository implements IExpenseRepository {
           notesPrint: input.notesPrint,
           notesInternal: input.notesInternal,
           createdBy: ctx.userId,
+          clientOperationId: ctx.clientOperationId ?? null,
         })
         .returning();
 

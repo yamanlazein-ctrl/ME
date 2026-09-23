@@ -60,7 +60,13 @@ export interface DashboardData {
     revenueUsd: number;
     revenueByCurrency: Record<string, number>;
   }>;
-  cashbox: { balance: number; todayMovementCount: number; isLocked: boolean; openingDate?: string };
+  cashbox: {
+    balance: number | null;
+    balanceByCurrency: Record<string, number>;
+    todayMovementCount: number;
+    isLocked: boolean;
+    openingDate?: string;
+  };
   // Fix H-7: receiptsThisMonth/paymentsThisMonth used to sum every
   // currency's vouchers into one number. byCurrency reports each
   // currency's receipts/payments/count independently.

@@ -44,6 +44,8 @@ export const ledgerEntries = pgTable(
     cancelledAt: timestamp("cancelled_at", { withTimezone: true }),
     cancelledBy: uuid("cancelled_by"),
     cancellationReferenceId: uuid("cancellation_reference_id"),
+    /** REPAIR-008 B */
+    clientOperationId: uuid("client_operation_id"),
   },
   (table) => ({
     partyIdx: index("idx_ledger_party").on(table.tenantId, table.partyId),

@@ -16,6 +16,80 @@ use std::io::{self, ErrorKind};
 use std::path::{Path, PathBuf};
 
 pub const META_FILE: &str = "db-meta.json";
+pub const INTEGRITY_MANIFEST_FILE: &str = "data-integrity.json";
+
+const DATA_MISSING_MSG: &str = "مجلد قاعدة \
+البيانات مفقود رغم أن هذا الجهاز كان يحتوي بيانات. لن يُنشأ نظام فارغ تلقائياً. الخيارات: استعادة نسخة احتياطية \
+— تحديد مجلد البيانات السابقة — إعادة ضبط مصنعي مؤكدة.";
+
+/// Minimal read of REPAIR-023 manifest (Rust side — enforcement before PG starts).
+#[derive(Debug, Clone, Deserialize)]
+struct IntegrityManifestLite {
+    #[serde(default)]
+    reset_authorized: Option<bool>,
+    #[serde(rename = "resetAuthorized")]
+    reset_authorized_camel: Option<bool>,
+    #[serde(default)]
+    last_known_counts: Option<LastKnownCounts>,
+    #[serde(rename = "lastKnownCounts")]
+    last_known_counts_camel: Option<LastKnownCounts>,
+}
+
+#[derive(Debug, Clone, Deserialize, Default)]
+struct LastKnownCounts {
+    #[serde(default)]
+    invoices: i64,
+    #[serde(default)]
+    parties: i64,
+    #[serde(default)]
+    rolls: i64,
+}
+
+impl IntegrityManifestLite {
+    fn reset_authorized(&self) -> bool {
+        self.reset_authorized
+            .or(self.reset_authorized_camel)
+            .unwrap_or(false)
+    }
+
+    fn business_rows(&self) -> i64 {
+        let c = self
+            .last_known_counts
+            .as_ref()
+            .or(self.last_known_counts_camel.as_ref());
+        match c {
+            Some(c) => c.invoices + c.parties + c.rolls,
+            None => 0,
+        }
+    }
+}
+
+pub fn integrity_manifest_path(app_data_root: &Path) -> PathBuf {
+    app_data_root.join(INTEGRITY_MANIFEST_FILE)
+}
+
+pub fn read_integrity_manifest(app_data_root: &Path) -> Option<IntegrityManifestLite> {
+    let path = integrity_manifest_path(app_data_root);
+    let raw = fs::read_to_string(&path).ok()?;
+    serde_json::from_str(&raw).ok()
+}
+
+fn had_prior_business_data(app_data_root: &Path) -> bool {
+    if let Ok(Some(meta)) = read_meta(app_data_root) {
+        if meta.schema_journal_idx > 0 {
+            return true;
+        }
+    }
+    if let Some(m) = read_integrity_manifest(app_data_root) {
+        if m.reset_authorized() {
+            return false;
+        }
+        if m.business_rows() > 0 {
+            return true;
+        }
+    }
+    false
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct DbMeta {
@@ -133,6 +207,10 @@ pub fn evaluate_existing_cluster(
     bundled_schema_idx: i32,
 ) -> io::Result<ClusterDecision> {
     if !pgdata.join("PG_VERSION").exists() {
+        // REPAIR-014 / REPAIR-023: missing pgdata with evidence of prior data → refuse.
+        if had_prior_business_data(app_data_root) {
+            return Err(io::Error::new(ErrorKind::NotFound, DATA_MISSING_MSG));
+        }
         return Ok(ClusterDecision::Fresh);
     }
     let on_disk_major = read_pg_major(&pgdata.join("PG_VERSION"))?;
@@ -246,6 +324,53 @@ mod tests {
     fn missing_pgdata_is_fresh() {
         let dir = scratch();
         let pgdata = dir.join("pgdata");
+        let d = evaluate_existing_cluster(&dir, &pgdata, "id-a", 16, 63).unwrap();
+        assert!(matches!(d, ClusterDecision::Fresh));
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn missing_pgdata_with_meta_idx_is_data_missing() {
+        let dir = scratch();
+        let pgdata = dir.join("pgdata");
+        write_meta(
+            &dir,
+            &DbMeta {
+                installation_id: "id-a".into(),
+                pg_major: 16,
+                schema_journal_idx: 40,
+                created_at: None,
+            },
+        )
+        .unwrap();
+        let err = evaluate_existing_cluster(&dir, &pgdata, "id-a", 16, 63).unwrap_err();
+        assert!(err.to_string().contains("مفقود"));
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn missing_pgdata_with_manifest_rows_is_data_missing() {
+        let dir = scratch();
+        let pgdata = dir.join("pgdata");
+        fs::write(
+            dir.join(INTEGRITY_MANIFEST_FILE),
+            r#"{"version":1,"resetAuthorized":false,"lastKnownCounts":{"invoices":10,"parties":2,"rolls":1}}"#,
+        )
+        .unwrap();
+        let err = evaluate_existing_cluster(&dir, &pgdata, "id-a", 16, 63).unwrap_err();
+        assert!(err.to_string().contains("مفقود"));
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn missing_pgdata_with_reset_authorized_is_fresh() {
+        let dir = scratch();
+        let pgdata = dir.join("pgdata");
+        fs::write(
+            dir.join(INTEGRITY_MANIFEST_FILE),
+            r#"{"version":1,"resetAuthorized":true,"lastKnownCounts":{"invoices":10,"parties":2,"rolls":1}}"#,
+        )
+        .unwrap();
         let d = evaluate_existing_cluster(&dir, &pgdata, "id-a", 16, 63).unwrap();
         assert!(matches!(d, ClusterDecision::Fresh));
         let _ = fs::remove_dir_all(&dir);

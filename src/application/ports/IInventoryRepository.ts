@@ -114,5 +114,6 @@ export interface InventoryFilter {
   status?: "active" | "low" | "out" | "all";
   search?: string;
   limit?: number;
+  page?: number;
   offset?: number;
 }

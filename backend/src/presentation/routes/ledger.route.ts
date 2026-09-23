@@ -20,6 +20,7 @@ import {
 } from "../../application/use-cases/sync/syncEnqueue.js";
 import { listLedgerSchema, writeLedgerBatchSchema } from "./ledger.schema.js";
 import * as uc from "../../application/use-cases/ledger/ledgerUseCases.js";
+import { idempotency } from "../../infrastructure/http/middleware/idempotency-handler.middleware.js";
 
 export function registerLedgerRoutes(
   router: Router,
@@ -197,6 +198,7 @@ export function registerLedgerRoutes(
     "/ledger",
     auth,
     writeGuard,
+    idempotency("POST", { required: true }),
     validateBody(writeLedgerBatchSchema),
     async (req: Request, res: Response) => {
       const c = ctx(req);

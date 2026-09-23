@@ -1,4 +1,5 @@
 import { eq, and, desc, ilike, sql, inArray } from "drizzle-orm";
+import { likeContains } from "../utils/likeEscape.js";
 import type { DB } from "../orm/drizzle.js";
 import type {
   IOrderRepository,
@@ -43,7 +44,7 @@ export class PostgresOrderRepository implements IOrderRepository {
     const conditions = [eq(orders.tenantId, ctx.tenantId)];
     if (filter.customerId) conditions.push(eq(orders.customerId, filter.customerId));
     if (filter.status) conditions.push(eq(orders.status, filter.status));
-    if (filter.search) conditions.push(ilike(orders.code, `%${filter.search}%`));
+    if (filter.search) conditions.push(ilike(orders.code, likeContains(filter.search)));
     const where = and(...conditions);
     const page = Math.max(0, filter.page ?? 0);
     const limit = Math.min(1000, Math.max(1, filter.limit ?? 20));

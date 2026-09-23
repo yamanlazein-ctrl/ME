@@ -37,9 +37,10 @@ export function mapDashboardResponse(raw: BackendDashboardResponse): DashboardDa
       openedAt: raw.cashbox?.openingDate ?? "",
     },
     cashBalance: {
-      syp: raw.cashbox?.balance ?? 0, // real source (cashbox.balance)
-      usd: 0, // no USD balance source → NOT CONNECTED
+      syp: raw.cashbox?.balanceByCurrency?.SYP ?? (raw.cashbox?.balance ?? 0),
+      usd: raw.cashbox?.balanceByCurrency?.USD ?? 0,
     },
+    cashBalanceByCurrency: raw.cashbox?.balanceByCurrency ?? {},
     // Fix H-7: the backend now returns todayProfit.byCurrency (never a
     // single blended number). ProfitDTO only has one slot for
     // marginPercent/trend, so — same "map only a real source, never

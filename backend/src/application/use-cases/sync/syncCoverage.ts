@@ -75,6 +75,9 @@ export const SYNC_COVERAGE: Record<string, CoverageEntry> = {
   "PUT /settings/:section": { sync: { entityType: "settings", operation: "update" } },
   "PUT /api/company/profile": { sync: { entityType: "company", operation: "update" } },
 
+  // ---- local integrity control plane (not business state)
+  "POST /integrity/accept-baseline": { exempt: "admin data-integrity baseline control, not a business document" },
+  "POST /integrity/authorize-reset": { exempt: "admin reset authorization control, not a business document" },
   // ---- transport (never business state) ----
   "PUT /sync/hub-config": { exempt: "local hub pairing, not a business document" },
   "POST /sync/hub-pair": { exempt: "local hub pairing, not a business document" },

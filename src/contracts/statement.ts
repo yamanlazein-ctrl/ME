@@ -96,6 +96,12 @@ export interface PartyStatementDTO {
     >
   >;
   entries: StatementEntryDTO[];
+  page?: {
+    limit: number;
+    hasMore: boolean;
+    nextCursor: string | null;
+    balanceBeforePage: number;
+  };
 }
 
 export interface StatementFilter {
@@ -103,6 +109,8 @@ export interface StatementFilter {
   to?: string;
   currency?: Currency | "ALL";
   type?: LedgerType;
+  limit?: number;
+  cursor?: string;
 }
 
 export interface SettleResponse {

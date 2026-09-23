@@ -541,6 +541,22 @@ export function registerSyncRoutes(
     gate.orchestration,
     async (req: Request, res: Response) => {
     const ctx = req.tenantContext!;
+    // REPAIR-007: per-tenant run lock on a dedicated client (held for the whole run).
+    const { pool } = await import("../../infrastructure/orm/drizzle.js");
+    const lockClient = await pool.connect();
+    let lockHeld = false;
+    try {
+      const lockKey = `${ctx.tenantId}:sync-run`;
+      const lockRes = await lockClient.query(
+        `SELECT pg_try_advisory_lock(hashtextextended($1, 0)) AS ok`,
+        [lockKey],
+      );
+      lockHeld = Boolean(lockRes.rows[0]?.ok);
+      if (!lockHeld) {
+        res.json({ skipped: true, reason: "sync already running" });
+        return;
+      }
+
     const push = await syncUc.runLocalSyncPush(
       container.syncOutboxRepo,
       container.invoiceRepo,
@@ -647,6 +663,18 @@ export function registerSyncRoutes(
       }
     }
     res.json({ ...push, deviceTrust, pull, pullError, blocksError, activity });
+    } finally {
+      if (lockHeld) {
+        try {
+          await lockClient.query(`SELECT pg_advisory_unlock(hashtextextended($1, 0))`, [
+            `${ctx.tenantId}:sync-run`,
+          ]);
+        } catch {
+          /* best-effort unlock */
+        }
+      }
+      lockClient.release();
+    }
   });
 
   /**

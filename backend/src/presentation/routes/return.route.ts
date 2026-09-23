@@ -51,7 +51,7 @@ export function registerReturnRoutes(
     "/returns",
     auth,
     writeGuard,
-    idempotency("POST"),
+    idempotency("POST", { required: true }),
     validateBody(createReturnSchema),
     async (req: Request, res: Response) => {
       const input = body<CreateReturnInput>(req);

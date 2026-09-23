@@ -12,12 +12,14 @@
 // originating stage and cleans up what boot already started — downstream
 // layers never report their own noise (Plan §0.2).
 
+mod boot_log;
 mod error;
 mod health;
 mod ports;
 mod stages;
 mod stack;
 
+pub use boot_log::{boot_id, event as boot_event, init as init_boot_log};
 pub use error::{fail, BootFailure};
 pub use stages::{BootStage, ALL as BOOT_ORDER};
 pub use stack::{
@@ -30,4 +32,5 @@ pub use stack::{
 /// boot across postgres/backend/SSR lines.
 pub(crate) fn log(msg: &str) {
     eprintln!("[desktop-runtime] {}", msg);
+    boot_log::trace(msg);
 }

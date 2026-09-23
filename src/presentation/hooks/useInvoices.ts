@@ -33,9 +33,10 @@ export function useInvoicesList(filter?: InvoiceFilter) {
   return useQuery({
     queryKey: KEYS.list(filter),
     queryFn: async ({ signal }) => {
-      void signal;
       const res = await container.invoices.list.execute(filter ?? {}, ctx);
       if (!isOk(res)) throw res.error;
+      // REPAIR-016: signal reserved for when list ports accept AbortSignal.
+      if (signal.aborted) throw new DOMException("Aborted", "AbortError");
       return res.value;
     },
     staleTime: 30_000,

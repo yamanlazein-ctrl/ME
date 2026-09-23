@@ -61,7 +61,7 @@ import { convertForSettlement } from "@erp/shared";
 
 export const Route = createFileRoute("/reports/")({ component: ReportsPage });
 
-const FULL = { limit: 1000, page: 0 };
+const FULL = { limit: 50, page: 0 }; // REPAIR-001: page; do not treat as all
 
 type ConvertMode = {
   target: Currency;

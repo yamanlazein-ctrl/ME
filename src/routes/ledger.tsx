@@ -35,7 +35,7 @@ function LedgerPage() {
   const [status, setStatus] = useState<LedgerStatus | "all">("all");
   const [partyId, setPartyId] = useState<string>("all");
   const [q, setQ] = useState("");
-  const { data: entries } = useLedgerEntries({ limit: 1000 });
+  const { data: entries } = useLedgerEntries({ limit: 50 });
   const all = useMemo(() => buildGlobalLedger(entries ?? []), [entries]);
   const filtered = useMemo(() => {
     const f = filterLedger(all, {

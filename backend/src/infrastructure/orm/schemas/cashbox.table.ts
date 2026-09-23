@@ -8,6 +8,7 @@ import {
   text,
   uniqueIndex,
   primaryKey,
+  index,
 } from "drizzle-orm/pg-core";
 import { tenants } from "./tenant.table.js";
 
@@ -36,21 +37,38 @@ export const cashboxSessions = pgTable(
   }),
 ).enableRLS();
 
-export const manualMovements = pgTable("manual_movements", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  tenantId: uuid("tenant_id")
-    .notNull()
-    .references(() => tenants.id),
-  date: date("date").notNull(),
-  type: varchar("type", { length: 20 }).notNull(),
-  direction: varchar("direction", { length: 5 }).notNull(),
-  amount: numeric("amount", { precision: 14, scale: 2, mode: "number" }).notNull(),
-  currency: varchar("currency", { length: 3 }).notNull().default("SYP"),
-  description: text("description"),
-  notesInternal: text("notes_internal"),
-  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-  createdBy: uuid("created_by"),
-}).enableRLS();
+export const manualMovements = pgTable(
+  "manual_movements",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id),
+    date: date("date").notNull(),
+    type: varchar("type", { length: 20 }).notNull(),
+    direction: varchar("direction", { length: 5 }).notNull(),
+    amount: numeric("amount", { precision: 14, scale: 2, mode: "number" }).notNull(),
+    currency: varchar("currency", { length: 3 }).notNull().default("SYP"),
+    description: text("description"),
+    notesInternal: text("notes_internal"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    createdBy: uuid("created_by"),
+    /** REPAIR-008 B */
+    clientOperationId: uuid("client_operation_id"),
+  },
+  (table) => ({
+    tenantDateCurrencyIdx: index("idx_manual_movements_tenant_date_currency").on(
+      table.tenantId,
+      table.date,
+      table.currency,
+    ),
+    tenantCurrencyDateIdx: index("idx_manual_movements_tenant_currency_date").on(
+      table.tenantId,
+      table.currency,
+      table.date,
+    ),
+  }),
+).enableRLS();
 
 export const dayCloses = pgTable(
   "day_closes",

@@ -1,0 +1,15 @@
+{
+  "journalIdx": 84,
+  "generatedAt": "2026-09-23T00:00:00.000Z",
+  "sha256": "pending-generate",
+  "tables": {},
+  "indexes": {},
+  "constraints": {},
+  "policies": {},
+  "rls": {},
+  "triggers": {},
+  "functions": {},
+  "enums": {},
+  "extensions": [],
+  "note": "Placeholder — run: node backend/scripts/schema-fingerprint.mjs --url <migrated DATABASE_URL>"
+}

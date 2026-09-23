@@ -154,6 +154,7 @@ const authRepo = new ApiAuthRepository(new AuthApiService(apiClient));
 const fxApi = new FxApiService(apiClient);
 
 export const container = {
+  http: apiClient,
   auth: { repository: authRepo },
 
   expenses: {

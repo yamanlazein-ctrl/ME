@@ -12,6 +12,7 @@ import type { IAuditRepository } from "../../application/ports/IAuditRepository.
 import type { ISyncOutboxRepository } from "../../application/ports/ISyncOutboxRepository.js";
 import type { TenantContext } from "../../domain/types/index.js";
 import { logger } from "../../infrastructure/config/logger.js";
+import { idempotency } from "../../infrastructure/http/middleware/idempotency-handler.middleware.js";
 import { db, withTenantTx } from "../../infrastructure/orm/drizzle.js";
 import { customerCreditPosition } from "../../infrastructure/repositories/customerCredit.js";
 import { respondTransactionFailure } from "../../infrastructure/http/transactionRouteError.js";
@@ -73,6 +74,8 @@ export function registerStatementRoutes(
               toDate: q.to,
               currency: q.currency,
               type: q.type,
+              limit: q.limit,
+              cursor: q.cursor,
             },
             ctx(req),
           );
@@ -116,6 +119,7 @@ export function registerStatementRoutes(
       `${base}/:id/statement/settle-invoices`,
       auth,
       writeGuard,
+      idempotency("POST", { required: true }),
       validateBody(settleInvoicesSchema),
       async (req: Request, res: Response) => {
         if (!voucherRepo || !auditRepo) {
@@ -210,6 +214,7 @@ export function registerStatementRoutes(
       `${base}/:id/statement/settle`,
       auth,
       writeGuard,
+      idempotency("POST", { required: true }),
       validateBody(settlePartySchema),
       async (req: Request, res: Response) => {
         const c = ctx(req);

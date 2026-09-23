@@ -1,5 +1,5 @@
 import { createFileRoute, Link, useSearch } from "@tanstack/react-router";
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ArrowRight } from "lucide-react";
 import { AppShell } from "@/components/layout/AppShell";
 import { PageCard } from "@/components/layout/PageCard";
@@ -18,6 +18,7 @@ import {
 } from "@/presentation/hooks/useInventory";
 import { customers, suppliers, customerById, supplierById } from "@/presentation/hooks/useParties";
 import { useLedgerEntries, LEDGER_TYPE_LABEL } from "@/presentation/hooks/useLedger";
+import { container } from "@/infrastructure/container";
 import { formatDateTime } from "@/lib/utils";
 import { formatCurrencyBreakdown, groupAmountsByCurrency } from "@/presentation/hooks/useCurrency";
 import type { ReturnDTO } from "@/application/ports/IReturnRepository";
@@ -187,9 +188,9 @@ function ReportBody({
     case "purchases":
       return <SalesReport inRange={inRange} invoices={invoices} kind="entry" vouchers={vouchers} />;
     case "receivables":
-      return <PartyBalances kind="customer" invoices={invoices} ledgerEntries={ledgerEntriesArr} />;
+      return <PartyBalances kind="customer" />;
     case "payables":
-      return <PartyBalances kind="supplier" invoices={invoices} ledgerEntries={ledgerEntriesArr} />;
+      return <PartyBalances kind="supplier" />;
     case "sales-returns":
       return <ReturnsReport inRange={inRange} returns={returns} />;
     case "expenses":
@@ -327,61 +328,91 @@ function SalesReport({
   );
 }
 
-function PartyBalances({
-  kind,
-  invoices,
-  ledgerEntries,
-}: {
-  kind: "customer" | "supplier";
-  invoices: DomainInvoice[];
-  ledgerEntries: DomainLedgerEntry[];
-}) {
-  // Fix BUG-06/C-9/C-10: total/paid/remaining are now per-currency
-  // breakdowns, never a toSYP-blended single number. Ranking (sort) still
-  // needs one comparable figure — SYP remaining specifically, documented,
-  // since there is no real FX rate to fairly compare a SYP and a USD
-  // party's remaining balance.
-  const remainingOf = (partyId: string): Record<string, number> => {
-    // Authoritative remaining — from the ledger (debit − credit for customers,
-    // credit − debit for suppliers), identical to the كشف الحساب / getBalance.
-    const out: Record<string, number> = {};
-    for (const e of ledgerEntries ?? []) {
-      if (!e || e.partyId !== partyId) continue;
-      if ((e.status ?? "active") !== "active") continue;
-      const ccy = e.currency ?? "SYP";
-      const signed =
-        kind === "supplier" ? (e.credit ?? 0) - (e.debit ?? 0) : (e.debit ?? 0) - (e.credit ?? 0);
-      out[ccy] = (out[ccy] ?? 0) + signed;
-    }
-    return out;
-  };
-  const rows = (kind === "customer" ? customers : suppliers)
-    .map((p) => {
-      const invs = invoices.filter((i) => i.partyId === p.id && i.status !== "cancelled");
-      const total = groupAmountsByCurrency(invs, invoiceTotal, (i) => i.currency);
-      // Read paid from the invoice row (backend-maintained, FX-converted) —
-      // never sum voucher amounts raw across currencies.
-      const paid = groupAmountsByCurrency(
-        invs,
-        (i) => i.paid ?? 0,
-        (i) => i.currency,
-      );
-      const remaining = remainingOf(p.id);
-      return { p, total, paid, remaining, count: invs.length };
-    })
-    .filter((r) => r.count > 0)
-    .sort((a, b) => (b.remaining.SYP ?? 0) - (a.remaining.SYP ?? 0));
+function PartyBalances({ kind }: { kind: "customer" | "supplier" }) {
+  // REPAIR-002: server ledger aggregation — never a 1,000-row client slice.
+  const [rows, setRows] = useState<
+    Array<{
+      partyId: string;
+      name: string;
+      remaining: Record<string, number>;
+      total: Record<string, number>;
+      paid: Record<string, number>;
+      count: number;
+    }>
+  >([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    void container.http
+      .get<{
+        data: Array<{
+          partyId: string;
+          name: string;
+          currency: string | null;
+          remaining: string | number;
+          total: string | number;
+          paid: string | number;
+        }>;
+      }>(`/api/reports/party-balances?kind=${kind}`)
+      .then((res) => {
+        if (cancelled) return;
+        const byParty = new Map<
+          string,
+          {
+            partyId: string;
+            name: string;
+            remaining: Record<string, number>;
+            total: Record<string, number>;
+            paid: Record<string, number>;
+            count: number;
+          }
+        >();
+        for (const r of res.data.data ?? []) {
+          const id = r.partyId;
+          const cur = byParty.get(id) ?? {
+            partyId: id,
+            name: r.name,
+            remaining: {},
+            total: {},
+            paid: {},
+            count: 0,
+          };
+          const ccy = r.currency ?? "SYP";
+          cur.remaining[ccy] = Number(r.remaining ?? 0);
+          cur.total[ccy] = Number(r.total ?? 0);
+          cur.paid[ccy] = Number(r.paid ?? 0);
+          cur.count += 1;
+          byParty.set(id, cur);
+        }
+        setRows(
+          [...byParty.values()]
+            .filter((r) => Object.values(r.remaining).some((v) => v !== 0) || Object.values(r.total).some((v) => v !== 0))
+            .sort((a, b) => (b.remaining.SYP ?? 0) - (a.remaining.SYP ?? 0)),
+        );
+        setLoading(false);
+      })
+      .catch(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [kind]);
 
   return (
     <PageCard title={kind === "customer" ? "ذمم العملاء" : "ذمم الموردين"} noBodyPadding>
-      {rows.length === 0 ? (
+      {loading ? (
+        <Empty text="جاري التحميل…" />
+      ) : rows.length === 0 ? (
         <Empty text="لا بيانات." />
       ) : (
         <TableWrap>
           <thead className="bg-secondary/60 text-[11px] uppercase text-muted-foreground">
             <tr>
               <TH>{kind === "customer" ? "العميل" : "المورد"}</TH>
-              <TH>عدد الفواتير</TH>
+              <TH>عملات</TH>
               <TH>الإجمالي</TH>
               <TH>المدفوع</TH>
               <TH>المتبقي</TH>
@@ -389,9 +420,9 @@ function PartyBalances({
           </thead>
           <tbody className="divide-y divide-border">
             {rows.map((r) => (
-              <tr key={r.p.id}>
-                <td className="px-3 py-2 font-semibold">{r.p.name}</td>
-                <td className="px-3 py-2 tabular-nums">{r.count}</td>
+              <tr key={r.partyId}>
+                <td className="px-3 py-2 font-semibold">{r.name}</td>
+                <td className="px-3 py-2 tabular-nums">{Object.keys(r.remaining).join(", ")}</td>
                 <td className="px-3 py-2 tabular-nums">{formatCurrencyBreakdown(r.total)}</td>
                 <td className="px-3 py-2 tabular-nums">{formatCurrencyBreakdown(r.paid)}</td>
                 <td className="px-3 py-2 tabular-nums font-semibold">

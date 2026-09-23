@@ -1,4 +1,5 @@
 import { eq, and, desc, ilike, sql } from "drizzle-orm";
+import { likeContains } from "../utils/likeEscape.js";
 import type { DB } from "../orm/drizzle.js";
 import type {
   IRollRepository,
@@ -40,7 +41,7 @@ export class PostgresRollRepository implements IRollRepository {
     const conditions = [eq(rolls.tenantId, ctx.tenantId)];
     if (filter.colorId) conditions.push(eq(rolls.colorId, filter.colorId));
     if (filter.status) conditions.push(eq(rolls.status, filter.status));
-    if (filter.search) conditions.push(ilike(rolls.rollNo!, `%${filter.search}%`)!);
+    if (filter.search) conditions.push(ilike(rolls.rollNo!, likeContains(filter.search))!);
     const where = and(...conditions);
     const page = Math.max(0, filter.page ?? 0);
     const limit = Math.min(1000, Math.max(1, filter.limit ?? 20));

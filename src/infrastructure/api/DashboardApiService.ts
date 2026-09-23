@@ -64,7 +64,8 @@ export interface BackendDashboardResponse {
     revenueByCurrency: Record<string, number>;
   }>;
   cashbox: {
-    balance: number;
+    balance: number | null;
+    balanceByCurrency?: Record<string, number>;
     todayMovementCount: number;
     isLocked: boolean;
     openingDate?: string;

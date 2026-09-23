@@ -5,6 +5,8 @@
     { "path": "postgres/bin/postgres.exe", "kind": "file" },
     { "path": "postgres/bin/pg_ctl.exe", "kind": "file" },
     { "path": "postgres/bin/initdb.exe", "kind": "file" },
+    { "path": "postgres/bin/pg_dump.exe", "kind": "file" },
+    { "path": "postgres/bin/pg_restore.exe", "kind": "file" },
     { "path": "postgres/bin/libpq.dll", "kind": "file" },
     { "path": "postgres/pgdata-template/PG_VERSION", "kind": "file" },
     { "path": "postgres/pgdata-template.manifest.json", "kind": "file" },

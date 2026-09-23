@@ -67,6 +67,8 @@ export const invoices = pgTable(
     cancelledAt: timestamp("cancelled_at", { withTimezone: true }),
     cancelledBy: uuid("cancelled_by"),
     cancellationReferenceId: uuid("cancellation_reference_id"),
+    /** REPAIR-008 B — durable idempotency beyond the 5-minute HTTP cache. */
+    clientOperationId: uuid("client_operation_id"),
   },
   (table) => ({
     tenantTypeNumberIdx: uniqueIndex("idx_invoices_tenant_type_number").on(

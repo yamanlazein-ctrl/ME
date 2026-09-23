@@ -1,18 +1,20 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Check, ChevronDown, Plus, Search } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
-import { customers, suppliers, useParties } from "@/presentation/hooks/useParties";
-import { recentSuggestions } from "@/shared/utils/suggestions";
+import { container } from "@/infrastructure/container";
+
+type PartyHit = {
+  id: string;
+  name: string;
+  code?: string | null;
+  phone?: string | null;
+  kind: string;
+};
 
 /**
- * Searchable party (customer/supplier) combobox for use in forms.
- * - Opens with the most recent parties; type to filter by name / phone / city.
- * - If no match exists, an "add new" empty-state action is shown.
- *
- * Mirrors the app's existing comboboxes (SupplierInlineCombobox / FabricCombobox)
- * and keeps the same RTL / dark-light design tokens.
+ * Server-side typeahead party combobox (OLD-PLAN Phase 2 — no full party preload).
  */
 export function PartyCombobox({
   kind,
@@ -24,30 +26,67 @@ export function PartyCombobox({
   kind: "customer" | "supplier";
   value: string;
   onChange: (id: string) => void;
-  /** Triggered by the "إضافة جديد" empty-state action. */
   onCreateNew: () => void;
   placeholder?: string;
 }) {
-  useParties();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
-
-  const list = kind === "customer" ? customers : suppliers;
-  const selected = list.find((p) => p.id === value);
+  const [hits, setHits] = useState<PartyHit[]>([]);
+  const [selected, setSelected] = useState<PartyHit | null>(null);
+  const [loading, setLoading] = useState(false);
   const entity = kind === "customer" ? "عميل" : "مورد";
-  const q = query.trim().toLowerCase();
 
-  const filtered = useMemo(() => {
-    if (!q) return recentSuggestions(list);
-    return list.filter(
-      (p) =>
-        (p.name ?? "").toLowerCase().includes(q) ||
-        (p.phone ?? "").toLowerCase().includes(q) ||
-        (p.city ?? "").toLowerCase().includes(q),
-    );
-  }, [q, list]);
+  useEffect(() => {
+    if (!value) {
+      setSelected(null);
+      return;
+    }
+    if (selected?.id === value) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const client = container.http;
+        const res = await client.get<{ data: PartyHit[] }>(`/api/parties/by-ids`, {
+          params: { ids: value },
+        });
+        const row = res.data?.data?.[0];
+        if (!cancelled && row) setSelected(row);
+      } catch {
+        /* ignore */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [value, selected?.id]);
 
-  const noMatch = q.length > 0 && filtered.length === 0;
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    const t = setTimeout(() => {
+      setLoading(true);
+      void (async () => {
+        try {
+          const client = container.http;
+          const res = await client.get<{ data: PartyHit[] }>(`/api/parties/search`, {
+            params: { q: query.trim(), kind, limit: "30", status: "active" },
+          });
+          if (!cancelled) setHits(res.data?.data ?? []);
+        } catch {
+          if (!cancelled) setHits([]);
+        } finally {
+          if (!cancelled) setLoading(false);
+        }
+      })();
+    }, 200);
+    return () => {
+      cancelled = true;
+      clearTimeout(t);
+    };
+  }, [open, query, kind]);
+
+  const filtered = useMemo(() => hits, [hits]);
+  const noMatch = query.trim().length > 0 && !loading && filtered.length === 0;
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -72,14 +111,17 @@ export function PartyCombobox({
             autoFocus
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder={`ابحث عن ${entity} بالاسم أو الهاتف...`}
+            placeholder={`ابحث عن ${entity} بالاسم أو الرمز...`}
             className="h-8 border-0 bg-transparent p-0 shadow-none focus-visible:ring-0"
           />
         </div>
         <div className="max-h-56 overflow-y-auto py-1">
-          {!q && filtered.length === 0 && (
+          {loading && (
+            <div className="px-3 py-3 text-xs text-muted-foreground">جاري البحث…</div>
+          )}
+          {!loading && filtered.length === 0 && !noMatch && (
             <div className="px-3 py-3 text-xs text-muted-foreground">
-              لا يوجد {entity} مسجّل بعد.
+              اكتب للبحث عن {entity}.
             </div>
           )}
           {noMatch && (
@@ -93,6 +135,7 @@ export function PartyCombobox({
               type="button"
               onClick={() => {
                 onChange(p.id);
+                setSelected(p);
                 setOpen(false);
                 setQuery("");
               }}
@@ -100,13 +143,8 @@ export function PartyCombobox({
             >
               <div className="min-w-0">
                 <div className="truncate font-medium text-foreground">{p.name}</div>
-                {p.phone && (
-                  <div
-                    dir="ltr"
-                    className="truncate text-right text-[11px] text-muted-foreground tabular-nums"
-                  >
-                    {p.phone}
-                  </div>
+                {p.code && (
+                  <div className="truncate text-[11px] text-muted-foreground">{p.code}</div>
                 )}
               </div>
               {p.id === value && <Check className="h-4 w-4 text-primary" />}

@@ -11,6 +11,8 @@ export interface TenantContext {
   userName: string;
   /** Sync device id from `X-Sync-Device-Id` (desktop multi-device numbering). */
   syncDeviceId?: UUID | null;
+  /** REPAIR-008 B: Idempotency-Key as durable client_operation_id when present. */
+  clientOperationId?: UUID | null;
 }
 
 export type Timestamp = string; // ISO 8601

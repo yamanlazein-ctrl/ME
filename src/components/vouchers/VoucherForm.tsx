@@ -83,6 +83,8 @@ export function VoucherForm({
   const createReceipt = useCreateReceiptVoucher();
   const createPayment = useCreatePaymentVoucher();
   const cancelVoucher = useCancelVoucher();
+  const saving =
+    createReceipt.isPending || createPayment.isPending || cancelVoucher.isPending;
   const { data: editing } = useVoucher(editId ?? "");
   const isReceipt = kind === "receipt";
   const [partyId, setPartyId] = useState(initialPartyId ?? "");
@@ -126,12 +128,12 @@ export function VoucherForm({
   // Scoped to the selected party with a high limit — a global page-1 list
   // silently dropped older invoices for that party (looked like "only the last").
   const { data: invoicesData } = useInvoicesList(
-    partyId ? { partyId, limit: 1000 } : { limit: 1000 },
+    partyId ? { partyId, limit: 50 } : { limit: 50 },
   );
   const allInvoices = invoicesData?.data ?? [];
   // Returns are needed to compute the true remaining: backend does total - paid - activeReturns
   // (sale return credits the customer). Without this, the UI shows 44 while the backend correctly sees -72.
-  const { data: returnsData } = useReturnsList({ limit: 1000 });
+  const { data: returnsData } = useReturnsList({ limit: 50 });
   const returnsByInvoice = useMemo(() => {
     const map = new Map<string, number>();
     for (const r of (returnsData?.data ?? []) as Array<{
@@ -305,6 +307,7 @@ export function VoucherForm({
       }
     }
     if (!valid) return;
+    if (saving) return;
     const input = {
       kind,
       date,
@@ -610,8 +613,12 @@ export function VoucherForm({
           <Button variant="ghost" onClick={() => history.back()}>
             <X className="h-4 w-4 ml-1" /> إلغاء
           </Button>
-          <Button onClick={save} className="bg-primary text-primary-foreground">
-            <Save className="h-4 w-4 ml-1" /> حفظ السند
+          <Button
+            onClick={save}
+            disabled={saving}
+            className="bg-primary text-primary-foreground"
+          >
+            <Save className="h-4 w-4 ml-1" /> {saving ? "جاري الحفظ…" : "حفظ السند"}
           </Button>
         </div>
       </div>

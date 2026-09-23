@@ -28,9 +28,9 @@ import { formatDateTime } from "@/lib/utils";
 export const Route = createFileRoute("/payments/")({ component: PaymentsList });
 
 function PaymentsList() {
-  const { data: listData } = useVouchersList({ kind: "payment", limit: 1000 });
+  const { data: listData } = useVouchersList({ kind: "payment", limit: 50 });
   const list = listData?.data ?? [];
-  const { data: invoicesData } = useInvoicesList({ limit: 1000 });
+  const { data: invoicesData } = useInvoicesList({ limit: 50 });
   const invoiceNumberById = useMemo(() => {
     const m = new Map<string, string>();
     for (const inv of invoicesData?.data ?? []) {

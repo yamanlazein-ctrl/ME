@@ -1,4 +1,5 @@
 import { eq, and, desc, ilike, or, sql, gte, lte, isNotNull } from "drizzle-orm";
+import { likeContains } from "../utils/likeEscape.js";
 import { BusinessRuleError } from "../../domain/errors/index.js";
 import { allocateDocumentNumber } from "../utils/documentNumbers.js";
 import type { DB } from "../orm/drizzle.js";
@@ -66,7 +67,7 @@ export class PostgresVoucherRepository implements IVoucherRepository {
     if (filter.status) conditions.push(eq(vouchers.status, filter.status));
     if (filter.fromDate) conditions.push(gte(vouchers.date, filter.fromDate));
     if (filter.toDate) conditions.push(lte(vouchers.date, filter.toDate));
-    if (filter.search) conditions.push(or(ilike(vouchers.number!, `%${filter.search}%`))!);
+    if (filter.search) conditions.push(or(ilike(vouchers.number!, likeContains(filter.search)))!);
     const where = and(...conditions);
     const page = Math.max(0, filter.page ?? 0);
     const limit = Math.min(1000, Math.max(1, filter.limit ?? 20));
@@ -374,6 +375,7 @@ export class PostgresVoucherRepository implements IVoucherRepository {
           notesPrint: input.notesPrint,
           notesInternal: input.notesInternal,
           createdBy: ctx.userId,
+          clientOperationId: ctx.clientOperationId ?? null,
         })
         .returning();
 

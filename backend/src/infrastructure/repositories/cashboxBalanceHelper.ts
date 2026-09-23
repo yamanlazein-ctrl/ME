@@ -119,7 +119,7 @@ export async function getCashboxBalanceAsOf(
  * allowed — this is no longer a hard block. Callers may use the returned
  * snapshot to surface a warning in the UI.
  */
-export async function assertSufficientCashboxBalance(
+export async function lockAndReadCashboxBalance(
   tx: Tx,
   ctx: TenantContext,
   currency: string,
@@ -132,3 +132,6 @@ export async function assertSufficientCashboxBalance(
   const available = await getCashboxBalanceAsOf(tx, ctx, currency, asOfDate);
   return { available, wouldGoNegative: available < amount };
 }
+
+/** @deprecated Use lockAndReadCashboxBalance — name was misleading (never asserted). */
+export const assertSufficientCashboxBalance = lockAndReadCashboxBalance;

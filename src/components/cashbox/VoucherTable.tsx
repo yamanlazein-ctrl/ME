@@ -40,7 +40,7 @@ export function VoucherTable({
   kind: "receipt" | "payment";
   query: ProfitQueryParams;
 }) {
-  const { data, isLoading, isError, refetch, error } = useVouchersList({ kind, limit: 1000 });
+  const { data, isLoading, isError, refetch, error } = useVouchersList({ kind, limit: 50 });
   const cancelMut = useCancelVoucher();
   const [toCancel, setToCancel] = useState<Voucher | null>(null);
 

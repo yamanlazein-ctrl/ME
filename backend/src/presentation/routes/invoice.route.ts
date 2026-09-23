@@ -58,7 +58,7 @@ export function registerInvoiceRoutes(
     "/invoices",
     auth,
     writeGuard,
-    idempotency("POST"),
+    idempotency("POST", { required: true }),
     validateBody(createInvoiceSchema),
     async (req: Request, res: Response) => {
       const input = body<CreateInvoiceInput>(req);
@@ -229,7 +229,7 @@ export function registerInvoiceRoutes(
     "/invoices/:id",
     auth,
     writeGuard,
-    idempotency("PUT"),
+    idempotency("PUT", { required: true }),
     validateUuidParam("id"),
     validateBody(updateInvoiceSchema),
     async (req: Request, res: Response) => {

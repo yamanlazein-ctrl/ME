@@ -40,7 +40,7 @@ export type Currency = "SYP" | "USD" | "EUR";
 
 export type EntityStatus = "active" | "cancelled" | "draft";
 
-export type InvoiceType = "entry" | "sale" | "return";
+export type InvoiceType = "entry" | "sale";
 
 export type VoucherKind = "receipt" | "payment";
 export type VoucherMethod = "cash" | "transfer" | "check" | "card";
@@ -49,16 +49,62 @@ export type VoucherMethod = "cash" | "transfer" | "check" | "card";
 export type Mutable<T> = { -readonly [K in keyof T]: T[K] };
 
 export type LedgerType =
-  | "opening"
-  | "purchase_invoice"
-  | "sales_invoice"
-  | "payment_out"
-  | "receipt_in"
-  | "purchase_return"
-  | "sales_return"
-  | "expense"
   | "adjustment"
-  | "settlement";
+  | "adjustment_contra"
+  | "cancellation"
+  | "cash"
+  | "cogs_expense"
+  | "expense"
+  | "inventory_asset"
+  | "opening"
+  | "opening_equity"
+  | "payment_out"
+  | "printing_charge"
+  | "printing_revenue"
+  | "purchase_invoice"
+  | "purchase_return"
+  | "purchase_return_contra"
+  | "receipt_in"
+  | "sales_invoice"
+  | "sales_revenue"
+  | "sales_return"
+  | "sales_return_contra"
+  | "settlement"
+  | "settlement_contra"
+  | "settlement_discount_expense"
+  | "settlement_discount_income"
+  | "fx_gain"
+  | "fx_loss";
+
+/** Must stay equal to backend `LEDGER_ENTRY_TYPES` (REPAIR-011). */
+export const FRONTEND_LEDGER_TYPES: readonly LedgerType[] = [
+  "adjustment",
+  "adjustment_contra",
+  "cancellation",
+  "cash",
+  "cogs_expense",
+  "expense",
+  "inventory_asset",
+  "opening",
+  "opening_equity",
+  "payment_out",
+  "printing_charge",
+  "printing_revenue",
+  "purchase_invoice",
+  "purchase_return",
+  "purchase_return_contra",
+  "receipt_in",
+  "sales_invoice",
+  "sales_revenue",
+  "sales_return",
+  "sales_return_contra",
+  "settlement",
+  "settlement_contra",
+  "settlement_discount_expense",
+  "settlement_discount_income",
+  "fx_gain",
+  "fx_loss",
+] as const;
 
 export type CashImpact = "in" | "out" | "none";
 

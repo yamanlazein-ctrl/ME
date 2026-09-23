@@ -1,4 +1,5 @@
 import { eq, and, desc, ilike, or, ne, sql, inArray, gte, lte } from "drizzle-orm";
+import { likeContains } from "../utils/likeEscape.js";
 import type { DB } from "../orm/drizzle.js";
 import { allocateDocumentNumber } from "../utils/documentNumbers.js";
 import type { IReturnRepository, ReturnFilter } from "../../application/ports/IReturnRepository.js";
@@ -38,7 +39,7 @@ export class PostgresReturnRepository implements IReturnRepository {
     if (filter.status) conditions.push(eq(returns.status, filter.status));
     if (filter.fromDate) conditions.push(gte(returns.date, filter.fromDate));
     if (filter.toDate) conditions.push(lte(returns.date, filter.toDate));
-    if (filter.search) conditions.push(or(ilike(returns.number!, `%${filter.search}%`))!);
+    if (filter.search) conditions.push(or(ilike(returns.number!, likeContains(filter.search)))!);
     const where = and(...conditions);
     const page = Math.max(0, filter.page ?? 0);
     const limit = Math.min(1000, Math.max(1, filter.limit ?? 20));
@@ -112,6 +113,7 @@ export class PostgresReturnRepository implements IReturnRepository {
           notesPrint: input.notesPrint,
           notesInternal: input.notesInternal,
           createdBy: ctx.userId,
+          clientOperationId: ctx.clientOperationId ?? null,
         })
         .returning();
 
@@ -338,23 +340,16 @@ export class PostgresReturnRepository implements IReturnRepository {
         }),
       );
 
-      for (const [rollId, totalQty] of inputByRoll) {
+      // REPAIR-012: lock all return rolls once, ascending id order.
+      const { lockRollsOrdered } = await import("./rollLocking.js");
+      const lockedRolls = await lockRollsOrdered(tx, ctx.tenantId, [...inputByRoll.keys()]);
+      for (const rollId of [...inputByRoll.keys()].sort()) {
+        const totalQty = inputByRoll.get(rollId)!;
         const totalPieces = piecesByRoll.get(rollId) ?? 1;
-        const [r] = await tx
-          .select({
-            remainingKg: rolls.remainingKg,
-            remainingPieces: rolls.remainingPieces,
-            version: rolls.version,
-            rollNo: rolls.rollNo,
-          })
-          .from(rolls)
-          .where(and(eq(rolls.id, rollId), eq(rolls.tenantId, ctx.tenantId)))
-          .for("update")
-          .limit(1);
-        if (r) {
+        const r = lockedRolls.get(rollId)!;
+        {
           const currentKg = Number(r.remainingKg);
           const currentPieces = Number(r.remainingPieces);
-          // مرتجع إدخال = إرجاع مواد للمورد → ينقص المخزون؛ مرتجع بيع = استرجاع من العميل → يزيد المخزون
           const delta = input.kind === "entry" ? -totalQty : totalQty;
           const piecesDelta = input.kind === "entry" ? -totalPieces : totalPieces;
           const newKg = Math.max(0, currentKg + delta);
@@ -404,12 +399,10 @@ export class PostgresReturnRepository implements IReturnRepository {
         }
       }
 
-      // Write the ledger entry for the return (atomic with stock + return).
-      // Price is server-derived from invoice_lines (fix 3.2c), never client-supplied.
-      // For sale returns, split at cost: party at sale price, inventory at cost, COGS reversed.
       const isEntryReturn = input.kind === "entry";
       let saleTotal = 0;
       let costTotal = 0;
+
       for (const [rollId, totalQty] of inputByRoll) {
         const entry = invoiceLineQtys.get(rollId)!;
         saleTotal += round2dp(totalQty * entry.pricePerKg);
@@ -602,18 +595,16 @@ export class PostgresReturnRepository implements IReturnRepository {
 
       const lines = await tx.select().from(returnLines).where(eq(returnLines.returnId, id));
 
-      for (const l of lines) {
-        const [roll] = await tx
-          .select({
-            remainingKg: rolls.remainingKg,
-            remainingPieces: rolls.remainingPieces,
-            version: rolls.version,
-            rollNo: rolls.rollNo,
-          })
-          .from(rolls)
-          .where(and(eq(rolls.id, l.rollId), eq(rolls.tenantId, ctx.tenantId)))
-          .for("update")
-          .limit(1);
+      // REPAIR-012: lock cancel rolls once in ascending id order.
+      const { lockRollsOrdered } = await import("./rollLocking.js");
+      const lockedCancel = await lockRollsOrdered(
+        tx,
+        ctx.tenantId,
+        lines.map((l) => l.rollId),
+      );
+      const linesSorted = [...lines].sort((a, b) => (a.rollId < b.rollId ? -1 : a.rollId > b.rollId ? 1 : 0));
+      for (const l of linesSorted) {
+        const roll = lockedCancel.get(l.rollId);
         if (roll) {
           // عكس التأثير الأصلي عند الإلغاء: مرتجع إدخال → يعيد الكمية للمخزون؛ مرتجع بيع → يخصمها
           const delta = r.kind === "entry" ? Number(l.quantityKg) : -Number(l.quantityKg);

@@ -35,6 +35,7 @@ export const createPartySchema = z.object({
   defaultDiscount: z.number().min(0).optional(),
   vat: z.number().min(0).optional(),
   notes: z.string().max(2000).optional(),
+  status: z.enum(["active", "inactive"]).optional(),
 });
 
 export const updatePartySchema = createPartySchema.partial().omit({ kind: true });
@@ -42,7 +43,7 @@ export const updatePartySchema = createPartySchema.partial().omit({ kind: true }
 export const listPartiesSchema = z.object({
   kind: z.enum(["customer", "supplier"]).optional(),
   search: z.string().max(200).optional(),
-  status: z.enum(["active", "cancelled"]).optional(),
+  status: z.enum(["active", "inactive", "cancelled"]).optional(),
   page: z.coerce.number().int().min(0).optional().default(0),
   limit: z.coerce.number().int().min(1).max(1000).optional().default(20),
 });

@@ -60,7 +60,16 @@ transportStream.on("error", (err: unknown) => {
   console.error("[logger] transport error (non-fatal, logging degraded):", err);
 });
 
-const pinoLogger = pino({ level: config.LOG_LEVEL }, transportStream);
+const pinoLogger = pino(
+  {
+    level: config.LOG_LEVEL,
+    // REPAIR-013: correlate backend lines with the desktop boot log.
+    ...(process.env.MOTARD_BOOT_ID
+      ? { base: { bootId: process.env.MOTARD_BOOT_ID } }
+      : {}),
+  },
+  transportStream,
+);
 
 export { pinoLogger as logger };
 

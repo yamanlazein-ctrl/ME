@@ -100,7 +100,6 @@ function printInvoiceWithArchive(inv: Invoice) {
 const TYPE_LABEL: Record<Invoice["type"], string> = {
   entry: "فاتورة دخول",
   sale: "فاتورة بيع",
-  return: "مرتجع",
 };
 
 const STATUS_LABEL: Record<NonNullable<InvoiceFilter["status"]>, string> = {
@@ -161,7 +160,7 @@ function InvoicesTrackingPage() {
   const { data: returnsData } = useReturnsList({ limit: 500 });
   const { data: printJobs = [] } = usePrintJobs();
   const allParties = [...customers, ...suppliers];
-  const { data: vouchersData } = useVouchersList({ limit: 1000 });
+  const { data: vouchersData } = useVouchersList({ limit: 50 });
   const allVouchers = vouchersData?.data ?? [];
 
   const cancelInvoice = useCancelInvoice();

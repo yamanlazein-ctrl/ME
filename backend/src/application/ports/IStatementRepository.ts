@@ -12,12 +12,8 @@ export interface SettlePartyInput {
 /**
  * Party statement (كشف حساب) + settlement (تسوية).
  *
- * The statement is computed server-side so the UI gets:
- *  - previous balance (sum of movements strictly before `from`, signed by kind)
- *  - chronological entries with running balance + expandable invoice line details
- *  - totals + final balance
- * No pagination / hidden limits: the acceptance criteria require the full,
- * unfiltered register for each party.
+ * Totals always cover the full filter window. Entry pages are bounded
+ * (default/max limit enforced in PostgresStatementRepository).
  */
 export interface IStatementRepository {
   getStatement(query: StatementQuery, ctx: TenantContext): Promise<PartyStatementData>;

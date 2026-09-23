@@ -16,7 +16,7 @@ export interface InvoiceDTO {
   number: string;
   /** Human-readable reference (ENT-2026-0001 / INV-2026-0001). */
   reference?: string | null;
-  type: "entry" | "sale" | "return";
+  type: "entry" | "sale";
   date: string;
   partyId: UUID;
   partyType: "customer" | "supplier";
@@ -41,7 +41,7 @@ export interface InvoiceDTO {
 }
 
 export interface CreateInvoiceRequest {
-  type: "entry" | "sale" | "return";
+  type: "entry" | "sale";
   date: string;
   partyId: UUID;
   partyType: "customer" | "supplier";

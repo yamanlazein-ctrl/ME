@@ -42,6 +42,11 @@ export const syncOutbox = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
     syncedAt: timestamp("synced_at", { withTimezone: true }),
+    // REPAIR-027: lease ownership so a stale worker cannot overwrite a newer outcome.
+    leaseOwner: text("lease_owner"),
+    leaseToken: uuid("lease_token"),
+    leaseUntil: timestamp("lease_until", { withTimezone: true }),
+    claimedAt: timestamp("claimed_at", { withTimezone: true }),
   },
   (table) => ({
     tenantStatusIdx: index("idx_sync_outbox_tenant_status").on(table.tenantId, table.status),
@@ -50,6 +55,7 @@ export const syncOutbox = pgTable(
       table.status,
       table.seq,
     ),
+    leaseUntilIdx: index("idx_sync_outbox_lease_until").on(table.tenantId, table.leaseUntil),
     opUnique: uniqueIndex("uq_sync_outbox_tenant_op").on(table.tenantId, table.opId),
   }),
 ).enableRLS();

@@ -505,71 +505,44 @@ export class PostgresDashboardRepository implements IDashboardRepository {
       .where(eq(companyProfiles.tenantId, ctx.tenantId))
       .limit(1);
 
-    // ── Cashbox balance (real: opening + movements in − out) ────────
-    // Mirrors GET /cashbox/balance/:date — same formula.
+    // ── Cashbox balance (REPAIR-004a: never blend currencies) ────────
     const [cashSession] = await this.db
       .select()
       .from(cashboxSessions)
       .where(eq(cashboxSessions.tenantId, ctx.tenantId))
       .limit(1);
-    let cashBalance = 0;
-    if (cashSession) {
-      const from = cashSession.openingDate;
-      const currency = cashSession.currency;
-      const [ledgerCash] = await this.db
-        .select({
-          amountIn: sql<number>`COALESCE(SUM(CASE WHEN ${ledgerEntries.cashImpact} = 'in' THEN ${ledgerEntries.debit} + ${ledgerEntries.credit} ELSE 0 END), 0)`,
-          amountOut: sql<number>`COALESCE(SUM(CASE WHEN ${ledgerEntries.cashImpact} = 'out' THEN ${ledgerEntries.debit} + ${ledgerEntries.credit} ELSE 0 END), 0)`,
-        })
-        .from(ledgerEntries)
-        .where(
-          and(
-            eq(ledgerEntries.tenantId, ctx.tenantId),
-            eq(ledgerEntries.status, "active"),
-            inArray(ledgerEntries.cashImpact, ["in", "out"]),
-            eq(ledgerEntries.currency, currency),
-            sql`${ledgerEntries.date} >= ${from}`,
-            sql`${ledgerEntries.date} <= ${today}`,
-          ),
-        );
-      const manualRows = await this.db
-        .select({
-          direction: manualMovements.direction,
-          amount: manualMovements.amount,
-          date: manualMovements.date,
-          currency: manualMovements.currency,
-        })
-        .from(manualMovements)
-        .where(eq(manualMovements.tenantId, ctx.tenantId));
-      let mIn = 0;
-      let mOut = 0;
-      for (const m of manualRows) {
-        if (m.currency !== currency || m.date > today || m.date < from) continue;
-        if (m.direction === "in") mIn += m.amount;
-        else mOut += m.amount;
-      }
-      cashBalance =
-        cashSession.openingBalance +
-        Number(ledgerCash?.amountIn ?? 0) +
-        mIn -
-        Number(ledgerCash?.amountOut ?? 0) -
-        mOut;
-    } else {
-      const [ledgerCash] = await this.db
-        .select({
-          amountIn: sql<number>`COALESCE(SUM(CASE WHEN ${ledgerEntries.cashImpact} = 'in' THEN ${ledgerEntries.debit} + ${ledgerEntries.credit} ELSE 0 END), 0)`,
-          amountOut: sql<number>`COALESCE(SUM(CASE WHEN ${ledgerEntries.cashImpact} = 'out' THEN ${ledgerEntries.debit} + ${ledgerEntries.credit} ELSE 0 END), 0)`,
-        })
-        .from(ledgerEntries)
-        .where(
-          and(
-            eq(ledgerEntries.tenantId, ctx.tenantId),
-            eq(ledgerEntries.status, "active"),
-            inArray(ledgerEntries.cashImpact, ["in", "out"]),
-          ),
-        );
-      cashBalance = Number(ledgerCash?.amountIn ?? 0) - Number(ledgerCash?.amountOut ?? 0);
+
+    const { getCashboxBalanceAsOf } = await import("./cashboxBalanceHelper.js");
+    const currencyRows = await this.db
+      .select({ currency: sql<string>`DISTINCT ${ledgerEntries.currency}` })
+      .from(ledgerEntries)
+      .where(
+        and(
+          eq(ledgerEntries.tenantId, ctx.tenantId),
+          eq(ledgerEntries.status, "active"),
+          inArray(ledgerEntries.cashImpact, ["in", "out"]),
+        ),
+      );
+    const manualCcyRows = await this.db
+      .select({ currency: sql<string>`DISTINCT ${manualMovements.currency}` })
+      .from(manualMovements)
+      .where(eq(manualMovements.tenantId, ctx.tenantId));
+    const currencySet = new Set<string>();
+    if (cashSession?.currency) currencySet.add(cashSession.currency);
+    for (const r of currencyRows) if (r.currency) currencySet.add(r.currency);
+    for (const r of manualCcyRows) if (r.currency) currencySet.add(r.currency);
+    if (currencySet.size === 0) currencySet.add("SYP");
+
+    const cashBalanceByCurrency: Record<string, number> = {};
+    // getCashboxBalanceAsOf accepts drizzle query API; pool db is fine outside a tx.
+    const tx = this.db as unknown as import("../orm/drizzle.js").Tx;
+    for (const ccy of currencySet) {
+      cashBalanceByCurrency[ccy] = await getCashboxBalanceAsOf(tx, ctx, ccy, today);
     }
+    // Session branch: scalar = session currency. No session: null (never a blend) — §19 Q3.
+    const cashBalance: number | null = cashSession
+      ? (cashBalanceByCurrency[cashSession.currency] ?? 0)
+      : null;
 
     // ── Today's invoice count (all types: entry + sale) ─────────────
     const [todayInvoicesRow] = await this.db
@@ -770,6 +743,7 @@ export class PostgresDashboardRepository implements IDashboardRepository {
       })),
       cashbox: {
         balance: cashBalance,
+        balanceByCurrency: cashBalanceByCurrency,
         todayMovementCount: Number(todayMovements?.count ?? 0),
         isLocked: !!dayLock,
         openingDate: cashSession?.openingDate,

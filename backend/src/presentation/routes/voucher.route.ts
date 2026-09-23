@@ -104,7 +104,7 @@ export function registerVoucherRoutes(
     "/payments",
     auth,
     writeGuard,
-    idempotency("POST"),
+    idempotency("POST", { required: true }),
     validateBody(createVoucherSchema),
     async (req: Request, res: Response) => createAndEnqueue(req, res, "payment"),
   );
@@ -113,7 +113,7 @@ export function registerVoucherRoutes(
     "/receipts",
     auth,
     writeGuard,
-    idempotency("POST"),
+    idempotency("POST", { required: true }),
     validateBody(createVoucherSchema),
     async (req: Request, res: Response) => createAndEnqueue(req, res, "receipt"),
   );

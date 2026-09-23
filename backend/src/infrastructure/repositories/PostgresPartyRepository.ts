@@ -1,4 +1,5 @@
 import { eq, and, desc, ilike, or, sql, inArray } from "drizzle-orm";
+import { likeContains } from "../utils/likeEscape.js";
 import type { DB } from "../orm/drizzle.js";
 import type {
   IPartyRepository,
@@ -47,7 +48,7 @@ export class PostgresPartyRepository implements IPartyRepository {
     if (filter.kind) conditions.push(eq(parties.kind, filter.kind));
     if (filter.status) conditions.push(eq(parties.status, filter.status));
     if (filter.search) {
-      const search = `%${filter.search}%`;
+      const search = likeContains(filter.search);
       conditions.push(or(ilike(parties.name, search), ilike(parties.code!, search))!);
     }
     const where = and(...conditions);

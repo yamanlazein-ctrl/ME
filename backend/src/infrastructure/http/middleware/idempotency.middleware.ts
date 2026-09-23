@@ -89,12 +89,32 @@ export async function readCached(
     [tenantId, method, path, key],
   );
   const row = rows[0];
-  if (!row) return null;
-  return {
-    status: row.status_code,
-    body: typeof row.response_body === "string" ? JSON.parse(row.response_body) : row.response_body,
-    contentType: row.content_type,
-  };
+  if (row) {
+    return {
+      status: row.status_code,
+      body: typeof row.response_body === "string" ? JSON.parse(row.response_body) : row.response_body,
+      contentType: row.content_type,
+    };
+  }
+  // OLD-PLAN Phase 1: durable financial_operations — survives beyond 5-minute TTL.
+  try {
+    const durable = await pool.query(
+      `SELECT status_code, response_body, content_type
+         FROM financial_operations
+        WHERE tenant_id = $1 AND method = $2 AND path = $3 AND operation_key = $4
+          AND status_code > 0`,
+      [tenantId, method, path, key],
+    );
+    const d = durable.rows[0];
+    if (!d) return null;
+    return {
+      status: d.status_code,
+      body: typeof d.response_body === "string" ? d.response_body : JSON.stringify(d.response_body),
+      contentType: d.content_type,
+    };
+  } catch {
+    return null;
+  }
 }
 
 export async function writeCached(
@@ -111,7 +131,6 @@ export async function writeCached(
   if (redis) {
     try {
       await redis.setex(fullKey, IDEMPOTENCY_TTL_SECONDS, JSON.stringify(value));
-      return;
     } catch {
       // fall through to the durable DB store
     }
@@ -122,6 +141,21 @@ export async function writeCached(
       WHERE tenant_id = $1 AND method = $2 AND path = $3 AND idempotency_key = $4`,
     [tenantId, method, path, key, status, JSON.stringify(body), contentType],
   );
+  // Persist permanently for financial retries after TTL (table may be absent on old DBs).
+  try {
+    await pool.query(
+      `INSERT INTO financial_operations (tenant_id, method, path, operation_key, status_code, response_body, content_type)
+       VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7)
+       ON CONFLICT (tenant_id, method, path, operation_key)
+       DO UPDATE SET status_code = EXCLUDED.status_code,
+                     response_body = EXCLUDED.response_body,
+                     content_type = EXCLUDED.content_type,
+                     updated_at = now()`,
+      [tenantId, method, path, key, status, body, contentType],
+    );
+  } catch {
+    /* migration not applied yet — short TTL path still works */
+  }
 }
 
 /**
@@ -142,6 +176,20 @@ export async function tryClaim(
   path: string,
   key: string,
 ): Promise<boolean> {
+  // If a durable financial result already exists, never re-execute.
+  try {
+    const { rows: durable } = await pool.query(
+      `SELECT 1 FROM financial_operations
+        WHERE tenant_id = $1 AND method = $2 AND path = $3 AND operation_key = $4
+          AND status_code > 0
+        LIMIT 1`,
+      [tenantId, method, path, key],
+    );
+    if (durable.length > 0) return false;
+  } catch {
+    /* table may not exist yet */
+  }
+
   const fullKey = buildKey(tenantId, method, path, key);
   if (redis) {
     try {

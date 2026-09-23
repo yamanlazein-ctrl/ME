@@ -23,7 +23,7 @@ function ReturnsList() {
   useInventory();
   const { data: paginated } = useReturnsList();
   const returns = paginated?.data ?? [];
-  const { data: invoicesData } = useInvoicesList({ limit: 1000 });
+  const { data: invoicesData } = useInvoicesList({ limit: 50 });
   const invoiceNumberById = useMemo(() => {
     const m = new Map<string, string>();
     for (const inv of invoicesData?.data ?? []) {
