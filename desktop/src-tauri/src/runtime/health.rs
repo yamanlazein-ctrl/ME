@@ -1,39 +1,62 @@
-// Readiness gating with bounded deadlines (Plan §8 — measured, not vague).
+// Readiness gating — LIVENESS-based, not deadline-based.
 //
-// A note on the banned list (§0.1 rule 2): "adding sleep / increasing
-// timeouts / telling the user to wait longer" is banned as a FIX for a race
-// or ordering bug. What this module does is different and is the only honest
-// way to wait for a child process that initializes on its own schedule:
-// poll a readiness signal (TCP accept, HTTP 200) with a FIXED short quantum
-// and a HARD total deadline, then fail loudly with the single true cause and
-// clean up everything already started. The quantum (250–300ms) is a
-// scheduling granularity, not a correctness mechanism: correctness comes
-// from the deadline + the readiness signal itself, and boot order is enforced
-// by `stages.rs`, never by timing.
+// A fixed timeout ("fail if the server is not up in 60 s") is wrong for a desktop app: a cold start on a slow
+// disk with real-time antivirus scanning legitimately takes minutes, and the old 60 s / 120 s / 300 s deadlines
+// turned "slow" into a fatal error, killed the half-started stack and made the next boot start from scratch.
 //
-// Concretely:
-//   - postgres readiness is reported by postgres itself (`pg_ctl start -w`);
-//     `wait_tcp` is only the second gate before `createdb`.
-//   - backend readiness is the backend's own GET /api/health/live == 200.
-//   - frontend readiness is GET /__health == 200, a lightweight event-loop
-//     probe — NEVER "/" (polling "/" forced a full SSR render and caused the
-//     historic 5-minute-boot false failure; see stack.rs Step 8).
+// What decides the outcome here is the child process itself:
+//   - it reports ready            -> continue,
+//   - it has EXITED               -> fail immediately with its exit code (the real, single cause),
+//   - it is alive but not ready   -> keep waiting and keep telling the user how long it has been,
+//                                    up to a very generous safety ceiling that only exists to bound a
+//                                    genuinely wedged process.
+// Boot order is enforced by `stages.rs`, never by timing.
 
 use std::io::{self, Read, Write};
 use std::net::TcpStream;
 use std::time::{Duration, Instant};
 
-/// Absolute ceiling for the whole boot (provision → frontend ready).
-pub const BOOT_DEADLINE: Duration = Duration::from_secs(300);
+/// Result of waiting for a child process to become ready.
+#[derive(Debug, PartialEq, Eq)]
+pub enum WaitOutcome<T> {
+    Ready(T),
+    /// The child ended before it became ready (exit code as reported by the OS).
+    ChildExited(u32),
+    /// Still alive but never became ready within the safety ceiling.
+    CeilingReached,
+}
 
-pub fn check_boot_deadline(started: Instant) -> io::Result<()> {
-    if started.elapsed() > BOOT_DEADLINE {
-        return Err(io::Error::new(
-            io::ErrorKind::TimedOut,
-            "تجاوز إقلاع النظام المهلة القصوى (300 ثانية)",
-        ));
+/// Poll `ready` until it yields a value, the child dies, or `ceiling` elapses.
+/// `on_tick` receives the elapsed time roughly once per second (progress for the splash).
+pub fn wait_ready<T>(
+    mut ready: impl FnMut() -> Option<T>,
+    mut child_exit_code: impl FnMut() -> Option<u32>,
+    mut on_tick: impl FnMut(Duration),
+    ceiling: Duration,
+) -> WaitOutcome<T> {
+    let start = Instant::now();
+    let mut last_tick = Duration::ZERO;
+    loop {
+        if let Some(v) = ready() {
+            return WaitOutcome::Ready(v);
+        }
+        if let Some(code) = child_exit_code() {
+            // One last look: the child may have written its readiness signal just before exiting.
+            return match ready() {
+                Some(v) => WaitOutcome::Ready(v),
+                None => WaitOutcome::ChildExited(code),
+            };
+        }
+        let elapsed = start.elapsed();
+        if elapsed >= ceiling {
+            return WaitOutcome::CeilingReached;
+        }
+        if elapsed.saturating_sub(last_tick) >= Duration::from_secs(1) {
+            last_tick = elapsed;
+            on_tick(elapsed);
+        }
+        std::thread::sleep(Duration::from_millis(100));
     }
-    Ok(())
 }
 
 /// Wait until `host:port` accepts TCP, or the timeout expires.
@@ -81,19 +104,6 @@ pub fn http_get_ok(host: &str, port: u16, path: &str) -> bool {
     }
 }
 
-/// Poll `pred` until true or `timeout` elapses. The timeout is the contract;
-/// `false` means "not ready in time", never "maybe try longer".
-pub fn wait_for<F: Fn() -> bool>(pred: F, timeout: Duration) -> bool {
-    let start = Instant::now();
-    while start.elapsed() < timeout {
-        if pred() {
-            return true;
-        }
-        std::thread::sleep(Duration::from_millis(300));
-    }
-    false
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -108,21 +118,44 @@ mod tests {
     }
 
     #[test]
-    fn wait_for_returns_false_on_deadline() {
+    fn wait_ready_returns_as_soon_as_the_signal_appears() {
+        let mut n = 0;
+        let out = wait_ready(
+            || {
+                n += 1;
+                (n >= 3).then_some("up")
+            },
+            || None,
+            |_| {},
+            Duration::from_secs(5),
+        );
+        assert_eq!(out, WaitOutcome::Ready("up"));
+    }
+
+    #[test]
+    fn wait_ready_fails_immediately_when_the_child_dies() {
         let start = Instant::now();
-        assert!(!wait_for(|| false, Duration::from_millis(350)));
-        assert!(start.elapsed() < Duration::from_secs(10), "must be bounded");
+        let out = wait_ready::<()>(|| None, || Some(3), |_| {}, Duration::from_secs(60));
+        assert_eq!(out, WaitOutcome::ChildExited(3));
+        assert!(start.elapsed() < Duration::from_secs(2), "a dead child must not be waited on");
     }
 
     #[test]
-    fn wait_for_returns_true_immediately_when_ready() {
-        assert!(wait_for(|| true, Duration::from_secs(5)));
+    fn wait_ready_keeps_waiting_for_a_slow_but_alive_child() {
+        // Slow start (ready only after ~0.5 s) must succeed — being slow is not an error.
+        let t0 = Instant::now();
+        let out = wait_ready(
+            || (t0.elapsed() > Duration::from_millis(500)).then_some(1),
+            || None,
+            |_| {},
+            Duration::from_secs(10),
+        );
+        assert_eq!(out, WaitOutcome::Ready(1));
     }
 
     #[test]
-    fn boot_deadline_rejects_expired_start() {
-        let long_ago = Instant::now() - BOOT_DEADLINE - Duration::from_secs(1);
-        assert!(check_boot_deadline(long_ago).is_err());
-        assert!(check_boot_deadline(Instant::now()).is_ok());
+    fn wait_ready_only_gives_up_at_the_safety_ceiling() {
+        let out = wait_ready::<()>(|| None, || None, |_| {}, Duration::from_millis(300));
+        assert_eq!(out, WaitOutcome::CeilingReached);
     }
 }

@@ -37,9 +37,11 @@ export interface DashboardData {
     count: number;
     byCurrency: Record<string, { count: number; totalDue: number }>;
   };
-  // Fix H-7: groupBy(date) alone mixed every currency's sales into one
-  // "value" per day. byCurrency reports each currency's own total per day.
-  salesTrend: Record<string, Array<{ label: string; byCurrency: Record<string, number> }>>;
+  // Charts use valueUsd (frozen base). byCurrency keeps native amounts per day.
+  salesTrend: Record<
+    string,
+    Array<{ label: string; valueUsd: number; byCurrency: Record<string, number> }>
+  >;
   alerts: Array<{
     category: "inventory" | "financial";
     level: "low" | "out" | "overdue";
@@ -50,12 +52,12 @@ export interface DashboardData {
     remaining?: string;
   }>;
   topCustomers: Array<{ partyId: string; name: string; revenue: number; currency: string }>;
-  // Fix H-7: revenue used to be summed across every currency for a
-  // fabric. revenueByCurrency reports each currency's revenue independently.
+  // revenueUsd ranks fabrics in base currency; revenueByCurrency keeps natives.
   topFabrics: Array<{
     fabricId: string;
     name: string;
     kgSold: number;
+    revenueUsd: number;
     revenueByCurrency: Record<string, number>;
   }>;
   cashbox: { balance: number; todayMovementCount: number; isLocked: boolean; openingDate?: string };

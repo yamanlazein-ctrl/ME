@@ -10,6 +10,8 @@ import { PRINT_BRAND_NAME } from "@/shared/constants/printConfig";
 import { useSettings } from "@/presentation/hooks/useSettings";
 import { useConnectivity } from "@/presentation/hooks/useConnectivity";
 import { useAutoSync } from "@/presentation/hooks/useAutoSync";
+import { useLiveNotificationToasts } from "@/presentation/hooks/useLiveNotificationToasts";
+import { useSyncRunState } from "@/lib/sync-engine";
 import logoUrl from "@/assets/logo-motard-icon.png";
 import { cn } from "@/lib/utils";
 
@@ -20,6 +22,8 @@ import { cn } from "@/lib/utils";
 export function Header() {
   const connectivity = useConnectivity();
   const { deviceGate, deviceTrust } = useAutoSync();
+  useLiveNotificationToasts();
+  const { running: syncing } = useSyncRunState();
   const online = connectivity === "online";
   const conflictCount = useOpenSyncConflictCount();
 
@@ -84,7 +88,7 @@ export function Header() {
               )}
               aria-hidden
             />
-            {online ? "متصل" : "غير متصل"}
+            {online ? (syncing ? "جاري المزامنة…" : "متصل") : "غير متصل"}
           </span>
           {deviceGate && (
             <span

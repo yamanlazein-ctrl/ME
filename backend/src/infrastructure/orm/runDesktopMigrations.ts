@@ -40,6 +40,55 @@ export function lastJournalIdx(migrationsFolder: string): number {
   return entries.length ? entries[entries.length - 1]!.idx : 0;
 }
 
+/** Anything with `query` — a pg Pool, Client or PoolClient (lets tests run the repair inside a rolled-back transaction). */
+type Queryable = { query: (text: string, values?: unknown[]) => Promise<{ rows: any[]; rowCount: number | null }> };
+
+/**
+ * Legacy-data repair that MUST run before migration DFP-013 (composite tenant/license foreign keys).
+ *
+ * Older builds created licenses with `tenant_id = NULL` (a license existed before it was bound to a company) and
+ * devices registered against them. DFP-013 refuses to add the tenant/license foreign key while such rows exist
+ * ("device_registrations has license rows with NULL or mismatched tenant_id — fix data before applying") — on a
+ * desktop that refusal is a boot crash with no way out for the customer.
+ *
+ * The repair is deterministic and lossless: an orphan license whose registered devices all belong to ONE tenant is
+ * claimed by that tenant (the de-facto owner). A license used by devices of several tenants is genuinely
+ * ambiguous and is left alone — the migration then still refuses, and the server reports why.
+ *
+ * Skipped when the foreign key already exists (nothing left to repair) or the tables do not exist yet (fresh
+ * cluster). Returns the number of licenses it claimed.
+ */
+export async function repairLegacyLicenseTenantPairing(db: Queryable): Promise<number> {
+  const state = await db.query(
+    `SELECT to_regclass('public.licenses') IS NOT NULL
+        AND to_regclass('public.device_registrations') IS NOT NULL AS tables_exist,
+            EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'device_registrations_tenant_license_fk') AS fk_exists`,
+  );
+  const { tables_exist: tablesExist, fk_exists: fkExists } = state.rows[0] ?? {};
+  if (!tablesExist || fkExists) return 0;
+
+  const claimed = await db.query(
+    `UPDATE licenses AS l
+        SET tenant_id = d.tenant_id
+       FROM (
+              SELECT license_id, (array_agg(DISTINCT tenant_id))[1] AS tenant_id
+                FROM device_registrations
+               GROUP BY license_id
+              HAVING count(DISTINCT tenant_id) = 1
+            ) AS d
+      WHERE l.id = d.license_id
+        AND l.tenant_id IS NULL`,
+  );
+  const n = claimed.rowCount ?? 0;
+  if (n > 0) {
+    logger.warn(
+      { licenses: n },
+      "Legacy data repaired: unowned licenses were assigned to the tenant whose devices already use them",
+    );
+  }
+  return n;
+}
+
 async function stampDbMeta(migrationsFolder: string): Promise<void> {
   const metaPath = process.env.DESKTOP_DB_META_PATH;
   if (!metaPath) return;
@@ -104,6 +153,7 @@ export async function runDesktopMigrations(): Promise<void> {
     }
   }
 
+  await repairLegacyLicenseTenantPairing(pool);
   await migrate(db, { migrationsFolder: folder });
   await stampDbMeta(folder);
 }

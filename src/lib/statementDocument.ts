@@ -32,7 +32,13 @@ export function statementPaymentNote(
   rowCurrency: string,
   equivalent: number,
 ): string | null {
-  if (!doc || doc.kind !== "voucher") return null;
+  if (!doc) return null;
+  if (doc.kind === "invoice") {
+    // A sale settled (partly) from the customer's advance payments.
+    return doc.creditApplied && doc.creditApplied > 0
+      ? `مُسدَّد من رصيد العميل الدائن ${formatMoney(doc.creditApplied)} ${sym(rowCurrency)}`
+      : null;
+  }
   const parts: string[] = [];
   if (doc.crossCurrency && doc.exchangeRate) {
     // LRI…PDI keeps the equation left-to-right inside the RTL Arabic line.
@@ -45,8 +51,13 @@ export function statementPaymentNote(
   }
   if (doc.appliedToInvoiceNumber) {
     parts.push(`مطبّقة على الفاتورة ${doc.appliedToInvoiceNumber}`);
+    if (doc.advanceAmount && doc.advanceAmount > 0) {
+      parts.push(
+        `الفائض ${formatMoney(doc.advanceAmount)} ${sym(rowCurrency)} دفعة مقدمة (رصيد دائن)`,
+      );
+    }
   } else {
-    parts.push("دفعة على الحساب");
+    parts.push("دفعة مقدمة / على الحساب");
   }
   return parts.join(" · ");
 }

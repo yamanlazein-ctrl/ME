@@ -124,6 +124,18 @@ impl HiddenChild {
         }
     }
 
+    /// Non-blocking: `Some(exit_code)` when the process has ended, `None` while it is still running.
+    pub fn try_exit_code(&self) -> Option<u32> {
+        unsafe {
+            if WaitForSingleObject(self.process, 0) != WAIT_OBJECT_0 {
+                return None;
+            }
+            let mut code: u32 = 0;
+            GetExitCodeProcess(self.process, &mut code).ok()?;
+            Some(code)
+        }
+    }
+
     /// Best-effort forceful termination (mirrors std::process::Child::kill).
     pub fn kill(&self) {
         unsafe {

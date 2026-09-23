@@ -78,6 +78,10 @@ export const SYNC_COVERAGE: Record<string, CoverageEntry> = {
   // ---- transport (never business state) ----
   "PUT /sync/hub-config": { exempt: "local hub pairing, not a business document" },
   "POST /sync/hub-pair": { exempt: "local hub pairing, not a business document" },
+  "POST /sync/hub/test": { exempt: "read-only hub ping" },
+  "POST /sync/hub/connect": { exempt: "local hub pairing, not a business document" },
+  "DELETE /sync/hub": { exempt: "local hub pairing, not a business document" },
+  "POST /sync/activity": { exempt: "ephemeral presence feed on the hub, not a business document" },
   "POST /sync/run": { exempt: "sync transport itself" },
   "POST /sync/claims/reap": { exempt: "operator tooling on hub state" },
   "POST /sync/conflicts/resolve": { exempt: "operator tooling on hub conflict state" },

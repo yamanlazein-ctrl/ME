@@ -12,7 +12,8 @@ import type { IAuditRepository } from "../../application/ports/IAuditRepository.
 import type { ISyncOutboxRepository } from "../../application/ports/ISyncOutboxRepository.js";
 import type { TenantContext } from "../../domain/types/index.js";
 import { logger } from "../../infrastructure/config/logger.js";
-import { withTenantTx } from "../../infrastructure/orm/drizzle.js";
+import { db, withTenantTx } from "../../infrastructure/orm/drizzle.js";
+import { customerCreditPosition } from "../../infrastructure/repositories/customerCredit.js";
 import { respondTransactionFailure } from "../../infrastructure/http/transactionRouteError.js";
 import {
   enqueueSettlement,
@@ -82,6 +83,33 @@ export function registerStatementRoutes(
       },
     );
 
+    // GET /api/customers/:id/credit?currency=USD
+    // The customer's available credit (advance payments / overpaid excess not
+    // yet attached to an invoice) — drives «خصم من رصيد العميل» on a new sale.
+    if (kind === "customer") {
+      router.get(`${base}/:id/credit`, auth, readGuard, async (req: Request, res: Response) => {
+        const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+        if (!UUID_RE.test(req.params.id as string)) {
+          return res.status(400).json({ code: "BAD_REQUEST", message: "صيغة المعرف غير صالحة" });
+        }
+        const currency = typeof req.query.currency === "string" ? req.query.currency : "";
+        if (!/^(SYP|USD|EUR)$/.test(currency)) {
+          return res.status(400).json({ code: "BAD_REQUEST", message: "العملة مطلوبة (SYP / USD / EUR)" });
+        }
+        const party = await partyRepo.findById(req.params.id as string, ctx(req));
+        if (!party || party.kind !== kind) {
+          return res.status(404).json({ code: "NOT_FOUND", message: partyLabel });
+        }
+        const position = await customerCreditPosition(
+          db,
+          ctx(req).tenantId,
+          req.params.id as string,
+          currency,
+        );
+        res.json(position);
+      });
+    }
+
     // POST /api/customers/:id/statement/settle-invoices
     // Multi-invoice cash settlement → one SET batch + N linked vouchers.
     router.post(
@@ -113,6 +141,7 @@ export function registerStatementRoutes(
             {
               invoiceIds: b.invoiceIds,
               amountPaid: b.amountPaid,
+              discount: b.discount,
               currency: b.currency,
               exchangeRate: b.exchangeRate,
               date: b.date,

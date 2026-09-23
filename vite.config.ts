@@ -13,9 +13,18 @@ import tsconfigPaths from "vite-tsconfig-paths";
  *   - Tailwind CSS 4 (utility-first styling)
  *   - TypeScript paths (resolves @/* aliases from tsconfig.json)
  */
+// Desktop release: build a static single-page app (served by the local backend on the same origin) instead of an
+// SSR server. The app has no server functions, so SSR only added a third process, ~10k files and a fixed port.
+const desktop = process.env.VITE_DESKTOP_DEPLOY === "true";
+
 export default defineConfig({
   plugins: [
-    tanstackStart({ server: { entry: "server" } }),
+    tanstackStart({
+      server: { entry: "server" },
+      ...(desktop
+        ? { spa: { enabled: true, prerender: { enabled: true, outputPath: "/_shell.html", crawlLinks: false } } }
+        : {}),
+    }),
     react(),
     tailwindcss(),
     tsconfigPaths(),
@@ -44,6 +53,6 @@ export default defineConfig({
     // Desktop release build sets VITE_DESKTOP_DEPLOY=true — maps are stripped
     // from the MSI and must not be required at runtime. Keep maps for local
     // web/dev builds only.
-    sourcemap: process.env.VITE_DESKTOP_DEPLOY === "true" ? false : true,
+    sourcemap: desktop ? false : true,
   },
 });

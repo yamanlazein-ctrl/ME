@@ -56,11 +56,6 @@ fn main() {
                      مع الدعم الفني."
                         .to_string()
                 }
-                motard_fabrics_erp::identity::DeviceBindError::FingerprintMismatch => {
-                    "تغيّر تعريف الجهاز منذ أول تشغيل، لذلك تم إيقاف التشغيل لحماية التثبيت.\n\n\
-                     إذا كان هذا التغيير متوقعاً بعد صيانة العتاد، تواصل مع الدعم لإجراء إعادة ربط موثّقة."
-                        .to_string()
-                }
                 motard_fabrics_erp::identity::DeviceBindError::Io(detail) => format!(
                     "تعذّر إنشاء أو قراءة ملف ربط الجهاز (device-binding.dat).\n\n\
                      الخطأ: {}\n\n\
@@ -79,6 +74,14 @@ fn main() {
     };
 
     let app = match tauri::Builder::default()
+        // Must be the FIRST plugin. A second launch just brings the running window to the front.
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            if let Some(w) = app.get_webview_window("main") {
+                let _ = w.unminimize();
+                let _ = w.show();
+                let _ = w.set_focus();
+            }
+        }))
         .plugin(tauri_plugin_autostart::init(
             tauri_plugin_autostart::MacosLauncher::LaunchAgent,
             Option::<Vec<&str>>::None,
@@ -189,14 +192,49 @@ fn main() {
         };
         match boot_desktop_stack_with_progress(&cfg, &report) {
             Ok(stack) => {
+                // The server picked its own port, so the window is created NOW, pointing at it. It starts
+                // hidden and is shown (and the splash closed) only when the page has really loaded — the user
+                // never sees a blank window.
+                let url = stack.app_url();
                 *shared_for_boot.lock().unwrap() = Some(stack);
-                if let Some(main) = handle.get_webview_window("main") {
-                    let _ = main.show();
-                    let _ = main.set_focus();
-                }
-                if let Some(splash) = handle.get_webview_window("splash") {
-                    let _ = splash.close();
-                }
+                let for_main = handle.clone();
+                let _ = handle.run_on_main_thread(move || {
+                    let parsed: tauri::Url = match url.parse() {
+                        Ok(u) => u,
+                        Err(e) => {
+                            eprintln!("FATAL: bad application url {url}: {e}");
+                            std::process::exit(3);
+                        }
+                    };
+                    let built = tauri::WebviewWindowBuilder::new(
+                        &for_main,
+                        "main",
+                        tauri::WebviewUrl::External(parsed),
+                    )
+                    .title("Motard Fabrics Group ERP")
+                    .inner_size(1400.0, 900.0)
+                    .min_inner_size(1024.0, 768.0)
+                    .center()
+                    .visible(false)
+                    .on_page_load(|window, payload| {
+                        if matches!(payload.event(), tauri::webview::PageLoadEvent::Finished) {
+                            let _ = window.show();
+                            let _ = window.set_focus();
+                            if let Some(splash) = window.app_handle().get_webview_window("splash") {
+                                let _ = splash.close();
+                            }
+                        }
+                    })
+                    .build();
+                    if let Err(e) = built {
+                        eprintln!("FATAL: could not create the main window: {e}");
+                        motard_fabrics_erp::runtime::show_fatal_dialog(
+                            "خطأ في فتح النافذة — Motard ERP",
+                            &format!("تعذّر إنشاء نافذة البرنامج.\n\nالخطأ: {e}"),
+                        );
+                        std::process::exit(3);
+                    }
+                });
             }
             Err(e) => {
                 eprintln!("FATAL: desktop stack failed to boot: {}", e);
@@ -236,20 +274,14 @@ struct FingerprintResult {
 /// (`crate::fingerprint`) so the shell and the boot gate can never diverge.
 #[tauri::command]
 fn get_fingerprint() -> Result<FingerprintResult, String> {
-    let signals = motard_fabrics_erp::fingerprint::collect_signals();
-    let hostname = signals
-        .get("hostname")
-        .and_then(|v| v.as_str())
-        .unwrap_or_default()
-        .to_string();
-    let os = signals
-        .get("platform_release")
-        .and_then(|v| v.as_str())
-        .unwrap_or_default()
-        .to_string();
+    let info = motard_fabrics_erp::fingerprint::machine_info();
     let hash = motard_fabrics_erp::fingerprint::desktop_fingerprint()?;
 
-    Ok(FingerprintResult { hash, hostname, os })
+    Ok(FingerprintResult {
+        hash,
+        hostname: info.hostname,
+        os: info.os,
+    })
 }
 
 // `license_key`/`fingerprint` arrive in the payload for wire compatibility with
@@ -312,10 +344,10 @@ async fn validate_license(req: ValidateRequest) -> Result<ValidateResult, String
     })
 }
 
-/// Issue 12: create Desktop/أقمشة ومنسوجات + document-type subfolders.
+/// Issue 12: create Desktop/<company name> + document-type subfolders.
 #[tauri::command]
-fn ensure_document_folders() -> Result<String, String> {
-    motard_fabrics_erp::document_archive::ensure_document_folders()
+fn ensure_document_folders(company_name: Option<String>) -> Result<String, String> {
+    motard_fabrics_erp::document_archive::ensure_document_folders(company_name)
 }
 
 /// Issue 12: drop a PDF (or HTML fallback) into the matching archive subfolder.
@@ -324,8 +356,9 @@ fn archive_document_pdf(
     doc_type: String,
     file_stem: String,
     html: String,
+    company_name: Option<String>,
 ) -> Result<motard_fabrics_erp::document_archive::ArchiveResult, String> {
-    motard_fabrics_erp::document_archive::archive_document_pdf(doc_type, file_stem, html)
+    motard_fabrics_erp::document_archive::archive_document_pdf(doc_type, file_stem, html, company_name)
 }
 
 /// App semver from Cargo (kept in sync with tauri.conf.json `version`).

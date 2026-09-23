@@ -22,6 +22,15 @@ import type { TenantContext } from "../src/domain/types/index.js";
 import type { InvoiceData } from "../src/domain/entities/Invoice.js";
 import type { VoucherData } from "../src/domain/entities/Voucher.js";
 
+// `recordSyncConflict` is a fail-closed REAL database write (Phase 2 / DFP-019). These tests assert the
+// refuse-vs-apply DECISION with in-memory repos, so the write is replaced by a spy; its real
+// behaviour (including NULL base/server versions) is covered in sync-conflict-record.test.ts.
+const recordSyncConflict = vi.hoisted(() => vi.fn().mockResolvedValue(true));
+vi.mock("../src/application/use-cases/sync/syncConflicts.js", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../src/application/use-cases/sync/syncConflicts.js")>()),
+  recordSyncConflict,
+}));
+
 const ctx: TenantContext = {
   tenantId: "11111111-1111-4111-8111-111111111111",
   userId: "22222222-2222-4222-8222-222222222222",

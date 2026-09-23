@@ -5,7 +5,7 @@ import type { TenantContext } from "../../../domain/types/index.js";
 import type { VoucherMethod } from "../../../domain/types/index.js";
 import type { VoucherData } from "../../../domain/entities/Voucher.js";
 import { BusinessRuleError } from "../../../domain/errors/index.js";
-import { allocateSettlementPayment } from "@erp/shared";
+import { allocateSettlementPayment, splitCashAndDiscountAcrossLines, round2dp } from "@erp/shared";
 import { createVoucherUseCase } from "../vouchers/voucherUseCases.js";
 import { nextDocumentNumber } from "../../../infrastructure/utils/documentNumbers.js";
 import { db } from "../../../infrastructure/orm/drizzle.js";
@@ -13,11 +13,11 @@ import { invoices } from "../../../infrastructure/orm/schemas/invoice.table.js";
 import { returns } from "../../../infrastructure/orm/schemas/return.table.js";
 import { returnLines } from "../../../infrastructure/orm/schemas/return-line.table.js";
 import { and, eq, inArray, sql } from "drizzle-orm";
-import { round2dp } from "@erp/shared";
 
 export type SettleInvoicesInput = {
   invoiceIds: string[];
   amountPaid: number;
+  discount?: number;
   currency: "SYP" | "USD" | "EUR";
   exchangeRate?: number;
   date?: string;
@@ -31,6 +31,8 @@ export type SettleInvoicesResult = {
   currency: string;
   exchangeRate: number | null;
   amountPaid: number;
+  /** Cash above the total due, kept as customer credit (on-account receipt). */
+  advance: { amount: number; voucherId: string; voucherNumber: string } | null;
   totalDueInSettlement: number;
   totalAllocated: number;
   date: string;
@@ -73,7 +75,13 @@ export async function settleInvoicesUseCase(
 
     const ids = [...new Set(input.invoiceIds.filter(Boolean))];
     if (ids.length === 0) return { ok: false, error: "اختر فاتورة واحدة على الأقل" };
-    if (!(input.amountPaid > 0)) return { ok: false, error: "مبلغ الدفعة يجب أن يكون أكبر من صفر" };
+    const cashPaid = round2dp(input.amountPaid);
+    const discount = round2dp(input.discount ?? 0);
+    if (cashPaid < 0) return { ok: false, error: "المبلغ النقدي لا يمكن أن يكون سالباً" };
+    if (discount < 0) return { ok: false, error: "الخصم لا يمكن أن يكون سالباً" };
+    const totalReduction = round2dp(cashPaid + discount);
+    if (!(totalReduction > 0))
+      return { ok: false, error: "يجب أن يكون مجموع المبلغ النقدي والمسامحة أكبر من صفر" };
 
     const date = input.date ?? new Date().toISOString().slice(0, 10);
     const method: VoucherMethod = input.method ?? "cash";
@@ -148,7 +156,7 @@ export async function settleInvoicesUseCase(
     try {
       allocated = allocateSettlementPayment({
         invoices: open,
-        amountPaid: input.amountPaid,
+        amountPaid: totalReduction,
         settlementCurrency: input.currency,
         exchangeRate: input.exchangeRate,
       });
@@ -172,8 +180,35 @@ export async function settleInvoicesUseCase(
 
     const vouchers: VoucherData[] = [];
     const resultLines: SettleInvoicesResult["allocations"] = [];
+    const cashSplit = splitCashAndDiscountAcrossLines(
+      allocated.allocations.map((l) => l.amountInSettlementCurrency),
+      cashPaid,
+    );
 
-    for (const line of allocated.allocations) {
+    // Cash above everything due. The allocator caps at the total due, so this
+    // excess used to be dropped silently: the drawer received it, the books
+    // never did. A customer's excess becomes an on-account receipt (advance →
+    // credit balance, cash into the cashbox). A supplier overpayment is refused
+    // explicitly rather than half-recorded.
+    const cashAllocated = round2dp(cashSplit.reduce((s, p) => s + p.cash, 0));
+    const excessCash = round2dp(cashPaid - cashAllocated);
+    if (excessCash > 0.01) {
+      if (partyKind !== "customer") {
+        return {
+          ok: false,
+          error: `المبلغ المدفوع (${cashPaid}) أكبر من المستحق على الفواتير المحددة (${cashAllocated}) — سجّل الفرق كسند دفع مستقل إن كان دفعة مقدمة للمورد`,
+        };
+      }
+      if (discount > 0) {
+        return {
+          ok: false,
+          error: "لا يمكن تطبيق مسامحة عندما يتجاوز المبلغ النقدي المستحق — أزل المسامحة",
+        };
+      }
+    }
+
+    for (const [idx, line] of allocated.allocations.entries()) {
+      const parts = cashSplit[idx] ?? { cash: line.amountInSettlementCurrency, discount: 0 };
       const created = await createVoucherUseCase(
         voucherRepo,
         auditRepo,
@@ -183,7 +218,8 @@ export async function settleInvoicesUseCase(
           partyId,
           partyKind,
           invoiceId: line.invoiceId,
-          amount: line.amountInSettlementCurrency,
+          amount: parts.cash,
+          discount: parts.discount > 0 ? parts.discount : undefined,
           currency: input.currency,
           exchangeRate: input.exchangeRate,
           method,
@@ -212,13 +248,44 @@ export async function settleInvoicesUseCase(
       });
     }
 
+    let advance: SettleInvoicesResult["advance"] = null;
+    if (excessCash > 0.01) {
+      const created = await createVoucherUseCase(
+        voucherRepo,
+        auditRepo,
+        {
+          kind: "receipt",
+          date,
+          partyId,
+          partyKind,
+          amount: excessCash,
+          currency: input.currency,
+          exchangeRate: input.exchangeRate,
+          method,
+          notesInternal: `دفعة مقدمة (فائض الدفعة ${batchNumber})`,
+          notesPrint: `دفعة مقدمة على الحساب — فائض الدفعة ${batchNumber}`,
+        },
+        ctx,
+      );
+      if (!created.ok) {
+        throw new BusinessRuleError(`فشل تسجيل فائض الدفعة كرصيد دائن: ${created.error}`);
+      }
+      vouchers.push(created.data);
+      advance = {
+        amount: excessCash,
+        voucherId: created.data.id,
+        voucherNumber: created.data.number,
+      };
+    }
+
     return {
       ok: true,
       data: {
         batchNumber,
         currency: input.currency,
         exchangeRate: input.exchangeRate ?? null,
-        amountPaid: round2dp(input.amountPaid),
+        amountPaid: cashPaid,
+        advance,
         totalDueInSettlement: allocated.totalDueInSettlement,
         totalAllocated: allocated.totalAllocated,
         date,

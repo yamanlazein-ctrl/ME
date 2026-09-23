@@ -10,13 +10,9 @@
 // `"node"`. The envelope SHAPE and the ordering rule are the shared contract —
 // the platform label is part of the identity, not a divergence.
 //
-// This module also owns the live boot gate used by `device_binding`: the
-// binding blob records the fingerprint observed at first launch, and every
-// later launch must reproduce it. A copied install or a VM clone therefore
-// refuses to boot instead of silently binding to the wrong machine.
-use crate::runtime::no_window_command;
+// The fingerprint is ONE stable signal (MachineGuid). `device_binding` records it at first launch and refreshes
+// it if it legitimately changes (hardware/OS reinstall on the same Windows profile); it never stops the app.
 use serde::{Deserialize, Serialize};
-use std::process::Command;
 
 /// Algorithm version. Bump only together with the Node side; an intentional
 /// change invalidates every existing fingerprint.
@@ -54,48 +50,44 @@ pub fn canonical_fingerprint_hash(
         .collect())
 }
 
-/// Collect the deterministic hardware signals available on this machine.
+/// The signals that identify this machine for BINDING.
 ///
-/// Only stable signals are included: an absent signal is omitted (never
-/// hashed as an empty string), so a machine that cannot report a MAC is still
-/// distinguishable from one whose MAC is literally "".
-pub fn collect_signals() -> serde_json::Map<String, serde_json::Value> {
+/// Exactly ONE: the Windows `MachineGuid`. It is stable across renames, network-adapter changes (VPN, USB
+/// Ethernet, docking, Wi-Fi off), hardware upgrades and Windows updates, and it is read through the registry API.
+///
+/// The previous set (hostname + first MAC from `getmac` + CPU name from `wmic` + MachineGuid) stopped installs
+/// for good the first time any one of them changed — renaming the PC, a VPN adapter appearing first in the
+/// list, `wmic` missing on newer Windows 11 — with "the device identity changed". None of those is evidence of
+/// a copied install; copying is already prevented by the DPAPI (per-user) encryption of the binding blob.
+pub fn stable_signals() -> Result<serde_json::Map<String, serde_json::Value>, String> {
+    let machine_id = get_machine_id()?;
+    if machine_id.trim().is_empty() {
+        return Err("empty MachineGuid".into());
+    }
     let mut signals = serde_json::Map::new();
-
-    let hostname = hostname::get()
-        .unwrap_or_default()
-        .to_string_lossy()
-        .into_owned();
-    signals.insert("hostname".into(), serde_json::Value::String(hostname));
-
-    let os_label = format!("{} {}", std::env::consts::OS, std::env::consts::ARCH);
-    signals.insert(
-        "platform_release".into(),
-        serde_json::Value::String(os_label),
-    );
-
-    if let Ok(mac) = get_primary_mac() {
-        if !mac.is_empty() {
-            signals.insert("primary_mac".into(), serde_json::Value::String(mac));
-        }
-    }
-    if let Ok(machine_id) = get_machine_id() {
-        if !machine_id.is_empty() {
-            signals.insert("machine_id".into(), serde_json::Value::String(machine_id));
-        }
-    }
-    if let Ok(cpu) = get_cpu_model() {
-        if !cpu.is_empty() {
-            signals.insert("cpu_model".into(), serde_json::Value::String(cpu));
-        }
-    }
-
-    signals
+    signals.insert("machine_id".into(), serde_json::Value::String(machine_id));
+    Ok(signals)
 }
 
 /// Canonical Desktop fingerprint for the current machine.
 pub fn desktop_fingerprint() -> Result<String, String> {
-    canonical_fingerprint_hash(DESKTOP_PLATFORM, FINGERPRINT_VERSION, &collect_signals())
+    canonical_fingerprint_hash(DESKTOP_PLATFORM, FINGERPRINT_VERSION, &stable_signals()?)
+}
+
+/// Human-readable machine info (display only — NOT part of the fingerprint).
+pub struct MachineInfo {
+    pub hostname: String,
+    pub os: String,
+}
+
+pub fn machine_info() -> MachineInfo {
+    MachineInfo {
+        hostname: hostname::get()
+            .unwrap_or_default()
+            .to_string_lossy()
+            .into_owned(),
+        os: format!("{} {}", std::env::consts::OS, std::env::consts::ARCH),
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -104,117 +96,38 @@ pub struct FingerprintSnapshot {
     pub version: u32,
 }
 
-fn get_primary_mac() -> Result<String, String> {
-    let output = if cfg!(target_os = "windows") {
-        no_window_command("getmac")
-            .args(["/fo", "csv", "/nh"])
-            .output()
-    } else {
-        Command::new("sh")
-            .args([
-                "-c",
-                "ip link show 2>/dev/null | grep -oP 'link/ether \\K[^ ]+' | head -1",
-            ])
-            .output()
-    };
-
-    match output {
-        Ok(o) if o.status.success() => {
-            let s = String::from_utf8_lossy(&o.stdout).trim().to_string();
-            // Windows getmac returns quoted CSV: "device","MAC"
-            let mac = if s.contains(',') {
-                s.split(',').nth(1).unwrap_or(&s).trim_matches('"').to_string()
-            } else {
-                s
-            };
-            if mac.is_empty() {
-                Err("no MAC found".into())
-            } else {
-                Ok(mac)
-            }
-        }
-        _ => Err("failed to get MAC".into()),
-    }
-}
-
+#[cfg(windows)]
 fn get_machine_id() -> Result<String, String> {
-    if cfg!(target_os = "linux") {
-        std::fs::read_to_string("/etc/machine-id")
-            .map(|s| s.trim().to_string())
-            .map_err(|_| "no machine-id".into())
-    } else if cfg!(target_os = "windows") {
-        let output = no_window_command("reg")
-            .args([
-                "query",
-                "HKLM\\SOFTWARE\\Microsoft\\Cryptography",
-                "/v",
-                "MachineGuid",
-            ])
-            .output();
-        match output {
-            Ok(o) if o.status.success() => {
-                let s = String::from_utf8_lossy(&o.stdout);
-                let id = s
-                    .lines()
-                    .find(|l| l.contains("MachineGuid"))
-                    .and_then(|l| l.split("REG_SZ").nth(1))
-                    .map(|s| s.trim().to_string())
-                    .unwrap_or_default();
-                Ok(id)
-            }
-            _ => Err("no MachineGuid".into()),
-        }
-    } else if cfg!(target_os = "macos") {
-        let output = Command::new("ioreg")
-            .args(["-rd1", "-c", "IOPlatformExpertDevice"])
-            .output();
-        match output {
-            Ok(o) if o.status.success() => {
-                let s = String::from_utf8_lossy(&o.stdout);
-                let id = s
-                    .lines()
-                    .find(|l| l.contains("IOPlatformUUID"))
-                    .and_then(|l| l.split('"').nth(3))
-                    .map(|s| s.to_string())
-                    .unwrap_or_default();
-                Ok(id)
-            }
-            _ => Err("no IOPlatformUUID".into()),
-        }
-    } else {
-        Err("unsupported platform".into())
+    use windows::core::w;
+    use windows::Win32::System::Registry::{
+        RegGetValueW, HKEY_LOCAL_MACHINE, RRF_RT_REG_SZ, RRF_SUBKEY_WOW6464KEY,
+    };
+    let mut buf = [0u16; 128];
+    let mut len = (buf.len() * 2) as u32;
+    let status = unsafe {
+        RegGetValueW(
+            HKEY_LOCAL_MACHINE,
+            w!("SOFTWARE\\Microsoft\\Cryptography"),
+            w!("MachineGuid"),
+            RRF_RT_REG_SZ | RRF_SUBKEY_WOW6464KEY,
+            None,
+            Some(buf.as_mut_ptr() as *mut core::ffi::c_void),
+            Some(&mut len),
+        )
+    };
+    if status.0 != 0 {
+        return Err(format!("MachineGuid unreadable (error {})", status.0));
     }
+    // `len` is in bytes and includes the terminating NUL.
+    let chars = (len as usize / 2).saturating_sub(1).min(buf.len());
+    Ok(String::from_utf16_lossy(&buf[..chars]).trim().to_string())
 }
 
-fn get_cpu_model() -> Result<String, String> {
-    if cfg!(target_os = "windows") {
-        let output = no_window_command("wmic")
-            .args(["cpu", "get", "name", "/format:value"])
-            .output();
-        match output {
-            Ok(o) if o.status.success() => {
-                let s = String::from_utf8_lossy(&o.stdout);
-                let cpu = s
-                    .lines()
-                    .find(|l| l.starts_with("Name="))
-                    .map(|l| l.trim_start_matches("Name=").trim().to_string())
-                    .unwrap_or_default();
-                Ok(cpu)
-            }
-            _ => Err("no CPU info".into()),
-        }
-    } else {
-        let output = Command::new("sh")
-            .args(["-c", "lscpu 2>/dev/null | grep 'Model name' | cut -d: -f2"])
-            .output();
-        match output {
-            Ok(o) if o.status.success() => {
-                let s = String::from_utf8_lossy(&o.stdout).trim().to_string();
-                Ok(s)
-            }
-            _ => Err("no CPU info".into()),
-        }
-    }
+#[cfg(not(windows))]
+fn get_machine_id() -> Result<String, String> {
+    std::fs::read_to_string("/etc/machine-id")
+        .map(|s| s.trim().to_string())
+        .map_err(|_| "no machine-id".into())
 }
 
 #[cfg(test)]
@@ -269,5 +182,14 @@ mod tests {
         let b = desktop_fingerprint().expect("live fingerprint");
         assert_eq!(a, b, "fingerprint must be stable for the same machine");
         assert_eq!(a.len(), 64);
+    }
+
+    #[test]
+    fn binding_fingerprint_uses_only_the_stable_machine_id() {
+        // Regression: hostname / MAC / CPU-name signals made a routine change (PC rename, VPN adapter,
+        // missing wmic) lock the customer out with "device identity changed".
+        let signals = stable_signals().expect("MachineGuid readable on Windows");
+        let keys: Vec<&String> = signals.keys().collect();
+        assert_eq!(keys, vec!["machine_id"]);
     }
 }

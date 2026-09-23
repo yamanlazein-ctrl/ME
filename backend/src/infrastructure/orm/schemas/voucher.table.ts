@@ -34,6 +34,12 @@ export const vouchers = pgTable(
     /** Cash concession: net cash movement = amount − discount; party settlement uses amount. */
     discount: numeric("discount", { precision: 14, scale: 2, mode: "number" }).notNull().default(0),
     currency: varchar("currency", { length: 3 }).notNull().default("SYP"),
+    /**
+     * Part of this voucher that settled its linked invoice, in the INVOICE's
+     * currency. Anything above it (an overpayment) stays on the party ledger as
+     * credit / advance. NULL = legacy row (pre-overpayment support).
+     */
+    appliedAmount: numeric("applied_amount", { precision: 14, scale: 2, mode: "number" }),
     // Base-currency (USD) FX capture — frozen at creation time.
     exchangeRate: numeric("exchange_rate", { precision: 18, scale: 6, mode: "number" }),
     baseAmount: numeric("base_amount", { precision: 14, scale: 2, mode: "number" }),

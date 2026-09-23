@@ -1,6 +1,5 @@
 import { useEffect, useState, type FormEvent, type MouseEvent } from "react";
 import logoUrl from "@/assets/logo-motard-icon.png";
-import { DesktopServerSettings } from "@/components/auth/DesktopServerSettings";
 import {
   setActivationId as saveActivationId,
   setLicenseKey as saveLicenseKey,
@@ -349,8 +348,6 @@ export function ActivationScreen({ onActivated }: { onActivated: () => void }) {
             {step === "done" && "تم تفعيل النظام بنجاح"}
           </p>
         </div>
-
-        <DesktopServerSettings />
 
         {error && (
           <p className="mt-4 rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive">

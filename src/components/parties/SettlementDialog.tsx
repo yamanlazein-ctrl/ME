@@ -23,6 +23,7 @@ import type { PartyKind } from "@/domain/entities/Party";
 import type { SettleInvoicesResponse } from "@/contracts/statement";
 import { useSettleInvoices } from "@/presentation/hooks/useStatement";
 import { allocateSettlementPayment, settlementRequiresExchangeRate } from "@erp/shared";
+import { useSypRateSoftWarning } from "@/presentation/hooks/useSypRateSoftCheck";
 import { printDocument } from "@/components/print/printPortal";
 import { SettlementPrintDocument } from "@/components/print/SettlementPrintDocument";
 
@@ -59,7 +60,9 @@ export function SettlementDialog({
   const [exchangeRate, setExchangeRate] = useState<number | "">("");
   const [mode, setMode] = useState<Mode>("full");
   const [amountPaid, setAmountPaid] = useState<number | "">("");
+  const [discount, setDiscount] = useState<number | "">("");
   const [method, setMethod] = useState<"cash" | "transfer" | "check" | "card">("cash");
+  const [softWarningAcked, setSoftWarningAcked] = useState(false);
 
   useEffect(() => {
     if (!open) return;
@@ -69,7 +72,9 @@ export function SettlementDialog({
     setExchangeRate("");
     setMode("full");
     setAmountPaid("");
+    setDiscount("");
     setMethod("cash");
+    setSoftWarningAcked(false);
   }, [open, outstanding]);
 
   const selectedRows = useMemo(
@@ -81,6 +86,19 @@ export function SettlementDialog({
     settlementCurrency,
     selectedRows.map((r) => r.currency),
   );
+
+  // Whichever currency in this settlement is actually SYP-denominated (the
+  // settlement currency itself, or any invoice being paid) — the rate typed
+  // above pairs with THAT currency regardless of which one it is.
+  const sypSide =
+    settlementCurrency === "SYP" || selectedRows.some((r) => r.currency === "SYP")
+      ? "SYP"
+      : settlementCurrency;
+  const enteredRateNum = Number(exchangeRate) > 0 ? Number(exchangeRate) : null;
+  const softWarning = useSypRateSoftWarning(sypSide, enteredRateNum);
+  useEffect(() => {
+    setSoftWarningAcked(false);
+  }, [enteredRateNum, sypSide]);
 
   const preview = useMemo(() => {
     if (selectedRows.length === 0) {
@@ -106,11 +124,12 @@ export function SettlementDialog({
         exchangeRate: rateArg,
       });
       const totalDue = dueProbe.totalDueInSettlement;
+      const discountVal = typeof discount === "number" && discount > 0 ? discount : 0;
       const pay =
         mode === "full"
           ? totalDue
-          : typeof amountPaid === "number" && amountPaid > 0
-            ? amountPaid
+          : typeof amountPaid === "number" && amountPaid + discountVal > 0
+            ? amountPaid + discountVal
             : 0;
       if (!(pay > 0)) {
         return { totalDue, allocations: [], error: null };
@@ -139,7 +158,7 @@ export function SettlementDialog({
         error: e instanceof Error ? e.message : "تعذّر احتساب الدفعة",
       };
     }
-  }, [selectedRows, settlementCurrency, exchangeRate, needsRate, mode, amountPaid]);
+  }, [selectedRows, settlementCurrency, exchangeRate, needsRate, mode, amountPaid, discount]);
 
   const toggle = (id: string) => {
     setSelected((prev) => {
@@ -155,15 +174,33 @@ export function SettlementDialog({
     else setSelected(new Set(outstanding.map((r) => r.invoiceId)));
   };
 
-  const effectiveAmount =
-    mode === "full" ? preview.totalDue : typeof amountPaid === "number" ? amountPaid : 0;
+  const discountVal = typeof discount === "number" && discount > 0 ? discount : 0;
+  const cashAmount =
+    mode === "full"
+      ? Math.max(0, preview.totalDue - discountVal)
+      : typeof amountPaid === "number"
+        ? amountPaid
+        : 0;
+  const effectiveAmount = cashAmount + discountVal;
+  // Paying more than everything selected: a customer's surplus is booked as an
+  // advance (on-account receipt → credit balance, cash into the drawer); a
+  // supplier overpayment, or a concession on top of a surplus, is refused
+  // server-side — mirror that here instead of failing on submit.
+  const allocatedTotal = preview.allocations.reduce((s, a) => s + a.amountInSettlementCurrency, 0);
+  const surplus =
+    preview.allocations.length > 0
+      ? Math.max(0, Math.round((effectiveAmount - allocatedTotal) * 100) / 100)
+      : 0;
+  const surplusBlocked = surplus > 0.01 && (kind !== "customer" || discountVal > 0);
 
   const canSubmit =
     selectedRows.length > 0 &&
     effectiveAmount > 0 &&
     !preview.error &&
+    !surplusBlocked &&
     preview.allocations.length > 0 &&
     (!needsRate || Number(exchangeRate) > 0) &&
+    (!softWarning || softWarningAcked) &&
     !settle.isPending;
 
   const onSubmit = async () => {
@@ -171,7 +208,8 @@ export function SettlementDialog({
     try {
       const res: SettleInvoicesResponse = await settle.mutateAsync({
         invoiceIds: selectedRows.map((r) => r.invoiceId),
-        amountPaid: effectiveAmount,
+        amountPaid: cashAmount,
+        discount: discountVal > 0 ? discountVal : undefined,
         currency: settlementCurrency,
         exchangeRate: Number(exchangeRate) > 0 ? Number(exchangeRate) : undefined,
         method,
@@ -284,6 +322,23 @@ export function SettlementDialog({
                   setExchangeRate(e.target.value === "" ? "" : Number(e.target.value))
                 }
               />
+              {softWarning && (
+                <div
+                  role="alert"
+                  data-testid="settlement-syp-rate-soft-warning"
+                  className="mt-2 rounded-md border border-warning/40 bg-warning/10 px-2.5 py-2 text-[11px] leading-snug text-foreground"
+                >
+                  <p>{softWarning}</p>
+                  <label className="mt-1.5 flex items-center gap-1.5 font-semibold">
+                    <input
+                      type="checkbox"
+                      checked={softWarningAcked}
+                      onChange={(e) => setSoftWarningAcked(e.target.checked)}
+                    />
+                    السعر صحيح ومقصود، تابع الحفظ
+                  </label>
+                </div>
+              )}
             </div>
             <div>
               <Label className="mb-1 block text-[11px] font-semibold text-muted-foreground">
@@ -329,11 +384,21 @@ export function SettlementDialog({
                 min={0}
                 step="0.01"
                 className="h-9 w-40 tabular-nums"
-                placeholder={`المبلغ ${settleSym}`}
+                placeholder={`المبلغ النقدي ${settleSym}`}
                 value={amountPaid}
                 onChange={(e) => setAmountPaid(e.target.value === "" ? "" : Number(e.target.value))}
               />
             )}
+            <Input
+              type="number"
+              min={0}
+              step="0.01"
+              className="h-9 w-40 tabular-nums"
+              placeholder={`مسامحة ${settleSym}`}
+              value={discount}
+              onChange={(e) => setDiscount(e.target.value === "" ? "" : Number(e.target.value))}
+              aria-label="المسامحة"
+            />
           </div>
 
           <div className="rounded-md border bg-secondary/30 px-4 py-3 space-y-1">
@@ -344,14 +409,45 @@ export function SettlementDialog({
               </span>
             </div>
             <div>
-              المبلغ الذي سيُسجَّل:{" "}
+              النقد الفعلي:{" "}
               <span className="font-bold">
-                <Amt amount={effectiveAmount} currency={settlementCurrency} />
+                <Amt amount={cashAmount} currency={settlementCurrency} />
               </span>
               {method === "cash"
                 ? ` → صندوق ${settlementCurrency}`
                 : " (بدون أثر على الصندوق النقدي)"}
             </div>
+            {discountVal > 0 && (
+              <div>
+                المسامحة:{" "}
+                <span className="font-bold">
+                  <Amt amount={discountVal} currency={settlementCurrency} />
+                </span>
+                {" · "}إجمالي تخفيض الذمة:{" "}
+                <span className="font-bold">
+                  <Amt amount={effectiveAmount} currency={settlementCurrency} />
+                </span>
+              </div>
+            )}
+            {surplus > 0.01 && !surplusBlocked && (
+              <div
+                className="rounded border border-success/40 bg-success/10 px-2 py-1 text-xs text-success"
+                data-testid="settlement-surplus"
+              >
+                تُسدَّد الفواتير المحددة بالكامل، والفائض{" "}
+                <span className="font-bold">
+                  <Amt amount={surplus} currency={settlementCurrency} />
+                </span>{" "}
+                يُسجَّل دفعة مقدمة (رصيد دائن للعميل) ويدخل الصندوق مع باقي المبلغ.
+              </div>
+            )}
+            {surplusBlocked && (
+              <div className="text-destructive text-xs">
+                {kind !== "customer"
+                  ? "المبلغ أكبر من المستحق على الفواتير المحددة — سجّل الفرق كسند دفع مستقل إن كان دفعة مقدمة للمورد."
+                  : "لا يمكن منح مسامحة عندما يتجاوز المبلغ المستحق — أزل المسامحة."}
+              </div>
+            )}
             {preview.error && <div className="text-destructive text-xs">{preview.error}</div>}
           </div>
 

@@ -28,9 +28,6 @@ use std::path::PathBuf;
 pub enum DeviceBindError {
     /// Blob could not be decrypted -> not the original user/machine (or tampered).
     Tampered,
-    /// Decrypt succeeded but this machine's live fingerprint no longer matches
-    /// the one recorded at first launch (hardware change / clone / copied data).
-    FingerprintMismatch,
     /// IO failure while reading/writing the binding file.
     Io(String),
 }
@@ -79,6 +76,19 @@ fn persist_payload(path: &PathBuf, payload: &BindingPayload) -> Result<(), Devic
     fs::write(path, B64.encode(&cipher)).map_err(|e| DeviceBindError::Io(e.to_string()))
 }
 
+/// The binding to store when the live fingerprint differs from the recorded one; `None` when it is unchanged.
+/// The installation identity (id + nonce) always stays the same — only the fingerprint is refreshed.
+fn refreshed_binding(recorded: &BindingPayload, live: FingerprintSnapshot) -> Option<BindingPayload> {
+    if live.hash == recorded.fingerprint.hash {
+        return None;
+    }
+    Some(BindingPayload {
+        installation_id: recorded.installation_id.clone(),
+        nonce: recorded.nonce.clone(),
+        fingerprint: live,
+    })
+}
+
 /// Step 0 of desktop boot. Creates the binding on first launch; on later
 /// launches verifies it (both DPAPI decrypt AND live fingerprint). Returns the
 /// stable `installation_id` used to stamp `db-meta.json`.
@@ -94,12 +104,18 @@ pub fn ensure_device_binding() -> Result<String, DeviceBindError> {
             if payload.installation_id.trim().is_empty() {
                 return Err(DeviceBindError::Tampered);
             }
-            // P1-11: live fingerprint must match the recorded one. A copied
-            // AppData dir or a changed machine can still DPAPI-decrypt under a
-            // fresh Windows account, so the fingerprint is the hardware guard.
-            let live = current_fingerprint_snapshot()?;
-            if live.hash != payload.fingerprint.hash {
-                return Err(DeviceBindError::FingerprintMismatch);
+            // The blob decrypted, so this is the same Windows user on the same install: that (DPAPI, per-user)
+            // is the anti-copy guard. A different fingerprint is therefore a legitimate change (hardware/OS
+            // reinstall, an older fingerprint algorithm), NOT a reason to lock the customer out — refresh the
+            // recorded fingerprint and continue.
+            if let Ok(live) = current_fingerprint_snapshot() {
+                if let Some(refreshed) = refreshed_binding(&payload, live) {
+                    eprintln!("[device-binding] machine fingerprint changed — refreshing the binding");
+                    // Best effort: failing to persist must not stop the app either.
+                    if let Err(e) = persist_payload(&path, &refreshed) {
+                        eprintln!("[device-binding] could not refresh binding: {e:?}");
+                    }
+                }
             }
             return Ok(payload.installation_id);
         }
@@ -143,14 +159,22 @@ mod tests {
     }
 
     #[test]
-    fn changed_fingerprint_is_detected_before_boot() {
-        // P1-11 regression: a payload whose fingerprint differs from the live
-        // one must fail closed — not silently mint a new identity.
+    fn a_changed_fingerprint_refreshes_the_binding_instead_of_blocking_the_app() {
+        // Regression: a PC rename / network adapter change / missing wmic used to end in
+        // "the device identity changed — startup stopped" forever.
         let live = current_fingerprint_snapshot().expect("snapshot");
-        let mut spoofed = live.clone();
-        spoofed.hash = "0".repeat(64);
-        // Simulate the boot check's comparison without touching disk.
-        assert_ne!(spoofed.hash, live.hash);
-        assert!(spoofed.hash.len() == 64);
+        let mut old = live.clone();
+        old.hash = "0".repeat(64);
+        let recorded = BindingPayload {
+            installation_id: "id-1".into(),
+            nonce: "n".into(),
+            fingerprint: old,
+        };
+        let refreshed = refreshed_binding(&recorded, live.clone()).expect("a change is refreshed");
+        assert_eq!(refreshed.installation_id, "id-1", "identity is preserved");
+        assert_eq!(refreshed.nonce, "n");
+        assert_eq!(refreshed.fingerprint.hash, live.hash);
+        // Unchanged → nothing to do.
+        assert!(refreshed_binding(&refreshed, live).is_none());
     }
 }

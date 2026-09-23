@@ -155,12 +155,21 @@ export class PostgresDashboardRepository implements IDashboardRepository {
     // silently added together. kgSold is a physical quantity (not money)
     // so it is safe to sum across currencies; revenue is not, so it is
     // grouped by (fabricId, currency) and kept as a per-currency breakdown.
+    const lineNet = sql`GREATEST(0, ${invoiceLines.quantityKg} * ${invoiceLines.pricePerKg} - ${invoiceLines.discountAmount})`;
     const topFabricRows = await this.db
       .select({
         fabricId: invoiceLines.fabricId,
         currency: invoices.currency,
         kgSold: sql<number>`SUM(${invoiceLines.quantityKg})`,
-        revenue: sql<number>`SUM(GREATEST(0, ${invoiceLines.quantityKg} * ${invoiceLines.pricePerKg} - ${invoiceLines.discountAmount}))`,
+        revenue: sql<number>`SUM(${lineNet})`,
+        revenueUsd: sql<number>`SUM(
+          CASE
+            WHEN ${invoices.currency} = 'USD' THEN ${lineNet}
+            WHEN ${invoices.exchangeRate} IS NOT NULL AND ${invoices.exchangeRate} > 0
+              THEN (${lineNet}) / ${invoices.exchangeRate}
+            ELSE 0
+          END
+        )`,
       })
       .from(invoiceLines)
       .innerJoin(invoices, eq(invoices.id, invoiceLines.invoiceId))
@@ -175,21 +184,28 @@ export class PostgresDashboardRepository implements IDashboardRepository {
 
     const topFabricAgg = new Map<
       string,
-      { fabricId: string; kgSold: number; revenueByCurrency: Record<string, number> }
+      {
+        fabricId: string;
+        kgSold: number;
+        revenueUsd: number;
+        revenueByCurrency: Record<string, number>;
+      }
     >();
     for (const r of topFabricRows) {
       const agg = topFabricAgg.get(r.fabricId) ?? {
         fabricId: r.fabricId,
         kgSold: 0,
+        revenueUsd: 0,
         revenueByCurrency: {},
       };
       agg.kgSold += Number(r.kgSold);
+      agg.revenueUsd += Number(r.revenueUsd);
       agg.revenueByCurrency[r.currency] =
         (agg.revenueByCurrency[r.currency] ?? 0) + Number(r.revenue);
       topFabricAgg.set(r.fabricId, agg);
     }
     const topFabricLines = Array.from(topFabricAgg.values())
-      .sort((a, b) => b.kgSold - a.kgSold)
+      .sort((a, b) => b.revenueUsd - a.revenueUsd || b.kgSold - a.kgSold)
       .slice(0, 5);
 
     const fabricIds = topFabricLines.map((r) => r.fabricId);
@@ -413,30 +429,53 @@ export class PostgresDashboardRepository implements IDashboardRepository {
     }
 
     // ── Sales trend (per-day series for 7/14/30) ────────────────────
-    // Fix H-7: groupBy(invoices.date) alone mixed every currency's sales
-    // into one "value" per day bucket. Group by date AND currency, and
-    // expose a per-currency breakdown per day instead of a single number.
+    // Native amounts stay in byCurrency (never blended). `valueUsd` is the
+    // dashboard chart series — frozen base_total (USD) per invoice, with a
+    // fallback conversion via the invoice's own exchange_rate when base_total
+    // is missing. Never revalue historical docs at a "current" rate.
+    const usdExpr = sql<number>`COALESCE(
+      SUM(
+        COALESCE(
+          ${invoices.baseTotal},
+          CASE
+            WHEN ${invoices.currency} = 'USD' THEN ${invoices.total}
+            WHEN ${invoices.exchangeRate} IS NOT NULL AND ${invoices.exchangeRate} > 0
+              THEN ${invoices.total} / ${invoices.exchangeRate}
+            ELSE 0
+          END
+        )
+      ),
+      0
+    )`;
     const trendRows = await this.db
       .select({
         date: invoices.date,
         currency: invoices.currency,
         total: sql<number>`COALESCE(SUM(${invoices.total}), 0)`,
+        totalUsd: usdExpr,
       })
       .from(invoices)
       .where(and(saleBase, gte(invoices.date, monthStart)))
       .groupBy(invoices.date, invoices.currency)
       .orderBy(invoices.date);
     const trendByDate = new Map<string, Record<string, number>>();
+    const trendUsdByDate = new Map<string, number>();
     for (const r of trendRows) {
       const byCurrency = trendByDate.get(r.date) ?? {};
       byCurrency[r.currency] = Number(r.total);
       trendByDate.set(r.date, byCurrency);
+      trendUsdByDate.set(r.date, (trendUsdByDate.get(r.date) ?? 0) + Number(r.totalUsd));
     }
     const buildTrend = (days: number) => {
-      const out: Array<{ label: string; byCurrency: Record<string, number> }> = [];
+      const out: Array<{ label: string; valueUsd: number; byCurrency: Record<string, number> }> =
+        [];
       for (let i = days - 1; i >= 0; i--) {
         const d = new Date(Date.now() - i * 86400000).toISOString().slice(0, 10);
-        out.push({ label: d, byCurrency: trendByDate.get(d) ?? {} });
+        out.push({
+          label: d,
+          valueUsd: trendUsdByDate.get(d) ?? 0,
+          byCurrency: trendByDate.get(d) ?? {},
+        });
       }
       return out;
     };
@@ -679,7 +718,9 @@ export class PostgresDashboardRepository implements IDashboardRepository {
         fabricId: r.fabricId,
         name: fabricNames.find((f) => f.id === r.fabricId)?.name ?? r.fabricId,
         kgSold: r.kgSold,
-        // FIX H-7: per-currency breakdown — never a single blended number.
+        // Dashboard ranking uses frozen USD (invoice rate / base). byCurrency
+        // remains for operators who need the original document currencies.
+        revenueUsd: r.revenueUsd,
         revenueByCurrency: r.revenueByCurrency,
       })),
       lowStockRolls: {

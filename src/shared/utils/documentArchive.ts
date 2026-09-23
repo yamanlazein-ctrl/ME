@@ -1,21 +1,44 @@
-import { settings } from "@/presentation/hooks/useSettings";
+import { documentPdfStem } from "@erp/shared";
 import type { ArchiveDocType } from "@/infrastructure/tauri-bridge";
 import type { PrintArchiveMeta } from "@/components/print/printPortal";
 
-/** Build Desktop-archive filename stem (Issue 12/13): company_date_TYPE-number. */
+/**
+ * Desktop / print PDF stem:
+ *   [نوع المستند]_[اسم العميل أو المورد]_[رقم الفاتورة]_[التاريخ]
+ */
 export function documentArchiveStem(opts: {
-  date: string;
-  typeLabel: string;
-  number: string;
+  docType: string;
+  partyName?: string | null;
+  number?: string | null;
+  date?: string | null;
+  /** @deprecated prefer docType + partyName */
+  typeLabel?: string;
 }): string {
-  const company = (settings.company?.name || "Motard Fabrics Group").replace(/[<>:"/\\|?*]/g, "_");
-  const num = (opts.number || "draft").replace(/[<>:"/\\|?*]/g, "_");
-  return `${company}_${opts.date}_${opts.typeLabel}-${num}`;
+  return documentPdfStem({
+    docType: opts.docType || opts.typeLabel || "مستند",
+    partyName: opts.partyName,
+    number: opts.number,
+    date: opts.date,
+  });
 }
 
 export function archiveMeta(
   docType: ArchiveDocType,
-  opts: { date: string; typeLabel: string; number: string },
+  opts: {
+    date: string;
+    number: string;
+    partyName?: string | null;
+    typeLabel?: string;
+  },
 ): PrintArchiveMeta {
-  return { docType, fileStem: documentArchiveStem(opts) };
+  return {
+    docType,
+    fileStem: documentArchiveStem({
+      docType,
+      partyName: opts.partyName,
+      number: opts.number,
+      date: opts.date,
+      typeLabel: opts.typeLabel,
+    }),
+  };
 }

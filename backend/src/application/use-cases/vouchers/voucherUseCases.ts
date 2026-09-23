@@ -18,11 +18,12 @@ export async function createVoucherUseCase(
   input: CreateVoucherInput,
   ctx: TenantContext,
 ): Promise<Result<VoucherData>> {
-  if (!input.amount || input.amount <= 0)
-    return { ok: false, error: "المبلغ يجب أن يكون أكبر من صفر" };
+  const cash = input.amount ?? 0;
   const discount = input.discount ?? 0;
+  if (cash < 0) return { ok: false, error: "المبلغ النقدي لا يمكن أن يكون سالباً" };
   if (discount < 0) return { ok: false, error: "الخصم لا يمكن أن يكون سالباً" };
-  if (discount > input.amount) return { ok: false, error: "الخصم لا يمكن أن يتجاوز مبلغ السند" };
+  if (cash + discount <= 0)
+    return { ok: false, error: "يجب أن يكون مجموع المبلغ النقدي والمسامحة أكبر من صفر" };
   if (!input.partyId) return { ok: false, error: "الطرف مطلوب" };
   try {
     // Document number is allocated INSIDE repo.create (same transaction as

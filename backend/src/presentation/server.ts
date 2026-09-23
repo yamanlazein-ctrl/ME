@@ -34,6 +34,9 @@ import { registerNotificationRoutes } from "./routes/notification.route.js";
 import { registerSettingsRoutes } from "./routes/settings.route.js";
 import { registerDashboardRoutes } from "./routes/dashboard.route.js";
 import { registerLicenseRoutes } from "./routes/license.route.js";
+import { mountStaticApp } from "./staticApp.js";
+import { startupFailureReason } from "../infrastructure/config/startupFailure.js";
+import { renameSync, writeFileSync } from "node:fs";
 import { registerSetupRoutes } from "./routes/setup.route.js";
 import { registerProfitRoutes } from "./routes/profit.route.js";
 import { registerCompanyRoutes } from "./routes/company.route.js";
@@ -42,9 +45,9 @@ import {
   registerInvitationPublicRoutes,
 } from "./routes/invitation.route.js";
 import { registerAuditRoutes } from "./routes/audit.route.js";
-import { backupRouter } from "./routes/backup.route.js";
+import { createBackupRouter } from "./routes/backup.route.js";
 import { registerFxRoutes } from "./routes/fx.route.js";
-import { registerDesktopHubRoutes, registerSyncRoutes } from "./routes/sync.route.js";
+import { registerSyncRoutes } from "./routes/sync.route.js";
 import { getCentralSyncUrl, probeHubReachable } from "../application/use-cases/sync/hubConfig.js";
 import { FxRateService } from "../infrastructure/fx/FxRateService.js";
 import { offlineWriteGuard } from "../infrastructure/http/middleware/offline-write.middleware.js";
@@ -81,6 +84,12 @@ const fxRateService = new FxRateService({
   refreshIntervalMs: config.FX_REFRESH_INTERVAL_MS,
   fetchTimeoutMs: config.FX_FETCH_TIMEOUT_MS,
 });
+
+// Desktop: the built frontend is served from this same process/origin (before helmet, which would apply the
+// API's `default-src 'none'` CSP to the HTML documents).
+if (config.SERVE_STATIC_DIR) {
+  mountStaticApp(app, config.SERVE_STATIC_DIR);
+}
 
 // Security & compression middleware
 // Pure JSON API — CSP governs only HTML documents. Allow same-origin
@@ -134,7 +143,9 @@ app.use(
 function isLoopbackIp(ip: string | undefined): boolean {
   if (!ip) return false;
   const host = ip.replace(/^::ffff:/, "").split("%")[0];
-  return host === "127.0.0.1" || host === "::1" || host === "localhost" || host === "0:0:0:0:0:0:0:1";
+  return (
+    host === "127.0.0.1" || host === "::1" || host === "localhost" || host === "0:0:0:0:0:0:0:1"
+  );
 }
 app.use(
   rateLimit({
@@ -184,7 +195,6 @@ registerSetupRoutes(router, container);
 registerCompanyRoutes(router, container, authMiddleware);
 registerInvitationAdminRoutes(router, container, authMiddleware, rbac(["admin"]));
 registerInvitationPublicRoutes(router, container);
-registerDesktopHubRoutes(router);
 app.use(router);
 
 // Business routes use bare paths (`/invoices`, `/customers`, ...) but the
@@ -219,11 +229,26 @@ apiRouter.use(
 // FINAL DECISION (owner, 2026-08-28): accounting is available in every plan
 // (`feature.accounting` is in all PLANS entries) and its routes stay
 // un-gated by design — this is a final decision, not an open item.
-apiRouter.use("/inventory", requireFeature(container.licenseRepo, container.tenantRepo, FEATURES.INVENTORY));
-apiRouter.use("/invoices", requireFeature(container.licenseRepo, container.tenantRepo, FEATURES.SALES));
-apiRouter.use("/orders", requireFeature(container.licenseRepo, container.tenantRepo, FEATURES.SALES));
-apiRouter.use("/returns", requireFeature(container.licenseRepo, container.tenantRepo, FEATURES.SALES));
-apiRouter.use("/profit", requireFeature(container.licenseRepo, container.tenantRepo, FEATURES.REPORTS));
+apiRouter.use(
+  "/inventory",
+  requireFeature(container.licenseRepo, container.tenantRepo, FEATURES.INVENTORY),
+);
+apiRouter.use(
+  "/invoices",
+  requireFeature(container.licenseRepo, container.tenantRepo, FEATURES.SALES),
+);
+apiRouter.use(
+  "/orders",
+  requireFeature(container.licenseRepo, container.tenantRepo, FEATURES.SALES),
+);
+apiRouter.use(
+  "/returns",
+  requireFeature(container.licenseRepo, container.tenantRepo, FEATURES.SALES),
+);
+apiRouter.use(
+  "/profit",
+  requireFeature(container.licenseRepo, container.tenantRepo, FEATURES.REPORTS),
+);
 registerPartyRoutes(
   apiRouter,
   container.partyRepo,
@@ -430,7 +455,16 @@ registerSyncRoutes(
   },
 );
 // Full backup endpoint — POST /api/backup/full (returns ZIP file) — admin-only, tenant-scoped
-apiRouter.use(authMiddleware, rbac(["admin"]), backupRouter);
+apiRouter.use(
+  authMiddleware,
+  rbac(["admin"]),
+  createBackupRouter({
+    invoiceRepo: container.invoiceRepo,
+    voucherRepo: container.voucherRepo,
+    partyRepo: container.partyRepo,
+    statementRepo: container.statementRepo,
+  }),
+);
 
 app.use("/api", apiRouter);
 
@@ -465,9 +499,8 @@ async function prepareDesktopDatabase(): Promise<void> {
 async function prepareLicenseIdentity(): Promise<void> {
   try {
     const { db } = await import("../infrastructure/orm/drizzle.js");
-    const { detachOrphanBakedLicenses } = await import(
-      "../infrastructure/license/detachOrphanBakedLicenses.js"
-    );
+    const { detachOrphanBakedLicenses } =
+      await import("../infrastructure/license/detachOrphanBakedLicenses.js");
     await detachOrphanBakedLicenses(db);
     setLicenseIdentityDegraded(null);
   } catch (err) {
@@ -485,10 +518,17 @@ fxRateService.start();
 void prepareDesktopDatabase()
   .then(() => prepareLicenseIdentity())
   .then(() => {
-    app.listen(config.PORT, config.HOST, () => {
-      logger.info(
-        `ERP API server listening on ${config.HOST}:${config.PORT} in ${config.NODE_ENV} mode`,
-      );
+    const server = app.listen(config.PORT, config.HOST, () => {
+      const address = server.address();
+      const port = typeof address === "object" && address ? address.port : config.PORT;
+      logger.info(`ERP API server listening on ${config.HOST}:${port} in ${config.NODE_ENV} mode`);
+      // The desktop shell learns the (dynamic) port from this file. It is written LAST, after the server is
+      // really accepting connections, so "port file exists" == "ready to serve". Write + rename = atomic.
+      if (config.DESKTOP_PORT_FILE) {
+        const tmp = `${config.DESKTOP_PORT_FILE}.tmp`;
+        writeFileSync(tmp, JSON.stringify({ port, pid: process.pid }));
+        renameSync(tmp, config.DESKTOP_PORT_FILE);
+      }
       if (getCentralSyncUrl()) {
         void probeHubReachable(true);
         setInterval(() => {
@@ -498,7 +538,15 @@ void prepareDesktopDatabase()
     });
   })
   .catch((err) => {
-    logger.fatal({ err }, "Desktop migrations / license identity prepare failed — refusing to listen");
+    // The structured log goes through pino's worker thread and can be lost when the process exits right after,
+    // and the desktop shell only shows server.log. Write the REAL reason (the database's own message, which drizzle
+    // keeps in `cause`) synchronously to stderr so the crash is never reported as an unrelated warning.
+    process.stderr.write(`[FATAL] Server startup failed: ${startupFailureReason(err)}
+`);
+    logger.fatal(
+      { err },
+      "Desktop migrations / license identity prepare failed — refusing to listen",
+    );
     process.exit(1);
   });
 

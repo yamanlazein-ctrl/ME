@@ -11,6 +11,7 @@ import {
   isTauri,
   type ArchiveDocType,
 } from "@/infrastructure/tauri-bridge";
+import { settings } from "@/presentation/hooks/useSettings";
 
 /**
  * Unified print portal.
@@ -176,14 +177,22 @@ ${container.outerHTML}
 async function archiveIfDesktop(container: HTMLElement, meta?: PrintArchiveMeta): Promise<void> {
   if (!isTauri() || !meta) return;
   try {
-    await ensureDocumentFolders();
+    const companyName = settings.company?.name;
+    await ensureDocumentFolders(companyName);
     const html = buildArchiveHtml(container, meta.fileStem);
-    const res = await archiveDocumentPdf(meta.docType, meta.fileStem, html);
+    const res = await archiveDocumentPdf(meta.docType, meta.fileStem, html, companyName);
     if (res?.path) {
+      toast.success(`تم حفظ الملف: ${res.path}`);
       console.info("[print-archive]", res.format, res.path);
     }
   } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    if (/أُلغي الحفظ|cancelled|canceled/i.test(msg)) {
+      toast.message("أُلغي حفظ ملف PDF");
+      return;
+    }
     console.warn("[print-archive] failed:", e);
+    toast.error(`تعذّر حفظ PDF: ${msg}`);
   }
 }
 

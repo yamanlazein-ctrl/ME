@@ -44,15 +44,16 @@ class TenantScopedPool extends Pool {
       // platform request (app.platform_mode='on') would leak that flag to the
       // next tenant request reusing the same connection, letting a tenant see
       // other tenants' category-2 rows.
-      const stmts: Promise<unknown>[] = [
-        client.query("SELECT set_config('app.current_tenant_id', $1, false)", [
-          ctx?.tenantId ?? null,
-        ]),
-        client.query("SELECT set_config('app.platform_mode', $1, false)", [
-          ctx?.platformMode ? "on" : null,
-        ]),
-      ];
-      return Promise.all(stmts).then(() => client);
+      // ONE statement, one round trip. (This used to fire two `client.query()` calls back to back inside
+      // Promise.all on the same client — the second while the first was still running — which is exactly
+      // what pg's "Calling client.query() when the client is already executing a query" deprecation is
+      // about, and would break outright in pg@9.)
+      return client
+        .query(
+          "SELECT set_config('app.current_tenant_id', $1, false), set_config('app.platform_mode', $2, false)",
+          [ctx?.tenantId ?? null, ctx?.platformMode ? "on" : null],
+        )
+        .then(() => client);
     };
 
     if (callback) {

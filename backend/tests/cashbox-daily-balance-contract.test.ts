@@ -25,5 +25,37 @@ describe("cashbox daily balance migration contract", () => {
     expect(typeof mod.recomputeCashboxBalanceAsOf).toBe("function");
     expect(typeof mod.applyCashboxDailyDelta).toBe("function");
     expect(typeof mod.assertSufficientCashboxBalance).toBe("function");
+  }, 15_000);
+
+  it("assertSufficientCashboxBalance never queries the DB for a non-positive amount", async () => {
+    // Zero/negative cash portion (pure discount settlement) must not touch the DB.
+    const { assertSufficientCashboxBalance } = await import(
+      "../src/infrastructure/repositories/cashboxBalanceHelper.js"
+    );
+    const poisonedTx = {
+      execute: () => {
+        throw new Error("must not touch the DB for a non-positive amount");
+      },
+      select: () => {
+        throw new Error("must not touch the DB for a non-positive amount");
+      },
+    } as never;
+    const ctx = { tenantId: "t1", userId: "u1" } as never;
+
+    await expect(
+      assertSufficientCashboxBalance(poisonedTx, ctx, "USD", "2026-09-22", 0),
+    ).resolves.toEqual({ available: 0, wouldGoNegative: false });
+    await expect(
+      assertSufficientCashboxBalance(poisonedTx, ctx, "USD", "2026-09-22", -5),
+    ).resolves.toEqual({ available: 0, wouldGoNegative: false });
+  });
+
+  it("helper source no longer hard-blocks negative cash balances", async () => {
+    const src = readFileSync(
+      resolve(HERE, "../src/infrastructure/repositories/cashboxBalanceHelper.ts"),
+      "utf8",
+    );
+    expect(src).toMatch(/Negative cash balances are[\s*]+allowed/);
+    expect(src).not.toMatch(/throw new InsufficientCashboxBalanceError/);
   });
 });

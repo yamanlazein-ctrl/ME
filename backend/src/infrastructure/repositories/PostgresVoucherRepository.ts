@@ -14,6 +14,11 @@ import { returnLines } from "../orm/schemas/return-line.table.js";
 import { assertDayUnlocked } from "./dayLockHelper.js";
 import { assertSufficientCashboxBalance } from "./cashboxBalanceHelper.js";
 import {
+  assertCreditNotOverdrawn,
+  customerCreditPosition,
+  splitOverpayment,
+} from "./customerCredit.js";
+import {
   Voucher,
   type VoucherData,
   type CreateVoucherInput,
@@ -24,7 +29,9 @@ import {
   convertForSettlement,
   isValidFxRate,
   round2dp,
+  saneSypRateError,
   settleAmountAgainstRemaining,
+  settlementFromCashAndDiscount,
   FX_REQUIRED_MESSAGE,
   type FxSide,
 } from "@erp/shared";
@@ -133,22 +140,24 @@ export class PostgresVoucherRepository implements IVoucherRepository {
       if (voucherCurrency !== BASE_CURRENCY && !isValidFxRate(fxRate)) {
         throw new BusinessRuleError(FX_REQUIRED_MESSAGE);
       }
+      // Sanity floor: a manually-typed SYP rate under 1,000 is never a real
+      // market rate, only a dropped digit (127 instead of 12,700) — catch it
+      // before it silently under-settles an invoice by three orders of
+      // magnitude.
+      const sypRateError = saneSypRateError(voucherCurrency, fxRate);
+      if (sypRateError) throw new BusinessRuleError(sypRateError);
       const voucherFx: FxSide = { currency: voucherCurrency, exchangeRate: fxRate };
 
-      const grossAmount = round2dp(input.amount);
-      const discount = round2dp(input.discount ?? 0);
-      if (discount < 0) {
-        throw new BusinessRuleError("الخصم لا يمكن أن يكون سالباً");
-      }
-      if (discount > grossAmount) {
-        throw new BusinessRuleError("الخصم لا يمكن أن يتجاوز مبلغ السند");
-      }
-      const netCash = round2dp(grossAmount - discount);
+      // Contract: input.amount is CASH that actually moves. Discount is an
+      // extra settlement adjustment. Party AR/AP + invoices.paid move by
+      // cash + discount. Cashbox moves by cash only — never amount − discount.
+      const settled = settlementFromCashAndDiscount(input.amount, input.discount ?? 0);
+      const discount = settled.discount;
+      const netCash = settled.cash;
+      const grossAmount = settled.partySettlement;
 
-      // F06 (Phase 1 audit) + product decision: a cash PAYMENT voucher removes
-      // cash from the cashbox and must never take it negative. A cash RECEIPT
-      // adds cash — no guard needed. Bank/transfer vouchers have no cashbox
-      // effect (cashImpact stays "none" below).
+      // Negative cash balances are allowed (business rule). The helper only
+      // serializes concurrent cash-outs; it no longer hard-blocks the write.
       if (input.method === "cash" && input.kind === "payment") {
         await assertSufficientCashboxBalance(tx, ctx, voucherCurrency, input.date, netCash);
       }
@@ -156,6 +165,9 @@ export class PostgresVoucherRepository implements IVoucherRepository {
       // What this voucher actually settles on the linked invoice, restated in the
       // INVOICE's currency. Stays null for a standalone payment (no invoice).
       let settledInInvoiceCurrency: number | null = null;
+      // The part of it that goes to invoices.paid (≤ remaining). Any excess of a
+      // customer receipt stays on the party ledger as credit.
+      let appliedToInvoice: number | null = null;
       // Currency + frozen rate of the invoice we just locked, echoed back on the
       // created voucher so the caller can print the counterpart immediately.
       let linkedInvoiceFx: { currency?: string | null; exchangeRate?: number | null } | undefined;
@@ -213,6 +225,15 @@ export class PostgresVoucherRepository implements IVoucherRepository {
         };
         linkedInvoiceFx = { currency: invoiceFx.currency, exchangeRate: invoiceFx.exchangeRate };
         const enteredRate = isValidFxRate(input.exchangeRate) ? input.exchangeRate! : null;
+        // Same sanity floor, keyed on the INVOICE's currency this time: a USD
+        // voucher settling an SYP invoice never re-validates voucherCurrency
+        // above (that check only fires when the voucher itself is SYP), so a
+        // typo like 127 for a USD-voucher-against-SYP-invoice settlement
+        // would otherwise sail through untouched — exactly the case that was
+        // reported (39,538,000 ل.س invoice, $120 @ 127 → 15,240 ل.س instead
+        // of the ~1.6M a realistic rate produces).
+        const crossCurrencySypError = saneSypRateError(invoiceFx.currency, enteredRate);
+        if (crossCurrencySypError) throw new BusinessRuleError(crossCurrencySypError);
         // Plain conversion first: only to fail closed when FX is unusable. The
         // amount actually credited is decided below, once the remaining balance
         // is known (`settleAmountAgainstRemaining`).
@@ -273,12 +294,28 @@ export class PostgresVoucherRepository implements IVoucherRepository {
             `لا يمكن تسديد فاتورة بعملة ${invoiceFx.currency} بسند بعملة ${voucherCurrency} — ${FX_REQUIRED_MESSAGE}`,
           );
         }
-        // 0.01 tolerance: the conversion rounds to 2dp once, so a payment that
-        // settles the invoice exactly can land a fraction of a cent above it.
-        if (settledInInvoiceCurrency > remaining + 0.01) {
+        // Overpayment. A customer RECEIPT larger than the remaining balance is
+        // never refused: the invoice is settled in full and the excess stays on
+        // the customer's ledger as credit (the party leg below is posted for
+        // the full amount; only invoices.paid is capped). Supplier payments
+        // keep the strict guard. 0.01 tolerance: the conversion rounds to 2dp
+        // once, so an exact settlement can land a fraction of a cent above it.
+        if (input.kind === "receipt") {
+          const split = splitOverpayment(settledInInvoiceCurrency, remaining);
+          // A concession on a payment that already exceeds the debt would be
+          // booked as customer credit — i.e. money the customer never paid.
+          if (split.excess > 0 && discount > 0) {
+            throw new BusinessRuleError(
+              "لا يمكن منح مسامحة مع دفعة تتجاوز المتبقي على الفاتورة — أزل المسامحة",
+            );
+          }
+          appliedToInvoice = split.applied;
+        } else if (settledInInvoiceCurrency > remaining + 0.01) {
           throw new BusinessRuleError(
             `بعد التحويل ${settledInInvoiceCurrency} ${invoiceFx.currency} يتجاوز المتبقي ${remaining} ${invoiceFx.currency}`,
           );
+        } else {
+          appliedToInvoice = settledInInvoiceCurrency;
         }
       }
 
@@ -330,6 +367,7 @@ export class PostgresVoucherRepository implements IVoucherRepository {
           amount: grossAmount,
           discount,
           currency: voucherCurrency,
+          appliedAmount: appliedToInvoice,
           exchangeRate: storedExchangeRate,
           baseAmount: voucherBaseAmount,
           method: input.method,
@@ -340,10 +378,11 @@ export class PostgresVoucherRepository implements IVoucherRepository {
         .returning();
 
       // Standard double-entry with optional settlement discount:
-      //   amount = gross party settlement (AR/AP + invoices.paid)
-      //   discount = cash concession; net cash = amount − discount
-      //   receipt: Dr cash(net) [+ Dr discount_expense] Cr party(gross)
-      //   payment: Dr party(gross) Cr cash(net) [+ Cr discount_income]
+      //   input.amount = cash that moves; discount = settlement adjustment
+      //   stored amount = partySettlement (cash + discount) so print
+      //   (amount − discount) still yields cash for historical rows.
+      //   receipt: Dr cash(cash) [+ Dr discount_expense] Cr party(cash+discount)
+      //   payment: Dr party(cash+discount) Cr cash(cash) [+ Cr discount_income]
       const isPayment = input.kind === "payment";
       const refType = isPayment ? "payment_out" : "receipt_in";
       const cashImpact = input.method === "cash" ? (isPayment ? "out" : "in") : "none";
@@ -462,7 +501,7 @@ export class PostgresVoucherRepository implements IVoucherRepository {
         await tx
           .update(invoices)
           .set({
-            paid: sql`${invoices.paid} + ${settledInInvoiceCurrency ?? grossAmount}`,
+            paid: sql`${invoices.paid} + ${appliedToInvoice ?? settledInInvoiceCurrency ?? grossAmount}`,
             updatedAt: new Date(),
           })
           .where(and(eq(invoices.id, input.invoiceId), eq(invoices.tenantId, ctx.tenantId)));
@@ -532,7 +571,11 @@ export class PostgresVoucherRepository implements IVoucherRepository {
       // create() credited to invoices.paid, including an exact-closure amount that
       // a plain re-conversion of the voucher amount would not reproduce.
       const [postedPartyLeg] = await tx
-        .select({ debit: ledgerEntries.debit, credit: ledgerEntries.credit })
+        .select({
+          debit: ledgerEntries.debit,
+          credit: ledgerEntries.credit,
+          currency: ledgerEntries.currency,
+        })
         .from(ledgerEntries)
         .where(
           and(
@@ -550,6 +593,20 @@ export class PostgresVoucherRepository implements IVoucherRepository {
       const postedPartyAmount =
         postedPartyLeg != null
           ? Number(row.kind === "payment" ? postedPartyLeg.debit : postedPartyLeg.credit)
+          : null;
+
+      // A customer receipt may carry credit (on-account payment or overpaid
+      // excess). Snapshot the customer's unattached position now, while the
+      // ledger leg is still active, to refuse a cancel whose credit was already
+      // spent on later invoices (checked after the reversal below).
+      const creditCheck =
+        row.kind === "receipt" && row.partyKind === "customer" && postedPartyLeg?.currency
+          ? {
+              currency: postedPartyLeg.currency,
+              before: (
+                await customerCreditPosition(tx, ctx.tenantId, row.partyId, postedPartyLeg.currency)
+              ).unattached,
+            }
           : null;
 
       // Reverse the linked ledger entry atomically (mirrors invoice cancel).
@@ -601,8 +658,13 @@ export class PostgresVoucherRepository implements IVoucherRepository {
         // means the stored rate is unusable; fail closed instead of corrupting
         // the invoice balance.
         const voucherCurrencyOnCancel = row.currency ?? "SYP";
+        // applied_amount is exactly what create() added to invoices.paid (an
+        // overpaid receipt's excess never reached the invoice). Legacy rows
+        // (NULL) keep the posted-party-leg rule.
         const reversed =
-          postedPartyAmount !== null && Number.isFinite(postedPartyAmount) && postedPartyAmount > 0
+          row.appliedAmount !== null && row.appliedAmount !== undefined
+            ? round2dp(Number(row.appliedAmount))
+            : postedPartyAmount !== null && Number.isFinite(postedPartyAmount) && postedPartyAmount > 0
             ? round2dp(postedPartyAmount)
             : convertForSettlement(
                 Number(row.amount),
@@ -619,6 +681,23 @@ export class PostgresVoucherRepository implements IVoucherRepository {
           .update(invoices)
           .set({ paid: sql`GREATEST(0, ${invoices.paid} - ${reversed})`, updatedAt: new Date() })
           .where(and(eq(invoices.id, row.invoiceId), eq(invoices.tenantId, ctx.tenantId)));
+      }
+
+      if (creditCheck) {
+        const after = await customerCreditPosition(
+          tx,
+          ctx.tenantId,
+          row.partyId,
+          creditCheck.currency,
+        );
+        await assertCreditNotOverdrawn(
+          tx,
+          ctx.tenantId,
+          row.partyId,
+          creditCheck.currency,
+          creditCheck.before,
+          after.unattached,
+        );
       }
 
       return this.toDomain(row);
@@ -656,6 +735,7 @@ export class PostgresVoucherRepository implements IVoucherRepository {
       // standalone payments simply leave these undefined.
       invoiceCurrency: invoiceFx?.currency ?? undefined,
       invoiceExchangeRate: invoiceFx?.exchangeRate ?? undefined,
+      appliedAmount: row.appliedAmount ?? undefined,
       method: row.method as VoucherData["method"],
       status: row.status as VoucherData["status"],
       notesPrint: n(row.notesPrint),

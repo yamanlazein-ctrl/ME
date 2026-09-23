@@ -2,8 +2,6 @@
 
 Arabic-language ERP for fabric & roll trading. Monorepo: React frontend, Express + PostgreSQL API, and shared domain.
 
-> Desktop customer-delivery readiness is tracked in `docs/DESKTOP-FORENSIC-FIX-PLAN.md` — clean-machine MSI lifecycle (DFP-004) remains unproven until a Windows VM gate exists.
-
 ## Monorepo Layout
 
 | Directory | Purpose |

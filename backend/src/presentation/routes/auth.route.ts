@@ -31,6 +31,12 @@ import {
   isSyncEnqueueEnabled,
 } from "../../application/use-cases/sync/syncEnqueue.js";
 import { assertTenantLicenseAllowsAccess } from "../../infrastructure/license/tenantLicenseAccess.js";
+import {
+  announceHubActivity,
+  getCentralSyncUrl,
+  getHubSessionInfo,
+} from "../../application/use-cases/sync/hubConfig.js";
+import { hostname } from "node:os";
 
 // Login-specific rate limiter: 5 attempts per IP per 15 minutes
 const loginRateLimiter = rateLimit({
@@ -65,6 +71,22 @@ function withJwtTenantContext<T>(tenantId: string, fn: () => Promise<T>): Promis
     return runWithTenantContext({ tenantId }, fn);
   }
   return fn();
+}
+
+/**
+ * Presence for peers: «المحاسب سجّل دخوله الآن». Only a device paired with a
+ * hub announces (the hub itself has no CENTRAL_SYNC_URL). Fire-and-forget — a
+ * slow or unreachable hub must never delay or fail a local login.
+ */
+function announceLoginToHub(user: { name: string; role: string }): void {
+  if (!getCentralSyncUrl()) return;
+  void announceHubActivity({
+    kind: "login",
+    userName: user.name,
+    userRole: user.role,
+    deviceLabel: hostname() || null,
+    sourceDeviceId: getHubSessionInfo()?.hubDeviceId ?? null,
+  });
 }
 
 function isLoopback(ip: string | undefined): boolean {
@@ -263,9 +285,17 @@ export function registerAuthRoutes(router: Router, container: Container) {
           const baked = await container.tenantRepo.findBySlug("default");
           if (baked) tenantId = baked.id;
         }
-        // Host-based tenant resolution as fallback (e.g., customer1.motard.com → tenant lookup)
-        // For now, require explicit tenantId; host fallback is a future enhancement
-        // to avoid unordered LIMIT 1 when email is not globally unique.
+        // Hub pairing from a desktop sends no tenantId (the desktop's baked
+        // tenant id means nothing on the hub). A server install is one tenant
+        // (docs/decisions.md), so resolve it exactly like the install gate:
+        // operator-pinned BOOTSTRAP_TENANT_ID, else the sole completed tenant
+        // (findAnyCompleted throws on >1, so this never picks arbitrarily).
+        if (!tenantId) {
+          tenantId =
+            process.env.BOOTSTRAP_TENANT_ID ??
+            (await container.installationStateRepo.findAnyCompleted()) ??
+            undefined;
+        }
         if (!tenantId) {
           const host = (req.headers.host as string | undefined) ?? "";
           // Simple host→tenant mapping could be added here (e.g., via tenants.slug)
@@ -314,6 +344,7 @@ export function registerAuthRoutes(router: Router, container: Container) {
             role: user.role,
           },
         });
+        announceLoginToHub(user);
       } catch (err) {
         next(err);
       }
@@ -537,6 +568,7 @@ export function registerAuthRoutes(router: Router, container: Container) {
           refreshToken,
           user: { id: user.id, name: user.name, email: user.email, role: user.role },
         });
+        announceLoginToHub(user);
       } catch (err) {
         next(err);
       }

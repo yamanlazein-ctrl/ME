@@ -33,6 +33,8 @@ import {
   useNextInvoiceNumber,
 } from "@/presentation/hooks/useInvoices";
 import { invoiceSubtotal, invoiceTotal } from "@/core/calculations/invoiceCalc";
+import { saneSypRateError } from "@erp/shared";
+import { useSypRateSoftWarning } from "@/presentation/hooks/useSypRateSoftCheck";
 import { printOrArchive } from "@/components/print/printPortal";
 import { archiveMeta } from "@/shared/utils/documentArchive";
 import { InvoicePrintDocument } from "@/components/print/InvoicePrintDocument";
@@ -133,6 +135,12 @@ function EntryInvoicePage() {
   // FX rule (base currency = USD): a non-USD entry invoice MUST carry the
   // frozen exchange rate (units of SYP per 1 USD) captured at creation time.
   const [exchangeRate, setExchangeRate] = useState<number | "">("");
+  const [softWarningAcked, setSoftWarningAcked] = useState(false);
+  const enteredRateNum = Number(exchangeRate) > 0 ? Number(exchangeRate) : null;
+  const softWarning = useSypRateSoftWarning(currency, enteredRateNum);
+  useEffect(() => {
+    setSoftWarningAcked(false);
+  }, [enteredRateNum, currency]);
   const settingsSnap = useSettings();
   const enabledPaymentMethods = settingsSnap.paymentMethods.filter((m) => m.enabled);
   const [paymentMethod, setPaymentMethod] = useState<string>(
@@ -818,6 +826,18 @@ function EntryInvoicePage() {
       showError(msg);
       return;
     }
+    const sypError = saneSypRateError(currency, enteredRateNum);
+    if (sypError) {
+      setError(sypError);
+      showError(sypError);
+      return;
+    }
+    if (softWarning && !softWarningAcked) {
+      const msg = "أكّد أن سعر الصرف مقصود (مربّع التأكيد بجانب الحقل) قبل الحفظ.";
+      setError(msg);
+      showError(msg);
+      return;
+    }
 
     const paidAmount = paid === "" ? 0 : Number(paid);
     // Guard against overpaying — show a clear Arabic error instead of letting
@@ -1008,6 +1028,23 @@ function EntryInvoicePage() {
                 ariaLabel="سعر الصرف"
                 className="!h-9 text-left tabular-nums"
               />
+              {softWarning && (
+                <div
+                  role="alert"
+                  data-testid="entry-invoice-syp-rate-soft-warning"
+                  className="mt-1 rounded-md border border-warning/40 bg-warning/10 px-2 py-1.5 text-[11px] leading-snug text-foreground"
+                >
+                  <p>{softWarning}</p>
+                  <label className="mt-1 flex items-center gap-1.5 font-semibold">
+                    <input
+                      type="checkbox"
+                      checked={softWarningAcked}
+                      onChange={(e) => setSoftWarningAcked(e.target.checked)}
+                    />
+                    السعر صحيح ومقصود، تابع الحفظ
+                  </label>
+                </div>
+              )}
             </HeaderField>
             <HeaderField label="الدفع">
               <PaymentMethodSelect

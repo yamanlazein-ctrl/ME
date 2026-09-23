@@ -37,6 +37,8 @@ export interface InvoiceData {
   total: number;
   /** Amount paid at invoice time (entry = supplier payment, sale = receipt). */
   paid: number;
+  /** Part of `paid` settled from the customer's credit balance (no cash moved). */
+  creditApplied?: number;
   /** Outstanding amount = total - paid. */
   amountDue: number;
   /** Payment method used when paid > 0 (cash/transfer/check/card). */
@@ -76,8 +78,11 @@ export class Invoice {
     const shipping = input.shipping ?? 0;
     // One edge-round keeps cents exact and kills float accumulation.
     const total = round2dp(subtotal - discount + tax + shipping);
-    const paid = input.paid ?? 0;
-    const paymentMethod = paid > 0 ? (input.paymentMethod ?? "cash") : undefined;
+    // Cash above a sale invoice's total is customer credit, not invoice payment.
+    const cashPaid = input.paid ?? 0;
+    const creditApplied = input.creditApplied ?? 0;
+    const paid = round2dp(Math.min(cashPaid, total) + creditApplied);
+    const paymentMethod = cashPaid > 0 ? (input.paymentMethod ?? "cash") : undefined;
     return new Invoice({
       id: "" as UUID,
       tenantId: "" as UUID,
@@ -93,6 +98,7 @@ export class Invoice {
       shipping,
       total,
       paid,
+      creditApplied,
       amountDue: total - paid,
       paymentMethod,
       notes: input.notes?.trim(),
@@ -194,6 +200,11 @@ export interface CreateInvoiceInput {
    * on the invoice and `amountDue = total - paid` is exposed.
    */
   paid?: number;
+  /**
+   * Sale invoices: amount settled from the customer's existing credit balance
+   * (advance payments). No ledger movement; validated against the live ledger.
+   */
+  creditApplied?: number;
   /** Receipt method used when `paid > 0`. Defaults to "cash". */
   paymentMethod?: "cash" | "transfer" | "check" | "card";
   /**

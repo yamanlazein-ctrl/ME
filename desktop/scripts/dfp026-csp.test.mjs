@@ -11,16 +11,15 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const conf = JSON.parse(readFileSync(resolve(root, "src-tauri/tauri.conf.json"), "utf8"));
 const csp = String(conf.app?.security?.csp ?? "");
 
-test("DFP-026 CSP has no Google Fonts / wildcard connect", () => {
+test("DFP-026 CSP has no Google Fonts / wildcard connect / fixed ports", () => {
   assert.doesNotMatch(csp, /fonts\.googleapis|fonts\.gstatic/i);
   assert.doesNotMatch(csp, /connect-src[^;]*\*/);
-  assert.match(csp, /127\.0\.0\.1:8080/);
-  assert.match(csp, /127\.0\.0\.1:4173/);
+  // The desktop UI is served by the local server on an OS-assigned port: no fixed port may be baked in.
+  assert.doesNotMatch(csp, /:8080|:4173/);
 });
 
-test("DFP-026 documents unavoidable WebView script exceptions in CSP string", () => {
-  // Tauri/WebView bootstrap still requires these; connect-src is narrowed above.
-  assert.match(csp, /'unsafe-inline'/);
-  assert.match(csp, /wasm-unsafe-eval/);
+test("DFP-026 the only bundled window is the local splash page", () => {
+  const labels = (conf.app?.windows ?? []).map((w) => w.label);
+  assert.deepEqual(labels, ["splash"], "the main window is created at runtime, once the server port is known");
   assert.match(csp, /default-src 'self'/);
 });

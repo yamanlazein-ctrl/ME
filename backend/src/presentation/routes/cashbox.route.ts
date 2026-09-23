@@ -6,6 +6,7 @@ import type { ILedgerRepository } from "../../application/ports/ILedgerRepositor
 import type { ISyncOutboxRepository } from "../../application/ports/ISyncOutboxRepository.js";
 import type { TenantContext } from "../../domain/types/index.js";
 import { randomUUID } from "node:crypto";
+import { round2dp } from "@erp/shared";
 import { logger } from "../../infrastructure/config/logger.js";
 import { withTenantTx } from "../../infrastructure/orm/drizzle.js";
 import {
@@ -67,7 +68,8 @@ export function registerCashboxRoutes(
           if (m.direction === "in") mIn += m.amount;
           else mOut += m.amount;
         }
-        return opening + ledger.in + mIn - ledger.out - mOut;
+        // 2dp decimals summed in floats — round once (no 4655.879999999999 leaks).
+        return round2dp(opening + ledger.in + mIn - ledger.out - mOut);
       };
 
       // DFP-031 M5: without ?currency=, return a per-currency map so multi-currency

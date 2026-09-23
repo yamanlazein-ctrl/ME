@@ -27,14 +27,12 @@ pub enum BootStage {
     StartDatabase,
     /// Load or generate DPAPI-encrypted local secrets (JWT/APP_MASTER_KEY).
     LoadSecrets,
-    /// Spawn the bundled Node backend with secrets injected via env.
-    StartBackend,
-    /// Spawn the bundled SSR frontend server (parallel with backend init).
-    StartFrontend,
-    /// Gate on GET /api/health/live == 200 (bounded deadline, single cause).
-    WaitBackend,
-    /// Gate on GET /__health == 200 (lightweight probe — never a full render).
-    WaitFrontend,
+    /// Spawn the ONE bundled Node server (API + built frontend, same origin, OS-assigned port).
+    StartServer,
+    /// Wait until the server reports its port (it writes the port file only once it accepts
+    /// connections) and answers /api/health/live. Liveness-based: the wait ends when the server is
+    /// ready or when the process is dead — never on an arbitrary timeout.
+    WaitServer,
 }
 
 /// The full boot order. The runner in `stack.rs` executes these top to bottom;
@@ -47,10 +45,8 @@ pub const ALL: &[BootStage] = &[
     BootStage::SyncDbPort,
     BootStage::StartDatabase,
     BootStage::LoadSecrets,
-    BootStage::StartBackend,
-    BootStage::StartFrontend,
-    BootStage::WaitBackend,
-    BootStage::WaitFrontend,
+    BootStage::StartServer,
+    BootStage::WaitServer,
 ];
 
 impl BootStage {
@@ -65,10 +61,8 @@ impl BootStage {
             BootStage::SyncDbPort => "ضبط إعدادات قاعدة البيانات…",
             BootStage::StartDatabase => "تشغيل قاعدة البيانات…",
             BootStage::LoadSecrets => "تجهيز مفاتيح التشغيل…",
-            BootStage::StartBackend => "تشغيل محرّك النظام…",
-            BootStage::StartFrontend => "تشغيل واجهة العرض…",
-            BootStage::WaitBackend => "انتظار محرّك النظام…",
-            BootStage::WaitFrontend => "انتظار واجهة العرض…",
+            BootStage::StartServer => "تشغيل النظام…",
+            BootStage::WaitServer => "فتح الواجهة…",
         }
     }
 
@@ -82,10 +76,8 @@ impl BootStage {
             BootStage::SyncDbPort => "sync-db-port",
             BootStage::StartDatabase => "start-db",
             BootStage::LoadSecrets => "load-secrets",
-            BootStage::StartBackend => "start-backend",
-            BootStage::StartFrontend => "start-frontend",
-            BootStage::WaitBackend => "wait-backend",
-            BootStage::WaitFrontend => "wait-frontend",
+            BootStage::StartServer => "start-server",
+            BootStage::WaitServer => "wait-server",
         }
     }
 }
@@ -109,10 +101,8 @@ mod tests {
                 "sync-db-port",
                 "start-db",
                 "load-secrets",
-                "start-backend",
-                "start-frontend",
-                "wait-backend",
-                "wait-frontend",
+                "start-server",
+                "wait-server",
             ]
         );
         let uniq: HashSet<&str> = codes.iter().copied().collect();

@@ -180,6 +180,56 @@ export function settleAmountAgainstRemaining(
   return plain;
 }
 
+/**
+ * Hard sanity floor for a manually-typed SYP-paired exchange rate.
+ *
+ * `exchangeRate` is always "units of the non-USD currency per 1 USD". For SYP
+ * that value has been in the thousands for years (this file's own regression
+ * fixtures use 13,500-136,500) — a value under this floor is never a real
+ * market rate, only a dropped digit (typing "127" instead of "12,700"). This
+ * is SYP-specific: EUR/USD legitimately sits under 2, so the same floor must
+ * never be applied to EUR.
+ *
+ * Kept separate from `exchangeRateSchema` (which is currency-agnostic and
+ * shared by every document, EUR included) rather than folded into it.
+ */
+export const MIN_SANE_SYP_RATE = 1000;
+
+/**
+ * Returns an Arabic error message when `rate` cannot be a real SYP/USD rate,
+ * or null when the rate is fine (or the currency isn't SYP, or no rate was
+ * given — callers that require a rate check that separately).
+ */
+export function saneSypRateError(currency: string, rate: number | null | undefined): string | null {
+  if (currency !== "SYP") return null;
+  if (!isValidFxRate(rate)) return null;
+  if (rate < MIN_SANE_SYP_RATE) {
+    return `سعر الصرف (${rate.toLocaleString("en-US")}) غير منطقي لليرة السورية — لا يمكن أن يكون الدولار بأقل من ${MIN_SANE_SYP_RATE.toLocaleString("en-US")} ل.س. تأكد من عدم نسيان بعض الأصفار (مثال: 12700 بدل 127).`;
+  }
+  return null;
+}
+
+/**
+ * Soft (non-blocking) mismatch check: how far a manually-typed SYP rate sits
+ * from the live LiraScope reference rate. Returns an Arabic warning string
+ * when the gap exceeds `thresholdRatio` (default 30%), else null. The caller
+ * decides what to do with the warning (confirm-to-continue banner) — this
+ * never blocks saving and the reference rate is never written anywhere.
+ */
+export function sypRateDeviationWarning(
+  currency: string,
+  rate: number | null | undefined,
+  referenceRate: number | null | undefined,
+  thresholdRatio = 0.3,
+): string | null {
+  if (currency !== "SYP") return null;
+  if (!isValidFxRate(rate) || !isValidFxRate(referenceRate)) return null;
+  const deviation = Math.abs(rate - referenceRate) / referenceRate;
+  if (deviation <= thresholdRatio) return null;
+  const pct = Math.round(deviation * 100);
+  return `سعر الصرف المدخل (${rate.toLocaleString("en-US")}) يختلف بنسبة ${pct}% عن السعر المرجعي الحالي (${referenceRate.toLocaleString("en-US")} تقريباً). تأكد من الرقم قبل المتابعة.`;
+}
+
 export const FX_REQUIRED_MESSAGE = "سعر الصرف مطلوب لكل عملية ليست بالدولار (عملة الأساس USD)";
 
 /** Zod fragment: optional but strictly-positive exchange rate field. */

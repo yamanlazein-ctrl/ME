@@ -1,4 +1,4 @@
-import { eq, and, desc, ilike, or, sql, inArray, gte, lte } from "drizzle-orm";
+import { eq, and, desc, ilike, or, sql, gte, lte } from "drizzle-orm";
 import type { DB } from "../orm/drizzle.js";
 import type {
   IExpenseRepository,
@@ -6,8 +6,8 @@ import type {
 } from "../../application/ports/IExpenseRepository.js";
 import { expenses } from "../orm/schemas/expense.table.js";
 import { ledgerEntries } from "../orm/schemas/ledger-entry.table.js";
-import { cashboxSessions, manualMovements } from "../orm/schemas/cashbox.table.js";
 import { assertDayUnlocked } from "./dayLockHelper.js";
+import { assertSufficientCashboxBalance } from "./cashboxBalanceHelper.js";
 import {
   Expense,
   type ExpenseData,
@@ -96,60 +96,16 @@ export class PostgresExpenseRepository implements IExpenseRepository {
       const paidFromCashbox = input.paidFromCashbox ?? true;
       const currency = input.currency ?? "SYP";
       const isCash = input.method === "cash" || paidFromCashbox === true;
-      // CB.BC.02 fix: an expense that reduces the cashbox must not overdraw it.
-      // Only enforced when a cashbox session exists for this exact currency
-      // (no session / different currency → no meaningful balance to check,
-      // preserving legacy behaviour). Mirrors GET /cashbox/balance/:date.
+      // CB.BC.02 / F06 fix: an expense that reduces the cashbox must not
+      // overdraw it. Previously this was a hand-rolled, non-atomic recompute
+      // that (a) grabbed an arbitrary cashbox session row instead of the one
+      // for THIS currency, silently skipping the check whenever the tenant
+      // had sessions in more than one currency, and (b) took no advisory
+      // lock, so two concurrent cash expenses could both read the same
+      // balance and both pass. Reuse the same guard vouchers/manual
+      // movements use — race-safe and always per-currency.
       if (isCash) {
-        const [session] = await tx
-          .select()
-          .from(cashboxSessions)
-          .where(eq(cashboxSessions.tenantId, ctx.tenantId))
-          .limit(1);
-        if (session && session.currency === currency) {
-          const from = session.openingDate;
-          const [agg] = await tx
-            .select({
-              amountIn: sql<number>`COALESCE(SUM(CASE WHEN ${ledgerEntries.cashImpact} = 'in' THEN ${ledgerEntries.debit} + ${ledgerEntries.credit} ELSE 0 END), 0)`,
-              amountOut: sql<number>`COALESCE(SUM(CASE WHEN ${ledgerEntries.cashImpact} = 'out' THEN ${ledgerEntries.debit} + ${ledgerEntries.credit} ELSE 0 END), 0)`,
-            })
-            .from(ledgerEntries)
-            .where(
-              and(
-                eq(ledgerEntries.tenantId, ctx.tenantId),
-                eq(ledgerEntries.status, "active"),
-                eq(ledgerEntries.currency, currency),
-                inArray(ledgerEntries.cashImpact, ["in", "out"]),
-                sql`${ledgerEntries.date} >= ${from}`,
-              ),
-            );
-          const manualRows = await tx
-            .select({
-              direction: manualMovements.direction,
-              amount: manualMovements.amount,
-              currency: manualMovements.currency,
-            })
-            .from(manualMovements)
-            .where(eq(manualMovements.tenantId, ctx.tenantId));
-          let mIn = 0;
-          let mOut = 0;
-          for (const m of manualRows) {
-            if (m.currency !== currency) continue;
-            if (m.direction === "in") mIn += m.amount;
-            else mOut += m.amount;
-          }
-          const balance =
-            session.openingBalance +
-            Number(agg?.amountIn ?? 0) +
-            mIn -
-            Number(agg?.amountOut ?? 0) -
-            mOut;
-          if (balance - input.amount < 0) {
-            throw new Error(
-              `رصيد الصندوق غير كافٍ (${balance.toLocaleString("en-US")} ${currency}) لصرف ${input.amount.toLocaleString("en-US")} ${currency}`,
-            );
-          }
-        }
+        await assertSufficientCashboxBalance(tx, ctx, currency, input.date, input.amount);
       }
       const [row] = await tx
         .insert(expenses)

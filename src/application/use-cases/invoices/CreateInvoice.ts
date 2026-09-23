@@ -45,6 +45,7 @@ export class CreateInvoiceUseCase {
       shipping: input.shipping,
       notes: input.notes,
       paid: input.paid,
+      creditApplied: input.creditApplied,
       paymentMethod: input.paymentMethod,
       orderId: (input as unknown as { orderId?: string }).orderId,
     });

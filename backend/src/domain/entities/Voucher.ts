@@ -25,6 +25,12 @@ export interface VoucherData {
    */
   invoiceCurrency?: string;
   invoiceExchangeRate?: number | null;
+  /**
+   * Part that settled the linked invoice (invoice currency). A customer receipt
+   * above the invoice's remaining balance keeps the excess as customer credit.
+   * Undefined for standalone (on-account) vouchers and legacy rows.
+   */
+  appliedAmount?: number;
   method: VoucherMethod;
   status: EntityStatus;
   notesPrint?: string;

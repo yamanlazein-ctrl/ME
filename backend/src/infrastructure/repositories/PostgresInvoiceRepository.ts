@@ -17,6 +17,8 @@ import { vouchers } from "../orm/schemas/voucher.table.js";
 import { recordStockMovement } from "./stockMovementHelper.js";
 import { notifyOrderAvailability } from "./orderAvailabilityNotifier.js";
 import { assertDayUnlocked } from "./dayLockHelper.js";
+import { assertSufficientCashboxBalance } from "./cashboxBalanceHelper.js";
+import { assertCreditNotOverdrawn, customerCreditPosition } from "./customerCredit.js";
 import { returns } from "../orm/schemas/return.table.js";
 import type {
   InvoiceData,
@@ -30,6 +32,7 @@ import {
   BASE_CURRENCY,
   computeBaseEquivalent,
   isValidFxRate,
+  saneSypRateError,
   FX_REQUIRED_MESSAGE,
 } from "@erp/shared";
 import type { TenantContext, PaginatedResult } from "../../domain/types/index.js";
@@ -191,6 +194,29 @@ export class PostgresInvoiceRepository implements IInvoiceRepository {
         throw new BusinessRuleError("نوع الطرف في الفاتورة لا يطابق نوع الفاتورة");
       }
 
+      // Customer credit (advance payments / earlier overpayments) applied to
+      // this sale. Re-validated here against the live ledger — the client's
+      // figure may be stale, and a synced replay on the hub must fail closed
+      // (→ sync conflict) rather than mark an invoice paid with credit that
+      // another device already spent.
+      const creditApplied = isSale ? round2dp(input.creditApplied ?? 0) : 0;
+      if (creditApplied > 0) {
+        const position = await customerCreditPosition(
+          tx,
+          ctx.tenantId,
+          input.partyId,
+          input.currency ?? "SYP",
+        );
+        if (creditApplied > position.availableCredit + 0.01) {
+          throw new BusinessRuleError(
+            `الرصيد الدائن المتاح للعميل (${position.availableCredit} ${input.currency ?? "SYP"}) أقل من المبلغ المطلوب خصمه (${creditApplied})`,
+          );
+        }
+      }
+      // Cash that settles THIS invoice; anything above the total is customer credit.
+      const cashPaid = input.paid ?? 0;
+      const cashApplied = isSale ? round2dp(Math.min(cashPaid, inv.total)) : cashPaid;
+
       // Stock validation and deduction only for sale invoices.
       // Entry invoices add stock via roll creation — no deduction needed.
       const expectedVersions = new Map<string, number>();
@@ -223,6 +249,12 @@ export class PostgresInvoiceRepository implements IInvoiceRepository {
       if (invoiceCurrency !== BASE_CURRENCY && !isValidFxRate(fxRate)) {
         throw new BusinessRuleError(FX_REQUIRED_MESSAGE);
       }
+      // Sanity floor: a manually-typed SYP rate under 1,000 is never a real
+      // market rate, only a dropped digit — this is the frozen rate every
+      // later settlement voucher reuses, so catching it here (once, at
+      // invoice creation) prevents it from propagating forward.
+      const invoiceSypRateError = saneSypRateError(invoiceCurrency, fxRate);
+      if (invoiceSypRateError) throw new BusinessRuleError(invoiceSypRateError);
       // Per-line guards: stock, color/fabric match, currency match.
       // Runs for BOTH sale and entry invoices (NEW-03 added entry arm).
       // The H1 cross-currency guard inside rejects when the roll's currency
@@ -333,7 +365,8 @@ export class PostgresInvoiceRepository implements IInvoiceRepository {
           tax: inv.tax,
           shipping: input.shipping ?? 0,
           total: inv.total,
-          paid: input.paid ?? 0,
+          paid: round2dp(cashApplied + creditApplied),
+          creditApplied,
           paymentMethod: (input.paid ?? 0) > 0 ? (input.paymentMethod ?? "cash") : null,
           notes: input.notes,
           // BUG-03 fix — frozen FX capture at creation time (mirrors fx.ts rule):
@@ -556,9 +589,9 @@ export class PostgresInvoiceRepository implements IInvoiceRepository {
       }
       let linkedVoucherId: string | null = null;
       if (isSale && paid > 0) {
-        if (paid > inv.total) {
-          throw new BusinessRuleError(`المبلغ المدفوع (${paid}) أكبر من إجمالي الفاتورة (${inv.total})`);
-        }
+        // Overpayment is accepted: the receipt carries the FULL cash (cash leg
+        // + customer credit leg below), the invoice only takes `cashApplied`,
+        // and the excess stays on the customer's ledger as credit.
         const method = input.paymentMethod ?? "cash";
         const receiptNumber = `RCP-${autoNumber}`;
         linkedVoucherId = input.linkedVoucherId ?? randomUUID();
@@ -574,6 +607,7 @@ export class PostgresInvoiceRepository implements IInvoiceRepository {
             partyKind: "customer",
             invoiceId: row.id,
             amount: paid,
+            appliedAmount: cashApplied,
             discount: 0,
             currency: input.currency ?? "SYP",
             // QA fix: the linked receipt voucher must freeze the same FX rate
@@ -582,7 +616,10 @@ export class PostgresInvoiceRepository implements IInvoiceRepository {
             exchangeRate: fxRate,
             baseAmount: computeBaseEquivalent(paid, invoiceCurrency, fxRate),
             method,
-            notesPrint: `قبض مرتبط بالفاتورة ${autoNumber}`,
+            notesPrint:
+              paid > cashApplied + 0.01
+                ? `قبض مرتبط بالفاتورة ${autoNumber} — منه ${round2dp(paid - cashApplied)} دفعة مقدمة لرصيد العميل`
+                : `قبض مرتبط بالفاتورة ${autoNumber}`,
             createdBy: ctx.userId,
           })
           .returning({ id: vouchers.id });
@@ -632,6 +669,18 @@ export class PostgresInvoiceRepository implements IInvoiceRepository {
           throw new BusinessRuleError(`المبلغ المدفوع (${paid}) أكبر من إجمالي الفاتورة (${inv.total})`);
         }
         const method = input.paymentMethod ?? "cash";
+        // F06 gap: a cash-paid purchase invoice removes cash from the cashbox
+        // exactly like a payment voucher — it must be guarded the same way
+        // (comment above claimed this already happened; it never did).
+        if (method === "cash") {
+          await assertSufficientCashboxBalance(
+            tx,
+            ctx,
+            input.currency ?? "SYP",
+            input.date,
+            paid,
+          );
+        }
         const paymentNumber = `PAY-${autoNumber}`;
         linkedVoucherId = input.linkedVoucherId ?? randomUUID();
         const [voucherRow] = await tx
@@ -1236,6 +1285,14 @@ export class PostgresInvoiceRepository implements IInvoiceRepository {
 
       const ilines = await tx.select().from(invoiceLines).where(eq(invoiceLines.invoiceId, id));
 
+      // Cancelling a sale also reverses its linked receipts — including any
+      // overpaid excess that became customer credit. Snapshot the customer's
+      // position so the cancel is refused if that credit was already spent.
+      const creditBefore =
+        inv.type === "sale"
+          ? (await customerCreditPosition(tx, ctx.tenantId, inv.partyId, inv.currency)).unattached
+          : null;
+
       // Release stock for sale invoices (restore what was deducted).
       // Reverse entry invoices (subtract what was added at create time).
       if (inv.type === "sale") {
@@ -1437,6 +1494,18 @@ export class PostgresInvoiceRepository implements IInvoiceRepository {
         .where(and(eq(invoices.id, id), eq(invoices.tenantId, ctx.tenantId)))
         .returning();
 
+      if (creditBefore !== null) {
+        const after = await customerCreditPosition(tx, ctx.tenantId, inv.partyId, inv.currency);
+        await assertCreditNotOverdrawn(
+          tx,
+          ctx.tenantId,
+          inv.partyId,
+          inv.currency,
+          creditBefore,
+          after.unattached,
+        );
+      }
+
       return this.toDomain(
         updated,
         ilines.map((l) => ({ ...l, invoiceId: id })),
@@ -1474,6 +1543,7 @@ export class PostgresInvoiceRepository implements IInvoiceRepository {
       shipping: row.shipping,
       total: row.total,
       paid: row.paid ?? 0,
+      creditApplied: row.creditApplied ?? 0,
       amountDue: Number(row.total) - Number(row.paid ?? 0),
       paymentMethod: row.paymentMethod as InvoiceData["paymentMethod"],
       notes: n(row.notes),

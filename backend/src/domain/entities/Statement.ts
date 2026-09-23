@@ -42,6 +42,15 @@ export interface StatementDocumentInfo {
   appliedToInvoiceCurrency?: string;
   /** Vouchers: payment currency differs from the currency of the row (the invoice). */
   crossCurrency?: boolean;
+  /**
+   * Customer receipts: the part kept as customer credit — the whole amount of
+   * an on-account receipt, or the overpaid excess of an invoice-linked one.
+   */
+  advanceAmount?: number;
+  /** Invoices: amount paid so far (cash + credit), in the invoice currency. */
+  paid?: number;
+  /** Invoices: part settled from the customer's credit balance (no cash moved). */
+  creditApplied?: number;
 }
 
 /**
@@ -96,7 +105,16 @@ export interface PartyStatementData {
   /** Per-currency totals — populated when `currency === "ALL"`, else a single-key map. */
   totalsByCurrency?: Record<
     string,
-    { previousBalance: number; totalDebit: number; totalCredit: number; finalBalance: number }
+    {
+      previousBalance: number;
+      totalDebit: number;
+      totalCredit: number;
+      finalBalance: number;
+      /** Customers: which side the final balance is on (مدين / دائن). */
+      balanceSide?: "debit" | "credit" | "zero";
+      /** Customers: credit not yet attached to any invoice (spendable on a new sale). */
+      availableCredit?: number;
+    }
   >;
   entries: StatementEntryData[];
 }

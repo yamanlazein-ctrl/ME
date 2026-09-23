@@ -93,9 +93,12 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { property: "og:description", content: DESCRIPTION },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
+      { name: "theme-color", content: "#0a0a0a" },
     ],
     links: [
       { rel: "stylesheet", href: appCss },
+      // Installable web app (PWA): Edge/Chrome "Install app" opens the web ERP in its own Windows window.
+      { rel: "manifest", href: "/manifest.webmanifest" },
       { rel: "icon", href: "/favicon.png?v=2", type: "image/png" },
       { rel: "icon", href: "/favicon.ico?v=2", type: "image/x-icon", sizes: "48x48" },
       { rel: "apple-touch-icon", href: "/favicon.png?v=2" },
@@ -131,6 +134,21 @@ function RootComponent() {
   // at boot so dashboards, prices and reports use real values across the app.
   useEffect(() => {
     void loadSettings();
+  }, []);
+
+  // Web deployment only: register the service worker that makes the app installable. The desktop shell
+  // serves the same UI from its own local server and must not have a service worker of its own.
+  useEffect(() => {
+    if (
+      import.meta.env.PROD &&
+      import.meta.env.VITE_DESKTOP_DEPLOY !== "true" &&
+      "serviceWorker" in navigator &&
+      !("__TAURI_INTERNALS__" in window)
+    ) {
+      navigator.serviceWorker.register("/sw.js").catch(() => {
+        /* installability is optional — never break the app over it */
+      });
+    }
   }, []);
 
   return (

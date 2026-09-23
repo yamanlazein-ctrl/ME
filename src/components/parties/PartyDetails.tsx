@@ -52,10 +52,12 @@ import { PartyFormDialog, type PartyKind } from "./PartyFormDialog";
 import {
   addPartyAttachment,
   customerById,
+  customers,
   deleteCustomer,
   deleteSupplier,
   removePartyAttachment,
   supplierById,
+  suppliers,
   updateCustomer,
   updateSupplier,
   useParties,
@@ -76,6 +78,7 @@ import {
   buildOutstanding,
   buildPartyStats,
   buildPartyStatsByCurrency,
+  ledgerRemainingByCurrency,
   LEDGER_TYPE_LABEL,
   useLedgerEntries,
   type LedgerType,
@@ -165,11 +168,15 @@ function isInvoiceStatementRow(r: { referenceType?: string; referenceId?: string
 function printPartyInvoice(inv: Invoice) {
   const node = <InvoicePrintDocument invoice={inv} />;
   if (inv.type === "sale" || inv.type === "entry") {
+    const party =
+      inv.type === "sale"
+        ? customers.find((c) => c.id === inv.partyId)
+        : suppliers.find((s) => s.id === inv.partyId);
     printOrArchive(
       node,
       archiveMeta(inv.type, {
         date: inv.date,
-        typeLabel: inv.type === "entry" ? "ENTRY" : "SALE",
+        partyName: party?.name,
         number: inv.number || inv.reference || inv.id,
       }),
       true,
@@ -292,9 +299,22 @@ export function PartyDetailsPage({ kind, id }: { kind: PartyKind; id: string }) 
   }
 
   const statsByCurrency = buildPartyStatsByCurrency(p, kind, allInvoices, allVouchers, allReturns);
-  // N14: summary «المتبقي» must match open-invoices / aging on this same page
-  // (invoice total − paid), not a separate ledger debit−credit path that drifts.
-  const overviewStats = statsByCurrency;
+  const ledgerRemaining = ledgerRemainingByCurrency(ledgerEntries, p.id, kind);
+  const overviewStats = { ...statsByCurrency };
+  for (const [ccy, remaining] of Object.entries(ledgerRemaining)) {
+    const prev = overviewStats[ccy];
+    overviewStats[ccy] = prev
+      ? { ...prev, remaining }
+      : {
+          invoicesCount: 0,
+          totalAmount: 0,
+          totalPaid: 0,
+          remaining,
+          avgInvoice: 0,
+          totalKg: 0,
+          lastDate: undefined,
+        };
+  }
   const active = (p.status ?? "active") === "active";
 
   return (
@@ -440,9 +460,15 @@ export function PartyDetailsPage({ kind, id }: { kind: PartyKind; id: string }) 
         onClose={() => setEditing(false)}
         onSubmit={(patch) => {
           const mp = toMockPatch(patch as Record<string, unknown>);
-          if (isSup) updateSupplier(p.id, mp as Parameters<typeof updateSupplier>[1]);
-          else updateCustomer(p.id, mp as Parameters<typeof updateCustomer>[1]);
-          setEditing(false);
+          void (async () => {
+            try {
+              if (isSup) await updateSupplier(p.id, mp as Parameters<typeof updateSupplier>[1]);
+              else await updateCustomer(p.id, mp as Parameters<typeof updateCustomer>[1]);
+              setEditing(false);
+            } catch {
+              /* toast already shown by hook */
+            }
+          })();
         }}
       />
 
@@ -792,6 +818,31 @@ function PaymentsTab({ p, kind }: { p: Party; kind: PartyKind }) {
 
 /* ---------------- Statement of Account ---------------- */
 
+/**
+ * Accounting side of a party balance for the KPI label. A customer with a
+ * positive balance owes us (مدين); negative = we hold their money (دائن).
+ * Suppliers are the mirror image. Falls back to the sign when the server did
+ * not send `balanceSide` (older backend).
+ */
+function balanceSideLabel(
+  side: "debit" | "credit" | "zero" | undefined,
+  finalBalance: number,
+  kind: "customer" | "supplier",
+): string {
+  const resolved =
+    side ??
+    (Math.abs(finalBalance) < 0.01
+      ? "zero"
+      : finalBalance > 0 === (kind === "customer")
+        ? "debit"
+        : "credit");
+  if (resolved === "zero") return "متوازن";
+  if (kind === "customer") {
+    return resolved === "debit" ? "مدين (على العميل)" : "دائن (للعميل)";
+  }
+  return resolved === "credit" ? "دائن (للمورد)" : "مدين (على المورد)";
+}
+
 function StatementTab({ p, kind }: { p: Party; kind: PartyKind }) {
   const navigate = useNavigate();
   const [from, setFrom] = useState("");
@@ -1083,7 +1134,17 @@ function StatementTab({ p, kind }: { p: Party; kind: PartyKind }) {
           <Button
             variant="outline"
             className="h-9 gap-2"
-            onClick={() => printDocument(printDoc, printFilterKey)}
+            onClick={() =>
+              printDocument(
+                printDoc,
+                printFilterKey,
+                archiveMeta("statement", {
+                  date: to || new Date().toISOString().slice(0, 10),
+                  typeLabel: "STATEMENT",
+                  number: p.code || p.id,
+                }),
+              )
+            }
           >
             <Printer className="h-4 w-4" /> طباعة / PDF
           </Button>
@@ -1149,26 +1210,64 @@ function StatementTab({ p, kind }: { p: Party; kind: PartyKind }) {
                         >
                           <MoneyText amount={t.finalBalance} currency={c as Currency} />
                         </div>
-                        <div className="mt-1 text-[10px] text-muted-foreground tabular-nums">
-                          مدين {fmt(t.totalDebit)} · دائن {fmt(t.totalCredit)}
+                        <div className="mt-0.5 text-[10px] font-semibold">
+                          {balanceSideLabel(t.balanceSide, t.finalBalance, kind)}
                         </div>
+                        <div className="mt-1 text-[10px] text-muted-foreground tabular-nums">
+                          {kind === "customer" ? "المسحوبات" : "المشتريات"} {fmt(t.totalDebit)} ·{" "}
+                          {kind === "customer" ? "المقبوضات" : "المدفوعات"} {fmt(t.totalCredit)}
+                        </div>
+                        {kind === "customer" && (t.availableCredit ?? 0) > 0 && (
+                          <div className="mt-1 text-[10px] font-semibold text-success tabular-nums">
+                            رصيد دائن متاح (دفعات مقدمة) {fmt(t.availableCredit ?? 0)} {sym}
+                          </div>
+                        )}
                       </div>
                     );
                   })}
               </div>
             </div>
           ) : (
-            <div className="grid gap-3 px-4 pb-4 md:grid-cols-4">
+            <div
+              className={`grid gap-3 px-4 pb-4 ${kind === "customer" ? "md:grid-cols-5" : "md:grid-cols-4"}`}
+            >
               {[
                 { label: "رصيد سابق", value: previousBalance },
-                { label: "إجمالي مدين", value: totalDebit },
-                { label: "إجمالي دائن", value: totalCredit },
-                { label: "الرصيد النهائي", value: finalBalance, bold: true },
+                {
+                  label: kind === "customer" ? "إجمالي المسحوبات (مدين)" : "إجمالي مدين",
+                  value: totalDebit,
+                },
+                {
+                  label: kind === "customer" ? "إجمالي المقبوضات (دائن)" : "إجمالي دائن",
+                  value: totalCredit,
+                },
+                {
+                  label: `صافي الرصيد — ${balanceSideLabel(
+                    totalsByCurrency[displayCcy]?.balanceSide,
+                    finalBalance,
+                    kind,
+                  )}`,
+                  value: finalBalance,
+                  bold: true,
+                },
+                ...(kind === "customer"
+                  ? [
+                      {
+                        label: "الرصيد الدائن المتاح (دفعات مقدمة)",
+                        value: totalsByCurrency[displayCcy]?.availableCredit ?? 0,
+                        credit: true,
+                      },
+                    ]
+                  : []),
               ].map((s) => (
                 <div
                   key={s.label}
                   className={`rounded-lg border px-4 py-3 ${
-                    s.bold ? "border-primary/30 bg-primary/5" : "border-border bg-background/60"
+                    s.bold
+                      ? "border-primary/30 bg-primary/5"
+                      : "credit" in s && s.credit && s.value > 0
+                        ? "border-success/30 bg-success/5"
+                        : "border-border bg-background/60"
                   }`}
                 >
                   <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">

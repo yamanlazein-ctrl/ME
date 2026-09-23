@@ -28,7 +28,9 @@ export const settlePartySchema = z.object({
 export const settleInvoicesSchema = z
   .object({
     invoiceIds: z.array(z.string().uuid()).min(1).max(200),
-    amountPaid: z.number().positive().finite(),
+    amountPaid: z.number().min(0).finite(),
+    /** Settlement adjustment (مسامحة / خصم مكتسب). Party reduction = amountPaid + discount. */
+    discount: z.number().min(0).finite().optional(),
     currency: z.enum(["SYP", "USD", "EUR"]),
     exchangeRate: exchangeRateSchema,
     date: z
@@ -40,6 +42,13 @@ export const settleInvoicesSchema = z
     notesPrint: z.string().max(500).optional(),
   })
   .superRefine((val, ctx) => {
+    if ((val.amountPaid ?? 0) + (val.discount ?? 0) <= 0) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["amountPaid"],
+        message: "يجب أن يكون مجموع المبلغ النقدي والمسامحة أكبر من صفر",
+      });
+    }
     // DFP-034: non-USD settlements must carry an explicit rate (never silent FX).
     if (!requireFxRate(val.currency, val.exchangeRate)) {
       ctx.addIssue({

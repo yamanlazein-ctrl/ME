@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-ensure-document-folders"
+description = "Enables the ensure_document_folders command without any pre-configured scope."
+commands.allow = ["ensure_document_folders"]
+
+[[permission]]
+identifier = "deny-ensure-document-folders"
+description = "Denies the ensure_document_folders command without any pre-configured scope."
+commands.deny = ["ensure_document_folders"]

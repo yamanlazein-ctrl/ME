@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { ActivationScreen } from "./ActivationScreen";
 import { getApiBaseUrl } from "@/lib/api-base-url";
-import { clearLicense, isActivated } from "@/lib/license-state";
+import { clearLicense, getInstallTenantId, isActivated } from "@/lib/license-state";
 
 /**
  * Gate before AuthGate / app shell.
@@ -19,9 +19,39 @@ import { clearLicense, isActivated } from "@/lib/license-state";
  * stale local markers must not skip activation (otherwise AuthGate spins on
  * "جاري استعادة الجلسة…" with dead JWTs).
  *
+ * 2026-09-22 hardening: `isCompleted` staying `true` is NOT enough either — a
+ * reused device (e.g. QA/dev machine, or any machine whose DB was wiped and
+ * re-provisioned as a fresh tenant) can have `localOk === true` from a
+ * PREVIOUS, now-deleted install while the CURRENT backend also reports
+ * `isCompleted: true` for its own, unrelated, genuinely-completed tenant —
+ * both conditions true by coincidence, gate wrongly opens straight to the
+ * user picker of a tenant this device was never actually activated on
+ * (reproduced this session: a leftover "FirstRun Admin" account with an
+ * unknown PIN). `/api/setup/status` now echoes `tenantId` — cross-check it
+ * against the tenant id THIS device activated against; on any mismatch,
+ * never trust the local marker, always force activation (which offers the
+ * license-key AND invitation-code paths).
+ *
  * `VITE_ACTIVATION_BYPASS=1` skips the gate entirely for local UI work.
  */
 const DEV_BYPASS = import.meta.env.VITE_ACTIVATION_BYPASS === "1";
+
+export type SetupStatusResponse = { isCompleted?: boolean; tenantId?: string };
+
+/**
+ * Pure decision, exported for unit testing without mounting the component:
+ * given a successful `/api/setup/status` response and this device's locally
+ * stored tenant id, should the LOCAL activation marker (`isActivated()`) be
+ * trusted at all? `false` forces `clearLicense()` + the activation screen,
+ * regardless of what the local marker says.
+ */
+export function shouldTrustLocalActivation(
+  data: SetupStatusResponse,
+  localTenantId: string | null,
+): boolean {
+  const tenantMismatch = Boolean(data.tenantId && localTenantId && data.tenantId !== localTenantId);
+  return data.isCompleted !== false && !tenantMismatch;
+}
 
 export function ActivationGate({ children }: { children: React.ReactNode }) {
   const [activated, setActivated] = useState<boolean>(() => DEV_BYPASS || isActivated());
@@ -52,9 +82,9 @@ export function ActivationGate({ children }: { children: React.ReactNode }) {
           if (!cancelled) setActivated(localOk);
           return;
         }
-        const data = (await r.json()) as { isCompleted?: boolean };
+        const data = (await r.json()) as SetupStatusResponse;
         if (!cancelled) {
-          if (data?.isCompleted === false) {
+          if (!shouldTrustLocalActivation(data, getInstallTenantId())) {
             clearLicense();
             setActivated(false);
           } else setActivated(localOk);

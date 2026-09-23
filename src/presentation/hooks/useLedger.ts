@@ -66,6 +66,7 @@ export {
   buildOutstanding,
   buildPartyStats,
   buildPartyStatsByCurrency,
+  ledgerRemainingByCurrency,
   partyOf,
 } from "@/core/calculations/ledgerCalc";
 

@@ -613,6 +613,31 @@ function isRetryablePushStatus(status: number): boolean {
 }
 
 /** Pull applied units from hub and materialize locally. */
+/** One applied unit as delivered by the hub's /sync/pull. */
+export type PulledUnit = {
+  opId: string;
+  syncDeviceId: string | null;
+  entityType: string;
+  entityId: string;
+  operation: string;
+  payload: Record<string, unknown>;
+  receivedSeq: number;
+  receivedAt: string;
+  appliedAt: string | null;
+};
+
+/**
+ * Forget the pull cursor. Used when the device is paired with a DIFFERENT hub
+ * (or hub tenant): the old `received_seq` belongs to another sequence, and
+ * keeping it would silently skip every unit below it on the new hub. Replays
+ * are idempotent (`exists`), so starting from zero is safe.
+ */
+export async function resetPullCursor(tenantId: string): Promise<void> {
+  await runWithTenantContext({ tenantId }, async () => {
+    await db.delete(syncState).where(eq(syncState.tenantId, tenantId));
+  });
+}
+
 export async function runLocalSyncPull(
   database: DB,
   repos: SyncMaterializeRepos,
@@ -626,6 +651,13 @@ export async function runLocalSyncPull(
    * operation is stranded behind it — reproduced live 2026-09-10.
    */
   inbox?: ISyncInboxRepository,
+  /**
+   * Called once per unit that NEWLY materialized here (status `created`, never
+   * `exists`), so a re-pulled unit cannot notify twice. Drives the in-app
+   * activity notifications («أضاف محمد فاتورة مبيعات…»). Must not throw into
+   * the pull loop — failures are logged and swallowed.
+   */
+  onApplied?: (unit: PulledUnit) => Promise<void>,
 ): Promise<{
   pulled: number;
   applied: number;
@@ -744,6 +776,15 @@ export async function runLocalSyncPull(
     }
   };
 
+  const notifyApplied = async (unit: PulledUnit) => {
+    if (!onApplied) return;
+    try {
+      await onApplied(unit);
+    } catch (err) {
+      logger.warn({ err, opId: unit.opId }, "pull onApplied hook failed");
+    }
+  };
+
   const markLocalApplied = async (opId: string) => {
     if (!inbox) return;
     try {
@@ -793,6 +834,7 @@ export async function runLocalSyncPull(
     if (result.status === "created" || result.status === "exists") {
       applied += 1;
       await markLocalApplied(unit.opId);
+      if (result.status === "created") await notifyApplied(unit);
       processed.push({ seq, receivedAt, blocked: false });
     } else if (result.status === "invalid") {
       // Permanently unappliable (malformed payload / unsupported operation).
@@ -835,6 +877,7 @@ export async function runLocalSyncPull(
         const rec = processed.find((p) => p.blocked && p.seq === d.seq);
         if (rec) rec.blocked = false;
         await markLocalApplied(d.unit.opId);
+        if (result.status === "created") await notifyApplied(d.unit);
       }
     }
   }

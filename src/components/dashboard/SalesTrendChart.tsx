@@ -30,9 +30,9 @@ function TrendTooltip({ active, payload, label }: TrendTooltipProps) {
       <div className="mt-1 flex items-center gap-2">
         <span className="h-2 w-2 rounded-full" style={{ background: "var(--primary)" }} />
         <span className="text-sm font-bold tabular-nums text-foreground">
-          {formatNumber(v ?? 0)}K
+          {formatNumber(v ?? 0)}
         </span>
-        <span className="text-[11px] text-muted-foreground">ل.س</span>
+        <span className="text-[11px] text-muted-foreground">$</span>
       </div>
     </div>
   );
@@ -78,7 +78,7 @@ export function SalesTrendChart() {
           </span>
           <div>
             <h3 className="text-sm font-bold text-foreground">اتجاه المبيعات</h3>
-            <p className="mt-0.5 text-[11px] text-muted-foreground">القيم بآلاف الليرات السورية</p>
+            <p className="mt-0.5 text-[11px] text-muted-foreground">القيم بالدولار الأمريكي ($)</p>
           </div>
         </div>
         <div className="inline-flex rounded-lg border border-border bg-secondary/60 p-0.5">

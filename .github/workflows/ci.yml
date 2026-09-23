@@ -48,8 +48,8 @@ jobs:
       - name: Invitation atomic redeem unit gate (DFP-005 / DFP-006)
         run: cd backend && npx vitest run tests/invitation-atomic-redeem.test.ts tests/invitation-license-link.test.ts
 
-      - name: Desktop symbols + CSP + backup + docs + staging + CI gates (DFP-036 / 026 / 028 / 025 / 037 / 001 / 008)
-        run: node --test desktop/scripts/dfp036-symbols.test.mjs desktop/scripts/dfp026-csp.test.mjs desktop/scripts/dfp028-backup.test.mjs desktop/scripts/dfp025-doc-targets.test.mjs desktop/scripts/dfp037-docs.test.mjs desktop/scripts/dfp001-staging-gate.test.mjs desktop/scripts/dfp008-ci-gates.test.mjs
+      - name: Desktop symbols + CSP + backup + docs + staging + CI gates (DFP-036 / 026 / 028 / 025 / 001 / 008)
+        run: node --test desktop/scripts/dfp036-symbols.test.mjs desktop/scripts/dfp026-csp.test.mjs desktop/scripts/dfp028-backup.test.mjs desktop/scripts/dfp025-doc-targets.test.mjs desktop/scripts/dfp001-staging-gate.test.mjs desktop/scripts/dfp008-ci-gates.test.mjs
 
       - name: Credential / lockfile / audit / backup fixture (DFP-029 / 032 / 031 / 028)
         run: npx vitest run src/dfp029-credentials.test.ts src/dfp032-lockfile.test.ts src/dfp031-audit-hygiene.test.ts src/dfp028-verify-fixture.test.ts

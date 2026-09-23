@@ -23,7 +23,13 @@ const envSchema = z.object({
     .enum(["true", "false", "1", "0"])
     .default("false")
     .transform((v) => v === "true" || v === "1"),
-  PORT: z.coerce.number().default(8080),
+  // 0 = let the OS pick a free port (desktop). The chosen port is announced on stdout, see server.ts.
+  PORT: z.coerce.number().int().min(0).max(65535).default(8080),
+  // Desktop: absolute path of the built single-page frontend. When set, this process serves it on the same
+  // origin as the API (no SSR server, no proxy, no second port). Unset for the web deployment.
+  SERVE_STATIC_DIR: z.string().optional(),
+  // Desktop: file the server writes its listening port to (atomically) once it accepts connections.
+  DESKTOP_PORT_FILE: z.string().optional(),
   // Desktop sidecars must bind loopback. Server installs may use 0.0.0.0 but
   // then DFP-030 forbids loopback auth bypass (see license-server.ts).
   HOST: z.string().default(process.env.DESKTOP_DEPLOY === "true" || process.env.DESKTOP_DEPLOY === "1" ? "127.0.0.1" : "0.0.0.0"),

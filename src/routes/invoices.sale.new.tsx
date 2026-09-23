@@ -26,6 +26,8 @@ import {
   useNextInvoiceNumber,
 } from "@/presentation/hooks/useInvoices";
 import { invoiceSubtotal, invoiceTotal, invoiceRemaining } from "@/core/calculations/invoiceCalc";
+import { saneSypRateError } from "@erp/shared";
+import { useSypRateSoftWarning } from "@/presentation/hooks/useSypRateSoftCheck";
 import { toast } from "sonner";
 import { printOrArchive } from "@/components/print/printPortal";
 import { archiveMeta } from "@/shared/utils/documentArchive";
@@ -72,6 +74,8 @@ import {
 } from "@/components/invoices/sale-types";
 import { formatNumber, formatMoney, formatQuantity } from "@/shared/utils/formatNumber";
 import { parseInvoiceNotes } from "@/components/print/noteParser";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { planSaleSettlement, useCustomerCredit } from "@/presentation/hooks/useCustomerCredit";
 
 type SaleSearch = { fromOrder?: string; edit?: string };
 
@@ -113,6 +117,12 @@ function SaleInvoicePage() {
   // FX rule (base currency = USD): non-USD sale invoices MUST carry the
   // frozen exchange rate (units of SYP per 1 USD) captured at creation time.
   const [exchangeRate, setExchangeRate] = useState<number | "">("");
+  const [softWarningAcked, setSoftWarningAcked] = useState(false);
+  const enteredRateNum = Number(exchangeRate) > 0 ? Number(exchangeRate) : null;
+  const softWarning = useSypRateSoftWarning(currency || "USD", enteredRateNum);
+  useEffect(() => {
+    setSoftWarningAcked(false);
+  }, [enteredRateNum, currency]);
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
   const settingsSnap = useSettings();
   const enabledPaymentMethods = settingsSnap.paymentMethods.filter((m) => m.enabled);
@@ -136,6 +146,15 @@ function SaleInvoicePage() {
   // BOTH entry and sale invoices — the sale form previously dropped it.
   const [shipping, setShipping] = useState<number | "">("");
   const [paid, setPaid] = useState<number | "">("");
+  // «خصم من رصيد العميل الدائن» — on by default: a customer with advance
+  // payments expects them to be used before anything is booked as debt.
+  const [useCredit, setUseCredit] = useState(true);
+  // Debt confirmation (credit insufficient / zero) — the save paused on it.
+  const [debtConfirm, setDebtConfirm] = useState<{
+    debt: number;
+    thenPrint: boolean;
+    thenNew: boolean;
+  } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [quickCustomer, setQuickCustomer] = useState(false);
   // BUG-07 — interactive soft warning state: pending orders matching the lines
@@ -246,7 +265,16 @@ function SaleInvoicePage() {
     tax: Number(tax) || 0,
     shipping: Number(shipping) || 0,
   });
-  const remaining = invoiceRemaining(netTotal, Number(paid) || 0, 0);
+  const { data: creditPosition } = useCustomerCredit(edit ? "" : customerId, currency);
+  const availableCredit = creditPosition?.availableCredit ?? 0;
+  const settlement = planSaleSettlement({
+    total: netTotal,
+    cashPaid: Number(paid) || 0,
+    availableCredit,
+    useCredit,
+  });
+  // Edit never re-settles (paid is not editable on PUT) — keep the plain figure.
+  const remaining = edit ? invoiceRemaining(netTotal, Number(paid) || 0, 0) : settlement.debt;
   const isUSD = currency === "USD";
   const moneyClass = isUSD ? "text-success" : "text-foreground";
 
@@ -290,7 +318,12 @@ function SaleInvoicePage() {
     setTimeout(() => fabricRefs.current[newLine.id]?.focus(), 0);
   };
 
-  const save = async (thenPrint: boolean, thenNew = false, skipConflictCheck = false) => {
+  const save = async (
+    thenPrint: boolean,
+    thenNew = false,
+    skipConflictCheck = false,
+    debtConfirmed = false,
+  ) => {
     setError(null);
     if (!customerId) return setError("يرجى تحديد العميل.");
     if (!currency) return setError("اختر العملة (دولار $ أو ليرة سورية ل.س) قبل الحفظ.");
@@ -300,7 +333,11 @@ function SaleInvoicePage() {
     if ((Number(tax) || 0) < 0) return setError("الضريبة لا يمكن أن تكون سالبة.");
     const paidAmount = Number(paid) || 0;
     if (paidAmount < 0) return setError("المبلغ المدفوع لا يمكن أن يكون سالباً.");
-    if (paidAmount > netTotal) return setError("المبلغ المدفوع أكبر من الإجمالي الكلي للفاتورة.");
+    // Paying MORE than the total is accepted on a new sale: the invoice is
+    // settled and the excess becomes the customer's credit balance.
+    if (edit && paidAmount > netTotal) {
+      return setError("المبلغ المدفوع أكبر من الإجمالي الكلي للفاتورة.");
+    }
     for (const l of valid) {
       // Guard against values that exceed the DB numeric(12,2) columns.
       if (!Number.isFinite(l.pricePerKg) || l.pricePerKg <= 0) {
@@ -406,6 +443,15 @@ function SaleInvoicePage() {
       );
       return;
     }
+    const sypError = saneSypRateError(currency || "USD", enteredRateNum);
+    if (sypError) {
+      setError(sypError);
+      return;
+    }
+    if (softWarning && !softWarningAcked) {
+      setError("أكّد أن سعر الصرف مقصود (مربّع التأكيد بجانب الحقل) قبل الحفظ.");
+      return;
+    }
 
     if (edit) {
       const res = await update.mutateAsync({
@@ -446,6 +492,13 @@ function SaleInvoicePage() {
       return;
     }
 
+    // Whatever cash + credit does not cover becomes debt (ذمم مدينة) — only
+    // after an explicit confirmation.
+    if (!debtConfirmed && settlement.debt > 0.01) {
+      setDebtConfirm({ debt: settlement.debt, thenPrint, thenNew });
+      return;
+    }
+
     const res = await create.mutateAsync({
       tenantId: "dev-tenant",
       // FIN-02: server allocates the authoritative number.
@@ -461,6 +514,7 @@ function SaleInvoicePage() {
       tax: Number(tax) || 0,
       shipping: Number(shipping) || 0,
       paid: paidAmount,
+      ...(settlement.creditApplied > 0 ? { creditApplied: settlement.creditApplied } : {}),
       paymentMethod: methodEnum,
       orderId: fromOrderId || undefined,
       lines: linePayload,
@@ -475,11 +529,26 @@ function SaleInvoicePage() {
       );
     }
     const inv = res.value;
-    toast.success(`تم إنشاء الفاتورة ${inv.number} بنجاح`);
+    toast.success(`تم إنشاء الفاتورة ${inv.number} بنجاح`, {
+      description:
+        [
+          settlement.creditApplied > 0 &&
+            `خُصم ${formatMoney(settlement.creditApplied)} من رصيد العميل`,
+          settlement.excessCash > 0 &&
+            `أُضيف ${formatMoney(settlement.excessCash)} لرصيد العميل الدائن`,
+          settlement.debt > 0 && `سُجّل ${formatMoney(settlement.debt)} ديناً على العميل`,
+        ]
+          .filter(Boolean)
+          .join(" · ") || undefined,
+    });
     if (fromOrderId) await fulfillOrder.mutateAsync({ orderId: fromOrderId, invoiceId: inv.id });
     printOrArchive(
       <InvoicePrintDocument invoice={inv} />,
-      archiveMeta("sale", { date: inv.date, typeLabel: "SALE", number: inv.number }),
+      archiveMeta("sale", {
+        date: inv.date,
+        partyName: customers.find((c) => c.id === inv.partyId)?.name,
+        number: inv.number,
+      }),
       thenPrint,
     );
     if (thenNew) {
@@ -496,6 +565,7 @@ function SaleInvoicePage() {
     setTax("");
     setShipping("");
     setPaid("");
+    setUseCredit(true);
     setReference("");
     setNotes("");
     setError(null);
@@ -697,6 +767,23 @@ function SaleInvoicePage() {
                 ariaLabel="سعر الصرف"
                 className="!h-9 text-left tabular-nums"
               />
+              {softWarning && (
+                <div
+                  role="alert"
+                  data-testid="sale-invoice-syp-rate-soft-warning"
+                  className="mt-1 rounded-md border border-warning/40 bg-warning/10 px-2 py-1.5 text-[11px] leading-snug text-foreground"
+                >
+                  <p>{softWarning}</p>
+                  <label className="mt-1 flex items-center gap-1.5 font-semibold">
+                    <input
+                      type="checkbox"
+                      checked={softWarningAcked}
+                      onChange={(e) => setSoftWarningAcked(e.target.checked)}
+                    />
+                    السعر صحيح ومقصود، تابع الحفظ
+                  </label>
+                </div>
+              )}
             </HeaderField>
             <HeaderField label="الدفع">
               <PaymentMethodSelect
@@ -793,11 +880,54 @@ function SaleInvoicePage() {
               tone={moneyClass}
             />
             <TotalCell
-              label="المتبقي"
+              label={edit ? "المتبقي" : "المتبقي (دين آجل)"}
               value={`${formatMoney(remaining)} ${currencySymbol(currency)}`}
               tone={remaining > 0 ? "text-destructive" : moneyClass}
             />
           </div>
+          {!edit && customerId && currency && (
+            <div
+              className="flex flex-wrap items-center gap-x-6 gap-y-2 border-t border-border/60 px-4 py-2.5 text-xs"
+              data-testid="customer-credit-panel"
+            >
+              <label
+                className={cn(
+                  "inline-flex items-center gap-2",
+                  availableCredit > 0 ? "cursor-pointer" : "cursor-not-allowed opacity-60",
+                )}
+              >
+                <input
+                  type="checkbox"
+                  className="h-4 w-4 accent-primary"
+                  checked={useCredit && availableCredit > 0}
+                  disabled={availableCredit <= 0}
+                  onChange={(e) => setUseCredit(e.target.checked)}
+                />
+                <span>
+                  خصم من رصيد العميل الدائن — المتاح{" "}
+                  <span className="font-semibold tabular-nums">
+                    {formatMoney(availableCredit)} {currencySymbol(currency)}
+                  </span>
+                </span>
+              </label>
+              {settlement.creditApplied > 0 && (
+                <span className="text-emerald-700 dark:text-emerald-400">
+                  يُخصم من الرصيد:{" "}
+                  <span className="font-semibold tabular-nums">
+                    {formatMoney(settlement.creditApplied)} {currencySymbol(currency)}
+                  </span>
+                </span>
+              )}
+              {settlement.excessCash > 0 && (
+                <span className="text-emerald-700 dark:text-emerald-400">
+                  فائض يُضاف لرصيد العميل (دفعة مقدمة):{" "}
+                  <span className="font-semibold tabular-nums">
+                    {formatMoney(settlement.excessCash)} {currencySymbol(currency)}
+                  </span>
+                </span>
+              )}
+            </div>
+          )}
           <div
             className={cn(
               "flex flex-wrap items-center justify-between gap-3 border-t border-border/60 bg-card/50 px-4 py-3",
@@ -855,6 +985,24 @@ function SaleInvoicePage() {
         onCreated={(id) => {
           setCustomerId(id);
           setQuickCustomer(false);
+        }}
+      />
+      <ConfirmDialog
+        open={debtConfirm !== null}
+        onOpenChange={(open) => {
+          if (!open) setDebtConfirm(null);
+        }}
+        title="تسجيل المتبقي كدين؟"
+        description={`رصيد العميل المتوفر غير كافٍ (أو صفر). هل تريد تسجيل المبلغ المتبقي (${formatMoney(
+          debtConfirm?.debt ?? 0,
+        )} ${currencySymbol(currency)}) كـ دين (آجل/ذمم مدينة) وإتمام الفاتورة؟`}
+        confirmLabel="نعم، سجّل كدين وأتمم الفاتورة"
+        cancelLabel="رجوع"
+        variant="default"
+        onConfirm={() => {
+          const pending = debtConfirm;
+          setDebtConfirm(null);
+          if (pending) void save(pending.thenPrint, pending.thenNew, true, true);
         }}
       />
       <PendingOrderConflictDialog

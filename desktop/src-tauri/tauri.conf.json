@@ -4,26 +4,11 @@
   "version": "1.0.0",
   "identifier": "com.motardfabrics.erp",
   "build": {
-    "frontendDist": "../../dist",
-    "devUrl": "http://localhost:5173",
-    "beforeDevCommand": "cd .. && npm run dev",
+    "frontendDist": "../shell",
     "beforeBuildCommand": "cmd /c src-tauri\\before-build.cmd"
   },
   "app": {
     "windows": [
-      {
-        "label": "main",
-        "title": "Motard Fabrics Group ERP",
-        "url": "http://127.0.0.1:4173",
-        "visible": false,
-        "width": 1400,
-        "height": 900,
-        "minWidth": 1024,
-        "minHeight": 768,
-        "resizable": true,
-        "fullscreen": false,
-        "center": true
-      },
       {
         "label": "splash",
         "title": "Motard ERP",
@@ -41,38 +26,47 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: blob:; connect-src 'self' http://127.0.0.1:8080 http://127.0.0.1:4173 ws://127.0.0.1:8080 ws://127.0.0.1:4173"
+      "csp": "default-src 'self' 'unsafe-inline'; img-src 'self' data:"
     }
   },
   "bundle": {
     "active": true,
-    "targets": ["msi", "nsis"],
+    "targets": [
+      "nsis"
+    ],
     "windows": {
-      "webviewInstallMode": { "type": "downloadBootstrapper" },
-      "nsis": {
-        "installerHooks": "./windows/hooks.nsh"
+      "webviewInstallMode": {
+        "type": "embedBootstrapper"
       },
-      "wix": {
-        "language": ["ar-SA"],
-        "fragmentPaths": ["./wix-cleanup.wxs"],
-        "componentRefs": ["MotardRunKeyCleanup"]
+      "nsis": {
+        "installMode": "currentUser",
+        "installerHooks": "./windows/hooks.nsh",
+        "languages": [
+          "Arabic",
+          "English"
+        ],
+        "displayLanguageSelector": false,
+        "compression": "lzma"
       }
     },
-    "icon": ["icons/icon.ico", "icons/icon.png"],
-    "createUpdaterArtifacts": true,
+    "icon": [
+      "icons/icon.ico",
+      "icons/icon.png"
+    ],
+    "createUpdaterArtifacts": false,
     "resources": {
       "resources/postgres": "postgres",
       "resources/node.exe": "node.exe",
-      "resources/backend": "backend",
-      "resources/license-public.pem": "license-public.pem",
-      "resources/ssr": "ssr",
-      "resources/node_modules": "node_modules"
+      "resources/server": "server",
+      "resources/license-public.pem": "license-public.pem"
     }
   },
   "plugins": {
     "updater": {
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDg0QzhCQTU2RDdDMzIzQTEKUldTaEk4UFhWcnJJaE1vNVJGMnlyWWlya2NtcVhXSVlqWStkNGNJa2J2cE1MNXdTMUFtOW5PNnAK",
-      "endpoints": ["https://updates.motardfabrics.com/desktop/latest.json"],
+      "endpoints": [
+        "https://updates.motardfabrics.com/desktop/latest.json"
+      ],
       "windows": {
         "installMode": "passive"
       }

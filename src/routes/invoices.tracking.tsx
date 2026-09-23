@@ -228,7 +228,7 @@ function InvoicesTrackingPage() {
         );
         if (
           qLower &&
-          !`${b.batchNumber} ${party?.name ?? ""} دفعة تسوية`.toLowerCase().includes(qLower)
+          !`${b.batchNumber} ${party?.name ?? ""} دفعة`.toLowerCase().includes(qLower)
         ) {
           continue;
         }
@@ -320,7 +320,7 @@ function InvoicesTrackingPage() {
                   <SelectItem value="return">مرتجع</SelectItem>
                   <SelectItem value="print_send">إرسال مطبعة</SelectItem>
                   <SelectItem value="print_receive">استلام مطبعة</SelectItem>
-                  <SelectItem value="settlement">دفعة تسوية</SelectItem>
+                  <SelectItem value="settlement">دفعة</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -380,7 +380,7 @@ function InvoicesTrackingPage() {
 
         <PageCard
           title="سجل الفواتير"
-          description={`عرض ${invoices.length + extraRows.length} مستنداً (فواتير + مرتجعات + مطبعة + دفعات تسوية).`}
+          description={`عرض ${invoices.length + extraRows.length} مستنداً (فواتير + مرتجعات + مطبعة + دفعات).`}
           noBodyPadding
         >
           {isLoading && <div className="p-8 text-center text-muted-foreground">جاري التحميل…</div>}
@@ -483,7 +483,7 @@ function InvoicesTrackingPage() {
                         {row.kind === "return"
                           ? "مرتجع"
                           : row.kind === "settlement"
-                            ? "دفعة تسوية"
+                            ? "دفعة"
                             : row.kind === "print_send"
                               ? "إرسال مطبعة"
                               : "استلام مطبعة"}

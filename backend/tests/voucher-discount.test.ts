@@ -79,7 +79,9 @@ describe("voucher settlement discount", () => {
       },
       ctx,
     );
-    expect(created.amount).toBe(100_000);
+    // Contract: input.amount is CASH; the stored/returned voucher.amount is
+    // the party settlement (cash + discount) = 100,000 + 10,000 = 110,000.
+    expect(created.amount).toBe(110_000);
     expect(created.discount).toBe(10_000);
 
     const legs = await db

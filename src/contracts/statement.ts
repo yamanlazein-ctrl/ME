@@ -34,6 +34,12 @@ export interface StatementDocumentDTO {
   appliedToInvoiceNumber?: string;
   appliedToInvoiceCurrency?: Currency | string;
   crossCurrency?: boolean;
+  /** Customer receipts: part kept as customer credit (on-account or overpaid excess). */
+  advanceAmount?: number;
+  /** Invoices: amount paid so far (cash + credit). */
+  paid?: number;
+  /** Invoices: part settled from the customer's credit balance. */
+  creditApplied?: number;
 }
 
 /** One statement row with its running balance already computed server-side. */
@@ -77,7 +83,16 @@ export interface PartyStatementDTO {
   totalsByCurrency?: Partial<
     Record<
       Currency,
-      { previousBalance: number; totalDebit: number; totalCredit: number; finalBalance: number }
+      {
+        previousBalance: number;
+        totalDebit: number;
+        totalCredit: number;
+        finalBalance: number;
+        /** Which side the final balance is on (مدين / دائن). */
+        balanceSide?: "debit" | "credit" | "zero";
+        /** Customers: spendable credit (advance payments not yet used). */
+        availableCredit?: number;
+      }
     >
   >;
   entries: StatementEntryDTO[];
@@ -127,6 +142,7 @@ export interface SettleInvoicesAllocationDTO {
 export interface SettleInvoicesInput {
   invoiceIds: UUID[];
   amountPaid: number;
+  discount?: number;
   currency: Currency;
   exchangeRate?: number;
   date?: string;
@@ -140,6 +156,8 @@ export interface SettleInvoicesResponse {
   currency: Currency | string;
   exchangeRate: number | null;
   amountPaid: number;
+  /** Customer surplus above the total due, booked as an on-account receipt (credit). */
+  advance?: { amount: number; voucherId: UUID; voucherNumber: string } | null;
   totalDueInSettlement: number;
   totalAllocated: number;
   date: string;

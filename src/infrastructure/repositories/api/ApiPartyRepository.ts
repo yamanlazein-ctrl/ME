@@ -91,7 +91,8 @@ export class ApiPartyRepository implements IPartyRepository {
       throw new Error("الإصدار المتوقع (expectedVersion) مطلوب لتحديث الحساب");
     }
     const raw = (patch.toJSON ? patch.toJSON() : patch) as Record<string, unknown>;
-    const { version: _v, ...rest } = raw;
+    const { version: _v, openingBalance: _opening, ...rest } = raw;
+    void _opening;
     void _v;
     const dto = await this.api.update(kind, id, {
       ...rest,

@@ -157,32 +157,43 @@ const fromParty = (p: SimpleParty): Draft => ({
   notes: p.notes ?? "",
 });
 
-const toPatch = (d: Draft, kind: PartyKind): Omit<SimpleParty, "id"> => ({
-  code: d.code.trim() || undefined,
-  name: d.name.trim(),
-  companyName: d.companyName.trim() || undefined,
-  commercialReg: d.commercialReg.trim() || undefined,
-  category: kind === "supplier" ? d.category.trim() || undefined : undefined,
-  salesRep: kind === "customer" ? d.salesRep.trim() || undefined : undefined,
-  taxNumber: d.taxNumber.trim() || undefined,
-  status: d.status,
-  phone: d.phone.trim() || undefined,
-  mobile: d.mobile.trim() || undefined,
-  whatsapp: d.whatsapp.trim() || undefined,
-  email: d.email.trim() || undefined,
-  website: d.website.trim() || undefined,
-  address: d.address.trim() || undefined,
-  city: d.city.trim() || undefined,
-  country: d.country.trim() || undefined,
-  openingBalance: d.openingBalance === "" ? 0 : Number(d.openingBalance) || 0,
-  creditLimit: d.creditLimit === "" ? 0 : Number(d.creditLimit) || 0,
-  currency: d.currency,
-  paymentTerms: d.paymentTerms,
-  paymentMethod: d.paymentMethod,
-  defaultDiscount: d.defaultDiscount === "" ? 0 : Number(d.defaultDiscount) || 0,
-  vat: d.vat === "" ? 0 : Number(d.vat) || 0,
-  notes: d.notes.trim() || undefined,
-});
+const toPatch = (
+  d: Draft,
+  kind: PartyKind,
+  isEdit: boolean,
+): Omit<SimpleParty, "id"> => {
+  const patch: Omit<SimpleParty, "id"> = {
+    code: d.code.trim() || undefined,
+    name: d.name.trim(),
+    companyName: d.companyName.trim() || undefined,
+    commercialReg: d.commercialReg.trim() || undefined,
+    category: kind === "supplier" ? d.category.trim() || undefined : undefined,
+    salesRep: kind === "customer" ? d.salesRep.trim() || undefined : undefined,
+    taxNumber: d.taxNumber.trim() || undefined,
+    status: d.status,
+    phone: d.phone.trim() || undefined,
+    mobile: d.mobile.trim() || undefined,
+    whatsapp: d.whatsapp.trim() || undefined,
+    email: d.email.trim() || undefined,
+    website: d.website.trim() || undefined,
+    address: d.address.trim() || undefined,
+    city: d.city.trim() || undefined,
+    country: d.country.trim() || undefined,
+    creditLimit: d.creditLimit === "" ? 0 : Number(d.creditLimit) || 0,
+    currency: d.currency,
+    paymentTerms: d.paymentTerms,
+    paymentMethod: d.paymentMethod,
+    defaultDiscount: d.defaultDiscount === "" ? 0 : Number(d.defaultDiscount) || 0,
+    vat: d.vat === "" ? 0 : Number(d.vat) || 0,
+    notes: d.notes.trim() || undefined,
+  };
+  // Opening balance is journaled once on create. Sending it on edit makes
+  // PostgresPartyRepository.update reject the whole patch — including name.
+  if (!isEdit) {
+    patch.openingBalance = d.openingBalance === "" ? 0 : Number(d.openingBalance) || 0;
+  }
+  return patch;
+};
 
 export function PartyFormDialog({
   kind,
@@ -224,7 +235,7 @@ export function PartyFormDialog({
       return;
     }
     setErr(null);
-    onSubmit(toPatch(draft, kind));
+    onSubmit(toPatch(draft, kind, Boolean(editing)));
   };
 
   const L = LABELS[kind];
@@ -420,8 +431,14 @@ export function PartyFormDialog({
                   type="number"
                   className="h-10 tabular-nums"
                   value={draft.openingBalance}
+                  disabled={Boolean(editing)}
                   onChange={(e) => patch("openingBalance", e.target.value)}
                 />
+                {editing ? (
+                  <p className="mt-1 text-[11px] text-muted-foreground">
+                    الرصيد الافتتاحي يُسجَّل مرة واحدة عند الإنشاء ولا يُعدَّل لاحقاً.
+                  </p>
+                ) : null}
               </Field>
               <Field label="حد الائتمان">
                 <Input

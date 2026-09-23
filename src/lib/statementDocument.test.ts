@@ -50,7 +50,42 @@ describe("statementDocument", () => {
   it("marks an unlinked payment as on-account", () => {
     const { appliedToInvoiceNumber: _a, ...rest } = usdReceipt;
     expect(statementPaymentNote({ ...rest, crossCurrency: false }, "USD", 10)).toBe(
-      "دفعة على الحساب",
+      "دفعة مقدمة / على الحساب",
     );
+  });
+
+  it("shows the overpaid excess kept as customer credit", () => {
+    const note = statementPaymentNote(
+      { ...usdReceipt, crossCurrency: false, advanceAmount: 10_000 },
+      "USD",
+      20_000,
+    )!;
+    expect(note).toContain("INV-1");
+    expect(note).toContain("الفائض 10,000");
+    expect(note).toContain("دفعة مقدمة");
+  });
+
+  it("shows an invoice settled from the customer's credit", () => {
+    expect(
+      statementPaymentNote(
+        {
+          kind: "invoice",
+          number: "INV-9",
+          currency: "USD",
+          amount: 12_000,
+          exchangeRate: 1,
+          creditApplied: 12_000,
+        },
+        "USD",
+        12_000,
+      ),
+    ).toContain("مُسدَّد من رصيد العميل الدائن 12,000");
+    expect(
+      statementPaymentNote(
+        { kind: "invoice", number: "INV-8", currency: "USD", amount: 1, exchangeRate: 1 },
+        "USD",
+        1,
+      ),
+    ).toBeNull();
   });
 });

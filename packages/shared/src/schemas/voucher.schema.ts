@@ -8,8 +8,9 @@ export const createVoucherSchema = z
     partyId: z.string().uuid(),
     partyKind: z.enum(["customer", "supplier"]),
     invoiceId: z.string().uuid().optional(),
-    amount: z.number().positive(),
-    /** Cash concession — party settlement still uses `amount`; cash leg uses amount − discount. */
+    /** Actual cash that moves. Discount is added on top — never subtracted. */
+    amount: z.number().min(0),
+    /** Settlement adjustment (مسامحة / خصم مكتسب). Party reduction = amount + discount. */
     discount: z.number().min(0).optional().default(0),
     currency: z.enum(["SYP", "USD", "EUR"]).optional(),
     // BUG-03 (same-pattern) frozen FX rate: units of `currency` per 1 USD,
@@ -21,11 +22,11 @@ export const createVoucherSchema = z
   })
   .superRefine((data, ctx) => {
     const discount = data.discount ?? 0;
-    if (discount > data.amount) {
+    if (data.amount + discount <= 0) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        message: "الخصم لا يمكن أن يتجاوز مبلغ السند",
-        path: ["discount"],
+        message: "يجب أن يكون مجموع المبلغ النقدي والمسامحة أكبر من صفر",
+        path: ["amount"],
       });
     }
   });

@@ -1,0 +1,25 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "main-window",
+  "description": "The main window loads the local server (API + UI) from a loopback origin with an OS-assigned port. Grants it exactly the app's own desktop commands and nothing else.",
+  "windows": [
+    "main"
+  ],
+  "remote": {
+    "urls": [
+      "http://127.0.0.1:*/*"
+    ]
+  },
+  "permissions": [
+    "allow-get-fingerprint",
+    "allow-validate-license",
+    "allow-ensure-document-folders",
+    "allow-archive-document-pdf",
+    "allow-get-hub-url",
+    "allow-set-hub-url",
+    "allow-request-factory-reset",
+    "allow-get-app-version",
+    "allow-check-desktop-update",
+    "allow-install-desktop-update"
+  ]
+}

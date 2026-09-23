@@ -1,27 +1,20 @@
 {
-  "version": 2,
-  "description": "Hard release gate — every path required by desktop preflight_check() plus packaging-critical peers. Relative to desktop/src-tauri/resources/. Optional sha256 (64 hex) is verified when present; seal-resource-hashes.mjs fills hashes for staged binaries at package time.",
+  "version": 3,
+  "description": "Hard release gate — every path required by desktop preflight_check() plus packaging-critical peers. Relative to desktop/src-tauri/resources/. Optional sha256 (64 hex) is verified when present.",
   "required": [
     { "path": "postgres/bin/postgres.exe", "kind": "file" },
     { "path": "postgres/bin/pg_ctl.exe", "kind": "file" },
     { "path": "postgres/bin/initdb.exe", "kind": "file" },
     { "path": "postgres/bin/libpq.dll", "kind": "file" },
     { "path": "postgres/pgdata-template/PG_VERSION", "kind": "file" },
+    { "path": "postgres/pgdata-template.manifest.json", "kind": "file" },
     { "path": "node.exe", "kind": "file" },
-    { "path": "backend/dist/backend/src/presentation/server.js", "kind": "file" },
-    {
-      "path": "ssr/serve.mjs",
-      "kind": "file",
-      "sha256": "35688741980c3ab4b0b2343fcdcff065e46bc4351852c440412cbd534a9a20e1"
-    },
-    {
-      "path": "ssr/resolve-api-proxy.mjs",
-      "kind": "file",
-      "sha256": "4aed2a30a5d6e8b602b448413719a672955f0fafd72aa2bfbdbe2e9858ef708f"
-    },
-    { "path": "ssr/dist/server/server.js", "kind": "file" },
-    { "path": "license-public.pem", "kind": "file" },
-    { "path": "node_modules", "kind": "dir" },
-    { "path": "backend/node_modules", "kind": "dir" }
+    { "path": "server/server.mjs", "kind": "file" },
+    { "path": "server/pino-worker.cjs", "kind": "file" },
+    { "path": "server/thread-stream-worker.cjs", "kind": "file" },
+    { "path": "server/web/_shell.html", "kind": "file" },
+    { "path": "server/migrations/meta/_journal.json", "kind": "file" },
+    { "path": "server/node_modules/@node-rs/argon2-win32-x64-msvc", "kind": "dir" },
+    { "path": "license-public.pem", "kind": "file" }
   ]
 }

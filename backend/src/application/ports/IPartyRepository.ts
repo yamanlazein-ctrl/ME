@@ -35,6 +35,7 @@ export interface CreatePartyData {
   defaultDiscount?: number;
   vat?: number;
   notes?: string;
+  status?: string;
 }
 
 export interface IPartyRepository {

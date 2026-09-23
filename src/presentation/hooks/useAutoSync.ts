@@ -1,7 +1,10 @@
 import { useEffect, useRef, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { useConnectivity, type ConnectivityStatus } from "@/presentation/hooks/useConnectivity";
 import { hasStoredSession } from "@/infrastructure/auth/TokenProvider";
 import { runSyncNow } from "@/lib/sync-engine";
+import { refreshParties } from "@/presentation/hooks/useParties";
+import { refreshInventory } from "@/presentation/hooks/useInventory";
 
 /**
  * When connectivity flips to online (and a session exists), trigger a local
@@ -15,8 +18,10 @@ import { runSyncNow } from "@/lib/sync-engine";
  * by design: sync status is observed via /sync/status, not via this hook.
  */
 const RETRY_DELAYS_MS = [30_000, 120_000];
+const PERIODIC_SYNC_MS = 20_000;
 
 export function useAutoSync() {
+  const qc = useQueryClient();
   const status = useConnectivity(15_000);
   const prev = useRef<ConnectivityStatus | null>(null);
   const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
@@ -76,6 +81,37 @@ export function useAutoSync() {
       cancelled = true;
     };
   }, [status]);
+
+  // Steady cadence while online: the reconnect trigger above only fires on an
+  // offline→online flip, so without this a device that stays online never
+  // pulls a peer's invoice until the next network blip. Each tick is one
+  // push+pull round trip; a tick that finds nothing is a cheap no-op on the hub.
+  useEffect(() => {
+    if (status !== "online") return;
+    const tick = async () => {
+      if (!hasStoredSession() || document.visibilityState === "hidden") return;
+      try {
+        const result = await runSyncNow();
+        if (!result || result.skipped) return;
+        setDeviceGate(Boolean(result.deviceGate));
+        setDeviceTrust(result.deviceGate ? (result.deviceTrust ?? null) : null);
+        const pulledSomething = (result.pull?.applied ?? 0) > 0 && (result.pull?.pulled ?? 0) > 0;
+        if (pulledSomething) {
+          // Peers changed documents here: every list/detail view must re-read,
+          // including the two module-level caches that live outside react-query.
+          void refreshParties();
+          void refreshInventory();
+          await qc.invalidateQueries();
+        } else if ((result.activity ?? 0) > 0 || (result.rejected ?? 0) > 0) {
+          await qc.invalidateQueries({ queryKey: ["notifications"] });
+        }
+      } catch (err) {
+        console.warn("[sync] periodic run failed:", err);
+      }
+    };
+    const id = setInterval(() => void tick(), PERIODIC_SYNC_MS);
+    return () => clearInterval(id);
+  }, [status, qc]);
 
   useEffect(
     () => () => {

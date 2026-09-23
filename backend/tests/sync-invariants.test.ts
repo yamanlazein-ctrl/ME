@@ -985,7 +985,9 @@ describe("sync invariants — run-result honesty (P7)", () => {
       "the actual pull failure message must be reported, not just logged",
     ).toBe(true);
     expect(
-      ROUTE.includes("res.json({ ...push, deviceTrust, pull, pullError, blocksError })"),
+      /res\.json\(\{ \.\.\.push, deviceTrust, pull, pullError, blocksError(, [a-zA-Z]+)* \}\)/.test(
+        ROUTE,
+      ),
       "fields must reach the client",
     ).toBe(true);
   });
@@ -1532,10 +1534,6 @@ describe("P3 consolidation contracts", () => {
   const NUMBERS = read("src", "infrastructure", "utils", "documentNumbers.ts");
   const HTTP_IDEMPOTENCY = read("src", "infrastructure", "http", "middleware", "idempotency.middleware.ts");
   const RUNBOOK = readFileSync(join(BACKEND_ROOT, "..", "docs", "SYNC-OPERATIONS.md"), "utf8");
-  const PLAN = readFileSync(
-    join(BACKEND_ROOT, "..", "docs", "archive", "MOTARD-COMPLETE-REMEDIATION-PLAN.md"),
-    "utf8",
-  );
 
   it("documents block authority and explicit global fallback", () => {
     expect(NUMBERS).toContain("documentNumberBlocks");
@@ -1549,12 +1547,5 @@ describe("P3 consolidation contracts", () => {
     expect(HTTP_IDEMPOTENCY).toContain("(tenant_id, op_id)");
     expect(RUNBOOK).toContain("Sync retries");
     expect(RUNBOOK).toContain("five minutes");
-  });
-
-  it("uses the remediation plan as current P3 tracking", () => {
-    expect(PLAN).toContain("P3-1");
-    expect(PLAN).toContain("P3-2");
-    expect(PLAN).toContain("P3-3");
-    expect(PLAN).toContain("no runtime PASS claim");
   });
 });

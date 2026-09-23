@@ -44,7 +44,7 @@ export async function updatePartyUseCase(
     const party = await repo.update(id, input, ctx, expectedVersion);
     return { ok: true, data: party };
   } catch (e) {
-    return { ok: false, error: "فشل تحديث الطرف" };
+    return { ok: false, error: e instanceof Error ? e.message : "فشل تحديث الطرف" };
   }
 }
 

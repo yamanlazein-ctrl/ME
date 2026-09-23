@@ -93,3 +93,67 @@ export function aggregatePartyListStats(
 
   return map;
 }
+
+export interface PartyLedgerBalanceRow {
+  partyId: string;
+  currency: string | null;
+  debit: number;
+  credit: number;
+}
+
+/**
+ * Overlay ledger remaining (statement source of truth) onto invoice aggregates.
+ * Invoice totals stay as sales figures; `remaining` becomes debit−credit
+ * (customer) or credit−debit (supplier) per currency so opening balances
+ * and on-account vouchers are not dropped from the list.
+ */
+export function applyLedgerRemainingToPartyStats(
+  stats: Map<string, PartyListStats>,
+  ledgerRows: PartyLedgerBalanceRow[],
+  kind: "customer" | "supplier",
+): Map<string, PartyListStats> {
+  const sign = kind === "customer" ? 1 : -1;
+  for (const r of ledgerRows) {
+    const partyId = r.partyId;
+    if (!partyId) continue;
+    const existing = stats.get(partyId) ?? {
+      invoicesCount: 0,
+      totalAmount: 0,
+      totalPaid: 0,
+      remaining: 0,
+      byCurrency: {},
+    };
+    if (!stats.has(partyId)) stats.set(partyId, existing);
+    const ccy = r.currency ?? "SYP";
+    const remaining = (r.debit - r.credit) * sign;
+    existing.byCurrency = existing.byCurrency ?? {};
+    const prev = existing.byCurrency[ccy] ?? {
+      invoicesCount: 0,
+      totalAmount: 0,
+      totalPaid: 0,
+      remaining: 0,
+    };
+    existing.byCurrency[ccy] = { ...prev, remaining };
+  }
+
+  // Scalar `remaining` used to stay on the invoice-default-currency slice,
+  // which showed "0 ل.س" while USD lived only inside byCurrency and some
+  // older list UIs ignored byCurrency. Prefer the largest absolute
+  // ledger-backed remaining as the scalar so a single-currency chip is never
+  // stuck at zero when another currency has a real balance. Multi-currency
+  // UIs still read byCurrency and must never blend the numbers.
+  for (const s of stats.values()) {
+    if (!s.byCurrency) continue;
+    let best = s.remaining;
+    let bestAbs = Math.abs(best);
+    for (const b of Object.values(s.byCurrency)) {
+      const abs = Math.abs(b.remaining);
+      if (abs > bestAbs) {
+        bestAbs = abs;
+        best = b.remaining;
+      }
+    }
+    s.remaining = best;
+  }
+  return stats;
+}

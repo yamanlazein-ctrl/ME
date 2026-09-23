@@ -33,13 +33,13 @@ use std::io;
 use std::os::windows::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use super::error::BootFailure;
-use super::health::{check_boot_deadline, http_get_ok, wait_for, wait_tcp};
+use super::health::{http_get_ok, wait_ready, wait_tcp, WaitOutcome};
 use super::ports::{
-    find_free_backend_port, find_free_db_port, persist_backend_port, persist_db_port,
-    resolve_backend_port, resolve_db_port, sync_pg_conf_port,
+    find_free_db_port, find_free_server_port, persist_db_port, persist_server_port, resolve_db_port,
+    resolve_server_port, sync_pg_conf_port,
 };
 use super::stages::BootStage;
 
@@ -61,31 +61,33 @@ const DB_SUPERUSER: &str = "postgres";
 /// `establish_scram_auth`, and never trusts again.
 const SCRAM_PW_SET_MARKER: &str = ".motard-scram-pw-set";
 
-// Port the bundled SSR frontend server (resources/ssr/serve.mjs) listens on.
-// MUST match `app.windows[].url` in tauri.conf.json.
-const SSR_PORT: u16 = 4173;
-
 #[derive(Clone, Debug)]
 pub struct BootConfig {
-    /// Directory containing the bundled `postgres/` and (optionally) `backend/`
-    /// and `pgdata-template/`. For a packaged app this is the Tauri resource
-    /// dir; for the probe it is `src-tauri/resources`.
+    /// Directory containing the bundled `postgres/`, `server/` and `node.exe`. For a packaged app this is the
+    /// Tauri resource dir; for the probe it is `src-tauri/resources`.
     pub resources_root: PathBuf,
-    /// Per-user data dir, e.g. `%LOCALAPPDATA%/motard-erp`. Holds the live
-    /// `pgdata`, `secrets.dat`, `device-binding.dat`.
+    /// Per-user data dir, e.g. `%LOCALAPPDATA%/motard-erp`. Holds the live `pgdata`, `secrets.dat`,
+    /// `device-binding.dat`.
     pub app_data_root: PathBuf,
-    /// Node runtime used to launch the backend. Packaged app: `node.exe` inside
-    /// `resources_root`; probe: system `node` on PATH.
+    /// Node runtime used to launch the server. Packaged app: `node.exe` inside `resources_root`.
     pub node_exe: PathBuf,
-    /// Working directory for the backend process (must contain `node_modules`).
-    pub backend_dir: PathBuf,
-    /// Compiled backend entry (ESM). `dist/backend/src/presentation/server.js`.
+    /// The bundled server: `server.mjs` (whole backend, esbuild bundle) + `web/` (built SPA) + `migrations/`.
+    pub server_dir: PathBuf,
+    /// `server_dir/server.mjs`.
     pub server_js: PathBuf,
-    /// The Ed25519 *public* key (PEM) for DESKTOP_DEPLOY verify-only license
-    /// checks. The private key is NEVER injected (see spawn_backend).
+    /// `server_dir/web` — served by the server on the same origin as the API.
+    pub web_dir: PathBuf,
+    /// `server_dir/migrations` — drizzle SQL read at boot.
+    pub migrations_dir: PathBuf,
+    /// File the server writes its OS-assigned port to once it is really accepting connections.
+    pub port_file: PathBuf,
+    /// The Ed25519 *public* key (PEM) for DESKTOP_DEPLOY verify-only license checks. The private key is NEVER
+    /// injected (see spawn_server).
     pub license_public_key: Option<String>,
     pub db_port: u16,
-    pub backend_port: u16,
+    /// Preferred port for the server (API + UI). Stable across launches so the browser origin — and everything
+    /// the UI stores under it — survives restarts; replaced only when it is actually taken.
+    pub server_port: u16,
     /// Stable install identity from DPAPI `device-binding.dat`. Empty is refused.
     pub installation_id: String,
 }
@@ -93,27 +95,23 @@ pub struct BootConfig {
 impl BootConfig {
     /// Resolve a config for the packaged app given Tauri's resource directory.
     pub fn for_app(resource_dir: PathBuf) -> Result<Self, String> {
-        let backend_dir = resource_dir.join("backend");
-        let server_js = backend_dir
-            .join("dist")
-            .join("backend")
-            .join("src")
-            .join("presentation")
-            .join("server.js");
-        let license_public_key =
-            fs::read_to_string(resource_dir.join("license-public.pem")).ok();
+        let server_dir = resource_dir.join("server");
+        let license_public_key = fs::read_to_string(resource_dir.join("license-public.pem")).ok();
         let app_data_root = crate::app_data_dir()?;
         let db_port = resolve_db_port(&app_data_root);
-        let backend_port = resolve_backend_port(&app_data_root);
+        let server_port = resolve_server_port(&app_data_root);
         Ok(BootConfig {
             resources_root: resource_dir.clone(),
+            port_file: app_data_root.join("server-port.json"),
             app_data_root,
             node_exe: resource_dir.join("node.exe"),
-            backend_dir,
-            server_js,
+            server_js: server_dir.join("server.mjs"),
+            web_dir: server_dir.join("web"),
+            migrations_dir: server_dir.join("migrations"),
+            server_dir,
             license_public_key,
             db_port,
-            backend_port,
+            server_port,
             installation_id: String::new(),
         })
     }
@@ -125,9 +123,16 @@ pub struct DesktopStack {
     pub resources_root: PathBuf,
     pub pgdata_dir: PathBuf,
     pub db_port: u16,
-    pub backend_port: u16,
-    backend: Option<HiddenChild>,
-    ssr: Option<HiddenChild>,
+    /// The OS-assigned port the single server (API + UI) is listening on.
+    pub server_port: u16,
+    server: Option<HiddenChild>,
+}
+
+impl DesktopStack {
+    /// URL of the application (same origin for the UI and the API).
+    pub fn app_url(&self) -> String {
+        format!("http://127.0.0.1:{}/", self.server_port)
+    }
 }
 
 // ── Recursive copy (used to clone a baked pgdata-template) ──────────────────
@@ -323,7 +328,7 @@ fn ensure_pgdata(cfg: &BootConfig, db_password: &str) -> io::Result<PathBuf> {
             ))
         }
     })?;
-    let schema_idx = bundled_schema_journal_idx(&cfg.backend_dir);
+    let schema_idx = bundled_schema_journal_idx(&cfg.migrations_dir);
 
     match evaluate_existing_cluster(
         app_data_root,
@@ -503,13 +508,8 @@ fn preflight_check(cfg: &BootConfig) -> Result<(), Vec<String>> {
         bin.join("libpq.dll"),
         cfg.node_exe.clone(),
         cfg.server_js.clone(),
-        cfg.resources_root.join("ssr").join("serve.mjs"),
-        cfg.resources_root.join("ssr").join("resolve-api-proxy.mjs"),
-        cfg.resources_root
-            .join("ssr")
-            .join("dist")
-            .join("server")
-            .join("server.js"),
+        cfg.web_dir.join("_shell.html"),
+        cfg.migrations_dir.join("meta").join("_journal.json"),
         cfg.resources_root
             .join("postgres")
             .join("pgdata-template")
@@ -651,8 +651,11 @@ fn start_postgres(
             "-l",
             &log_str,
             "-w",
+            // Wedge guard only. A cold start under real-time antivirus scanning can take minutes; the
+            // outcome is decided by postgres itself (pg_ctl returns as soon as it accepts connections
+            // or has exited), not by a short deadline.
             "-t",
-            "60",
+            "900",
         ])
         .spawn()?
         .wait_success()?;
@@ -702,7 +705,7 @@ fn start_postgres(
     }
     ensure_erp_database(resources_root, db_port, db_password)?;
 
-    wait_tcp("127.0.0.1", db_port, Duration::from_secs(60))?;
+    wait_tcp("127.0.0.1", db_port, Duration::from_secs(300))?;
     log("postgres is accepting connections");
     Ok(())
 }
@@ -860,7 +863,7 @@ pub(crate) fn ensure_erp_database(
 }
 
 // ── Step 5: spawn the Node backend with injected secrets ────────────────────
-fn spawn_backend(cfg: &BootConfig, store: &secret_store::SecretStore) -> io::Result<HiddenChild> {
+fn spawn_server(cfg: &BootConfig, store: &secret_store::SecretStore) -> io::Result<HiddenChild> {
     // P2-5: the password is URL-safe by construction (alphanumeric only) and
     // is never persisted in the connection string — it is injected into the
     // child's environment at spawn time only.
@@ -868,22 +871,36 @@ fn spawn_backend(cfg: &BootConfig, store: &secret_store::SecretStore) -> io::Res
         "postgresql://{}:{}@127.0.0.1:{}/{}",
         DB_SUPERUSER, store.db_password, cfg.db_port, DB_NAME
     );
+    // A port file left by a previous run must never be mistaken for "ready".
+    let _ = fs::remove_file(&cfg.port_file);
     log(&format!(
-        "starting backend (node {}) on port {}",
-        cfg.node_exe.display(),
-        cfg.backend_port
+        "starting server (node {}) — port assigned by the OS",
+        cfg.node_exe.display()
     ));
     let mut cmd = HiddenCommand::new(strip_verbatim_prefix(&cfg.node_exe));
     cmd.arg(strip_verbatim_prefix(&cfg.server_js))
-        .current_dir(strip_verbatim_prefix(&cfg.backend_dir))
+        .current_dir(strip_verbatim_prefix(&cfg.server_dir))
         .env("NODE_ENV", "production")
         .env("DESKTOP_DEPLOY", "true")
-        .env("PORT", cfg.backend_port.to_string())
+        // The port is a persisted random port (see ports::resolve_server_port), never a well-known one like
+        // 8080/4173, and it is re-picked if something is holding it. The server still publishes what it really
+        // bound in DESKTOP_PORT_FILE once it is accepting connections.
+        .env("PORT", cfg.server_port.to_string())
         .env("HOST", "127.0.0.1")
-        // The bundled Tauri webview loads the SSR server at 127.0.0.1:4173, so
-        // API fetches originate there. Production CORS forbids "*", so we pin the
-        // exact origin the desktop client uses.
-        .env("CORS_ORIGIN", "http://127.0.0.1:4173")
+        .env(
+            "DESKTOP_PORT_FILE",
+            cfg.port_file.to_string_lossy().into_owned(),
+        )
+        // The built single-page frontend is served by this same process on the same origin as the API
+        // (no SSR server, no proxy, no CORS). CORS_ORIGIN is only a non-wildcard placeholder for the
+        // production guard: same-origin requests never need it.
+        .env(
+            "SERVE_STATIC_DIR",
+            strip_verbatim_prefix(&cfg.web_dir)
+                .to_string_lossy()
+                .into_owned(),
+        )
+        .env("CORS_ORIGIN", "http://127.0.0.1")
         // pino-roll's default LOG_DIR resolves relative to the compiled
         // logger.js location, which under the packaged app is inside
         // `Program Files\...\backend\dist\logs` — not writable by a
@@ -929,11 +946,7 @@ fn spawn_backend(cfg: &BootConfig, store: &secret_store::SecretStore) -> io::Res
         )
         .env(
             "DESKTOP_MIGRATIONS_FOLDER",
-            cfg.backend_dir
-                .join("src")
-                .join("infrastructure")
-                .join("orm")
-                .join("migrations")
+            strip_verbatim_prefix(&cfg.migrations_dir)
                 .to_string_lossy()
                 .into_owned(),
         )
@@ -952,43 +965,7 @@ fn spawn_backend(cfg: &BootConfig, store: &secret_store::SecretStore) -> io::Res
     // it — same file redirection as before, now via hidden_process so the
     // window suppression is actually reliable (see the CREATE_NO_WINDOW note
     // above spawn_backend's old Command-based version).
-    let log_path = cfg.app_data_root.join("backend.log");
-    let out_log = fs::File::create(&log_path)?;
-    let err_log = out_log.try_clone()?;
-    cmd.stdin_null()?
-        .stdout_file(out_log)
-        .stderr_file(err_log)
-        .spawn()
-}
-
-/// Spawn the bundled SSR frontend server (resources/ssr/serve.mjs) using the
-/// bundled Node runtime. It hosts the prebuilt TanStack Start nitro handler on a
-/// local port so the Tauri webview simply loads an ordinary web page (no
-/// client-side npm/build step). We start it ONLY after the backend is healthy:
-/// the SSR pages fetch from the API on first paint, so a dead backend would
-/// otherwise show error states until the API comes up.
-fn spawn_ssr(cfg: &BootConfig) -> io::Result<HiddenChild> {
-    let ssr_script = cfg.resources_root.join("ssr").join("serve.mjs");
-    log(&format!(
-        "starting SSR frontend server on http://127.0.0.1:{}",
-        SSR_PORT
-    ));
-    let api_proxy = format!("http://127.0.0.1:{}", cfg.backend_port);
-    let runtime_config = cfg.app_data_root.join("runtime-config.json");
-    let mut cmd = HiddenCommand::new(strip_verbatim_prefix(&cfg.node_exe));
-    cmd.arg(strip_verbatim_prefix(&ssr_script))
-        .current_dir(strip_verbatim_prefix(&cfg.resources_root))
-        .env("NODE_ENV", "production")
-        .env("SSR_PORT", SSR_PORT.to_string())
-        .env("SSR_HOST", "127.0.0.1")
-        // Discoverable backend port (Phase 4): SSR proxies /api here — never bake 8080.
-        .env("SSR_API_PROXY", &api_proxy)
-        .env(
-            "RUNTIME_CONFIG_PATH",
-            runtime_config.to_string_lossy().into_owned(),
-        )
-        .env_remove("LICENSE_SIGNING_KEY");
-    let log_path = cfg.app_data_root.join("ssr.log");
+    let log_path = cfg.app_data_root.join("server.log");
     let out_log = fs::File::create(&log_path)?;
     let err_log = out_log.try_clone()?;
     cmd.stdin_null()?
@@ -1013,7 +990,6 @@ pub fn boot_desktop_stack_with_progress(
     cfg: &BootConfig,
     progress: &dyn Fn(&str),
 ) -> Result<DesktopStack, BootFailure> {
-    let boot_started = Instant::now();
     // Never fail to boot merely because something else already holds the
     // default DB port (a system-installed PostgreSQL service, an orphaned
     // instance of this app) — pick a free one instead. See R-04.
@@ -1027,18 +1003,6 @@ pub fn boot_desktop_stack_with_progress(
         cfg.db_port = resolved_db_port;
         persist_db_port(&cfg.app_data_root, cfg.db_port);
     }
-
-    // Same pattern as the DB: prefer the persisted/default API port (8080), but
-    // relocate when occupied and publish runtime-config.json for SSR/frontend.
-    let resolved_backend_port = find_free_backend_port(cfg.backend_port);
-    if resolved_backend_port != cfg.backend_port {
-        log(&format!(
-            "backend port {} busy — falling back to {}",
-            cfg.backend_port, resolved_backend_port
-        ));
-        cfg.backend_port = resolved_backend_port;
-    }
-    persist_backend_port(&cfg.app_data_root, cfg.backend_port);
 
     progress(BootStage::Preflight.label());
     // Step 0: pre-flight — verify every runtime-critical bundled file exists on
@@ -1060,8 +1024,6 @@ pub fn boot_desktop_stack_with_progress(
             format!("pre-flight: missing bundled files: {}", missing.join(", ")),
         ));
     }
-    check_boot_deadline(boot_started)
-        .map_err(|e| BootFailure::new(BootStage::Preflight, "boot-deadline", e.to_string()))?;
 
     progress(BootStage::FactoryReset.label());
     if let Err(e) = apply_requested_factory_reset(&cfg) {
@@ -1123,8 +1085,6 @@ pub fn boot_desktop_stack_with_progress(
             ));
         }
     };
-    check_boot_deadline(boot_started)
-        .map_err(|e| BootFailure::new(BootStage::ProvisionDatabase, "boot-deadline", e.to_string()))?;
     // P2-6: re-check immediately before bind to shrink the TOCTOU window.
     let resolved_again = find_free_db_port(cfg.db_port);
     if resolved_again != cfg.db_port {
@@ -1177,151 +1137,111 @@ pub fn boot_desktop_stack_with_progress(
             e.to_string(),
         ));
     }
-    check_boot_deadline(boot_started)
-        .map_err(|e| BootFailure::new(BootStage::StartDatabase, "boot-deadline", e.to_string()))?;
 
     // The store was loaded before provisioning because PostgreSQL now needs
     // its DPAPI-backed role password. Keep the explicit stage/progress event,
     // but do not decrypt or regenerate the file a second time.
     progress(BootStage::LoadSecrets.label());
-    progress(BootStage::StartBackend.label());
-    // Backend port already resolved + persisted above (find_free_backend_port).
-    let backend = match spawn_backend(&cfg, &store) {
+    progress(BootStage::StartServer.label());
+    let chosen = find_free_server_port(cfg.server_port, cfg.db_port);
+    if chosen != cfg.server_port {
+        log(&format!(
+            "server port {} is taken — falling back to {}",
+            cfg.server_port, chosen
+        ));
+        cfg.server_port = chosen;
+        persist_server_port(&cfg.app_data_root, chosen);
+    }
+    let server = match spawn_server(&cfg, &store) {
         Ok(b) => {
-            // node.exe still opens its own console despite CREATE_NO_WINDOW +
-            // SW_HIDE (verified live, unlike postgres/pg_ctl where those flags
-            // work correctly) — detect and hide it instead. Best-effort,
-            // background thread, never blocks boot.
+            // node.exe still opens its own console despite CREATE_NO_WINDOW + SW_HIDE (verified live) —
+            // detect and hide it instead. Best-effort, background thread, never blocks boot.
             crate::hidden_process::hide_stray_console_async(b.id());
             b
         }
         Err(e) => {
             let _ = stop_postgres(&cfg.resources_root, &pgdata);
             let msg = format!(
-                "تعذّر تشغيل محرّك النظام (Node.js backend).\n\n\
+                "تعذّر تشغيل محرّك النظام.\n\n\
                  الخطأ: {}\n\n\
                  المسار المتوقَّع: {}\n\n\
                  السبب الأكثر شيوعاً: برنامج الحماية حذف أو حجب node.exe بعد التثبيت.\n\n\
-                 الحل: أضف مجلد تثبيت البرنامج لاستثناءات الحماية، ثم أعد تشغيل مثبّت \
-                 البرنامج (Repair).",
+                 الحل: أعد تثبيت البرنامج، أو أضف مجلد التثبيت لاستثناءات برنامج الحماية.",
                 e,
                 cfg.node_exe.display()
             );
             show_fatal_dialog("خطأ في تشغيل محرّك النظام — Motard ERP", &msg);
             return Err(BootFailure::new(
-                BootStage::StartBackend,
-                "spawn-backend",
+                BootStage::StartServer,
+                "spawn-server",
                 e.to_string(),
             ));
         }
     };
 
-    // Step 6 (parallel): start the SSR frontend server IMMEDIATELY, without
-    // waiting for the backend to become healthy first. The SSR node process
-    // spends ~6s importing the prebuilt nitro bundle — overlapping that with
-    // the backend's own ~20s init saves the full SSR import cost off the
-    // critical path. Ordering is still guaranteed: Step 7 waits for the
-    // backend first, Step 8 waits for SSR after, so the first SSR paint can
-    // reach a live API exactly as before.
-    progress(BootStage::StartFrontend.label());
-    let ssr = match spawn_ssr(&cfg) {
-        Ok(s) => {
-            crate::hidden_process::hide_stray_console_async(s.id());
-            s
-        }
-        Err(e) => {
-            backend.kill();
-            let _ = stop_postgres(&cfg.resources_root, &pgdata);
+    // Wait for the server. The server writes its port file only once it is REALLY accepting connections, so
+    // "port file present" is the readiness signal — and it also tells us the OS-assigned port. The wait is
+    // decided by the process, not by a clock: ready -> go; process gone -> fail at once with its exit code
+    // and log tail; process alive but slow (cold start, antivirus scan) -> keep waiting and keep reporting.
+    progress(BootStage::WaitServer.label());
+    let outcome = wait_ready(
+        || {
+            let text = fs::read_to_string(&cfg.port_file).ok()?;
+            let v: serde_json::Value = serde_json::from_str(&text).ok()?;
+            let port = v.get("port")?.as_u64()? as u16;
+            http_get_ok("127.0.0.1", port, "/api/health/live").then_some(port)
+        },
+        || server.try_exit_code(),
+        |elapsed| {
+            let secs = elapsed.as_secs();
+            if secs >= 10 {
+                progress(&format!(
+                    "{} ({} ث) — التشغيل الأول قد يستغرق وقتاً أطول…",
+                    BootStage::WaitServer.label(),
+                    secs
+                ));
+            }
+        },
+        // Safety ceiling for a genuinely wedged (alive but never ready) process — not a "slow machine" limit.
+        Duration::from_secs(20 * 60),
+    );
+    let server_port = match outcome {
+        WaitOutcome::Ready(port) => port,
+        failure => {
+            abort_partial_boot(Some(&server), &cfg.resources_root, &pgdata);
+            let log_text = fs::read_to_string(cfg.app_data_root.join("server.log")).unwrap_or_default();
+            let log_tail = log_tail_for_dialog(&log_text);
+            let cause = match failure {
+                WaitOutcome::ChildExited(code) => format!("توقف محرّك النظام فجأة (رمز الخروج {code})."),
+                _ => "بدأ محرّك النظام لكنه لم يصبح جاهزاً خلال 20 دقيقة.".to_string(),
+            };
+            let reason = last_fatal_reason(&log_text)
+                .map(|r| format!("\n\nالسبب: {r}"))
+                .unwrap_or_default();
             let msg = format!(
-                "تعذّر تشغيل واجهة العرض (SSR frontend server).\n\n\
-                 الخطأ: {}\n\n\
-                 الحل: أضف مجلد تثبيت البرنامج لاستثناءات برنامج الحماية، ثم أعد تشغيل \
-                 مثبّت البرنامج (Repair) إن استمرت المشكلة.",
-                e
+                "{}{}\n\nآخر سطور السجل ({}):\n{}\n\n\
+                 أعد فتح البرنامج، وإن تكررت المشكلة أرسل هذا الملف للدعم الفني.",
+                cause,
+                reason,
+                cfg.app_data_root.join("server.log").display(),
+                log_tail
             );
-            show_fatal_dialog("خطأ في تشغيل واجهة العرض — Motard ERP", &msg);
+            show_fatal_dialog("خطأ: محرّك النظام لم يبدأ — Motard ERP", &msg);
             return Err(BootFailure::new(
-                BootStage::StartFrontend,
-                "spawn-ssr",
-                e.to_string(),
+                BootStage::WaitServer,
+                "server-not-ready",
+                "server did not become healthy (/api/health/live)",
             ));
         }
     };
-
-    // Step 7: wait for the backend to report live.
-    progress(BootStage::WaitBackend.label());
-    let live = wait_for(
-        || http_get_ok("127.0.0.1", cfg.backend_port, "/api/health/live"),
-        Duration::from_secs(60),
-    );
-    if !live {
-        // DFP-003: kill EVERY child started so far — including the backend.
-        // Omitting backend.kill() left node listening on 8080 → next boot
-        // EADDRINUSE forever (same cascade documented on WaitFrontend below).
-        abort_partial_boot(
-            Some(&backend),
-            Some(&ssr),
-            &cfg.resources_root,
-            &pgdata,
-        );
-        let msg = format!(
-            "بدأ محرّك النظام لكنه لم يستجب خلال المهلة المتوقَّعة (60 ثانية).\n\n\
-             المنفذ: {}\n\n\
-             قد يكون الجهاز بطيئاً جداً في الإقلاع الأول، أو برنامج الحماية يفحص الملفات \
-             ببطء. أعد فتح البرنامج مرة أخرى، وإن تكررت المشكلة تواصل مع الدعم الفني.",
-            cfg.backend_port
-        );
-        show_fatal_dialog("خطأ: محرّك النظام لم يستجب — Motard ERP", &msg);
-        return Err(BootFailure::new(
-            BootStage::WaitBackend,
-            "backend-not-live",
-            "backend did not become healthy (/api/health/live)",
-        ));
-    }
-    super::log("desktop stack is UP (postgres + backend)");
-
-    // Step 8 (already running, see Step 6): wait for the SSR frontend to
-    // answer on its LIGHTWEIGHT readiness probe. Polling "/" here was the
-    // 5-minute-boot bug (verified live 2026-09-05): "/" forces a full SSR
-    // render which takes minutes on a cold AV-scanned boot, so the 30s
-    // timeout fired while the server was actually fine — then the fatal path
-    // below orphaned the backend on 8080 and EVERY later boot failed too.
-    // "/__health" (serve.mjs) answers from the node event loop with no render.
-    progress(BootStage::WaitFrontend.label());
-    let ssr_live = wait_for(
-        || http_get_ok("127.0.0.1", SSR_PORT, "/__health"),
-        Duration::from_secs(120),
-    );
-    if !ssr_live {
-        // Kill EVERYTHING we started: leaving the backend alive on 8080 turns
-        // one slow boot into a permanent failure cascade (next boot's backend
-        // gets EADDRINUSE and can never become healthy).
-        abort_partial_boot(
-            Some(&backend),
-            Some(&ssr),
-            &cfg.resources_root,
-            &pgdata,
-        );
-        let msg = "بدأت واجهة العرض لكنها لم تستجب خلال المهلة المتوقَّعة (120 ثانية).\n\n\
-                     أعد فتح البرنامج مرة أخرى، وإن تكررت المشكلة تواصل مع الدعم الفني.";
-        show_fatal_dialog("خطأ: واجهة العرض لم تستجب — Motard ERP", msg);
-        return Err(BootFailure::new(
-            BootStage::WaitFrontend,
-            "ssr-not-ready",
-            "SSR frontend did not become healthy (http://127.0.0.1:4173/)",
-        ));
-    }
-    check_boot_deadline(boot_started)
-        .map_err(|e| BootFailure::new(BootStage::WaitFrontend, "boot-deadline", e.to_string()))?;
-    super::log("SSR frontend is UP");
+    super::log(&format!("desktop stack is UP (postgres + server on 127.0.0.1:{server_port})"));
 
     Ok(DesktopStack {
         resources_root: cfg.resources_root.clone(),
         pgdata_dir: pgdata,
         db_port: cfg.db_port,
-        backend_port: cfg.backend_port,
-        backend: Some(backend),
-        ssr: Some(ssr),
+        server_port,
+        server: Some(server),
     })
 }
 
@@ -1329,50 +1249,78 @@ pub fn boot_desktop_stack_with_progress(
 
 /// Tear down every child owned by a partial or failed boot (DFP-003).
 /// Order: Node children first (free TCP ports), then PostgreSQL.
-fn abort_partial_boot(
-    backend: Option<&HiddenChild>,
-    ssr: Option<&HiddenChild>,
-    resources_root: &Path,
-    pgdata: &Path,
-) {
-    // DFP-022: wait briefly after TerminateProcess so ports are released
-    // before the next boot attempt (and so we can log hung children).
+fn abort_partial_boot(server: Option<&HiddenChild>, resources_root: &Path, pgdata: &Path) {
+    // DFP-022: wait briefly after TerminateProcess so the child is really gone before the next boot attempt
+    // (and so a hung child is logged).
     const CHILD_EXIT_WAIT_MS: u32 = 5_000;
-    if let Some(b) = backend {
-        if !b.kill_and_wait(CHILD_EXIT_WAIT_MS) {
-            log("abort_partial_boot: backend did not exit within wait window");
-        }
-    }
-    if let Some(s) = ssr {
-        if !s.kill_and_wait(CHILD_EXIT_WAIT_MS) {
-            log("abort_partial_boot: SSR did not exit within wait window");
+    if let Some(sv) = server {
+        if !sv.kill_and_wait(CHILD_EXIT_WAIT_MS) {
+            log("abort_partial_boot: server did not exit within wait window");
         }
     }
     let _ = stop_postgres(resources_root, pgdata);
 }
 
 /// Pure checklist used by unit tests — which owned children a stage must kill.
+/// The server writes `[FATAL] <reason>` synchronously to stderr (= server.log) when start-up is refused. The LAST
+/// such line is the real cause — surface it instead of leaving the user to guess from unrelated warnings above it.
+fn last_fatal_reason(log: &str) -> Option<String> {
+    log.lines()
+        .rev()
+        .find_map(|l| l.find("[FATAL]").map(|i| l[i + "[FATAL]".len()..].trim().to_string()))
+        .filter(|r| !r.is_empty())
+}
+
+/// Last 12 log lines for the failure dialog.
+fn log_tail_for_dialog(log: &str) -> String {
+    let lines: Vec<&str> = log.lines().collect();
+    lines[lines.len().saturating_sub(12)..].join("\n")
+}
+
+#[cfg(test)]
+mod fatal_reason_tests {
+    use super::*;
+
+    #[test]
+    fn picks_the_last_fatal_line_not_the_unrelated_warning() {
+        let log = "(node:1) DeprecationWarning: Calling client.query() when the client is already executing a query\n\
+                   [FATAL] Server startup failed: old reason\n\
+                   [FATAL] Server startup failed: device_registrations has license rows with NULL tenant_id\n";
+        assert_eq!(
+            last_fatal_reason(log).as_deref(),
+            Some("Server startup failed: device_registrations has license rows with NULL tenant_id")
+        );
+    }
+
+    #[test]
+    fn no_fatal_line_means_no_reason() {
+        assert_eq!(last_fatal_reason("just a warning\n"), None);
+        assert_eq!(last_fatal_reason("[FATAL]   \n"), None);
+    }
+
+    #[test]
+    fn tail_keeps_only_the_last_twelve_lines() {
+        let log: String = (1..=20).map(|i| format!("l{i}\n")).collect();
+        let tail = log_tail_for_dialog(&log);
+        assert_eq!(tail.lines().count(), 12);
+        assert!(tail.starts_with("l9") && tail.ends_with("l20"));
+    }
+}
+
 #[cfg(test)]
 fn abort_targets_for_stage(stage: &str) -> &'static [&'static str] {
     match stage {
-        "WaitBackend" | "WaitFrontend" => &["backend", "ssr", "postgres"],
-        "StartFrontend" => &["backend", "postgres"], // SSR spawn failed — no SSR child
+        "WaitServer" => &["server", "postgres"],
         _ => &[],
     }
 }
 
 pub fn shutdown(stack: &mut DesktopStack) {
     const CHILD_EXIT_WAIT_MS: u32 = 8_000;
-    if let Some(b) = stack.backend.take() {
-        log("stopping backend");
-        if !b.kill_and_wait(CHILD_EXIT_WAIT_MS) {
-            log("shutdown: backend did not exit within wait window after TerminateProcess");
-        }
-    }
-    if let Some(s) = stack.ssr.take() {
-        log("stopping SSR frontend");
-        if !s.kill_and_wait(CHILD_EXIT_WAIT_MS) {
-            log("shutdown: SSR did not exit within wait window after TerminateProcess");
+    if let Some(sv) = stack.server.take() {
+        log("stopping server");
+        if !sv.kill_and_wait(CHILD_EXIT_WAIT_MS) {
+            log("shutdown: server did not exit within wait window after TerminateProcess");
         }
     }
     let _ = stop_postgres(&stack.resources_root, &stack.pgdata_dir);
@@ -1488,31 +1436,11 @@ mod boot_lifecycle_tests {
     }
 
     #[test]
-    fn wait_backend_timeout_must_kill_backend_ssr_and_postgres() {
-        // DFP-003 regression: WaitBackend used to omit backend → EADDRINUSE.
-        let targets = abort_targets_for_stage("WaitBackend");
-        assert!(targets.contains(&"backend"));
-        assert!(targets.contains(&"ssr"));
+    fn a_failed_server_wait_must_kill_the_server_and_postgres() {
+        // DFP-003 regression: a failed wait used to leave a child alive holding its port -> the next boot failed forever.
+        let targets = abort_targets_for_stage("WaitServer");
+        assert!(targets.contains(&"server"));
         assert!(targets.contains(&"postgres"));
-        assert_eq!(
-            abort_targets_for_stage("WaitBackend"),
-            abort_targets_for_stage("WaitFrontend")
-        );
-    }
-
-    #[test]
-    fn wait_frontend_timeout_same_cleanup_set_as_wait_backend() {
-        let targets = abort_targets_for_stage("WaitFrontend");
-        assert_eq!(targets, &["backend", "ssr", "postgres"]);
-    }
-
-    #[test]
-    fn start_frontend_failure_kills_backend_and_postgres_not_ssr() {
-        // SSR spawn failed — there is no SSR child to kill.
-        let targets = abort_targets_for_stage("StartFrontend");
-        assert!(targets.contains(&"backend"));
-        assert!(targets.contains(&"postgres"));
-        assert!(!targets.contains(&"ssr"));
     }
 
     #[test]

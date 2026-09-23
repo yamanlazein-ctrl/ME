@@ -1,13 +1,19 @@
 import type { BaseHttpClient } from "@/infrastructure/http";
 
 /**
- * FxApiService — client for the header's reference USD→SYP badge.
+ * FxApiService — client for the reference USD→SYP rate.
  *
  * ⛔ GOVERNING RULE (settled project decision — do not violate):
- * This service feeds a DISPLAY-ONLY header widget. Its data must NEVER be
- * used to pre-fill any `exchangeRate` field on invoices, vouchers, or any
- * accounting document — the user always types the exchange rate manually.
- * Keep it isolated from all billing logic.
+ * This data must NEVER be used to pre-fill any `exchangeRate` field on
+ * invoices, vouchers, or any accounting document — the user always types the
+ * exchange rate manually.
+ *
+ * Originally this fed ONLY the display-only header badge (`FxReferenceRate`).
+ * As of 2026-09-22 it also backs a narrow, explicitly-requested exception:
+ * `useSypRateSoftCheck` compares a manually-typed SYP rate against this value
+ * to show a dismissible "this looks off" warning (never a block, never a
+ * write) — see that hook's docstring. That is the ONLY other permitted
+ * consumer; still never auto-fill, never block, never silently substitute.
  *
  * The browser only ever calls our internal backend endpoint (which serves a
  * server-side cached snapshot); it never contacts LiraScope directly.

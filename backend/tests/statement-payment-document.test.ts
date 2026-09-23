@@ -3,12 +3,15 @@
  * in its own currency with its own frozen rate, plus the converted equivalent
  * that reduced the balance. The invoice must survive the payment untouched.
  *
- *   Invoice 1,365 SYP (historical rate 130)  ->  balance 1,365 SYP
- *   Receipt 10 USD @ 136.5 (rate at payment) ->  equivalent 1,365 SYP -> balance 0
+ *   Invoice 136,500 SYP (historical rate 13,000)  ->  balance 136,500 SYP
+ *   Receipt 10 USD @ 13,650 (rate at payment)      ->  equivalent 136,500 SYP -> balance 0
+ *
+ * Rates use realistic SYP/USD magnitudes (>= 1,000) — anything below that is
+ * rejected by the saneSypRateError guard as a likely dropped-zero typo.
  */
 import { describe, it, expect, beforeAll } from "vitest";
 import { randomUUID } from "node:crypto";
-import { eq, sql } from "drizzle-orm";
+import { eq, and, sql } from "drizzle-orm";
 import { computeBaseEquivalent } from "@erp/shared";
 import { db } from "@/infrastructure/orm/drizzle.js";
 import { tenants } from "@/infrastructure/orm/schemas/tenant.table.js";
@@ -90,14 +93,14 @@ describe("statement shows invoice AND payment with their own currency / rate", (
     ]);
   });
 
-  it("customer: 10 USD @136.5 against a 1,365 SYP invoice -> 0 SYP, both rows visible", async () => {
+  it("customer: 10 USD @13,650 against a 136,500 SYP invoice -> 0 SYP, both rows visible", async () => {
     const vouchers = new PostgresVoucherRepository(db);
     const statements = new PostgresStatementRepository(db);
     const invId = await insertInvoice({
       number: "INV-DOC-1",
-      total: 1365,
+      total: 136_500,
       currency: "SYP",
-      exchangeRate: 130,
+      exchangeRate: 13_000,
       kind: "sale",
     });
 
@@ -110,7 +113,7 @@ describe("statement shows invoice AND payment with their own currency / rate", (
         invoiceId: invId,
         amount: 10,
         currency: "USD",
-        exchangeRate: 136.5,
+        exchangeRate: 13_650,
         method: "cash",
       },
       ctx,
@@ -119,9 +122,9 @@ describe("statement shows invoice AND payment with their own currency / rate", (
     // Invoice untouched: original currency, amount and historical rate.
     const [inv] = await db.select().from(invoices).where(eq(invoices.id, invId));
     expect(inv.currency).toBe("SYP");
-    expect(Number(inv.total)).toBe(1365);
-    expect(Number(inv.exchangeRate)).toBe(130);
-    expect(Number(inv.paid)).toBe(1365);
+    expect(Number(inv.total)).toBe(136_500);
+    expect(Number(inv.exchangeRate)).toBe(13_000);
+    expect(Number(inv.paid)).toBe(136_500);
 
     const stmt = await statements.getStatement(
       { partyId: customerId, kind: "customer", currency: "ALL" },
@@ -132,24 +135,24 @@ describe("statement shows invoice AND payment with their own currency / rate", (
 
     // The invoice does not disappear after payment.
     expect(invoiceRow).toBeDefined();
-    expect(invoiceRow.debit).toBe(1365);
+    expect(invoiceRow.debit).toBe(136_500);
     expect(invoiceRow.document).toMatchObject({
       kind: "invoice",
       number: "INV-DOC-1",
       currency: "SYP",
-      amount: 1365,
-      exchangeRate: 130,
+      amount: 136_500,
+      exchangeRate: 13_000,
     });
 
     // Payment: own currency / amount / rate; the row figure is the converted equivalent.
     expect(paymentRow.currency).toBe("SYP");
-    expect(paymentRow.credit).toBe(1365);
+    expect(paymentRow.credit).toBe(136_500);
     expect(paymentRow.document).toMatchObject({
       kind: "voucher",
       number: receipt.number,
       currency: "USD",
       amount: 10,
-      exchangeRate: 136.5,
+      exchangeRate: 13_650,
       crossCurrency: true,
       appliedToInvoiceNumber: "INV-DOC-1",
       appliedToInvoiceCurrency: "SYP",
@@ -187,10 +190,10 @@ describe("statement shows invoice AND payment with their own currency / rate", (
     expect(stmt.totalsByCurrency?.USD?.finalBalance).toBe(-5);
   });
 
-  it("supplier: 10 USD @1200 (discount 1) against a SYP purchase -> 12,000 SYP applied", async () => {
+  it("supplier: 10 USD cash + 1 discount @1200 against SYP purchase → 13,200 SYP AP reduction", async () => {
     const vouchers = new PostgresVoucherRepository(db);
     const statements = new PostgresStatementRepository(db);
-    // Fund the USD cashbox so the cash-payment guard passes.
+    // Fund the USD cashbox (negative cash is allowed, but keep the fixture funded).
     await vouchers.create(
       {
         kind: "receipt",
@@ -217,8 +220,8 @@ describe("statement shows invoice AND payment with their own currency / rate", (
         partyId: supplierId,
         partyKind: "supplier",
         invoiceId: invId,
-        amount: 10,
-        discount: 1,
+        amount: 10, // CASH only
+        discount: 1, // discount received — additive
         currency: "USD",
         exchangeRate: 1200,
         method: "cash",
@@ -230,17 +233,33 @@ describe("statement shows invoice AND payment with their own currency / rate", (
       ctx,
     );
     const row = stmt.entries.find((e) => e.referenceNumber === payment.number)!;
+    // Party leg is in invoice currency at (cash+discount)×rate = 11×1200.
     expect(row.currency).toBe("SYP");
-    expect(row.debit).toBe(12_000);
+    expect(row.debit).toBe(13_200);
     expect(row.document).toMatchObject({
       kind: "voucher",
       currency: "USD",
-      amount: 10,
+      // Stored voucher.amount is partySettlement (cash+discount); cash = amount−discount.
+      amount: 11,
       discount: 1,
       exchangeRate: 1200,
       crossCurrency: true,
       appliedToInvoiceNumber: "ENT-DOC-1",
     });
-    expect(stmt.totalsByCurrency?.SYP?.finalBalance).toBe(1_000_000 - 12_000);
+    expect(stmt.totalsByCurrency?.SYP?.finalBalance).toBe(1_000_000 - 13_200);
+
+    // Cashbox moved by cash only (10), never 10−1=9.
+    const [cashLeg] = await db
+      .select()
+      .from(ledgerEntries)
+      .where(
+        and(
+          eq(ledgerEntries.tenantId, tenantId),
+          eq(ledgerEntries.referenceId, payment.id),
+          eq(ledgerEntries.type, "cash"),
+        ),
+      );
+    expect(Number(cashLeg.credit)).toBe(10);
+    expect(cashLeg.currency).toBe("USD");
   });
 });

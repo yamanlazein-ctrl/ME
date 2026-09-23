@@ -6,14 +6,14 @@ import { test } from "node:test";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
-test("DFP-025 BUILD-WINDOWS.md documents msi+nsis and ar-SA wix language", () => {
+test("DFP-025 the installer is a per-user NSIS setup (no MSI, no UAC) and BUILD-WINDOWS.md says so", () => {
   const conf = JSON.parse(readFileSync(resolve(root, "src-tauri/tauri.conf.json"), "utf8"));
   const doc = readFileSync(resolve(root, "BUILD-WINDOWS.md"), "utf8");
 
-  assert.deepEqual(conf.bundle.targets, ["msi", "nsis"]);
-  assert.deepEqual(conf.bundle.windows.wix.language, ["ar-SA"]);
-  assert.match(doc, /"targets":\s*\["msi",\s*"nsis"\]/);
-  assert.match(doc, /nsis\/\*\.exe/);
-  assert.match(doc, /ar-SA/);
-  assert.doesNotMatch(doc, /targets": \["msi"\] فقط/);
+  // MSI registers/rollback-protects every file separately; NSIS is the fast, per-user installer.
+  assert.deepEqual(conf.bundle.targets, ["nsis"]);
+  assert.equal(conf.bundle.windows.nsis.installMode, "currentUser");
+  assert.equal(conf.bundle.windows.wix, undefined);
+  assert.match(doc, /nsis/i);
+  assert.match(doc, /currentUser|per-user|بدون صلاحيات/);
 });

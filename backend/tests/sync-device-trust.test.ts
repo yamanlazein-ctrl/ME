@@ -29,6 +29,15 @@ import type { SyncMaterializeRepos } from "../src/application/use-cases/sync/syn
 import type { TenantContext } from "../src/domain/types/index.js";
 import { runWithTenantContext } from "../src/infrastructure/orm/tenant-context.js";
 
+// `recordSyncConflict` is a fail-closed REAL database write (Phase 2 / DFP-019). These tests assert the
+// refuse-vs-apply DECISION with in-memory repos, so the write is replaced by a spy; its real
+// behaviour (including NULL base/server versions) is covered in sync-conflict-record.test.ts.
+const recordSyncConflict = vi.hoisted(() => vi.fn().mockResolvedValue(true));
+vi.mock("../src/application/use-cases/sync/syncConflicts.js", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../src/application/use-cases/sync/syncConflicts.js")>()),
+  recordSyncConflict,
+}));
+
 const TENANT = "11111111-1111-4111-8111-111111111111";
 const USER_A = "22222222-2222-4222-8222-222222222222";
 const USER_B = "33333333-3333-4333-8333-333333333333";

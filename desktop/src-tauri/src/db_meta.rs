@@ -91,26 +91,10 @@ pub fn bundled_pg_major(resources_root: &Path) -> io::Result<u16> {
     ))
 }
 
-/// Last `idx` in Drizzle `_journal.json`. Missing journal → 0 (migrate will no-op / fail later).
-pub fn bundled_schema_journal_idx(backend_dir: &Path) -> i32 {
-    let candidates = [
-        backend_dir
-            .join("src")
-            .join("infrastructure")
-            .join("orm")
-            .join("migrations")
-            .join("meta")
-            .join("_journal.json"),
-        backend_dir
-            .join("dist")
-            .join("backend")
-            .join("src")
-            .join("infrastructure")
-            .join("orm")
-            .join("migrations")
-            .join("meta")
-            .join("_journal.json"),
-    ];
+/// Last `idx` in Drizzle `_journal.json` inside the bundled `migrations/` dir.
+/// Missing journal → 0 (migrate will no-op / fail later).
+pub fn bundled_schema_journal_idx(migrations_dir: &Path) -> i32 {
+    let candidates = [migrations_dir.join("meta").join("_journal.json")];
     for path in candidates {
         if let Ok(raw) = fs::read_to_string(&path) {
             if let Ok(v) = serde_json::from_str::<serde_json::Value>(&raw) {

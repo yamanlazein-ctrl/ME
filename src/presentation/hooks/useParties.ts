@@ -3,6 +3,7 @@ import { useSyncExternalStore } from "react";
 import { toast } from "sonner";
 import { container } from "@/infrastructure/container";
 import { buildTenantContext } from "@/infrastructure/di/auth-context";
+import { isOk } from "@/core/result";
 import { getAccessToken } from "@/infrastructure/auth/TokenProvider";
 import { PartyFilter } from "@/core/dtos/PartyDTO";
 import type { Party, PartyKind } from "@/domain/entities/Party";
@@ -133,10 +134,17 @@ export function useParty(id: string, kind: "customer" | "supplier" = "customer")
 export function useCreateParty() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (input: CreatePartyInput) => container.parties.create.execute(input, ctx),
+    mutationFn: async (input: CreatePartyInput) => {
+      const res = await container.parties.create.execute(input, ctx);
+      if (!isOk(res)) throw res.error;
+      return res.value;
+    },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: KEYS.root });
       invalidateFinancialViews(qc, { refetchDashboard: true });
+    },
+    onError: (e: Error) => {
+      toast.error(`فشل إنشاء الطرف: ${e.message}`);
     },
   });
 }
@@ -276,6 +284,7 @@ export async function updateCustomer(id: string, patch: Record<string, unknown>)
     toast.info("تم تحديث العميل");
   } catch (e) {
     toast.error(`فشل تحديث العميل: ${e instanceof Error ? e.message : "خطأ غير معروف"}`);
+    throw e;
   }
 }
 
@@ -294,6 +303,7 @@ export async function updateSupplier(id: string, patch: Record<string, unknown>)
     toast.info("تم تحديث المورد");
   } catch (e) {
     toast.error(`فشل تحديث المورد: ${e instanceof Error ? e.message : "خطأ غير معروف"}`);
+    throw e;
   }
 }
 

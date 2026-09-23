@@ -41,6 +41,7 @@ import { Route as SettingsCompanyRouteImport } from './routes/settings.company'
 import { Route as SettingsInvoiceRouteImport } from './routes/settings.invoice'
 import { Route as SettingsPaymentMethodsRouteImport } from './routes/settings.payment-methods'
 import { Route as SettingsPrintingRouteImport } from './routes/settings.printing'
+import { Route as SettingsSyncRouteImport } from './routes/settings.sync'
 import { Route as SettingsUnitsRouteImport } from './routes/settings.units'
 import { Route as SettingsUsersRouteImport } from './routes/settings.users'
 import { Route as SettingsWarehousesRouteImport } from './routes/settings.warehouses'
@@ -214,6 +215,11 @@ const SettingsPrintingRoute = SettingsPrintingRouteImport.update({
   path: '/printing',
   getParentRoute: () => SettingsRoute,
 } as any)
+const SettingsSyncRoute = SettingsSyncRouteImport.update({
+  id: '/sync',
+  path: '/sync',
+  getParentRoute: () => SettingsRoute,
+} as any)
 const SettingsUnitsRoute = SettingsUnitsRouteImport.update({
   id: '/units',
   path: '/units',
@@ -299,6 +305,7 @@ export interface FileRoutesByFullPath {
   '/settings/invoice': typeof SettingsInvoiceRoute
   '/settings/payment-methods': typeof SettingsPaymentMethodsRoute
   '/settings/printing': typeof SettingsPrintingRoute
+  '/settings/sync': typeof SettingsSyncRoute
   '/settings/units': typeof SettingsUnitsRoute
   '/settings/users': typeof SettingsUsersRoute
   '/settings/warehouses': typeof SettingsWarehousesRoute
@@ -343,6 +350,7 @@ export interface FileRoutesByTo {
   '/settings/invoice': typeof SettingsInvoiceRoute
   '/settings/payment-methods': typeof SettingsPaymentMethodsRoute
   '/settings/printing': typeof SettingsPrintingRoute
+  '/settings/sync': typeof SettingsSyncRoute
   '/settings/units': typeof SettingsUnitsRoute
   '/settings/users': typeof SettingsUsersRoute
   '/settings/warehouses': typeof SettingsWarehousesRoute
@@ -390,6 +398,7 @@ export interface FileRoutesById {
   '/settings/invoice': typeof SettingsInvoiceRoute
   '/settings/payment-methods': typeof SettingsPaymentMethodsRoute
   '/settings/printing': typeof SettingsPrintingRoute
+  '/settings/sync': typeof SettingsSyncRoute
   '/settings/units': typeof SettingsUnitsRoute
   '/settings/users': typeof SettingsUsersRoute
   '/settings/warehouses': typeof SettingsWarehousesRoute
@@ -438,6 +447,7 @@ export interface FileRouteTypes {
     | '/settings/invoice'
     | '/settings/payment-methods'
     | '/settings/printing'
+    | '/settings/sync'
     | '/settings/units'
     | '/settings/users'
     | '/settings/warehouses'
@@ -482,6 +492,7 @@ export interface FileRouteTypes {
     | '/settings/invoice'
     | '/settings/payment-methods'
     | '/settings/printing'
+    | '/settings/sync'
     | '/settings/units'
     | '/settings/users'
     | '/settings/warehouses'
@@ -528,6 +539,7 @@ export interface FileRouteTypes {
     | '/settings/invoice'
     | '/settings/payment-methods'
     | '/settings/printing'
+    | '/settings/sync'
     | '/settings/units'
     | '/settings/users'
     | '/settings/warehouses'
@@ -812,6 +824,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SettingsPrintingRouteImport
       parentRoute: typeof SettingsRoute
     }
+    '/settings/sync': {
+      id: '/settings/sync'
+      path: '/sync'
+      fullPath: '/settings/sync'
+      preLoaderRoute: typeof SettingsSyncRouteImport
+      parentRoute: typeof SettingsRoute
+    }
     '/settings/units': {
       id: '/settings/units'
       path: '/units'
@@ -919,6 +938,7 @@ interface SettingsRouteChildren {
   SettingsInvoiceRoute: typeof SettingsInvoiceRoute
   SettingsPaymentMethodsRoute: typeof SettingsPaymentMethodsRoute
   SettingsPrintingRoute: typeof SettingsPrintingRoute
+  SettingsSyncRoute: typeof SettingsSyncRoute
   SettingsUnitsRoute: typeof SettingsUnitsRoute
   SettingsUsersRoute: typeof SettingsUsersRoute
   SettingsWarehousesRoute: typeof SettingsWarehousesRoute
@@ -932,6 +952,7 @@ const SettingsRouteChildren: SettingsRouteChildren = {
   SettingsInvoiceRoute: SettingsInvoiceRoute,
   SettingsPaymentMethodsRoute: SettingsPaymentMethodsRoute,
   SettingsPrintingRoute: SettingsPrintingRoute,
+  SettingsSyncRoute: SettingsSyncRoute,
   SettingsUnitsRoute: SettingsUnitsRoute,
   SettingsUsersRoute: SettingsUsersRoute,
   SettingsWarehousesRoute: SettingsWarehousesRoute,

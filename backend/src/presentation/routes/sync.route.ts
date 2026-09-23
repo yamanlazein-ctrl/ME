@@ -6,14 +6,22 @@ import * as syncUc from "../../application/use-cases/sync/syncUseCases.js";
 import * as syncConflicts from "../../application/use-cases/sync/syncConflicts.js";
 import * as numberBlocksUc from "../../application/use-cases/sync/numberBlockUseCases.js";
 import { logger } from "../../infrastructure/config/logger.js";
-import { config } from "../../infrastructure/config/env.js";
 import { BusinessRuleError } from "../../domain/errors/index.js";
 import {
+  connectHub,
+  disconnectHub,
   getCentralSyncUrl,
+  getHubSessionInfo,
+  isHubReachableCached,
+  listHubActivity,
   pairHubSession,
   probeHubReachable,
+  pullHubActivity,
+  recordHubActivity,
   setRuntimeCentralSyncUrl,
+  testHubConnection,
 } from "../../application/use-cases/sync/hubConfig.js";
+import { describeHubActivity, describePulledUnit } from "../../application/use-cases/sync/syncActivity.js";
 import { revokeSubjectSessions } from "../../infrastructure/auth/sessionCutoff.js";
 
 const HubConfigSchema = z.object({
@@ -27,6 +35,24 @@ const HubPairSchema = z.object({
   userId: z.string().uuid().optional(),
   pin: z.string().min(4).max(12).optional(),
   tenantId: z.string().uuid().optional(),
+});
+
+const HubTestSchema = z.object({
+  url: z.string().url().optional(),
+});
+
+const HubConnectSchema = z.object({
+  url: z.string().url(),
+  email: z.string().email(),
+  password: z.string().min(1),
+});
+
+const HubActivitySchema = z.object({
+  kind: z.literal("login"),
+  userName: z.string().min(1).max(120),
+  userRole: z.string().max(20).nullable().optional(),
+  deviceLabel: z.string().max(120).nullable().optional(),
+  sourceDeviceId: z.string().uuid().nullable().optional(),
 });
 
 const PushUnitSchema = z.object({
@@ -121,63 +147,6 @@ export type SyncDeviceGates = {
   orchestration: RequestHandler;
 };
 
-function isLoopbackOrLan(ip: string | undefined): boolean {
-  if (!ip) return false;
-  const host = ip.replace(/^::ffff:/, "").split(":")[0];
-  if (host === "127.0.0.1" || host === "localhost" || host === "::1") return true;
-  if (host.startsWith("10.") || host.startsWith("192.168.") || host.startsWith("169.254.")) {
-    return true;
-  }
-  return /^172\.(1[6-9]|2\d|3[01])\./.test(host);
-}
-
-/** Login-screen pairing: desktop SKU on loopback, no JWT (UI stays on local API). */
-export function registerDesktopHubRoutes(router: Router): void {
-  const desktopOnly = (req: Request, res: Response, next: () => void) => {
-    if (!config.DESKTOP_DEPLOY) {
-      res.status(404).json({ code: "NOT_FOUND", message: "غير متاح" });
-      return;
-    }
-    if (!isLoopbackOrLan(req.ip ?? req.socket.remoteAddress)) {
-      res.status(403).json({ code: "FORBIDDEN", message: "ضبط المركز متاح من الجهاز المحلي فقط" });
-      return;
-    }
-    next();
-  };
-
-  router.get("/api/sync/desktop-hub", desktopOnly, async (_req: Request, res: Response) => {
-    const url = getCentralSyncUrl();
-    res.json({ url, hubReachable: url ? await probeHubReachable() : null });
-  });
-
-  router.put(
-    "/api/sync/desktop-hub",
-    desktopOnly,
-    validateBody(HubConfigSchema),
-    async (req: Request, res: Response) => {
-      const body = (req as unknown as { validatedBody: z.infer<typeof HubConfigSchema> })
-        .validatedBody;
-      const url = setRuntimeCentralSyncUrl(body.url);
-      res.json({ url, hubReachable: url ? await probeHubReachable(true) : null });
-    },
-  );
-
-  router.post(
-    "/api/sync/desktop-hub-pair",
-    desktopOnly,
-    validateBody(HubPairSchema),
-    async (req: Request, res: Response) => {
-      const body = (req as unknown as { validatedBody: z.infer<typeof HubPairSchema> }).validatedBody;
-      const result = await pairHubSession(body);
-      if (!result.ok) {
-        res.status(422).json({ code: "HUB_PAIR_FAILED", message: result.error });
-        return;
-      }
-      res.json({ url: result.url, paired: true });
-    },
-  );
-}
-
 export function registerSyncRoutes(
   router: Router,
   container: Container,
@@ -194,7 +163,7 @@ export function registerSyncRoutes(
   router.put(
     "/sync/hub-config",
     auth,
-    guards.transportGuard,
+    guards.operatorGuard,
     validateBody(HubConfigSchema),
     async (req: Request, res: Response) => {
       const body = (req as unknown as { validatedBody: z.infer<typeof HubConfigSchema> })
@@ -207,7 +176,7 @@ export function registerSyncRoutes(
   router.post(
     "/sync/hub-pair",
     auth,
-    guards.transportGuard,
+    guards.operatorGuard,
     validateBody(HubPairSchema),
     async (req: Request, res: Response) => {
       const body = (req as unknown as { validatedBody: z.infer<typeof HubPairSchema> }).validatedBody;
@@ -223,6 +192,120 @@ export function registerSyncRoutes(
       res.json({ url: result.url, paired: true });
     },
   );
+
+  // ── Settings → «المزامنة السحابية» — admin only ────────────────────────────
+  // The pre-auth pairing surface on the login screen is gone: pairing decides
+  // where every document of this device is sent, so it needs an admin session.
+
+  router.get("/sync/hub", auth, guards.operatorGuard, async (req: Request, res: Response) => {
+    const ctx = req.tenantContext!;
+    const url = getCentralSyncUrl();
+    const reachable = url ? await probeHubReachable() : null;
+    const status = await syncUc.getSyncStatus(container.syncOutboxRepo, ctx.tenantId);
+    res.json({
+      url,
+      reachable,
+      session: getHubSessionInfo(),
+      pendingCount: status.pendingCount,
+      statusCounts: status.statusCounts,
+      lastPullAt: status.lastPullAt,
+      localDeviceId: ctx.syncDeviceId ?? null,
+    });
+  });
+
+  router.post(
+    "/sync/hub/test",
+    auth,
+    guards.operatorGuard,
+    validateBody(HubTestSchema),
+    async (req: Request, res: Response) => {
+      const body = (req as unknown as { validatedBody: z.infer<typeof HubTestSchema> }).validatedBody;
+      const url = body.url ?? getCentralSyncUrl();
+      if (!url) {
+        res.status(422).json({ code: "HUB_NOT_CONFIGURED", message: "لم يُحدَّد رابط المركز" });
+        return;
+      }
+      res.json(await testHubConnection(url));
+    },
+  );
+
+  router.post(
+    "/sync/hub/connect",
+    auth,
+    guards.operatorGuard,
+    validateBody(HubConnectSchema),
+    async (req: Request, res: Response) => {
+      const ctx = req.tenantContext!;
+      const body = (req as unknown as { validatedBody: z.infer<typeof HubConnectSchema> })
+        .validatedBody;
+      const localDevice = ctx.syncDeviceId
+        ? await container.syncDeviceRepo.findById(ctx.tenantId, ctx.syncDeviceId).catch(() => null)
+        : null;
+      const result = await connectHub({
+        url: body.url,
+        email: body.email,
+        password: body.password,
+        device: localDevice
+          ? {
+              id: localDevice.id,
+              fingerprint: localDevice.deviceFingerprint,
+              fingerprintVersion: localDevice.deviceFingerprintVersion,
+              platform: localDevice.platform,
+              hostname: localDevice.hostname,
+              label: localDevice.label,
+            }
+          : null,
+      });
+      if (!result.ok) {
+        res
+          .status(422)
+          .json({ code: "HUB_CONNECT_FAILED", stage: result.stage, message: result.error });
+        return;
+      }
+      // A different hub (or hub tenant) has its own received_seq sequence.
+      if (result.hubChanged) await syncUc.resetPullCursor(ctx.tenantId);
+      res.json({
+        url: result.info.hubUrl,
+        session: result.info,
+        cursorReset: result.hubChanged,
+        deviceWarning: result.deviceWarning,
+      });
+    },
+  );
+
+  router.delete("/sync/hub", auth, guards.operatorGuard, async (_req: Request, res: Response) => {
+    disconnectHub();
+    res.json({ url: null, session: null });
+  });
+
+  // Hub side of the presence feed: a paired device reports «user X logged in»,
+  // peers read it during /sync/run. Ephemeral (in-memory) by design.
+  router.post(
+    "/sync/activity",
+    auth,
+    guards.readGuard,
+    validateBody(HubActivitySchema),
+    async (req: Request, res: Response) => {
+      const ctx = req.tenantContext!;
+      const body = (req as unknown as { validatedBody: z.infer<typeof HubActivitySchema> })
+        .validatedBody;
+      const row = recordHubActivity(ctx.tenantId, {
+        kind: body.kind,
+        userName: body.userName,
+        userRole: body.userRole ?? null,
+        deviceLabel: body.deviceLabel ?? null,
+        sourceDeviceId: body.sourceDeviceId ?? null,
+      });
+      res.status(201).json(row);
+    },
+  );
+
+  router.get("/sync/activity", auth, guards.readGuard, async (req: Request, res: Response) => {
+    const ctx = req.tenantContext!;
+    const raw = typeof req.query.afterSeq === "string" ? Number(req.query.afterSeq) : NaN;
+    const afterSeq = Number.isFinite(raw) && raw >= 0 ? raw : null;
+    res.json({ items: listHubActivity(ctx.tenantId, afterSeq) });
+  });
 
   router.get("/sync/status", auth, guards.readGuard, async (req: Request, res: Response) => {
     const ctx = req.tenantContext!;
@@ -515,6 +598,11 @@ export function registerSyncRoutes(
         // Local inbox: mirrors pulled units so their retries are bounded and a
         // permanently-failing unit cannot hold the cursor forever.
         container.syncInboxRepo,
+        // Activity notifications for work done on other devices.
+        async (unit) => {
+          const n = describePulledUnit(unit);
+          if (n) await container.notificationRepo.create(n, ctx);
+        },
       );
     } catch (err) {
       pullError = err instanceof Error ? err.message : "pull failed";
@@ -544,7 +632,21 @@ export function registerSyncRoutes(
     // device must be able to say WHY it stopped (unknown / revoked / not bound)
     // and that its unsynced documents are still intact.
     const deviceTrust = push.deviceTrust ?? pull.deviceTrust ?? null;
-    res.json({ ...push, deviceTrust, pull, pullError, blocksError });
+
+    // Presence (another user logged in on another device), best-effort.
+    let activity = 0;
+    if (getCentralSyncUrl() && isHubReachableCached() !== false) {
+      try {
+        const events = await pullHubActivity(getHubSessionInfo()?.hubDeviceId ?? null);
+        for (const e of events) {
+          await container.notificationRepo.create(describeHubActivity(e), ctx);
+          activity += 1;
+        }
+      } catch (err) {
+        logger.debug({ err }, "hub activity pull failed");
+      }
+    }
+    res.json({ ...push, deviceTrust, pull, pullError, blocksError, activity });
   });
 
   /**

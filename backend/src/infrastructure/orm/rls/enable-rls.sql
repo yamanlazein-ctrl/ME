@@ -46,7 +46,7 @@ DO $$
 DECLARE
   t text;
   tables text[] := ARRAY[
-    'attachments','audit_logs','cashbox_sessions','colors','company_profiles',
+    'attachments','audit_logs','cashbox_daily_balances','cashbox_sessions','colors','company_profiles',
     'day_closes','document_sequences','expenses',
     'fabrics','idempotency_keys','invoice_lines','invoices',
     'ledger_entries','ledger_entry_archive',

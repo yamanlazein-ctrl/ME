@@ -26,9 +26,9 @@ function FabricTooltip({ active, payload }: FabricTooltipProps) {
       <div className="mt-1 flex items-center gap-2">
         <span className="h-2 w-2 rounded-full" style={{ background: "var(--primary)" }} />
         <span className="text-sm font-bold tabular-nums text-foreground">
-          {formatNumber(p.salesK)}K
+          {formatNumber(p.salesK)}
         </span>
-        <span className="text-[11px] text-muted-foreground">ل.س</span>
+        <span className="text-[11px] text-muted-foreground">$</span>
       </div>
     </div>
   );
@@ -73,7 +73,7 @@ export function TopFabricsChart() {
         </span>
         <div>
           <h3 className="text-sm font-bold text-foreground">الأكثر مبيعاً</h3>
-          <p className="mt-0.5 text-[11px] text-muted-foreground">القيم بآلاف الليرات السورية</p>
+          <p className="mt-0.5 text-[11px] text-muted-foreground">الإيراد بالدولار الأمريكي ($)</p>
         </div>
       </div>
 

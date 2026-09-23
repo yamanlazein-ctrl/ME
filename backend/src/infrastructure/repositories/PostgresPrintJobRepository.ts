@@ -176,11 +176,26 @@ export class PostgresPrintJobRepository implements IPrintJobRepository {
             `كمية الإرسال (${input.quantityKg} كغ) تتجاوز المخزون المتاح (${Number(srcLock.remainingKg)} كغ)`,
           );
         }
+        const piecesToDeduct = Number(input.pieces ?? 0);
+        const currentPieces = Number(srcLock.remainingPieces ?? 0);
+        if (piecesToDeduct < 0 || !Number.isFinite(piecesToDeduct)) {
+          throw new Error("عدد الأثواب يجب أن يكون عدداً صحيحاً غير سالب");
+        }
+        if (piecesToDeduct > currentPieces) {
+          throw new Error(
+            `عدد الأثواب المرسلة (${piecesToDeduct}) يتجاوز المتاح (${currentPieces} أثواب)`,
+          );
+        }
+        if (currentPieces > 0 && piecesToDeduct <= 0) {
+          throw new Error("أدخل عدد الأثواب مع الوزن — يجب أن تتحرك الكميتان معاً");
+        }
         const newSrcKg = Number(srcLock.remainingKg) - input.quantityKg;
+        const newSrcPieces = currentPieces - piecesToDeduct;
         await tx
           .update(rolls)
           .set({
             remainingKg: String(newSrcKg),
+            remainingPieces: newSrcPieces,
             status: sql`CASE WHEN ${String(newSrcKg)} <= '0' THEN 'exhausted' ELSE ${rolls.status} END`,
             version: sql`${rolls.version} + 1`,
             updatedAt: new Date(),

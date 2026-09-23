@@ -50,6 +50,11 @@ export interface InvoiceData {
    * Initially set at creation time (sale = receipt, entry = supplier payment).
    */
   paid?: number;
+  /**
+   * Sale: part of `paid` settled from the customer's credit balance (advance
+   * payments). Sent on create; echoed back by the server.
+   */
+  creditApplied?: number;
   /** Receipt method used when `paid > 0`. Defaults to "cash". */
   paymentMethod?: "cash" | "transfer" | "check" | "card";
   /** Order being fulfilled by this invoice (sale only) — allows its reserved rolls. */
@@ -81,6 +86,7 @@ export class Invoice implements InvoiceData {
   readonly shipping?: number;
   notes?: string;
   readonly paid?: number;
+  readonly creditApplied?: number;
   readonly paymentMethod?: "cash" | "transfer" | "check" | "card";
   readonly orderId?: string;
   readonly createdAt: Timestamp;
@@ -107,6 +113,7 @@ export class Invoice implements InvoiceData {
     this.shipping = data.shipping;
     this.notes = data.notes;
     this.paid = data.paid;
+    this.creditApplied = data.creditApplied;
     this.paymentMethod = data.paymentMethod;
     this.orderId = data.orderId;
     this.createdAt = data.createdAt;

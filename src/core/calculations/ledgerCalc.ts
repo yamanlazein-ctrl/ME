@@ -44,7 +44,7 @@ export const LEDGER_TYPE_LABEL: Record<string, string> = {
   expense: "مصروف",
   printing_charge: "أجور طباعة",
   adjustment: "تسوية يدوية",
-  settlement: "تسوية حساب",
+  settlement: "دفعة على الحساب",
 };
 
 export type FabricHistoryRow = {
@@ -370,6 +370,31 @@ export function buildPartyStatsByCurrency(
     cur.remaining = cur.totalAmount - cur.totalPaid - returnsCredit;
     cur.avgInvoice = cur.invoicesCount ? round2dp(cur.totalAmount / cur.invoicesCount) : 0;
     cur.totalKg = Math.round(cur.totalKg);
+  }
+  return out;
+}
+
+/** Statement-identical remaining: customer debit−credit, supplier credit−debit. */
+export function ledgerRemainingByCurrency(
+  entries: Array<{
+    status?: string;
+    partyId?: string | null;
+    debit?: number;
+    credit?: number;
+    currency?: string;
+  }>,
+  partyId: string,
+  kind: PartyKind,
+): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const e of entries) {
+    if (e.status && e.status !== "active") continue;
+    if (e.partyId && e.partyId !== partyId) continue;
+    const ccy = e.currency ?? "SYP";
+    out[ccy] = round2dp((out[ccy] ?? 0) + (Number(e.debit ?? 0) - Number(e.credit ?? 0)));
+  }
+  if (kind === "supplier") {
+    for (const ccy of Object.keys(out)) out[ccy] = round2dp(-out[ccy]);
   }
   return out;
 }

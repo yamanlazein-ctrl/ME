@@ -15,17 +15,30 @@ export function isTauri(): boolean {
   return "__TAURI_INTERNALS__" in window || "__TAURI__" in window;
 }
 
+type TauriGlobals = {
+  __TAURI_INTERNALS__?: { invoke?: TauriInvoke };
+  __TAURI__?: { core?: { invoke?: TauriInvoke } };
+};
+
+/**
+ * The IPC function Tauri injects into every webview it controls.
+ *
+ * NEVER `import("@tauri-apps/api/core")` at runtime: the desktop window loads this app from the
+ * embedded SSR server as a plain web page, so a bare package specifier has nothing to resolve it
+ * (no bundler, no import map) and throws "Failed to resolve module specifier" — which silently
+ * broke activation, hub linking, factory reset, archiving and updates in the shipped app.
+ */
 async function getInvoke(): Promise<TauriInvoke> {
   if (_invoke) return _invoke;
-  if (isTauri()) {
-    // Dynamic import — only in Tauri desktop context
-    const mod = (await Function('return import("@tauri-apps/api/core")')()) as {
-      invoke: TauriInvoke;
-    };
-    _invoke = mod.invoke;
-    return _invoke;
+  if (!isTauri()) throw new Error("Not running in Tauri desktop");
+  const w = window as unknown as TauriGlobals;
+  const internals = w.__TAURI_INTERNALS__;
+  const fn = internals?.invoke ?? w.__TAURI__?.core?.invoke;
+  if (typeof fn !== "function") {
+    throw new Error("قناة Tauri IPC غير متاحة في هذه النافذة");
   }
-  throw new Error("Not running in Tauri desktop");
+  _invoke = (cmd, args) => fn.call(internals ?? w.__TAURI__?.core, cmd, args);
+  return _invoke;
 }
 
 export interface DesktopFingerprint {
@@ -103,19 +116,24 @@ export async function validateDesktopLicense(
   }) as Promise<DesktopLicenseStatus>;
 }
 
-/** Document types for Desktop/أقمشة ومنسوجات archive (Issue 12). */
-export type ArchiveDocType = "sale" | "entry" | "print_send" | "print_receive";
+/** Document types for the Desktop/<company> archive (Issue 12). */
+export type ArchiveDocType = "sale" | "entry" | "print_send" | "print_receive" | "statement";
 
 export interface ArchiveDocumentResult {
   path: string;
   format: string;
 }
 
-/** Create Desktop archive folders (idempotent). No-op outside Tauri. */
-export async function ensureDocumentFolders(): Promise<string | null> {
+/**
+ * Create Desktop archive folders (idempotent). No-op outside Tauri.
+ * `companyName` names the root folder (`Desktop/<companyName>/...`); when
+ * omitted/empty the Rust side falls back to a fixed brand name so this never
+ * fails just because settings haven't loaded yet.
+ */
+export async function ensureDocumentFolders(companyName?: string): Promise<string | null> {
   if (!isTauri()) return null;
   const invoke = await getInvoke();
-  return (await invoke("ensure_document_folders")) as string;
+  return (await invoke("ensure_document_folders", { companyName })) as string;
 }
 
 export async function getHubUrl(): Promise<string> {
@@ -143,6 +161,7 @@ export async function archiveDocumentPdf(
   docType: ArchiveDocType,
   fileStem: string,
   html: string,
+  companyName?: string,
 ): Promise<ArchiveDocumentResult | null> {
   if (!isTauri()) return null;
   const invoke = await getInvoke();
@@ -150,6 +169,7 @@ export async function archiveDocumentPdf(
     docType,
     fileStem,
     html,
+    companyName,
   })) as ArchiveDocumentResult;
 }
 

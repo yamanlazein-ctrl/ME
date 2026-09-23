@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-set-hub-url"
+description = "Enables the set_hub_url command without any pre-configured scope."
+commands.allow = ["set_hub_url"]
+
+[[permission]]
+identifier = "deny-set-hub-url"
+description = "Denies the set_hub_url command without any pre-configured scope."
+commands.deny = ["set_hub_url"]

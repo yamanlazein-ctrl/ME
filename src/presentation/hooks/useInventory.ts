@@ -9,6 +9,7 @@ import { Fabric, type FabricData } from "@/domain/entities/Fabric";
 import { Color, type ColorData } from "@/domain/entities/Color";
 import { Roll, type RollData } from "@/domain/entities/Roll";
 import { UUID, type TenantContext } from "@/domain/types";
+import { isOk } from "@/core/result";
 import type { Currency } from "@/domain/types";
 import { formatNumber, formatMoney, formatQuantity } from "@/shared/utils/formatNumber";
 import { colorOnFabric, filterColorsByQuery } from "@/domain/inventory/colorLookup";
@@ -143,12 +144,12 @@ export function useRolls(filter: InventoryFilter = {}) {
 export function useCreateFabric() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (
+    mutationFn: async (
       input: Omit<FabricData, "id" | "createdAt" | "tenantId" | "createdBy"> & {
         fabricId?: string;
       },
     ) => {
-      return container.inventory.createFabric.execute(
+      const res = await container.inventory.createFabric.execute(
         {
           ...input,
           tenantId: ctx.tenantId,
@@ -157,20 +158,25 @@ export function useCreateFabric() {
         } as FabricData,
         ctx,
       );
+      if (!isOk(res)) throw res.error;
+      return res.value;
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: KEYS.fabrics() }),
+    onError: (e: Error) => {
+      toast.error(`فشل إنشاء القماش: ${e.message}`);
+    },
   });
 }
 
 export function useCreateRoll() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (
+    mutationFn: async (
       input: Omit<RollData, "id" | "remainingKg" | "version" | "createdAt" | "tenantId"> & {
         remainingKg?: number;
       },
-    ) =>
-      container.inventory.createRoll.execute(
+    ) => {
+      const res = await container.inventory.createRoll.execute(
         {
           ...input,
           tenantId: ctx.tenantId,
@@ -179,8 +185,14 @@ export function useCreateRoll() {
           createdAt: new Date().toISOString(),
         } as RollData,
         ctx,
-      ),
+      );
+      if (!isOk(res)) throw res.error;
+      return res.value;
+    },
     onSuccess: () => qc.invalidateQueries({ queryKey: KEYS.rolls() }),
+    onError: (e: Error) => {
+      toast.error(`فشل إنشاء اللفافة: ${e.message}`);
+    },
   });
 }
 

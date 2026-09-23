@@ -40,8 +40,11 @@ export interface BackendDashboardResponse {
     count: number;
     byCurrency: Record<string, { count: number; totalDue: number }>;
   };
-  // Fix H-7: per-day byCurrency breakdown instead of one blended value.
-  salesTrend: Record<string, Array<{ label: string; byCurrency: Record<string, number> }>>;
+  // Charts use valueUsd (frozen base). byCurrency keeps native amounts.
+  salesTrend: Record<
+    string,
+    Array<{ label: string; valueUsd?: number; byCurrency: Record<string, number> }>
+  >;
   alerts: Array<{
     category: "inventory" | "financial";
     level: "low" | "out" | "overdue";
@@ -52,12 +55,12 @@ export interface BackendDashboardResponse {
     remaining?: string;
   }>;
   topCustomers: Array<{ partyId: string; name: string; revenue: number }>;
-  // Fix H-7: revenueByCurrency instead of one number that summed every
-  // currency's revenue for that fabric.
+  // revenueUsd ranks in base currency; revenueByCurrency keeps natives.
   topFabrics: Array<{
     fabricId: string;
     name: string;
     kgSold: number;
+    revenueUsd?: number;
     revenueByCurrency: Record<string, number>;
   }>;
   cashbox: {

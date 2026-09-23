@@ -275,8 +275,7 @@ function PrintReceivePage() {
           newSalePricePerKg: l.newSalePrice === "" ? undefined : Number(l.newSalePrice),
           notes,
         });
-        if (!recRes.ok) throw new Error(recRes.error?.message ?? "فشل الحفظ");
-        created.push(recRes.value);
+        created.push(recRes);
       }
 
       const numbers = created.map((j) => j.number).join("، ");

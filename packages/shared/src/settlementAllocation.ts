@@ -7,7 +7,7 @@
  * FX rates are never consulted here — they stay frozen on the invoice.
  */
 
-import { convertForSettlement, FX_REQUIRED_MESSAGE, isValidFxRate } from "./fx.js";
+import { convertForSettlement, FX_REQUIRED_MESSAGE, isValidFxRate, saneSypRateError } from "./fx.js";
 import { round2dp } from "./precision.js";
 
 export type SettlementInvoiceInput = {
@@ -81,6 +81,14 @@ export function allocateSettlementPayment(opts: {
   const rate = isValidFxRate(opts.exchangeRate) ? opts.exchangeRate : null;
   if (needsRate && rate === null) {
     throw new Error(FX_REQUIRED_MESSAGE);
+  }
+  // Sanity floor: whichever side of this settlement is SYP (the settlement
+  // currency itself, or any invoice being paid), a manually-typed rate under
+  // 1,000 is never real — only a dropped digit. Check every currency this
+  // rate will actually be used against, not just the settlement currency.
+  for (const currency of new Set([opts.settlementCurrency, ...sorted.map((i) => i.currency)])) {
+    const err = saneSypRateError(currency, rate);
+    if (err) throw new Error(err);
   }
 
   const withDue = sorted.map((inv) => {

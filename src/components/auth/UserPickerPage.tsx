@@ -1,16 +1,18 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import logoUrl from "@/assets/logo-motard-icon.png";
 import { persistTokens } from "@/infrastructure/auth/TokenProvider";
-import { DesktopServerSettings } from "@/components/auth/DesktopServerSettings";
 import { getApiBaseUrl } from "@/lib/api-base-url";
 import {
   getInstallTenantId,
   setInstallTenantId,
   getDecryptedActivationId,
   getServerFingerprint,
+  setActivationId as saveActivationId,
+  setLicenseKey as saveLicenseKey,
 } from "@/lib/license-state";
 import { registerCurrentSyncDevice } from "@/lib/sync-device";
 import { useQueryClient } from "@tanstack/react-query";
+import { consumeInvitation, validateInvitation } from "@/lib/invitations";
 
 type RosterUser = {
   id: string;
@@ -21,15 +23,6 @@ type RosterUser = {
 };
 
 export function resolveTenantId(): string {
-  // F08 (Phase 1 audit): the desktop-deploy branch used to check the
-  // build-time VITE_DEFAULT_TENANT_ID BEFORE this device's own recorded
-  // activation. That env var is baked into the installer at build time
-  // (see .env.example) — every copy of the same build shares it. Once a
-  // real tenant activates on a given machine (setInstallTenantId, written
-  // during the actual activation flow), THAT is the tenant this device
-  // belongs to; the baked constant must only be a last-resort fallback for
-  // a machine that has never activated anything, exactly like the web
-  // build already treats it below.
   return (
     getInstallTenantId() ?? (import.meta.env.VITE_DEFAULT_TENANT_ID as string | undefined) ?? ""
   );
@@ -43,6 +36,8 @@ type RosterResponse = {
   message?: string;
   code?: string;
 };
+
+type PanelMode = "login" | "invite" | "recover";
 
 async function fetchRoster(
   base: string,
@@ -97,6 +92,15 @@ export function UserPickerPage() {
   const [confirmPin, setConfirmPin] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
+  const [panel, setPanel] = useState<PanelMode>("login");
+
+  const [invCode, setInvCode] = useState("");
+  const [invPin, setInvPin] = useState("");
+  const [invConfirm, setInvConfirm] = useState("");
+
+  const [recoverySecret, setRecoverySecret] = useState("");
+  const [recoveryPin, setRecoveryPin] = useState("");
+  const [recoveryConfirm, setRecoveryConfirm] = useState("");
 
   const loadRoster = useCallback(async () => {
     setLoading(true);
@@ -120,8 +124,6 @@ export function UserPickerPage() {
         setUsers(Array.isArray(data.users) ? data.users : []);
         return;
       }
-      // Stale local tenant from a half-finished wizard: the live install
-      // is a different completed tenant. Recover from /api/setup/status.
       if (data.status === 503 && data.code === "SETUP_REQUIRED") {
         const recovered = await recoverCompletedTenant(base);
         if (recovered && recovered !== tid) {
@@ -228,31 +230,127 @@ export function UserPickerPage() {
     }
   };
 
+  const submitInvite = async (e: FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    const code = invCode.trim().toUpperCase();
+    if (!code) {
+      setError("أدخل رمز الدعوة");
+      return;
+    }
+    if (!/^\d{4}$/.test(invPin) || invPin !== invConfirm) {
+      setError("الرقم السري يجب أن يكون 4 أرقام ومتطابقاً");
+      return;
+    }
+    setPending(true);
+    try {
+      const v = await validateInvitation(code);
+      if (!v.valid) throw new Error("رمز الدعوة غير صالح أو منتهٍ");
+      const fingerprint = await getServerFingerprint().catch(() => undefined);
+      const result = await consumeInvitation({
+        code,
+        password: v.type === "user" ? invPin : undefined,
+        deviceFingerprint: fingerprint,
+      });
+      await saveLicenseKey(`INVITE:${code}`);
+      await saveActivationId(result.tenantId || v.tenantId || code);
+      if (result.tenantId) setInstallTenantId(result.tenantId);
+      else if (v.tenantId) setInstallTenantId(v.tenantId);
+      setPanel("login");
+      setSelected(null);
+      await loadRoster();
+      setError(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "فشل تفعيل الدعوة");
+    } finally {
+      setPending(false);
+    }
+  };
+
+  const submitRecovery = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!selected) return;
+    setError(null);
+    if (!recoverySecret.trim()) {
+      setError("أدخل كلمة مرور الحساب أو الرمز السابق لإثبات الهوية");
+      return;
+    }
+    if (!/^\d{4}$/.test(recoveryPin) || recoveryPin !== recoveryConfirm) {
+      setError("الرقم السري الجديد يجب أن يكون 4 أرقام ومتطابقاً");
+      return;
+    }
+    setPending(true);
+    try {
+      const base = getApiBaseUrl();
+      const setRes = await fetch(`${base}/api/auth/set-pin`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId: selected.id,
+          pin: recoveryPin,
+          currentSecret: recoverySecret,
+          tenantId: tenantId || undefined,
+        }),
+      });
+      if (!setRes.ok) {
+        const body = (await setRes.json().catch(() => ({}))) as { message?: string };
+        throw new Error(
+          body.message ||
+            "تعذّرت الاستعادة — تحقق من كلمة مرور الحساب. لا تُحذف البيانات عند فشل الاستعادة.",
+        );
+      }
+      const loginRes = await fetch(`${base}/api/auth/pin-login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId: selected.id,
+          pin: recoveryPin,
+          tenantId: tenantId || undefined,
+        }),
+      });
+      const body = (await loginRes.json().catch(() => ({}))) as {
+        accessToken?: string;
+        refreshToken?: string;
+        message?: string;
+      };
+      if (!loginRes.ok || !body.accessToken) {
+        throw new Error(body.message || "تم تغيير الرقم السري لكن فشل الدخول التلقائي");
+      }
+      await finishLogin(body.accessToken, body.refreshToken);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "فشل استعادة الرقم السري");
+    } finally {
+      setPending(false);
+    }
+  };
+
   return (
     <div
       className="min-h-screen w-full bg-background text-foreground flex items-center justify-center px-4"
       dir="rtl"
     >
-      <div className="w-full max-w-md rounded-2xl border border-border bg-card p-8 shadow-2xl">
+      <div className="relative w-full max-w-md rounded-2xl border border-border bg-card p-8 shadow-2xl">
         <div className="flex flex-col items-center text-center">
           <img
             src={logoUrl}
-            alt=""
+            alt="Motard Fabrics"
             className="h-16 w-16 object-contain object-center bg-transparent"
           />
-          <h1 className="mt-4 text-2xl font-bold tracking-tight text-foreground">
-            Motard Fabrics Group
-          </h1>
-          <p className="mt-1 text-xs text-muted-foreground">اختر المستخدم ثم أدخل الرقم السري</p>
+          <h1 className="mt-4 text-2xl font-bold tracking-tight text-foreground">Motard Fabrics</h1>
+          <p className="mt-1 text-xs text-muted-foreground">
+            {panel === "invite"
+              ? "تسجيل جهاز محاسب جديد"
+              : panel === "recover"
+                ? "استعادة الرقم السري"
+                : "اختر المستخدم ثم أدخل الرقم السري"}
+          </p>
         </div>
 
-        <DesktopServerSettings />
-
-        {loading && (
+        {loading && panel === "login" && (
           <p className="mt-8 text-center text-sm text-muted-foreground">جاري تحميل المستخدمين…</p>
         )}
 
-        {loadError && (
+        {loadError && panel === "login" && (
           <div className="mt-6 space-y-3">
             <p className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive">
               {loadError}
@@ -267,7 +365,143 @@ export function UserPickerPage() {
           </div>
         )}
 
-        {!loading && !loadError && !selected && (
+        {panel === "invite" && (
+          <form onSubmit={submitInvite} className="mt-6 space-y-4">
+            <label className="block">
+              <span className="mb-1.5 block text-xs font-medium text-muted-foreground">
+                رمز الدعوة
+              </span>
+              <input
+                dir="ltr"
+                value={invCode}
+                onChange={(e) => setInvCode(e.target.value.toUpperCase())}
+                className="w-full rounded-lg border border-border bg-secondary px-3 py-2.5 text-center tracking-widest outline-none focus:border-primary"
+                placeholder="XXXX-XXXX"
+                autoFocus
+              />
+            </label>
+            <label className="block">
+              <span className="mb-1.5 block text-xs font-medium text-muted-foreground">
+                رقم سري جديد (4 أرقام)
+              </span>
+              <input
+                type="password"
+                inputMode="numeric"
+                maxLength={4}
+                value={invPin}
+                onChange={(e) => setInvPin(e.target.value.replace(/\D/g, "").slice(0, 4))}
+                className="w-full rounded-lg border border-border bg-secondary px-3 py-2.5 text-center text-lg tracking-[0.4em] outline-none focus:border-primary"
+              />
+            </label>
+            <label className="block">
+              <span className="mb-1.5 block text-xs font-medium text-muted-foreground">
+                تأكيد الرقم السري
+              </span>
+              <input
+                type="password"
+                inputMode="numeric"
+                maxLength={4}
+                value={invConfirm}
+                onChange={(e) => setInvConfirm(e.target.value.replace(/\D/g, "").slice(0, 4))}
+                className="w-full rounded-lg border border-border bg-secondary px-3 py-2.5 text-center text-lg tracking-[0.4em] outline-none focus:border-primary"
+              />
+            </label>
+            {error && (
+              <p className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+                {error}
+              </p>
+            )}
+            <button
+              type="submit"
+              disabled={pending}
+              className="w-full rounded-lg bg-primary px-4 py-3 text-sm font-bold text-primary-foreground disabled:opacity-60"
+            >
+              {pending ? "جاري التفعيل…" : "تفعيل والانضمام"}
+            </button>
+            <button
+              type="button"
+              className="w-full text-xs text-muted-foreground underline"
+              onClick={() => {
+                setPanel("login");
+                setError(null);
+              }}
+            >
+              العودة لتسجيل الدخول
+            </button>
+          </form>
+        )}
+
+        {panel === "recover" && selected && (
+          <form onSubmit={submitRecovery} className="mt-6 space-y-4">
+            <p className="text-[11px] leading-relaxed text-muted-foreground">
+              استعادة الوصول لـ <strong>{selected.name}</strong> دون حذف الفواتير أو العملاء أو
+              قاعدة البيانات. أدخل كلمة مرور الحساب (أو الرمز السابق إن وُجد)، ثم عيّن رقماً سرياً
+              جديداً من 4 أرقام.
+            </p>
+            <label className="block">
+              <span className="mb-1.5 block text-xs font-medium text-muted-foreground">
+                كلمة مرور الحساب / السر الحالي
+              </span>
+              <input
+                type="password"
+                value={recoverySecret}
+                onChange={(e) => setRecoverySecret(e.target.value)}
+                className="w-full rounded-lg border border-border bg-secondary px-3 py-2.5 outline-none focus:border-primary"
+                autoFocus
+              />
+            </label>
+            <label className="block">
+              <span className="mb-1.5 block text-xs font-medium text-muted-foreground">
+                رقم سري جديد (4 أرقام)
+              </span>
+              <input
+                type="password"
+                inputMode="numeric"
+                maxLength={4}
+                value={recoveryPin}
+                onChange={(e) => setRecoveryPin(e.target.value.replace(/\D/g, "").slice(0, 4))}
+                className="w-full rounded-lg border border-border bg-secondary px-3 py-2.5 text-center text-lg tracking-[0.4em] outline-none focus:border-primary"
+              />
+            </label>
+            <label className="block">
+              <span className="mb-1.5 block text-xs font-medium text-muted-foreground">
+                تأكيد الرقم السري الجديد
+              </span>
+              <input
+                type="password"
+                inputMode="numeric"
+                maxLength={4}
+                value={recoveryConfirm}
+                onChange={(e) => setRecoveryConfirm(e.target.value.replace(/\D/g, "").slice(0, 4))}
+                className="w-full rounded-lg border border-border bg-secondary px-3 py-2.5 text-center text-lg tracking-[0.4em] outline-none focus:border-primary"
+              />
+            </label>
+            {error && (
+              <p className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+                {error}
+              </p>
+            )}
+            <button
+              type="submit"
+              disabled={pending}
+              className="w-full rounded-lg bg-primary px-4 py-3 text-sm font-bold text-primary-foreground disabled:opacity-60"
+            >
+              {pending ? "جاري الاستعادة…" : "تعيين الرقم السري والدخول"}
+            </button>
+            <button
+              type="button"
+              className="w-full text-xs text-muted-foreground underline"
+              onClick={() => {
+                setPanel("login");
+                setError(null);
+              }}
+            >
+              العودة
+            </button>
+          </form>
+        )}
+
+        {panel === "login" && !loading && !loadError && !selected && (
           <ul className="mt-6 space-y-2">
             {users.length === 0 ? (
               <li className="rounded-lg border border-border px-3 py-4 text-center text-sm text-muted-foreground">
@@ -303,6 +537,18 @@ export function UserPickerPage() {
             <li>
               <button
                 type="button"
+                onClick={() => {
+                  setPanel("invite");
+                  setError(null);
+                }}
+                className="mt-3 w-full rounded-lg border border-dashed border-primary/40 px-3 py-2.5 text-xs font-semibold text-primary"
+              >
+                تسجيل جهاز محاسب جديد عبر كود الدعوة
+              </button>
+            </li>
+            <li>
+              <button
+                type="button"
                 onClick={() => void loadRoster()}
                 className="mt-2 w-full text-xs text-muted-foreground underline"
               >
@@ -312,7 +558,7 @@ export function UserPickerPage() {
           </ul>
         )}
 
-        {selected && (
+        {panel === "login" && selected && (
           <form onSubmit={submitPin} className="mt-6 space-y-4">
             <div className="rounded-md border border-border bg-secondary px-3 py-2 text-sm">
               <span className="text-muted-foreground">المستخدم: </span>
@@ -381,6 +627,22 @@ export function UserPickerPage() {
             >
               {pending ? "جاري الدخول…" : selected.hasPin ? "دخول" : "تعيين الرقم السري والدخول"}
             </button>
+
+            {selected.hasPin && (
+              <button
+                type="button"
+                className="w-full text-xs text-muted-foreground underline"
+                onClick={() => {
+                  setPanel("recover");
+                  setRecoverySecret("");
+                  setRecoveryPin("");
+                  setRecoveryConfirm("");
+                  setError(null);
+                }}
+              >
+                نسيت الرمز السري؟
+              </button>
+            )}
           </form>
         )}
       </div>

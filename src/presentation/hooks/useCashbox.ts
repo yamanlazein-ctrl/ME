@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { container } from "@/infrastructure/container";
 import { buildTenantContext } from "@/infrastructure/di/auth-context";
+import { isOk } from "@/core/result";
 import { toast } from "sonner";
 import type {
   CreateManualMovementInput,
@@ -55,8 +56,11 @@ export function useManualMovements() {
 export function useAddManualMovement() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (input: CreateManualMovementInput) =>
-      container.cashbox.addMovement.execute(input, buildTenantContext()),
+    mutationFn: async (input: CreateManualMovementInput) => {
+      const res = await container.cashbox.addMovement.execute(input, buildTenantContext());
+      if (!isOk(res)) throw res.error;
+      return res.value;
+    },
     onSuccess: () => {
       toast.success("تمت إضافة الحركة اليدوية");
       qc.invalidateQueries({ queryKey: KEYS.state });
@@ -116,8 +120,11 @@ export function useSetOpeningBalance() {
 export function useCloseDay() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (input: CloseDayInput) =>
-      container.cashbox.closeDay.execute(input, buildTenantContext()),
+    mutationFn: async (input: CloseDayInput) => {
+      const res = await container.cashbox.closeDay.execute(input, buildTenantContext());
+      if (!isOk(res)) throw res.error;
+      return res.value;
+    },
     onSuccess: () => {
       toast.info("تم إقفال اليوم");
       qc.invalidateQueries({ queryKey: KEYS.state });

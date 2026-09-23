@@ -371,7 +371,7 @@ export function PartyListPage({
                           than one currency, show each one explicitly instead of
                           silently presenting a partial total as if it were
                           everything — mirrors the Balance column below. */}
-                      {s.byCurrency.length > 1 ? (
+                      {s.byCurrency.length > 0 ? (
                         <div className="flex flex-col gap-0.5 items-start">
                           {s.byCurrency.map(([ccy, b]) => (
                             <span key={ccy}>
@@ -396,10 +396,11 @@ export function PartyListPage({
                           : "text-success"
                       }`}
                     >
-                      {s.byCurrency.length > 1 ? (
-                        <div className="flex flex-col gap-0.5 items-start">
+                      {s.byCurrency.length > 0 ? (
+                        <div className="flex flex-col gap-0.5 items-start" data-testid="party-balances">
                           {s.byCurrency.map(([ccy, b]) => (
                             <span key={ccy}>
+                              {ccy === "USD" ? "USD: " : ccy === "SYP" ? "SYP: " : `${ccy}: `}
                               {formatMoney(b.remaining)}{" "}
                               <span className="text-[10px] opacity-70">
                                 {currencySymbol(ccy as "SYP" | "USD" | "EUR")}
@@ -489,15 +490,21 @@ export function PartyListPage({
         onClose={() => setForm({ open: false })}
         onSubmit={(patch) => {
           const mp = toMockPatch(patch as Record<string, unknown>);
-          if (form.editing) {
-            (isSup ? updateSupplier : updateCustomer)(
-              form.editing.id as string,
-              mp as Parameters<typeof updateSupplier>[1],
-            );
-          } else {
-            (isSup ? addSupplier : addCustomer)(mp as Parameters<typeof addSupplier>[0]);
-          }
-          setForm({ open: false });
+          void (async () => {
+            try {
+              if (form.editing) {
+                await (isSup ? updateSupplier : updateCustomer)(
+                  form.editing.id as string,
+                  mp as Parameters<typeof updateSupplier>[1],
+                );
+              } else {
+                await (isSup ? addSupplier : addCustomer)(mp as Parameters<typeof addSupplier>[0]);
+              }
+              setForm({ open: false });
+            } catch {
+              /* toast already shown */
+            }
+          })();
         }}
       />
 

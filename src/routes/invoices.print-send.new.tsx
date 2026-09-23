@@ -223,9 +223,15 @@ function PrintSendPage() {
           throw new Error(
             `الكمية تتجاوز المتاح في الصبغة #${src.rollNo} (${formatQuantity(src.remainingKg)} كغ)`,
           );
-        const pc = l.pieces === "" ? undefined : Number(l.pieces);
-        if (pc !== undefined && (!Number.isInteger(pc) || pc < 0))
+        const pc = l.pieces === "" ? NaN : Number(l.pieces);
+        if (!Number.isInteger(pc) || pc < 0)
           throw new Error("عدد الأثواب يجب أن يكون عدداً صحيحاً غير سالب");
+        if ((src.remainingPieces ?? 0) > 0 && pc <= 0)
+          throw new Error("أدخل عدد الأثواب مع الوزن — يجب أن تتحرك الكميتان معاً");
+        if (pc > (src.remainingPieces ?? 0))
+          throw new Error(
+            `عدد الأثواب يتجاوز المتاح في الصبغة #${src.rollNo} (${src.remainingPieces ?? 0} أثواب)`,
+          );
       }
       if (!pressName.trim()) throw new Error("أدخل اسم المطبعة");
 
@@ -236,12 +242,11 @@ function PrintSendPage() {
           date,
           sourceRollId: l.rollId,
           quantityKg: Number(l.quantityKg),
-          pieces: l.pieces === "" ? undefined : Number(l.pieces),
+          pieces: Number(l.pieces),
           pressName,
           notes,
         });
-        if (!recRes.ok) throw new Error(recRes.error?.message ?? "فشل الحفظ");
-        created.push(recRes.value);
+        created.push(recRes);
       }
 
       const numbers = created.map((j) => j.number).join("، ");

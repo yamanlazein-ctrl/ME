@@ -63,13 +63,13 @@ export function useSettleParty(partyId: string | undefined, kind: PartyKind) {
         const res = await container.statement.api.settle(partyId ?? "", kind, input);
         return { ok: true as const, referenceNumber: res.referenceNumber };
       } catch (e) {
-        const msg = e instanceof Error ? e.message : "فشلت تسوية الحساب";
+        const msg = e instanceof Error ? e.message : "فشل تسجيل الدفعة";
         return { ok: false as const, error: msg };
       }
     },
     onSuccess: (res) => {
       if (res.ok) {
-        toast.success(`تمت التسوية (${res.referenceNumber})`);
+        toast.success(`تم تسجيل الدفعة (${res.referenceNumber})`);
         invalidateAfterSettlement(qc);
       } else {
         toast.error(res.error);
@@ -89,7 +89,7 @@ export function useSettleInvoices(partyId: string | undefined, kind: PartyKind) 
       invalidateAfterSettlement(qc);
     },
     onError: (e: unknown) => {
-      toast.error(e instanceof Error ? e.message : "فشلت تسوية الحساب");
+      toast.error(e instanceof Error ? e.message : "فشل تسجيل الدفعة");
     },
   });
 }

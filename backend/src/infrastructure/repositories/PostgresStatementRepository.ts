@@ -25,6 +25,7 @@ import { vouchers } from "../orm/schemas/voucher.table.js";
 import { allocateDocumentNumber } from "../utils/documentNumbers.js";
 import { round2dp } from "@erp/shared";
 import { BusinessRuleError } from "../../domain/errors/index.js";
+import { customerCreditPosition } from "./customerCredit.js";
 
 const INVOICE_TYPES = ["sales_invoice", "purchase_invoice"];
 const VOUCHER_REF_TYPES = ["receipt_in", "payment_out"];
@@ -210,11 +211,29 @@ export class PostgresStatementRepository implements IStatementRepository {
     ]);
     if (!allCurrencies) allCcys.add(currency);
     for (const ccy of allCcys) {
+      const finalBalance = round2dp(runningByCurrency.get(ccy) ?? prevByCurrency.get(ccy) ?? 0);
+      // finalBalance is signed per party kind (customer: + = owes us; supplier:
+      // + = we owe them) — translate to the accounting side for the KPI label.
+      const side: "debit" | "credit" | "zero" =
+        Math.abs(finalBalance) < 0.01
+          ? "zero"
+          : (finalBalance > 0) === (p.kind === "customer")
+            ? "debit"
+            : "credit";
       totalsByCurrency[ccy] = {
         previousBalance: round2dp(prevByCurrency.get(ccy) ?? 0),
         totalDebit: round2dp(debitByCurrency.get(ccy) ?? 0),
         totalCredit: round2dp(creditByCurrency.get(ccy) ?? 0),
-        finalBalance: round2dp(runningByCurrency.get(ccy) ?? prevByCurrency.get(ccy) ?? 0),
+        finalBalance,
+        balanceSide: side,
+        // Current (not window-bound) spendable credit — what the next sale can use.
+        ...(p.kind === "customer"
+          ? {
+              availableCredit: (
+                await customerCreditPosition(this.db, ctx.tenantId, query.partyId, ccy)
+              ).availableCredit,
+            }
+          : {}),
       };
     }
 
@@ -384,6 +403,8 @@ export class PostgresStatementRepository implements IStatementRepository {
           currency: invoices.currency,
           exchangeRate: invoices.exchangeRate,
           total: invoices.total,
+          paid: invoices.paid,
+          creditApplied: invoices.creditApplied,
         })
         .from(invoices)
         .where(and(inArray(invoices.id, invoiceIds), eq(invoices.tenantId, ctx.tenantId)));
@@ -399,6 +420,10 @@ export class PostgresStatementRepository implements IStatementRepository {
             currency: inv.currency ?? r.currency,
             amount: round2dp(Number(inv.total)),
             exchangeRate: inv.exchangeRate != null ? Number(inv.exchangeRate) : null,
+            paid: round2dp(Number(inv.paid ?? 0)),
+            ...(Number(inv.creditApplied ?? 0) > 0
+              ? { creditApplied: round2dp(Number(inv.creditApplied)) }
+              : {}),
           },
         });
       }
@@ -421,6 +446,8 @@ export class PostgresStatementRepository implements IStatementRepository {
           amount: vouchers.amount,
           discount: vouchers.discount,
           method: vouchers.method,
+          invoiceId: vouchers.invoiceId,
+          appliedAmount: vouchers.appliedAmount,
           invoiceNumber: invoices.number,
           invoiceCurrency: invoices.currency,
         })
@@ -433,6 +460,19 @@ export class PostgresStatementRepository implements IStatementRepository {
         const v = byId.get(r.referenceId);
         if (!v) continue;
         const rate = v.exchangeRate != null ? Number(v.exchangeRate) : null;
+        // Customer receipts: the part that did NOT settle an invoice is an
+        // advance (credit balance). The party leg (this row) is the full amount
+        // in the row's currency; a linked receipt applied only `appliedAmount`.
+        let advanceAmount: number | undefined;
+        if (r.type === "receipt_in") {
+          const partyLeg = Number(r.credit ?? 0);
+          const excess = !v.invoiceId
+            ? partyLeg
+            : v.appliedAmount != null
+              ? round2dp(partyLeg - Number(v.appliedAmount))
+              : 0;
+          if (excess > 0.01) advanceAmount = round2dp(excess);
+        }
         out.set(`${r.type}:${r.referenceId}`, {
           info: {
             kind: "voucher",
@@ -442,6 +482,7 @@ export class PostgresStatementRepository implements IStatementRepository {
             exchangeRate: rate != null && rate > 0 ? rate : null,
             discount: round2dp(Number(v.discount ?? 0)),
             method: v.method,
+            ...(advanceAmount !== undefined ? { advanceAmount } : {}),
             ...(v.invoiceNumber
               ? {
                   appliedToInvoiceNumber: v.invoiceNumber,

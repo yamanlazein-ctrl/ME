@@ -10,11 +10,13 @@ import { test } from "node:test";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
-test("DFP-036 build-frontend moves maps to target/symbols and strips packaged tree", () => {
-  const cmd = readFileSync(resolve(root, "build-frontend.cmd"), "utf8");
+test("DFP-036 build-frontend moves maps to target/symbols and strips the packaged web tree", () => {
+  const cmd = readFileSync(resolve(root, "build-frontend.cmd"), "utf8").replaceAll("\\", "/");
   assert.match(cmd, /DFP-036/);
-  assert.match(cmd, /target\\symbols/);
-  assert.match(cmd, /del \/s \/q "desktop\\src-tauri\\resources\\\*\.map"/);
+  assert.match(cmd, /target\/symbols/);
+  // Scoped to the web tree — an unscoped resources\*.map would also delete PostgreSQL's pg_filenode.map
+  // catalog files from the database template (see build-frontend-scope.test.mjs).
+  assert.ok(cmd.includes('del /s /q "desktop/src-tauri/resources/server/web/*.map"'));
   assert.match(cmd, /ME_KEEP_SOURCEMAPS/);
 });
 

@@ -77,6 +77,25 @@ describe("allocateSettlementPayment", () => {
     expect(r.allocations[1]!.remainingAfterInInvoiceCurrency).toBe(50);
   });
 
+  it("rejects a dropped-digit SYP rate (the exact reported regression: $120 @ 127 against a 39,538,000 SYP invoice)", () => {
+    expect(() =>
+      allocateSettlementPayment({
+        invoices: [
+          {
+            invoiceId: "syp",
+            number: "INV-001",
+            date: "2026-01-01",
+            currency: "SYP",
+            remaining: 39_538_000,
+          },
+        ],
+        amountPaid: 120,
+        settlementCurrency: "USD",
+        exchangeRate: 127,
+      }),
+    ).toThrow(/غير منطقي/);
+  });
+
   it("USD invoices settled in SYP", () => {
     const r = allocateSettlementPayment({
       invoices: [

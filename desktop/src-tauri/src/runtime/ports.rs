@@ -19,9 +19,8 @@
 //      the `-o "-p ..."` passed to postgres — a disagreement is a guaranteed
 //      false "start failed".
 //
-// Backend API port (DFP-009 / remediation Phase 4): same pattern as the DB —
-// prefer 8080 (dev default), persist the live port + `runtime-config.json` in
-// AppData, and have SSR/frontend discover it at runtime instead of baking 8080.
+// The desktop runs ONE server (API + UI). Its port is a persisted random high port — never 8080/4173 — that is
+// re-picked only when something is really holding it, and announced through a port file once the server is ready.
 
 use std::fs;
 use std::io;
@@ -84,99 +83,60 @@ pub fn find_free_db_port(preferred: u16) -> u16 {
     preferred
 }
 
-/// Default Desktop API port — preferred when free; never the only option.
-pub const BACKEND_PORT_DEFAULT: u16 = 8080;
+// ── Server (API + UI) port ────────────────────────────────────────────────────
+// The UI runs at http://127.0.0.1:<port>, and the browser keys everything it stores (session, device activation
+// id, preferences) by ORIGIN. A new port on every launch would log the user out and wipe those settings at each
+// start, so the port is chosen ONCE (random, high range), persisted, and reused whenever it is free. It changes
+// only when something else is actually holding it.
 
-/// Fallback range when 8080 (or a persisted port) is occupied.
-pub const BACKEND_PORT_FALLBACK_RANGE: std::ops::Range<u16> = 18080..19000;
+/// Range for the local server port (kept apart from the DB range so the two can never collide).
+pub const SERVER_PORT_RANGE: std::ops::Range<u16> = 20000..40000;
 
-fn backend_port_path(app_data_root: &Path) -> PathBuf {
-    app_data_root.join("backend-port.txt")
+fn server_port_path(app_data_root: &Path) -> PathBuf {
+    app_data_root.join("server-port.pref")
 }
 
-fn runtime_config_path(app_data_root: &Path) -> PathBuf {
-    app_data_root.join("runtime-config.json")
-}
-
-fn is_usable_backend_port(port: u16) -> bool {
-    port != 0 && port != 4173 // SSR listens on 4173; never collide intentionally
-}
-
-/// Read the last persisted backend port, or the 8080 dev default.
-pub fn resolve_backend_port(app_data_root: &Path) -> u16 {
-    let path = backend_port_path(app_data_root);
-    if let Ok(text) = fs::read_to_string(&path) {
+/// The persisted preferred server port, or a fresh random one (persisted) on the first launch.
+pub fn resolve_server_port(app_data_root: &Path) -> u16 {
+    if let Ok(text) = fs::read_to_string(server_port_path(app_data_root)) {
         if let Ok(port) = text.trim().parse::<u16>() {
-            if is_usable_backend_port(port) {
+            if SERVER_PORT_RANGE.contains(&port) {
                 return port;
             }
         }
     }
-    BACKEND_PORT_DEFAULT
+    use rand::Rng;
+    let port = rand::rngs::OsRng.gen_range(SERVER_PORT_RANGE);
+    persist_server_port(app_data_root, port);
+    port
 }
 
-/// Persist `backend-port.txt` and `runtime-config.json` for SSR/frontend readers.
-pub fn persist_backend_port(app_data_root: &Path, port: u16) {
+pub fn persist_server_port(app_data_root: &Path, port: u16) {
     let _ = fs::create_dir_all(app_data_root);
-    if let Err(e) = fs::write(backend_port_path(app_data_root), port.to_string()) {
-        crate::runtime::log(&format!(
-            "warning: could not persist backend-port.txt ({port}): {e}"
-        ));
-    }
-    write_runtime_config(app_data_root, port);
-}
-
-/// Write AppData runtime config so SSR (`serve.mjs`) and tools can discover the API.
-pub fn write_runtime_config(app_data_root: &Path, port: u16) {
-    let _ = fs::create_dir_all(app_data_root);
-    let api_base = format!("http://127.0.0.1:{port}");
-    let body = serde_json::json!({
-        "backendPort": port,
-        "apiBaseUrl": api_base,
-    });
-    if let Err(e) = fs::write(
-        runtime_config_path(app_data_root),
-        format!("{}\n", body),
-    ) {
-        crate::runtime::log(&format!(
-            "warning: could not write runtime-config.json ({port}): {e}"
-        ));
+    if let Err(e) = fs::write(server_port_path(app_data_root), port.to_string()) {
+        crate::runtime::log(&format!("warning: could not persist server-port.pref ({port}): {e}"));
     }
 }
 
-/// Return `preferred` if free, otherwise a free port in the fallback range
-/// (or an OS-assigned ephemeral port as last resort).
-pub fn find_free_backend_port(preferred: u16) -> u16 {
+/// `preferred` if it can be bound right now, otherwise another free port in SERVER_PORT_RANGE that is not `avoid`.
+pub fn find_free_server_port(preferred: u16, avoid: u16) -> u16 {
     use rand::Rng;
     use std::net::TcpListener;
-    if is_usable_backend_port(preferred) && ensure_backend_port_free(preferred).is_ok() {
+    if preferred != avoid && TcpListener::bind(("127.0.0.1", preferred)).is_ok() {
         return preferred;
     }
     for _ in 0..64 {
-        let candidate = rand::rngs::OsRng.gen_range(BACKEND_PORT_FALLBACK_RANGE);
-        if candidate != preferred && ensure_backend_port_free(candidate).is_ok() {
+        let candidate = rand::rngs::OsRng.gen_range(SERVER_PORT_RANGE);
+        if candidate != avoid && TcpListener::bind(("127.0.0.1", candidate)).is_ok() {
             return candidate;
         }
     }
-    // Last resort: OS ephemeral — still better than refusing to boot.
-    match TcpListener::bind(("127.0.0.1", 0)) {
-        Ok(listener) => listener
-            .local_addr()
-            .map(|a| a.port())
-            .unwrap_or(BACKEND_PORT_DEFAULT),
-        Err(_) => preferred,
-    }
-}
-
-/// Probe whether a port can be bound (used by tests / diagnostics).
-pub fn ensure_backend_port_free(port: u16) -> Result<(), String> {
-    use std::net::TcpListener;
-    match TcpListener::bind(("127.0.0.1", port)) {
-        Ok(_listener) => Ok(()),
-        Err(e) => Err(format!(
-            "backend port {port} is occupied (cannot bind 127.0.0.1:{port}): {e}"
-        )),
-    }
+    // Last resort: let the OS pick (the server accepts PORT=0) — still better than refusing to start.
+    TcpListener::bind(("127.0.0.1", 0))
+        .ok()
+        .and_then(|l| l.local_addr().ok())
+        .map(|a| a.port())
+        .unwrap_or(0)
 }
 
 /// Force `postgresql.conf`'s port to the port postgres will actually bind.
@@ -299,48 +259,26 @@ mod tests {
     }
 
     #[test]
-    fn ensure_backend_port_free_rejects_occupied_port() {
-        let listener = std::net::TcpListener::bind(("127.0.0.1", 0)).unwrap();
-        let occupied = listener.local_addr().unwrap().port();
-        assert!(
-            ensure_backend_port_free(occupied).is_err(),
-            "occupied port must fail"
-        );
-        drop(listener);
+    fn server_port_is_chosen_once_and_reused_across_launches() {
+        let dir = scratch("server-port-stable");
+        let first = resolve_server_port(&dir);
+        assert!(SERVER_PORT_RANGE.contains(&first));
+        assert_eq!(resolve_server_port(&dir), first, "same port on every launch → same browser origin");
     }
 
     #[test]
-    fn resolve_backend_port_defaults_to_8080_then_persists() {
-        let dir = scratch("backend-port-default");
-        assert_eq!(resolve_backend_port(&dir), BACKEND_PORT_DEFAULT);
-        persist_backend_port(&dir, 18123);
-        assert_eq!(resolve_backend_port(&dir), 18123);
-        let cfg = fs::read_to_string(dir.join("runtime-config.json")).unwrap();
-        assert!(cfg.contains("18123"));
-        assert!(cfg.contains("http://127.0.0.1:18123"));
-        let _ = fs::remove_dir_all(&dir);
+    fn server_port_only_changes_when_the_preferred_one_is_really_taken() {
+        let free = find_free_server_port(20000 + 4321, 0);
+        assert_eq!(find_free_server_port(free, 0), free, "a free preferred port is kept");
+        let held = std::net::TcpListener::bind(("127.0.0.1", free)).unwrap();
+        let moved = find_free_server_port(free, 0);
+        assert_ne!(moved, free, "an occupied preferred port is replaced");
+        drop(held);
     }
 
     #[test]
-    fn find_free_backend_port_skips_occupied_preferred() {
-        // Occupy a preferred port (simulates 8080 busy) and confirm we boot
-        // on an alternate free port instead of failing.
-        let holder = std::net::TcpListener::bind(("127.0.0.1", 0)).unwrap();
-        let occupied = holder.local_addr().unwrap().port();
-        let alt = find_free_backend_port(occupied);
-        assert_ne!(alt, occupied, "must not return the occupied preferred port");
-        assert!(
-            ensure_backend_port_free(alt).is_ok(),
-            "alternate port {alt} must be bindable"
-        );
-        drop(holder);
-    }
-
-    #[test]
-    fn find_free_backend_port_keeps_8080_when_free() {
-        // Only assert the contract when 8080 is actually free on this host.
-        if ensure_backend_port_free(BACKEND_PORT_DEFAULT).is_ok() {
-            assert_eq!(find_free_backend_port(BACKEND_PORT_DEFAULT), BACKEND_PORT_DEFAULT);
-        }
+    fn server_port_never_equals_the_database_port() {
+        let free = find_free_server_port(20000 + 777, 0);
+        assert_ne!(find_free_server_port(free, free), free);
     }
 }

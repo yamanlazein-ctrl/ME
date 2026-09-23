@@ -1,6 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { container } from "@/infrastructure/container";
 import { buildTenantContext } from "@/infrastructure/di/auth-context";
+import { isOk } from "@/core/result";
+import { toast } from "sonner";
 import type { CreatePrintSendInput } from "@/application/ports/IPrintJobRepository";
 import { refreshInventory } from "@/presentation/hooks/useInventory";
 
@@ -39,7 +41,11 @@ export function useOpenPrintJobs() {
 export function useCreatePrintSend() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (input: CreatePrintSendInput) => container.printJobs.send.execute(input, ctx),
+    mutationFn: async (input: CreatePrintSendInput) => {
+      const res = await container.printJobs.send.execute(input, ctx);
+      if (!isOk(res)) throw res.error;
+      return res.value;
+    },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: KEYS.all });
       qc.invalidateQueries({ queryKey: KEYS.open });
@@ -48,14 +54,20 @@ export function useCreatePrintSend() {
       qc.invalidateQueries({ queryKey: ["inventory"] });
       qc.invalidateQueries({ queryKey: ["dashboard"] });
     },
+    onError: (e: Error) => {
+      toast.error(`فشل إرسال أمر الطباعة: ${e.message}`);
+    },
   });
 }
 
 export function useReceivePrint() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (input: Parameters<typeof container.printJobs.receive.execute>[0]) =>
-      container.printJobs.receive.execute(input, ctx),
+    mutationFn: async (input: Parameters<typeof container.printJobs.receive.execute>[0]) => {
+      const res = await container.printJobs.receive.execute(input, ctx);
+      if (!isOk(res)) throw res.error;
+      return res.value;
+    },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: KEYS.all });
       qc.invalidateQueries({ queryKey: KEYS.open });
@@ -67,6 +79,9 @@ export function useReceivePrint() {
       qc.invalidateQueries({ queryKey: ["ledger"] });
       qc.invalidateQueries({ queryKey: ["cashbox"] });
       qc.invalidateQueries({ queryKey: ["expenses"] });
+    },
+    onError: (e: Error) => {
+      toast.error(`فشل استلام أمر الطباعة: ${e.message}`);
     },
   });
 }

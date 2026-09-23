@@ -196,6 +196,11 @@ export function clearLicense(): void {
   writeString(KEY_STORAGE, null);
   writeString(ACTIVATION_ID_STORAGE, null);
   writeString(HOSTNAME_STORAGE, null);
+  // The stale tenant id must go too — otherwise ActivationScreen's
+  // ensureTenant() reuses `getInstallTenantId()` (its initial state) and
+  // tries to activate against a tenant that this backend/DB may no longer
+  // have (e.g. after a factory reset re-provisioned a brand-new tenant id).
+  writeString(TENANT_ID_STORAGE, null);
 }
 
 export function getFingerprintVersion(): number {

@@ -7,7 +7,7 @@ import {
 } from "../orm/schemas/cashbox.table.js";
 import { ledgerEntries } from "../orm/schemas/ledger-entry.table.js";
 import type { TenantContext } from "../../domain/types/index.js";
-import { InsufficientCashboxBalanceError } from "../../domain/errors/index.js";
+import { round2dp } from "@erp/shared";
 
 /**
  * Full recompute of cashbox balance for `currency` as of `asOfDate`
@@ -59,7 +59,11 @@ export async function recomputeCashboxBalanceAsOf(
     else mOut += m.amount;
   }
 
-  return opening + Number(ledger?.amountIn ?? 0) + mIn - Number(ledger?.amountOut ?? 0) - mOut;
+  // Every term is a 2dp decimal; round once so float addition never leaks digits
+  // like 4655.879999999999 into the balance (or into the sufficiency guard).
+  return round2dp(
+    opening + Number(ledger?.amountIn ?? 0) + mIn - Number(ledger?.amountOut ?? 0) - mOut,
+  );
 }
 
 /**
@@ -110,16 +114,10 @@ export async function getCashboxBalanceAsOf(
 }
 
 /**
- * F06 (Phase 1 audit) + product decision: hard-block any cash-out write
- * (manual withdrawal, cash payment voucher) that would take the cashbox
- * balance negative, per-currency. Must be called from INSIDE the caller's
- * transaction, before the write it guards.
- *
- * Serializes per (tenant, currency) with a Postgres transactional advisory
- * lock — the same idiom already used for reference-scoped serialization in
- * PostgresLedgerRepository.cancelByReference — so two concurrent cash-out
- * writes cannot both read the same balance and both pass the check. The
- * second call blocks here until the first transaction commits or rolls back.
+ * Serializes concurrent cash-out writes per (tenant, currency) so two
+ * payments cannot interleave mid-ledger. Negative cash balances are
+ * allowed — this is no longer a hard block. Callers may use the returned
+ * snapshot to surface a warning in the UI.
  */
 export async function assertSufficientCashboxBalance(
   tx: Tx,
@@ -127,11 +125,10 @@ export async function assertSufficientCashboxBalance(
   currency: string,
   asOfDate: string,
   amount: number,
-): Promise<void> {
+): Promise<{ available: number; wouldGoNegative: boolean }> {
+  if (!(amount > 0)) return { available: 0, wouldGoNegative: false };
   const lockKey = `${ctx.tenantId}:cashbox:${currency}`;
   await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${lockKey}, 0))`);
   const available = await getCashboxBalanceAsOf(tx, ctx, currency, asOfDate);
-  if (available < amount) {
-    throw new InsufficientCashboxBalanceError(currency, available, amount);
-  }
+  return { available, wouldGoNegative: available < amount };
 }

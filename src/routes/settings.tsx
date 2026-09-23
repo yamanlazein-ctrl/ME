@@ -1,10 +1,11 @@
 import { Outlet, Link, useRouterState, createFileRoute } from "@tanstack/react-router";
 import { AppShell } from "@/components/layout/AppShell";
 import { cn } from "@/lib/utils";
+import { useCurrentUser } from "@/presentation/hooks/useAuth";
 
 export const Route = createFileRoute("/settings")({ component: SettingsLayout });
 
-const NAV = [
+const NAV: { to: string; label: string; adminOnly?: boolean }[] = [
   { to: "/settings/company", label: "معلومات الشركة" },
   { to: "/settings/invoice", label: "إعدادات الفواتير" },
   { to: "/settings/warehouses", label: "المستودعات" },
@@ -14,17 +15,20 @@ const NAV = [
   { to: "/settings/backup", label: "النسخ الاحتياطي" },
   { to: "/settings/users", label: "المستخدمون والصلاحيات" },
   { to: "/settings/activity", label: "سجل النشاط" },
+  { to: "/settings/sync", label: "المزامنة السحابية", adminOnly: true },
 ];
 
 function SettingsLayout() {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
+  const { data: me } = useCurrentUser();
+  const nav = NAV.filter((n) => !n.adminOnly || me?.role === "admin");
   return (
     <AppShell title="الإعدادات" subtitle="إعدادات الشركة والنظام.">
       <div className="grid gap-4 md:grid-cols-[220px_1fr]">
         <aside>
           <nav className="rounded-lg border border-border bg-card p-2">
             <ul className="space-y-1">
-              {NAV.map((n) => {
+              {nav.map((n) => {
                 const active = pathname === n.to;
                 return (
                   <li key={n.to}>

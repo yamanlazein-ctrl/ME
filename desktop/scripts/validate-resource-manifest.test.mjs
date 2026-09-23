@@ -18,7 +18,6 @@ import {
   writeFileSync,
   readFileSync,
   rmSync,
-  copyFileSync,
 } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -43,14 +42,7 @@ function populateComplete(root) {
       writeFileSync(join(full, ".keep"), "x");
     } else {
       mkdirSync(dirname(full), { recursive: true });
-      // Prefer real SSR sources so checked-in sha256 matches.
-      if (entry.path === "ssr/serve.mjs") {
-        copyFileSync(join(HERE, "..", "ssr", "serve.mjs"), full);
-      } else if (entry.path === "ssr/resolve-api-proxy.mjs") {
-        copyFileSync(join(HERE, "..", "ssr", "resolve-api-proxy.mjs"), full);
-      } else {
-        writeFileSync(full, "non-empty");
-      }
+      writeFileSync(full, "non-empty");
     }
   }
 }
@@ -85,11 +77,11 @@ test("zero-byte required file fails", () => {
   const root = mkdtempSync(join(tmpdir(), "dfp001-empty-"));
   try {
     populateComplete(root);
-    writeFileSync(join(root, "ssr", "serve.mjs"), "");
+    writeFileSync(join(root, "server", "server.mjs"), "");
     const r = runValidator(root);
     assert.equal(r.status, 1);
     assert.match(r.stderr, /empty/);
-    assert.match(r.stderr, /serve\.mjs/);
+    assert.match(r.stderr, /server\.mjs/);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

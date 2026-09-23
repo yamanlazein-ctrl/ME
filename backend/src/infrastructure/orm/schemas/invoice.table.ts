@@ -43,6 +43,12 @@ export const invoices = pgTable(
     // `amountDue = total - paid` and so the supplier/customer balance reflects
     // the payment (a linked payment_out / receipt_in voucher is also written).
     paid: numeric("paid", { precision: 14, scale: 2, mode: "number" }).notNull().default(0),
+    // Part of `paid` funded from the customer's existing credit balance at
+    // creation (no ledger movement — the ledger is already net). Included in
+    // `paid`; kept separately for display and audit.
+    creditApplied: numeric("credit_applied", { precision: 14, scale: 2, mode: "number" })
+      .notNull()
+      .default(0),
     // Payment method used when paid > 0 (cash/transfer/check/card).
     // Stored on the invoice for audit trail and display purposes.
     paymentMethod: varchar("payment_method", { length: 20 }),

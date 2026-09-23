@@ -24,13 +24,17 @@ tauri-plugin-shell = "2"
 # plugin is known to lose the Run key after one reboot on some Windows builds.
 tauri-plugin-autostart = "2"
 tauri-plugin-updater = "2"
+# One app instance per user: two instances would fight over the same database directory.
+tauri-plugin-single-instance = "2"
 # Windows DPAPI (CurrentUser scope) for encrypting locally-generated secrets
 # (JWT_SECRET, APP_MASTER_KEY) so they never ship as plaintext.
-windows = { version = "0.61", features = ["Win32_Security_Cryptography", "Win32_Foundation", "Win32_UI_WindowsAndMessaging", "Win32_System_Threading", "Win32_System_Diagnostics_ToolHelp"] }
+windows = { version = "0.61", features = ["Win32_Security_Cryptography", "Win32_Foundation", "Win32_UI_WindowsAndMessaging", "Win32_System_Threading", "Win32_System_Diagnostics_ToolHelp", "Win32_System_Registry"] }
 rand = "0.8"
 base64 = "0.22"
 sha2 = "0.10"
 dirs-sys = "0.5.0"
+# Native Save As dialog for PDF archive (Windows).
+rfd = "0.15"
 
 [[bin]]
 name = "motard-fabrics-erp"

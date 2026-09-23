@@ -29,7 +29,14 @@ import {
 import { useInvoicesList } from "@/presentation/hooks/useInvoices";
 import { useReturnsList } from "@/presentation/hooks/useReturns";
 import { invoiceTotal } from "@/core/calculations/invoiceCalc";
-import { convertForSettlement, round2dp, settleAmountAgainstRemaining } from "@erp/shared";
+import {
+  convertForSettlement,
+  round2dp,
+  saneSypRateError,
+  settleAmountAgainstRemaining,
+} from "@erp/shared";
+import { useSypRateSoftWarning } from "@/presentation/hooks/useSypRateSoftCheck";
+import { useCashBalance } from "@/presentation/hooks/useCashbox";
 import { AlertTriangle, Save, X, Lock } from "lucide-react";
 
 /**
@@ -88,6 +95,7 @@ export function VoucherForm({
   const [fxError, setFxError] = useState<string | null>(null);
   const [method, setMethod] = useState<VoucherMethod>("cash");
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
+  const { data: cashBalance } = useCashBalance(date, currency);
   const [notesPrint, setNotesPrint] = useState("");
   const [notesInternal, setNotesInternal] = useState("");
   const [partyError, setPartyError] = useState<string | null>(null);
@@ -101,7 +109,10 @@ export function VoucherForm({
     if (editing.status === "cancelled") return;
     setPartyId(editing.partyId);
     setInvoiceId(editing.invoiceId ?? "");
-    setAmount(editing.amount);
+    // The stored voucher amount is the GROSS party settlement (backend
+    // contract); the form's own `amount` field represents actual cash/value
+    // paid, so back out the discount when hydrating an edit.
+    setAmount(round2dp(editing.amount - (editing.discount ?? 0)));
     setDiscount(editing.discount && editing.discount > 0 ? editing.discount : "");
     setCurrency(editing.currency as Currency);
     setExchangeRate(editing.exchangeRate && editing.exchangeRate > 0 ? editing.exchangeRate : "");
@@ -197,6 +208,20 @@ export function VoucherForm({
     ? invoiceOptions.filter((i) => i.currency !== currency)
     : [];
 
+  const selectedInvoice = invoiceOptions.find((i) => i.id === invoiceId);
+  // Whichever side of this settlement is actually SYP-denominated — the rate
+  // typed here pairs with THAT currency, regardless of which one is "the
+  // voucher's own currency" (e.g. a USD voucher settling an SYP invoice).
+  const sypSide = currency === "SYP" || selectedInvoice?.currency === "SYP" ? "SYP" : currency;
+  const enteredRateNum = Number(exchangeRate) > 0 ? Number(exchangeRate) : null;
+  const [softWarningAcked, setSoftWarningAcked] = useState(false);
+  const softWarning = useSypRateSoftWarning(sypSide, enteredRateNum);
+  // A changed rate/currency invalidates a prior acknowledgment — the operator
+  // must re-confirm if they edit the number after dismissing the warning.
+  useEffect(() => {
+    setSoftWarningAcked(false);
+  }, [enteredRateNum, sypSide]);
+
   const save = async () => {
     let valid = true;
     if (!partyId) {
@@ -210,21 +235,32 @@ export function VoucherForm({
       setAmountError("المبلغ يجب أن يكون رقماً.");
       valid = false;
     }
+    // Wire contract: `amount` is the cash that actually moves. Discount is
+    // added on top by the backend (partySettlement = cash + discount).
     const discountVal = Number(discount) || 0;
     if (discountVal < 0) {
       setDiscountError("الخصم لا يمكن أن يكون سالباً.");
       valid = false;
-    } else if (amount && discountVal > Number(amount)) {
-      setDiscountError("الخصم لا يمكن أن يتجاوز مبلغ السند.");
-      valid = false;
     } else {
       setDiscountError(null);
     }
+    const grossAmount = round2dp((Number(amount) || 0) + discountVal);
     if (currency !== "USD" && !(Number(exchangeRate) > 0)) {
       setFxError("سعر الصرف مطلوب يدوياً لكل عملية ليست بالدولار (عملة الأساس USD)");
       valid = false;
     } else {
-      setFxError(null);
+      const sypError = saneSypRateError(sypSide, enteredRateNum);
+      if (sypError) {
+        setFxError(sypError);
+        valid = false;
+      } else {
+        setFxError(null);
+      }
+    }
+    if (valid && softWarning && !softWarningAcked) {
+      // Soft mismatch vs. the live reference rate — never blocks silently,
+      // just requires the operator to see and confirm it once.
+      valid = false;
     }
     if (valid && invoiceId) {
       const opt = invoiceOptions.find((i) => i.id === invoiceId);
@@ -238,9 +274,11 @@ export function VoucherForm({
           valid = false;
         } else {
           // Same closure rule as the backend: paying the exact remaining (to the
-          // payment currency's smallest unit) settles it exactly.
+          // payment currency's smallest unit) settles it exactly. Uses the
+          // GROSS amount (cash + discount) — that is what actually clears the
+          // receivable/payable.
           const settled = settleAmountAgainstRemaining(
-            Number(amount),
+            grossAmount,
             currency,
             opt.currency,
             voucherFx.exchangeRate,
@@ -250,10 +288,18 @@ export function VoucherForm({
             setFxError("تعذر التحويل — أدخل سعر صرف صحيح لهذه العملية");
             valid = false;
           } else if (settled > opt.remaining + 0.01) {
-            setAmountError(
-              `بعد التحويل ${formatAmount(settled, opt.currency)} يتجاوز المتبقي ${formatAmount(opt.remaining, opt.currency)}.`,
-            );
-            valid = false;
+            // Customer receipts: an overpayment settles the invoice and the
+            // excess becomes the customer's credit balance (server-side). Only
+            // a supplier payment, or a concession on top of it, is refused.
+            if (!isReceipt) {
+              setAmountError(
+                `بعد التحويل ${formatAmount(settled, opt.currency)} يتجاوز المتبقي ${formatAmount(opt.remaining, opt.currency)}.`,
+              );
+              valid = false;
+            } else if (discountVal > 0) {
+              setDiscountError("لا يمكن منح مسامحة مع دفعة تتجاوز المتبقي — أزل المسامحة.");
+              valid = false;
+            }
           }
         }
       }
@@ -265,7 +311,7 @@ export function VoucherForm({
       partyId,
       partyKind: isReceipt ? ("customer" as const) : ("supplier" as const),
       invoiceId: invoiceId || undefined,
-      amount: Number(amount),
+      amount: Number(amount) || 0,
       discount: discountVal > 0 ? discountVal : undefined,
       currency,
       exchangeRate: Number(exchangeRate) > 0 ? Number(exchangeRate) : undefined,
@@ -285,22 +331,23 @@ export function VoucherForm({
     }
   };
 
-  const selectedInvoice = invoiceOptions.find((i) => i.id === invoiceId);
   const showFxField =
     currency !== "USD" || Boolean(selectedInvoice && selectedInvoice.currency !== currency);
 
   // Live preview of settlement math (multiply when paying USD against SYP):
-  // amount × rate → invoice currency. Shown whenever both amount and rate
-  // are present so the operator never has to guess whether we divide or multiply.
+  // gross (cash + discount) × rate → invoice currency. Shown whenever both
+  // amount and rate are present so the operator never has to guess whether
+  // we divide or multiply.
+  const previewGross = round2dp((Number(amount) || 0) + (Number(discount) || 0));
   const settlementPreview = useMemo(() => {
-    if (!selectedInvoice || !amount || Number(amount) <= 0) return null;
+    if (!selectedInvoice || previewGross <= 0) return null;
     if (selectedInvoice.currency === currency) {
-      return { settled: Number(amount), rate: null as number | null };
+      return { settled: previewGross, rate: null as number | null };
     }
     const rate = Number(exchangeRate);
     if (!(rate > 0)) return null;
     const settled = settleAmountAgainstRemaining(
-      Number(amount),
+      previewGross,
       currency,
       selectedInvoice.currency,
       rate,
@@ -308,7 +355,7 @@ export function VoucherForm({
     );
     if (settled == null) return null;
     return { settled, rate };
-  }, [selectedInvoice, amount, currency, exchangeRate]);
+  }, [selectedInvoice, previewGross, currency, exchangeRate]);
 
   return (
     <>
@@ -381,7 +428,7 @@ export function VoucherForm({
               className="h-10"
             />
           </Field>
-          <FormField label="مبلغ الدفعة (الإجمالي) *" error={amountError ?? undefined}>
+          <FormField label="المبلغ الفعلي (نقداً / حوالة / شيك) *" error={amountError ?? undefined}>
             <FormattedAmountInput
               value={amount}
               onChange={(v) => {
@@ -389,19 +436,62 @@ export function VoucherForm({
                 setAmountError(null);
               }}
               className="h-10"
-              ariaLabel="مبلغ الدفعة"
+              ariaLabel="المبلغ الفعلي"
             />
             {settlementPreview && selectedInvoice && selectedInvoice.currency !== currency ? (
               <p className="mt-1 text-[11px] leading-snug text-muted-foreground" dir="ltr">
                 ≈ {formatAmount(settlementPreview.settled, selectedInvoice.currency)}
                 {settlementPreview.rate != null
-                  ? ` (${Number(amount)} × ${settlementPreview.rate})`
+                  ? ` (${previewGross} × ${settlementPreview.rate})`
                   : ""}
                 {" · "}متبقٍ {formatAmount(selectedInvoice.remaining, selectedInvoice.currency)}
               </p>
             ) : null}
+            {isReceipt &&
+            settlementPreview &&
+            selectedInvoice &&
+            settlementPreview.settled > selectedInvoice.remaining + 0.01 ? (
+              <p
+                role="status"
+                data-testid="overpayment-notice"
+                className="mt-1 rounded-md border border-emerald-500/40 bg-emerald-500/10 px-2 py-1 text-[11px] leading-snug text-emerald-700 dark:text-emerald-400"
+              >
+                تُسدَّد الفاتورة بالكامل (
+                {formatAmount(selectedInvoice.remaining, selectedInvoice.currency)}
+                )، والفائض{" "}
+                {formatAmount(
+                  round2dp(settlementPreview.settled - selectedInvoice.remaining),
+                  selectedInvoice.currency,
+                )}{" "}
+                يُضاف لرصيد العميل الدائن (دفعة مقدمة). يدخل الصندوق المبلغ كاملاً.
+              </p>
+            ) : null}
+            {isReceipt && partyId && !invoiceId && Number(amount) > 0 ? (
+              <p className="mt-1 text-[11px] leading-snug text-muted-foreground">
+                دفعة مقدمة / على الحساب — تُضاف لرصيد العميل الدائن وتُخصم تلقائياً من فواتيره
+                القادمة عند اختيار «خصم من الرصيد».
+              </p>
+            ) : null}
           </FormField>
-          <FormField label="الخصم (يُخصم من النقد)" error={discountError ?? undefined}>
+          {!isReceipt &&
+          method === "cash" &&
+          Number(amount) > 0 &&
+          (cashBalance ?? 0) < Number(amount) ? (
+            <div
+              role="alert"
+              data-testid="cashbox-negative-warning"
+              className="sm:col-span-2 lg:col-span-3 rounded-md border border-warning/40 bg-warning/10 px-3 py-2 text-[12px] text-foreground"
+            >
+              تنبيه: سيصبح رصيد الصندوق سالباً بعد تنفيذ العملية (المتاح{" "}
+              {formatAmount(cashBalance ?? 0, currency)}، المطلوب{" "}
+              {formatAmount(Number(amount), currency)}
+              ). يمكن المتابعة والحفظ.
+            </div>
+          ) : null}
+          <FormField
+            label="المسامحة / الخصم الممنوح (يُضاف لتغطية الفرق)"
+            error={discountError ?? undefined}
+          >
             <FormattedAmountInput
               value={discount}
               onChange={(v) => {
@@ -409,12 +499,12 @@ export function VoucherForm({
                 setDiscountError(null);
               }}
               className="h-10"
-              ariaLabel="الخصم"
+              ariaLabel="المسامحة"
             />
-            {amount && Number(amount) > 0 && Number(discount) > 0 ? (
+            {Number(amount) > 0 && Number(discount) > 0 ? (
               <p className="mt-1 text-[11px] leading-snug text-muted-foreground">
-                الصافي نقداً:{" "}
-                {formatAmount(Math.max(0, Number(amount) - (Number(discount) || 0)), currency)}
+                الإجمالي المُسدَّد من الذمة (المبلغ الفعلي + المسامحة):{" "}
+                {formatAmount(previewGross, currency)}
               </p>
             ) : null}
           </FormField>
@@ -448,6 +538,26 @@ export function VoucherForm({
                 <p className="mt-1 text-[11px] leading-snug text-muted-foreground">
                   دولار → ليرة: ضرب المبلغ × السعر · ليرة → دولار: قسمة المبلغ ÷ السعر
                 </p>
+                {softWarning && !fxError && (
+                  <div
+                    role="alert"
+                    data-testid="syp-rate-soft-warning"
+                    className="mt-2 flex items-start gap-2 rounded-md border border-warning/40 bg-warning/10 px-2.5 py-2 text-[11px] leading-snug text-foreground"
+                  >
+                    <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-warning" />
+                    <div className="flex-1">
+                      <p>{softWarning}</p>
+                      <label className="mt-1.5 flex items-center gap-1.5 font-semibold">
+                        <input
+                          type="checkbox"
+                          checked={softWarningAcked}
+                          onChange={(e) => setSoftWarningAcked(e.target.checked)}
+                        />
+                        السعر صحيح ومقصود، تابع الحفظ
+                      </label>
+                    </div>
+                  </div>
+                )}
               </FormField>
             </div>
           )}

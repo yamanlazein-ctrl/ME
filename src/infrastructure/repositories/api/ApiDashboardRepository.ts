@@ -106,24 +106,21 @@ export function mapDashboardResponse(raw: BackendDashboardResponse): DashboardDa
       rollNo: a.rollNo,
       remaining: a.remaining,
     })),
-    // Fix H-7: the backend now returns revenueByCurrency (never a single
-    // number that summed every currency's revenue for a fabric). TopFabricDTO
-    // only has one numeric slot (salesK), so — same rule as above — this
-    // reads the SYP bucket specifically and documents it, instead of
-    // silently summing SYP + USD the way `f.revenue` used to.
+    // Dashboard presentation is USD (base currency). Prefer revenueUsd from
+    // the backend (frozen invoice rates); fall back to the USD bucket only.
     topFabrics: (raw.topFabrics ?? []).map((f) => ({
-      name: f.name, // real source
-      salesK: (f.revenueByCurrency?.SYP ?? 0) / 1000, // real source, SYP only (thousands of SYP)
+      name: f.name,
+      salesK: f.revenueUsd ?? f.revenueByCurrency?.USD ?? 0,
     })),
-    // Fix H-7: each day's point is now { label, byCurrency } from the
-    // backend (never a single blended value). Project SYP specifically —
-    // never sum across currencies — matching the topFabrics/todayProfit
-    // fix above until the chart component itself is redesigned to render
-    // a per-currency series.
+    // Chart series = frozen USD base per day (valueUsd). Never project SYP
+    // thousands as if they were the dashboard unit.
     salesTrend: Object.fromEntries(
       Object.entries(raw.salesTrend ?? {}).map(([range, points]) => [
         range,
-        points.map((p) => ({ label: p.label, value: p.byCurrency?.SYP ?? 0 })),
+        points.map((p) => ({
+          label: p.label,
+          value: p.valueUsd ?? p.byCurrency?.USD ?? 0,
+        })),
       ]),
     ),
   };

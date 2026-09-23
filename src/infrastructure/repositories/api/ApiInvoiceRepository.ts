@@ -56,6 +56,7 @@ export class ApiInvoiceRepository implements IInvoiceRepository {
       tax: invoice.tax,
       shipping: invoice.shipping,
       paid: invoice.paid,
+      ...(invoice.creditApplied ? { creditApplied: invoice.creditApplied } : {}),
       paymentMethod: invoice.paymentMethod,
       orderId: invoice.orderId,
       lines: invoice.lines.map((l) => ({

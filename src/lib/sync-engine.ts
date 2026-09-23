@@ -1,3 +1,4 @@
+import { useSyncExternalStore } from "react";
 import { getAccessToken } from "@/infrastructure/auth/TokenProvider";
 import { getApiBaseUrl } from "@/lib/api-base-url";
 import { getRegisteredSyncDeviceId } from "@/lib/sync-device";
@@ -33,9 +34,37 @@ export type SyncRunResult = {
    * Nothing was lost locally: refused units stay pending in the outbox.
    */
   deviceTrust?: { code: string; message: string } | null;
+  /** Presence events (another user logged in) turned into notifications. */
+  activity?: number;
 };
 
-let running = false;
+// ── Run state, shared by the header badge and Settings → المزامنة السحابية ──
+
+export type SyncRunState = {
+  running: boolean;
+  lastRunAt: string | null;
+  lastResult: SyncRunResult | null;
+  lastError: string | null;
+};
+
+let state: SyncRunState = { running: false, lastRunAt: null, lastResult: null, lastError: null };
+const listeners = new Set<() => void>();
+
+function setState(patch: Partial<SyncRunState>) {
+  state = { ...state, ...patch };
+  listeners.forEach((l) => l());
+}
+
+export function useSyncRunState(): SyncRunState {
+  return useSyncExternalStore(
+    (cb) => {
+      listeners.add(cb);
+      return () => listeners.delete(cb);
+    },
+    () => state,
+    () => state,
+  );
+}
 
 export async function runSyncNow(): Promise<SyncRunResult | null> {
   const token = getAccessToken();
@@ -43,10 +72,10 @@ export async function runSyncNow(): Promise<SyncRunResult | null> {
   // P7: an overlapping trigger used to return null — indistinguishable from
   // "no session" — so a dropped run looked like no run was needed. Report the
   // concurrency skip explicitly; the caller decides whether to retry.
-  if (running) {
+  if (state.running) {
     return { pushed: 0, failed: 0, skipped: true, reason: "sync already running" };
   }
-  running = true;
+  setState({ running: true });
   try {
     const res = await fetch(`${getApiBaseUrl()}/api/sync/run`, {
       method: "POST",
@@ -62,8 +91,88 @@ export async function runSyncNow(): Promise<SyncRunResult | null> {
       const body = (await res.json().catch(() => ({}))) as { message?: string };
       throw new Error(body.message || `فشل تشغيل المزامنة (${res.status})`);
     }
-    return (await res.json()) as SyncRunResult;
+    const result = (await res.json()) as SyncRunResult;
+    setState({
+      lastRunAt: new Date().toISOString(),
+      lastResult: result,
+      lastError: result.pullError ?? null,
+    });
+    return result;
+  } catch (err) {
+    setState({
+      lastRunAt: new Date().toISOString(),
+      lastError: err instanceof Error ? err.message : "فشل تشغيل المزامنة",
+    });
+    throw err;
   } finally {
-    running = false;
+    setState({ running: false });
   }
 }
+
+// ── Hub pairing API (admin only — Settings → المزامنة السحابية) ────────────
+
+export type HubSessionInfo = {
+  hubUrl?: string;
+  hubTenantId?: string;
+  hubUserId?: string;
+  hubUserEmail?: string;
+  hubUserName?: string;
+  hubUserRole?: string;
+  hubLicenseKey?: string | null;
+  hubLicenseStatus?: string | null;
+  hubDeviceId?: string | null;
+  pairedAt?: string;
+};
+
+export type HubState = {
+  url: string | null;
+  reachable: boolean | null;
+  session: HubSessionInfo | null;
+  pendingCount: number;
+  statusCounts: Record<string, number>;
+  lastPullAt: string | null;
+  localDeviceId: string | null;
+};
+
+export type HubTestResult = {
+  url: string;
+  reachable: boolean;
+  latencyMs: number | null;
+  setupCompleted: boolean | null;
+  error: string | null;
+};
+
+export type HubConnectResult = {
+  url: string;
+  session: HubSessionInfo;
+  cursorReset: boolean;
+  deviceWarning: string | null;
+};
+
+async function hubApi<T>(path: string, init: RequestInit = {}): Promise<T> {
+  const token = getAccessToken();
+  const deviceId = getRegisteredSyncDeviceId();
+  const res = await fetch(`${getApiBaseUrl()}/api${path}`, {
+    ...init,
+    headers: {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(deviceId ? { "X-Sync-Device-Id": deviceId } : {}),
+    },
+  });
+  const body = (await res.json().catch(() => ({}))) as T & { message?: string };
+  if (!res.ok) throw new Error(body.message || `فشل الطلب (${res.status})`);
+  return body;
+}
+
+export const hubSync = {
+  state: () => hubApi<HubState>("/sync/hub"),
+  test: (url?: string) =>
+    hubApi<HubTestResult>("/sync/hub/test", { method: "POST", body: JSON.stringify({ url }) }),
+  connect: (input: { url: string; email: string; password: string }) =>
+    hubApi<HubConnectResult>("/sync/hub/connect", {
+      method: "POST",
+      body: JSON.stringify(input),
+    }),
+  disconnect: () => hubApi<{ url: null }>("/sync/hub", { method: "DELETE" }),
+};

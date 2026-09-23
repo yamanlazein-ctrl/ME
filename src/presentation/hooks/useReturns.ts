@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { container } from "@/infrastructure/container";
 import { buildTenantContext } from "@/infrastructure/di/auth-context";
+import { isOk } from "@/core/result";
 import { toast } from "sonner";
 import type { ReturnFilter, ReturnDTO } from "@/application/ports/IReturnRepository";
 import { refreshInventory } from "./useInventory";
@@ -29,8 +30,11 @@ export function useReturnsList(filter?: ReturnFilter) {
 export function useCreateReturn() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (input: Parameters<typeof container.returns.create.execute>[0]) =>
-      container.returns.create.execute(input, ctx),
+    mutationFn: async (input: Parameters<typeof container.returns.create.execute>[0]) => {
+      const res = await container.returns.create.execute(input, ctx);
+      if (!isOk(res)) throw res.error;
+      return res.value;
+    },
     onSuccess: () => {
       toast.success("تم إنشاء المرتجع");
       qc.invalidateQueries({ queryKey: KEYS.root });

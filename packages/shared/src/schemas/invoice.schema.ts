@@ -64,6 +64,14 @@ export const createInvoiceSchema = z
     notes: z.string().max(2000).optional(),
     paid: z.number().min(0, "المبلغ المدفوع لا يمكن أن يكون سالباً").optional(),
     paymentMethod: z.enum(["cash", "transfer", "check", "card"]).optional(),
+    // Sale invoices: part of the total settled from the customer's existing
+    // credit balance (advance payments / earlier overpayments). The server
+    // re-validates it against the live ledger.
+    creditApplied: z
+      .number()
+      .min(0, "المبلغ المخصوم من الرصيد لا يمكن أن يكون سالباً")
+      .refine(is2dp, { message: MAX_2DP_MESSAGE })
+      .optional(),
     orderId: z.string().uuid().optional(),
   })
   .superRefine((data, ctx) => {
@@ -90,12 +98,30 @@ export const createInvoiceSchema = z
         message: "مجموع الفاتورة يجب أن يكون موجباً",
       });
     }
-    if ((data.paid ?? 0) > total) {
+    // A customer paying MORE than a sale invoice is accepted: the invoice is
+    // settled and the excess becomes customer credit. Purchase invoices keep
+    // the strict rule (supplier advances go through a standalone payment).
+    if (data.type !== "sale" && (data.paid ?? 0) > total) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         path: ["paid"],
         message: "المبلغ المدفوع لا يمكن أن يتجاوز الإجمالي",
       });
+    }
+    if ((data.creditApplied ?? 0) > 0) {
+      if (data.type !== "sale") {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["creditApplied"],
+          message: "الخصم من الرصيد الدائن متاح لفواتير البيع فقط",
+        });
+      } else if (Math.min(data.paid ?? 0, total) + (data.creditApplied ?? 0) > total + 0.01) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["creditApplied"],
+          message: "المدفوع مع المخصوم من الرصيد يتجاوز إجمالي الفاتورة",
+        });
+      }
     }
   });
 

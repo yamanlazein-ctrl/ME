@@ -12,7 +12,10 @@ import { vouchers } from "../orm/schemas/voucher.table.js";
 import { Party, type PartyData, type PartyListStats } from "../../domain/entities/Party.js";
 import type { TenantContext, PaginatedResult } from "../../domain/types/index.js";
 import { allocateDocumentNumber } from "../utils/documentNumbers.js";
-import { aggregatePartyListStats } from "./partyListStatsAggregation.js";
+import {
+  aggregatePartyListStats,
+  applyLedgerRemainingToPartyStats,
+} from "./partyListStatsAggregation.js";
 
 export class PostgresPartyRepository implements IPartyRepository {
   constructor(private readonly db: DB) {}
@@ -141,7 +144,7 @@ export class PostgresPartyRepository implements IPartyRepository {
     // count vs. byCurrency breakdown) lives in a pure, DB-free function —
     // see partyListStatsAggregation.ts — so it can be unit-tested directly
     // (F09 regression coverage) without a live database.
-    return aggregatePartyListStats(
+    const stats = aggregatePartyListStats(
       invRows.map((r) => ({
         partyId: r.partyId,
         partyCurrency: r.partyCurrency,
@@ -151,6 +154,36 @@ export class PostgresPartyRepository implements IPartyRepository {
         paid: Number(r.paid),
         lastDate: r.lastDate,
       })),
+    );
+
+    const ledgerRows = await this.db
+      .select({
+        partyId: ledgerEntries.partyId,
+        currency: ledgerEntries.currency,
+        debit: sql<string>`coalesce(sum(${ledgerEntries.debit}), 0)::text`,
+        credit: sql<string>`coalesce(sum(${ledgerEntries.credit}), 0)::text`,
+      })
+      .from(ledgerEntries)
+      .where(
+        and(
+          eq(ledgerEntries.tenantId, tenantId),
+          eq(ledgerEntries.status, "active"),
+          inArray(ledgerEntries.partyId, partyIds),
+        ),
+      )
+      .groupBy(ledgerEntries.partyId, ledgerEntries.currency);
+
+    return applyLedgerRemainingToPartyStats(
+      stats,
+      ledgerRows
+        .filter((r) => r.partyId)
+        .map((r) => ({
+          partyId: r.partyId as string,
+          currency: r.currency,
+          debit: Number(r.debit),
+          credit: Number(r.credit),
+        })),
+      kind,
     );
   }
 
@@ -289,13 +322,28 @@ export class PostgresPartyRepository implements IPartyRepository {
     const values: Record<string, unknown> = {};
     if (data.name !== undefined) values.name = data.name;
     if (data.code !== undefined) values.code = data.code ?? null;
+    if (data.companyName !== undefined) values.companyName = data.companyName ?? null;
+    if (data.commercialReg !== undefined) values.commercialReg = data.commercialReg ?? null;
+    if (data.category !== undefined) values.category = data.category ?? null;
+    if (data.salesRep !== undefined) values.salesRep = data.salesRep ?? null;
     if (data.phone !== undefined) values.phone = data.phone ?? null;
     if (data.mobile !== undefined) values.mobile = data.mobile ?? null;
+    if (data.whatsapp !== undefined) values.whatsapp = data.whatsapp ?? null;
+    if (data.altPhone !== undefined) values.altPhone = data.altPhone ?? null;
     if (data.email !== undefined) values.email = data.email ?? null;
+    if (data.website !== undefined) values.website = data.website ?? null;
     if (data.address !== undefined) values.address = data.address ?? null;
     if (data.city !== undefined) values.city = data.city ?? null;
     if (data.country !== undefined) values.country = data.country ?? null;
+    if (data.taxNumber !== undefined) values.taxNumber = data.taxNumber ?? null;
+    if (data.currency !== undefined) values.currency = data.currency;
+    if (data.paymentTerms !== undefined) values.paymentTerms = data.paymentTerms ?? null;
+    if (data.paymentMethod !== undefined) values.paymentMethod = data.paymentMethod ?? null;
+    if (data.creditLimit !== undefined) values.creditLimit = data.creditLimit;
+    if (data.defaultDiscount !== undefined) values.defaultDiscount = data.defaultDiscount;
+    if (data.vat !== undefined) values.vat = data.vat;
     if (data.notes !== undefined) values.notes = data.notes ?? null;
+    if (data.status !== undefined && data.status !== "cancelled") values.status = data.status;
     if (Object.keys(values).length === 0) {
       const existing = await this.findById(id, ctx);
       if (!existing) throw new Error("Party not found");

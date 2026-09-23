@@ -16,7 +16,7 @@
 
 /*
  * Fabric ERP design system.
- * Light = white surfaces + warm yellow accent.
+ * Light = soft off-white slate surfaces (eye-care, no pure white) + warm yellow accent.
  * Dark  = near-black surfaces + same warm yellow accent.
  * Yellow (#F5B400) is ONLY for accents: buttons, active states, links,
  * chart highlights. Never a dominant surface.
@@ -190,35 +190,44 @@
 }
 
 /* ================================================================
- * LIGHT theme — same brand identity, white surfaces, warm gold accent.
+ * LIGHT theme — soft "eye-care" light: no pure white surfaces, no pure
+ * black text. Same brand identity (warm gold accent).
+ *
+ * Layering (lightest → deepest), so panels still separate without glare:
+ *   popover #FCFCFD → card #FAFBFC → background #F7F8FA → page #F2F4F7
+ * Text is slate (#1E293B), never #000; muted text #56657A keeps ≥ 4.5:1
+ * contrast on every surface above. Inputs are transparent (they take the
+ * card colour), so --input is one step stronger than --border to stay visible.
+ * Print documents keep their own white paper palette (print.css).
  * ============================================================== */
 .light {
   color-scheme: light;
-  --background: #ffffff;
-  --foreground: #0a0a0a;
-  --surface: #f7f6f2;
-  --card: #ffffff;
-  --card-foreground: #0a0a0a;
-  --popover: #ffffff;
-  --popover-foreground: #0a0a0a;
+  --background: #f7f8fa;
+  --foreground: #1e293b;
+  --surface: #f2f4f7;
+  --card: #fafbfc;
+  --card-foreground: #1e293b;
+  --popover: #fcfcfd;
+  --popover-foreground: #1e293b;
 
   --primary: #c89100;
   --primary-foreground: #ffffff;
   --primary-glow: #e0a800;
-  --accent-soft: #8a6a00;
+  --accent-soft: #7d6000;
 
-  --secondary: #f1efea;
-  --secondary-foreground: #0a0a0a;
-  --muted: #f1efea;
-  --muted-foreground: #5b6270;
-  --accent: #f1efea;
-  --accent-foreground: #0a0a0a;
+  --secondary: #edf0f4;
+  --secondary-foreground: #1e293b;
+  --muted: #edf0f4;
+  --muted-foreground: #56657a;
+  --accent: #e9edf2;
+  --accent-foreground: #1e293b;
 
-  --border: #e6e4de;
-  --input: #e6e4de;
+  --border: #e2e8f0;
+  --input: #d5dce5;
   --ring: #c89100;
 
-  --currency-syp: #8a6a00;
+  /* One step darker than before: keeps ≥ 5:1 on the softer muted fills. */
+  --currency-syp: #7d6000;
   --currency-usd: #4b5563;
 
   --chart-1: #c89100;
@@ -227,19 +236,19 @@
   --chart-4: #9ca3af;
   --chart-5: #d1d5db;
 
-  --sidebar: #faf9f5;
-  --sidebar-foreground: #0a0a0a;
+  --sidebar: #f7f8fa;
+  --sidebar-foreground: #1e293b;
   --sidebar-primary: #c89100;
   --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: #f1efea;
-  --sidebar-accent-foreground: #0a0a0a;
-  --sidebar-border: #e6e4de;
+  --sidebar-accent: #e9edf2;
+  --sidebar-accent-foreground: #1e293b;
+  --sidebar-border: #e2e8f0;
   --sidebar-ring: #c89100;
 
   --hero-card-bg: linear-gradient(
     135deg,
-    #fffbee 0%,
-    color-mix(in oklab, var(--primary) 12%, #ffffff) 100%
+    #fbf7ea 0%,
+    color-mix(in oklab, var(--primary) 10%, var(--card)) 100%
   );
 }
 

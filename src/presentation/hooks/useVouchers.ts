@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { container } from "@/infrastructure/container";
 import { buildTenantContext } from "@/infrastructure/di/auth-context";
+import { isOk } from "@/core/result";
 import { toast } from "sonner";
 import type { VoucherFilter, CreateVoucherInput } from "@/core/dtos/VoucherDTO";
 import type { VoucherKind, VoucherMethod } from "@/domain/types";
@@ -54,7 +55,11 @@ export function useVoucher(id: string) {
 export function useCreateReceiptVoucher() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (input: CreateVoucherInput) => container.vouchers.createReceipt.execute(input, ctx),
+    mutationFn: async (input: CreateVoucherInput) => {
+      const res = await container.vouchers.createReceipt.execute(input, ctx);
+      if (!isOk(res)) throw res.error;
+      return res.value;
+    },
     onSuccess: (_data, variables) => {
       toast.success("تم إنشاء سند القبض");
       qc.invalidateQueries({ queryKey: KEYS.root });
@@ -79,7 +84,11 @@ export function useCreateReceiptVoucher() {
 export function useCreatePaymentVoucher() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (input: CreateVoucherInput) => container.vouchers.createPayment.execute(input, ctx),
+    mutationFn: async (input: CreateVoucherInput) => {
+      const res = await container.vouchers.createPayment.execute(input, ctx);
+      if (!isOk(res)) throw res.error;
+      return res.value;
+    },
     onSuccess: (_data, variables) => {
       toast.success("تم إنشاء سند الصرف");
       qc.invalidateQueries({ queryKey: KEYS.root });
@@ -103,7 +112,11 @@ export function useCreatePaymentVoucher() {
 export function useCancelVoucher() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (id: string) => container.vouchers.cancel.execute(id, ctx),
+    mutationFn: async (id: string) => {
+      const res = await container.vouchers.cancel.execute(id, ctx);
+      if (!isOk(res)) throw res.error;
+      return res.value;
+    },
     onSuccess: () => {
       toast.success("تم إلغاء السند");
       qc.invalidateQueries({ queryKey: KEYS.root });
