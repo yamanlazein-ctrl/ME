@@ -44,12 +44,10 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { DataPagination } from "@/components/common/DataPagination";
-import { useCancelInvoice, useInvoicesList, useInvoice } from "@/presentation/hooks/useInvoices";
-import { useReturnsList } from "@/presentation/hooks/useReturns";
-import { usePrintJobs } from "@/presentation/hooks/usePrintJobs";
+import { useCancelInvoice, useInvoice, loadInvoice } from "@/presentation/hooks/useInvoices";
+import { useDocumentTrack, type DocumentTrackRow } from "@/presentation/hooks/useDocumentTrack";
 import { useInvoiceAudit } from "@/presentation/hooks/useAudit";
 import type { AuditLogDTO } from "@/infrastructure/api/AuditApiService";
-import { useVouchersList } from "@/presentation/hooks/useVouchers";
 import { formatDateTime } from "@/lib/utils";
 import { formatNumber } from "@/shared/utils/formatNumber";
 import { customers, suppliers } from "@/presentation/hooks/useParties";
@@ -62,23 +60,9 @@ import { printDocument, printOrArchive } from "@/components/print/printPortal";
 import { archiveMeta } from "@/shared/utils/documentArchive";
 import { PrintPageBreak } from "@/components/print/PrintDocument";
 import { InvoicePrintDocument } from "@/components/print/InvoicePrintDocument";
-import { groupSettlementBatches } from "@/lib/settlementBatches";
 
 type TrackKind =
   "all" | "entry" | "sale" | "return" | "print_send" | "print_receive" | "settlement";
-
-type TrackRow = {
-  id: string;
-  kind: Exclude<TrackKind, "all">;
-  number: string;
-  date: string;
-  partyName: string;
-  totalLabel: string;
-  statusLabel: string;
-  href: string;
-  /** Party page to open for settlement rows (their document lives on the party statement). */
-  party?: { kind: "customer" | "supplier"; id: string };
-};
 
 function printInvoiceWithArchive(inv: Invoice) {
   const node = <InvoicePrintDocument invoice={inv} />;
@@ -124,157 +108,44 @@ function InvoicesTrackingPage() {
   const [historyInv, setHistoryInv] = useState<Invoice | null>(null);
   const [page, setPage] = useState(0);
   const [pageSize, setPageSize] = useState(20);
-  const [toDelete, setToDelete] = useState<Invoice | null>(null);
+  const [toDelete, setToDelete] = useState<{ id: string; number: string } | null>(null);
 
-  const invoiceTypeFilter: Invoice["type"] | undefined =
-    type === "entry" || type === "sale" ? type : undefined;
-
-  const filter: InvoiceFilter = useMemo(() => {
-    const f: InvoiceFilter = {};
-    if (q.trim()) f.search = q.trim();
-    if (invoiceTypeFilter) f.type = invoiceTypeFilter;
-    if (status !== "all") f.status = status;
-    if (partyId !== "all") f.partyId = partyId;
-    if (from) f.fromDate = from;
-    if (to) f.toDate = to;
-    f.page = page;
-    f.limit = pageSize;
-    return f;
-  }, [q, invoiceTypeFilter, status, partyId, from, to, page, pageSize]);
-
-  const { data, isLoading, error } = useInvoicesList(
-    type === "return" || type === "print_send" || type === "print_receive" || type === "settlement"
-      ? { ...filter, limit: 1 }
-      : filter,
-  );
-  const invoices = useMemo(() => {
-    if (
-      type === "return" ||
-      type === "print_send" ||
-      type === "print_receive" ||
-      type === "settlement"
-    )
-      return [];
-    return data?.data ?? [];
-  }, [data, type]);
-  // Party/date/status filters run on the server so only matching returns and
-  // vouchers are fetched (the extra rows below still re-check them).
-  const { data: returnsData } = useReturnsList(
-    {
-      ...(status === "active" || status === "cancelled" ? { status } : {}),
-      ...(partyId !== "all" ? { partyId } : {}),
-      ...(from ? { fromDate: from } : {}),
-      ...(to ? { toDate: to } : {}),
-    },
-    { all: true },
-  );
-  const { data: printJobs = [] } = usePrintJobs();
+  // Everything below is filtered, sorted (by document date) and paged ON THE
+  // SERVER. The old screen downloaded every return, print job and voucher of
+  // the company and appended all of them under every page of invoices.
+  const [term, setTerm] = useState("");
+  useEffect(() => {
+    const t = setTimeout(() => setTerm(q.trim()), 300);
+    return () => clearTimeout(t);
+  }, [q]);
+  const { data, isLoading, error } = useDocumentTrack({
+    type,
+    status,
+    partyId: partyId !== "all" ? partyId : undefined,
+    fromDate: from || undefined,
+    toDate: to || undefined,
+    search: term || undefined,
+    page,
+    limit: pageSize,
+  });
+  const rows: DocumentTrackRow[] = data?.data ?? [];
+  const total = data?.total ?? 0;
+  const invoiceRows = rows.filter((r) => r.kind === "entry" || r.kind === "sale");
   const allParties = [...customers, ...suppliers];
-  const { data: vouchersData } = useVouchersList(
-    {
-      ...(partyId !== "all" ? { partyId } : {}),
-      ...(from ? { fromDate: from } : {}),
-      ...(to ? { toDate: to } : {}),
-    },
-    { all: true },
-  );
-  const allVouchers = vouchersData?.data ?? [];
 
   const cancelInvoice = useCancelInvoice();
+  /** Row actions need the full invoice; it is loaded only when used. */
+  const withInvoice = async (id: string, apply: (inv: Invoice) => void) => {
+    const inv = await loadInvoice(id);
+    if (inv) apply(inv as Invoice);
+  };
 
-  const extraRows: TrackRow[] = useMemo(() => {
-    const rows: TrackRow[] = [];
-    const qLower = q.trim().toLowerCase();
-    if (type === "all" || type === "return") {
-      for (const r of returnsData?.data ?? []) {
-        if (status === "active" && r.status !== "active") continue;
-        if (status === "cancelled" && r.status !== "cancelled") continue;
-        if (partyId !== "all" && r.partyId !== partyId) continue;
-        if (from && r.date < from) continue;
-        if (to && r.date > to) continue;
-        const party =
-          r.kind === "entry"
-            ? suppliers.find((p) => p.id === r.partyId)
-            : customers.find((p) => p.id === r.partyId);
-        const label = r.kind === "entry" ? "مرتجع دخول" : "مرتجع بيع";
-        if (qLower && !`${r.number} ${party?.name ?? ""} ${label}`.toLowerCase().includes(qLower)) {
-          continue;
-        }
-        const totalVal = r.lines.reduce((s, l) => s + l.quantityKg * l.pricePerKg, 0);
-        rows.push({
-          id: `ret-${r.id}`,
-          kind: "return",
-          number: r.number,
-          date: r.date,
-          partyName: party?.name ?? "—",
-          totalLabel: formatAmount(totalVal, r.currency as never),
-          statusLabel: r.status === "active" ? "نشطة" : "ملغاة",
-          href: "/returns",
-        });
-      }
-    }
-    if (type === "all" || type === "print_send" || type === "print_receive") {
-      for (const j of printJobs) {
-        const isRecv = j.status === "received";
-        if (type === "print_send" && isRecv) continue;
-        if (type === "print_receive" && !isRecv) continue;
-        if (qLower && !`${j.number} ${j.pressName ?? ""}`.toLowerCase().includes(qLower)) continue;
-        rows.push({
-          id: `print-${j.id}`,
-          kind: isRecv ? "print_receive" : "print_send",
-          number: j.number,
-          date: j.sentDate,
-          partyName: j.pressName || "مطبعة",
-          totalLabel: `${j.sentKg} كغ`,
-          statusLabel: isRecv ? "مستلم" : "مرسل",
-          href: isRecv ? "/invoices/print-receive/new" : "/invoices/print-send/new",
-        });
-      }
-    }
-    if (type === "all" || type === "settlement") {
-      for (const b of groupSettlementBatches(allVouchers)) {
-        if (status === "active" && b.status !== "active") continue;
-        if (status === "cancelled" && b.status !== "cancelled") continue;
-        if (status === "draft") continue;
-        if (partyId !== "all" && b.partyId !== partyId) continue;
-        if (from && b.date < from) continue;
-        if (to && b.date > to) continue;
-        const party = (b.partyKind === "customer" ? customers : suppliers).find(
-          (p) => p.id === b.partyId,
-        );
-        if (
-          qLower &&
-          !`${b.batchNumber} ${party?.name ?? ""} دفعة`.toLowerCase().includes(qLower)
-        ) {
-          continue;
-        }
-        rows.push({
-          id: `settle-${b.partyId}-${b.batchNumber}`,
-          kind: "settlement",
-          number: b.batchNumber,
-          date: b.date,
-          partyName: party?.name ?? "—",
-          totalLabel: formatAmount(b.total, b.currency as never),
-          statusLabel: b.status === "active" ? "نشطة" : "ملغاة",
-          href: b.partyKind === "customer" ? "/customers" : "/suppliers",
-          party: { kind: b.partyKind, id: b.partyId },
-        });
-      }
-    }
-    return rows;
-  }, [returnsData, printJobs, allVouchers, type, status, partyId, from, to, q]);
+  useEffect(() => setPage(0), [term, type, status, partyId, from, to]);
 
-  const invoiceTotal = useMemo(() => data?.total ?? 0, [data]);
-  const total =
-    type === "all"
-      ? invoiceTotal + extraRows.length
-      : type === "entry" || type === "sale"
-        ? invoiceTotal
-        : extraRows.length;
-
-  useEffect(() => setPage(0), [q, type, status, partyId, from, to]);
-
-  const handlePrintAll = () => {
+  const handlePrintAll = async () => {
+    const invoices = (await Promise.all(invoiceRows.map((r) => loadInvoice(r.id)))).filter(
+      (x): x is NonNullable<typeof x> => !!x,
+    ) as Invoice[];
     const docs = invoices.map((inv, i) => (
       <div key={inv.id}>
         {i > 0 && <PrintPageBreak />}
@@ -293,10 +164,10 @@ function InvoicesTrackingPage() {
           <Button
             variant="outline"
             size="sm"
-            onClick={handlePrintAll}
-            disabled={invoices.length === 0}
+            onClick={() => void handlePrintAll()}
+            disabled={invoiceRows.length === 0}
           >
-            <Printer className="ml-1 h-4 w-4" /> طباعة المفضلة ({invoices.length})
+            <Printer className="ml-1 h-4 w-4" /> طباعة المفضلة ({invoiceRows.length})
           </Button>
         </div>
       }
@@ -395,7 +266,7 @@ function InvoicesTrackingPage() {
 
         <PageCard
           title="سجل الفواتير"
-          description={`عرض ${invoices.length + extraRows.length} مستنداً (فواتير + مرتجعات + مطبعة + دفعات).`}
+          description={`عرض ${rows.length} من أصل ${total} مستنداً (فواتير + مرتجعات + مطبعة + دفعات).`}
           noBodyPadding
         >
           {isLoading && <div className="p-8 text-center text-muted-foreground">جاري التحميل…</div>}
@@ -417,17 +288,28 @@ function InvoicesTrackingPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border">
-                  {invoices.map((inv) => {
-                    const party = allParties.find((p) => p.id === inv.partyId);
+                  {rows.map((row) => {
+                    if (row.kind !== "entry" && row.kind !== "sale")
+                      return <OtherDocumentRow key={`${row.kind}-${row.id}`} row={row} />;
+                    const inv = {
+                      id: row.id,
+                      number: row.number ?? "",
+                      type: row.kind,
+                      partyId: row.partyId,
+                      status: row.status,
+                    };
+                    const party = allParties.find((p) => p.id === inv.partyId) ?? {
+                      name: row.partyName ?? "—",
+                    };
                     const isCancelled = inv.status === "cancelled";
                     return (
                       <tr key={inv.id} className={isCancelled ? "bg-destructive/5" : ""}>
                         <td className="px-3 py-2 font-mono text-xs text-primary">{inv.number}</td>
                         <td className="px-3 py-2">{TYPE_LABEL[inv.type]}</td>
                         <td className="px-3 py-2">{party?.name ?? "—"}</td>
-                        <td className="px-3 py-2 tabular-nums">{formatDateTime(inv.createdAt)}</td>
+                        <td className="px-3 py-2 tabular-nums">{row.date}</td>
                         <td className="px-3 py-2 text-left tabular-nums">
-                          {formatAmount(inv.total(), inv.currency)}
+                          {formatAmount(row.total ?? 0, (row.currency ?? "USD") as never)}
                         </td>
                         <td className="px-3 py-2">
                           <span
@@ -439,21 +321,27 @@ function InvoicesTrackingPage() {
                                   : "text-warning"
                             }
                           >
-                            {STATUS_LABEL[inv.status as Invoice["status"]]}
+                            {STATUS_LABEL[inv.status as Invoice["status"]] ?? inv.status}
                           </span>
                         </td>
                         <td className="px-3 py-2 text-left">
                           <div className="inline-flex flex-nowrap items-center justify-end gap-1 whitespace-nowrap">
-                            <Button size="sm" variant="ghost" onClick={() => setPreview(inv)}>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => void withInvoice(inv.id, setPreview)}
+                            >
                               <Eye className="ml-1 h-4 w-4" /> عرض
                             </Button>
                             <Button
                               size="sm"
                               variant="outline"
-                              onClick={() => {
-                                setPreview(inv);
-                                printInvoiceWithArchive(inv);
-                              }}
+                              onClick={() =>
+                                void withInvoice(inv.id, (full) => {
+                                  setPreview(full);
+                                  printInvoiceWithArchive(full);
+                                })
+                              }
                             >
                               <Printer className="ml-1 h-4 w-4" /> طباعة
                             </Button>
@@ -462,7 +350,7 @@ function InvoicesTrackingPage() {
                                 size="sm"
                                 variant="ghost"
                                 className="text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
-                                onClick={() => setToDelete(inv)}
+                                onClick={() => setToDelete({ id: inv.id, number: inv.number })}
                                 aria-label="حذف"
                               >
                                 <Trash2 className="ml-1 h-4 w-4" /> حذف
@@ -471,7 +359,7 @@ function InvoicesTrackingPage() {
                             <Button
                               size="sm"
                               variant="ghost"
-                              onClick={() => setHistoryInv(inv)}
+                              onClick={() => void withInvoice(inv.id, setHistoryInv)}
                               aria-label="سجل الفاتورة"
                               title="الخط الزمني للفاتورة (من سجل التدقيق)"
                             >
@@ -491,43 +379,7 @@ function InvoicesTrackingPage() {
                       </tr>
                     );
                   })}
-                  {extraRows.map((row) => (
-                    <tr key={row.id}>
-                      <td className="px-3 py-2 font-mono text-xs text-primary">{row.number}</td>
-                      <td className="px-3 py-2">
-                        {row.kind === "return"
-                          ? "مرتجع"
-                          : row.kind === "settlement"
-                            ? "دفعة"
-                            : row.kind === "print_send"
-                              ? "إرسال مطبعة"
-                              : "استلام مطبعة"}
-                      </td>
-                      <td className="px-3 py-2">{row.partyName}</td>
-                      <td className="px-3 py-2 tabular-nums">{row.date}</td>
-                      <td className="px-3 py-2 text-left tabular-nums">{row.totalLabel}</td>
-                      <td className="px-3 py-2">{row.statusLabel}</td>
-                      <td className="px-3 py-2 text-left">
-                        {row.party ? (
-                          <Link
-                            to={row.party.kind === "customer" ? "/customers/$id" : "/suppliers/$id"}
-                            params={{ id: row.party.id }}
-                            className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-primary hover:underline"
-                          >
-                            فتح كشف الحساب
-                          </Link>
-                        ) : (
-                          <Link
-                            to={row.href}
-                            className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-primary hover:underline"
-                          >
-                            فتح
-                          </Link>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                  {invoices.length === 0 && extraRows.length === 0 && (
+                  {rows.length === 0 && (
                     <tr>
                       <td colSpan={7} className="p-10 text-center text-muted-foreground">
                         لا توجد فواتير مطابقة.
@@ -739,6 +591,63 @@ function TimelineRow({ entry }: { entry: AuditLogDTO }) {
 }
 
 /** Full audit timeline dialog for one invoice — the heart of invoice tracking. */
+const OTHER_KIND_LABEL: Record<string, string> = {
+  return: "مرتجع",
+  settlement: "دفعة",
+  print_send: "إرسال مطبعة",
+  print_receive: "استلام مطبعة",
+};
+const OTHER_STATUS_LABEL: Record<string, string> = {
+  active: "نشطة",
+  cancelled: "ملغاة",
+  received: "مستلم",
+  sent: "مرسل",
+};
+
+function OtherDocumentRow({ row }: { row: DocumentTrackRow }) {
+  const partyLink = row.kind === "settlement" && row.partyId && row.partyKind;
+  const href =
+    row.kind === "return"
+      ? "/returns"
+      : row.kind === "print_receive"
+        ? "/invoices/print-receive/new"
+        : "/invoices/print-send/new";
+  return (
+    <tr>
+      <td className="px-3 py-2 font-mono text-xs text-primary">{row.number}</td>
+      <td className="px-3 py-2">{OTHER_KIND_LABEL[row.kind] ?? row.kind}</td>
+      <td className="px-3 py-2">
+        {row.partyName ?? (row.kind.startsWith("print") ? "مطبعة" : "—")}
+      </td>
+      <td className="px-3 py-2 tabular-nums">{row.date}</td>
+      <td className="px-3 py-2 text-left tabular-nums">
+        {row.quantityKg != null
+          ? `${formatNumber(row.quantityKg)} كغ`
+          : formatAmount(row.total ?? 0, (row.currency ?? "USD") as never)}
+      </td>
+      <td className="px-3 py-2">{OTHER_STATUS_LABEL[row.status] ?? row.status}</td>
+      <td className="px-3 py-2 text-left">
+        {partyLink ? (
+          <Link
+            to={row.partyKind === "customer" ? "/customers/$id" : "/suppliers/$id"}
+            params={{ id: row.partyId! }}
+            className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-primary hover:underline"
+          >
+            فتح كشف الحساب
+          </Link>
+        ) : (
+          <Link
+            to={href}
+            className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-primary hover:underline"
+          >
+            فتح
+          </Link>
+        )}
+      </td>
+    </tr>
+  );
+}
+
 function InvoiceTimelineDialog({
   invoice,
   onClose,

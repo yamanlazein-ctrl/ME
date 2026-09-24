@@ -74,6 +74,11 @@ export function useInvoice(id: string) {
   });
 }
 
+/** Load one full invoice on demand (e.g. a row action on a server-paged list). */
+export function loadInvoice(id: string) {
+  return container.invoices.repository.findById(id, ctx);
+}
+
 /* ── Mutations ───────────────────────────────────────────────────── */
 
 /**

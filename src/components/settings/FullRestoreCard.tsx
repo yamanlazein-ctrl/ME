@@ -73,10 +73,14 @@ export function FullRestoreCard({
     setState("restoring");
     setError(null);
     try {
-      const url = mode === "wizard" ? "/api/setup/wizard/restore" : "/api/backup/restore?confirm=replace";
+      const url =
+        mode === "wizard" ? "/api/setup/wizard/restore" : "/api/backup/restore?confirm=replace";
       const res = await fetch(url, {
         method: "POST",
-        headers: { ...(mode === "settings" ? authHeaders() : {}), "Content-Type": "application/octet-stream" },
+        headers: {
+          ...(mode === "settings" ? authHeaders() : {}),
+          "Content-Type": "application/octet-stream",
+        },
         body: file,
       });
       const body = await res.json().catch(() => ({}));
@@ -84,7 +88,9 @@ export function FullRestoreCard({
       const rows = (body.tables ?? []).reduce((a: number, t: { rows: number }) => a + t.rows, 0);
       setResult(
         `تمت الاستعادة والتحقق من ${rows.toLocaleString("ar")} سجل` +
-          (body.schema?.migratedDuringRestore ? ` (رُقّيت النسخة ${body.schema.migratedDuringRestore} ترحيلات)` : "") +
+          (body.schema?.migratedDuringRestore
+            ? ` (رُقّيت النسخة ${body.schema.migratedDuringRestore} ترحيلات)`
+            : "") +
           (body.safetyBackup ? `. نسخة أمان من البيانات السابقة: ${body.safetyBackup}` : ""),
       );
       setState("done");
@@ -98,7 +104,10 @@ export function FullRestoreCard({
 
   const busy = state === "verifying" || state === "restoring";
   const canRestore =
-    !!file && !busy && state !== "done" && (mode === "wizard" || (!!summary && phrase.trim() === CONFIRM_PHRASE));
+    !!file &&
+    !busy &&
+    state !== "done" &&
+    (mode === "wizard" || (!!summary && phrase.trim() === CONFIRM_PHRASE));
 
   return (
     <div className="space-y-3 rounded-xl border p-4">
@@ -138,7 +147,9 @@ export function FullRestoreCard({
       {summary && (
         <div className="rounded-lg bg-muted/50 p-3 text-xs leading-6">
           <div>تاريخ النسخة: {new Date(summary.createdAt).toLocaleString("ar")}</div>
-          <div>الشركة: {summary.company ?? "—"} · إصدار البرنامج: {summary.appVersion}</div>
+          <div>
+            الشركة: {summary.company ?? "—"} · إصدار البرنامج: {summary.appVersion}
+          </div>
           <div>
             السجلات: {summary.rows.toLocaleString("ar")} · الفواتير:{" "}
             {(summary.rowsByTable.invoices ?? 0).toLocaleString("ar")} · السندات:{" "}
@@ -163,8 +174,8 @@ export function FullRestoreCard({
 
       {state === "restoring" && (
         <p className="flex items-center gap-2 text-sm text-muted-foreground">
-          <Loader2 className="h-4 w-4 animate-spin" /> جاري الاستعادة والتحقق… لا تغلق البرنامج (إغلاقه لا يُتلف البيانات، لكنه يلغي
-          العملية).
+          <Loader2 className="h-4 w-4 animate-spin" /> جاري الاستعادة والتحقق… لا تغلق البرنامج
+          (إغلاقه لا يُتلف البيانات، لكنه يلغي العملية).
         </p>
       )}
       {state === "done" && result && (

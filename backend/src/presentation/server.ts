@@ -46,6 +46,8 @@ import {
 } from "./routes/invitation.route.js";
 import { registerAuditRoutes } from "./routes/audit.route.js";
 import { createBackupRouter } from "./routes/backup.route.js";
+import { registerDocumentTrackRoutes } from "./routes/documentTrack.route.js";
+import { PostgresDocumentTrackRepository } from "../infrastructure/repositories/PostgresDocumentTrackRepository.js";
 import { createIntegrityRouter } from "./routes/integrity.route.js";
 import { dataSafeModeGuard } from "../infrastructure/http/middleware/dataSafeMode.middleware.js";
 import { registerFxRoutes } from "./routes/fx.route.js";
@@ -415,6 +417,12 @@ registerSettingsRoutes(
 registerDashboardRoutes(
   apiRouter,
   container.dashboardRepo,
+  authMiddleware,
+  rbac(["admin", "accountant", "warehouse", "viewer"]),
+);
+registerDocumentTrackRoutes(
+  apiRouter,
+  new PostgresDocumentTrackRepository(container.db),
   authMiddleware,
   rbac(["admin", "accountant", "warehouse", "viewer"]),
 );
