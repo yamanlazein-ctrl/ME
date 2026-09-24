@@ -4,7 +4,7 @@ import { toast } from "sonner";
 import { container } from "@/infrastructure/container";
 import { buildTenantContext } from "@/infrastructure/di/auth-context";
 import { isOk } from "@/core/result";
-import { getAccessToken } from "@/infrastructure/auth/TokenProvider";
+import { getAccessToken, SESSION_STARTED_EVENT } from "@/infrastructure/auth/TokenProvider";
 import { PartyFilter } from "@/core/dtos/PartyDTO";
 import type { Party, PartyKind } from "@/domain/entities/Party";
 import type { CreatePartyInput } from "@/core/dtos/PartyDTO";
@@ -107,6 +107,13 @@ export function refreshParties(): Promise<void> {
 
 if (typeof window !== "undefined" && getAccessToken()) {
   void loadAll();
+}
+if (typeof window !== "undefined") {
+  // A login after startup must fill the cache too (see persistTokens).
+  window.addEventListener(SESSION_STARTED_EVENT, () => {
+    retryAttempts = 0;
+    void loadAll(true);
+  });
 }
 
 /* ── Reactivity hook (re-renders on party changes) ───────────────── */

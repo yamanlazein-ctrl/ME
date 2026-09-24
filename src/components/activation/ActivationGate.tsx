@@ -71,10 +71,12 @@ export function ActivationGate({ children }: { children: React.ReactNode }) {
         const r = await fetch(url, { signal: ctrl.signal, cache: "no-store" });
         if (!r.ok) {
           const body = (await r.json().catch(() => ({}))) as { code?: string };
-          if (
-            r.status === 503 &&
-            (body.code === "SETUP_STATUS_UNAVAILABLE" || body.code === "SETUP_REQUIRED")
-          ) {
+          // Only a database that genuinely needs setup cancels the local
+          // activation. SETUP_STATUS_UNAVAILABLE is a transient read failure
+          // (e.g. the server still busy at startup); treating it the same way
+          // wiped the licence and put an activated shop back on the
+          // activation screen after an update.
+          if (r.status === 503 && body.code === "SETUP_REQUIRED") {
             clearLicense();
             if (!cancelled) setActivated(false);
             return;

@@ -75,13 +75,31 @@ export function createTokenProvider(): TokenProvider {
   };
 }
 
+/** Fired when a NEW session starts (no access token before) — any login path. */
+export const SESSION_STARTED_EVENT = "erp:session-started";
+
 export function persistTokens(accessToken: string, refreshToken?: string): void {
   if (typeof window === "undefined") return;
+  let hadSession = false;
   try {
+    hadSession = !!localStorage.getItem(TOKEN_KEY);
     localStorage.setItem(TOKEN_KEY, accessToken);
     if (refreshToken) localStorage.setItem(REFRESH_KEY, refreshToken);
   } catch {
     /* ignore */
+  }
+  // Module caches (customers/suppliers, fabrics/colors/rolls) load once at
+  // startup and only when a token already exists. A login that happens AFTER
+  // startup (PIN picker, invite, PIN recovery, first run after activation)
+  // left them empty: every customer, supplier and roll "disappeared" while
+  // the dashboard — which queries directly — still showed the figures.
+  // Token refreshes (a session already existed) do not reload them.
+  if (!hadSession) {
+    try {
+      window.dispatchEvent(new Event(SESSION_STARTED_EVENT));
+    } catch {
+      /* ignore */
+    }
   }
 }
 

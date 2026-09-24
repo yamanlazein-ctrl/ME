@@ -343,6 +343,9 @@ fn apply_requested_factory_reset(cfg: &BootConfig) -> io::Result<()> {
     Ok(())
 }
 
+/// Hub pairing state written by the server next to pgdata (hubConfig.ts).
+const HUB_PAIRING_FILES: [&str; 3] = ["hub.json", "hub-session.json", "hub-credentials.dat"];
+
 /// How many reset archives (`pgdata.reset-*`) to keep; older ones are removed.
 const RESET_ARCHIVES_KEPT: usize = 3;
 
@@ -366,6 +369,16 @@ pub(crate) fn move_pgdata_aside(app_data_root: &Path) -> io::Result<Option<PathB
     let manifest = crate::db_meta::integrity_manifest_path(app_data_root);
     if manifest.exists() {
         let _ = fs::rename(&manifest, target.join("data-integrity.before-reset.json"));
+    }
+    // The hub pairing belongs to the archived company too. Left in place, the
+    // fresh company would come up paired to the OLD hub — pulling the old
+    // company's documents into the new database and pushing new ones into the
+    // old hub. Kept with the archive (recoverable), never deleted.
+    for name in HUB_PAIRING_FILES {
+        let p = app_data_root.join(name);
+        if p.exists() {
+            let _ = fs::rename(&p, target.join(format!("{name}.before-reset")));
+        }
     }
     // Retention: keep the newest few archives (names sort by utc stamp).
     let mut archives: Vec<PathBuf> = fs::read_dir(app_data_root)?
@@ -1612,6 +1625,9 @@ mod boot_lifecycle_tests {
         fs::write(dir.join("pgdata").join("PG_VERSION"), "17\n").unwrap();
         fs::write(dir.join("pgdata").join("base").join("row"), "invoice data").unwrap();
         fs::write(dir.join(FACTORY_RESET_FLAG), b"1").unwrap();
+        for name in HUB_PAIRING_FILES {
+            fs::write(dir.join(name), b"{\"url\":\"https://old-hub\"}").unwrap();
+        }
         let cfg = BootConfig {
             resources_root: dir.join("resources"),
             app_data_root: dir.clone(),
@@ -1637,6 +1653,10 @@ mod boot_lifecycle_tests {
             .find(|e| e.file_name().to_string_lossy().starts_with("pgdata.reset-"))
             .expect("archive exists");
         assert!(archive.path().join("base").join("row").exists(), "old data kept intact");
+        for name in HUB_PAIRING_FILES {
+            assert!(!dir.join(name).exists(), "{name}: the fresh company must not stay paired to the old hub");
+            assert!(archive.path().join(format!("{name}.before-reset")).exists(), "{name} kept with the archive");
+        }
         let _ = fs::remove_dir_all(&dir);
     }
 

@@ -4,7 +4,7 @@ import { toast } from "sonner";
 import { container } from "@/infrastructure/container";
 import { fetchAllPaged } from "@/lib/fetchAllPaged";
 import { buildTenantContext } from "@/infrastructure/di/auth-context";
-import { getAccessToken } from "@/infrastructure/auth/TokenProvider";
+import { getAccessToken, SESSION_STARTED_EVENT } from "@/infrastructure/auth/TokenProvider";
 import { InventoryFilter } from "@/application/ports";
 import { Fabric, type FabricData } from "@/domain/entities/Fabric";
 import { Color, type ColorData } from "@/domain/entities/Color";
@@ -129,6 +129,13 @@ export function refreshInventory(): Promise<void> {
 
 if (typeof window !== "undefined" && getAccessToken()) {
   void loadAll();
+}
+if (typeof window !== "undefined") {
+  // A login after startup must fill the cache too (see persistTokens).
+  window.addEventListener(SESSION_STARTED_EVENT, () => {
+    retryAttempts = 0;
+    void loadAll(true);
+  });
 }
 
 /* ── React Query hooks ────────────────────────────────────────────── */
