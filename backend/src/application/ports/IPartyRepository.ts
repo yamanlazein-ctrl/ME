@@ -2,6 +2,8 @@ import type { TenantContext, PaginatedResult, PartyKind } from "../../domain/typ
 import type { PartyData } from "../../domain/entities/Party.js";
 
 export interface PartyFilter {
+  /** Keyset cursor ("load every row" callers) — see keysetPage.ts. */
+  cursor?: string;
   kind?: PartyKind;
   search?: string;
   status?: string;

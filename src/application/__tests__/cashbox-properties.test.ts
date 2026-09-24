@@ -258,7 +258,9 @@ describe("Expense tracking properties (fast-check)", () => {
           const totalFromGroups = Array.from(byDate.values()).reduce((a, b) => a + b, 0);
           const totalDirect = expenses.reduce((sum, e) => sum + e.amount, 0);
 
-          expect(totalFromGroups).toBeCloseTo(totalDirect, 10);
+          // Money is 2dp: summation order changes float noise far below a cent
+          // (flaky at 10 digits for sums up to 20M); compare at currency precision.
+          expect(totalFromGroups).toBeCloseTo(totalDirect, 2);
         },
       ),
     );

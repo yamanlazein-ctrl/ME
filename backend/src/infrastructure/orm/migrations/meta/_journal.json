@@ -638,6 +638,27 @@
       "when": 1790319600000,
       "tag": "20261013_pg_trgm_search",
       "breakpoints": true
+    },
+    {
+      "idx": 91,
+      "version": 7,
+      "when": 1790406000000,
+      "tag": "20261014_cashbox_daily_rls_fix",
+      "breakpoints": true
+    },
+    {
+      "idx": 92,
+      "version": 7,
+      "when": 1790492400000,
+      "tag": "20261015_ledger_keyset_index",
+      "breakpoints": true
+    },
+    {
+      "idx": 93,
+      "version": 7,
+      "when": 1790578800000,
+      "tag": "20261016_sync_inbox_applied_seq",
+      "breakpoints": true
     }
   ]
 }

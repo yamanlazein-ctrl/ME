@@ -19,13 +19,14 @@ import { companyProfiles } from "../orm/schemas/company-profile.table.js";
 import type { DashboardData } from "../../domain/entities/Dashboard.js";
 import type { TenantContext } from "../../domain/types/index.js";
 
+import { localToday, localDateISO } from "../utils/localDate.js";
 export class PostgresDashboardRepository implements IDashboardRepository {
   constructor(private readonly db: DB) {}
 
   async getDashboard(ctx: TenantContext): Promise<DashboardData> {
-    const today = new Date().toISOString().slice(0, 10);
-    const weekStart = new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10);
-    const monthStart = new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10);
+    const today = localToday();
+    const weekStart = localDateISO(new Date(Date.now() - 7 * 86400000));
+    const monthStart = localDateISO(new Date(Date.now() - 30 * 86400000));
 
     const base = eq(invoices.tenantId, ctx.tenantId);
 
@@ -331,7 +332,7 @@ export class PostgresDashboardRepository implements IDashboardRepository {
     // ── Today / yesterday profit (revenue − COGS) ───────────────────
     // Cost basis: current roll purchase price (price_per_kg) at sale time.
     const saleBase = and(base, eq(invoices.type, "sale"), eq(invoices.status, "active"));
-    const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+    const yesterday = localDateISO(new Date(Date.now() - 86400000));
     // Fix H-7: revStats/cogsStats had no groupBy(currency) at all — a USD
     // sale and a SYP sale on the same day were summed into one "profitToday"
     // number with no currency attached. Group both by currency and compute
@@ -468,7 +469,7 @@ export class PostgresDashboardRepository implements IDashboardRepository {
       const out: Array<{ label: string; valueUsd: number; byCurrency: Record<string, number> }> =
         [];
       for (let i = days - 1; i >= 0; i--) {
-        const d = new Date(Date.now() - i * 86400000).toISOString().slice(0, 10);
+        const d = localDateISO(new Date(Date.now() - i * 86400000));
         out.push({
           label: d,
           valueUsd: trendUsdByDate.get(d) ?? 0,

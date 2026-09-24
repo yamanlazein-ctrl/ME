@@ -21,6 +21,8 @@ export const createColorSchema = z.object({
 export const updateColorSchema = createColorSchema.partial().omit({ fabricId: true });
 
 export const listColorsSchema = z.object({
+  /** Keyset cursor for "load every row" callers (no OFFSET scan). */
+  cursor: z.string().max(300).optional(),
   fabricId: z.string().uuid().optional(),
   search: z.string().max(200).optional(),
   page: z.coerce.number().int().min(0).optional().default(0),

@@ -68,13 +68,13 @@ async function loadAll(force = false): Promise<void> {
     try {
       const ctx = buildTenantContext();
       // Legacy synchronous lookups (customerById/supplierById, prints, detail
-      // pages) need every party, not just the first page. Page by `page`
-      // (the only paging parameter the API accepts) until hasNext is false.
+      // pages) need every party, not just the first page. Walk the keyset
+      // cursor (page numbers only as a fallback) until the server says done.
       const pageSize = 1000;
       const loadKind = (kind: "customer" | "supplier") =>
         fetchAllPaged<Party>(
-          async (page, limit) => {
-            const res = await container.parties.list.execute({ kind, limit, page }, ctx);
+          async (page, limit, cursor) => {
+            const res = await container.parties.list.execute({ kind, limit, page, cursor }, ctx);
             return isPaginated<Party>(res) ? res : (res as Party[]);
           },
           { pageSize, maxPages: 200, label: `parties:${kind}` },

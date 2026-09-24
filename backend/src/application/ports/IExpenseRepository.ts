@@ -2,6 +2,8 @@ import type { TenantContext, PaginatedResult } from "../../domain/types/index.js
 import type { ExpenseData, CreateExpenseInput } from "../../domain/entities/Expense.js";
 
 export interface ExpenseFilter {
+  /** Keyset cursor ("load every row" callers) — see keysetPage.ts. */
+  cursor?: string;
   category?: string;
   status?: string;
   fromDate?: string;

@@ -36,6 +36,7 @@ import {
 import { addSupplier, suppliers, supplierById, useParties } from "@/presentation/hooks/useParties";
 import { SectionCard, Field } from "./InventoryHelpers";
 
+import { localToday } from "@/lib/localDate";
 type FabricFormState = { open: boolean; editing?: Fabric };
 type ColorFormState = { open: boolean; fabricId: string; editing?: Color };
 type RollFormState = { open: boolean; colorId: string; editing?: Roll };
@@ -59,7 +60,7 @@ function FabricFormDialog({ state, onClose }: { state: FabricFormState; onClose:
   const [minKg, setMinKg] = useState<number>(10);
   // Section 2
   const [supplierId, setSupplierId] = useState<string>("");
-  const [entryDate, setEntryDate] = useState<string>(new Date().toISOString().slice(0, 10));
+  const [entryDate, setEntryDate] = useState<string>(localToday());
   const [createdBy, setCreatedBy] = useState<string>("أحمد الشامي");
   // Section 3
   const [colorName, setColorName] = useState("");
@@ -87,7 +88,7 @@ function FabricFormDialog({ state, onClose }: { state: FabricFormState; onClose:
     setUnit(e?.unit ?? "kg");
     setMinKg(e?.minStockKg ?? 10);
     setSupplierId("");
-    setEntryDate(new Date().toISOString().slice(0, 10));
+    setEntryDate(localToday());
     setCreatedBy(e?.createdBy ?? "أحمد الشامي");
     setColorName("");
     setColorCode("");
@@ -647,7 +648,7 @@ function RollFormDialog({ state, onClose }: { state: RollFormState; onClose: () 
   // recorded one); a new roll starts unset.
   const [supplierId, setSupplierId] = useState<string>(editing?.supplierId ?? "");
   const [date, setDate] = useState<string>(
-    editing?.entryDate ?? new Date().toISOString().slice(0, 10),
+    editing?.entryDate ?? localToday(),
   );
   const [rollErr, setRollErr] = useState<string | null>(null);
   const [dyeErr, setDyeErr] = useState<string | null>(null);
@@ -669,7 +670,7 @@ function RollFormDialog({ state, onClose }: { state: RollFormState; onClose: () 
       setPrice(e?.pricePerKg != null ? String(e.pricePerKg) : "");
       setCurrency(e?.currency ?? "SYP");
       setSupplierId(e?.supplierId ?? "");
-      setDate(e?.entryDate ?? new Date().toISOString().slice(0, 10));
+      setDate(e?.entryDate ?? localToday());
     }
   }, [state.open, state.editing]);
 

@@ -75,6 +75,7 @@ import { parseInvoiceNotes } from "@/components/print/noteParser";
 import { formatNumber, formatMoney, formatQuantity } from "@/shared/utils/formatNumber";
 import { MAX_2DP_MSG, hasMoreThan2dp } from "@/shared/utils/precision";
 
+import { localToday } from "@/lib/localDate";
 export const Route = createFileRoute("/invoices/entry/new")({
   validateSearch: (search: Record<string, unknown>): { edit?: string } => ({
     edit: typeof search.edit === "string" ? search.edit : undefined,
@@ -131,7 +132,7 @@ function EntryInvoicePage() {
 
   const [supplierId, setSupplierId] = useState("");
   const [currency, setCurrency] = useState<Currency>("SYP");
-  const [date, setDate] = useState<string>(new Date().toISOString().slice(0, 10));
+  const [date, setDate] = useState<string>(localToday());
   // FX rule (base currency = USD): a non-USD entry invoice MUST carry the
   // frozen exchange rate (units of SYP per 1 USD) captured at creation time.
   const [exchangeRate, setExchangeRate] = useState<number | "">("");

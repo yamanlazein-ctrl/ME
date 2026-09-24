@@ -33,6 +33,8 @@ export const createVoucherSchema = z
   });
 
 export const listVouchersSchema = z.object({
+  /** Keyset cursor for "load every row" callers (no OFFSET scan). */
+  cursor: z.string().max(300).optional(),
   kind: z.enum(["receipt", "payment"]).optional(),
   partyId: z.string().uuid().optional(),
   invoiceId: z.string().uuid().optional(),

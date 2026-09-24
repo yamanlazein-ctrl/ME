@@ -39,6 +39,7 @@ import {
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 
+import { localToday } from "@/lib/localDate";
 export const Route = createFileRoute("/orders/new")({
   component: NewOrderPage,
   head: () => ({
@@ -95,7 +96,7 @@ function NewOrderPage() {
 
   const [customerId, setCustomerId] = useState("");
   const [currency, setCurrency] = useState<Currency>("SYP");
-  const [date, setDate] = useState<string>(new Date().toISOString().slice(0, 10));
+  const [date, setDate] = useState<string>(localToday());
   const [notes, setNotes] = useState("");
   const [lines, setLines] = useState<Line[]>(() => [emptyLine()]);
   const [error, setError] = useState<string | null>(null);

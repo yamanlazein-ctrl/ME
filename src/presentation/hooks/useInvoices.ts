@@ -35,15 +35,19 @@ const KEYS = {
  * EVERY matching row — for screens that compute balances/totals and must not
  * work on a truncated first page.
  */
-export function useInvoicesList(filter?: InvoiceFilter, opts?: { all?: boolean }) {
+export function useInvoicesList(filter?: InvoiceFilter, opts?: { all?: boolean; enabled?: boolean }) {
   const all = Boolean(opts?.all);
   return useQuery({
+    enabled: opts?.enabled ?? true,
     queryKey: all ? [...KEYS.list(filter), "all"] : KEYS.list(filter),
     queryFn: async ({ signal }) => {
       if (all) {
         const data = await fetchAllPaged(
-          async (page, limit) => {
-            const r = await container.invoices.list.execute({ ...(filter ?? {}), page, limit }, ctx);
+          async (page, limit, cursor) => {
+            const r = await container.invoices.list.execute(
+              { ...(filter ?? {}), page, limit, cursor },
+              ctx,
+            );
             if (!isOk(r)) throw r.error;
             return r.value;
           },

@@ -89,7 +89,10 @@ export function useAutoSync() {
   useEffect(() => {
     if (status !== "online") return;
     const tick = async () => {
-      if (!hasStoredSession() || document.visibilityState === "hidden") return;
+      // No "window hidden" skip: the desktop app is usually minimized while
+      // people work in other programs, and peers still need its documents
+      // (background timers are only throttled by WebView2, not stopped).
+      if (!hasStoredSession()) return;
       try {
         const result = await runSyncNow();
         if (!result || result.skipped) return;

@@ -1,4 +1,5 @@
 import { eq, and, desc, ilike, or, sql, gte, lte, isNotNull } from "drizzle-orm";
+import { afterCursor, cursorColumns, decodeCursor, keysetOrder, nextCursorOf, type KeysetSpec } from "./keysetPage.js";
 import { likeContains } from "../utils/likeEscape.js";
 import { BusinessRuleError } from "../../domain/errors/index.js";
 import { allocateDocumentNumber } from "../utils/documentNumbers.js";
@@ -72,6 +73,11 @@ export class PostgresVoucherRepository implements IVoucherRepository {
     const page = Math.max(0, filter.page ?? 0);
     const limit = Math.min(1000, Math.max(1, filter.limit ?? 20));
     const offset = page * limit;
+    // Keyset mode for "load every row" callers: seek after the cursor instead
+    // of OFFSET (constant cost per page, strict total order). keysetPage.ts.
+    const keyset: KeysetSpec = { date: vouchers.date, createdAt: vouchers.createdAt, id: vouchers.id };
+    const cursor = true ? decodeCursor(filter.cursor) : null;
+    const pageWhere = cursor ? and(where, afterCursor(keyset, cursor)) : where;
 
     const [dataRows, countRows] = await Promise.all([
       this.db
@@ -80,22 +86,28 @@ export class PostgresVoucherRepository implements IVoucherRepository {
           invoiceCurrency: invoices.currency,
           invoiceExchangeRate: invoices.exchangeRate,
           invoiceNumber: invoices.number,
+          ...cursorColumns(keyset),
         })
         .from(vouchers)
         // Carries the linked invoice's currency + frozen rate so the print
         // template can render the cross-currency counterpart line. The COUNT
         // query stays on vouchers alone — a join would not change the total.
         .leftJoin(invoices, eq(vouchers.invoiceId, invoices.id))
-        .where(where)
+        .where(pageWhere)
         .limit(limit)
-        .offset(offset)
-        .orderBy(desc(vouchers.date), desc(vouchers.createdAt)),
-      this.db
-        .select({ count: sql<number>`count(*)` })
-        .from(vouchers)
-        .where(where),
+        .offset(cursor ? 0 : offset)
+        .orderBy(...keysetOrder(keyset)),
+      // Cursor pages skip the COUNT: the caller stops on nextCursor and the
+      // first (cursor-less) page already carried the real total.
+      cursor
+        ? Promise.resolve([{ count: -1 }])
+        : this.db
+            .select({ count: sql<number>`count(*)` })
+            .from(vouchers)
+            .where(where),
     ]);
 
+    const nextCursor = nextCursorOf(dataRows.map((r) => ({ ...r, id: r.voucher.id })) as unknown as Array<Record<string, unknown>>, limit);
     return {
       data: dataRows.map((r) =>
         this.toDomain(r.voucher, {
@@ -108,7 +120,9 @@ export class PostgresVoucherRepository implements IVoucherRepository {
         total: Number(countRows[0]?.count ?? 0),
         page,
         limit,
-        hasNext: offset + limit < Number(countRows[0]?.count ?? 0),
+        // Without a cursor the COUNT decides; a last page hands out no cursor.
+        nextCursor: cursor || offset + limit < Number(countRows[0]?.count ?? 0) ? nextCursor : null,
+        hasNext: cursor ? nextCursor !== null : offset + limit < Number(countRows[0]?.count ?? 0),
         totalPages: Math.ceil(Number(countRows[0]?.count ?? 0) / limit),
       },
     };

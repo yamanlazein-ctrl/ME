@@ -41,6 +41,7 @@ import { FinancialOverview } from "@/components/cashbox/FinancialOverview";
 import { ActivityTabs } from "@/components/cashbox/ActivityTabs";
 import type { ProfitQueryParams } from "@/contracts/profit";
 
+import { localToday } from "@/lib/localDate";
 export const Route = createFileRoute("/cashbox")({
   validateSearch: (search: Record<string, unknown>): CashboxPeriodFilter & { tab?: string } => ({
     from: typeof search.from === "string" ? search.from : "",
@@ -67,7 +68,7 @@ export const Route = createFileRoute("/cashbox")({
  * to an invoice and returning preserves the exact view.
  */
 function CashBoxPage() {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = localToday();
   const qc = useQueryClient();
   const { data: state, dataUpdatedAt } = useCashboxState();
   const openingToday = state?.openingBalance ?? 0;
@@ -290,7 +291,7 @@ function OpeningDialog({ open, onClose }: { open: boolean; onClose: () => void }
   const [currency, setCurrency] = useState<"SYP" | "USD">(cs.currency === "USD" ? "USD" : "SYP");
   const [balErr, setBalErr] = useState<string | null>(null);
   const setOpening = useSetOpeningBalance();
-  const today = new Date().toISOString().slice(0, 10);
+  const today = localToday();
   const save = () => {
     if (!v || Number(v) <= 0) {
       setBalErr("أدخل رصيداً صحيحاً أكبر من صفر.");
@@ -358,6 +359,7 @@ function ManualDialog({ open, onClose }: { open: boolean; onClose: () => void })
   const [desc, setDesc] = useState("");
   const [amtErr, setAmtErr] = useState<string | null>(null);
   const [descErr, setDescErr] = useState<string | null>(null);
+  const { data: cashNow } = useCashBalance(localToday(), currency);
   const addMovement = useAddManualMovement();
   const save = () => {
     let valid = true;
@@ -372,7 +374,7 @@ function ManualDialog({ open, onClose }: { open: boolean; onClose: () => void })
     if (!valid) return;
     addMovement.mutate(
       {
-        date: new Date().toISOString().slice(0, 10),
+        date: localToday(),
         type,
         direction: dir,
         amount: Number(amount),
@@ -455,6 +457,17 @@ function ManualDialog({ open, onClose }: { open: boolean; onClose: () => void })
             />
           </FormField>
         </div>
+        {dir === "out" && Number(amount) > 0 && (cashNow ?? 0) < Number(amount) ? (
+          <div
+            role="alert"
+            data-testid="cashbox-negative-warning"
+            className="rounded-md border border-warning/40 bg-warning/10 px-3 py-2 text-[12px] text-foreground"
+          >
+            تنبيه: سيصبح رصيد الصندوق ({currency}) سالباً بعد هذا السحب (المتاح{" "}
+            {(cashNow ?? 0).toLocaleString("en-US")}، المطلوب {Number(amount).toLocaleString("en-US")}).
+            يمكن المتابعة والحفظ.
+          </div>
+        ) : null}
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>
             إلغاء
@@ -493,7 +506,7 @@ function ClosingDialog({
     if (counted === "") return;
     closeDayMut.mutate(
       {
-        date: new Date().toISOString().slice(0, 10),
+        date: localToday(),
         openingBalance: opening,
         totalIn: inn,
         totalOut: out,

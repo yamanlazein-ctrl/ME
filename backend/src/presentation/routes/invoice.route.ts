@@ -107,6 +107,7 @@ export function registerInvoiceRoutes(
               lines: created.data.lines.map((l) => ({
                 rollId: l.rollId,
                 quantityKg: l.quantityKg,
+                pieces: l.pieces ?? 0,
                 costPerKg: l.costPerKg ?? null,
               })),
             },

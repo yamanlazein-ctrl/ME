@@ -73,5 +73,6 @@ export type PartyFilter = {
   status?: PartyStatus;
   page?: number;
   limit?: number;
+  cursor?: string;
   offset?: number;
 };

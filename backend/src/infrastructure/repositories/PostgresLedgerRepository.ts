@@ -1,4 +1,5 @@
-import { eq, and, ilike, or, sql, desc, asc, gte, lte, inArray } from "drizzle-orm";
+import { eq, and, ilike, or, sql, desc, asc, gte, lte, inArray, getTableColumns } from "drizzle-orm";
+import { afterCursor, cursorColumns, decodeCursor, keysetOrder, nextCursorOf, type KeysetSpec } from "./keysetPage.js";
 import { likeContains } from "../utils/likeEscape.js";
 import type { DB } from "../orm/drizzle.js";
 import type {
@@ -19,6 +20,7 @@ import {
 } from "../../domain/entities/LedgerEntry.js";
 import type { TenantContext, PaginatedResult, UUID } from "../../domain/types/index.js";
 
+import { localToday } from "../utils/localDate.js";
 export class PostgresLedgerRepository implements ILedgerRepository {
   constructor(private readonly db: DB) {}
 
@@ -66,6 +68,11 @@ export class PostgresLedgerRepository implements ILedgerRepository {
     const page = Math.max(0, filter.page ?? 0);
     const limit = Math.min(1000, Math.max(1, filter.limit ?? 20));
     const offset = page * limit;
+    // Keyset mode for "load every row" callers: seek after the cursor instead
+    // of OFFSET (constant cost per page, strict total order). keysetPage.ts.
+    const keyset: KeysetSpec = { createdAt: ledgerEntries.createdAt, id: ledgerEntries.id };
+    const cursor = filter.sort !== "asc" ? decodeCursor(filter.cursor) : null;
+    const pageWhere = cursor ? and(where, afterCursor(keyset, cursor)) : where;
     // The list API defaults to newest-first (createdAt DESC). The statement
     // path passes sort=asc so running balances accumulate chronologically
     // (date ASC, createdAt ASC as tiebreaker for same-transaction entries).
@@ -76,25 +83,32 @@ export class PostgresLedgerRepository implements ILedgerRepository {
 
     const [dataRows, countRows] = await Promise.all([
       this.db
-        .select()
+        .select({ ...getTableColumns(ledgerEntries), ...cursorColumns(keyset) })
         .from(ledgerEntries)
-        .where(where)
+        .where(pageWhere)
         .limit(limit)
-        .offset(offset)
-        .orderBy(...orderBy),
-      this.db
-        .select({ count: sql<number>`count(*)` })
-        .from(ledgerEntries)
-        .where(where),
+        .offset(cursor ? 0 : offset)
+        .orderBy(...(filter.sort === "asc" ? orderBy : keysetOrder(keyset))),
+      // Cursor pages skip the COUNT: the caller stops on nextCursor and the
+      // first (cursor-less) page already carried the real total.
+      cursor
+        ? Promise.resolve([{ count: -1 }])
+        : this.db
+            .select({ count: sql<number>`count(*)` })
+            .from(ledgerEntries)
+            .where(where),
     ]);
 
+    const nextCursor = nextCursorOf(dataRows as unknown as Array<Record<string, unknown>>, limit);
     return {
       data: dataRows.map((r) => this.toDomain(r)),
       meta: {
         total: Number(countRows[0]?.count ?? 0),
         page,
         limit,
-        hasNext: offset + limit < Number(countRows[0]?.count ?? 0),
+        // Without a cursor the COUNT decides; a last page hands out no cursor.
+        nextCursor: cursor || offset + limit < Number(countRows[0]?.count ?? 0) ? nextCursor : null,
+        hasNext: cursor ? nextCursor !== null : offset + limit < Number(countRows[0]?.count ?? 0),
         totalPages: Math.ceil(Number(countRows[0]?.count ?? 0) / limit),
       },
     };
@@ -207,7 +221,7 @@ export class PostgresLedgerRepository implements ILedgerRepository {
             return {
               tenantId: ctx.tenantId,
               partyId: e.partyId,
-              date: new Date().toISOString().slice(0, 10),
+              date: localToday(),
               type: "cancellation" as const,
               debit: reversal.debit,
               credit: reversal.credit,

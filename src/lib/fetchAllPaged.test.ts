@@ -43,4 +43,46 @@ describe("fetchAllPaged", () => {
       ),
     ).rejects.toThrow(/refusing to return a truncated list/);
   });
+  it("follows nextCursor (keyset) and passes it back — page numbers are not used for seeking", async () => {
+    const calls: Array<{ page: number; cursor?: string }> = [];
+    const out = await fetchAllPaged(
+      async (page, limit, cursor) => {
+        calls.push({ page, cursor });
+        const start = cursor ? Number(cursor) : 0;
+        const data = rows.slice(start, start + limit);
+        const end = start + data.length;
+        return { data, meta: { hasNext: end < rows.length, nextCursor: end < rows.length ? String(end) : null } };
+      },
+      { pageSize: 10 },
+    );
+    expect(out).toEqual(rows);
+    expect(calls.map((c) => c.cursor)).toEqual([undefined, "10", "20"]);
+  });
+
+  it("a cursor walk ends when the cursor stops, even if a stale hasNext says more", async () => {
+    let n = 0;
+    const out = await fetchAllPaged(
+      async (_page, limit, cursor) => {
+        n++;
+        if (!cursor) return { data: rows.slice(0, limit), hasNext: true, nextCursor: "c1" };
+        return { data: rows.slice(limit, limit + 3), hasNext: true, nextCursor: undefined };
+      },
+      { pageSize: 10 },
+    );
+    expect(out).toEqual(rows.slice(0, 13));
+    expect(n).toBe(2);
+  });
+
+  it("repository-style top-level nextCursor is honoured", async () => {
+    const out = await fetchAllPaged(
+      async (_page, limit, cursor) => {
+        const start = cursor ? Number(cursor) : 0;
+        const data = rows.slice(start, start + limit);
+        const end = start + data.length;
+        return { data, total: rows.length, hasNext: end < rows.length, nextCursor: end < rows.length ? String(end) : undefined };
+      },
+      { pageSize: 7 },
+    );
+    expect(out).toEqual(rows);
+  });
 });

@@ -35,18 +35,30 @@ const KEYS = {
  * EVERY matching row — for screens that compute balances/totals and must not
  * work on a truncated first page.
  */
-export function useVouchersList(filter?: VoucherFilter, opts?: { all?: boolean }) {
+export function useVouchersList(filter?: VoucherFilter, opts?: { all?: boolean; enabled?: boolean }) {
   const all = Boolean(opts?.all);
   return useQuery({
+    enabled: opts?.enabled ?? true,
     queryKey: all ? [...KEYS.list(filter), "all"] : KEYS.list(filter),
     queryFn: async ({ signal }) => {
       void signal;
       if (all) {
-        const data = await fetchAllPaged(
-          (page, limit) =>
-            container.vouchers.repository.list({ ...(filter ?? {}), page, limit } as VoucherFilter, ctx),
-          { pageSize: 1000, maxPages: 500, label: "vouchers" },
+        // Receipts and payments are two endpoints with two independent
+        // cursors, so an unfiltered walk pages each kind on its own.
+        const kinds = filter?.kind ? [filter.kind] : (["receipt", "payment"] as const);
+        const parts = await Promise.all(
+          kinds.map((kind) =>
+            fetchAllPaged(
+              (page, limit, cursor) =>
+                container.vouchers.repository.list(
+                  { ...(filter ?? {}), kind, page, limit, cursor } as VoucherFilter,
+                  ctx,
+                ),
+              { pageSize: 1000, maxPages: 500, label: `vouchers:${kind}` },
+            ),
+          ),
         );
+        const data = parts.flat();
         return { data, total: data.length, hasNext: false };
       }
       return container.vouchers.repository.list(filter ?? {}, ctx);

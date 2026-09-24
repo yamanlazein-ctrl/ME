@@ -39,6 +39,7 @@ import { useSypRateSoftWarning } from "@/presentation/hooks/useSypRateSoftCheck"
 import { useCashBalance } from "@/presentation/hooks/useCashbox";
 import { AlertTriangle, Save, X, Lock } from "lucide-react";
 
+import { localToday } from "@/lib/localDate";
 /**
  * Restate an amount in the linked invoice's currency using the rate entered
  * ON THIS VOUCHER right now (`convertForSettlement` — same helper the
@@ -96,7 +97,7 @@ export function VoucherForm({
   const [exchangeRate, setExchangeRate] = useState<number | "">("");
   const [fxError, setFxError] = useState<string | null>(null);
   const [method, setMethod] = useState<VoucherMethod>("cash");
-  const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
+  const [date, setDate] = useState(localToday());
   const { data: cashBalance } = useCashBalance(date, currency);
   const [notesPrint, setNotesPrint] = useState("");
   const [notesInternal, setNotesInternal] = useState("");

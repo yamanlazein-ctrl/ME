@@ -890,10 +890,10 @@ async function main() {
            (tenant_id, sync_device_id, op_id, entity_type, entity_id, operation, payload,
             status, received_at, applied_at)
          VALUES ($1,$2,$3,'party',$4,'create','{"snapshot":{}}','applied',$5,$5)
-         RETURNING received_seq`,
+         RETURNING applied_seq`,
         [TENANT_ID, DEV_A, randomUUID(), randomUUID(), frozen],
       );
-      ids.push(Number(r.rows[0].received_seq));
+      ids.push(Number(r.rows[0].applied_seq)); // the pull cursor (application order)
     }
     await c.end();
 
@@ -938,17 +938,21 @@ async function main() {
         `INSERT INTO sync_inbox
            (tenant_id, sync_device_id, op_id, entity_type, entity_id, operation, payload, status, applied_at)
          VALUES ($1,$2,$3,'party',$4,'create','{"snapshot":{}}','applied',now())
-         RETURNING received_seq`,
+         RETURNING applied_seq`,
         [TENANT_ID, DEV_B, randomUUID(), randomUUID()],
       );
-      bSeqs.push(Number(r.rows[0].received_seq));
+      bSeqs.push(Number(r.rows[0].applied_seq)); // the pull cursor (application order)
     }
     await c.end();
 
+    // The hub derives "own units" ONLY from the authenticated device header
+    // (SYNC-07: the query parameter is ignored so a caller cannot hide another
+    // device's units). The desktop client sends both; so does this drill.
     const pulled = await api(
       HUB.port,
       "GET",
       `/api/sync/pull?excludeSyncDeviceId=${DEV_A}&limit=5`,
+      { deviceId: DEV_A },
     );
     const returned = (pulled.json?.items ?? []).map((i) => i.receivedSeq);
     const sawB = bSeqs.filter((s) => returned.includes(s)).length;

@@ -101,6 +101,12 @@ export interface PartyStatementDTO {
     hasMore: boolean;
     nextCursor: string | null;
     balanceBeforePage: number;
+    /** Carried («منقول») balance per currency at the top of this page. */
+    balanceBeforePageByCurrency?: Record<string, number>;
+    /** Numbered-page mode (screen paging). */
+    page?: number;
+    totalRows?: number;
+    totalPages?: number;
   };
 }
 
@@ -111,6 +117,8 @@ export interface StatementFilter {
   type?: LedgerType;
   limit?: number;
   cursor?: string;
+  /** 0-based page number (screen paging); ignored with a cursor. */
+  page?: number;
 }
 
 export interface SettleResponse {

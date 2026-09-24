@@ -1,4 +1,5 @@
-import { eq, and, desc, ilike, or, sql, inArray } from "drizzle-orm";
+import { eq, and, desc, ilike, or, sql, inArray, getTableColumns } from "drizzle-orm";
+import { afterCursor, cursorColumns, decodeCursor, keysetOrder, nextCursorOf, type KeysetSpec } from "./keysetPage.js";
 import { likeContains } from "../utils/likeEscape.js";
 import type { DB } from "../orm/drizzle.js";
 import type {
@@ -17,6 +18,63 @@ import {
   aggregatePartyListStats,
   applyLedgerRemainingToPartyStats,
 } from "./partyListStatsAggregation.js";
+
+import { localToday } from "../utils/localDate.js";
+/**
+ * The balanced opening journal of a party: customer positive = Dr (AR),
+ * supplier positive = Cr (AP), mirrored by an equity leg (Σdebit = Σcredit).
+ * One source for the local create AND the sync replay on other devices —
+ * the replay used to insert the party with no opening journal, so every
+ * other device showed the customer's balance without its opening amount.
+ */
+export function openingJournalRows(input: {
+  tenantId: string;
+  partyId: string;
+  kind: string;
+  openingBalance: number;
+  currency: string;
+  code: string | null;
+  date: string;
+  userId: string;
+}) {
+  const absBal = Math.abs(input.openingBalance);
+  const isPositive = input.openingBalance > 0;
+  const isSupplier = input.kind === "supplier";
+  const partyDebit = isSupplier ? (isPositive ? 0 : absBal) : isPositive ? absBal : 0;
+  const partyCredit = isSupplier ? (isPositive ? absBal : 0) : isPositive ? 0 : absBal;
+  return [
+    {
+      tenantId: input.tenantId,
+      partyId: input.partyId,
+      date: input.date,
+      type: "opening" as const,
+      debit: partyDebit,
+      credit: partyCredit,
+      currency: input.currency,
+      cashImpact: "none" as const,
+      referenceType: "opening",
+      referenceId: input.partyId,
+      referenceNumber: input.code,
+      description: "الرصيد الافتتاحي",
+      createdBy: input.userId,
+    },
+    {
+      tenantId: input.tenantId,
+      partyId: null,
+      date: input.date,
+      type: "opening_equity" as const,
+      debit: partyCredit,
+      credit: partyDebit,
+      currency: input.currency,
+      cashImpact: "none" as const,
+      referenceType: "opening",
+      referenceId: input.partyId,
+      referenceNumber: input.code,
+      description: "رأس مال / حقوق ملكية (مقابل الرصيد الافتتاحي)",
+      createdBy: input.userId,
+    },
+  ];
+}
 
 export class PostgresPartyRepository implements IPartyRepository {
   constructor(private readonly db: DB) {}
@@ -56,19 +114,28 @@ export class PostgresPartyRepository implements IPartyRepository {
     const page = Math.max(0, filter.page ?? 0);
     const limit = Math.min(1000, Math.max(1, filter.limit ?? 20));
     const offset = page * limit;
+    // Keyset mode for "load every row" callers: seek after the cursor instead
+    // of OFFSET (constant cost per page, strict total order). keysetPage.ts.
+    const keyset: KeysetSpec = { createdAt: parties.createdAt, id: parties.id };
+    const cursor = true ? decodeCursor(filter.cursor) : null;
+    const pageWhere = cursor ? and(where, afterCursor(keyset, cursor)) : where;
 
     const [dataRows, countRows] = await Promise.all([
       this.db
-        .select()
+        .select({ ...getTableColumns(parties), ...cursorColumns(keyset) })
         .from(parties)
-        .where(where)
+        .where(pageWhere)
         .limit(limit)
-        .offset(offset)
-        .orderBy(desc(parties.createdAt)),
-      this.db
-        .select({ count: sql<number>`count(*)` })
-        .from(parties)
-        .where(where),
+        .offset(cursor ? 0 : offset)
+        .orderBy(...keysetOrder(keyset)),
+      // Cursor pages skip the COUNT: the caller stops on nextCursor and the
+      // first (cursor-less) page already carried the real total.
+      cursor
+        ? Promise.resolve([{ count: -1 }])
+        : this.db
+            .select({ count: sql<number>`count(*)` })
+            .from(parties)
+            .where(where),
     ]);
 
     const total = Number(countRows[0]?.count ?? 0);
@@ -92,13 +159,16 @@ export class PostgresPartyRepository implements IPartyRepository {
         };
       }
     }
+    const nextCursor = nextCursorOf(dataRows as unknown as Array<Record<string, unknown>>, limit);
     return {
       data: domains,
       meta: {
         total,
         page,
         limit,
-        hasNext: offset + limit < total,
+        // Without a cursor the COUNT decides; a last page hands out no cursor.
+        nextCursor: cursor || offset + limit < total ? nextCursor : null,
+        hasNext: cursor ? nextCursor !== null : offset + limit < total,
         totalPages: Math.ceil(total / limit),
       },
     };
@@ -257,55 +327,18 @@ export class PostgresPartyRepository implements IPartyRepository {
       // positive = Cr (AP). The equity leg mirrors the party leg so every
       // opening journal is balanced (Σdebit = Σcredit).
       if (openingBalance !== 0) {
-        const absBal = Math.abs(openingBalance);
-        const isPositive = openingBalance > 0;
-        const isSupplier = data.kind === "supplier";
-        const partyDebit = isSupplier
-          ? isPositive
-            ? 0
-            : absBal
-          : isPositive
-            ? absBal
-            : 0;
-        const partyCredit = isSupplier
-          ? isPositive
-            ? absBal
-            : 0
-          : isPositive
-            ? 0
-            : absBal;
-        await tx.insert(ledgerEntries).values([
-          {
+        await tx.insert(ledgerEntries).values(
+          openingJournalRows({
             tenantId: ctx.tenantId,
             partyId: row.id,
-            date: new Date().toISOString().slice(0, 10),
-            type: "opening",
-            debit: partyDebit,
-            credit: partyCredit,
+            kind: data.kind,
+            openingBalance,
             currency,
-            cashImpact: "none",
-            referenceType: "opening",
-            referenceId: row.id,
-            referenceNumber: code,
-            description: "الرصيد الافتتاحي",
-            createdBy: ctx.userId,
-          },
-          {
-            tenantId: ctx.tenantId,
-            partyId: null,
-            date: new Date().toISOString().slice(0, 10),
-            type: "opening_equity",
-            debit: partyCredit,
-            credit: partyDebit,
-            currency,
-            cashImpact: "none",
-            referenceType: "opening",
-            referenceId: row.id,
-            referenceNumber: code,
-            description: "رأس مال / حقوق ملكية (مقابل الرصيد الافتتاحي)",
-            createdBy: ctx.userId,
-          },
-        ]);
+            code,
+            date: localToday(),
+            userId: ctx.userId,
+          }),
+        );
       }
 
       return this.toDomain(row);

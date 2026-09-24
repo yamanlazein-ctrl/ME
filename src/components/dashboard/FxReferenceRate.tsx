@@ -149,8 +149,17 @@ export function FxReferenceRate() {
             : "text-[12px] font-semibold tabular-nums text-foreground"
         }
       >
-        <span dir="ltr">$1 = {formatRate(rateValue)}</span>
+        {/* Documents use the OLD lira (≥ 1,000 per $, see MIN_SANE_SYP_RATE);
+            the provider now publishes the NEW lira (two zeros dropped). Show
+            the rate in the unit the invoice form expects, with the new-lira
+            figure beside it — typing "137" from the badge was rejected. */}
+        <span dir="ltr">$1 = {formatRate(rateValue < 1000 ? rateValue * 100 : rateValue)}</span>
         <span className="ms-1 font-normal text-muted-foreground">ل.س</span>
+        {rateValue < 1000 && (
+          <span className="ms-1 font-normal text-muted-foreground" dir="ltr">
+            ({formatRate(rateValue)} ل.ج)
+          </span>
+        )}
       </span>
       <span className="text-[10px] text-muted-foreground">
         <a

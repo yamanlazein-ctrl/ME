@@ -22,6 +22,7 @@ import { DesktopUpdatesCard } from "@/components/desktop/DesktopUpdatesCard";
 import { FullRestoreCard } from "@/components/settings/FullRestoreCard";
 import { clearTokens } from "@/infrastructure/auth/TokenProvider";
 
+import { localToday } from "@/lib/localDate";
 const ALLOWED_SETTING_KEYS = [
   "company",
   "currencies",
@@ -99,7 +100,7 @@ function BackupPage() {
       const disposition = res.headers.get("Content-Disposition") ?? "";
       const fileName =
         /filename="([^"]+)"/.exec(disposition)?.[1] ??
-        `MotardERP-Backup-${new Date().toISOString().slice(0, 10)}.zip`;
+        `MotardERP-Backup-${localToday()}.zip`;
 
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
@@ -138,7 +139,7 @@ function BackupPage() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `settings-backup-${new Date().toISOString().slice(0, 10)}.json`;
+    a.download = `settings-backup-${localToday()}.json`;
     a.click();
     URL.revokeObjectURL(url);
     setLastBackup(new Date().toLocaleString("ar"));

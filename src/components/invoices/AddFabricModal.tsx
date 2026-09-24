@@ -21,6 +21,7 @@ import {
 import { addColor, addFabric, type FabricUnit } from "@/presentation/hooks/useInventory";
 import { suppliers } from "@/presentation/hooks/useParties";
 
+import { localToday } from "@/lib/localDate";
 export type NewFabricPayload = {
   fabricId: string;
   fabricName: string;
@@ -59,7 +60,7 @@ export function AddFabricModal({
   const [unit, setUnit] = useState<FabricUnit>("kg");
 
   const [supplierId, setSupplierId] = useState(defaultSupplierId ?? "");
-  const [entryDate, setEntryDate] = useState(defaultDate ?? new Date().toISOString().slice(0, 10));
+  const [entryDate, setEntryDate] = useState(defaultDate ?? localToday());
   const [addedBy, setAddedBy] = useState("مسؤول المستودع");
 
   const [colorName, setColorName] = useState("");
@@ -81,7 +82,7 @@ export function AddFabricModal({
     setCategory("");
     setUnit("kg");
     setSupplierId(defaultSupplierId ?? "");
-    setEntryDate(defaultDate ?? new Date().toISOString().slice(0, 10));
+    setEntryDate(defaultDate ?? localToday());
     setAddedBy("مسؤول المستودع");
     setColorName("");
     setColorCode("");

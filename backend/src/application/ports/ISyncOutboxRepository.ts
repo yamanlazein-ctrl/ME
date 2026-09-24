@@ -76,6 +76,14 @@ export interface ISyncOutboxRepository {
     errorDetail: string | undefined,
     leaseToken: UUID,
   ): Promise<number>;
+  /**
+   * Paired with a DIFFERENT hub: everything this device already delivered to
+   * the old hub is unknown to the new one. Put every `synced` unit (and every
+   * `hubDead:` rejection, which was never rolled back locally) back to
+   * `pending` (original seq, so history replays first and in order). The hub
+   * deduplicates on opId, so re-delivery is idempotent. Returns the count.
+   */
+  requeueSyncedForNewHub(tenantId: UUID): Promise<number>;
   /** pending + pushing — everything not yet settled. Drives the UI counter. */
   countOutstanding(tenantId: UUID): Promise<number>;
   /** Per-status counts so stuck work is observable instead of invisible. */

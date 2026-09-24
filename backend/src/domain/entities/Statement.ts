@@ -128,6 +128,12 @@ export interface PartyStatementData {
     nextCursor: string | null;
     /** Signed balance immediately before the first entry of this page (per primary currency semantics). */
     balanceBeforePage: number;
+    /** Carried («منقول») balance per currency — the ALL-currencies view needs one per ledger. */
+    balanceBeforePageByCurrency?: Record<string, number>;
+    /** Numbered-page mode only. */
+    page?: number;
+    totalRows?: number;
+    totalPages?: number;
   };
 }
 
@@ -142,4 +148,9 @@ export interface StatementQuery {
   limit?: number;
   /** Opaque cursor from a previous page (`date|createdAtIso|id`). */
   cursor?: string;
+  /**
+   * 0-based page number (screen paging: «الصفحة 3 من 12»). Ignored when a
+   * cursor is given. The page starts with the exact carried balance.
+   */
+  page?: number;
 }

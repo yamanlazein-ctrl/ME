@@ -6,6 +6,8 @@ import type {
 } from "../../domain/entities/Invoice.js";
 
 export interface InvoiceFilter {
+  /** Keyset cursor ("load every row" callers) — see keysetPage.ts. */
+  cursor?: string;
   partyId?: string;
   type?: string;
   status?: string;

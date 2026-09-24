@@ -21,6 +21,8 @@ export const createReturnSchema = z.object({
 });
 
 export const listReturnsSchema = z.object({
+  /** Keyset cursor for "load every row" callers (no OFFSET scan). */
+  cursor: z.string().max(300).optional(),
   kind: z.enum(["entry", "sale"]).optional(),
   partyId: z.string().uuid().optional(),
   status: z.enum(["active", "cancelled"]).optional(),

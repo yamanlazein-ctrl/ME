@@ -707,10 +707,13 @@ describe("sync invariants — quantity-aware claims (P3a)", () => {
 
   it("updates and creates contend in one roll pool", () => {
     expect(
-      USECASES.includes('resourceType: "roll"') &&
+      USECASES.includes('resourceType: adds ? "entry_roll" : "roll"') &&
         !/resourceType: operation === "update" \? "invoice_update_roll"/.test(USECASES),
       "updates must reserve from the same roll pool as creates — separate namespaces allow joint oversell",
     ).toBe(true);
+    // The only split is by DIRECTION: a purchase adds stock (entry_roll, never
+    // conflicts on quantity); every sale — create or update — consumes `roll`.
+    expect(USECASES).toMatch(/const adds =\s*payload\.invoiceType === "entry"/);
   });
 
   it("conflict detail and message carry quantities", () => {

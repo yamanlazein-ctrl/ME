@@ -172,7 +172,7 @@ export function buildContainer(): Container {
   const returnRepo = new PostgresReturnRepository(dbx);
   const cashboxRepo = new PostgresCashboxRepository(dbx);
   const expenseRepo = new PostgresExpenseRepository(dbx);
-  const printJobRepo = new PostgresPrintJobRepository(db);
+  const printJobRepo = new PostgresPrintJobRepository(dbx);
   const notificationRepo = new PostgresNotificationRepository(db);
   const settingsRepo = new PostgresSettingsRepository(dbx);
   const dashboardRepo = new PostgresDashboardRepository(db);

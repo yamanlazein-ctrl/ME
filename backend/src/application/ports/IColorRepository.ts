@@ -2,6 +2,8 @@ import type { TenantContext, PaginatedResult, UUID } from "../../domain/types/in
 import type { ColorData } from "../../domain/entities/Color.js";
 
 export interface ColorFilter {
+  /** Keyset cursor ("load every row" callers) — see keysetPage.ts. */
+  cursor?: string;
   fabricId?: UUID;
   search?: string;
   page?: number;

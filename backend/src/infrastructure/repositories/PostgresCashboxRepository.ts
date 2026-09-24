@@ -15,6 +15,7 @@ import type {
 import { CashboxSession, ManualMovement, DayClose } from "../../domain/entities/Cashbox.js";
 import type { TenantContext, UUID } from "../../domain/types/index.js";
 
+import { localToday } from "../utils/localDate.js";
 export class PostgresCashboxRepository implements ICashboxRepository {
   constructor(private readonly db: DB) {}
 
@@ -36,7 +37,7 @@ export class PostgresCashboxRepository implements ICashboxRepository {
       .where(eq(dayCloses.tenantId, ctx.tenantId))
       .orderBy(desc(dayCloses.closedAt))
       .limit(1);
-    const today = new Date().toISOString().slice(0, 10);
+    const today = localToday();
     const [lock] = await this.db
       .select()
       .from(dayCloses)

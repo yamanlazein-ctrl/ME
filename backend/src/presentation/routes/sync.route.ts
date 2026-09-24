@@ -14,6 +14,8 @@ import {
   getHubSessionInfo,
   isHubReachableCached,
   listHubActivity,
+  loadHubCredentials,
+  resolveConnectCredentials,
   pairHubSession,
   probeHubReachable,
   pullHubActivity,
@@ -43,8 +45,11 @@ const HubTestSchema = z.object({
 
 const HubConnectSchema = z.object({
   url: z.string().url(),
-  email: z.string().email(),
-  password: z.string().min(1),
+  // Both optional when this device already holds the hub account (stored
+  // encrypted at pairing): changing only the URL — e.g. a tunnel that got a
+  // new address — must not force the operator to type the password again.
+  email: z.string().email().optional(),
+  password: z.string().min(1).optional(),
 });
 
 const HubActivitySchema = z.object({
@@ -202,10 +207,31 @@ export function registerSyncRoutes(
     const url = getCentralSyncUrl();
     const reachable = url ? await probeHubReachable() : null;
     const status = await syncUc.getSyncStatus(container.syncOutboxRepo, ctx.tenantId);
+    // Honest health: "connected" is meaningless if work is not leaving this
+    // device. Report how long the oldest unsent unit has waited and why the
+    // last attempt failed, so the screen can show a problem instead of green.
+    const { pool } = await import("../../infrastructure/orm/drizzle.js");
+    const health = await pool
+      .query(
+        // The reason shown is the one of the unit that BLOCKS the queue: units
+        // queued behind it only say "waiting for an earlier operation", which
+        // tells the operator nothing.
+        `SELECT min(created_at) AS oldest,
+                (array_agg(error_detail ORDER BY seq ASC)
+                   FILTER (WHERE error_detail IS NOT NULL AND error_detail <> $2))[1] AS last_error,
+                bool_or(error_detail = $2) AS has_waiting
+           FROM sync_outbox WHERE tenant_id = $1 AND status IN ('pending', 'pushing')`,
+        [ctx.tenantId, syncUc.ORDERED_LANE_WAITING],
+      )
+      .then((r) => r.rows[0] ?? {})
+      .catch(() => ({}));
     res.json({
       url,
       reachable,
       session: getHubSessionInfo(),
+      hasStoredCredentials: loadHubCredentials() !== null,
+      oldestPendingAt: health.oldest ? new Date(health.oldest).toISOString() : null,
+      lastPushError: health.last_error ?? (health.has_waiting ? syncUc.ORDERED_LANE_WAITING : null),
       pendingCount: status.pendingCount,
       statusCounts: status.statusCounts,
       lastPullAt: status.lastPullAt,
@@ -241,10 +267,19 @@ export function registerSyncRoutes(
       const localDevice = ctx.syncDeviceId
         ? await container.syncDeviceRepo.findById(ctx.tenantId, ctx.syncDeviceId).catch(() => null)
         : null;
+      const { email, password } = resolveConnectCredentials(body);
+      if (!email || !password) {
+        res.status(422).json({
+          code: "HUB_CONNECT_FAILED",
+          stage: "login",
+          message: "أدخل البريد وكلمة مرور حساب المركز (لا يوجد حساب محفوظ على هذا الجهاز)",
+        });
+        return;
+      }
       const result = await connectHub({
         url: body.url,
-        email: body.email,
-        password: body.password,
+        email,
+        password,
         device: localDevice
           ? {
               id: localDevice.id,
@@ -263,11 +298,37 @@ export function registerSyncRoutes(
         return;
       }
       // A different hub (or hub tenant) has its own received_seq sequence.
-      if (result.hubChanged) await syncUc.resetPullCursor(ctx.tenantId);
+      // A different hub (or hub company) knows nothing this device already
+      // delivered elsewhere: re-pull from its start AND re-deliver our own
+      // history — otherwise moving to a new server (test tunnel → real hub)
+      // silently leaves every earlier customer, roll and invoice behind, and
+      // later units then fail against missing parents.
+      let requeued = 0;
+      if (result.hubChanged) {
+        await syncUc.resetPullCursor(ctx.tenantId);
+        requeued = await container.syncOutboxRepo.requeueSyncedForNewHub(ctx.tenantId);
+      }
+      // Paired = several writers: reserve this device's number ranges from the
+      // hub NOW, so the very first document after pairing cannot collide.
+      let blocksError: string | null = null;
+      if (ctx.syncDeviceId) {
+        await numberBlocksUc
+          .ensureDeviceNumberBlocks(container.documentNumberBlockRepo, container.fingerprintProvider, {
+            tenantId: ctx.tenantId,
+            syncDeviceId: ctx.syncDeviceId,
+            userId: ctx.userId,
+            authHeader: req.headers.authorization,
+          })
+          .catch((err) => {
+            blocksError = err instanceof Error ? err.message : String(err);
+          });
+      }
       res.json({
         url: result.info.hubUrl,
         session: result.info,
         cursorReset: result.hubChanged,
+        requeued,
+        blocksError,
         deviceWarning: result.deviceWarning,
       });
     },
@@ -557,24 +618,46 @@ export function registerSyncRoutes(
         return;
       }
 
-    const push = await syncUc.runLocalSyncPush(
-      container.syncOutboxRepo,
-      container.invoiceRepo,
-      container.auditRepo,
-      container.notificationRepo,
-      ctx,
-      req.headers.authorization,
-      // P1-step-1: every created document type needs its cancel use-case wired
-      // so a terminally-rejected unit rolls back locally instead of forking.
-      {
-        voucherRepo: container.voucherRepo,
-        returnRepo: container.returnRepo,
-        orderRepo: container.orderRepo,
-        expenseRepo: container.expenseRepo,
-        ledgerRepo: container.ledgerRepo,
-        cashboxRepo: container.cashboxRepo,
-      },
-    );
+    // One claim batch is 50 units. A device with history (worked standalone,
+    // or restored data) can hold thousands: pushing one batch per run left
+    // them trickling for hours. Keep draining full, clean batches within a
+    // time budget; any failure, device refusal or short batch ends the loop.
+    const pushOnce = () =>
+      syncUc.runLocalSyncPush(
+        container.syncOutboxRepo,
+        container.invoiceRepo,
+        container.auditRepo,
+        container.notificationRepo,
+        ctx,
+        req.headers.authorization,
+        // P1-step-1: every created document type needs its cancel use-case wired
+        // so a terminally-rejected unit rolls back locally instead of forking.
+        {
+          voucherRepo: container.voucherRepo,
+          returnRepo: container.returnRepo,
+          orderRepo: container.orderRepo,
+          expenseRepo: container.expenseRepo,
+          ledgerRepo: container.ledgerRepo,
+          cashboxRepo: container.cashboxRepo,
+        },
+      );
+    const PUSH_BATCH = 50; // claimBatch size in runLocalSyncPush
+    const handledOf = (r: { pushed: number; failed: number; rejected: number; hubDead: number }) =>
+      r.pushed + r.failed + r.rejected + r.hubDead;
+    const push = await pushOnce();
+    const pushDeadline = Date.now() + 30_000;
+    let lastFull = handledOf(push) >= PUSH_BATCH;
+    while (lastFull && !push.deviceGate && push.failed === 0 && Date.now() < pushDeadline) {
+      const more = await pushOnce();
+      push.pushed += more.pushed;
+      push.failed += more.failed;
+      push.rejected += more.rejected;
+      push.hubDead += more.hubDead;
+      push.hubDeadOps.push(...more.hubDeadOps);
+      push.deviceGate ||= more.deviceGate;
+      push.deviceTrust ??= more.deviceTrust;
+      lastFull = handledOf(more) >= PUSH_BATCH;
+    }
 
     let pull: Awaited<ReturnType<typeof syncUc.runLocalSyncPull>> = {
       pulled: 0,
@@ -589,37 +672,61 @@ export function registerSyncRoutes(
     // hub outage. Same for the best-effort block refill below.
     let pullError: string | null = null;
     try {
-      pull = await syncUc.runLocalSyncPull(
-        container.db,
-        {
-          invoiceRepo: container.invoiceRepo,
-          voucherRepo: container.voucherRepo,
-          returnRepo: container.returnRepo,
-          orderRepo: container.orderRepo,
-          expenseRepo: container.expenseRepo,
-          auditRepo: container.auditRepo,
-          partyRepo: container.partyRepo,
-          fabricRepo: container.fabricRepo,
-          colorRepo: container.colorRepo,
-          rollRepo: container.rollRepo,
-          ledgerRepo: container.ledgerRepo,
-          statementRepo: container.statementRepo,
-          cashboxRepo: container.cashboxRepo,
-          settingsRepo: container.settingsRepo,
-          companyRepo: container.companyRepo,
-        },
-        ctx,
-        req.headers.authorization,
-        ctx.syncDeviceId ?? null,
-        // Local inbox: mirrors pulled units so their retries are bounded and a
-        // permanently-failing unit cannot hold the cursor forever.
-        container.syncInboxRepo,
-        // Activity notifications for work done on other devices.
-        async (unit) => {
-          const n = describePulledUnit(unit);
-          if (n) await container.notificationRepo.create(n, ctx);
-        },
-      );
+      // Same drain as push: a hub page is 50 units. Keep pulling full pages
+      // that made progress, within a budget (a stuck page — held units, a
+      // failure — ends the loop; the next run resumes from the cursor).
+      const pullOnce = () =>
+        syncUc.runLocalSyncPull(
+          container.db,
+          {
+            invoiceRepo: container.invoiceRepo,
+            voucherRepo: container.voucherRepo,
+            returnRepo: container.returnRepo,
+            orderRepo: container.orderRepo,
+            expenseRepo: container.expenseRepo,
+            auditRepo: container.auditRepo,
+            partyRepo: container.partyRepo,
+            fabricRepo: container.fabricRepo,
+            colorRepo: container.colorRepo,
+            rollRepo: container.rollRepo,
+            ledgerRepo: container.ledgerRepo,
+            statementRepo: container.statementRepo,
+            printJobRepo: container.printJobRepo,
+            cashboxRepo: container.cashboxRepo,
+            settingsRepo: container.settingsRepo,
+            companyRepo: container.companyRepo,
+          },
+          ctx,
+          req.headers.authorization,
+          ctx.syncDeviceId ?? null,
+          // Local inbox: mirrors pulled units so their retries are bounded and a
+          // permanently-failing unit cannot hold the cursor forever.
+          container.syncInboxRepo,
+          // Activity notifications for work done on other devices.
+          async (unit) => {
+            const n = describePulledUnit(unit);
+            if (n) await container.notificationRepo.create(n, ctx);
+          },
+        );
+      pull = await pullOnce();
+      const pullDeadline = Date.now() + 30_000;
+      let page = pull;
+      while (
+        page.pulled >= 50 &&
+        page.applied + page.skipped > 0 &&
+        page.failed === 0 &&
+        !page.deviceTrust &&
+        Date.now() < pullDeadline
+      ) {
+        page = await pullOnce();
+        pull = {
+          pulled: pull.pulled + page.pulled,
+          applied: pull.applied + page.applied,
+          skipped: pull.skipped + page.skipped,
+          failed: pull.failed + page.failed,
+          deviceTrust: pull.deviceTrust ?? page.deviceTrust,
+        };
+      }
     } catch (err) {
       pullError = err instanceof Error ? err.message : "pull failed";
       logger.warn({ err }, "sync pull during sync/run failed");
@@ -729,6 +836,7 @@ export function registerSyncRoutes(
             rollRepo: container.rollRepo,
             ledgerRepo: container.ledgerRepo,
             statementRepo: container.statementRepo,
+            printJobRepo: container.printJobRepo,
             cashboxRepo: container.cashboxRepo,
             settingsRepo: container.settingsRepo,
             companyRepo: container.companyRepo,
@@ -816,7 +924,12 @@ export function registerSyncRoutes(
         entityId: r.entityId,
         operation: r.operation,
         payload: r.payload,
-        receivedSeq: r.receivedSeq,
+        // Devices store this field as their pull cursor. It carries the
+        // APPLICATION order (applied_seq) — see the 20261016 migration. Rows
+        // applied before that migration have applied_seq = received_seq, so
+        // cursors already stored on devices stay valid.
+        receivedSeq: r.appliedSeq ?? r.receivedSeq,
+        appliedSeq: r.appliedSeq,
         receivedAt: r.receivedAt.toISOString(),
         appliedAt: r.appliedAt?.toISOString() ?? null,
       })),

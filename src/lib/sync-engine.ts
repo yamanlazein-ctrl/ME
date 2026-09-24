@@ -92,10 +92,15 @@ export async function runSyncNow(): Promise<SyncRunResult | null> {
       throw new Error(body.message || `فشل تشغيل المزامنة (${res.status})`);
     }
     const result = (await res.json()) as SyncRunResult;
+    // Push failures must be as visible as pull failures: the header's
+    // «تعذّرت المزامنة السحابية» badge is driven by lastError. Units that do
+    // not leave the device used to leave this null — a silent "متصل".
+    const pushProblem =
+      (result.failed ?? 0) > 0 ? `لم تُرسل ${result.failed} عملية إلى المركز — ستُعاد المحاولة` : null;
     setState({
       lastRunAt: new Date().toISOString(),
       lastResult: result,
-      lastError: result.pullError ?? null,
+      lastError: result.pullError ?? pushProblem,
     });
     return result;
   } catch (err) {
@@ -132,6 +137,12 @@ export type HubState = {
   statusCounts: Record<string, number>;
   lastPullAt: string | null;
   localDeviceId: string | null;
+  /** Oldest unit still waiting to leave this device (pending/pushing). */
+  oldestPendingAt?: string | null;
+  /** Why the last push attempt of a waiting unit failed. */
+  lastPushError?: string | null;
+  /** The hub account is stored (encrypted) — a URL change needs no password. */
+  hasStoredCredentials?: boolean;
 };
 
 export type HubTestResult = {
@@ -146,6 +157,8 @@ export type HubConnectResult = {
   url: string;
   session: HubSessionInfo;
   cursorReset: boolean;
+  /** Units already delivered to the previous hub, queued again for this one. */
+  requeued?: number;
   deviceWarning: string | null;
 };
 
@@ -169,7 +182,7 @@ export const hubSync = {
   state: () => hubApi<HubState>("/sync/hub"),
   test: (url?: string) =>
     hubApi<HubTestResult>("/sync/hub/test", { method: "POST", body: JSON.stringify({ url }) }),
-  connect: (input: { url: string; email: string; password: string }) =>
+  connect: (input: { url: string; email?: string; password?: string }) =>
     hubApi<HubConnectResult>("/sync/hub/connect", {
       method: "POST",
       body: JSON.stringify(input),

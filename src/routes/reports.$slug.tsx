@@ -13,6 +13,7 @@ import { formatDateTime } from "@/lib/utils";
 import { formatCurrencyBreakdown } from "@/presentation/hooks/useCurrency";
 import { formatNumber, formatMoney, formatQuantity } from "@/shared/utils/formatNumber";
 
+import { localDateISO } from "@/lib/localDate";
 type Search = { range?: "7" | "30" | "90" | "all" };
 
 export const Route = createFileRoute("/reports/$slug")({
@@ -55,7 +56,7 @@ function useCutoff(range: Search["range"]) {
     if (range === "all") return null;
     const d = new Date();
     d.setDate(d.getDate() - parseInt(range ?? "30", 10));
-    return d.toISOString().slice(0, 10);
+    return localDateISO(d);
   }, [range]);
 }
 

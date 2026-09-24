@@ -2,6 +2,7 @@ import { useSyncExternalStore } from "react";
 import type { Currency } from "@/domain/types";
 import { formatNumber, formatMoney, formatQuantity } from "@/shared/utils/formatNumber";
 
+import { localToday } from "@/lib/localDate";
 /**
  * Presentation-layer currency utilities.
  *
@@ -40,7 +41,7 @@ export const currencyState: {
 } = {
   defaultCurrency: DEFAULT_CURRENCY,
   rates: { ...EXCHANGE_RATES },
-  lastUpdated: new Date().toISOString().slice(0, 10),
+  lastUpdated: localToday(),
 };
 
 /**
@@ -50,7 +51,7 @@ export const currencyState: {
  */
 export function setExchangeRate(code: Currency, rate: number): void {
   currencyState.rates[code] = rate;
-  currencyState.lastUpdated = new Date().toISOString().slice(0, 10);
+  currencyState.lastUpdated = localToday();
   if (typeof window !== "undefined") {
     window.dispatchEvent(new Event("currency-change"));
   }

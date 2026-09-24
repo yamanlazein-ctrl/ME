@@ -35,6 +35,7 @@ import {
 import { useInvoicesList, useInvoice } from "@/presentation/hooks/useInvoices";
 import { Plus, Palette, Save, Trash2, X, Lock } from "lucide-react";
 
+import { localToday } from "@/lib/localDate";
 type Line = {
   id: string;
   rollId: string;
@@ -54,7 +55,7 @@ export function ReturnForm({ kind }: { kind: ReturnKind }) {
   const navigate = useNavigate();
   const [partyId, setPartyId] = useState("");
   const [invoiceId, setInvoiceId] = useState("");
-  const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
+  const [date, setDate] = useState(localToday());
   const [reason, setReason] = useState<ReturnReason>("defect");
   const [currency, setCurrency] = useState<Currency>("SYP");
   const [lines, setLines] = useState<Line[]>([]);

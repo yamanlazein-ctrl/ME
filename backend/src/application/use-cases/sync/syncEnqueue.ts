@@ -794,3 +794,73 @@ export async function enqueueCompanyUpdate(
     },
   });
 }
+
+/**
+ * Press cycle (textile printing/dyeing): sending moves stock out of the
+ * source roll; receiving creates the printed fabric/colour/roll and pays the
+ * print cost in cash. Both change shared stock and money, so they sync like
+ * invoices. The old "per-device print queue" exemption confused the textile
+ * press with a paper printer, and the other PCs never saw the stock or cash.
+ */
+export async function enqueuePrintSend(
+  outbox: ISyncOutboxRepository,
+  job: { id: string; number: string },
+  input: Record<string, unknown>,
+  ctx: TenantContext,
+  syncDeviceId: string | null,
+  opId?: string,
+) {
+  return enqueueSyncUnit(outbox, {
+    tenantId: ctx.tenantId,
+    syncDeviceId,
+    opId,
+    entityType: "print",
+    entityId: job.id,
+    operation: "send",
+    payload: {
+      jobId: job.id,
+      jobNumber: job.number,
+      sendInput: input,
+      actorUserId: ctx.userId,
+      actorRole: ctx.userRole,
+      actorUserName: ctx.userName,
+    },
+  });
+}
+
+export async function enqueuePrintReceive(
+  outbox: ISyncOutboxRepository,
+  job: {
+    id: string;
+    resultFabricId?: string;
+    resultColorId?: string;
+    resultRollId?: string;
+    resultRollNo?: string;
+  },
+  input: Record<string, unknown>,
+  ctx: TenantContext,
+  syncDeviceId: string | null,
+  opId?: string,
+) {
+  return enqueueSyncUnit(outbox, {
+    tenantId: ctx.tenantId,
+    syncDeviceId,
+    opId,
+    entityType: "print",
+    entityId: job.id,
+    operation: "receive",
+    payload: {
+      jobId: job.id,
+      receiveInput: input,
+      preset: {
+        resultFabricId: job.resultFabricId,
+        resultColorId: job.resultColorId,
+        resultRollId: job.resultRollId,
+        resultRollNo: job.resultRollNo,
+      },
+      actorUserId: ctx.userId,
+      actorRole: ctx.userRole,
+      actorUserName: ctx.userName,
+    },
+  });
+}

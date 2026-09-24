@@ -1,4 +1,5 @@
-import { eq, and, desc, ilike, or, ne, sql, inArray, gte, lte } from "drizzle-orm";
+import { eq, and, desc, ilike, or, ne, sql, inArray, gte, lte, getTableColumns } from "drizzle-orm";
+import { afterCursor, cursorColumns, decodeCursor, keysetOrder, nextCursorOf, type KeysetSpec } from "./keysetPage.js";
 import { likeContains } from "../utils/likeEscape.js";
 import type { DB } from "../orm/drizzle.js";
 import { allocateDocumentNumber } from "../utils/documentNumbers.js";
@@ -44,19 +45,28 @@ export class PostgresReturnRepository implements IReturnRepository {
     const page = Math.max(0, filter.page ?? 0);
     const limit = Math.min(1000, Math.max(1, filter.limit ?? 20));
     const offset = page * limit;
+    // Keyset mode for "load every row" callers: seek after the cursor instead
+    // of OFFSET (constant cost per page, strict total order). keysetPage.ts.
+    const keyset: KeysetSpec = { date: returns.date, createdAt: returns.createdAt, id: returns.id };
+    const cursor = true ? decodeCursor(filter.cursor) : null;
+    const pageWhere = cursor ? and(where, afterCursor(keyset, cursor)) : where;
 
     const [dataRows, countRows] = await Promise.all([
       this.db
-        .select()
+        .select({ ...getTableColumns(returns), ...cursorColumns(keyset) })
         .from(returns)
-        .where(where)
+        .where(pageWhere)
         .limit(limit)
-        .offset(offset)
-        .orderBy(desc(returns.date), desc(returns.createdAt)),
-      this.db
-        .select({ count: sql<number>`count(*)` })
-        .from(returns)
-        .where(where),
+        .offset(cursor ? 0 : offset)
+        .orderBy(...keysetOrder(keyset)),
+      // Cursor pages skip the COUNT: the caller stops on nextCursor and the
+      // first (cursor-less) page already carried the real total.
+      cursor
+        ? Promise.resolve([{ count: -1 }])
+        : this.db
+            .select({ count: sql<number>`count(*)` })
+            .from(returns)
+            .where(where),
     ]);
 
     const ids = dataRows.map((r) => r.id);
@@ -83,6 +93,7 @@ export class PostgresReturnRepository implements IReturnRepository {
       for (const i of inv) origNumbers.set(i.id, i.number);
     }
 
+    const nextCursor = nextCursorOf(dataRows as unknown as Array<Record<string, unknown>>, limit);
     return {
       data: dataRows.map((r) => ({
         ...this.toDomain(r, byId.get(r.id) ?? []),
@@ -92,7 +103,9 @@ export class PostgresReturnRepository implements IReturnRepository {
         total: Number(countRows[0]?.count ?? 0),
         page,
         limit,
-        hasNext: offset + limit < Number(countRows[0]?.count ?? 0),
+        // Without a cursor the COUNT decides; a last page hands out no cursor.
+        nextCursor: cursor || offset + limit < Number(countRows[0]?.count ?? 0) ? nextCursor : null,
+        hasNext: cursor ? nextCursor !== null : offset + limit < Number(countRows[0]?.count ?? 0),
         totalPages: Math.ceil(Number(countRows[0]?.count ?? 0) / limit),
       },
     };

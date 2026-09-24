@@ -10,6 +10,7 @@ import {
 } from "@/components/ui/select";
 import { CURRENCIES } from "@/presentation/hooks/useCurrency";
 
+import { localDateISO } from "@/lib/localDate";
 export type CashboxPeriodFilter = {
   from: string; // yyyy-mm-dd
   to: string; // yyyy-mm-dd
@@ -17,7 +18,7 @@ export type CashboxPeriodFilter = {
 };
 
 function isoDay(d: Date): string {
-  return d.toISOString().slice(0, 10);
+  return localDateISO(d);
 }
 
 /**

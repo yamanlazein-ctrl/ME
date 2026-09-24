@@ -9,6 +9,7 @@ import {
   index,
   uniqueIndex,
   bigserial,
+  bigint,
 } from "drizzle-orm/pg-core";
 import { tenants } from "./tenant.table.js";
 import { syncDevices } from "./sync-device.table.js";
@@ -46,6 +47,8 @@ export const syncInbox = pgTable(
     receivedSeq: bigserial("received_seq", { mode: "number" }).notNull(),
     receivedAt: timestamp("received_at", { withTimezone: true }).notNull().defaultNow(),
     appliedAt: timestamp("applied_at", { withTimezone: true }),
+    /** Order of APPLICATION (trigger-stamped) — the pull cursor. See 20261016 migration. */
+    appliedSeq: bigint("applied_seq", { mode: "number" }),
   },
   (table) => ({
     tenantIdx: index("idx_sync_inbox_tenant").on(table.tenantId),

@@ -29,6 +29,7 @@ import { withTenantTx, db } from "../../infrastructure/orm/drizzle.js";
 import { mergePartiesUseCase } from "../../application/use-cases/parties/mergePartiesUseCase.js";
 import { idempotency } from "../../infrastructure/http/middleware/idempotency-handler.middleware.js";
 
+import { localDateISO } from "../../infrastructure/utils/localDate.js";
 export function registerPartyRoutes(
   router: Router,
   partyRepo: IPartyRepository,
@@ -88,6 +89,10 @@ export function registerPartyRoutes(
             vat: p.vat,
             status: p.status,
             notes: p.notes ?? null,
+            // The opening journal is written locally in the same transaction
+            // as the party; other devices rebuild it from these two fields.
+            openingBalance: p.openingBalance ?? 0,
+            openingDate: localDateISO(new Date(p.createdAt ?? Date.now())),
           },
           c,
           syncDeviceIdFromRequest(req),

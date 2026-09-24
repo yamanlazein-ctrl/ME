@@ -6,4 +6,7 @@ export class ListExpensesUseCase {
   execute(filter?: ExpenseFilter): Promise<ExpenseDTO[]> {
     return this.repo.list(filter);
   }
+  page(filter?: ExpenseFilter) {
+    return this.repo.listPage(filter);
+  }
 }

@@ -36,6 +36,7 @@ import { CardField, GroupSection } from "@/components/invoices/InvoiceFormLayout
 import { showError, showSuccess } from "@/components/common/toast-helpers";
 import { resolveColorPick } from "@/domain/inventory/colorLookup";
 
+import { localToday } from "@/lib/localDate";
 type DocOption = { id: string; title: string; subtitle?: string };
 
 /** One line of the receive request — one sent voucher becoming one new color. */
@@ -158,7 +159,7 @@ function PrintReceivePage() {
   const { data: open = [] } = useOpenPrintJobs();
   const receivePrint = useReceivePrint();
 
-  const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
+  const [date, setDate] = useState(localToday());
   const [currency, setCurrency] = useState<Currency>("SYP");
   const [exchangeRate, setExchangeRate] = useState<number | "">("");
   const [newCategory, setNewCategory] = useState("طباعة");

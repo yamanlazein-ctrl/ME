@@ -49,6 +49,7 @@ export class ApiPartyRepository implements IPartyRepository {
       data,
       total: res.meta?.total ?? data.length,
       hasNext: res.meta?.hasNext ?? false,
+      nextCursor: res.meta?.nextCursor ?? undefined,
     };
   }
 

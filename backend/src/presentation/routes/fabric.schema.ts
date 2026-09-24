@@ -12,6 +12,8 @@ export const createFabricSchema = z.object({
 export const updateFabricSchema = createFabricSchema.partial();
 
 export const listFabricsSchema = z.object({
+  /** Keyset cursor for "load every row" callers (no OFFSET scan). */
+  cursor: z.string().max(300).optional(),
   search: z.string().max(200).optional(),
   page: z.coerce.number().int().min(0).optional().default(0),
   limit: z.coerce.number().int().min(1).max(1000).optional().default(20),

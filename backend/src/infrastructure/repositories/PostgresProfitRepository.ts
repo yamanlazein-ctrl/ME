@@ -18,6 +18,7 @@ import { returns } from "../orm/schemas/return.table.js";
 import { returnLines } from "../orm/schemas/return-line.table.js";
 import { ledgerEntries } from "../orm/schemas/ledger-entry.table.js";
 
+import { localToday } from "../utils/localDate.js";
 /**
  * PostgresProfitRepository — net profit from live data.
  *
@@ -398,7 +399,7 @@ export class PostgresProfitRepository implements IProfitRepository {
       .leftJoin(parties, eq(parties.id, invoices.partyId))
       .where(invoiceBase);
 
-    const today = new Date().toISOString().slice(0, 10);
+    const today = localToday();
     const out: DebtItem[] = [];
     for (const r of rows) {
       const total = Number(r.total);

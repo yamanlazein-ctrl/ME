@@ -40,4 +40,5 @@ export type ExpenseFilter = {
   to?: string;
   page?: number;
   limit?: number;
+  cursor?: string;
 };

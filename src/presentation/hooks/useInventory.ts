@@ -79,22 +79,22 @@ async function loadAll(force = false): Promise<void> {
     try {
       const ctx = buildTenantContext();
       // Names/prints/pickers resolve fabrics, colors and rolls synchronously
-      // from this cache, so it must hold every row — page by `page` until done.
+      // from this cache, so it must hold every row — walk the keyset cursor until done.
       const opts = { pageSize: 1000, maxPages: 500 };
       const [fRes, cRes, rRes] = await Promise.all([
         fetchAllPaged<Fabric>(
-          async (page, limit) =>
-            (await container.inventory.listFabrics.execute({ limit, page }, ctx)) as never,
+          async (page, limit, cursor) =>
+            (await container.inventory.listFabrics.execute({ limit, page, cursor }, ctx)) as never,
           { ...opts, label: "fabrics" },
         ),
         fetchAllPaged<Color>(
-          async (page, limit) =>
-            (await container.inventory.listColors.execute({ limit, page }, ctx)) as never,
+          async (page, limit, cursor) =>
+            (await container.inventory.listColors.execute({ limit, page, cursor }, ctx)) as never,
           { ...opts, label: "colors" },
         ),
         fetchAllPaged<Roll>(
-          async (page, limit) =>
-            (await container.inventory.listRolls.execute({ limit, page }, ctx)) as never,
+          async (page, limit, cursor) =>
+            (await container.inventory.listRolls.execute({ limit, page, cursor }, ctx)) as never,
           { ...opts, label: "rolls" },
         ),
       ]);

@@ -109,13 +109,13 @@ export class ApiVoucherRepository implements IVoucherRepository {
         ? this.api.listPayments(paymentFilter)
         : Promise.resolve({
             data: [],
-            meta: { total: 0, page: 0, limit: 0, hasNext: false, totalPages: 0 },
+            meta: { total: 0, page: 0, limit: 0, hasNext: false, totalPages: 0, nextCursor: null },
           }),
       receiptFilter
         ? this.api.listReceipts(receiptFilter)
         : Promise.resolve({
             data: [],
-            meta: { total: 0, page: 0, limit: 0, hasNext: false, totalPages: 0 },
+            meta: { total: 0, page: 0, limit: 0, hasNext: false, totalPages: 0, nextCursor: null },
           }),
     ]);
 
@@ -124,7 +124,19 @@ export class ApiVoucherRepository implements IVoucherRepository {
       ...receiptsRes.data.map(receiptToVoucher),
     ];
     const total = paymentsRes.meta.total + receiptsRes.meta.total;
-    return { data, total, hasNext: paymentsRes.meta.hasNext || receiptsRes.meta.hasNext };
+    // A cursor belongs to one endpoint: only a single-kind page can hand one out.
+    const nextCursor =
+      kind === "payment"
+        ? (paymentsRes.meta.nextCursor ?? undefined)
+        : kind === "receipt"
+          ? (receiptsRes.meta.nextCursor ?? undefined)
+          : undefined;
+    return {
+      data,
+      total,
+      hasNext: paymentsRes.meta.hasNext || receiptsRes.meta.hasNext,
+      nextCursor,
+    };
   }
 
   async create(voucher: Voucher, ctx: TenantContext): Promise<Voucher> {

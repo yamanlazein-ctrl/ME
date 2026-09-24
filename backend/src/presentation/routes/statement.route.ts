@@ -21,11 +21,12 @@ import {
   enqueueVoucherCreate,
   isSyncEnqueueEnabled,
   opIdFromRequest,
+  uuidFromString,
   syncDeviceIdFromRequest,
 } from "../../application/use-cases/sync/syncEnqueue.js";
 import { capturePartySyncDependencies } from "../../application/use-cases/sync/syncDependencySnapshots.js";
 import { statementQuerySchema, settlePartySchema, settleInvoicesSchema } from "./statement.schema.js";
-import { nextDocumentNumber } from "../../infrastructure/utils/documentNumbers.js";
+import { allocateDocumentNumberForDevice } from "../../infrastructure/utils/documentNumbers.js";
 import { settleInvoicesUseCase } from "../../application/use-cases/statements/settleInvoicesUseCase.js";
 import { BusinessRuleError } from "../../domain/errors/index.js";
 
@@ -76,6 +77,7 @@ export function registerStatementRoutes(
               type: q.type,
               limit: q.limit,
               cursor: q.cursor,
+              page: q.page,
             },
             ctx(req),
           );
@@ -160,6 +162,12 @@ export function registerStatementRoutes(
           }
           if (syncOutboxRepo && isSyncEnqueueEnabled()) {
             const deps = await capturePartySyncDependencies(partyRepo, [req.params.id as string], c);
+            // ONE request creates N vouchers: each needs its own opId. Reusing
+            // the request's Idempotency-Key for all of them made the outbox
+            // (deduplicated on opId) keep only the first — a 15-invoice payment
+            // synced 1 voucher and the other PCs kept 14 invoices "unpaid".
+            // Derived deterministically so a retried request re-uses them.
+            const baseOpId = opIdFromRequest(req);
             for (const v of result.data.vouchers) {
               await enqueueVoucherCreate(
                 syncOutboxRepo,
@@ -182,7 +190,7 @@ export function registerStatementRoutes(
                 },
                 c,
                 syncDeviceIdFromRequest(req),
-                opIdFromRequest(req),
+                baseOpId ? uuidFromString(`${baseOpId}:settle-voucher:${v.id}`) : undefined,
                 deps,
               );
             }
@@ -230,7 +238,7 @@ export function registerStatementRoutes(
             return res.status(404).json({ code: "NOT_FOUND", message: partyLabel });
           }
 
-          const referenceNumber = await nextDocumentNumber("settlement", c.tenantId);
+          const referenceNumber = await allocateDocumentNumberForDevice("settlement", c.tenantId, c.syncDeviceId);
           const settleInput = {
             date: b.date,
             currency: b.currency,

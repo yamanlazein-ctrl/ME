@@ -197,6 +197,8 @@ export const updateInvoiceSchema = z
   });
 
 export const listInvoicesSchema = z.object({
+  /** Keyset cursor for "load every row" callers (no OFFSET scan). */
+  cursor: z.string().max(300).optional(),
   partyId: z.string().uuid().optional(),
   type: z.enum(["entry", "sale"]).optional(),
   status: z.enum(["active", "cancelled"]).optional(),

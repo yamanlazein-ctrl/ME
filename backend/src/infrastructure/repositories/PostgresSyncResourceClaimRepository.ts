@@ -28,7 +28,9 @@ function mapRow(row: typeof syncResourceClaims.$inferSelect): SyncResourceClaimR
 }
 
 /** Stock-bearing claim namespaces: reservations measured in kilograms. */
-const STOCK_RESOURCE_TYPES = new Set(["roll", "invoice_update_roll", "return_roll"]);
+// entry_roll: a PURCHASE invoice adds stock to its rolls — measured like a
+// return (never consumes availability).
+const STOCK_RESOURCE_TYPES = new Set(["roll", "invoice_update_roll", "return_roll", "entry_roll"]);
 
 type MergedResource = {
   resourceType: string;
@@ -283,7 +285,10 @@ export class PostgresSyncResourceClaimRepository implements ISyncResourceClaimRe
           // Returns ADD stock, so neither their own nor other returns'
           // amounts consume availability (every return only increases what a
           // sale may later use). Recorded amounts stay for visibility.
-          const isReturn = r.resourceType === "return_roll";
+          // Returns and purchases ADD stock (was: purchases were checked as
+          // consumption — a purchase of 100 kg into a new empty roll was
+          // rejected as "insufficient stock: 0 available, 100 requested").
+          const isReturn = r.resourceType === "return_roll" || r.resourceType === "entry_roll";
           const effOutKg = isReturn ? 0 : outstandingKg;
           const effOutPc = isReturn ? 0 : outstandingPc;
           const effReqKg = isReturn ? 0 : requestedKg;

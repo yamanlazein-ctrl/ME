@@ -62,7 +62,7 @@ export class ApiReturnRepository implements IReturnRepository {
   async list(filter: ReturnFilter, ctx: TenantContext): Promise<PaginatedResult<ReturnDTO>> {
     const res = await this.api.list(filter);
     const data = res.data.map(toPortReturn);
-    return { data, total: res.meta.total, hasNext: res.meta.hasNext };
+    return { data, total: res.meta.total, hasNext: res.meta.hasNext, nextCursor: res.meta.nextCursor ?? undefined };
   }
 
   async create(input: CreateReturnInput, ctx: TenantContext): Promise<ReturnDTO> {

@@ -27,6 +27,7 @@ import { round2dp } from "@erp/shared";
 import { BusinessRuleError } from "../../domain/errors/index.js";
 import { customerCreditPosition } from "./customerCredit.js";
 
+import { localToday } from "../utils/localDate.js";
 const INVOICE_TYPES = ["sales_invoice", "purchase_invoice"];
 const VOUCHER_REF_TYPES = ["receipt_in", "payment_out"];
 
@@ -175,8 +176,51 @@ export class PostgresStatementRepository implements IStatementRepository {
       runningByCurrency.set(row.currency, round2dp(prev + mult * (d - c)));
     }
 
+    // Numbered-page mode: OFFSET inside ONE party's window (index-backed and
+    // bounded by that party's own row count), with the carried balance summed
+    // over exactly the rows that precede the page in the same total order.
+    const pageNo = !cursor && query.page != null ? Math.max(0, Math.floor(query.page)) : null;
+    const pageOffset = pageNo != null ? pageNo * pageLimit : 0;
+    let totalRowsInWindow: number | null = null;
+    if (pageNo != null) {
+      const [cnt] = await this.db
+        .select({ n: sql<number>`count(*)::int` })
+        .from(ledgerEntries)
+        .where(and(...winConditions));
+      totalRowsInWindow = Number(cnt?.n ?? 0);
+    }
+
     // Balance immediately before this page (for runningBalance continuity).
     const beforePageByCurrency = new Map<string, number>(prevByCurrency);
+    if (pageNo != null && pageOffset > 0) {
+      const head = this.db
+        .select({
+          currency: ledgerEntries.currency,
+          debit: ledgerEntries.debit,
+          credit: ledgerEntries.credit,
+          status: ledgerEntries.status,
+        })
+        .from(ledgerEntries)
+        .where(and(...winConditions))
+        .orderBy(asc(ledgerEntries.date), asc(ledgerEntries.createdAt), asc(ledgerEntries.id))
+        .limit(pageOffset)
+        .as("head");
+      const headRows = await this.db
+        .select({
+          currency: head.currency,
+          debit: sql<number>`COALESCE(SUM(CASE WHEN ${head.status} = 'active' THEN ${head.debit} ELSE 0 END), 0)`,
+          credit: sql<number>`COALESCE(SUM(CASE WHEN ${head.status} = 'active' THEN ${head.credit} ELSE 0 END), 0)`,
+        })
+        .from(head)
+        .groupBy(head.currency);
+      for (const row of headRows) {
+        const prev = prevByCurrency.get(row.currency) ?? 0;
+        beforePageByCurrency.set(
+          row.currency,
+          round2dp(prev + mult * (Number(row.debit ?? 0) - Number(row.credit ?? 0))),
+        );
+      }
+    }
     if (cursor) {
       const beforeConds = [
         ...winConditions,
@@ -217,7 +261,8 @@ export class PostgresStatementRepository implements IStatementRepository {
       .from(ledgerEntries)
       .where(and(...pageConditions))
       .orderBy(asc(ledgerEntries.date), asc(ledgerEntries.createdAt), asc(ledgerEntries.id))
-      .limit(fetchLimit);
+      .limit(fetchLimit)
+      .offset(pageOffset);
 
     const hasMore = window.length > pageLimit;
     const pageRows = hasMore ? window.slice(0, pageLimit) : window;
@@ -245,7 +290,7 @@ export class PostgresStatementRepository implements IStatementRepository {
 
       const entry: StatementEntryData = {
         id: row.id,
-        seq: i + 1,
+        seq: pageOffset + i + 1,
         date: row.date,
         type: row.type as StatementEntryData["type"],
         status: isCancelled ? "cancelled" : "active",
@@ -364,6 +409,19 @@ export class PostgresStatementRepository implements IStatementRepository {
         hasMore,
         nextCursor,
         balanceBeforePage: primaryBefore,
+        balanceBeforePageByCurrency: Object.fromEntries(
+          [...new Set([...beforePageByCurrency.keys(), ...(allCurrencies ? [] : [currency])])].map((c) => [
+            c,
+            round2dp(beforePageByCurrency.get(c) ?? 0),
+          ]),
+        ),
+        ...(pageNo != null
+          ? {
+              page: pageNo,
+              totalRows: totalRowsInWindow ?? 0,
+              totalPages: Math.max(1, Math.ceil((totalRowsInWindow ?? 0) / pageLimit)),
+            }
+          : {}),
       },
     };
   }
@@ -426,7 +484,9 @@ export class PostgresStatementRepository implements IStatementRepository {
       // references still pass through untouched.
       const referenceNumber =
         input.referenceNumber ??
-        (await allocateDocumentNumber(tx, "settlement", ctx.tenantId));
+        (await allocateDocumentNumber(tx, "settlement", ctx.tenantId, {
+          syncDeviceId: ctx.syncDeviceId,
+        }));
 
       // M8: both settlement legs share a real generated UUID as referenceId so
       // the pair is resolvable/reversible by reference (cancel-by-reference),
@@ -439,7 +499,7 @@ export class PostgresStatementRepository implements IStatementRepository {
           {
             tenantId: ctx.tenantId,
             partyId,
-            date: input.date ?? new Date().toISOString().slice(0, 10),
+            date: input.date ?? localToday(),
             type: "settlement",
             debit: net < 0 ? amount : 0,
             credit: net > 0 ? amount : 0,
@@ -454,7 +514,7 @@ export class PostgresStatementRepository implements IStatementRepository {
           {
             tenantId: ctx.tenantId,
             partyId: null,
-            date: input.date ?? new Date().toISOString().slice(0, 10),
+            date: input.date ?? localToday(),
             type: "settlement_contra",
             debit: net > 0 ? amount : 0,
             credit: net < 0 ? amount : 0,

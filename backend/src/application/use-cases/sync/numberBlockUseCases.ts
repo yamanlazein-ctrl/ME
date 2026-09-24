@@ -1,11 +1,13 @@
 import { hostname, platform as osPlatform } from "node:os";
 import { db } from "../../../infrastructure/orm/drizzle.js";
 import { logger } from "../../../infrastructure/config/logger.js";
-import { getCentralSyncUrl, resolveHubAuthHeader } from "./hubConfig.js";
+import { getCentralSyncUrl, getHubSessionInfo, resolveHubAuthHeader } from "./hubConfig.js";
 import {
   claimNumberBlockInTx,
   defaultBlockSize,
+  isNumberingAuthority,
   numberBlocksEnabled,
+  numberBlocksInUse,
   reclaimNumberBlockTailInTx,
   resolveNumberFormat,
 } from "../../../infrastructure/utils/documentNumbers.js";
@@ -41,6 +43,9 @@ const PRIMARY_ENTITY_TYPES = [
   "return",
   "expense",
   "order",
+  "settlement",
+  "print",
+  "print_roll",
 ] as const;
 
 export async function claimNumberBlock(input: {
@@ -59,9 +64,10 @@ export async function claimNumberBlock(input: {
    */
   knownUsed?: number | null;
 }) {
-  if (!numberBlocksEnabled()) {
-    // Reserving a block advances the shared counter by the block size, which is
-    // exactly the "ENT-2026-0001 → ENT-2026-0602" jump. Refuse instead.
+  if (!numberBlocksEnabled() && !numberBlocksInUse() && !isNumberingAuthority()) {
+    // Standalone desktop: reserving a block advances the shared counter by the
+    // block size ("ENT-2026-0001 → ENT-2026-0602"). Refuse there; a hub (the
+    // numbering authority) and a paired device always carve.
     throw new BusinessRuleError(
       "حجز كتل الترقيم معطّل — الترقيم يتم من عدّاد واحد متسلسل داخل السيرفر",
     );
@@ -138,7 +144,7 @@ export async function ensureDeviceNumberBlocks(
   skipped: boolean;
   reason?: string;
 }> {
-  if (!numberBlocksEnabled()) {
+  if (!numberBlocksInUse()) {
     return { ensured: [], skipped: true, reason: "number blocks disabled (single-counter numbering)" };
   }
   await assertDeviceBelongsToTenant(input.tenantId, input.syncDeviceId);
@@ -157,7 +163,19 @@ export async function ensureDeviceNumberBlocks(
 
   for (const entityType of types) {
     const existing = await blocks.findActive(input.tenantId, input.syncDeviceId, entityType, year);
-    if (existing && existing.nextNumber <= existing.endNumber) {
+    // Refill EARLY (below 25% of a block left across all active blocks), not
+    // at exhaustion: a device that runs out while offline cannot save a
+    // single document until it reconnects.
+    const remainingRes = await db.execute(sql`
+      SELECT COALESCE(SUM(end_number - next_number + 1), 0)::int AS remaining
+        FROM document_number_blocks
+       WHERE tenant_id = ${input.tenantId} AND sync_device_id = ${input.syncDeviceId}
+         AND entity_type = ${entityType} AND year = ${year}
+         AND status = 'active' AND next_number <= end_number`);
+    const remaining = Number(
+      ((remainingRes as unknown as { rows?: Array<{ remaining: number }> }).rows ?? [])[0]?.remaining ?? 0,
+    );
+    if (existing && remaining >= Math.ceil(defaultBlockSize(entityType) * 0.25)) {
       ensured.push({
         entityType,
         startNumber: existing.startNumber,
@@ -170,7 +188,13 @@ export async function ensureDeviceNumberBlocks(
     if (hub && authHeader) {
       try {
         if (!hubDeviceId) {
-          hubDeviceId = await registerDeviceOnHub(hub, fingerprintProvider, authHeader);
+          // The device registered at pairing IS this device on the hub. A
+          // second, fingerprint-derived hub row made blocks belong to a
+          // different identity (and to the SAME one for two installs on one
+          // machine, which then shared a range).
+          hubDeviceId =
+            getHubSessionInfo()?.hubDeviceId ??
+            (await registerDeviceOnHub(hub, fingerprintProvider, authHeader));
         }
         // Tip reconciliation: the hub must carve above anything this device
         // already issued via local fallback (its shared sequence), or the

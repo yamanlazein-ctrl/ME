@@ -5,6 +5,7 @@ import type { SettingsSection } from "@/infrastructure/api";
 import { setExchangeRate, type Currency } from "@/presentation/hooks/useCurrency";
 import { FIXED_COMPANY_CONTACT, formatCompanyPhoneField } from "@/shared/constants/printConfig";
 
+import { localToday } from "@/lib/localDate";
 export type ActivityEntry = {
   id: string;
   at: string;
@@ -185,7 +186,7 @@ export const settings = {
       email: "admin",
       role: "admin" as UserRole,
       active: true,
-      createdAt: new Date().toISOString().slice(0, 10),
+      createdAt: localToday(),
       password:
         typeof process !== "undefined"
           ? process.env.VITE_MOCK_ADMIN_PASSWORD || "NOT_SET"
@@ -415,7 +416,7 @@ export function addUser(v: Omit<SystemUser, "id" | "createdAt">): SystemUser {
   const u: SystemUser = {
     ...v,
     id: nextId("usr"),
-    createdAt: new Date().toISOString().slice(0, 10),
+    createdAt: localToday(),
   };
   settings.users.push(u);
   logActivity("المستخدمون", "إضافة مستخدم", `${u.name} — ${ROLE_LABEL[u.role]}`);

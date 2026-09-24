@@ -1,4 +1,4 @@
-import { and, asc, eq, inArray, lt, or, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, like, lt, or, sql } from "drizzle-orm";
 import type { DB } from "../orm/drizzle.js";
 import { runWithTenantContext } from "../orm/tenant-context.js";
 import type {
@@ -138,7 +138,17 @@ export class PostgresSyncOutboxRepository implements ISyncOutboxRepository {
                 LIMIT ${limit}
                 FOR UPDATE SKIP LOCKED
          )
-         RETURNING o.*
+         -- Raw SQL returns snake_case columns; mapRow reads the drizzle
+         -- (camelCase) shape. With RETURNING o.* every claimed unit had an
+         -- undefined leaseToken/opId, so each push aborted locally with
+         -- SYNC_LEASE_MISSING and NOTHING ever reached the hub, while the
+         -- units sat in 'pushing' and the UI showed "syncing".
+         RETURNING o.id, o.tenant_id AS "tenantId", o.sync_device_id AS "syncDeviceId",
+                   o.op_id AS "opId", o.entity_type AS "entityType", o.entity_id AS "entityId",
+                   o.operation, o.payload, o.status, o.error_detail AS "errorDetail", o.seq,
+                   o.created_at AS "createdAt", o.updated_at AS "updatedAt", o.synced_at AS "syncedAt",
+                   o.lease_owner AS "leaseOwner", o.lease_token AS "leaseToken",
+                   o.lease_until AS "leaseUntil", o.claimed_at AS "claimedAt"
       `);
       const rows = (result as unknown as { rows: Array<typeof syncOutbox.$inferSelect> }).rows ?? [];
       return rows.map(mapRow).sort((a, b) => a.seq - b.seq);
@@ -219,6 +229,37 @@ export class PostgresSyncOutboxRepository implements ISyncOutboxRepository {
           eq(syncOutbox.leaseToken, leaseToken),
         ));
       return result.rowCount ?? 0;
+    });
+  }
+
+  async requeueSyncedForNewHub(tenantId: string): Promise<number> {
+    return runWithTenantContext({ tenantId }, async () => {
+      const rows = await this.db
+        .update(syncOutbox)
+        .set({
+          status: "pending",
+          syncedAt: null,
+          errorDetail: null,
+          leaseOwner: null,
+          leaseToken: null,
+          leaseUntil: null,
+          updatedAt: new Date(),
+        })
+        .where(
+          and(
+            eq(syncOutbox.tenantId, tenantId),
+            // `hubDead:` rejections were parked by the OLD hub (e.g. a parent
+            // it never received) and — unlike conflict losers — were NOT
+            // rolled back locally: the document is live here, so the new hub
+            // must get it too. Conflict/permanent rejections stay rejected.
+            or(
+              eq(syncOutbox.status, "synced"),
+              and(eq(syncOutbox.status, "rejected"), like(syncOutbox.errorDetail, "hubDead:%")),
+            ),
+          ),
+        )
+        .returning({ id: syncOutbox.id });
+      return rows.length;
     });
   }
 

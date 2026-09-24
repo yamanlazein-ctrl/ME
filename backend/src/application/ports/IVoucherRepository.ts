@@ -2,6 +2,8 @@ import type { TenantContext, PaginatedResult } from "../../domain/types/index.js
 import type { VoucherData, CreateVoucherInput } from "../../domain/entities/Voucher.js";
 
 export interface VoucherFilter {
+  /** Keyset cursor ("load every row" callers) — see keysetPage.ts. */
+  cursor?: string;
   kind?: string;
   partyId?: string;
   invoiceId?: string;

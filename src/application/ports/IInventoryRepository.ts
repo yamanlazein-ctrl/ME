@@ -115,5 +115,7 @@ export interface InventoryFilter {
   search?: string;
   limit?: number;
   page?: number;
+  /** Keyset cursor from the previous page (seek paging for "load all" walks). */
+  cursor?: string;
   offset?: number;
 }

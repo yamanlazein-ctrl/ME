@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { container } from "@/infrastructure/container";
 import { toast } from "sonner";
 import type { Currency } from "@/domain/types";
@@ -80,6 +80,37 @@ export function useStatement(
     enabled: !!partyId,
     staleTime: 15_000,
   });
+}
+
+/**
+ * ONE screen page of the statement (20/50/100 rows). The server computes the
+ * carried balance («رصيد منقول») of the rows before the page, so page N opens
+ * with exactly the balance page N-1 closed on — rendering thousands of rows
+ * at once is what froze the statement screen.
+ */
+export function useStatementPage(
+  partyId: string | undefined,
+  kind: PartyKind,
+  filter: StatementFilter,
+  page: number,
+  pageSize: number,
+) {
+  const normalized = { ...normalizeFilter(filter), limit: pageSize, cursor: undefined, page };
+  return useQuery({
+    queryKey: [...KEYS.party(partyId ?? "", kind, normalized), "page"] as const,
+    queryFn: () => container.statement.api.getStatement(partyId ?? "", kind, normalized),
+    enabled: !!partyId,
+    staleTime: 15_000,
+    placeholderData: keepPreviousData,
+  });
+}
+
+/** The COMPLETE statement, fetched on demand (print / Excel export). */
+export function loadFullStatement(partyId: string, kind: PartyKind, filter: StatementFilter) {
+  return fetchFullStatement(
+    (f) => container.statement.api.getStatement(partyId, kind, f),
+    { ...normalizeFilter(filter), limit: 500, cursor: undefined },
+  );
 }
 
 function invalidateAfterSettlement(qc: ReturnType<typeof useQueryClient>) {

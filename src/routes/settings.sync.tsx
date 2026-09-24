@@ -33,18 +33,29 @@ export const Route = createFileRoute("/settings/sync")({ component: SyncSettings
 
 const HUB_KEY = ["sync", "hub"] as const;
 
-type Indicator = "unpaired" | "online" | "offline" | "syncing";
+type Indicator = "unpaired" | "online" | "offline" | "syncing" | "stuck";
 
 const INDICATOR: Record<Indicator, { label: string; dot: string; text: string }> = {
   unpaired: { label: "غير مربوط", dot: "bg-muted-foreground", text: "text-muted-foreground" },
   online: { label: "متصل", dot: "bg-emerald-500", text: "text-emerald-600 dark:text-emerald-400" },
   offline: { label: "غير متصل", dot: "bg-destructive", text: "text-destructive" },
+  stuck: { label: "متصل لكن العمليات لا تُرسل", dot: "bg-destructive", text: "text-destructive" },
   syncing: {
     label: "جاري المزامنة",
     dot: "bg-amber-500 animate-pulse",
     text: "text-amber-600 dark:text-amber-400",
   },
 };
+
+/** Quick-tunnel hosts get a new random name on every restart of the tunnel. */
+function isEphemeralTunnel(url: string | null | undefined): boolean {
+  if (!url) return false;
+  try {
+    return /(^|\.)trycloudflare\.com$/i.test(new URL(url).hostname);
+  } catch {
+    return false;
+  }
+}
 
 function fmt(iso: string | null | undefined): string {
   if (!iso) return "—";
@@ -88,13 +99,23 @@ function SyncSettingsAdmin() {
   const state: HubState | undefined = hub.data;
   const effectiveUrl = url.trim() || state?.url || "";
 
+  // "Connected" only when work actually leaves this device: units waiting
+  // more than 2 minutes, or a failed last run, is a problem — never green.
+  const stuck =
+    !!state?.url &&
+    ((state.pendingCount > 0 &&
+      !!state.oldestPendingAt &&
+      Date.now() - new Date(state.oldestPendingAt).getTime() > 120_000) ||
+      (run.lastResult?.failed ?? 0) > 0);
   const indicator: Indicator = !state?.url
     ? "unpaired"
     : run.running
       ? "syncing"
       : state.reachable === false
         ? "offline"
-        : "online";
+        : stuck
+          ? "stuck"
+          : "online";
 
   const testMut = useMutation({
     mutationFn: () => hubSync.test(effectiveUrl || undefined),
@@ -110,11 +131,20 @@ function SyncSettingsAdmin() {
   });
 
   const connectMut = useMutation({
-    mutationFn: () => hubSync.connect({ url: effectiveUrl, email: email.trim(), password }),
+    mutationFn: () =>
+      hubSync.connect({
+        url: effectiveUrl,
+        email: email.trim() || undefined,
+        password: password || undefined,
+      }),
     onSuccess: async (r) => {
       setPassword("");
       toast.success("تم ربط الجهاز بالمركز", {
-        description: r.cursorReset ? "مركز جديد — ستُسحب كل العمليات من البداية." : undefined,
+        description: r.cursorReset
+          ? `مركز جديد — ستُسحب كل العمليات من البداية${
+              r.requeued ? `، وتُعاد ${r.requeued} عملية سابقة من هذا الجهاز إليه` : ""
+            }.`
+          : undefined,
       });
       if (r.deviceWarning) toast.warning(r.deviceWarning, { duration: 10_000 });
       await qc.invalidateQueries({ queryKey: HUB_KEY });
@@ -145,6 +175,8 @@ function SyncSettingsAdmin() {
         toast.error(r.deviceTrust?.message ?? "المركز رفض هذا الجهاز — أعد الربط");
       } else if (r.pullError) {
         toast.error(`تم الدفع لكن فشل السحب: ${r.pullError}`);
+      } else if ((r.failed ?? 0) > 0) {
+        toast.error(`لم تُرسل ${r.failed} عملية — ستُعاد المحاولة تلقائياً. أُرسل ${r.pushed} · سُحب ${r.pull?.applied ?? 0}`);
       } else {
         toast.success(
           `مزامنة: أُرسل ${r.pushed} · سُحب ${r.pull?.applied ?? 0}${r.rejected ? ` · رُفض ${r.rejected}` : ""}`,
@@ -158,7 +190,9 @@ function SyncSettingsAdmin() {
 
   const onConnect = (e: FormEvent) => {
     e.preventDefault();
-    if (!effectiveUrl || !email.trim() || !password) {
+    // With a stored account, changing only the URL is enough.
+    const needsAccount = !state?.hasStoredCredentials;
+    if (!effectiveUrl || (needsAccount && (!email.trim() || !password))) {
       toast.error("أدخل رابط المركز والبريد وكلمة المرور");
       return;
     }
@@ -225,6 +259,17 @@ function SyncSettingsAdmin() {
                   : "—"
               }
             />
+            <Row label="أقدم عملية بانتظار الإرسال" value={fmt(state?.oldestPendingAt)} />
+            {isEphemeralTunnel(state?.url) && (
+              <Row
+                label="تنبيه الرابط"
+                value="هذا رابط نفق مؤقت (trycloudflare) يتغيّر كلما أُعيد تشغيل المركز، فتنقطع كل الأجهزة. استخدم نفقاً مسمّى أو نطاقاً ثابتاً."
+                danger
+              />
+            )}
+            {state?.lastPushError && (
+              <Row label="سبب تعذّر الإرسال" value={state.lastPushError} danger />
+            )}
             {run.lastError && <Row label="آخر خطأ" value={run.lastError} danger />}
           </dl>
         )}
@@ -301,9 +346,16 @@ function SyncSettingsAdmin() {
               dir="ltr"
               type="password"
               autoComplete="current-password"
+              placeholder={state?.hasStoredCredentials ? "محفوظة — اتركها فارغة" : undefined}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
             />
+            {state?.hasStoredCredentials && (
+              <p className="text-xs text-muted-foreground">
+                الحساب محفوظ مشفّراً على هذا الجهاز: لتغيير رابط المركز فقط اترك البريد وكلمة المرور
+                فارغين.
+              </p>
+            )}
           </div>
 
           {test && (

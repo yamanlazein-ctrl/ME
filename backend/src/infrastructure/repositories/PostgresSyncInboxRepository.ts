@@ -1,4 +1,4 @@
-import { and, asc, eq, gt, inArray, isNull, ne, or, sql } from "drizzle-orm";
+import { and, asc, eq, gt, inArray, isNotNull, isNull, ne, or, sql } from "drizzle-orm";
 import type { DB } from "../orm/drizzle.js";
 import { runWithTenantContext } from "../orm/tenant-context.js";
 import type {
@@ -29,6 +29,7 @@ function mapRow(row: typeof syncInbox.$inferSelect): SyncInboxRow {
     receivedSeq: Number(row.receivedSeq),
     receivedAt: row.receivedAt,
     appliedAt: row.appliedAt,
+    appliedSeq: row.appliedSeq == null ? null : Number(row.appliedSeq),
   };
 }
 
@@ -132,9 +133,10 @@ export class PostgresSyncInboxRepository implements ISyncInboxRepository {
       const conditions = [
         eq(syncInbox.tenantId, tenantId),
         eq(syncInbox.status, "applied"),
+        isNotNull(syncInbox.appliedSeq),
       ];
       if (afterSeq !== null && afterSeq !== undefined) {
-        conditions.push(gt(syncInbox.receivedSeq, afterSeq));
+        conditions.push(gt(syncInbox.appliedSeq, afterSeq));
       }
       if (opts?.excludeSyncDeviceId) {
         // Keep units whose device is unknown (NULL) — only exclude our own.
@@ -146,12 +148,21 @@ export class PostgresSyncInboxRepository implements ISyncInboxRepository {
         );
       }
 
-      const rows = await this.db
-        .select()
-        .from(syncInbox)
-        .where(and(...conditions))
-        .orderBy(asc(syncInbox.receivedSeq))
-        .limit(limit);
+      // Shared side of the per-tenant lock the applied_seq trigger takes: a
+      // unit that has drawn its number but not committed yet blocks this read
+      // until it commits, so a page can never show #20 while #19 is pending
+      // (the cursor would move past #19 and that PC would never get it).
+      const rows = await this.db.transaction(async (tx) => {
+        await tx.execute(
+          sql`select pg_advisory_xact_lock_shared(hashtextextended(${`sync_inbox_applied:${tenantId}`}, 0))`,
+        );
+        return tx
+          .select()
+          .from(syncInbox)
+          .where(and(...conditions))
+          .orderBy(asc(syncInbox.appliedSeq))
+          .limit(limit);
+      });
 
       return rows.map(mapRow);
     });

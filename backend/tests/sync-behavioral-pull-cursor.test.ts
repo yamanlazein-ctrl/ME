@@ -38,48 +38,57 @@ describe("sync behavioral — pull cursor / out-of-order arrival", () => {
     });
   });
 
-  it("listAppliedSince returns units by received_seq even when applied out of order", async (ctx) => {
+  it("a unit applied AFTER a later one is still delivered (cursor = application order)", async (ctx) => {
     skipUnlessDatabase(reachable, ctx.skip);
     const inbox = new PostgresSyncInboxRepository(db);
     const earlyOp = randomUUID();
     const lateOp = randomUUID();
-    const entityEarly = randomUUID();
-    const entityLate = randomUUID();
 
     const early = await inbox.receive({
-      tenantId,
-      opId: earlyOp,
-      entityType: "party",
-      entityId: entityEarly,
-      operation: "create",
-      payload: { order: "early" },
+      tenantId, opId: earlyOp, entityType: "party", entityId: randomUUID(), operation: "create", payload: { order: "early" },
     });
     const late = await inbox.receive({
-      tenantId,
-      opId: lateOp,
-      entityType: "party",
-      entityId: entityLate,
-      operation: "create",
-      payload: { order: "late" },
+      tenantId, opId: lateOp, entityType: "party", entityId: randomUUID(), operation: "create", payload: { order: "late" },
     });
     expect(late.row.receivedSeq).toBeGreaterThan(early.row.receivedSeq);
 
-    // Apply late first, then early — wall-clock apply order ≠ receive order.
+    // The race that lost an invoice on one PC (450 concurrent sales): the
+    // LATER unit is applied first and a device pulls in between.
     await inbox.markApplied(tenantId, lateOp);
-    await new Promise((r) => setTimeout(r, 15));
+    const first = (await inbox.listAppliedSince(tenantId, null, { limit: 100 })).filter(
+      (r) => r.opId === earlyOp || r.opId === lateOp,
+    );
+    expect(first.map((r) => r.opId)).toEqual([lateOp]);
+    const cursor = first[0]!.appliedSeq!;
+
+    // Now the earlier unit is applied: it must appear AFTER the cursor.
     await inbox.markApplied(tenantId, earlyOp);
+    const next = await inbox.listAppliedSince(tenantId, cursor, { limit: 100 });
+    expect(next.map((r) => r.opId)).toContain(earlyOp);
+    expect(next.map((r) => r.opId)).not.toContain(lateOp);
+    const e = next.find((r) => r.opId === earlyOp)!;
+    expect(e.appliedSeq!).toBeGreaterThan(cursor);
+    // receive order is untouched (other features rely on it)
+    expect(e.receivedSeq).toBe(early.row.receivedSeq);
+  });
 
-    const afterBeforeBoth = early.row.receivedSeq - 1;
-    const page = await inbox.listAppliedSince(tenantId, afterBeforeBoth, { limit: 50 });
-    const ours = page.filter((r) => r.opId === earlyOp || r.opId === lateOp);
-    expect(ours.map((r) => r.opId)).toEqual([earlyOp, lateOp]);
-    expect(ours[0]!.receivedSeq).toBeLessThan(ours[1]!.receivedSeq);
-
-    // Cursor parked at early seq must still surface the later unit.
-    const afterEarly = await inbox.listAppliedSince(tenantId, early.row.receivedSeq, {
-      limit: 50,
-    });
-    expect(afterEarly.some((r) => r.opId === lateOp)).toBe(true);
-    expect(afterEarly.some((r) => r.opId === earlyOp)).toBe(false);
+  it("units applied in one go come back in application order, each exactly once", async (ctx) => {
+    skipUnlessDatabase(reachable, ctx.skip);
+    const inbox = new PostgresSyncInboxRepository(db);
+    const ops = Array.from({ length: 6 }, () => randomUUID());
+    for (const op of ops) {
+      await inbox.receive({ tenantId, opId: op, entityType: "party", entityId: randomUUID(), operation: "create", payload: {} });
+    }
+    for (const op of [...ops].reverse()) await inbox.markApplied(tenantId, op);
+    const seen: string[] = [];
+    let cursor: number | null = null;
+    for (let g = 0; g < 10; g++) {
+      const page = (await inbox.listAppliedSince(tenantId, cursor, { limit: 2 }));
+      if (page.length === 0) break;
+      for (const r of page) if (ops.includes(r.opId)) seen.push(r.opId);
+      cursor = page[page.length - 1]!.appliedSeq!;
+    }
+    expect(new Set(seen).size).toBe(ops.length);
+    expect(seen).toHaveLength(ops.length);
   });
 });

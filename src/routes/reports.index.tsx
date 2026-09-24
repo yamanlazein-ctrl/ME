@@ -55,6 +55,7 @@ import { cn } from "@/lib/utils";
 import { showSuccess } from "@/components/common/toast-helpers";
 import { convertForSettlement } from "@erp/shared";
 
+import { localDateISO } from "@/lib/localDate";
 export const Route = createFileRoute("/reports/")({ component: ReportsPage });
 
 type ConvertMode = {
@@ -163,7 +164,7 @@ function ReportsPage() {
     if (range === "all") return null;
     const d = new Date();
     d.setDate(d.getDate() - parseInt(range, 10));
-    return d.toISOString().slice(0, 10);
+    return localDateISO(d);
   }, [range]);
 
   // All period figures are aggregated in SQL on the server (same formulas the

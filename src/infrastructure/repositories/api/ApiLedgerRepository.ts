@@ -10,7 +10,7 @@ export class ApiLedgerRepository implements ILedgerRepository {
   async entries(filter: LedgerFilter, ctx: TenantContext): Promise<PaginatedResult<LedgerEntry>> {
     const res = await this.api.list({ ...filter, types: filter.types as LedgerType[] });
     const data = res.data.map((dto) => LedgerEntry.reconstitute(dto as unknown as LedgerEntryData));
-    return { data, total: res.meta.total, hasNext: res.meta.hasNext };
+    return { data, total: res.meta.total, hasNext: res.meta.hasNext, nextCursor: res.meta.nextCursor ?? undefined };
   }
 
   async write(entry: LedgerEntry, ctx: TenantContext): Promise<LedgerEntry> {

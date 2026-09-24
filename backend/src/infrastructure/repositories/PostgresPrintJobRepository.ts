@@ -17,6 +17,7 @@ import {
 import type { TenantContext, UUID } from "../../domain/types/index.js";
 import { round2dp, convertAmount, isValidFxRate } from "@erp/shared";
 
+import { localToday } from "../utils/localDate.js";
 export class PostgresPrintJobRepository implements IPrintJobRepository {
   constructor(private readonly db: DB) {}
 
@@ -92,6 +93,7 @@ export class PostgresPrintJobRepository implements IPrintJobRepository {
       const [r] = await tx
         .insert(printJobs)
         .values({
+          ...(input.presetId ? { id: input.presetId } : {}),
           tenantId: ctx.tenantId,
           number: jobNumber,
           date: input.date,
@@ -251,6 +253,13 @@ export class PostgresPrintJobRepository implements IPrintJobRepository {
       let resultRollId: string | null = null;
 
       if (input.receivedKg != null && input.receivedKg >= 0) {
+        // Sync replay: reuse the origin PC's printed fabric/colour when present.
+        const presetFab = input.preset?.resultFabricId;
+        if (!resultFabricId && presetFab) {
+          const [f] = await tx.select({ id: fabrics.id }).from(fabrics)
+            .where(and(eq(fabrics.id, presetFab), eq(fabrics.tenantId, ctx.tenantId))).limit(1);
+          if (f) resultFabricId = f.id;
+        }
         if (!resultFabricId) {
           if (input.newName) {
             const existingFab = await tx
@@ -264,6 +273,7 @@ export class PostgresPrintJobRepository implements IPrintJobRepository {
               const [fab] = await tx
                 .insert(fabrics)
                 .values({
+                  ...(presetFab ? { id: presetFab } : {}),
                   tenantId: ctx.tenantId,
                   name: input.newName,
                   category: input.newCategory ?? job.newCategory,
@@ -283,7 +293,14 @@ export class PostgresPrintJobRepository implements IPrintJobRepository {
           // Issue 11: never attach a result roll to the SOURCE color when the
           // fabric was renamed — inventory name resolves via color→fabric, so
           // reusing source colorId left the old fabric name on the new roll.
-          if (input.newColorName?.trim() || fabricChanged) {
+          const presetCol = input.preset?.resultColorId;
+          const [presetColRow] = presetCol
+            ? await tx.select({ id: colors.id }).from(colors)
+                .where(and(eq(colors.id, presetCol), eq(colors.tenantId, ctx.tenantId))).limit(1)
+            : [];
+          if (presetColRow) {
+            resultColorId = presetColRow.id;
+          } else if (input.newColorName?.trim() || fabricChanged) {
             let colorName = input.newColorName?.trim() ?? "";
             if (!colorName && baseColorId) {
               const [srcCol] = await tx
@@ -311,6 +328,7 @@ export class PostgresPrintJobRepository implements IPrintJobRepository {
               const [col] = await tx
                 .insert(colors)
                 .values({
+                  ...(presetCol ? { id: presetCol } : {}),
                   tenantId: ctx.tenantId,
                   fabricId: resultFabricId,
                   name: colorName,
@@ -336,7 +354,10 @@ export class PostgresPrintJobRepository implements IPrintJobRepository {
         // Routed through the shared nextDocumentNumber() sequence generator
         // (same atomic INSERT...ON CONFLICT DO UPDATE used by every other
         // document type), which is race-free by construction.
-        const generatedRollNo = await allocateDocumentNumber(tx, "print_roll", ctx.tenantId);
+        const generatedRollNo = await allocateDocumentNumber(tx, "print_roll", ctx.tenantId, {
+          syncDeviceId: ctx.syncDeviceId,
+          ...(input.preset?.resultRollNo ? { preAllocatedNumber: input.preset.resultRollNo } : {}),
+        });
 
         const srcPrice = Number(srcRoll.pricePerKg ?? 0);
         const printCost = input.printCostPerKg != null ? Number(input.printCostPerKg) : 0;
@@ -370,7 +391,7 @@ export class PostgresPrintJobRepository implements IPrintJobRepository {
         const salePrice = input.newSalePricePerKg ?? srcRoll.salePricePerKg ?? undefined;
         // B1 fix: entryDate is NOT NULL in the rolls table; fall back to today's
         // date (or the print job's date) if the caller didn't supply one.
-        const effectiveDate = input.date ?? job.date ?? new Date().toISOString().slice(0, 10);
+        const effectiveDate = input.date ?? job.date ?? localToday();
 
         // BUG-05 fix: compute sellable pieces for the result roll. Previously
         // this insert omitted pieces/remainingPieces so every printed roll was
@@ -386,6 +407,7 @@ export class PostgresPrintJobRepository implements IPrintJobRepository {
         const [newRoll] = await tx
           .insert(rolls)
           .values({
+            ...(input.preset?.resultRollId ? { id: input.preset.resultRollId } : {}),
             tenantId: ctx.tenantId,
             colorId: resultColorId ?? srcRoll.colorId,
             rollNo: generatedRollNo,
@@ -463,7 +485,7 @@ export class PostgresPrintJobRepository implements IPrintJobRepository {
       // so it must reach the P&L exactly ONCE — via COGS when the printed
       // fabric is sold. The old separate EXPENSE row double-counted it.
       // Cash outflow tracking is preserved: Dr inventory / Cr cash (impact=out).
-      const effectiveDate2 = input.date ?? job.date ?? new Date().toISOString().slice(0, 10);
+      const effectiveDate2 = input.date ?? job.date ?? localToday();
       let costExpenseId: string | null = null;
       const costPerKg = input.printCostPerKg ?? Number(job.printCostPerKg ?? 0);
       const receivedKgNum = input.receivedKg ?? 0;

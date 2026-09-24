@@ -29,7 +29,11 @@ export function useSypReferenceRateValue(): number | undefined {
     // into "unavailable" instead of retrying loudly or breaking the form.
     retry: false,
   });
-  return data?.available && typeof data.rate?.value === "number" ? data.rate.value : undefined;
+  if (!data?.available || typeof data.rate?.value !== "number") return undefined;
+  // Provider publishes the NEW lira (two zeros dropped); documents use the old
+  // lira — compare like with like or every correct rate looks 100× off.
+  const v = data.rate.value;
+  return v < 1000 ? v * 100 : v;
 }
 
 /** Convenience wrapper: null when the currency isn't SYP or no reference rate is loaded yet. */

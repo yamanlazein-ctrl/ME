@@ -77,6 +77,7 @@ import { parseInvoiceNotes } from "@/components/print/noteParser";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { planSaleSettlement, useCustomerCredit } from "@/presentation/hooks/useCustomerCredit";
 
+import { localToday } from "@/lib/localDate";
 type SaleSearch = { fromOrder?: string; edit?: string };
 
 function formatMutationError(error: unknown, fallback: string): string {
@@ -123,7 +124,7 @@ function SaleInvoicePage() {
   useEffect(() => {
     setSoftWarningAcked(false);
   }, [enteredRateNum, currency]);
-  const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
+  const [date, setDate] = useState(localToday());
   const settingsSnap = useSettings();
   const enabledPaymentMethods = settingsSnap.paymentMethods.filter((m) => m.enabled);
   const warehousesList = settingsSnap.warehouses;

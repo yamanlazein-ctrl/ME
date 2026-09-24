@@ -1,5 +1,6 @@
 import type { IExpenseRepository } from "@/application/ports/IExpenseRepository";
 import type { ExpenseDTO, CreateExpenseInput, ExpenseFilter } from "@/core/dtos/ExpenseDTO";
+import type { PaginatedResult } from "@/domain/types";
 import { ExpenseApiService } from "@/infrastructure/api";
 
 export class ApiExpenseRepository implements IExpenseRepository {
@@ -8,6 +9,16 @@ export class ApiExpenseRepository implements IExpenseRepository {
   async list(filter?: ExpenseFilter): Promise<ExpenseDTO[]> {
     const res = await this.api.list(filter);
     return res.data;
+  }
+
+  async listPage(filter?: ExpenseFilter): Promise<PaginatedResult<ExpenseDTO>> {
+    const res = await this.api.list(filter);
+    return {
+      data: res.data,
+      total: res.meta.total,
+      hasNext: res.meta.hasNext,
+      nextCursor: res.meta.nextCursor ?? undefined,
+    };
   }
 
   async findById(id: string): Promise<ExpenseDTO | null> {

@@ -18,6 +18,8 @@ export const addExpenseNameSchema = z.object({
 });
 
 export const listExpensesSchema = z.object({
+  /** Keyset cursor for "load every row" callers (no OFFSET scan). */
+  cursor: z.string().max(300).optional(),
   category: z.string().optional(),
   status: z.enum(["active", "cancelled"]).optional(),
   fromDate: z

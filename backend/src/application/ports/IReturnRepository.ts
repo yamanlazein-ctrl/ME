@@ -2,6 +2,8 @@ import type { TenantContext, PaginatedResult, UUID } from "../../domain/types/in
 import type { ReturnData, CreateReturnInput } from "../../domain/entities/Return.js";
 
 export interface ReturnFilter {
+  /** Keyset cursor ("load every row" callers) — see keysetPage.ts. */
+  cursor?: string;
   kind?: string;
   partyId?: UUID;
   status?: string;

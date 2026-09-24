@@ -1,4 +1,5 @@
 import { pool } from "../../../infrastructure/orm/drizzle.js";
+import { resolveDocumentNumberForReplay } from "./syncNumberCollision.js";
 import type { DB } from "../../../infrastructure/orm/drizzle.js";
 import { logger } from "../../../infrastructure/config/logger.js";
 import { recordSyncConflict } from "./syncConflicts.js";
@@ -33,6 +34,8 @@ import {
   updateInvoiceUseCase,
 } from "../invoices/invoiceUseCases.js";
 import { updatePartyUseCase, cancelPartyUseCase } from "../parties/partyUseCases.js";
+import { createPrintJobUseCase, receivePrintJobUseCase } from "../printing/printJobUseCases.js";
+import type { IPrintJobRepository } from "../../ports/IPrintJobRepository.js";
 import { updateFabricUseCase, deleteFabricUseCase } from "../inventory/fabricUseCases.js";
 import { updateColorUseCase, deleteColorUseCase } from "../inventory/colorUseCases.js";
 import { updateRollUseCase, deleteRollUseCase } from "../inventory/rollUseCases.js";
@@ -50,6 +53,7 @@ import { cancelReturnUseCase, createReturnUseCase } from "../returns/returnUseCa
 import { cancelOrderUseCase, createOrderUseCase } from "../orders/orderUseCases.js";
 import { cancelExpenseUseCase, createExpenseUseCase } from "../expenses/expenseUseCases.js";
 import {
+  applyPartyOpeningForReplay,
   ensureInvoiceSyncDependencies,
   parseDependenciesPayload,
   type InvoiceSyncDependencies,
@@ -77,6 +81,8 @@ export type SyncMaterializeRepos = {
   cashboxRepo: ICashboxRepository;
   settingsRepo: ISettingsRepository;
   companyRepo: ICompanyRepository;
+  /** Press cycle replay (send → stock out, receive → printed roll + cash). */
+  printJobRepo?: IPrintJobRepository;
 };
 
 export type MaterializeResult = {
@@ -261,6 +267,16 @@ export async function materializeSyncUnit(
 ): Promise<MaterializeResult> {
   const { entityType, operation, payload } = unit;
 
+  // Same number on a different record (devices that numbered independently):
+  // resolve deterministically BEFORE replay so the record is stored, never
+  // refused forever or mistaken for a duplicate. See syncNumberCollision.ts.
+  if (
+    operation === "create" &&
+    (entityType === "invoice" || entityType === "voucher" || entityType === "return" || entityType === "expense")
+  ) {
+    await resolveDocumentNumberForReplay(database, entityType, payload, ctx.tenantId);
+  }
+
   if (entityType === "invoice" && operation === "create") {
     return materializeInvoiceCreate(database, repos, payload, ctx);
   }
@@ -325,6 +341,9 @@ export async function materializeSyncUnit(
   }
   if (entityType === "settlement" && operation === "create") {
     return materializeSettlement(repos, payload, ctx);
+  }
+  if (entityType === "print" && (operation === "send" || operation === "receive")) {
+    return materializePrint(repos, operation, payload, ctx);
   }
   if (entityType === "cashbox") {
     return materializeCashbox(repos, operation, payload, ctx);
@@ -426,7 +445,11 @@ async function materializeInvoiceCreate(
     const existing = await repos.invoiceRepo.findById(invoiceId, ctx);
     if (existing) return { status: "exists" };
   }
-  if (invoiceNumber && invoiceType) {
+  // By-number dedupe only for legacy payloads without an id. With an id, the
+  // same number on a DIFFERENT invoice is a collision (resolved before this
+  // point), not a duplicate delivery — treating it as "exists" silently
+  // dropped the second invoice from the hub and every peer.
+  if (!invoiceId && invoiceNumber && invoiceType) {
     const byNumber = await repos.invoiceRepo.findByNumber(invoiceNumber, invoiceType, ctx);
     if (byNumber) return { status: "exists" };
   }
@@ -1100,6 +1123,9 @@ async function materializeMasterCreate(
 
   try {
     await ensureInvoiceSyncDependencies(database, deps, ctx);
+    if (entityType === "party") {
+      await applyPartyOpeningForReplay(database, snap as unknown as SyncPartySnapshot, ctx);
+    }
     return { status: "created" };
   } catch (err) {
     return {
@@ -1565,6 +1591,42 @@ async function materializeLedgerCancel(
   if (r.ok) return { status: "created" };
   if ((r as { code?: string }).code === "ALREADY_CANCELLED") return { status: "exists" };
   return { status: "failed", error: r.error };
+}
+
+async function materializePrint(
+  repos: SyncMaterializeRepos,
+  operation: string,
+  payload: Record<string, unknown>,
+  ctx: TenantContext,
+): Promise<MaterializeResult> {
+  if (!repos.printJobRepo) return { status: "failed", error: "print replay not wired" };
+  const jobId = typeof payload.jobId === "string" && isUuid(payload.jobId) ? payload.jobId : null;
+  if (!jobId) return { status: "invalid", error: "missing jobId" };
+  const rctx = replayCtxFromPayload(payload, ctx);
+  const existing = await repos.printJobRepo.findById(jobId, rctx);
+  if (operation === "send") {
+    if (existing) return { status: "exists" };
+    const input = payload.sendInput as Record<string, unknown> | undefined;
+    const number = typeof payload.jobNumber === "string" ? payload.jobNumber : null;
+    if (!input || !number) return { status: "invalid", error: "missing sendInput/jobNumber" };
+    const r = await createPrintJobUseCase(repos.printJobRepo, { ...input, presetId: jobId } as never, number, rctx);
+    return r.ok ? { status: "created" } : { status: "failed", error: r.error };
+  }
+  if (operation === "receive") {
+    // The send must land first (ordered lane); until then this is retryable.
+    if (!existing) return { status: "failed", error: "print job not yet received on this node" };
+    if (existing.status === "received") return { status: "exists" };
+    const input = payload.receiveInput as Record<string, unknown> | undefined;
+    if (!input) return { status: "invalid", error: "missing receiveInput" };
+    const preset = (payload.preset ?? {}) as Record<string, string | undefined>;
+    const r = await receivePrintJobUseCase(
+      repos.printJobRepo,
+      { ...input, jobId, preset } as never,
+      rctx,
+    );
+    return r.ok ? { status: "created" } : { status: "failed", error: r.error };
+  }
+  return { status: "invalid", error: `unknown print operation ${operation}` };
 }
 
 async function materializeSettlement(

@@ -20,6 +20,8 @@ export const writeLedgerBatchSchema = z.object({
 });
 
 export const listLedgerSchema = z.object({
+  /** Keyset cursor for "load every row" callers (no OFFSET scan). */
+  cursor: z.string().max(300).optional(),
   partyId: z.string().uuid().optional(),
   type: z.string().optional(),
   currency: z.enum(["SYP", "USD", "EUR"]).optional(),

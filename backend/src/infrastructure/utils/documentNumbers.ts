@@ -41,6 +41,7 @@ const WIDTHS: Record<string, number> = {
   order: 4,
   print: 4,
   print_roll: 4,
+  settlement: 4,
 };
 
 /** Default reserved block sizes per entity (product defaults). */
@@ -58,6 +59,9 @@ export const DEFAULT_BLOCK_SIZES: Record<string, number> = {
   // collision reproduced in the multi-device acceptance run of 2026-09-10.
   customer: 500,
   supplier: 500,
+  settlement: 100,
+  print: 100,
+  print_roll: 100,
 };
 
 export type AllocateNumberOpts = {
@@ -108,6 +112,19 @@ export type AllocateNumberOpts = {
  * @param tenantId  - UUID of the tenant
  * @returns         - formatted document number string
  */
+/**
+ * Allocate a number in its own transaction, honouring this device's number
+ * block when blocks are in use (paired with a hub). Use instead of
+ * {@link nextDocumentNumber} for anything a peer device could also number.
+ */
+export async function allocateDocumentNumberForDevice(
+  entityType: string,
+  tenantId: string,
+  syncDeviceId: string | null | undefined,
+): Promise<string> {
+  return db.transaction((tx) => allocateDocumentNumber(tx, entityType, tenantId, { syncDeviceId }));
+}
+
 export async function nextDocumentNumber(entityType: string, tenantId: string): Promise<string> {
   const prefix = PREFIXES[entityType] ?? entityType.toUpperCase();
   const width = WIDTHS[entityType] ?? 4;
@@ -237,8 +254,26 @@ export function numberBlocksEnabled(): boolean {
   return config.NUMBER_BLOCKS_ENABLED;
 }
 
+/**
+ * Per-device number blocks are REQUIRED as soon as this install syncs with a
+ * hub: several devices then create documents between syncs, and a single
+ * local counter hands out the same number on each of them (reproduced with two
+ * devices: both issued VOC-2026-0002; the hub refused the second one forever
+ * as a data conflict, so that receipt never synced). A standalone desktop
+ * keeps the gapless single counter unless NUMBER_BLOCKS_ENABLED forces blocks.
+ */
+export function numberBlocksInUse(): boolean {
+  if (getCentralSyncUrl()) return true;
+  return numberBlocksEnabled() && config.DESKTOP_DEPLOY;
+}
+
+/** The central server carves ranges for its devices (it is the numbering authority). */
+export function isNumberingAuthority(): boolean {
+  return !config.DESKTOP_DEPLOY && !getCentralSyncUrl();
+}
+
 function shouldUseNumberBlocks(): boolean {
-  return numberBlocksEnabled() && Boolean(config.DESKTOP_DEPLOY || getCentralSyncUrl());
+  return numberBlocksInUse();
 }
 
 /**
@@ -264,13 +299,19 @@ export async function claimNumberBlockInTx(
   nextNumber: number;
 }> {
   const year = input.year ?? new Date().getFullYear();
-  const { prefix, width } = resolveNumberFormat(input.entityType);
+  const { prefix } = resolveNumberFormat(input.entityType);
   const size = input.size ?? defaultBlockSize(input.entityType);
   if (size < 1 || size > 5000) {
     throw new BusinessRuleError("حجم كتلة الترقيم غير صالح");
   }
 
-  const maxValue = 10 ** width - 1;
+  // `width` is the minimum zero-padding, NOT a maximum: document_sequences has
+  // no year, so the counter accumulates over the company's whole life (local
+  // numbering already issues INV-2026-10937). Capping blocks at 10^width-1
+  // made every company past 9,999 invoices in total unable to reserve a
+  // block — pairing then refused invoices forever. Keep only a column-safety
+  // ceiling.
+  const maxValue = 99_999_999;
 
   // Atomic tip advance: lastNumber += size, then range is (end-size+1)..end.
   const [bumped] = await tx
@@ -302,7 +343,7 @@ export async function claimNumberBlockInTx(
         ),
       );
     throw new BusinessRuleError(
-      `لا يمكن حجز كتلة ترقيم — تجاوز الحد الأقصى للأرقام لهذه السنة (${maxValue})`,
+      `لا يمكن حجز كتلة ترقيم — تجاوز الحد الأقصى لعدّاد المستندات (${maxValue})`,
     );
   }
 
@@ -414,7 +455,12 @@ async function applyPreAllocatedNumber(
   preAllocatedNumber: string,
   fmt: { prefix: string; width: number; yearNum: number },
 ): Promise<string> {
-  const parsed = parseDocumentNumber(preAllocatedNumber);
+  // A sync collision suffix (`-3f8d`, see syncNumberCollision.ts) is part of
+  // the stored number; the counter floor is driven by the base number only.
+  const split = /^([A-Z]+-\d{4}-\d+)((?:-[0-9a-f]{4})*)$/i.exec(preAllocatedNumber.trim());
+  const base = split ? split[1] : preAllocatedNumber;
+  const suffix = split ? split[2] : "";
+  const parsed = parseDocumentNumber(base);
   if (!parsed) {
     throw new BusinessRuleError(`رقم مستند غير صالح: ${preAllocatedNumber}`);
   }
@@ -423,8 +469,12 @@ async function applyPreAllocatedNumber(
       `بادئة الرقم المحجوز (${parsed.prefix}) لا تطابق نوع المستند (${fmt.prefix})`,
     );
   }
-  if (parsed.year !== fmt.yearNum) {
-    throw new BusinessRuleError("لا يمكن قبول رقم محجوز من سنة مختلفة عن السنة الحالية");
+  // A number issued in an EARLIER year is a real, already-issued document
+  // (synced after New Year, a device offline over the year change, a
+  // restore). Refusing it parked the document as dead forever. The counter
+  // is not per-year (document_sequences has no year), so accepting it is safe.
+  if (parsed.year > fmt.yearNum) {
+    throw new BusinessRuleError("لا يمكن قبول رقم محجوز من سنة لاحقة للسنة الحالية — تحقق من تاريخ الجهاز");
   }
 
   // Raise global floor so future claims/allocations cannot collide.
@@ -443,7 +493,7 @@ async function applyPreAllocatedNumber(
       },
     });
 
-  return `${fmt.prefix}-${parsed.year}-${String(parsed.n).padStart(fmt.width, "0")}`;
+  return `${fmt.prefix}-${parsed.year}-${String(parsed.n).padStart(fmt.width, "0")}${suffix}`;
 }
 
 export function parseDocumentNumber(

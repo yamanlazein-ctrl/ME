@@ -1,4 +1,5 @@
-import { eq, and, ilike, or, sql, inArray, gte, lte, desc } from "drizzle-orm";
+import { eq, and, ilike, or, sql, inArray, gte, lte, desc, getTableColumns } from "drizzle-orm";
+import { afterCursor, cursorColumns, decodeCursor, keysetOrder, nextCursorOf, type KeysetSpec } from "./keysetPage.js";
 import { likeContains } from "../utils/likeEscape.js";
 import { allocateDocumentNumber } from "../utils/documentNumbers.js";
 import type { DB } from "../orm/drizzle.js";
@@ -102,21 +103,30 @@ export class PostgresInvoiceRepository implements IInvoiceRepository {
     const page = Math.max(0, filter.page ?? 0);
     const limit = Math.min(1000, Math.max(1, filter.limit ?? 20));
     const offset = page * limit;
+    // Keyset mode for "load every row" callers: seek after the cursor instead
+    // of OFFSET (constant cost per page, strict total order). keysetPage.ts.
+    const keyset: KeysetSpec = { date: invoices.date, createdAt: invoices.createdAt, id: invoices.id };
+    const cursor = true ? decodeCursor(filter.cursor) : null;
+    const pageWhere = cursor ? and(where, afterCursor(keyset, cursor)) : where;
 
     const [dataRows, countRows] = await Promise.all([
       this.db
-        .select()
+        .select({ ...getTableColumns(invoices), ...cursorColumns(keyset) })
         .from(invoices)
-        .where(where)
+        .where(pageWhere)
         .limit(limit)
-        .offset(offset)
+        .offset(cursor ? 0 : offset)
         // Newest first: order by business date descending (createdAt as tiebreaker),
         // so the latest entered invoice is always at the top of the list.
-        .orderBy(desc(invoices.date), desc(invoices.createdAt)),
-      this.db
-        .select({ count: sql<number>`count(*)` })
-        .from(invoices)
-        .where(where),
+        .orderBy(...keysetOrder(keyset)),
+      // Cursor pages skip the COUNT: the caller stops on nextCursor and the
+      // first (cursor-less) page already carried the real total.
+      cursor
+        ? Promise.resolve([{ count: -1 }])
+        : this.db
+            .select({ count: sql<number>`count(*)` })
+            .from(invoices)
+            .where(where),
     ]);
 
     const ids = dataRows.map((r) => r.id);
@@ -131,13 +141,16 @@ export class PostgresInvoiceRepository implements IInvoiceRepository {
       byId.set(it.invoiceId, l);
     }
 
+    const nextCursor = nextCursorOf(dataRows as unknown as Array<Record<string, unknown>>, limit);
     return {
       data: dataRows.map((r) => this.toDomain(r, byId.get(r.id) ?? [])),
       meta: {
         total: Number(countRows[0]?.count ?? 0),
         page,
         limit,
-        hasNext: offset + limit < Number(countRows[0]?.count ?? 0),
+        // Without a cursor the COUNT decides; a last page hands out no cursor.
+        nextCursor: cursor || offset + limit < Number(countRows[0]?.count ?? 0) ? nextCursor : null,
+        hasNext: cursor ? nextCursor !== null : offset + limit < Number(countRows[0]?.count ?? 0),
         totalPages: Math.ceil(Number(countRows[0]?.count ?? 0) / limit),
       },
     };

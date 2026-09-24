@@ -2,6 +2,8 @@ import type { TenantContext, PaginatedResult, UUID } from "../../domain/types/in
 import type { RollData } from "../../domain/entities/Roll.js";
 
 export interface RollFilter {
+  /** Keyset cursor ("load every row" callers) — see keysetPage.ts. */
+  cursor?: string;
   colorId?: UUID;
   status?: string;
   search?: string;

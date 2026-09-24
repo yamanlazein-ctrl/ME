@@ -25,6 +25,8 @@ import {
   useAddExpenseName,
 } from "@/presentation/hooks/useExpenses";
 
+import { localToday } from "@/lib/localDate";
+import { useCashBalance } from "@/presentation/hooks/useCashbox";
 export const Route = createFileRoute("/expenses/new")({ component: NewExpense });
 
 function NewExpense() {
@@ -36,9 +38,10 @@ function NewExpense() {
   const [description, setDescription] = useState("");
   const [amount, setAmount] = useState<number | "">("");
   const [currency, setCurrency] = useState<Currency>("SYP");
-  const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
+  const [date, setDate] = useState(localToday());
   const [method, setMethod] = useState<VoucherMethod>("cash");
   const [paidFromCashbox, setPaidFromCashbox] = useState(true);
+  const { data: cashBalance } = useCashBalance(date, currency);
   const [notesPrint, setNotesPrint] = useState("");
   const [notesInternal, setNotesInternal] = useState("");
   const [catError, setCatError] = useState<string | null>(null);
@@ -161,6 +164,17 @@ function NewExpense() {
               مدفوع من الصندوق
             </label>
           </div>
+          {paidFromCashbox && Number(amount) > 0 && (cashBalance ?? 0) < Number(amount) ? (
+            <div
+              role="alert"
+              data-testid="cashbox-negative-warning"
+              className="md:col-span-3 rounded-md border border-warning/40 bg-warning/10 px-3 py-2 text-[12px] text-foreground"
+            >
+              تنبيه: سيصبح رصيد الصندوق ({currency}) سالباً بعد هذا المصروف (المتاح{" "}
+              {(cashBalance ?? 0).toLocaleString("en-US")}، المطلوب {Number(amount).toLocaleString("en-US")}).
+              يمكن المتابعة والحفظ.
+            </div>
+          ) : null}
           <div className="md:col-span-3">
             <FormField label="الوصف *" error={descError ?? undefined}>
               <Input

@@ -24,6 +24,7 @@ import { PrintPageBreak } from "@/components/print/PrintDocument";
 import { formatQuantity } from "@/shared/utils/formatNumber";
 import { DEFAULT_SUGGESTION_COUNT } from "@/shared/utils/suggestions";
 
+import { localToday } from "@/lib/localDate";
 type DocOption = { id: string; title: string; subtitle?: string };
 
 /** One line of the send request — a single raw-fabric lot (= one color). */
@@ -136,7 +137,7 @@ function PrintSendPage() {
   const { data: previewNumber } = useNextInvoiceNumber("print");
   const number = previewNumber ?? "…";
 
-  const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
+  const [date, setDate] = useState(localToday());
   const [lines, setLines] = useState<SendLine[]>([emptySendLine()]);
   const [pressName, setPressName] = useState("");
   const [notes, setNotes] = useState("");

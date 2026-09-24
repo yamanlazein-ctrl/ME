@@ -76,6 +76,8 @@ export class PrintJob {
 }
 
 export interface CreatePrintJobInput {
+  /** Sync replay: the job id the origin PC created (same id on every node). */
+  presetId?: UUID;
   date: string;
   sourceRollId: UUID;
   sourceFabricId?: UUID;
@@ -97,6 +99,12 @@ export interface CreatePrintJobInput {
 }
 
 export interface ReceivePrintJobInput {
+  /**
+   * Sync replay: the ids/number the origin PC produced for the printed
+   * fabric, colour and roll, so every node holds the SAME rows (a later sale
+   * of the printed roll references them by id).
+   */
+  preset?: { resultFabricId?: UUID; resultColorId?: UUID; resultRollId?: UUID; resultRollNo?: string };
   jobId: UUID;
   date: string;
   receivedKg: number;

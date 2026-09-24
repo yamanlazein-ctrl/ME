@@ -1,4 +1,5 @@
 import { and, eq } from "drizzle-orm";
+import { resolveMasterSnapshotForReplay } from "./syncNumberCollision.js";
 import { pool } from "../../../infrastructure/orm/drizzle.js";
 import type { DB } from "../../../infrastructure/orm/drizzle.js";
 import { runWithTenantContext } from "../../../infrastructure/orm/tenant-context.js";
@@ -6,6 +7,8 @@ import { parties } from "../../../infrastructure/orm/schemas/party.table.js";
 import { fabrics } from "../../../infrastructure/orm/schemas/fabric.table.js";
 import { colors } from "../../../infrastructure/orm/schemas/color.table.js";
 import { rolls } from "../../../infrastructure/orm/schemas/roll.table.js";
+import { ledgerEntries } from "../../../infrastructure/orm/schemas/ledger-entry.table.js";
+import { openingJournalRows } from "../../../infrastructure/repositories/PostgresPartyRepository.js";
 import type { IPartyRepository } from "../../ports/IPartyRepository.js";
 import type { IFabricRepository } from "../../ports/IFabricRepository.js";
 import type { IColorRepository } from "../../ports/IColorRepository.js";
@@ -16,6 +19,7 @@ import type { PartyData } from "../../../domain/entities/Party.js";
 import type { TenantContext } from "../../../domain/types/index.js";
 import { logger } from "../../../infrastructure/config/logger.js";
 
+import { localToday } from "../../../infrastructure/utils/localDate.js";
 export type SyncPartySnapshot = {
   id: string;
   kind: string;
@@ -42,6 +46,9 @@ export type SyncPartySnapshot = {
   vat?: number;
   status: string;
   notes?: string | null;
+  /** Present on a party's own create unit (not on invoice dependency copies). */
+  openingBalance?: number;
+  openingDate?: string;
 };
 
 export type SyncFabricSnapshot = {
@@ -412,6 +419,63 @@ export async function ensureInvoiceSyncDependencies(
 }
 
 /**
+ * Replays a party's opening balance on another node: the same balanced
+ * opening journal the creating device wrote, plus parties.opening_balance.
+ * Idempotent — does nothing when the opening journal already exists (a
+ * duplicate delivery, or the party was created here first).
+ */
+export async function applyPartyOpeningForReplay(
+  database: DB,
+  snap: SyncPartySnapshot,
+  ctx: TenantContext,
+): Promise<void> {
+  const amount = Number(snap.openingBalance ?? 0);
+  if (!Number.isFinite(amount) || amount === 0) return;
+  const date =
+    typeof snap.openingDate === "string" && /^\d{4}-\d{2}-\d{2}$/.test(snap.openingDate)
+      ? snap.openingDate
+      : localToday();
+  await runWithTenantContext({ tenantId: ctx.tenantId }, async () => {
+    await database.transaction(async (tx) => {
+      const existing = await tx
+        .select({ id: ledgerEntries.id })
+        .from(ledgerEntries)
+        .where(
+          and(
+            eq(ledgerEntries.tenantId, ctx.tenantId),
+            eq(ledgerEntries.referenceType, "opening"),
+            eq(ledgerEntries.referenceId, snap.id),
+          ),
+        )
+        .limit(1);
+      if (existing.length > 0) return;
+      const [party] = await tx
+        .select({ id: parties.id, code: parties.code, kind: parties.kind, currency: parties.currency })
+        .from(parties)
+        .where(and(eq(parties.tenantId, ctx.tenantId), eq(parties.id, snap.id)))
+        .limit(1);
+      if (!party) return;
+      await tx
+        .update(parties)
+        .set({ openingBalance: String(amount) as never })
+        .where(and(eq(parties.tenantId, ctx.tenantId), eq(parties.id, snap.id)));
+      await tx.insert(ledgerEntries).values(
+        openingJournalRows({
+          tenantId: ctx.tenantId,
+          partyId: party.id,
+          kind: party.kind,
+          openingBalance: amount,
+          currency: party.currency,
+          code: party.code ?? null,
+          date,
+          userId: ctx.userId,
+        }),
+      );
+    });
+  });
+}
+
+/**
  * True when a tombstone guards this (tenant, type, id) — i.e. the row was
  * DELETED and must not be silently resurrected by a dependency snapshot
  * replay (plan §10). A deleted fabric/color/roll/party referenced by a later
@@ -439,6 +503,11 @@ export async function syncTombstoneBlocksDependency(
 }
 
 /** Transaction-scoped body of {@link ensureInvoiceSyncDependencies}. */
+// Inserts are idempotent on the primary key ONLY: push lanes run in parallel,
+// so an invoice's dependency snapshot and the master's own create unit can
+// insert the same row at the same moment (seen live: `fabrics_pkey` duplicate
+// → unit deferred to the next run). Same id = same row, so "already there" is
+// success. Natural-key conflicts (code, roll number) still raise visibly.
 async function ensureInvoiceSyncDependenciesInTx(
   tx: Parameters<Parameters<DB["transaction"]>[0]>[0],
   deps: InvoiceSyncDependencies,
@@ -453,6 +522,9 @@ async function ensureInvoiceSyncDependenciesInTx(
     if (existing) continue;
     // §10: never resurrect a deleted master through a dependency snapshot.
     if (await syncTombstoneBlocksDependency(ctx.tenantId, "party", p.id)) continue;
+    // Same code/name on a different party (created on another device before
+    // sync): deterministic suffix, never an endless refusal.
+    await resolveMasterSnapshotForReplay(tx, "party", p as unknown as Record<string, unknown>, ctx.tenantId);
     try {
       await tx.insert(parties).values({
         id: p.id,
@@ -485,7 +557,7 @@ async function ensureInvoiceSyncDependenciesInTx(
         status: p.status || "active",
         notes: p.notes ?? null,
         createdBy: ctx.userId,
-      });
+      }).onConflictDoNothing({ target: parties.id });
     } catch (err) {
       logger.warn(
         { err, partyId: p.id },
@@ -513,7 +585,7 @@ async function ensureInvoiceSyncDependenciesInTx(
       notes: f.notes ?? null,
       imageUrl: f.imageUrl ?? null,
       createdBy: ctx.userId,
-    });
+    }).onConflictDoNothing({ target: fabrics.id });
   }
 
   for (const c of deps.colors ?? []) {
@@ -532,7 +604,7 @@ async function ensureInvoiceSyncDependenciesInTx(
       code: c.code ?? null,
       hex: c.hex ?? null,
       imageUrl: c.imageUrl ?? null,
-    });
+    }).onConflictDoNothing({ target: colors.id });
   }
 
   for (const r of deps.rolls ?? []) {
@@ -543,6 +615,7 @@ async function ensureInvoiceSyncDependenciesInTx(
       .limit(1);
     if (existing) continue;
     if (await syncTombstoneBlocksDependency(ctx.tenantId, "roll", r.id)) continue;
+    await resolveMasterSnapshotForReplay(tx, "roll", r as unknown as Record<string, unknown>, ctx.tenantId);
     await tx.insert(rolls).values({
       id: r.id,
       tenantId: ctx.tenantId,
@@ -562,7 +635,7 @@ async function ensureInvoiceSyncDependenciesInTx(
       weightGsm: r.weightGsm != null ? String(r.weightGsm) : null,
       status: r.status || "in_stock",
       version: 1,
-    });
+    }).onConflictDoNothing({ target: rolls.id });
   }
 }
 

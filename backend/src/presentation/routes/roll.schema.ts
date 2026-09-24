@@ -55,6 +55,8 @@ export const updateRollSchema = createRollSchema
   });
 
 export const listRollsSchema = z.object({
+  /** Keyset cursor for "load every row" callers (no OFFSET scan). */
+  cursor: z.string().max(300).optional(),
   colorId: z.string().uuid().optional(),
   status: z.enum(["in_stock", "exhausted", "reserved"]).optional(),
   search: z.string().max(200).optional(),

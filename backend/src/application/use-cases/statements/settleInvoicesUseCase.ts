@@ -7,7 +7,7 @@ import type { VoucherData } from "../../../domain/entities/Voucher.js";
 import { BusinessRuleError } from "../../../domain/errors/index.js";
 import { allocateSettlementPayment, splitCashAndDiscountAcrossLines, round2dp } from "@erp/shared";
 import { createVoucherUseCase } from "../vouchers/voucherUseCases.js";
-import { nextDocumentNumber } from "../../../infrastructure/utils/documentNumbers.js";
+import { allocateDocumentNumberForDevice } from "../../../infrastructure/utils/documentNumbers.js";
 import { deriveOperationId } from "../../../infrastructure/utils/operationId.js";
 import { db } from "../../../infrastructure/orm/drizzle.js";
 import { invoices } from "../../../infrastructure/orm/schemas/invoice.table.js";
@@ -15,6 +15,7 @@ import { returns } from "../../../infrastructure/orm/schemas/return.table.js";
 import { returnLines } from "../../../infrastructure/orm/schemas/return-line.table.js";
 import { and, eq, inArray, sql } from "drizzle-orm";
 
+import { localToday } from "../../../infrastructure/utils/localDate.js";
 export type SettleInvoicesInput = {
   invoiceIds: string[];
   amountPaid: number;
@@ -84,7 +85,7 @@ export async function settleInvoicesUseCase(
     if (!(totalReduction > 0))
       return { ok: false, error: "يجب أن يكون مجموع المبلغ النقدي والمسامحة أكبر من صفر" };
 
-    const date = input.date ?? new Date().toISOString().slice(0, 10);
+    const date = input.date ?? localToday();
     const method: VoucherMethod = input.method ?? "cash";
     const voucherKind = partyKind === "customer" ? "receipt" : "payment";
 
@@ -165,7 +166,7 @@ export async function settleInvoicesUseCase(
       return { ok: false, error: e instanceof Error ? e.message : "تعذّر توزيع الدفعة" };
     }
 
-    const batchNumber = await nextDocumentNumber("settlement", ctx.tenantId);
+    const batchNumber = await allocateDocumentNumberForDevice("settlement", ctx.tenantId, ctx.syncDeviceId);
     // The SET batch number is what ties the N vouchers back into one settlement
     // (invoice tracking groups by it), so it must survive custom user notes too.
     const withBatch = (text: string | undefined, fallback: string) => {

@@ -22,16 +22,20 @@ const KEYS = {
  * EVERY matching row — for screens that compute balances/totals and must not
  * work on a truncated first page.
  */
-export function useReturnsList(filter?: ReturnFilter, opts?: { all?: boolean }) {
+export function useReturnsList(filter?: ReturnFilter, opts?: { all?: boolean; enabled?: boolean }) {
   const all = Boolean(opts?.all);
   return useQuery({
+    enabled: opts?.enabled ?? true,
     queryKey: all ? [...KEYS.list(filter), "all"] : KEYS.list(filter),
     queryFn: async ({ signal }) => {
       void signal;
       if (all) {
         const data = await fetchAllPaged(
-          (page, limit) =>
-            container.returns.list.execute({ ...(filter ?? {}), page, limit } as ReturnFilter, ctx),
+          (page, limit, cursor) =>
+            container.returns.list.execute(
+              { ...(filter ?? {}), page, limit, cursor } as ReturnFilter,
+              ctx,
+            ),
           { pageSize: 1000, maxPages: 500, label: "returns" },
         );
         return { data, total: data.length, hasNext: false };

@@ -83,7 +83,10 @@ import {
   useLedgerEntries,
   type LedgerType,
 } from "@/presentation/hooks/useLedger";
-import { useStatement } from "@/presentation/hooks/useStatement";
+import { loadFullStatement, useStatementPage } from "@/presentation/hooks/useStatement";
+import { toast } from "sonner";
+import { ClientPager, useClientPage } from "@/components/common/ClientPager";
+import { loadInvoice } from "@/presentation/hooks/useInvoices";
 import { SettlementDialog } from "@/components/parties/SettlementDialog";
 import { formatNumber, formatMoney, formatQuantity } from "@/shared/utils/formatNumber";
 import {
@@ -92,6 +95,7 @@ import {
   statementRateToShow,
 } from "@/lib/statementDocument";
 
+import { localToday } from "@/lib/localDate";
 const _nextFormId = 0;
 function toMockPatch(patch: Record<string, unknown>): Record<string, unknown> {
   const out: Record<string, unknown> = {};
@@ -186,17 +190,97 @@ function printPartyInvoice(inv: Invoice) {
   }
 }
 
+/**
+ * Statement paging bar: [السابق] الصفحة X من Y [التالي] + rows per page.
+ * Each page is one server round-trip of 20/50/100 rows, never the whole
+ * history — the full statement is only fetched for print/Excel.
+ */
+function StatementPager({
+  page,
+  totalPages,
+  totalRows,
+  pageSize,
+  loading,
+  onPage,
+  onPageSize,
+}: {
+  page: number;
+  totalPages: number;
+  totalRows: number;
+  pageSize: 20 | 50 | 100;
+  loading: boolean;
+  onPage: (p: number) => void;
+  onPageSize: (n: 20 | 50 | 100) => void;
+}) {
+  return (
+    <div
+      className="flex flex-wrap items-center justify-between gap-3 border-t border-border px-3 py-2 text-xs"
+      data-testid="statement-pager"
+    >
+      <div className="flex items-center gap-2">
+        <Button type="button" size="sm" variant="outline" disabled={page === 0 || loading} onClick={() => onPage(page - 1)}>
+          الصفحة السابقة
+        </Button>
+        <span className="tabular-nums font-semibold" data-testid="statement-page-label">
+          الصفحة {page + 1} من {Math.max(1, totalPages)}
+        </span>
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          disabled={page + 1 >= totalPages || loading}
+          onClick={() => onPage(page + 1)}
+        >
+          الصفحة التالية
+        </Button>
+        {loading && <span className="text-muted-foreground">جاري التحميل…</span>}
+      </div>
+      <div className="flex items-center gap-2 text-muted-foreground">
+        <span className="tabular-nums">{totalRows} حركة</span>
+        <span>عدد الأسطر:</span>
+        {([20, 50, 100] as const).map((n) => (
+          <Button
+            key={n}
+            type="button"
+            size="sm"
+            variant={n === pageSize ? "default" : "outline"}
+            className="h-7 px-2 tabular-nums"
+            onClick={() => onPageSize(n)}
+          >
+            {n}
+          </Button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function StatementInvoiceActions({
   invoiceId,
-  invoice,
+  invoiceType,
+  cancelled,
   onDelete,
 }: {
   invoiceId: string;
-  invoice?: Invoice;
+  /** From the statement row itself: no need to load every invoice of the party. */
+  invoiceType: "sale" | "entry" | null;
+  cancelled: boolean;
   onDelete: (inv: Invoice) => void;
 }) {
-  const cancelled = invoice?.status === "cancelled";
-  const canEdit = !!invoice && !cancelled && (invoice.type === "sale" || invoice.type === "entry");
+  const [busy, setBusy] = useState(false);
+  const withInvoice = async (fn: (inv: Invoice) => void) => {
+    setBusy(true);
+    try {
+      const inv = await loadInvoice(invoiceId);
+      if (inv) fn(inv);
+      else toast.error("تعذّر تحميل الفاتورة");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "تعذّر تحميل الفاتورة");
+    } finally {
+      setBusy(false);
+    }
+  };
+  const canEdit = !cancelled && invoiceType !== null;
   return (
     <div
       className="inline-flex flex-nowrap items-center gap-1 whitespace-nowrap text-[11px] font-semibold"
@@ -208,8 +292,8 @@ function StatementInvoiceActions({
       <span className="text-muted-foreground/50">|</span>
       {canEdit ? (
         <Link
-          to={invoice.type === "entry" ? "/invoices/entry/new" : "/invoices/sale/new"}
-          search={{ edit: invoice.id }}
+          to={invoiceType === "entry" ? "/invoices/entry/new" : "/invoices/sale/new"}
+          search={{ edit: invoiceId }}
           className="text-primary hover:underline"
         >
           تعديل
@@ -221,8 +305,8 @@ function StatementInvoiceActions({
       <button
         type="button"
         className="text-primary hover:underline disabled:text-muted-foreground/40"
-        disabled={!invoice}
-        onClick={() => invoice && printPartyInvoice(invoice)}
+        disabled={busy}
+        onClick={() => void withInvoice(printPartyInvoice)}
       >
         طباعة
       </button>
@@ -230,8 +314,8 @@ function StatementInvoiceActions({
       <button
         type="button"
         className="text-destructive hover:underline disabled:text-muted-foreground/40"
-        disabled={!invoice || cancelled}
-        onClick={() => invoice && onDelete(invoice)}
+        disabled={busy || cancelled}
+        onClick={() => void withInvoice(onDelete)}
       >
         حذف
       </button>
@@ -594,6 +678,7 @@ function InvoicesTab({ p, kind }: { p: Party; kind: PartyKind }) {
     paidByInvoice.set(i.id, i.paid ?? 0);
   }
 
+  const ipg = useClientPage(invs, `${from}|${to}`);
   return (
     <PageCard
       title={isSup ? "فواتير الشراء" : "فواتير البيع"}
@@ -658,7 +743,7 @@ function InvoicesTab({ p, kind }: { p: Party; kind: PartyKind }) {
                 </td>
               </tr>
             )}
-            {invs.map((i) => {
+            {ipg.pageItems.map((i) => {
               const t = invoiceTotal(i);
               const paid = paidByInvoice.get(i.id) ?? 0;
               const r = Math.max(0, t - paid);
@@ -700,6 +785,7 @@ function InvoicesTab({ p, kind }: { p: Party; kind: PartyKind }) {
             })}
           </tbody>
         </table>
+        <ClientPager page={ipg.page} totalPages={ipg.totalPages} total={ipg.total} pageSize={ipg.pageSize} onPage={ipg.setPage} onPageSize={ipg.setPageSize} />
       </div>
     </PageCard>
   );
@@ -724,7 +810,7 @@ function PaymentsTab({ p, kind }: { p: Party; kind: PartyKind }) {
     .map((v) => {
       const inv = invs.find((i) => i.id === v.invoiceId);
       return {
-        date: v.date ?? new Date().toISOString().slice(0, 10),
+        date: v.date ?? localToday(),
         amount: v.amount,
         currency: v.currency ?? "SYP",
         kind: v.kind,
@@ -736,6 +822,7 @@ function PaymentsTab({ p, kind }: { p: Party; kind: PartyKind }) {
     })
     .sort((a, b) => (a.date < b.date ? 1 : -1));
 
+  const ppg = useClientPage(payments, p.id);
   return (
     <div className="space-y-4">
       <PageCard
@@ -790,7 +877,7 @@ function PaymentsTab({ p, kind }: { p: Party; kind: PartyKind }) {
                   </td>
                 </tr>
               )}
-              {payments.map((pay, idx) => (
+              {ppg.pageItems.map((pay, idx) => (
                 <tr key={idx} className="h-12 align-middle [&>td]:px-4 [&>td]:py-2">
                   <td className="tabular-nums text-muted-foreground">{pay.date}</td>
                   <td className="tabular-nums font-semibold text-primary">{pay.number ?? "—"}</td>
@@ -809,6 +896,7 @@ function PaymentsTab({ p, kind }: { p: Party; kind: PartyKind }) {
               ))}
             </tbody>
           </table>
+        <ClientPager page={ppg.page} totalPages={ppg.totalPages} total={ppg.total} pageSize={ppg.pageSize} onPage={ppg.setPage} onPageSize={ppg.setPageSize} />
         </div>
       </PageCard>
     </div>
@@ -851,17 +939,27 @@ function StatementTab({ p, kind }: { p: Party; kind: PartyKind }) {
   // party.currency alone was hiding whole document classes and looked like
   // "فقط آخر فاتورة".
   const [ccy, setCcy] = useState<Currency | "ALL">("ALL");
+  // Screen paging: 20 rows by default (20 / 50 / 100). Print and Excel still
+  // cover the whole window (fetched on click).
+  const [page, setPage] = useState(0);
+  const [pageSize, setPageSize] = useState<20 | 50 | 100>(20);
+  useEffect(() => {
+    setPage(0);
+  }, [from, to, type, ccy, pageSize]);
+  const [exporting, setExporting] = useState(false);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [settleOpen, setSettleOpen] = useState(false);
   const [toDelete, setToDelete] = useState<Invoice | null>(null);
   const cancelInvoice = useCancelInvoice();
-  const { data: invData } = useInvoicesList({ partyId: p.id }, { all: true });
-  const { data: vDataForSettle } = useVouchersList({ partyId: p.id }, { all: true });
+  // The settlement dialog needs the party's open invoices; they are loaded
+  // only when it is opened (a customer with thousands of invoices made the
+  // statement screen fetch all of them just to show the page).
+  const { data: invData } = useInvoicesList({ partyId: p.id }, { all: true, enabled: settleOpen });
+  const { data: vDataForSettle } = useVouchersList({ partyId: p.id }, { all: true, enabled: settleOpen });
   const { data: returnsForSettle } = useReturnsList({
     partyId: p.id,
     status: "active",
-  }, { all: true });
-  const invoicesById = new Map((invData?.data ?? []).map((i) => [i.id, i]));
+  }, { all: true, enabled: settleOpen });
   const outstandingForSettle = buildOutstanding(
     p.id,
     invData?.data ?? [],
@@ -888,7 +986,20 @@ function StatementTab({ p, kind }: { p: Party; kind: PartyKind }) {
     printDataChanged(printFilterKey);
   }, [printFilterKey]);
 
-  const { data: statement, isLoading } = useStatement(p.id, kind, filter);
+  const { data: statement, isLoading, isFetching } = useStatementPage(p.id, kind, filter, page, pageSize);
+  const totalPages = statement?.page?.totalPages ?? 1;
+  const totalRows = statement?.page?.totalRows ?? 0;
+  const carried = statement?.page?.balanceBeforePageByCurrency ?? {};
+  const withFull = async (fn: (full: NonNullable<typeof statement>) => void) => {
+    setExporting(true);
+    try {
+      fn(await loadFullStatement(p.id, kind, filter));
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "تعذّر تحميل كشف الحساب كاملاً");
+    } finally {
+      setExporting(false);
+    }
+  };
 
   const rows = statement?.entries ?? [];
   const previousBalance = statement?.previousBalance ?? 0;
@@ -938,7 +1049,7 @@ function StatementTab({ p, kind }: { p: Party; kind: PartyKind }) {
 
   const spendable = (r: (typeof rows)[number]) => Array.isArray(r.lines) && r.lines.length > 0;
 
-  const exportCsv = () => {
+  const exportCsv = (rows: NonNullable<typeof statement>["entries"]) => {
     const header = [
       "#",
       "التاريخ",
@@ -1019,12 +1130,12 @@ function StatementTab({ p, kind }: { p: Party; kind: PartyKind }) {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `statement-${p.code ?? p.id}-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.download = `statement-${p.code ?? p.id}-${localToday()}.csv`;
     a.click();
     URL.revokeObjectURL(url);
   };
 
-  const printDoc = (
+  const printDoc = (rows: NonNullable<typeof statement>["entries"]) => (
     <PartyStatementDocument
       partyName={p.name}
       partyCode={p.code}
@@ -1132,24 +1243,30 @@ function StatementTab({ p, kind }: { p: Party; kind: PartyKind }) {
           <Button
             variant="outline"
             className="h-9 gap-2"
+            disabled={exporting}
             onClick={() =>
-              printDocument(
-                printDoc,
+              void withFull((full) => printDocument(
+                printDoc(full.entries),
                 printFilterKey,
                 archiveMeta("statement", {
-                  date: to || new Date().toISOString().slice(0, 10),
+                  date: to || localToday(),
                   typeLabel: "STATEMENT",
                   number: p.code || p.id,
                 }),
-              )
+              ))
             }
           >
             <Printer className="h-4 w-4" /> طباعة / PDF
           </Button>
-          <Button variant="outline" className="h-9 gap-2" onClick={exportCsv}>
+          <Button
+            variant="outline"
+            className="h-9 gap-2"
+            disabled={exporting}
+            onClick={() => void withFull((full) => exportCsv(full.entries))}
+          >
             <Download className="h-4 w-4" /> تصدير Excel
           </Button>
-          {outstandingForSettle.length > 0 && (
+          {(outstandingForSettle.length > 0 || Math.abs(finalBalance) >= 0.01 || multiCcy) && (
             <Button
               variant="default"
               className="h-9 gap-2 bg-warning text-warning-foreground hover:bg-warning/90"
@@ -1311,7 +1428,35 @@ function StatementTab({ p, kind }: { p: Party; kind: PartyKind }) {
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
-                {previousBalance !== 0 && !multiCcy && (
+                {page > 0 &&
+                  Object.entries(carried)
+                    .filter(([c]) => !multiCcy || rows.some((r) => r.currency === c))
+                    .sort(([a], [b]) => a.localeCompare(b))
+                    .map(([c, bal]) => (
+                      <tr
+                        key={`carried-${c}`}
+                        className="h-11 bg-primary/5 align-middle [&>td]:px-3 [&>td]:py-2"
+                        data-testid="statement-carried"
+                      >
+                        <td className="tabular-nums text-muted-foreground">—</td>
+                        <td className="tabular-nums text-muted-foreground">—</td>
+                        <td className="text-xs font-semibold">رصيد منقول</td>
+                        <td colSpan={multiCcy ? 8 : 7} className="text-muted-foreground">
+                          من نهاية الصفحة السابقة{multiCcy ? ` — ${currencySymbol(c as Currency)}` : ""}
+                        </td>
+                        <td className="text-left tabular-nums" />
+                        <td className="text-left tabular-nums" />
+                        <td
+                          className={`text-left font-semibold tabular-nums ${
+                            bal > 0 ? "text-warning" : bal < 0 ? "text-success" : ""
+                          }`}
+                        >
+                          {fmt(bal)}
+                        </td>
+                        <td />
+                      </tr>
+                    ))}
+                {page === 0 && previousBalance !== 0 && !multiCcy && (
                   <tr className="h-11 bg-muted/40 align-middle [&>td]:px-3 [&>td]:py-2">
                     <td className="tabular-nums text-muted-foreground">—</td>
                     <td className="tabular-nums text-muted-foreground">—</td>
@@ -1390,7 +1535,14 @@ function StatementTab({ p, kind }: { p: Party; kind: PartyKind }) {
                         {isInvoiceStatementRow(r) && r.referenceId ? (
                           <StatementInvoiceActions
                             invoiceId={r.referenceId}
-                            invoice={invoicesById.get(r.referenceId)}
+                            invoiceType={
+                              r.type === "sales_invoice"
+                                ? "sale"
+                                : r.type === "purchase_invoice"
+                                  ? "entry"
+                                  : null
+                            }
+                            cancelled={r.status === "cancelled"}
                             onDelete={setToDelete}
                           />
                         ) : (
@@ -1588,6 +1740,15 @@ function StatementTab({ p, kind }: { p: Party; kind: PartyKind }) {
               )}
             </table>
           </div>
+          <StatementPager
+            page={page}
+            totalPages={totalPages}
+            totalRows={totalRows}
+            pageSize={pageSize}
+            loading={isFetching}
+            onPage={setPage}
+            onPageSize={setPageSize}
+          />
         </PageCard>
       )}
 
@@ -1669,6 +1830,7 @@ function OutstandingTab({ p }: { p: Party }) {
   }
   const due = ccyRows.reduce((s, r) => s + r.remaining, 0);
 
+  const opg = useClientPage(ccyRows, ccy);
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-end gap-2">
@@ -1753,7 +1915,7 @@ function OutstandingTab({ p }: { p: Party }) {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border">
-                  {ccyRows.map((r) => (
+                  {opg.pageItems.map((r) => (
                     <tr key={r.invoiceId} className="h-11 align-middle [&>td]:px-3 [&>td]:py-2">
                       <td className="tabular-nums font-semibold text-primary">{r.number}</td>
                       <td className="tabular-nums text-muted-foreground">{r.date}</td>
@@ -1784,6 +1946,7 @@ function OutstandingTab({ p }: { p: Party }) {
                   ))}
                 </tbody>
               </table>
+        <ClientPager page={opg.page} totalPages={opg.totalPages} total={opg.total} pageSize={opg.pageSize} onPage={opg.setPage} onPageSize={opg.setPageSize} />
             </div>
           </PageCard>
         </>
@@ -2103,6 +2266,7 @@ function ActivityTab({ p, kind }: { p: Party; kind: PartyKind }) {
   // Sort newest-first
   items.sort((a, b) => (a.at < b.at ? 1 : -1));
 
+  const apg = useClientPage(items, p.id);
   return (
     <PageCard
       title="سجل النشاط"
@@ -2113,7 +2277,7 @@ function ActivityTab({ p, kind }: { p: Party; kind: PartyKind }) {
         {items.length === 0 && (
           <div className="px-4 py-10 text-center text-xs text-muted-foreground">لا نشاط بعد.</div>
         )}
-        {items.map((a) => (
+        {apg.pageItems.map((a) => (
           <div key={a.id} className="flex items-start gap-3 px-4 py-3">
             <div
               className={`mt-0.5 grid h-7 w-7 place-items-center rounded-full text-[11px] font-bold ${
@@ -2143,6 +2307,7 @@ function ActivityTab({ p, kind }: { p: Party; kind: PartyKind }) {
           </div>
         ))}
       </div>
+        <ClientPager page={apg.page} totalPages={apg.totalPages} total={apg.total} pageSize={apg.pageSize} onPage={apg.setPage} onPageSize={apg.setPageSize} />
     </PageCard>
   );
 }

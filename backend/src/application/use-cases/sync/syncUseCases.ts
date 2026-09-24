@@ -35,6 +35,7 @@ import {
 import { recordSyncConflict, resolveSyncConflictByOp } from "./syncConflicts.js";
 import {
   getCentralSyncUrl,
+  getHubSessionInfo,
   markHubUnreachable,
   refreshHubSession,
   resolveHubAuthHeader,
@@ -56,7 +57,7 @@ export async function enqueueInvoiceCreate(
     number: string;
     partyId?: string;
     linkedVoucherId?: string | null;
-    lines?: Array<{ rollId: string; quantityKg: number; costPerKg?: number | null }>;
+    lines?: Array<{ rollId: string; quantityKg: number; pieces?: number; costPerKg?: number | null }>;
   },
   createInput: CreateInvoiceInput,
   ctx: TenantContext,
@@ -104,6 +105,7 @@ export async function enqueueInvoiceCreate(
         pinnedCreateInput.lines.map((l) => ({
           rollId: l.rollId,
           quantityKg: l.quantityKg,
+          pieces: l.pieces ?? 0,
           costPerKg: l.costPerKg ?? null,
         })),
       createInput: pinnedCreateInput,
@@ -303,6 +305,14 @@ export async function runLocalSyncPush(
     "cashbox",
     "settings",
     "company",
+    // Stock documents keep the device's recorded order. A sale's roll
+    // snapshot carries post-purchase stock: if the sale overtook the purchase
+    // that created the roll, the hub created the roll WITH stock and then
+    // refused the purchase forever ("roll already has stock"). Reproduced
+    // with two devices. Voucher/expense replays are order-independent.
+    "invoice",
+    "return",
+    "print",
   ]);
   const laneOf = (entityType: string, entityId: string): number => {
     if (ORDERED_LANE_TYPES.has(entityType)) return 0;
@@ -336,6 +346,17 @@ export async function runLocalSyncPush(
       deviceGate: false,
       deviceTrust: null as SyncDeviceTrustFailure,
     };
+    // Every unit in THIS outbox is an operation of THIS device's database.
+    // Units recorded before the device was paired/registered carry NULL, and
+    // units in data restored from another machine carry that machine's id —
+    // the hub refused both (SYNC_DEVICE_REQUIRED / unknown device), so a
+    // device that had worked standalone showed "connected" while its whole
+    // history stayed queued forever. Attribute them to the current device;
+    // the hub deduplicates on opId, so a unit the other machine already
+    // pushed resolves to `exists`.
+    const attributedDeviceId =
+      ctx.syncDeviceId ?? getHubSessionInfo()?.hubDeviceId ?? unit.syncDeviceId ?? null;
+    const payloadToSend = await withPartyOpening(unit, ctx.tenantId);
     try {
       const postUnit = async (authorization: string) =>
         fetch(`${hub}/api/sync/push`, {
@@ -343,14 +364,15 @@ export async function runLocalSyncPush(
           headers: {
             "Content-Type": "application/json",
             Authorization: authorization,
+            ...(attributedDeviceId ? { "X-Sync-Device-Id": attributedDeviceId } : {}),
           },
           body: JSON.stringify({
             opId: unit.opId,
-            syncDeviceId: unit.syncDeviceId,
+            syncDeviceId: attributedDeviceId,
             entityType: unit.entityType,
             entityId: unit.entityId,
             operation: unit.operation,
-            payload: unit.payload,
+            payload: payloadToSend,
           }),
           signal: AbortSignal.timeout(15_000),
         });
@@ -548,7 +570,9 @@ export async function runLocalSyncPush(
         deviceGate: false,
         deviceTrust: null as SyncDeviceTrustFailure,
       };
-      for (const unit of laneUnits) {
+      const ordered = laneUnits.length > 0 && laneOf(laneUnits[0]!.entityType, laneUnits[0]!.entityId) === 0;
+      for (let i = 0; i < laneUnits.length; i++) {
+        const unit = laneUnits[i]!;
         const d = await pushOne(unit);
         acc.pushed += d.pushed;
         acc.failed += d.failed;
@@ -557,6 +581,19 @@ export async function runLocalSyncPush(
         acc.hubDeadOps.push(...d.hubDeadOps);
         acc.deviceGate = acc.deviceGate || d.deviceGate;
         acc.deviceTrust = acc.deviceTrust ?? d.deviceTrust;
+        // Ordered lane: a unit that did not reach the hub must not be
+        // overtaken by the units recorded after it. Release them for the
+        // next run (not a failure, and not held until the lease expires).
+        if (ordered && d.failed > 0) {
+          for (const held of laneUnits.slice(i + 1)) {
+            if (held.leaseToken) {
+              await outbox
+                .resetToPending(held.id, held.tenantId, ORDERED_LANE_WAITING, held.leaseToken)
+                .catch(() => 0);
+            }
+          }
+          break;
+        }
       }
       return acc;
     }),
@@ -640,6 +677,42 @@ export type PulledUnit = {
  * keeping it would silently skip every unit below it on the new hub. Replays
  * are idempotent (`exists`), so starting from zero is safe.
  */
+/**
+ * Party-create units queued before the snapshot carried the opening balance
+ * reach other devices without it (the party arrived with opening 0 and no
+ * opening journal). Fill it from this device's own record at push time.
+ * Exported for tests.
+ */
+export async function withPartyOpening(
+  unit: { entityType: string; operation: string; entityId: string; payload: Record<string, unknown> },
+  tenantId: string,
+): Promise<Record<string, unknown>> {
+  if (unit.entityType !== "party" || unit.operation !== "create") return unit.payload;
+  const snap = unit.payload.snapshot as Record<string, unknown> | undefined;
+  if (!snap || snap.openingBalance !== undefined) return unit.payload;
+  const rows = await runWithTenantContext({ tenantId }, async () => {
+    const r = await db.execute(sql`
+      SELECT p.opening_balance::float8 AS amount,
+             (SELECT min(le.date)::text FROM ledger_entries le
+               WHERE le.tenant_id = p.tenant_id AND le.reference_type = 'opening'
+                 AND le.reference_id = p.id) AS date
+        FROM parties p WHERE p.tenant_id = ${tenantId} AND p.id = ${unit.entityId}::uuid`);
+    return (Array.isArray(r) ? r : ((r as { rows?: unknown[] }).rows ?? [])) as Array<{
+      amount: number | null;
+      date: string | null;
+    }>;
+  });
+  const amount = Number(rows[0]?.amount ?? 0);
+  if (!amount) return unit.payload;
+  return {
+    ...unit.payload,
+    snapshot: { ...snap, openingBalance: amount, ...(rows[0]?.date ? { openingDate: rows[0].date } : {}) },
+  };
+}
+
+/** Error text of units held back behind a failed earlier unit of an ordered lane. */
+export const ORDERED_LANE_WAITING = "بانتظار إرسال عملية سابقة لها";
+
 export async function resetPullCursor(tenantId: string): Promise<void> {
   await runWithTenantContext({ tenantId }, async () => {
     await db.delete(syncState).where(eq(syncState.tenantId, tenantId));
@@ -687,9 +760,14 @@ export async function runLocalSyncPull(
   if (syncDeviceId) qs.set("excludeSyncDeviceId", syncDeviceId);
   qs.set("limit", "50");
 
+  // The hub derives "don't send me my own units" ONLY from the authenticated
+  // device header (the query parameter is deliberately ignored there), so the
+  // local device id must travel as X-Sync-Device-Id. Without it every device
+  // pulled back — and re-applied — everything it had just pushed.
+  const deviceHeader: Record<string, string> = syncDeviceId ? { "X-Sync-Device-Id": syncDeviceId } : {};
   let res = await fetch(`${hub}/api/sync/pull?${qs.toString()}`, {
     method: "GET",
-    headers: { Authorization: hubAuth },
+    headers: { Authorization: hubAuth, ...deviceHeader },
     signal: AbortSignal.timeout(20_000),
   });
   if (res.status === 401 && (await refreshHubSession())) {
@@ -697,7 +775,7 @@ export async function runLocalSyncPull(
     if (refreshed) {
       res = await fetch(`${hub}/api/sync/pull?${qs.toString()}`, {
         method: "GET",
-        headers: { Authorization: refreshed },
+        headers: { Authorization: refreshed, ...deviceHeader },
         signal: AbortSignal.timeout(20_000),
       });
     }
@@ -759,7 +837,13 @@ export async function runLocalSyncPull(
   // in the same page), and hold the cursor before the earliest unit that
   // still could not apply. Held units are re-pulled next run; already-applied
   // units re-materialize as `exists` (idempotent), so the re-pull is cheap.
-  type DeferredUnit = { unit: (typeof body.items)[number]; seq: number; receivedAt: Date };
+  type DeferredUnit = {
+    unit: (typeof body.items)[number];
+    seq: number;
+    receivedAt: Date;
+    /** Why the last attempt failed — recorded and logged, never replaced by a generic text. */
+    error?: string;
+  };
   type Processed = { seq: number; receivedAt: Date; blocked: boolean };
   const deferred: DeferredUnit[] = [];
   const processed: Processed[] = [];
@@ -815,7 +899,11 @@ export async function runLocalSyncPull(
       try {
         const received = await inbox.receive({
           tenantId: ctx.tenantId,
-          syncDeviceId: unit.syncDeviceId && isUuid(unit.syncDeviceId) ? unit.syncDeviceId : null,
+          // The ORIGIN device is a peer: it is registered on the hub, not in
+          // this device's sync_devices. Storing its id here violated the FK,
+          // so every mirror insert failed — no retry accounting, a failing
+          // unit could hold the pull cursor forever (attempts stayed 0).
+          syncDeviceId: null,
           opId: unit.opId,
           entityType: unit.entityType,
           entityId: unit.entityId,
@@ -869,7 +957,7 @@ export async function runLocalSyncPull(
     } else {
       // Retryable failure — defer, but keep the stream moving: later units in
       // this page may be the very dependency this unit is waiting for.
-      deferred.push({ unit, seq, receivedAt });
+      deferred.push({ unit, seq, receivedAt, error: result.error });
       processed.push({ seq, receivedAt, blocked: true });
     }
   }
@@ -886,6 +974,8 @@ export async function runLocalSyncPull(
         if (rec) rec.blocked = false;
         await markLocalApplied(d.unit.opId);
         if (result.status === "created") await notifyApplied(d.unit);
+      } else {
+        d.error = result.error ?? d.error;
       }
     }
   }
@@ -898,7 +988,7 @@ export async function runLocalSyncPull(
     if (inbox) {
       try {
         const updated = await inbox.setMaterializeError(ctx.tenantId, d.unit.opId, {
-          materializeError: "materialize deferred — dependency not yet applied",
+          materializeError: d.error ?? "materialize deferred — dependency not yet applied",
           at: new Date().toISOString(),
         });
         attempts = updated?.applyAttempts ?? 0;
@@ -923,7 +1013,7 @@ export async function runLocalSyncPull(
     } else {
       failed += 1;
       logger.warn(
-        { opId: d.unit.opId, attempts },
+        { opId: d.unit.opId, entityType: d.unit.entityType, attempts, error: d.error },
         "pull materialize deferred — cursor held before this unit",
       );
     }
@@ -1326,7 +1416,7 @@ async function releaseClaimsAfterApply(
       input.tenantId,
       input.entityType,
       input.entityId,
-      ["roll", "invoice_update_roll", "return_roll"],
+      ["roll", "invoice_update_roll", "return_roll", "entry_roll"],
     );
     if (released > 0) {
       logger.info(
@@ -1759,6 +1849,11 @@ async function annotateUpdateClaimDeltas(
   let oldDemand: Map<string, RollDemand> | null = null;
   try {
     const existing = await invoiceRepo.findById(invoiceId, hubCtx);
+    if ((existing as unknown as { type?: string } | null)?.type === "entry") {
+      // Editing a purchase changes stock it ADDED: never a consumption claim.
+      for (const r of targets) r.resourceType = "entry_roll";
+      return;
+    }
     oldDemand = sumDemandByRoll((existing as unknown as { lines?: unknown } | null)?.lines ?? null);
   } catch (err) {
     logger.warn({ err, invoiceId }, "update claim delta lookup failed — keeping full reservation");
@@ -1781,7 +1876,8 @@ async function annotateUpdateClaimDeltas(
   }
 }
 
-function extractConflictResources(
+/** Exported for tests (claim measurement is a sync invariant). */
+export function extractConflictResources(
   entityType: string,
   operation: string,
   payload: Record<string, unknown>,
@@ -1797,10 +1893,15 @@ function extractConflictResources(
       : [];
     // Line demand makes the claim measurable (P3a); dimensions the lines do
     // not quantify stay NULL and keep whole-resource semantics for that row.
+    // createInput.lines is the exact user input (it carries `pieces`).
+    // payload.lines is a summary without pieces: measuring from it made every
+    // kg-only cut default to "1 piece", so two devices selling from the same
+    // single-piece roll always conflicted — 96 of 150 concurrent 2 kg sales
+    // were rejected with 4,996 kg still available.
     const rawLines =
       operation === "create"
-        ? ((payload.lines ??
-            (payload.createInput as { lines?: unknown } | undefined)?.lines) as unknown)
+        ? (((payload.createInput as { lines?: unknown } | undefined)?.lines ??
+            payload.lines) as unknown)
         : ((payload.updateInput as { lines?: unknown } | undefined)?.lines as unknown);
     const demand = sumDemandByRoll(rawLines);
     if (rollIds.length > 0) {
@@ -1809,8 +1910,12 @@ function extractConflictResources(
       // allow joint oversell. Net-delta narrowing happens in
       // annotateUpdateClaimDeltas; applied creates never self-conflict because
       // applied holders are excluded from outstanding.
+      // A purchase (entry) invoice adds stock: non-consuming claim.
+      const adds =
+        payload.invoiceType === "entry" ||
+        (payload.createInput as { type?: unknown } | undefined)?.type === "entry";
       return rollIds.map((resourceId) => ({
-        resourceType: "roll",
+        resourceType: adds ? "entry_roll" : "roll",
         resourceId,
         quantityKg: demand?.get(resourceId)?.quantityKg ?? null,
         quantityPieces: demand?.get(resourceId)?.quantityPieces ?? null,
@@ -1821,6 +1926,21 @@ function extractConflictResources(
         {
           resourceType: operation === "update" ? "invoice_update" : "invoice",
           resourceId: payload.invoiceId,
+        },
+      ];
+    }
+  }
+  // Sending to the press consumes stock from the SAME roll pool as sales, so
+  // a press job and a sale on another PC cannot both take the same kilos.
+  if (entityType === "print" && operation === "send") {
+    const inp = (payload.sendInput ?? {}) as { sourceRollId?: unknown; quantityKg?: unknown; pieces?: unknown };
+    if (typeof inp.sourceRollId === "string" && isUuid(inp.sourceRollId)) {
+      return [
+        {
+          resourceType: "roll",
+          resourceId: inp.sourceRollId,
+          quantityKg: typeof inp.quantityKg === "number" ? inp.quantityKg : null,
+          quantityPieces: typeof inp.pieces === "number" ? inp.pieces : null,
         },
       ];
     }
@@ -2011,26 +2131,46 @@ function buildConflictMessage(
     return `رُفضت مزامنة «${loserNumber}» لأن جهازاً آخر سبق بمزامنة نفس الموارد`;
   }
   if (winner.reason === "insufficient-stock") {
-    // No winner: the roll itself is short. Figures name the exact shortage so
-    // the operator resizes the sale instead of retrying blindly.
-    const kg =
-      winner.availableKg != null && winner.requestedKg != null
-        ? ` (المتاح ${winner.availableKg} كغ، المطلوب ${winner.requestedKg} كغ)`
-        : "";
-    const pc =
-      winner.availablePieces != null && winner.requestedPieces != null
-        ? ` (المتاح ${winner.availablePieces} أثواب، المطلوب ${winner.requestedPieces} أثواب)`
-        : "";
-    return `رُفضت مزامنة «${loserNumber}»: مخزون اللفافة لا يكفي${kg}${pc}`;
+    // No winner: the roll itself is short. Quote the dimension that is short
+    // (kg and/or pieces) so the operator resizes the sale instead of retrying
+    // blindly — a "requested 0 pieces" figure only confuses.
+    const shortKg =
+      winner.availableKg != null && winner.requestedKg != null && winner.requestedKg > winner.availableKg;
+    const shortPc =
+      winner.availablePieces != null &&
+      winner.requestedPieces != null &&
+      winner.requestedPieces > winner.availablePieces;
+    const parts: string[] = [];
+    if (shortKg || !shortPc) {
+      if (winner.availableKg != null && winner.requestedKg != null) {
+        parts.push(`المتاح ${winner.availableKg} كغ، المطلوب ${winner.requestedKg} كغ`);
+      }
+    }
+    if (shortPc) {
+      parts.push(`الأثواب المتاحة ${winner.availablePieces}، المطلوبة ${winner.requestedPieces}`);
+    }
+    return `رُفضت مزامنة «${loserNumber}»: مخزون اللفافة لا يكفي${parts.length ? ` (${parts.join("؛ ")})` : ""}`;
   }
   const qty =
     winner.availableKg != null && winner.requestedKg != null
       ? ` (المتاح ${winner.availableKg} كغ، المطلوب ${winner.requestedKg} كغ)`
       : "";
+  // Identifiers stay in the conflict record (sync conflicts screen); the
+  // message itself must read as a sentence for the operator.
+  const what: Record<string, string> = {
+    invoice: "فاتورة",
+    voucher: "سند",
+    return: "مرتجع",
+    expense: "مصروف",
+    print: "طبعة",
+  };
+  const when = winner.claimedAt.toLocaleString("ar-SY-u-nu-latn", {
+    dateStyle: "short",
+    timeStyle: "short",
+  });
   return (
-    `رُفضت مزامنة «${loserNumber}» بالكامل (أول واصل يفوز). ` +
-    `سبقها ${winner.entityType} ${winner.entityId} على المورد ${winner.resourceType}:${winner.resourceId} ` +
-    `في ${winner.claimedAt.toISOString()}${qty}`
+    `رُفضت مزامنة «${loserNumber}» بالكامل: سبقتها ${what[winner.entityType] ?? "عملية"} من جهاز آخر ` +
+    `على نفس المورد (${when})${qty}. التفاصيل في شاشة «تعارضات المزامنة».`
   );
 }
 

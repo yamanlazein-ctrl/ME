@@ -39,7 +39,7 @@ export class ApiInvoiceRepository implements IInvoiceRepository {
   ): Promise<import("@/domain/types").PaginatedResult<Invoice>> {
     const res = await this.api.list(filter);
     const data = res.data.map((dto) => Invoice.reconstitute(dto as unknown as InvoiceData));
-    return { data, total: res.meta.total, hasNext: res.meta.hasNext };
+    return { data, total: res.meta.total, hasNext: res.meta.hasNext, nextCursor: res.meta.nextCursor ?? undefined };
   }
 
   async create(invoice: Invoice, ctx: TenantContext): Promise<Invoice> {

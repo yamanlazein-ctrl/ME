@@ -1,3 +1,4 @@
+import { localToday } from "@/lib/localDate";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
 /* ── Mock the settings API (via the DI container) and sonner toasts ──
@@ -24,7 +25,7 @@ vi.mock("@/infrastructure/container", () => ({
 
 import { EXCHANGE_RATES } from "@/presentation/hooks/useCurrency";
 
-const today = new Date().toISOString().slice(0, 10);
+const today = localToday();
 
 /** Fresh module instances → reset defaults and the loadStarted guard (simulates a page reload). */
 async function freshModules() {

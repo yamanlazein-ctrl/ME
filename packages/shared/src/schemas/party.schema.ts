@@ -41,6 +41,8 @@ export const createPartySchema = z.object({
 export const updatePartySchema = createPartySchema.partial().omit({ kind: true });
 
 export const listPartiesSchema = z.object({
+  /** Keyset cursor for "load every row" callers (no OFFSET scan). */
+  cursor: z.string().max(300).optional(),
   kind: z.enum(["customer", "supplier"]).optional(),
   search: z.string().max(200).optional(),
   status: z.enum(["active", "inactive", "cancelled"]).optional(),

@@ -41,6 +41,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { formatMoney } from "@/shared/utils/formatNumber";
 import type { Party } from "@/domain/entities/Party";
 
+import { localToday } from "@/lib/localDate";
 const _nextFormId = 0;
 function toMockPatch(patch: Record<string, unknown>): Record<string, unknown> {
   const out: Record<string, unknown> = {};
@@ -221,7 +222,7 @@ export function PartyListPage({
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `${kind}s-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.download = `${kind}s-${localToday()}.csv`;
     a.click();
     URL.revokeObjectURL(url);
   };

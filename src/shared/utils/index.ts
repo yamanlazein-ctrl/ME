@@ -1,3 +1,4 @@
+import { localDateISO } from "@/lib/localDate";
 export type UUID = string;
 
 export function generateUUID(): UUID {
@@ -18,7 +19,7 @@ export function generateDocNumber(prefix: string, seq: number, pad = 6): string 
 
 export function formatDate(d: Date | string): string {
   const date = typeof d === "string" ? new Date(d) : d;
-  return date.toISOString().slice(0, 10);
+  return localDateISO(date);
 }
 
 export function nowISO(): string {

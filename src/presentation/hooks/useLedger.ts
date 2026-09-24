@@ -47,9 +47,9 @@ export function useLedgerEntries(filter?: LedgerFilter, opts?: { all?: boolean }
       void signal;
       if (all) {
         const data = await fetchAllPaged(
-          (page, limit) =>
+          (page, limit, cursor) =>
             container.invoices.ledger.entries(
-              { ...(filter ?? {}), page, limit } as LedgerFilter,
+              { ...(filter ?? {}), page, limit, cursor } as LedgerFilter,
               ctx,
             ),
           { pageSize: 1000, maxPages: 500, label: "ledger" },

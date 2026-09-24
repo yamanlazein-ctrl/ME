@@ -17,6 +17,8 @@ export const statementQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(500).optional(),
   /** Opaque cursor from previous page (`date|createdAtIso|id`). */
   cursor: z.string().max(200).optional(),
+  /** 0-based page number for screen paging (20/50/100 rows); ignored with a cursor. */
+  page: z.coerce.number().int().min(0).max(1_000_000).optional(),
 });
 
 export const settlePartySchema = z.object({

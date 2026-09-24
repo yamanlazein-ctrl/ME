@@ -22,6 +22,7 @@ import {
 } from "../../infrastructure/backup/portableBackup.js";
 import { resolveMigrationsFolder } from "../../infrastructure/orm/runDesktopMigrations.js";
 
+import { localToday } from "../../infrastructure/utils/localDate.js";
 const backupInProgress = new Set<string>();
 let restoreInProgress = false;
 
@@ -171,7 +172,7 @@ export function createBackupRouter(_deps: BackupRouteDeps): Router {
     }
     backupInProgress.add(tenantId);
     const startTime = Date.now();
-    const date = new Date().toISOString().slice(0, 10);
+    const date = localToday();
     const zipFile = join(tmpdir(), `motard-backup-${tenantId}-${stampNow()}.zip`);
     try {
       const r = await runTenantFullBackup(tenantId, zipFile);

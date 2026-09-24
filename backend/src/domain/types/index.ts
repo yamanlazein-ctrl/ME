@@ -25,6 +25,8 @@ export interface PaginatedResult<T> {
     limit: number;
     hasNext: boolean;
     totalPages: number;
+    /** Keyset cursor of the next page (null on the last page). */
+    nextCursor?: string | null;
   };
 }
 

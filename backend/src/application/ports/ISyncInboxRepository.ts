@@ -18,10 +18,16 @@ export interface SyncInboxRow {
   materializeError: Record<string, unknown> | null;
   applyAttempts: number;
   lastAttemptAt: Date | null;
-  /** Monotonic receive order — the only valid pull cursor. */
+  /** Monotonic receive order. */
   receivedSeq: number;
   receivedAt: Date;
   appliedAt: Date | null;
+  /**
+   * Monotonic APPLICATION order (trigger-stamped when the unit becomes
+   * `applied`) — the pull cursor. A unit applied late gets a number after
+   * everything already delivered, so no cursor can pass over it.
+   */
+  appliedSeq: number | null;
 }
 
 export interface ReceiveSyncUnitInput {

@@ -1,6 +1,7 @@
 import { TenantContext, UUID, Currency } from "@/domain/types";
 import { ICashboxRepository } from "@/application/ports/ICashboxRepository";
 
+import { localToday } from "@/lib/localDate";
 export class CashboxStateUseCase {
   constructor(private readonly cashbox: ICashboxRepository) {}
 
@@ -13,7 +14,7 @@ export class CashboxStateUseCase {
   }
 
   currentBalance(ctx: TenantContext, currency?: string) {
-    const today = new Date().toISOString().slice(0, 10);
+    const today = localToday();
     return this.cashbox.cashBalanceOn(today, ctx, currency);
   }
 

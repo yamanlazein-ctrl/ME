@@ -35,6 +35,8 @@ export interface PaginatedMeta {
   limit: number;
   hasNext: boolean;
   totalPages: number;
+  /** Keyset cursor of the next page (list endpoints that support seek paging). */
+  nextCursor?: string | null;
 }
 
 export interface ListRequest<TFilters = Record<string, unknown>>

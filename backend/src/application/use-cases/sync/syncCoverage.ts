@@ -37,6 +37,9 @@ export const SYNC_COVERAGE: Record<string, CoverageEntry> = {
   "POST /orders/:id/fulfill": { sync: { entityType: "order", operation: "update" } },
   // ---- expenses ----
   "POST /expenses": { sync: { entityType: "expense", operation: "create" } },
+  // ---- press cycle (textile printing/dyeing: moves stock and cash) ----
+  "POST /printing/send": { sync: { entityType: "print", operation: "send" } },
+  "POST /printing/receive": { sync: { entityType: "print", operation: "receive" } },
   "POST /expenses/:id/cancel": { sync: { entityType: "expense", operation: "cancel" } },
   // ---- masters ----
   "POST /customers": { sync: { entityType: "party", operation: "create" } },
@@ -129,8 +132,6 @@ export const SYNC_COVERAGE: Record<string, CoverageEntry> = {
   "POST /notifications/:id/read": { exempt: "device-local read state" },
   "POST /notifications/mark-all-read": { exempt: "device-local read state" },
   "POST /notifications/dismiss-all": { exempt: "device-local read state" },
-  "POST /printing/send": { exempt: "per-device print queue" },
-  "POST /printing/receive": { exempt: "per-device print queue" },
   "POST /api/company/logo": {
     exempt:
       "binary logo bytes stay device-local until attachment sync exists; profile fields sync via PUT /api/company/profile",

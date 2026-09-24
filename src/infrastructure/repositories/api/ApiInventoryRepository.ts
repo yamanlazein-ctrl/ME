@@ -30,7 +30,7 @@ export class ApiInventoryRepository implements IInventoryRepository {
   async listFabrics(filter: InventoryFilter, ctx: TenantContext): Promise<PaginatedResult<Fabric>> {
     const res = await this.api.listFabrics(filter as Record<string, string>);
     const data = res.data.map((dto: FabricData) => Fabric.reconstitute(dto));
-    return { data, total: res.meta.total, hasNext: res.meta.hasNext };
+    return { data, total: res.meta.total, hasNext: res.meta.hasNext, nextCursor: res.meta.nextCursor ?? undefined };
   }
 
   async updateFabric(
@@ -82,7 +82,7 @@ export class ApiInventoryRepository implements IInventoryRepository {
   async listColors(filter: InventoryFilter, ctx: TenantContext): Promise<PaginatedResult<Color>> {
     const res = await this.api.listColors(filter as Record<string, string>);
     const data = res.data.map((dto: ColorData) => Color.reconstitute(dto));
-    return { data, total: res.meta.total, hasNext: res.meta.hasNext };
+    return { data, total: res.meta.total, hasNext: res.meta.hasNext, nextCursor: res.meta.nextCursor ?? undefined };
   }
 
   async updateColor(
@@ -142,7 +142,7 @@ export class ApiInventoryRepository implements IInventoryRepository {
   async listRolls(filter: InventoryFilter, ctx: TenantContext): Promise<PaginatedResult<Roll>> {
     const res = await this.api.listRolls(filter as Record<string, string>);
     const data = res.data.map((dto) => Roll.reconstitute(dto));
-    return { data, total: res.meta.total, hasNext: res.meta.hasNext };
+    return { data, total: res.meta.total, hasNext: res.meta.hasNext, nextCursor: res.meta.nextCursor ?? undefined };
   }
 
   async updateRoll(

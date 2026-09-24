@@ -6,6 +6,8 @@ import type {
 } from "../../domain/entities/LedgerEntry.js";
 
 export interface LedgerFilter {
+  /** Keyset cursor ("load every row" callers) — see keysetPage.ts. */
+  cursor?: string;
   partyId?: UUID;
   type?: string;
   currency?: string;

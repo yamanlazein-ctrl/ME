@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:crypto";
 import path from "node:path";
 import { config } from "../../../infrastructure/config/env.js";
 import { logger } from "../../../infrastructure/config/logger.js";
@@ -86,7 +87,9 @@ export function getCentralSyncUrl(): string | null {
   if (runtimeHubUrl) return runtimeHubUrl;
   const fromEnv = trimUrl(config.CENTRAL_SYNC_URL);
   if (fromEnv) return fromEnv;
-  return readHubUrlFile();
+  // hub.json lost but the pairing was never removed: the stored credentials
+  // still name the hub.
+  return readHubUrlFile() ?? loadHubCredentials()?.url ?? null;
 }
 
 export function setRuntimeCentralSyncUrl(url: string | null): string | null {
@@ -145,12 +148,118 @@ function loadSession(): HubSession | null {
  * bearer (lab topologies that share a signing secret).
  */
 export async function resolveHubAuthHeader(localAuthHeader?: string): Promise<string | undefined> {
-  const session = loadSession();
+  let session = loadSession();
+  if (!session?.accessToken && (await reloginWithStoredCredentials())) session = loadSession();
   if (session?.accessToken) return `Bearer ${session.accessToken}`;
   return localAuthHeader;
 }
 
+// ── Stored hub credentials ──────────────────────────────────────────────────
+// The pairing (URL + email + password) stays until the operator presses
+// «فصل». Tokens expire, a hub can restart with a new signing secret, a session
+// file can be lost — none of that may silently unpair the device and leave it
+// "connected" without syncing. The password is kept only encrypted
+// (AES-256-GCM, key derived from this install's APP_MASTER_KEY) and is used
+// solely to sign in to the hub again when the session cannot be refreshed.
+type StoredCredentials = { url: string; email: string; password: string };
+
+function credentialsPath(): string | null {
+  const explicit = process.env.HUB_CREDENTIALS_PATH?.trim();
+  if (explicit) return explicit;
+  const session = sessionPath();
+  return session ? path.join(path.dirname(session), "hub-credentials.dat") : null;
+}
+
+function credentialsKey(): Buffer {
+  return createHash("sha256").update(`hub-credentials:${config.APP_MASTER_KEY}`).digest();
+}
+
+export function saveHubCredentials(creds: StoredCredentials | null): void {
+  const file = credentialsPath();
+  if (!file) return;
+  try {
+    if (!creds) {
+      if (fs.existsSync(file)) fs.unlinkSync(file);
+      return;
+    }
+    const iv = randomBytes(12);
+    const cipher = createCipheriv("aes-256-gcm", credentialsKey(), iv);
+    const ct = Buffer.concat([cipher.update(JSON.stringify(creds), "utf8"), cipher.final()]);
+    const blob = { v: 1, iv: iv.toString("base64"), tag: cipher.getAuthTag().toString("base64"), ct: ct.toString("base64") };
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, JSON.stringify(blob), { encoding: "utf8", mode: 0o600 });
+  } catch (err) {
+    logger.warn({ err }, "failed to persist hub credentials");
+  }
+}
+
+export function loadHubCredentials(): StoredCredentials | null {
+  const file = credentialsPath();
+  if (!file || !fs.existsSync(file)) return null;
+  try {
+    const blob = JSON.parse(fs.readFileSync(file, "utf8")) as { iv: string; tag: string; ct: string };
+    const decipher = createDecipheriv("aes-256-gcm", credentialsKey(), Buffer.from(blob.iv, "base64"));
+    decipher.setAuthTag(Buffer.from(blob.tag, "base64"));
+    const plain = Buffer.concat([decipher.update(Buffer.from(blob.ct, "base64")), decipher.final()]);
+    const parsed = JSON.parse(plain.toString("utf8")) as StoredCredentials;
+    return parsed.url && parsed.email && parsed.password ? parsed : null;
+  } catch (err) {
+    logger.warn({ err }, "stored hub credentials unreadable");
+    return null;
+  }
+}
+
+/**
+ * Account for «حفظ وربط». Typed values win; blanks fall back to the stored
+ * account, so changing only the hub URL needs no password. A stored password
+ * is never paired with a DIFFERENT typed email.
+ */
+export function resolveConnectCredentials(input: { email?: string; password?: string }): {
+  email: string | undefined;
+  password: string | undefined;
+} {
+  const stored = loadHubCredentials();
+  const email = input.email ?? stored?.email;
+  const password =
+    input.password ?? (stored && (!input.email || input.email === stored.email) ? stored.password : undefined);
+  return { email, password };
+}
+
+/** Sign in to the hub again with the stored credentials (keeps pairing metadata). */
+async function reloginWithStoredCredentials(): Promise<boolean> {
+  const creds = loadHubCredentials();
+  if (!creds) return false;
+  try {
+    const res = await fetch(`${creds.url}/api/auth/login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: creds.email, password: creds.password }),
+      signal: AbortSignal.timeout(20_000),
+    });
+    const body = (await res.json().catch(() => ({}))) as { accessToken?: string; refreshToken?: string };
+    if (!res.ok || !body.accessToken) {
+      logger.warn({ status: res.status }, "hub re-login with stored credentials refused");
+      return false;
+    }
+    const previous = loadSession();
+    persistHubSession({ ...(previous ?? {}), accessToken: body.accessToken, refreshToken: body.refreshToken });
+    if (!getCentralSyncUrl()) setRuntimeCentralSyncUrl(creds.url);
+    hubReachable = true;
+    lastProbeAt = Date.now();
+    logger.info("hub session re-established from stored credentials");
+    return true;
+  } catch (err) {
+    logger.warn({ err }, "hub re-login failed");
+    return false;
+  }
+}
+
 export async function refreshHubSession(): Promise<boolean> {
+  if (await refreshWithToken()) return true;
+  return reloginWithStoredCredentials();
+}
+
+async function refreshWithToken(): Promise<boolean> {
   const hub = getCentralSyncUrl();
   const session = loadSession();
   if (!hub || !session?.refreshToken) return false;
@@ -264,16 +373,22 @@ export function isServerSideOffline(): boolean {
 
 export function getHubSessionInfo(): HubSessionInfo | null {
   const session = loadSession();
-  if (!session?.accessToken) return null;
+  if (!session?.accessToken) {
+    // Still paired: the next sync re-establishes the session from the
+    // stored credentials. Never show "not connected" for that.
+    const creds = loadHubCredentials();
+    return creds ? { hubUrl: creds.url, hubUserEmail: creds.email } : null;
+  }
   const { accessToken: _a, refreshToken: _r, ...info } = session;
   void _a;
   void _r;
   return info;
 }
 
-/** Forget the URL and the session (disk + memory). */
+/** Forget the URL, the session and the stored credentials (disk + memory). */
 export function disconnectHub(): void {
   persistHubSession(null);
+  saveHubCredentials(null);
   setRuntimeCentralSyncUrl(null);
   hubReachable = null;
 }
@@ -498,6 +613,8 @@ export async function connectHub(input: ConnectHubInput): Promise<ConnectHubResu
   persistHubSession(null);
   setRuntimeCentralSyncUrl(url);
   persistHubSession({ accessToken: login.accessToken, refreshToken: login.refreshToken, ...info });
+  // Kept (encrypted) until «فصل»: expired tokens / a restarted hub re-login silently.
+  saveHubCredentials({ url, email: input.email, password: input.password });
   hubReachable = true;
   lastProbeAt = Date.now();
   localActivityCursor = null;

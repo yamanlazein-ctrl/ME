@@ -2,6 +2,8 @@ import type { TenantContext, PaginatedResult } from "../../domain/types/index.js
 import type { FabricData } from "../../domain/entities/Fabric.js";
 
 export interface FabricFilter {
+  /** Keyset cursor ("load every row" callers) — see keysetPage.ts. */
+  cursor?: string;
   search?: string;
   page?: number;
   limit?: number;

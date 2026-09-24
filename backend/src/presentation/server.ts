@@ -398,6 +398,7 @@ registerPrintRoutes(
   authMiddleware,
   rbac(["admin", "warehouse"]),
   rbac(["admin", "accountant", "warehouse", "viewer"]),
+  container.syncOutboxRepo,
 );
 registerNotificationRoutes(
   apiRouter,

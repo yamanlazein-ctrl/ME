@@ -9,6 +9,7 @@ import { formatNumber, formatMoney } from "@/shared/utils/formatNumber";
 import { formatAmount, currencySymbol, type Currency } from "@/presentation/hooks/useCurrency";
 import { cn } from "@/lib/utils";
 
+import { localToday } from "@/lib/localDate";
 function formatUnpaidCurrencies(
   byCurrency: Record<string, { count: number; totalDue: number }> = {},
 ): string {
@@ -104,7 +105,7 @@ function MetricCell({
 
 export function ExecutiveKpiGrid() {
   const { data } = useDashboard();
-  const today = new Date().toISOString().slice(0, 10);
+  const today = localToday();
   const { data: returnsData } = useReturnsList();
   const { data: cashbox } = useCashboxState();
   const { data: balSYP } = useCashBalance(today, "SYP");
