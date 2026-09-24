@@ -15,7 +15,7 @@ import { clearLicense, getInstallTenantId, isActivated } from "@/lib/license-sta
  * Soft network failure: if local markers exist, allow through; otherwise keep
  * the activation screen so a first-run cannot fall through to login.
  *
- * After a wiped/empty DB, `/api/setup/status` returns SETUP_STATUS_UNAVAILABLE —
+ * After a wiped/empty DB, `/api/setup/status` returns isCompleted:false (or SETUP_REQUIRED) —
  * stale local markers must not skip activation (otherwise AuthGate spins on
  * "جاري استعادة الجلسة…" with dead JWTs).
  *
