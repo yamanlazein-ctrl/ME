@@ -28,7 +28,7 @@ export const DB_SUPERUSER = "postgres";
 /** Tables allowed to hold rows in a shipped template, with the exact expected row count. */
 export const EXPECTED_ROWS = {
   tenants: 1,
-  users: 1,
+  users: 0,
   licenses: 1,
 };
 

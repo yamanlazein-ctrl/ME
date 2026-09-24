@@ -1,4 +1,4 @@
-import { eq, and, gte, lte, sql, inArray, asc } from "drizzle-orm";
+import { eq, and, gte, lte, sql, inArray, asc, getTableColumns } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import type { DB } from "../orm/drizzle.js";
 import type {
@@ -205,8 +205,15 @@ export class PostgresStatementRepository implements IStatementRepository {
     }
 
     const fetchLimit = pageLimit + 1;
+    // createdAtUs: full microsecond precision for the cursor. A JS Date keeps
+    // only milliseconds, so `created_at > cursor` matched the boundary row
+    // again and every page repeated the previous page's last row(s) — found by
+    // the 5-year audit (11 duplicated rows in a 4,022-row statement).
     const window = await this.db
-      .select()
+      .select({
+        ...getTableColumns(ledgerEntries),
+        createdAtUs: sql<string>`to_char(${ledgerEntries.createdAt} AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')`,
+      })
       .from(ledgerEntries)
       .where(and(...pageConditions))
       .orderBy(asc(ledgerEntries.date), asc(ledgerEntries.createdAt), asc(ledgerEntries.id))
@@ -329,7 +336,7 @@ export class PostgresStatementRepository implements IStatementRepository {
     const last = pageRows[pageRows.length - 1];
     const nextCursor =
       hasMore && last
-        ? `${last.date}|${last.createdAt.toISOString()}|${last.id}`
+        ? `${last.date}|${last.createdAtUs}|${last.id}`
         : null;
 
     const primaryBefore =

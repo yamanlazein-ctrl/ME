@@ -128,12 +128,17 @@ export function VoucherForm({
   // Scoped to the selected party with a high limit — a global page-1 list
   // silently dropped older invoices for that party (looked like "only the last").
   const { data: invoicesData } = useInvoicesList(
-    partyId ? { partyId, limit: 50 } : { limit: 50 },
+    partyId ? { partyId } : { limit: 50 },
+    // Remaining-balance math needs every invoice of the selected party.
+    { all: Boolean(partyId) },
   );
   const allInvoices = invoicesData?.data ?? [];
   // Returns are needed to compute the true remaining: backend does total - paid - activeReturns
   // (sale return credits the customer). Without this, the UI shows 44 while the backend correctly sees -72.
-  const { data: returnsData } = useReturnsList({ limit: 50 });
+  const { data: returnsData } = useReturnsList(
+    partyId ? { partyId, status: "active" } : { status: "active" },
+    { all: true },
+  );
   const returnsByInvoice = useMemo(() => {
     const map = new Map<string, number>();
     for (const r of (returnsData?.data ?? []) as Array<{

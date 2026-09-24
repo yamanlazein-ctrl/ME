@@ -20,6 +20,8 @@ pub mod hidden_process;
 pub mod identity;
 pub mod runtime;
 pub mod secret_store;
+#[cfg(windows)]
+pub mod session_end;
 
 // ── Shared per-user app-data root ────────────────────────────────────────────
 // Used by secret_store, device_binding, and runtime so the three

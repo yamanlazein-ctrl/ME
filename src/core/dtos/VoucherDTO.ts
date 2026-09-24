@@ -43,6 +43,9 @@ export type VoucherFilter = {
   fromDate?: string;
   toDate?: string;
   status?: "active" | "cancelled" | "all";
+  /** Server-side match on the voucher number (all history, not a page). */
+  search?: string;
   limit?: number;
-  offset?: number;
+  /** 0-based page (the API pages by `page`; it has no `offset`). */
+  page?: number;
 };

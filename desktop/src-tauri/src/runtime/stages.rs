@@ -57,7 +57,7 @@ impl BootStage {
             BootStage::DeviceBinding => "التحقق من الجهاز…",
             BootStage::Preflight => "فحص ملفات التشغيل…",
             BootStage::FactoryReset => "مراجعة طلبات إعادة الضبط…",
-            BootStage::ProvisionDatabase => "تجهيز قاعدة البيانات المحلية…",
+            BootStage::ProvisionDatabase => "تجهيز قاعدة البيانات المحلية (التشغيل الأول قد يستغرق وقتاً)…",
             BootStage::SyncDbPort => "ضبط إعدادات قاعدة البيانات…",
             BootStage::StartDatabase => "تشغيل قاعدة البيانات…",
             BootStage::LoadSecrets => "تجهيز مفاتيح التشغيل…",

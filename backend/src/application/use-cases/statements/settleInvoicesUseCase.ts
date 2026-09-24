@@ -8,6 +8,7 @@ import { BusinessRuleError } from "../../../domain/errors/index.js";
 import { allocateSettlementPayment, splitCashAndDiscountAcrossLines, round2dp } from "@erp/shared";
 import { createVoucherUseCase } from "../vouchers/voucherUseCases.js";
 import { nextDocumentNumber } from "../../../infrastructure/utils/documentNumbers.js";
+import { deriveOperationId } from "../../../infrastructure/utils/operationId.js";
 import { db } from "../../../infrastructure/orm/drizzle.js";
 import { invoices } from "../../../infrastructure/orm/schemas/invoice.table.js";
 import { returns } from "../../../infrastructure/orm/schemas/return.table.js";
@@ -226,7 +227,8 @@ export async function settleInvoicesUseCase(
           notesInternal,
           notesPrint,
         },
-        ctx,
+        // One request → N vouchers: each needs its own durable operation id.
+        { ...ctx, clientOperationId: deriveOperationId(ctx.clientOperationId, `inv:${line.invoiceId}`) },
       );
       if (!created.ok) {
         // Throw so an outer withTenantTx rolls back every prior voucher in the batch.
@@ -265,7 +267,7 @@ export async function settleInvoicesUseCase(
           notesInternal: `دفعة مقدمة (فائض الدفعة ${batchNumber})`,
           notesPrint: `دفعة مقدمة على الحساب — فائض الدفعة ${batchNumber}`,
         },
-        ctx,
+        { ...ctx, clientOperationId: deriveOperationId(ctx.clientOperationId, "advance") },
       );
       if (!created.ok) {
         throw new BusinessRuleError(`فشل تسجيل فائض الدفعة كرصيد دائن: ${created.error}`);

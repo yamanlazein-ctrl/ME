@@ -25,6 +25,8 @@ export interface VoucherData {
    */
   invoiceCurrency?: string;
   invoiceExchangeRate?: number | null;
+  /** Number of the linked invoice (list views) — avoids loading every invoice. */
+  invoiceNumber?: string;
   /**
    * Part that settled the linked invoice (invoice currency). A customer receipt
    * above the invoice's remaining balance keeps the excess as customer credit.

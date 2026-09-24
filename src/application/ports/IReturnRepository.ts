@@ -22,6 +22,7 @@ export interface ReturnDTO {
   date: string;
   partyId: UUID;
   originalInvoiceId?: UUID | null;
+  originalInvoiceNumber?: string;
   lines: ReturnLineDTO[];
   reason: ReturnReason;
   currency: string;
@@ -53,8 +54,11 @@ export interface ReturnFilter {
   status?: ReturnStatus | "all";
   fromDate?: string;
   toDate?: string;
+  /** Server-side match on the return number (all history, not a page). */
+  search?: string;
   limit?: number;
-  offset?: number;
+  /** 0-based page (the API pages by `page`; it has no `offset`). */
+  page?: number;
 }
 
 export interface IReturnRepository {

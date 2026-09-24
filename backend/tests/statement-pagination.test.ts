@@ -76,4 +76,27 @@ describe("statement pagination", () => {
     expect(page2.totalDebit).toBe(25_000);
     expect(page2.entries[0]!.id).not.toBe(page1.entries[0]!.id);
   });
+
+  it("walking every page returns every row exactly once (cursor keeps microseconds)", async () => {
+    // All 25 rows share one created_at (single INSERT). A millisecond-truncated
+    // cursor re-matched the boundary row, repeating it on the next page — the
+    // 5-year audit found 11 duplicated lines in one customer's statement.
+    const repo = new PostgresStatementRepository(db);
+    const ids: string[] = [];
+    let cursor: string | undefined;
+    let running = 0;
+    for (let guard = 0; guard < 20; guard++) {
+      const page = await repo.getStatement(
+        { partyId: customerId, kind: "customer", currency: "SYP", limit: 7, cursor },
+        ctx,
+      );
+      ids.push(...page.entries.map((e) => e.id));
+      running = page.entries.at(-1)?.runningBalance ?? running;
+      if (!page.page?.hasMore) break;
+      cursor = page.page.nextCursor!;
+    }
+    expect(ids).toHaveLength(25);
+    expect(new Set(ids).size).toBe(25);
+    expect(running).toBe(25_000);
+  });
 });

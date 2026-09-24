@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useSyncExternalStore } from "react";
 import { toast } from "sonner";
 import { container } from "@/infrastructure/container";
+import { fetchAllPaged } from "@/lib/fetchAllPaged";
 import { buildTenantContext } from "@/infrastructure/di/auth-context";
 import { getAccessToken } from "@/infrastructure/auth/TokenProvider";
 import { InventoryFilter } from "@/application/ports";
@@ -77,12 +78,25 @@ async function loadAll(force = false): Promise<void> {
   loadPromise = (async () => {
     try {
       const ctx = buildTenantContext();
-      // OLD-PLAN Phase 2: first page only — pickers must use /api/*/search typeahead.
-      const pageSize = 50;
+      // Names/prints/pickers resolve fabrics, colors and rolls synchronously
+      // from this cache, so it must hold every row — page by `page` until done.
+      const opts = { pageSize: 1000, maxPages: 500 };
       const [fRes, cRes, rRes] = await Promise.all([
-        container.inventory.listFabrics.execute({ limit: pageSize, page: 0 }, ctx),
-        container.inventory.listColors.execute({ limit: pageSize, page: 0 }, ctx),
-        container.inventory.listRolls.execute({ limit: pageSize, page: 0 }, ctx),
+        fetchAllPaged<Fabric>(
+          async (page, limit) =>
+            (await container.inventory.listFabrics.execute({ limit, page }, ctx)) as never,
+          { ...opts, label: "fabrics" },
+        ),
+        fetchAllPaged<Color>(
+          async (page, limit) =>
+            (await container.inventory.listColors.execute({ limit, page }, ctx)) as never,
+          { ...opts, label: "colors" },
+        ),
+        fetchAllPaged<Roll>(
+          async (page, limit) =>
+            (await container.inventory.listRolls.execute({ limit, page }, ctx)) as never,
+          { ...opts, label: "rolls" },
+        ),
       ]);
       const fData = isPaginated<Fabric>(fRes) ? fRes.data : (fRes as Fabric[]);
       const cData = isPaginated<Color>(cRes) ? cRes.data : (cRes as Color[]);

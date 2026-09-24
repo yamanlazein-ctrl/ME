@@ -22,6 +22,7 @@ function toPortReturn(dto: ContractReturnDTO): ReturnDTO {
     date: dto.date,
     partyId: dto.partyId as UUID,
     originalInvoiceId: dto.originalInvoiceId as UUID | null | undefined,
+    originalInvoiceNumber: dto.originalInvoiceNumber,
     lines: dto.lines.map((l) => ({
       id: l.id as UUID,
       rollId: l.rollId as UUID,

@@ -25,7 +25,8 @@ import {
   type HubState,
   type HubTestResult,
 } from "@/lib/sync-engine";
-import { isTauri, requestFactoryReset } from "@/infrastructure/tauri-bridge";
+import { isTauri } from "@/infrastructure/tauri-bridge";
+import { FactoryResetCard } from "@/components/settings/FactoryResetCard";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/settings/sync")({ component: SyncSettingsPage });
@@ -83,7 +84,6 @@ function SyncSettingsAdmin() {
   const [password, setPassword] = useState("");
   const [test, setTest] = useState<HubTestResult | null>(null);
   const [confirmDisconnect, setConfirmDisconnect] = useState(false);
-  const [confirmReset, setConfirmReset] = useState(false);
 
   const state: HubState | undefined = hub.data;
   const effectiveUrl = url.trim() || state?.url || "";
@@ -353,21 +353,7 @@ function SyncSettingsAdmin() {
         </form>
       </PageCard>
 
-      {isTauri() && (
-        <PageCard
-          title="إعادة الضبط المصنعي"
-          description="يحذف قاعدة البيانات المحلية وجلسة المركز عند إعادة التشغيل التالية. ملف ربط الجهاز وأسرار التطبيق تبقى."
-        >
-          <Button
-            type="button"
-            variant="outline"
-            className="text-destructive"
-            onClick={() => setConfirmReset(true)}
-          >
-            طلب إعادة ضبط مصنعي
-          </Button>
-        </PageCard>
-      )}
+      {isTauri() && <FactoryResetCard />}
 
       <ConfirmDialog
         open={confirmDisconnect}
@@ -376,18 +362,6 @@ function SyncSettingsAdmin() {
         description="يتوقف إرسال العمليات واستقبالها. العمليات غير المرسلة تبقى محفوظة محلياً وتُرسل عند إعادة الربط."
         confirmLabel="فصل"
         onConfirm={() => disconnectMut.mutate()}
-      />
-      <ConfirmDialog
-        open={confirmReset}
-        onOpenChange={setConfirmReset}
-        title="إعادة ضبط مصنعي؟"
-        description="سيتم حذف كل البيانات المحلية عند إعادة تشغيل البرنامج. لا يمكن التراجع."
-        confirmLabel="نعم، أعد الضبط"
-        onConfirm={() => {
-          requestFactoryReset()
-            .then(() => toast.success("طُلبت إعادة الضبط. أغلق البرنامج ثم افتحه من جديد."))
-            .catch((e: Error) => toast.error(e.message || "تعذّر طلب إعادة الضبط"));
-        }}
       />
     </>
   );

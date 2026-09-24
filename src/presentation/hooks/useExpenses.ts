@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { container } from "@/infrastructure/container";
+import { fetchAllPaged } from "@/lib/fetchAllPaged";
 import { toast } from "sonner";
 import type { CreateExpenseInput, ExpenseFilter } from "@/core/dtos/ExpenseDTO";
 import { isOk } from "@/core/result";
@@ -11,11 +12,20 @@ const KEYS = {
   names: ["expenses", "names"] as const,
 };
 
-export function useExpensesList(filter?: ExpenseFilter) {
+/** `opts.all`: page through the API and return every matching expense. */
+export function useExpensesList(filter?: ExpenseFilter, opts?: { all?: boolean }) {
+  const all = Boolean(opts?.all);
   return useQuery({
-    queryKey: KEYS.list(filter),
+    queryKey: all ? [...KEYS.list(filter), "all"] : KEYS.list(filter),
     queryFn: ({ signal }) => {
       void signal;
+      if (all) {
+        return fetchAllPaged(
+          (page, limit) =>
+            container.expenses.list.execute({ ...(filter ?? {}), page, limit } as ExpenseFilter),
+          { pageSize: 1000, maxPages: 500, label: "expenses" },
+        );
+      }
       return container.expenses.list.execute(filter);
     },
   });

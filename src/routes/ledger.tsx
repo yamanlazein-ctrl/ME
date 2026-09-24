@@ -1,7 +1,8 @@
 import { AppShell } from "@/components/layout/AppShell";
 import { PageCard } from "@/components/layout/PageCard";
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { useEffect, useState } from "react";
+import { ListPager, LIST_PAGE_SIZE } from "@/components/common/ListPager";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -13,10 +14,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
-  buildGlobalLedger,
-  filterLedger,
   LEDGER_TYPE_LABEL,
-  useLedgerEntries,
+  useLedgerPage,
   type LedgerType,
   type LedgerStatus,
 } from "@/presentation/hooks/useLedger";
@@ -35,27 +34,26 @@ function LedgerPage() {
   const [status, setStatus] = useState<LedgerStatus | "all">("all");
   const [partyId, setPartyId] = useState<string>("all");
   const [q, setQ] = useState("");
-  const { data: entries } = useLedgerEntries({ limit: 50 });
-  const all = useMemo(() => buildGlobalLedger(entries ?? []), [entries]);
-  const filtered = useMemo(() => {
-    const f = filterLedger(all, {
-      from: from || undefined,
-      to: to || undefined,
-      types: type === "all" ? undefined : [type],
-      status,
-    });
-    return f.filter((e) => {
-      if (partyId !== "all" && e.partyId !== partyId) return false;
-      if (q) {
-        const s = q.trim().toLowerCase();
-        return (
-          (e.referenceNumber ?? "").toLowerCase().includes(s) ||
-          (e.description || "").toLowerCase().includes(s)
-        );
-      }
-      return true;
-    });
-  }, [all, from, to, type, status, partyId, q]);
+  // All filters run on the server (same rules as the old filterLedger:
+  // opening entries always listed, search on reference number or
+  // description); one page at a time instead of the whole ledger history.
+  const [page, setPage] = useState(0);
+  const filter = {
+    ...(partyId !== "all" ? { partyId } : {}),
+    ...(from ? { fromDate: from } : {}),
+    ...(to ? { toDate: to } : {}),
+    ...(type !== "all" ? { type } : {}),
+    ...(status !== "all" ? { status } : {}),
+    ...(q.trim() ? { search: q.trim() } : {}),
+    keepOpening: true,
+    page,
+    limit: LIST_PAGE_SIZE,
+  };
+  const { data: ledgerPage, isFetching } = useLedgerPage(filter);
+  const filtered = ledgerPage?.data ?? [];
+  const totalCount = ledgerPage?.total ?? filtered.length;
+  const filterKey = JSON.stringify([partyId, from, to, type, status, q]);
+  useEffect(() => setPage(0), [filterKey]);
 
   const allParties = [...customers, ...suppliers];
 
@@ -141,7 +139,7 @@ function LedgerPage() {
         </div>
       </PageCard>
 
-      <PageCard title="الحركات" description={`عرض ${filtered.length} حركة.`} noBodyPadding>
+      <PageCard title="الحركات" description={`عرض ${totalCount} حركة.`} noBodyPadding>
         <div className="w-full overflow-x-auto">
           <table className="w-full min-w-[900px] text-right text-sm">
             <thead className="bg-secondary/60 text-[11px] font-semibold uppercase text-muted-foreground">
@@ -204,6 +202,7 @@ function LedgerPage() {
             </tbody>
           </table>
         </div>
+        <ListPager page={page} total={totalCount} loading={isFetching} onPage={setPage} />
       </PageCard>
 
       <div className="flex justify-end gap-2">

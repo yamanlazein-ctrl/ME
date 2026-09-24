@@ -34,9 +34,8 @@ export const SetPinSchema = z.object({
       message: "هذا الرقم السري ضعيف جداً (مثل 0000 أو 1234) — يرجى اختيار رقم أصعب تخمينه",
     }),
   /**
-   * Current account password (or existing PIN). Required when changing an
-   * already-set PIN. Optional on first-time PIN claim (no pinHash yet) —
-   * that path is gated by device provisioning proof instead.
+   * Legacy optional field. Lost-PIN recovery and first claim require device
+   * provisioning proof instead — the lost secret must never be required.
    */
   currentSecret: z.string().min(1).optional(),
   tenantId: z.string().uuid().optional(),

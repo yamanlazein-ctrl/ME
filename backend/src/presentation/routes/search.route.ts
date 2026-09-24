@@ -18,7 +18,7 @@ function decodeCursor(raw: string | undefined): { sortKey: string; id: string } 
       sortKey: string;
       id: string;
     };
-    if (j.sortKey && j.id) return j;
+    if (typeof j.sortKey === "string" && typeof j.id === "string" && j.id) return j;
   } catch {
     /* ignore */
   }
@@ -52,7 +52,11 @@ export function registerSearchRoutes(
          AND (name ILIKE ${pattern} ESCAPE '\\' OR COALESCE(code,'') ILIKE ${pattern} ESCAPE '\\')
          AND (
            ${cursor?.sortKey ?? null}::text IS NULL
-           OR (name, id) > (${cursor?.sortKey ?? ""}, ${cursor?.id ?? "00000000-0000-0000-0000-000000000000"}::uuid)
+           OR (
+             (name, id) > (${cursor?.sortKey ?? ""}, ${cursor?.id ?? "00000000-0000-0000-0000-000000000000"}::uuid)
+             -- the exact-code match is pinned to page 1 only; never repeat it
+             AND (${q} = '' OR lower(COALESCE(code,'')) <> lower(${q}))
+           )
          )
        ORDER BY
          CASE WHEN lower(COALESCE(code,'')) = lower(${q}) THEN 0 ELSE 1 END,
@@ -61,9 +65,17 @@ export function registerSearchRoutes(
     `);
     const list = (rows as unknown as { rows: Array<Record<string, unknown>> }).rows ?? [];
     const page = list.slice(0, limit);
+    // Page 1 pins the exact-code match first; the keyset cursor must come
+    // from the last (name, id)-ordered row, never from that pinned row.
+    const isPinned = (r: Record<string, unknown> | undefined) =>
+      !cursor && q !== "" && String(r?.code ?? "").toLowerCase() === q.toLowerCase();
+    const ordered = page.filter((r) => !isPinned(r));
+    const last = ordered.at(-1);
     const next =
       list.length > limit
-        ? encodeCursor(String(page.at(-1)?.name ?? ""), String(page.at(-1)?.id ?? ""))
+        ? last
+          ? encodeCursor(String(last.name ?? ""), String(last.id ?? ""))
+          : encodeCursor("", "00000000-0000-0000-0000-000000000000")
         : null;
     res.json({ data: page, nextCursor: next });
   });

@@ -1,5 +1,6 @@
-import { useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { container } from "@/infrastructure/container";
+import { fetchAllPaged } from "@/lib/fetchAllPaged";
 import { buildTenantContext } from "@/infrastructure/di/auth-context";
 import type { LedgerFilter } from "@/application/ports";
 
@@ -17,11 +18,44 @@ const KEYS = {
     ["ledger", "cashMovements", date, currency ?? "SYP"] as const,
 };
 
-export function useLedgerEntries(filter?: LedgerFilter) {
+/**
+ * `opts.all`: page through the API (page/limit, 1000 per page) and return
+ * EVERY matching row — for screens that compute balances/totals and must not
+ * work on a truncated first page.
+ */
+/**
+ * One server page of ledger entries with the total count — for the central
+ * ledger screen (filters run in SQL; the full history is never downloaded).
+ */
+export function useLedgerPage(filter: LedgerFilter) {
   return useQuery({
-    queryKey: KEYS.entries(filter),
+    queryKey: [...KEYS.entries(filter), "page"],
     queryFn: ({ signal }) => {
       void signal;
+      return container.invoices.ledger.entries(filter, ctx);
+    },
+    placeholderData: keepPreviousData,
+    staleTime: 30_000,
+  });
+}
+
+export function useLedgerEntries(filter?: LedgerFilter, opts?: { all?: boolean }) {
+  const all = Boolean(opts?.all);
+  return useQuery({
+    queryKey: all ? [...KEYS.entries(filter), "all"] : KEYS.entries(filter),
+    queryFn: async ({ signal }) => {
+      void signal;
+      if (all) {
+        const data = await fetchAllPaged(
+          (page, limit) =>
+            container.invoices.ledger.entries(
+              { ...(filter ?? {}), page, limit } as LedgerFilter,
+              ctx,
+            ),
+          { pageSize: 1000, maxPages: 500, label: "ledger" },
+        );
+        return { data, total: data.length, hasNext: false };
+      }
       return container.invoices.ledger.entries(filter ?? {}, ctx);
     },
     select: (result) => result.data,

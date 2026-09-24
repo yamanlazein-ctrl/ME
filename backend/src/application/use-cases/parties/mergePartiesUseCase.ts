@@ -3,14 +3,14 @@
  * Moves invoices, vouchers, returns, ledger party_id; soft-cancels the source.
  */
 import { and, eq, sql } from "drizzle-orm";
-import type { DB } from "../../infrastructure/orm/drizzle.js";
-import { parties } from "../../infrastructure/orm/schemas/party.table.js";
-import { invoices } from "../../infrastructure/orm/schemas/invoice.table.js";
-import { vouchers } from "../../infrastructure/orm/schemas/voucher.table.js";
-import { returns } from "../../infrastructure/orm/schemas/return.table.js";
-import { ledgerEntries } from "../../infrastructure/orm/schemas/ledger-entry.table.js";
-import type { TenantContext } from "../../domain/types/index.js";
-import { BusinessRuleError } from "../../domain/errors/index.js";
+import { allowLedgerPartyRemap, type DB } from "../../../infrastructure/orm/drizzle.js";
+import { parties } from "../../../infrastructure/orm/schemas/party.table.js";
+import { invoices } from "../../../infrastructure/orm/schemas/invoice.table.js";
+import { vouchers } from "../../../infrastructure/orm/schemas/voucher.table.js";
+import { returns } from "../../../infrastructure/orm/schemas/return.table.js";
+import { ledgerEntries } from "../../../infrastructure/orm/schemas/ledger-entry.table.js";
+import type { TenantContext } from "../../../domain/types/index.js";
+import { BusinessRuleError } from "../../../domain/errors/index.js";
 
 export type MergePartiesResult = {
   survivorId: string;
@@ -29,7 +29,7 @@ export async function mergePartiesUseCase(
   }
 
   return db.transaction(async (tx) => {
-    await tx.execute(sql`SELECT set_config('app.allow_party_remap', '1', true)`);
+    await allowLedgerPartyRemap(tx);
 
     const [survivor] = await tx
       .select()
@@ -69,7 +69,7 @@ export async function mergePartiesUseCase(
 
     const ret = await tx
       .update(returns)
-      .set({ partyId: survivorId, updatedAt: new Date() })
+      .set({ partyId: survivorId })
       .where(and(eq(returns.partyId, sourceId), eq(returns.tenantId, ctx.tenantId)))
       .returning({ id: returns.id });
 

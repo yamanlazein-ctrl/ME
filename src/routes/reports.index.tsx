@@ -40,13 +40,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useInvoicesList } from "@/presentation/hooks/useInvoices";
-import { useReturnsList } from "@/presentation/hooks/useReturns";
-import { useExpensesList } from "@/presentation/hooks/useExpenses";
+import { useReportSummary } from "@/presentation/hooks/useReports";
 import { useCashBalance } from "@/presentation/hooks/useCashbox";
-import { useInventory, rolls, fabricById } from "@/presentation/hooks/useInventory";
 import { suppliers, customers, useParties } from "@/presentation/hooks/useParties";
-import { invoiceTotal } from "@/core/calculations/invoiceCalc";
 import {
   CURRENCIES,
   formatAmount,
@@ -60,8 +56,6 @@ import { showSuccess } from "@/components/common/toast-helpers";
 import { convertForSettlement } from "@erp/shared";
 
 export const Route = createFileRoute("/reports/")({ component: ReportsPage });
-
-const FULL = { limit: 50, page: 0 }; // REPAIR-001: page; do not treat as all
 
 type ConvertMode = {
   target: Currency;
@@ -146,15 +140,8 @@ function pick(by: Record<string, number>, code: Currency): number {
 }
 
 function ReportsPage() {
-  useInventory();
   useParties();
 
-  const { data: invoicesData } = useInvoicesList(FULL);
-  const invoices = useMemo(() => invoicesData?.data ?? [], [invoicesData]);
-  const { data: returnsData } = useReturnsList(FULL);
-  const returns = useMemo(() => returnsData?.data ?? [], [returnsData]);
-  const { data: expensesData } = useExpensesList(FULL);
-  const expenses = useMemo(() => expensesData ?? [], [expensesData]);
   const { data: cashBalSYP = 0 } = useCashBalance(undefined, "SYP");
   const { data: cashBalUSD = 0 } = useCashBalance(undefined, "USD");
   const { data: cashBalEUR = 0 } = useCashBalance(undefined, "EUR");
@@ -172,51 +159,23 @@ function ReportsPage() {
   const [draftEurRate, setDraftEurRate] = useState<string>("");
   const [convertMode, setConvertMode] = useState<ConvertMode | null>(null);
 
-  const activeInvoices = useMemo(
-    () => invoices.filter((i) => i.status !== "cancelled"),
-    [invoices],
-  );
-  const activeReturns = useMemo(() => returns.filter((r) => r.status !== "cancelled"), [returns]);
-  const activeExpenses = useMemo(
-    () => expenses.filter((e) => e.status !== "cancelled"),
-    [expenses],
-  );
-
   const cutoff = useMemo(() => {
     if (range === "all") return null;
     const d = new Date();
     d.setDate(d.getDate() - parseInt(range, 10));
     return d.toISOString().slice(0, 10);
   }, [range]);
-  const inRange = (date: string) => (cutoff ? date >= cutoff : true);
 
-  const salesInvoices = activeInvoices.filter((i) => i.type === "sale" && inRange(i.date));
-  const purchaseInvoices = activeInvoices.filter((i) => i.type === "entry" && inRange(i.date));
-  const salesReturns = activeReturns.filter((r) => r.kind === "sale" && inRange(r.date));
-  const entryReturns = activeReturns.filter((r) => r.kind === "entry" && inRange(r.date));
-  const periodExpenses = activeExpenses.filter((e) => inRange(e.date));
-
-  const returnAmountOf = (r: (typeof salesReturns)[number]) =>
-    r.lines.reduce((sum, l) => sum + l.quantityKg * l.pricePerKg, 0);
-
-  const totalSales = groupAmountsByCurrency(salesInvoices, invoiceTotal, (i) => i.currency);
-  const totalPurchases = groupAmountsByCurrency(purchaseInvoices, invoiceTotal, (i) => i.currency);
-  const totalSalesReturns = groupAmountsByCurrency(
-    salesReturns,
-    returnAmountOf,
-    (r) => r.currency || "SYP",
-  );
-  const totalEntryReturns = groupAmountsByCurrency(
-    entryReturns,
-    returnAmountOf,
-    (r) => r.currency || "SYP",
-  );
+  // All period figures are aggregated in SQL on the server (same formulas the
+  // page used to run over every downloaded invoice/return/expense).
+  const { data: summary } = useReportSummary(cutoff);
+  const EMPTY: Record<string, number> = {};
+  const totalSales = summary?.sales ?? EMPTY;
+  const totalPurchases = summary?.purchases ?? EMPTY;
+  const totalSalesReturns = summary?.salesReturns ?? EMPTY;
+  const totalEntryReturns = summary?.entryReturns ?? EMPTY;
   const netRevenue = addCurrencyBreakdowns(totalSales, totalSalesReturns, -1);
-  const totalExpenses = groupAmountsByCurrency(
-    periodExpenses,
-    (e: { amount: number }) => e.amount,
-    (e) => e.currency,
-  );
+  const totalExpenses = summary?.expenses ?? EMPTY;
   const receivables = groupAmountsByCurrency(
     customers,
     (c) => c.stats?.remaining ?? 0,
@@ -227,44 +186,16 @@ function ReportsPage() {
     (s) => s.stats?.remaining ?? 0,
     (s) => s.currency ?? "SYP",
   );
-  const inventoryValue = groupAmountsByCurrency(
-    rolls,
-    (r) => r.remainingKg * r.pricePerKg,
-    (r) => r.currency,
-  );
-
-  const totalKg = rolls.reduce((s, r) => s + r.remainingKg, 0);
-
-  const topFabrics = useMemo(() => {
-    const map = new Map<string, number>();
-    salesInvoices.forEach((inv) => {
-      inv.lines.forEach((l) => map.set(l.fabricId, (map.get(l.fabricId) ?? 0) + l.quantityKg));
-    });
-    return [...map.entries()]
-      .map(([id, qty]) => ({ fabric: fabricById(id), qty }))
-      .sort((a, b) => b.qty - a.qty)
-      .slice(0, 5);
-  }, [salesInvoices]);
-
-  const topCustomers = useMemo(() => {
-    const map = new Map<string, Record<string, number>>();
-    salesInvoices.forEach((inv) => {
-      const prev = map.get(inv.partyId) ?? {};
-      prev[inv.currency] = (prev[inv.currency] ?? 0) + invoiceTotal(inv);
-      map.set(inv.partyId, prev);
-    });
-    return [...map.entries()]
-      .map(([id, revenueByCurrency]) => ({
-        customer: customers.find((c) => c.id === id),
-        revenueByCurrency,
-      }))
-      .sort((a, b) => {
-        const score = (x: Record<string, number>) =>
-          (x.USD ?? 0) * 1e9 + (x.SYP ?? 0) + (x.EUR ?? 0);
-        return score(b.revenueByCurrency) - score(a.revenueByCurrency);
-      })
-      .slice(0, 5);
-  }, [salesInvoices]);
+  const inventoryValue = summary?.inventoryValue ?? EMPTY;
+  const totalKg = summary?.totalKg ?? 0;
+  const topFabrics = (summary?.topFabrics ?? []).map((f) => ({
+    fabric: { name: f.name },
+    qty: f.qty,
+  }));
+  const topCustomers = (summary?.topCustomers ?? []).map((c) => ({
+    customer: { name: c.name },
+    revenueByCurrency: c.revenueByCurrency,
+  }));
 
   const hasEur =
     pick(netRevenue, "EUR") !== 0 ||
@@ -404,7 +335,7 @@ function ReportsPage() {
       {/* Physical / non-money */}
       <div className="mt-4 grid gap-3 sm:grid-cols-3">
         <InfoCard icon={Package} label="كمية المخزون" value={`${formatMoney(totalKg)} كغ`} />
-        <InfoCard icon={Package} label="عدد الصبغات" value={String(rolls.length)} />
+        <InfoCard icon={Package} label="عدد الصبغات" value={String(summary?.rollCount ?? 0)} />
         <InfoCard icon={Users} label="العملاء" value={String(customers.length)} />
       </div>
 

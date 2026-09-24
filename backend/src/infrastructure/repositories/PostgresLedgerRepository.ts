@@ -35,15 +35,33 @@ export class PostgresLedgerRepository implements ILedgerRepository {
   async list(filter: LedgerFilter, ctx: TenantContext): Promise<PaginatedResult<LedgerEntryData>> {
     const conditions = [eq(ledgerEntries.tenantId, ctx.tenantId)];
     if (filter.partyId) conditions.push(eq(ledgerEntries.partyId, filter.partyId));
-    if (filter.type) conditions.push(eq(ledgerEntries.type, filter.type));
     if (filter.currency) conditions.push(eq(ledgerEntries.currency, filter.currency));
     if (filter.referenceType)
       conditions.push(eq(ledgerEntries.referenceType, filter.referenceType));
     if (filter.referenceId) conditions.push(eq(ledgerEntries.referenceId, filter.referenceId));
-    if (filter.fromDate) conditions.push(gte(ledgerEntries.date, filter.fromDate));
-    if (filter.toDate) conditions.push(lte(ledgerEntries.date, filter.toDate));
-    if (filter.search)
-      conditions.push(or(ilike(ledgerEntries.description!, likeContains(filter.search)))!);
+    // Window filters (type / date / status). With keepOpening the central
+    // ledger screen's rule applies: opening entries bypass them.
+    const windowConds = [];
+    if (filter.type) windowConds.push(eq(ledgerEntries.type, filter.type));
+    if (filter.fromDate) windowConds.push(gte(ledgerEntries.date, filter.fromDate));
+    if (filter.toDate) windowConds.push(lte(ledgerEntries.date, filter.toDate));
+    if (filter.status && filter.status !== "all")
+      windowConds.push(eq(ledgerEntries.status, filter.status));
+    if (windowConds.length > 0) {
+      conditions.push(
+        filter.keepOpening
+          ? or(eq(ledgerEntries.type, "opening"), and(...windowConds))!
+          : and(...windowConds)!,
+      );
+    }
+    if (filter.search) {
+      const pat = likeContains(filter.search);
+      conditions.push(
+        filter.keepOpening
+          ? or(ilike(ledgerEntries.description!, pat), ilike(ledgerEntries.referenceNumber!, pat))!
+          : or(ilike(ledgerEntries.description!, pat))!,
+      );
+    }
     const where = and(...conditions);
     const page = Math.max(0, filter.page ?? 0);
     const limit = Math.min(1000, Math.max(1, filter.limit ?? 20));

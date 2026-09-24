@@ -29,7 +29,8 @@ const VALIDATOR = join(HERE, "validate-resource-manifest.mjs");
 const MANIFEST = JSON.parse(readFileSync(join(HERE, "resource-manifest.json"), "utf8"));
 
 function runValidator(resourcesDir, manifestPath) {
-  const args = [VALIDATOR, "--resources", resourcesDir];
+  // Fixture trees hold dummy files, not runnable PostgreSQL binaries.
+  const args = [VALIDATOR, "--resources", resourcesDir, "--skip-exec-check"];
   if (manifestPath) args.push("--manifest", manifestPath);
   return spawnSync(process.execPath, args, { encoding: "utf8" });
 }

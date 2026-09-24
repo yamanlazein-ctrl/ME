@@ -17,8 +17,20 @@ export type LockedRollRow = {
   colorId: string;
   currency: string;
   rollNo: string;
-  fabricId: string;
+  fabricId: string | null;
 };
+
+export type LockRollsOptions = {
+  /** Message for a missing roll (defaults to the create-path color message). */
+  notFoundMessage?: string;
+  /** Skip missing rolls instead of throwing (paths that historically did `if (r)`). */
+  skipMissing?: boolean;
+  /** Treat a roll whose color row is gone as missing (create path only). */
+  requireColor?: boolean;
+};
+
+const DEFAULT_NOT_FOUND =
+  "الصبغة المحددة لأحد البنود غير موجودة (ربما حُذفت) — أعد اختيار الصبغة";
 
 /**
  * SELECT … FOR UPDATE OF rolls ORDER BY id.
@@ -28,6 +40,7 @@ export async function lockRollsOrdered(
   tx: Tx,
   tenantId: string,
   rollIds: string[],
+  opts: LockRollsOptions = { requireColor: true },
 ): Promise<Map<string, LockedRollRow>> {
   const unique = [...new Set(rollIds.filter(Boolean))];
   const map = new Map<string, LockedRollRow>();
@@ -47,20 +60,21 @@ export async function lockRollsOrdered(
       fabricId: colors.fabricId,
     })
     .from(rolls)
-    .innerJoin(colors, eq(colors.id, rolls.colorId))
+    .leftJoin(colors, eq(colors.id, rolls.colorId))
     .where(and(eq(rolls.tenantId, tenantId), inArray(rolls.id, unique)))
     .orderBy(asc(rolls.id))
     .for("update", { of: rolls });
 
   for (const r of rows) {
+    if (opts.requireColor && r.fabricId == null) continue;
     map.set(r.id, r as LockedRollRow);
   }
 
-  for (const id of unique) {
-    if (!map.has(id)) {
-      throw new BusinessRuleError(
-        "الصبغة المحددة لأحد البنود غير موجودة (ربما حُذفت) — أعد اختيار الصبغة",
-      );
+  if (!opts.skipMissing) {
+    for (const id of unique) {
+      if (!map.has(id)) {
+        throw new BusinessRuleError(opts.notFoundMessage ?? DEFAULT_NOT_FOUND);
+      }
     }
   }
   return map;

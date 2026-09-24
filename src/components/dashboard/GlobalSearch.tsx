@@ -17,10 +17,19 @@ export function GlobalSearch() {
   const [open, setOpen] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const { data: invoicesData } = useInvoicesList();
-  const { data: vouchersData } = useVouchersList();
+  // Documents are searched ON THE SERVER across the whole history. The old
+  // unfiltered list calls returned only the newest page (20 rows), so an
+  // invoice older than the latest 20 could never be found from here.
+  const [term, setTerm] = useState("");
+  useEffect(() => {
+    const t = setTimeout(() => setTerm(q.trim()), 250);
+    return () => clearTimeout(t);
+  }, [q]);
+  const docFilter = term ? { search: term, limit: 20 } : { limit: 1 };
+  const { data: invoicesData } = useInvoicesList(docFilter);
+  const { data: vouchersData } = useVouchersList(docFilter);
   const { data: expensesData } = useExpensesList();
-  const { data: returnsData } = useReturnsList();
+  const { data: returnsData } = useReturnsList(docFilter);
 
   const invoices = useMemo(() => invoicesData?.data ?? [], [invoicesData?.data]);
   const vouchers = useMemo(() => vouchersData?.data ?? [], [vouchersData?.data]);

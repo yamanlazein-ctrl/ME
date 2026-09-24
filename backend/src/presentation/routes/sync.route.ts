@@ -664,16 +664,20 @@ export function registerSyncRoutes(
     }
     res.json({ ...push, deviceTrust, pull, pullError, blocksError, activity });
     } finally {
+      let destroy = false;
       if (lockHeld) {
         try {
           await lockClient.query(`SELECT pg_advisory_unlock(hashtextextended($1, 0))`, [
             `${ctx.tenantId}:sync-run`,
           ]);
         } catch {
-          /* best-effort unlock */
+          // A session-level advisory lock survives on a pooled connection;
+          // destroy the client so the lock dies with it instead of blocking
+          // every later sync run.
+          destroy = true;
         }
       }
-      lockClient.release();
+      lockClient.release(destroy);
     }
   });
 

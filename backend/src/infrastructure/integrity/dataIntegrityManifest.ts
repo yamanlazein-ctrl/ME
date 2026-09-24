@@ -178,7 +178,26 @@ export async function verifyDataAgainstManifest(
     if (process.env.DATA_INTEGRITY_PATH && existsSync(process.env.DATA_INTEGRITY_PATH)) {
       enterSafeMode("MANIFEST_UNREADABLE");
     }
-    return; // first install only when no manifest path/file exists
+    // No manifest yet (fresh install, or first boot after upgrading from a
+    // build that never wrote one): record the current counts as the baseline.
+    // Without this the drop check below could never run on any install.
+    if (process.env.DATA_INTEGRITY_PATH) {
+      const { counts, databaseSizeBytes } = await collectCounts(db, tenantId);
+      await writeManifestAtomic({
+        version: 1,
+        installationId: process.env.MOTARD_INSTALLATION_ID ?? "",
+        tenantId,
+        schemaJournalIdx: 0,
+        lastKnownCounts: counts,
+        lastKnownDatabaseSizeBytes: databaseSizeBytes,
+        lastVerifiedAt: new Date().toISOString(),
+        lastSuccessfulBackupAt: null,
+        lastBootDecision: "FIRST_BASELINE",
+        resetAuthorized: false,
+        restoreInProgress: null,
+      });
+    }
+    return;
   }
   if (manifest.resetAuthorized) return;
   const expected =

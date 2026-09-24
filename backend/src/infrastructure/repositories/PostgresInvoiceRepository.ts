@@ -853,7 +853,9 @@ export class PostgresInvoiceRepository implements IInvoiceRepository {
 
       // REPAIR-012: lock all rolls once in ascending id order.
       const { lockRollsOrdered } = await import("./rollLocking.js");
-      const lockedRolls = await lockRollsOrdered(tx, ctx.tenantId, [...rollIds]);
+      const lockedRolls = await lockRollsOrdered(tx, ctx.tenantId, [...rollIds], {
+        notFoundMessage: "اللفافة المحددة غير موجودة",
+      });
       for (const rollId of [...rollIds].sort()) {
         const r = lockedRolls.get(rollId)!;
         const next = newByRoll.get(rollId);
@@ -1259,6 +1261,18 @@ export class PostgresInvoiceRepository implements IInvoiceRepository {
       }
 
       const ilines = await tx.select().from(invoiceLines).where(eq(invoiceLines.invoiceId, id));
+      // REPAIR-012: take every roll lock up front in ascending id order (the
+      // per-line FOR UPDATE below then re-locks rows already held), so cancel
+      // cannot deadlock against create/update/return which lock the same way.
+      {
+        const { lockRollsOrdered } = await import("./rollLocking.js");
+        await lockRollsOrdered(
+          tx,
+          ctx.tenantId,
+          ilines.map((l) => l.rollId).filter((x): x is string => Boolean(x)),
+          { skipMissing: true },
+        );
+      }
 
       // Cancelling a sale also reverses its linked receipts — including any
       // overpaid excess that became customer credit. Snapshot the customer's

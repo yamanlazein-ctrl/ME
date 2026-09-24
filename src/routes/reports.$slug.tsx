@@ -1,30 +1,16 @@
 import { createFileRoute, Link, useSearch } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
+import { Button } from "@/components/ui/button";
 import { ArrowRight } from "lucide-react";
 import { AppShell } from "@/components/layout/AppShell";
 import { PageCard } from "@/components/layout/PageCard";
 import { DualCurrency } from "@/components/common/DualCurrency";
-import { useInvoicesList } from "@/presentation/hooks/useInvoices";
-import { useVouchersList } from "@/presentation/hooks/useVouchers";
-import { useReturnsList, returnAmount } from "@/presentation/hooks/useReturns";
-import { useExpensesList } from "@/presentation/hooks/useExpenses";
-import { useManualMovements, MANUAL_TYPE_LABEL } from "@/presentation/hooks/useCashbox";
-import {
-  useInventory,
-  fabrics,
-  colors,
-  rolls,
-  fabricById,
-} from "@/presentation/hooks/useInventory";
-import { customers, suppliers, customerById, supplierById } from "@/presentation/hooks/useParties";
-import { useLedgerEntries, LEDGER_TYPE_LABEL } from "@/presentation/hooks/useLedger";
+import { MANUAL_TYPE_LABEL } from "@/presentation/hooks/useCashbox";
+import { LEDGER_TYPE_LABEL } from "@/presentation/hooks/useLedger";
+import { useReportDetail, type ByCurrency } from "@/presentation/hooks/useReports";
 import { container } from "@/infrastructure/container";
 import { formatDateTime } from "@/lib/utils";
-import { formatCurrencyBreakdown, groupAmountsByCurrency } from "@/presentation/hooks/useCurrency";
-import type { ReturnDTO } from "@/application/ports/IReturnRepository";
-import type { Invoice as DomainInvoice } from "@/domain/entities/Invoice";
-import type { LedgerEntry as DomainLedgerEntry } from "@/domain/entities/LedgerEntry";
-import { invoiceTotal } from "@/core/calculations/invoiceCalc";
+import { formatCurrencyBreakdown } from "@/presentation/hooks/useCurrency";
 import { formatNumber, formatMoney, formatQuantity } from "@/shared/utils/formatNumber";
 
 type Search = { range?: "7" | "30" | "90" | "all" };
@@ -74,26 +60,10 @@ function useCutoff(range: Search["range"]) {
 }
 
 function ReportDetailPage() {
-  useInventory();
-
-  // Reports aggregate full datasets — never the paginated (limit=20) default
-  // used by the invoices/summaries pages.
-  const { data: invoicesData } = useInvoicesList({ limit: 1000, page: 0 });
-  const invoicesArr = useMemo(() => invoicesData?.data ?? [], [invoicesData]);
-  const { data: vouchersData } = useVouchersList({ limit: 1000 });
-  const vouchersArr = useMemo(() => vouchersData?.data ?? [], [vouchersData]);
-  const { data: returnsData } = useReturnsList({ limit: 1000 });
-  const returnsArr = useMemo(() => returnsData?.data ?? [], [returnsData]);
-  const { data: expensesData } = useExpensesList({ limit: 1000 });
-  const expensesArr = useMemo(() => expensesData ?? [], [expensesData]);
-  const { data: manualMoves = [] } = useManualMovements();
-  const { data: ledgerEntriesArr = [] } = useLedgerEntries({ limit: 1000 });
-
   const { slug } = Route.useParams();
   const search = useSearch({ from: "/reports/$slug" });
   const range = search.range ?? "30";
   const cutoff = useCutoff(range);
-  const inRange = (date: string) => (cutoff ? date >= cutoff : true);
 
   const meta = TITLES[slug] ?? { title: "تقرير", sub: "" };
 
@@ -125,86 +95,40 @@ function ReportDetailPage() {
         </div>
       </div>
 
-      <ReportBody
-        slug={slug}
-        inRange={inRange}
-        invoices={invoicesArr}
-        returns={returnsArr}
-        expenses={expensesArr}
-        manualMoves={manualMoves}
-        ledgerEntriesArr={ledgerEntriesArr}
-        vouchers={vouchersArr}
-      />
+      <ReportBody key={`${slug}:${cutoff ?? "all"}`} slug={slug} from={cutoff} />
     </AppShell>
   );
 }
 
-function ReportBody({
-  slug,
-  inRange,
-  invoices,
-  returns,
-  expenses,
-  manualMoves,
-  ledgerEntriesArr,
-  vouchers,
-}: {
-  slug: string;
-  inRange: (d: string) => boolean;
-  invoices: DomainInvoice[];
-  returns: ReturnDTO[];
-  expenses: {
-    id: string;
-    date: string;
-    createdAt?: string;
-    amount: number;
-    currency: string;
-    category: string;
-    status: string;
-    description: string;
-    reference?: string;
-  }[];
-  manualMoves: {
-    id: string;
-    date: string;
-    type: string;
-    direction: "in" | "out";
-    amount: number;
-    currency: string;
-    description: string;
-    createdAt: string;
-  }[];
-  ledgerEntriesArr: DomainLedgerEntry[];
-  vouchers: {
-    id: string;
-    invoiceId?: string | null;
-    status: string;
-    amount: number;
-  }[];
-}) {
+/**
+ * Reports are computed on the SERVER (SQL aggregates + paged rows). The page
+ * never downloads the full invoice/voucher/ledger history: summary figures
+ * cover the whole period, the table shows one page at a time.
+ */
+function ReportBody({ slug, from }: { slug: string; from: string | null }) {
   switch (slug) {
     case "net-sales":
-      return <SalesReport inRange={inRange} invoices={invoices} kind="sale" vouchers={vouchers} />;
+      return <SalesReport from={from} kind="sale" />;
     case "purchases":
-      return <SalesReport inRange={inRange} invoices={invoices} kind="entry" vouchers={vouchers} />;
+      return <SalesReport from={from} kind="entry" />;
     case "receivables":
       return <PartyBalances kind="customer" />;
     case "payables":
       return <PartyBalances kind="supplier" />;
     case "sales-returns":
-      return <ReturnsReport inRange={inRange} returns={returns} />;
+      return <ReturnsReport from={from} />;
     case "expenses":
-      return <ExpensesReport inRange={inRange} expenses={expenses} />;
+      return <ExpensesReport from={from} />;
     case "ledger":
-      return <LedgerReport inRange={inRange} entries={ledgerEntriesArr} />;
+      return <LedgerReport from={from} />;
     case "cashbox":
-      return <CashboxReport inRange={inRange} manualMoves={manualMoves} />;
+      return <CashboxReport from={from} />;
     case "inventory-value":
       return <InventoryReport />;
     case "top-fabrics":
-      return <TopFabricsReport inRange={inRange} invoices={invoices} />;
+      return <TopFabricsReport from={from} />;
     case "top-customers":
-      return <TopCustomersReport inRange={inRange} invoices={invoices} />;
+      return <TopCustomersReport from={from} />;
     default:
       return (
         <PageCard title="غير معروف">
@@ -214,71 +138,92 @@ function ReportBody({
   }
 }
 
-function TableWrap({ children }: { children: React.ReactNode }) {
+const PAGE_SIZE = 100;
+
+function usePagedReport<R>(slug: string, from: string | null) {
+  const [page, setPage] = useState(0);
+  const q = useReportDetail<R>(slug, from, page, PAGE_SIZE);
+  return { page, setPage, ...q };
+}
+
+function Pager({
+  page,
+  setPage,
+  meta,
+  loading,
+}: {
+  page: number;
+  setPage: (p: number) => void;
+  meta?: { total: number; hasNext: boolean };
+  loading?: boolean;
+}) {
+  if (!meta || meta.total <= PAGE_SIZE) return null;
+  const pages = Math.max(1, Math.ceil(meta.total / PAGE_SIZE));
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full text-right text-sm">{children}</table>
+    <div className="flex items-center justify-between border-t border-border px-3 py-2 text-xs text-muted-foreground">
+      <span>
+        صفحة {page + 1} من {pages} — {meta.total} سجل
+        {loading ? " — جاري التحميل…" : ""}
+      </span>
+      <div className="flex gap-2">
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          disabled={page === 0}
+          onClick={() => setPage(page - 1)}
+        >
+          السابق
+        </Button>
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          disabled={!meta.hasNext}
+          onClick={() => setPage(page + 1)}
+        >
+          التالي
+        </Button>
+      </div>
     </div>
   );
 }
 
-function TH({ children, align }: { children: React.ReactNode; align?: "left" | "right" }) {
-  return <th className={`px-3 py-2 ${align === "left" ? "text-left" : ""}`}>{children}</th>;
-}
+const asBy = (v: unknown): ByCurrency => (v && typeof v === "object" ? (v as ByCurrency) : {});
 
-function Empty({ text }: { text: string }) {
-  return <div className="p-6 text-center text-sm text-muted-foreground">{text}</div>;
-}
+type SalesRow = {
+  id: string;
+  number: string;
+  createdAt: string;
+  currency: string;
+  partyId: string;
+  partyName: string | null;
+  total: number;
+  paid: number;
+  remaining: number;
+};
 
-function SalesReport({
-  inRange,
-  invoices,
-  kind,
-  vouchers,
-}: {
-  inRange: (d: string) => boolean;
-  invoices: DomainInvoice[];
-  kind: "sale" | "entry";
-  vouchers: {
-    id: string;
-    invoiceId?: string | null;
-    status: string;
-    amount: number;
-  }[];
-}) {
-  const rows = invoices
-    .filter((i) => i.status !== "cancelled" && i.type === kind && inRange(i.date))
-    .sort((a, b) => (a.date < b.date ? 1 : -1));
-  const paidByInvoice = (invoiceId: string) => {
-    const inv = invoices.find((i) => i.id === invoiceId);
-    return inv?.paid ?? 0;
-  };
-  const totalByCurrency = groupAmountsByCurrency(rows, invoiceTotal, (i) => i.currency);
-  const paidByCurrency = groupAmountsByCurrency(
-    rows,
-    (i) => paidByInvoice(i.id),
-    (i) => i.currency,
+function SalesReport({ from, kind }: { from: string | null; kind: "sale" | "entry" }) {
+  const { page, setPage, data, isFetching } = usePagedReport<SalesRow>(
+    kind === "sale" ? "net-sales" : "purchases",
+    from,
   );
-  const remainingByCurrency = groupAmountsByCurrency(
-    rows,
-    (i) => Math.max(0, invoiceTotal(i) - paidByInvoice(i.id)),
-    (i) => i.currency,
-  );
-
+  const rows = data?.rows ?? [];
+  const sum = data?.summary ?? {};
   return (
     <div className="space-y-3">
       <div className="grid gap-3 md:grid-cols-4">
-        <StatBox label="عدد الفواتير" value={rows.length.toString()} />
-        <StatBox label="الإجمالي" byCurrency={totalByCurrency} />
-        <StatBox label="المدفوع" byCurrency={paidByCurrency} tone="good" />
-        <StatBox label="المتبقي" byCurrency={remainingByCurrency} tone="warning" />
+        <StatBox label="عدد الفواتير" value={String(sum.count ?? 0)} />
+        <StatBox label="الإجمالي" byCurrency={asBy(sum.total)} />
+        <StatBox label="المدفوع" byCurrency={asBy(sum.paid)} tone="good" />
+        <StatBox label="المتبقي" byCurrency={asBy(sum.remaining)} tone="warning" />
       </div>
       <PageCard
         title={kind === "sale" ? "قائمة فواتير البيع" : "قائمة فواتير الدخول"}
         noBodyPadding
       >
         {rows.length === 0 ? (
-          <Empty text="لا فواتير في الفترة المحددة." />
+          <Empty text={isFetching ? "جاري التحميل…" : "لا فواتير في الفترة المحددة."} />
         ) : (
           <TableWrap>
             <thead className="bg-secondary/60 text-[11px] uppercase text-muted-foreground">
@@ -304,19 +249,283 @@ function SalesReport({
                     </Link>
                   </td>
                   <td className="px-3 py-2 tabular-nums">{formatDateTime(i.createdAt)}</td>
-                  <td className="px-3 py-2">
-                    {kind === "sale"
-                      ? customerById(i.partyId)?.name
-                      : (supplierById(i.partyId)?.name ?? i.partyId)}
-                  </td>
+                  <td className="px-3 py-2">{i.partyName ?? i.partyId}</td>
                   <td className="px-3 py-2 tabular-nums font-semibold">
-                    {formatMoney(invoiceTotal(i))} {i.currency}
+                    {formatMoney(i.total)} {i.currency}
                   </td>
                   <td className="px-3 py-2 tabular-nums">
-                    {formatMoney(paidByInvoice(i.id))} {i.currency}
+                    {formatMoney(i.paid)} {i.currency}
                   </td>
                   <td className="px-3 py-2 tabular-nums font-semibold">
-                    {formatMoney(Math.max(0, invoiceTotal(i) - paidByInvoice(i.id)))} {i.currency}
+                    {formatMoney(i.remaining)} {i.currency}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </TableWrap>
+        )}
+        <Pager page={page} setPage={setPage} meta={data?.meta} loading={isFetching} />
+      </PageCard>
+    </div>
+  );
+}
+
+type ReturnRow = {
+  id: string;
+  number: string;
+  kind: string;
+  createdAt: string;
+  currency: string;
+  partyId: string;
+  partyName: string | null;
+  amount: number;
+};
+
+function ReturnsReport({ from }: { from: string | null }) {
+  const { page, setPage, data, isFetching } = usePagedReport<ReturnRow>("sales-returns", from);
+  const rows = data?.rows ?? [];
+  const sum = data?.summary ?? {};
+  return (
+    <div className="space-y-3">
+      <div className="grid gap-3 md:grid-cols-2">
+        <StatBox label="عدد المرتجعات" value={String(sum.count ?? 0)} />
+        <StatBox label="الإجمالي" byCurrency={asBy(sum.total)} />
+      </div>
+      <PageCard title="قائمة المرتجعات" noBodyPadding>
+        {rows.length === 0 ? (
+          <Empty text={isFetching ? "جاري التحميل…" : "لا مرتجعات في الفترة المحددة."} />
+        ) : (
+          <TableWrap>
+            <thead className="bg-secondary/60 text-[11px] uppercase text-muted-foreground">
+              <tr>
+                <TH>الرقم</TH>
+                <TH>النوع</TH>
+                <TH>التاريخ</TH>
+                <TH>الطرف</TH>
+                <TH>المبلغ</TH>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-border">
+              {rows.map((r) => (
+                <tr key={r.id}>
+                  <td className="px-3 py-2 font-semibold">{r.number}</td>
+                  <td className="px-3 py-2">{r.kind === "sale" ? "بيع" : "دخول"}</td>
+                  <td className="px-3 py-2 tabular-nums">{formatDateTime(r.createdAt)}</td>
+                  <td className="px-3 py-2">{r.partyName ?? r.partyId}</td>
+                  <td className="px-3 py-2 tabular-nums">
+                    {formatMoney(r.amount)} {r.currency}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </TableWrap>
+        )}
+        <Pager page={page} setPage={setPage} meta={data?.meta} loading={isFetching} />
+      </PageCard>
+    </div>
+  );
+}
+
+type ExpenseRow = {
+  id: string;
+  createdAt: string;
+  category: string;
+  description: string;
+  amount: number;
+  currency: string;
+};
+
+function ExpensesReport({ from }: { from: string | null }) {
+  const { page, setPage, data, isFetching } = usePagedReport<ExpenseRow>("expenses", from);
+  const rows = data?.rows ?? [];
+  const sum = data?.summary ?? {};
+  return (
+    <div className="space-y-3">
+      <div className="grid gap-3 md:grid-cols-2">
+        <StatBox label="عدد المصاريف" value={String(sum.count ?? 0)} />
+        <StatBox label="الإجمالي" byCurrency={asBy(sum.total)} />
+      </div>
+      <PageCard title="قائمة المصاريف" noBodyPadding>
+        {rows.length === 0 ? (
+          <Empty text={isFetching ? "جاري التحميل…" : "لا مصاريف في الفترة المحددة."} />
+        ) : (
+          <TableWrap>
+            <thead className="bg-secondary/60 text-[11px] uppercase text-muted-foreground">
+              <tr>
+                <TH>التاريخ</TH>
+                <TH>الفئة</TH>
+                <TH>الوصف</TH>
+                <TH>المبلغ</TH>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-border">
+              {rows.map((e) => (
+                <tr key={e.id}>
+                  <td className="px-3 py-2 tabular-nums">{formatDateTime(e.createdAt)}</td>
+                  <td className="px-3 py-2">{e.category}</td>
+                  <td className="px-3 py-2">{e.description}</td>
+                  <td className="px-3 py-2 tabular-nums">
+                    {formatMoney(e.amount)} {e.currency}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </TableWrap>
+        )}
+        <Pager page={page} setPage={setPage} meta={data?.meta} loading={isFetching} />
+      </PageCard>
+    </div>
+  );
+}
+
+type LedgerRow = {
+  id: string;
+  date: string;
+  type: string;
+  description: string;
+  referenceNumber: string | null;
+  debit: number;
+  credit: number;
+  currency: string;
+};
+
+function LedgerReport({ from }: { from: string | null }) {
+  const { page, setPage, data, isFetching } = usePagedReport<LedgerRow>("ledger", from);
+  const rows = data?.rows ?? [];
+  const sum = data?.summary ?? {};
+  return (
+    <div className="space-y-3">
+      <div className="grid gap-3 md:grid-cols-3">
+        <StatBox label="عدد الحركات" value={String(sum.count ?? 0)} />
+        <StatBox label="إجمالي المدين" byCurrency={asBy(sum.debit)} tone="warning" />
+        <StatBox label="إجمالي الدائن" byCurrency={asBy(sum.credit)} tone="warning" />
+      </div>
+      <PageCard title="قيود دفتر الحركات" noBodyPadding>
+        {rows.length === 0 ? (
+          <Empty text={isFetching ? "جاري التحميل…" : "لا حركات في الفترة المحددة."} />
+        ) : (
+          <TableWrap>
+            <thead className="bg-secondary/60 text-[11px] uppercase text-muted-foreground">
+              <tr>
+                <TH>التاريخ</TH>
+                <TH>النوع</TH>
+                <TH>الوصف</TH>
+                <TH>المرجع</TH>
+                <TH>مدين</TH>
+                <TH>دائن</TH>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-border">
+              {rows.map((e) => (
+                <tr key={e.id}>
+                  <td className="px-3 py-2 tabular-nums">{formatDateTime(e.date)}</td>
+                  <td className="px-3 py-2">
+                    {LEDGER_TYPE_LABEL[e.type as keyof typeof LEDGER_TYPE_LABEL] ?? e.type}
+                  </td>
+                  <td className="px-3 py-2">{e.description}</td>
+                  <td className="px-3 py-2 tabular-nums">{e.referenceNumber ?? "—"}</td>
+                  <td className="px-3 py-2 tabular-nums">
+                    {e.debit ? `${formatMoney(e.debit)} ${e.currency}` : "—"}
+                  </td>
+                  <td className="px-3 py-2 tabular-nums">
+                    {e.credit ? `${formatMoney(e.credit)} ${e.currency}` : "—"}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </TableWrap>
+        )}
+        <Pager page={page} setPage={setPage} meta={data?.meta} loading={isFetching} />
+      </PageCard>
+    </div>
+  );
+}
+
+type CashRow = {
+  id: string;
+  createdAt: string;
+  type: string;
+  direction: "in" | "out";
+  description: string;
+  amount: number;
+  currency: string;
+};
+
+function CashboxReport({ from }: { from: string | null }) {
+  const { page, setPage, data, isFetching } = usePagedReport<CashRow>("cashbox", from);
+  const rows = data?.rows ?? [];
+  return (
+    <PageCard title="حركة الصندوق اليدوية" noBodyPadding>
+      {rows.length === 0 ? (
+        <Empty text={isFetching ? "جاري التحميل…" : "لا حركات في الفترة المحددة."} />
+      ) : (
+        <TableWrap>
+          <thead className="bg-secondary/60 text-[11px] uppercase text-muted-foreground">
+            <tr>
+              <TH>التاريخ</TH>
+              <TH>النوع</TH>
+              <TH>اتجاه</TH>
+              <TH>الوصف</TH>
+              <TH>المبلغ</TH>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-border">
+            {rows.map((m) => (
+              <tr key={m.id}>
+                <td className="px-3 py-2 tabular-nums">{formatDateTime(m.createdAt)}</td>
+                <td className="px-3 py-2">
+                  {MANUAL_TYPE_LABEL[m.type as keyof typeof MANUAL_TYPE_LABEL]}
+                </td>
+                <td className="px-3 py-2">{m.direction === "in" ? "وارد" : "صادر"}</td>
+                <td className="px-3 py-2">{m.description}</td>
+                <td className="px-3 py-2 tabular-nums font-semibold">
+                  {formatMoney(m.amount)} {m.currency}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </TableWrap>
+      )}
+      <Pager page={page} setPage={setPage} meta={data?.meta} loading={isFetching} />
+    </PageCard>
+  );
+}
+
+type FabricValueRow = {
+  fabricId: string;
+  name: string;
+  kg: number;
+  rolls: number;
+  value: ByCurrency;
+};
+
+function InventoryReport() {
+  const { data, isFetching } = useReportDetail<FabricValueRow>("inventory-value", null, 0);
+  const rows = data?.rows ?? [];
+  return (
+    <div className="space-y-3">
+      <StatBox label="القيمة الإجمالية" byCurrency={asBy(data?.summary?.total)} />
+      <PageCard title="المخزون حسب الصنف" noBodyPadding>
+        {rows.length === 0 ? (
+          <Empty text={isFetching ? "جاري التحميل…" : "لا مخزون."} />
+        ) : (
+          <TableWrap>
+            <thead className="bg-secondary/60 text-[11px] uppercase text-muted-foreground">
+              <tr>
+                <TH>الصنف</TH>
+                <TH>الكمية</TH>
+                <TH>عدد الصبغات</TH>
+                <TH>القيمة</TH>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-border">
+              {rows.map((r) => (
+                <tr key={r.fabricId}>
+                  <td className="px-3 py-2 font-semibold">{r.name}</td>
+                  <td className="px-3 py-2 tabular-nums">{formatNumber(r.kg)} كغ</td>
+                  <td className="px-3 py-2 tabular-nums">{r.rolls}</td>
+                  <td className="px-3 py-2 tabular-nums font-semibold">
+                    {formatCurrencyBreakdown(r.value)}
                   </td>
                 </tr>
               ))}
@@ -326,6 +535,95 @@ function SalesReport({
       </PageCard>
     </div>
   );
+}
+
+type TopFabricRow = {
+  fabricId: string;
+  name: string;
+  qty: number;
+  revenueByCurrency: ByCurrency;
+};
+
+function TopFabricsReport({ from }: { from: string | null }) {
+  const { data, isFetching } = useReportDetail<TopFabricRow>("top-fabrics", from, 0);
+  const rows = data?.rows ?? [];
+  return (
+    <PageCard title="أعلى ١٠ أصناف مبيعاً" noBodyPadding>
+      {rows.length === 0 ? (
+        <Empty text={isFetching ? "جاري التحميل…" : "لا مبيعات في الفترة."} />
+      ) : (
+        <TableWrap>
+          <thead className="bg-secondary/60 text-[11px] uppercase text-muted-foreground">
+            <tr>
+              <TH>الصنف</TH>
+              <TH>الكمية</TH>
+              <TH>الإيراد</TH>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-border">
+            {rows.map((r) => (
+              <tr key={r.fabricId}>
+                <td className="px-3 py-2 font-semibold">{r.name}</td>
+                <td className="px-3 py-2 tabular-nums">{formatMoney(r.qty)} كغ</td>
+                <td className="px-3 py-2 tabular-nums">
+                  {formatCurrencyBreakdown(r.revenueByCurrency)}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </TableWrap>
+      )}
+    </PageCard>
+  );
+}
+
+type TopCustomerRow = { partyId: string; name: string; revenueByCurrency: ByCurrency };
+
+function TopCustomersReport({ from }: { from: string | null }) {
+  const { data, isFetching } = useReportDetail<TopCustomerRow>("top-customers", from, 0);
+  const rows = data?.rows ?? [];
+  return (
+    <PageCard title="أعلى ١٠ عملاء" noBodyPadding>
+      {rows.length === 0 ? (
+        <Empty text={isFetching ? "جاري التحميل…" : "لا مبيعات في الفترة."} />
+      ) : (
+        <TableWrap>
+          <thead className="bg-secondary/60 text-[11px] uppercase text-muted-foreground">
+            <tr>
+              <TH>العميل</TH>
+              <TH>الإيراد</TH>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-border">
+            {rows.map((r) => (
+              <tr key={r.partyId}>
+                <td className="px-3 py-2 font-semibold">{r.name}</td>
+                <td className="px-3 py-2 tabular-nums">
+                  {formatCurrencyBreakdown(r.revenueByCurrency)}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </TableWrap>
+      )}
+    </PageCard>
+  );
+}
+
+function TableWrap({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full text-right text-sm">{children}</table>
+    </div>
+  );
+}
+
+function TH({ children, align }: { children: React.ReactNode; align?: "left" | "right" }) {
+  return <th className={`px-3 py-2 ${align === "left" ? "text-left" : ""}`}>{children}</th>;
+}
+
+function Empty({ text }: { text: string }) {
+  return <div className="p-6 text-center text-sm text-muted-foreground">{text}</div>;
 }
 
 function PartyBalances({ kind }: { kind: "customer" | "supplier" }) {
@@ -388,7 +686,11 @@ function PartyBalances({ kind }: { kind: "customer" | "supplier" }) {
         }
         setRows(
           [...byParty.values()]
-            .filter((r) => Object.values(r.remaining).some((v) => v !== 0) || Object.values(r.total).some((v) => v !== 0))
+            .filter(
+              (r) =>
+                Object.values(r.remaining).some((v) => v !== 0) ||
+                Object.values(r.total).some((v) => v !== 0),
+            )
             .sort((a, b) => (b.remaining.SYP ?? 0) - (a.remaining.SYP ?? 0)),
         );
         setLoading(false);
@@ -427,412 +729,6 @@ function PartyBalances({ kind }: { kind: "customer" | "supplier" }) {
                 <td className="px-3 py-2 tabular-nums">{formatCurrencyBreakdown(r.paid)}</td>
                 <td className="px-3 py-2 tabular-nums font-semibold">
                   {formatCurrencyBreakdown(r.remaining)}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </TableWrap>
-      )}
-    </PageCard>
-  );
-}
-
-function ReturnsReport({
-  inRange,
-  returns,
-}: {
-  inRange: (d: string) => boolean;
-  returns: ReturnDTO[];
-}) {
-  const rows = returns
-    .filter((r) => r.kind === "sale" && r.status !== "cancelled" && inRange(r.date))
-    .sort((a, b) => (a.date < b.date ? 1 : -1));
-  const totalByCurrency = groupAmountsByCurrency(
-    rows,
-    (r) => r.lines.reduce((sum, l) => sum + l.quantityKg * l.pricePerKg, 0),
-    (r) => r.currency || "SYP",
-  );
-  return (
-    <div className="space-y-3">
-      <div className="grid gap-3 md:grid-cols-2">
-        <StatBox label="عدد المرتجعات" value={rows.length.toString()} />
-        <StatBox label="الإجمالي" byCurrency={totalByCurrency} />
-      </div>
-      <PageCard title="قائمة المرتجعات" noBodyPadding>
-        {rows.length === 0 ? (
-          <Empty text="لا مرتجعات في الفترة المحددة." />
-        ) : (
-          <TableWrap>
-            <thead className="bg-secondary/60 text-[11px] uppercase text-muted-foreground">
-              <tr>
-                <TH>الرقم</TH>
-                <TH>النوع</TH>
-                <TH>التاريخ</TH>
-                <TH>الطرف</TH>
-                <TH>المبلغ</TH>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border">
-              {rows.map((r) => (
-                <tr key={r.id}>
-                  <td className="px-3 py-2 font-semibold">{r.number}</td>
-                  <td className="px-3 py-2">{r.kind === "sale" ? "بيع" : "دخول"}</td>
-                  <td className="px-3 py-2 tabular-nums">{formatDateTime(r.createdAt)}</td>
-                  <td className="px-3 py-2">{r.partyId}</td>
-                  <td className="px-3 py-2 tabular-nums">
-                    {formatMoney(r.lines.reduce((sum, l) => sum + l.quantityKg * l.pricePerKg, 0))}{" "}
-                    {r.currency}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </TableWrap>
-        )}
-      </PageCard>
-    </div>
-  );
-}
-
-function ExpensesReport({
-  inRange,
-  expenses,
-}: {
-  inRange: (d: string) => boolean;
-  expenses: {
-    id: string;
-    date: string;
-    createdAt?: string;
-    amount: number;
-    currency: string;
-    category: string;
-    status: string;
-    description: string;
-    reference?: string;
-  }[];
-}) {
-  const rows = expenses
-    .filter((e) => e.status !== "cancelled" && inRange(e.date))
-    .sort((a, b) => (a.date < b.date ? 1 : -1));
-  const totalByCurrency = groupAmountsByCurrency(
-    rows,
-    (e) => e.amount,
-    (e) => e.currency,
-  );
-  return (
-    <div className="space-y-3">
-      <div className="grid gap-3 md:grid-cols-2">
-        <StatBox label="عدد المصاريف" value={rows.length.toString()} />
-        <StatBox label="الإجمالي" byCurrency={totalByCurrency} />
-      </div>
-      <PageCard title="قائمة المصاريف" noBodyPadding>
-        {rows.length === 0 ? (
-          <Empty text="لا مصاريف في الفترة المحددة." />
-        ) : (
-          <TableWrap>
-            <thead className="bg-secondary/60 text-[11px] uppercase text-muted-foreground">
-              <tr>
-                <TH>التاريخ</TH>
-                <TH>الفئة</TH>
-                <TH>الوصف</TH>
-                <TH>المبلغ</TH>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border">
-              {rows.map((e) => (
-                <tr key={e.id}>
-                  <td className="px-3 py-2 tabular-nums">{formatDateTime(e.createdAt)}</td>
-                  <td className="px-3 py-2">{e.category}</td>
-                  <td className="px-3 py-2">{e.description}</td>
-                  <td className="px-3 py-2 tabular-nums">
-                    {formatMoney(e.amount)} {e.currency}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </TableWrap>
-        )}
-      </PageCard>
-    </div>
-  );
-}
-
-function LedgerReport({
-  inRange,
-  entries,
-}: {
-  inRange: (d: string) => boolean;
-  entries: DomainLedgerEntry[];
-}) {
-  const rows = (entries ?? [])
-    .filter((e) => e.status !== "cancelled" && inRange(e.date))
-    .sort((a, b) => (a.date < b.date ? 1 : -1));
-  // Fix BUG-06/C-9/C-10: these used to sum e.debit/e.credit with no
-  // currency grouping at all — a USD ledger row and a SYP row were added
-  // directly. Group by e.currency instead.
-  const totalDebitByCurrency = groupAmountsByCurrency(
-    rows,
-    (e) => e.debit || 0,
-    (e) => e.currency,
-  );
-  const totalCreditByCurrency = groupAmountsByCurrency(
-    rows,
-    (e) => e.credit || 0,
-    (e) => e.currency,
-  );
-  return (
-    <div className="space-y-3">
-      <div className="grid gap-3 md:grid-cols-3">
-        <StatBox label="عدد الحركات" value={rows.length.toString()} />
-        <StatBox label="إجمالي المدين" byCurrency={totalDebitByCurrency} tone="warning" />
-        <StatBox label="إجمالي الدائن" byCurrency={totalCreditByCurrency} tone="warning" />
-      </div>
-      <PageCard title="قيود دفتر الحركات" noBodyPadding>
-        {rows.length === 0 ? (
-          <Empty text="لا حركات في الفترة المحددة." />
-        ) : (
-          <TableWrap>
-            <thead className="bg-secondary/60 text-[11px] uppercase text-muted-foreground">
-              <tr>
-                <TH>التاريخ</TH>
-                <TH>النوع</TH>
-                <TH>الوصف</TH>
-                <TH>المرجع</TH>
-                <TH>مدين</TH>
-                <TH>دائن</TH>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border">
-              {rows.map((e) => (
-                <tr key={e.id}>
-                  <td className="px-3 py-2 tabular-nums">{formatDateTime(e.date)}</td>
-                  <td className="px-3 py-2">{LEDGER_TYPE_LABEL[e.type] ?? e.type}</td>
-                  <td className="px-3 py-2">{e.description}</td>
-                  <td className="px-3 py-2 tabular-nums">{e.referenceNumber ?? "—"}</td>
-                  <td className="px-3 py-2 tabular-nums">
-                    {e.debit ? `${formatMoney(e.debit)} ${e.currency}` : "—"}
-                  </td>
-                  <td className="px-3 py-2 tabular-nums">
-                    {e.credit ? `${formatMoney(e.credit)} ${e.currency}` : "—"}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </TableWrap>
-        )}
-      </PageCard>
-    </div>
-  );
-}
-
-function CashboxReport({
-  inRange,
-  manualMoves,
-}: {
-  inRange: (d: string) => boolean;
-  manualMoves: {
-    id: string;
-    date: string;
-    type: string;
-    direction: "in" | "out";
-    amount: number;
-    currency: string;
-    description: string;
-    createdAt: string;
-  }[];
-}) {
-  const rows = manualMoves
-    .filter((m) => inRange(m.date))
-    .sort((a, b) => (a.createdAt < b.createdAt ? -1 : 1));
-  return (
-    <PageCard title="حركة الصندوق اليدوية" noBodyPadding>
-      {rows.length === 0 ? (
-        <Empty text="لا حركات في الفترة المحددة." />
-      ) : (
-        <TableWrap>
-          <thead className="bg-secondary/60 text-[11px] uppercase text-muted-foreground">
-            <tr>
-              <TH>التاريخ</TH>
-              <TH>النوع</TH>
-              <TH>اتجاه</TH>
-              <TH>الوصف</TH>
-              <TH>المبلغ</TH>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-border">
-            {rows.map((m) => (
-              <tr key={m.id}>
-                <td className="px-3 py-2 tabular-nums">{formatDateTime(m.createdAt)}</td>
-                <td className="px-3 py-2">
-                  {MANUAL_TYPE_LABEL[m.type as keyof typeof MANUAL_TYPE_LABEL]}
-                </td>
-                <td className="px-3 py-2">{m.direction === "in" ? "وارد" : "صادر"}</td>
-                <td className="px-3 py-2">{m.description}</td>
-                <td className="px-3 py-2 tabular-nums font-semibold">
-                  {formatMoney(m.amount)} {m.currency}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </TableWrap>
-      )}
-    </PageCard>
-  );
-}
-
-function InventoryReport() {
-  // Fix BUG-06/C-9/C-10: `val` used to convert every roll's value through
-  // toSYP and sum it into one blended number, both per-fabric and in the
-  // grand total. Group by currency at both levels instead.
-  const rows = fabrics.map((f) => {
-    const fColors = colors.filter((c) => c.fabricId === f.id);
-    const fRolls = rolls.filter((r) => fColors.some((c) => c.id === r.colorId));
-    const kg = fRolls.reduce((s, r) => s + r.remainingKg, 0);
-    const valByCurrency = groupAmountsByCurrency(
-      fRolls,
-      (r) => r.remainingKg * r.pricePerKg,
-      (r) => r.currency,
-    );
-    return { f, kg, valByCurrency, rolls: fRolls.length };
-  });
-  const totalValByCurrency: Record<string, number> = {};
-  for (const r of rows) {
-    for (const [cur, amt] of Object.entries(r.valByCurrency)) {
-      totalValByCurrency[cur] = (totalValByCurrency[cur] ?? 0) + amt;
-    }
-  }
-  return (
-    <div className="space-y-3">
-      <StatBox label="القيمة الإجمالية" byCurrency={totalValByCurrency} />
-      <PageCard title="المخزون حسب الصنف" noBodyPadding>
-        {rows.length === 0 ? (
-          <Empty text="لا مخزون." />
-        ) : (
-          <TableWrap>
-            <thead className="bg-secondary/60 text-[11px] uppercase text-muted-foreground">
-              <tr>
-                <TH>الصنف</TH>
-                <TH>الكمية</TH>
-                <TH>عدد الصبغات</TH>
-                <TH>القيمة</TH>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border">
-              {rows.map((r) => (
-                <tr key={r.f.id}>
-                  <td className="px-3 py-2 font-semibold">{r.f.name}</td>
-                  <td className="px-3 py-2 tabular-nums">{formatNumber(r.kg)} كغ</td>
-                  <td className="px-3 py-2 tabular-nums">{r.rolls}</td>
-                  <td className="px-3 py-2 tabular-nums font-semibold">
-                    {formatCurrencyBreakdown(r.valByCurrency)}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </TableWrap>
-        )}
-      </PageCard>
-    </div>
-  );
-}
-
-function TopFabricsReport({
-  inRange,
-  invoices,
-}: {
-  inRange: (d: string) => boolean;
-  invoices: DomainInvoice[];
-}) {
-  const invs = invoices.filter(
-    (i) => i.type === "sale" && i.status !== "cancelled" && inRange(i.date),
-  );
-  // Fix BUG-06/C-9/C-10: revenue is now a per-currency breakdown, never a
-  // toSYP-blended single number. Ranked by kg sold (currency-agnostic,
-  // safe to sum) rather than a converted revenue figure.
-  const map = new Map<string, { qty: number; revenueByCurrency: Record<string, number> }>();
-  invs.forEach((i) =>
-    i.lines.forEach((l) => {
-      const c = map.get(l.fabricId) ?? { qty: 0, revenueByCurrency: {} };
-      c.qty += l.quantityKg;
-      c.revenueByCurrency[i.currency] =
-        (c.revenueByCurrency[i.currency] ?? 0) + l.quantityKg * l.pricePerKg;
-      map.set(l.fabricId, c);
-    }),
-  );
-  const rows = [...map.entries()]
-    .map(([id, v]) => ({ fabric: fabricById(id), ...v }))
-    .sort((a, b) => b.qty - a.qty)
-    .slice(0, 10);
-  return (
-    <PageCard title="أعلى ١٠ أصناف مبيعاً" noBodyPadding>
-      {rows.length === 0 ? (
-        <Empty text="لا مبيعات في الفترة." />
-      ) : (
-        <TableWrap>
-          <thead className="bg-secondary/60 text-[11px] uppercase text-muted-foreground">
-            <tr>
-              <TH>الصنف</TH>
-              <TH>الكمية</TH>
-              <TH>الإيراد</TH>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-border">
-            {rows.map((r, i) => (
-              <tr key={i}>
-                <td className="px-3 py-2 font-semibold">{r.fabric?.name ?? ""}</td>
-                <td className="px-3 py-2 tabular-nums">{formatMoney(r.qty)} كغ</td>
-                <td className="px-3 py-2 tabular-nums">
-                  {formatCurrencyBreakdown(r.revenueByCurrency)}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </TableWrap>
-      )}
-    </PageCard>
-  );
-}
-
-function TopCustomersReport({
-  inRange,
-  invoices,
-}: {
-  inRange: (d: string) => boolean;
-  invoices: DomainInvoice[];
-}) {
-  const invs = invoices.filter(
-    (i) => i.type === "sale" && i.status !== "cancelled" && inRange(i.date),
-  );
-  // Fix BUG-06/C-9/C-10: revenue is now a per-currency breakdown, never a
-  // toSYP-blended single number. Ranked by SYP revenue (documented, not
-  // blended) since a single sortable figure is needed.
-  const map = new Map<string, Record<string, number>>();
-  invs.forEach((i) => {
-    const prev = map.get(i.partyId) ?? {};
-    prev[i.currency] = (prev[i.currency] ?? 0) + invoiceTotal(i);
-    map.set(i.partyId, prev);
-  });
-  const rows = [...map.entries()]
-    .map(([id, revenueByCurrency]) => ({ cust: customerById(id), revenueByCurrency }))
-    .sort((a, b) => (b.revenueByCurrency.SYP ?? 0) - (a.revenueByCurrency.SYP ?? 0))
-    .slice(0, 10);
-  return (
-    <PageCard title="أعلى ١٠ عملاء" noBodyPadding>
-      {rows.length === 0 ? (
-        <Empty text="لا مبيعات في الفترة." />
-      ) : (
-        <TableWrap>
-          <thead className="bg-secondary/60 text-[11px] uppercase text-muted-foreground">
-            <tr>
-              <TH>العميل</TH>
-              <TH>الإيراد</TH>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-border">
-            {rows.map((r, i) => (
-              <tr key={i}>
-                <td className="px-3 py-2 font-semibold">{r.cust?.name ?? ""}</td>
-                <td className="px-3 py-2 tabular-nums">
-                  {formatCurrencyBreakdown(r.revenueByCurrency)}
                 </td>
               </tr>
             ))}

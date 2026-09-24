@@ -26,10 +26,6 @@ const DATA_MISSING_MSG: &str = "مجلد قاعدة \
 #[derive(Debug, Clone, Deserialize)]
 struct IntegrityManifestLite {
     #[serde(default)]
-    reset_authorized: Option<bool>,
-    #[serde(rename = "resetAuthorized")]
-    reset_authorized_camel: Option<bool>,
-    #[serde(default)]
     last_known_counts: Option<LastKnownCounts>,
     #[serde(rename = "lastKnownCounts")]
     last_known_counts_camel: Option<LastKnownCounts>,
@@ -46,12 +42,6 @@ struct LastKnownCounts {
 }
 
 impl IntegrityManifestLite {
-    fn reset_authorized(&self) -> bool {
-        self.reset_authorized
-            .or(self.reset_authorized_camel)
-            .unwrap_or(false)
-    }
-
     fn business_rows(&self) -> i64 {
         let c = self
             .last_known_counts
@@ -68,22 +58,22 @@ pub fn integrity_manifest_path(app_data_root: &Path) -> PathBuf {
     app_data_root.join(INTEGRITY_MANIFEST_FILE)
 }
 
-pub fn read_integrity_manifest(app_data_root: &Path) -> Option<IntegrityManifestLite> {
+fn read_integrity_manifest(app_data_root: &Path) -> Option<IntegrityManifestLite> {
     let path = integrity_manifest_path(app_data_root);
     let raw = fs::read_to_string(&path).ok()?;
     serde_json::from_str(&raw).ok()
 }
 
 fn had_prior_business_data(app_data_root: &Path) -> bool {
-    if let Ok(Some(meta)) = read_meta(app_data_root) {
-        if meta.schema_journal_idx > 0 {
-            return true;
-        }
+    // Evidence that a cluster was provisioned here before. `db-meta.json` is
+    // written only AFTER a cluster has been fully provisioned (atomic rename of
+    // the staged copy), so its presence is the positive marker. `secrets.dat`
+    // is NOT evidence: boot creates it before provisioning, so treating it as
+    // "prior data" made every genuine first launch refuse to start.
+    if meta_path(app_data_root).exists() {
+        return true;
     }
     if let Some(m) = read_integrity_manifest(app_data_root) {
-        if m.reset_authorized() {
-            return false;
-        }
         if m.business_rows() > 0 {
             return true;
         }
@@ -206,9 +196,15 @@ pub fn evaluate_existing_cluster(
     bundled_pg_major: u16,
     bundled_schema_idx: i32,
 ) -> io::Result<ClusterDecision> {
-    if !pgdata.join("PG_VERSION").exists() {
-        // REPAIR-014 / REPAIR-023: missing pgdata with evidence of prior data → refuse.
-        if had_prior_business_data(app_data_root) {
+    // Fail closed for *any* pre-existing data directory that is not a valid
+    // PostgreSQL cluster.  The old check looked only for PG_VERSION, so a
+    // partially deleted/corrupted pgdata directory could be classified as a
+    // first install and then overwritten from pgdata-template.  That is an
+    // unacceptable data-loss path: startup must never repair by replacement.
+    let pgdata_exists = pgdata.exists();
+    let pg_version_exists = pgdata.join("PG_VERSION").exists();
+    if !pg_version_exists {
+        if pgdata_exists || had_prior_business_data(app_data_root) {
             return Err(io::Error::new(ErrorKind::NotFound, DATA_MISSING_MSG));
         }
         return Ok(ClusterDecision::Fresh);
@@ -330,6 +326,28 @@ mod tests {
     }
 
     #[test]
+    fn first_launch_with_freshly_generated_secrets_is_fresh() {
+        // Boot writes secrets.dat (and device-binding.dat) before pgdata is
+        // provisioned. That must not be mistaken for a vanished cluster.
+        let dir = scratch();
+        let pgdata = dir.join("pgdata");
+        fs::write(dir.join("secrets.dat"), b"generated this boot").unwrap();
+        let d = evaluate_existing_cluster(&dir, &pgdata, "id-a", 16, 63).unwrap();
+        assert!(matches!(d, ClusterDecision::Fresh));
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn missing_pgdata_with_meta_at_idx_zero_is_data_missing() {
+        let dir = scratch();
+        let pgdata = dir.join("pgdata");
+        stamp_fresh_cluster(&dir, "id-a", 16, 0).unwrap();
+        let err = evaluate_existing_cluster(&dir, &pgdata, "id-a", 16, 63).unwrap_err();
+        assert!(err.to_string().contains("مفقود"));
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
     fn missing_pgdata_with_meta_idx_is_data_missing() {
         let dir = scratch();
         let pgdata = dir.join("pgdata");
@@ -363,7 +381,7 @@ mod tests {
     }
 
     #[test]
-    fn missing_pgdata_with_reset_authorized_is_fresh() {
+    fn missing_pgdata_with_reset_authorization_still_refuses_automatic_fresh_boot() {
         let dir = scratch();
         let pgdata = dir.join("pgdata");
         fs::write(
@@ -371,8 +389,8 @@ mod tests {
             r#"{"version":1,"resetAuthorized":true,"lastKnownCounts":{"invoices":10,"parties":2,"rolls":1}}"#,
         )
         .unwrap();
-        let d = evaluate_existing_cluster(&dir, &pgdata, "id-a", 16, 63).unwrap();
-        assert!(matches!(d, ClusterDecision::Fresh));
+        let err = evaluate_existing_cluster(&dir, &pgdata, "id-a", 16, 63).unwrap_err();
+        assert!(err.to_string().contains("مفقود"));
         let _ = fs::remove_dir_all(&dir);
     }
 

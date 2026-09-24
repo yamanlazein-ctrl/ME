@@ -39,6 +39,19 @@ export function lastJournalIdx(migrationsFolder: string): number {
   return entries.length ? entries[entries.length - 1]!.idx : 0;
 }
 
+/**
+ * True when the journal holds a migration newer than the last one recorded in
+ * drizzle.__drizzle_migrations — the same rule drizzle's migrate() uses
+ * (journal `when` vs max(created_at)). This is the authoritative "will this
+ * boot change the schema?" signal; db-meta.json can be missing or stale.
+ */
+export function hasPendingMigrations(migrationsFolder: string, lastAppliedMillis: number): boolean {
+  const raw = JSON.parse(
+    readFileSync(path.join(migrationsFolder, "meta", "_journal.json"), "utf8"),
+  ) as { entries?: Array<{ when: number }> };
+  return (raw.entries ?? []).some((e) => Number(e.when) > lastAppliedMillis);
+}
+
 /** Anything with `query` — a pg Pool, Client or PoolClient (lets tests run the repair inside a rolled-back transaction). */
 type Queryable = { query: (text: string, values?: unknown[]) => Promise<{ rows: any[]; rowCount: number | null }> };
 
@@ -181,18 +194,25 @@ export async function runDesktopMigrations(): Promise<void> {
     );
   }
 
-  // REPAIR-024: snapshot when pending migrations exist.
-  const metaPath = process.env.DESKTOP_DB_META_PATH;
+  // REPAIR-024: snapshot ONLY when this boot will change the schema. (It used
+  // to run pg_dump on every boot — boot time and disk use grew with the data.)
+  // The legacy license repair below only changes rows on pre-DFP-013 data,
+  // which always has pending migrations, so this snapshot covers it too.
+  const lastApplied = await pool.query<{ m: string | number | null }>(
+    `SELECT COALESCE(max(created_at), 0) AS m FROM drizzle.__drizzle_migrations`,
+  );
+  const pending = hasPendingMigrations(folder, Number(lastApplied.rows[0]?.m ?? 0));
   let currentIdx = 0;
+  const metaPath = process.env.DESKTOP_DB_META_PATH;
   if (metaPath && existsSync(metaPath)) {
     try {
       const meta = JSON.parse(await readFile(metaPath, "utf8")) as { schema_journal_idx?: number };
       currentIdx = Number(meta.schema_journal_idx ?? 0);
     } catch {
-      /* ignore */
+      /* informational only */
     }
   }
-  if (journalIdx > currentIdx && hasTenants) {
+  if (pending && hasTenants) {
     const { takePreOpSnapshot } = await import("../integrity/snapshot.js");
     const snap = await takePreOpSnapshot({
       databaseUrl: config.DATABASE_URL,
@@ -210,17 +230,6 @@ export async function runDesktopMigrations(): Promise<void> {
     "MIGRATION_STARTED",
   );
   try {
-    const repairSnapNeeded = true;
-    if (repairSnapNeeded && hasTenants) {
-      const { takePreOpSnapshot } = await import("../integrity/snapshot.js");
-      // Snapshot before legacy repair (idempotent if already taken this boot — retention handles dupes)
-      await takePreOpSnapshot({
-        databaseUrl: config.DATABASE_URL,
-        operation: "legacy_repair",
-        operationId: `${process.env.MOTARD_BOOT_ID ?? "boot"}-legacy`,
-        schemaJournalIdx: currentIdx,
-      });
-    }
     await repairLegacyLicenseTenantPairing(pool);
     await migrate(db, { migrationsFolder: folder });
 

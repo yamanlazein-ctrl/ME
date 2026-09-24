@@ -18,6 +18,8 @@ export interface ReturnData {
   date: string;
   partyId: UUID;
   originalInvoiceId?: UUID;
+  /** Number of the original invoice (list views only). */
+  originalInvoiceNumber?: string;
   reason: string;
   currency: string;
   /** Units of `currency` per 1 USD — frozen at creation. */

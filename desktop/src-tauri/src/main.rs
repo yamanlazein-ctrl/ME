@@ -197,6 +197,7 @@ fn main() {
                 // never sees a blank window.
                 let url = stack.app_url();
                 *shared_for_boot.lock().unwrap() = Some(stack);
+                let shared_for_session = Arc::clone(&shared_for_boot);
                 let for_main = handle.clone();
                 let _ = handle.run_on_main_thread(move || {
                     let parsed: tauri::Url = match url.parse() {
@@ -226,6 +227,22 @@ fn main() {
                         }
                     })
                     .build();
+                    // Windows shutdown / restart / sign-out: stop postgres cleanly
+                    // before the session ends (see session_end.rs).
+                    #[cfg(windows)]
+                    if let Ok(window) = &built {
+                        if let Ok(hwnd) = window.hwnd() {
+                            motard_fabrics_erp::session_end::install(
+                                hwnd.0 as isize,
+                                Box::new(move || {
+                                    if let Some(mut s) = shared_for_session.lock().unwrap().take() {
+                                        eprintln!("[desktop-runtime] Windows session ending — shutting down stack");
+                                        shutdown(&mut s);
+                                    }
+                                }),
+                            );
+                        }
+                    }
                     if let Err(e) = built {
                         eprintln!("FATAL: could not create the main window: {e}");
                         motard_fabrics_erp::runtime::show_fatal_dialog(
@@ -425,9 +442,9 @@ fn set_hub_url(url: String) -> Result<String, String> {
     motard_fabrics_erp::runtime::write_hub_url(&root, &url)
 }
 
-/// Queue a factory reset: next boot deletes pgdata + db-meta.json + hub session.
-/// Does not wipe device-binding.dat or secrets.dat. MSI uninstall still preserves
-/// AppData unless MOTARD_WIPEDATA=1.
+/// Queue an operator recovery request. Startup refuses to execute destructive
+/// reset actions; a verified recovery tool must handle this flag. This command
+/// does not wipe device-binding.dat or secrets.dat.
 #[tauri::command]
 fn request_factory_reset() -> Result<(), String> {
     let root = motard_fabrics_erp::app_data_dir()?;

@@ -98,7 +98,6 @@ export function UserPickerPage() {
   const [invPin, setInvPin] = useState("");
   const [invConfirm, setInvConfirm] = useState("");
 
-  const [recoverySecret, setRecoverySecret] = useState("");
   const [recoveryPin, setRecoveryPin] = useState("");
   const [recoveryConfirm, setRecoveryConfirm] = useState("");
 
@@ -271,10 +270,6 @@ export function UserPickerPage() {
     e.preventDefault();
     if (!selected) return;
     setError(null);
-    if (!recoverySecret.trim()) {
-      setError("أدخل كلمة مرور الحساب أو الرمز السابق لإثبات الهوية");
-      return;
-    }
     if (!/^\d{4}$/.test(recoveryPin) || recoveryPin !== recoveryConfirm) {
       setError("الرقم السري الجديد يجب أن يكون 4 أرقام ومتطابقاً");
       return;
@@ -282,21 +277,30 @@ export function UserPickerPage() {
     setPending(true);
     try {
       const base = getApiBaseUrl();
+      const setHeaders: Record<string, string> = { "Content-Type": "application/json" };
+      const activationId = await getDecryptedActivationId().catch(() => null);
+      if (activationId) setHeaders["X-Device-Activation-Id"] = activationId;
+      const fingerprint = await getServerFingerprint().catch(() => null);
+      if (fingerprint) setHeaders["X-Device-Fingerprint"] = fingerprint;
       const setRes = await fetch(`${base}/api/auth/set-pin`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: setHeaders,
         body: JSON.stringify({
           userId: selected.id,
           pin: recoveryPin,
-          currentSecret: recoverySecret,
           tenantId: tenantId || undefined,
         }),
       });
       if (!setRes.ok) {
-        const body = (await setRes.json().catch(() => ({}))) as { message?: string };
+        const body = (await setRes.json().catch(() => ({}))) as {
+          message?: string;
+          code?: string;
+        };
         throw new Error(
           body.message ||
-            "تعذّرت الاستعادة — تحقق من كلمة مرور الحساب. لا تُحذف البيانات عند فشل الاستعادة.",
+            (body.code === "DEVICE_PROOF_REQUIRED"
+              ? "تعذّر التحقق من تفعيل هذا الجهاز — أعد تفعيل الجهاز ثم حاول مجدداً"
+              : "تعذّرت الاستعادة. لا يُطلب الرمز الحالي المفقود، ولا تُحذف البيانات عند الفشل."),
         );
       }
       const loginRes = await fetch(`${base}/api/auth/pin-login`, {
@@ -435,21 +439,9 @@ export function UserPickerPage() {
           <form onSubmit={submitRecovery} className="mt-6 space-y-4">
             <p className="text-[11px] leading-relaxed text-muted-foreground">
               استعادة الوصول لـ <strong>{selected.name}</strong> دون حذف الفواتير أو العملاء أو
-              قاعدة البيانات. أدخل كلمة مرور الحساب (أو الرمز السابق إن وُجد)، ثم عيّن رقماً سرياً
-              جديداً من 4 أرقام.
+              قاعدة البيانات. لا نطلب الرمز القديم المفقود؛ سيجري التحقق من تفعيل هذا الجهاز، ثم
+              عيّن رقماً سرياً جديداً من 4 أرقام.
             </p>
-            <label className="block">
-              <span className="mb-1.5 block text-xs font-medium text-muted-foreground">
-                كلمة مرور الحساب / السر الحالي
-              </span>
-              <input
-                type="password"
-                value={recoverySecret}
-                onChange={(e) => setRecoverySecret(e.target.value)}
-                className="w-full rounded-lg border border-border bg-secondary px-3 py-2.5 outline-none focus:border-primary"
-                autoFocus
-              />
-            </label>
             <label className="block">
               <span className="mb-1.5 block text-xs font-medium text-muted-foreground">
                 رقم سري جديد (4 أرقام)
@@ -486,7 +478,7 @@ export function UserPickerPage() {
               disabled={pending}
               className="w-full rounded-lg bg-primary px-4 py-3 text-sm font-bold text-primary-foreground disabled:opacity-60"
             >
-              {pending ? "جاري الاستعادة…" : "تعيين الرقم السري والدخول"}
+              {pending ? "جاري الاستعادة…" : "تعيين رمز جديد والدخول"}
             </button>
             <button
               type="button"
@@ -634,7 +626,6 @@ export function UserPickerPage() {
                 className="w-full text-xs text-muted-foreground underline"
                 onClick={() => {
                   setPanel("recover");
-                  setRecoverySecret("");
                   setRecoveryPin("");
                   setRecoveryConfirm("");
                   setError(null);

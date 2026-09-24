@@ -157,10 +157,27 @@ function InvoicesTrackingPage() {
       return [];
     return data?.data ?? [];
   }, [data, type]);
-  const { data: returnsData } = useReturnsList({ limit: 500 });
+  // Party/date/status filters run on the server so only matching returns and
+  // vouchers are fetched (the extra rows below still re-check them).
+  const { data: returnsData } = useReturnsList(
+    {
+      ...(status === "active" || status === "cancelled" ? { status } : {}),
+      ...(partyId !== "all" ? { partyId } : {}),
+      ...(from ? { fromDate: from } : {}),
+      ...(to ? { toDate: to } : {}),
+    },
+    { all: true },
+  );
   const { data: printJobs = [] } = usePrintJobs();
   const allParties = [...customers, ...suppliers];
-  const { data: vouchersData } = useVouchersList({ limit: 50 });
+  const { data: vouchersData } = useVouchersList(
+    {
+      ...(partyId !== "all" ? { partyId } : {}),
+      ...(from ? { fromDate: from } : {}),
+      ...(to ? { toDate: to } : {}),
+    },
+    { all: true },
+  );
   const allVouchers = vouchersData?.data ?? [];
 
   const cancelInvoice = useCancelInvoice();
@@ -245,7 +262,6 @@ function InvoicesTrackingPage() {
       }
     }
     return rows;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [returnsData, printJobs, allVouchers, type, status, partyId, from, to, q]);
 
   const invoiceTotal = useMemo(() => data?.total ?? 0, [data]);

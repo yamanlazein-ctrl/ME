@@ -255,6 +255,13 @@ apiRouter.use(
   "/profit",
   requireFeature(container.licenseRepo, container.tenantRepo, FEATURES.REPORTS),
 );
+// Typeahead/search routes must be registered BEFORE the entity routes:
+// "/parties/search" would otherwise be captured by "/parties/:id" (400 UUID).
+registerSearchRoutes(
+  apiRouter,
+  authMiddleware,
+  rbac(["admin", "accountant", "warehouse", "viewer"]),
+);
 registerPartyRoutes(
   apiRouter,
   container.partyRepo,
@@ -408,11 +415,6 @@ registerSettingsRoutes(
 registerDashboardRoutes(
   apiRouter,
   container.dashboardRepo,
-  authMiddleware,
-  rbac(["admin", "accountant", "warehouse", "viewer"]),
-);
-registerSearchRoutes(
-  apiRouter,
   authMiddleware,
   rbac(["admin", "accountant", "warehouse", "viewer"]),
 );

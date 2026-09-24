@@ -87,6 +87,7 @@ export interface PinLoginRequest {
 export interface SetPinRequest {
   userId: string;
   pin: string;
-  currentSecret: string;
+  /** Optional legacy field — recovery and first claim use device proof, not the lost secret. */
+  currentSecret?: string;
   tenantId?: string;
 }

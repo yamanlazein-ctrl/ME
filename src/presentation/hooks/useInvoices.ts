@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { container } from "@/infrastructure/container";
+import { fetchAllPaged } from "@/lib/fetchAllPaged";
 import { buildTenantContext } from "@/infrastructure/di/auth-context";
 import { isOk } from "@/core/result";
 import { toast } from "sonner";
@@ -29,10 +30,27 @@ const KEYS = {
 /* ── Queries ─────────────────────────────────────────────────────── */
 
 /** List invoices with optional filters. */
-export function useInvoicesList(filter?: InvoiceFilter) {
+/**
+ * `opts.all`: page through the API (page/limit, 1000 per page) and return
+ * EVERY matching row — for screens that compute balances/totals and must not
+ * work on a truncated first page.
+ */
+export function useInvoicesList(filter?: InvoiceFilter, opts?: { all?: boolean }) {
+  const all = Boolean(opts?.all);
   return useQuery({
-    queryKey: KEYS.list(filter),
+    queryKey: all ? [...KEYS.list(filter), "all"] : KEYS.list(filter),
     queryFn: async ({ signal }) => {
+      if (all) {
+        const data = await fetchAllPaged(
+          async (page, limit) => {
+            const r = await container.invoices.list.execute({ ...(filter ?? {}), page, limit }, ctx);
+            if (!isOk(r)) throw r.error;
+            return r.value;
+          },
+          { pageSize: 1000, maxPages: 500, label: "invoices" },
+        );
+        return { data, total: data.length, hasNext: false };
+      }
       const res = await container.invoices.list.execute(filter ?? {}, ctx);
       if (!isOk(res)) throw res.error;
       // REPAIR-016: signal reserved for when list ports accept AbortSignal.

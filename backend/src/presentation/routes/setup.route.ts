@@ -333,6 +333,55 @@ export function registerSetupRoutes(router: Router, container: Container): void 
   });
 
   // POST /api/setup/wizard/complete
+  // POST /api/setup/wizard/restore — first run on a new/reinstalled machine:
+  // restore a full backup instead of creating a new company. Only while the
+  // installation has NO users (nothing to overwrite, nobody to authenticate);
+  // afterwards the restored users sign in with their existing PINs.
+  router.post("/api/setup/wizard/restore", async (req, res) => {
+    if (!config.DESKTOP_DEPLOY || !requireLocalAccess(req)) {
+      res.status(401).json({ code: "UNAUTHORIZED", message: "غير مصرح", statusCode: 401 });
+      return;
+    }
+    const baked = await container.tenantRepo.findBySlug("default");
+    if (!baked) {
+      res.status(409).json({ code: "NO_TENANT", message: "لا توجد شركة مهيأة على هذا الجهاز", statusCode: 409 });
+      return;
+    }
+    const { pool } = await import("../../infrastructure/orm/drizzle.js");
+    const users = await pool.query("SELECT count(*)::int AS n FROM users WHERE tenant_id = $1", [baked.id]);
+    if (users.rows[0].n > 0) {
+      res.status(409).json({
+        code: "ALREADY_INITIALIZED",
+        message: "هذا الجهاز مهيأ مسبقاً — استخدم الاستعادة من الإعدادات بعد تسجيل الدخول",
+        statusCode: 409,
+      });
+      return;
+    }
+    const { restoreUploadedBackup } = await import("./backup.route.js");
+    const { BackupError } = await import("../../infrastructure/backup/portableBackup.js");
+    const { tmpdir } = await import("node:os");
+    const { join } = await import("node:path");
+    const { createWriteStream } = await import("node:fs");
+    const { rm } = await import("node:fs/promises");
+    const { pipeline } = await import("node:stream/promises");
+    const file = join(tmpdir(), `motard-wizard-restore-${Date.now()}.zip`);
+    try {
+      await pipeline(req, createWriteStream(file));
+      const report = await restoreUploadedBackup(file, baked.id, false);
+      res.json(report);
+    } catch (err) {
+      const e = err instanceof BackupError ? err : null;
+      const status = e ? (e.code === "RESTORE_FAILED" ? 500 : 422) : 500;
+      res.status(status).json({
+        code: e?.code ?? "RESTORE_FAILED",
+        message: e?.message ?? `فشلت الاستعادة ولم تتغير البيانات: ${(err as Error).message}`,
+        statusCode: status,
+      });
+    } finally {
+      await rm(file, { force: true }).catch(() => {});
+    }
+  });
+
   router.post("/api/setup/wizard/complete", async (req, res, next) => {
     try {
       if (!requireLocalAccess(req)) {
@@ -354,6 +403,10 @@ export function registerSetupRoutes(router: Router, container: Container): void 
         tenantId,
       );
       if (!r.ok) {
+        if (r.code === "ADMIN_REQUIRED") {
+          res.status(422).json({ code: r.code, message: r.error, statusCode: 422 });
+          return;
+        }
         res.status(500).json({ code: "INTERNAL", message: r.error, statusCode: 500 });
         return;
       }

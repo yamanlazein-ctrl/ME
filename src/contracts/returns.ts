@@ -30,6 +30,7 @@ export interface ReturnDTO {
   partyId: UUID;
   partyName: string;
   originalInvoiceId?: UUID | null;
+  originalInvoiceNumber?: string;
   lines: ReturnLineDTO[];
   reason: ReturnReason;
   currency: string;

@@ -1,4 +1,5 @@
 import { useEffect, useState, type FormEvent, type MouseEvent } from "react";
+import { FullRestoreCard } from "@/components/settings/FullRestoreCard";
 import logoUrl from "@/assets/logo-motard-icon.png";
 import {
   setActivationId as saveActivationId,
@@ -28,10 +29,9 @@ import { cn } from "@/lib/utils";
 const API_BASE = getApiBaseUrl("");
 const SETUP_TOKEN = import.meta.env.VITE_SETUP_TOKEN as string | undefined;
 
-// Desktop pre-baked build: the license is baked into the bundled DB and
-// activated verify-only at runtime — there is no key for the customer to enter.
-// After activate succeeds we mark setup complete and open login (seed already
-// has company + admin); we do NOT collect company/admin again.
+// Desktop build carries the license, but the database template intentionally
+// contains no development user. Every clean install must run onboarding so the
+// customer chooses the company owner and first password locally.
 const isDesktopPreBaked = import.meta.env.VITE_DESKTOP_DEPLOY === "true";
 
 type Step = "activate" | "bootstrap" | "done";
@@ -91,27 +91,10 @@ export function ActivationScreen({ onActivated }: { onActivated: () => void }) {
         if (!r.ok) return;
         const data = (await r.json()) as { currentStep?: string; isCompleted?: boolean };
         if (cancelled) return;
-        // N1: never skip via isCompleted alone — only local isActivated() (Gate)
-        // opens the app. Persist markers first if finishing a mid-wizard desktop install.
-        if (
-          isDesktopPreBaked &&
-          data?.isCompleted !== true &&
-          data?.currentStep &&
-          data.currentStep !== "welcome" &&
-          data.currentStep !== "activate"
-        ) {
-          const tid = getInstallTenantId() || (await ensureTenant());
-          const cp = await apiPost("/api/setup/wizard/complete", { tenantId: tid });
-          if (cp.ok || cp.data?.code === "ALREADY_COMPLETED" || cp.status === 409) {
-            await saveLicenseKey("DESKTOP");
-            await saveActivationId(tid);
-            setStep("done");
-            onActivated();
-            return;
-          }
-        }
+        // Resume mid-wizard only. Never auto-complete without an owner —
+        // the desktop template ships with zero users.
         const mapped = mapBackendStep(data?.currentStep);
-        if (mapped && mapped !== "done" && !isDesktopPreBaked) setStep(mapped);
+        if (mapped && mapped !== "done") setStep(mapped);
       } catch {
         /* stay on activate */
       }
@@ -121,8 +104,10 @@ export function ActivationScreen({ onActivated }: { onActivated: () => void }) {
     };
   }, []);
 
-  // Bootstrap after license (empty DB): password only — company comes from license.
+  // Bootstrap after license (empty DB): desktop asks for name + 4-digit PIN;
+  // web asks for account password (8+). Company name comes from the license.
   const [companyName, setCompanyName] = useState("شركتي");
+  const [ownerName, setOwnerName] = useState("");
   const [adminPassword, setAdminPassword] = useState("");
   const [adminPasswordConfirm, setAdminPasswordConfirm] = useState("");
   const [rememberYear, setRememberYear] = useState(true);
@@ -237,18 +222,10 @@ export function ActivationScreen({ onActivated }: { onActivated: () => void }) {
       const activationId = r.data?.activationId ?? r.data?.id ?? resolvedTenantId;
       setPendingActivationId(activationId);
 
-      // Pre-provisioned install (desktop baked or seeded web tenant): backend
-      // marks wizard complete on activate — open login, no company/admin forms.
-      const skipWizard = isDesktopPreBaked || r.data?.isCompleted === true;
-      if (skipWizard) {
-        if (isDesktopPreBaked && !r.data?.isCompleted) {
-          const cp = await apiPost("/api/setup/wizard/complete", {
-            tenantId: resolvedTenantId,
-          });
-          if (!cp.ok && cp.data?.code !== "ALREADY_COMPLETED") {
-            throw new Error(cp.data?.message || "فشل إكمال الإعداد");
-          }
-        }
+      // A desktop package contains only tenant/license bootstrap data. It must
+      // never skip onboarding because the old development admin is absent.
+      // Already-completed installations may still proceed directly to login.
+      if (r.data?.isCompleted === true) {
         await saveLicenseKey(key || "DESKTOP");
         await saveActivationId(activationId);
         setStep("done");
@@ -256,7 +233,8 @@ export function ActivationScreen({ onActivated }: { onActivated: () => void }) {
         return;
       }
 
-      // Empty DB: license unlocks install → one password screen only.
+      // Clean DB: license unlocks install → customer onboarding creates the
+      // company owner and chooses the first password.
       const fromLicense =
         (typeof r.data?.companyName === "string" && r.data.companyName.trim()) || "شركتي";
       setCompanyName(fromLicense);
@@ -281,25 +259,50 @@ export function ActivationScreen({ onActivated }: { onActivated: () => void }) {
   async function submitBootstrap(e: FormEvent) {
     e.preventDefault();
     setError(null);
-    if (adminPassword.length < 8) {
-      setError("كلمة المرور يجب أن تكون 8 أحرف على الأقل");
-      return;
-    }
-    if (adminPassword !== adminPasswordConfirm) {
-      setError("كلمتا المرور غير متطابقتين");
-      return;
+    if (isDesktopPreBaked) {
+      const name = ownerName.trim();
+      if (!name) {
+        setError("أدخل اسمك");
+        return;
+      }
+      if (!/^\d{4}$/.test(adminPassword) || adminPassword !== adminPasswordConfirm) {
+        setError("الرقم السري يجب أن يكون 4 أرقام ومتطابقاً");
+        return;
+      }
+    } else {
+      if (adminPassword.length < 8) {
+        setError("كلمة المرور يجب أن تكون 8 أحرف على الأقل");
+        return;
+      }
+      if (adminPassword !== adminPasswordConfirm) {
+        setError("كلمتا المرور غير متطابقتين");
+        return;
+      }
     }
     setLoading(true);
     try {
       const tid = await ensureTenant();
-      const admin = await apiPost("/api/setup/wizard/admin", {
-        tenantId: tid,
-        name: "المدير",
-        email: "admin@erp.local",
-        password: adminPassword,
-      });
+      const adminBody = isDesktopPreBaked
+        ? {
+            tenantId: tid,
+            name: ownerName.trim(),
+            email: "admin@erp.local",
+            pin: adminPassword,
+          }
+        : {
+            tenantId: tid,
+            name: "المدير",
+            email: "admin@erp.local",
+            password: adminPassword,
+          };
+      const admin = await apiPost("/api/setup/wizard/admin", adminBody);
       if (!admin.ok) {
-        throw new Error(admin.data?.message || "فشل حفظ كلمة المرور — تأكد أنها 8 أحرف على الأقل");
+        throw new Error(
+          admin.data?.message ||
+            (isDesktopPreBaked
+              ? "فشل حفظ الرمز السري"
+              : "فشل حفظ كلمة المرور — تأكد أنها 8 أحرف على الأقل"),
+        );
       }
       const rv = await apiPost("/api/setup/wizard/review", { tenantId: tid, confirmed: true });
       const reviewAlreadyDone = rv.status === 409 || rv.data?.code === "ALREADY_COMPLETED";
@@ -344,7 +347,10 @@ export function ActivationScreen({ onActivated }: { onActivated: () => void }) {
               (isDesktopPreBaked
                 ? "تم تضمين الترخيص مسبقاً في هذا التثبيت"
                 : "تفعيل الجهاز مرة واحدة — ترخيص أو دعوة")}
-            {step === "bootstrap" && "مبروك — تم تفعيل الترخيص"}
+            {step === "bootstrap" &&
+              (isDesktopPreBaked
+                ? "عيّن اسمك ورقمك السري لأول مرة"
+                : "مبروك — تم تفعيل الترخيص")}
             {step === "done" && "تم تفعيل النظام بنجاح"}
           </p>
         </div>
@@ -546,6 +552,67 @@ export function ActivationScreen({ onActivated }: { onActivated: () => void }) {
                 </button>
               </form>
             )}
+          </div>
+        )}
+
+        {step === "bootstrap" && isDesktopPreBaked && (
+          <form onSubmit={submitBootstrap} className="mt-6 space-y-4">
+            <p className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-3 text-sm text-emerald-700 dark:text-emerald-300">
+              مبروك — تم تفعيل الترخيص لـ «{companyName}». أدخل اسمك وعيّن رقماً سرياً من 4 أرقام
+              لاستخدامه في كل دخول لاحق.
+            </p>
+            <Field label="اسمك">
+              <input
+                type="text"
+                className={inputCls}
+                value={ownerName}
+                onChange={(e) => setOwnerName(e.target.value)}
+                autoComplete="name"
+                autoFocus
+              />
+            </Field>
+            <Field label="الرقم السري (4 أرقام)">
+              <input
+                type="password"
+                inputMode="numeric"
+                maxLength={4}
+                className={cn(inputCls, "text-center text-lg tracking-[0.4em]")}
+                value={adminPassword}
+                onChange={(e) => setAdminPassword(e.target.value.replace(/\D/g, "").slice(0, 4))}
+                autoComplete="new-password"
+              />
+            </Field>
+            <Field label="تأكيد الرقم السري">
+              <input
+                type="password"
+                inputMode="numeric"
+                maxLength={4}
+                className={cn(inputCls, "text-center text-lg tracking-[0.4em]")}
+                value={adminPasswordConfirm}
+                onChange={(e) =>
+                  setAdminPasswordConfirm(e.target.value.replace(/\D/g, "").slice(0, 4))
+                }
+                autoComplete="new-password"
+              />
+            </Field>
+            <label className="flex items-center gap-2 text-xs text-muted-foreground">
+              <input
+                type="checkbox"
+                checked={rememberYear}
+                onChange={(e) => setRememberYear(e.target.checked)}
+                className="rounded border-border"
+              />
+              تذكّر هذا الجهاز لمدة سنة
+            </label>
+            <button type="submit" disabled={loading} className={btnCls}>
+              {loading ? "جاري الحفظ…" : "تم — ادخل النظام"}
+            </button>
+          </form>
+        )}
+
+        {step === "bootstrap" && isDesktopPreBaked && (
+          <div className="mt-6 border-t border-border pt-4">
+            <FullRestoreCard mode="wizard" onRestored={onActivated} />
           </div>
         )}
 

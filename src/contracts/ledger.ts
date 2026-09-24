@@ -37,6 +37,13 @@ export interface LedgerFilter extends PaginationParams, SortParams {
   fromDate?: string;
   toDate?: string;
   status?: "active" | "cancelled" | "all";
+  /** Single ledger type (server filter). */
+  type?: string;
+  search?: string;
+  /** Central-ledger rule: opening entries bypass type/date/status filters. */
+  keepOpening?: boolean;
+  /** 0-based page. */
+  page?: number;
 }
 export type ListLedgerRequest = ListRequest<LedgerFilter>;
 export type ListLedgerResponse = ListResponse<LedgerEntryDTO>;

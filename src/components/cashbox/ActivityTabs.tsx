@@ -61,11 +61,13 @@ export function ActivityTabs({
     isError,
     refetch,
     error,
-  } = useLedgerEntries({
+  } = useLedgerEntries(
+    {
     fromDate: query.fromDate,
     toDate: query.toDate,
-    limit: 500,
-  });
+  },
+    { all: true },
+  );
 
   useEffect(() => {
     if (error) console.error("[cashbox] ledger feed failed:", error);

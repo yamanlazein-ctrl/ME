@@ -40,7 +40,17 @@ export function VoucherTable({
   kind: "receipt" | "payment";
   query: ProfitQueryParams;
 }) {
-  const { data, isLoading, isError, refetch, error } = useVouchersList({ kind, limit: 50 });
+  // Period/status filters run on the server — only this period's vouchers are
+  // fetched, not the whole voucher history.
+  const { data, isLoading, isError, refetch, error } = useVouchersList(
+    {
+      kind,
+      status: "active",
+      ...(query.fromDate ? { fromDate: query.fromDate } : {}),
+      ...(query.toDate ? { toDate: query.toDate } : {}),
+    },
+    { all: true },
+  );
   const cancelMut = useCancelVoucher();
   const [toCancel, setToCancel] = useState<Voucher | null>(null);
 

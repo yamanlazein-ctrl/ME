@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { GitMerge } from "lucide-react";
+import { CloudOff, GitMerge } from "lucide-react";
 import { Link } from "@tanstack/react-router";
 import { useOpenSyncConflictCount } from "@/presentation/hooks/useSyncConflicts";
 import { NotificationsBell } from "./NotificationsBell";
@@ -23,7 +23,7 @@ export function Header() {
   const connectivity = useConnectivity();
   const { deviceGate, deviceTrust } = useAutoSync();
   useLiveNotificationToasts();
-  const { running: syncing } = useSyncRunState();
+  const { running: syncing, lastError: hubSyncError } = useSyncRunState();
   const online = connectivity === "online";
   const conflictCount = useOpenSyncConflictCount();
 
@@ -77,7 +77,7 @@ export function Header() {
               "hidden items-center gap-1.5 text-[11px] font-medium lg:inline-flex",
               online ? "text-emerald-600 dark:text-emerald-400" : "text-destructive",
             )}
-            title={online ? "الاتصال بالخادم متاح" : "لا يوجد اتصال بالخادم"}
+            title={online ? "الجهاز المحلي متصل بخادمه الداخلي" : "لا يوجد اتصال بالخادم المحلي"}
             role="status"
             aria-live="polite"
           >
@@ -90,6 +90,24 @@ export function Header() {
             />
             {online ? (syncing ? "جاري المزامنة…" : "متصل") : "غير متصل"}
           </span>
+          {/* Cloud-sync health is separate from local connectivity above: the
+              local backend can be reachable while the hub (Neon/tunnel) is
+              down, which used to show a false "متصل" with no visible error —
+              reproduced live 2026-09-23 (hub process down behind a dead
+              Cloudflare quick-tunnel while both desktops still read
+              "متصل/مسجّل ✓"). Driven by the SAME /api/sync/run result the
+              periodic auto-sync already polls — no extra admin-gated call. */}
+          {!syncing && hubSyncError && (
+            <span
+              className="hidden items-center gap-1.5 text-[11px] font-medium text-destructive lg:inline-flex"
+              title={`تعذّرت المزامنة مع المركز: ${hubSyncError}`}
+              role="status"
+              aria-live="polite"
+            >
+              <CloudOff className="h-3 w-3" aria-hidden />
+              تعذّرت المزامنة السحابية
+            </span>
+          )}
           {deviceGate && (
             <span
               className="hidden items-center gap-1.5 text-[11px] font-medium text-amber-600 lg:inline-flex dark:text-amber-400"

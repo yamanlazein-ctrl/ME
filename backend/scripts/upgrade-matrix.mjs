@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * REPAIR-030 — upgrade-over-real-data matrix scaffold.
- * Scenarios S-1..S-18 from REPAIR-PLAN.md § REPAIR-030.
+ * Checklist only — NOT an automated test (see docs/PROJECT-STATUS.md §3.3).
  * Exit 0 when checklist file is present; expand with real AppData copies in CI.
  */
 const scenarios = [

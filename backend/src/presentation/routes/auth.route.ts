@@ -606,13 +606,16 @@ export function registerAuthRoutes(router: Router, container: Container) {
             });
           }
         } else {
-          if (!currentSecret) throw new InvalidCredentialsError();
-          const passwordOk = await container.passwordHasher.verify(
-            user.passwordHash,
-            currentSecret,
-          );
-          const pinOk = await container.passwordHasher.verify(user.pinHash!, currentSecret);
-          if (!passwordOk && !pinOk) throw new InvalidCredentialsError();
+          // Lost-PIN recovery must not ask for the lost current secret. Require
+          // device provisioning proof instead, just as first-time PIN setup.
+          const proof = await hasDeviceProvisioningProof(req, container, tenantId, authRepo);
+          if (!proof) {
+            return res.status(401).json({
+              code: "DEVICE_PROOF_REQUIRED",
+              message: "تعذّر التحقق من تفعيل هذا الجهاز — أعد تفعيل الجهاز ثم حاول مجدداً",
+              statusCode: 401,
+            });
+          }
         }
 
         const pinHash = await container.passwordHasher.hash(pin);

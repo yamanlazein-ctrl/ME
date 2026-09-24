@@ -1,6 +1,6 @@
 import { drizzle } from "drizzle-orm/node-postgres";
 import { sql } from "drizzle-orm";
-import { Pool, PoolClient } from "pg";
+import pg, { Pool, PoolClient } from "pg";
 import { config } from "../config/env.js";
 import { tenantContext } from "./tenant-context.js";
 import { runInAmbientTx, getAmbientTx, getAmbientTenantId, ambientDb } from "./ambient-tx.js";
@@ -94,6 +94,22 @@ export const pool = new TenantScopedPool({
     : {}),
 });
 
+// A connection that drops (postgres restart, socket reset, AV/firewall on
+// loopback) emits 'error'. pg forwards idle-client errors to the pool, but a
+// CHECKED-OUT client between queries emits on itself — with no listener Node
+// treats it as an uncaught exception and the whole server process exits
+// (reproduced under a 10k-invoice load test: "Connection terminated
+// unexpectedly" killed the desktop backend). The broken client is discarded by
+// pg on its next use; log and keep serving.
+pool.on("error", (err) => {
+  console.error("[db] idle pool client error:", err.message);
+});
+pool.on("connect", (client) => {
+  client.on("error", (err) => {
+    console.error("[db] pooled client error:", err.message);
+  });
+});
+
 export const db = drizzle(pool);
 
 /** Pool-backed db that joins an ambient `withTenantTx` when one is active. */
@@ -129,6 +145,14 @@ export type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
  * repository that opens `withTenantTx` internally can never commit behind the
  * route's back.
  */
+/**
+ * Enable the controlled ledger party_id remap (migration 20261011) for the
+ * current transaction only. Kept here: GUC writes are confined to drizzle.ts.
+ */
+export async function allowLedgerPartyRemap(tx: Tx): Promise<void> {
+  await tx.execute(sql`SELECT set_config('app.allow_party_remap', '1', true)`);
+}
+
 export async function withTenantTx<T>(tenantId: string, fn: (tx: Tx) => Promise<T>): Promise<T> {
   if (!tenantId) throw new Error("tenantId is required");
   // F-07 nesting: when an ambient tenant transaction is ALREADY active (a
@@ -167,6 +191,27 @@ export async function withTenantTx<T>(tenantId: string, fn: (tx: Tx) => Promise<
   } finally {
     client.release();
   }
+}
+
+/**
+ * A dedicated (non-pooled) connection — for work that must not run on the
+ * shared pool: full backup/restore needs its own long transaction and a
+ * connection to a different database (the restore staging DB).
+ */
+export async function openDedicatedClient(connectionString: string = config.DATABASE_URL) {
+  const client = new pg.Client({ connectionString });
+  client.on("error", (err) => console.error("[db] dedicated client error:", err.message));
+  await client.connect();
+  return client;
+}
+export type DedicatedClient = Awaited<ReturnType<typeof openDedicatedClient>>;
+
+/** Tenant GUC for the CURRENT transaction only (RLS scope of backup/restore). */
+export async function setTenantForTransaction(
+  client: { query: (text: string, values?: unknown[]) => Promise<unknown> },
+  tenantId: string,
+): Promise<void> {
+  await client.query("SELECT set_config('app.current_tenant_id', $1, true)", [tenantId]);
 }
 
 // Health check helper

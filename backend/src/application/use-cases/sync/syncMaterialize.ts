@@ -435,6 +435,22 @@ async function materializeInvoiceCreate(
   if (!createInput || typeof createInput !== "object") {
     return { status: "invalid", error: "missing createInput in sync payload" };
   }
+  // A create replay must carry measurable line data. Never materialize a
+  // malformed/partial payload as a zero-line invoice: that would make the hub
+  // appear successful while losing stock and financial effects.
+  const inputLines = (createInput as { lines?: unknown }).lines;
+  if (!Array.isArray(inputLines) || inputLines.length === 0) {
+    return { status: "invalid", error: "sync invoice create has no invoice lines" };
+  }
+  for (const line of inputLines) {
+    if (!line || typeof line !== "object") {
+      return { status: "invalid", error: "sync invoice line is malformed" };
+    }
+    const quantityKg = Number((line as { quantityKg?: unknown }).quantityKg);
+    if (!Number.isFinite(quantityKg) || quantityKg <= 0) {
+      return { status: "invalid", error: "sync invoice line quantity must be positive" };
+    }
+  }
 
   const depErr = await ensureDeps(database, payload, ctx);
   if (depErr) return depErr;

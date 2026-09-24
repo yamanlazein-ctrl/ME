@@ -22,6 +22,7 @@ import { db as defaultDb } from "../../../infrastructure/orm/drizzle.js";
 import { randomUUID } from "node:crypto";
 import { recordDesktopDeviceActivation } from "./recordDesktopDeviceActivation.js";
 import { MultipleTenantsDetectedError } from "../../../domain/errors/index.js";
+import { isWeakPin } from "../../../domain/value-objects/pinStrength.js";
 
 /**
  * Phase 0 sub-batches 0F + 0G — setup use cases.
@@ -381,12 +382,22 @@ export async function activateAndPersistUseCase(
         activationId,
       });
 
-      // Desktop SKU: seed already provisioned company + admin. Mark the wizard
-      // complete here so Continue does not force company/admin screens, and so
-      // the next cold boot skips ActivationGate (local status = completed).
-      const completed = await deps.installationStateRepo.markCompleted(
-        effectiveTenantId as never,
-      );
+      // Desktop template ships tenant + baked license only (0 users). Mark
+      // complete only when an owner already exists (upgrade / re-activate);
+      // otherwise the onboarding wizard must collect name + PIN.
+      let isCompleted = false;
+      if (
+        await tenantAlreadyProvisioned(
+          deps.installationStateRepo,
+          deps.authRepo,
+          effectiveTenantId,
+        )
+      ) {
+        const completed = await deps.installationStateRepo.markCompleted(
+          effectiveTenantId as never,
+        );
+        isCompleted = completed.isCompleted;
+      }
 
       await ensureServerInstallation(defaultDb, {
         installationId,
@@ -395,6 +406,17 @@ export async function activateAndPersistUseCase(
         appVersion: parsed.data.appVersion ?? null,
       });
 
+      const companyName =
+        (lic.customerName && String(lic.customerName).trim()) ||
+        (lic.vendorMetadata &&
+        typeof lic.vendorMetadata === "object" &&
+        lic.vendorMetadata !== null &&
+        "companyName" in lic.vendorMetadata &&
+        typeof (lic.vendorMetadata as { companyName?: unknown }).companyName === "string"
+          ? String((lic.vendorMetadata as { companyName: string }).companyName).trim()
+          : "") ||
+        undefined;
+
       return {
         ok: true,
         data: {
@@ -402,7 +424,8 @@ export async function activateAndPersistUseCase(
           features: lic.features ?? [],
           expiresAt: lic.expiresAt?.toISOString() ?? null,
           tenantId: effectiveTenantId,
-          isCompleted: completed.isCompleted,
+          isCompleted,
+          companyName,
         },
       };
     }
@@ -573,11 +596,16 @@ export async function saveCompanyStepUseCase(
   }
 }
 
-const adminStepInput = z.object({
-  name: z.string().min(1),
-  email: z.string().email(),
-  password: z.string().min(8),
-});
+const adminStepInput = z
+  .object({
+    name: z.string().min(1),
+    email: z.string().email().optional(),
+    password: z.string().min(8).optional(),
+    pin: z.string().regex(/^\d{4}$/).optional(),
+  })
+  .refine((d) => Boolean(d.password || d.pin), {
+    message: "password_or_pin_required",
+  });
 
 export async function saveAdminStepUseCase(
   deps: {
@@ -589,17 +617,32 @@ export async function saveAdminStepUseCase(
 ): Promise<Result<true>> {
   const parsed = adminStepInput.safeParse(input);
   if (!parsed.success) return { ok: false, error: "بيانات المسؤول غير صالحة" };
+  if (parsed.data.pin && isWeakPin(parsed.data.pin)) {
+    return {
+      ok: false,
+      error: "هذا الرقم السري ضعيف جداً (مثل 0000 أو 1234) — يرجى اختيار رقم أصعب تخمينه",
+    };
+  }
   const guard = await assertWizardMutable(deps.installationStateRepo, tenantId);
   if (!guard.ok) return guard;
   try {
-    const passwordHash = await deps.passwordHasher.hash(parsed.data.password);
+    const email = (parsed.data.email?.trim() || "admin@erp.local").toLowerCase();
+    // Desktop onboarding may send only a 4-digit PIN; web still sends password.
+    // PIN login uses pinHash; passwordHash must still exist on the user row.
+    const passwordHash = await deps.passwordHasher.hash(
+      parsed.data.password ?? parsed.data.pin!,
+    );
+    const pinHash = parsed.data.pin
+      ? await deps.passwordHasher.hash(parsed.data.pin)
+      : undefined;
     await deps.installationStateRepo.saveStep(tenantId as never, "admin", {
       name: parsed.data.name,
-      email: parsed.data.email,
+      email,
       // The hash is held in the wizard state until completeWizard
       // promotes it to a real `users` row. Hashes must never be
       // echoed back to the client.
       passwordHash,
+      ...(pinHash ? { pinHash } : {}),
     });
     return { ok: true, data: true };
   } catch (e) {
@@ -651,17 +694,25 @@ export async function completeWizardUseCase(
     const name = String(admin.name ?? "").trim();
     const email = String(admin.email ?? "").trim();
     const passwordHash = String(admin.passwordHash ?? "");
-    if (name && email && passwordHash) {
-      const existing = await deps.authRepo.findUserByEmail(email, tenantId as never);
-      if (!existing) {
-        await deps.authRepo.createUser({
-          tenantId: tenantId as never,
-          name,
-          email,
-          passwordHash,
-          role: "admin",
-        });
-      }
+    const pinHashRaw = admin.pinHash;
+    const pinHash = typeof pinHashRaw === "string" && pinHashRaw ? pinHashRaw : undefined;
+    if (!name || !email || !passwordHash) {
+      return {
+        ok: false,
+        error: "يجب تعيين اسم المالك والرمز السري قبل إكمال الإعداد",
+        code: "ADMIN_REQUIRED",
+      };
+    }
+    const existing = await deps.authRepo.findUserByEmail(email, tenantId as never);
+    if (!existing) {
+      await deps.authRepo.createUser({
+        tenantId: tenantId as never,
+        name,
+        email,
+        passwordHash,
+        role: "admin",
+        pinHash: pinHash ?? null,
+      });
     }
 
     const updated = await deps.installationStateRepo.markCompleted(tenantId as never);

@@ -20,7 +20,8 @@ import {
 import { printDocument } from "@/components/print/printPortal";
 import { VoucherPrintDocument } from "@/components/print/VoucherPrintDocument";
 import { useVouchersList, useCancelVoucher, type Voucher } from "@/presentation/hooks/useVouchers";
-import { useInvoicesList } from "@/presentation/hooks/useInvoices";
+import { ListPager, LIST_PAGE_SIZE } from "@/components/common/ListPager";
+import type { VoucherFilter } from "@/core/dtos/VoucherDTO";
 import { supplierById } from "@/presentation/hooks/useParties";
 import { formatAmount } from "@/presentation/hooks/useCurrency";
 import { formatDateTime } from "@/lib/utils";
@@ -28,16 +29,16 @@ import { formatDateTime } from "@/lib/utils";
 export const Route = createFileRoute("/payments/")({ component: PaymentsList });
 
 function PaymentsList() {
-  const { data: listData } = useVouchersList({ kind: "payment", limit: 50 });
+  // One server page at a time (was: every voucher + every invoice downloaded
+  // just to show invoice numbers). The invoice number now comes with the row.
+  const [page, setPage] = useState(0);
+  const { data: listData, isFetching } = useVouchersList({
+    kind: "payment",
+    page,
+    limit: LIST_PAGE_SIZE,
+  } as VoucherFilter);
   const list = listData?.data ?? [];
-  const { data: invoicesData } = useInvoicesList({ limit: 50 });
-  const invoiceNumberById = useMemo(() => {
-    const m = new Map<string, string>();
-    for (const inv of invoicesData?.data ?? []) {
-      m.set(inv.id, inv.number || inv.reference || inv.id.slice(0, 8));
-    }
-    return m;
-  }, [invoicesData]);
+  const totalCount = listData?.total ?? list.length;
   const cancelVoucherMut = useCancelVoucher();
 
   const [selectMode, setSelectMode] = useState(false);
@@ -103,7 +104,7 @@ function PaymentsList() {
         </div>
       }
     >
-      <PageCard title="القائمة" description={`${list.length} سند مسجل.`} noBodyPadding>
+      <PageCard title="القائمة" description={`${totalCount} سند مسجل.`} noBodyPadding>
         <div className="w-full overflow-x-auto">
           <table className="w-full min-w-[900px] text-right text-sm">
             <thead className="bg-secondary/60 text-[11px] uppercase text-muted-foreground">
@@ -142,7 +143,7 @@ function PaymentsList() {
                     <td className="px-3 py-2 text-primary">
                       {v.invoiceId ? (
                         <Link to="/invoices/$id" params={{ id: v.invoiceId }}>
-                          {invoiceNumberById.get(v.invoiceId) ?? "—"}
+                          {v.invoiceNumber ?? "—"}
                         </Link>
                       ) : (
                         <span className="text-muted-foreground">دفعة عامة</span>
@@ -203,6 +204,15 @@ function PaymentsList() {
             </tbody>
           </table>
         </div>
+        <ListPager
+          page={page}
+          total={totalCount}
+          loading={isFetching}
+          onPage={(p) => {
+            setPage(p);
+            setSelectedIds({});
+          }}
+        />
       </PageCard>
 
       <ConfirmBulkAction

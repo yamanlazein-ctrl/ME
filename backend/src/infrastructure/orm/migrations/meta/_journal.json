@@ -624,6 +624,20 @@
       "when": 1790146800000,
       "tag": "20261011_ledger_party_remap",
       "breakpoints": true
+    },
+    {
+      "idx": 89,
+      "version": 7,
+      "when": 1790233200000,
+      "tag": "20261012_drop_duplicate_idempotency_idx",
+      "breakpoints": true
+    },
+    {
+      "idx": 90,
+      "version": 7,
+      "when": 1790319600000,
+      "tag": "20261013_pg_trgm_search",
+      "breakpoints": true
     }
   ]
 }

@@ -149,11 +149,13 @@ function CashBoxPage() {
   const todayOut = todayFlowByCurrency[sessionCurrency]?.out ?? 0;
 
   // Today's transaction count (light query; separate cache entry from the tab feed).
-  const { data: todayLedgerResult } = useLedgerEntries({
+  const { data: todayLedgerResult } = useLedgerEntries(
+    {
     fromDate: today,
     toDate: today,
-    limit: 500,
-  });
+  },
+    { all: true },
+  );
   const txCount =
     (todayLedgerResult ?? []).filter((e) => e.status === "active" && e.cashImpact !== "none")
       .length + manualMoves.filter((m) => m.date === today).length;

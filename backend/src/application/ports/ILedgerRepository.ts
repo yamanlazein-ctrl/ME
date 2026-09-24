@@ -15,6 +15,13 @@ export interface LedgerFilter {
   referenceType?: string;
   referenceId?: UUID;
   search?: string;
+  /** "all" (default) | "active" | "cancelled". */
+  status?: "active" | "cancelled" | "all";
+  /**
+   * Central-ledger screen semantics: opening entries are always listed,
+   * regardless of date/type/status, and search also matches reference_number.
+   */
+  keepOpening?: boolean;
   page?: number;
   limit?: number;
 }

@@ -382,36 +382,34 @@ export class PostgresDashboardRepository implements IDashboardRepository {
       count: number;
       total_due: number;
     }>(sql`
-      SELECT
-        i.currency AS currency,
-        COUNT(*)::int AS count,
-        COALESCE(SUM(
-          i.total - i.paid - COALESCE((
-            SELECT SUM(rl.quantity_kg * rl.price_per_kg)
-            FROM return_lines rl
-            INNER JOIN returns r ON r.id = rl.return_id
-            WHERE r.original_invoice_id = i.id
-              AND r.tenant_id = i.tenant_id
-              AND r.status = 'active'
-              AND r.kind = 'sale'
-          ), 0)
-        ), 0)::float AS total_due
-      FROM invoices i
-      WHERE i.tenant_id = ${ctx.tenantId}
-        AND i.type = 'sale'
-        AND i.status = 'active'
-        AND (
-          i.total - i.paid - COALESCE((
-            SELECT SUM(rl.quantity_kg * rl.price_per_kg)
-            FROM return_lines rl
-            INNER JOIN returns r ON r.id = rl.return_id
-            WHERE r.original_invoice_id = i.id
-              AND r.tenant_id = i.tenant_id
-              AND r.status = 'active'
-              AND r.kind = 'sale'
-          ), 0)
-        ) > 0
-      GROUP BY i.currency
+      -- Returns aggregated ONCE per original invoice and joined. The previous
+      -- correlated subquery ran per invoice, twice (SELECT + WHERE): 3 s of
+      -- the dashboard at 50k invoices (EXPLAIN: 74k subplan executions).
+      WITH ret AS (
+        SELECT r.original_invoice_id AS invoice_id,
+               SUM(rl.quantity_kg * rl.price_per_kg) AS amount
+          FROM returns r
+          JOIN return_lines rl ON rl.return_id = r.id
+         WHERE r.tenant_id = ${ctx.tenantId}
+           AND r.status = 'active'
+           AND r.kind = 'sale'
+           AND r.original_invoice_id IS NOT NULL
+         GROUP BY r.original_invoice_id
+      ),
+      due AS (
+        SELECT i.currency, i.total - i.paid - COALESCE(ret.amount, 0) AS remaining
+          FROM invoices i
+          LEFT JOIN ret ON ret.invoice_id = i.id
+         WHERE i.tenant_id = ${ctx.tenantId}
+           AND i.type = 'sale'
+           AND i.status = 'active'
+      )
+      SELECT currency,
+             COUNT(*)::int AS count,
+             COALESCE(SUM(remaining), 0)::float AS total_due
+        FROM due
+       WHERE remaining > 0
+       GROUP BY currency
     `);
 
     const unpaidByCurrency: Record<string, { count: number; totalDue: number }> = {};

@@ -71,8 +71,23 @@ export class PostgresReturnRepository implements IReturnRepository {
       byId.set(it.returnId, l);
     }
 
+    // Original invoice numbers for the page (list screens used to download
+    // every invoice just to show this column).
+    const origIds = [...new Set(dataRows.map((r) => r.originalInvoiceId).filter(Boolean))] as string[];
+    const origNumbers = new Map<string, string>();
+    if (origIds.length > 0) {
+      const inv = await this.db
+        .select({ id: invoices.id, number: invoices.number })
+        .from(invoices)
+        .where(and(eq(invoices.tenantId, ctx.tenantId), inArray(invoices.id, origIds)));
+      for (const i of inv) origNumbers.set(i.id, i.number);
+    }
+
     return {
-      data: dataRows.map((r) => this.toDomain(r, byId.get(r.id) ?? [])),
+      data: dataRows.map((r) => ({
+        ...this.toDomain(r, byId.get(r.id) ?? []),
+        originalInvoiceNumber: r.originalInvoiceId ? origNumbers.get(r.originalInvoiceId) : undefined,
+      })),
       meta: {
         total: Number(countRows[0]?.count ?? 0),
         page,
@@ -210,10 +225,21 @@ export class PostgresReturnRepository implements IReturnRepository {
             currency: invoiceCurrency,
           });
         }
-        // All active returns for same party+kind+roll, regardless of linkage
+        // Two bounds, both must hold:
+        //  1. per invoice: this invoice's qty minus returns LINKED to it;
+        //  2. per party+roll: everything sold to the party from this roll minus
+        //     ALL its returns of the roll (linked or not), so unlinked returns
+        //     can never be double-dipped against a linked one.
+        // Subtracting every return of the roll from THIS invoice's qty (the old
+        // rule) refused legitimate returns when the same roll was sold on
+        // several invoices (found by the 5-year load audit).
         const rollIds = Array.from(new Set(input.lines.map((l) => l.rollId)));
         const prevReturns = await tx
-          .select({ rollId: returnLines.rollId, total: sql<number>`COALESCE(SUM(${returnLines.quantityKg}),0)` })
+          .select({
+            rollId: returnLines.rollId,
+            total: sql<number>`COALESCE(SUM(${returnLines.quantityKg}),0)`,
+            linked: sql<number>`COALESCE(SUM(${returnLines.quantityKg}) FILTER (WHERE ${returns.originalInvoiceId} = ${input.originalInvoiceId}),0)`,
+          })
           .from(returnLines)
           .innerJoin(
             returns,
@@ -228,9 +254,31 @@ export class PostgresReturnRepository implements IReturnRepository {
           )
           .where(inArray(returnLines.rollId, rollIds))
           .groupBy(returnLines.rollId);
-        for (const pr of prevReturns) {
-          const entry = invoiceLineQtys.get(pr.rollId);
-          if (entry) entry.returned = Math.round(Number(pr.total) * 100) / 100;
+        const soldToParty = await tx
+          .select({ rollId: invoiceLines.rollId, total: sql<number>`COALESCE(SUM(${invoiceLines.quantityKg}),0)` })
+          .from(invoiceLines)
+          .innerJoin(
+            invoices,
+            and(
+              eq(invoices.id, invoiceLines.invoiceId),
+              eq(invoices.tenantId, ctx.tenantId),
+              eq(invoices.partyId, input.partyId),
+              eq(invoices.type, expectedInvoiceType),
+              eq(invoices.status, "active"),
+            ),
+          )
+          .where(and(eq(invoiceLines.tenantId, ctx.tenantId), inArray(invoiceLines.rollId, rollIds)))
+          .groupBy(invoiceLines.rollId);
+        const round = (n: unknown) => Math.round(Number(n) * 100) / 100;
+        for (const [rollId, entry] of invoiceLineQtys) {
+          const pr = prevReturns.find((p) => p.rollId === rollId);
+          const sold = round(soldToParty.find((s) => s.rollId === rollId)?.total ?? entry.original);
+          const allReturned = round(pr?.total ?? 0);
+          const linkedReturned = round(pr?.linked ?? 0);
+          // Effective "already returned" against this invoice = the larger of
+          // the two consumptions, so `original - returned` is the tighter bound.
+          const globalRoom = round(sold - allReturned);
+          entry.returned = round(Math.max(linkedReturned, entry.original - globalRoom));
         }
       } else {
         const rollIds = Array.from(new Set(input.lines.map((l) => l.rollId)));
@@ -342,12 +390,14 @@ export class PostgresReturnRepository implements IReturnRepository {
 
       // REPAIR-012: lock all return rolls once, ascending id order.
       const { lockRollsOrdered } = await import("./rollLocking.js");
-      const lockedRolls = await lockRollsOrdered(tx, ctx.tenantId, [...inputByRoll.keys()]);
+      const lockedRolls = await lockRollsOrdered(tx, ctx.tenantId, [...inputByRoll.keys()], {
+        skipMissing: true,
+      });
       for (const rollId of [...inputByRoll.keys()].sort()) {
         const totalQty = inputByRoll.get(rollId)!;
         const totalPieces = piecesByRoll.get(rollId) ?? 1;
-        const r = lockedRolls.get(rollId)!;
-        {
+        const r = lockedRolls.get(rollId);
+        if (r) {
           const currentKg = Number(r.remainingKg);
           const currentPieces = Number(r.remainingPieces);
           const delta = input.kind === "entry" ? -totalQty : totalQty;
@@ -601,6 +651,7 @@ export class PostgresReturnRepository implements IReturnRepository {
         tx,
         ctx.tenantId,
         lines.map((l) => l.rollId),
+        { skipMissing: true },
       );
       const linesSorted = [...lines].sort((a, b) => (a.rollId < b.rollId ? -1 : a.rollId > b.rollId ? 1 : 0));
       for (const l of linesSorted) {

@@ -19,6 +19,8 @@ import { Progress } from "@/components/ui/progress";
 import { settings, logActivity } from "@/presentation/hooks/useSettings";
 import { getAccessToken } from "@/infrastructure/auth/TokenProvider";
 import { DesktopUpdatesCard } from "@/components/desktop/DesktopUpdatesCard";
+import { FullRestoreCard } from "@/components/settings/FullRestoreCard";
+import { clearTokens } from "@/infrastructure/auth/TokenProvider";
 
 const ALLOWED_SETTING_KEYS = [
   "company",
@@ -94,8 +96,10 @@ function BackupPage() {
 
       const blob = await res.blob();
       const size = blob.size;
-      const timestamp = new Date().toISOString().slice(0, 19).replace(/:/g, "-");
-      const fileName = `fabric-erp-full-backup-${timestamp}.zip`;
+      const disposition = res.headers.get("Content-Disposition") ?? "";
+      const fileName =
+        /filename="([^"]+)"/.exec(disposition)?.[1] ??
+        `MotardERP-Backup-${new Date().toISOString().slice(0, 10)}.zip`;
 
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
@@ -277,10 +281,19 @@ function BackupPage() {
             </li>
           </ul>
           <p className="mt-2 text-xs text-muted-foreground">
-            الملف يُحفظ بتنسيق ZIP. للاسترجاع على جهاز جديد: ثبّت النظام ثم نفّذ{" "}
-            <code className="rounded bg-secondary px-1">npm run db:restore &lt;ملف-النسخة&gt;</code>{" "}
-            — راجع دليل docs/DISASTER-RECOVERY.md.
+            ملف ZIP واحد يُتحقق منه بعد إنشائه (بصمة SHA-256 لكل جدول، إصدار البرنامج والمخطط).
+            للاسترجاع على جهاز جديد: ثبّت البرنامج واختر «استعادة نسخة احتياطية من جهاز سابق» في
+            شاشة الإعداد الأولى، أو استخدم بطاقة الاستعادة أدناه.
           </p>
+        </div>
+        <div className="mt-4">
+          <FullRestoreCard
+            mode="settings"
+            onRestored={() => {
+              clearTokens();
+              window.location.assign("/");
+            }}
+          />
         </div>
       </PageCard>
 

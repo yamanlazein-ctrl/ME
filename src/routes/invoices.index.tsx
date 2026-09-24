@@ -230,7 +230,16 @@ function InvoicesIndexPage() {
                       </td>
                       <td className="px-3 py-2">{TYPE_LABEL[inv.type]}</td>
                       <td className="px-3 py-2">{party?.name ?? "—"}</td>
-                      <td className="px-3 py-2 tabular-nums">{formatDateTime(inv.createdAt)}</td>
+                      {/* The document date (what the invoice says) — not when it was
+                          typed in; a backdated invoice showed today's date here. */}
+                      <td className="px-3 py-2 tabular-nums">
+                        {String(inv.date).slice(0, 10)}
+                        {inv.createdAt && String(inv.createdAt).slice(0, 10) !== String(inv.date).slice(0, 10) && (
+                          <div className="text-[10px] text-muted-foreground">
+                            أُدخلت: {formatDateTime(inv.createdAt)}
+                          </div>
+                        )}
+                      </td>
                       <td className="px-3 py-2 text-left tabular-nums">
                         {formatAmount(total, inv.currency)}
                       </td>

@@ -192,6 +192,10 @@ pub fn no_window_command(program: impl AsRef<std::ffi::OsStr>) -> Command {
 // (Boot deadline accounting lives in `super::health`.)
 
 const FACTORY_RESET_FLAG: &str = "factory-reset.requested";
+/// First-launch staging dir; renamed to `pgdata` only once fully provisioned.
+const PROVISIONING_DIR: &str = "pgdata.provisioning";
+/// Written only by the initdb path; consumed by the one `createdb` it needs.
+const NEEDS_CREATEDB_MARKER: &str = ".motard-needs-createdb";
 
 #[derive(Debug, PartialEq, Eq)]
 enum PidLock {
@@ -217,24 +221,46 @@ fn classify_postmaster_pid(contents: &str, is_running: impl Fn(u32) -> bool) -> 
     }
 }
 
+/// True only when `pid` is a live `postgres.exe`. After a power cut the
+/// stale postmaster.pid can name a PID Windows has since handed to an
+/// unrelated process; treating that as "postgres still running" used to
+/// block startup with a bogus "close the old PostgreSQL" error.
 fn pid_is_running(pid: u32) -> bool {
     if pid == 0 {
         return false;
     }
     #[cfg(windows)]
     {
+        use windows::core::PWSTR;
         use windows::Win32::Foundation::CloseHandle;
         use windows::Win32::System::Threading::{
-            GetExitCodeProcess, OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION,
+            GetExitCodeProcess, OpenProcess, QueryFullProcessImageNameW, PROCESS_NAME_WIN32,
+            PROCESS_QUERY_LIMITED_INFORMATION,
         };
         unsafe {
             let Ok(handle) = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid) else {
                 return false;
             };
             let mut code = 0u32;
-            let queried = GetExitCodeProcess(handle, &mut code).is_ok();
+            let alive = GetExitCodeProcess(handle, &mut code).is_ok() && code == 259; // STILL_ACTIVE
+            let mut buf = [0u16; 1024];
+            let mut len = buf.len() as u32;
+            let named = QueryFullProcessImageNameW(
+                handle,
+                PROCESS_NAME_WIN32,
+                PWSTR(buf.as_mut_ptr()),
+                &mut len,
+            )
+            .is_ok();
             let _ = CloseHandle(handle);
-            queried && code == 259 // STILL_ACTIVE
+            if !alive {
+                return false;
+            }
+            if !named {
+                // Cannot tell what it is: stay on the safe side (treat as live).
+                return true;
+            }
+            is_postgres_image(&String::from_utf16_lossy(&buf[..len as usize]))
         }
     }
     #[cfg(not(windows))]
@@ -242,6 +268,12 @@ fn pid_is_running(pid: u32) -> bool {
         let _ = pid;
         false
     }
+}
+
+fn is_postgres_image(path: &str) -> bool {
+    path.rsplit(['\\', '/'])
+        .next()
+        .map_or(false, |name| name.eq_ignore_ascii_case("postgres.exe"))
 }
 
 fn remove_stale_lock_files(pgdata: &Path) {
@@ -287,62 +319,70 @@ fn apply_requested_factory_reset(cfg: &BootConfig) -> io::Result<()> {
     if !flag.exists() {
         return Ok(());
     }
-    log("factory-reset requested — wiping local cluster (binding/secrets kept)");
-    let mut details = serde_json::Map::new();
-    details.insert(
-        "reason".into(),
-        serde_json::Value::String("factory-reset-flag".into()),
-    );
-    details.insert(
-        "pgdataExists".into(),
-        serde_json::Value::Bool(cfg.app_data_root.join("pgdata").join("PG_VERSION").exists()),
-    );
-
+    // The operator confirmed a reset in the UI (typed phrase). Nothing is
+    // deleted: the live cluster is RENAMED aside (same volume, atomic) and the
+    // next step provisions a fresh one. Refusing here instead would leave the
+    // app unable to start until someone deleted the flag by hand.
+    log("factory-reset requested — moving pgdata aside (kept as pgdata.reset-*)");
     let pgdata = cfg.app_data_root.join("pgdata");
-    if pgdata.join("PG_VERSION").exists() {
-        let _ = stop_postgres(&cfg.resources_root, &pgdata);
-        let _ = cleanup_stale_cluster_lock(&cfg.resources_root, &pgdata);
-        // REPAIR-024: folder snapshot of stopped cluster before wipe.
-        let stamp = chrono_like_utc_stamp();
-        let snap_dir = cfg
-            .app_data_root
-            .join("snapshots")
-            .join(format!("{stamp}_factory_reset"));
-        if let Err(e) = copy_dir_recursive(&pgdata, &snap_dir) {
-            details.insert(
-                "snapshotError".into(),
-                serde_json::Value::String(e.to_string()),
-            );
-            super::boot_log::event("SNAPSHOT_FAILED", "factory_reset", details);
-            return Err(io::Error::new(
-                io::ErrorKind::Other,
-                format!(
-                    "تعذّر أخذ نسخة أمان قبل إعادة الضبط المصنعي: {e} — لن تُحذف قاعدة البيانات"
-                ),
-            ));
-        }
-        let sidecar = snap_dir.with_extension("json");
-        let _ = fs::write(
-            &sidecar,
-            format!(
-                "{{\n  \"operation\": \"factory_reset\",\n  \"createdAt\": \"{stamp}\",\n  \"path\": \"{}\"\n}}\n",
-                snap_dir.to_string_lossy().replace('\\', "\\\\")
-            ),
-        );
-        details.insert(
-            "snapshotPath".into(),
-            serde_json::Value::String(snap_dir.to_string_lossy().into_owned()),
-        );
+    if pgdata.join("postmaster.pid").exists() {
+        cleanup_stale_cluster_lock(&cfg.resources_root, &pgdata)?;
     }
-    super::boot_log::event("FACTORY_RESET", "factory_reset", details);
-
-    if pgdata.exists() {
-        fs::remove_dir_all(&pgdata)?;
-    }
+    let archived = move_pgdata_aside(&cfg.app_data_root)?;
     let _ = fs::remove_file(crate::db_meta::meta_path(&cfg.app_data_root));
     let _ = fs::remove_file(cfg.app_data_root.join("hub-session.json"));
-    let _ = fs::remove_file(&flag);
+    fs::remove_file(&flag)?;
+    let mut details = serde_json::Map::new();
+    details.insert(
+        "archivedTo".into(),
+        serde_json::Value::String(
+            archived.map(|p| p.to_string_lossy().into_owned()).unwrap_or_default(),
+        ),
+    );
+    super::boot_log::event("FACTORY_RESET", "factory_reset", details);
     Ok(())
+}
+
+/// How many reset archives (`pgdata.reset-*`) to keep; older ones are removed.
+const RESET_ARCHIVES_KEPT: usize = 3;
+
+/// Rename `pgdata` to `pgdata.reset-<utc>` (same volume → atomic, instant).
+/// Returns the archive path, or None when there was no pgdata.
+pub(crate) fn move_pgdata_aside(app_data_root: &Path) -> io::Result<Option<PathBuf>> {
+    let pgdata = app_data_root.join("pgdata");
+    if !pgdata.exists() {
+        return Ok(None);
+    }
+    let mut target = app_data_root.join(format!("pgdata.reset-{}", chrono_like_utc_stamp()));
+    let mut n = 1;
+    while target.exists() {
+        target = app_data_root.join(format!("pgdata.reset-{}-{n}", chrono_like_utc_stamp()));
+        n += 1;
+    }
+    fs::rename(&pgdata, &target)?;
+    // The integrity manifest describes the archived cluster, not the fresh one
+    // about to be created — keep it WITH the archive. Left in place it would
+    // make the next boot refuse ("data missing") and the app would never start.
+    let manifest = crate::db_meta::integrity_manifest_path(app_data_root);
+    if manifest.exists() {
+        let _ = fs::rename(&manifest, target.join("data-integrity.before-reset.json"));
+    }
+    // Retention: keep the newest few archives (names sort by utc stamp).
+    let mut archives: Vec<PathBuf> = fs::read_dir(app_data_root)?
+        .filter_map(|e| e.ok().map(|e| e.path()))
+        .filter(|p| {
+            p.is_dir()
+                && p.file_name()
+                    .and_then(|n| n.to_str())
+                    .map_or(false, |n| n.starts_with("pgdata.reset-"))
+        })
+        .collect();
+    archives.sort();
+    while archives.len() > RESET_ARCHIVES_KEPT {
+        let oldest = archives.remove(0);
+        let _ = fs::remove_dir_all(&oldest);
+    }
+    Ok(Some(target))
 }
 
 fn chrono_like_utc_stamp() -> String {
@@ -352,21 +392,6 @@ fn chrono_like_utc_stamp() -> String {
         .map(|d| d.as_secs())
         .unwrap_or(0);
     format!("utc-{secs}")
-}
-
-fn copy_dir_recursive(src: &Path, dst: &Path) -> io::Result<()> {
-    fs::create_dir_all(dst)?;
-    for entry in fs::read_dir(src)? {
-        let entry = entry?;
-        let ty = entry.file_type()?;
-        let to = dst.join(entry.file_name());
-        if ty.is_dir() {
-            copy_dir_recursive(&entry.path(), &to)?;
-        } else if ty.is_file() {
-            fs::copy(entry.path(), &to)?;
-        }
-    }
-    Ok(())
 }
 
 pub fn request_factory_reset(app_data_root: &Path) -> io::Result<()> {
@@ -427,25 +452,39 @@ fn ensure_pgdata(cfg: &BootConfig, db_password: &str) -> io::Result<PathBuf> {
         ClusterDecision::Fresh => {}
     }
 
-    // Preferred path: ship a baked, already-migrated+seeded data dir.
+    // `evaluate_existing_cluster` already refused any existing pgdata that is
+    // not a valid cluster, so reaching here means: no pgdata, no evidence of a
+    // prior cluster. Provision into a staging dir and rename it into place only
+    // when complete — an interrupted first launch (power cut mid-copy) then
+    // leaves `pgdata.provisioning` (our own partial copy, safe to discard)
+    // instead of a half-copied `pgdata` that every later boot would refuse.
+    let staging = app_data_root.join(PROVISIONING_DIR);
+    if staging.exists() {
+        log("discarding an interrupted first-launch copy (pgdata.provisioning)");
+        fs::remove_dir_all(&staging)?;
+    }
+
+    // Preferred path for a genuinely fresh install only: ship a baked,
+    // already-migrated+seeded data dir.
     let template = resources_root.join("postgres").join("pgdata-template");
     if template.join("PG_VERSION").exists() {
         log(&format!(
             "copying baked pgdata-template -> {}",
             pgdata.display()
         ));
-        copy_dir_all(&template, &pgdata)?;
+        copy_dir_all(&template, &staging)?;
         // WiX strips EMPTY directories from the MSI (empty dirs are not
         // packaged), so the installed pgdata-template is missing PostgreSQL's
         // required empty subdirectories (pg_notify, pg_logical/snapshots, ...).
         // Recreate the full set before first start, otherwise the server aborts
         // with "could not open directory".
-        ensure_pg_subdirs(&pgdata)?;
+        ensure_pg_subdirs(&staging)?;
         // The baked template may carry stale live-server artifacts from the
         // build machine; remove them so pg_ctl treats the copy as fresh.
         for stale in ["postmaster.pid", "postmaster.opts", "current_logfiles"] {
-            let _ = fs::remove_file(pgdata.join(stale));
+            let _ = fs::remove_file(staging.join(stale));
         }
+        fs::rename(&staging, &pgdata)?;
         stamp_fresh_cluster(app_data_root, &cfg.installation_id, pg_major, 0)?;
         let mut details = serde_json::Map::new();
         details.insert("pgdataExists".into(), serde_json::Value::Bool(false));
@@ -470,9 +509,9 @@ fn ensure_pgdata(cfg: &BootConfig, db_password: &str) -> io::Result<PathBuf> {
     log("no pgdata-template — running initdb");
     let bindir = pg_bin(resources_root);
     let initdb = strip_verbatim_prefix(&bindir.join("initdb.exe"));
-    let pgdata_str = pgdata.to_string_lossy().into_owned();
-    fs::create_dir_all(&pgdata).ok();
-    let pwfile = pgdata.join(".initdb-pwfile");
+    let pgdata_str = staging.to_string_lossy().into_owned();
+    fs::create_dir_all(&staging).ok();
+    let pwfile = app_data_root.join(".initdb-pwfile");
     fs::write(&pwfile, db_password)?;
     let pwfile_str = pwfile.to_string_lossy().into_owned();
     let ok = HiddenCommand::new(&initdb)
@@ -496,10 +535,13 @@ fn ensure_pgdata(cfg: &BootConfig, db_password: &str) -> io::Result<PathBuf> {
             "initdb failed — see pgdata/pg.log",
         ));
     }
-    stamp_fresh_cluster(app_data_root, &cfg.installation_id, pg_major, 0)?;
     // initdb already wrote a scram-sha-256 pg_hba.conf and set the superuser
     // password — record that so start_postgres skips the trust bootstrap.
-    fs::write(pgdata.join(SCRAM_PW_SET_MARKER), b"initdb-scram")?;
+    fs::write(staging.join(SCRAM_PW_SET_MARKER), b"initdb-scram")?;
+    // One-shot: only a cluster initdb just created may get a new `erp` db.
+    fs::write(staging.join(NEEDS_CREATEDB_MARKER), b"1")?;
+    fs::rename(&staging, &pgdata)?;
+    stamp_fresh_cluster(app_data_root, &cfg.installation_id, pg_major, 0)?;
     let mut details = serde_json::Map::new();
     details.insert(
         "reason".into(),
@@ -742,8 +784,17 @@ fn start_postgres(
     let pgdata_str = pgdata.to_string_lossy().into_owned();
     let log_path = pgdata.join("pg.log");
     let log_str = log_path.to_string_lossy().into_owned();
+    // Durability is pinned on the command line so no edited/restored
+    // postgresql.conf can weaken it: a committed invoice or cashbox movement
+    // must survive a power cut. On Windows `wal_sync_method=fsync` is
+    // FlushFileBuffers, which also flushes the drive's own write cache on
+    // every WAL commit (open_datasync, the default, relies on write-through
+    // that some drives acknowledge from volatile cache). This PG build does
+    // not offer fsync_writethrough — an unknown value stops postgres.
     let opts = format!(
-        "-p {} -c listen_addresses=127.0.0.1 -c unix_socket_directories=",
+        "-p {} -c listen_addresses=127.0.0.1 -c unix_socket_directories= \
+         -c fsync=on -c synchronous_commit=on -c full_page_writes=on \
+         -c wal_sync_method=fsync",
         db_port
     );
     log(&format!("starting postgres on port {}", db_port));
@@ -757,9 +808,10 @@ fn start_postgres(
             "-l",
             &log_str,
             "-w",
-            // Wedge guard only. A cold start under real-time antivirus scanning can take minutes; the
-            // outcome is decided by postgres itself (pg_ctl returns as soon as it accepts connections
-            // or has exited), not by a short deadline.
+            // Wedge guard only. pg_ctl returns as soon as postgres accepts
+            // connections or exits; crash recovery after a power cut, or a cold
+            // start under real-time antivirus, legitimately takes longer than
+            // a minute and must not be reported as a failure.
             "-t",
             "900",
         ])
@@ -784,32 +836,39 @@ fn start_postgres(
         log("pg_hba.conf re-hardened to scram-sha-256");
     }
 
-    // Ensure the target database exists (DFP-010). createdb is idempotent when
-    // `erp` already exists (non-zero exit); we still VERIFY connectivity to
-    // `erp` before returning — TCP readiness alone is not enough.
-    let createdb = strip_verbatim_prefix(&bindir.join("createdb.exe"));
-    let created_ok = HiddenCommand::new(&createdb)
-        .args([
-            "-h",
-            "127.0.0.1",
-            "-p",
-            &db_port.to_string(),
-            "-U",
-            DB_SUPERUSER,
-            DB_NAME,
-        ])
-        .env("PGPASSWORD", db_password)
-        .spawn()
-        .and_then(|c| c.wait_success())
-        .unwrap_or(false);
-    if created_ok {
-        log(&format!("created database `{DB_NAME}`"));
-    } else {
-        log(&format!(
-            "createdb `{DB_NAME}` returned non-success (may already exist) — verifying"
-        ));
+    // `erp` ships inside the template. It is created here ONLY for a cluster
+    // initdb just made. On an existing cluster a missing `erp` is data loss and
+    // must fail visibly — the old unconditional `createdb` turned it into an
+    // empty database that migrations then filled, i.e. a silent blank system.
+    if pgdata.join(NEEDS_CREATEDB_MARKER).exists() {
+        let createdb = strip_verbatim_prefix(&bindir.join("createdb.exe"));
+        let created_ok = HiddenCommand::new(&createdb)
+            .args([
+                "-h",
+                "127.0.0.1",
+                "-p",
+                &db_port.to_string(),
+                "-U",
+                DB_SUPERUSER,
+                DB_NAME,
+            ])
+            .env("PGPASSWORD", db_password)
+            .spawn()
+            .and_then(|c| c.wait_success())
+            .unwrap_or(false);
+        log(&format!("createdb `{DB_NAME}` on fresh initdb cluster: ok={created_ok}"));
     }
-    ensure_erp_database(resources_root, db_port, db_password)?;
+    if let Err(first) = ensure_erp_database(resources_root, db_port, db_password) {
+        // The usual cause on an existing cluster is a role password that no
+        // longer matches secrets.dat (secrets restored/regenerated). postgres
+        // listens on 127.0.0.1 only and we own pg_hba.conf, so re-apply the
+        // current secret the same way the first launch does, then re-verify.
+        // If `erp` itself is missing this still fails — never recreated.
+        log(&format!("{first} — re-applying the role password from secrets.dat"));
+        establish_scram_auth(resources_root, pgdata, db_port, db_password)?;
+        ensure_erp_database(resources_root, db_port, db_password)?;
+    }
+    let _ = fs::remove_file(pgdata.join(NEEDS_CREATEDB_MARKER));
 
     wait_tcp("127.0.0.1", db_port, Duration::from_secs(300))?;
     log("postgres is accepting connections");
@@ -1057,6 +1116,8 @@ fn spawn_server(cfg: &BootConfig, store: &secret_store::SecretStore) -> io::Resu
                 .into_owned(),
         )
         .env("MOTARD_BOOT_ID", super::boot_log::boot_id())
+        // Recorded in every backup manifest (compatibility reporting).
+        .env("MOTARD_APP_VERSION", env!("CARGO_PKG_VERSION"))
         .env(
             "DATA_INTEGRITY_PATH",
             cfg.app_data_root
@@ -1199,8 +1260,7 @@ pub fn boot_desktop_stack_with_progress(
                  1) مساحة القرص ممتلئة\n\
                  2) برنامج الحماية يمنع الكتابة في مجلد AppData\\Local\\motard-erp\\pgdata\n\
                  3) قالب قاعدة البيانات المرفق (postgres\\pgdata-template) تالف أو ناقص\n\n\
-                 الحل: تحقق من المساحة المتاحة وصلاحيات الكتابة، ثم أعد تشغيل مثبّت \
-                 البرنامج (Repair) إن استمرت المشكلة.",
+                 الحل: لا تحذف مجلد pgdata ولا توافق على إعادة ضبط مصنعي. خذ نسخة من AppData ثم أرسل pg.log للدعم الفني.",
                 e
             );
             show_fatal_dialog("خطأ في تجهيز قاعدة البيانات — Motard ERP", &msg);
@@ -1328,7 +1388,9 @@ pub fn boot_desktop_stack_with_progress(
                 ));
             }
         },
-        // Safety ceiling for a genuinely wedged (alive but never ready) process — not a "slow machine" limit.
+        // Safety ceiling for a genuinely wedged (alive but never ready)
+        // process. A crashed server fails immediately (ChildExited); a slow
+        // one (migrations on a large database) keeps going.
         Duration::from_secs(20 * 60),
     );
     let server_port = match outcome {
@@ -1543,6 +1605,72 @@ mod boot_lifecycle_tests {
     use super::*;
 
     #[test]
+    fn queued_factory_reset_archives_pgdata_instead_of_deleting_it() {
+        let dir = std::env::temp_dir().join(format!("motard-reset-archive-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(dir.join("pgdata").join("base")).unwrap();
+        fs::write(dir.join("pgdata").join("PG_VERSION"), "17\n").unwrap();
+        fs::write(dir.join("pgdata").join("base").join("row"), "invoice data").unwrap();
+        fs::write(dir.join(FACTORY_RESET_FLAG), b"1").unwrap();
+        let cfg = BootConfig {
+            resources_root: dir.join("resources"),
+            app_data_root: dir.clone(),
+            migrations_dir: dir.join("migrations"),
+            node_exe: dir.join("node.exe"),
+            server_js: dir.join("server.js"),
+            server_dir: dir.clone(),
+            web_dir: dir.join("web"),
+            port_file: dir.join("port.json"),
+            db_port: 5432,
+            server_port: 4173,
+            installation_id: "id-a".into(),
+            license_public_key: None,
+        };
+        fs::write(crate::db_meta::meta_path(&dir), "{}").unwrap();
+        apply_requested_factory_reset(&cfg).expect("a confirmed reset must not brick boot");
+        assert!(!dir.join("pgdata").exists(), "live pgdata moved aside");
+        assert!(!dir.join(FACTORY_RESET_FLAG).exists(), "flag consumed");
+        assert!(!crate::db_meta::meta_path(&dir).exists(), "next boot provisions fresh");
+        let archive = fs::read_dir(&dir)
+            .unwrap()
+            .filter_map(|e| e.ok())
+            .find(|e| e.file_name().to_string_lossy().starts_with("pgdata.reset-"))
+            .expect("archive exists");
+        assert!(archive.path().join("base").join("row").exists(), "old data kept intact");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn only_a_postgres_image_counts_as_a_live_postmaster() {
+        assert!(is_postgres_image(r"C:\Program Files\Motard\postgres\bin\postgres.exe"));
+        assert!(is_postgres_image("C:/x/POSTGRES.EXE"));
+        assert!(!is_postgres_image(r"C:\Program Files\Google\Chrome\chrome.exe"));
+        assert!(!is_postgres_image(r"C:\x\postgres.exe.bak"));
+    }
+
+    #[test]
+    fn factory_reset_keeps_only_newest_archives() {
+        let dir = std::env::temp_dir().join(format!("motard-reset-keep-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        for old in ["pgdata.reset-utc-1", "pgdata.reset-utc-2", "pgdata.reset-utc-3"] {
+            fs::create_dir_all(dir.join(old)).unwrap();
+        }
+        fs::create_dir_all(dir.join("pgdata")).unwrap();
+        fs::write(dir.join("pgdata").join("PG_VERSION"), "17
+").unwrap();
+        move_pgdata_aside(&dir).unwrap();
+        let left: Vec<_> = fs::read_dir(&dir)
+            .unwrap()
+            .filter_map(|e| e.ok())
+            .filter(|e| e.file_name().to_string_lossy().starts_with("pgdata.reset-"))
+            .collect();
+        assert_eq!(left.len(), RESET_ARCHIVES_KEPT);
+        assert!(!dir.join("pgdata.reset-utc-1").exists());
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
     fn classify_stale_pid_when_process_dead() {
         let lock = classify_postmaster_pid("4242\n/pgdata\n", |_| false);
         assert_eq!(lock, PidLock::Stale { pid: 4242 });
@@ -1561,8 +1689,10 @@ mod boot_lifecycle_tests {
     }
 
     #[test]
-    fn pid_is_running_sees_current_process() {
-        assert!(pid_is_running(std::process::id()));
+    fn a_live_pid_that_is_not_postgres_is_a_stale_lock() {
+        // The test binary is alive but is not postgres.exe — exactly the
+        // "Windows reused the PID after a power cut" case. It must not block boot.
+        assert!(!pid_is_running(std::process::id()));
         assert!(!pid_is_running(0));
     }
 

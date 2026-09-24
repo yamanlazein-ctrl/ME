@@ -58,7 +58,12 @@ async function seed() {
 
     console.log("Created tenant:", tenant.id);
 
-    // Create admin user.
+    // Create admin user unless the desktop template explicitly defers owner
+    // creation to the customer's onboarding wizard.
+    if (process.env.SKIP_ADMIN_SEED === "true") {
+      console.log("SKIP_ADMIN_SEED=true — leaving users empty for onboarding");
+      return;
+    }
     // Task 1.2: the password is generated at seed time (random, 107 bits)
     // and printed once. It is never committed to source. To regenerate,
     // delete the seeded rows and re-run the script — there is no default.

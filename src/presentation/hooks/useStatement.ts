@@ -28,6 +28,39 @@ function normalizeFilter(filter: StatementFilter): StatementFilter {
   };
 }
 
+type StatementPage = {
+  entries: unknown[];
+  page?: { hasMore: boolean; nextCursor: string | null } & Record<string, unknown>;
+};
+
+/**
+ * Return the COMPLETE statement for a filter. The server caps a page (200/500
+ * rows) and carries runningBalance across pages, so following nextCursor and
+ * concatenating entries is exact; header totals / previous / final balance
+ * are full-window values from the first page. An explicit cursor means the
+ * caller pages itself. (Before: rows past 200 silently vanished from the
+ * screen and from the printed statement.)
+ */
+export async function fetchFullStatement<T extends StatementPage>(
+  getPage: (f: StatementFilter) => Promise<T>,
+  filter: StatementFilter,
+): Promise<T> {
+  const first = await getPage(filter);
+  if (filter.cursor) return first;
+  let page = first.page;
+  const entries = [...first.entries];
+  for (let i = 0; page?.hasMore && page.nextCursor && i < 1000; i++) {
+    const next = await getPage({ ...filter, limit: 500, cursor: page.nextCursor });
+    entries.push(...next.entries);
+    page = next.page;
+  }
+  return {
+    ...first,
+    entries,
+    page: first.page && { ...first.page, hasMore: false, nextCursor: null },
+  } as T;
+}
+
 /** Fetch the statement for a party, optionally windowed by date/currency/type. */
 export function useStatement(
   partyId: string | undefined,
@@ -37,9 +70,12 @@ export function useStatement(
   const normalized = normalizeFilter(filter);
   return useQuery({
     queryKey: KEYS.party(partyId ?? "", kind, normalized),
-    queryFn: ({ signal }) => {
+    queryFn: async ({ signal }) => {
       void signal;
-      return container.statement.api.getStatement(partyId ?? "", kind, normalized);
+      return fetchFullStatement(
+        (f) => container.statement.api.getStatement(partyId ?? "", kind, f),
+        normalized,
+      );
     },
     enabled: !!partyId,
     staleTime: 15_000,

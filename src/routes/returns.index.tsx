@@ -3,7 +3,7 @@ import { PageCard } from "@/components/layout/PageCard";
 import { Button } from "@/components/ui/button";
 import { Link, createFileRoute } from "@tanstack/react-router";
 import { Plus, Printer } from "lucide-react";
-import { useState, useMemo } from "react";
+import { useState } from "react";
 import { RETURN_REASONS } from "@/presentation/hooks/useReturns";
 import { useReturnsList, useCancelReturn } from "@/presentation/hooks/useReturns";
 import { customerById, supplierById } from "@/presentation/hooks/useParties";
@@ -12,7 +12,7 @@ import { formatDateTime } from "@/lib/utils";
 import { printDocument } from "@/components/print/printPortal";
 import { ReturnInvoicePrint } from "@/components/print/invoices/ReturnInvoicePrint";
 import { useInventory } from "@/presentation/hooks/useInventory";
-import { useInvoicesList } from "@/presentation/hooks/useInvoices";
+import { ListPager, LIST_PAGE_SIZE } from "@/components/common/ListPager";
 import { toast } from "sonner";
 import type { Currency } from "@/domain/types";
 import type { ReturnDTO } from "@/application/ports/IReturnRepository";
@@ -21,25 +21,22 @@ export const Route = createFileRoute("/returns/")({ component: ReturnsList });
 
 function ReturnsList() {
   useInventory();
-  const { data: paginated } = useReturnsList();
-  const returns = paginated?.data ?? [];
-  const { data: invoicesData } = useInvoicesList({ limit: 50 });
-  const invoiceNumberById = useMemo(() => {
-    const m = new Map<string, string>();
-    for (const inv of invoicesData?.data ?? []) {
-      m.set(inv.id, inv.number || inv.reference || inv.id);
-    }
-    return m;
-  }, [invoicesData]);
-  const cancelReturn = useCancelReturn();
+  // Server-side paging + kind filter (was: default 20 rows only, plus every
+  // invoice downloaded just to show original invoice numbers).
   const [kind, setKind] = useState<"all" | "entry" | "sale">("all");
-  const list = returns.filter((r) => kind === "all" || r.kind === kind);
+  const [page, setPage] = useState(0);
+  const { data: paginated, isFetching } = useReturnsList({
+    ...(kind === "all" ? {} : { kind }),
+    page,
+    limit: LIST_PAGE_SIZE,
+  });
+  const list = paginated?.data ?? [];
+  const totalCount = paginated?.total ?? list.length;
+  const cancelReturn = useCancelReturn();
 
   const handlePrint = (r: ReturnDTO) => {
     try {
-      const originalInvoiceNumber = r.originalInvoiceId
-        ? invoiceNumberById.get(r.originalInvoiceId)
-        : undefined;
+      const originalInvoiceNumber = r.originalInvoiceNumber;
       printDocument(
         <ReturnInvoicePrint returnDoc={r} originalInvoiceNumber={originalInvoiceNumber} />,
       );
@@ -75,7 +72,10 @@ function ReturnsList() {
           ].map(([k, l]) => (
             <button
               key={k}
-              onClick={() => setKind(k as typeof kind)}
+              onClick={() => {
+                setKind(k as typeof kind);
+                setPage(0);
+              }}
               className={`px-3 py-1.5 rounded ${kind === k ? "bg-primary text-primary-foreground" : "bg-secondary"}`}
             >
               {l}
@@ -84,7 +84,7 @@ function ReturnsList() {
         </div>
       </PageCard>
 
-      <PageCard title="القائمة" description={`${list.length} مرتجع.`} noBodyPadding>
+      <PageCard title="القائمة" description={`${totalCount} مرتجع.`} noBodyPadding>
         <div className="w-full overflow-x-auto">
           <table className="w-full min-w-[900px] text-right text-sm">
             <thead className="bg-secondary/60 text-[11px] uppercase text-muted-foreground">
@@ -120,7 +120,7 @@ function ReturnsList() {
                     <td className="px-3 py-2 text-primary">
                       {r.originalInvoiceId ? (
                         <Link to="/invoices/$id" params={{ id: r.originalInvoiceId }}>
-                          {invoiceNumberById.get(r.originalInvoiceId) ?? "—"}
+                          {r.originalInvoiceNumber ?? "—"}
                         </Link>
                       ) : (
                         "—"
@@ -170,6 +170,7 @@ function ReturnsList() {
             </tbody>
           </table>
         </div>
+        <ListPager page={page} total={totalCount} loading={isFetching} onPage={setPage} />
       </PageCard>
     </AppShell>
   );

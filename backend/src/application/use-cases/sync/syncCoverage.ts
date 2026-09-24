@@ -75,6 +75,8 @@ export const SYNC_COVERAGE: Record<string, CoverageEntry> = {
   "PUT /settings/:section": { sync: { entityType: "settings", operation: "update" } },
   "PUT /api/company/profile": { sync: { entityType: "company", operation: "update" } },
 
+  // ---- party merge: refused (409) while sync is enabled; standalone only
+  "POST /parties/merge": { exempt: "standalone-only party merge; route returns 409 when sync enqueue is enabled" },
   // ---- local integrity control plane (not business state)
   "POST /integrity/accept-baseline": { exempt: "admin data-integrity baseline control, not a business document" },
   "POST /integrity/authorize-reset": { exempt: "admin reset authorization control, not a business document" },
@@ -119,6 +121,9 @@ export const SYNC_COVERAGE: Record<string, CoverageEntry> = {
   "POST /api/setup/wizard/admin": { exempt: "one-time provisioning, pre-tenant" },
   "POST /api/setup/wizard/review": { exempt: "one-time provisioning, pre-tenant" },
   "POST /api/setup/wizard/complete": { exempt: "one-time provisioning, pre-tenant" },
+  "POST /api/setup/wizard/restore": {
+    exempt: "first-run restore of a local backup (no users yet); restored sync outbox/inbox/cursor carry the sync state",
+  },
   // ---- device-local operational mirrors ----
   "POST /notifications": { exempt: "device-local mirror; sync rejections notify per device" },
   "POST /notifications/:id/read": { exempt: "device-local read state" },

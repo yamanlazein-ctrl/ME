@@ -351,6 +351,15 @@ export function registerPartyRoutes(
     idempotency("POST", { required: true }),
     validateBody(mergeBody),
     async (req: Request, res: Response) => {
+      // The merge remaps party_id on already-synced financial rows without
+      // enqueueing sync units, so a synced device and the hub would diverge.
+      // Refuse it while sync is enabled until a merge sync unit exists.
+      if (syncOutboxRepo && isSyncEnqueueEnabled()) {
+        return res.status(409).json({
+          code: "MERGE_UNAVAILABLE_WITH_SYNC",
+          message: "دمج الأطراف غير متاح عند تفعيل المزامنة",
+        });
+      }
       try {
         const b = body<{ survivorId: string; sourceId: string }>(req);
         const result = await mergePartiesUseCase(db, b.survivorId, b.sourceId, ctxFn(req));

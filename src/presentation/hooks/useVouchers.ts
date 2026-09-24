@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { container } from "@/infrastructure/container";
+import { fetchAllPaged } from "@/lib/fetchAllPaged";
 import { buildTenantContext } from "@/infrastructure/di/auth-context";
 import { isOk } from "@/core/result";
 import { toast } from "sonner";
@@ -29,11 +30,25 @@ const KEYS = {
   detail: (id: string) => ["vouchers", "detail", id] as const,
 };
 
-export function useVouchersList(filter?: VoucherFilter) {
+/**
+ * `opts.all`: page through the API (page/limit, 1000 per page) and return
+ * EVERY matching row — for screens that compute balances/totals and must not
+ * work on a truncated first page.
+ */
+export function useVouchersList(filter?: VoucherFilter, opts?: { all?: boolean }) {
+  const all = Boolean(opts?.all);
   return useQuery({
-    queryKey: KEYS.list(filter),
-    queryFn: ({ signal }) => {
+    queryKey: all ? [...KEYS.list(filter), "all"] : KEYS.list(filter),
+    queryFn: async ({ signal }) => {
       void signal;
+      if (all) {
+        const data = await fetchAllPaged(
+          (page, limit) =>
+            container.vouchers.repository.list({ ...(filter ?? {}), page, limit } as VoucherFilter, ctx),
+          { pageSize: 1000, maxPages: 500, label: "vouchers" },
+        );
+        return { data, total: data.length, hasNext: false };
+      }
       return container.vouchers.repository.list(filter ?? {}, ctx);
     },
     staleTime: 30_000,

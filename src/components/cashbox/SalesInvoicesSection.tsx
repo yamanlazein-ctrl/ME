@@ -50,9 +50,8 @@ export function SalesInvoicesTable({ query }: { query: ProfitQueryParams }) {
     fromDate: query.fromDate,
     toDate: query.toDate,
     ...(query.currency ? { currency: query.currency } : {}),
-    limit: 500,
   };
-  const { data, isLoading, isError, refetch, error } = useInvoicesList(filter);
+  const { data, isLoading, isError, refetch, error } = useInvoicesList(filter, { all: true });
   const { data: profitDetails } = useProfitDetails(query);
 
   useEffect(() => {

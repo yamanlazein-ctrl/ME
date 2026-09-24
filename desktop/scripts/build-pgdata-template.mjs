@@ -6,7 +6,8 @@
  *   1. initdb a brand-new cluster with the BUNDLED PostgreSQL (UTF8, locale C, UTC).
  *   2. start it on a free localhost port, createdb `erp`.
  *   3. apply EVERY drizzle migration (backend/scripts/migrate.mjs).
- *   4. clean seed ONLY: one tenant + one admin user (backend/src/scripts/seed.ts).
+ *   4. clean seed ONLY: one tenant + no admin user; the customer creates the
+ *      first owner password in the onboarding wizard.
  *   5. bake the signed desktop license (backend/src/scripts/bake-desktop-license.ts).
  *   6. assert: migrations applied == journal, every business table has 0 rows,
  *      document_sequences is empty (so the first invoice is number 1).
@@ -15,7 +16,6 @@
  *   9. re-verify the shipped copy (verify-pgdata-template.mjs).
  *
  * Required environment:
- *   DESKTOP_ADMIN_PASSWORD   initial admin password (min 12 chars) — never stored, only its Argon2 hash.
  *   LICENSE_SIGNING_KEY / LICENSE_SIGNING_PUBLIC_KEY   (or present in backend/.env) — signs the license.
  * Optional:
  *   DESKTOP_LICENSE_KEY      license key string (default: LIC-DESKTOP-<16 hex>)
@@ -58,10 +58,6 @@ process.on("uncaughtException", (e) => {
 });
 
 // ── inputs ───────────────────────────────────────────────────────────────────
-const adminPassword = process.env.DESKTOP_ADMIN_PASSWORD?.trim();
-if (!adminPassword || adminPassword.length < 12) {
-  fail("DESKTOP_ADMIN_PASSWORD is required (min 12 characters). It is hashed into the template and never stored.");
-}
 
 const frontendCmd = readFileSync(join(REPO_ROOT, "desktop", "build-frontend.cmd"), "utf8");
 const tenantId = /set\s+"VITE_DEFAULT_TENANT_ID=([0-9a-f-]{36})"/i.exec(frontendCmd)?.[1];
@@ -136,7 +132,7 @@ try {
     LICENSE_SIGNING_KEY: keys.priv,
     LICENSE_SIGNING_PUBLIC_KEY: keys.pub,
     SEED_TENANT_ID: tenantId,
-    SEED_ADMIN_PASSWORD: adminPassword,
+    SKIP_ADMIN_SEED: "true",
     BAKED_LICENSE_KEY: licenseKey,
     BAKED_LICENSE_DEVICES: devices,
     LOG_LEVEL: "warn",
@@ -149,7 +145,11 @@ try {
   };
 
   step("apply all migrations", [join(BACKEND_ROOT, "scripts", "migrate.mjs")]);
-  step("seed: company + admin only", [tsx, "src/scripts/seed.ts"]);
+  step("seed: tenant only; onboarding creates owner", [tsx, "src/scripts/seed.ts"]);
+  await withClient(url, async (c) => {
+    await c.query("DELETE FROM users");
+    log("verified template has no development/admin users");
+  });
   step("bake signed desktop license", [tsx, "src/scripts/bake-desktop-license.ts"]);
 
   log("asserting migrated + clean + empty sequences");
@@ -179,7 +179,7 @@ try {
     postgresVersion: run(join(REPO_ROOT, "desktop", "src-tauri", "resources", "postgres", "bin", "postgres.exe"), ["--version"]).stdout.trim(),
     database: DB_NAME,
     tenantId,
-    adminEmail: "admin@erp.local",
+    adminEmail: null,
     license: { key: summary.licenseKey, devices: Number(devices) },
     migrations: { applied: summary.migrationsApplied, journal: summary.journalEntries },
     tables: summary.tableCount,

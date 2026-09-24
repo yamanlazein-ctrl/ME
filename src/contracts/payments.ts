@@ -24,6 +24,7 @@ export interface PaymentDTO {
   /** Currency + frozen rate of the linked invoice — absent for standalone payments. */
   invoiceCurrency?: Currency;
   invoiceExchangeRate?: number | null;
+  invoiceNumber?: string;
   method: VoucherMethod;
   notesPrint?: string | null;
   notesInternal?: string | null;

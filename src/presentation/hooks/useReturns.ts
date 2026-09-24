@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { container } from "@/infrastructure/container";
+import { fetchAllPaged } from "@/lib/fetchAllPaged";
 import { buildTenantContext } from "@/infrastructure/di/auth-context";
 import { isOk } from "@/core/result";
 import { toast } from "sonner";
@@ -16,11 +17,25 @@ const KEYS = {
   list: (f?: ReturnFilter) => ["returns", "list", f ?? {}] as const,
 };
 
-export function useReturnsList(filter?: ReturnFilter) {
+/**
+ * `opts.all`: page through the API (page/limit, 1000 per page) and return
+ * EVERY matching row — for screens that compute balances/totals and must not
+ * work on a truncated first page.
+ */
+export function useReturnsList(filter?: ReturnFilter, opts?: { all?: boolean }) {
+  const all = Boolean(opts?.all);
   return useQuery({
-    queryKey: KEYS.list(filter),
-    queryFn: ({ signal }) => {
+    queryKey: all ? [...KEYS.list(filter), "all"] : KEYS.list(filter),
+    queryFn: async ({ signal }) => {
       void signal;
+      if (all) {
+        const data = await fetchAllPaged(
+          (page, limit) =>
+            container.returns.list.execute({ ...(filter ?? {}), page, limit } as ReturnFilter, ctx),
+          { pageSize: 1000, maxPages: 500, label: "returns" },
+        );
+        return { data, total: data.length, hasNext: false };
+      }
       return container.returns.list.execute(filter ?? {}, ctx);
     },
     staleTime: 30_000,

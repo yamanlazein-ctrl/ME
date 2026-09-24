@@ -109,8 +109,10 @@ export function registerExpenseRoutes(
     // REPAIR-001: page through until exhausted — never treat one 1,000-row page as "all".
     const names = new Set<string>();
     const c = ctx(req);
-    for (let page = 0; page < 50; page++) {
-      const r = await uc.listExpensesUseCase(expenseRepo, { limit: 200, page }, c);
+    // No page cap: a fixed cap (was 50×200) silently dropped category names
+    // used only by expenses older than the newest 10,000.
+    for (let page = 0; ; page++) {
+      const r = await uc.listExpensesUseCase(expenseRepo, { limit: 1000, page }, c);
       if (!r.ok) {
         res.status(500).json({ code: "INTERNAL", message: r.error });
         return;

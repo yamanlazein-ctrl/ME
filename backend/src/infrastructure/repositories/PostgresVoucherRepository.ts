@@ -79,6 +79,7 @@ export class PostgresVoucherRepository implements IVoucherRepository {
           voucher: vouchers,
           invoiceCurrency: invoices.currency,
           invoiceExchangeRate: invoices.exchangeRate,
+          invoiceNumber: invoices.number,
         })
         .from(vouchers)
         // Carries the linked invoice's currency + frozen rate so the print
@@ -100,6 +101,7 @@ export class PostgresVoucherRepository implements IVoucherRepository {
         this.toDomain(r.voucher, {
           currency: r.invoiceCurrency,
           exchangeRate: r.invoiceExchangeRate,
+          number: r.invoiceNumber,
         }),
       ),
       meta: {
@@ -709,14 +711,14 @@ export class PostgresVoucherRepository implements IVoucherRepository {
   /** Currency + frozen rate of the linked invoice, when the row was joined to it. */
   private toDomain(
     row: typeof vouchers.$inferSelect,
-    invoiceFx?: { currency?: string | null; exchangeRate?: number | null },
+    invoiceFx?: { currency?: string | null; exchangeRate?: number | null; number?: string | null },
   ): VoucherData {
     return Voucher.reconstitute(this.mapRow(row, invoiceFx)).toData();
   }
 
   private mapRow(
     row: typeof vouchers.$inferSelect,
-    invoiceFx?: { currency?: string | null; exchangeRate?: number | null },
+    invoiceFx?: { currency?: string | null; exchangeRate?: number | null; number?: string | null },
   ): VoucherData {
     const n = (v: string | null) => v ?? undefined;
     return {
@@ -737,6 +739,7 @@ export class PostgresVoucherRepository implements IVoucherRepository {
       // standalone payments simply leave these undefined.
       invoiceCurrency: invoiceFx?.currency ?? undefined,
       invoiceExchangeRate: invoiceFx?.exchangeRate ?? undefined,
+      invoiceNumber: invoiceFx?.number ?? undefined,
       appliedAmount: row.appliedAmount ?? undefined,
       method: row.method as VoucherData["method"],
       status: row.status as VoucherData["status"],

@@ -10,6 +10,7 @@ import type { Party, PartyKind } from "@/domain/entities/Party";
 import type { CreatePartyInput } from "@/core/dtos/PartyDTO";
 import type { Currency } from "@/domain/types";
 import { invalidateFinancialViews } from "./invalidateFinancialViews";
+import { fetchAllPaged } from "@/lib/fetchAllPaged";
 const ctx = new Proxy({} as import("@/domain/types").TenantContext, {
   get: (_target, property: string) =>
     buildTenantContext()[property as keyof import("@/domain/types").TenantContext],
@@ -66,13 +67,19 @@ async function loadAll(force = false): Promise<void> {
   loadPromise = (async () => {
     try {
       const ctx = buildTenantContext();
-      // OLD-PLAN Phase 2: do NOT pull every party into the browser.
-      // First page only for legacy list screens; pickers use /api/parties/search.
-      const pageSize = 50;
-      const [cRes, sRes] = await Promise.all([
-        container.parties.list.execute({ kind: "customer", limit: pageSize, page: 0 }, ctx),
-        container.parties.list.execute({ kind: "supplier", limit: pageSize, page: 0 }, ctx),
-      ]);
+      // Legacy synchronous lookups (customerById/supplierById, prints, detail
+      // pages) need every party, not just the first page. Page by `page`
+      // (the only paging parameter the API accepts) until hasNext is false.
+      const pageSize = 1000;
+      const loadKind = (kind: "customer" | "supplier") =>
+        fetchAllPaged<Party>(
+          async (page, limit) => {
+            const res = await container.parties.list.execute({ kind, limit, page }, ctx);
+            return isPaginated<Party>(res) ? res : (res as Party[]);
+          },
+          { pageSize, maxPages: 200, label: `parties:${kind}` },
+        );
+      const [cRes, sRes] = await Promise.all([loadKind("customer"), loadKind("supplier")]);
       const cData = isPaginated<Party>(cRes) ? cRes.data : (cRes as Party[]);
       const sData = isPaginated<Party>(sRes) ? sRes.data : (sRes as Party[]);
       _allParties.splice(0, _allParties.length, ...cData, ...sData);

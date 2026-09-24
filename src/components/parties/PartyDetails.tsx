@@ -258,13 +258,13 @@ export function PartyDetailsPage({ kind, id }: { kind: PartyKind; id: string }) 
   // not page 1 of an unscoped global list. Both endpoints accept partyId +
   // limit (server caps at 1000), so the totals below are truly cumulative.
   const { data: invoicesData } = useInvoicesList(
-    p ? { partyId: p.id, type: isSup ? "entry" : "sale", limit: 50 } : undefined,
+    p ? { partyId: p.id, type: isSup ? "entry" : "sale" } : undefined, { all: true },
   );
   const allInvoices = invoicesData?.data ?? [];
-  const { data: vouchersData } = useVouchersList(p ? { partyId: p.id, limit: 50 } : undefined);
+  const { data: vouchersData } = useVouchersList(p ? { partyId: p.id } : undefined, { all: true });
   const allVouchers = vouchersData?.data ?? [];
   const { data: returnsData } = useReturnsList(
-    p ? { partyId: p.id, status: "active", limit: 50 } : undefined,
+    p ? { partyId: p.id, status: "active" } : undefined, { all: true },
   );
   const allReturns = (returnsData?.data ?? []).map((r) => ({
     originalInvoiceId: r.originalInvoiceId,
@@ -273,7 +273,7 @@ export function PartyDetailsPage({ kind, id }: { kind: PartyKind; id: string }) 
     amount: returnAmount(r),
   }));
   const { data: ledgerEntries = [] } = useLedgerEntries(
-    p ? { partyId: p.id, limit: 50 } : undefined,
+    p ? { partyId: p.id } : undefined, { all: true },
   );
 
   const [tab, setTab] = useState<TabId>("overview");
@@ -575,10 +575,9 @@ function InvoicesTab({ p, kind }: { p: Party; kind: PartyKind }) {
   const [to, setTo] = useState("");
   const { data: invData } = useInvoicesList({
     partyId: p.id,
-    limit: 50,
     fromDate: from || undefined,
     toDate: to || undefined,
-  });
+  }, { all: true });
   const invs = (invData?.data ?? [])
     .filter((i) => i.partyId === p.id && i.status !== "cancelled")
     .sort((a, b) => {
@@ -711,8 +710,8 @@ function InvoicesTab({ p, kind }: { p: Party; kind: PartyKind }) {
 function PaymentsTab({ p, kind }: { p: Party; kind: PartyKind }) {
   const navigate = useNavigate();
   const isSup = kind === "supplier";
-  const { data: invData } = useInvoicesList({ partyId: p.id, limit: 50 });
-  const { data: vData } = useVouchersList({ partyId: p.id, limit: 50 });
+  const { data: invData } = useInvoicesList({ partyId: p.id }, { all: true });
+  const { data: vData } = useVouchersList({ partyId: p.id }, { all: true });
   const invs = (invData?.data ?? []).filter((i) => i.partyId === p.id && i.status === "active");
   // BUG-9 fix: show actual payment/receipt vouchers linked to this party.
   const payments = (vData?.data ?? [])
@@ -856,13 +855,12 @@ function StatementTab({ p, kind }: { p: Party; kind: PartyKind }) {
   const [settleOpen, setSettleOpen] = useState(false);
   const [toDelete, setToDelete] = useState<Invoice | null>(null);
   const cancelInvoice = useCancelInvoice();
-  const { data: invData } = useInvoicesList({ partyId: p.id, limit: 50 });
-  const { data: vDataForSettle } = useVouchersList({ partyId: p.id, limit: 50 });
+  const { data: invData } = useInvoicesList({ partyId: p.id }, { all: true });
+  const { data: vDataForSettle } = useVouchersList({ partyId: p.id }, { all: true });
   const { data: returnsForSettle } = useReturnsList({
     partyId: p.id,
     status: "active",
-    limit: 50,
-  });
+  }, { all: true });
   const invoicesById = new Map((invData?.data ?? []).map((i) => [i.id, i]));
   const outstandingForSettle = buildOutstanding(
     p.id,
@@ -1632,15 +1630,14 @@ function StatementTab({ p, kind }: { p: Party; kind: PartyKind }) {
 /* ---------------- Outstanding ---------------- */
 
 function OutstandingTab({ p }: { p: Party }) {
-  const { data: invData } = useInvoicesList({ partyId: p.id, limit: 50 });
+  const { data: invData } = useInvoicesList({ partyId: p.id }, { all: true });
   const invs = invData?.data ?? [];
-  const { data: vData } = useVouchersList({ partyId: p.id, limit: 50 });
+  const { data: vData } = useVouchersList({ partyId: p.id }, { all: true });
   const vchs = vData?.data ?? [];
   const { data: returnsData } = useReturnsList({
     partyId: p.id,
     status: "active",
-    limit: 50,
-  });
+  }, { all: true });
   const rows = buildOutstanding(
     p.id,
     invs,
@@ -1798,15 +1795,14 @@ function OutstandingTab({ p }: { p: Party }) {
 /* ---------------- Stats / History ---------------- */
 
 function StatsTab({ p, kind }: { p: Party; kind: PartyKind }) {
-  const { data: invData } = useInvoicesList({ partyId: p.id, limit: 50 });
+  const { data: invData } = useInvoicesList({ partyId: p.id }, { all: true });
   const invs = invData?.data ?? [];
-  const { data: vData } = useVouchersList({ partyId: p.id, limit: 50 });
+  const { data: vData } = useVouchersList({ partyId: p.id }, { all: true });
   const vchs = vData?.data ?? [];
   const { data: returnsData } = useReturnsList({
     partyId: p.id,
     status: "active",
-    limit: 50,
-  });
+  }, { all: true });
   const colorNames = Object.fromEntries(colors.map((c) => [c.id, c.name]));
   const colorCodes = Object.fromEntries(colors.map((c) => [c.id, c.code ?? ""]));
   const fabricNames = Object.fromEntries(fabrics.map((f) => [f.id, f.name]));
@@ -2056,9 +2052,9 @@ function NotesTab({ p, kind }: { p: Party; kind: PartyKind }) {
 /** Derive activity timeline from real data sources (invoices, vouchers, party changes)
  *  — avoids a non-existent activity table. Sorted newest-first. */
 function ActivityTab({ p, kind }: { p: Party; kind: PartyKind }) {
-  const { data: invData } = useInvoicesList({ partyId: p.id, limit: 50 });
+  const { data: invData } = useInvoicesList({ partyId: p.id }, { all: true });
   const invs = (invData?.data ?? []).filter((i) => i.partyId === p.id && i.status !== "cancelled");
-  const { data: vData } = useVouchersList({ partyId: p.id, limit: 50 });
+  const { data: vData } = useVouchersList({ partyId: p.id }, { all: true });
   const vchs = (vData?.data ?? []).filter((v) => v.partyId === p.id && v.status === "active");
 
   const items: {

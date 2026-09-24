@@ -90,7 +90,7 @@ export class PostgresProfitRepository implements IProfitRepository {
         revenue: invoices.subtotal,
         discount: invoices.discount,
         lineCogs: sql<number>`COALESCE(SUM(
-          ROUND(${invoiceLines.quantityKg}::numeric * COALESCE(${invoiceLines.costPerKg}, 0)::numeric)
+          ROUND(${invoiceLines.quantityKg}::numeric * COALESCE(${invoiceLines.costPerKg}, 0)::numeric, 2)
         ), 0)`,
         ledgerCogs: sql<number>`COALESCE((
           SELECT SUM(${ledgerEntries.debit} - ${ledgerEntries.credit})

@@ -34,6 +34,11 @@ export const listLedgerSchema = z.object({
     .string()
     .regex(/^\d{4}-\d{2}-\d{2}$/)
     .optional(),
+  status: z.enum(["active", "cancelled", "all"]).optional(),
+  keepOpening: z
+    .enum(["1", "0", "true", "false"])
+    .optional()
+    .transform((v) => v === "1" || v === "true"),
   sort: z.enum(["asc", "desc"]).optional().default("desc"),
   page: z.coerce.number().int().min(0).optional().default(0),
   limit: z.coerce.number().int().min(1).max(1000).optional().default(20),
