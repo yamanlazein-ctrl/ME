@@ -78,9 +78,7 @@ import {
   buildOutstanding,
   buildPartyStats,
   buildPartyStatsByCurrency,
-  ledgerRemainingByCurrency,
   LEDGER_TYPE_LABEL,
-  useLedgerEntries,
   type LedgerType,
 } from "@/presentation/hooks/useLedger";
 import { loadFullStatement, useStatementPage } from "@/presentation/hooks/useStatement";
@@ -356,9 +354,11 @@ export function PartyDetailsPage({ kind, id }: { kind: PartyKind; id: string }) 
     currency: r.currency,
     amount: returnAmount(r),
   }));
-  const { data: ledgerEntries = [] } = useLedgerEntries(
-    p ? { partyId: p.id } : undefined, { all: true },
-  );
+  // Audit F-005: the "remaining" per currency is the statement's final
+  // balance — the server already computes it (active entries, debit − credit,
+  // negated for suppliers). Downloading the party's WHOLE ledger (4,000+ rows
+  // for a busy customer) on every open just to add it up again is gone.
+  const { data: balanceHeader } = useStatementPage(p?.id, kind, { currency: "ALL" }, 0, 1);
 
   const [tab, setTab] = useState<TabId>("overview");
   const [editing, setEditing] = useState(false);
@@ -383,7 +383,11 @@ export function PartyDetailsPage({ kind, id }: { kind: PartyKind; id: string }) 
   }
 
   const statsByCurrency = buildPartyStatsByCurrency(p, kind, allInvoices, allVouchers, allReturns);
-  const ledgerRemaining = ledgerRemainingByCurrency(ledgerEntries, p.id, kind);
+  const ledgerRemaining: Record<string, number> = Object.fromEntries(
+    Object.entries(balanceHeader?.totalsByCurrency ?? {})
+      .filter(([ccy, t]) => t && (Math.abs(t.finalBalance) >= 0.005 || statsByCurrency[ccy]))
+      .map(([ccy, t]) => [ccy, t!.finalBalance]),
+  );
   const overviewStats = { ...statsByCurrency };
   for (const [ccy, remaining] of Object.entries(ledgerRemaining)) {
     const prev = overviewStats[ccy];
@@ -800,6 +804,8 @@ function PaymentsTab({ p, kind }: { p: Party; kind: PartyKind }) {
   const { data: vData } = useVouchersList({ partyId: p.id }, { all: true });
   const invs = (invData?.data ?? []).filter((i) => i.partyId === p.id && i.status === "active");
   // BUG-9 fix: show actual payment/receipt vouchers linked to this party.
+  // Audit F-005: one Map lookup per voucher instead of scanning all invoices (was O(V·I)).
+  const invById = new Map(invs.map((i) => [i.id, i]));
   const payments = (vData?.data ?? [])
     .filter(
       (v) =>
@@ -808,7 +814,7 @@ function PaymentsTab({ p, kind }: { p: Party; kind: PartyKind }) {
         (v.kind === "receipt" || v.kind === "payment"),
     )
     .map((v) => {
-      const inv = invs.find((i) => i.id === v.invoiceId);
+      const inv = v.invoiceId ? invById.get(v.invoiceId) : undefined;
       return {
         date: v.date ?? localToday(),
         amount: v.amount,

@@ -666,6 +666,20 @@
       "when": 1790665200000,
       "tag": "20261017_cost_price_4dp",
       "breakpoints": true
+    },
+    {
+      "idx": 95,
+      "version": 7,
+      "when": 1790751600000,
+      "tag": "20261018_financial_operations_rls",
+      "breakpoints": true
+    },
+    {
+      "idx": 96,
+      "version": 7,
+      "when": 1790838000000,
+      "tag": "20261019_return_price_4dp",
+      "breakpoints": true
     }
   ]
 }

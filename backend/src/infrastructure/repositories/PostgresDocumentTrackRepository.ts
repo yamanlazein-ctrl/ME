@@ -112,7 +112,7 @@ export class PostgresDocumentTrackRepository {
         SELECT 'return' AS kind, r.id, r.number, r.date, r.created_at, r.party_id,
                CASE WHEN r.kind = 'entry' THEN 'supplier' ELSE 'customer' END AS party_kind,
                p.name AS party_name,
-               (SELECT coalesce(sum(rl.quantity_kg * rl.price_per_kg), 0) FROM return_lines rl WHERE rl.return_id = r.id) AS total,
+               (SELECT coalesce(sum(round(rl.quantity_kg * rl.price_per_kg, 2)), 0) FROM return_lines rl WHERE rl.return_id = r.id) AS total,
                r.currency, r.status, NULL::numeric AS kg
           FROM returns r LEFT JOIN parties p ON p.id = r.party_id
          WHERE r.tenant_id = ${t}

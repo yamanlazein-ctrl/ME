@@ -1,3 +1,4 @@
+import { ClientPager, useClientPage } from "@/components/common/ClientPager";
 import { useEffect } from "react";
 import { Link } from "@tanstack/react-router";
 import { Trash2 } from "lucide-react";
@@ -91,6 +92,8 @@ export function ActivityTabs({
     ...ledgerRows.map((e) => ({ kind: "ledger" as const, at: e.createdAt, entry: e })),
     ...manualRows.map((m) => ({ kind: "manual" as const, at: m.createdAt, move: m })),
   ].sort((a, b) => (a.at < b.at ? 1 : -1));
+  // Audit F-005: the period's movements are paged in the DOM (20/50/100).
+  const apg = useClientPage(rows, `${period.from}|${period.to}|${period.currency}`);
 
   return (
     <div className="rounded-xl border border-border bg-card">
@@ -137,7 +140,7 @@ export function ActivityTabs({
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {rows.map((r) =>
+                  {apg.pageItems.map((r) =>
                     r.kind === "ledger" ? (
                       <LedgerRow key={r.entry.id} e={r.entry} hydrated={hydrated} />
                     ) : (
@@ -151,6 +154,7 @@ export function ActivityTabs({
                   )}
                 </TableBody>
               </Table>
+              <ClientPager page={apg.page} totalPages={apg.totalPages} total={apg.total} pageSize={apg.pageSize} onPage={apg.setPage} onPageSize={apg.setPageSize} />
             </div>
           )}
         </TabsContent>

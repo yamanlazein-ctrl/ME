@@ -82,7 +82,7 @@ export async function returnTotalsByCurrency(
     db,
     sql`SELECT COALESCE(r.currency, 'SYP') AS currency,
                count(DISTINCT r.id)::int AS n,
-               COALESCE(sum(rl.quantity_kg * rl.price_per_kg), 0) AS amount
+               COALESCE(sum(round(rl.quantity_kg * rl.price_per_kg, 2)), 0) AS amount
           FROM returns r
           LEFT JOIN return_lines rl ON rl.return_id = r.id
          WHERE r.tenant_id = ${tenantId}::uuid AND r.status <> 'cancelled' AND r.kind = ${kind}
@@ -310,7 +310,7 @@ export async function pagedRows(
         rows(db, sql`SELECT r.id, r.number, r.kind, r.date, r.created_at AS "createdAt",
                             COALESCE(r.currency, 'SYP') AS currency,
                             r.party_id AS "partyId", p.name AS "partyName",
-                            COALESCE((SELECT sum(rl.quantity_kg * rl.price_per_kg)
+                            COALESCE((SELECT sum(round(rl.quantity_kg * rl.price_per_kg, 2))
                                         FROM return_lines rl WHERE rl.return_id = r.id), 0) AS amount
                      ${base} ORDER BY r.date DESC, r.created_at DESC, r.id
                      LIMIT ${limit} OFFSET ${off}`),

@@ -110,8 +110,14 @@ export const RETURN_REASONS: { code: ReturnReason; label: string }[] = [
   { code: "other", label: "أخرى" },
 ];
 
+/**
+ * Return value — the SAME rule the server posts to the ledger: each line
+ * rounded to 2 decimals, then summed (audit F-004: the UI used raw products,
+ * so outstanding balances could differ from the server by fractions).
+ */
 export function returnAmount(r: { lines: { quantityKg: number; pricePerKg: number }[] }): number {
-  return r.lines.reduce((s, l) => s + l.quantityKg * l.pricePerKg, 0);
+  const cents = r.lines.reduce((s, l) => s + Math.round(l.quantityKg * l.pricePerKg * 100), 0);
+  return cents / 100;
 }
 
 export type { ReturnDTO };

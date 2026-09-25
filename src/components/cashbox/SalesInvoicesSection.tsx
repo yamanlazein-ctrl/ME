@@ -1,3 +1,4 @@
+import { ClientPager, useClientPage } from "@/components/common/ClientPager";
 import { useEffect, useMemo } from "react";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { Eye, MoreVertical, Pencil, Printer, Trash2 } from "lucide-react";
@@ -67,6 +68,8 @@ export function SalesInvoicesTable({ query }: { query: ProfitQueryParams }) {
   }, [profitDetails]);
 
   const invoices = data?.data ?? [];
+  // Audit F-005: a long period (a year) no longer puts every invoice in the DOM.
+  const spg = useClientPage(invoices, `${query.fromDate}|${query.toDate}|${query.currency ?? ""}`);
 
   const paidByInvoice = useMemo(() => {
     const m = new Map<string, number>();
@@ -115,7 +118,7 @@ export function SalesInvoicesTable({ query }: { query: ProfitQueryParams }) {
           </TableRow>
         </TableHeader>
         <TableBody>
-          {invoices.map((inv) => {
+          {spg.pageItems.map((inv) => {
             const total = inv.total();
             const paid = paidByInvoice.get(inv.id) ?? 0;
             const remaining = Math.max(0, total - paid);
@@ -215,6 +218,7 @@ export function SalesInvoicesTable({ query }: { query: ProfitQueryParams }) {
           })}
         </TableBody>
       </Table>
+      <ClientPager page={spg.page} totalPages={spg.totalPages} total={spg.total} pageSize={spg.pageSize} onPage={spg.setPage} onPageSize={spg.setPageSize} />
     </div>
   );
 }

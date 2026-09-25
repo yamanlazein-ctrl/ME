@@ -170,7 +170,7 @@ export class PostgresProfitRepository implements IProfitRepository {
         date: returns.date,
         originalInvoiceId: returns.originalInvoiceId,
         currency: returns.currency,
-        revenue: sql<number>`COALESCE(SUM(${returnLines.quantityKg} * ${returnLines.pricePerKg}), 0)`,
+        revenue: sql<number>`COALESCE(SUM(ROUND(${returnLines.quantityKg} * ${returnLines.pricePerKg}, 2)), 0)`,
         cogs: sql<number>`COALESCE((
           SELECT SUM(${ledgerEntries.credit} - ${ledgerEntries.debit})
           FROM ${ledgerEntries}
@@ -374,7 +374,7 @@ export class PostgresProfitRepository implements IProfitRepository {
     );
 
     const returnTotalSql = sql<number>`COALESCE((
-      SELECT SUM(${returnLines.quantityKg} * ${returnLines.pricePerKg})
+      SELECT SUM(ROUND(${returnLines.quantityKg} * ${returnLines.pricePerKg}, 2))
       FROM ${returnLines}
       INNER JOIN ${returns} ON ${returns.id} = ${returnLines.returnId}
       WHERE ${returns.originalInvoiceId} = ${invoices.id}

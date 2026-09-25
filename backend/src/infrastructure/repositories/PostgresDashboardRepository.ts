@@ -388,7 +388,7 @@ export class PostgresDashboardRepository implements IDashboardRepository {
       -- the dashboard at 50k invoices (EXPLAIN: 74k subplan executions).
       WITH ret AS (
         SELECT r.original_invoice_id AS invoice_id,
-               SUM(rl.quantity_kg * rl.price_per_kg) AS amount
+               sum(round(rl.quantity_kg * rl.price_per_kg, 2)) AS amount
           FROM returns r
           JOIN return_lines rl ON rl.return_id = r.id
          WHERE r.tenant_id = ${ctx.tenantId}
@@ -603,7 +603,7 @@ export class PostgresDashboardRepository implements IDashboardRepository {
         partyId: returns.partyId,
         partyName: parties.name,
         originalInvoice: invoices.number,
-        amount: sql<number>`COALESCE(SUM(${returnLines.quantityKg} * ${returnLines.pricePerKg}), 0)`,
+        amount: sql<number>`COALESCE(SUM(ROUND(${returnLines.quantityKg} * ${returnLines.pricePerKg}, 2)), 0)`,
       })
       .from(returns)
       .innerJoin(parties, eq(parties.id, returns.partyId))

@@ -451,8 +451,18 @@ export class PostgresInvoiceRepository implements IInvoiceRepository {
               `عدد الأثواب المطلوب (${agg.pieces}) يتجاوز المتاح في الصبغة (${r.remainingPieces} أثواب)`,
             );
           }
-          const newKg = Math.max(0, r.remainingKg - agg.kg);
-          const newPieces = Math.max(0, r.remainingPieces - agg.pieces);
+          // Audit F-001: the per-line check above sees ONE line at a time. Two
+          // lines on the same roll (6 kg + 6 kg on a 10 kg roll) each passed,
+          // and the old Math.max(0, …) clamped the roll to zero while the
+          // movement recorded 12 kg. Check the per-roll TOTAL, never clamp.
+          const aggKgCents = Math.round(agg.kg * 100);
+          if (aggKgCents > Math.round(r.remainingKg * 100)) {
+            throw new BusinessRuleError(
+              `اللفافة ${r.rollNo} المخزون غير كافٍ لمجموع بنود الفاتورة (${r.remainingKg} كغ < ${aggKgCents / 100} كغ)`,
+            );
+          }
+          const newKg = Math.round(r.remainingKg * 100 - aggKgCents) / 100;
+          const newPieces = r.remainingPieces - agg.pieces;
           const expectedVersion = expectedVersions.get(rollId);
           const updated = await tx
             .update(rolls)
@@ -799,6 +809,26 @@ export class PostgresInvoiceRepository implements IInvoiceRepository {
         throw Object.assign(new Error(`Stale version: expected ${expectedVersion}, current ${inv.version}`), {
           code: "STALE_VERSION" as const,
         });
+      }
+
+      // Audit F-003: return documents are immutable records of what was
+      // sold (quantity, price, roll). Editing the invoice underneath them made
+      // return credit, eligibility and profit disagree with the invoice. Same
+      // rule as cancel: cancel the returns first, then edit.
+      const activeReturnsOnEdit = await tx
+        .select({ number: returns.number })
+        .from(returns)
+        .where(
+          and(
+            eq(returns.originalInvoiceId, id),
+            eq(returns.tenantId, ctx.tenantId),
+            eq(returns.status, "active"),
+          ),
+        );
+      if (activeReturnsOnEdit.length > 0) {
+        throw new BusinessRuleError(
+          `لا يمكن تعديل الفاتورة ${inv.number} لوجود مرتجعات نشطة (${activeReturnsOnEdit.map((r) => r.number).join("، ")}). ألغِ المرتجعات أولاً ثم عدّل الفاتورة.`,
+        );
       }
 
       // The invoice may already have voucher/settlement payments recorded

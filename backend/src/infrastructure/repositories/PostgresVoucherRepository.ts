@@ -283,7 +283,7 @@ export class PostgresVoucherRepository implements IVoucherRepository {
         // rates created leftover lira on remaining vs the party ledger.
         const [retAgg] = await tx
           .select({
-            total: sql<number>`COALESCE(SUM(${returnLines.quantityKg} * ${returnLines.pricePerKg}), 0)`,
+            total: sql<number>`COALESCE(SUM(ROUND(${returnLines.quantityKg} * ${returnLines.pricePerKg}, 2)), 0)`,
           })
           .from(returnLines)
           .innerJoin(returns, eq(returnLines.returnId, returns.id))

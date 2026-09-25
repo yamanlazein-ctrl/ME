@@ -194,6 +194,13 @@ export class PostgresReturnRepository implements IReturnRepository {
       // BUG-03 fix: frozen FX derived server-side from the original document(s).
       let linkedInvoiceFx: number | null = null;
       let unlinkedInvoiceFx: number | null = null;
+      // Lock the returned rolls BEFORE computing eligibility (invoice lock
+      // first, then rolls ascending — the same order as invoice edit/cancel,
+      // so no deadlock). The later lockRollsOrdered call re-locks harmlessly.
+      const lockReturnRollsEarly = async () => {
+        const { lockRollsOrdered: lockEarly } = await import("./rollLocking.js");
+        await lockEarly(tx, ctx.tenantId, [...new Set(input.lines.map((l) => l.rollId))], { skipMissing: true });
+      };
 
       if (input.originalInvoiceId) {
         const [origInv] = await tx
@@ -206,8 +213,13 @@ export class PostgresReturnRepository implements IReturnRepository {
           })
           .from(invoices)
           .where(and(eq(invoices.id, input.originalInvoiceId), eq(invoices.tenantId, ctx.tenantId)))
+          // Serialize returns (and edits/cancels) of the same invoice: the
+          // eligibility below reads "sold − already returned"; without the lock
+          // two concurrent returns both read the same room and over-return.
+          .for("update")
           .limit(1);
         if (!origInv) throw new Error("الفاتورة الأصلية غير موجودة");
+        await lockReturnRollsEarly();
         if (origInv.type !== expectedInvoiceType)
           throw new Error(`نوع الفاتورة الأصلية (${origInv.type}) لا يطابق نوع المرتجع (${input.kind})`);
         if (origInv.status !== "active") throw new Error("لا يمكن الإرجاع على فاتورة ملغاة");
@@ -223,8 +235,9 @@ export class PostgresReturnRepository implements IReturnRepository {
           .select({
             rollId: invoiceLines.rollId,
             qty: sql<number>`COALESCE(SUM(${invoiceLines.quantityKg}),0)`,
-            price: sql<number>`AVG(${invoiceLines.pricePerKg})`,
-            cost: sql<number>`AVG(${invoiceLines.costPerKg})`,
+            // Audit F-004: quantity-WEIGHTED (10 kg @5 + 1 kg @9 → 5.36, not 7).
+            price: sql<number>`SUM(${invoiceLines.quantityKg} * ${invoiceLines.pricePerKg}) / NULLIF(SUM(${invoiceLines.quantityKg}), 0)`,
+            cost: sql<number>`SUM(${invoiceLines.quantityKg} * COALESCE(${invoiceLines.costPerKg}, ${invoiceLines.pricePerKg})) / NULLIF(SUM(${invoiceLines.quantityKg}), 0)`,
           })
           .from(invoiceLines)
           .where(and(eq(invoiceLines.invoiceId, input.originalInvoiceId), eq(invoiceLines.tenantId, ctx.tenantId)))
@@ -233,8 +246,10 @@ export class PostgresReturnRepository implements IReturnRepository {
           invoiceLineQtys.set(ol.rollId, {
             original: Math.round(Number(ol.qty) * 100) / 100,
             returned: 0,
-            pricePerKg: Math.round(Number(ol.price) * 100) / 100,
-            costPerKg: Math.round(Number(ol.cost ?? ol.price) * 100) / 100,
+            pricePerKg: Math.round(Number(ol.price) * 10000) / 10000,
+            // cost carries 4 decimals (20261017) — rounding it to 2 made the
+            // reversed COGS differ from the COGS the sale posted.
+            costPerKg: Math.round(Number(ol.cost ?? ol.price) * 10000) / 10000,
             currency: invoiceCurrency,
           });
         }
@@ -294,13 +309,15 @@ export class PostgresReturnRepository implements IReturnRepository {
           entry.returned = round(Math.max(linkedReturned, entry.original - globalRoom));
         }
       } else {
+        await lockReturnRollsEarly();
         const rollIds = Array.from(new Set(input.lines.map((l) => l.rollId)));
         const historical = await tx
           .select({
             rollId: invoiceLines.rollId,
             total: sql<number>`COALESCE(SUM(${invoiceLines.quantityKg}),0)`,
-            price: sql<number>`AVG(${invoiceLines.pricePerKg})`,
-            cost: sql<number>`AVG(${invoiceLines.costPerKg})`,
+            // Audit F-004: quantity-WEIGHTED (10 kg @5 + 1 kg @9 → 5.36, not 7).
+            price: sql<number>`SUM(${invoiceLines.quantityKg} * ${invoiceLines.pricePerKg}) / NULLIF(SUM(${invoiceLines.quantityKg}), 0)`,
+            cost: sql<number>`SUM(${invoiceLines.quantityKg} * COALESCE(${invoiceLines.costPerKg}, ${invoiceLines.pricePerKg})) / NULLIF(SUM(${invoiceLines.quantityKg}), 0)`,
             currency: sql<string>`MAX(${invoices.currency})`,
             minRate: sql<number | null>`MIN(${invoices.exchangeRate})`,
             maxRate: sql<number | null>`MAX(${invoices.exchangeRate})`,
@@ -332,8 +349,8 @@ export class PostgresReturnRepository implements IReturnRepository {
           invoiceLineQtys.set(h.rollId, {
             original: Math.round(Number(h.total) * 100) / 100,
             returned: 0,
-            pricePerKg: Math.round(Number(h.price) * 100) / 100,
-            costPerKg: Math.round(Number(h.cost ?? h.price) * 100) / 100,
+            pricePerKg: Math.round(Number(h.price) * 10000) / 10000,
+            costPerKg: Math.round(Number(h.cost ?? h.price) * 10000) / 10000,
             currency: String(h.currency),
           });
         }
@@ -415,14 +432,15 @@ export class PostgresReturnRepository implements IReturnRepository {
           const currentPieces = Number(r.remainingPieces);
           const delta = input.kind === "entry" ? -totalQty : totalQty;
           const piecesDelta = input.kind === "entry" ? -totalPieces : totalPieces;
-          const newKg = Math.max(0, currentKg + delta);
-          const newPieces = Math.max(0, currentPieces + piecesDelta);
           if (input.kind === "entry" && currentKg < totalQty) {
             throw new Error(`الكمية المرتجعة (${totalQty} كغ) تتجاوز المتاح في الصبغة (${currentKg} كغ)`);
           }
           if (input.kind === "entry" && currentPieces < totalPieces) {
             throw new Error(`الأثواب المرتجعة (${totalPieces}) تتجاوز المتاح في الصبغة (${currentPieces} أثواب)`);
           }
+          // Checked above for the only direction that removes stock — no clamp.
+          const newKg = Math.round((currentKg + delta) * 100) / 100;
+          const newPieces = currentPieces + piecesDelta;
           const updated = await tx
             .update(rolls)
             .set({
@@ -673,8 +691,22 @@ export class PostgresReturnRepository implements IReturnRepository {
           // عكس التأثير الأصلي عند الإلغاء: مرتجع إدخال → يعيد الكمية للمخزون؛ مرتجع بيع → يخصمها
           const delta = r.kind === "entry" ? Number(l.quantityKg) : -Number(l.quantityKg);
           const piecesDelta = r.kind === "entry" ? Number(l.pieces ?? 1) : -Number(l.pieces ?? 1);
-          const newKg = Math.max(0, Number(roll.remainingKg) + delta);
-          const newPieces = Math.max(0, Number(roll.remainingPieces) + piecesDelta);
+          // Audit F-002: cancelling a SALE return takes the returned goods back
+          // out of stock. If they were sold again meanwhile, the old
+          // Math.max(0, …) silently zeroed the roll and recorded a movement
+          // that never happened. Refuse instead — cancel the later sale first.
+          if (Number(roll.remainingKg) + delta < -0.000001) {
+            throw new Error(
+              `لا يمكن إلغاء المرتجع ${r.number}: الكمية المرتجعة (${Number(l.quantityKg)} كغ) لم تعد موجودة في اللفافة ${roll.rollNo} (المتاح ${Number(roll.remainingKg)} كغ) — بيعت أو استُهلكت بعد الإرجاع`,
+            );
+          }
+          if (Number(roll.remainingPieces) + piecesDelta < 0) {
+            throw new Error(
+              `لا يمكن إلغاء المرتجع ${r.number}: الأثواب المرتجعة (${Number(l.pieces ?? 1)}) لم تعد موجودة في اللفافة ${roll.rollNo} (المتاح ${Number(roll.remainingPieces)})`,
+            );
+          }
+          const newKg = Math.round((Number(roll.remainingKg) + delta) * 100) / 100;
+          const newPieces = Number(roll.remainingPieces) + piecesDelta;
           const updated = await tx
             .update(rolls)
             .set({
