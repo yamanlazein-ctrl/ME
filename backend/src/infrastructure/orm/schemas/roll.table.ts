@@ -29,7 +29,7 @@ export const rolls = pgTable(
     remainingKg: decimal("remaining_kg", { precision: 12, scale: 2 }).notNull(),
     pieces: integer("pieces").notNull().default(1),
     remainingPieces: integer("remaining_pieces").notNull().default(0),
-    pricePerKg: decimal("price_per_kg", { precision: 12, scale: 2 }).notNull(),
+    pricePerKg: decimal("price_per_kg", { precision: 14, scale: 4 }).notNull(),
     salePricePerKg: decimal("sale_price_per_kg", { precision: 12, scale: 2 }),
     currency: varchar("currency", { length: 3 }).notNull().default("SYP"),
     supplierId: uuid("supplier_id").references(() => parties.id),

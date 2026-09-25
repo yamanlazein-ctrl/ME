@@ -40,7 +40,7 @@ export const invoiceLines = pgTable(
     discountAmount: numeric("discount_amount", { precision: 14, scale: 2, mode: "number" })
       .notNull()
       .default(0),
-    costPerKg: decimal("cost_per_kg", { precision: 12, scale: 2 }),
+    costPerKg: decimal("cost_per_kg", { precision: 14, scale: 4 }),
     note: text("note"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },

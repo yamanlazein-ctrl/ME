@@ -812,7 +812,7 @@ function RollFormDialog({ state, onClose }: { state: RollFormState; onClose: () 
               <Input
                 type="number"
                 inputMode="decimal"
-                step="0.01"
+                step="any"
                 min="0"
                 value={price}
                 onChange={(e) => setPrice(e.target.value)}

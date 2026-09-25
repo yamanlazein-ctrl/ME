@@ -1,5 +1,5 @@
 ﻿import { z } from "zod";
-import { is2dp, MAX_2DP_MESSAGE } from "./precision.js";
+import { is2dp, MAX_2DP_MESSAGE, is4dp, MAX_4DP_MESSAGE } from "./precision.js";
 
 export const createRollSchema = z.object({
   colorId: z.string().uuid(),
@@ -15,7 +15,10 @@ export const createRollSchema = z.object({
    *  roll is born with stock (remainingKg > 0), or 0 when the entry-invoice
    *  flow will increment it. */
   pieces: z.coerce.number().int().positive().max(100000).optional().default(1),
-  pricePerKg: z.number().positive().refine(is2dp, { message: MAX_2DP_MESSAGE }),
+  // Cost price: 4 decimals (a printed batch spreads its waste over the net
+  // kilos — see PostgresPrintJobRepository.receive). Editing such a roll must
+  // not be refused for carrying its own computed cost.
+  pricePerKg: z.number().positive().refine(is4dp, { message: MAX_4DP_MESSAGE }),
   salePricePerKg: z.number().positive().optional(),
   currency: z.enum(["SYP", "USD", "EUR"]).optional(),
   supplierId: z.string().uuid().optional(),

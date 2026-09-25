@@ -15,7 +15,7 @@ import {
   type ReceivePrintJobInput,
 } from "../../domain/entities/PrintJob.js";
 import type { TenantContext, UUID } from "../../domain/types/index.js";
-import { round2dp, convertAmount, isValidFxRate } from "@erp/shared";
+import { round2dp, convertAmount, isValidFxRate, round4dp } from "@erp/shared";
 
 import { localToday } from "../utils/localDate.js";
 export class PostgresPrintJobRepository implements IPrintJobRepository {
@@ -387,7 +387,19 @@ export class PostgresPrintJobRepository implements IPrintJobRepository {
               exchangeRate: currency === "USD" ? 1 : isValidFxRate(fxRate) ? fxRate : null,
             },
           ) ?? srcPrice;
-        const unitCost = round2dp(srcInReceive + printCost);
+        // Batch costing (approved 2026-09-25): the lost weight is absorbed by
+        // the sellable fabric instead of silently vanishing from stock value.
+        //   batch cost  = raw cost of EVERYTHING sent + press charges
+        //   unit cost   = batch cost / net kilos actually received
+        // Press charges = received kg × print cost per kg — the same amount
+        // paid out in cash below (Dr inventory / Cr cash). Stored at 4
+        // decimals so the division leaves no yearly rounding drift.
+        const sentKg = Number(job.quantityKg) || 0;
+        const netKg = Number(input.receivedKg) || 0;
+        const pressCharges = round2dp(netKg * printCost);
+        const batchCost = srcInReceive * sentKg + pressCharges;
+        const unitCost =
+          netKg > 0 ? round4dp(batchCost / netKg) : round4dp(srcInReceive + printCost);
         const salePrice = input.newSalePricePerKg ?? srcRoll.salePricePerKg ?? undefined;
         // B1 fix: entryDate is NOT NULL in the rolls table; fall back to today's
         // date (or the print job's date) if the caller didn't supply one.

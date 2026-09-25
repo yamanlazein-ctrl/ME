@@ -12,6 +12,17 @@ export function is2dp(v: number): boolean {
   return Math.abs(v * 100 - Math.round(v * 100)) < 1e-9;
 }
 
+/** Unit COST prices (roll price_per_kg) are stored with 4 decimals — see 20261017 migration. */
+export function is4dp(v: number): boolean {
+  return Math.abs(v * 10000 - Math.round(v * 10000)) < 1e-6;
+}
+
+export const MAX_4DP_MESSAGE = "سعر التكلفة يقبل حتى 4 خانات عشرية كحد أقصى";
+
+export function round4dp(n: number): number {
+  return Math.round((Number.isFinite(n) ? n : 0) * 10000) / 10000;
+}
+
 export const MAX_2DP_MESSAGE = "القيمة تقبل حتى خانتين عشريتين كحد أقصى (دقة التخزين 0.01)";
 
 export const MAX_2DP_MSG = MAX_2DP_MESSAGE;
