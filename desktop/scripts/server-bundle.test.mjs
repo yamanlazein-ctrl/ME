@@ -75,6 +75,10 @@ before(async () => {
       APP_MASTER_KEY: Buffer.alloc(32, 7).toString("base64"),
       CORS_ORIGIN: "http://127.0.0.1",
       LOG_DIR: join(work, "logs"),
+      // Build-time smoke test: never write backups into the developer's
+      // Documents (it left a truncated auto-*.zip there when the test server
+      // was stopped mid-copy).
+      BACKUP_MIRROR_DIR: "off",
       LICENSE_SIGNING_PUBLIC_KEY: readFileSync(join(RESOURCES, "license-public.pem"), "utf8"),
       LOG_LEVEL: "info",
     },
