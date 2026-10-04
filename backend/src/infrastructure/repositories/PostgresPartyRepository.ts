@@ -1,4 +1,4 @@
-import { eq, and, desc, ilike, or, sql, inArray, getTableColumns } from "drizzle-orm";
+import { eq, ne, and, desc, ilike, or, sql, inArray, getTableColumns } from "drizzle-orm";
 import { afterCursor, cursorColumns, decodeCursor, keysetOrder, nextCursorOf, type KeysetSpec } from "./keysetPage.js";
 import { likeContains } from "../utils/likeEscape.js";
 import type { DB } from "../orm/drizzle.js";
@@ -104,7 +104,11 @@ export class PostgresPartyRepository implements IPartyRepository {
   async list(filter: PartyFilter, ctx: TenantContext): Promise<PaginatedResult<PartyData>> {
     const conditions = [eq(parties.tenantId, ctx.tenantId)];
     if (filter.kind) conditions.push(eq(parties.kind, filter.kind));
+    // D-4 / FR-017: cancelled parties are hidden from operational lists,
+    // including the default "all" view. They stay stored and reachable by id
+    // and through an explicit `status: "cancelled"` filter (audit/history).
     if (filter.status) conditions.push(eq(parties.status, filter.status));
+    else conditions.push(ne(parties.status, "cancelled"));
     if (filter.search) {
       const search = likeContains(filter.search);
       conditions.push(or(ilike(parties.name, search), ilike(parties.code!, search))!);

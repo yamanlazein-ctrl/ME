@@ -26,6 +26,10 @@ const KEYS = {
 /*    synchronous party API used by legacy components).                ── */
 
 let _allParties: Party[] = [];
+// D-4: cancelled parties never appear in operational lists or pickers
+// (`customers` / `suppliers`), but historical documents still resolve their
+// names by id — so they are cached separately for the by-id lookups only.
+const _cancelledParties: Party[] = [];
 
 const _customers: Party[] = [];
 const _suppliers: Party[] = [];
@@ -79,10 +83,31 @@ async function loadAll(force = false): Promise<void> {
           },
           { pageSize, maxPages: 200, label: `parties:${kind}` },
         );
-      const [cRes, sRes] = await Promise.all([loadKind("customer"), loadKind("supplier")]);
-      const cData = isPaginated<Party>(cRes) ? cRes.data : (cRes as Party[]);
-      const sData = isPaginated<Party>(sRes) ? sRes.data : (sRes as Party[]);
+      // History-only set: explicit status filter (the default list excludes cancelled).
+      const loadCancelled = (kind: "customer" | "supplier") =>
+        fetchAllPaged<Party>(
+          async (page, limit, cursor) => {
+            const res = await container.parties.list.execute(
+              { kind, limit, page, cursor, status: "cancelled" } as Parameters<typeof container.parties.list.execute>[0],
+              ctx,
+            );
+            return isPaginated<Party>(res) ? res : (res as Party[]);
+          },
+          { pageSize, maxPages: 200, label: `parties:${kind}:cancelled` },
+        );
+      const [cRes, sRes, ccRes, scRes] = await Promise.all([
+        loadKind("customer"),
+        loadKind("supplier"),
+        loadCancelled("customer"),
+        loadCancelled("supplier"),
+      ]);
+      const operational = (p: Party) => p.status !== "cancelled";
+      const cData = (isPaginated<Party>(cRes) ? cRes.data : (cRes as Party[])).filter(operational);
+      const sData = (isPaginated<Party>(sRes) ? sRes.data : (sRes as Party[])).filter(operational);
+      const ccData = isPaginated<Party>(ccRes) ? ccRes.data : (ccRes as Party[]);
+      const scData = isPaginated<Party>(scRes) ? scRes.data : (scRes as Party[]);
       _allParties.splice(0, _allParties.length, ...cData, ...sData);
+      _cancelledParties.splice(0, _cancelledParties.length, ...ccData, ...scData);
       _customers.splice(0, _customers.length, ...cData);
       _suppliers.splice(0, _suppliers.length, ...sData);
       loaded = true;
@@ -202,14 +227,30 @@ export const partiesQueryOptions = {
 
 /* ── Synchronous lookup helpers (backed by the module cache) ──────── */
 
+// By-id lookups also see cancelled parties, so historical documents keep
+// showing their counterparty (D-4: preserved for audit/history).
 export function customerById(id: string): Party | undefined {
-  return _allParties.find((p) => p.kind === "customer" && p.id === id);
+  return (
+    _allParties.find((p) => p.kind === "customer" && p.id === id) ??
+    _cancelledParties.find((p) => p.kind === "customer" && p.id === id)
+  );
 }
 export function supplierById(id: string): Party | undefined {
-  return _allParties.find((p) => p.kind === "supplier" && p.id === id);
+  return (
+    _allParties.find((p) => p.kind === "supplier" && p.id === id) ??
+    _cancelledParties.find((p) => p.kind === "supplier" && p.id === id)
+  );
 }
 
 function syncPartiesCache() {
+  // A party cancelled in this session leaves the operational lists at once.
+  for (let i = _allParties.length - 1; i >= 0; i--) {
+    const p = _allParties[i];
+    if (p.status === "cancelled") {
+      _allParties.splice(i, 1);
+      if (!_cancelledParties.some((c) => c.id === p.id)) _cancelledParties.push(p);
+    }
+  }
   _customers.splice(0, _customers.length, ..._allParties.filter((p) => p.kind === "customer"));
   _suppliers.splice(0, _suppliers.length, ..._allParties.filter((p) => p.kind === "supplier"));
   notifyPartiesChange();
@@ -327,6 +368,9 @@ export async function updateSupplier(id: string, patch: Record<string, unknown>)
 export async function deleteCustomer(id: string): Promise<void> {
   try {
     await container.parties.repository.delete(id, "customer", ctx);
+    // The backend cancels the party (D-4): keep it for by-id history lookups.
+    const removed = _allParties.find((p) => p.id === id);
+    if (removed && !_cancelledParties.some((c) => c.id === id)) _cancelledParties.push(removed);
     _allParties = _allParties.filter((p) => p.id !== id);
     syncPartiesCache();
     notifyPartiesChange();
@@ -345,6 +389,9 @@ export async function deleteCustomer(id: string): Promise<void> {
 export async function deleteSupplier(id: string): Promise<void> {
   try {
     await container.parties.repository.delete(id, "supplier", ctx);
+    // The backend cancels the party (D-4): keep it for by-id history lookups.
+    const removed = _allParties.find((p) => p.id === id);
+    if (removed && !_cancelledParties.some((c) => c.id === id)) _cancelledParties.push(removed);
     _allParties = _allParties.filter((p) => p.id !== id);
     syncPartiesCache();
     notifyPartiesChange();
