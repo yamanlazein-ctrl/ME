@@ -47,7 +47,7 @@ export interface ProcessGuard {
   readonly givenUp: boolean;
 }
 
-type GuardState = { crashes: number; givenUp: boolean };
+type GuardState = { crashes: number; givenUp: boolean; fatalUntilServing: boolean; serving: boolean };
 
 function describe(err: unknown): string {
   if (err instanceof Error) return err.stack ?? `${err.name}: ${err.message}`;
@@ -59,14 +59,28 @@ function describe(err: unknown): string {
  *
  * Returns the live guard state so the caller (and tests) can assert on it.
  */
-export function installProcessGuards(): ProcessGuard {
+export function installProcessGuards(opts: { fatalUntilServing?: boolean } = {}): ProcessGuard {
   const g = globalThis as typeof globalThis & { __motardProcessGuard?: GuardState };
   if (g.__motardProcessGuard) return g.__motardProcessGuard;
 
-  const state: GuardState = { crashes: 0, givenUp: false };
+  const state: GuardState = {
+    crashes: 0,
+    givenUp: false,
+    fatalUntilServing: opts.fatalUntilServing ?? false,
+    serving: false,
+  };
   g.__motardProcessGuard = state;
 
   const onFault = (kind: "exception" | "rejection", err: unknown) => {
+    // Before the server is serving there is nothing to keep alive: a fault while
+    // the process is still being built (e.g. a throw in the container) would
+    // otherwise leave a process with no listener at all — alive, silent, never
+    // reachable. That is a start-up refusal, and start-up refusals are fatal.
+    if (state.fatalUntilServing && !state.serving) {
+      process.stderr.write(`[FATAL] Server startup failed (uncaught ${kind}): ${describe(err)}
+`);
+      process.exit(1);
+    }
     // `exit` is a hard decision made by the call sites that own their failure
     // mode (migrations, bind errors). Never re-derive it here.
     state.crashes += 1;
@@ -100,4 +114,10 @@ export function installProcessGuards(): ProcessGuard {
     "PROCESS_GUARDS_INSTALLED",
   );
   return state;
+}
+
+/** The server is listening: from now on faults are contained (see `fatalUntilServing`). */
+export function markServing(): void {
+  const g = globalThis as typeof globalThis & { __motardProcessGuard?: GuardState };
+  if (g.__motardProcessGuard) g.__motardProcessGuard.serving = true;
 }

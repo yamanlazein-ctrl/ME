@@ -32,15 +32,15 @@ const guardUrl = pathToFileURL(
 type ChildResult = { alive: boolean; stdout: string; stderr: string };
 
 /** Run `body` in a child that has installed the guards, and report what survived. */
-function runGuarded(body: string): ChildResult {
+function runGuarded(body: string, install = "installProcessGuards();"): ChildResult {
   const dir = mkdtempSync(path.join(tmpdir(), "motard-guard-"));
   const script = path.join(dir, "child.mts");
   try {
     writeFileSync(
       script,
-      `import { installProcessGuards, MAX_TOLERATED_CRASHES } from ${JSON.stringify(guardUrl)};
+      `import { installProcessGuards, markServing, MAX_TOLERATED_CRASHES } from ${JSON.stringify(guardUrl)};
 const { EventEmitter } = await import("node:events");
-installProcessGuards();
+${install}
 ${body}
 `,
     );
@@ -130,5 +130,36 @@ describe("desktop process guards", () => {
     expect(r.alive).toBe(true);
     expect(r.stdout).toContain("SURVIVED_IDEMPOTENT");
     expect(r.stderr).not.toContain("budget exhausted");
+  });
+
+  it("a fault before the server is listening is a start-up failure, not a silent live process", () => {
+    // The cloud hub used to stay alive with no port: a throw while building the
+    // container was contained, so listen() never ran and nothing said why.
+    const r = runGuarded(
+      `
+      ${STREAM_FAULT}
+      ${AFTER_FAULT}
+      console.log("SHOULD_NOT_RUN");
+    `,
+      "installProcessGuards({ fatalUntilServing: true });",
+    );
+    expect(r.alive).toBe(false);
+    expect(r.stdout).not.toContain("SHOULD_NOT_RUN");
+    expect(r.stderr).toContain("[FATAL] Server startup failed");
+    expect(r.stderr).toContain("stream blew up");
+  });
+
+  it("once serving, the same fault is contained exactly as before", () => {
+    const r = runGuarded(
+      `
+      markServing();
+      ${STREAM_FAULT}
+      ${AFTER_FAULT}
+      console.log("SURVIVED_AFTER_LISTEN");
+    `,
+      "installProcessGuards({ fatalUntilServing: true });",
+    );
+    expect(r.alive).toBe(true);
+    expect(r.stdout).toContain("SURVIVED_AFTER_LISTEN");
   });
 });

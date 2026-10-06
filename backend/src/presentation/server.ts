@@ -4,7 +4,7 @@ import helmet from "helmet";
 import compression from "compression";
 import rateLimit from "express-rate-limit";
 import * as Sentry from "@sentry/node";
-import { installProcessGuards } from "../infrastructure/config/processGuard.js";
+import { installProcessGuards, markServing } from "../infrastructure/config/processGuard.js";
 import { config, corsOrigins } from "../infrastructure/config/env.js";
 import { logger } from "../infrastructure/config/logger.js";
 import { buildContainer } from "../infrastructure/di/container.js";
@@ -72,8 +72,10 @@ import { setLicenseIdentityDegraded } from "../infrastructure/license/licenseIde
 // stream/timer is what used to take the whole desktop app down and leave the
 // WebView2 window on its built-in "can't reach this page" screen. Start-up
 // refusals stay fatal — they call process.exit(1) explicitly, which this
-// guard never intercepts.
-installProcessGuards();
+// guard never intercepts — and so does any uncaught fault before the server is
+// listening (a throw while building the container used to leave a live process
+// with no port, which a cloud host only reports as "no open ports").
+installProcessGuards({ fatalUntilServing: true });
 
 // Crash reporting & APM — guarded so it never blocks startup
 if (config.SENTRY_DSN) {
@@ -640,12 +642,14 @@ void prepareDesktopDatabase()
     // middleware, route and test — is unchanged: only the bind target moved.
     const server = config.DESKTOP_PIPE
       ? app.listen(config.DESKTOP_PIPE, () => {
+          markServing();
           logger.info(`ERP API server listening on pipe ${config.DESKTOP_PIPE}`);
           // Readiness is now "the pipe accepts a request", which the Rust shell
           // probes directly. No port file is written and none is needed.
           afterListen();
         })
       : app.listen(config.PORT, config.HOST, () => {
+          markServing();
           const address = server?.address();
           const bound = typeof address === "object" && address ? address.port : config.PORT;
           logger.info(`ERP API server listening on ${config.HOST}:${bound} in ${config.NODE_ENV} mode`);
