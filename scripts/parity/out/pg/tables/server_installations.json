@@ -1,0 +1,13 @@
+[
+  {
+    "app_version": null,
+    "created_at": "<ts>",
+    "hostname": "parity-host",
+    "id": "#00351",
+    "installation_id": "#00352",
+    "last_heartbeat_at": "<ts>",
+    "os": null,
+    "os_version": null,
+    "tenant_id": "#00095"
+  }
+]

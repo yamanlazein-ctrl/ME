@@ -1,0 +1,19 @@
+[
+  {
+    "created_at": "<ts>",
+    "device_fingerprint": "parity-fingerprint-0000000000000001::#00352",
+    "device_fingerprint_version": 1,
+    "device_id": "#00256",
+    "id": "#00257",
+    "last_seen_at": "<ts>",
+    "license_id": "#00258",
+    "name": "parity-host",
+    "platform": "windows",
+    "revoke_reason": null,
+    "revoked_at": null,
+    "signed_token": null,
+    "signed_token_expires_at": null,
+    "tenant_id": "#00095",
+    "user_id": null
+  }
+]

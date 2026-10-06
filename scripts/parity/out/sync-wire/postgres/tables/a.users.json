@@ -1,0 +1,17 @@
+[
+  {
+    "active": true,
+    "created_at": "<ts>",
+    "email": "admin-a@ac8.local",
+    "id": "#00002",
+    "is_license_owner": false,
+    "name": "AC-8 Admin",
+    "password_hash": "not-used-tokens-are-minted",
+    "permissions": [],
+    "pin_hash": null,
+    "role": "admin",
+    "tenant_id": "#00003",
+    "tokens_revoked_before": null,
+    "updated_at": "<ts>"
+  }
+]

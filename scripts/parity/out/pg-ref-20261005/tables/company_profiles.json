@@ -1,0 +1,22 @@
+[
+  {
+    "address": null,
+    "city": "دمشق",
+    "commercial_reg": null,
+    "country": null,
+    "created_at": "<ts>",
+    "currency": "SYP",
+    "customization": {},
+    "default_tax_rate": "0.0000",
+    "email": null,
+    "fiscal_year_start": "2026-01-01",
+    "id": "#00255",
+    "language": "ar",
+    "logo_path": null,
+    "name": "شركة التكافؤ",
+    "phone": null,
+    "tax_number": null,
+    "tenant_id": "#00095",
+    "updated_at": "<ts>"
+  }
+]

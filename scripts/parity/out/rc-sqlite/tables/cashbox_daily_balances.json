@@ -1,0 +1,65 @@
+[
+  {
+    "balance_date": "2026-02-01",
+    "closing_balance": "-1000000.00",
+    "currency": "SYP",
+    "tenant_id": "#00095",
+    "updated_at": "<ts>"
+  },
+  {
+    "balance_date": "2026-02-03",
+    "closing_balance": "-249999.50",
+    "currency": "SYP",
+    "tenant_id": "#00095",
+    "updated_at": "<ts>"
+  },
+  {
+    "balance_date": "2026-02-04",
+    "closing_balance": "-369999.50",
+    "currency": "SYP",
+    "tenant_id": "#00095",
+    "updated_at": "<ts>"
+  },
+  {
+    "balance_date": "2026-02-05",
+    "closing_balance": "-404999.50",
+    "currency": "SYP",
+    "tenant_id": "#00095",
+    "updated_at": "<ts>"
+  },
+  {
+    "balance_date": "2026-02-10",
+    "closing_balance": "-4999.50",
+    "currency": "SYP",
+    "tenant_id": "#00095",
+    "updated_at": "<ts>"
+  },
+  {
+    "balance_date": "2026-02-15",
+    "closing_balance": "145001.25",
+    "currency": "SYP",
+    "tenant_id": "#00095",
+    "updated_at": "<ts>"
+  },
+  {
+    "balance_date": "2026-02-16",
+    "closing_balance": "-1854998.75",
+    "currency": "SYP",
+    "tenant_id": "#00095",
+    "updated_at": "<ts>"
+  },
+  {
+    "balance_date": "2026-02-21",
+    "closing_balance": "-1554998.75",
+    "currency": "SYP",
+    "tenant_id": "#00095",
+    "updated_at": "<ts>"
+  },
+  {
+    "balance_date": "2026-03-03",
+    "closing_balance": "5.55",
+    "currency": "EUR",
+    "tenant_id": "#00095",
+    "updated_at": "<ts>"
+  }
+]

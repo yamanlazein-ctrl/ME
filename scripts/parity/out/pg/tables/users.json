@@ -1,0 +1,17 @@
+[
+  {
+    "active": true,
+    "created_at": "<ts>",
+    "email": "admin@erp.local",
+    "id": "#00093",
+    "is_license_owner": false,
+    "name": "المدير",
+    "password_hash": "<random>",
+    "permissions": [],
+    "pin_hash": null,
+    "role": "admin",
+    "tenant_id": "#00095",
+    "tokens_revoked_before": null,
+    "updated_at": "<ts>"
+  }
+]

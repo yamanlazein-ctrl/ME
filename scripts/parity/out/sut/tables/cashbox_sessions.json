@@ -1,0 +1,11 @@
+[
+  {
+    "created_at": "<ts>",
+    "currency": "SYP",
+    "id": "#00187",
+    "opening_balance": "5000000.00",
+    "opening_date": "2026-01-31",
+    "tenant_id": "#00095",
+    "updated_at": "<ts>"
+  }
+]

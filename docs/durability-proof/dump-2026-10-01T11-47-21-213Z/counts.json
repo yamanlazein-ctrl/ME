@@ -1,0 +1,11 @@
+{
+  "invoices": 100000,
+  "invoice_lines": 100000,
+  "ledger_entries": 200000,
+  "stock_movements": 1,
+  "vouchers": 1,
+  "parties": 1,
+  "rolls": 1,
+  "colors": 1,
+  "fabrics": 1
+}

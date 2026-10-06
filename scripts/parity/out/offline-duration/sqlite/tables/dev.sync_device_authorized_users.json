@@ -1,0 +1,14 @@
+[
+  {
+    "created_at": "<ts>",
+    "device_id": "#00021",
+    "tenant_id": "#00008",
+    "user_id": "#00001"
+  },
+  {
+    "created_at": "<ts>",
+    "device_id": "#00113",
+    "tenant_id": "#00008",
+    "user_id": "#00001"
+  }
+]

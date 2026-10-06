@@ -1,0 +1,27 @@
+{
+  "generatedAt": "2026-10-03T15:48:48.570Z",
+  "engine": "postgres",
+  "params": {
+    "invoices": 1000,
+    "parties": 100,
+    "deepShare": 200
+  },
+  "counts": {
+    "customersList": 80,
+    "suppliersList": 20,
+    "invoices": 1000,
+    "ledgerRows": 2000,
+    "cashboxDailyRows": 1000
+  },
+  "statements": {
+    "parties": 80,
+    "totalLines": 2000,
+    "deepest": {
+      "party": "6d96f060-b5f0-9fb6-4a3f-f70cceda0a3d",
+      "lines": 420
+    },
+    "sha256": "21c65ba10df34c6c92dce465cb868db935bf6ac16dd0e79a06a4f3e65007fc32"
+  },
+  "cashboxClosingSYP": "1496512.00",
+  "tenantId": "15e9cca2-5f55-4e8b-8478-8ba8094ab3fa"
+}

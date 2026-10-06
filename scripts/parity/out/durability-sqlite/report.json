@@ -1,0 +1,288 @@
+{
+  "generatedAt": "2026-10-04T22:11:19.332Z",
+  "engine": "sqlite",
+  "rounds": 25,
+  "referenceShape": {
+    "lines": 1,
+    "ledger": 4,
+    "stock": 1
+  },
+  "results": [
+    {
+      "round": 1,
+      "sent": 16,
+      "confirmed": 16,
+      "invoicesInFile": 17,
+      "integrity": "ok",
+      "fkViolations": 0,
+      "missingConfirmed": 0,
+      "incomplete": 0,
+      "ok": true
+    },
+    {
+      "round": 2,
+      "sent": 44,
+      "confirmed": 59,
+      "invoicesInFile": 60,
+      "integrity": "ok",
+      "fkViolations": 0,
+      "missingConfirmed": 0,
+      "incomplete": 0,
+      "ok": true
+    },
+    {
+      "round": 3,
+      "sent": 22,
+      "confirmed": 80,
+      "invoicesInFile": 82,
+      "integrity": "ok",
+      "fkViolations": 0,
+      "missingConfirmed": 0,
+      "incomplete": 0,
+      "ok": true
+    },
+    {
+      "round": 4,
+      "sent": 49,
+      "confirmed": 128,
+      "invoicesInFile": 131,
+      "integrity": "ok",
+      "fkViolations": 0,
+      "missingConfirmed": 0,
+      "incomplete": 0,
+      "ok": true
+    },
+    {
+      "round": 5,
+      "sent": 28,
+      "confirmed": 155,
+      "invoicesInFile": 159,
+      "integrity": "ok",
+      "fkViolations": 0,
+      "missingConfirmed": 0,
+      "incomplete": 0,
+      "ok": true
+    },
+    {
+      "round": 6,
+      "sent": 22,
+      "confirmed": 176,
+      "invoicesInFile": 181,
+      "integrity": "ok",
+      "fkViolations": 0,
+      "missingConfirmed": 0,
+      "incomplete": 0,
+      "ok": true
+    },
+    {
+      "round": 7,
+      "sent": 14,
+      "confirmed": 189,
+      "invoicesInFile": 195,
+      "integrity": "ok",
+      "fkViolations": 0,
+      "missingConfirmed": 0,
+      "incomplete": 0,
+      "ok": true
+    },
+    {
+      "round": 8,
+      "sent": 56,
+      "confirmed": 244,
+      "invoicesInFile": 251,
+      "integrity": "ok",
+      "fkViolations": 0,
+      "missingConfirmed": 0,
+      "incomplete": 0,
+      "ok": true
+    },
+    {
+      "round": 9,
+      "sent": 49,
+      "confirmed": 292,
+      "invoicesInFile": 300,
+      "integrity": "ok",
+      "fkViolations": 0,
+      "missingConfirmed": 0,
+      "incomplete": 0,
+      "ok": true
+    },
+    {
+      "round": 10,
+      "sent": 11,
+      "confirmed": 302,
+      "invoicesInFile": 310,
+      "integrity": "ok",
+      "fkViolations": 0,
+      "missingConfirmed": 0,
+      "incomplete": 0,
+      "ok": true
+    },
+    {
+      "round": 11,
+      "sent": 54,
+      "confirmed": 355,
+      "invoicesInFile": 364,
+      "integrity": "ok",
+      "fkViolations": 0,
+      "missingConfirmed": 0,
+      "incomplete": 0,
+      "ok": true
+    },
+    {
+      "round": 12,
+      "sent": 37,
+      "confirmed": 391,
+      "invoicesInFile": 401,
+      "integrity": "ok",
+      "fkViolations": 0,
+      "missingConfirmed": 0,
+      "incomplete": 0,
+      "ok": true
+    },
+    {
+      "round": 13,
+      "sent": 24,
+      "confirmed": 414,
+      "invoicesInFile": 425,
+      "integrity": "ok",
+      "fkViolations": 0,
+      "missingConfirmed": 0,
+      "incomplete": 0,
+      "ok": true
+    },
+    {
+      "round": 14,
+      "sent": 12,
+      "confirmed": 426,
+      "invoicesInFile": 437,
+      "integrity": "ok",
+      "fkViolations": 0,
+      "missingConfirmed": 0,
+      "incomplete": 0,
+      "ok": true
+    },
+    {
+      "round": 15,
+      "sent": 32,
+      "confirmed": 458,
+      "invoicesInFile": 469,
+      "integrity": "ok",
+      "fkViolations": 0,
+      "missingConfirmed": 0,
+      "incomplete": 0,
+      "ok": true
+    },
+    {
+      "round": 16,
+      "sent": 38,
+      "confirmed": 496,
+      "invoicesInFile": 507,
+      "integrity": "ok",
+      "fkViolations": 0,
+      "missingConfirmed": 0,
+      "incomplete": 0,
+      "ok": true
+    },
+    {
+      "round": 17,
+      "sent": 14,
+      "confirmed": 509,
+      "invoicesInFile": 521,
+      "integrity": "ok",
+      "fkViolations": 0,
+      "missingConfirmed": 0,
+      "incomplete": 0,
+      "ok": true
+    },
+    {
+      "round": 18,
+      "sent": 55,
+      "confirmed": 563,
+      "invoicesInFile": 576,
+      "integrity": "ok",
+      "fkViolations": 0,
+      "missingConfirmed": 0,
+      "incomplete": 0,
+      "ok": true
+    },
+    {
+      "round": 19,
+      "sent": 28,
+      "confirmed": 590,
+      "invoicesInFile": 604,
+      "integrity": "ok",
+      "fkViolations": 0,
+      "missingConfirmed": 0,
+      "incomplete": 0,
+      "ok": true
+    },
+    {
+      "round": 20,
+      "sent": 15,
+      "confirmed": 604,
+      "invoicesInFile": 619,
+      "integrity": "ok",
+      "fkViolations": 0,
+      "missingConfirmed": 0,
+      "incomplete": 0,
+      "ok": true
+    },
+    {
+      "round": 21,
+      "sent": 39,
+      "confirmed": 642,
+      "invoicesInFile": 658,
+      "integrity": "ok",
+      "fkViolations": 0,
+      "missingConfirmed": 0,
+      "incomplete": 0,
+      "ok": true
+    },
+    {
+      "round": 22,
+      "sent": 27,
+      "confirmed": 668,
+      "invoicesInFile": 685,
+      "integrity": "ok",
+      "fkViolations": 0,
+      "missingConfirmed": 0,
+      "incomplete": 0,
+      "ok": true
+    },
+    {
+      "round": 23,
+      "sent": 21,
+      "confirmed": 688,
+      "invoicesInFile": 706,
+      "integrity": "ok",
+      "fkViolations": 0,
+      "missingConfirmed": 0,
+      "incomplete": 0,
+      "ok": true
+    },
+    {
+      "round": 24,
+      "sent": 9,
+      "confirmed": 696,
+      "invoicesInFile": 714,
+      "integrity": "ok",
+      "fkViolations": 0,
+      "missingConfirmed": 0,
+      "incomplete": 0,
+      "ok": true
+    },
+    {
+      "round": 25,
+      "sent": 42,
+      "confirmed": 737,
+      "invoicesInFile": 755,
+      "integrity": "ok",
+      "fkViolations": 0,
+      "missingConfirmed": 0,
+      "incomplete": 0,
+      "ok": true
+    }
+  ],
+  "pass": true
+}

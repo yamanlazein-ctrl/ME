@@ -1,0 +1,16 @@
+[
+  {
+    "closed_at": "<ts>",
+    "closed_by": "#00093",
+    "counted": "5595000.50",
+    "currency": "SYP",
+    "date": "2026-02-05",
+    "difference": "1000000.00",
+    "expected": "4595000.50",
+    "id": "#00188",
+    "opening_balance": "5000000.00",
+    "tenant_id": "#00095",
+    "total_in": "750000.50",
+    "total_out": "1155000.00"
+  }
+]

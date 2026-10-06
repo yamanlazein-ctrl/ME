@@ -1,0 +1,79 @@
+[
+  {
+    "entity_type": "customer",
+    "id": "#01202",
+    "last_number": 1000,
+    "prefix": "CUS",
+    "tenant_id": "#00003"
+  },
+  {
+    "entity_type": "expense",
+    "id": "#01203",
+    "last_number": 200,
+    "prefix": "EXP",
+    "tenant_id": "#00003"
+  },
+  {
+    "entity_type": "invoice",
+    "id": "#01204",
+    "last_number": 1000,
+    "prefix": "INV",
+    "tenant_id": "#00003"
+  },
+  {
+    "entity_type": "invoice_entry",
+    "id": "#01205",
+    "last_number": 400,
+    "prefix": "ENT",
+    "tenant_id": "#00003"
+  },
+  {
+    "entity_type": "order",
+    "id": "#01206",
+    "last_number": 200,
+    "prefix": "ORD",
+    "tenant_id": "#00003"
+  },
+  {
+    "entity_type": "print",
+    "id": "#01207",
+    "last_number": 200,
+    "prefix": "PRT",
+    "tenant_id": "#00003"
+  },
+  {
+    "entity_type": "print_roll",
+    "id": "#01208",
+    "last_number": 200,
+    "prefix": "PRT",
+    "tenant_id": "#00003"
+  },
+  {
+    "entity_type": "return",
+    "id": "#01209",
+    "last_number": 200,
+    "prefix": "RET",
+    "tenant_id": "#00003"
+  },
+  {
+    "entity_type": "settlement",
+    "id": "#01210",
+    "last_number": 200,
+    "prefix": "SET",
+    "tenant_id": "#00003"
+  },
+  {
+    "entity_type": "supplier",
+    "id": "#01211",
+    "last_number": 1000,
+    "prefix": "SUP",
+    "tenant_id": "#00003"
+  },
+  {
+    "entity_type": "voucher",
+    "id": "#01212",
+    "last_number": 400,
+    "prefix": "VOC",
+    "tenant_id": "#00003"
+  }
+]

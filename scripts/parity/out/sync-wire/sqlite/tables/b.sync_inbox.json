@@ -1,0 +1,3245 @@
+[
+  {
+    "applied_at": "<ts>",
+    "applied_seq": 10,
+    "apply_attempts": 0,
+    "conflict_detail": null,
+    "conflict_op_id": null,
+    "entity_id": "#00037",
+    "entity_type": "roll",
+    "id": "#01138",
+    "last_attempt_at": null,
+    "materialize_error": null,
+    "op_id": "#00038",
+    "operation": "create",
+    "payload": {
+      "actorRole": "admin",
+      "actorUserId": "#00002",
+      "actorUserName": "AC-8 Admin",
+      "snapshot": {
+        "colorId": "#00025",
+        "currency": "USD",
+        "dyeBatch": null,
+        "entryDate": "2026-03-01",
+        "id": "#00037",
+        "initialKg": 500,
+        "pieces": 50,
+        "pricePerKg": 2,
+        "remainingKg": 500,
+        "remainingPieces": 50,
+        "rollNo": "AC8-R3",
+        "salePricePerKg": null,
+        "status": "in_stock",
+        "supplierId": null,
+        "weightGsm": null,
+        "widthCm": null
+      }
+    },
+    "received_at": "<ts>",
+    "received_seq": 9,
+    "reject_reason": null,
+    "status": "applied",
+    "sync_device_id": null,
+    "tenant_id": "#00003",
+    "tombstone_id": null
+  },
+  {
+    "applied_at": "<ts>",
+    "applied_seq": 11,
+    "apply_attempts": 0,
+    "conflict_detail": null,
+    "conflict_op_id": null,
+    "entity_id": "#00040",
+    "entity_type": "roll",
+    "id": "#01139",
+    "last_attempt_at": null,
+    "materialize_error": null,
+    "op_id": "#00041",
+    "operation": "create",
+    "payload": {
+      "actorRole": "admin",
+      "actorUserId": "#00002",
+      "actorUserName": "AC-8 Admin",
+      "snapshot": {
+        "colorId": "#00025",
+        "currency": "USD",
+        "dyeBatch": null,
+        "entryDate": "2026-03-01",
+        "id": "#00040",
+        "initialKg": 500,
+        "pieces": 50,
+        "pricePerKg": 2,
+        "remainingKg": 500,
+        "remainingPieces": 50,
+        "rollNo": "AC8-R4",
+        "salePricePerKg": null,
+        "status": "in_stock",
+        "supplierId": null,
+        "weightGsm": null,
+        "widthCm": null
+      }
+    },
+    "received_at": "<ts>",
+    "received_seq": 10,
+    "reject_reason": null,
+    "status": "applied",
+    "sync_device_id": null,
+    "tenant_id": "#00003",
+    "tombstone_id": null
+  },
+  {
+    "applied_at": "<ts>",
+    "applied_seq": 12,
+    "apply_attempts": 0,
+    "conflict_detail": null,
+    "conflict_op_id": null,
+    "entity_id": "#00043",
+    "entity_type": "roll",
+    "id": "#01140",
+    "last_attempt_at": null,
+    "materialize_error": null,
+    "op_id": "#00044",
+    "operation": "create",
+    "payload": {
+      "actorRole": "admin",
+      "actorUserId": "#00002",
+      "actorUserName": "AC-8 Admin",
+      "snapshot": {
+        "colorId": "#00025",
+        "currency": "USD",
+        "dyeBatch": null,
+        "entryDate": "2026-03-01",
+        "id": "#00043",
+        "initialKg": 500,
+        "pieces": 50,
+        "pricePerKg": 2,
+        "remainingKg": 500,
+        "remainingPieces": 50,
+        "rollNo": "AC8-R5",
+        "salePricePerKg": null,
+        "status": "in_stock",
+        "supplierId": null,
+        "weightGsm": null,
+        "widthCm": null
+      }
+    },
+    "received_at": "<ts>",
+    "received_seq": 11,
+    "reject_reason": null,
+    "status": "applied",
+    "sync_device_id": null,
+    "tenant_id": "#00003",
+    "tombstone_id": null
+  },
+  {
+    "applied_at": "<ts>",
+    "applied_seq": 13,
+    "apply_attempts": 0,
+    "conflict_detail": null,
+    "conflict_op_id": null,
+    "entity_id": "#00046",
+    "entity_type": "roll",
+    "id": "#01141",
+    "last_attempt_at": null,
+    "materialize_error": null,
+    "op_id": "#00047",
+    "operation": "create",
+    "payload": {
+      "actorRole": "admin",
+      "actorUserId": "#00002",
+      "actorUserName": "AC-8 Admin",
+      "snapshot": {
+        "colorId": "#00025",
+        "currency": "USD",
+        "dyeBatch": null,
+        "entryDate": "2026-03-01",
+        "id": "#00046",
+        "initialKg": 100,
+        "pieces": 50,
+        "pricePerKg": 2,
+        "remainingKg": 100,
+        "remainingPieces": 50,
+        "rollNo": "AC8-RS",
+        "salePricePerKg": null,
+        "status": "in_stock",
+        "supplierId": null,
+        "weightGsm": null,
+        "widthCm": null
+      }
+    },
+    "received_at": "<ts>",
+    "received_seq": 12,
+    "reject_reason": null,
+    "status": "applied",
+    "sync_device_id": null,
+    "tenant_id": "#00003",
+    "tombstone_id": null
+  },
+  {
+    "applied_at": "<ts>",
+    "applied_seq": 14,
+    "apply_attempts": 0,
+    "conflict_detail": null,
+    "conflict_op_id": null,
+    "entity_id": "#00064",
+    "entity_type": "invoice",
+    "id": "#01142",
+    "last_attempt_at": null,
+    "materialize_error": null,
+    "op_id": "#00065",
+    "operation": "create",
+    "payload": {
+      "actorRole": "admin",
+      "actorUserId": "#00002",
+      "actorUserName": "AC-8 Admin",
+      "createInput": {
+        "currency": "USD",
+        "date": "2026-03-01",
+        "lines": [
+          {
+            "colorId": "#00025",
+            "costPerKg": 2,
+            "fabricId": "#00022",
+            "pieces": 1,
+            "pricePerKg": 4,
+            "quantityKg": 5,
+            "rollId": "#00028"
+          }
+        ],
+        "paid": 0,
+        "partyId": "#00012",
+        "partyType": "customer",
+        "type": "sale"
+      },
+      "dependencies": {
+        "colors": [
+          {
+            "code": null,
+            "fabricId": "#00022",
+            "hex": null,
+            "id": "#00025",
+            "imageUrl": null,
+            "name": "AC8 Color"
+          }
+        ],
+        "fabrics": [
+          {
+            "category": null,
+            "id": "#00022",
+            "imageUrl": null,
+            "minStockKg": 0,
+            "name": "AC8 Fabric",
+            "notes": null,
+            "unit": null
+          }
+        ],
+        "parties": [
+          {
+            "address": null,
+            "altPhone": null,
+            "category": null,
+            "city": null,
+            "code": "CUS-2026-0001",
+            "commercialReg": null,
+            "companyName": null,
+            "country": null,
+            "currency": "SYP",
+            "defaultDiscount": 0,
+            "email": null,
+            "id": "#00012",
+            "kind": "customer",
+            "mobile": null,
+            "name": "AC8 Customer 0",
+            "notes": null,
+            "paymentMethod": null,
+            "paymentTerms": null,
+            "phone": null,
+            "salesRep": null,
+            "status": "active",
+            "taxNumber": null,
+            "vat": 0,
+            "website": null,
+            "whatsapp": null
+          }
+        ],
+        "rolls": [
+          {
+            "colorId": "#00025",
+            "currency": "USD",
+            "dyeBatch": null,
+            "entryDate": "2026-03-01",
+            "id": "#00028",
+            "initialKg": 500,
+            "pieces": 50,
+            "pricePerKg": 2,
+            "remainingKg": 500,
+            "remainingPieces": 50,
+            "rollNo": "AC8-R0",
+            "salePricePerKg": null,
+            "status": "in_stock",
+            "supplierId": null,
+            "weightGsm": null,
+            "widthCm": null
+          }
+        ]
+      },
+      "invoiceId": "#00064",
+      "invoiceNumber": "INV-2026-0001",
+      "invoiceType": "sale",
+      "lines": [
+        {
+          "costPerKg": 2,
+          "pieces": 1,
+          "quantityKg": 5,
+          "rollId": "#00028"
+        }
+      ],
+      "partyId": "#00012",
+      "preAllocated": true,
+      "rollIds": [
+        "#00028"
+      ]
+    },
+    "received_at": "<ts>",
+    "received_seq": 13,
+    "reject_reason": null,
+    "status": "applied",
+    "sync_device_id": null,
+    "tenant_id": "#00003",
+    "tombstone_id": null
+  },
+  {
+    "applied_at": "<ts>",
+    "applied_seq": 15,
+    "apply_attempts": 0,
+    "conflict_detail": null,
+    "conflict_op_id": null,
+    "entity_id": "#00067",
+    "entity_type": "invoice",
+    "id": "#01143",
+    "last_attempt_at": null,
+    "materialize_error": null,
+    "op_id": "#00068",
+    "operation": "create",
+    "payload": {
+      "actorRole": "admin",
+      "actorUserId": "#00002",
+      "actorUserName": "AC-8 Admin",
+      "createInput": {
+        "currency": "USD",
+        "date": "2026-03-01",
+        "lines": [
+          {
+            "colorId": "#00025",
+            "costPerKg": 2,
+            "fabricId": "#00022",
+            "pieces": 1,
+            "pricePerKg": 4,
+            "quantityKg": 5,
+            "rollId": "#00031"
+          }
+        ],
+        "linkedVoucherId": "#00069",
+        "paid": 20,
+        "partyId": "#00016",
+        "partyType": "customer",
+        "type": "sale"
+      },
+      "dependencies": {
+        "colors": [
+          {
+            "code": null,
+            "fabricId": "#00022",
+            "hex": null,
+            "id": "#00025",
+            "imageUrl": null,
+            "name": "AC8 Color"
+          }
+        ],
+        "fabrics": [
+          {
+            "category": null,
+            "id": "#00022",
+            "imageUrl": null,
+            "minStockKg": 0,
+            "name": "AC8 Fabric",
+            "notes": null,
+            "unit": null
+          }
+        ],
+        "parties": [
+          {
+            "address": null,
+            "altPhone": null,
+            "category": null,
+            "city": null,
+            "code": "CUS-2026-0002",
+            "commercialReg": null,
+            "companyName": null,
+            "country": null,
+            "currency": "SYP",
+            "defaultDiscount": 0,
+            "email": null,
+            "id": "#00016",
+            "kind": "customer",
+            "mobile": null,
+            "name": "AC8 Customer 1",
+            "notes": null,
+            "paymentMethod": null,
+            "paymentTerms": null,
+            "phone": null,
+            "salesRep": null,
+            "status": "active",
+            "taxNumber": null,
+            "vat": 0,
+            "website": null,
+            "whatsapp": null
+          }
+        ],
+        "rolls": [
+          {
+            "colorId": "#00025",
+            "currency": "USD",
+            "dyeBatch": null,
+            "entryDate": "2026-03-01",
+            "id": "#00031",
+            "initialKg": 500,
+            "pieces": 50,
+            "pricePerKg": 2,
+            "remainingKg": 500,
+            "remainingPieces": 50,
+            "rollNo": "AC8-R1",
+            "salePricePerKg": null,
+            "status": "in_stock",
+            "supplierId": null,
+            "weightGsm": null,
+            "widthCm": null
+          }
+        ]
+      },
+      "invoiceId": "#00067",
+      "invoiceNumber": "INV-2026-0002",
+      "invoiceType": "sale",
+      "lines": [
+        {
+          "costPerKg": 2,
+          "pieces": 1,
+          "quantityKg": 5,
+          "rollId": "#00031"
+        }
+      ],
+      "partyId": "#00016",
+      "preAllocated": true,
+      "rollIds": [
+        "#00031"
+      ]
+    },
+    "received_at": "<ts>",
+    "received_seq": 14,
+    "reject_reason": null,
+    "status": "applied",
+    "sync_device_id": null,
+    "tenant_id": "#00003",
+    "tombstone_id": null
+  },
+  {
+    "applied_at": "<ts>",
+    "applied_seq": 16,
+    "apply_attempts": 0,
+    "conflict_detail": null,
+    "conflict_op_id": null,
+    "entity_id": "#00071",
+    "entity_type": "invoice",
+    "id": "#01144",
+    "last_attempt_at": null,
+    "materialize_error": null,
+    "op_id": "#00072",
+    "operation": "create",
+    "payload": {
+      "actorRole": "admin",
+      "actorUserId": "#00002",
+      "actorUserName": "AC-8 Admin",
+      "createInput": {
+        "currency": "USD",
+        "date": "2026-03-01",
+        "lines": [
+          {
+            "colorId": "#00025",
+            "costPerKg": 2,
+            "fabricId": "#00022",
+            "pieces": 1,
+            "pricePerKg": 4,
+            "quantityKg": 5,
+            "rollId": "#00034"
+          }
+        ],
+        "paid": 0,
+        "partyId": "#00019",
+        "partyType": "customer",
+        "type": "sale"
+      },
+      "dependencies": {
+        "colors": [
+          {
+            "code": null,
+            "fabricId": "#00022",
+            "hex": null,
+            "id": "#00025",
+            "imageUrl": null,
+            "name": "AC8 Color"
+          }
+        ],
+        "fabrics": [
+          {
+            "category": null,
+            "id": "#00022",
+            "imageUrl": null,
+            "minStockKg": 0,
+            "name": "AC8 Fabric",
+            "notes": null,
+            "unit": null
+          }
+        ],
+        "parties": [
+          {
+            "address": null,
+            "altPhone": null,
+            "category": null,
+            "city": null,
+            "code": "CUS-2026-0003",
+            "commercialReg": null,
+            "companyName": null,
+            "country": null,
+            "currency": "SYP",
+            "defaultDiscount": 0,
+            "email": null,
+            "id": "#00019",
+            "kind": "customer",
+            "mobile": null,
+            "name": "AC8 Customer 2",
+            "notes": null,
+            "paymentMethod": null,
+            "paymentTerms": null,
+            "phone": null,
+            "salesRep": null,
+            "status": "active",
+            "taxNumber": null,
+            "vat": 0,
+            "website": null,
+            "whatsapp": null
+          }
+        ],
+        "rolls": [
+          {
+            "colorId": "#00025",
+            "currency": "USD",
+            "dyeBatch": null,
+            "entryDate": "2026-03-01",
+            "id": "#00034",
+            "initialKg": 500,
+            "pieces": 50,
+            "pricePerKg": 2,
+            "remainingKg": 500,
+            "remainingPieces": 50,
+            "rollNo": "AC8-R2",
+            "salePricePerKg": null,
+            "status": "in_stock",
+            "supplierId": null,
+            "weightGsm": null,
+            "widthCm": null
+          }
+        ]
+      },
+      "invoiceId": "#00071",
+      "invoiceNumber": "INV-2026-0003",
+      "invoiceType": "sale",
+      "lines": [
+        {
+          "costPerKg": 2,
+          "pieces": 1,
+          "quantityKg": 5,
+          "rollId": "#00034"
+        }
+      ],
+      "partyId": "#00019",
+      "preAllocated": true,
+      "rollIds": [
+        "#00034"
+      ]
+    },
+    "received_at": "<ts>",
+    "received_seq": 15,
+    "reject_reason": null,
+    "status": "applied",
+    "sync_device_id": null,
+    "tenant_id": "#00003",
+    "tombstone_id": null
+  },
+  {
+    "applied_at": "<ts>",
+    "applied_seq": 17,
+    "apply_attempts": 0,
+    "conflict_detail": null,
+    "conflict_op_id": null,
+    "entity_id": "#00074",
+    "entity_type": "invoice",
+    "id": "#01145",
+    "last_attempt_at": null,
+    "materialize_error": null,
+    "op_id": "#00075",
+    "operation": "create",
+    "payload": {
+      "actorRole": "admin",
+      "actorUserId": "#00002",
+      "actorUserName": "AC-8 Admin",
+      "createInput": {
+        "currency": "USD",
+        "date": "2026-03-01",
+        "lines": [
+          {
+            "colorId": "#00025",
+            "costPerKg": 2,
+            "fabricId": "#00022",
+            "pieces": 1,
+            "pricePerKg": 4,
+            "quantityKg": 5,
+            "rollId": "#00028"
+          }
+        ],
+        "linkedVoucherId": "#00076",
+        "paid": 20,
+        "partyId": "#00012",
+        "partyType": "customer",
+        "type": "sale"
+      },
+      "dependencies": {
+        "colors": [
+          {
+            "code": null,
+            "fabricId": "#00022",
+            "hex": null,
+            "id": "#00025",
+            "imageUrl": null,
+            "name": "AC8 Color"
+          }
+        ],
+        "fabrics": [
+          {
+            "category": null,
+            "id": "#00022",
+            "imageUrl": null,
+            "minStockKg": 0,
+            "name": "AC8 Fabric",
+            "notes": null,
+            "unit": null
+          }
+        ],
+        "parties": [
+          {
+            "address": null,
+            "altPhone": null,
+            "category": null,
+            "city": null,
+            "code": "CUS-2026-0001",
+            "commercialReg": null,
+            "companyName": null,
+            "country": null,
+            "currency": "SYP",
+            "defaultDiscount": 0,
+            "email": null,
+            "id": "#00012",
+            "kind": "customer",
+            "mobile": null,
+            "name": "AC8 Customer 0",
+            "notes": null,
+            "paymentMethod": null,
+            "paymentTerms": null,
+            "phone": null,
+            "salesRep": null,
+            "status": "active",
+            "taxNumber": null,
+            "vat": 0,
+            "website": null,
+            "whatsapp": null
+          }
+        ],
+        "rolls": [
+          {
+            "colorId": "#00025",
+            "currency": "USD",
+            "dyeBatch": null,
+            "entryDate": "2026-03-01",
+            "id": "#00028",
+            "initialKg": 500,
+            "pieces": 50,
+            "pricePerKg": 2,
+            "remainingKg": 495,
+            "remainingPieces": 49,
+            "rollNo": "AC8-R0",
+            "salePricePerKg": null,
+            "status": "in_stock",
+            "supplierId": null,
+            "weightGsm": null,
+            "widthCm": null
+          }
+        ]
+      },
+      "invoiceId": "#00074",
+      "invoiceNumber": "INV-2026-0004",
+      "invoiceType": "sale",
+      "lines": [
+        {
+          "costPerKg": 2,
+          "pieces": 1,
+          "quantityKg": 5,
+          "rollId": "#00028"
+        }
+      ],
+      "partyId": "#00012",
+      "preAllocated": true,
+      "rollIds": [
+        "#00028"
+      ]
+    },
+    "received_at": "<ts>",
+    "received_seq": 16,
+    "reject_reason": null,
+    "status": "applied",
+    "sync_device_id": null,
+    "tenant_id": "#00003",
+    "tombstone_id": null
+  },
+  {
+    "applied_at": "<ts>",
+    "applied_seq": 18,
+    "apply_attempts": 0,
+    "conflict_detail": null,
+    "conflict_op_id": null,
+    "entity_id": "#00078",
+    "entity_type": "invoice",
+    "id": "#01146",
+    "last_attempt_at": null,
+    "materialize_error": null,
+    "op_id": "#00079",
+    "operation": "create",
+    "payload": {
+      "actorRole": "admin",
+      "actorUserId": "#00002",
+      "actorUserName": "AC-8 Admin",
+      "createInput": {
+        "currency": "USD",
+        "date": "2026-03-01",
+        "lines": [
+          {
+            "colorId": "#00025",
+            "costPerKg": 2,
+            "fabricId": "#00022",
+            "pieces": 1,
+            "pricePerKg": 4,
+            "quantityKg": 5,
+            "rollId": "#00031"
+          }
+        ],
+        "paid": 0,
+        "partyId": "#00016",
+        "partyType": "customer",
+        "type": "sale"
+      },
+      "dependencies": {
+        "colors": [
+          {
+            "code": null,
+            "fabricId": "#00022",
+            "hex": null,
+            "id": "#00025",
+            "imageUrl": null,
+            "name": "AC8 Color"
+          }
+        ],
+        "fabrics": [
+          {
+            "category": null,
+            "id": "#00022",
+            "imageUrl": null,
+            "minStockKg": 0,
+            "name": "AC8 Fabric",
+            "notes": null,
+            "unit": null
+          }
+        ],
+        "parties": [
+          {
+            "address": null,
+            "altPhone": null,
+            "category": null,
+            "city": null,
+            "code": "CUS-2026-0002",
+            "commercialReg": null,
+            "companyName": null,
+            "country": null,
+            "currency": "SYP",
+            "defaultDiscount": 0,
+            "email": null,
+            "id": "#00016",
+            "kind": "customer",
+            "mobile": null,
+            "name": "AC8 Customer 1",
+            "notes": null,
+            "paymentMethod": null,
+            "paymentTerms": null,
+            "phone": null,
+            "salesRep": null,
+            "status": "active",
+            "taxNumber": null,
+            "vat": 0,
+            "website": null,
+            "whatsapp": null
+          }
+        ],
+        "rolls": [
+          {
+            "colorId": "#00025",
+            "currency": "USD",
+            "dyeBatch": null,
+            "entryDate": "2026-03-01",
+            "id": "#00031",
+            "initialKg": 500,
+            "pieces": 50,
+            "pricePerKg": 2,
+            "remainingKg": 495,
+            "remainingPieces": 49,
+            "rollNo": "AC8-R1",
+            "salePricePerKg": null,
+            "status": "in_stock",
+            "supplierId": null,
+            "weightGsm": null,
+            "widthCm": null
+          }
+        ]
+      },
+      "invoiceId": "#00078",
+      "invoiceNumber": "INV-2026-0005",
+      "invoiceType": "sale",
+      "lines": [
+        {
+          "costPerKg": 2,
+          "pieces": 1,
+          "quantityKg": 5,
+          "rollId": "#00031"
+        }
+      ],
+      "partyId": "#00016",
+      "preAllocated": true,
+      "rollIds": [
+        "#00031"
+      ]
+    },
+    "received_at": "<ts>",
+    "received_seq": 17,
+    "reject_reason": null,
+    "status": "applied",
+    "sync_device_id": null,
+    "tenant_id": "#00003",
+    "tombstone_id": null
+  },
+  {
+    "applied_at": "<ts>",
+    "applied_seq": 19,
+    "apply_attempts": 0,
+    "conflict_detail": null,
+    "conflict_op_id": null,
+    "entity_id": "#00081",
+    "entity_type": "invoice",
+    "id": "#01147",
+    "last_attempt_at": null,
+    "materialize_error": null,
+    "op_id": "#00082",
+    "operation": "create",
+    "payload": {
+      "actorRole": "admin",
+      "actorUserId": "#00002",
+      "actorUserName": "AC-8 Admin",
+      "createInput": {
+        "currency": "USD",
+        "date": "2026-03-01",
+        "lines": [
+          {
+            "colorId": "#00025",
+            "costPerKg": 2,
+            "fabricId": "#00022",
+            "pieces": 1,
+            "pricePerKg": 4,
+            "quantityKg": 5,
+            "rollId": "#00034"
+          }
+        ],
+        "linkedVoucherId": "#00083",
+        "paid": 20,
+        "partyId": "#00019",
+        "partyType": "customer",
+        "type": "sale"
+      },
+      "dependencies": {
+        "colors": [
+          {
+            "code": null,
+            "fabricId": "#00022",
+            "hex": null,
+            "id": "#00025",
+            "imageUrl": null,
+            "name": "AC8 Color"
+          }
+        ],
+        "fabrics": [
+          {
+            "category": null,
+            "id": "#00022",
+            "imageUrl": null,
+            "minStockKg": 0,
+            "name": "AC8 Fabric",
+            "notes": null,
+            "unit": null
+          }
+        ],
+        "parties": [
+          {
+            "address": null,
+            "altPhone": null,
+            "category": null,
+            "city": null,
+            "code": "CUS-2026-0003",
+            "commercialReg": null,
+            "companyName": null,
+            "country": null,
+            "currency": "SYP",
+            "defaultDiscount": 0,
+            "email": null,
+            "id": "#00019",
+            "kind": "customer",
+            "mobile": null,
+            "name": "AC8 Customer 2",
+            "notes": null,
+            "paymentMethod": null,
+            "paymentTerms": null,
+            "phone": null,
+            "salesRep": null,
+            "status": "active",
+            "taxNumber": null,
+            "vat": 0,
+            "website": null,
+            "whatsapp": null
+          }
+        ],
+        "rolls": [
+          {
+            "colorId": "#00025",
+            "currency": "USD",
+            "dyeBatch": null,
+            "entryDate": "2026-03-01",
+            "id": "#00034",
+            "initialKg": 500,
+            "pieces": 50,
+            "pricePerKg": 2,
+            "remainingKg": 495,
+            "remainingPieces": 49,
+            "rollNo": "AC8-R2",
+            "salePricePerKg": null,
+            "status": "in_stock",
+            "supplierId": null,
+            "weightGsm": null,
+            "widthCm": null
+          }
+        ]
+      },
+      "invoiceId": "#00081",
+      "invoiceNumber": "INV-2026-0006",
+      "invoiceType": "sale",
+      "lines": [
+        {
+          "costPerKg": 2,
+          "pieces": 1,
+          "quantityKg": 5,
+          "rollId": "#00034"
+        }
+      ],
+      "partyId": "#00019",
+      "preAllocated": true,
+      "rollIds": [
+        "#00034"
+      ]
+    },
+    "received_at": "<ts>",
+    "received_seq": 18,
+    "reject_reason": null,
+    "status": "applied",
+    "sync_device_id": null,
+    "tenant_id": "#00003",
+    "tombstone_id": null
+  },
+  {
+    "applied_at": "<ts>",
+    "applied_seq": 2,
+    "apply_attempts": 0,
+    "conflict_detail": null,
+    "conflict_op_id": null,
+    "entity_id": "#00012",
+    "entity_type": "party",
+    "id": "#01148",
+    "last_attempt_at": null,
+    "materialize_error": null,
+    "op_id": "#00013",
+    "operation": "create",
+    "payload": {
+      "actorRole": "admin",
+      "actorUserId": "#00002",
+      "actorUserName": "AC-8 Admin",
+      "snapshot": {
+        "address": null,
+        "altPhone": null,
+        "category": null,
+        "city": null,
+        "code": "CUS-2026-0001",
+        "commercialReg": null,
+        "companyName": null,
+        "country": null,
+        "currency": "SYP",
+        "defaultDiscount": 0,
+        "email": null,
+        "id": "#00012",
+        "kind": "customer",
+        "mobile": null,
+        "name": "AC8 Customer 0",
+        "notes": null,
+        "openingBalance": 0,
+        "openingDate": "2026-10-05",
+        "paymentMethod": null,
+        "paymentTerms": null,
+        "phone": null,
+        "salesRep": null,
+        "status": "active",
+        "taxNumber": null,
+        "vat": 0,
+        "website": null,
+        "whatsapp": null
+      }
+    },
+    "received_at": "<ts>",
+    "received_seq": 1,
+    "reject_reason": null,
+    "status": "applied",
+    "sync_device_id": null,
+    "tenant_id": "#00003",
+    "tombstone_id": null
+  },
+  {
+    "applied_at": "<ts>",
+    "applied_seq": 20,
+    "apply_attempts": 0,
+    "conflict_detail": null,
+    "conflict_op_id": null,
+    "entity_id": "#00085",
+    "entity_type": "invoice",
+    "id": "#01149",
+    "last_attempt_at": null,
+    "materialize_error": null,
+    "op_id": "#00086",
+    "operation": "create",
+    "payload": {
+      "actorRole": "admin",
+      "actorUserId": "#00002",
+      "actorUserName": "AC-8 Admin",
+      "createInput": {
+        "currency": "USD",
+        "date": "2026-03-01",
+        "lines": [
+          {
+            "colorId": "#00025",
+            "costPerKg": 2,
+            "fabricId": "#00022",
+            "pieces": 1,
+            "pricePerKg": 4,
+            "quantityKg": 5,
+            "rollId": "#00028"
+          }
+        ],
+        "paid": 0,
+        "partyId": "#00012",
+        "partyType": "customer",
+        "type": "sale"
+      },
+      "dependencies": {
+        "colors": [
+          {
+            "code": null,
+            "fabricId": "#00022",
+            "hex": null,
+            "id": "#00025",
+            "imageUrl": null,
+            "name": "AC8 Color"
+          }
+        ],
+        "fabrics": [
+          {
+            "category": null,
+            "id": "#00022",
+            "imageUrl": null,
+            "minStockKg": 0,
+            "name": "AC8 Fabric",
+            "notes": null,
+            "unit": null
+          }
+        ],
+        "parties": [
+          {
+            "address": null,
+            "altPhone": null,
+            "category": null,
+            "city": null,
+            "code": "CUS-2026-0001",
+            "commercialReg": null,
+            "companyName": null,
+            "country": null,
+            "currency": "SYP",
+            "defaultDiscount": 0,
+            "email": null,
+            "id": "#00012",
+            "kind": "customer",
+            "mobile": null,
+            "name": "AC8 Customer 0",
+            "notes": null,
+            "paymentMethod": null,
+            "paymentTerms": null,
+            "phone": null,
+            "salesRep": null,
+            "status": "active",
+            "taxNumber": null,
+            "vat": 0,
+            "website": null,
+            "whatsapp": null
+          }
+        ],
+        "rolls": [
+          {
+            "colorId": "#00025",
+            "currency": "USD",
+            "dyeBatch": null,
+            "entryDate": "2026-03-01",
+            "id": "#00028",
+            "initialKg": 500,
+            "pieces": 50,
+            "pricePerKg": 2,
+            "remainingKg": 490,
+            "remainingPieces": 48,
+            "rollNo": "AC8-R0",
+            "salePricePerKg": null,
+            "status": "in_stock",
+            "supplierId": null,
+            "weightGsm": null,
+            "widthCm": null
+          }
+        ]
+      },
+      "invoiceId": "#00085",
+      "invoiceNumber": "INV-2026-0007",
+      "invoiceType": "sale",
+      "lines": [
+        {
+          "costPerKg": 2,
+          "pieces": 1,
+          "quantityKg": 5,
+          "rollId": "#00028"
+        }
+      ],
+      "partyId": "#00012",
+      "preAllocated": true,
+      "rollIds": [
+        "#00028"
+      ]
+    },
+    "received_at": "<ts>",
+    "received_seq": 19,
+    "reject_reason": null,
+    "status": "applied",
+    "sync_device_id": null,
+    "tenant_id": "#00003",
+    "tombstone_id": null
+  },
+  {
+    "applied_at": "<ts>",
+    "applied_seq": 21,
+    "apply_attempts": 0,
+    "conflict_detail": null,
+    "conflict_op_id": null,
+    "entity_id": "#00088",
+    "entity_type": "invoice",
+    "id": "#01150",
+    "last_attempt_at": null,
+    "materialize_error": null,
+    "op_id": "#00089",
+    "operation": "create",
+    "payload": {
+      "actorRole": "admin",
+      "actorUserId": "#00002",
+      "actorUserName": "AC-8 Admin",
+      "createInput": {
+        "currency": "USD",
+        "date": "2026-03-01",
+        "lines": [
+          {
+            "colorId": "#00025",
+            "costPerKg": 2,
+            "fabricId": "#00022",
+            "pieces": 1,
+            "pricePerKg": 4,
+            "quantityKg": 5,
+            "rollId": "#00031"
+          }
+        ],
+        "linkedVoucherId": "#00090",
+        "paid": 20,
+        "partyId": "#00016",
+        "partyType": "customer",
+        "type": "sale"
+      },
+      "dependencies": {
+        "colors": [
+          {
+            "code": null,
+            "fabricId": "#00022",
+            "hex": null,
+            "id": "#00025",
+            "imageUrl": null,
+            "name": "AC8 Color"
+          }
+        ],
+        "fabrics": [
+          {
+            "category": null,
+            "id": "#00022",
+            "imageUrl": null,
+            "minStockKg": 0,
+            "name": "AC8 Fabric",
+            "notes": null,
+            "unit": null
+          }
+        ],
+        "parties": [
+          {
+            "address": null,
+            "altPhone": null,
+            "category": null,
+            "city": null,
+            "code": "CUS-2026-0002",
+            "commercialReg": null,
+            "companyName": null,
+            "country": null,
+            "currency": "SYP",
+            "defaultDiscount": 0,
+            "email": null,
+            "id": "#00016",
+            "kind": "customer",
+            "mobile": null,
+            "name": "AC8 Customer 1",
+            "notes": null,
+            "paymentMethod": null,
+            "paymentTerms": null,
+            "phone": null,
+            "salesRep": null,
+            "status": "active",
+            "taxNumber": null,
+            "vat": 0,
+            "website": null,
+            "whatsapp": null
+          }
+        ],
+        "rolls": [
+          {
+            "colorId": "#00025",
+            "currency": "USD",
+            "dyeBatch": null,
+            "entryDate": "2026-03-01",
+            "id": "#00031",
+            "initialKg": 500,
+            "pieces": 50,
+            "pricePerKg": 2,
+            "remainingKg": 490,
+            "remainingPieces": 48,
+            "rollNo": "AC8-R1",
+            "salePricePerKg": null,
+            "status": "in_stock",
+            "supplierId": null,
+            "weightGsm": null,
+            "widthCm": null
+          }
+        ]
+      },
+      "invoiceId": "#00088",
+      "invoiceNumber": "INV-2026-0008",
+      "invoiceType": "sale",
+      "lines": [
+        {
+          "costPerKg": 2,
+          "pieces": 1,
+          "quantityKg": 5,
+          "rollId": "#00031"
+        }
+      ],
+      "partyId": "#00016",
+      "preAllocated": true,
+      "rollIds": [
+        "#00031"
+      ]
+    },
+    "received_at": "<ts>",
+    "received_seq": 20,
+    "reject_reason": null,
+    "status": "applied",
+    "sync_device_id": null,
+    "tenant_id": "#00003",
+    "tombstone_id": null
+  },
+  {
+    "applied_at": "<ts>",
+    "applied_seq": 22,
+    "apply_attempts": 0,
+    "conflict_detail": null,
+    "conflict_op_id": null,
+    "entity_id": "#00092",
+    "entity_type": "invoice",
+    "id": "#01151",
+    "last_attempt_at": null,
+    "materialize_error": null,
+    "op_id": "#00093",
+    "operation": "create",
+    "payload": {
+      "actorRole": "admin",
+      "actorUserId": "#00002",
+      "actorUserName": "AC-8 Admin",
+      "createInput": {
+        "currency": "USD",
+        "date": "2026-03-01",
+        "lines": [
+          {
+            "colorId": "#00025",
+            "costPerKg": 2,
+            "fabricId": "#00022",
+            "pieces": 1,
+            "pricePerKg": 4,
+            "quantityKg": 5,
+            "rollId": "#00034"
+          }
+        ],
+        "paid": 0,
+        "partyId": "#00019",
+        "partyType": "customer",
+        "type": "sale"
+      },
+      "dependencies": {
+        "colors": [
+          {
+            "code": null,
+            "fabricId": "#00022",
+            "hex": null,
+            "id": "#00025",
+            "imageUrl": null,
+            "name": "AC8 Color"
+          }
+        ],
+        "fabrics": [
+          {
+            "category": null,
+            "id": "#00022",
+            "imageUrl": null,
+            "minStockKg": 0,
+            "name": "AC8 Fabric",
+            "notes": null,
+            "unit": null
+          }
+        ],
+        "parties": [
+          {
+            "address": null,
+            "altPhone": null,
+            "category": null,
+            "city": null,
+            "code": "CUS-2026-0003",
+            "commercialReg": null,
+            "companyName": null,
+            "country": null,
+            "currency": "SYP",
+            "defaultDiscount": 0,
+            "email": null,
+            "id": "#00019",
+            "kind": "customer",
+            "mobile": null,
+            "name": "AC8 Customer 2",
+            "notes": null,
+            "paymentMethod": null,
+            "paymentTerms": null,
+            "phone": null,
+            "salesRep": null,
+            "status": "active",
+            "taxNumber": null,
+            "vat": 0,
+            "website": null,
+            "whatsapp": null
+          }
+        ],
+        "rolls": [
+          {
+            "colorId": "#00025",
+            "currency": "USD",
+            "dyeBatch": null,
+            "entryDate": "2026-03-01",
+            "id": "#00034",
+            "initialKg": 500,
+            "pieces": 50,
+            "pricePerKg": 2,
+            "remainingKg": 490,
+            "remainingPieces": 48,
+            "rollNo": "AC8-R2",
+            "salePricePerKg": null,
+            "status": "in_stock",
+            "supplierId": null,
+            "weightGsm": null,
+            "widthCm": null
+          }
+        ]
+      },
+      "invoiceId": "#00092",
+      "invoiceNumber": "INV-2026-0009",
+      "invoiceType": "sale",
+      "lines": [
+        {
+          "costPerKg": 2,
+          "pieces": 1,
+          "quantityKg": 5,
+          "rollId": "#00034"
+        }
+      ],
+      "partyId": "#00019",
+      "preAllocated": true,
+      "rollIds": [
+        "#00034"
+      ]
+    },
+    "received_at": "<ts>",
+    "received_seq": 21,
+    "reject_reason": null,
+    "status": "applied",
+    "sync_device_id": null,
+    "tenant_id": "#00003",
+    "tombstone_id": null
+  },
+  {
+    "applied_at": "<ts>",
+    "applied_seq": 23,
+    "apply_attempts": 0,
+    "conflict_detail": null,
+    "conflict_op_id": null,
+    "entity_id": "#00095",
+    "entity_type": "invoice",
+    "id": "#01152",
+    "last_attempt_at": null,
+    "materialize_error": null,
+    "op_id": "#00096",
+    "operation": "create",
+    "payload": {
+      "actorRole": "admin",
+      "actorUserId": "#00002",
+      "actorUserName": "AC-8 Admin",
+      "createInput": {
+        "currency": "USD",
+        "date": "2026-03-01",
+        "lines": [
+          {
+            "colorId": "#00025",
+            "costPerKg": 2,
+            "fabricId": "#00022",
+            "pieces": 1,
+            "pricePerKg": 4,
+            "quantityKg": 5,
+            "rollId": "#00028"
+          }
+        ],
+        "linkedVoucherId": "#00097",
+        "paid": 20,
+        "partyId": "#00012",
+        "partyType": "customer",
+        "type": "sale"
+      },
+      "dependencies": {
+        "colors": [
+          {
+            "code": null,
+            "fabricId": "#00022",
+            "hex": null,
+            "id": "#00025",
+            "imageUrl": null,
+            "name": "AC8 Color"
+          }
+        ],
+        "fabrics": [
+          {
+            "category": null,
+            "id": "#00022",
+            "imageUrl": null,
+            "minStockKg": 0,
+            "name": "AC8 Fabric",
+            "notes": null,
+            "unit": null
+          }
+        ],
+        "parties": [
+          {
+            "address": null,
+            "altPhone": null,
+            "category": null,
+            "city": null,
+            "code": "CUS-2026-0001",
+            "commercialReg": null,
+            "companyName": null,
+            "country": null,
+            "currency": "SYP",
+            "defaultDiscount": 0,
+            "email": null,
+            "id": "#00012",
+            "kind": "customer",
+            "mobile": null,
+            "name": "AC8 Customer 0",
+            "notes": null,
+            "paymentMethod": null,
+            "paymentTerms": null,
+            "phone": null,
+            "salesRep": null,
+            "status": "active",
+            "taxNumber": null,
+            "vat": 0,
+            "website": null,
+            "whatsapp": null
+          }
+        ],
+        "rolls": [
+          {
+            "colorId": "#00025",
+            "currency": "USD",
+            "dyeBatch": null,
+            "entryDate": "2026-03-01",
+            "id": "#00028",
+            "initialKg": 500,
+            "pieces": 50,
+            "pricePerKg": 2,
+            "remainingKg": 485,
+            "remainingPieces": 47,
+            "rollNo": "AC8-R0",
+            "salePricePerKg": null,
+            "status": "in_stock",
+            "supplierId": null,
+            "weightGsm": null,
+            "widthCm": null
+          }
+        ]
+      },
+      "invoiceId": "#00095",
+      "invoiceNumber": "INV-2026-0010",
+      "invoiceType": "sale",
+      "lines": [
+        {
+          "costPerKg": 2,
+          "pieces": 1,
+          "quantityKg": 5,
+          "rollId": "#00028"
+        }
+      ],
+      "partyId": "#00012",
+      "preAllocated": true,
+      "rollIds": [
+        "#00028"
+      ]
+    },
+    "received_at": "<ts>",
+    "received_seq": 22,
+    "reject_reason": null,
+    "status": "applied",
+    "sync_device_id": null,
+    "tenant_id": "#00003",
+    "tombstone_id": null
+  },
+  {
+    "applied_at": "<ts>",
+    "applied_seq": 24,
+    "apply_attempts": 0,
+    "conflict_detail": null,
+    "conflict_op_id": null,
+    "entity_id": "#00099",
+    "entity_type": "invoice",
+    "id": "#01153",
+    "last_attempt_at": null,
+    "materialize_error": null,
+    "op_id": "#00100",
+    "operation": "create",
+    "payload": {
+      "actorRole": "admin",
+      "actorUserId": "#00002",
+      "actorUserName": "AC-8 Admin",
+      "createInput": {
+        "currency": "USD",
+        "date": "2026-03-01",
+        "lines": [
+          {
+            "colorId": "#00025",
+            "costPerKg": 2,
+            "fabricId": "#00022",
+            "pieces": 1,
+            "pricePerKg": 4,
+            "quantityKg": 5,
+            "rollId": "#00031"
+          }
+        ],
+        "paid": 0,
+        "partyId": "#00016",
+        "partyType": "customer",
+        "type": "sale"
+      },
+      "dependencies": {
+        "colors": [
+          {
+            "code": null,
+            "fabricId": "#00022",
+            "hex": null,
+            "id": "#00025",
+            "imageUrl": null,
+            "name": "AC8 Color"
+          }
+        ],
+        "fabrics": [
+          {
+            "category": null,
+            "id": "#00022",
+            "imageUrl": null,
+            "minStockKg": 0,
+            "name": "AC8 Fabric",
+            "notes": null,
+            "unit": null
+          }
+        ],
+        "parties": [
+          {
+            "address": null,
+            "altPhone": null,
+            "category": null,
+            "city": null,
+            "code": "CUS-2026-0002",
+            "commercialReg": null,
+            "companyName": null,
+            "country": null,
+            "currency": "SYP",
+            "defaultDiscount": 0,
+            "email": null,
+            "id": "#00016",
+            "kind": "customer",
+            "mobile": null,
+            "name": "AC8 Customer 1",
+            "notes": null,
+            "paymentMethod": null,
+            "paymentTerms": null,
+            "phone": null,
+            "salesRep": null,
+            "status": "active",
+            "taxNumber": null,
+            "vat": 0,
+            "website": null,
+            "whatsapp": null
+          }
+        ],
+        "rolls": [
+          {
+            "colorId": "#00025",
+            "currency": "USD",
+            "dyeBatch": null,
+            "entryDate": "2026-03-01",
+            "id": "#00031",
+            "initialKg": 500,
+            "pieces": 50,
+            "pricePerKg": 2,
+            "remainingKg": 485,
+            "remainingPieces": 47,
+            "rollNo": "AC8-R1",
+            "salePricePerKg": null,
+            "status": "in_stock",
+            "supplierId": null,
+            "weightGsm": null,
+            "widthCm": null
+          }
+        ]
+      },
+      "invoiceId": "#00099",
+      "invoiceNumber": "INV-2026-0011",
+      "invoiceType": "sale",
+      "lines": [
+        {
+          "costPerKg": 2,
+          "pieces": 1,
+          "quantityKg": 5,
+          "rollId": "#00031"
+        }
+      ],
+      "partyId": "#00016",
+      "preAllocated": true,
+      "rollIds": [
+        "#00031"
+      ]
+    },
+    "received_at": "<ts>",
+    "received_seq": 23,
+    "reject_reason": null,
+    "status": "applied",
+    "sync_device_id": null,
+    "tenant_id": "#00003",
+    "tombstone_id": null
+  },
+  {
+    "applied_at": "<ts>",
+    "applied_seq": 25,
+    "apply_attempts": 0,
+    "conflict_detail": null,
+    "conflict_op_id": null,
+    "entity_id": "#00102",
+    "entity_type": "invoice",
+    "id": "#01154",
+    "last_attempt_at": null,
+    "materialize_error": null,
+    "op_id": "#00103",
+    "operation": "create",
+    "payload": {
+      "actorRole": "admin",
+      "actorUserId": "#00002",
+      "actorUserName": "AC-8 Admin",
+      "createInput": {
+        "currency": "USD",
+        "date": "2026-03-01",
+        "lines": [
+          {
+            "colorId": "#00025",
+            "costPerKg": 2,
+            "fabricId": "#00022",
+            "pieces": 1,
+            "pricePerKg": 4,
+            "quantityKg": 5,
+            "rollId": "#00034"
+          }
+        ],
+        "linkedVoucherId": "#00104",
+        "paid": 20,
+        "partyId": "#00019",
+        "partyType": "customer",
+        "type": "sale"
+      },
+      "dependencies": {
+        "colors": [
+          {
+            "code": null,
+            "fabricId": "#00022",
+            "hex": null,
+            "id": "#00025",
+            "imageUrl": null,
+            "name": "AC8 Color"
+          }
+        ],
+        "fabrics": [
+          {
+            "category": null,
+            "id": "#00022",
+            "imageUrl": null,
+            "minStockKg": 0,
+            "name": "AC8 Fabric",
+            "notes": null,
+            "unit": null
+          }
+        ],
+        "parties": [
+          {
+            "address": null,
+            "altPhone": null,
+            "category": null,
+            "city": null,
+            "code": "CUS-2026-0003",
+            "commercialReg": null,
+            "companyName": null,
+            "country": null,
+            "currency": "SYP",
+            "defaultDiscount": 0,
+            "email": null,
+            "id": "#00019",
+            "kind": "customer",
+            "mobile": null,
+            "name": "AC8 Customer 2",
+            "notes": null,
+            "paymentMethod": null,
+            "paymentTerms": null,
+            "phone": null,
+            "salesRep": null,
+            "status": "active",
+            "taxNumber": null,
+            "vat": 0,
+            "website": null,
+            "whatsapp": null
+          }
+        ],
+        "rolls": [
+          {
+            "colorId": "#00025",
+            "currency": "USD",
+            "dyeBatch": null,
+            "entryDate": "2026-03-01",
+            "id": "#00034",
+            "initialKg": 500,
+            "pieces": 50,
+            "pricePerKg": 2,
+            "remainingKg": 485,
+            "remainingPieces": 47,
+            "rollNo": "AC8-R2",
+            "salePricePerKg": null,
+            "status": "in_stock",
+            "supplierId": null,
+            "weightGsm": null,
+            "widthCm": null
+          }
+        ]
+      },
+      "invoiceId": "#00102",
+      "invoiceNumber": "INV-2026-0012",
+      "invoiceType": "sale",
+      "lines": [
+        {
+          "costPerKg": 2,
+          "pieces": 1,
+          "quantityKg": 5,
+          "rollId": "#00034"
+        }
+      ],
+      "partyId": "#00019",
+      "preAllocated": true,
+      "rollIds": [
+        "#00034"
+      ]
+    },
+    "received_at": "<ts>",
+    "received_seq": 24,
+    "reject_reason": null,
+    "status": "applied",
+    "sync_device_id": null,
+    "tenant_id": "#00003",
+    "tombstone_id": null
+  },
+  {
+    "applied_at": "<ts>",
+    "applied_seq": 26,
+    "apply_attempts": 0,
+    "conflict_detail": null,
+    "conflict_op_id": null,
+    "entity_id": "#00106",
+    "entity_type": "invoice",
+    "id": "#01155",
+    "last_attempt_at": null,
+    "materialize_error": null,
+    "op_id": "#00107",
+    "operation": "create",
+    "payload": {
+      "actorRole": "admin",
+      "actorUserId": "#00002",
+      "actorUserName": "AC-8 Admin",
+      "createInput": {
+        "currency": "USD",
+        "date": "2026-03-01",
+        "lines": [
+          {
+            "colorId": "#00025",
+            "costPerKg": 2,
+            "fabricId": "#00022",
+            "pieces": 1,
+            "pricePerKg": 4,
+            "quantityKg": 5,
+            "rollId": "#00028"
+          }
+        ],
+        "paid": 0,
+        "partyId": "#00012",
+        "partyType": "customer",
+        "type": "sale"
+      },
+      "dependencies": {
+        "colors": [
+          {
+            "code": null,
+            "fabricId": "#00022",
+            "hex": null,
+            "id": "#00025",
+            "imageUrl": null,
+            "name": "AC8 Color"
+          }
+        ],
+        "fabrics": [
+          {
+            "category": null,
+            "id": "#00022",
+            "imageUrl": null,
+            "minStockKg": 0,
+            "name": "AC8 Fabric",
+            "notes": null,
+            "unit": null
+          }
+        ],
+        "parties": [
+          {
+            "address": null,
+            "altPhone": null,
+            "category": null,
+            "city": null,
+            "code": "CUS-2026-0001",
+            "commercialReg": null,
+            "companyName": null,
+            "country": null,
+            "currency": "SYP",
+            "defaultDiscount": 0,
+            "email": null,
+            "id": "#00012",
+            "kind": "customer",
+            "mobile": null,
+            "name": "AC8 Customer 0",
+            "notes": null,
+            "paymentMethod": null,
+            "paymentTerms": null,
+            "phone": null,
+            "salesRep": null,
+            "status": "active",
+            "taxNumber": null,
+            "vat": 0,
+            "website": null,
+            "whatsapp": null
+          }
+        ],
+        "rolls": [
+          {
+            "colorId": "#00025",
+            "currency": "USD",
+            "dyeBatch": null,
+            "entryDate": "2026-03-01",
+            "id": "#00028",
+            "initialKg": 500,
+            "pieces": 50,
+            "pricePerKg": 2,
+            "remainingKg": 480,
+            "remainingPieces": 46,
+            "rollNo": "AC8-R0",
+            "salePricePerKg": null,
+            "status": "in_stock",
+            "supplierId": null,
+            "weightGsm": null,
+            "widthCm": null
+          }
+        ]
+      },
+      "invoiceId": "#00106",
+      "invoiceNumber": "INV-2026-0013",
+      "invoiceType": "sale",
+      "lines": [
+        {
+          "costPerKg": 2,
+          "pieces": 1,
+          "quantityKg": 5,
+          "rollId": "#00028"
+        }
+      ],
+      "partyId": "#00012",
+      "preAllocated": true,
+      "rollIds": [
+        "#00028"
+      ]
+    },
+    "received_at": "<ts>",
+    "received_seq": 25,
+    "reject_reason": null,
+    "status": "applied",
+    "sync_device_id": null,
+    "tenant_id": "#00003",
+    "tombstone_id": null
+  },
+  {
+    "applied_at": "<ts>",
+    "applied_seq": 27,
+    "apply_attempts": 0,
+    "conflict_detail": null,
+    "conflict_op_id": null,
+    "entity_id": "#00109",
+    "entity_type": "invoice",
+    "id": "#01156",
+    "last_attempt_at": null,
+    "materialize_error": null,
+    "op_id": "#00110",
+    "operation": "create",
+    "payload": {
+      "actorRole": "admin",
+      "actorUserId": "#00002",
+      "actorUserName": "AC-8 Admin",
+      "createInput": {
+        "currency": "USD",
+        "date": "2026-03-01",
+        "lines": [
+          {
+            "colorId": "#00025",
+            "costPerKg": 2,
+            "fabricId": "#00022",
+            "pieces": 1,
+            "pricePerKg": 4,
+            "quantityKg": 5,
+            "rollId": "#00031"
+          }
+        ],
+        "linkedVoucherId": "#00111",
+        "paid": 20,
+        "partyId": "#00016",
+        "partyType": "customer",
+        "type": "sale"
+      },
+      "dependencies": {
+        "colors": [
+          {
+            "code": null,
+            "fabricId": "#00022",
+            "hex": null,
+            "id": "#00025",
+            "imageUrl": null,
+            "name": "AC8 Color"
+          }
+        ],
+        "fabrics": [
+          {
+            "category": null,
+            "id": "#00022",
+            "imageUrl": null,
+            "minStockKg": 0,
+            "name": "AC8 Fabric",
+            "notes": null,
+            "unit": null
+          }
+        ],
+        "parties": [
+          {
+            "address": null,
+            "altPhone": null,
+            "category": null,
+            "city": null,
+            "code": "CUS-2026-0002",
+            "commercialReg": null,
+            "companyName": null,
+            "country": null,
+            "currency": "SYP",
+            "defaultDiscount": 0,
+            "email": null,
+            "id": "#00016",
+            "kind": "customer",
+            "mobile": null,
+            "name": "AC8 Customer 1",
+            "notes": null,
+            "paymentMethod": null,
+            "paymentTerms": null,
+            "phone": null,
+            "salesRep": null,
+            "status": "active",
+            "taxNumber": null,
+            "vat": 0,
+            "website": null,
+            "whatsapp": null
+          }
+        ],
+        "rolls": [
+          {
+            "colorId": "#00025",
+            "currency": "USD",
+            "dyeBatch": null,
+            "entryDate": "2026-03-01",
+            "id": "#00031",
+            "initialKg": 500,
+            "pieces": 50,
+            "pricePerKg": 2,
+            "remainingKg": 480,
+            "remainingPieces": 46,
+            "rollNo": "AC8-R1",
+            "salePricePerKg": null,
+            "status": "in_stock",
+            "supplierId": null,
+            "weightGsm": null,
+            "widthCm": null
+          }
+        ]
+      },
+      "invoiceId": "#00109",
+      "invoiceNumber": "INV-2026-0014",
+      "invoiceType": "sale",
+      "lines": [
+        {
+          "costPerKg": 2,
+          "pieces": 1,
+          "quantityKg": 5,
+          "rollId": "#00031"
+        }
+      ],
+      "partyId": "#00016",
+      "preAllocated": true,
+      "rollIds": [
+        "#00031"
+      ]
+    },
+    "received_at": "<ts>",
+    "received_seq": 26,
+    "reject_reason": null,
+    "status": "applied",
+    "sync_device_id": null,
+    "tenant_id": "#00003",
+    "tombstone_id": null
+  },
+  {
+    "applied_at": "<ts>",
+    "applied_seq": 28,
+    "apply_attempts": 0,
+    "conflict_detail": null,
+    "conflict_op_id": null,
+    "entity_id": "#00113",
+    "entity_type": "invoice",
+    "id": "#01157",
+    "last_attempt_at": null,
+    "materialize_error": null,
+    "op_id": "#00114",
+    "operation": "create",
+    "payload": {
+      "actorRole": "admin",
+      "actorUserId": "#00002",
+      "actorUserName": "AC-8 Admin",
+      "createInput": {
+        "currency": "USD",
+        "date": "2026-03-01",
+        "lines": [
+          {
+            "colorId": "#00025",
+            "costPerKg": 2,
+            "fabricId": "#00022",
+            "pieces": 1,
+            "pricePerKg": 4,
+            "quantityKg": 5,
+            "rollId": "#00034"
+          }
+        ],
+        "paid": 0,
+        "partyId": "#00019",
+        "partyType": "customer",
+        "type": "sale"
+      },
+      "dependencies": {
+        "colors": [
+          {
+            "code": null,
+            "fabricId": "#00022",
+            "hex": null,
+            "id": "#00025",
+            "imageUrl": null,
+            "name": "AC8 Color"
+          }
+        ],
+        "fabrics": [
+          {
+            "category": null,
+            "id": "#00022",
+            "imageUrl": null,
+            "minStockKg": 0,
+            "name": "AC8 Fabric",
+            "notes": null,
+            "unit": null
+          }
+        ],
+        "parties": [
+          {
+            "address": null,
+            "altPhone": null,
+            "category": null,
+            "city": null,
+            "code": "CUS-2026-0003",
+            "commercialReg": null,
+            "companyName": null,
+            "country": null,
+            "currency": "SYP",
+            "defaultDiscount": 0,
+            "email": null,
+            "id": "#00019",
+            "kind": "customer",
+            "mobile": null,
+            "name": "AC8 Customer 2",
+            "notes": null,
+            "paymentMethod": null,
+            "paymentTerms": null,
+            "phone": null,
+            "salesRep": null,
+            "status": "active",
+            "taxNumber": null,
+            "vat": 0,
+            "website": null,
+            "whatsapp": null
+          }
+        ],
+        "rolls": [
+          {
+            "colorId": "#00025",
+            "currency": "USD",
+            "dyeBatch": null,
+            "entryDate": "2026-03-01",
+            "id": "#00034",
+            "initialKg": 500,
+            "pieces": 50,
+            "pricePerKg": 2,
+            "remainingKg": 480,
+            "remainingPieces": 46,
+            "rollNo": "AC8-R2",
+            "salePricePerKg": null,
+            "status": "in_stock",
+            "supplierId": null,
+            "weightGsm": null,
+            "widthCm": null
+          }
+        ]
+      },
+      "invoiceId": "#00113",
+      "invoiceNumber": "INV-2026-0015",
+      "invoiceType": "sale",
+      "lines": [
+        {
+          "costPerKg": 2,
+          "pieces": 1,
+          "quantityKg": 5,
+          "rollId": "#00034"
+        }
+      ],
+      "partyId": "#00019",
+      "preAllocated": true,
+      "rollIds": [
+        "#00034"
+      ]
+    },
+    "received_at": "<ts>",
+    "received_seq": 27,
+    "reject_reason": null,
+    "status": "applied",
+    "sync_device_id": null,
+    "tenant_id": "#00003",
+    "tombstone_id": null
+  },
+  {
+    "applied_at": "<ts>",
+    "applied_seq": 29,
+    "apply_attempts": 0,
+    "conflict_detail": null,
+    "conflict_op_id": null,
+    "entity_id": "#00116",
+    "entity_type": "invoice",
+    "id": "#01158",
+    "last_attempt_at": null,
+    "materialize_error": null,
+    "op_id": "#00117",
+    "operation": "create",
+    "payload": {
+      "actorRole": "admin",
+      "actorUserId": "#00002",
+      "actorUserName": "AC-8 Admin",
+      "createInput": {
+        "currency": "USD",
+        "date": "2026-03-01",
+        "lines": [
+          {
+            "colorId": "#00025",
+            "costPerKg": 2,
+            "fabricId": "#00022",
+            "pieces": 1,
+            "pricePerKg": 4,
+            "quantityKg": 5,
+            "rollId": "#00028"
+          }
+        ],
+        "linkedVoucherId": "#00118",
+        "paid": 20,
+        "partyId": "#00012",
+        "partyType": "customer",
+        "type": "sale"
+      },
+      "dependencies": {
+        "colors": [
+          {
+            "code": null,
+            "fabricId": "#00022",
+            "hex": null,
+            "id": "#00025",
+            "imageUrl": null,
+            "name": "AC8 Color"
+          }
+        ],
+        "fabrics": [
+          {
+            "category": null,
+            "id": "#00022",
+            "imageUrl": null,
+            "minStockKg": 0,
+            "name": "AC8 Fabric",
+            "notes": null,
+            "unit": null
+          }
+        ],
+        "parties": [
+          {
+            "address": null,
+            "altPhone": null,
+            "category": null,
+            "city": null,
+            "code": "CUS-2026-0001",
+            "commercialReg": null,
+            "companyName": null,
+            "country": null,
+            "currency": "SYP",
+            "defaultDiscount": 0,
+            "email": null,
+            "id": "#00012",
+            "kind": "customer",
+            "mobile": null,
+            "name": "AC8 Customer 0",
+            "notes": null,
+            "paymentMethod": null,
+            "paymentTerms": null,
+            "phone": null,
+            "salesRep": null,
+            "status": "active",
+            "taxNumber": null,
+            "vat": 0,
+            "website": null,
+            "whatsapp": null
+          }
+        ],
+        "rolls": [
+          {
+            "colorId": "#00025",
+            "currency": "USD",
+            "dyeBatch": null,
+            "entryDate": "2026-03-01",
+            "id": "#00028",
+            "initialKg": 500,
+            "pieces": 50,
+            "pricePerKg": 2,
+            "remainingKg": 475,
+            "remainingPieces": 45,
+            "rollNo": "AC8-R0",
+            "salePricePerKg": null,
+            "status": "in_stock",
+            "supplierId": null,
+            "weightGsm": null,
+            "widthCm": null
+          }
+        ]
+      },
+      "invoiceId": "#00116",
+      "invoiceNumber": "INV-2026-0016",
+      "invoiceType": "sale",
+      "lines": [
+        {
+          "costPerKg": 2,
+          "pieces": 1,
+          "quantityKg": 5,
+          "rollId": "#00028"
+        }
+      ],
+      "partyId": "#00012",
+      "preAllocated": true,
+      "rollIds": [
+        "#00028"
+      ]
+    },
+    "received_at": "<ts>",
+    "received_seq": 28,
+    "reject_reason": null,
+    "status": "applied",
+    "sync_device_id": null,
+    "tenant_id": "#00003",
+    "tombstone_id": null
+  },
+  {
+    "applied_at": "<ts>",
+    "applied_seq": 3,
+    "apply_attempts": 0,
+    "conflict_detail": null,
+    "conflict_op_id": null,
+    "entity_id": "#00016",
+    "entity_type": "party",
+    "id": "#01159",
+    "last_attempt_at": null,
+    "materialize_error": null,
+    "op_id": "#00017",
+    "operation": "create",
+    "payload": {
+      "actorRole": "admin",
+      "actorUserId": "#00002",
+      "actorUserName": "AC-8 Admin",
+      "snapshot": {
+        "address": null,
+        "altPhone": null,
+        "category": null,
+        "city": null,
+        "code": "CUS-2026-0002",
+        "commercialReg": null,
+        "companyName": null,
+        "country": null,
+        "currency": "SYP",
+        "defaultDiscount": 0,
+        "email": null,
+        "id": "#00016",
+        "kind": "customer",
+        "mobile": null,
+        "name": "AC8 Customer 1",
+        "notes": null,
+        "openingBalance": 0,
+        "openingDate": "2026-10-05",
+        "paymentMethod": null,
+        "paymentTerms": null,
+        "phone": null,
+        "salesRep": null,
+        "status": "active",
+        "taxNumber": null,
+        "vat": 0,
+        "website": null,
+        "whatsapp": null
+      }
+    },
+    "received_at": "<ts>",
+    "received_seq": 2,
+    "reject_reason": null,
+    "status": "applied",
+    "sync_device_id": null,
+    "tenant_id": "#00003",
+    "tombstone_id": null
+  },
+  {
+    "applied_at": "<ts>",
+    "applied_seq": 30,
+    "apply_attempts": 0,
+    "conflict_detail": null,
+    "conflict_op_id": null,
+    "entity_id": "#00120",
+    "entity_type": "invoice",
+    "id": "#01160",
+    "last_attempt_at": null,
+    "materialize_error": null,
+    "op_id": "#00121",
+    "operation": "create",
+    "payload": {
+      "actorRole": "admin",
+      "actorUserId": "#00002",
+      "actorUserName": "AC-8 Admin",
+      "createInput": {
+        "currency": "USD",
+        "date": "2026-03-01",
+        "lines": [
+          {
+            "colorId": "#00025",
+            "costPerKg": 2,
+            "fabricId": "#00022",
+            "pieces": 1,
+            "pricePerKg": 4,
+            "quantityKg": 5,
+            "rollId": "#00031"
+          }
+        ],
+        "paid": 0,
+        "partyId": "#00016",
+        "partyType": "customer",
+        "type": "sale"
+      },
+      "dependencies": {
+        "colors": [
+          {
+            "code": null,
+            "fabricId": "#00022",
+            "hex": null,
+            "id": "#00025",
+            "imageUrl": null,
+            "name": "AC8 Color"
+          }
+        ],
+        "fabrics": [
+          {
+            "category": null,
+            "id": "#00022",
+            "imageUrl": null,
+            "minStockKg": 0,
+            "name": "AC8 Fabric",
+            "notes": null,
+            "unit": null
+          }
+        ],
+        "parties": [
+          {
+            "address": null,
+            "altPhone": null,
+            "category": null,
+            "city": null,
+            "code": "CUS-2026-0002",
+            "commercialReg": null,
+            "companyName": null,
+            "country": null,
+            "currency": "SYP",
+            "defaultDiscount": 0,
+            "email": null,
+            "id": "#00016",
+            "kind": "customer",
+            "mobile": null,
+            "name": "AC8 Customer 1",
+            "notes": null,
+            "paymentMethod": null,
+            "paymentTerms": null,
+            "phone": null,
+            "salesRep": null,
+            "status": "active",
+            "taxNumber": null,
+            "vat": 0,
+            "website": null,
+            "whatsapp": null
+          }
+        ],
+        "rolls": [
+          {
+            "colorId": "#00025",
+            "currency": "USD",
+            "dyeBatch": null,
+            "entryDate": "2026-03-01",
+            "id": "#00031",
+            "initialKg": 500,
+            "pieces": 50,
+            "pricePerKg": 2,
+            "remainingKg": 475,
+            "remainingPieces": 45,
+            "rollNo": "AC8-R1",
+            "salePricePerKg": null,
+            "status": "in_stock",
+            "supplierId": null,
+            "weightGsm": null,
+            "widthCm": null
+          }
+        ]
+      },
+      "invoiceId": "#00120",
+      "invoiceNumber": "INV-2026-0017",
+      "invoiceType": "sale",
+      "lines": [
+        {
+          "costPerKg": 2,
+          "pieces": 1,
+          "quantityKg": 5,
+          "rollId": "#00031"
+        }
+      ],
+      "partyId": "#00016",
+      "preAllocated": true,
+      "rollIds": [
+        "#00031"
+      ]
+    },
+    "received_at": "<ts>",
+    "received_seq": 29,
+    "reject_reason": null,
+    "status": "applied",
+    "sync_device_id": null,
+    "tenant_id": "#00003",
+    "tombstone_id": null
+  },
+  {
+    "applied_at": "<ts>",
+    "applied_seq": 31,
+    "apply_attempts": 0,
+    "conflict_detail": null,
+    "conflict_op_id": null,
+    "entity_id": "#00123",
+    "entity_type": "invoice",
+    "id": "#01161",
+    "last_attempt_at": null,
+    "materialize_error": null,
+    "op_id": "#00124",
+    "operation": "create",
+    "payload": {
+      "actorRole": "admin",
+      "actorUserId": "#00002",
+      "actorUserName": "AC-8 Admin",
+      "createInput": {
+        "currency": "USD",
+        "date": "2026-03-01",
+        "lines": [
+          {
+            "colorId": "#00025",
+            "costPerKg": 2,
+            "fabricId": "#00022",
+            "pieces": 1,
+            "pricePerKg": 4,
+            "quantityKg": 5,
+            "rollId": "#00034"
+          }
+        ],
+        "linkedVoucherId": "#00125",
+        "paid": 20,
+        "partyId": "#00019",
+        "partyType": "customer",
+        "type": "sale"
+      },
+      "dependencies": {
+        "colors": [
+          {
+            "code": null,
+            "fabricId": "#00022",
+            "hex": null,
+            "id": "#00025",
+            "imageUrl": null,
+            "name": "AC8 Color"
+          }
+        ],
+        "fabrics": [
+          {
+            "category": null,
+            "id": "#00022",
+            "imageUrl": null,
+            "minStockKg": 0,
+            "name": "AC8 Fabric",
+            "notes": null,
+            "unit": null
+          }
+        ],
+        "parties": [
+          {
+            "address": null,
+            "altPhone": null,
+            "category": null,
+            "city": null,
+            "code": "CUS-2026-0003",
+            "commercialReg": null,
+            "companyName": null,
+            "country": null,
+            "currency": "SYP",
+            "defaultDiscount": 0,
+            "email": null,
+            "id": "#00019",
+            "kind": "customer",
+            "mobile": null,
+            "name": "AC8 Customer 2",
+            "notes": null,
+            "paymentMethod": null,
+            "paymentTerms": null,
+            "phone": null,
+            "salesRep": null,
+            "status": "active",
+            "taxNumber": null,
+            "vat": 0,
+            "website": null,
+            "whatsapp": null
+          }
+        ],
+        "rolls": [
+          {
+            "colorId": "#00025",
+            "currency": "USD",
+            "dyeBatch": null,
+            "entryDate": "2026-03-01",
+            "id": "#00034",
+            "initialKg": 500,
+            "pieces": 50,
+            "pricePerKg": 2,
+            "remainingKg": 475,
+            "remainingPieces": 45,
+            "rollNo": "AC8-R2",
+            "salePricePerKg": null,
+            "status": "in_stock",
+            "supplierId": null,
+            "weightGsm": null,
+            "widthCm": null
+          }
+        ]
+      },
+      "invoiceId": "#00123",
+      "invoiceNumber": "INV-2026-0018",
+      "invoiceType": "sale",
+      "lines": [
+        {
+          "costPerKg": 2,
+          "pieces": 1,
+          "quantityKg": 5,
+          "rollId": "#00034"
+        }
+      ],
+      "partyId": "#00019",
+      "preAllocated": true,
+      "rollIds": [
+        "#00034"
+      ]
+    },
+    "received_at": "<ts>",
+    "received_seq": 30,
+    "reject_reason": null,
+    "status": "applied",
+    "sync_device_id": null,
+    "tenant_id": "#00003",
+    "tombstone_id": null
+  },
+  {
+    "applied_at": "<ts>",
+    "applied_seq": 32,
+    "apply_attempts": 0,
+    "conflict_detail": null,
+    "conflict_op_id": null,
+    "entity_id": "#00127",
+    "entity_type": "invoice",
+    "id": "#01162",
+    "last_attempt_at": null,
+    "materialize_error": null,
+    "op_id": "#00128",
+    "operation": "create",
+    "payload": {
+      "actorRole": "admin",
+      "actorUserId": "#00002",
+      "actorUserName": "AC-8 Admin",
+      "createInput": {
+        "currency": "USD",
+        "date": "2026-03-01",
+        "lines": [
+          {
+            "colorId": "#00025",
+            "costPerKg": 2,
+            "fabricId": "#00022",
+            "pieces": 1,
+            "pricePerKg": 4,
+            "quantityKg": 5,
+            "rollId": "#00028"
+          }
+        ],
+        "paid": 0,
+        "partyId": "#00012",
+        "partyType": "customer",
+        "type": "sale"
+      },
+      "dependencies": {
+        "colors": [
+          {
+            "code": null,
+            "fabricId": "#00022",
+            "hex": null,
+            "id": "#00025",
+            "imageUrl": null,
+            "name": "AC8 Color"
+          }
+        ],
+        "fabrics": [
+          {
+            "category": null,
+            "id": "#00022",
+            "imageUrl": null,
+            "minStockKg": 0,
+            "name": "AC8 Fabric",
+            "notes": null,
+            "unit": null
+          }
+        ],
+        "parties": [
+          {
+            "address": null,
+            "altPhone": null,
+            "category": null,
+            "city": null,
+            "code": "CUS-2026-0001",
+            "commercialReg": null,
+            "companyName": null,
+            "country": null,
+            "currency": "SYP",
+            "defaultDiscount": 0,
+            "email": null,
+            "id": "#00012",
+            "kind": "customer",
+            "mobile": null,
+            "name": "AC8 Customer 0",
+            "notes": null,
+            "paymentMethod": null,
+            "paymentTerms": null,
+            "phone": null,
+            "salesRep": null,
+            "status": "active",
+            "taxNumber": null,
+            "vat": 0,
+            "website": null,
+            "whatsapp": null
+          }
+        ],
+        "rolls": [
+          {
+            "colorId": "#00025",
+            "currency": "USD",
+            "dyeBatch": null,
+            "entryDate": "2026-03-01",
+            "id": "#00028",
+            "initialKg": 500,
+            "pieces": 50,
+            "pricePerKg": 2,
+            "remainingKg": 470,
+            "remainingPieces": 44,
+            "rollNo": "AC8-R0",
+            "salePricePerKg": null,
+            "status": "in_stock",
+            "supplierId": null,
+            "weightGsm": null,
+            "widthCm": null
+          }
+        ]
+      },
+      "invoiceId": "#00127",
+      "invoiceNumber": "INV-2026-0019",
+      "invoiceType": "sale",
+      "lines": [
+        {
+          "costPerKg": 2,
+          "pieces": 1,
+          "quantityKg": 5,
+          "rollId": "#00028"
+        }
+      ],
+      "partyId": "#00012",
+      "preAllocated": true,
+      "rollIds": [
+        "#00028"
+      ]
+    },
+    "received_at": "<ts>",
+    "received_seq": 31,
+    "reject_reason": null,
+    "status": "applied",
+    "sync_device_id": null,
+    "tenant_id": "#00003",
+    "tombstone_id": null
+  },
+  {
+    "applied_at": "<ts>",
+    "applied_seq": 33,
+    "apply_attempts": 0,
+    "conflict_detail": null,
+    "conflict_op_id": null,
+    "entity_id": "#00130",
+    "entity_type": "invoice",
+    "id": "#01163",
+    "last_attempt_at": null,
+    "materialize_error": null,
+    "op_id": "#00131",
+    "operation": "create",
+    "payload": {
+      "actorRole": "admin",
+      "actorUserId": "#00002",
+      "actorUserName": "AC-8 Admin",
+      "createInput": {
+        "currency": "USD",
+        "date": "2026-03-01",
+        "lines": [
+          {
+            "colorId": "#00025",
+            "costPerKg": 2,
+            "fabricId": "#00022",
+            "pieces": 1,
+            "pricePerKg": 4,
+            "quantityKg": 30,
+            "rollId": "#00046"
+          }
+        ],
+        "paid": 0,
+        "partyId": "#00012",
+        "partyType": "customer",
+        "type": "sale"
+      },
+      "dependencies": {
+        "colors": [
+          {
+            "code": null,
+            "fabricId": "#00022",
+            "hex": null,
+            "id": "#00025",
+            "imageUrl": null,
+            "name": "AC8 Color"
+          }
+        ],
+        "fabrics": [
+          {
+            "category": null,
+            "id": "#00022",
+            "imageUrl": null,
+            "minStockKg": 0,
+            "name": "AC8 Fabric",
+            "notes": null,
+            "unit": null
+          }
+        ],
+        "parties": [
+          {
+            "address": null,
+            "altPhone": null,
+            "category": null,
+            "city": null,
+            "code": "CUS-2026-0001",
+            "commercialReg": null,
+            "companyName": null,
+            "country": null,
+            "currency": "SYP",
+            "defaultDiscount": 0,
+            "email": null,
+            "id": "#00012",
+            "kind": "customer",
+            "mobile": null,
+            "name": "AC8 Customer 0",
+            "notes": null,
+            "paymentMethod": null,
+            "paymentTerms": null,
+            "phone": null,
+            "salesRep": null,
+            "status": "active",
+            "taxNumber": null,
+            "vat": 0,
+            "website": null,
+            "whatsapp": null
+          }
+        ],
+        "rolls": [
+          {
+            "colorId": "#00025",
+            "currency": "USD",
+            "dyeBatch": null,
+            "entryDate": "2026-03-01",
+            "id": "#00046",
+            "initialKg": 100,
+            "pieces": 50,
+            "pricePerKg": 2,
+            "remainingKg": 100,
+            "remainingPieces": 50,
+            "rollNo": "AC8-RS",
+            "salePricePerKg": null,
+            "status": "in_stock",
+            "supplierId": null,
+            "weightGsm": null,
+            "widthCm": null
+          }
+        ]
+      },
+      "invoiceId": "#00130",
+      "invoiceNumber": "INV-2026-0020",
+      "invoiceType": "sale",
+      "lines": [
+        {
+          "costPerKg": 2,
+          "pieces": 1,
+          "quantityKg": 30,
+          "rollId": "#00046"
+        }
+      ],
+      "partyId": "#00012",
+      "preAllocated": true,
+      "rollIds": [
+        "#00046"
+      ]
+    },
+    "received_at": "<ts>",
+    "received_seq": 32,
+    "reject_reason": null,
+    "status": "applied",
+    "sync_device_id": null,
+    "tenant_id": "#00003",
+    "tombstone_id": null
+  },
+  {
+    "applied_at": "<ts>",
+    "applied_seq": 34,
+    "apply_attempts": 0,
+    "conflict_detail": null,
+    "conflict_op_id": null,
+    "entity_id": "#00012",
+    "entity_type": "party",
+    "id": "#01164",
+    "last_attempt_at": null,
+    "materialize_error": null,
+    "op_id": "#00133",
+    "operation": "update",
+    "payload": {
+      "actorRole": "admin",
+      "actorUserId": "#00002",
+      "actorUserName": "AC-8 Admin",
+      "baseUpdatedAt": null,
+      "baseVersion": 1,
+      "entityId": "#00012",
+      "updateInput": {
+        "phone": "0911-000-A"
+      }
+    },
+    "received_at": "<ts>",
+    "received_seq": 33,
+    "reject_reason": null,
+    "status": "applied",
+    "sync_device_id": null,
+    "tenant_id": "#00003",
+    "tombstone_id": null
+  },
+  {
+    "applied_at": "<ts>",
+    "applied_seq": 4,
+    "apply_attempts": 0,
+    "conflict_detail": null,
+    "conflict_op_id": null,
+    "entity_id": "#00019",
+    "entity_type": "party",
+    "id": "#01165",
+    "last_attempt_at": null,
+    "materialize_error": null,
+    "op_id": "#00020",
+    "operation": "create",
+    "payload": {
+      "actorRole": "admin",
+      "actorUserId": "#00002",
+      "actorUserName": "AC-8 Admin",
+      "snapshot": {
+        "address": null,
+        "altPhone": null,
+        "category": null,
+        "city": null,
+        "code": "CUS-2026-0003",
+        "commercialReg": null,
+        "companyName": null,
+        "country": null,
+        "currency": "SYP",
+        "defaultDiscount": 0,
+        "email": null,
+        "id": "#00019",
+        "kind": "customer",
+        "mobile": null,
+        "name": "AC8 Customer 2",
+        "notes": null,
+        "openingBalance": 0,
+        "openingDate": "2026-10-05",
+        "paymentMethod": null,
+        "paymentTerms": null,
+        "phone": null,
+        "salesRep": null,
+        "status": "active",
+        "taxNumber": null,
+        "vat": 0,
+        "website": null,
+        "whatsapp": null
+      }
+    },
+    "received_at": "<ts>",
+    "received_seq": 3,
+    "reject_reason": null,
+    "status": "applied",
+    "sync_device_id": null,
+    "tenant_id": "#00003",
+    "tombstone_id": null
+  },
+  {
+    "applied_at": "<ts>",
+    "applied_seq": 5,
+    "apply_attempts": 0,
+    "conflict_detail": null,
+    "conflict_op_id": null,
+    "entity_id": "#00022",
+    "entity_type": "fabric",
+    "id": "#01166",
+    "last_attempt_at": null,
+    "materialize_error": null,
+    "op_id": "#00023",
+    "operation": "create",
+    "payload": {
+      "actorRole": "admin",
+      "actorUserId": "#00002",
+      "actorUserName": "AC-8 Admin",
+      "snapshot": {
+        "category": null,
+        "id": "#00022",
+        "imageUrl": null,
+        "minStockKg": 0,
+        "name": "AC8 Fabric",
+        "notes": null,
+        "unit": null
+      }
+    },
+    "received_at": "<ts>",
+    "received_seq": 4,
+    "reject_reason": null,
+    "status": "applied",
+    "sync_device_id": null,
+    "tenant_id": "#00003",
+    "tombstone_id": null
+  },
+  {
+    "applied_at": "<ts>",
+    "applied_seq": 6,
+    "apply_attempts": 0,
+    "conflict_detail": null,
+    "conflict_op_id": null,
+    "entity_id": "#00025",
+    "entity_type": "color",
+    "id": "#01167",
+    "last_attempt_at": null,
+    "materialize_error": null,
+    "op_id": "#00026",
+    "operation": "create",
+    "payload": {
+      "actorRole": "admin",
+      "actorUserId": "#00002",
+      "actorUserName": "AC-8 Admin",
+      "snapshot": {
+        "code": null,
+        "fabricId": "#00022",
+        "hex": null,
+        "id": "#00025",
+        "imageUrl": null,
+        "name": "AC8 Color"
+      }
+    },
+    "received_at": "<ts>",
+    "received_seq": 5,
+    "reject_reason": null,
+    "status": "applied",
+    "sync_device_id": null,
+    "tenant_id": "#00003",
+    "tombstone_id": null
+  },
+  {
+    "applied_at": "<ts>",
+    "applied_seq": 7,
+    "apply_attempts": 0,
+    "conflict_detail": null,
+    "conflict_op_id": null,
+    "entity_id": "#00028",
+    "entity_type": "roll",
+    "id": "#01168",
+    "last_attempt_at": null,
+    "materialize_error": null,
+    "op_id": "#00029",
+    "operation": "create",
+    "payload": {
+      "actorRole": "admin",
+      "actorUserId": "#00002",
+      "actorUserName": "AC-8 Admin",
+      "snapshot": {
+        "colorId": "#00025",
+        "currency": "USD",
+        "dyeBatch": null,
+        "entryDate": "2026-03-01",
+        "id": "#00028",
+        "initialKg": 500,
+        "pieces": 50,
+        "pricePerKg": 2,
+        "remainingKg": 500,
+        "remainingPieces": 50,
+        "rollNo": "AC8-R0",
+        "salePricePerKg": null,
+        "status": "in_stock",
+        "supplierId": null,
+        "weightGsm": null,
+        "widthCm": null
+      }
+    },
+    "received_at": "<ts>",
+    "received_seq": 6,
+    "reject_reason": null,
+    "status": "applied",
+    "sync_device_id": null,
+    "tenant_id": "#00003",
+    "tombstone_id": null
+  },
+  {
+    "applied_at": "<ts>",
+    "applied_seq": 8,
+    "apply_attempts": 0,
+    "conflict_detail": null,
+    "conflict_op_id": null,
+    "entity_id": "#00031",
+    "entity_type": "roll",
+    "id": "#01169",
+    "last_attempt_at": null,
+    "materialize_error": null,
+    "op_id": "#00032",
+    "operation": "create",
+    "payload": {
+      "actorRole": "admin",
+      "actorUserId": "#00002",
+      "actorUserName": "AC-8 Admin",
+      "snapshot": {
+        "colorId": "#00025",
+        "currency": "USD",
+        "dyeBatch": null,
+        "entryDate": "2026-03-01",
+        "id": "#00031",
+        "initialKg": 500,
+        "pieces": 50,
+        "pricePerKg": 2,
+        "remainingKg": 500,
+        "remainingPieces": 50,
+        "rollNo": "AC8-R1",
+        "salePricePerKg": null,
+        "status": "in_stock",
+        "supplierId": null,
+        "weightGsm": null,
+        "widthCm": null
+      }
+    },
+    "received_at": "<ts>",
+    "received_seq": 7,
+    "reject_reason": null,
+    "status": "applied",
+    "sync_device_id": null,
+    "tenant_id": "#00003",
+    "tombstone_id": null
+  },
+  {
+    "applied_at": "<ts>",
+    "applied_seq": 9,
+    "apply_attempts": 0,
+    "conflict_detail": null,
+    "conflict_op_id": null,
+    "entity_id": "#00034",
+    "entity_type": "roll",
+    "id": "#01170",
+    "last_attempt_at": null,
+    "materialize_error": null,
+    "op_id": "#00035",
+    "operation": "create",
+    "payload": {
+      "actorRole": "admin",
+      "actorUserId": "#00002",
+      "actorUserName": "AC-8 Admin",
+      "snapshot": {
+        "colorId": "#00025",
+        "currency": "USD",
+        "dyeBatch": null,
+        "entryDate": "2026-03-01",
+        "id": "#00034",
+        "initialKg": 500,
+        "pieces": 50,
+        "pricePerKg": 2,
+        "remainingKg": 500,
+        "remainingPieces": 50,
+        "rollNo": "AC8-R2",
+        "salePricePerKg": null,
+        "status": "in_stock",
+        "supplierId": null,
+        "weightGsm": null,
+        "widthCm": null
+      }
+    },
+    "received_at": "<ts>",
+    "received_seq": 8,
+    "reject_reason": null,
+    "status": "applied",
+    "sync_device_id": null,
+    "tenant_id": "#00003",
+    "tombstone_id": null
+  }
+]
