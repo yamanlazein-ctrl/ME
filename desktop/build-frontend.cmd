@@ -25,11 +25,21 @@ if not exist "dist\client\_shell.html" (
   echo ERROR: dist\client\_shell.html is missing - the SPA shell was not produced.
   exit /b 1
 )
+rem Tauri loads `_shell.html`; after the router rewrites the path to `/` a
+rem refresh must still serve the SPA (custom protocol maps `/` → index.html).
+copy /Y "dist\client\_shell.html" "dist\client\index.html" >nul
+if errorlevel 1 exit /b 1
 
 rem Mirror the fresh SPA build. /MIR removes stale hashed chunks from earlier builds.
 robocopy dist\client desktop\src-tauri\resources\server\web /MIR /R:1 /W:1 /NFL /NDL /NJH /NJS >nul
 rem robocopy exit codes >= 8 are real failures; 0-7 mean "copied/skipped" (ok).
 if errorlevel 8 exit /b 1
+
+rem Phase 1: Tauri embeds this directory and serves the SPA from its own asset
+rem protocol, so the shell's own pages (splash, recovery) have to live here too.
+rem /Y overwrites; the SPA build never produces files with these names.
+copy /Y "%~dp0shell\*.html" "desktop\src-tauri\resources\server\web\" >nul
+if errorlevel 1 exit /b 1
 
 rem DFP-036: source maps never ship to customers. Scope: ONLY the web tree. (An unscoped glob over
 rem resources\*.map once also deleted PostgreSQL's own pg_filenode.map catalog files from the database

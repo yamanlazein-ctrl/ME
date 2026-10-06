@@ -74,3 +74,42 @@ function isENOENT(err: unknown): boolean {
     (err as { code: unknown }).code === "ENOENT"
   );
 }
+
+/**
+ * Desktop (D-2, spec FR-069, T088): the installation id is per WINDOWS USER, so it lives in the
+ * per-user data root (`%LOCALAPPDATA%\motard-erp\install-id`, i.e. next to `data\motard.db`), not in
+ * the machine-wide default above. It is seeded from — and must stay linked to — the device-binding
+ * installation id the runtime passes as `MOTARD_INSTALLATION_ID`. A stored value that differs from
+ * the binding is an identity mismatch: reported (error code INSTALLATION_ID_MISMATCH), never
+ * overwritten silently. Explicit `write` (licence transfer) is still allowed.
+ */
+export class DesktopInstallationIdStorage extends InstallationIdStorage {
+  constructor(
+    dataRoot: string,
+    private readonly bindingId: string | undefined,
+  ) {
+    super(join(dataRoot, "install-id"));
+  }
+
+  override async readOrCreate(): Promise<string> {
+    const existing = await this.read();
+    const binding = this.bindingId?.trim() || null;
+    if (existing) {
+      if (binding && existing !== binding) {
+        throw Object.assign(
+          new Error(`INSTALLATION_ID_MISMATCH: stored install-id ${existing} ≠ device binding ${binding} — not overwritten`),
+          { code: "INSTALLATION_ID_MISMATCH" },
+        );
+      }
+      return existing;
+    }
+    const id = binding ?? randomUUID();
+    await this.write(id);
+    return id;
+  }
+}
+
+/** The per-user data root of a desktop SQLite install: `<root>\data\motard.db` → `<root>`. */
+export function desktopDataRoot(sqlitePath: string): string {
+  return dirname(dirname(sqlitePath));
+}

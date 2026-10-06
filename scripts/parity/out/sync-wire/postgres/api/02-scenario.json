@@ -1,0 +1,756 @@
+[
+  {
+    "data": {
+      "ensured": [
+        {
+          "endNumber": 500,
+          "entityType": "customer",
+          "source": "hub",
+          "startNumber": 1
+        },
+        {
+          "endNumber": 500,
+          "entityType": "supplier",
+          "source": "hub",
+          "startNumber": 1
+        },
+        {
+          "endNumber": 500,
+          "entityType": "invoice",
+          "source": "hub",
+          "startNumber": 1
+        },
+        {
+          "endNumber": 200,
+          "entityType": "invoice_entry",
+          "source": "hub",
+          "startNumber": 1
+        }
+      ],
+      "skipped": false
+    },
+    "label": "A.number-blocks"
+  },
+  {
+    "data": {
+      "ensured": [
+        {
+          "endNumber": 1000,
+          "entityType": "customer",
+          "source": "hub",
+          "startNumber": 501
+        },
+        {
+          "endNumber": 1000,
+          "entityType": "supplier",
+          "source": "hub",
+          "startNumber": 501
+        },
+        {
+          "endNumber": 1000,
+          "entityType": "invoice",
+          "source": "hub",
+          "startNumber": 501
+        },
+        {
+          "endNumber": 400,
+          "entityType": "invoice_entry",
+          "source": "hub",
+          "startNumber": 201
+        }
+      ],
+      "skipped": false
+    },
+    "label": "B.number-blocks"
+  },
+  {
+    "data": [
+      {
+        "activity": 0,
+        "blocksError": null,
+        "deviceGate": false,
+        "deviceTrust": null,
+        "failed": 0,
+        "hubDead": 0,
+        "hubDeadOps": [],
+        "pull": {
+          "acknowledged": 0,
+          "applied": 0,
+          "deviceTrust": null,
+          "failed": 0,
+          "pulled": 0,
+          "skipped": 0
+        },
+        "pullError": null,
+        "pushed": 12,
+        "rejected": 0,
+        "skipped": false
+      },
+      {
+        "activity": 0,
+        "blocksError": null,
+        "deviceGate": false,
+        "deviceTrust": null,
+        "failed": 0,
+        "hubDead": 0,
+        "hubDeadOps": [],
+        "pull": {
+          "acknowledged": 0,
+          "applied": 0,
+          "deviceTrust": null,
+          "failed": 0,
+          "pulled": 0,
+          "skipped": 0
+        },
+        "pullError": null,
+        "pushed": 0,
+        "rejected": 0,
+        "skipped": false
+      }
+    ],
+    "label": "online.A.sync"
+  },
+  {
+    "data": [
+      {
+        "activity": 0,
+        "blocksError": null,
+        "deviceGate": false,
+        "deviceTrust": null,
+        "failed": 0,
+        "hubDead": 0,
+        "hubDeadOps": [],
+        "pull": {
+          "acknowledged": 0,
+          "applied": 12,
+          "deviceTrust": null,
+          "failed": 0,
+          "pulled": 12,
+          "skipped": 0
+        },
+        "pullError": null,
+        "pushed": 0,
+        "rejected": 0,
+        "skipped": false
+      },
+      {
+        "activity": 0,
+        "blocksError": null,
+        "deviceGate": false,
+        "deviceTrust": null,
+        "failed": 0,
+        "hubDead": 0,
+        "hubDeadOps": [],
+        "pull": {
+          "acknowledged": 0,
+          "applied": 0,
+          "deviceTrust": null,
+          "failed": 0,
+          "pulled": 0,
+          "skipped": 0
+        },
+        "pullError": null,
+        "pushed": 0,
+        "rejected": 0,
+        "skipped": false
+      }
+    ],
+    "label": "online.B.sync"
+  },
+  {
+    "data": 3,
+    "label": "online.B.customers"
+  },
+  {
+    "data": {
+      "status": 200,
+      "version": 2
+    },
+    "label": "offline.A.edit-C0"
+  },
+  {
+    "data": {
+      "status": 200,
+      "version": 2
+    },
+    "label": "offline.B.edit-C0"
+  },
+  {
+    "data": [
+      {
+        "activity": 0,
+        "blocksError": null,
+        "deviceGate": false,
+        "deviceTrust": null,
+        "failed": 0,
+        "hubDead": 0,
+        "hubDeadOps": [],
+        "pull": {
+          "acknowledged": 0,
+          "applied": 0,
+          "deviceTrust": null,
+          "failed": 0,
+          "pulled": 0,
+          "skipped": 0
+        },
+        "pullError": null,
+        "pushed": 21,
+        "rejected": 0,
+        "skipped": false
+      },
+      {
+        "activity": 0,
+        "blocksError": null,
+        "deviceGate": false,
+        "deviceTrust": null,
+        "failed": 0,
+        "hubDead": 0,
+        "hubDeadOps": [],
+        "pull": {
+          "acknowledged": 0,
+          "applied": 0,
+          "deviceTrust": null,
+          "failed": 0,
+          "pulled": 0,
+          "skipped": 0
+        },
+        "pullError": null,
+        "pushed": 0,
+        "rejected": 0,
+        "skipped": false
+      }
+    ],
+    "label": "reconnect.A.sync"
+  },
+  {
+    "data": [
+      {
+        "activity": 0,
+        "blocksError": null,
+        "deviceGate": false,
+        "deviceTrust": null,
+        "failed": 1,
+        "hubDead": 0,
+        "hubDeadOps": [],
+        "pull": {
+          "acknowledged": 0,
+          "applied": 21,
+          "deviceTrust": null,
+          "failed": 0,
+          "pulled": 21,
+          "skipped": 0
+        },
+        "pullError": null,
+        "pushed": 30,
+        "rejected": 0,
+        "skipped": false
+      },
+      {
+        "activity": 0,
+        "blocksError": null,
+        "deviceGate": false,
+        "deviceTrust": null,
+        "failed": 1,
+        "hubDead": 0,
+        "hubDeadOps": [],
+        "pull": {
+          "acknowledged": 0,
+          "applied": 0,
+          "deviceTrust": null,
+          "failed": 0,
+          "pulled": 0,
+          "skipped": 0
+        },
+        "pullError": null,
+        "pushed": 0,
+        "rejected": 0,
+        "skipped": false
+      },
+      {
+        "activity": 0,
+        "blocksError": null,
+        "deviceGate": false,
+        "deviceTrust": null,
+        "failed": 1,
+        "hubDead": 0,
+        "hubDeadOps": [],
+        "pull": {
+          "acknowledged": 0,
+          "applied": 0,
+          "deviceTrust": null,
+          "failed": 0,
+          "pulled": 0,
+          "skipped": 0
+        },
+        "pullError": null,
+        "pushed": 0,
+        "rejected": 0,
+        "skipped": false
+      },
+      {
+        "activity": 0,
+        "blocksError": null,
+        "deviceGate": false,
+        "deviceTrust": null,
+        "failed": 1,
+        "hubDead": 0,
+        "hubDeadOps": [],
+        "pull": {
+          "acknowledged": 0,
+          "applied": 0,
+          "deviceTrust": null,
+          "failed": 0,
+          "pulled": 0,
+          "skipped": 0
+        },
+        "pullError": null,
+        "pushed": 0,
+        "rejected": 0,
+        "skipped": false
+      },
+      {
+        "activity": 0,
+        "blocksError": null,
+        "deviceGate": false,
+        "deviceTrust": null,
+        "failed": 0,
+        "hubDead": 1,
+        "hubDeadOps": [
+          "#00012"
+        ],
+        "pull": {
+          "acknowledged": 0,
+          "applied": 0,
+          "deviceTrust": null,
+          "failed": 0,
+          "pulled": 0,
+          "skipped": 0
+        },
+        "pullError": null,
+        "pushed": 0,
+        "rejected": 1,
+        "skipped": false
+      },
+      {
+        "activity": 0,
+        "blocksError": null,
+        "deviceGate": false,
+        "deviceTrust": null,
+        "failed": 0,
+        "hubDead": 0,
+        "hubDeadOps": [],
+        "pull": {
+          "acknowledged": 0,
+          "applied": 0,
+          "deviceTrust": null,
+          "failed": 0,
+          "pulled": 0,
+          "skipped": 0
+        },
+        "pullError": null,
+        "pushed": 0,
+        "rejected": 0,
+        "skipped": false
+      }
+    ],
+    "label": "reconnect.B.sync"
+  },
+  {
+    "data": [
+      {
+        "activity": 0,
+        "blocksError": null,
+        "deviceGate": false,
+        "deviceTrust": null,
+        "failed": 0,
+        "hubDead": 0,
+        "hubDeadOps": [],
+        "pull": {
+          "acknowledged": 0,
+          "applied": 30,
+          "deviceTrust": null,
+          "failed": 0,
+          "pulled": 30,
+          "skipped": 0
+        },
+        "pullError": null,
+        "pushed": 0,
+        "rejected": 0,
+        "skipped": false
+      },
+      {
+        "activity": 0,
+        "blocksError": null,
+        "deviceGate": false,
+        "deviceTrust": null,
+        "failed": 0,
+        "hubDead": 0,
+        "hubDeadOps": [],
+        "pull": {
+          "acknowledged": 0,
+          "applied": 0,
+          "deviceTrust": null,
+          "failed": 0,
+          "pulled": 0,
+          "skipped": 0
+        },
+        "pullError": null,
+        "pushed": 0,
+        "rejected": 0,
+        "skipped": false
+      }
+    ],
+    "label": "reconnect.A.sync"
+  },
+  {
+    "data": [
+      {
+        "activity": 0,
+        "blocksError": null,
+        "deviceGate": false,
+        "deviceTrust": null,
+        "failed": 0,
+        "hubDead": 0,
+        "hubDeadOps": [],
+        "pull": {
+          "acknowledged": 0,
+          "applied": 0,
+          "deviceTrust": null,
+          "failed": 0,
+          "pulled": 0,
+          "skipped": 0
+        },
+        "pullError": null,
+        "pushed": 0,
+        "rejected": 0,
+        "skipped": false
+      }
+    ],
+    "label": "reconnect.B.sync"
+  },
+  {
+    "data": [
+      {
+        "entityType": "party",
+        "operation": "update",
+        "status": 200
+      }
+    ],
+    "label": "resolve.keep-server"
+  },
+  {
+    "data": [
+      {
+        "activity": 0,
+        "blocksError": null,
+        "deviceGate": false,
+        "deviceTrust": null,
+        "failed": 0,
+        "hubDead": 0,
+        "hubDeadOps": [],
+        "pull": {
+          "acknowledged": 0,
+          "applied": 0,
+          "deviceTrust": null,
+          "failed": 0,
+          "pulled": 0,
+          "skipped": 0
+        },
+        "pullError": null,
+        "pushed": 0,
+        "rejected": 0,
+        "skipped": false
+      }
+    ],
+    "label": "converge.B.sync"
+  },
+  {
+    "data": [
+      {
+        "activity": 0,
+        "blocksError": null,
+        "deviceGate": false,
+        "deviceTrust": null,
+        "failed": 0,
+        "hubDead": 0,
+        "hubDeadOps": [],
+        "pull": {
+          "acknowledged": 0,
+          "applied": 0,
+          "deviceTrust": null,
+          "failed": 0,
+          "pulled": 0,
+          "skipped": 0
+        },
+        "pullError": null,
+        "pushed": 0,
+        "rejected": 0,
+        "skipped": false
+      }
+    ],
+    "label": "converge.A.sync"
+  },
+  {
+    "data": [
+      {
+        "activity": 0,
+        "blocksError": null,
+        "deviceGate": false,
+        "deviceTrust": null,
+        "failed": 0,
+        "hubDead": 0,
+        "hubDeadOps": [],
+        "pull": {
+          "acknowledged": 0,
+          "applied": 0,
+          "deviceTrust": null,
+          "failed": 0,
+          "pulled": 0,
+          "skipped": 0
+        },
+        "pullError": null,
+        "pushed": 0,
+        "rejected": 0,
+        "skipped": false
+      }
+    ],
+    "label": "converge.B.sync"
+  },
+  {
+    "data": {
+      "A": {
+        "claimInventory": {
+          "byResourceType": [],
+          "claims": [],
+          "total": 0
+        },
+        "hubConfigured": true,
+        "hubUrl": "http://127.0.0.1:<port>",
+        "inboxStatusCounts": {
+          "applied": 30,
+          "dead": 0,
+          "received": 0,
+          "rejected": 0
+        },
+        "lastPullAt": "<ts>",
+        "lastPullSeq": 64,
+        "missingBlocks": [],
+        "numberBlocks": [
+          {
+            "endNumber": 500,
+            "entityType": "customer",
+            "nextNumber": 4,
+            "startNumber": 1,
+            "status": "active",
+            "year": 2026
+          },
+          {
+            "endNumber": 500,
+            "entityType": "supplier",
+            "nextNumber": 1,
+            "startNumber": 1,
+            "status": "active",
+            "year": 2026
+          },
+          {
+            "endNumber": 500,
+            "entityType": "invoice",
+            "nextNumber": 21,
+            "startNumber": 1,
+            "status": "active",
+            "year": 2026
+          },
+          {
+            "endNumber": 200,
+            "entityType": "invoice_entry",
+            "nextNumber": 1,
+            "startNumber": 1,
+            "status": "active",
+            "year": 2026
+          },
+          {
+            "endNumber": 200,
+            "entityType": "voucher",
+            "nextNumber": 1,
+            "startNumber": 1,
+            "status": "active",
+            "year": 2026
+          },
+          {
+            "endNumber": 100,
+            "entityType": "return",
+            "nextNumber": 1,
+            "startNumber": 1,
+            "status": "active",
+            "year": 2026
+          },
+          {
+            "endNumber": 100,
+            "entityType": "expense",
+            "nextNumber": 1,
+            "startNumber": 1,
+            "status": "active",
+            "year": 2026
+          },
+          {
+            "endNumber": 100,
+            "entityType": "order",
+            "nextNumber": 1,
+            "startNumber": 1,
+            "status": "active",
+            "year": 2026
+          },
+          {
+            "endNumber": 100,
+            "entityType": "settlement",
+            "nextNumber": 1,
+            "startNumber": 1,
+            "status": "active",
+            "year": 2026
+          },
+          {
+            "endNumber": 100,
+            "entityType": "print",
+            "nextNumber": 1,
+            "startNumber": 1,
+            "status": "active",
+            "year": 2026
+          },
+          {
+            "endNumber": 100,
+            "entityType": "print_roll",
+            "nextNumber": 1,
+            "startNumber": 1,
+            "status": "active",
+            "year": 2026
+          }
+        ],
+        "pendingCount": 0,
+        "restore": null,
+        "statusCounts": {
+          "pending": 0,
+          "pushing": 0,
+          "rejected": 0,
+          "synced": 33
+        }
+      },
+      "B": {
+        "claimInventory": {
+          "byResourceType": [],
+          "claims": [],
+          "total": 0
+        },
+        "hubConfigured": true,
+        "hubUrl": "http://127.0.0.1:<port>",
+        "inboxStatusCounts": {
+          "applied": 33,
+          "dead": 0,
+          "received": 0,
+          "rejected": 0
+        },
+        "lastPullAt": "<ts>",
+        "lastPullSeq": 34,
+        "missingBlocks": [],
+        "numberBlocks": [
+          {
+            "endNumber": 1000,
+            "entityType": "customer",
+            "nextNumber": 501,
+            "startNumber": 501,
+            "status": "active",
+            "year": 2026
+          },
+          {
+            "endNumber": 1000,
+            "entityType": "supplier",
+            "nextNumber": 501,
+            "startNumber": 501,
+            "status": "active",
+            "year": 2026
+          },
+          {
+            "endNumber": 1000,
+            "entityType": "invoice",
+            "nextNumber": 531,
+            "startNumber": 501,
+            "status": "active",
+            "year": 2026
+          },
+          {
+            "endNumber": 400,
+            "entityType": "invoice_entry",
+            "nextNumber": 201,
+            "startNumber": 201,
+            "status": "active",
+            "year": 2026
+          },
+          {
+            "endNumber": 400,
+            "entityType": "voucher",
+            "nextNumber": 201,
+            "startNumber": 201,
+            "status": "active",
+            "year": 2026
+          },
+          {
+            "endNumber": 200,
+            "entityType": "return",
+            "nextNumber": 101,
+            "startNumber": 101,
+            "status": "active",
+            "year": 2026
+          },
+          {
+            "endNumber": 200,
+            "entityType": "expense",
+            "nextNumber": 101,
+            "startNumber": 101,
+            "status": "active",
+            "year": 2026
+          },
+          {
+            "endNumber": 200,
+            "entityType": "order",
+            "nextNumber": 101,
+            "startNumber": 101,
+            "status": "active",
+            "year": 2026
+          },
+          {
+            "endNumber": 200,
+            "entityType": "settlement",
+            "nextNumber": 101,
+            "startNumber": 101,
+            "status": "active",
+            "year": 2026
+          },
+          {
+            "endNumber": 200,
+            "entityType": "print",
+            "nextNumber": 101,
+            "startNumber": 101,
+            "status": "active",
+            "year": 2026
+          },
+          {
+            "endNumber": 200,
+            "entityType": "print_roll",
+            "nextNumber": 101,
+            "startNumber": 101,
+            "status": "active",
+            "year": 2026
+          }
+        ],
+        "pendingCount": 0,
+        "restore": null,
+        "statusCounts": {
+          "pending": 0,
+          "pushing": 0,
+          "rejected": 1,
+          "synced": 30
+        }
+      }
+    },
+    "label": "final.sync-status"
+  }
+]

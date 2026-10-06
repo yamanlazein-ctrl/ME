@@ -15,6 +15,7 @@ import { PostgresInvoiceRepository } from "@/infrastructure/repositories/Postgre
 import { PostgresRollRepository } from "@/infrastructure/repositories/PostgresRollRepository.js";
 import { PostgresReturnRepository } from "@/infrastructure/repositories/PostgresReturnRepository.js";
 import type { TenantContext } from "@/domain/types/index.js";
+import { pgOnly } from "./_helpers/engine.js";
 
 const tenantId = randomUUID();
 const customerId = randomUUID();
@@ -118,7 +119,9 @@ describe("audit v2 — confirmed findings", () => {
     expect(await rollKg(roll)).toBe(36); // 40 − 10 + 6
   });
 
-  it("F-008: financial_operations has row-level security enabled, forced, with a tenant policy", async () => {
+  // PG mechanism only (allowed delta RLS → app predicate, research I-13). SQLite equivalent:
+  // tests/sqlite/tenant-isolation.test.ts (T049) — zero cross-tenant reads/writes through every port.
+  it.skipIf(pgOnly)("F-008: financial_operations has row-level security enabled, forced, with a tenant policy", async () => {
     const [t] = rows(await db.execute(sql`select relrowsecurity r, relforcerowsecurity f from pg_class where relname = 'financial_operations'`));
     expect(t).toEqual({ r: true, f: true });
     const pol = rows(await db.execute(sql`select polname, pg_get_expr(polqual, polrelid) q, pg_get_expr(polwithcheck, polrelid) w from pg_policy where polrelid = 'financial_operations'::regclass`));

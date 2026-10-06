@@ -35,11 +35,20 @@ describe("fetchAllPaged", () => {
     expect(out).toEqual(rows);
   });
 
-  it("refuses to return a truncated list at maxPages (totals would be wrong)", async () => {
+  it("has no page cap: walks past the old 200/500-page limits to the end (track P)", async () => {
+    const pages = 1200;
+    const rows = await fetchAllPaged(
+      async (page, limit) => ({ data: [page * limit, page * limit + 1], hasNext: page + 1 < pages }),
+      { pageSize: 2, label: "t" },
+    );
+    expect(rows).toHaveLength(pages * 2);
+  });
+
+  it("refuses to return a truncated list when a keyset cursor does not advance", async () => {
     await expect(
       fetchAllPaged(
-        async (page, limit) => ({ data: pageOf(page, limit), hasNext: true }),
-        { pageSize: 10, maxPages: 2, label: "t" },
+        async (page, limit) => ({ data: pageOf(page, limit), nextCursor: "stuck" }),
+        { pageSize: 10, label: "t" },
       ),
     ).rejects.toThrow(/refusing to return a truncated list/);
   });

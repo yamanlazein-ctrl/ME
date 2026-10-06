@@ -29,6 +29,7 @@ use std::io;
 use std::os::windows::ffi::OsStrExt;
 use std::os::windows::io::AsRawHandle;
 use std::path::{Path, PathBuf};
+use std::sync::OnceLock;
 
 use windows::core::{BOOL, PWSTR};
 use windows::Win32::Foundation::{
@@ -37,6 +38,11 @@ use windows::Win32::Foundation::{
 use windows::Win32::System::Diagnostics::ToolHelp::{
     CreateToolhelp32Snapshot, Process32FirstW, Process32NextW, PROCESSENTRY32W,
     TH32CS_SNAPPROCESS,
+};
+use windows::Win32::System::JobObjects::{
+    AssignProcessToJobObject, CreateJobObjectW, JobObjectExtendedLimitInformation,
+    SetInformationJobObject, JOBOBJECT_EXTENDED_LIMIT_INFORMATION,
+    JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE,
 };
 use windows::Win32::System::Threading::{
     CreateProcessW, GetExitCodeProcess, TerminateProcess, WaitForSingleObject, CREATE_NO_WINDOW,
@@ -95,6 +101,68 @@ fn make_inheritable(file: &File) -> io::Result<HANDLE> {
 /// Owns the process/thread handles; closes them on drop. Keeps the stdio
 /// `File`s it was given alive for as long as the child might still be
 /// writing to them.
+// ── Process-tree kill guarantee (PR-1) ─────────────────────────────────────
+// Root cause this closes: `impl Drop for HiddenChild` only closes handles, it
+// does NOT terminate the child, and the shell has no Job Object. A force-close
+// (Task Manager), a hard crash, or a logoff therefore orphaned `postgres.exe`
+// (launched by `pg_ctl.exe`) and `node.exe`, which kept the pgdata lock, the
+// DB port and the named pipe `motard-erp`. The next launch raced that orphan
+// and failed to bind — the "won't reopen after Force Close / restart" bug.
+//
+// Fix: ONE process-wide job object created with JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE.
+// Every child this module spawns is assigned to it. Job membership is inherited
+// by descendants, so `postgres.exe` that `pg_ctl.exe` launches is captured
+// without extra work. When this process ends — for ANY reason — the OS closes
+// the job's last handle and terminates every member, releasing the lock/port/
+// pipe instantly. The reactive reapers in `runtime::stack` remain as a second
+// line of defense (they still run), just no longer load-bearing.
+pub struct KillJob(HANDLE);
+// SAFETY: a Job Object HANDLE is a kernel handle. We only read its value and
+// pass it to AssignProcessToJobObject, and we intentionally never close it so
+// it lives for the whole process and the OS performs the kill on exit.
+unsafe impl Send for KillJob {}
+unsafe impl Sync for KillJob {}
+
+/// The shared kill job, created once and held for the process lifetime. Returns
+/// `None` only if the OS refused to create it — we then degrade to the previous
+//  behavior (boot-time reaper) rather than refusing to spawn the app.
+fn kill_job() -> Option<HANDLE> {
+    static JOB: OnceLock<Option<KillJob>> = OnceLock::new();
+    JOB.get_or_init(|| match create_kill_job() {
+        Ok(handle) => Some(KillJob(handle)),
+        Err(e) => {
+            crate::runtime::log(&format!(
+                "warning: kill job object unavailable ({e}) — falling back to boot-time reaper"
+            ));
+            None
+        }
+    })
+    .as_ref()
+    .map(|job| job.0)
+}
+
+fn create_kill_job() -> io::Result<HANDLE> {
+    unsafe {
+        let job = CreateJobObjectW(None, None)
+            .map_err(|e| io::Error::new(io::ErrorKind::Other, format!("CreateJobObjectW: {e}")))?;
+        let mut info = JOBOBJECT_EXTENDED_LIMIT_INFORMATION::default();
+        info.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
+        if let Err(e) = SetInformationJobObject(
+            job,
+            JobObjectExtendedLimitInformation,
+            &info as *const JOBOBJECT_EXTENDED_LIMIT_INFORMATION as *const c_void,
+            std::mem::size_of::<JOBOBJECT_EXTENDED_LIMIT_INFORMATION>() as u32,
+        ) {
+            let _ = CloseHandle(job);
+            return Err(io::Error::new(
+                io::ErrorKind::Other,
+                format!("SetInformationJobObject: {e}"),
+            ));
+        }
+        Ok(job)
+    }
+}
+
 pub struct HiddenChild {
     process: HANDLE,
     thread: HANDLE,
@@ -162,31 +230,73 @@ impl HiddenChild {
 /// allocating the console, detect it immediately after spawn and hide it
 /// instead: find the conhost.exe that is a direct child of `pid` (that's
 /// what actually owns the visible console window on modern Windows) and
-/// hide every top-level window it owns. Runs in a background thread and
-/// retries for a few seconds, since the console isn't allocated the instant
-/// CreateProcessW returns. Scoped strictly to descendants of `pid` — this
-/// never touches an unrelated console window elsewhere on the system (e.g.
-/// the user's own terminal).
+/// hide every top-level window it owns — AND any top-level window owned by
+/// `pid` itself (some Windows builds attach the console chrome to node).
+/// Runs in a background thread and retries for a few seconds, since the
+/// console isn't allocated the instant CreateProcessW returns. Scoped
+/// strictly to `pid` and its descendants — never touches an unrelated
+/// console window elsewhere on the system (e.g. the user's own terminal).
 pub fn hide_stray_console_async(pid: u32) {
     std::thread::spawn(move || {
-        for _ in 0..40 {
+        for _ in 0..60 {
             let mut hid_any = false;
+            hide_windows_owned_by(pid);
             for conhost_pid in child_processes_named(pid, "conhost.exe") {
                 hide_windows_owned_by(conhost_pid);
                 hid_any = true;
             }
+            // Also hide consoles owned by immediate children (pg_ctl → postgres,
+            // node workers) so a flash from a grandchild never sticks.
+            for child_pid in child_process_ids(pid) {
+                hide_windows_owned_by(child_pid);
+                for conhost_pid in child_processes_named(child_pid, "conhost.exe") {
+                    hide_windows_owned_by(conhost_pid);
+                    hid_any = true;
+                }
+            }
             if hid_any {
-                // Keep sweeping briefly in case the window re-shows itself
-                // right after creation, then stop — it's not going anywhere.
-                std::thread::sleep(std::time::Duration::from_millis(500));
+                std::thread::sleep(std::time::Duration::from_millis(400));
+                hide_windows_owned_by(pid);
                 for conhost_pid in child_processes_named(pid, "conhost.exe") {
                     hide_windows_owned_by(conhost_pid);
                 }
+                for child_pid in child_process_ids(pid) {
+                    hide_windows_owned_by(child_pid);
+                    for conhost_pid in child_processes_named(child_pid, "conhost.exe") {
+                        hide_windows_owned_by(conhost_pid);
+                    }
+                }
                 return;
             }
-            std::thread::sleep(std::time::Duration::from_millis(100));
+            std::thread::sleep(std::time::Duration::from_millis(80));
         }
     });
+}
+
+fn child_process_ids(parent_pid: u32) -> Vec<u32> {
+    let mut result = Vec::new();
+    unsafe {
+        let snapshot = match CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0) {
+            Ok(h) => h,
+            Err(_) => return result,
+        };
+        let mut entry = PROCESSENTRY32W {
+            dwSize: std::mem::size_of::<PROCESSENTRY32W>() as u32,
+            ..Default::default()
+        };
+        if Process32FirstW(snapshot, &mut entry).is_ok() {
+            loop {
+                if entry.th32ParentProcessID == parent_pid {
+                    result.push(entry.th32ProcessID);
+                }
+                if Process32NextW(snapshot, &mut entry).is_err() {
+                    break;
+                }
+            }
+        }
+        let _ = CloseHandle(snapshot);
+    }
+    result
 }
 
 fn child_processes_named(parent_pid: u32, name: &str) -> Vec<u32> {
@@ -450,6 +560,21 @@ impl HiddenCommand {
             .map_err(|e| io::Error::new(io::ErrorKind::Other, format!("CreateProcessW({}): {e}", self.program)))?;
         }
 
+        // Bind the fresh child to the kill job (see `kill_job`). Membership is
+        // inherited, so descendants (postgres.exe that pg_ctl.exe launches,
+        // node.exe's children) are covered automatically. Non-fatal on failure:
+        // the boot-time reaper in `runtime::stack` still reaps the orphan.
+        if let Some(job) = kill_job() {
+            unsafe {
+                if let Err(e) = AssignProcessToJobObject(job, process_info.hProcess) {
+                    crate::runtime::log(&format!(
+                        "warning: could not assign pid {} to kill job ({e})",
+                        process_info.dwProcessId
+                    ));
+                }
+            }
+        }
+
         Ok(HiddenChild {
             process: process_info.hProcess,
             thread: process_info.hThread,
@@ -496,6 +621,23 @@ mod tests {
         assert!(
             child.kill_and_wait(5_000),
             "child must exit within wait window after TerminateProcess"
+        );
+    }
+
+    #[test]
+    fn kill_job_is_created_once_and_reused() {
+        // PR-1 smoke test on real Windows: the process-wide kill job must be
+        // created successfully and stably. The full kill-on-close guarantee
+        // (Force Close -> no orphans holding the pipe/pgdata) is verified by the
+        // runtime acceptance run; this proves the OS accepted our job
+        // configuration on this platform and that the shared job is created
+        // exactly once (so every child lands in the SAME job).
+        let h1 = kill_job().expect("kill job must be created on Windows");
+        let h2 = kill_job().expect("kill job must be created on Windows");
+        assert_eq!(
+            h1.0 as usize,
+            h2.0 as usize,
+            "the kill job must be created once and reused across spawns"
         );
     }
 

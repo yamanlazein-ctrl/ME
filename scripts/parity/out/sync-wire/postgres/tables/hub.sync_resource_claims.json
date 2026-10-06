@@ -1,0 +1,15 @@
+[
+  {
+    "claimed_at": "<ts>",
+    "claimed_by_device_id": "#00056",
+    "claimed_by_op_id": "#00235",
+    "entity_id": "#00012",
+    "entity_type": "party",
+    "id": "#01551",
+    "quantity_kg": null,
+    "quantity_pieces": null,
+    "resource_id": "#00012",
+    "resource_type": "party",
+    "tenant_id": "#00003"
+  }
+]

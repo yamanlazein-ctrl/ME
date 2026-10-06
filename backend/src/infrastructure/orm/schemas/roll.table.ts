@@ -32,6 +32,12 @@ export const rolls = pgTable(
     pricePerKg: decimal("price_per_kg", { precision: 14, scale: 4 }).notNull(),
     salePricePerKg: decimal("sale_price_per_kg", { precision: 12, scale: 2 }),
     currency: varchar("currency", { length: 3 }).notNull().default("SYP"),
+    // The ACTUAL entry price of this exact roll, written once when the stock entered (purchase line,
+    // printing-factory receive or stock-in) and never changed by an edit of the cost price above.
+    entryPricePerKg: decimal("entry_price_per_kg", { precision: 14, scale: 4 }),
+    entryCurrency: varchar("entry_currency", { length: 3 }),
+    entrySource: varchar("entry_source", { length: 20 }),
+    entryReference: varchar("entry_reference", { length: 100 }),
     supplierId: uuid("supplier_id").references(() => parties.id),
     entryDate: date("entry_date").notNull(),
     widthCm: decimal("width_cm", { precision: 7, scale: 2 }),

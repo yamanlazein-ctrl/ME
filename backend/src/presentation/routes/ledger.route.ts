@@ -10,7 +10,7 @@ import type { ISyncOutboxRepository } from "../../application/ports/ISyncOutboxR
 import type { TenantContext } from "../../domain/types/index.js";
 import { randomUUID } from "node:crypto";
 import { logger } from "../../infrastructure/config/logger.js";
-import { withTenantTx } from "../../infrastructure/orm/drizzle.js";
+import { withTenantTx } from "../../infrastructure/orm/engine.js";
 import {
   enqueueLedgerCancel,
   enqueueLedgerCreate,

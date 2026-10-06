@@ -1,9 +1,7 @@
 import { randomUUID, createHash } from "node:crypto";
-import { eq, sql } from "drizzle-orm";
 import { logger } from "../../../infrastructure/config/logger.js";
-import { db, type DB } from "../../../infrastructure/orm/drizzle.js";
-import { runWithTenantContext } from "../../../infrastructure/orm/tenant-context.js";
-import { syncState } from "../../../infrastructure/orm/schemas/sync-state.table.js";
+import type { DB } from "../../../infrastructure/orm/drizzle.js";
+import { getSyncStateStore } from "../../../infrastructure/repositories/engineStores.js";
 import type { ISyncOutboxRepository } from "../../ports/ISyncOutboxRepository.js";
 import { DEFAULT_PUSHING_LEASE_MS } from "../../../infrastructure/repositories/PostgresSyncOutboxRepository.js";
 import type { ISyncInboxRepository, SyncInboxRow } from "../../ports/ISyncInboxRepository.js";
@@ -690,18 +688,8 @@ export async function withPartyOpening(
   if (unit.entityType !== "party" || unit.operation !== "create") return unit.payload;
   const snap = unit.payload.snapshot as Record<string, unknown> | undefined;
   if (!snap || snap.openingBalance !== undefined) return unit.payload;
-  const rows = await runWithTenantContext({ tenantId }, async () => {
-    const r = await db.execute(sql`
-      SELECT p.opening_balance::float8 AS amount,
-             (SELECT min(le.date)::text FROM ledger_entries le
-               WHERE le.tenant_id = p.tenant_id AND le.reference_type = 'opening'
-                 AND le.reference_id = p.id) AS date
-        FROM parties p WHERE p.tenant_id = ${tenantId} AND p.id = ${unit.entityId}::uuid`);
-    return (Array.isArray(r) ? r : ((r as { rows?: unknown[] }).rows ?? [])) as Array<{
-      amount: number | null;
-      date: string | null;
-    }>;
-  });
+  const opening = await (await getSyncStateStore()).partyOpening(tenantId, unit.entityId);
+  const rows = opening ? [opening] : [];
   const amount = Number(rows[0]?.amount ?? 0);
   if (!amount) return unit.payload;
   return {
@@ -714,9 +702,7 @@ export async function withPartyOpening(
 export const ORDERED_LANE_WAITING = "بانتظار إرسال عملية سابقة لها";
 
 export async function resetPullCursor(tenantId: string): Promise<void> {
-  await runWithTenantContext({ tenantId }, async () => {
-    await db.delete(syncState).where(eq(syncState.tenantId, tenantId));
-  });
+  await (await getSyncStateStore()).resetPullCursor(tenantId);
 }
 
 export async function runLocalSyncPull(
@@ -739,11 +725,19 @@ export async function runLocalSyncPull(
    * the pull loop — failures are logged and swallowed.
    */
   onApplied?: (unit: PulledUnit) => Promise<void>,
+  /**
+   * Restore on a synced device (T109): returns true when the pulled unit is one of THIS database's
+   * own restored operations that the hub already holds (same op-id, pushed under the previous sync
+   * identity). Its effect is already in the restored data, so it is acknowledged, not re-applied.
+   */
+  isOwnRestoredUnit?: (unit: PulledUnit) => Promise<boolean>,
 ): Promise<{
   pulled: number;
   applied: number;
   skipped: number;
   failed: number;
+  /** Own restored units acknowledged instead of applied (T109). */
+  acknowledged?: number;
   /** 4B: set when the hub refused the DEVICE (revoked / unknown / not bound). */
   deviceTrust?: SyncDeviceTrustFailure;
 }> {
@@ -821,6 +815,7 @@ export async function runLocalSyncPull(
   let applied = 0;
   let skipped = 0;
   let failed = 0;
+  let acknowledged = 0;
   // Cursor bookkeeping is computed AFTER the page is processed (see below).
   const afterSeqCursor = afterSeq;
   const previousPullAt = cursor.lastPullAt;
@@ -921,6 +916,13 @@ export async function runLocalSyncPull(
     if (localRow && (localRow.status === "applied" || localRow.status === "dead")) {
       if (localRow.status === "applied") applied += 1;
       else skipped += 1;
+      processed.push({ seq, receivedAt, blocked: false });
+      continue;
+    }
+
+    if (isOwnRestoredUnit && (await isOwnRestoredUnit(unit))) {
+      acknowledged += 1;
+      await markLocalApplied(unit.opId);
       processed.push({ seq, receivedAt, blocked: false });
       continue;
     }
@@ -1036,7 +1038,7 @@ export async function runLocalSyncPull(
     await setPullCursor(ctx.tenantId, newSeq, newAt);
   }
 
-  return { pulled: body.items?.length ?? 0, applied, skipped, failed, deviceTrust: null };
+  return { pulled: body.items?.length ?? 0, applied, skipped, failed, acknowledged, deviceTrust: null };
 }
 
 /**
@@ -2177,30 +2179,11 @@ function buildConflictMessage(
 async function getPullCursor(
   tenantId: string,
 ): Promise<{ lastPullSeq: number | null; lastPullAt: Date | null }> {
-  return runWithTenantContext({ tenantId }, async () => {
-    const [row] = await db
-      .select()
-      .from(syncState)
-      .where(eq(syncState.tenantId, tenantId))
-      .limit(1);
-    return {
-      lastPullSeq: row?.lastPullSeq ?? null,
-      lastPullAt: row?.lastPullAt ?? null,
-    };
-  });
+  return (await getSyncStateStore()).getPullCursor(tenantId);
 }
 
 async function setPullCursor(tenantId: string, seq: number, at: Date | null): Promise<void> {
-  await runWithTenantContext({ tenantId }, async () => {
-    await db
-      .insert(syncState)
-      .values({ tenantId, lastPullSeq: seq, lastPullAt: at, updatedAt: new Date() })
-      .onConflictDoUpdate({
-        target: [syncState.tenantId],
-        set: { lastPullSeq: seq, lastPullAt: at, updatedAt: new Date() },
-        setWhere: sql`sync_state.last_pull_seq IS NULL OR sync_state.last_pull_seq <= ${seq}`,
-      });
-  });
+  await (await getSyncStateStore()).setPullCursor(tenantId, seq, at);
 }
 
 function isUuid(value: string): boolean {

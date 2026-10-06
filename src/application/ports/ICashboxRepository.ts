@@ -74,6 +74,8 @@ export interface ICashboxRepository {
     ctx: TenantContext,
   ): Promise<void>;
   cashBalanceOn(date: string, ctx: TenantContext, currency?: string): Promise<number>;
+  /** Every currency's drawer balance on `date`, as returned by the unscoped endpoint. */
+  cashBalancesOn(date: string, ctx: TenantContext): Promise<Record<string, number>>;
   cashMovementsOn(date: string, ctx: TenantContext): Promise<DayCashFlowDTO>;
   isDayLocked(date: string, ctx: TenantContext): Promise<boolean>;
   listManualMovements(ctx: TenantContext): Promise<ManualMovementDTO[]>;

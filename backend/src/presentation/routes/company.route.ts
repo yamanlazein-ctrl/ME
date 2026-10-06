@@ -13,7 +13,7 @@ import {
 } from "../../application/use-cases/sync/syncEnqueue.js";
 import { createAuthMiddleware } from "../../infrastructure/http/middleware/auth.middleware.js";
 import { rbac } from "../../infrastructure/http/middleware/rbac.middleware.js";
-import { withTenantTx } from "../../infrastructure/orm/drizzle.js";
+import { withTenantTx } from "../../infrastructure/orm/engine.js";
 
 /**
  * Phase 0 sub-batch 0H — company profile routes.

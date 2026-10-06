@@ -1,0 +1,1189 @@
+[
+  {
+    "body": {
+      "amountDue": 40,
+      "baseTotal": 40,
+      "createdAt": "<ts>",
+      "createdBy": "#00001",
+      "creditApplied": 0,
+      "currency": "USD",
+      "date": "2026-10-06",
+      "discount": 0,
+      "exchangeRate": 1,
+      "id": "#00002",
+      "lines": [
+        {
+          "colorId": "#00003",
+          "costPerKg": 2,
+          "discountAmount": 0,
+          "fabricId": "#00004",
+          "id": "#00005",
+          "pieces": 1,
+          "pricePerKg": 4,
+          "quantityKg": 10,
+          "rollId": "#00006"
+        }
+      ],
+      "linkedVoucherId": null,
+      "number": "INV-2026-0001",
+      "paid": 0,
+      "partyId": "#00007",
+      "partyType": "customer",
+      "paymentMethod": null,
+      "reference": "INV-2026-0001",
+      "shipping": 0,
+      "status": "active",
+      "subtotal": 40,
+      "tax": 0,
+      "tenantId": "#00008",
+      "total": 40,
+      "type": "sale",
+      "updatedAt": "<ts>",
+      "version": 1
+    },
+    "label": "day1.invoice",
+    "method": "POST",
+    "path": "/api/invoices",
+    "status": 201
+  },
+  {
+    "body": {
+      "amount": 15,
+      "attachments": [],
+      "baseAmount": 15,
+      "createdAt": "<ts>",
+      "createdBy": "#00001",
+      "currency": "USD",
+      "date": "2026-10-06",
+      "discount": 0,
+      "exchangeRate": 1,
+      "id": "#00009",
+      "kind": "receipt",
+      "method": "cash",
+      "number": "VOC-2026-0001",
+      "partyId": "#00007",
+      "partyKind": "customer",
+      "status": "active",
+      "tenantId": "#00008",
+      "updatedAt": "<ts>",
+      "version": 1
+    },
+    "label": "day1.receipt",
+    "method": "POST",
+    "path": "/api/receipts",
+    "status": 201
+  },
+  {
+    "body": {
+      "colorId": "#00003",
+      "createdAt": "<ts>",
+      "currency": "USD",
+      "entryDate": "2026-10-06",
+      "id": "#00010",
+      "initialKg": 50,
+      "pieces": 5,
+      "pricePerKg": 2,
+      "remainingKg": 50,
+      "remainingPieces": 5,
+      "rollNo": "OFF-R1",
+      "status": "in_stock",
+      "tenantId": "#00008",
+      "updatedAt": "<ts>",
+      "version": 1
+    },
+    "label": "day1.stock-in",
+    "method": "POST",
+    "path": "/api/inventory/rolls",
+    "status": 201
+  },
+  {
+    "body": {
+      "currency": "SYP",
+      "entries": [],
+      "finalBalance": 0,
+      "fromDate": null,
+      "kind": "customer",
+      "page": {
+        "balanceBeforePage": 0,
+        "balanceBeforePageByCurrency": {
+          "SYP": 0
+        },
+        "hasMore": false,
+        "limit": 500,
+        "nextCursor": null
+      },
+      "partyCode": "CUS-2026-0001",
+      "partyId": "#00007",
+      "partyName": "Offline Customer",
+      "previousBalance": 0,
+      "toDate": null,
+      "totalCredit": 0,
+      "totalDebit": 0,
+      "totalsByCurrency": {
+        "SYP": {
+          "availableCredit": 0,
+          "balanceSide": "zero",
+          "finalBalance": 0,
+          "previousBalance": 0,
+          "totalCredit": 0,
+          "totalDebit": 0
+        }
+      },
+      "type": null
+    },
+    "label": "day1.statement",
+    "method": "GET",
+    "path": "/api/customers/#00007/statement?limit=500",
+    "status": 200
+  },
+  {
+    "body": {
+      "claimInventory": {
+        "byResourceType": [],
+        "claims": [],
+        "total": 0
+      },
+      "hubConfigured": true,
+      "hubUrl": "http://127.0.0.1:<port>",
+      "inboxStatusCounts": {
+        "applied": 0,
+        "dead": 0,
+        "received": 0,
+        "rejected": 0
+      },
+      "lastPullAt": null,
+      "lastPullSeq": null,
+      "missingBlocks": [],
+      "numberBlocks": [
+        {
+          "endNumber": 500,
+          "entityType": "invoice",
+          "nextNumber": 2,
+          "startNumber": 1,
+          "status": "active",
+          "year": 2026
+        },
+        {
+          "endNumber": 200,
+          "entityType": "invoice_entry",
+          "nextNumber": 1,
+          "startNumber": 1,
+          "status": "active",
+          "year": 2026
+        },
+        {
+          "endNumber": 500,
+          "entityType": "customer",
+          "nextNumber": 2,
+          "startNumber": 1,
+          "status": "active",
+          "year": 2026
+        },
+        {
+          "endNumber": 500,
+          "entityType": "supplier",
+          "nextNumber": 1,
+          "startNumber": 1,
+          "status": "active",
+          "year": 2026
+        },
+        {
+          "endNumber": 200,
+          "entityType": "voucher",
+          "nextNumber": 2,
+          "startNumber": 1,
+          "status": "active",
+          "year": 2026
+        },
+        {
+          "endNumber": 100,
+          "entityType": "return",
+          "nextNumber": 1,
+          "startNumber": 1,
+          "status": "active",
+          "year": 2026
+        },
+        {
+          "endNumber": 100,
+          "entityType": "expense",
+          "nextNumber": 1,
+          "startNumber": 1,
+          "status": "active",
+          "year": 2026
+        },
+        {
+          "endNumber": 100,
+          "entityType": "order",
+          "nextNumber": 1,
+          "startNumber": 1,
+          "status": "active",
+          "year": 2026
+        },
+        {
+          "endNumber": 100,
+          "entityType": "settlement",
+          "nextNumber": 1,
+          "startNumber": 1,
+          "status": "active",
+          "year": 2026
+        },
+        {
+          "endNumber": 100,
+          "entityType": "print",
+          "nextNumber": 1,
+          "startNumber": 1,
+          "status": "active",
+          "year": 2026
+        },
+        {
+          "endNumber": 100,
+          "entityType": "print_roll",
+          "nextNumber": 1,
+          "startNumber": 1,
+          "status": "active",
+          "year": 2026
+        }
+      ],
+      "pendingCount": 7,
+      "restore": null,
+      "statusCounts": {
+        "pending": 7,
+        "pushing": 0,
+        "rejected": 0,
+        "synced": 0
+      }
+    },
+    "label": "day1.sync-status",
+    "method": "GET",
+    "path": "/api/sync/status",
+    "status": 200
+  },
+  {
+    "body": {
+      "code": "NO_ACTIVE_LICENSE",
+      "message": "لا توجد ترخيص نشط",
+      "statusCode": 404
+    },
+    "label": "day1.license",
+    "method": "GET",
+    "path": "/api/license/status",
+    "status": 404
+  },
+  {
+    "body": {
+      "amountDue": 40,
+      "baseTotal": 40,
+      "createdAt": "<ts>",
+      "createdBy": "#00001",
+      "creditApplied": 0,
+      "currency": "USD",
+      "date": "2026-10-12",
+      "discount": 0,
+      "exchangeRate": 1,
+      "id": "#00011",
+      "lines": [
+        {
+          "colorId": "#00003",
+          "costPerKg": 2,
+          "discountAmount": 0,
+          "fabricId": "#00004",
+          "id": "#00012",
+          "pieces": 1,
+          "pricePerKg": 4,
+          "quantityKg": 10,
+          "rollId": "#00006"
+        }
+      ],
+      "linkedVoucherId": null,
+      "number": "INV-2026-0002",
+      "paid": 0,
+      "partyId": "#00007",
+      "partyType": "customer",
+      "paymentMethod": null,
+      "reference": "INV-2026-0002",
+      "shipping": 0,
+      "status": "active",
+      "subtotal": 40,
+      "tax": 0,
+      "tenantId": "#00008",
+      "total": 40,
+      "type": "sale",
+      "updatedAt": "<ts>",
+      "version": 1
+    },
+    "label": "day7.invoice",
+    "method": "POST",
+    "path": "/api/invoices",
+    "status": 201
+  },
+  {
+    "body": {
+      "amount": 15,
+      "attachments": [],
+      "baseAmount": 15,
+      "createdAt": "<ts>",
+      "createdBy": "#00001",
+      "currency": "USD",
+      "date": "2026-10-12",
+      "discount": 0,
+      "exchangeRate": 1,
+      "id": "#00013",
+      "kind": "receipt",
+      "method": "cash",
+      "number": "VOC-2026-0002",
+      "partyId": "#00007",
+      "partyKind": "customer",
+      "status": "active",
+      "tenantId": "#00008",
+      "updatedAt": "<ts>",
+      "version": 1
+    },
+    "label": "day7.receipt",
+    "method": "POST",
+    "path": "/api/receipts",
+    "status": 201
+  },
+  {
+    "body": {
+      "colorId": "#00003",
+      "createdAt": "<ts>",
+      "currency": "USD",
+      "entryDate": "2026-10-12",
+      "id": "#00014",
+      "initialKg": 50,
+      "pieces": 5,
+      "pricePerKg": 2,
+      "remainingKg": 50,
+      "remainingPieces": 5,
+      "rollNo": "OFF-R7",
+      "status": "in_stock",
+      "tenantId": "#00008",
+      "updatedAt": "<ts>",
+      "version": 1
+    },
+    "label": "day7.stock-in",
+    "method": "POST",
+    "path": "/api/inventory/rolls",
+    "status": 201
+  },
+  {
+    "body": {
+      "amountDue": 40,
+      "baseTotal": 40,
+      "cancelledAt": "<ts>",
+      "cancelledBy": "#00001",
+      "createdAt": "<ts>",
+      "createdBy": "#00001",
+      "creditApplied": 0,
+      "currency": "USD",
+      "date": "2026-10-06",
+      "discount": 0,
+      "exchangeRate": 1,
+      "id": "#00002",
+      "lines": [
+        {
+          "colorId": "#00003",
+          "costPerKg": 2,
+          "discountAmount": 0,
+          "fabricId": "#00004",
+          "id": "#00005",
+          "pieces": 1,
+          "pricePerKg": 4,
+          "quantityKg": 10,
+          "rollId": "#00006"
+        }
+      ],
+      "number": "INV-2026-0001",
+      "paid": 0,
+      "partyId": "#00007",
+      "partyType": "customer",
+      "paymentMethod": null,
+      "reference": "INV-2026-0001",
+      "shipping": 0,
+      "status": "cancelled",
+      "subtotal": 40,
+      "tax": 0,
+      "tenantId": "#00008",
+      "total": 40,
+      "type": "sale",
+      "updatedAt": "<ts>",
+      "version": 2
+    },
+    "label": "day7.cancel-previous",
+    "method": "POST",
+    "path": "/api/invoices/#00002/cancel",
+    "status": 200
+  },
+  {
+    "body": {
+      "currency": "SYP",
+      "entries": [],
+      "finalBalance": 0,
+      "fromDate": null,
+      "kind": "customer",
+      "page": {
+        "balanceBeforePage": 0,
+        "balanceBeforePageByCurrency": {
+          "SYP": 0
+        },
+        "hasMore": false,
+        "limit": 500,
+        "nextCursor": null
+      },
+      "partyCode": "CUS-2026-0001",
+      "partyId": "#00007",
+      "partyName": "Offline Customer",
+      "previousBalance": 0,
+      "toDate": null,
+      "totalCredit": 0,
+      "totalDebit": 0,
+      "totalsByCurrency": {
+        "SYP": {
+          "availableCredit": 0,
+          "balanceSide": "zero",
+          "finalBalance": 0,
+          "previousBalance": 0,
+          "totalCredit": 0,
+          "totalDebit": 0
+        }
+      },
+      "type": null
+    },
+    "label": "day7.statement",
+    "method": "GET",
+    "path": "/api/customers/#00007/statement?limit=500",
+    "status": 200
+  },
+  {
+    "body": {
+      "claimInventory": {
+        "byResourceType": [],
+        "claims": [],
+        "total": 0
+      },
+      "hubConfigured": true,
+      "hubUrl": "http://127.0.0.1:<port>",
+      "inboxStatusCounts": {
+        "applied": 0,
+        "dead": 0,
+        "received": 0,
+        "rejected": 0
+      },
+      "lastPullAt": null,
+      "lastPullSeq": null,
+      "missingBlocks": [],
+      "numberBlocks": [
+        {
+          "endNumber": 500,
+          "entityType": "invoice",
+          "nextNumber": 3,
+          "startNumber": 1,
+          "status": "active",
+          "year": 2026
+        },
+        {
+          "endNumber": 200,
+          "entityType": "invoice_entry",
+          "nextNumber": 1,
+          "startNumber": 1,
+          "status": "active",
+          "year": 2026
+        },
+        {
+          "endNumber": 500,
+          "entityType": "customer",
+          "nextNumber": 2,
+          "startNumber": 1,
+          "status": "active",
+          "year": 2026
+        },
+        {
+          "endNumber": 500,
+          "entityType": "supplier",
+          "nextNumber": 1,
+          "startNumber": 1,
+          "status": "active",
+          "year": 2026
+        },
+        {
+          "endNumber": 200,
+          "entityType": "voucher",
+          "nextNumber": 3,
+          "startNumber": 1,
+          "status": "active",
+          "year": 2026
+        },
+        {
+          "endNumber": 100,
+          "entityType": "return",
+          "nextNumber": 1,
+          "startNumber": 1,
+          "status": "active",
+          "year": 2026
+        },
+        {
+          "endNumber": 100,
+          "entityType": "expense",
+          "nextNumber": 1,
+          "startNumber": 1,
+          "status": "active",
+          "year": 2026
+        },
+        {
+          "endNumber": 100,
+          "entityType": "order",
+          "nextNumber": 1,
+          "startNumber": 1,
+          "status": "active",
+          "year": 2026
+        },
+        {
+          "endNumber": 100,
+          "entityType": "settlement",
+          "nextNumber": 1,
+          "startNumber": 1,
+          "status": "active",
+          "year": 2026
+        },
+        {
+          "endNumber": 100,
+          "entityType": "print",
+          "nextNumber": 1,
+          "startNumber": 1,
+          "status": "active",
+          "year": 2026
+        },
+        {
+          "endNumber": 100,
+          "entityType": "print_roll",
+          "nextNumber": 1,
+          "startNumber": 1,
+          "status": "active",
+          "year": 2026
+        }
+      ],
+      "pendingCount": 11,
+      "restore": null,
+      "statusCounts": {
+        "pending": 11,
+        "pushing": 0,
+        "rejected": 0,
+        "synced": 0
+      }
+    },
+    "label": "day7.sync-status",
+    "method": "GET",
+    "path": "/api/sync/status",
+    "status": 200
+  },
+  {
+    "body": {
+      "code": "NO_ACTIVE_LICENSE",
+      "message": "لا توجد ترخيص نشط",
+      "statusCode": 404
+    },
+    "label": "day7.license",
+    "method": "GET",
+    "path": "/api/license/status",
+    "status": 404
+  },
+  {
+    "body": {
+      "amountDue": 40,
+      "baseTotal": 40,
+      "createdAt": "<ts>",
+      "createdBy": "#00001",
+      "creditApplied": 0,
+      "currency": "USD",
+      "date": "2026-11-04",
+      "discount": 0,
+      "exchangeRate": 1,
+      "id": "#00015",
+      "lines": [
+        {
+          "colorId": "#00003",
+          "costPerKg": 2,
+          "discountAmount": 0,
+          "fabricId": "#00004",
+          "id": "#00016",
+          "pieces": 1,
+          "pricePerKg": 4,
+          "quantityKg": 10,
+          "rollId": "#00006"
+        }
+      ],
+      "linkedVoucherId": null,
+      "number": "INV-2026-0003",
+      "paid": 0,
+      "partyId": "#00007",
+      "partyType": "customer",
+      "paymentMethod": null,
+      "reference": "INV-2026-0003",
+      "shipping": 0,
+      "status": "active",
+      "subtotal": 40,
+      "tax": 0,
+      "tenantId": "#00008",
+      "total": 40,
+      "type": "sale",
+      "updatedAt": "<ts>",
+      "version": 1
+    },
+    "label": "day30.invoice",
+    "method": "POST",
+    "path": "/api/invoices",
+    "status": 201
+  },
+  {
+    "body": {
+      "amount": 15,
+      "attachments": [],
+      "baseAmount": 15,
+      "createdAt": "<ts>",
+      "createdBy": "#00001",
+      "currency": "USD",
+      "date": "2026-11-04",
+      "discount": 0,
+      "exchangeRate": 1,
+      "id": "#00017",
+      "kind": "receipt",
+      "method": "cash",
+      "number": "VOC-2026-0003",
+      "partyId": "#00007",
+      "partyKind": "customer",
+      "status": "active",
+      "tenantId": "#00008",
+      "updatedAt": "<ts>",
+      "version": 1
+    },
+    "label": "day30.receipt",
+    "method": "POST",
+    "path": "/api/receipts",
+    "status": 201
+  },
+  {
+    "body": {
+      "colorId": "#00003",
+      "createdAt": "<ts>",
+      "currency": "USD",
+      "entryDate": "2026-11-04",
+      "id": "#00018",
+      "initialKg": 50,
+      "pieces": 5,
+      "pricePerKg": 2,
+      "remainingKg": 50,
+      "remainingPieces": 5,
+      "rollNo": "OFF-R30",
+      "status": "in_stock",
+      "tenantId": "#00008",
+      "updatedAt": "<ts>",
+      "version": 1
+    },
+    "label": "day30.stock-in",
+    "method": "POST",
+    "path": "/api/inventory/rolls",
+    "status": 201
+  },
+  {
+    "body": {
+      "amountDue": 40,
+      "baseTotal": 40,
+      "cancelledAt": "<ts>",
+      "cancelledBy": "#00001",
+      "createdAt": "<ts>",
+      "createdBy": "#00001",
+      "creditApplied": 0,
+      "currency": "USD",
+      "date": "2026-10-12",
+      "discount": 0,
+      "exchangeRate": 1,
+      "id": "#00011",
+      "lines": [
+        {
+          "colorId": "#00003",
+          "costPerKg": 2,
+          "discountAmount": 0,
+          "fabricId": "#00004",
+          "id": "#00012",
+          "pieces": 1,
+          "pricePerKg": 4,
+          "quantityKg": 10,
+          "rollId": "#00006"
+        }
+      ],
+      "number": "INV-2026-0002",
+      "paid": 0,
+      "partyId": "#00007",
+      "partyType": "customer",
+      "paymentMethod": null,
+      "reference": "INV-2026-0002",
+      "shipping": 0,
+      "status": "cancelled",
+      "subtotal": 40,
+      "tax": 0,
+      "tenantId": "#00008",
+      "total": 40,
+      "type": "sale",
+      "updatedAt": "<ts>",
+      "version": 2
+    },
+    "label": "day30.cancel-previous",
+    "method": "POST",
+    "path": "/api/invoices/#00011/cancel",
+    "status": 200
+  },
+  {
+    "body": {
+      "currency": "SYP",
+      "entries": [],
+      "finalBalance": 0,
+      "fromDate": null,
+      "kind": "customer",
+      "page": {
+        "balanceBeforePage": 0,
+        "balanceBeforePageByCurrency": {
+          "SYP": 0
+        },
+        "hasMore": false,
+        "limit": 500,
+        "nextCursor": null
+      },
+      "partyCode": "CUS-2026-0001",
+      "partyId": "#00007",
+      "partyName": "Offline Customer",
+      "previousBalance": 0,
+      "toDate": null,
+      "totalCredit": 0,
+      "totalDebit": 0,
+      "totalsByCurrency": {
+        "SYP": {
+          "availableCredit": 0,
+          "balanceSide": "zero",
+          "finalBalance": 0,
+          "previousBalance": 0,
+          "totalCredit": 0,
+          "totalDebit": 0
+        }
+      },
+      "type": null
+    },
+    "label": "day30.statement",
+    "method": "GET",
+    "path": "/api/customers/#00007/statement?limit=500",
+    "status": 200
+  },
+  {
+    "body": {
+      "claimInventory": {
+        "byResourceType": [],
+        "claims": [],
+        "total": 0
+      },
+      "hubConfigured": true,
+      "hubUrl": "http://127.0.0.1:<port>",
+      "inboxStatusCounts": {
+        "applied": 0,
+        "dead": 0,
+        "received": 0,
+        "rejected": 0
+      },
+      "lastPullAt": null,
+      "lastPullSeq": null,
+      "missingBlocks": [],
+      "numberBlocks": [
+        {
+          "endNumber": 500,
+          "entityType": "invoice",
+          "nextNumber": 4,
+          "startNumber": 1,
+          "status": "active",
+          "year": 2026
+        },
+        {
+          "endNumber": 200,
+          "entityType": "invoice_entry",
+          "nextNumber": 1,
+          "startNumber": 1,
+          "status": "active",
+          "year": 2026
+        },
+        {
+          "endNumber": 500,
+          "entityType": "customer",
+          "nextNumber": 2,
+          "startNumber": 1,
+          "status": "active",
+          "year": 2026
+        },
+        {
+          "endNumber": 500,
+          "entityType": "supplier",
+          "nextNumber": 1,
+          "startNumber": 1,
+          "status": "active",
+          "year": 2026
+        },
+        {
+          "endNumber": 200,
+          "entityType": "voucher",
+          "nextNumber": 4,
+          "startNumber": 1,
+          "status": "active",
+          "year": 2026
+        },
+        {
+          "endNumber": 100,
+          "entityType": "return",
+          "nextNumber": 1,
+          "startNumber": 1,
+          "status": "active",
+          "year": 2026
+        },
+        {
+          "endNumber": 100,
+          "entityType": "expense",
+          "nextNumber": 1,
+          "startNumber": 1,
+          "status": "active",
+          "year": 2026
+        },
+        {
+          "endNumber": 100,
+          "entityType": "order",
+          "nextNumber": 1,
+          "startNumber": 1,
+          "status": "active",
+          "year": 2026
+        },
+        {
+          "endNumber": 100,
+          "entityType": "settlement",
+          "nextNumber": 1,
+          "startNumber": 1,
+          "status": "active",
+          "year": 2026
+        },
+        {
+          "endNumber": 100,
+          "entityType": "print",
+          "nextNumber": 1,
+          "startNumber": 1,
+          "status": "active",
+          "year": 2026
+        },
+        {
+          "endNumber": 100,
+          "entityType": "print_roll",
+          "nextNumber": 1,
+          "startNumber": 1,
+          "status": "active",
+          "year": 2026
+        }
+      ],
+      "pendingCount": 15,
+      "restore": null,
+      "statusCounts": {
+        "pending": 15,
+        "pushing": 0,
+        "rejected": 0,
+        "synced": 0
+      }
+    },
+    "label": "day30.sync-status",
+    "method": "GET",
+    "path": "/api/sync/status",
+    "status": 200
+  },
+  {
+    "body": {
+      "code": "NO_ACTIVE_LICENSE",
+      "message": "لا توجد ترخيص نشط",
+      "statusCode": 404
+    },
+    "label": "day30.license",
+    "method": "GET",
+    "path": "/api/license/status",
+    "status": 404
+  },
+  {
+    "body": {
+      "code": "VALIDATION",
+      "message": "نفدت كتلة الترقيم لهذا الجهاز أو لا توجد كتلة للسنة الحالية — اطلب كتلة جديدة عند الاتصال"
+    },
+    "label": "day90.invoice",
+    "method": "POST",
+    "path": "/api/invoices",
+    "status": 422
+  },
+  {
+    "body": {
+      "code": "VALIDATION",
+      "message": "نفدت كتلة الترقيم لهذا الجهاز أو لا توجد كتلة للسنة الحالية — اطلب كتلة جديدة عند الاتصال"
+    },
+    "label": "day90.receipt",
+    "method": "POST",
+    "path": "/api/receipts",
+    "status": 422
+  },
+  {
+    "body": {
+      "colorId": "#00003",
+      "createdAt": "<ts>",
+      "currency": "USD",
+      "entryDate": "2027-01-03",
+      "id": "#00019",
+      "initialKg": 50,
+      "pieces": 5,
+      "pricePerKg": 2,
+      "remainingKg": 50,
+      "remainingPieces": 5,
+      "rollNo": "OFF-R90",
+      "status": "in_stock",
+      "tenantId": "#00008",
+      "updatedAt": "<ts>",
+      "version": 1
+    },
+    "label": "day90.stock-in",
+    "method": "POST",
+    "path": "/api/inventory/rolls",
+    "status": 201
+  },
+  {
+    "body": {
+      "amountDue": 40,
+      "baseTotal": 40,
+      "cancelledAt": "<ts>",
+      "cancelledBy": "#00001",
+      "createdAt": "<ts>",
+      "createdBy": "#00001",
+      "creditApplied": 0,
+      "currency": "USD",
+      "date": "2026-11-04",
+      "discount": 0,
+      "exchangeRate": 1,
+      "id": "#00015",
+      "lines": [
+        {
+          "colorId": "#00003",
+          "costPerKg": 2,
+          "discountAmount": 0,
+          "fabricId": "#00004",
+          "id": "#00016",
+          "pieces": 1,
+          "pricePerKg": 4,
+          "quantityKg": 10,
+          "rollId": "#00006"
+        }
+      ],
+      "number": "INV-2026-0003",
+      "paid": 0,
+      "partyId": "#00007",
+      "partyType": "customer",
+      "paymentMethod": null,
+      "reference": "INV-2026-0003",
+      "shipping": 0,
+      "status": "cancelled",
+      "subtotal": 40,
+      "tax": 0,
+      "tenantId": "#00008",
+      "total": 40,
+      "type": "sale",
+      "updatedAt": "<ts>",
+      "version": 2
+    },
+    "label": "day90.cancel-previous",
+    "method": "POST",
+    "path": "/api/invoices/#00015/cancel",
+    "status": 200
+  },
+  {
+    "body": {
+      "currency": "SYP",
+      "entries": [],
+      "finalBalance": 0,
+      "fromDate": null,
+      "kind": "customer",
+      "page": {
+        "balanceBeforePage": 0,
+        "balanceBeforePageByCurrency": {
+          "SYP": 0
+        },
+        "hasMore": false,
+        "limit": 500,
+        "nextCursor": null
+      },
+      "partyCode": "CUS-2026-0001",
+      "partyId": "#00007",
+      "partyName": "Offline Customer",
+      "previousBalance": 0,
+      "toDate": null,
+      "totalCredit": 0,
+      "totalDebit": 0,
+      "totalsByCurrency": {
+        "SYP": {
+          "availableCredit": 0,
+          "balanceSide": "zero",
+          "finalBalance": 0,
+          "previousBalance": 0,
+          "totalCredit": 0,
+          "totalDebit": 0
+        }
+      },
+      "type": null
+    },
+    "label": "day90.statement",
+    "method": "GET",
+    "path": "/api/customers/#00007/statement?limit=500",
+    "status": 200
+  },
+  {
+    "body": {
+      "claimInventory": {
+        "byResourceType": [],
+        "claims": [],
+        "total": 0
+      },
+      "hubConfigured": true,
+      "hubUrl": "http://127.0.0.1:<port>",
+      "inboxStatusCounts": {
+        "applied": 0,
+        "dead": 0,
+        "received": 0,
+        "rejected": 0
+      },
+      "lastPullAt": null,
+      "lastPullSeq": null,
+      "missingBlocks": [],
+      "numberBlocks": [
+        {
+          "endNumber": 500,
+          "entityType": "invoice",
+          "nextNumber": 4,
+          "startNumber": 1,
+          "status": "active",
+          "year": 2026
+        },
+        {
+          "endNumber": 200,
+          "entityType": "invoice_entry",
+          "nextNumber": 1,
+          "startNumber": 1,
+          "status": "active",
+          "year": 2026
+        },
+        {
+          "endNumber": 500,
+          "entityType": "customer",
+          "nextNumber": 2,
+          "startNumber": 1,
+          "status": "active",
+          "year": 2026
+        },
+        {
+          "endNumber": 500,
+          "entityType": "supplier",
+          "nextNumber": 1,
+          "startNumber": 1,
+          "status": "active",
+          "year": 2026
+        },
+        {
+          "endNumber": 200,
+          "entityType": "voucher",
+          "nextNumber": 4,
+          "startNumber": 1,
+          "status": "active",
+          "year": 2026
+        },
+        {
+          "endNumber": 100,
+          "entityType": "return",
+          "nextNumber": 1,
+          "startNumber": 1,
+          "status": "active",
+          "year": 2026
+        },
+        {
+          "endNumber": 100,
+          "entityType": "expense",
+          "nextNumber": 1,
+          "startNumber": 1,
+          "status": "active",
+          "year": 2026
+        },
+        {
+          "endNumber": 100,
+          "entityType": "order",
+          "nextNumber": 1,
+          "startNumber": 1,
+          "status": "active",
+          "year": 2026
+        },
+        {
+          "endNumber": 100,
+          "entityType": "settlement",
+          "nextNumber": 1,
+          "startNumber": 1,
+          "status": "active",
+          "year": 2026
+        },
+        {
+          "endNumber": 100,
+          "entityType": "print",
+          "nextNumber": 1,
+          "startNumber": 1,
+          "status": "active",
+          "year": 2026
+        },
+        {
+          "endNumber": 100,
+          "entityType": "print_roll",
+          "nextNumber": 1,
+          "startNumber": 1,
+          "status": "active",
+          "year": 2026
+        }
+      ],
+      "pendingCount": 17,
+      "restore": null,
+      "statusCounts": {
+        "pending": 17,
+        "pushing": 0,
+        "rejected": 0,
+        "synced": 0
+      }
+    },
+    "label": "day90.sync-status",
+    "method": "GET",
+    "path": "/api/sync/status",
+    "status": 200
+  },
+  {
+    "body": {
+      "code": "NO_ACTIVE_LICENSE",
+      "message": "لا توجد ترخيص نشط",
+      "statusCode": 404
+    },
+    "label": "day90.license",
+    "method": "GET",
+    "path": "/api/license/status",
+    "status": 404
+  },
+  {
+    "label": "reconnect.sync",
+    "recorded": [
+      {
+        "failed": 0,
+        "pulled": 0,
+        "pushed": 17,
+        "rejected": 0
+      },
+      {
+        "failed": 0,
+        "pulled": 0,
+        "pushed": 0,
+        "rejected": 0
+      }
+    ]
+  }
+]

@@ -3,6 +3,7 @@ import { TenantContext, UUID, type PaginatedResult } from "@/domain/types";
 import type { IPartyRepository, PartyFilter } from "@/application/ports/IPartyRepository";
 import { PartyApiService } from "@/infrastructure/api";
 import type { PartyDTO } from "@/core/dtos/PartyDTO";
+import type { PartyOpeningInput } from "@erp/shared";
 
 export class ApiPartyRepository implements IPartyRepository {
   constructor(private api: PartyApiService) {}
@@ -102,9 +103,41 @@ export class ApiPartyRepository implements IPartyRepository {
     return Party.reconstitute(dto as unknown as PartyData);
   }
 
-  async delete(id: UUID, kind: "customer" | "supplier", ctx: TenantContext): Promise<void> {
-    const current = await this.findById(id, kind, ctx);
-    if (!current) return;
-    await this.api.delete(kind, id, current.version);
+  async setOpening(
+    id: UUID,
+    kind: "customer" | "supplier",
+    opening: PartyOpeningInput,
+    expectedVersion: number,
+    ctx: TenantContext,
+  ): Promise<Party> {
+    void ctx;
+    const dto = await this.api.setOpening(kind, id, { opening, expectedVersion });
+    return Party.reconstitute(dto as unknown as PartyData);
+  }
+
+  async delete(
+    id: UUID,
+    kind: "customer" | "supplier",
+    ctx: TenantContext,
+    confirmCascade = false,
+    expectedVersion?: number,
+  ): Promise<void> {
+    // Prefer the version from the deletion-impact sheet (same read the UI just
+    // showed). Falling back to `?? 1` was sending version 1 against DB version
+    // 2 whenever findById reconstituted a party without a version field —
+    // every delete then failed OCC with "الإصدار 2".
+    let version =
+      typeof expectedVersion === "number" && Number.isFinite(expectedVersion)
+        ? expectedVersion
+        : undefined;
+    if (version === undefined) {
+      const current = await this.findById(id, kind, ctx);
+      if (!current) return;
+      if (typeof current.version !== "number" || !Number.isFinite(current.version)) {
+        throw new Error("تعذّر قراءة إصدار السجل — حدّث الصفحة ثم أعد المحاولة");
+      }
+      version = current.version;
+    }
+    await this.api.delete(kind, id, version, confirmCascade);
   }
 }

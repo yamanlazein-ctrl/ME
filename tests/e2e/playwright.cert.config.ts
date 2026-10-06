@@ -15,27 +15,27 @@ export default defineConfig({
   projects: [
     {
       name: "cert-route",
-      testDir: "./tests/e2e/cert-route",
+      testDir: "./cert-route",
       testMatch: "*.spec.ts",
       timeout: 300_000,
     },
     {
       name: "cert-ui",
-      testDir: "./tests/e2e/cert-ui",
+      testDir: "./cert-ui",
       testMatch: "*.spec.ts",
       timeout: 600_000,
       dependencies: ["cert-route"],
     },
     {
       name: "cert-financial",
-      testDir: "./tests/e2e/cert-financial",
+      testDir: "./cert-financial",
       testMatch: "*.spec.ts",
       timeout: 900_000,
       dependencies: ["cert-ui"],
     },
     {
       name: "cert-report",
-      testDir: "./tests/e2e/cert-report",
+      testDir: "./cert-report",
       testMatch: "*.spec.mjs",
       dependencies: ["cert-financial"],
     },

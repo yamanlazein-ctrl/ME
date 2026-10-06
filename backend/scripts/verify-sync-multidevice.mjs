@@ -18,6 +18,7 @@
  * Scenarios covered (maps 1:1 to the required acceptance criteria):
  *   S1 both devices write offline, isolated                      -> no premature visibility
  *   S2 reconnect: push + pull until convergence                  -> no loss, no duplication
+ *   S2b sale invoice + drawer converge (same number/amount/balance) -> no divergence
  *   S3 ordering is stable and follows insertion order             -> correct order
  *   S4 concurrent claim on a shared resource                      -> 409 conflict, not 500
  *   S5 pull cursor over identical received_at timestamps          -> no loss on ties
@@ -441,7 +442,7 @@ async function mintToken(secret = JWT_HUB) {
 
 const tokens = new Map();
 
-async function api(port, method, urlPath, { body, deviceId } = {}) {
+async function api(port, method, urlPath, { body, deviceId, idempotencyKey } = {}) {
   const token = tokens.get(port) ?? tokens.get("hub");
   const res = await fetch(`http://127.0.0.1:${port}${urlPath}`, {
     method,
@@ -449,6 +450,7 @@ async function api(port, method, urlPath, { body, deviceId } = {}) {
       Authorization: `Bearer ${token}`,
       "Content-Type": "application/json",
       ...(deviceId ? { "X-Sync-Device-Id": deviceId } : {}),
+      ...(idempotencyKey ? { "Idempotency-Key": idempotencyKey } : {}),
     },
     ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
     signal: AbortSignal.timeout(30_000),
@@ -508,6 +510,84 @@ async function createParty(port, deviceId, name) {
   return api(port, "POST", "/api/customers", { deviceId, body: { name } });
 }
 
+/**
+ * A sale invoice on one device, with the stock it needs. Fabric → color →
+ * roll are created here too, so a fresh topology needs no extra fixtures.
+ * Returns the ids plus the number the server allocated.
+ */
+async function createSaleInvoice(port, deviceId, { customerId, date, kg, pricePerKg, paid }) {
+  const fabric = await api(port, "POST", "/api/inventory/fabrics", {
+    deviceId,
+    body: { name: `Fabric-${randomUUID().slice(0, 6)}` },
+  });
+  if (fabric.status >= 400) throw new Error(`fabric create HTTP ${fabric.status} ${fabric.text}`);
+
+  const color = await api(port, "POST", "/api/inventory/colors", {
+    deviceId,
+    body: { fabricId: fabric.json.id, name: `Color-${randomUUID().slice(0, 4)}` },
+  });
+  if (color.status >= 400) throw new Error(`color create HTTP ${color.status} ${color.text}`);
+
+  const roll = await api(port, "POST", "/api/inventory/rolls", {
+    deviceId,
+    body: {
+      colorId: color.json.id,
+      rollNo: `R-${randomUUID().slice(0, 6)}`,
+      initialKg: kg,
+      pieces: 1,
+      pricePerKg: 10,
+      currency: "USD",
+      entryDate: date,
+    },
+  });
+  if (roll.status >= 400) throw new Error(`roll create HTTP ${roll.status} ${roll.text}`);
+
+  const invoice = await api(port, "POST", "/api/invoices", {
+    deviceId,
+    idempotencyKey: randomUUID(),
+    body: {
+      type: "sale",
+      date,
+      partyId: customerId,
+      partyType: "customer",
+      currency: "USD",
+      lines: [{ fabricId: fabric.json.id, colorId: color.json.id, rollId: roll.json.id, quantityKg: kg, pieces: 1, pricePerKg }],
+      paid,
+    },
+  });
+  if (invoice.status >= 400) {
+    throw new Error(`invoice create HTTP ${invoice.status} ${invoice.text.slice(0, 300)}`);
+  }
+  return invoice.json;
+}
+
+/** `number=total` per sale invoice — the pair that must match on every node. */
+async function saleInvoiceFacts(db) {
+  const c = await dbClient(db);
+  const r = await c.query(
+    `SELECT number, total::text AS total, paid::text AS paid
+     FROM invoices WHERE tenant_id = $1 AND type = 'sale' ORDER BY number`,
+    [TENANT_ID],
+  );
+  await c.end();
+  return r.rows.map((x) => `${x.number}=${x.total}/${x.paid}`);
+}
+
+/**
+ * Drawer balance straight from the device's own endpoint — the same code the
+ * cashbox screen reads, so the two nodes are compared through production
+ * logic rather than a formula re-implemented in the test.
+ */
+async function drawerBalance(port, date) {
+  const r = await api(port, "GET", `/api/cashbox/balance/${date}`);
+  if (r.status !== 200) throw new Error(`balance HTTP ${r.status} ${r.text.slice(0, 200)}`);
+  // Unscoped, so the server answers with a per-currency map. A scalar here
+  // would mean the comparison silently lost its currency dimension.
+  if (typeof r.json !== "object" || r.json === null) {
+    throw new Error(`expected a per-currency map, got ${r.text.slice(0, 200)}`);
+  }
+  return r.json;
+}
 /**
  * Reserve this device's document-number blocks — the real provisioning path a
  * desktop node follows while it still has connectivity, before it goes
@@ -742,6 +822,71 @@ async function main() {
       after === 3,
       `hub rows after replay=${after}`,
     );
+  }
+
+  // ------------------------------------------------------------ S2b
+  // S2 proved parties converge. The owner-facing question is narrower and
+  // stricter: does a sale invoice raised on A show up on B with the SAME
+  // number and amount, and does the drawer agree? Those are the numbers the
+  // workshop quotes, so they are asserted through each device's own code.
+  section("S2b. Sale invoice + drawer converge across devices");
+  {
+    const c = await dbClient(A.db);
+    const cust = await c.query(
+      `SELECT id FROM parties WHERE tenant_id = $1 AND kind = 'customer' ORDER BY name LIMIT 1`,
+      [TENANT_ID],
+    );
+    await c.end();
+    const customerId = cust.rows[0]?.id;
+    if (!customerId) {
+      check("S2b precondition: device A has a customer", false, "no customer row");
+    } else {
+      const today = new Date().toISOString().slice(0, 10);
+      // 25 kg at 40.00 = 1000.00 invoiced, 400.00 collected.
+      const inv = await createSaleInvoice(A.port, DEV_A, {
+        customerId,
+        date: today,
+        kg: 25,
+        pricePerKg: 40,
+        paid: 400,
+      });
+
+      await syncUntilDrained(A.port);
+      await syncUntilDrained(B.port);
+      await syncUntilDrained(A.port);
+
+      const aInv = await saleInvoiceFacts(A.db);
+      const bInv = await saleInvoiceFacts(B.db);
+      const hubInv = await saleInvoiceFacts(HUB.db);
+      check(
+        "device B holds A's sale invoice with the same number, total and paid",
+        aInv.length === 1 && JSON.stringify(aInv) === JSON.stringify(bInv),
+        `A=[${aInv.join(", ")}] B=[${bInv.join(", ")}]`,
+      );
+      check(
+        "hub agrees with both devices on that invoice",
+        JSON.stringify(hubInv) === JSON.stringify(bInv),
+        `hub=[${hubInv.join(", ")}] B=[${bInv.join(", ")}]`,
+      );
+      check(
+        "no duplicated invoice on the receiving device",
+        bInv.length === 1,
+        `B rows=${bInv.length}`,
+      );
+
+      const aBal = await drawerBalance(A.port, today);
+      const bBal = await drawerBalance(B.port, today);
+      check(
+        "device B drawer balance matches device A (per currency, no FX mix)",
+        JSON.stringify(aBal) === JSON.stringify(bBal),
+        `A=${JSON.stringify(aBal)} B=${JSON.stringify(bBal)}`,
+      );
+      check(
+        "the collected 400.00 is in the drawer on both devices",
+        Math.round((aBal.USD ?? 0) * 100) === 40000 && Math.round((bBal.USD ?? 0) * 100) === 40000,
+        `A.USD=${aBal.USD} B.USD=${bBal.USD} invoice=${inv.number}`,
+      );
+    }
   }
 
   // ------------------------------------------------------------ S3
@@ -1138,6 +1283,95 @@ async function cleanup() {
       /* ignore */
     }
   }
+}
+
+/**
+ * AC-8 / SC-007 (specs/001-desktop-sqlite-engine T102):
+ *   node scripts/verify-sync-multidevice.mjs --ac8 [--device-engine sqlite|postgres] [--refresh-template]
+ * Desktops on the chosen engine against a fresh, unchanged PostgreSQL hub tenant (throwaway cluster,
+ * see scripts/parity/lib/syncAc8.mjs). A creates 20 invoices offline, B 30, both consume the same
+ * roll and edit the same customer; after reconnecting (and an operator keep-server decision on the
+ * edit conflict) A, B and the hub must hold identical business state.
+ */
+async function ac8Main() {
+  const flag = process.argv.indexOf("--device-engine");
+  const engine = flag === -1 ? "sqlite" : process.argv[flag + 1];
+  if (!["sqlite", "postgres"].includes(engine)) throw new Error(`--device-engine must be sqlite or postgres, got ${engine}`);
+  const { runAc8, businessState, diffStates } = await import(
+    new URL("../../scripts/parity/lib/syncAc8.mjs", import.meta.url).href
+  );
+  section(`AC-8: ${engine} desktops A/B against a PostgreSQL hub`);
+  const withRestore = process.argv.includes("--restore");
+  // --device-server <server.mjs>: desktops run a packaged build (T119 re-runs this on the release candidate).
+  const ds = process.argv.indexOf("--device-server");
+  const deviceServer = ds === -1 ? undefined : process.argv[ds + 1];
+  const r = await runAc8({ deviceEngine: engine, refreshTemplate: process.argv.includes("--refresh-template"), keep: KEEP, restoreScenario: withRestore, deviceServer });
+  if (withRestore) {
+    // T110 / quickstart §6 — restore on synced device B (owner decision 2026-10-05: option b).
+    section("Restore on synced device B");
+    const rr = r.restoreReport;
+    const status = r.log.find((l) => l.label === "restore.B.status")?.data;
+    const runs = r.log.find((l) => l.label === "restore.B.runs")?.data ?? [];
+    check("sync paused after the restore (first run reconciles, pushes nothing)", runs[0]?.restore != null && runs[0].pushed === 0, JSON.stringify(runs[0]?.restore ?? runs[0]));
+    check("reconcile finished: phase done under a NEW sync identity", status?.phase === "done" && Boolean(status?.newDeviceId) && status.newDeviceId !== "44444444-4444-4444-8444-444444444444", JSON.stringify(status));
+    const hubNew = r.tables.hub.sync_devices.find((d) => d.id === status?.newDeviceId);
+    const hubOthers = r.tables.hub.sync_devices.filter((d) => d.id !== status?.newDeviceId);
+    check(
+      "the hub registered the new identity as its own device (own id and fingerprint)",
+      Boolean(hubNew) && hubOthers.every((d) => d.device_fingerprint !== hubNew.device_fingerprint),
+      `${r.tables.hub.sync_devices.length} hub devices`,
+    );
+    const pushedIds = new Set(rr.pushedAfter.map((p) => p.entityId));
+    check("units the hub already held were NOT pushed again (SY-7)", rr.pendingAtBackup.every((id) => !pushedIds.has(id)), `pushed after restore: ${rr.pushedAfter.length}`);
+    check("units pushed after the restore carry the new identity", rr.pushedAfter.every((p) => p.syncDeviceId === status?.newDeviceId), JSON.stringify(rr.pushedAfter.map((p) => p.syncDeviceId)));
+    const bOutbox = new Map(r.tables.b.sync_outbox.map((u) => [u.entity_id, u.status]));
+    check("restored pending units acknowledged as synced locally", rr.pendingAtBackup.every((id) => bOutbox.get(id) === "synced"), rr.pendingAtBackup.map((id) => bOutbox.get(id)).join(","));
+    const bInvoices = new Set(r.tables.b.invoices.map((i) => i.id));
+    check("B got its own post-backup work back from the hub", rr.postBackup.every((id) => bInvoices.has(id)), `${rr.postBackup.filter((id) => bInvoices.has(id)).length}/${rr.postBackup.length}`);
+    check("B got the peer's newer data", rr.peerNewer.every((id) => bInvoices.has(id)));
+    const idsOf = (t) => r.tables[t].invoices.map((i) => i.id).sort().join(",");
+    check("A, B and the hub hold the same invoices (61, no duplicate)", idsOf("a") === idsOf("hub") && idsOf("b") === idsOf("hub") && r.tables.hub.invoices.length === 61, `hub=${r.tables.hub.invoices.length} a=${r.tables.a.invoices.length} b=${r.tables.b.invoices.length}`);
+    const numbers = r.tables.hub.invoices.map((i) => i.number);
+    check("no duplicate document number on the hub", new Set(numbers).size === numbers.length);
+  }
+  const state = { hub: businessState(r.tables.hub), A: businessState(r.tables.a), B: businessState(r.tables.b) };
+  const numbers = (t) => t.invoices.map((row) => JSON.parse(row).number).sort();
+  const expectedInvoices = withRestore ? 61 : 50;
+  for (const node of ["hub", "A", "B"]) check(`${node} holds ${expectedInvoices} invoices`, state[node].invoices.length === expectedInvoices, `${state[node].invoices.length}`);
+  check(
+    "A, B and the hub hold the same invoice numbers",
+    JSON.stringify(numbers(state.A)) === JSON.stringify(numbers(state.hub)) && JSON.stringify(numbers(state.B)) === JSON.stringify(numbers(state.hub)),
+  );
+  const status = r.log.find((l) => l.label === "final.sync-status")?.data ?? {};
+  for (const node of ["A", "B"]) check(`${node} outbox drained`, status[node]?.pendingCount === 0, JSON.stringify(status[node]?.statusCounts ?? null));
+  const resolved = r.log.find((l) => l.label === "resolve.keep-server")?.data ?? [];
+  check("the same-record edit opened exactly one hub conflict, resolved keep-server", resolved.length === 1 && resolved[0].status === 200, JSON.stringify(resolved));
+  // Editing a customer after losing a conflict still syncs, and every node agrees on the version.
+  const c0 = (tables) => tables.parties.find((p) => p.id === r.ids.customers[0]);
+  const edits = ["hub", "a", "b"].map((n) => c0(r.tables[n]));
+  check(
+    "an edit made after losing a conflict reaches the hub and the other device (same name, phone, version)",
+    edits.every((p) => p?.name === "AC8 Customer 0 (renamed on B)" && p?.phone === "0933-000-B" && p?.version === edits[0]?.version),
+    JSON.stringify(edits.map((p) => ({ name: p?.name, phone: p?.phone, version: p?.version }))),
+  );
+  for (const node of ["A", "B"]) {
+    const d = diffStates(state[node], state.hub, node, "hub");
+    check(`${node} business state identical to the hub (every business table)`, d.length === 0, d.length ? `\n      ${d.join("\n      ")}` : "");
+  }
+  section("Summary");
+  const failed = results.filter((x) => !x.pass);
+  console.log(`  ${results.length - failed.length}/${results.length} checks passed (${r.wire.length} device↔hub exchanges)`);
+  return failed.length === 0;
+}
+
+if (process.argv.includes("--ac8")) {
+  let pass = false;
+  try {
+    pass = await ac8Main();
+  } catch (err) {
+    console.error("\nHARNESS ERROR:", err?.stack || err);
+  }
+  process.exit(pass ? 0 : 1);
 }
 
 let ok = false;

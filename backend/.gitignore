@@ -3,3 +3,8 @@ dist/
 .env
 *.log
 .drizzle/
+
+# Boosthis node kit — dev-only telemetry, vendored by re-fetching (see scripts/boosthis-dev.mts). Never shipped.
+lib/boosthis-runtime-node/
+lib/boosthis-checklist/
+BOOSTHIS_*

@@ -1,0 +1,20 @@
+[
+  {
+    "id": "#00133",
+    "pieces": 1,
+    "price_per_kg": "26500.5000",
+    "quantity_kg": "3.33",
+    "return_id": "#00132",
+    "roll_id": "#00105",
+    "tenant_id": "#00095"
+  },
+  {
+    "id": "#00135",
+    "pieces": 1,
+    "price_per_kg": "19000.0000",
+    "quantity_kg": "2.50",
+    "return_id": "#00134",
+    "roll_id": "#00108",
+    "tenant_id": "#00095"
+  }
+]

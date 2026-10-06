@@ -336,3 +336,14 @@
     display: none !important;
   }
 }
+
+/* Decimal quantity/cost fields: keep type=number (mobile decimal pad) but hide steppers. */
+input[type="number"].no-spinner::-webkit-outer-spin-button,
+input[type="number"].no-spinner::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+input[type="number"].no-spinner {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}

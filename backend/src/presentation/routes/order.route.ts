@@ -29,7 +29,7 @@ import {
 import type { InvoiceSyncDependencies } from "../../application/use-cases/sync/syncDependencySnapshots.js";
 import { capturePartySyncDependencies } from "../../application/use-cases/sync/syncDependencySnapshots.js";
 import { logger } from "../../infrastructure/config/logger.js";
-import { withTenantTx } from "../../infrastructure/orm/drizzle.js";
+import { withTenantTx } from "../../infrastructure/orm/engine.js";
 
 export function registerOrderRoutes(
   router: Router,

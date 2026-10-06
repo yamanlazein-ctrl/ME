@@ -4,6 +4,7 @@ import helmet from "helmet";
 import compression from "compression";
 import rateLimit from "express-rate-limit";
 import * as Sentry from "@sentry/node";
+import { installProcessGuards } from "../infrastructure/config/processGuard.js";
 import { config, corsOrigins } from "../infrastructure/config/env.js";
 import { logger } from "../infrastructure/config/logger.js";
 import { buildContainer } from "../infrastructure/di/container.js";
@@ -13,13 +14,16 @@ import { createErrorHandler } from "../infrastructure/http/middleware/error-hand
 import { registerAuthRoutes } from "./routes/auth.route.js";
 import { registerUserRoutes } from "./routes/user.route.js";
 import { registerHealthRoutes } from "./routes/health.route.js";
-import { checkDatabase } from "../infrastructure/orm/drizzle.js";
+import { registerDesktopRuntimeRoutes } from "./routes/desktopRuntime.route.js";
+import { checkDatabase, getEngine } from "../infrastructure/orm/engine.js";
 import { checkRedis } from "../infrastructure/auth/TokenDenylist.js";
 import { registerPartyRoutes } from "./routes/party.route.js";
 import { rbac } from "../infrastructure/http/middleware/rbac.middleware.js";
 import { createSyncDeviceGate } from "../infrastructure/http/middleware/sync-device-gate.middleware.js";
 import { registerFabricRoutes } from "./routes/fabric.route.js";
 import { registerColorRoutes } from "./routes/color.route.js";
+import { registerDyeRoutes } from "./routes/dye.route.js";
+import { registerYearClosingRoutes } from "./routes/year-closing.route.js";
 import { registerRollRoutes } from "./routes/roll.route.js";
 import { registerOrderRoutes } from "./routes/order.route.js";
 import { registerInvoiceRoutes } from "./routes/invoice.route.js";
@@ -36,7 +40,6 @@ import { registerDashboardRoutes } from "./routes/dashboard.route.js";
 import { registerLicenseRoutes } from "./routes/license.route.js";
 import { mountStaticApp } from "./staticApp.js";
 import { startupFailureReason } from "../infrastructure/config/startupFailure.js";
-import { renameSync, writeFileSync } from "node:fs";
 import { registerSetupRoutes } from "./routes/setup.route.js";
 import { registerProfitRoutes } from "./routes/profit.route.js";
 import { registerCompanyRoutes } from "./routes/company.route.js";
@@ -47,7 +50,6 @@ import {
 import { registerAuditRoutes } from "./routes/audit.route.js";
 import { createBackupRouter } from "./routes/backup.route.js";
 import { registerDocumentTrackRoutes } from "./routes/documentTrack.route.js";
-import { PostgresDocumentTrackRepository } from "../infrastructure/repositories/PostgresDocumentTrackRepository.js";
 import { createIntegrityRouter } from "./routes/integrity.route.js";
 import { dataSafeModeGuard } from "../infrastructure/http/middleware/dataSafeMode.middleware.js";
 import { registerFxRoutes } from "./routes/fx.route.js";
@@ -55,6 +57,7 @@ import { registerSyncRoutes } from "./routes/sync.route.js";
 import { registerSearchRoutes } from "./routes/search.route.js";
 import { registerReportRoutes } from "./routes/reports.route.js";
 import { registerSyncBootstrapRoutes } from "./routes/syncBootstrap.route.js";
+import { registerSyncEnrollmentPublicRoutes } from "./routes/syncEnrollment.route.js";
 import { getCentralSyncUrl, probeHubReachable } from "../application/use-cases/sync/hubConfig.js";
 import { FxRateService } from "../infrastructure/fx/FxRateService.js";
 import { offlineWriteGuard } from "../infrastructure/http/middleware/offline-write.middleware.js";
@@ -64,6 +67,13 @@ import { createLicenseGuard } from "../infrastructure/http/middleware/license.gu
 import { requireFeature } from "../infrastructure/http/middleware/license.enforcement.middleware.js";
 import { FEATURES } from "../domain/licensing/features.js";
 import { setLicenseIdentityDegraded } from "../infrastructure/license/licenseIdentityHealth.js";
+
+// MUST run before anything that can fault: an uncaught 'error' event on a
+// stream/timer is what used to take the whole desktop app down and leave the
+// WebView2 window on its built-in "can't reach this page" screen. Start-up
+// refusals stay fatal — they call process.exit(1) explicitly, which this
+// guard never intercepts.
+installProcessGuards();
 
 // Crash reporting & APM — guarded so it never blocks startup
 if (config.SENTRY_DSN) {
@@ -162,6 +172,7 @@ app.use(
     legacyHeaders: false,
     skip: (req) =>
       config.NODE_ENV !== "production" ||
+      Boolean(config.DESKTOP_PIPE) ||
       isLoopbackIp(req.ip) ||
       req.path.startsWith("/api/health") ||
       req.path.includes("device-roster"),
@@ -194,7 +205,9 @@ app.use(dataSafeModeGuard());
 // ── Route registration ──────────────────────────────────────────────
 // health + auth already hard-code the `/api` prefix internally → mount at root.
 const router = express.Router();
-registerHealthRoutes(router, checkDatabase, checkRedis, rbac, authMiddleware);
+registerHealthRoutes(router, checkDatabase, checkRedis, rbac, authMiddleware, container.healthRepo);
+// Desktop runtime only (Rust shell over the named pipe; 404 for anyone else) — T083.
+registerDesktopRuntimeRoutes(router);
 registerAuthRoutes(router, container);
 // Phase-0 platform routes (license / setup / company / invitations) also
 // hard-code the `/api` prefix → mount at root like auth & health.
@@ -203,6 +216,7 @@ registerSetupRoutes(router, container);
 registerCompanyRoutes(router, container, authMiddleware);
 registerInvitationAdminRoutes(router, container, authMiddleware, rbac(["admin"]));
 registerInvitationPublicRoutes(router, container);
+registerSyncEnrollmentPublicRoutes(router, container);
 app.use(router);
 
 // Business routes use bare paths (`/invoices`, `/customers`, ...) but the
@@ -263,6 +277,7 @@ registerSearchRoutes(
   apiRouter,
   authMiddleware,
   rbac(["admin", "accountant", "warehouse", "viewer"]),
+  container.searchRepo,
 );
 registerPartyRoutes(
   apiRouter,
@@ -271,6 +286,8 @@ registerPartyRoutes(
   rbac(["admin", "accountant"]),
   rbac(["admin", "accountant", "warehouse", "viewer"]),
   container.syncOutboxRepo,
+  container.invoiceRepo,
+  container.voucherRepo,
 );
 registerUserRoutes(
   apiRouter,
@@ -295,6 +312,24 @@ registerColorRoutes(
   rbac(["admin", "warehouse"]),
   rbac(["admin", "accountant", "warehouse", "viewer"]),
   container.syncOutboxRepo,
+);
+registerDyeRoutes(
+  apiRouter,
+  authMiddleware,
+  // A purge destroys financial documents, so it is admin/accountant only —
+  // deliberately narrower than creating an inventory master.
+  rbac(["admin", "accountant"]),
+  rbac(["admin", "accountant", "warehouse", "viewer"]),
+);
+registerYearClosingRoutes(
+  apiRouter,
+  authMiddleware,
+  // Closing a year freezes the books and the inventory: accountant+admin, and
+  // a warehouse counter may enter physical counts but not close the year.
+  rbac(["admin", "accountant"]),
+  rbac(["admin", "accountant", "warehouse", "viewer"]),
+  // Reopen is the one operation that can unfreeze a closed year — admin only.
+  rbac(["admin"]),
 );
 registerRollRoutes(
   apiRouter,
@@ -423,7 +458,7 @@ registerDashboardRoutes(
 );
 registerDocumentTrackRoutes(
   apiRouter,
-  new PostgresDocumentTrackRepository(container.db),
+  container.documentTrackRepo,
   authMiddleware,
   rbac(["admin", "accountant", "warehouse", "viewer"]),
 );
@@ -431,6 +466,7 @@ registerReportRoutes(
   apiRouter,
   authMiddleware,
   rbac(["admin", "accountant", "warehouse", "viewer"]),
+  container.reportsRepo,
 );
 registerSyncBootstrapRoutes(apiRouter, authMiddleware);
 // Profit endpoints were fully implemented but never mounted — the cashbox
@@ -455,7 +491,7 @@ registerFxRoutes(apiRouter, fxRateService, authMiddleware);
 //                can still ingest peers. Device trust is additional, not instead.
 //   numbering  → operational roles (viewer is read-only everywhere)
 //   operator   → admin (claims repair, device revoke/reinstate)
-registerSyncRoutes(
+const syncRuntime = registerSyncRoutes(
   apiRouter,
   container,
   authMiddleware,
@@ -524,7 +560,14 @@ async function prepareDesktopDatabase(): Promise<void> {
   await runDesktopMigrations();
   // REPAIR-023 / REPAIR-026: integrity + tenant visibility after migrations.
   try {
-    const { pool } = await import("../infrastructure/orm/drizzle.js");
+    // Same checks on either engine; on SQLite they read through the reader connection
+    // (drizzle.ts must never be imported there — it opens a PostgreSQL pool).
+    const { getEngine } = await import("../infrastructure/orm/engine.js");
+    const engine = getEngine();
+    const pool: import("../infrastructure/orm/sqlite/queryable.js").RowsQueryable =
+      engine === "sqlite"
+        ? (await import("../infrastructure/orm/sqlite/queryable.js")).sqliteReaderQueryable()
+        : (await import("../infrastructure/orm/drizzle.js")).pool;
     const { verifyDataAgainstManifest } =
       await import("../infrastructure/integrity/dataIntegrityManifest.js");
     const tenantRes = await pool.query<{ id: string }>(
@@ -532,10 +575,12 @@ async function prepareDesktopDatabase(): Promise<void> {
     );
     const tenantId = tenantRes.rows[0]?.id;
     if (tenantId) {
-      await verifyDataAgainstManifest(pool, tenantId);
+      await verifyDataAgainstManifest(pool, tenantId, engine);
       // Tenant visibility check (REPAIR-026)
       const byTenant = await pool.query<{ tenant_id: string; n: number }>(
-        `SELECT tenant_id, count(*)::int AS n FROM invoices GROUP BY tenant_id`,
+        engine === "sqlite"
+          ? `SELECT tenant_id, count(*) AS n FROM invoices GROUP BY tenant_id`
+          : `SELECT tenant_id, count(*)::int AS n FROM invoices GROUP BY tenant_id`,
       );
       const effective = byTenant.rows.find((r) => r.tenant_id === tenantId);
       const other = byTenant.rows.find((r) => r.tenant_id !== tenantId && Number(r.n) > 0);
@@ -568,10 +613,10 @@ async function prepareDesktopDatabase(): Promise<void> {
 /** Detach stale baked Desktop licenses that are not the tenant entitlement. */
 async function prepareLicenseIdentity(): Promise<void> {
   try {
-    const { db } = await import("../infrastructure/orm/drizzle.js");
+    const { engineDb } = await import("../infrastructure/orm/engineSchema.js");
     const { detachOrphanBakedLicenses } =
       await import("../infrastructure/license/detachOrphanBakedLicenses.js");
-    await detachOrphanBakedLicenses(db);
+    await detachOrphanBakedLicenses(await engineDb());
     setLicenseIdentityDegraded(null);
   } catch (err) {
     // FIN-18: a desktop app must still start if this maintenance step fails,
@@ -588,24 +633,51 @@ fxRateService.start();
 void prepareDesktopDatabase()
   .then(() => prepareLicenseIdentity())
   .then(() => {
-    const server = app.listen(config.PORT, config.HOST, () => {
-      const address = server.address();
-      const port = typeof address === "object" && address ? address.port : config.PORT;
-      logger.info(`ERP API server listening on ${config.HOST}:${port} in ${config.NODE_ENV} mode`);
-      // The desktop shell learns the (dynamic) port from this file. It is written LAST, after the server is
-      // really accepting connections, so "port file exists" == "ready to serve". Write + rename = atomic.
-      if (config.DESKTOP_PORT_FILE) {
-        const tmp = `${config.DESKTOP_PORT_FILE}.tmp`;
-        writeFileSync(tmp, JSON.stringify({ port, pid: process.pid }));
-        renameSync(tmp, config.DESKTOP_PORT_FILE);
-      }
+    // Desktop listens on a WINDOWS NAMED PIPE, not a TCP port. The UI is
+    // served by the Tauri shell over its own asset protocol and reaches this
+    // process through Rust, so the API never needs an open port. `listen(path)`
+    // speaks ordinary HTTP/1.1 over the pipe, which is why the whole app — every
+    // middleware, route and test — is unchanged: only the bind target moved.
+    const server = config.DESKTOP_PIPE
+      ? app.listen(config.DESKTOP_PIPE, () => {
+          logger.info(`ERP API server listening on pipe ${config.DESKTOP_PIPE}`);
+          // Readiness is now "the pipe accepts a request", which the Rust shell
+          // probes directly. No port file is written and none is needed.
+          afterListen();
+        })
+      : app.listen(config.PORT, config.HOST, () => {
+          const address = server?.address();
+          const bound = typeof address === "object" && address ? address.port : config.PORT;
+          logger.info(`ERP API server listening on ${config.HOST}:${bound} in ${config.NODE_ENV} mode`);
+          afterListen();
+        });
+
+    // A bind failure (EADDRINUSE on a port, or a pipe already owned by another
+    // instance) arrives here as an asynchronous 'error' event, long after the
+    // .then() above resolved — so its .catch() never sees it. A server that
+    // cannot bind is genuinely unusable — write the real reason and exit.
+    server.on("error", (err: NodeJS.ErrnoException) => {
+      const reason = err.code ? `${err.code}: ${err.message}` : String(err);
+      process.stderr.write(`[FATAL] Server startup failed: ${reason}\n`);
+      logger.fatal({ err, code: err.code }, "HTTP listen failed — refusing to serve");
+      process.exit(1);
+    });
+
+    function afterListen(): void {
+      // Sync without a logged-in user (no-op until this device is paired).
+      syncRuntime.startBackgroundSync();
       if (getCentralSyncUrl()) {
         void probeHubReachable(true);
         setInterval(() => {
           void probeHubReachable();
         }, 15_000).unref();
       }
-      if (config.DESKTOP_DEPLOY) {
+      if (config.DESKTOP_DEPLOY && getEngine() === "sqlite") {
+        void import("../infrastructure/backup/sqliteBackupScheduler.js").then((m) =>
+          m.startSqliteBackupScheduler(),
+        );
+        void import("../infrastructure/integrity/retentionJobs.js").then((m) => m.startSqliteRetentionJobs());
+      } else if (config.DESKTOP_DEPLOY) {
         void import("../infrastructure/backup/backupScheduler.js").then((m) =>
           m.startBackupScheduler(),
         );
@@ -615,7 +687,7 @@ void prepareDesktopDatabase()
           ),
         );
       }
-    });
+    }
   })
   .catch((err) => {
     // The structured log goes through pino's worker thread and can be lost when the process exits right after,
@@ -629,5 +701,27 @@ void prepareDesktopDatabase()
     );
     process.exit(1);
   });
+
+/**
+ * Graceful stop (specs/001-desktop-sqlite-engine T041/T083): on SQLite, fold the WAL back into the
+ * database file and close it before exiting. A kill without this is still safe (WAL + synchronous=FULL
+ * recover every committed transaction on the next open); this only leaves a tidy single file.
+ */
+if (getEngine() === "sqlite") {
+  let stopping = false;
+  const stop = (signal: string) => {
+    if (stopping) return;
+    stopping = true;
+    void import("../infrastructure/orm/sqlite/runtime.js")
+      .then((m) => m.shutdownSqliteRuntime())
+      .catch((err) => logger.error({ err }, "sqlite shutdown checkpoint failed"))
+      .finally(() => {
+        logger.info({ signal }, "backend stopped");
+        process.exit(0);
+      });
+  };
+  process.once("SIGTERM", () => stop("SIGTERM"));
+  process.once("SIGINT", () => stop("SIGINT"));
+}
 
 export default app;

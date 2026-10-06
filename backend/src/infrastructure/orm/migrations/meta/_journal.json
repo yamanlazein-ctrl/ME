@@ -680,6 +680,41 @@
       "when": 1790838000000,
       "tag": "20261019_return_price_4dp",
       "breakpoints": true
+    },
+    {
+      "idx": 97,
+      "version": 7,
+      "when": 1790838000001,
+      "tag": "20261020_financial_years_inventory_counts",
+      "breakpoints": true
+    },
+    {
+      "idx": 98,
+      "version": 7,
+      "when": 1790838000002,
+      "tag": "20261021_reconcile_tombstone_schema_drift",
+      "breakpoints": true
+    },
+    {
+      "idx": 99,
+      "version": 7,
+      "when": 1790924400000,
+      "tag": "20261022_party_opening_date_note",
+      "breakpoints": true
+    },
+    {
+      "idx": 100,
+      "version": 7,
+      "when": 1791010800000,
+      "tag": "20261023_roll_entry_price_invoice_pieces",
+      "breakpoints": true
+    },
+    {
+      "idx": 101,
+      "version": 7,
+      "when": 1791097200000,
+      "tag": "20261024_party_opening_currency",
+      "breakpoints": true
     }
   ]
 }

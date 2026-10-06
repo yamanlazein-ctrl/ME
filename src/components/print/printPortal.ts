@@ -36,6 +36,15 @@ let activeContainer: HTMLDivElement | null = null;
 let activeFingerprint: string | null = null;
 /** Saved so we can blank document.title during print (kills browser header text). */
 let previousDocumentTitle: string | null = null;
+/** True from click until the print job is torn down — blocks a second print. */
+let printing = false;
+let printingSafetyTimer: number | null = null;
+
+/** Upper bound on waiting for images/fonts — never block printing on them. */
+export const PRINT_ASSET_TIMEOUT_MS = 3000;
+/** If neither afterprint nor the print media query ever report back (WebView2
+ *  edge cases, printer error), release the lock so the user can print again. */
+const PRINTING_LOCK_MAX_MS = 60_000;
 
 export type PrintArchiveMeta = {
   docType: ArchiveDocType;
@@ -97,6 +106,11 @@ function cleanup() {
   }
   activeFingerprint = null;
   clearPrintPaper();
+  printing = false;
+  if (printingSafetyTimer !== null) {
+    window.clearTimeout(printingSafetyTimer);
+    printingSafetyTimer = null;
+  }
 }
 
 function afterPrint() {
@@ -111,6 +125,33 @@ export function installPrintHandler() {
   if ((window as unknown as { __printHandlerInstalled?: boolean }).__printHandlerInstalled) return;
   (window as unknown as { __printHandlerInstalled?: boolean }).__printHandlerInstalled = true;
   window.addEventListener("afterprint", afterPrint);
+  // Fallback when afterprint never fires (cancel/printer error in WebView2):
+  // the print media query flipping back to false means the job is over.
+  const mq = window.matchMedia?.("print");
+  mq?.addEventListener?.("change", (e) => {
+    if (!e.matches && activeContainer) afterPrint();
+  });
+}
+
+/** Resolve once every <img> in `container` has loaded (or failed) and web
+ *  fonts are ready — or after `timeoutMs`, whichever comes first. */
+export function waitForPrintAssets(
+  container: HTMLElement,
+  timeoutMs = PRINT_ASSET_TIMEOUT_MS,
+): Promise<void> {
+  const images = Array.from(container.querySelectorAll("img")).map((img) =>
+    img.complete
+      ? Promise.resolve()
+      : new Promise<void>((resolve) => {
+          img.addEventListener("load", () => resolve(), { once: true });
+          img.addEventListener("error", () => resolve(), { once: true });
+        }),
+  );
+  const fonts = document.fonts?.ready.then(() => undefined) ?? Promise.resolve();
+  return Promise.race([
+    Promise.all([...images, fonts]).then(() => undefined),
+    new Promise<void>((resolve) => window.setTimeout(resolve, timeoutMs)),
+  ]);
 }
 
 /**
@@ -205,8 +246,17 @@ export function printDocument(
   fingerprint?: string,
   archive?: PrintArchiveMeta,
 ): void {
+  if (printing) {
+    toast.info("الطباعة جارية");
+    return;
+  }
   cleanup();
   installPrintHandler();
+  printing = true;
+  printingSafetyTimer = window.setTimeout(() => {
+    printing = false;
+    printingSafetyTimer = null;
+  }, PRINTING_LOCK_MAX_MS);
   activeFingerprint = fingerprint ?? null;
 
   const container = document.createElement("div");
@@ -228,28 +278,30 @@ export function printDocument(
     } catch (e) {
       cleanup();
       console.error("[print] failed to render document:", e);
-      setTimeout(() => {
-        window.alert("تعذّر عرض مستند الطباعة. راجع سجل الأخطاء.");
-      }, 0);
+      toast.error("تعذّر عرض مستند الطباعة. راجع سجل الأخطاء.");
       return;
     }
 
     window.setTimeout(() => {
       // Paper must be stamped before archive HTML snapshot AND before print().
       syncPrintPaper(container);
-      void archiveIfDesktop(container, archive).finally(() => {
-        // Strip any leftover inline geometry so print.css owns width 100%.
-        // A fixed mm width here used to make Chrome shrink-to-fit and leave
-        // a huge empty band beside the invoice.
-        // Keep data-paper — required for named @page alignment (DFP-002).
-        container.style.cssText = "";
-        syncPrintPaper(container);
-        if (previousDocumentTitle === null) {
-          previousDocumentTitle = document.title;
-        }
-        document.title = "\u00a0";
-        window.print();
-      });
+      void waitForPrintAssets(container)
+        .then(() => archiveIfDesktop(container, archive))
+        .finally(() => {
+          // Closed meanwhile (printDataChanged / newer job) — nothing to print.
+          if (activeContainer !== container) return;
+          // Strip any leftover inline geometry so print.css owns width 100%.
+          // A fixed mm width here used to make Chrome shrink-to-fit and leave
+          // a huge empty band beside the invoice.
+          // Keep data-paper — required for named @page alignment (DFP-002).
+          container.style.cssText = "";
+          syncPrintPaper(container);
+          if (previousDocumentTitle === null) {
+            previousDocumentTitle = document.title;
+          }
+          document.title = "\u00a0";
+          window.print();
+        });
     }, 200);
   })();
 }

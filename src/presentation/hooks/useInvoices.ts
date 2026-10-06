@@ -8,6 +8,8 @@ import type { InvoiceFilter } from "@/application/ports/IInvoiceRepository";
 import type { InvoiceData } from "@/domain/entities/Invoice";
 import type { InvoiceType } from "@/domain/types";
 import { refreshInventory } from "./useInventory";
+import { refreshParties } from "./useParties";
+import { invalidateFinancialViews } from "./invalidateFinancialViews";
 
 /**
  * Presentation-layer hooks for invoice CRUD.
@@ -51,7 +53,7 @@ export function useInvoicesList(filter?: InvoiceFilter, opts?: { all?: boolean; 
             if (!isOk(r)) throw r.error;
             return r.value;
           },
-          { pageSize: 1000, maxPages: 500, label: "invoices" },
+          { pageSize: 1000, label: "invoices" },
         );
         return { data, total: data.length, hasNext: false };
       }
@@ -159,16 +161,13 @@ export function useCancelInvoice() {
         toast.error("تم إلغاء الفاتورة");
         qc.invalidateQueries({ queryKey: KEYS.root });
         qc.invalidateQueries({ queryKey: KEYS.detail(res.value.id) });
-        qc.invalidateQueries({ queryKey: ["dashboard"] });
-        qc.refetchQueries({ queryKey: ["dashboard"] });
+        // Party list stats (invoice counts / balances) live in a module cache
+        // that React Query alone cannot see — refresh it with financial views.
+        invalidateFinancialViews(qc, { refetchDashboard: true });
+        void refreshParties();
         // Invoice cancel restores stock — refresh inventory caches.
         void refreshInventory();
         qc.invalidateQueries({ queryKey: ["inventory"] });
-        // Cancellation reverses ledger legs + profit contribution.
-        qc.invalidateQueries({ queryKey: ["cashbox"] });
-        qc.invalidateQueries({ queryKey: ["ledger"] });
-        qc.invalidateQueries({ queryKey: ["profit"] });
-        qc.invalidateQueries({ queryKey: ["statement"] });
       } else {
         const errMsg =
           (res.error as any)?.message ?? (res.error as any)?.toString?.() ?? "فشل إلغاء الفاتورة";

@@ -22,6 +22,9 @@ type HubSession = {
   /** Local sync-device id registered on the hub under the SAME id (push attribution). */
   hubDeviceId?: string | null;
   pairedAt?: string;
+  /** Local tenant/user the background sync runs as when nobody is logged in. */
+  localTenantId?: string;
+  localUserId?: string;
 };
 
 export type HubSessionInfo = Omit<HubSession, "accessToken" | "refreshToken">;
@@ -161,7 +164,16 @@ export async function resolveHubAuthHeader(localAuthHeader?: string): Promise<st
 // "connected" without syncing. The password is kept only encrypted
 // (AES-256-GCM, key derived from this install's APP_MASTER_KEY) and is used
 // solely to sign in to the hub again when the session cannot be refreshed.
-type StoredCredentials = { url: string; email: string; password: string };
+// Two shapes: a device credential (enrollment code / converted pairing — the
+// hub account never leaves the hub), or the legacy account of older pairings.
+type StoredCredentials = {
+  url: string;
+  email?: string;
+  password?: string;
+  tenantId?: string;
+  deviceId?: string;
+  deviceSecret?: string;
+};
 
 function credentialsPath(): string | null {
   const explicit = process.env.HUB_CREDENTIALS_PATH?.trim();
@@ -202,7 +214,8 @@ export function loadHubCredentials(): StoredCredentials | null {
     decipher.setAuthTag(Buffer.from(blob.tag, "base64"));
     const plain = Buffer.concat([decipher.update(Buffer.from(blob.ct, "base64")), decipher.final()]);
     const parsed = JSON.parse(plain.toString("utf8")) as StoredCredentials;
-    return parsed.url && parsed.email && parsed.password ? parsed : null;
+    const usable = (parsed.email && parsed.password) || (parsed.tenantId && parsed.deviceId && parsed.deviceSecret);
+    return parsed.url && usable ? parsed : null;
   } catch (err) {
     logger.warn({ err }, "stored hub credentials unreadable");
     return null;
@@ -230,19 +243,31 @@ async function reloginWithStoredCredentials(): Promise<boolean> {
   const creds = loadHubCredentials();
   if (!creds) return false;
   try {
-    const res = await fetch(`${creds.url}/api/auth/login`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email: creds.email, password: creds.password }),
-      signal: AbortSignal.timeout(20_000),
-    });
+    const res = creds.deviceSecret
+      ? await fetch(`${creds.url}/api/sync/device-token`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ tenantId: creds.tenantId, deviceId: creds.deviceId, secret: creds.deviceSecret }),
+          signal: AbortSignal.timeout(20_000),
+        })
+      : await fetch(`${creds.url}/api/auth/login`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email: creds.email, password: creds.password }),
+          signal: AbortSignal.timeout(20_000),
+        });
     const body = (await res.json().catch(() => ({}))) as { accessToken?: string; refreshToken?: string };
     if (!res.ok || !body.accessToken) {
       logger.warn({ status: res.status }, "hub re-login with stored credentials refused");
       return false;
     }
     const previous = loadSession();
-    persistHubSession({ ...(previous ?? {}), accessToken: body.accessToken, refreshToken: body.refreshToken });
+    persistHubSession({
+      ...(previous ?? {}),
+      ...(creds.deviceId ? { hubDeviceId: creds.deviceId, hubTenantId: creds.tenantId } : {}),
+      accessToken: body.accessToken,
+      refreshToken: body.refreshToken,
+    });
     if (!getCentralSyncUrl()) setRuntimeCentralSyncUrl(creds.url);
     hubReachable = true;
     lastProbeAt = Date.now();
@@ -464,6 +489,8 @@ export type ConnectHubInput = {
   url: string;
   email: string;
   password: string;
+  /** Local tenant/user the background sync acts as (saved with the session). */
+  local?: { tenantId: string; userId: string };
   /** The local sync device, registered on the hub under the same id. */
   device: {
     id: string;
@@ -474,6 +501,60 @@ export type ConnectHubInput = {
     label: string | null;
   } | null;
 };
+
+type HubDeviceRegistration = NonNullable<ConnectHubInput["device"]>;
+
+/** POST /api/auth/sync-device on the hub: registers (or touches) a sync device under its local id. */
+async function postHubDeviceRegistration(
+  url: string,
+  auth: string,
+  device: HubDeviceRegistration,
+): Promise<{ ok: true; id: string } | { ok: false; status: number; code: string | null; error: string }> {
+  try {
+    const dr = await fetch(`${url}/api/auth/sync-device`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: auth },
+      body: JSON.stringify({
+        deviceId: device.id,
+        deviceFingerprint: device.fingerprint,
+        deviceFingerprintVersion: device.fingerprintVersion,
+        platform: device.platform,
+        hostname: device.hostname ?? undefined,
+        label: device.label ?? device.hostname ?? undefined,
+      }),
+      signal: AbortSignal.timeout(15_000),
+    });
+    const body = (await dr.json().catch(() => ({}))) as { id?: string; code?: string; message?: string };
+    if (dr.ok && body.id) return { ok: true, id: body.id };
+    return { ok: false, status: dr.status, code: body.code ?? null, error: body.message || `تعذّر تسجيل الجهاز في المركز (${dr.status})` };
+  } catch (err) {
+    return { ok: false, status: 0, code: null, error: err instanceof Error ? err.message : "تعذّر تسجيل الجهاز في المركز" };
+  }
+}
+
+/**
+ * Register a sync device on the paired hub with the current hub session (restore on a synced
+ * device, T109). On success the session records it as this device's hub identity.
+ */
+export async function registerDeviceOnHub(
+  device: HubDeviceRegistration,
+  localAuthHeader?: string,
+): Promise<{ ok: true; id: string } | { ok: false; status: number; code: string | null; error: string }> {
+  const url = getCentralSyncUrl();
+  if (!url) return { ok: false, status: 0, code: null, error: "CENTRAL_SYNC_URL غير مضبوط" };
+  let auth = await resolveHubAuthHeader(localAuthHeader);
+  if (!auth) return { ok: false, status: 0, code: null, error: "لا توجد جلسة مصادقة للمركز" };
+  let reg = await postHubDeviceRegistration(url, auth, device);
+  if (!reg.ok && reg.status === 401 && (await refreshHubSession())) {
+    auth = (await resolveHubAuthHeader(localAuthHeader)) ?? auth;
+    reg = await postHubDeviceRegistration(url, auth, device);
+  }
+  if (reg.ok) {
+    const session = loadSession();
+    if (session?.accessToken) persistHubSession({ ...session, hubDeviceId: reg.id });
+  }
+  return reg;
+}
 
 export type ConnectHubResult =
   | { ok: true; info: HubSessionInfo; hubChanged: boolean; deviceWarning: string | null }
@@ -543,54 +624,23 @@ export async function connectHub(input: ConnectHubInput): Promise<ConnectHubResu
   const auth = `Bearer ${login.accessToken}`;
   const claims = decodeJwtClaims(login.accessToken);
 
-  let hubLicenseKey: string | null = null;
-  let hubLicenseStatus: string | null = null;
-  try {
-    const lr = await fetch(`${url}/api/license/status`, {
-      headers: { Authorization: auth },
-      signal: AbortSignal.timeout(10_000),
-    });
-    if (lr.ok) {
-      const lb = (await lr.json()) as { license?: { key?: string; status?: string } };
-      hubLicenseKey = lb.license?.key ?? null;
-      hubLicenseStatus = lb.license?.status ?? null;
-    }
-  } catch {
-    /* license display is best-effort */
-  }
+  const { key: hubLicenseKey, status: hubLicenseStatus } = await fetchHubLicense(url, auth);
 
   let hubDeviceId: string | null = null;
   let deviceWarning: string | null = null;
   if (input.device) {
-    try {
-      const dr = await fetch(`${url}/api/auth/sync-device`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: auth },
-        body: JSON.stringify({
-          deviceId: input.device.id,
-          deviceFingerprint: input.device.fingerprint,
-          deviceFingerprintVersion: input.device.fingerprintVersion,
-          platform: input.device.platform,
-          hostname: input.device.hostname ?? undefined,
-          label: input.device.label ?? input.device.hostname ?? undefined,
-        }),
-        signal: AbortSignal.timeout(15_000),
-      });
-      const body = (await dr.json().catch(() => ({}))) as { id?: string; message?: string };
-      if (dr.ok && body.id) {
-        hubDeviceId = body.id;
-        // registerOrTouch falls back to an existing row with the same
-        // fingerprint. Pushes carry the LOCAL id, so a different hub id means
-        // the hub will still refuse them — say so instead of pretending.
-        if (body.id !== input.device.id) {
-          deviceWarning =
-            "المركز يعرف هذا الجهاز بمعرّف آخر — قد تُرفض المزامنة. ألغِ الجهاز القديم من المركز ثم أعد الربط";
-        }
-      } else {
-        deviceWarning = body.message || `تعذّر تسجيل الجهاز في المركز (${dr.status})`;
+    const reg = await postHubDeviceRegistration(url, auth, input.device);
+    if (reg.ok) {
+      hubDeviceId = reg.id;
+      // registerOrTouch falls back to an existing row with the same
+      // fingerprint. Pushes carry the LOCAL id, so a different hub id means
+      // the hub will still refuse them — say so instead of pretending.
+      if (reg.id !== input.device.id) {
+        deviceWarning =
+          "المركز يعرف هذا الجهاز بمعرّف آخر — قد تُرفض المزامنة. ألغِ الجهاز القديم من المركز ثم أعد الربط";
       }
-    } catch (err) {
-      deviceWarning = err instanceof Error ? err.message : "تعذّر تسجيل الجهاز في المركز";
+    } else {
+      deviceWarning = reg.error;
     }
   } else {
     deviceWarning = "لا يوجد جهاز مزامنة محلي مسجّل لهذه الجلسة — سجّل الخروج والدخول ثم أعد الربط";
@@ -609,12 +659,29 @@ export async function connectHub(input: ConnectHubInput): Promise<ConnectHubResu
     pairedAt: new Date().toISOString(),
   };
 
+  // Convert the account pairing into a device credential, so the hub password
+  // is not kept on this device. Hubs without the endpoint keep the old way.
+  const deviceSecret =
+    hubDeviceId && hubDeviceId === input.device?.id && info.hubTenantId
+      ? await mintHubDeviceCredential(url, auth, hubDeviceId)
+      : null;
+
   // Clean slate: drop the old session before writing the new one.
   persistHubSession(null);
   setRuntimeCentralSyncUrl(url);
-  persistHubSession({ accessToken: login.accessToken, refreshToken: login.refreshToken, ...info });
+  persistHubSession({
+    accessToken: login.accessToken,
+    refreshToken: login.refreshToken,
+    ...info,
+    localTenantId: input.local?.tenantId,
+    localUserId: input.local?.userId,
+  });
   // Kept (encrypted) until «فصل»: expired tokens / a restarted hub re-login silently.
-  saveHubCredentials({ url, email: input.email, password: input.password });
+  saveHubCredentials(
+    deviceSecret && hubDeviceId
+      ? { url, tenantId: info.hubTenantId, deviceId: hubDeviceId, deviceSecret }
+      : { url, email: input.email, password: input.password },
+  );
   hubReachable = true;
   lastProbeAt = Date.now();
   localActivityCursor = null;
@@ -624,6 +691,136 @@ export async function connectHub(input: ConnectHubInput): Promise<ConnectHubResu
     (previous.hubUrl !== undefined && previous.hubUrl !== url) ||
     (previous.hubTenantId !== undefined && previous.hubTenantId !== info.hubTenantId);
   return { ok: true, info, hubChanged, deviceWarning };
+}
+
+async function fetchHubLicense(url: string, auth: string): Promise<{ key: string | null; status: string | null }> {
+  try {
+    const lr = await fetch(`${url}/api/license/status`, {
+      headers: { Authorization: auth },
+      signal: AbortSignal.timeout(10_000),
+    });
+    if (lr.ok) {
+      const lb = (await lr.json()) as { license?: { key?: string; status?: string } };
+      return { key: lb.license?.key ?? null, status: lb.license?.status ?? null };
+    }
+  } catch {
+    /* license display is best-effort */
+  }
+  return { key: null, status: null };
+}
+
+/** Ask the hub for this (already bound) device's own credential. Null when the hub cannot. */
+async function mintHubDeviceCredential(url: string, auth: string, deviceId: string): Promise<string | null> {
+  try {
+    const res = await fetch(`${url}/api/sync/devices/self/credential`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: auth, "X-Sync-Device-Id": deviceId },
+      body: JSON.stringify({ deviceId }),
+      signal: AbortSignal.timeout(15_000),
+    });
+    const body = (await res.json().catch(() => ({}))) as { deviceSecret?: string };
+    return res.ok && body.deviceSecret ? body.deviceSecret : null;
+  } catch {
+    return null;
+  }
+}
+
+export type EnrollHubInput = {
+  url: string;
+  code: string;
+  device: NonNullable<ConnectHubInput["device"]>;
+  local: { tenantId: string; userId: string };
+};
+
+/**
+ * Enrollment with a company code (no hub account on this device): the hub
+ * registers this device under its LOCAL id and returns its own credential,
+ * which replaces any earlier pairing. Saved until «فصل».
+ */
+export async function enrollHub(input: EnrollHubInput): Promise<ConnectHubResult> {
+  const url = trimUrl(input.url);
+  if (!url) return { ok: false, stage: "url", error: "رابط الخادم المركزي غير صالح" };
+  const previous = loadSession();
+  const test = await testHubConnection(url);
+  if (!test.reachable) return { ok: false, stage: "reach", error: test.error ?? "الخادم المركزي لا يستجيب" };
+
+  let res: Response;
+  try {
+    res = await fetch(`${url}/api/sync/enroll`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        code: input.code,
+        device: {
+          id: input.device.id,
+          fingerprint: input.device.fingerprint,
+          fingerprintVersion: input.device.fingerprintVersion,
+          platform: input.device.platform,
+          hostname: input.device.hostname ?? undefined,
+          label: input.device.label ?? input.device.hostname ?? undefined,
+        },
+      }),
+      signal: AbortSignal.timeout(20_000),
+    });
+  } catch (err) {
+    return { ok: false, stage: "reach", error: err instanceof Error ? err.message : "تعذّر الاتصال" };
+  }
+  const body = (await res.json().catch(() => ({}))) as {
+    message?: string;
+    tenantId?: string;
+    deviceId?: string;
+    deviceSecret?: string;
+    accessToken?: string;
+    refreshToken?: string;
+    user?: { id?: string; name?: string; role?: string };
+  };
+  if (!res.ok || !body.accessToken || !body.deviceSecret || !body.deviceId || !body.tenantId) {
+    return { ok: false, stage: "login", error: body.message || `رفض المركز التسجيل (${res.status})` };
+  }
+
+  const license = await fetchHubLicense(url, `Bearer ${body.accessToken}`);
+  const info: HubSessionInfo = {
+    hubUrl: url,
+    hubTenantId: body.tenantId,
+    hubUserId: body.user?.id,
+    hubUserName: body.user?.name,
+    hubUserRole: body.user?.role,
+    hubLicenseKey: license.key,
+    hubLicenseStatus: license.status,
+    hubDeviceId: body.deviceId,
+    pairedAt: new Date().toISOString(),
+    localTenantId: input.local.tenantId,
+    localUserId: input.local.userId,
+  };
+  persistHubSession(null);
+  setRuntimeCentralSyncUrl(url);
+  persistHubSession({ accessToken: body.accessToken, refreshToken: body.refreshToken, ...info });
+  saveHubCredentials({ url, tenantId: body.tenantId, deviceId: body.deviceId, deviceSecret: body.deviceSecret });
+  hubReachable = true;
+  lastProbeAt = Date.now();
+  localActivityCursor = null;
+
+  const hubChanged =
+    !previous ||
+    (previous.hubUrl !== undefined && previous.hubUrl !== url) ||
+    (previous.hubTenantId !== undefined && previous.hubTenantId !== info.hubTenantId);
+  return { ok: true, info, hubChanged, deviceWarning: null };
+}
+
+/** Remember which local tenant/user to sync as (pairings made before this was saved). */
+export function rememberLocalSyncIdentity(tenantId: string, userId: string): void {
+  const session = loadSession();
+  if (!session?.accessToken || (session.localTenantId === tenantId && session.localUserId)) return;
+  persistHubSession({ ...session, localTenantId: tenantId, localUserId: userId });
+}
+
+/** Who the background sync runs as, or null when this device is not set up for it yet. */
+export function backgroundSyncIdentity(): { tenantId: string; userId: string; deviceId: string } | null {
+  if (!getCentralSyncUrl()) return null;
+  const session = loadSession();
+  const deviceId = session?.hubDeviceId ?? loadHubCredentials()?.deviceId;
+  if (!session?.localTenantId || !session.localUserId || !deviceId) return null;
+  return { tenantId: session.localTenantId, userId: session.localUserId, deviceId };
 }
 
 // ── Cross-device activity feed (presence: «سجّل المحاسب دخوله الآن») ─────────
@@ -715,4 +912,19 @@ export async function pullHubActivity(ownDeviceId: string | null): Promise<HubAc
     if (localActivityCursor === null || e.seq > localActivityCursor) localActivityCursor = e.seq;
   }
   return items.filter((e) => !ownDeviceId || e.sourceDeviceId !== ownDeviceId);
+}
+
+/** Device side: forward an admin action to the paired hub with this device's hub session. */
+export async function hubProxy(
+  method: "GET" | "POST" | "DELETE",
+  pathname: string,
+  body?: unknown,
+): Promise<{ status: number; body: unknown }> {
+  const res = await hubFetch(pathname, {
+    method,
+    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+  }).catch(() => undefined);
+  if (res === undefined) return { status: 503, body: { code: "HUB_UNREACHABLE", message: "المركز لا يستجيب الآن — حاول لاحقاً" } };
+  if (!res) return { status: 409, body: { code: "HUB_NOT_PAIRED", message: "هذا الجهاز غير مربوط بالمركز" } };
+  return { status: res.status, body: await res.json().catch(() => ({})) };
 }

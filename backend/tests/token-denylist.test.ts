@@ -2,6 +2,7 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { randomUUID } from "node:crypto";
 import { sql, inArray, eq } from "drizzle-orm";
 import { db } from "@/infrastructure/orm/drizzle";
+import { liveColumns, pgOnly } from "./_helpers/engine.js";
 import { revokedTokens } from "@/infrastructure/orm/schemas/revoked-token.table";
 import {
   DbTokenDenylist,
@@ -74,12 +75,7 @@ const brokenFastPath: TokenDenylist = {
 };
 
 beforeAll(async () => {
-  const probe = await db.execute(sql`
-    select 1 from information_schema.tables
-    where table_schema = 'public' and table_name = 'revoked_tokens'
-  `);
-  const rows = (probe as unknown as { rows: unknown[] }).rows ?? [];
-  if (rows.length === 0) {
+  if ((await liveColumns((q) => db.execute(q as never), sql as never, "revoked_tokens")).length === 0) {
     throw new Error(
       "revoked_tokens is missing — run `npm run db:migrate` (migration 0052) against the test database first.",
     );
@@ -94,19 +90,13 @@ afterAll(async () => {
 
 describe("P0-004 · revoked_tokens provisioning", () => {
   it("exists in the database with the expected columns", async () => {
-    const res = await db.execute(sql`
-      select column_name, is_nullable, data_type
-      from information_schema.columns
-      where table_schema = 'public' and table_name = 'revoked_tokens'
-      order by column_name
-    `);
-    const cols = ((res as unknown as { rows: { column_name: string }[] }).rows ?? []).map(
-      (r) => r.column_name,
-    );
+    const cols = await liveColumns((q) => db.execute(q as never), sql as never, "revoked_tokens");
     expect(cols).toEqual(["created_at", "expires_at", "jti", "reason", "subject", "tenant_id"]);
   });
 
-  it("is deliberately NOT RLS-managed (readable before a tenant context exists)", async () => {
+  // PG mechanism only: SQLite has no RLS at all (research.md allowed delta RLS → app predicate), so
+  // revoked_tokens is readable before a tenant context there by construction.
+  it.skipIf(pgOnly)("is deliberately NOT RLS-managed (readable before a tenant context exists)", async () => {
     const res = await db.execute(sql`
       select c.relrowsecurity as rls
       from pg_class c

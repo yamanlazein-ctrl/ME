@@ -1,7 +1,6 @@
 import { and, eq } from "drizzle-orm";
-import { db } from "../orm/drizzle.js";
-import { users } from "../orm/schemas/user.table.js";
 import type { Role } from "../../domain/types/index.js";
+import { engineSchema, engineDb } from "../orm/engineSchema.js";
 
 /**
  * Per-subject session cutoff. Tokens whose `iat` is strictly before this
@@ -22,6 +21,8 @@ export function isTokenBeforeCutoff(
 }
 
 export async function revokeSubjectSessions(userId: string, tenantId: string): Promise<Date> {
+  const { users } = await engineSchema();
+  const db = await engineDb();
   const cutoff = new Date();
   await db
     .update(users)
@@ -59,6 +60,8 @@ export async function resolveSessionIdentity(
   userId: string,
   fallback: string,
 ): Promise<SessionIdentity> {
+  const { users } = await engineSchema();
+  const db = await engineDb();
   const cached = identityCache.get(userId);
   if (cached && cached.expiresAt > Date.now()) {
     return {

@@ -1,0 +1,2430 @@
+[
+  {
+    "body": {
+      "activeRolls": {
+        "colors": 3,
+        "fabricTypes": 2,
+        "total": 4
+      },
+      "activeTodayCustomers": 0,
+      "alerts": [],
+      "cashbox": {
+        "balance": -1554998.75,
+        "balanceByCurrency": {
+          "SYP": -1554998.75
+        },
+        "isLocked": false,
+        "openingDate": "2026-01-31",
+        "todayMovementCount": 0
+      },
+      "lowStockFabrics": 0,
+      "lowStockRolls": {
+        "low": 0,
+        "outOfStock": 0
+      },
+      "monthSales": {
+        "byCurrency": {}
+      },
+      "outstandingOrders": 0,
+      "recentActivity": [
+        {
+          "action": "cancel",
+          "detail": "إلغاء مرتجع RET-2026-0002",
+          "module": "returns",
+          "timestamp": "<ts>"
+        },
+        {
+          "action": "cancel",
+          "detail": "إلغاء فاتورة INV-2026-0004",
+          "module": "invoices",
+          "timestamp": "<ts>"
+        },
+        {
+          "action": "cancel",
+          "detail": "إلغاء مصروف EXP-2026-0002",
+          "module": "expenses",
+          "timestamp": "<ts>"
+        },
+        {
+          "action": "create",
+          "detail": "مصروف EXP-2026-0002",
+          "module": "expenses",
+          "timestamp": "<ts>"
+        },
+        {
+          "action": "create",
+          "detail": "مصروف EXP-2026-0001",
+          "module": "expenses",
+          "timestamp": "<ts>"
+        },
+        {
+          "action": "create",
+          "detail": "سند قبض VOC-2026-0005",
+          "module": "vouchers",
+          "timestamp": "<ts>"
+        },
+        {
+          "action": "create",
+          "detail": "مرتجع RET-2026-0002",
+          "module": "returns",
+          "timestamp": "<ts>"
+        },
+        {
+          "action": "create",
+          "detail": "مرتجع RET-2026-0001",
+          "module": "returns",
+          "timestamp": "<ts>"
+        },
+        {
+          "action": "cancel",
+          "detail": "إلغاء سند VOC-2026-0004",
+          "module": "vouchers",
+          "timestamp": "<ts>"
+        },
+        {
+          "action": "create",
+          "detail": "سند قبض VOC-2026-0004",
+          "module": "vouchers",
+          "timestamp": "<ts>"
+        }
+      ],
+      "recentTransactions": [
+        {
+          "amount": 301500.5,
+          "currency": "SYP",
+          "detail": "تسديد على INV-2026-0003",
+          "id": "#00141",
+          "party": "Beta Textiles",
+          "reference": "INV-2026-0003",
+          "time": "<ts>",
+          "type": "payment"
+        },
+        {
+          "amount": 88246.67,
+          "currency": "SYP",
+          "detail": "مرتجع مبيع",
+          "id": "#00132",
+          "party": "أحمد التاجر",
+          "reference": "INV-2026-0001",
+          "time": "<ts>",
+          "type": "return"
+        },
+        {
+          "amount": 50.5,
+          "currency": "USD",
+          "detail": "سند قبض",
+          "id": "#00129",
+          "party": "Beta Textiles",
+          "reference": "VOC-2026-0002",
+          "time": "<ts>",
+          "type": "payment"
+        },
+        {
+          "amount": 152501,
+          "currency": "SYP",
+          "detail": "تسديد على INV-2026-0001",
+          "id": "#00128",
+          "party": "أحمد التاجر",
+          "reference": "INV-2026-0001",
+          "time": "<ts>",
+          "type": "payment"
+        },
+        {
+          "amount": 472000,
+          "currency": "SYP",
+          "customer": "Beta Textiles",
+          "detail": "فاتورة مبيع",
+          "id": "#00122",
+          "invoiceNo": "INV-2026-0003",
+          "party": "Beta Textiles",
+          "time": "<ts>",
+          "type": "sale"
+        },
+        {
+          "amount": 107.45,
+          "currency": "USD",
+          "customer": "Beta Textiles",
+          "detail": "فاتورة مبيع",
+          "id": "#00120",
+          "invoiceNo": "INV-2026-0002",
+          "party": "Beta Textiles",
+          "time": "<ts>",
+          "type": "sale"
+        },
+        {
+          "amount": 1240596.1,
+          "currency": "SYP",
+          "customer": "أحمد التاجر",
+          "detail": "فاتورة مبيع",
+          "id": "#00116",
+          "invoiceNo": "INV-2026-0001",
+          "party": "أحمد التاجر",
+          "time": "<ts>",
+          "type": "sale"
+        },
+        {
+          "amount": 400000,
+          "currency": "SYP",
+          "detail": "تسديد على INV-2026-0001",
+          "id": "#00119",
+          "party": "أحمد التاجر",
+          "reference": "INV-2026-0001",
+          "time": "<ts>",
+          "type": "payment"
+        },
+        {
+          "amount": 207.03,
+          "currency": "USD",
+          "detail": "فاتورة دخول",
+          "id": "#00114",
+          "invoiceNo": "ENT-2026-0002",
+          "party": "Gamma Yarn",
+          "supplier": "Gamma Yarn",
+          "time": "<ts>",
+          "type": "entry"
+        },
+        {
+          "amount": 5183030.13,
+          "currency": "SYP",
+          "detail": "فاتورة دخول",
+          "id": "#00109",
+          "invoiceNo": "ENT-2026-0001",
+          "party": "معمل النسيج الحديث",
+          "supplier": "معمل النسيج الحديث",
+          "time": "<ts>",
+          "type": "entry"
+        }
+      ],
+      "salesTrend": {
+        "7": [
+          {
+            "byCurrency": {},
+            "label": "2026-09-29",
+            "valueUsd": 0
+          },
+          {
+            "byCurrency": {},
+            "label": "2026-09-30",
+            "valueUsd": 0
+          },
+          {
+            "byCurrency": {},
+            "label": "2026-10-01",
+            "valueUsd": 0
+          },
+          {
+            "byCurrency": {},
+            "label": "2026-10-02",
+            "valueUsd": 0
+          },
+          {
+            "byCurrency": {},
+            "label": "2026-10-03",
+            "valueUsd": 0
+          },
+          {
+            "byCurrency": {},
+            "label": "2026-10-04",
+            "valueUsd": 0
+          },
+          {
+            "byCurrency": {},
+            "label": "2026-10-05",
+            "valueUsd": 0
+          }
+        ],
+        "14": [
+          {
+            "byCurrency": {},
+            "label": "2026-09-22",
+            "valueUsd": 0
+          },
+          {
+            "byCurrency": {},
+            "label": "2026-09-23",
+            "valueUsd": 0
+          },
+          {
+            "byCurrency": {},
+            "label": "2026-09-24",
+            "valueUsd": 0
+          },
+          {
+            "byCurrency": {},
+            "label": "2026-09-25",
+            "valueUsd": 0
+          },
+          {
+            "byCurrency": {},
+            "label": "2026-09-26",
+            "valueUsd": 0
+          },
+          {
+            "byCurrency": {},
+            "label": "2026-09-27",
+            "valueUsd": 0
+          },
+          {
+            "byCurrency": {},
+            "label": "2026-09-28",
+            "valueUsd": 0
+          },
+          {
+            "byCurrency": {},
+            "label": "2026-09-29",
+            "valueUsd": 0
+          },
+          {
+            "byCurrency": {},
+            "label": "2026-09-30",
+            "valueUsd": 0
+          },
+          {
+            "byCurrency": {},
+            "label": "2026-10-01",
+            "valueUsd": 0
+          },
+          {
+            "byCurrency": {},
+            "label": "2026-10-02",
+            "valueUsd": 0
+          },
+          {
+            "byCurrency": {},
+            "label": "2026-10-03",
+            "valueUsd": 0
+          },
+          {
+            "byCurrency": {},
+            "label": "2026-10-04",
+            "valueUsd": 0
+          },
+          {
+            "byCurrency": {},
+            "label": "2026-10-05",
+            "valueUsd": 0
+          }
+        ],
+        "30": [
+          {
+            "byCurrency": {},
+            "label": "2026-09-06",
+            "valueUsd": 0
+          },
+          {
+            "byCurrency": {},
+            "label": "2026-09-07",
+            "valueUsd": 0
+          },
+          {
+            "byCurrency": {},
+            "label": "2026-09-08",
+            "valueUsd": 0
+          },
+          {
+            "byCurrency": {},
+            "label": "2026-09-09",
+            "valueUsd": 0
+          },
+          {
+            "byCurrency": {},
+            "label": "2026-09-10",
+            "valueUsd": 0
+          },
+          {
+            "byCurrency": {},
+            "label": "2026-09-11",
+            "valueUsd": 0
+          },
+          {
+            "byCurrency": {},
+            "label": "2026-09-12",
+            "valueUsd": 0
+          },
+          {
+            "byCurrency": {},
+            "label": "2026-09-13",
+            "valueUsd": 0
+          },
+          {
+            "byCurrency": {},
+            "label": "2026-09-14",
+            "valueUsd": 0
+          },
+          {
+            "byCurrency": {},
+            "label": "2026-09-15",
+            "valueUsd": 0
+          },
+          {
+            "byCurrency": {},
+            "label": "2026-09-16",
+            "valueUsd": 0
+          },
+          {
+            "byCurrency": {},
+            "label": "2026-09-17",
+            "valueUsd": 0
+          },
+          {
+            "byCurrency": {},
+            "label": "2026-09-18",
+            "valueUsd": 0
+          },
+          {
+            "byCurrency": {},
+            "label": "2026-09-19",
+            "valueUsd": 0
+          },
+          {
+            "byCurrency": {},
+            "label": "2026-09-20",
+            "valueUsd": 0
+          },
+          {
+            "byCurrency": {},
+            "label": "2026-09-21",
+            "valueUsd": 0
+          },
+          {
+            "byCurrency": {},
+            "label": "2026-09-22",
+            "valueUsd": 0
+          },
+          {
+            "byCurrency": {},
+            "label": "2026-09-23",
+            "valueUsd": 0
+          },
+          {
+            "byCurrency": {},
+            "label": "2026-09-24",
+            "valueUsd": 0
+          },
+          {
+            "byCurrency": {},
+            "label": "2026-09-25",
+            "valueUsd": 0
+          },
+          {
+            "byCurrency": {},
+            "label": "2026-09-26",
+            "valueUsd": 0
+          },
+          {
+            "byCurrency": {},
+            "label": "2026-09-27",
+            "valueUsd": 0
+          },
+          {
+            "byCurrency": {},
+            "label": "2026-09-28",
+            "valueUsd": 0
+          },
+          {
+            "byCurrency": {},
+            "label": "2026-09-29",
+            "valueUsd": 0
+          },
+          {
+            "byCurrency": {},
+            "label": "2026-09-30",
+            "valueUsd": 0
+          },
+          {
+            "byCurrency": {},
+            "label": "2026-10-01",
+            "valueUsd": 0
+          },
+          {
+            "byCurrency": {},
+            "label": "2026-10-02",
+            "valueUsd": 0
+          },
+          {
+            "byCurrency": {},
+            "label": "2026-10-03",
+            "valueUsd": 0
+          },
+          {
+            "byCurrency": {},
+            "label": "2026-10-04",
+            "valueUsd": 0
+          },
+          {
+            "byCurrency": {},
+            "label": "2026-10-05",
+            "valueUsd": 0
+          }
+        ]
+      },
+      "store": {
+        "city": "دمشق",
+        "name": "شركة التكافؤ"
+      },
+      "todayInvoices": {
+        "count": 0
+      },
+      "todayProfit": {
+        "byCurrency": {}
+      },
+      "todaySales": {
+        "byCurrency": {}
+      },
+      "topCustomers": [],
+      "topFabrics": [
+        {
+          "fabricId": "#00100",
+          "kgSold": 63.15,
+          "name": "قطن مصري",
+          "revenueByCurrency": {
+            "SYP": 1716361.5443
+          },
+          "revenueUsd": 115.75633507196626
+        },
+        {
+          "fabricId": "#00101",
+          "kgSold": 20.01,
+          "name": "Polyester 150D",
+          "revenueByCurrency": {
+            "USD": 107.4537
+          },
+          "revenueUsd": 107.4537
+        }
+      ],
+      "totalInventoryKg": 244.75,
+      "unpaidInvoices": {
+        "byCurrency": {
+          "SYP": {
+            "count": 2,
+            "totalDue": 770347.93
+          },
+          "USD": {
+            "count": 1,
+            "totalDue": 107.45
+          }
+        },
+        "count": 3
+      },
+      "unreadNotifications": 0,
+      "vouchers": {
+        "byCurrency": {},
+        "count": 0
+      },
+      "weekSales": {
+        "byCurrency": {}
+      }
+    },
+    "label": "dashboard",
+    "method": "GET",
+    "path": "/api/dashboard",
+    "status": 200
+  },
+  {
+    "body": {
+      "entryReturns": {},
+      "expenses": {
+        "SYP": 35000
+      },
+      "from": "2026-01-01",
+      "inventoryValue": {
+        "SYP": 4015925.81,
+        "USD": 139.37
+      },
+      "purchases": {
+        "SYP": 5183030.13,
+        "USD": 207.03
+      },
+      "rollCount": 4,
+      "sales": {
+        "SYP": 1712596.1,
+        "USD": 107.45
+      },
+      "salesReturns": {
+        "SYP": 88246.67
+      },
+      "topCustomers": [
+        {
+          "name": "Beta Textiles",
+          "partyId": "#00096",
+          "revenueByCurrency": {
+            "SYP": 472000,
+            "USD": 107.45
+          }
+        },
+        {
+          "name": "أحمد التاجر",
+          "partyId": "#00094",
+          "revenueByCurrency": {
+            "SYP": 1240596.1
+          }
+        }
+      ],
+      "topFabrics": [
+        {
+          "fabricId": "#00100",
+          "name": "قطن مصري",
+          "qty": 63.15,
+          "revenueByCurrency": {
+            "SYP": 1717361.54
+          }
+        },
+        {
+          "fabricId": "#00101",
+          "name": "Polyester 150D",
+          "qty": 20.01,
+          "revenueByCurrency": {
+            "USD": 107.45
+          }
+        }
+      ],
+      "totalKg": 244.75
+    },
+    "label": "reports.summary",
+    "method": "GET",
+    "path": "/api/reports/summary?from=2026-01-01",
+    "status": 200
+  },
+  {
+    "body": {
+      "meta": {
+        "hasNext": false,
+        "limit": 100,
+        "page": 0,
+        "total": 3
+      },
+      "rows": [
+        {
+          "createdAt": "<ts>",
+          "currency": "SYP",
+          "date": "2026-02-12",
+          "id": "#00122",
+          "number": "INV-2026-0003",
+          "paid": 301500.5,
+          "partyId": "#00096",
+          "partyName": "Beta Textiles",
+          "remaining": 170499.5,
+          "total": 472000
+        },
+        {
+          "createdAt": "<ts>",
+          "currency": "USD",
+          "date": "2026-02-11",
+          "id": "#00120",
+          "number": "INV-2026-0002",
+          "paid": 0,
+          "partyId": "#00096",
+          "partyName": "Beta Textiles",
+          "remaining": 107.45,
+          "total": 107.45
+        },
+        {
+          "createdAt": "<ts>",
+          "currency": "SYP",
+          "date": "2026-02-10",
+          "id": "#00116",
+          "number": "INV-2026-0001",
+          "paid": 552501,
+          "partyId": "#00094",
+          "partyName": "أحمد التاجر",
+          "remaining": 688095.1,
+          "total": 1240596.1
+        }
+      ],
+      "summary": {
+        "count": 3,
+        "paid": {
+          "SYP": 854001.5,
+          "USD": 0
+        },
+        "remaining": {
+          "SYP": 858594.6,
+          "USD": 107.45
+        },
+        "total": {
+          "SYP": 1712596.1,
+          "USD": 107.45
+        }
+      }
+    },
+    "label": "reports.detail.net-sales",
+    "method": "GET",
+    "path": "/api/reports/detail/net-sales?from=2026-01-01",
+    "status": 200
+  },
+  {
+    "body": {
+      "meta": {
+        "hasNext": false,
+        "limit": 100,
+        "page": 0,
+        "total": 2
+      },
+      "rows": [
+        {
+          "createdAt": "<ts>",
+          "currency": "USD",
+          "date": "2026-02-02",
+          "id": "#00114",
+          "number": "ENT-2026-0002",
+          "paid": 0,
+          "partyId": "#00099",
+          "partyName": "Gamma Yarn",
+          "remaining": 207.03,
+          "total": 207.03
+        },
+        {
+          "createdAt": "<ts>",
+          "currency": "SYP",
+          "date": "2026-02-01",
+          "id": "#00109",
+          "number": "ENT-2026-0001",
+          "paid": 1000000,
+          "partyId": "#00098",
+          "partyName": "معمل النسيج الحديث",
+          "remaining": 4183030.13,
+          "total": 5183030.13
+        }
+      ],
+      "summary": {
+        "count": 2,
+        "paid": {
+          "SYP": 1000000,
+          "USD": 0
+        },
+        "remaining": {
+          "SYP": 4183030.13,
+          "USD": 207.03
+        },
+        "total": {
+          "SYP": 5183030.13,
+          "USD": 207.03
+        }
+      }
+    },
+    "label": "reports.detail.purchases",
+    "method": "GET",
+    "path": "/api/reports/detail/purchases?from=2026-01-01",
+    "status": 200
+  },
+  {
+    "body": {
+      "meta": {
+        "hasNext": false,
+        "limit": 100,
+        "page": 0,
+        "total": 1
+      },
+      "rows": [
+        {
+          "amount": 88246.67,
+          "createdAt": "<ts>",
+          "currency": "SYP",
+          "date": "2026-02-18",
+          "id": "#00132",
+          "kind": "sale",
+          "number": "RET-2026-0001",
+          "partyId": "#00094",
+          "partyName": "أحمد التاجر"
+        }
+      ],
+      "summary": {
+        "count": 1,
+        "total": {
+          "SYP": 88246.67
+        }
+      }
+    },
+    "label": "reports.detail.sales-returns",
+    "method": "GET",
+    "path": "/api/reports/detail/sales-returns?from=2026-01-01",
+    "status": 200
+  },
+  {
+    "body": {
+      "meta": {
+        "hasNext": false,
+        "limit": 100,
+        "page": 0,
+        "total": 1
+      },
+      "rows": [
+        {
+          "amount": 35000,
+          "category": "نقل",
+          "createdAt": "<ts>",
+          "currency": "SYP",
+          "date": "2026-02-05",
+          "description": "أجور شحن",
+          "id": "#00185"
+        }
+      ],
+      "summary": {
+        "count": 1,
+        "total": {
+          "SYP": 35000
+        }
+      }
+    },
+    "label": "reports.detail.expenses",
+    "method": "GET",
+    "path": "/api/reports/detail/expenses?from=2026-01-01",
+    "status": 200
+  },
+  {
+    "body": {
+      "meta": {
+        "hasNext": false,
+        "limit": 100,
+        "page": 0,
+        "total": 42
+      },
+      "rows": [
+        {
+          "credit": 830.4,
+          "currency": "SYP",
+          "date": "2026-10-05",
+          "debit": 0,
+          "description": "الرصيد الافتتاحي",
+          "id": "#00181",
+          "referenceNumber": "SUP-2026-0002",
+          "type": "opening"
+        },
+        {
+          "credit": 0,
+          "currency": "SYP",
+          "date": "2026-10-05",
+          "debit": 830.4,
+          "description": "رأس مال / حقوق ملكية (مقابل الرصيد الافتتاحي)",
+          "id": "#00182",
+          "referenceNumber": "SUP-2026-0002",
+          "type": "opening_equity"
+        },
+        {
+          "credit": 0,
+          "currency": "SYP",
+          "date": "2026-02-21",
+          "debit": 300000,
+          "description": "نقدية مقبوضة VOC-2026-0005",
+          "id": "#00149",
+          "referenceNumber": "VOC-2026-0005",
+          "type": "cash"
+        },
+        {
+          "credit": 301500.5,
+          "currency": "SYP",
+          "date": "2026-02-21",
+          "debit": 0,
+          "description": "سند قبض VOC-2026-0005",
+          "id": "#00142",
+          "referenceNumber": "VOC-2026-0005",
+          "type": "receipt_in"
+        },
+        {
+          "credit": 0,
+          "currency": "SYP",
+          "date": "2026-02-21",
+          "debit": 1500.5,
+          "description": "مصروف خصم دفعة VOC-2026-0005",
+          "id": "#00150",
+          "referenceNumber": "VOC-2026-0005",
+          "type": "settlement_discount_expense"
+        },
+        {
+          "credit": 61605.83,
+          "currency": "SYP",
+          "date": "2026-02-18",
+          "debit": 0,
+          "description": "عكس تكلفة البضاعة RET-2026-0001",
+          "id": "#00152",
+          "referenceNumber": "RET-2026-0001",
+          "type": "cogs_expense"
+        },
+        {
+          "credit": 0,
+          "currency": "SYP",
+          "date": "2026-02-18",
+          "debit": 61605.83,
+          "description": "إعادة مخزون RET-2026-0001",
+          "id": "#00153",
+          "referenceNumber": "RET-2026-0001",
+          "type": "inventory_asset"
+        },
+        {
+          "credit": 88246.67,
+          "currency": "SYP",
+          "date": "2026-02-18",
+          "debit": 0,
+          "description": "مرتجع بيع RET-2026-0001",
+          "id": "#00139",
+          "referenceNumber": "RET-2026-0001",
+          "type": "sales_return"
+        },
+        {
+          "credit": 0,
+          "currency": "SYP",
+          "date": "2026-02-18",
+          "debit": 88246.67,
+          "description": "عكس إيراد RET-2026-0001",
+          "id": "#00154",
+          "referenceNumber": "RET-2026-0001",
+          "type": "sales_return_contra"
+        },
+        {
+          "credit": 2000000,
+          "currency": "SYP",
+          "date": "2026-02-16",
+          "debit": 0,
+          "description": "نقدية مدفوعة VOC-2026-0003",
+          "id": "#00157",
+          "referenceNumber": "VOC-2026-0003",
+          "type": "cash"
+        },
+        {
+          "credit": 0,
+          "currency": "USD",
+          "date": "2026-02-16",
+          "debit": 50.5,
+          "description": "نقدية مقبوضة VOC-2026-0002",
+          "id": "#00158",
+          "referenceNumber": "VOC-2026-0002",
+          "type": "cash"
+        },
+        {
+          "credit": 0,
+          "currency": "SYP",
+          "date": "2026-02-16",
+          "debit": 2000000,
+          "description": "سند دفع VOC-2026-0003",
+          "id": "#00145",
+          "referenceNumber": "VOC-2026-0003",
+          "type": "payment_out"
+        },
+        {
+          "credit": 50.5,
+          "currency": "USD",
+          "date": "2026-02-16",
+          "debit": 0,
+          "description": "سند قبض VOC-2026-0002",
+          "id": "#00147",
+          "referenceNumber": "VOC-2026-0002",
+          "type": "receipt_in"
+        },
+        {
+          "credit": 0,
+          "currency": "SYP",
+          "date": "2026-02-15",
+          "debit": 150000.75,
+          "description": "نقدية مقبوضة VOC-2026-0001",
+          "id": "#00159",
+          "referenceNumber": "VOC-2026-0001",
+          "type": "cash"
+        },
+        {
+          "credit": 152501,
+          "currency": "SYP",
+          "date": "2026-02-15",
+          "debit": 0,
+          "description": "سند قبض VOC-2026-0001",
+          "id": "#00138",
+          "referenceNumber": "VOC-2026-0001",
+          "type": "receipt_in"
+        },
+        {
+          "credit": 0,
+          "currency": "SYP",
+          "date": "2026-02-15",
+          "debit": 2500.25,
+          "description": "مصروف خصم دفعة VOC-2026-0001",
+          "id": "#00160",
+          "referenceNumber": "VOC-2026-0001",
+          "type": "settlement_discount_expense"
+        },
+        {
+          "credit": 0,
+          "currency": "SYP",
+          "date": "2026-02-12",
+          "debit": 333626.81,
+          "description": "تكلفة البضاعة المباعة INV-2026-0003",
+          "id": "#00167",
+          "referenceNumber": "INV-2026-0003",
+          "type": "cogs_expense"
+        },
+        {
+          "credit": 333626.81,
+          "currency": "SYP",
+          "date": "2026-02-12",
+          "debit": 0,
+          "description": "تخفيض مخزون INV-2026-0003",
+          "id": "#00168",
+          "referenceNumber": "INV-2026-0003",
+          "type": "inventory_asset"
+        },
+        {
+          "credit": 0,
+          "currency": "SYP",
+          "date": "2026-02-12",
+          "debit": 472000,
+          "description": "فاتورة بيع INV-2026-0003",
+          "id": "#00140",
+          "referenceNumber": "INV-2026-0003",
+          "type": "sales_invoice"
+        },
+        {
+          "credit": 472000,
+          "currency": "SYP",
+          "date": "2026-02-12",
+          "debit": 0,
+          "description": "إيراد مبيعات INV-2026-0003",
+          "id": "#00169",
+          "referenceNumber": "INV-2026-0003",
+          "type": "sales_revenue"
+        },
+        {
+          "credit": 0,
+          "currency": "USD",
+          "date": "2026-02-11",
+          "debit": 69.17,
+          "description": "تكلفة البضاعة المباعة INV-2026-0002",
+          "id": "#00170",
+          "referenceNumber": "INV-2026-0002",
+          "type": "cogs_expense"
+        },
+        {
+          "credit": 69.17,
+          "currency": "USD",
+          "date": "2026-02-11",
+          "debit": 0,
+          "description": "تخفيض مخزون INV-2026-0002",
+          "id": "#00171",
+          "referenceNumber": "INV-2026-0002",
+          "type": "inventory_asset"
+        },
+        {
+          "credit": 0,
+          "currency": "USD",
+          "date": "2026-02-11",
+          "debit": 107.45,
+          "description": "فاتورة بيع INV-2026-0002",
+          "id": "#00148",
+          "referenceNumber": "INV-2026-0002",
+          "type": "sales_invoice"
+        },
+        {
+          "credit": 107.45,
+          "currency": "USD",
+          "date": "2026-02-11",
+          "debit": 0,
+          "description": "إيراد مبيعات INV-2026-0002",
+          "id": "#00172",
+          "referenceNumber": "INV-2026-0002",
+          "type": "sales_revenue"
+        },
+        {
+          "credit": 0,
+          "currency": "SYP",
+          "date": "2026-02-10",
+          "debit": 400000,
+          "description": "نقدية مقبوضة RCP-INV-2026-0001",
+          "id": "#00173",
+          "referenceNumber": "RCP-INV-2026-0001",
+          "type": "cash"
+        },
+        {
+          "credit": 0,
+          "currency": "SYP",
+          "date": "2026-02-10",
+          "debit": 870083.33,
+          "description": "تكلفة البضاعة المباعة INV-2026-0001",
+          "id": "#00174",
+          "referenceNumber": "INV-2026-0001",
+          "type": "cogs_expense"
+        },
+        {
+          "credit": 870083.33,
+          "currency": "SYP",
+          "date": "2026-02-10",
+          "debit": 0,
+          "description": "تخفيض مخزون INV-2026-0001",
+          "id": "#00175",
+          "referenceNumber": "INV-2026-0001",
+          "type": "inventory_asset"
+        },
+        {
+          "credit": 400000,
+          "currency": "SYP",
+          "date": "2026-02-10",
+          "debit": 0,
+          "description": "سند قبض RCP-INV-2026-0001",
+          "id": "#00136",
+          "referenceNumber": "RCP-INV-2026-0001",
+          "type": "receipt_in"
+        },
+        {
+          "credit": 0,
+          "currency": "SYP",
+          "date": "2026-02-10",
+          "debit": 1240596.1,
+          "description": "فاتورة بيع INV-2026-0001",
+          "id": "#00137",
+          "referenceNumber": "INV-2026-0001",
+          "type": "sales_invoice"
+        },
+        {
+          "credit": 1240596.1,
+          "currency": "SYP",
+          "date": "2026-02-10",
+          "debit": 0,
+          "description": "إيراد مبيعات INV-2026-0001",
+          "id": "#00176",
+          "referenceNumber": "INV-2026-0001",
+          "type": "sales_revenue"
+        },
+        {
+          "credit": 35000,
+          "currency": "SYP",
+          "date": "2026-02-05",
+          "debit": 0,
+          "description": "نقدية مدفوعة EXP-2026-0001",
+          "id": "#00190",
+          "referenceNumber": "EXP-2026-0001",
+          "type": "cash"
+        },
+        {
+          "credit": 0,
+          "currency": "SYP",
+          "date": "2026-02-05",
+          "debit": 35000,
+          "description": "مصروف EXP-2026-0001: نقل - أجور شحن",
+          "id": "#00191",
+          "referenceNumber": "EXP-2026-0001",
+          "type": "expense"
+        },
+        {
+          "credit": 0,
+          "currency": "SYP",
+          "date": "2026-02-04",
+          "debit": 120000,
+          "description": "حركة يدوية withdrawal",
+          "id": "#00192",
+          "referenceNumber": null,
+          "type": "adjustment"
+        },
+        {
+          "credit": 120000,
+          "currency": "SYP",
+          "date": "2026-02-04",
+          "debit": 0,
+          "description": "مقابل الحركة اليدوية withdrawal",
+          "id": "#00193",
+          "referenceNumber": null,
+          "type": "adjustment_contra"
+        },
+        {
+          "credit": 750000.5,
+          "currency": "SYP",
+          "date": "2026-02-03",
+          "debit": 0,
+          "description": "رأس مال إضافي",
+          "id": "#00194",
+          "referenceNumber": null,
+          "type": "adjustment"
+        },
+        {
+          "credit": 0,
+          "currency": "SYP",
+          "date": "2026-02-03",
+          "debit": 750000.5,
+          "description": "مقابل الحركة اليدوية رأس مال",
+          "id": "#00195",
+          "referenceNumber": null,
+          "type": "adjustment_contra"
+        },
+        {
+          "credit": 0,
+          "currency": "USD",
+          "date": "2026-02-02",
+          "debit": 207.03,
+          "description": "مخزون مستلم ENT-2026-0002",
+          "id": "#00178",
+          "referenceNumber": "ENT-2026-0002",
+          "type": "inventory_asset"
+        },
+        {
+          "credit": 207.03,
+          "currency": "USD",
+          "date": "2026-02-02",
+          "debit": 0,
+          "description": "فاتورة شراء ENT-2026-0002",
+          "id": "#00177",
+          "referenceNumber": "ENT-2026-0002",
+          "type": "purchase_invoice"
+        },
+        {
+          "credit": 1000000,
+          "currency": "SYP",
+          "date": "2026-02-01",
+          "debit": 0,
+          "description": "نقدية مدفوعة PAY-ENT-2026-0001",
+          "id": "#00179",
+          "referenceNumber": "PAY-ENT-2026-0001",
+          "type": "cash"
+        },
+        {
+          "credit": 0,
+          "currency": "SYP",
+          "date": "2026-02-01",
+          "debit": 5183030.13,
+          "description": "مخزون مستلم ENT-2026-0001",
+          "id": "#00180",
+          "referenceNumber": "ENT-2026-0001",
+          "type": "inventory_asset"
+        },
+        {
+          "credit": 0,
+          "currency": "SYP",
+          "date": "2026-02-01",
+          "debit": 1000000,
+          "description": "سند دفع PAY-ENT-2026-0001",
+          "id": "#00143",
+          "referenceNumber": "PAY-ENT-2026-0001",
+          "type": "payment_out"
+        },
+        {
+          "credit": 5183030.13,
+          "currency": "SYP",
+          "date": "2026-02-01",
+          "debit": 0,
+          "description": "فاتورة شراء ENT-2026-0001",
+          "id": "#00144",
+          "referenceNumber": "ENT-2026-0001",
+          "type": "purchase_invoice"
+        }
+      ],
+      "summary": {
+        "count": 42,
+        "credit": {
+          "SYP": 13009021.27,
+          "USD": 434.15
+        },
+        "debit": {
+          "SYP": 13009021.27,
+          "USD": 434.15
+        }
+      }
+    },
+    "label": "reports.detail.ledger",
+    "method": "GET",
+    "path": "/api/reports/detail/ledger?from=2026-01-01",
+    "status": 200
+  },
+  {
+    "body": {
+      "meta": {
+        "hasNext": false,
+        "limit": 100,
+        "page": 0,
+        "total": 2
+      },
+      "rows": [
+        {
+          "amount": 750000.5,
+          "createdAt": "<ts>",
+          "currency": "SYP",
+          "date": "2026-02-03",
+          "description": "رأس مال إضافي",
+          "direction": "in",
+          "id": "#00183",
+          "type": "capital"
+        },
+        {
+          "amount": 120000,
+          "createdAt": "<ts>",
+          "currency": "SYP",
+          "date": "2026-02-04",
+          "description": null,
+          "direction": "out",
+          "id": "#00184",
+          "type": "withdrawal"
+        }
+      ],
+      "summary": {}
+    },
+    "label": "reports.detail.cashbox",
+    "method": "GET",
+    "path": "/api/reports/detail/cashbox?from=2026-01-01",
+    "status": 200
+  },
+  {
+    "body": {
+      "meta": {
+        "hasNext": false,
+        "limit": 2,
+        "page": 0,
+        "total": 2
+      },
+      "rows": [
+        {
+          "fabricId": "#00101",
+          "kg": 40.32,
+          "name": "Polyester 150D",
+          "rolls": 1,
+          "value": {
+            "USD": 139.37
+          }
+        },
+        {
+          "fabricId": "#00100",
+          "kg": 204.43,
+          "name": "قطن مصري",
+          "rolls": 3,
+          "value": {
+            "SYP": 4015925.81
+          }
+        }
+      ],
+      "summary": {
+        "total": {
+          "SYP": 4015925.81,
+          "USD": 139.37
+        }
+      }
+    },
+    "label": "reports.detail.inventory-value",
+    "method": "GET",
+    "path": "/api/reports/detail/inventory-value?from=2026-01-01",
+    "status": 200
+  },
+  {
+    "body": {
+      "meta": {
+        "hasNext": false,
+        "limit": 10,
+        "page": 0,
+        "total": 2
+      },
+      "rows": [
+        {
+          "fabricId": "#00100",
+          "name": "قطن مصري",
+          "qty": 63.15,
+          "revenueByCurrency": {
+            "SYP": 1717361.54
+          }
+        },
+        {
+          "fabricId": "#00101",
+          "name": "Polyester 150D",
+          "qty": 20.01,
+          "revenueByCurrency": {
+            "USD": 107.45
+          }
+        }
+      ],
+      "summary": {}
+    },
+    "label": "reports.detail.top-fabrics",
+    "method": "GET",
+    "path": "/api/reports/detail/top-fabrics?from=2026-01-01",
+    "status": 200
+  },
+  {
+    "body": {
+      "meta": {
+        "hasNext": false,
+        "limit": 10,
+        "page": 0,
+        "total": 2
+      },
+      "rows": [
+        {
+          "name": "أحمد التاجر",
+          "partyId": "#00094",
+          "revenueByCurrency": {
+            "SYP": 1240596.1
+          }
+        },
+        {
+          "name": "Beta Textiles",
+          "partyId": "#00096",
+          "revenueByCurrency": {
+            "SYP": 472000,
+            "USD": 107.45
+          }
+        }
+      ],
+      "summary": {}
+    },
+    "label": "reports.detail.top-customers",
+    "method": "GET",
+    "path": "/api/reports/detail/top-customers?from=2026-01-01",
+    "status": 200
+  },
+  {
+    "body": {
+      "data": [
+        {
+          "code": "C-BETA",
+          "currency": "SYP",
+          "name": "Beta Textiles",
+          "paid": "301500.50",
+          "partyCurrency": "SYP",
+          "partyId": "#00096",
+          "remaining": "170499.50",
+          "total": "472000.00"
+        },
+        {
+          "code": "C-BETA",
+          "currency": "USD",
+          "name": "Beta Textiles",
+          "paid": "0.00",
+          "partyCurrency": "SYP",
+          "partyId": "#00096",
+          "remaining": "56.95",
+          "total": "107.45"
+        },
+        {
+          "code": "CUS-2026-0001",
+          "currency": "SYP",
+          "name": "أحمد التاجر",
+          "paid": "552501.00",
+          "partyCurrency": "SYP",
+          "partyId": "#00094",
+          "remaining": "599848.43",
+          "total": "1240596.10"
+        },
+        {
+          "code": "CUS-2026-0002",
+          "currency": null,
+          "name": "إيلاف للأقمشة",
+          "paid": "0",
+          "partyCurrency": "SYP",
+          "partyId": "#00097",
+          "remaining": "0",
+          "total": "0"
+        }
+      ]
+    },
+    "label": "reports.party-balances",
+    "method": "GET",
+    "path": "/api/reports/party-balances",
+    "status": 200
+  },
+  {
+    "body": {
+      "byCurrency": [
+        {
+          "cogs": 1142104.3099999998,
+          "currency": "SYP",
+          "expenses": 35000,
+          "grossProfit": 481010.5600000003,
+          "invoiceCount": 2,
+          "marginPercent": 29.64,
+          "netProfit": 446010.5600000003,
+          "returnCount": 1,
+          "salesRevenue": 1623114.87
+        },
+        {
+          "cogs": 69.17,
+          "currency": "USD",
+          "expenses": 0,
+          "grossProfit": 38.28,
+          "invoiceCount": 1,
+          "marginPercent": 35.63,
+          "netProfit": 38.28,
+          "returnCount": 0,
+          "salesRevenue": 107.45
+        }
+      ],
+      "totalPayables": [
+        {
+          "currency": "SYP",
+          "date": "2026-02-01",
+          "daysOverdue": 246,
+          "invoiceId": "#00109",
+          "kind": "payable",
+          "number": "ENT-2026-0001",
+          "paid": 1000000,
+          "partyId": "#00098",
+          "partyName": "معمل النسيج الحديث",
+          "remaining": 2183030.13,
+          "returns": 0,
+          "total": 5183030.13
+        },
+        {
+          "currency": "USD",
+          "date": "2026-02-02",
+          "daysOverdue": 245,
+          "invoiceId": "#00114",
+          "kind": "payable",
+          "number": "ENT-2026-0002",
+          "paid": 0,
+          "partyId": "#00099",
+          "partyName": "Gamma Yarn",
+          "remaining": 207.03,
+          "returns": 0,
+          "total": 207.03
+        }
+      ],
+      "totalReceivables": [
+        {
+          "currency": "SYP",
+          "date": "2026-02-10",
+          "daysOverdue": 237,
+          "invoiceId": "#00116",
+          "kind": "receivable",
+          "number": "INV-2026-0001",
+          "paid": 552501,
+          "partyId": "#00094",
+          "partyName": "أحمد التاجر",
+          "remaining": 599848.43,
+          "returns": 88246.67,
+          "total": 1240596.1
+        },
+        {
+          "currency": "SYP",
+          "date": "2026-02-12",
+          "daysOverdue": 235,
+          "invoiceId": "#00122",
+          "kind": "receivable",
+          "number": "INV-2026-0003",
+          "paid": 301500.5,
+          "partyId": "#00096",
+          "partyName": "Beta Textiles",
+          "remaining": 170499.5,
+          "returns": 0,
+          "total": 472000
+        },
+        {
+          "currency": "USD",
+          "date": "2026-02-11",
+          "daysOverdue": 236,
+          "invoiceId": "#00120",
+          "kind": "receivable",
+          "number": "INV-2026-0002",
+          "paid": 0,
+          "partyId": "#00096",
+          "partyName": "Beta Textiles",
+          "remaining": 56.95,
+          "returns": 0,
+          "total": 107.45
+        }
+      ]
+    },
+    "label": "profit.summary",
+    "method": "GET",
+    "path": "/api/profit/summary?from=2026-01-01&to=2026-12-31",
+    "status": 200
+  },
+  {
+    "body": {
+      "byCurrency": [
+        {
+          "cogs": 1142104.3099999998,
+          "currency": "SYP",
+          "expenses": 35000,
+          "grossProfit": 481010.5600000003,
+          "invoiceCount": 2,
+          "marginPercent": 29.64,
+          "netProfit": 446010.5600000003,
+          "returnCount": 1,
+          "salesRevenue": 1623114.87
+        },
+        {
+          "cogs": 69.17,
+          "currency": "USD",
+          "expenses": 0,
+          "grossProfit": 38.28,
+          "invoiceCount": 1,
+          "marginPercent": 35.63,
+          "netProfit": 38.28,
+          "returnCount": 0,
+          "salesRevenue": 107.45
+        }
+      ],
+      "expenses": [
+        {
+          "amount": 35000,
+          "category": "نقل",
+          "currency": "SYP",
+          "date": "2026-02-05",
+          "description": "أجور شحن",
+          "id": "#00185",
+          "number": "EXP-2026-0001"
+        }
+      ],
+      "invoiceLines": [
+        {
+          "cogs": 333626.81,
+          "currency": "SYP",
+          "date": "2026-02-12",
+          "grossProfit": 138373.19,
+          "invoiceId": "#00122",
+          "marginPercent": 29.32,
+          "number": "INV-2026-0003",
+          "partyId": "#00096",
+          "partyName": "Beta Textiles",
+          "revenue": 472000
+        },
+        {
+          "cogs": 69.17,
+          "currency": "USD",
+          "date": "2026-02-11",
+          "grossProfit": 38.28,
+          "invoiceId": "#00120",
+          "marginPercent": 35.63,
+          "number": "INV-2026-0002",
+          "partyId": "#00096",
+          "partyName": "Beta Textiles",
+          "revenue": 107.45
+        },
+        {
+          "cogs": 870083.33,
+          "currency": "SYP",
+          "date": "2026-02-10",
+          "grossProfit": 369278.2100000001,
+          "invoiceId": "#00116",
+          "marginPercent": 29.8,
+          "number": "INV-2026-0001",
+          "partyId": "#00094",
+          "partyName": "أحمد التاجر",
+          "revenue": 1239361.54
+        }
+      ],
+      "payables": [
+        {
+          "currency": "SYP",
+          "date": "2026-02-01",
+          "daysOverdue": 246,
+          "invoiceId": "#00109",
+          "kind": "payable",
+          "number": "ENT-2026-0001",
+          "paid": 1000000,
+          "partyId": "#00098",
+          "partyName": "معمل النسيج الحديث",
+          "remaining": 2183030.13,
+          "returns": 0,
+          "total": 5183030.13
+        },
+        {
+          "currency": "USD",
+          "date": "2026-02-02",
+          "daysOverdue": 245,
+          "invoiceId": "#00114",
+          "kind": "payable",
+          "number": "ENT-2026-0002",
+          "paid": 0,
+          "partyId": "#00099",
+          "partyName": "Gamma Yarn",
+          "remaining": 207.03,
+          "returns": 0,
+          "total": 207.03
+        }
+      ],
+      "receivables": [
+        {
+          "currency": "SYP",
+          "date": "2026-02-10",
+          "daysOverdue": 237,
+          "invoiceId": "#00116",
+          "kind": "receivable",
+          "number": "INV-2026-0001",
+          "paid": 552501,
+          "partyId": "#00094",
+          "partyName": "أحمد التاجر",
+          "remaining": 599848.43,
+          "returns": 88246.67,
+          "total": 1240596.1
+        },
+        {
+          "currency": "SYP",
+          "date": "2026-02-12",
+          "daysOverdue": 235,
+          "invoiceId": "#00122",
+          "kind": "receivable",
+          "number": "INV-2026-0003",
+          "paid": 301500.5,
+          "partyId": "#00096",
+          "partyName": "Beta Textiles",
+          "remaining": 170499.5,
+          "returns": 0,
+          "total": 472000
+        },
+        {
+          "currency": "USD",
+          "date": "2026-02-11",
+          "daysOverdue": 236,
+          "invoiceId": "#00120",
+          "kind": "receivable",
+          "number": "INV-2026-0002",
+          "paid": 0,
+          "partyId": "#00096",
+          "partyName": "Beta Textiles",
+          "remaining": 56.95,
+          "returns": 0,
+          "total": 107.45
+        }
+      ],
+      "returnAdjustments": [
+        {
+          "cogs": 61605.83,
+          "currency": "SYP",
+          "date": "2026-02-18",
+          "number": "RET-2026-0001",
+          "originalInvoiceId": "#00116",
+          "returnId": "#00132",
+          "revenue": 88246.67
+        }
+      ]
+    },
+    "label": "profit.details",
+    "method": "GET",
+    "path": "/api/profit/details?from=2026-01-01&to=2026-12-31",
+    "status": 200
+  },
+  {
+    "body": {
+      "data": [
+        {
+          "code": "CUS-2026-0001",
+          "currency": "SYP",
+          "id": "#00094",
+          "kind": "customer",
+          "name": "أحمد التاجر",
+          "status": "active"
+        }
+      ],
+      "nextCursor": null
+    },
+    "label": "search.parties.أحمد",
+    "method": "GET",
+    "path": "/api/parties/search?q=%D8%A3%D8%AD%D9%85%D8%AF",
+    "status": 200
+  },
+  {
+    "body": {
+      "data": [],
+      "nextCursor": null
+    },
+    "label": "search.parties.احمد",
+    "method": "GET",
+    "path": "/api/parties/search?q=%D8%A7%D8%AD%D9%85%D8%AF",
+    "status": 200
+  },
+  {
+    "body": {
+      "data": [
+        {
+          "code": "C-BETA",
+          "currency": "SYP",
+          "id": "#00096",
+          "kind": "customer",
+          "name": "Beta Textiles",
+          "status": "active"
+        }
+      ],
+      "nextCursor": null
+    },
+    "label": "search.parties.beta",
+    "method": "GET",
+    "path": "/api/parties/search?q=beta",
+    "status": 200
+  },
+  {
+    "body": {
+      "data": [
+        {
+          "code": "C-BETA",
+          "currency": "SYP",
+          "id": "#00096",
+          "kind": "customer",
+          "name": "Beta Textiles",
+          "status": "active"
+        }
+      ],
+      "nextCursor": null
+    },
+    "label": "search.parties.BETA",
+    "method": "GET",
+    "path": "/api/parties/search?q=BETA",
+    "status": 200
+  },
+  {
+    "body": {
+      "data": [
+        {
+          "code": "CUS-2026-0002",
+          "currency": "SYP",
+          "id": "#00097",
+          "kind": "customer",
+          "name": "إيلاف للأقمشة",
+          "status": "active"
+        }
+      ],
+      "nextCursor": null
+    },
+    "label": "search.parties.إيلاف",
+    "method": "GET",
+    "path": "/api/parties/search?q=%D8%A5%D9%8A%D9%84%D8%A7%D9%81",
+    "status": 200
+  },
+  {
+    "body": {
+      "data": [
+        {
+          "code": "SUP-2026-0001",
+          "currency": "SYP",
+          "id": "#00098",
+          "kind": "supplier",
+          "name": "معمل النسيج الحديث",
+          "status": "active"
+        }
+      ],
+      "nextCursor": null
+    },
+    "label": "search.parties.النسيج",
+    "method": "GET",
+    "path": "/api/parties/search?q=%D8%A7%D9%84%D9%86%D8%B3%D9%8A%D8%AC",
+    "status": 200
+  },
+  {
+    "body": {
+      "data": [],
+      "nextCursor": null
+    },
+    "label": "search.parties.%",
+    "method": "GET",
+    "path": "/api/parties/search?q=%25",
+    "status": 200
+  },
+  {
+    "body": {
+      "data": [],
+      "nextCursor": null
+    },
+    "label": "search.parties._",
+    "method": "GET",
+    "path": "/api/parties/search?q=_",
+    "status": 200
+  },
+  {
+    "body": {
+      "data": [
+        {
+          "id": "#00100",
+          "name": "قطن مصري"
+        }
+      ]
+    },
+    "label": "search.fabrics",
+    "method": "GET",
+    "path": "/api/fabrics/search?q=%D9%82%D8%B7%D9%86",
+    "status": 200
+  },
+  {
+    "body": {
+      "data": [
+        {
+          "code": "CL-2",
+          "fabricId": "#00101",
+          "id": "#00104",
+          "name": "Black"
+        }
+      ]
+    },
+    "label": "search.colors",
+    "method": "GET",
+    "path": "/api/colors/search?q=bl&fabricId=#00101",
+    "status": 200
+  },
+  {
+    "body": {
+      "data": [
+        {
+          "colorId": "#00102",
+          "currency": "SYP",
+          "id": "#00105",
+          "pricePerKg": "18500.2500",
+          "remainingKg": "83.25",
+          "remainingPieces": 5,
+          "rollNo": "R-001",
+          "status": "in_stock"
+        },
+        {
+          "colorId": "#00102",
+          "currency": "SYP",
+          "id": "#00108",
+          "pricePerKg": "19000.0000",
+          "remainingKg": "34.50",
+          "remainingPieces": 3,
+          "rollNo": "R-004",
+          "status": "in_stock"
+        }
+      ]
+    },
+    "label": "search.rolls",
+    "method": "GET",
+    "path": "/api/rolls/search?q=R-00&colorId=#00102",
+    "status": 200
+  },
+  {
+    "body": {
+      "data": [
+        {
+          "amountDue": 100000,
+          "baseTotal": 10.07,
+          "cancelledAt": "<ts>",
+          "cancelledBy": "#00093",
+          "createdAt": "<ts>",
+          "createdBy": "#00093",
+          "creditApplied": 0,
+          "currency": "SYP",
+          "date": "2026-02-13",
+          "discount": 0,
+          "exchangeRate": 14900,
+          "id": "#00125",
+          "lines": [
+            {
+              "colorId": "#00103",
+              "costPerKg": 21000,
+              "discountAmount": 0,
+              "fabricId": "#00100",
+              "id": "#00126",
+              "pieces": 1,
+              "pricePerKg": 30000,
+              "quantityKg": 5,
+              "rollId": "#00106"
+            }
+          ],
+          "number": "INV-2026-0004",
+          "paid": 50000,
+          "partyId": "#00097",
+          "partyType": "customer",
+          "paymentMethod": "cash",
+          "reference": "INV-2026-0004",
+          "shipping": 0,
+          "status": "cancelled",
+          "subtotal": 150000,
+          "tax": 0,
+          "tenantId": "#00095",
+          "total": 150000,
+          "type": "sale",
+          "updatedAt": "<ts>",
+          "version": 2
+        },
+        {
+          "amountDue": 170499.5,
+          "baseTotal": 31.68,
+          "createdAt": "<ts>",
+          "createdBy": "#00093",
+          "creditApplied": 0,
+          "currency": "SYP",
+          "date": "2026-02-12",
+          "discount": 0,
+          "exchangeRate": 14900,
+          "id": "#00122",
+          "lines": [
+            {
+              "colorId": "#00102",
+              "costPerKg": 19000,
+              "discountAmount": 0,
+              "fabricId": "#00100",
+              "id": "#00123",
+              "pieces": 1,
+              "pricePerKg": 27000,
+              "quantityKg": 10.5,
+              "rollId": "#00108"
+            },
+            {
+              "colorId": "#00102",
+              "costPerKg": 18500.25,
+              "discountAmount": 0,
+              "fabricId": "#00100",
+              "id": "#00124",
+              "pieces": 1,
+              "pricePerKg": 26000,
+              "quantityKg": 7.25,
+              "rollId": "#00105"
+            }
+          ],
+          "number": "INV-2026-0003",
+          "paid": 301500.5,
+          "partyId": "#00096",
+          "partyType": "customer",
+          "paymentMethod": null,
+          "reference": "INV-2026-0003",
+          "shipping": 0,
+          "status": "active",
+          "subtotal": 472000,
+          "tax": 0,
+          "tenantId": "#00095",
+          "total": 472000,
+          "type": "sale",
+          "updatedAt": "<ts>",
+          "version": 1
+        }
+      ],
+      "meta": {
+        "hasNext": true,
+        "limit": 2,
+        "nextCursor": "<cursor>",
+        "page": 0,
+        "total": 4,
+        "totalPages": 2
+      }
+    },
+    "label": "invoice.keyset.page0",
+    "method": "GET",
+    "path": "/api/invoices?type=sale&limit=2",
+    "status": 200
+  },
+  {
+    "body": {
+      "data": [
+        {
+          "amountDue": 107.45,
+          "baseTotal": 107.45,
+          "createdAt": "<ts>",
+          "createdBy": "#00093",
+          "creditApplied": 0,
+          "currency": "USD",
+          "date": "2026-02-11",
+          "discount": 0,
+          "exchangeRate": 1,
+          "id": "#00120",
+          "lines": [
+            {
+              "colorId": "#00104",
+              "costPerKg": 3.4567,
+              "discountAmount": 0,
+              "fabricId": "#00101",
+              "id": "#00121",
+              "pieces": 1,
+              "pricePerKg": 5.37,
+              "quantityKg": 20.01,
+              "rollId": "#00107"
+            }
+          ],
+          "number": "INV-2026-0002",
+          "paid": 0,
+          "partyId": "#00096",
+          "partyType": "customer",
+          "paymentMethod": null,
+          "reference": "INV-2026-0002",
+          "shipping": 0,
+          "status": "active",
+          "subtotal": 107.45,
+          "tax": 0,
+          "tenantId": "#00095",
+          "total": 107.45,
+          "type": "sale",
+          "updatedAt": "<ts>",
+          "version": 1
+        },
+        {
+          "amountDue": 688095.1000000001,
+          "baseTotal": 83.82,
+          "createdAt": "<ts>",
+          "createdBy": "#00093",
+          "creditApplied": 0,
+          "currency": "SYP",
+          "date": "2026-02-10",
+          "discount": 5000,
+          "exchangeRate": 14800,
+          "id": "#00116",
+          "lines": [
+            {
+              "colorId": "#00102",
+              "costPerKg": 18500.25,
+              "discountAmount": 1000,
+              "fabricId": "#00100",
+              "id": "#00117",
+              "pieces": 1,
+              "pricePerKg": 26500.5,
+              "quantityKg": 33.33,
+              "rollId": "#00105"
+            },
+            {
+              "colorId": "#00103",
+              "costPerKg": 21000,
+              "discountAmount": 0,
+              "fabricId": "#00100",
+              "id": "#00118",
+              "pieces": 1,
+              "pricePerKg": 29999.99,
+              "quantityKg": 12.07,
+              "rollId": "#00106"
+            }
+          ],
+          "number": "INV-2026-0001",
+          "paid": 552501,
+          "partyId": "#00094",
+          "partyType": "customer",
+          "paymentMethod": "cash",
+          "reference": "INV-2026-0001",
+          "shipping": 0,
+          "status": "active",
+          "subtotal": 1244361.54,
+          "tax": 1234.56,
+          "tenantId": "#00095",
+          "total": 1240596.1,
+          "type": "sale",
+          "updatedAt": "<ts>",
+          "version": 1
+        }
+      ],
+      "meta": {
+        "hasNext": true,
+        "limit": 2,
+        "nextCursor": "<cursor>",
+        "page": 0,
+        "total": -1,
+        "totalPages": 0
+      }
+    },
+    "label": "invoice.keyset.page1",
+    "method": "GET",
+    "path": "/api/invoices?type=sale&limit=2&cursor=<cursor>",
+    "status": 200
+  },
+  {
+    "body": {
+      "data": [],
+      "meta": {
+        "hasNext": false,
+        "limit": 2,
+        "nextCursor": null,
+        "page": 0,
+        "total": -1,
+        "totalPages": 0
+      }
+    },
+    "label": "invoice.keyset.page2",
+    "method": "GET",
+    "path": "/api/invoices?type=sale&limit=2&cursor=<cursor>",
+    "status": 200
+  },
+  {
+    "body": {
+      "documentId": "#00116",
+      "documentType": "invoice",
+      "order": null,
+      "returns": [
+        {
+          "date": "2026-02-18",
+          "id": "#00132",
+          "kind": "sale",
+          "number": "RET-2026-0001",
+          "reason": "defect",
+          "status": "active"
+        }
+      ],
+      "timeline": [
+        {
+          "cashImpact": "none",
+          "createdAt": "<ts>",
+          "createdBy": "#00093",
+          "credit": 400000,
+          "currency": "SYP",
+          "date": "2026-02-10",
+          "debit": 0,
+          "description": "سند قبض RCP-INV-2026-0001",
+          "id": "#00136",
+          "partyId": "#00094",
+          "referenceId": "#00119",
+          "referenceNumber": "RCP-INV-2026-0001",
+          "referenceType": "receipt_in",
+          "status": "active",
+          "tenantId": "#00095",
+          "type": "receipt_in"
+        },
+        {
+          "cashImpact": "none",
+          "createdAt": "<ts>",
+          "createdBy": "#00093",
+          "credit": 0,
+          "currency": "SYP",
+          "date": "2026-02-10",
+          "debit": 1240596.1,
+          "description": "فاتورة بيع INV-2026-0001",
+          "id": "#00137",
+          "partyId": "#00094",
+          "referenceId": "#00116",
+          "referenceNumber": "INV-2026-0001",
+          "referenceType": "sales_invoice",
+          "status": "active",
+          "tenantId": "#00095",
+          "type": "sales_invoice"
+        },
+        {
+          "cashImpact": "in",
+          "createdAt": "<ts>",
+          "createdBy": "#00093",
+          "credit": 0,
+          "currency": "SYP",
+          "date": "2026-02-10",
+          "debit": 400000,
+          "description": "نقدية مقبوضة RCP-INV-2026-0001",
+          "id": "#00173",
+          "partyId": null,
+          "referenceId": "#00119",
+          "referenceNumber": "RCP-INV-2026-0001",
+          "referenceType": "receipt_in",
+          "status": "active",
+          "tenantId": "#00095",
+          "type": "cash"
+        },
+        {
+          "cashImpact": "none",
+          "createdAt": "<ts>",
+          "createdBy": "#00093",
+          "credit": 0,
+          "currency": "SYP",
+          "date": "2026-02-10",
+          "debit": 870083.33,
+          "description": "تكلفة البضاعة المباعة INV-2026-0001",
+          "id": "#00174",
+          "partyId": null,
+          "referenceId": "#00116",
+          "referenceNumber": "INV-2026-0001",
+          "referenceType": "sales_invoice",
+          "status": "active",
+          "tenantId": "#00095",
+          "type": "cogs_expense"
+        },
+        {
+          "cashImpact": "none",
+          "createdAt": "<ts>",
+          "createdBy": "#00093",
+          "credit": 870083.33,
+          "currency": "SYP",
+          "date": "2026-02-10",
+          "debit": 0,
+          "description": "تخفيض مخزون INV-2026-0001",
+          "id": "#00175",
+          "partyId": null,
+          "referenceId": "#00116",
+          "referenceNumber": "INV-2026-0001",
+          "referenceType": "sales_invoice",
+          "status": "active",
+          "tenantId": "#00095",
+          "type": "inventory_asset"
+        },
+        {
+          "cashImpact": "none",
+          "createdAt": "<ts>",
+          "createdBy": "#00093",
+          "credit": 1240596.1,
+          "currency": "SYP",
+          "date": "2026-02-10",
+          "debit": 0,
+          "description": "إيراد مبيعات INV-2026-0001",
+          "id": "#00176",
+          "partyId": null,
+          "referenceId": "#00116",
+          "referenceNumber": "INV-2026-0001",
+          "referenceType": "sales_invoice",
+          "status": "active",
+          "tenantId": "#00095",
+          "type": "sales_revenue"
+        },
+        {
+          "cashImpact": "none",
+          "createdAt": "<ts>",
+          "createdBy": "#00093",
+          "credit": 152501,
+          "currency": "SYP",
+          "date": "2026-02-15",
+          "debit": 0,
+          "description": "سند قبض VOC-2026-0001",
+          "id": "#00138",
+          "partyId": "#00094",
+          "referenceId": "#00128",
+          "referenceNumber": "VOC-2026-0001",
+          "referenceType": "receipt_in",
+          "status": "active",
+          "tenantId": "#00095",
+          "type": "receipt_in"
+        },
+        {
+          "cashImpact": "in",
+          "createdAt": "<ts>",
+          "createdBy": "#00093",
+          "credit": 0,
+          "currency": "SYP",
+          "date": "2026-02-15",
+          "debit": 150000.75,
+          "description": "نقدية مقبوضة VOC-2026-0001",
+          "id": "#00159",
+          "partyId": null,
+          "referenceId": "#00128",
+          "referenceNumber": "VOC-2026-0001",
+          "referenceType": "receipt_in",
+          "status": "active",
+          "tenantId": "#00095",
+          "type": "cash"
+        },
+        {
+          "cashImpact": "none",
+          "createdAt": "<ts>",
+          "createdBy": "#00093",
+          "credit": 0,
+          "currency": "SYP",
+          "date": "2026-02-15",
+          "debit": 2500.25,
+          "description": "مصروف خصم دفعة VOC-2026-0001",
+          "id": "#00160",
+          "partyId": null,
+          "referenceId": "#00128",
+          "referenceNumber": "VOC-2026-0001",
+          "referenceType": "receipt_in",
+          "status": "active",
+          "tenantId": "#00095",
+          "type": "settlement_discount_expense"
+        },
+        {
+          "cashImpact": "none",
+          "createdAt": "<ts>",
+          "createdBy": "#00093",
+          "credit": 88246.67,
+          "currency": "SYP",
+          "date": "2026-02-18",
+          "debit": 0,
+          "description": "مرتجع بيع RET-2026-0001",
+          "id": "#00139",
+          "partyId": "#00094",
+          "referenceId": "#00132",
+          "referenceNumber": "RET-2026-0001",
+          "referenceType": "sales_return",
+          "status": "active",
+          "tenantId": "#00095",
+          "type": "sales_return"
+        },
+        {
+          "cashImpact": "none",
+          "createdAt": "<ts>",
+          "createdBy": "#00093",
+          "credit": 61605.83,
+          "currency": "SYP",
+          "date": "2026-02-18",
+          "debit": 0,
+          "description": "عكس تكلفة البضاعة RET-2026-0001",
+          "id": "#00152",
+          "partyId": null,
+          "referenceId": "#00132",
+          "referenceNumber": "RET-2026-0001",
+          "referenceType": "sales_return",
+          "status": "active",
+          "tenantId": "#00095",
+          "type": "cogs_expense"
+        },
+        {
+          "cashImpact": "none",
+          "createdAt": "<ts>",
+          "createdBy": "#00093",
+          "credit": 0,
+          "currency": "SYP",
+          "date": "2026-02-18",
+          "debit": 61605.83,
+          "description": "إعادة مخزون RET-2026-0001",
+          "id": "#00153",
+          "partyId": null,
+          "referenceId": "#00132",
+          "referenceNumber": "RET-2026-0001",
+          "referenceType": "sales_return",
+          "status": "active",
+          "tenantId": "#00095",
+          "type": "inventory_asset"
+        },
+        {
+          "cashImpact": "none",
+          "createdAt": "<ts>",
+          "createdBy": "#00093",
+          "credit": 0,
+          "currency": "SYP",
+          "date": "2026-02-18",
+          "debit": 88246.67,
+          "description": "عكس إيراد RET-2026-0001",
+          "id": "#00154",
+          "partyId": null,
+          "referenceId": "#00132",
+          "referenceNumber": "RET-2026-0001",
+          "referenceType": "sales_return",
+          "status": "active",
+          "tenantId": "#00095",
+          "type": "sales_return_contra"
+        }
+      ],
+      "vouchers": [
+        {
+          "amount": 400000,
+          "date": "2026-02-10",
+          "id": "#00119",
+          "kind": "receipt",
+          "method": "cash",
+          "number": "RCP-INV-2026-0001",
+          "status": "active"
+        },
+        {
+          "amount": 152501,
+          "date": "2026-02-15",
+          "id": "#00128",
+          "kind": "receipt",
+          "method": "cash",
+          "number": "VOC-2026-0001",
+          "status": "active"
+        }
+      ]
+    },
+    "label": "document-graph",
+    "method": "GET",
+    "path": "/api/ledger/document-graph/#00116",
+    "status": 200
+  },
+  {
+    "body": {
+      "data": []
+    },
+    "label": "timeline",
+    "method": "GET",
+    "path": "/api/ledger/timeline/invoice/#00116",
+    "status": 200
+  },
+  {
+    "body": [],
+    "label": "financial-years",
+    "method": "GET",
+    "path": "/api/financial-years",
+    "status": 200
+  },
+  {
+    "body": {
+      "blockers": [],
+      "closingCashbox": {
+        "SYP": -1554998.75,
+        "USD": 0
+      },
+      "closingInventoryValue": {
+        "SYP": 4015925.81,
+        "USD": 139.37
+      },
+      "counts": {
+        "counted": 0,
+        "gainsKg": 0,
+        "lossesKg": 0,
+        "pending": 4,
+        "posted": 0,
+        "rolls": 4,
+        "withVariance": 0
+      },
+      "periodEnd": "2026-12-31",
+      "periodStart": "2026-01-01",
+      "status": "open",
+      "year": 2026
+    },
+    "label": "closing-preview",
+    "method": "GET",
+    "path": "/api/financial-years/2026/closing-preview",
+    "status": 200
+  }
+]

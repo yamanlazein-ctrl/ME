@@ -32,6 +32,29 @@ describe("fetchFullStatement", () => {
     expect(r.page.hasMore).toBe(false);
   });
 
+  it("has no page cap: walks more than 1000 follow-up pages (track P, C-11)", async () => {
+    // 1 + 1500 pages of one row each; the old loop stopped silently after 1000.
+    const pages = 1501;
+    const tiny = (f: { cursor?: string }): Promise<Page> => {
+      const i = f.cursor ? Number(f.cursor) : 0;
+      const more = i + 1 < pages;
+      return Promise.resolve({
+        entries: [{ id: i, runningBalance: i + 1 }],
+        finalBalance: pages,
+        page: { hasMore: more, nextCursor: more ? String(i + 1) : null, limit: 1 },
+      });
+    };
+    const r = await fetchFullStatement(tiny, { limit: 1 });
+    expect(r.entries).toHaveLength(pages);
+    expect(r.entries.at(-1)!.runningBalance).toBe(pages);
+  });
+
+  it("fails loudly instead of truncating when the cursor does not advance", async () => {
+    const stuck = (): Promise<Page> =>
+      Promise.resolve({ entries: [{ id: 0, runningBalance: 1 }], finalBalance: 1, page: { hasMore: true, nextCursor: "same", limit: 1 } });
+    await expect(fetchFullStatement(stuck, { limit: 1 })).rejects.toThrow(/did not advance/);
+  });
+
   it("explicit cursor returns just that page", async () => {
     const r = await fetchFullStatement(server, { limit: 200, cursor: "200" });
     expect(r.entries).toHaveLength(200);

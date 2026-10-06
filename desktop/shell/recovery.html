@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<!-- The document is LTR on purpose: the machine-generated technical text must
+     lay out left-to-right and wrap inside its own box. Direction is applied to
+     the Arabic elements individually, which is the only way an RTL container
+     stops clipping LTR content. -->
+<html lang="ar" dir="ltr">
+<head>
+<meta charset="UTF-8">
+<title>Motard ERP — استعادة التشغيل</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    background: #141414;
+    color: #f5f5f5;
+    font-family: "Segoe UI", Tahoma, Arial, sans-serif;
+    display: flex; align-items: center; justify-content: center;
+    user-select: none; cursor: default;
+  }
+  /* Responsive, not a fixed width: the window is sized in PHYSICAL pixels, so
+     at 125% display scaling a 560px window gives a ~448px CSS viewport and a
+     fixed 500px card would be clipped on the right. */
+  .card { text-align: center; width: 100%; max-width: 500px; padding: 0 10px; }
+  .logo { font-size: 38px; font-weight: 800; color: #f5c518; letter-spacing: 2px; }
+  .sub { font-size: 12px; color: #9a9a9a; margin-bottom: 18px; }
+  h1 { font-size: 15px; margin-bottom: 8px; }
+  #why { font-size: 12.5px; color: #b9b9b9; line-height: 1.7; margin-bottom: 14px; }
+  .bar-wrap { background: #2b2b2b; border-radius: 6px; height: 8px; overflow: hidden; margin-bottom: 10px; }
+  .bar { height: 100%; width: 8%; background: #f5c518; border-radius: 6px; transition: width 0.4s ease; }
+  #stage { font-size: 13.5px; color: #d7d7d7; min-height: 20px; margin-bottom: 12px; }
+  /* Machine-generated technical text: LTR, monospace, wraps on any token.
+     Mixed into an RTL paragraph it overflows the card and clips. */
+  #reason, #detail {
+    display: none; text-align: left; direction: ltr;
+    background: #1d1d1d; border: 1px solid #333; border-radius: 8px;
+    padding: 8px 10px; margin-bottom: 14px;
+    font-family: Consolas, "Courier New", monospace; font-size: 11px;
+    color: #b9b9b9; line-height: 1.55;
+    white-space: pre-wrap; overflow-wrap: anywhere; user-select: text;
+  }
+  #detail { max-height: 170px; overflow: auto; }
+  .actions { display: flex; gap: 10px; justify-content: center; }
+  button {
+    font-family: inherit; font-size: 13px; font-weight: 600;
+    padding: 9px 20px; border-radius: 7px; border: 1px solid #3a3a3a;
+    background: #262626; color: #e8e8e8; cursor: pointer;
+  }
+  button.primary { background: #f5c518; border-color: #f5c518; color: #1a1a1a; }
+  button:disabled { opacity: 0.45; cursor: default; }
+  #hint { font-size: 11.5px; color: #7d7d7d; margin-top: 12px; line-height: 1.6; }
+  /* Startup-choice mode (US3): one screen per data-root state, options exactly as the contract. */
+  #startup { display: none; }
+  #s-options { display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; }
+  #s-options button { width: 100%; }
+  #s-error { display: none; font-size: 12.5px; color: #ff8a80; margin-bottom: 10px; }
+  #s-note { font-size: 11.5px; color: #8d8d8d; line-height: 1.6; margin-top: 6px; }
+  body.startup #recovery { display: none; }
+  body.startup #startup { display: block; }
+</style>
+</head>
+<body>
+  <div class="card">
+    <div class="logo">M</div>
+    <div class="sub">Motard Fabrics Group ERP</div>
+    <div id="startup">
+      <h1 id="s-title" dir="rtl"></h1>
+      <div id="why2" dir="rtl" style="font-size:12.5px;color:#b9b9b9;line-height:1.7;margin-bottom:14px"></div>
+      <div id="s-error" dir="rtl"></div>
+      <div id="s-options" dir="rtl"></div>
+      <pre id="s-detail" style="display:none;text-align:left;direction:ltr;background:#1d1d1d;border:1px solid #333;border-radius:8px;padding:8px 10px;margin-bottom:12px;font-family:Consolas,monospace;font-size:11px;color:#b9b9b9;white-space:pre-wrap;overflow-wrap:anywhere;user-select:text;max-height:150px;overflow:auto"></pre>
+      <div class="actions" dir="rtl"><button id="s-quit">إغلاق البرنامج</button></div>
+      <div id="s-note" dir="rtl">لا يحذف أي خيار هنا بياناتك: «بدء مشروع جديد» ينقل البيانات الحالية إلى مجلد set-aside داخل مجلد البيانات.</div>
+    </div>
+    <div id="recovery">
+    <h1 id="title" dir="rtl">جارٍ استعادة التشغيل…</h1>
+    <div id="why" dir="rtl"></div>
+    <div class="bar-wrap"><div class="bar" id="bar"></div></div>
+    <div id="stage" dir="rtl">جارٍ فحص الخادم المحلي…</div>
+    <pre id="reason"></pre>
+    <pre id="detail"></pre>
+    <div class="actions" dir="rtl">
+      <button id="retry" class="primary" disabled>إعادة المحاولة</button>
+      <button id="details" disabled>تفاصيل السجل</button>
+      <button id="quit">إغلاق البرنامج</button>
+    </div>
+    <div id="hint" dir="rtl">
+      هذا البرنامج يعمل محلياً على هذا الجهاز فقط، ولا يحتاج اتصالاً بالإنترنت.
+      المشكلة في الخادم المحلي المدمج، وقد يكون سببها برنامج الحماية أو امتلاء
+      مساحة القرص.
+    </div>
+    </div>
+  </div>
+<script>
+  // Driven entirely by Rust:
+  //   window.setRecovery(json) — the supervisor's current state
+  //   __TAURI_INTERNALS__.invoke — retry / log detail / quit
+  (function () {
+    var el = function (id) { return document.getElementById(id); };
+    var title = el("title"), why = el("why"), stage = el("stage");
+    var bar = el("bar"), reason = el("reason"), detail = el("detail");
+    var retry = el("retry"), details = el("details"), quit = el("quit");
+
+    function invoke(cmd) {
+      return window.__TAURI_INTERNALS__.invoke(cmd);
+    }
+
+    function apply(r) {
+      if (!r) return;
+      var recovering = r.state === "recovering";
+      var failed = r.state === "failed";
+      retry.disabled = !failed;
+      details.disabled = !failed;
+      if (r.reason) {
+        reason.textContent = r.reason;
+        reason.style.display = "block";
+      } else {
+        reason.style.display = "none";
+      }
+      if (recovering) {
+        title.textContent = "جارٍ إعادة تشغيل الخادم المحلي…";
+        why.textContent = "سيعود البرنامج تلقائياً بمجرد أن يجيب الخادم المحلي.";
+        stage.textContent = "المحاولة " + r.attempt + " من " + r.maxAttempts;
+        bar.style.width = Math.round((r.attempt / Math.max(r.maxAttempts, 1)) * 100) + "%";
+      } else if (failed) {
+        title.textContent = "تعذّر تشغيل الخادم المحلي";
+        why.textContent = "استُنفدت كل المحاولات. راجع التفاصيل، أو أعد المحاولة بعد معالجة السبب.";
+        stage.textContent = "فشلت كل المحاولات";
+        bar.style.width = "100%";
+      } else {
+        title.textContent = "جارٍ استعادة التشغيل…";
+        why.textContent = "";
+        stage.textContent = "جارٍ فحص الخادم المحلي…";
+        bar.style.width = "8%";
+      }
+    }
+
+    window.setRecovery = function (json) {
+      try { apply(typeof json === "string" ? JSON.parse(json) : json); } catch (e) { /* ignore */ }
+    };
+
+    retry.addEventListener("click", function () {
+      retry.disabled = true;
+      details.disabled = true;
+      stage.textContent = "جارٍ إعادة التشغيل…";
+      bar.style.width = "8%";
+      invoke("recovery_retry").catch(function () { retry.disabled = false; });
+    });
+
+    details.addEventListener("click", function () {
+      invoke("recovery_log_tail").then(function (text) {
+        detail.textContent = text || "(السجل فارغ)";
+        detail.style.display = "block";
+      }).catch(function (e) {
+        detail.textContent = String(e);
+        detail.style.display = "block";
+      });
+    });
+
+    quit.addEventListener("click", function () { invoke("recovery_exit"); });
+
+    // ── Startup-choice mode (US3, contracts/data-root-and-startup-states.md) ──
+    // Only CORRUPT may speak of damage; every other state says what was found, not what is "broken".
+    var SCREENS = {
+      PRIOR_DATA_FOUND: ["وُجدت بيانات سابقة على هذا الجهاز",
+        "هذا تثبيت جديد للبرنامج، وفي مجلد البيانات بيانات من تثبيت سابق. اختر ما تريد فعله بها."],
+      MISMATCH: ["البيانات لا تخص هذا التثبيت",
+        "ملف البيانات الموجود يعود لتثبيت أو شركة أخرى، فلم يُفتح. لم يُغيَّر أي ملف."],
+      CORRUPT: ["ملف قاعدة البيانات تالف",
+        "فشل فحص سلامة ملف قاعدة البيانات، فلم يُفتح. يمكنك استعادة نسخة احتياطية، أو بدء مشروع جديد مع الاحتفاظ بالملف الحالي جانباً."],
+      TOO_NEW: ["البيانات من إصدار أحدث من البرنامج",
+        "أُنشئت هذه البيانات بإصدار أحدث من الإصدار المثبت. ثبّت الإصدار الأحدث لفتحها. لم يُغيَّر أي ملف."],
+      DATA_MISSING: ["ملف قاعدة البيانات غير موجود",
+        "توجد آثار بيانات سابقة لكن ملف قاعدة البيانات غير موجود في مكانه. استعد نسخة احتياطية، أو حدّد مكان الملف، أو ابدأ مشروعاً جديداً."],
+      LOCKED_UNKNOWN: ["مجلد البيانات مستخدم من برنامج آخر",
+        "يحتفظ برنامج آخر بقفل مجلد البيانات. أغلق ذلك البرنامج ثم أعد المحاولة. لم يُغيَّر أي ملف."]
+    };
+    var LABELS = {
+      open_existing: "فتح البيانات الموجودة",
+      restore_backup: "استعادة نسخة احتياطية",
+      start_new: "بدء مشروع جديد",
+      show_details: "عرض التفاصيل",
+      install_newer: "تثبيت إصدار أحدث",
+      locate: "تحديد مكان ملف قاعدة البيانات",
+      retry: "إعادة المحاولة"
+    };
+    var sTitle = el("s-title"), sWhy = el("why2"), sErr = el("s-error");
+    var sOpts = el("s-options"), sDetail = el("s-detail");
+    var current = null;
+
+    function showStartup(p) {
+      if (!p) return;
+      current = p;
+      document.body.className = "startup";
+      var s = SCREENS[p.state] || [p.state, ""];
+      sTitle.textContent = s[0];
+      sWhy.textContent = s[1];
+      sErr.textContent = p.error || "";
+      sErr.style.display = p.error ? "block" : "none";
+      sDetail.style.display = "none";
+      sOpts.innerHTML = "";
+      (p.options || []).forEach(function (code, i) {
+        var b = document.createElement("button");
+        b.textContent = (p.state === "LOCKED_UNKNOWN" && code === "show_details") ? "عرض البرنامج الذي يحتفظ بالقفل" : (LABELS[code] || code);
+        if (i === 0) b.className = "primary";
+        b.addEventListener("click", function () { choose(code); });
+        sOpts.appendChild(b);
+      });
+    }
+
+    function busy(on) {
+      Array.prototype.forEach.call(sOpts.querySelectorAll("button"), function (b) { b.disabled = on; });
+    }
+
+    function choose(code) {
+      if (code === "show_details") {
+        sDetail.textContent = (current && current.detail) || "(لا توجد تفاصيل)";
+        sDetail.style.display = "block";
+        return;
+      }
+      if (code === "install_newer") {
+        sDetail.textContent = "نزّل أحدث إصدار من Motard ERP وثبّته فوق هذا الإصدار؛ ستُفتح بياناتك كما هي.\n\n" + ((current && current.detail) || "");
+        sDetail.style.display = "block";
+        return;
+      }
+      busy(true);
+      sErr.style.display = "none";
+      window.__TAURI_INTERNALS__.invoke("startup_choose", { action: code }).catch(function (e) {
+        sErr.textContent = String(e);
+        sErr.style.display = "block";
+      }).then(function () { busy(false); });
+    }
+
+    el("s-quit").addEventListener("click", function () {
+      window.__TAURI_INTERNALS__.invoke("startup_choose", { action: "quit" });
+    });
+
+    window.setStartup = function (json) {
+      try { showStartup(typeof json === "string" ? JSON.parse(json) : json); } catch (e) { /* ignore */ }
+    };
+
+    invoke("startup_status").then(function (p) {
+      if (p) { showStartup(p); return; }
+      return invoke("recovery_status").then(apply);
+    }).catch(function () {
+      invoke("recovery_status").then(apply).catch(function () { /* Rust will push it */ });
+    });
+  })();
+</script>
+</body>
+</html>

@@ -1,7 +1,7 @@
 import type { Router, Request, Response, RequestHandler } from "express";
 import { z } from "zod";
 import { validateQuery } from "../../infrastructure/http/middleware/validate.middleware.js";
-import type { PostgresDocumentTrackRepository } from "../../infrastructure/repositories/PostgresDocumentTrackRepository.js";
+import type { IDocumentTrackRepository } from "../../application/ports/IDocumentTrackRepository.js";
 
 const ymd = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 export const documentTrackQuerySchema = z.object({
@@ -20,7 +20,7 @@ export const documentTrackQuerySchema = z.object({
 /** GET /api/documents/track — invoice-tracking screen, paged on the server. */
 export function registerDocumentTrackRoutes(
   router: Router,
-  repo: PostgresDocumentTrackRepository,
+  repo: IDocumentTrackRepository,
   auth: RequestHandler,
   readGuard: RequestHandler,
 ) {

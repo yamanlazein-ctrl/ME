@@ -54,6 +54,14 @@ DECLARE
     'party_balances','print_jobs','return_lines','returns','rolls','settings',
     'stock_movements','users','vouchers',
     'yearly_party_summaries',
+    -- Financial year + annual stocktake (migration
+    -- 20261020_financial_years_inventory_counts). Both carry a NOT NULL
+    -- tenant_id and hold tenant business data — a closed financial year and a
+    -- counted roll are exactly as private as an invoice. They are listed here
+    -- because this file is the canonical policy layer: rls-guard.test.ts
+    -- asserts every TS business table appears here, so a table added to the
+    -- schema and forgotten here is a cross-tenant read waiting to happen.
+    'financial_years','inventory_counts',
     -- Sync engine (0047-0051). All six carry a NOT NULL tenant_id, so they
     -- belong to the tenant-scoped family. They are listed here — and not only
     -- in their own migration — because this file is the canonical policy

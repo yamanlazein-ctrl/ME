@@ -5,11 +5,7 @@ import type {
 import type { PostgresInvitationRepository } from "../../../infrastructure/repositories/PostgresInvitationRepository.js";
 import type { Argon2PasswordHasher } from "../../../infrastructure/auth/PasswordHasher.js";
 import type { ILicenseRepository } from "../../../application/ports/ILicenseRepository.js";
-import { db } from "../../../infrastructure/orm/drizzle.js";
 import { runWithTenantContext } from "../../../infrastructure/orm/tenant-context.js";
-import { users } from "../../../infrastructure/orm/schemas/user.table.js";
-import { deviceRegistrations } from "../../../infrastructure/orm/schemas/device-registration.table.js";
-import { eq, count } from "drizzle-orm";
 import { isWithinLimit } from "../../../infrastructure/http/middleware/license.enforcement.middleware.js";
 import { resolveDeviceLimit } from "../../../domain/licensing/ownership.js";
 import { randomBytes } from "node:crypto";
@@ -214,14 +210,8 @@ export async function consumeInvitationCodeUseCase(
           ...lic.limits,
           devices: resolveDeviceLimit({ limits: lic.limits, maxDevices: lic.maxDevices }),
         };
-        const userCount =
-          typeof repoExtended.countUsersInTenant === "function"
-            ? await repoExtended.countUsersInTenant(row.tenantId)
-            : await countUsers(row.tenantId);
-        const deviceCount =
-          typeof repoExtended.countDevicesInTenant === "function"
-            ? await repoExtended.countDevicesInTenant(row.tenantId)
-            : await countDevices(row.tenantId);
+        const userCount = await repoExtended.countUsersInTenant(row.tenantId);
+        const deviceCount = await repoExtended.countDevicesInTenant(row.tenantId);
         if (row.type === "user" && !isWithinLimit(effectiveLimits, "users", userCount)) {
           return { ok: false, error: "تم الوصول إلى الحد الأقصى للمستخدمين المسموح بهم في الترخيص" };
         }
@@ -247,16 +237,7 @@ export async function consumeInvitationCodeUseCase(
           passwordHash!,
         );
         createdUserId = u.id;
-        if (typeof repoExtended.setUserPinHash === "function") {
-          await repoExtended.setUserPinHash(row.tenantId, u.id, passwordHash!);
-        } else {
-          await runWithTenantContext({ tenantId: row.tenantId }, async () => {
-            await db
-              .update(users)
-              .set({ pinHash: passwordHash!, updatedAt: new Date() })
-              .where(eq(users.id, u.id));
-          });
-        }
+        await repoExtended.setUserPinHash(row.tenantId, u.id, passwordHash!);
         if (options.deviceFingerprint) {
           const d = await repoExtended.registerDevice(
             row.tenantId,
@@ -294,29 +275,6 @@ export async function consumeInvitationCodeUseCase(
   }
 }
 
-async function countUsers(tenantId: string): Promise<number> {
-  // Pre-auth flow — stamp the tenant GUC (`users` is category-1 RLS).
-  return runWithTenantContext({ tenantId }, async () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const [{ c }] = await db
-      .select({ c: count() })
-      .from(users as any)
-      .where(eq((users as any).tenantId, tenantId));
-    return Number(c);
-  });
-}
-
-async function countDevices(tenantId: string): Promise<number> {
-  // Pre-auth flow — stamp the tenant GUC (device_registrations is category-2).
-  return runWithTenantContext({ tenantId }, async () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const [{ c }] = await db
-      .select({ c: count() })
-      .from(deviceRegistrations as any)
-      .where(eq((deviceRegistrations as any).tenantId, tenantId));
-    return Number(c);
-  });
-}
 
 function generateCode(): string {
   const bytes = randomBytes(6);

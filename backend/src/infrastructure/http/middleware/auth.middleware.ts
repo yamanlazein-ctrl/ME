@@ -3,6 +3,7 @@ import type { JwtSigner } from "../../auth/JwtSigner.js";
 import type { TokenDenylist } from "../../auth/TokenDenylist.js";
 import type { TenantContext } from "../../../domain/types/index.js";
 import { runWithTenantContext } from "../../orm/tenant-context.js";
+import { mapRestoredSyncDeviceId } from "../../sync/restoredIdentity.js";
 import { logger } from "../../config/logger.js";
 import {
   isTokenBeforeCutoff,
@@ -79,7 +80,8 @@ export function createAuthMiddleware(jwtSigner: JwtSigner, tokenDenylist: TokenD
           userId: payload.sub,
           userRole: (identity?.role ?? payload.role) as TenantContext["userRole"],
           userName: identity?.name ?? payload.sub,
-          syncDeviceId: syncDeviceId && isUuid(syncDeviceId) ? syncDeviceId : null,
+          // T109: after a restore on a synced device, a previous identity maps to the new one.
+          syncDeviceId: await mapRestoredSyncDeviceId(syncDeviceId && isUuid(syncDeviceId) ? syncDeviceId : null),
         };
 
         next();

@@ -1,0 +1,16 @@
+[
+  {
+    "category": null,
+    "created_at": "<ts>",
+    "created_by": "#00001",
+    "id": "#00004",
+    "image_url": null,
+    "min_stock_kg": "0.00",
+    "name": "Offline Fabric",
+    "notes": null,
+    "tenant_id": "#00008",
+    "unit": null,
+    "updated_at": "<ts>",
+    "version": 1
+  }
+]

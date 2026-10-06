@@ -1,6 +1,7 @@
 import type { BaseHttpClient } from "@/infrastructure/http";
 import type { PartyDTO, PartyFilter } from "@/core/dtos/PartyDTO";
 import type { ListResponse } from "@/contracts/_shared";
+import type { PartyOpeningInput } from "@erp/shared";
 
 export class PartyApiService {
   constructor(private client: BaseHttpClient) {}
@@ -43,7 +44,24 @@ export class PartyApiService {
     return res.data;
   }
 
-  async delete(kind: "customer" | "supplier", id: string, expectedVersion: number): Promise<void> {
-    await this.client.delete(`${this.path(kind)}/${id}`, { body: { expectedVersion } });
+  async setOpening(
+    kind: "customer" | "supplier",
+    id: string,
+    body: { opening: PartyOpeningInput; expectedVersion: number },
+  ): Promise<PartyDTO> {
+    const res = await this.client.put<PartyDTO>(`${this.path(kind)}/${id}/opening`, body);
+    return res.data;
+  }
+
+  async delete(kind: "customer" | "supplier", id: string, expectedVersion: number, confirmCascade = false): Promise<void> {
+    // Query params duplicate the body so a transport that strips DELETE bodies
+    // still carries the OCC token (desktop named-pipe + WebView2).
+    await this.client.delete(`${this.path(kind)}/${id}`, {
+      body: { expectedVersion, confirmCascade },
+      params: {
+        expectedVersion: String(expectedVersion),
+        ...(confirmCascade ? { confirmCascade: "true" } : {}),
+      },
+    });
   }
 }

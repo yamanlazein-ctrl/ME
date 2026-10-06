@@ -15,13 +15,11 @@ import { randomUUID } from "node:crypto";
 import { and, eq, isNull } from "drizzle-orm";
 import type { DB } from "../orm/drizzle.js";
 import { runWithPlatformContext } from "../orm/tenant-context.js";
-import { licenses } from "../orm/schemas/license.table.js";
-import { licenseActivations } from "../orm/schemas/license-activation.table.js";
-import { deviceRegistrations } from "../orm/schemas/device-registration.table.js";
 import type { ILicenseTokenSigner } from "../../application/ports/ILicenseTokenSigner.js";
 import type { ISecretsRepository } from "../../application/ports/ISecretsRepository.js";
 import type { ISecretCipher } from "../../application/ports/ISecretCipher.js";
 import { collectOfflineTokenJtisForDenylist } from "./licenseTokenJti.js";
+import { engineSchema } from "../orm/engineSchema.js";
 import type {
   LicenseLimits,
   LicenseModel,
@@ -85,6 +83,7 @@ export async function refreshOfflineEntitlement(input: {
   cipher?: ISecretCipher | null;
   tokenDenylist?: TokenDenylist | null;
 }): Promise<EntitlementRefreshResult> {
+  const { licenses, licenseActivations, deviceRegistrations } = await engineSchema();
   const { db, signer, license, secretsRepo, cipher, tokenDenylist } = input;
   const action = decideEntitlementRefreshAction(license.status);
 

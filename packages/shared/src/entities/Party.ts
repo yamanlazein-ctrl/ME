@@ -22,6 +22,8 @@ export interface PartyData {
   country?: string | null;
   taxNumber?: string | null;
   openingBalance: number;
+  openingDate?: string | null;
+  openingNote?: string | null;
   creditLimit: number;
   currency: string;
   paymentTerms?: string;
@@ -59,6 +61,8 @@ export function createPartyData(input: {
   country?: string;
   taxNumber?: string;
   openingBalance?: number;
+  openingDate?: string | null;
+  openingNote?: string | null;
   creditLimit?: number;
   currency?: string;
   paymentTerms?: string;
@@ -89,6 +93,8 @@ export function createPartyData(input: {
     country: input.country?.trim() ?? null,
     taxNumber: input.taxNumber?.trim() ?? null,
     openingBalance: input.openingBalance ?? 0,
+    openingDate: input.openingDate ?? null,
+    openingNote: input.openingNote?.trim() ?? null,
     creditLimit: input.creditLimit ?? 0,
     currency: input.currency ?? "SYP",
     paymentTerms: input.paymentTerms,

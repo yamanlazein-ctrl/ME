@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Check, ChevronDown, Plus, Search } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Input } from "@/components/ui/input";
@@ -7,16 +7,12 @@ import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 import { addSupplier, supplierById, suppliers, useParties } from "@/presentation/hooks/useParties";
 import { recentSuggestions } from "@/shared/utils/suggestions";
+import { findSupplierByExactName } from "@/shared/utils/supplierMatch";
 
 /**
- * Compact supplier picker for use in the invoice header.
- * - Opens with the most recent suppliers; type to search existing ones.
- * - If no match, an inline quick-add form appears (name + phone + notes).
- * - Saving quick-add registers the supplier in the global list AND selects it
- *   for the current invoice — no navigation off the page.
- *
- * Wraps `addSupplier` from mock-inventory (same registration path used by the
- * Suppliers page and by PartyPicker).
+ * Compact supplier picker for the purchase-invoice header.
+ * Exact-name matches surface the existing supplier for one-click select —
+ * never push the operator to a save-time unique-name error.
  */
 export function SupplierInlineCombobox({
   value,
@@ -34,40 +30,79 @@ export function SupplierInlineCombobox({
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [notes, setNotes] = useState("");
+  const [dupHint, setDupHint] = useState<{ id: string; name: string; phone?: string | null } | null>(
+    null,
+  );
 
   const selected = value ? supplierById(value) : undefined;
   const q = query.trim().toLowerCase();
-  // `suppliers` is a mutable module cache (re-rendered via useParties), so it is
-  // read directly rather than memoised on `q` alone — otherwise the empty-query
-  // defaults would stay stale after the list loads.
   const list = q
     ? suppliers.filter((s) => s.name.toLowerCase().includes(q))
     : recentSuggestions(suppliers);
   const noMatch = q.length > 0 && list.length === 0;
 
+  // Bug #1: the duplicate check is the shared domain rule (src/shared/utils/
+  // supplierMatch.ts), so the combobox and its tests cannot drift apart.
+  const exactExisting = useMemo(
+    () => findSupplierByExactName(suppliers, addMode ? name : query),
+    [addMode, name, query, suppliers.length],
+  );
+
   const openAdd = () => {
-    setName(query.trim());
+    const draft = query.trim();
+    const hit = findSupplierByExactName(suppliers, draft);
+    if (hit) {
+      setDupHint({ id: hit.id, name: hit.name, phone: hit.phone });
+      setName(draft);
+      setAddMode(true);
+      return;
+    }
+    setDupHint(null);
+    setName(draft);
     setPhone("");
     setNotes("");
     setAddMode(true);
   };
 
+  const selectExisting = (id: string) => {
+    onChange(id);
+    setDupHint(null);
+    setAddMode(false);
+    setQuery("");
+    setOpen(false);
+  };
+
   const commitAdd = async () => {
-    if (!name.trim()) return;
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    const hit = findSupplierByExactName(suppliers, trimmed);
+    if (hit) {
+      setDupHint({ id: hit.id, name: hit.name, phone: hit.phone });
+      return;
+    }
     try {
       const created = await addSupplier({
-        name: name.trim(),
+        name: trimmed,
         phone: phone.trim() || undefined,
         notes: notes.trim() || undefined,
         currency: "SYP",
         status: "active",
       });
       onChange(created.id);
+      setDupHint(null);
       setAddMode(false);
       setQuery("");
       setOpen(false);
-    } catch {
-      // addSupplier already surfaces the error via toast.
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "";
+      if (/مستخدم مسبق|مكرر|duplicate|unique/i.test(msg)) {
+        const again =
+          suppliers.find((s) => s.name.trim().toLowerCase() === trimmed.toLowerCase()) ?? null;
+        if (again) {
+          setDupHint({ id: again.id, name: again.name, phone: again.phone });
+          return;
+        }
+      }
     }
   };
 
@@ -79,6 +114,7 @@ export function SupplierInlineCombobox({
         if (!v) {
           setAddMode(false);
           setQuery("");
+          setDupHint(null);
         }
       }}
     >
@@ -107,6 +143,11 @@ export function SupplierInlineCombobox({
                 placeholder="ابحث أو اكتب اسم مورد جديد..."
                 className="h-8 border-0 bg-transparent p-0 shadow-none focus-visible:ring-0"
                 onKeyDown={(e) => {
+                  if (e.key === "Enter" && exactExisting) {
+                    e.preventDefault();
+                    selectExisting(exactExisting.id);
+                    return;
+                  }
                   if (e.key === "Enter" && noMatch) {
                     e.preventDefault();
                     openAdd();
@@ -114,6 +155,20 @@ export function SupplierInlineCombobox({
                 }}
               />
             </div>
+            {exactExisting && (
+              <div className="border-b border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs">
+                <div className="font-semibold text-amber-900 dark:text-amber-200">
+                  المورد «{exactExisting.name}» موجود مسبقاً
+                </div>
+                <button
+                  type="button"
+                  className="mt-1 font-semibold text-primary hover:underline"
+                  onClick={() => selectExisting(exactExisting.id)}
+                >
+                  اختيار المورد الموجود
+                </button>
+              </div>
+            )}
             <div className="max-h-56 overflow-y-auto py-1">
               {!q && list.length === 0 && (
                 <div className="px-3 py-3 text-xs text-muted-foreground">
@@ -124,11 +179,7 @@ export function SupplierInlineCombobox({
                 <button
                   key={s.id}
                   type="button"
-                  onClick={() => {
-                    onChange(s.id);
-                    setQuery("");
-                    setOpen(false);
-                  }}
+                  onClick={() => selectExisting(s.id)}
                   className="flex w-full items-center justify-between gap-2 px-3 py-2 text-right text-sm hover:bg-secondary"
                 >
                   <div className="min-w-0">
@@ -145,7 +196,7 @@ export function SupplierInlineCombobox({
                   {s.id === value && <Check className="h-4 w-4 text-primary" />}
                 </button>
               ))}
-              {noMatch && (
+              {noMatch && !exactExisting && (
                 <div className="px-3 py-3 text-xs text-muted-foreground">
                   لا يوجد مورد بهذا الاسم.
                 </div>
@@ -154,20 +205,52 @@ export function SupplierInlineCombobox({
             <button
               type="button"
               onClick={openAdd}
-              className="flex w-full items-center gap-2 border-t border-border bg-primary/5 px-3 py-2.5 text-right text-sm font-semibold text-primary hover:bg-primary/10"
+              disabled={Boolean(exactExisting)}
+              className="flex w-full items-center gap-2 border-t border-border bg-primary/5 px-3 py-2.5 text-right text-sm font-semibold text-primary hover:bg-primary/10 disabled:cursor-not-allowed disabled:opacity-50"
             >
               <Plus className="h-4 w-4" />
-              {q ? `إضافة "${q}" كمورد جديد` : "إضافة مورد جديد"}
+              {exactExisting
+                ? "لا يمكن إنشاء مورد مكرر — اختر الموجود"
+                : q
+                  ? `إضافة "${q}" كمورد جديد`
+                  : "إضافة مورد جديد"}
             </button>
           </>
         ) : (
           <div className="space-y-2 p-3">
+            {dupHint && (
+              <div className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs">
+                <div className="font-semibold text-amber-900 dark:text-amber-200">
+                  المورد «{dupHint.name}» موجود مسبقاً — لا يمكن إنشاء اسم مكرر.
+                </div>
+                {dupHint.phone && (
+                  <div className="mt-0.5 text-muted-foreground tabular-nums" dir="ltr">
+                    {dupHint.phone}
+                  </div>
+                )}
+                <Button
+                  type="button"
+                  size="sm"
+                  className="mt-2 h-8 w-full"
+                  onClick={() => selectExisting(dupHint.id)}
+                >
+                  اختيار المورد الموجود
+                </Button>
+              </div>
+            )}
             <div>
               <Label className="text-[11px] font-semibold">اسم المورد *</Label>
               <Input
                 autoFocus
                 value={name}
-                onChange={(e) => setName(e.target.value)}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  setName(v);
+                  const hit = suppliers.find(
+                    (s) => s.name.trim().toLowerCase() === v.trim().toLowerCase(),
+                  );
+                  setDupHint(hit ? { id: hit.id, name: hit.name, phone: hit.phone } : null);
+                }}
                 className="h-9"
               />
             </div>
@@ -178,11 +261,17 @@ export function SupplierInlineCombobox({
                 onChange={(e) => setPhone(e.target.value)}
                 className="h-9"
                 dir="ltr"
+                disabled={Boolean(dupHint)}
               />
             </div>
             <div>
               <Label className="text-[11px] font-semibold">ملاحظات</Label>
-              <Input value={notes} onChange={(e) => setNotes(e.target.value)} className="h-9" />
+              <Input
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                className="h-9"
+                disabled={Boolean(dupHint)}
+              />
             </div>
             <div className="flex items-center justify-end gap-2 pt-1">
               <Button variant="ghost" size="sm" onClick={() => setAddMode(false)}>
@@ -190,7 +279,8 @@ export function SupplierInlineCombobox({
               </Button>
               <Button
                 size="sm"
-                onClick={commitAdd}
+                onClick={() => void commitAdd()}
+                disabled={Boolean(dupHint)}
                 className="bg-primary text-primary-foreground hover:bg-primary/90"
               >
                 حفظ وتحديد

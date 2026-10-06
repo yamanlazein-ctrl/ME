@@ -1,0 +1,16 @@
+[
+  {
+    "app_version": null,
+    "created_at": "<ts>",
+    "deactivated_at": null,
+    "deactivation_reason": null,
+    "hostname": "parity-host",
+    "id": "#00348",
+    "last_seen_at": "<ts>",
+    "license_id": "#00258",
+    "notes": null,
+    "server_fingerprint": "parity-fingerprint-0000000000000001::#00352",
+    "server_fingerprint_version": 1,
+    "tenant_id": "#00095"
+  }
+]

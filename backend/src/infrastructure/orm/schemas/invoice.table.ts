@@ -43,6 +43,8 @@ export const invoices = pgTable(
     // `amountDue = total - paid` and so the supplier/customer balance reflects
     // the payment (a linked payment_out / receipt_in voucher is also written).
     paid: numeric("paid", { precision: 14, scale: 2, mode: "number" }).notNull().default(0),
+    // «عدد الأثواب»: pieces on the invoice (sum of its lines' pieces), computed by the server on save.
+    piecesCount: integer("pieces_count"),
     // Part of `paid` funded from the customer's existing credit balance at
     // creation (no ledger movement — the ledger is already net). Included in
     // `paid`; kept separately for display and audit.

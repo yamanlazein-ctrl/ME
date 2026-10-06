@@ -225,6 +225,13 @@ export class PostgresPrintJobRepository implements IPrintJobRepository {
     return this.toDomain(row);
   }
 
+  async rollNoOf(rollId: string, _ctx: TenantContext): Promise<string | undefined> {
+    // Moved verbatim from print.route.ts (S1): `this.db` is the ambient proxy, so
+    // this reads inside the caller's transaction — the roll is not committed yet.
+    const [row] = await this.db.select({ rollNo: rolls.rollNo }).from(rolls).where(eq(rolls.id, rollId)).limit(1);
+    return row?.rollNo;
+  }
+
   async receive(input: ReceivePrintJobInput, ctx: TenantContext): Promise<PrintJobData> {
     return this.db.transaction(async (tx) => {
       const [job] = await tx
@@ -429,6 +436,11 @@ export class PostgresPrintJobRepository implements IPrintJobRepository {
             pricePerKg: String(unitCost),
             salePricePerKg: salePrice != null ? String(salePrice) : null,
             currency,
+            // Entry price of the printed roll: the batch unit cost it entered at, recorded once.
+            entryPricePerKg: String(unitCost),
+            entryCurrency: currency,
+            entrySource: "press",
+            entryReference: job.number ?? null,
             supplierId: srcRoll.supplierId ?? null,
             entryDate: effectiveDate,
             widthCm: srcRoll.widthCm ? String(srcRoll.widthCm) : null,

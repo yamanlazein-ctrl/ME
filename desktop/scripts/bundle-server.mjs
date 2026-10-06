@@ -11,8 +11,14 @@
  *   pino-worker.cjs                pino's log worker      ┐ required because pino loads them by path,
  *   thread-stream-worker.cjs       thread-stream's worker ┘ which a bundle cannot resolve on its own
  *   node_modules/pino-roll/        log-rotation transport, bundled to a single file
- *   node_modules/@node-rs/argon2*  the only native module (prebuilt win32-x64 binary)
- *   migrations/                    drizzle SQL migrations (read at boot)
+ *   node_modules/@node-rs/argon2*  native module (prebuilt win32-x64 binary)
+ *   node_modules/better-sqlite3/   desktop SQLite engine: N-API addon, prebuilt win32-x64 only
+ *                                  (package.json + lib/ + prebuilds/win32-x64.node; research I-1)
+ *   sqlite-migrations/             SQLite baseline + journal + committed fingerprint (the desktop engine)
+ *   desktop-seed.json              first-run tenant + signed licence (built next by build-desktop-seed.mjs)
+ *
+ * The desktop runs SQLite only (specs/001-desktop-sqlite-engine US2): no PostgreSQL migrations,
+ * binaries or template are shipped.
  *   web/                           the built single-page frontend (copied by stage-web.mjs)
  *
  * Usage: node desktop/scripts/bundle-server.mjs
@@ -59,7 +65,7 @@ await build({
   tsconfig: join(BACKEND, "tsconfig.json"),
   banner: { js: banner },
   // native addon (loaded from the neighbouring node_modules) + optional/unused drivers
-  external: ["@node-rs/argon2", "pg-native", "@sentry/profiling-node", "pino-pretty"],
+  external: ["@node-rs/argon2", "better-sqlite3", "pg-native", "@sentry/profiling-node", "pino-pretty"],
 });
 
 console.log("[bundle-server] bundling pino workers + pino-roll transport");
@@ -88,8 +94,20 @@ for (const pkg of ["@node-rs/argon2", "@node-rs/argon2-win32-x64-msvc"]) {
 const helper = join(NM, "@node-rs", "helper");
 if (existsSync(helper)) cpSync(helper, join(OUT, "node_modules", "@node-rs", "helper"), { recursive: true });
 
-console.log("[bundle-server] copying migrations");
-cpSync(join(BACKEND, "src", "infrastructure", "orm", "migrations"), join(OUT, "migrations"), { recursive: true });
+console.log("[bundle-server] copying native better-sqlite3 (win32-x64 prebuild only)");
+{
+  const src = join(NM, "better-sqlite3");
+  const dst = join(OUT, "node_modules", "better-sqlite3");
+  const addon = join(src, "prebuilds", "win32-x64.node");
+  if (!existsSync(addon)) fail("missing better-sqlite3/prebuilds/win32-x64.node in backend/node_modules");
+  mkdirSync(join(dst, "prebuilds"), { recursive: true });
+  cpSync(join(src, "package.json"), join(dst, "package.json"));
+  cpSync(join(src, "lib"), join(dst, "lib"), { recursive: true });
+  cpSync(addon, join(dst, "prebuilds", "win32-x64.node"));
+}
+
+console.log("[bundle-server] copying SQLite migrations");
+cpSync(join(BACKEND, "src", "infrastructure", "orm", "sqlite", "migrations"), join(OUT, "sqlite-migrations"), { recursive: true });
 
 const count = (d) => readdirSync(d, { withFileTypes: true }).reduce((n, e) => n + (e.isDirectory() ? count(join(d, e.name)) : 1), 0);
 const size = (d) => readdirSync(d, { withFileTypes: true }).reduce((n, e) => n + (e.isDirectory() ? size(join(d, e.name)) : statSync(join(d, e.name)).size), 0);

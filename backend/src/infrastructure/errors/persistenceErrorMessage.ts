@@ -47,12 +47,13 @@ function looksTechnical(msg: string): boolean {
   );
 }
 
-export type PersistenceContext = "invoice" | "voucher" | "return" | "generic";
+export type PersistenceContext = "invoice" | "voucher" | "return" | "party" | "generic";
 
 const CONTEXT_LABEL: Record<PersistenceContext, string> = {
   invoice: "الفاتورة",
   voucher: "السند",
   return: "المرتجع",
+  party: "الطرف",
   generic: "العملية",
 };
 
@@ -73,11 +74,24 @@ export function persistenceErrorMessage(e: unknown, context: PersistenceContext 
   const combined = errorsCombined(errs);
 
   if (hasCode(errs, "23505") || combined.includes("duplicate") || combined.includes("idx_invoices_tenant_type_number")) {
-    return context === "invoice"
-      ? "رقم الفاتورة مكرر — فاتورة بهذا الرقم موجودة بالفعل. استخدم رقماً جديداً ثم أعد الحفظ."
-      : `تعذّر حفظ ${label} بسبب تعارض في البيانات — أعد المحاولة.`;
+    if (context === "invoice") {
+      return "رقم الفاتورة مكرر — فاتورة بهذا الرقم موجودة بالفعل. استخدم رقماً جديداً ثم أعد الحفظ.";
+    }
+    if (context === "party") {
+      if (/idx_parties_tenant_name|parties_tenant_id_name|unique.*name/i.test(combined)) {
+        return "اسم العميل/المورد مستخدم مسبقاً — اختر اسماً مختلفاً أو افتح السجل الموجود.";
+      }
+      if (/idx_parties_tenant_code|parties_tenant_id_code|unique.*code/i.test(combined)) {
+        return "رمز العميل/المورد مكرر — اترك الرمز فارغاً ليُنشأ تلقائياً أو استخدم رمزاً آخر.";
+      }
+      return "تعذّر حفظ الطرف بسبب تعارض في البيانات (اسم أو رمز مكرر) — أعد المحاولة.";
+    }
+    return `تعذّر حفظ ${label} بسبب تعارض في البيانات — أعد المحاولة.`;
   }
   if (hasCode(errs, "23503") || /foreign key/i.test(combined)) {
+    if (/sync_device|sync_outbox_sync_device/i.test(combined)) {
+      return "معرّف جهاز المزامنة غير مسجّل — أعد تسجيل الدخول أو أعد تفعيل الجهاز ثم حاول مجدداً.";
+    }
     return context === "invoice"
       ? "بيانات البند غير صالحة: المورد، أو القماش، أو اللون، أو الصبغة المحددة غير موجودة أو محذوفة."
       : context === "voucher"
@@ -97,6 +111,9 @@ export function persistenceErrorMessage(e: unknown, context: PersistenceContext 
     return `حقل إلزامي ناقص في بيانات ${label} — أكمل جميع الحقول المطلوبة.`;
   }
   if (hasCode(errs, "22003") || /numeric field overflow/i.test(combined)) {
+    if (context === "party") {
+      return "قيمة الضريبة أو الخصم خارج النطاق — أدخل نسبة الضريبة بين 0 و 100.";
+    }
     return "قيمة المبلغ أو الكمية خارج النطاق المسموح — راجع الأرقام المدخلة.";
   }
   if (hasCode(errs, "22001")) {

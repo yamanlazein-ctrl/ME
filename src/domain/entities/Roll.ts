@@ -9,6 +9,8 @@ import {
  *  Roll Entity — physical stock unit. Optimistic-locking via version.
  * ──────────────────────────────────────────────────────────────────────── */
 
+export type RollEntrySource = "purchase" | "press" | "stock_in";
+
 export interface RollData {
   id: UUID;
   tenantId: UUID;
@@ -23,6 +25,15 @@ export interface RollData {
   pricePerKg: number;
   salePricePerKg?: number | null;
   currency: Currency;
+  /**
+   * The ACTUAL price this exact roll entered stock at (purchase line, printing-factory receive or
+   * stock-in), in entryCurrency. Fixed at entry — an edit of pricePerKg never changes it. Shown on
+   * the sales screen as a reference only.
+   */
+  entryPricePerKg?: number | null;
+  entryCurrency?: Currency | null;
+  entrySource?: RollEntrySource | null;
+  entryReference?: string | null;
   supplierId: UUID;
   entryDate: string; // yyyy-mm-dd
   widthCm?: number | null;
@@ -44,6 +55,10 @@ export class Roll implements RollData {
   pricePerKg: number;
   salePricePerKg?: number | null;
   readonly currency: Currency;
+  readonly entryPricePerKg?: number | null;
+  readonly entryCurrency?: Currency | null;
+  readonly entrySource?: RollEntrySource | null;
+  readonly entryReference?: string | null;
   readonly supplierId: UUID;
   readonly entryDate: string;
   widthCm?: number | null;
@@ -64,6 +79,10 @@ export class Roll implements RollData {
     this.pricePerKg = data.pricePerKg;
     this.salePricePerKg = data.salePricePerKg;
     this.currency = data.currency;
+    this.entryPricePerKg = data.entryPricePerKg;
+    this.entryCurrency = data.entryCurrency;
+    this.entrySource = data.entrySource;
+    this.entryReference = data.entryReference;
     this.supplierId = data.supplierId;
     this.entryDate = data.entryDate;
     this.widthCm = data.widthCm;

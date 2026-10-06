@@ -26,7 +26,7 @@ import {
 } from "../../application/use-cases/sync/syncEnqueue.js";
 import { captureReturnSyncDependencies } from "../../application/use-cases/sync/syncDependencySnapshots.js";
 import { logger } from "../../infrastructure/config/logger.js";
-import { withTenantTx } from "../../infrastructure/orm/drizzle.js";
+import { withTenantTx } from "../../infrastructure/orm/engine.js";
 
 export function registerReturnRoutes(
   router: Router,

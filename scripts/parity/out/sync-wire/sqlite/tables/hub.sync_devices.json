@@ -1,0 +1,59 @@
+[
+  {
+    "authorized_user_ids": [
+      "#00002"
+    ],
+    "created_at": "<ts>",
+    "device_fingerprint": "3b4277b5cfa445ce859cb39c3872d15874d5f95bf30d89d7801fb3574c17ed7c",
+    "device_fingerprint_version": 1,
+    "device_registration_id": null,
+    "hostname": "-",
+    "id": "#00001",
+    "label": "-",
+    "last_seen_at": "<ts>",
+    "last_seen_by_user_id": "#00002",
+    "platform": "windows",
+    "revoke_reason": null,
+    "revoked_at": null,
+    "tenant_id": "#00003",
+    "updated_at": "<ts>"
+  },
+  {
+    "authorized_user_ids": [
+      "#00002"
+    ],
+    "created_at": "<ts>",
+    "device_fingerprint": "fp-device-a",
+    "device_fingerprint_version": 1,
+    "device_registration_id": null,
+    "hostname": "device-a",
+    "id": "#00014",
+    "label": "device-a",
+    "last_seen_at": "<ts>",
+    "last_seen_by_user_id": "#00002",
+    "platform": "windows",
+    "revoke_reason": null,
+    "revoked_at": null,
+    "tenant_id": "#00003",
+    "updated_at": "<ts>"
+  },
+  {
+    "authorized_user_ids": [
+      "#00002"
+    ],
+    "created_at": "<ts>",
+    "device_fingerprint": "fp-device-b",
+    "device_fingerprint_version": 1,
+    "device_registration_id": null,
+    "hostname": "device-b",
+    "id": "#00056",
+    "label": "device-b",
+    "last_seen_at": "<ts>",
+    "last_seen_by_user_id": "#00002",
+    "platform": "windows",
+    "revoke_reason": null,
+    "revoked_at": null,
+    "tenant_id": "#00003",
+    "updated_at": "<ts>"
+  }
+]

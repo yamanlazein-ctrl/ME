@@ -20,12 +20,13 @@ export function QuickCustomerDialog({
 }: {
   open: boolean;
   onClose: () => void;
-  onCreated: (id: string) => void;
+  onCreated: (party: { id: string; name: string }) => void;
 }) {
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
   const [err, setErr] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     if (open) {
@@ -33,6 +34,7 @@ export function QuickCustomerDialog({
       setPhone("");
       setEmail("");
       setErr(null);
+      setSaving(false);
     }
   }, [open]);
 
@@ -41,15 +43,19 @@ export function QuickCustomerDialog({
     const emailErr = partyEmailError(email);
     if (emailErr) return setErr(emailErr);
     setErr(null);
+    setSaving(true);
     try {
       const c = await addCustomer({
         name: name.trim(),
         ...(phone.trim() ? { phone: phone.trim() } : {}),
         ...(email.trim() ? { email: email.trim() } : {}),
       });
-      onCreated(c.id);
-    } catch {
-      // addCustomer already surfaces the error via toast.
+      onCreated({ id: c.id, name: c.name });
+    } catch (e) {
+      // addCustomer already toasts; also show inline so the dialog explains why.
+      setErr(e instanceof Error ? e.message : "فشل حفظ العميل");
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -103,12 +109,13 @@ export function QuickCustomerDialog({
         </div>
         <DialogFooter className="flex-row-reverse gap-2">
           <Button
-            onClick={submit}
+            onClick={() => void submit()}
+            disabled={saving}
             className="bg-primary text-primary-foreground hover:bg-primary/90"
           >
-            حفظ وتحديد
+            {saving ? "جاري الحفظ…" : "حفظ وتحديد"}
           </Button>
-          <Button variant="ghost" onClick={onClose}>
+          <Button variant="ghost" onClick={onClose} disabled={saving}>
             إلغاء
           </Button>
         </DialogFooter>

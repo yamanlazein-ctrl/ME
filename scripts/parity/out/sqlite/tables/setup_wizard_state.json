@@ -1,0 +1,28 @@
+[
+  {
+    "completed_at": "<ts>",
+    "completed_steps": [
+      "activate",
+      "company",
+      "admin",
+      "review"
+    ],
+    "created_at": "<ts>",
+    "current_step": "done",
+    "data": {
+      "activationId": "#00348",
+      "bootstrapAt": "<ts>",
+      "city": "دمشق",
+      "confirmed": true,
+      "currency": "SYP",
+      "email": "admin@erp.local",
+      "fiscalYearStart": "2026-01-01",
+      "key": "",
+      "name": "المدير",
+      "passwordHash": "<random>"
+    },
+    "is_completed": true,
+    "tenant_id": "#00095",
+    "updated_at": "<ts>"
+  }
+]

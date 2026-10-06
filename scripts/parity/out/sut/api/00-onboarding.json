@@ -1,0 +1,30 @@
+[
+  {
+    "label": "init",
+    "status": 200
+  },
+  {
+    "label": "activate",
+    "status": 200
+  },
+  {
+    "label": "company",
+    "status": 200
+  },
+  {
+    "label": "admin",
+    "status": 200
+  },
+  {
+    "label": "review",
+    "status": 200
+  },
+  {
+    "label": "complete",
+    "status": 200
+  },
+  {
+    "label": "login",
+    "status": 200
+  }
+]

@@ -16,7 +16,6 @@ import {
   type CreateInvoiceInput,
 } from "./invoice.schema.js";
 import * as uc from "../../application/use-cases/invoices/invoiceUseCases.js";
-import { peekNextDocumentNumber } from "../../infrastructure/utils/documentNumbers.js";
 import { enqueueInvoiceCreate } from "../../application/use-cases/sync/syncUseCases.js";
 import { captureInvoiceSyncDependencies } from "../../application/use-cases/sync/syncDependencySnapshots.js";
 import {
@@ -32,7 +31,8 @@ import type { IFabricRepository } from "../../application/ports/IFabricRepositor
 import type { IColorRepository } from "../../application/ports/IColorRepository.js";
 import type { IRollRepository } from "../../application/ports/IRollRepository.js";
 import { logger } from "../../infrastructure/config/logger.js";
-import { withTenantTx } from "../../infrastructure/orm/drizzle.js";
+import { withTenantTx } from "../../infrastructure/orm/engine.js";
+import { mapRestoredSyncDeviceId } from "../../infrastructure/sync/restoredIdentity.js";
 import { respondTransactionFailure } from "../../infrastructure/http/transactionRouteError.js";
 
 export function registerInvoiceRoutes(
@@ -68,12 +68,13 @@ export function registerInvoiceRoutes(
       // failed save no longer burns a number. The route no longer needs to
       // pre-call nextDocumentNumber here.
       const deviceHeader = req.headers["x-sync-device-id"];
-      const syncDeviceId =
+      const syncDeviceId = await mapRestoredSyncDeviceId(
         typeof deviceHeader === "string"
           ? deviceHeader
           : Array.isArray(deviceHeader)
             ? deviceHeader[0]
-            : null;
+            : null,
+      );
       const opHeader = req.headers["idempotency-key"];
       const opId =
         typeof opHeader === "string" ? opHeader : Array.isArray(opHeader) ? opHeader[0] : undefined;
@@ -179,11 +180,7 @@ export function registerInvoiceRoutes(
     }
     const entityType = type === "entry" ? "invoice_entry" : type === "print" ? "print" : "invoice";
     try {
-      const number = await peekNextDocumentNumber(
-        entityType,
-        ctx(req).tenantId,
-        ctx(req).syncDeviceId,
-      );
+      const number = await invoiceRepo.peekNextNumber(entityType, ctx(req));
       return res.json({ number, estimate: true });
     } catch (e) {
       return res.status(500).json({

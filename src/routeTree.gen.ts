@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as CashboxRouteImport } from './routes/cashbox'
+import { Route as ClosingRouteImport } from './routes/closing'
 import { Route as InventoryRouteImport } from './routes/inventory'
 import { Route as LedgerRouteImport } from './routes/ledger'
 import { Route as LoginRouteImport } from './routes/login'
@@ -63,6 +64,11 @@ const IndexRoute = IndexRouteImport.update({
 const CashboxRoute = CashboxRouteImport.update({
   id: '/cashbox',
   path: '/cashbox',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ClosingRoute = ClosingRouteImport.update({
+  id: '/closing',
+  path: '/closing',
   getParentRoute: () => rootRouteImport,
 } as any)
 const InventoryRoute = InventoryRouteImport.update({
@@ -284,6 +290,7 @@ const ReturnsSaleNewRoute = ReturnsSaleNewRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/cashbox': typeof CashboxRoute
+  '/closing': typeof ClosingRoute
   '/inventory': typeof InventoryRoute
   '/ledger': typeof LedgerRoute
   '/login': typeof LoginRoute
@@ -331,6 +338,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/cashbox': typeof CashboxRoute
+  '/closing': typeof ClosingRoute
   '/inventory': typeof InventoryRoute
   '/ledger': typeof LedgerRoute
   '/login': typeof LoginRoute
@@ -377,6 +385,7 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/cashbox': typeof CashboxRoute
+  '/closing': typeof ClosingRoute
   '/inventory': typeof InventoryRoute
   '/ledger': typeof LedgerRoute
   '/login': typeof LoginRoute
@@ -426,6 +435,7 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/cashbox'
+    | '/closing'
     | '/inventory'
     | '/ledger'
     | '/login'
@@ -473,6 +483,7 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/cashbox'
+    | '/closing'
     | '/inventory'
     | '/ledger'
     | '/login'
@@ -518,6 +529,7 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/cashbox'
+    | '/closing'
     | '/inventory'
     | '/ledger'
     | '/login'
@@ -566,6 +578,7 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   CashboxRoute: typeof CashboxRoute
+  ClosingRoute: typeof ClosingRoute
   InventoryRoute: typeof InventoryRoute
   LedgerRoute: typeof LedgerRoute
   LoginRoute: typeof LoginRoute
@@ -612,6 +625,13 @@ declare module '@tanstack/react-router' {
       path: '/cashbox'
       fullPath: '/cashbox'
       preLoaderRoute: typeof CashboxRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/closing': {
+      id: '/closing'
+      path: '/closing'
+      fullPath: '/closing'
+      preLoaderRoute: typeof ClosingRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/inventory': {
@@ -966,6 +986,7 @@ const SettingsRouteWithChildren = SettingsRoute._addFileChildren(
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   CashboxRoute: CashboxRoute,
+  ClosingRoute: ClosingRoute,
   InventoryRoute: InventoryRoute,
   LedgerRoute: LedgerRoute,
   LoginRoute: LoginRoute,

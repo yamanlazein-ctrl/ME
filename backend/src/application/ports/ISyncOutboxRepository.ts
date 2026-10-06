@@ -63,6 +63,14 @@ export interface ISyncOutboxRepository {
     owner: string,
   ): Promise<SyncOutboxRow[]>;
   markSynced(id: UUID, tenantId: UUID, leaseToken: UUID): Promise<number>;
+  /**
+   * Restore on a synced device (OQ-12, SY-7): the hub already holds this op-id (it came back in a
+   * pull under the device's previous identity), so the restored unit is acknowledged as `synced`
+   * without being pushed again. Only unsettled units (pending / pushing / rejected) change.
+   * `acknowledged`: an unsettled unit was marked synced; `settled`: this outbox already holds the
+   * op-id as synced; `unknown`: not an operation of this database.
+   */
+  acknowledgeByOpId(tenantId: UUID, opId: UUID): Promise<"acknowledged" | "settled" | "unknown">;
   markRejected(
     id: UUID,
     tenantId: UUID,

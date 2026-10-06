@@ -5,6 +5,12 @@ import { config } from "../config/env.js";
 import { tenantContext } from "./tenant-context.js";
 import { runInAmbientTx, getAmbientTx, getAmbientTenantId, ambientDb } from "./ambient-tx.js";
 
+// specs/001-desktop-sqlite-engine FR-040 / T122: a DB_ENGINE=sqlite process must never evaluate the
+// PostgreSQL layer. Any static import path that still reaches this module fails boot loudly.
+if (config.DB_ENGINE === "sqlite") {
+  throw new Error("PG_LAYER_LOADED_UNDER_SQLITE: orm/drizzle.ts was imported by a DB_ENGINE=sqlite process");
+}
+
 /**
  * A pg Pool that stamps the RLS tenant GUC onto every connection at checkout
  * time, keyed by the AsyncLocalStorage request context.

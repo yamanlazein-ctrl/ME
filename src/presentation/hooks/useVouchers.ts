@@ -54,7 +54,7 @@ export function useVouchersList(filter?: VoucherFilter, opts?: { all?: boolean; 
                   { ...(filter ?? {}), kind, page, limit, cursor } as VoucherFilter,
                   ctx,
                 ),
-              { pageSize: 1000, maxPages: 500, label: `vouchers:${kind}` },
+              { pageSize: 1000, label: `vouchers:${kind}` },
             ),
           ),
         );

@@ -58,7 +58,7 @@ describe("money precision", () => {
     const amounts = [20_000_001, 45_678_903, 137_500_007, 260_000_005];
     const exactTotal = amounts.reduce((a, b) => a + b, 0);
     const [row] = await db
-      .select({ total: sql`COALESCE(SUM(${ledgerEntries.debit}), 0)` })
+      .select({ total: sql`COALESCE(SUM(${ledgerEntries.debit}), 0)`.mapWith(ledgerEntries.debit) })
       .from(ledgerEntries)
       .where(eq(ledgerEntries.partyId, partyId));
     expect(Number(row?.total ?? 0)).toBe(exactTotal);

@@ -1,0 +1,56 @@
+﻿[
+    {
+        "case":  "foreign data root",
+        "expected":  "MISMATCH",
+        "observed":  "MISMATCH",
+        "changedFiles":  [
+
+                         ],
+        "pass":  true
+    },
+    {
+        "case":  "device binding deleted",
+        "expected":  "PRIOR_DATA_FOUND",
+        "observed":  "PRIOR_DATA_FOUND",
+        "changedFiles":  [
+
+                         ],
+        "pass":  true
+    },
+    {
+        "case":  "install-instance marker removed",
+        "expected":  "PRIOR_DATA_FOUND",
+        "observed":  "PRIOR_DATA_FOUND",
+        "changedFiles":  [
+
+                         ],
+        "pass":  true
+    },
+    {
+        "case":  "database truncated",
+        "expected":  "CORRUPT",
+        "observed":  "CORRUPT",
+        "changedFiles":  [
+
+                         ],
+        "pass":  true
+    },
+    {
+        "case":  "data lock held by a foreign process",
+        "expected":  "LOCKED_UNKNOWN",
+        "observed":  "LOCKED_UNKNOWN",
+        "changedFiles":  [
+
+                         ],
+        "pass":  true
+    },
+    {
+        "case":  "data folder deleted",
+        "expected":  "DATA_MISSING",
+        "observed":  "DATA_MISSING",
+        "changedFiles":  [
+
+                         ],
+        "pass":  true
+    }
+]

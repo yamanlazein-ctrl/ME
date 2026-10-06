@@ -13,6 +13,12 @@ import {
 import { registerCurrentSyncDevice } from "@/lib/sync-device";
 import { useQueryClient } from "@tanstack/react-query";
 import { consumeInvitation, validateInvitation } from "@/lib/invitations";
+import {
+  FACTORY_RESET_PHRASE,
+  canConfirmFactoryReset,
+} from "@/components/settings/FactoryResetCard";
+import { applyFactoryResetNow, isTauri } from "@/infrastructure/tauri-bridge";
+import { clearTokens } from "@/infrastructure/auth/TokenProvider";
 
 type RosterUser = {
   id: string;
@@ -37,7 +43,7 @@ type RosterResponse = {
   code?: string;
 };
 
-type PanelMode = "login" | "invite" | "recover";
+type PanelMode = "login" | "invite" | "recover" | "wipe";
 
 async function fetchRoster(
   base: string,
@@ -100,6 +106,11 @@ export function UserPickerPage() {
 
   const [recoveryPin, setRecoveryPin] = useState("");
   const [recoveryConfirm, setRecoveryConfirm] = useState("");
+
+  const [wipeTyped, setWipeTyped] = useState("");
+  const [wipeDone, setWipeDone] = useState(false);
+  const [wipeBusy, setWipeBusy] = useState(false);
+  const [wipeError, setWipeError] = useState<string | null>(null);
 
   const loadRoster = useCallback(async () => {
     setLoading(true);
@@ -634,7 +645,90 @@ export function UserPickerPage() {
                 نسيت الرمز السري؟
               </button>
             )}
+
           </form>
+        )}
+        <button
+          type="button"
+          className="mt-3 w-full text-xs font-semibold text-destructive underline"
+          onClick={() => {
+            setPanel("wipe");
+            setWipeTyped("");
+            setWipeError(null);
+          }}
+        >
+          نسيت الحساب كله؟ ابدأ هذا التثبيت من الصفر
+        </button>
+
+        {panel === "wipe" && (
+          <div className="mt-6 space-y-4">
+            <p className="text-[11px] leading-relaxed text-destructive">
+              ستفقد كل الفواتير والمخزون والسندات على هذا الجهاز. تُنقل قاعدة البيانات جانباً ولا
+              تُحذف، ويمكن استرجاعها من مجلد <strong>data.reset-&lt;وقت&gt;</strong> داخل{" "}
+              <strong>%LOCALAPPDATA%\motard-erp</strong>.
+            </p>
+            {wipeDone ? (
+              <p className="rounded-md border border-primary/40 bg-primary/10 px-3 py-2 text-xs text-foreground">
+                سيُؤرشف مجلد البيانات القديم ويبدأ البرنامج من جديد تلقائياً، ثم تُنشئ حساب
+                Admin جديداً من معالج الإعداد.
+              </p>
+            ) : isTauri() ? (
+              <>
+                <label className="block">
+                  <span className="mb-1.5 block text-xs font-medium text-muted-foreground">
+                    للتأكيد اكتب العبارة التالية حرفياً:{" "}
+                    <strong className="text-foreground">{FACTORY_RESET_PHRASE}</strong>
+                  </span>
+                  <input
+                    type="text"
+                    value={wipeTyped}
+                    onChange={(e) => setWipeTyped(e.target.value)}
+                    autoComplete="off"
+                    className="w-full rounded-lg border border-border bg-secondary px-3 py-2.5 text-sm outline-none focus:border-destructive"
+                  />
+                </label>
+                {wipeError && (
+                  <p className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+                    {wipeError}
+                  </p>
+                )}
+                <button
+                  type="button"
+                  disabled={!canConfirmFactoryReset(wipeTyped) || wipeBusy}
+                  onClick={() => {
+                    setWipeBusy(true);
+                    setWipeError(null);
+                    // The reset needs no session, which is why it works from the
+                    // login screen. The Rust side archives the data folder on the
+                    // next boot and restarts the process itself, so there is no
+                    // manual close-and-reopen step.
+                    clearTokens();
+                    applyFactoryResetNow()
+                      .then(() => setWipeDone(true))
+                      .catch((e: Error) => setWipeError(e.message || "تعذّر بدء التصفير"))
+                      .finally(() => setWipeBusy(false));
+                  }}
+                  className="w-full rounded-lg bg-destructive px-4 py-3 text-sm font-bold text-destructive-foreground disabled:opacity-60"
+                >
+                  {wipeBusy ? "جارٍ الطلب…" : "تأكيد — ابدأ من الصفر"}
+                </button>
+              </>
+            ) : (
+              <p className="rounded-md border border-border bg-secondary px-3 py-2 text-xs text-muted-foreground">
+                غير متاح في المتصفح. افتح البرنامج على جهاز التثبيت نفسه.
+              </p>
+            )}
+            <button
+              type="button"
+              className="w-full text-xs text-muted-foreground underline"
+              onClick={() => {
+                setPanel("login");
+                setWipeError(null);
+              }}
+            >
+              العودة
+            </button>
+          </div>
         )}
       </div>
     </div>

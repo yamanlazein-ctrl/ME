@@ -10,23 +10,16 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
 import { PartyFormDialog, type PartyKind, type SimpleParty } from "./PartyFormDialog";
+import { PartyDeleteDialog } from "./PartyDeleteDialog";
 import {
   addCustomer,
   addSupplier,
   customers,
   deleteCustomer,
   deleteSupplier,
+  getPartiesLoadState,
+  retryPartiesLoad,
   suppliers,
   updateCustomer,
   updateSupplier,
@@ -40,6 +33,8 @@ import { ConfirmBulkAction } from "@/components/common/ConfirmBulkAction";
 import { Checkbox } from "@/components/ui/checkbox";
 import { formatMoney } from "@/shared/utils/formatNumber";
 import type { Party } from "@/domain/entities/Party";
+import { container } from "@/infrastructure/container";
+import { toast } from "sonner";
 
 import { localToday } from "@/lib/localDate";
 const _nextFormId = 0;
@@ -85,6 +80,7 @@ export function PartyListPage({
 }) {
   useInventory();
   useParties();
+  const loadState = getPartiesLoadState();
   const navigate = useNavigate();
 
   const list = kind === "supplier" ? suppliers : customers;
@@ -133,9 +129,32 @@ export function PartyListPage({
   };
   const confirmBulkDelete = async () => {
     if (!bulkTarget) return;
+    const path = isSup ? "suppliers" : "customers";
     for (const p of bulkTarget.items) {
-      if (isSup) await deleteSupplier(p.id);
-      else await deleteCustomer(p.id);
+      try {
+        const impact = await container.http.get<{
+          version: number;
+          requiresCascade?: boolean;
+          counts?: { returns: number; orders: number };
+        }>(`/api/${path}/${p.id}/deletion-impact`);
+        const version = impact.data?.version;
+        if (typeof version !== "number") throw new Error("تعذّر قراءة إصدار السجل");
+        // Cascade only when there is something financial to reverse, and never
+        // while returns/orders are open — those block the delete outright.
+        const blocked =
+          (impact.data?.counts?.returns ?? 0) > 0 || (impact.data?.counts?.orders ?? 0) > 0;
+        if (blocked) {
+          toast.error(
+            `لا يمكن حذف «${p.name}» — ألغِ المرتجعات والطلبيات المفتوحة أولاً.`,
+          );
+          break;
+        }
+        if (isSup) await deleteSupplier(p.id, Boolean(impact.data?.requiresCascade), version);
+        else await deleteCustomer(p.id, Boolean(impact.data?.requiresCascade), version);
+      } catch {
+        /* toast already shown; stop so the operator can inspect */
+        break;
+      }
     }
     setBulkTarget(null);
     exitSelectMode();
@@ -298,20 +317,20 @@ export function PartyListPage({
 
         {/* Table */}
         <div className="w-full overflow-x-auto">
-          <table className="w-full min-w-[1200px] text-right text-sm">
+          <table className="w-full min-w-[980px] text-right text-sm">
             <thead className="bg-secondary/60 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
               <tr className="[&>th]:px-3 [&>th]:py-2.5">
                 {selectMode && <th className="w-10"></th>}
                 <th className="w-24">الكود</th>
-                <th className="min-w-[220px]">{isSup ? "اسم المورد" : "اسم العميل"}</th>
-                <th className="w-32">الهاتف</th>
-                <th className="w-24 text-center">الفواتير</th>
-                <th className="w-36 text-left">{isSup ? "إجمالي المشتريات" : "إجمالي المبيعات"}</th>
-                <th className="w-32 text-left">الرصيد</th>
-                <th className="min-w-[160px] text-center">حد الائتمان</th>
+                <th className="min-w-[200px]">{isSup ? "اسم المورد" : "اسم العميل"}</th>
+                <th className="w-24 text-center">الإجراءات</th>
+                <th className="w-28">الهاتف</th>
+                <th className="w-20 text-center">الفواتير</th>
+                <th className="w-32 text-left">{isSup ? "إجمالي المشتريات" : "إجمالي المبيعات"}</th>
+                <th className="w-28 text-left">الرصيد</th>
+                <th className="min-w-[140px] text-center">حد الائتمان</th>
                 <th className="w-28">آخر عملية</th>
                 <th className="w-20 text-center">الحالة</th>
-                <th className="w-24 text-center">الإجراءات</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
@@ -321,7 +340,21 @@ export function PartyListPage({
                     colSpan={selectMode ? 11 : 10}
                     className="px-4 py-16 text-center text-xs text-muted-foreground"
                   >
-                    لا نتائج مطابقة.
+                    {/* D-3 / FR-068: a failed or unfinished load is never shown as "no results". */}
+                    {loadState.status === "error" ? (
+                      <div role="alert" className="flex flex-col items-center gap-3 text-destructive">
+                        <span>
+                          {isSup ? "تعذّر تحميل قائمة الموردين." : "تعذّر تحميل قائمة العملاء."} {loadState.message}
+                        </span>
+                        <Button size="sm" variant="outline" onClick={() => void retryPartiesLoad()}>
+                          إعادة المحاولة
+                        </Button>
+                      </div>
+                    ) : loadState.status === "loading" || loadState.status === "idle" ? (
+                      "جارٍ التحميل…"
+                    ) : (
+                      "لا نتائج مطابقة."
+                    )}
                   </td>
                 </tr>
               )}
@@ -361,6 +394,26 @@ export function PartyListPage({
                             </div>
                           )}
                         </div>
+                      </div>
+                    </td>
+                    <td onClick={(e) => e.stopPropagation()}>
+                      <div className="flex items-center justify-center gap-1">
+                        <button
+                          type="button"
+                          onClick={() => setForm({ open: true, editing: p })}
+                          aria-label="تعديل"
+                          className="grid h-8 w-8 cursor-pointer place-items-center rounded-md text-muted-foreground transition hover:bg-secondary hover:text-foreground"
+                        >
+                          <Pencil className="h-3.5 w-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setToDelete(p)}
+                          aria-label="حذف"
+                          className="grid h-8 w-8 cursor-pointer place-items-center rounded-md text-muted-foreground transition hover:bg-destructive/10 hover:text-destructive"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
                       </div>
                     </td>
                     <td className="tabular-nums text-muted-foreground">{p.phone ?? "—"}</td>
@@ -445,26 +498,6 @@ export function PartyListPage({
                         {active ? "نشط" : "موقوف"}
                       </span>
                     </td>
-                    <td onClick={(e) => e.stopPropagation()}>
-                      <div className="flex items-center justify-center gap-1">
-                        <button
-                          type="button"
-                          onClick={() => setForm({ open: true, editing: p })}
-                          aria-label="تعديل"
-                          className="grid h-8 w-8 cursor-pointer place-items-center rounded-md text-muted-foreground transition hover:bg-secondary hover:text-foreground"
-                        >
-                          <Pencil className="h-3.5 w-3.5" />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setToDelete(p)}
-                          aria-label="حذف"
-                          className="grid h-8 w-8 cursor-pointer place-items-center rounded-md text-muted-foreground transition hover:bg-destructive/10 hover:text-destructive"
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </button>
-                      </div>
-                    </td>
                   </tr>
                 );
               })}
@@ -509,33 +542,18 @@ export function PartyListPage({
         }}
       />
 
-      <AlertDialog open={!!toDelete} onOpenChange={(o) => !o && setToDelete(null)}>
-        <AlertDialogContent dir="rtl">
-          <AlertDialogHeader>
-            <AlertDialogTitle>تأكيد الحذف</AlertDialogTitle>
-            <AlertDialogDescription>
-              هل أنت متأكد من حذف "{toDelete?.name}"؟ لا يمكن التراجع عن هذا الإجراء.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter className="flex-row-reverse gap-2">
-            <AlertDialogAction
-              onClick={() => {
-                if (toDelete) (isSup ? deleteSupplier : deleteCustomer)(toDelete.id as string);
-                setToDelete(null);
-              }}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-            >
-              حذف نهائي
-            </AlertDialogAction>
-            <AlertDialogCancel>إلغاء</AlertDialogCancel>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <PartyDeleteDialog
+        kind={kind}
+        partyId={toDelete?.id ?? null}
+        partyName={toDelete?.name ?? null}
+        open={!!toDelete}
+        onOpenChange={(o) => !o && setToDelete(null)}
+      />
 
       <ConfirmBulkAction
         open={!!bulkTarget}
         title="تأكيد الحذف"
-        description={`هل أنت متأكد من حذف ${bulkTarget?.items.length ?? 0} ${isSup ? "مورد" : "عميل"}؟ لا يمكن التراجع عن هذا الإجراء.`}
+        description={`هل أنت متأكد من حذف ${bulkTarget?.items.length ?? 0} ${isSup ? "مورد" : "عميل"}؟ سيتم فحص الارتباطات لكل سجل. لا يمكن التراجع عن هذا الإجراء.`}
         confirmLabel={`حذف ${bulkTarget?.items.length ?? 0} عنصر`}
         items={(bulkTarget?.items ?? []).map((p) => ({ key: p.id, name: p.name }))}
         onCancel={() => setBulkTarget(null)}

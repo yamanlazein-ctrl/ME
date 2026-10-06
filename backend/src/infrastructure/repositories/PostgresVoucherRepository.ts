@@ -1,11 +1,12 @@
-import { eq, and, desc, ilike, or, sql, gte, lte, isNotNull } from "drizzle-orm";
+import { eq, and, desc, ilike, or, sql, gte, lte, isNotNull, inArray } from "drizzle-orm";
 import { afterCursor, cursorColumns, decodeCursor, keysetOrder, nextCursorOf, type KeysetSpec } from "./keysetPage.js";
 import { likeContains } from "../utils/likeEscape.js";
 import { BusinessRuleError } from "../../domain/errors/index.js";
-import { allocateDocumentNumber } from "../utils/documentNumbers.js";
+import { allocateDocumentNumber, allocateDocumentNumberForDevice } from "../utils/documentNumbers.js";
 import type { DB } from "../orm/drizzle.js";
 import type {
   IVoucherRepository,
+  SettlementInvoiceRow,
   VoucherFilter,
 } from "../../application/ports/IVoucherRepository.js";
 import { vouchers } from "../orm/schemas/voucher.table.js";
@@ -41,6 +42,45 @@ import type { TenantContext, PaginatedResult } from "../../domain/types/index.js
 
 export class PostgresVoucherRepository implements IVoucherRepository {
   constructor(private readonly db: DB) {}
+
+  // Moved verbatim from settleInvoicesUseCase.ts (S1). Behavior unchanged.
+  async settlementInvoices(ids: string[], ctx: TenantContext): Promise<SettlementInvoiceRow[]> {
+    return this.db
+      .select({
+        id: invoices.id,
+        number: invoices.number,
+        date: invoices.date,
+        total: invoices.total,
+        paid: invoices.paid,
+        status: invoices.status,
+        currency: invoices.currency,
+        partyId: invoices.partyId,
+      })
+      .from(invoices)
+      .where(and(eq(invoices.tenantId, ctx.tenantId), inArray(invoices.id, ids))) as unknown as Promise<SettlementInvoiceRow[]>;
+  }
+
+  async settlementReturnTotals(ids: string[], ctx: TenantContext) {
+    return this.db
+      .select({
+        invoiceId: returns.originalInvoiceId,
+        total: sql<number>`COALESCE(SUM(ROUND(${returnLines.quantityKg} * ${returnLines.pricePerKg}, 2)), 0)`,
+      })
+      .from(returnLines)
+      .innerJoin(returns, eq(returnLines.returnId, returns.id))
+      .where(
+        and(
+          eq(returns.tenantId, ctx.tenantId),
+          eq(returns.status, "active"),
+          inArray(returns.originalInvoiceId, ids),
+        ),
+      )
+      .groupBy(returns.originalInvoiceId);
+  }
+
+  allocateSettlementBatchNumber(ctx: TenantContext): Promise<string> {
+    return allocateDocumentNumberForDevice("settlement", ctx.tenantId, ctx.syncDeviceId);
+  }
 
   async findById(id: string, ctx: TenantContext): Promise<VoucherData | null> {
     const rows = await this.db

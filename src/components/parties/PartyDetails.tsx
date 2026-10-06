@@ -49,12 +49,11 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { PartyFormDialog, type PartyKind } from "./PartyFormDialog";
+import { PartyDeleteDialog } from "./PartyDeleteDialog";
 import {
   addPartyAttachment,
   customerById,
   customers,
-  deleteCustomer,
-  deleteSupplier,
   removePartyAttachment,
   supplierById,
   suppliers,
@@ -81,7 +80,7 @@ import {
   LEDGER_TYPE_LABEL,
   type LedgerType,
 } from "@/presentation/hooks/useLedger";
-import { loadFullStatement, useStatementPage } from "@/presentation/hooks/useStatement";
+import { clampStatementPageIndex, loadFullStatement, useStatementPage } from "@/presentation/hooks/useStatement";
 import { toast } from "sonner";
 import { ClientPager, useClientPage } from "@/components/common/ClientPager";
 import { loadInvoice } from "@/presentation/hooks/useInvoices";
@@ -362,7 +361,7 @@ export function PartyDetailsPage({ kind, id }: { kind: PartyKind; id: string }) 
 
   const [tab, setTab] = useState<TabId>("overview");
   const [editing, setEditing] = useState(false);
-  const [confirmDel, setConfirmDel] = useState(false);
+  const [toDelete, setToDelete] = useState<{ id: string; name: string } | null>(null);
 
   if (!p) {
     return (
@@ -420,7 +419,7 @@ export function PartyDetailsPage({ kind, id }: { kind: PartyKind; id: string }) 
           </Button>
           <Button
             variant="outline"
-            onClick={() => setConfirmDel(true)}
+            onClick={() => setToDelete({ id: p.id, name: p.name })}
             className="h-10 gap-2 border-destructive/40 text-destructive hover:bg-destructive/10"
           >
             <Trash2 className="h-4 w-4" /> حذف
@@ -560,29 +559,20 @@ export function PartyDetailsPage({ kind, id }: { kind: PartyKind; id: string }) 
         }}
       />
 
-      <AlertDialog open={confirmDel} onOpenChange={setConfirmDel}>
-        <AlertDialogContent dir="rtl">
-          <AlertDialogHeader>
-            <AlertDialogTitle>حذف السجل</AlertDialogTitle>
-            <AlertDialogDescription>
-              سيتم حذف "{p.name}". لن يتم حذف الفواتير المرتبطة.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter className="flex-row-reverse gap-2">
-            <AlertDialogAction
-              onClick={() => {
-                if (isSup) deleteSupplier(p.id);
-                else deleteCustomer(p.id);
-                navigate({ to: isSup ? "/suppliers" : "/customers" });
-              }}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-            >
-              حذف نهائي
-            </AlertDialogAction>
-            <AlertDialogCancel>إلغاء</AlertDialogCancel>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      {/* AUDIT: the plain "confirm and delete" box used to call the delete with
+          no version and no cascade, so a party holding invoices could never be
+          removed from this page and the OCC token was a guess. Route it through
+          the same impact sheet the list uses: it shows every linked document,
+          sends the real `expectedVersion` + `confirmCascade`, and blocks on
+          returns / open orders instead of corrupting them. */}
+      <PartyDeleteDialog
+        kind={kind}
+        partyId={toDelete?.id ?? null}
+        partyName={toDelete?.name ?? null}
+        open={!!toDelete}
+        onOpenChange={(o) => !o && setToDelete(null)}
+        onDeleted={() => navigate({ to: isSup ? "/suppliers" : "/customers" })}
+      />
     </AppShell>
   );
 }
@@ -630,7 +620,17 @@ function OverviewTab({ p, kind }: { p: Party; kind: PartyKind }) {
         <dl className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
           <Info
             label="الرصيد الافتتاحي"
-            value={`${fmt(p.openingBalance ?? 0)} ${currencySymbol(p.currency ?? "SYP")}`}
+            value={
+              // Own currency (may differ from the party's); sign → لنا/له by kind.
+              `${fmt(Math.abs(p.openingBalance ?? 0))} ${currencySymbol(p.openingCurrency ?? p.currency ?? "SYP")}` +
+              (p.openingBalance
+                ? p.openingBalance > 0 === (kind === "customer")
+                  ? " (لنا)"
+                  : " (له)"
+                : "") +
+              (p.openingDate ? ` · ${p.openingDate}` : "") +
+              (p.openingNote ? ` · ${p.openingNote}` : "")
+            }
           />
           <Info
             label="حد الائتمان"
@@ -639,8 +639,15 @@ function OverviewTab({ p, kind }: { p: Party; kind: PartyKind }) {
           <Info label="العملة الافتراضية" value={currencySymbol(p.currency ?? "SYP")} />
           <Info label="شروط الدفع" value={TERMS_LABEL[p.paymentTerms ?? "cash"]} />
           <Info label="طريقة الدفع" value={METHOD_LABEL[p.paymentMethod ?? "cash"]} />
-          <Info label="خصم افتراضي" value={p.defaultDiscount ? `${p.defaultDiscount}%` : "—"} />
-          <Info label="ضريبة القيمة المضافة" value={p.vat ? `${p.vat}%` : "—"} />
+          <Info label="خصم افتراضي" value={p.defaultDiscount ? String(p.defaultDiscount) : "—"} />
+          <Info
+            label="ضريبة القيمة المضافة"
+            value={
+              p.vat
+                ? `${p.vat > 1 ? p.vat : Math.round(p.vat * 10000) / 100}%`
+                : "—"
+            }
+          />
         </dl>
       </PageCard>
 
@@ -951,7 +958,7 @@ function StatementTab({ p, kind }: { p: Party; kind: PartyKind }) {
   const [pageSize, setPageSize] = useState<20 | 50 | 100>(20);
   useEffect(() => {
     setPage(0);
-  }, [from, to, type, ccy, pageSize]);
+  }, [from, to, type, ccy, pageSize, p.id]);
   const [exporting, setExporting] = useState(false);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [settleOpen, setSettleOpen] = useState(false);
@@ -995,6 +1002,17 @@ function StatementTab({ p, kind }: { p: Party; kind: PartyKind }) {
   const { data: statement, isLoading, isFetching } = useStatementPage(p.id, kind, filter, page, pageSize);
   const totalPages = statement?.page?.totalPages ?? 1;
   const totalRows = statement?.page?.totalRows ?? 0;
+  // Bug #8: a stale client page (e.g. 100 left over from a long statement)
+  // must never render against a 4-invoice party. The server reports the true
+  // totalPages for the window, so clamp the page we DISPLAY and re-fetch that
+  // page. The server itself never silently serves the last page under the
+  // requested number — that would mislabel every row's seq/running balance.
+  useEffect(() => {
+    if (!statement) return;
+    const clamped = clampStatementPageIndex(page, totalPages);
+    if (clamped !== page) setPage(clamped);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- clamp on server totals only
+  }, [statement, totalPages, page]);
   const carried = statement?.page?.balanceBeforePageByCurrency ?? {};
   const withFull = async (fn: (full: NonNullable<typeof statement>) => void) => {
     setExporting(true);

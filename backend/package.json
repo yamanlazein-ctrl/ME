@@ -5,12 +5,14 @@
   "type": "module",
   "scripts": {
     "dev": "tsx watch src/presentation/server.ts",
+    "dev:boosthis": "node --env-file=.env.boosthis --import tsx --import ./scripts/boosthis-dev.mts src/presentation/server.ts",
     "build": "tsc -p tsconfig.json && tsc-alias -p tsconfig.json",
     "start": "node dist/backend/src/presentation/server.js",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "node scripts/migrate.mjs",
     "db:test:setup": "node scripts/ensure-test-db.mjs",
     "test": "node scripts/ensure-test-db.mjs && vitest run",
+    "test:sqlite": "node scripts/test-sqlite.mjs",
     "db:push:scratch": "echo 'WARNING: db:push is scratch-only. It does not emit check() constraints or triggers. Use db:migrate for any real database.' && drizzle-kit push",
     "db:studio": "drizzle-kit studio",
     "db:check": "drizzle-kit check",
@@ -22,7 +24,8 @@
     "license-server": "node scripts/run-license-server.mjs",
     "license:genkey": "node scripts/generate-license-signing-key.mjs",
     "test:sync-multidevice": "node scripts/verify-sync-multidevice.mjs --refresh-template",
-    "db:restore": "node scripts/restore-from-backup.mjs"
+    "db:restore": "node scripts/restore-from-backup.mjs",
+    "typecheck:sqlite": "tsc -p tsconfig.sqlite-tests.json && tsx scripts/generate-sqlite-schema.mts --check && tsx scripts/sqlite-schema-fingerprint.mts --check"
   },
   "dependencies": {
     "@node-rs/argon2": "^2.0.2",
@@ -32,9 +35,9 @@
     "cors": "^2.8.5",
     "dotenv": "^16.4.7",
     "drizzle-orm": "^0.45.2",
-    "fflate": "^0.8.2",
     "express": "^4.21.2",
     "express-rate-limit": "^7.5.0",
+    "fflate": "^0.8.2",
     "helmet": "^8.1.0",
     "ioredis": "^5.6.1",
     "jose": "^6.0.10",
@@ -46,6 +49,7 @@
     "zod": "^3.24.2"
   },
   "devDependencies": {
+    "@types/better-sqlite3": "^9.6.0",
     "@types/compression": "^1.8.1",
     "@types/cors": "^2.8.17",
     "@types/express": "^5.0.1",
@@ -56,5 +60,8 @@
     "tsc-alias": "1.9.2",
     "tsx": "^4.19.4",
     "typescript": "^5.8.3"
+  },
+  "optionalDependencies": {
+    "better-sqlite3": "^13.0.3"
   }
 }

@@ -1,7 +1,7 @@
 import { eq, and, ilike, or, sql, inArray, gte, lte, desc, getTableColumns } from "drizzle-orm";
 import { afterCursor, cursorColumns, decodeCursor, keysetOrder, nextCursorOf, type KeysetSpec } from "./keysetPage.js";
 import { likeContains } from "../utils/likeEscape.js";
-import { allocateDocumentNumber } from "../utils/documentNumbers.js";
+import { allocateDocumentNumber, peekNextDocumentNumber } from "../utils/documentNumbers.js";
 import type { DB } from "../orm/drizzle.js";
 import type {
   IInvoiceRepository,
@@ -20,6 +20,7 @@ import { recordStockMovement } from "./stockMovementHelper.js";
 import { notifyOrderAvailability } from "./orderAvailabilityNotifier.js";
 import { assertDayUnlocked } from "./dayLockHelper.js";
 import { assertSufficientCashboxBalance } from "./cashboxBalanceHelper.js";
+import { assertYearOpen } from "./dayLockHelper.js";
 import { assertCreditNotOverdrawn, customerCreditPosition } from "./customerCredit.js";
 import { returns } from "../orm/schemas/return.table.js";
 import type {
@@ -45,6 +46,11 @@ import { randomUUID } from "node:crypto";
 
 export class PostgresInvoiceRepository implements IInvoiceRepository {
   constructor(private readonly db: DB) {}
+
+  // Moved from invoice.route.ts (S1). Behavior unchanged.
+  peekNextNumber(entityType: string, ctx: TenantContext): Promise<string> {
+    return peekNextDocumentNumber(entityType, ctx.tenantId, ctx.syncDeviceId);
+  }
 
   async findById(id: string, ctx: TenantContext): Promise<InvoiceData | null> {
     const rows = await this.db
@@ -168,6 +174,11 @@ export class PostgresInvoiceRepository implements IInvoiceRepository {
     const entityType = isSale ? "invoice" : "invoice_entry";
 
     return this.db.transaction(async (tx) => {
+      // A CLOSED financial year is frozen: no invoice may be dated inside it,
+      // paid or not. This runs before the number is allocated so a rejected
+      // save does not burn a document number, and it is inside the transaction
+      // so it is atomic against a concurrent close.
+      await assertYearOpen(tx, ctx.tenantId, input.date);
       // H-NEW (forensic audit 2026-08-25, entry-invoice numbering): the
       // document number is allocated inside THIS transaction rather than
       // by the route handler before the transaction begins. If any guard
@@ -376,6 +387,8 @@ export class PostgresInvoiceRepository implements IInvoiceRepository {
           total: inv.total,
           paid: round2dp(cashApplied + creditApplied),
           creditApplied,
+          // «عدد الأثواب»: the invoice's pieces, from its own lines (same default as the line insert).
+          piecesCount: input.lines.reduce((sum, l) => sum + (l.pieces ?? 1), 0),
           paymentMethod: (input.paid ?? 0) > 0 ? (input.paymentMethod ?? "cash") : null,
           notes: input.notes,
           // BUG-03 fix — frozen FX capture at creation time (mirrors fx.ts rule):
@@ -509,7 +522,7 @@ export class PostgresInvoiceRepository implements IInvoiceRepository {
       if (!isSale) {
         const entryAgg = new Map<
           string,
-          { kg: number; pieces: number; colorId: string; fabricId: string }
+          { kg: number; pieces: number; colorId: string; fabricId: string; pricePerKg: number }
         >();
         for (const line of input.lines) {
           const prev = entryAgg.get(line.rollId);
@@ -519,6 +532,7 @@ export class PostgresInvoiceRepository implements IInvoiceRepository {
               pieces: prev.pieces + (line.pieces ?? 1),
               colorId: prev.colorId,
               fabricId: prev.fabricId,
+              pricePerKg: prev.pricePerKg,
             });
           } else {
             entryAgg.set(line.rollId, {
@@ -526,6 +540,7 @@ export class PostgresInvoiceRepository implements IInvoiceRepository {
               pieces: line.pieces ?? 1,
               colorId: line.colorId,
               fabricId: line.fabricId,
+              pricePerKg: line.pricePerKg,
             });
           }
         }
@@ -548,6 +563,12 @@ export class PostgresInvoiceRepository implements IInvoiceRepository {
             .set({
               remainingKg: sql`${rolls.remainingKg} + ${agg.kg}`,
               remainingPieces: sql`${rolls.remainingPieces} + ${agg.pieces}`,
+              // The roll is fresh and empty (checked above), so this IS its entry: record the actual
+              // purchase price, in the invoice currency, once. Later cost-price edits never touch it.
+              entryPricePerKg: String(agg.pricePerKg),
+              entryCurrency: invoiceCurrency,
+              entrySource: "purchase",
+              entryReference: autoNumber,
               status: sql`CASE WHEN ${rolls.remainingKg} + ${agg.kg} > 0 THEN 'in_stock' ELSE ${rolls.status} END`,
               version: sql`${rolls.version} + 1`,
               updatedAt: new Date(),
@@ -1131,6 +1152,7 @@ export class PostgresInvoiceRepository implements IInvoiceRepository {
           tax: round2dp(tax),
           shipping: round2dp(shipping),
           total: round2dp(total),
+          piecesCount: lines.reduce((sum, l) => sum + l.pieces, 0),
           notes: input.notes ?? null,
           // Keep the create-time FX freeze; edits must not rewrite exchangeRate.
           exchangeRate: editFx,
@@ -1576,6 +1598,7 @@ export class PostgresInvoiceRepository implements IInvoiceRepository {
       total: row.total,
       paid: row.paid ?? 0,
       creditApplied: row.creditApplied ?? 0,
+      piecesCount: row.piecesCount ?? undefined,
       amountDue: Number(row.total) - Number(row.paid ?? 0),
       paymentMethod: row.paymentMethod as InvoiceData["paymentMethod"],
       notes: n(row.notes),

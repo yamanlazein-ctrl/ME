@@ -1,11 +1,13 @@
 {
   "name": "erp-desktop",
   "private": true,
-  "version": "1.2.0",
+  "version": "2.0.1",
   "type": "module",
   "scripts": {
     "tauri:dev": "tauri dev",
-    "tauri:build": "tauri build"
+    "tauri:build": "tauri build",
+    "tauri:release": "cmd /c scripts\\build-release.cmd",
+    "verify:fresh": "node scripts/verify-build-freshness.mjs"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2.0.0"

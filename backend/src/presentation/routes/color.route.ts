@@ -25,7 +25,8 @@ import {
   syncDeviceIdFromRequest,
 } from "../../application/use-cases/sync/syncEnqueue.js";
 import { logger } from "../../infrastructure/config/logger.js";
-import { withTenantTx } from "../../infrastructure/orm/drizzle.js";
+import { withTenantTx } from "../../infrastructure/orm/engine.js";
+import { rollDeletionHelpers } from "../../infrastructure/repositories/engineHelpers.js";
 
 export function registerColorRoutes(
   router: Router,
@@ -162,6 +163,27 @@ export function registerColorRoutes(
     },
   );
 
+  /** Dry-run: list every live reference before the operator confirms delete. */
+  router.get(
+    "/inventory/colors/:id/deletion-impact",
+    auth,
+    readGuard,
+    async (req: Request, res: Response) => {
+      const tenantId = ctx(req).tenantId;
+      try {
+        const impact = await withTenantTx(tenantId, async (tx) =>
+          (await rollDeletionHelpers()).computeColorDeletionImpact(tx, tenantId, pid(req)),
+        );
+        return res.json(impact);
+      } catch (err) {
+        if ((err as { code?: string }).code === "COLOR_NOT_FOUND") {
+          return res.status(404).json({ code: "NOT_FOUND", message: "اللون غير موجود" });
+        }
+        throw err;
+      }
+    },
+  );
+
   router.delete("/inventory/colors/:id", auth, writeGuard, async (req: Request, res: Response) => {
     const c = ctx(req);
     const id = pid(req);
@@ -188,8 +210,13 @@ export function registerColorRoutes(
     try {
       r = syncEnabled ? await withTenantTx(c.tenantId, runDelete) : await runDelete();
     } catch (err) {
+      const msg = err instanceof Error ? err.message : "فشل حذف اللون";
+      // Business-rule refusals (linked invoices/orders) must not look like 500s.
+      if (/لا يمكن حذف|مرتبط/.test(msg)) {
+        return res.status(422).json({ code: "VALIDATION", message: msg });
+      }
       logger.error({ err }, "transaction rolled back — color delete dropped (F-07)");
-      return res.status(500).json({ code: "INTERNAL", message: "فشل حذف اللون" });
+      return res.status(500).json({ code: "INTERNAL", message: msg });
     }
     if (!r.ok) {
       return res.status(422).json({ code: "VALIDATION", message: r.error });

@@ -1,0 +1,14 @@
+[
+  {
+    "completed_at": "<ts>",
+    "completed_steps": [
+      "welcome"
+    ],
+    "created_at": "<ts>",
+    "current_step": "done",
+    "data": {},
+    "is_completed": true,
+    "tenant_id": "#00003",
+    "updated_at": "<ts>"
+  }
+]

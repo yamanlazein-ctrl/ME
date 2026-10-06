@@ -29,6 +29,8 @@ async function api(method: string, p: string, body?: unknown) {
     headers: {
       Authorization: `Bearer ${token}`,
       ...(body !== undefined ? { "Content-Type": "application/json" } : {}),
+      // REPAIR-008: financial mutations require an Idempotency-Key (428 otherwise).
+      ...(method !== "GET" ? { "Idempotency-Key": randomUUID() } : {}),
     },
     body: body !== undefined ? JSON.stringify(body) : undefined,
   });
@@ -44,8 +46,10 @@ const CUSTOMER_NAME = "Audit Regression Customer";
 const SUPPLIER_NAME = "Audit Regression Supplier";
 const FABRIC_NAME = "Audit Regression Fabric";
 const COLOR_NAME = "Audit Regression Color";
-const ROLL_SYP_NO = "AUDITREG-SYP";
-const ROLL_USD_NO = "AUDITREG-USD";
+// Fresh rolls per run: sales consume pieces, so a shared roll exhausts across reruns.
+const RUN_TAG = Date.now().toString(36);
+const ROLL_SYP_NO = `AUDITREG-SYP-${RUN_TAG}`;
+const ROLL_USD_NO = `AUDITREG-USD-${RUN_TAG}`;
 const createdInvoiceIds: string[] = [];
 
 async function findOrCreateParty(kind: "customer" | "supplier", name: string) {
@@ -100,7 +104,11 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-  for (const id of createdInvoiceIds) await api("POST", `/api/invoices/${id}/cancel`, {});
+  for (const id of createdInvoiceIds) {
+    const cur = (await api("GET", `/api/invoices/${id}`)).json;
+    const version = (cur?.data ?? cur)?.version;
+    if (typeof version === "number") await api("POST", `/api/invoices/${id}/cancel`, { expectedVersion: version });
+  }
 });
 
 async function createSaleInvoice(opts: {
@@ -114,6 +122,8 @@ async function createSaleInvoice(opts: {
   expect(color).toBeTruthy();
   const res = await api("POST", "/api/invoices", {
     type: "sale", date: today(), partyId: opts.partyId, partyType: "customer", currency: opts.currency,
+    // bf340593: every non-USD document carries its exchange rate (units per 1 USD).
+    ...(opts.currency !== "USD" ? { exchangeRate: 15000 } : {}),
     lines: [{ fabricId: color.fabricId, colorId: color.id, rollId: roll.id, quantityKg: opts.qty, pieces: 1, pricePerKg: opts.price }],
   });
   if ([200, 201].includes(res.status)) createdInvoiceIds.push((res.json.data ?? res.json).id);
@@ -131,7 +141,7 @@ describe("H3 — invoice create must validate party kind", () => {
     const colors: any[] = (await api("GET", `/api/inventory/colors?limit=1000`)).json?.data ?? [];
     const color = colors.find((c) => c.id === roll.colorId);
     const res = await api("POST", "/api/invoices", {
-      type: "entry", date: today(), partyId: cust.id, partyType: "supplier", currency: "SYP",
+      type: "entry", date: today(), partyId: cust.id, partyType: "supplier", currency: "SYP", exchangeRate: 15000,
       lines: [{ fabricId: color.fabricId, colorId: color.id, rollId: roll.id, quantityKg: 0.01, pricePerKg: 1000 }],
     });
     if ([200, 201].includes(res.status)) createdInvoiceIds.push((res.json.data ?? res.json).id);
@@ -142,20 +152,26 @@ describe("H3 — invoice create must validate party kind", () => {
 
 // ---------------------------------------------------------------- H1
 describe("H1 — COGS must not import another currency's cost numbers", () => {
-  // No conversion feature exists (verified by audit), so the only safe contract
-  // is: a sale whose currency differs from the roll's cost currency is rejected.
-  // FIX LANDED (cross-currency guard in PostgresInvoiceRepository create/update):
-  // flipped it.fails → it.
+  // A sale whose currency differs from the roll's cost currency is rejected
+  // unless a manual FX rate converts the cost (USD invoice here carries none).
   it("rejects a USD sale of an SYP-costed roll", async () => {
     const cust = await findOrCreateParty("customer", CUSTOMER_NAME);
     const res = await createSaleInvoice({ partyId: cust.id, rollNo: ROLL_SYP_NO, currency: "USD", qty: 1, price: 12.5 });
     expect(res.status).toBe(422);
   });
 
-  it("rejects an SYP sale of a USD-costed roll", async () => {
+  // Owner decision (saleCogsConversion.ts): buy USD / sell SYP is a normal
+  // workflow — the sale is accepted and COGS is CONVERTED at the document's
+  // frozen rate, never booked as raw USD numbers in an SYP ledger.
+  it("converts a USD-costed roll's COGS into SYP at the frozen rate", async () => {
     const cust = await findOrCreateParty("customer", CUSTOMER_NAME);
-    const res = await createSaleInvoice({ partyId: cust.id, rollNo: ROLL_USD_NO, currency: "SYP", qty: 1, price: 5000000 });
-    expect(res.status).toBe(422);
+    const res = await createSaleInvoice({ partyId: cust.id, rollNo: ROLL_USD_NO, currency: "SYP", qty: 0.01, price: 200000 });
+    expect([200, 201]).toContain(res.status);
+    const inv = res.json.data ?? res.json;
+    const legs = (await q(sql`select type, debit, currency from ledger_entries where reference_number = ${inv.number} and tenant_id = ${tenantId}`)).rows as any[];
+    const cogs = legs.find((l) => l.type === "cogs_expense");
+    expect(cogs.currency).toBe("SYP");
+    expect(Number(cogs.debit)).toBeCloseTo(0.01 * 10 * 15000, 2); // 0.01kg × 10 USD/kg × 15000
   });
 
   it("same-currency sales keep working (control)", async () => {
@@ -163,7 +179,7 @@ describe("H1 — COGS must not import another currency's cost numbers", () => {
     const res = await createSaleInvoice({ partyId: cust.id, rollNo: ROLL_SYP_NO, currency: "SYP", qty: 0.01, price: 30000 });
     expect([200, 201]).toContain(res.status);
     const inv = res.json.data ?? res.json;
-    const legs = (await q(sql`select type, debit, credit, currency from ledger_entries where reference_number = ${inv.number}`)).rows as any[];
+    const legs = (await q(sql`select type, debit, credit, currency from ledger_entries where reference_number = ${inv.number} and tenant_id = ${tenantId}`)).rows as any[];
     const cogs = legs.find((l) => l.type === "cogs_expense");
     expect(cogs).toBeTruthy();
     expect(cogs.currency).toBe("SYP");
@@ -180,8 +196,8 @@ describe("M4 — statement entry list must exclude cancelled documents", () => {
     const res = await createSaleInvoice({ partyId: cust.id, rollNo: ROLL_SYP_NO, currency: "SYP", qty: 0.01, price: 30000 });
     expect([200, 201]).toContain(res.status);
     const inv = res.json.data ?? res.json;
-    const legIds = (await q(sql`select id from ledger_entries where reference_number = ${inv.number}`)).rows.map((r: any) => r.id);
-    const cancel = await api("POST", `/api/invoices/${inv.id}/cancel`, {});
+    const legIds = (await q(sql`select id from ledger_entries where reference_number = ${inv.number} and tenant_id = ${tenantId}`)).rows.map((r: any) => r.id);
+    const cancel = await api("POST", `/api/invoices/${inv.id}/cancel`, { expectedVersion: inv.version });
     expect([200, 201]).toContain(cancel.status);
     const stmt = await api("GET", `/api/customers/${cust.id}/statement?currency=SYP`);
     expect(stmt.status).toBe(200);
@@ -222,7 +238,7 @@ describe("M8 — settlement legs must reference a resolvable source document", (
     if (settle.status === 422) return; // zero balance — nothing to settle
     expect(settle.status).toBe(201);
     const refNum = settle.json.referenceNumber;
-    const legs = (await q(sql`select reference_id from ledger_entries where reference_number = ${refNum}`)).rows as any[];
+    const legs = (await q(sql`select reference_id from ledger_entries where reference_number = ${refNum} and tenant_id = ${tenantId}`)).rows as any[];
     expect(legs.length).toBeGreaterThan(0);
     for (const leg of legs) expect(leg.reference_id).not.toBeNull();
   });
@@ -234,7 +250,7 @@ describe("guards — correct behaviors that must survive the fixes", () => {
     const cust = await findOrCreateParty("customer", CUSTOMER_NAME);
     const res = await createSaleInvoice({ partyId: cust.id, rollNo: ROLL_SYP_NO, currency: "SYP", qty: 0.01, price: 30000 });
     const inv = res.json.data ?? res.json;
-    const legs = (await q(sql`select debit, credit from ledger_entries where reference_number = ${inv.number} and status = 'active'`)).rows as any[];
+    const legs = (await q(sql`select debit, credit from ledger_entries where reference_number = ${inv.number} and tenant_id = ${tenantId} and status = 'active'`)).rows as any[];
     const sum = legs.reduce((a, l) => a + Number(l.debit) - Number(l.credit), 0);
     expect(sum).toBe(0);
   });
@@ -242,9 +258,10 @@ describe("guards — correct behaviors that must survive the fixes", () => {
   it("cancelling an invoice soft-cancels all of its legs", async () => {
     const cust = await findOrCreateParty("customer", CUSTOMER_NAME);
     const res = await createSaleInvoice({ partyId: cust.id, rollNo: ROLL_SYP_NO, currency: "SYP", qty: 0.01, price: 30000 });
+    expect([200, 201], JSON.stringify(res.json)).toContain(res.status);
     const inv = res.json.data ?? res.json;
-    await api("POST", `/api/invoices/${inv.id}/cancel`, {});
-    const legs = (await q(sql`select status from ledger_entries where reference_number = ${inv.number}`)).rows as any[];
+    await api("POST", `/api/invoices/${inv.id}/cancel`, { expectedVersion: inv.version });
+    const legs = (await q(sql`select status from ledger_entries where reference_number = ${inv.number} and tenant_id = ${tenantId}`)).rows as any[];
     expect(legs.length).toBeGreaterThan(0);
     expect(legs.every((l) => l.status === "cancelled")).toBe(true);
   });

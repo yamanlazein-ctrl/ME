@@ -3,6 +3,16 @@ import { resolveSaleCostPerKg } from "../src/domain/invoices/invoiceCostSnapshot
 import { pool } from "../src/infrastructure/orm/drizzle.js";
 import { materializeSyncUnit } from "../src/application/use-cases/sync/syncMaterialize.js";
 import { db } from "../src/infrastructure/orm/drizzle.js";
+import { eq } from "drizzle-orm";
+import { rolls } from "../src/infrastructure/orm/schemas/roll.table.js";
+
+/** `price` (numeric(14,4) text) + 111.11, exactly — what PG's `price_per_kg::numeric + 111.11` gives. */
+function bump4(price: string): string {
+  const [i, f = ""] = price.split(".");
+  const scaled = BigInt(i + f.padEnd(4, "0").slice(0, 4)) + 1111100n;
+  const t = scaled.toString().padStart(5, "0");
+  return `${t.slice(0, -4)}.${t.slice(-4)}`;
+}
 import { runWithTenantContext } from "../src/infrastructure/orm/tenant-context.js";
 
 describe("historical sale cost pinning", () => {
@@ -45,9 +55,7 @@ describe("historical sale cost pinning", () => {
     const oldPrice = rollBefore.rows[0]?.p;
     if (oldPrice == null) throw new Error("roll missing");
     try {
-      await pool.query(`UPDATE rolls SET price_per_kg = (price_per_kg::numeric + 111.11) WHERE id = $1`, [
-        inv.roll_id,
-      ]);
+      await db.update(rolls).set({ pricePerKg: bump4(oldPrice) } as never).where(eq(rolls.id, inv.roll_id));
       const afterBump = await pool.query<{ exchange_rate: string | null; cost_per_kg: string | null }>(
         `SELECT i.exchange_rate::text, il.cost_per_kg::text
            FROM invoices i JOIN invoice_lines il ON il.invoice_id = i.id
@@ -92,7 +100,7 @@ describe("historical sale cost pinning", () => {
       expect(afterReplay.rows[0]?.exchange_rate).toBe(before.rate);
       expect(afterReplay.rows[0]?.cost_per_kg).toBe(before.cost);
     } finally {
-      await pool.query(`UPDATE rolls SET price_per_kg = $2 WHERE id = $1`, [inv.roll_id, oldPrice]);
+      await db.update(rolls).set({ pricePerKg: oldPrice } as never).where(eq(rolls.id, inv.roll_id));
     }
   });
 });

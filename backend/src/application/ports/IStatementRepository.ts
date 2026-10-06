@@ -22,4 +22,8 @@ export interface IStatementRepository {
    * the opposite side. Throws if the balance is already zero (nothing to settle).
    */
   settle(partyId: UUID, input: SettlePartyInput, ctx: TenantContext): Promise<LedgerEntryData>;
+  /** Customer credit position (advance / debt) in one currency (moved from statement.route.ts, S1). */
+  creditPosition(partyId: UUID, currency: string, ctx: TenantContext): Promise<unknown>;
+  /** Allocate a settlement reference number in its OWN transaction (autonomous commit). */
+  allocateSettlementNumber(ctx: TenantContext): Promise<string>;
 }

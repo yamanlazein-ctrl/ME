@@ -130,6 +130,9 @@ function InvoiceDetailPage() {
           <MetaCell label="النوع" value={TYPE_LABEL[inv.type]} />
           <MetaCell label="التاريخ" value={inv.date} mono />
           <MetaCell label="العملة" value={inv.currency === "USD" ? "دولار أمريكي" : "ليرة سورية"} />
+          {inv.type === "sale" && inv.piecesCount != null && (
+            <MetaCell label="عدد الأثواب" value={formatNumber(inv.piecesCount)} />
+          )}
           {inv.currency !== "USD" && Number(inv.exchangeRate) > 1 ? (
             <>
               <MetaCell

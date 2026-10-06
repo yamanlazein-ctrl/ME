@@ -1,0 +1,768 @@
+// PORTED-FROM: src/infrastructure/repositories/PostgresDashboardRepository.ts sha256=2e71368307d05ca07b4de772880cd9e9b60f75cbf1170a38a6494980f3841178
+// SQLite twin (specs/001-desktop-sqlite-engine S4). Keep behavior identical to the PG source.
+import { desc } from "./helpers/pgOrder.js";
+import { scaledNumber, scaledText, greatest, decText, pgDivText, decSumNumber, roundDiv, mulRound } from "./helpers/likeContains.js";
+import { eq, and, sql, gte, gt, inArray } from "drizzle-orm";
+import type { DB } from "../../orm/sqlite/drizzleCompat.js";
+import type { IDashboardRepository } from "../../../application/ports/IDashboardRepository.js";
+import { invoices } from "../../orm/sqlite/schemas/invoice.table.js";
+import { returns } from "../../orm/sqlite/schemas/return.table.js";
+import { returnLines } from "../../orm/sqlite/schemas/return-line.table.js";
+import { orders } from "../../orm/sqlite/schemas/order.table.js";
+import { fabrics } from "../../orm/sqlite/schemas/fabric.table.js";
+import { rolls } from "../../orm/sqlite/schemas/roll.table.js";
+import { cashboxSessions, dayCloses, manualMovements } from "../../orm/sqlite/schemas/cashbox.table.js";
+import { vouchers } from "../../orm/sqlite/schemas/voucher.table.js";
+import { notifications } from "../../orm/sqlite/schemas/notification.table.js";
+import { auditLogs } from "../../orm/sqlite/schemas/audit-log.table.js";
+import { parties } from "../../orm/sqlite/schemas/party.table.js";
+import { invoiceLines } from "../../orm/sqlite/schemas/invoice-line.table.js";
+import { colors } from "../../orm/sqlite/schemas/color.table.js";
+import { ledgerEntries } from "../../orm/sqlite/schemas/ledger-entry.table.js";
+import { companyProfiles } from "../../orm/sqlite/schemas/company-profile.table.js";
+import type { DashboardData } from "../../../domain/entities/Dashboard.js";
+import type { TenantContext } from "../../../domain/types/index.js";
+
+import { localToday, localDateISO } from "../../utils/localDate.js";
+export class SqliteDashboardRepository implements IDashboardRepository {
+  constructor(private readonly db: DB) {}
+
+  async getDashboard(ctx: TenantContext): Promise<DashboardData> {
+    const today = localToday();
+    const weekStart = localDateISO(new Date(Date.now() - 7 * 86400000));
+    const monthStart = localDateISO(new Date(Date.now() - 30 * 86400000));
+
+    const base = eq(invoices.tenantId, ctx.tenantId);
+
+    const todaySalesRows = await this.db
+      .select({
+        total: scaledNumber(sql`COALESCE(SUM(${invoices.total}), 0)`, 2),
+        count: sql<number>`COUNT(*)`,
+        currency: invoices.currency,
+      })
+      .from(invoices)
+      .where(
+        and(
+          base,
+          eq(invoices.type, "sale"),
+          eq(invoices.date, today),
+          eq(invoices.status, "active"),
+        ),
+      )
+      .groupBy(invoices.currency);
+
+    const todaySalesByCurrency: Record<string, { total: number; count: number }> = {};
+    for (const r of todaySalesRows) {
+      todaySalesByCurrency[r.currency] = { total: Number(r.total), count: Number(r.count) };
+    }
+
+    // FIX 1.1: week/month sales are also grouped by currency to prevent mixing
+    // SYP + USD aggregates. Returns { byCurrency: { SYP: {total, count}, ... } }.
+    const weekSalesRows = await this.db
+      .select({
+        total: scaledNumber(sql`COALESCE(SUM(${invoices.total}), 0)`, 2),
+        count: sql<number>`COUNT(*)`,
+        currency: invoices.currency,
+      })
+      .from(invoices)
+      .where(
+        and(
+          base,
+          eq(invoices.type, "sale"),
+          gte(invoices.date, weekStart),
+          eq(invoices.status, "active"),
+        ),
+      )
+      .groupBy(invoices.currency);
+    const weekSalesByCurrency: Record<string, { total: number; count: number }> = {};
+    for (const r of weekSalesRows) {
+      weekSalesByCurrency[r.currency] = { total: Number(r.total), count: Number(r.count) };
+    }
+
+    const monthSalesRows = await this.db
+      .select({
+        total: scaledNumber(sql`COALESCE(SUM(${invoices.total}), 0)`, 2),
+        count: sql<number>`COUNT(*)`,
+        currency: invoices.currency,
+      })
+      .from(invoices)
+      .where(
+        and(
+          base,
+          eq(invoices.type, "sale"),
+          gte(invoices.date, monthStart),
+          eq(invoices.status, "active"),
+        ),
+      )
+      .groupBy(invoices.currency);
+    const monthSalesByCurrency: Record<string, { total: number; count: number }> = {};
+    for (const r of monthSalesRows) {
+      monthSalesByCurrency[r.currency] = { total: Number(r.total), count: Number(r.count) };
+    }
+
+    const [outstanding] = await this.db
+      .select({ count: sql<number>`COUNT(*)` })
+      .from(orders)
+      .where(and(eq(orders.tenantId, ctx.tenantId), eq(orders.status, "open")));
+
+    // Count fabrics where total remaining stock of in_stock rolls
+    // is below their configured minStockKg threshold.
+    const lowStockRows = await this.db
+      .select({ fabricId: fabrics.id })
+      .from(fabrics)
+      .innerJoin(colors, and(eq(colors.fabricId, fabrics.id), eq(colors.tenantId, ctx.tenantId)))
+      .innerJoin(
+        rolls,
+        and(
+          eq(rolls.colorId, colors.id),
+          eq(rolls.tenantId, ctx.tenantId),
+          eq(rolls.status, "in_stock"),
+        ),
+      )
+      .where(and(eq(fabrics.tenantId, ctx.tenantId), gt(fabrics.minStockKg, sql`0`)))
+      .groupBy(fabrics.id, fabrics.minStockKg)
+      .having(sql`COALESCE(SUM(${rolls.remainingKg}), 0) < ${fabrics.minStockKg}`);
+    const lowStockCount = lowStockRows.length;
+
+    // FIX 1.1: topCustomers revenue is also grouped by currency to avoid mixing
+    // SYP + USD. Returns one row per (customer, currency); UI can decide ordering.
+    const topCustomers = await this.db
+      .select({
+        partyId: invoices.partyId,
+        revenue: scaledNumber(sql`SUM(${invoices.total})`, 2),
+        currency: invoices.currency,
+      })
+      .from(invoices)
+      .where(
+        and(
+          base,
+          eq(invoices.type, "sale"),
+          eq(invoices.partyType, "customer"),
+          gte(invoices.date, monthStart),
+          eq(invoices.status, "active"),
+        ),
+      )
+      .groupBy(invoices.partyId, invoices.currency)
+      .orderBy(desc(sql`SUM(${invoices.total})`))
+      .limit(10);
+
+    const customerIds = topCustomers.map((r) => r.partyId);
+    const customerNames =
+      customerIds.length > 0
+        ? await this.db
+            .select({ id: parties.id, name: parties.name })
+            .from(parties)
+            .where(and(eq(parties.tenantId, ctx.tenantId), inArray(parties.id, customerIds)))
+        : [];
+
+    // Fix H-7: `revenue` used to be summed with groupBy(fabricId) only —
+    // a fabric sold in both SYP and USD had those two revenue figures
+    // silently added together. kgSold is a physical quantity (not money)
+    // so it is safe to sum across currencies; revenue is not, so it is
+    // grouped by (fabricId, currency) and kept as a per-currency breakdown.
+    // scale 4: qty(2) × price(2), discount(2) up-scaled ×100; GREATEST keeps PG's NULL semantics.
+    const lineNet = greatest(sql`0`, sql`${invoiceLines.quantityKg} * ${invoiceLines.pricePerKg} - ${invoiceLines.discountAmount} * 100`);
+    const topFabricRows = await this.db
+      .select({
+        fabricId: invoiceLines.fabricId,
+        currency: invoices.currency,
+        kgSold: scaledNumber(sql`SUM(${invoiceLines.quantityKg})`, 2),
+        revenue: scaledNumber(sql`SUM(${lineNet})`, 4),
+        // PG sums exact per-row numeric quotients; motard_decsum/pgdiv reproduce that exactly.
+        revenueUsd: decSumNumber(sql`
+          CASE
+            WHEN ${invoices.currency} = 'USD' THEN ${decText(lineNet, 4)}
+            WHEN ${invoices.exchangeRate} IS NOT NULL AND ${invoices.exchangeRate} > 0
+              THEN ${pgDivText(lineNet, 4, invoices.exchangeRate, 6)}
+            ELSE '0'
+          END`),
+      })
+      .from(invoiceLines)
+      .innerJoin(invoices, eq(invoices.id, invoiceLines.invoiceId))
+      .where(
+        and(
+          eq(invoices.tenantId, ctx.tenantId),
+          eq(invoices.type, "sale"),
+          eq(invoices.status, "active"),
+        ),
+      )
+      .groupBy(invoiceLines.fabricId, invoices.currency);
+
+    const topFabricAgg = new Map<
+      string,
+      {
+        fabricId: string;
+        kgSold: number;
+        revenueUsd: number;
+        revenueByCurrency: Record<string, number>;
+      }
+    >();
+    for (const r of topFabricRows) {
+      const agg = topFabricAgg.get(r.fabricId) ?? {
+        fabricId: r.fabricId,
+        kgSold: 0,
+        revenueUsd: 0,
+        revenueByCurrency: {},
+      };
+      agg.kgSold += Number(r.kgSold);
+      agg.revenueUsd += Number(r.revenueUsd);
+      agg.revenueByCurrency[r.currency] =
+        (agg.revenueByCurrency[r.currency] ?? 0) + Number(r.revenue);
+      topFabricAgg.set(r.fabricId, agg);
+    }
+    const topFabricLines = Array.from(topFabricAgg.values())
+      .sort((a, b) => b.revenueUsd - a.revenueUsd || b.kgSold - a.kgSold)
+      .slice(0, 5);
+
+    const fabricIds = topFabricLines.map((r) => r.fabricId);
+    const fabricNames =
+      fabricIds.length > 0
+        ? await this.db
+            .select({ id: fabrics.id, name: fabrics.name })
+            .from(fabrics)
+            .where(and(eq(fabrics.tenantId, ctx.tenantId), inArray(fabrics.id, fabricIds)))
+        : [];
+
+    const [todayMovements] = await this.db
+      .select({ count: sql<number>`COUNT(*)` })
+      .from(ledgerEntries)
+      .where(
+        and(
+          eq(ledgerEntries.tenantId, ctx.tenantId),
+          eq(ledgerEntries.status, "active"),
+          inArray(ledgerEntries.cashImpact, ["in", "out"]),
+          eq(ledgerEntries.date, today),
+        ),
+      );
+    const [dayLock] = await this.db
+      .select()
+      .from(dayCloses)
+      .where(and(eq(dayCloses.tenantId, ctx.tenantId), eq(dayCloses.date, today)))
+      .limit(1);
+
+    // Fix H-7 (forensic audit 2026-08-15): this used to aggregate receipts
+    // and payments with NO groupBy(currency) at all, silently summing SYP,
+    // USD, and EUR vouchers into one meaningless number. Group by currency
+    // like every other fixed aggregate in this file (weekSales, monthSales,
+    // topCustomers, unpaidInvoices) and let the caller decide how to
+    // display the breakdown — never fold currencies together server-side.
+    const voucherStatsRows = await this.db
+      .select({
+        currency: vouchers.currency,
+        receipts: scaledNumber(sql`COALESCE(SUM(CASE WHEN ${vouchers.kind} = 'receipt' THEN ${vouchers.amount} ELSE 0 END), 0)`, 2),
+        payments: scaledNumber(sql`COALESCE(SUM(CASE WHEN ${vouchers.kind} = 'payment' THEN ${vouchers.amount} ELSE 0 END), 0)`, 2),
+        count: sql<number>`COUNT(*)`,
+      })
+      .from(vouchers)
+      .where(
+        and(
+          eq(vouchers.tenantId, ctx.tenantId),
+          gte(vouchers.date, monthStart),
+          eq(vouchers.status, "active"),
+        ),
+      )
+      .groupBy(vouchers.currency);
+    const voucherStatsByCurrency: Record<
+      string,
+      { receipts: number; payments: number; count: number }
+    > = {};
+    let voucherStatsCount = 0;
+    for (const row of voucherStatsRows) {
+      voucherStatsByCurrency[row.currency] = {
+        receipts: Number(row.receipts),
+        payments: Number(row.payments),
+        count: Number(row.count),
+      };
+      voucherStatsCount += Number(row.count);
+    }
+
+    const [unread] = await this.db
+      .select({ count: sql<number>`COUNT(*)` })
+      .from(notifications)
+      .where(and(eq(notifications.tenantId, ctx.tenantId), eq(notifications.isRead, false)));
+
+    const recentActivity = await this.db
+      .select()
+      .from(auditLogs)
+      .where(eq(auditLogs.tenantId, ctx.tenantId))
+      .orderBy(desc(auditLogs.createdAt))
+      .limit(10);
+
+    // ── Active rolls (in-stock) ──────────────────────────────────────
+    const [rollStats] = await this.db
+      .select({
+        total: sql<number>`COUNT(*) FILTER (WHERE ${rolls.status} = 'in_stock')`,
+        colors: sql<number>`COUNT(DISTINCT ${rolls.colorId}) FILTER (WHERE ${rolls.status} = 'in_stock')`,
+      })
+      .from(rolls)
+      .where(eq(rolls.tenantId, ctx.tenantId));
+    const [fabricTypesRow] = await this.db
+      .select({
+        count: sql<number>`COUNT(DISTINCT ${colors.fabricId}) FILTER (WHERE ${rolls.status} = 'in_stock')`,
+      })
+      .from(rolls)
+      .innerJoin(colors, eq(colors.id, rolls.colorId))
+      .where(eq(rolls.tenantId, ctx.tenantId));
+
+    // ── Total available inventory (sum of all remaining kg) ─────────
+    const [invKgRow] = await this.db
+      .select({ total: scaledNumber(sql`COALESCE(SUM(${rolls.remainingKg}), 0)`, 2) })
+      .from(rolls)
+      .where(eq(rolls.tenantId, ctx.tenantId));
+
+    // ── Active customers today (distinct customer parties) ──────────
+    const [activeCustomersTodayRow] = await this.db
+      .select({ count: sql<number>`COUNT(DISTINCT ${invoices.partyId})` })
+      .from(invoices)
+      .where(
+        and(
+          base,
+          eq(invoices.date, today),
+          eq(invoices.status, "active"),
+          eq(invoices.partyType, "customer"),
+        ),
+      );
+
+    // ── Low-stock / out-of-stock rolls (real roll-level counts) ─────
+    const [lowRollStats] = await this.db
+      .select({
+        low: sql<number>`COUNT(*) FILTER (WHERE ${rolls.remainingKg} > 0 AND ${rolls.remainingKg} <= ${fabrics.minStockKg})`,
+        out: sql<number>`COUNT(*) FILTER (WHERE ${rolls.remainingKg} <= 0)`,
+      })
+      .from(rolls)
+      .innerJoin(colors, eq(colors.id, rolls.colorId))
+      .innerJoin(fabrics, eq(fabrics.id, colors.fabricId))
+      .where(eq(rolls.tenantId, ctx.tenantId));
+
+    // ── Today / yesterday profit (revenue − COGS) ───────────────────
+    // Cost basis: current roll purchase price (price_per_kg) at sale time.
+    const saleBase = and(base, eq(invoices.type, "sale"), eq(invoices.status, "active"));
+    const yesterday = localDateISO(new Date(Date.now() - 86400000));
+    // Fix H-7: revStats/cogsStats had no groupBy(currency) at all — a USD
+    // sale and a SYP sale on the same day were summed into one "profitToday"
+    // number with no currency attached. Group both by currency and compute
+    // profit per currency; never combine.
+    const revStatsRows = await this.db
+      .select({
+        currency: invoices.currency,
+        // Revenue for profit = subtotal - discount (excludes tax+shipping, per P0-LOGIC-3.6d)
+        today: scaledNumber(sql`COALESCE(SUM(${invoices.subtotal} - ${invoices.discount}) FILTER (WHERE ${invoices.date} = ${today}), 0)`, 2),
+        yesterday: scaledNumber(sql`COALESCE(SUM(${invoices.subtotal} - ${invoices.discount}) FILTER (WHERE ${invoices.date} = ${yesterday}), 0)`, 2),
+      })
+      .from(invoices)
+      .where(and(saleBase, gte(invoices.date, yesterday)))
+      .groupBy(invoices.currency);
+    const cogsStatsRows = await this.db
+      .select({
+        currency: invoices.currency,
+        // Use snapshot costPerKg, not live rolls.pricePerKg (mutates), fallback to roll price for pre-migration
+        // ROUND(q(2) × cost(4)) to 0 dp, exactly: scale-6 product ÷ 10^6, half away from zero.
+        today: scaledNumber(sql`COALESCE(SUM(${roundDiv(sql`${invoiceLines.quantityKg} * COALESCE(${invoiceLines.costPerKg}, ${rolls.pricePerKg})`, 1000000)}) FILTER (WHERE ${invoices.date} = ${today}), 0)`, 0),
+        // ROUND(q(2) × cost(4)) to 0 dp, exactly: scale-6 product ÷ 10^6, half away from zero.
+        yesterday: scaledNumber(sql`COALESCE(SUM(${roundDiv(sql`${invoiceLines.quantityKg} * COALESCE(${invoiceLines.costPerKg}, ${rolls.pricePerKg})`, 1000000)}) FILTER (WHERE ${invoices.date} = ${yesterday}), 0)`, 0),
+      })
+      .from(invoiceLines)
+      .innerJoin(invoices, eq(invoices.id, invoiceLines.invoiceId))
+      .innerJoin(rolls, eq(rolls.id, invoiceLines.rollId))
+      .where(and(saleBase, gte(invoices.date, yesterday)))
+      .groupBy(invoices.currency);
+
+    const cogsByCurrency = new Map(cogsStatsRows.map((r) => [r.currency, r]));
+    const profitByCurrency: Record<
+      string,
+      { today: number; yesterday: number; revenueToday: number }
+    > = {};
+    for (const rev of revStatsRows) {
+      const cogs = cogsByCurrency.get(rev.currency);
+      profitByCurrency[rev.currency] = {
+        today: Number(rev.today) - Number(cogs?.today ?? 0),
+        yesterday: Number(rev.yesterday) - Number(cogs?.yesterday ?? 0),
+        revenueToday: Number(rev.today),
+      };
+    }
+
+    // ── Unpaid sale invoices (total − paid − returns, per P0-LOGIC-3.6e unified) ──
+    // Do NOT nest a drizzle `.as()` subquery with a correlated returns SELECT:
+    // drizzle flattens column refs inside the alias (`id`/`tenant_id`) and the
+    // query fails → whole GET /api/dashboard 500s (dashboard looks "frozen").
+    const unpaidRows = await this.db.execute<{
+      currency: string;
+      count: number;
+      total_due: number;
+    }>(sql`
+      -- Returns aggregated ONCE per original invoice and joined. The previous
+      -- correlated subquery ran per invoice, twice (SELECT + WHERE): 3 s of
+      -- the dashboard at 50k invoices (EXPLAIN: 74k subplan executions).
+      WITH ret AS (
+        SELECT r.original_invoice_id AS invoice_id,
+               sum(${mulRound(sql`rl.quantity_kg`, 2, sql`rl.price_per_kg`, 4, 2)}) AS amount
+          FROM returns r
+          JOIN return_lines rl ON rl.return_id = r.id
+         WHERE r.tenant_id = ${ctx.tenantId}
+           AND r.status = 'active'
+           AND r.kind = 'sale'
+           AND r.original_invoice_id IS NOT NULL
+         GROUP BY r.original_invoice_id
+      ),
+      due AS (
+        SELECT i.currency, i.total - i.paid - COALESCE(ret.amount, 0) AS remaining
+          FROM invoices i
+          LEFT JOIN ret ON ret.invoice_id = i.id
+         WHERE i.tenant_id = ${ctx.tenantId}
+           AND i.type = 'sale'
+           AND i.status = 'active'
+      )
+      SELECT currency,
+             COUNT(*) AS count,
+             COALESCE(SUM(remaining), 0) AS total_due
+        FROM due
+       WHERE remaining > 0
+       GROUP BY currency
+    `);
+
+    const unpaidByCurrency: Record<string, { count: number; totalDue: number }> = {};
+    let unpaidTotalCount = 0;
+    const unpaidList = Array.isArray(unpaidRows)
+      ? unpaidRows
+      : ((unpaidRows as { rows?: Array<{ currency: string; count: number; total_due: number }> })
+          .rows ?? []);
+    for (const row of unpaidList) {
+      unpaidByCurrency[row.currency] = {
+        count: Number(row.count),
+        totalDue: Number(scaledText(row.total_due, 2)), // PG: numeric::float8 (correctly rounded) = Number(text)
+      };
+      unpaidTotalCount += Number(row.count);
+    }
+
+    // ── Sales trend (per-day series for 7/14/30) ────────────────────
+    // Native amounts stay in byCurrency (never blended). `valueUsd` is the
+    // dashboard chart series — frozen base_total (USD) per invoice, with a
+    // fallback conversion via the invoice's own exchange_rate when base_total
+    // is missing. Never revalue historical docs at a "current" rate.
+    const usdExpr = decSumNumber(sql`
+        COALESCE(
+          ${decText(invoices.baseTotal, 2)},
+          CASE
+            WHEN ${invoices.currency} = 'USD' THEN ${decText(invoices.total, 2)}
+            WHEN ${invoices.exchangeRate} IS NOT NULL AND ${invoices.exchangeRate} > 0
+              THEN ${pgDivText(invoices.total, 2, invoices.exchangeRate, 6)}
+            ELSE '0'
+          END
+        )`);
+    const trendRows = await this.db
+      .select({
+        date: invoices.date,
+        currency: invoices.currency,
+        total: scaledNumber(sql`COALESCE(SUM(${invoices.total}), 0)`, 2),
+        totalUsd: usdExpr,
+      })
+      .from(invoices)
+      .where(and(saleBase, gte(invoices.date, monthStart)))
+      .groupBy(invoices.date, invoices.currency)
+      .orderBy(invoices.date);
+    const trendByDate = new Map<string, Record<string, number>>();
+    const trendUsdByDate = new Map<string, number>();
+    for (const r of trendRows) {
+      const byCurrency = trendByDate.get(r.date) ?? {};
+      byCurrency[r.currency] = Number(r.total);
+      trendByDate.set(r.date, byCurrency);
+      trendUsdByDate.set(r.date, (trendUsdByDate.get(r.date) ?? 0) + Number(r.totalUsd));
+    }
+    const buildTrend = (days: number) => {
+      const out: Array<{ label: string; valueUsd: number; byCurrency: Record<string, number> }> =
+        [];
+      for (let i = days - 1; i >= 0; i--) {
+        const d = localDateISO(new Date(Date.now() - i * 86400000));
+        out.push({
+          label: d,
+          valueUsd: trendUsdByDate.get(d) ?? 0,
+          byCurrency: trendByDate.get(d) ?? {},
+        });
+      }
+      return out;
+    };
+
+    // ── Low-stock inventory alerts ──────────────────────────────────
+    const lowStockAlerts = await this.db
+      .select({
+        rollNo: rolls.rollNo,
+        remainingKg: rolls.remainingKg,
+        colorName: colors.name,
+        colorCode: colors.code,
+        fabricName: fabrics.name,
+      })
+      .from(rolls)
+      .innerJoin(colors, eq(colors.id, rolls.colorId))
+      .innerJoin(fabrics, eq(fabrics.id, colors.fabricId))
+      .where(
+        and(eq(rolls.tenantId, ctx.tenantId), sql`${rolls.remainingKg} <= ${fabrics.minStockKg}`),
+      )
+      .orderBy(desc(rolls.remainingKg))
+      .limit(20);
+
+    // ── Store identity (company profile — real source) ──────────────
+    const [company] = await this.db
+      .select({ name: companyProfiles.name, city: companyProfiles.city })
+      .from(companyProfiles)
+      .where(eq(companyProfiles.tenantId, ctx.tenantId))
+      .limit(1);
+
+    // ── Cashbox balance (REPAIR-004a: never blend currencies) ────────
+    const [cashSession] = await this.db
+      .select()
+      .from(cashboxSessions)
+      .where(eq(cashboxSessions.tenantId, ctx.tenantId))
+      .limit(1);
+
+    const { getCashboxBalanceAsOf } = await import("./helpers/cashboxBalanceHelper.js");
+    const currencyRows = await this.db
+      .select({ currency: sql<string>`DISTINCT ${ledgerEntries.currency}` })
+      .from(ledgerEntries)
+      .where(
+        and(
+          eq(ledgerEntries.tenantId, ctx.tenantId),
+          eq(ledgerEntries.status, "active"),
+          inArray(ledgerEntries.cashImpact, ["in", "out"]),
+        ),
+      );
+    const manualCcyRows = await this.db
+      .select({ currency: sql<string>`DISTINCT ${manualMovements.currency}` })
+      .from(manualMovements)
+      .where(eq(manualMovements.tenantId, ctx.tenantId));
+    const currencySet = new Set<string>();
+    if (cashSession?.currency) currencySet.add(cashSession.currency);
+    for (const r of currencyRows) if (r.currency) currencySet.add(r.currency);
+    for (const r of manualCcyRows) if (r.currency) currencySet.add(r.currency);
+    if (currencySet.size === 0) currencySet.add("SYP");
+
+    const cashBalanceByCurrency: Record<string, number> = {};
+    // getCashboxBalanceAsOf accepts drizzle query API; pool db is fine outside a tx.
+    const tx = this.db as unknown as import("../../orm/sqlite/drizzleCompat.js").Tx;
+    for (const ccy of currencySet) {
+      cashBalanceByCurrency[ccy] = await getCashboxBalanceAsOf(tx, ctx, ccy, today);
+    }
+    // Session branch: scalar = session currency. No session: null (never a blend) — §19 Q3.
+    const cashBalance: number | null = cashSession
+      ? (cashBalanceByCurrency[cashSession.currency] ?? 0)
+      : null;
+
+    // ── Today's invoice count (all types: entry + sale) ─────────────
+    const [todayInvoicesRow] = await this.db
+      .select({ count: sql<number>`COUNT(*)` })
+      .from(invoices)
+      .where(and(base, eq(invoices.date, today), eq(invoices.status, "active")));
+
+    // ── Recent transactions (last 10 real operations, newest first) ─
+    const recentInvoices = await this.db
+      .select({
+        id: invoices.id,
+        number: invoices.number,
+        type: invoices.type,
+        total: invoices.total,
+        currency: invoices.currency,
+        createdAt: invoices.createdAt,
+        partyId: invoices.partyId,
+        partyType: invoices.partyType,
+        partyName: parties.name,
+      })
+      .from(invoices)
+      .innerJoin(parties, eq(parties.id, invoices.partyId))
+      .where(and(base, eq(invoices.status, "active"), inArray(invoices.type, ["sale", "entry"])))
+      .orderBy(desc(invoices.createdAt))
+      .limit(10);
+
+    const recentVouchers = await this.db
+      .select({
+        id: vouchers.id,
+        number: vouchers.number,
+        kind: vouchers.kind,
+        amount: vouchers.amount,
+        currency: vouchers.currency,
+        createdAt: vouchers.createdAt,
+        partyId: vouchers.partyId,
+        partyName: parties.name,
+        invoiceNumber: invoices.number,
+      })
+      .from(vouchers)
+      .innerJoin(parties, eq(parties.id, vouchers.partyId))
+      .leftJoin(invoices, eq(invoices.id, vouchers.invoiceId))
+      .where(
+        and(
+          eq(vouchers.tenantId, ctx.tenantId),
+          eq(vouchers.status, "active"),
+          eq(vouchers.kind, "receipt"),
+        ),
+      )
+      .orderBy(desc(vouchers.createdAt))
+      .limit(10);
+
+    const recentReturns = await this.db
+      .select({
+        id: returns.id,
+        number: returns.number,
+        kind: returns.kind,
+        currency: returns.currency,
+        createdAt: returns.createdAt,
+        partyId: returns.partyId,
+        partyName: parties.name,
+        originalInvoice: invoices.number,
+        amount: scaledNumber(sql`COALESCE(SUM(${mulRound(returnLines.quantityKg, 2, returnLines.pricePerKg, 4, 2)}), 0)`, 2),
+      })
+      .from(returns)
+      .innerJoin(parties, eq(parties.id, returns.partyId))
+      .leftJoin(returnLines, eq(returnLines.returnId, returns.id))
+      .leftJoin(invoices, eq(invoices.id, returns.originalInvoiceId))
+      .where(and(eq(returns.tenantId, ctx.tenantId), eq(returns.status, "active")))
+      .groupBy(
+        returns.id,
+        returns.number,
+        returns.kind,
+        returns.currency,
+        returns.createdAt,
+        returns.partyId,
+        parties.name,
+        invoices.number,
+      )
+      .orderBy(desc(returns.createdAt))
+      .limit(10);
+
+    const recentTransactions = [
+      ...recentInvoices.map((r) => ({
+        type: (r.type === "entry" ? "entry" : "sale") as "sale" | "entry",
+        id: r.id,
+        invoiceNo: r.number,
+        amount: Number(r.total),
+        currency: r.currency,
+        customer: r.partyType === "customer" ? r.partyName : undefined,
+        supplier: r.partyType === "supplier" ? r.partyName : undefined,
+        party: r.partyName,
+        detail: r.type === "entry" ? "فاتورة دخول" : "فاتورة مبيع",
+        time: r.createdAt.toISOString(),
+      })),
+      ...recentVouchers.map((v) => ({
+        type: "payment" as const,
+        id: v.id,
+        reference: v.invoiceNumber ?? v.number,
+        amount: Number(v.amount),
+        currency: v.currency,
+        party: v.partyName,
+        detail: v.invoiceNumber ? `تسديد على ${v.invoiceNumber}` : "سند قبض",
+        time: v.createdAt.toISOString(),
+      })),
+      ...recentReturns.map((r) => ({
+        type: "return" as const,
+        id: r.id,
+        reference: r.originalInvoice ?? r.number,
+        amount: Number(r.amount),
+        currency: r.currency,
+        party: r.partyName,
+        detail: `مرتجع ${r.kind === "entry" ? "دخول" : "مبيع"}`,
+        time: r.createdAt.toISOString(),
+      })),
+    ]
+      .sort((a, b) => new Date(b.time).getTime() - new Date(a.time).getTime())
+      .slice(0, 10);
+
+    return {
+      store: {
+        name: company?.name ?? "",
+        city: company?.city ?? "",
+      },
+      todaySales: {
+        // FIX 1.1: NEVER mix currencies. Callers must read byCurrency[SYP/USD/...]
+        // separately. The legacy `total`/`count`/`currency` fields were removed
+        // to prevent silent aggregation of SYP + USD into one meaningless number.
+        byCurrency: todaySalesByCurrency,
+      },
+      todayInvoices: {
+        count: Number(todayInvoicesRow?.count ?? 0),
+      },
+      recentTransactions,
+      // FIX 1.1: per-currency breakdown for week/month sales.
+      weekSales: { byCurrency: weekSalesByCurrency },
+      monthSales: { byCurrency: monthSalesByCurrency },
+      outstandingOrders: Number(outstanding?.count ?? 0),
+      lowStockFabrics: lowStockCount,
+      topCustomers: topCustomers.map((r) => ({
+        partyId: r.partyId,
+        name: customerNames.find((c) => c.id === r.partyId)?.name ?? r.partyId,
+        revenue: Number(r.revenue),
+        currency: r.currency,
+      })),
+      topFabrics: topFabricLines.map((r) => ({
+        fabricId: r.fabricId,
+        name: fabricNames.find((f) => f.id === r.fabricId)?.name ?? r.fabricId,
+        kgSold: r.kgSold,
+        // Dashboard ranking uses frozen USD (invoice rate / base). byCurrency
+        // remains for operators who need the original document currencies.
+        revenueUsd: r.revenueUsd,
+        revenueByCurrency: r.revenueByCurrency,
+      })),
+      lowStockRolls: {
+        low: Number(lowRollStats?.low ?? 0),
+        outOfStock: Number(lowRollStats?.out ?? 0),
+      },
+      // FIX H-7: `syp` used to be a single number that actually summed
+      // profit across every currency, mislabeled as if it were SYP-only.
+      // byCurrency reports each currency's own profitToday/marginPercent/
+      // trend independently — never combined.
+      todayProfit: {
+        byCurrency: Object.fromEntries(
+          Object.entries(profitByCurrency).map(([currency, p]) => [
+            currency,
+            {
+              today: p.today,
+              marginPercent: p.revenueToday > 0 ? Math.round((p.today / p.revenueToday) * 100) : 0,
+              trend: p.today >= p.yesterday ? ("up" as const) : ("down" as const),
+            },
+          ]),
+        ),
+      },
+      activeRolls: {
+        total: Number(rollStats?.total ?? 0),
+        fabricTypes: Number(fabricTypesRow?.count ?? 0),
+        colors: Number(rollStats?.colors ?? 0),
+      },
+      totalInventoryKg: Number(invKgRow?.total ?? 0),
+      activeTodayCustomers: Number(activeCustomersTodayRow?.count ?? 0),
+      unpaidInvoices: {
+        count: unpaidTotalCount,
+        byCurrency: unpaidByCurrency,
+      },
+      salesTrend: {
+        "7": buildTrend(7),
+        "14": buildTrend(14),
+        "30": buildTrend(30),
+      },
+      alerts: lowStockAlerts.map((r) => ({
+        category: "inventory" as const,
+        level: Number(r.remainingKg) <= 0 ? ("out" as const) : ("low" as const),
+        fabric: r.fabricName,
+        color: r.colorName,
+        colorCode: r.colorCode ?? undefined,
+        rollNo: r.rollNo,
+        remaining: `${r.remainingKg} كغ`,
+      })),
+      cashbox: {
+        balance: cashBalance,
+        balanceByCurrency: cashBalanceByCurrency,
+        todayMovementCount: Number(todayMovements?.count ?? 0),
+        isLocked: !!dayLock,
+        openingDate: cashSession?.openingDate,
+      },
+      // FIX H-7: byCurrency breakdown instead of one blended
+      // receiptsThisMonth/paymentsThisMonth number.
+      vouchers: {
+        byCurrency: voucherStatsByCurrency,
+        count: voucherStatsCount,
+      },
+      unreadNotifications: Number(unread?.count ?? 0),
+      recentActivity: recentActivity.map((a) => ({
+        module: a.module,
+        action: a.action,
+        detail: a.detail ?? "",
+        timestamp: a.createdAt.toISOString(),
+      })),
+    };
+  }
+}

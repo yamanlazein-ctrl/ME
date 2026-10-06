@@ -1,6 +1,7 @@
 import { and, eq, isNull, sql } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
-import { db as defaultDb, type DB, type Tx } from "../orm/drizzle.js";
+import type { DB, Tx } from "../orm/drizzle.js";
+import { engineDb, engineSchema } from "../orm/engineSchema.js";
 import { runWithPlatformContext } from "../orm/tenant-context.js";
 import type { ILicenseProvider } from "../../application/ports/ILicenseProvider.js";
 import type {
@@ -18,11 +19,6 @@ import type {
   BackupPolicy,
 } from "../../domain/licensing/license-metadata.js";
 import { resolveDeviceLimit } from "../../domain/licensing/ownership.js";
-import { licenses } from "../orm/schemas/license.table.js";
-import { licenseActivations } from "../orm/schemas/license-activation.table.js";
-import { deviceRegistrations } from "../orm/schemas/device-registration.table.js";
-import { licenseAuditEvents } from "../orm/schemas/license-audit-event.table.js";
-import { tenants } from "../orm/schemas/tenant.table.js";
 import { revokeSyncDevicesByFingerprint } from "../device/linkedDeviceRevocation.js";
 
 /**
@@ -43,13 +39,19 @@ import { revokeSyncDevicesByFingerprint } from "../device/linkedDeviceRevocation
  * focused on the DB lifecycle).
  */
 export class SelfHostedLicenseProvider implements ILicenseProvider {
+  /** Injected handle (container), else the engine's default — resolved lazily (FR-040). */
+  private async handle(): Promise<DB> {
+    return this.db ?? (await engineDb());
+  }
+
   constructor(
     private readonly signer: LicenseTokenSigner,
-    private readonly db: DB = defaultDb,
+    private readonly db?: DB,
   ) {}
 
   async activate(req: ActivationRequest): Promise<ActivationResult> {
-    return runWithPlatformContext(() => this.db.transaction(async (tx: Tx) => {
+    const { licenses, licenseActivations, deviceRegistrations, licenseAuditEvents, tenants } = await engineSchema();
+    return runWithPlatformContext(async () => (await this.handle()).transaction(async (tx: Tx) => {
       // 1. Find the license by key (case-insensitive — UI may normalize case).
       const [lic] = await tx
         .select()
@@ -259,7 +261,8 @@ export class SelfHostedLicenseProvider implements ILicenseProvider {
   }
 
   async refresh(activationId: string): Promise<HeartbeatResult> {
-    return runWithPlatformContext(() => this.db.transaction(async (tx: Tx) => {
+    const { licenses, licenseActivations, deviceRegistrations, licenseAuditEvents, tenants } = await engineSchema();
+    return runWithPlatformContext(async () => (await this.handle()).transaction(async (tx: Tx) => {
       const [activation] = await tx
         .select()
         .from(licenseActivations)
@@ -298,7 +301,8 @@ export class SelfHostedLicenseProvider implements ILicenseProvider {
   }
 
   async deactivate(activationId: string, reason: string): Promise<void> {
-    await runWithPlatformContext(() => this.db.transaction(async (tx: Tx) => {
+    const { licenses, licenseActivations, deviceRegistrations, licenseAuditEvents, tenants } = await engineSchema();
+    await runWithPlatformContext(async () => (await this.handle()).transaction(async (tx: Tx) => {
       const [activation] = await tx
         .select()
         .from(licenseActivations)
@@ -320,7 +324,8 @@ export class SelfHostedLicenseProvider implements ILicenseProvider {
   }
 
   async listDevices(activationId: string): Promise<DeviceInfo[]> {
-    return runWithPlatformContext(() => this.db.transaction(async (tx: Tx) => {
+    const { licenses, licenseActivations, deviceRegistrations, licenseAuditEvents, tenants } = await engineSchema();
+    return runWithPlatformContext(async () => (await this.handle()).transaction(async (tx: Tx) => {
     const licenseId = await this.activationLicenseId(activationId);
     if (!licenseId) return [];
     const rows = await tx
@@ -339,9 +344,10 @@ export class SelfHostedLicenseProvider implements ILicenseProvider {
   }
 
   async revokeDevice(activationId: string, deviceId: string, reason: string): Promise<void> {
+    const { licenses, licenseActivations, deviceRegistrations, licenseAuditEvents, tenants } = await engineSchema();
     let fingerprint: string | null = null;
     let tenantIdForSync: string | null = null;
-    await runWithPlatformContext(() => this.db.transaction(async (tx: Tx) => {
+    await runWithPlatformContext(async () => (await this.handle()).transaction(async (tx: Tx) => {
       const licenseId = await this.activationLicenseId(activationId);
       if (!licenseId) return;
       const [updated] = await tx
@@ -368,12 +374,13 @@ export class SelfHostedLicenseProvider implements ILicenseProvider {
       }
     }));
     if (fingerprint && tenantIdForSync) {
-      await revokeSyncDevicesByFingerprint(this.db, tenantIdForSync, fingerprint, true, reason);
+      await revokeSyncDevicesByFingerprint((await this.handle()), tenantIdForSync, fingerprint, true, reason);
     }
   }
 
   private async activationLicenseId(activationId: string): Promise<string | null> {
-    const [a] = await this.db
+    const { licenses, licenseActivations, deviceRegistrations, licenseAuditEvents, tenants } = await engineSchema();
+    const [a] = await (await this.handle())
       .select({ licenseId: licenseActivations.licenseId })
       .from(licenseActivations)
       .where(eq(licenseActivations.id, activationId))
@@ -382,7 +389,8 @@ export class SelfHostedLicenseProvider implements ILicenseProvider {
   }
 
   private async activationTenantId(activationId: string): Promise<string | null> {
-    const [a] = await this.db
+    const { licenses, licenseActivations, deviceRegistrations, licenseAuditEvents, tenants } = await engineSchema();
+    const [a] = await (await this.handle())
       .select({ tenantId: licenseActivations.tenantId })
       .from(licenseActivations)
       .where(eq(licenseActivations.id, activationId))

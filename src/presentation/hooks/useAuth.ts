@@ -8,6 +8,7 @@ import {
   createTokenProvider,
   hasStoredSession,
   isAuthFailure,
+  isSetupRequired,
 } from "@/infrastructure/auth/TokenProvider";
 import { refreshParties } from "@/presentation/hooks/useParties";
 import { refreshInventory } from "@/presentation/hooks/useInventory";
@@ -38,8 +39,10 @@ export function useCurrentUser() {
       try {
         return await container.auth.repository.getCurrentUser(buildTenantContext());
       } catch (err) {
-        // After DB wipe / setup reset, /me returns SETUP_REQUIRED (503) while
-        // stale tokens remain — clear them so AuthGate leaves "استعادة الجلسة".
+        // After a DB wipe / setup reset, /me answers 503 SETUP_REQUIRED while
+        // stale tokens remain. The tokens are not rejected, so they stay —
+        // AuthGate leaves "استعادة الجلسة" on !user either way, and the picker
+        // is where the operator belongs after a wipe.
         if (isAuthFailure(err)) clearTokens();
         throw err;
       }
@@ -48,6 +51,9 @@ export function useCurrentUser() {
     // Retry transient failures while a session is stored; never retry hard auth fails.
     retry: (count, err) => {
       if (isAuthFailure(err)) return false;
+      // Retrying cannot flip a SETUP_REQUIRED, and with a stored session it
+      // would stall the cold start for ~10s of backoff before the picker.
+      if (isSetupRequired(err)) return false;
       if (!hasStoredSession()) return false;
       return count < 4;
     },

@@ -63,10 +63,13 @@ async function independentExpected(): Promise<Expected> {
     .from(invoices)
     .where(and(eq(invoices.tenantId, tenantId), eq(invoices.partyId, customerId)));
 
-  const retRows = await db
+  // Per line through the column decoders, summed here: engine-agnostic (a SQL product of two
+  // money columns has no single column to decode it on SQLite's scaled integers).
+  const retLines = await db
     .select({
       invoiceId: returns.originalInvoiceId,
-      amount: sql<number>`COALESCE(SUM(${returnLines.quantityKg} * ${returnLines.pricePerKg}), 0)`,
+      qty: returnLines.quantityKg,
+      price: returnLines.pricePerKg,
     })
     .from(returns)
     .innerJoin(returnLines, eq(returnLines.returnId, returns.id))
@@ -77,8 +80,9 @@ async function independentExpected(): Promise<Expected> {
         eq(returns.kind, "sale"),
       ),
     )
-    .groupBy(returns.originalInvoiceId);
-  const retByInv = new Map(retRows.map((r) => [r.invoiceId, Number(r.amount)]));
+    ;
+  const retByInv = new Map<string | null, number>();
+  for (const r of retLines) retByInv.set(r.invoiceId, (retByInv.get(r.invoiceId) ?? 0) + Number(r.qty) * Number(r.price));
 
   const bucket = (ccy: string) => {
     let total = 0;
@@ -96,7 +100,7 @@ async function independentExpected(): Promise<Expected> {
   const ledgerOf = async (ccy: string) => {
     const [row] = await db
       .select({
-        net: sql<number>`COALESCE(SUM(${ledgerEntries.debit} - ${ledgerEntries.credit}), 0)`,
+        net: sql<number>`COALESCE(SUM(${ledgerEntries.debit} - ${ledgerEntries.credit}), 0)`.mapWith(ledgerEntries.debit),
       })
       .from(ledgerEntries)
       .where(

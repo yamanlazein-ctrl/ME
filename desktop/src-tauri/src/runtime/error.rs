@@ -66,11 +66,11 @@ mod tests {
 
     #[test]
     fn failure_identifies_single_stage_and_code() {
-        let f = BootFailure::new(BootStage::StartDatabase, "pg_ctl-start", "exit 1");
-        assert_eq!(f.stage, BootStage::StartDatabase);
-        assert_eq!(f.code, "pg_ctl-start");
+        let f = BootFailure::new(BootStage::EvaluateData, "NEW_INSTALLATION", "marker differs");
+        assert_eq!(f.stage, BootStage::EvaluateData);
+        assert_eq!(f.code, "NEW_INSTALLATION");
         let line = f.log_line();
-        assert!(line.contains("start-db"), "log must name the stage: {line}");
-        assert!(line.contains("pg_ctl-start"), "log must name the code: {line}");
+        assert!(line.contains("evaluate-data"), "log must name the stage: {line}");
+        assert!(line.contains("NEW_INSTALLATION"), "log must name the code: {line}");
     }
 }

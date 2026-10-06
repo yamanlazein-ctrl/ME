@@ -12,4 +12,9 @@ export interface IPrintJobRepository {
   /** `number` null → the repository allocates the PRT number inside its save transaction. */
   create(input: CreatePrintJobInput, number: string | null, ctx: TenantContext): Promise<PrintJobData>;
   receive(input: ReceivePrintJobInput, ctx: TenantContext): Promise<PrintJobData>;
+  /**
+   * Roll number of a (possibly uncommitted) result roll, read inside the caller's
+   * ambient transaction — used to enqueue the print-receive sync unit.
+   */
+  rollNoOf(rollId: string, ctx: TenantContext): Promise<string | undefined>;
 }

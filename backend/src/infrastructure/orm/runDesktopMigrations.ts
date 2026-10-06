@@ -1,7 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
 import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { migrate } from "drizzle-orm/node-postgres/migrator";
 import { logger } from "../config/logger.js";
 
 export function shouldBaselineExistingCluster(
@@ -126,9 +125,21 @@ async function stampDbMeta(migrationsFolder: string): Promise<void> {
  * has no ad-hoc schema repair path.
  */
 export async function runDesktopMigrations(): Promise<void> {
+  const { getEngine } = await import("./engine.js");
+  if (getEngine() === "sqlite") return runSqliteDesktopMigrations();
   const folder = resolveMigrationsFolder();
   const { db, pool } = await import("./drizzle.js");
   const { config } = await import("../config/env.js");
+
+  // PR-2: the shell spawns this process once PostgreSQL reports "ready", but a
+  // supervisor-initiated server restart, or a cluster still finishing crash
+  // recovery after a hard kill, can still present a momentary connection
+  // refused / "the database system is starting up". Wait a bounded time for
+  // those TRANSIENT classes only, then run the real migrations. A genuinely
+  // broken database (bad SQL, checksum, auth) is NOT masked — it is rethrown.
+  if (config.DESKTOP_DEPLOY) {
+    await waitForDatabaseReady((sqlText) => pool.query(sqlText));
+  }
 
   const tenants = await pool.query<{ t: string | null }>(
     `SELECT to_regclass('public.tenants') AS t`,
@@ -231,6 +242,9 @@ export async function runDesktopMigrations(): Promise<void> {
   );
   try {
     await repairLegacyLicenseTenantPairing(pool);
+    // Loaded here, not at module scope: a DB_ENGINE=sqlite process also evaluates this module (startup
+    // restore path) and must never evaluate the PostgreSQL migrator (FR-040, T122 coverage check).
+    const { migrate } = await import("drizzle-orm/node-postgres/migrator");
     await migrate(db, { migrationsFolder: folder });
 
     // REPAIR-025: verify fingerprint after migrate (desktop strict).
@@ -260,4 +274,121 @@ export async function runDesktopMigrations(): Promise<void> {
     logger.fatal({ err, bootId: process.env.MOTARD_BOOT_ID }, "MIGRATION_FAILED");
     throw err;
   }
+}
+
+/**
+ * SQLite desktop boot (specs/001-desktop-sqlite-engine T045): open/create per the runtime's
+ * startup state, apply pending SQLite migrations forward only (snapshot first), verify the
+ * committed fingerprint, then mirror identity into db-meta.json. Never touches PostgreSQL.
+ */
+async function runSqliteDesktopMigrations(): Promise<void> {
+  const { ensureSqliteRuntime } = await import("./sqlite/runtime.js");
+  logger.info({ bootId: process.env.MOTARD_BOOT_ID }, "MIGRATION_STARTED");
+  try {
+    let r = await ensureSqliteRuntime();
+    // US3 "Restore a backup" (T085): the runtime moved the previous data aside and started FRESH with
+    // the chosen archive — restore it now (verified, staged, swapped) before anything is served.
+    const archive = process.env.MOTARD_RESTORE_ARCHIVE;
+    if (archive && r.created) {
+      const { restoreBackupV3 } = await import("../backup/sqliteRestore.js");
+      const { getSqliteRuntime } = await import("./sqlite/runtime.js");
+      const report = await restoreBackupV3(archive, { skipSafetyBackup: true });
+      logger.info({ archive, dataId: report.dataId, migrated: report.migrated }, "STARTUP_RESTORE_OK");
+      r = getSqliteRuntime()!;
+    }
+    const metaPath = process.env.DESKTOP_DB_META_PATH;
+    if (metaPath) {
+      try {
+        const meta = existsSync(metaPath) ? (JSON.parse(await readFile(metaPath, "utf8")) as Record<string, unknown>) : {};
+        meta.engine = "sqlite";
+        meta.data_id = r.meta.data_id;
+        meta.tenant_id = r.meta.tenant_id;
+        meta.schema_journal_idx = r.meta.schema_journal_idx;
+        // D-1 / T076: the runtime compares its HKCU install-instance marker with this before spawning
+        meta.install_instance_id = r.meta.install_instance_id ?? null;
+        if (process.env.MOTARD_INSTALLATION_ID) meta.installation_id = process.env.MOTARD_INSTALLATION_ID;
+        delete meta.pg_major;
+        await writeFile(metaPath, `${JSON.stringify(meta, null, 2)}\n`, "utf8");
+      } catch (err) {
+        logger.warn({ err, metaPath }, "Could not stamp db-meta.json (sqlite)");
+      }
+    }
+    logger.info(
+      { bootId: process.env.MOTARD_BOOT_ID, created: r.created, applied: r.appliedMigrations, snapshot: r.snapshotPath },
+      "MIGRATION_OK",
+    );
+  } catch (err) {
+    logger.fatal({ err, bootId: process.env.MOTARD_BOOT_ID }, "MIGRATION_FAILED");
+    throw err;
+  }
+}
+
+/** Errors that mean "the local database is not up yet", not "the database is broken". */
+const TRANSIENT_DB_STARTUP_CODES = new Set<string>([
+  // Node / libuv transport-level (nothing listening yet, socket dropped).
+  "ECONNREFUSED",
+  "ECONNRESET",
+  "ETIMEDOUT",
+  "EHOSTUNREACH",
+  "ENETUNREACH",
+  "EPIPE",
+  // PostgreSQL connection classes (SQLSTATE).
+  "08000", // connection_exception
+  "08001", // sqlclient_sql_unable_to_connect_sqlserver
+  "08004", // sqlserver_sql_rejected_sql_connection
+  "08006", // connection_failure
+  "57P01", // admin_shutdown (server restarting)
+  "57P02", // crash_shutdown
+  "57P03", // cannot_connect_now — "the database system is starting up" / crash recovery
+  "53300", // too_many_connections (transient during a restart storm)
+]);
+
+export function isTransientDbStartupError(err: unknown): boolean {
+  const code = (err as { code?: unknown } | null | undefined)?.code;
+  return typeof code === "string" && TRANSIENT_DB_STARTUP_CODES.has(code);
+}
+
+/**
+ * PR-2 bounded readiness gate. Retries a trivial probe ONLY on transient
+ * connect/startup/shutdown classes with capped exponential backoff; every other
+ * error is rethrown immediately so a real schema/auth/migration failure is
+ * never swallowed. When the budget is exhausted while still transient, the last
+ * genuine database error is rethrown so the desktop shell still surfaces its
+ * actionable `[FATAL]` line. This is deliberately NOT a longer blanket timeout —
+ * it distinguishes "database is coming up" from "database is broken".
+ */
+export async function waitForDatabaseReady(
+  probe: (sql: string) => Promise<unknown>,
+  opts: {
+    attempts?: number;
+    baseDelayMs?: number;
+    maxDelayMs?: number;
+    sleep?: (ms: number) => Promise<void>;
+  } = {},
+): Promise<void> {
+  const attempts = opts.attempts ?? 30;
+  const baseDelayMs = opts.baseDelayMs ?? 500;
+  const maxDelayMs = opts.maxDelayMs ?? 2000;
+  const sleep = opts.sleep ?? ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)));
+
+  let lastErr: unknown;
+  for (let attempt = 1; attempt <= attempts; attempt++) {
+    try {
+      await probe("SELECT 1");
+      if (attempt > 1) {
+        logger.info({ attempt }, "DATABASE_READY after waiting");
+      }
+      return;
+    } catch (err) {
+      if (!isTransientDbStartupError(err)) throw err;
+      lastErr = err;
+      const delay = Math.min(baseDelayMs * 2 ** (attempt - 1), maxDelayMs);
+      logger.warn(
+        { attempt, attempts, code: (err as { code?: unknown })?.code, nextDelayMs: delay, bootId: process.env.MOTARD_BOOT_ID },
+        "DATABASE_NOT_READY — waiting before migrations",
+      );
+      await sleep(delay);
+    }
+  }
+  throw lastErr;
 }

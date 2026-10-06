@@ -8,6 +8,7 @@ import type {
   CloseDayInput,
 } from "@/application/ports/ICashboxRepository";
 export type { ManualMovementType } from "@/application/ports/ICashboxRepository";
+import { localToday } from "@/lib/localDate";
 const KEYS = {
   state: ["cashbox", "state"] as const,
   movements: ["cashbox", "movements"] as const,
@@ -38,6 +39,15 @@ export function useCashBalance(date?: string, currency?: string) {
       if (date) return container.cashbox.state.cashBalanceOn(date, buildTenantContext(), currency);
       return container.cashbox.state.currentBalance(buildTenantContext(), currency);
     },
+    staleTime: 15_000,
+  });
+}
+
+/** Every currency's drawer balance — the cash position card reads them all at once. */
+export function useCashBalancesOn(date?: string) {
+  return useQuery({
+    queryKey: [...KEYS.state, "balances", date ?? "today"],
+    queryFn: () => container.cashbox.state.cashBalancesOn(date ?? localToday(), buildTenantContext()),
     staleTime: 15_000,
   });
 }

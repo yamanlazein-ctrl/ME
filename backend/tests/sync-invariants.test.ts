@@ -352,14 +352,19 @@ describe("sync invariants — Transactional Outbox (F-07)", () => {
       "withTenantTx must publish its transaction as the ambient tx",
     ).toBe(true);
 
-    const container = read("src", "infrastructure", "di", "container.ts");
+    // The container is wired per engine (di/postgresContainer.ts, di/sqliteContainer.ts); both
+    // must build the business repositories on the ambient handle, and the outbox on it too.
+    const pg = read("src", "infrastructure", "di", "postgresContainer.ts");
+    expect(pg.includes("ambientDb(db)"), "postgres container must build repositories with ambientDb(db)").toBe(true);
     expect(
-      container.includes("ambientDb(db)"),
-      "container must build repositories with ambientDb(db)",
-    ).toBe(true);
-    expect(
-      /new PostgresSyncOutboxRepository\(dbx\)/.test(container),
+      /new PostgresSyncOutboxRepository\(dbx\)/.test(pg),
       "the outbox repository must be ambient-aware — it is half of the atomic pair",
+    ).toBe(true);
+    const sq = read("src", "infrastructure", "di", "sqliteContainer.ts");
+    expect(/const dbx = sqliteDb\(\)/.test(sq), "sqlite container must build repositories on the ambient sqliteDb()").toBe(true);
+    expect(
+      /new SqliteSyncOutboxRepository\(dbx\)/.test(sq),
+      "the SQLite outbox repository must be ambient-aware — it is half of the atomic pair",
     ).toBe(true);
   });
 
@@ -987,10 +992,10 @@ describe("sync invariants — run-result honesty (P7)", () => {
       /pullError = err instanceof Error \? err\.message/.test(ROUTE),
       "the actual pull failure message must be reported, not just logged",
     ).toBe(true);
+    // The cycle (shared with the background timer) returns the result; the route sends it as is.
     expect(
-      /res\.json\(\{ \.\.\.push, deviceTrust, pull, pullError, blocksError(, [a-zA-Z]+)* \}\)/.test(
-        ROUTE,
-      ),
+      /return \{ \.\.\.push, deviceTrust, pull, pullError, blocksError(, [a-zA-Z]+)* \}/.test(ROUTE) &&
+        /res\.json\(await runSyncCycle\(/.test(ROUTE),
       "fields must reach the client",
     ).toBe(true);
   });
@@ -1217,7 +1222,10 @@ describe("sync invariants — coverage completion (SYNC-12/13)", () => {
 
 describe("sync invariants — tombstone enforcement (plan §10)", () => {
   const MAT = read("src", "application", "use-cases", "sync", "syncMaterialize.ts");
-  const DEPS = read("src", "application", "use-cases", "sync", "syncDependencySnapshots.ts");
+  // S1 (specs/001-desktop-sqlite-engine): the insert-if-missing SQL moved into the engine store.
+  const DEPS =
+    read("src", "application", "use-cases", "sync", "syncDependencySnapshots.ts") +
+    read("src", "infrastructure", "repositories", "PostgresSyncDependencyStore.ts");
   const SQL = allMigrationsSql();
 
   it("the migration creates sync_tombstones with forced tenant RLS", () => {
@@ -1514,7 +1522,10 @@ describe("sync invariants — number-block tip reconciliation", () => {
    *      the mirrored range, so a later local claim (hub unreachable) cannot
    *      overlap it either.
    */
-  const NB = read("src", "application", "use-cases", "sync", "numberBlockUseCases.ts");
+  // S1: the tip-reconciliation SQL moved into the engine store.
+  const NB =
+    read("src", "application", "use-cases", "sync", "numberBlockUseCases.ts") +
+    read("src", "infrastructure", "repositories", "PostgresNumberBlockStore.ts");
   const ROUTE = read("src", "presentation", "routes", "sync.route.ts");
 
   it("hub advances its tip past knownUsed before carving", () => {

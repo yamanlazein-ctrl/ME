@@ -1,26 +1,30 @@
 //! Issue 12 — Desktop document archive folders + PDF drop.
 //!
-//! On first use, creates:
+//! On first use (once the company name is known), creates ONE Desktop root:
 //!   Desktop/<company name>/{فواتير البيع,فواتير الدخول,إرسال المطبعة,استلام المطبعة,كشوفات الحسابات}
 //!
-//! The root folder is named after the tenant's actual company (2026-09-22 —
-//! previously a fixed brand string regardless of which customer's install
-//! this was). Falls back to `FALLBACK_ROOT_FOLDER` when no usable company
-//! name is supplied (empty, whitespace-only, or the frontend hasn't loaded
-//! settings yet) so archiving never fails just because of that.
-//!
-//! `archive_document_pdf` writes a PDF into the matching subfolder (newest-first
-//! naming via timestamp prefix). Prefers Edge/Chrome headless `--print-to-pdf`
-//! for Arabic-capable rendering; falls back to a `.html` sibling if no browser
-//! is available so the archive is never silently empty.
+//! Never create a second unrelated root (the old fixed brand fallback). If the
+//! company name is not available yet, folder creation is skipped — print/archive
+//! paths pass the real name and create the single external folder then.
 
 use serde::Serialize;
 use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::process::Stdio;
 
-const FALLBACK_ROOT_FOLDER: &str = "أقمشة ومنسوجات";
+// Chromium/Edge are console-subsystem binaries. Spawned through a bare
+// `Command` from this GUI process (windows_subsystem = "windows", no console of
+// its own) they allocate a NEW console window and flash it at the user for the
+// whole PDF render — the one remaining unhidden spawn outside `runtime/`.
+// `no_window_command` is the runtime layer's existing CREATE_NO_WINDOW wrapper.
+use crate::runtime::no_window_command;
+
+/// Legacy root name from builds that created a brand folder before the company
+/// name was known. Kept only so tests / migration notes stay readable — we no
+/// longer create this folder.
+#[allow(dead_code)]
+const LEGACY_FALLBACK_ROOT_FOLDER: &str = "أقمشة ومنسوجات";
 
 const SUBFOLDERS: &[(&str, &str)] = &[
     ("sale", "فواتير البيع"),
@@ -36,12 +40,12 @@ fn desktop_dir() -> Result<PathBuf, String> {
     })
 }
 
-/// The Desktop root folder name: the tenant's real company name when one was
-/// supplied (sanitized for NTFS), else the fixed fallback brand string.
-fn resolve_root_name(company_name: Option<&str>) -> String {
+/// Desktop root folder name from the tenant company only. Empty when unknown —
+/// callers must not invent a second brand folder.
+fn resolve_root_name(company_name: Option<&str>) -> Option<String> {
     match company_name.map(sanitize_stem) {
-        Some(name) if !name.is_empty() => name,
-        _ => FALLBACK_ROOT_FOLDER.to_string(),
+        Some(name) if !name.is_empty() => Some(name),
+        _ => None,
     }
 }
 
@@ -53,8 +57,8 @@ fn subfolder_name(doc_type: &str) -> Result<&'static str, String> {
         .ok_or_else(|| format!("نوع مستند غير معروف للأرشفة: {doc_type}"))
 }
 
-/// Create the project root + four document-type subfolders on the Desktop.
-/// Idempotent — safe to call on every launch.
+/// Create the project root + document-type subfolders on the Desktop.
+/// Idempotent — safe to call on every launch once the company name is known.
 pub fn ensure_folders_at(root: &Path) -> Result<PathBuf, String> {
     fs::create_dir_all(root).map_err(|e| format!("فشل إنشاء مجلد الأرشيف: {e}"))?;
     for (_, name) in SUBFOLDERS {
@@ -65,7 +69,12 @@ pub fn ensure_folders_at(root: &Path) -> Result<PathBuf, String> {
 }
 
 pub fn ensure_document_folders(company_name: Option<String>) -> Result<String, String> {
-    let root = desktop_dir()?.join(resolve_root_name(company_name.as_deref()));
+    let Some(root_name) = resolve_root_name(company_name.as_deref()) else {
+        // Skip: creating a fallback brand folder produced a second unrelated
+        // Desktop directory beside the real company archive.
+        return Ok(String::new());
+    };
+    let root = desktop_dir()?.join(root_name);
     let path = ensure_folders_at(&root)?;
     Ok(path.to_string_lossy().into_owned())
 }
@@ -94,12 +103,13 @@ fn find_chromium() -> Option<PathBuf> {
     CANDIDATES.iter().map(PathBuf::from).find(|p| p.is_file())
 }
 
+#[hotpath::measure]
 fn html_to_pdf(html_path: &Path, pdf_path: &Path) -> Result<(), String> {
     let browser = find_chromium().ok_or_else(|| {
         "لم يُعثر على Edge/Chrome لتحويل HTML→PDF — سيُحفظ ملف HTML بدلاً منه".to_string()
     })?;
     let file_url = format!("file:///{}", html_path.to_string_lossy().replace('\\', "/"));
-    let status = Command::new(&browser)
+    let status = no_window_command(&browser)
         .args([
             "--headless=new",
             "--disable-gpu",
@@ -107,6 +117,9 @@ fn html_to_pdf(html_path: &Path, pdf_path: &Path) -> Result<(), String> {
             &format!("--print-to-pdf={}", pdf_path.to_string_lossy()),
             &file_url,
         ])
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
         .status()
         .map_err(|e| format!("فشل تشغيل المتصفح للطباعة إلى PDF: {e}"))?;
     if !status.success() {
@@ -134,7 +147,10 @@ pub fn archive_document_pdf(
     html: String,
     company_name: Option<String>,
 ) -> Result<ArchiveResult, String> {
-    let root = desktop_dir()?.join(resolve_root_name(company_name.as_deref()));
+    let root_name = resolve_root_name(company_name.as_deref()).ok_or_else(|| {
+        "اسم الشركة غير متوفر — لا يمكن إنشاء مجلد الأرشيف على سطح المكتب".to_string()
+    })?;
+    let root = desktop_dir()?.join(root_name);
     ensure_folders_at(&root)?;
     let sub = subfolder_name(&doc_type)?;
     let dir = root.join(sub);
@@ -220,23 +236,37 @@ mod tests {
 
     #[test]
     fn resolve_root_name_prefers_the_real_company_name() {
-        assert_eq!(resolve_root_name(Some("شركة الأمل")), "شركة الأمل");
+        assert_eq!(resolve_root_name(Some("شركة الأمل")).as_deref(), Some("شركة الأمل"));
     }
 
     #[test]
-    fn resolve_root_name_falls_back_when_missing_or_blank() {
-        assert_eq!(resolve_root_name(None), FALLBACK_ROOT_FOLDER);
-        assert_eq!(resolve_root_name(Some("")), FALLBACK_ROOT_FOLDER);
-        assert_eq!(resolve_root_name(Some("   ")), FALLBACK_ROOT_FOLDER);
+    fn resolve_root_name_skips_when_missing_or_blank() {
+        assert_eq!(resolve_root_name(None), None);
+        assert_eq!(resolve_root_name(Some("")), None);
+        assert_eq!(resolve_root_name(Some("   ")), None);
+    }
+
+    #[test]
+    fn ensure_document_folders_without_company_creates_nothing() {
+        let result = ensure_document_folders(None).expect("ok");
+        assert!(result.is_empty(), "must not create a Desktop fallback folder");
     }
 
     #[test]
     fn resolve_root_name_sanitizes_ntfs_illegal_characters() {
-        assert_eq!(resolve_root_name(Some("Fabrics/Group:2026")), "Fabrics_Group_2026");
+        assert_eq!(
+            resolve_root_name(Some("Fabrics/Group:2026")).as_deref(),
+            Some("Fabrics_Group_2026")
+        );
     }
 
     #[test]
     fn statement_doc_type_maps_to_its_arabic_subfolder() {
         assert_eq!(subfolder_name("statement").expect("known type"), "كشوفات الحسابات");
+    }
+
+    #[test]
+    fn legacy_fallback_constant_kept_for_docs() {
+        assert!(!LEGACY_FALLBACK_ROOT_FOLDER.is_empty());
     }
 }

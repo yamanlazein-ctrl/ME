@@ -36,7 +36,7 @@ export function useReturnsList(filter?: ReturnFilter, opts?: { all?: boolean; en
               { ...(filter ?? {}), page, limit, cursor } as ReturnFilter,
               ctx,
             ),
-          { pageSize: 1000, maxPages: 500, label: "returns" },
+          { pageSize: 1000, label: "returns" },
         );
         return { data, total: data.length, hasNext: false };
       }

@@ -3,7 +3,7 @@ import type { ISettingsRepository } from "../../application/ports/ISettingsRepos
 import type { ISyncOutboxRepository } from "../../application/ports/ISyncOutboxRepository.js";
 import type { TenantContext } from "../../domain/types/index.js";
 import { logger } from "../../infrastructure/config/logger.js";
-import { withTenantTx } from "../../infrastructure/orm/drizzle.js";
+import { withTenantTx } from "../../infrastructure/orm/engine.js";
 import {
   enqueueSettingsUpdate,
   isSyncEnqueueEnabled,

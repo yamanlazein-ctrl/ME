@@ -1,0 +1,1490 @@
+[
+  {
+    "body": {
+      "attachments": [],
+      "code": "CUS-2026-0004",
+      "createdAt": "<ts>",
+      "createdBy": "#00093",
+      "creditLimit": 0,
+      "currency": "SYP",
+      "defaultDiscount": 0,
+      "id": "#00229",
+      "kind": "customer",
+      "name": "عميل باقٍ",
+      "openingBalance": 0,
+      "status": "active",
+      "tenantId": "#00095",
+      "updatedAt": "<ts>",
+      "vat": 0,
+      "version": 1
+    },
+    "label": "merge.survivor",
+    "method": "POST",
+    "path": "/api/customers",
+    "status": 201
+  },
+  {
+    "body": {
+      "attachments": [],
+      "code": "CUS-2026-0005",
+      "createdAt": "<ts>",
+      "createdBy": "#00093",
+      "creditLimit": 0,
+      "currency": "SYP",
+      "defaultDiscount": 0,
+      "id": "#00230",
+      "kind": "customer",
+      "name": "عميل مكرر",
+      "openingBalance": 0,
+      "status": "active",
+      "tenantId": "#00095",
+      "updatedAt": "<ts>",
+      "vat": 0,
+      "version": 1
+    },
+    "label": "merge.source",
+    "method": "POST",
+    "path": "/api/customers",
+    "status": 201
+  },
+  {
+    "body": {
+      "attachments": [],
+      "code": "CUS-2026-0006",
+      "createdAt": "<ts>",
+      "createdBy": "#00093",
+      "creditLimit": 0,
+      "currency": "SYP",
+      "defaultDiscount": 0,
+      "id": "#00231",
+      "kind": "customer",
+      "name": "عميل للحذف الكامل",
+      "openingBalance": 0,
+      "status": "active",
+      "tenantId": "#00095",
+      "updatedAt": "<ts>",
+      "vat": 0,
+      "version": 1
+    },
+    "label": "purge.party",
+    "method": "POST",
+    "path": "/api/customers",
+    "status": 201
+  },
+  {
+    "body": {
+      "createdAt": "<ts>",
+      "createdBy": "#00093",
+      "id": "#00232",
+      "minStockKg": 0,
+      "name": "صبغة للحذف",
+      "tenantId": "#00095",
+      "updatedAt": "<ts>",
+      "version": 1
+    },
+    "label": "dye.fabric",
+    "method": "POST",
+    "path": "/api/inventory/fabrics",
+    "status": 201
+  },
+  {
+    "body": {
+      "createdAt": "<ts>",
+      "fabricId": "#00232",
+      "hex": "#ff00ff",
+      "id": "#00233",
+      "name": "زهري",
+      "tenantId": "#00095",
+      "updatedAt": "<ts>",
+      "version": 1
+    },
+    "label": "dye.color",
+    "method": "POST",
+    "path": "/api/inventory/colors",
+    "status": 201
+  },
+  {
+    "body": {
+      "colorId": "#00233",
+      "createdAt": "<ts>",
+      "currency": "SYP",
+      "entryDate": "2026-04-01",
+      "id": "#00234",
+      "initialKg": 30,
+      "pieces": 6,
+      "pricePerKg": 12000,
+      "remainingKg": 0,
+      "remainingPieces": 0,
+      "rollNo": "R-DYE",
+      "status": "in_stock",
+      "supplierId": "#00098",
+      "tenantId": "#00095",
+      "updatedAt": "<ts>",
+      "version": 1
+    },
+    "label": "dye.roll",
+    "method": "POST",
+    "path": "/api/inventory/rolls",
+    "status": 201
+  },
+  {
+    "body": {
+      "amountDue": 360000,
+      "baseTotal": 24,
+      "createdAt": "<ts>",
+      "createdBy": "#00093",
+      "creditApplied": 0,
+      "currency": "SYP",
+      "date": "2026-04-01",
+      "discount": 0,
+      "exchangeRate": 15000,
+      "id": "#00235",
+      "lines": [
+        {
+          "colorId": "#00233",
+          "costPerKg": null,
+          "discountAmount": 0,
+          "fabricId": "#00232",
+          "id": "#00236",
+          "pieces": 6,
+          "pricePerKg": 12000,
+          "quantityKg": 30,
+          "rollId": "#00234"
+        }
+      ],
+      "linkedVoucherId": null,
+      "number": "ENT-2026-0004",
+      "paid": 0,
+      "partyId": "#00098",
+      "partyType": "supplier",
+      "paymentMethod": null,
+      "reference": "ENT-2026-0004",
+      "shipping": 0,
+      "status": "active",
+      "subtotal": 360000,
+      "tax": 0,
+      "tenantId": "#00095",
+      "total": 360000,
+      "type": "entry",
+      "updatedAt": "<ts>",
+      "version": 1
+    },
+    "label": "dye.entry",
+    "method": "POST",
+    "path": "/api/invoices",
+    "status": 201
+  },
+  {
+    "body": {
+      "amountDue": 30000,
+      "baseTotal": 2.67,
+      "createdAt": "<ts>",
+      "createdBy": "#00093",
+      "creditApplied": 0,
+      "currency": "SYP",
+      "date": "2026-04-02",
+      "discount": 0,
+      "exchangeRate": 15000,
+      "id": "#00237",
+      "lines": [
+        {
+          "colorId": "#00233",
+          "costPerKg": 12000,
+          "discountAmount": 0,
+          "fabricId": "#00232",
+          "id": "#00238",
+          "pieces": 1,
+          "pricePerKg": 16000,
+          "quantityKg": 2.5,
+          "rollId": "#00234"
+        }
+      ],
+      "linkedVoucherId": "#00239",
+      "number": "INV-2026-0012",
+      "paid": 10000,
+      "partyId": "#00230",
+      "partyType": "customer",
+      "paymentMethod": "cash",
+      "reference": "INV-2026-0012",
+      "shipping": 0,
+      "status": "active",
+      "subtotal": 40000,
+      "tax": 0,
+      "tenantId": "#00095",
+      "total": 40000,
+      "type": "sale",
+      "updatedAt": "<ts>",
+      "version": 1
+    },
+    "label": "merge.source.sale",
+    "method": "POST",
+    "path": "/api/invoices",
+    "status": 201
+  },
+  {
+    "body": {
+      "amountDue": 10000,
+      "baseTotal": 1.33,
+      "createdAt": "<ts>",
+      "createdBy": "#00093",
+      "creditApplied": 0,
+      "currency": "SYP",
+      "date": "2026-04-02",
+      "discount": 0,
+      "exchangeRate": 15000,
+      "id": "#00240",
+      "lines": [
+        {
+          "colorId": "#00233",
+          "costPerKg": 12000,
+          "discountAmount": 0,
+          "fabricId": "#00232",
+          "id": "#00241",
+          "pieces": 1,
+          "pricePerKg": 16000,
+          "quantityKg": 1.25,
+          "rollId": "#00234"
+        }
+      ],
+      "linkedVoucherId": "#00242",
+      "number": "INV-2026-0013",
+      "paid": 10000,
+      "partyId": "#00229",
+      "partyType": "customer",
+      "paymentMethod": "cash",
+      "reference": "INV-2026-0013",
+      "shipping": 0,
+      "status": "active",
+      "subtotal": 20000,
+      "tax": 0,
+      "tenantId": "#00095",
+      "total": 20000,
+      "type": "sale",
+      "updatedAt": "<ts>",
+      "version": 1
+    },
+    "label": "merge.survivor.sale",
+    "method": "POST",
+    "path": "/api/invoices",
+    "status": 201
+  },
+  {
+    "body": {
+      "amountDue": 38000,
+      "baseTotal": 3.2,
+      "createdAt": "<ts>",
+      "createdBy": "#00093",
+      "creditApplied": 0,
+      "currency": "SYP",
+      "date": "2026-04-02",
+      "discount": 0,
+      "exchangeRate": 15000,
+      "id": "#00243",
+      "lines": [
+        {
+          "colorId": "#00233",
+          "costPerKg": 12000,
+          "discountAmount": 0,
+          "fabricId": "#00232",
+          "id": "#00244",
+          "pieces": 1,
+          "pricePerKg": 16000,
+          "quantityKg": 3,
+          "rollId": "#00234"
+        }
+      ],
+      "linkedVoucherId": "#00245",
+      "number": "INV-2026-0014",
+      "paid": 10000,
+      "partyId": "#00231",
+      "partyType": "customer",
+      "paymentMethod": "cash",
+      "reference": "INV-2026-0014",
+      "shipping": 0,
+      "status": "active",
+      "subtotal": 48000,
+      "tax": 0,
+      "tenantId": "#00095",
+      "total": 48000,
+      "type": "sale",
+      "updatedAt": "<ts>",
+      "version": 1
+    },
+    "label": "purge.party.sale",
+    "method": "POST",
+    "path": "/api/invoices",
+    "status": 201
+  },
+  {
+    "body": {
+      "amount": 5000,
+      "appliedAmount": 5000,
+      "attachments": [],
+      "baseAmount": 0.33,
+      "createdAt": "<ts>",
+      "createdBy": "#00093",
+      "currency": "SYP",
+      "date": "2026-04-03",
+      "discount": 0,
+      "exchangeRate": 15000,
+      "id": "#00246",
+      "invoiceCurrency": "SYP",
+      "invoiceExchangeRate": 15000,
+      "invoiceId": "#00243",
+      "kind": "receipt",
+      "method": "cash",
+      "number": "VOC-2026-0006",
+      "partyId": "#00231",
+      "partyKind": "customer",
+      "status": "active",
+      "tenantId": "#00095",
+      "updatedAt": "<ts>",
+      "version": 1
+    },
+    "label": "purge.party.receipt",
+    "method": "POST",
+    "path": "/api/receipts",
+    "status": 201
+  },
+  {
+    "body": {
+      "code": "MERGE_UNAVAILABLE_WITH_SYNC",
+      "message": "دمج الأطراف غير متاح عند تفعيل المزامنة"
+    },
+    "label": "merge",
+    "method": "POST",
+    "path": "/api/parties/merge",
+    "status": 409
+  },
+  {
+    "body": {
+      "currency": "SYP",
+      "entries": [
+        {
+          "credit": 10000,
+          "currency": "SYP",
+          "date": "2026-04-02",
+          "debit": 0,
+          "description": "سند قبض RCP-INV-2026-0013",
+          "document": {
+            "amount": 10000,
+            "appliedToInvoiceCurrency": "SYP",
+            "appliedToInvoiceNumber": "INV-2026-0013",
+            "crossCurrency": false,
+            "currency": "SYP",
+            "discount": 0,
+            "exchangeRate": 15000,
+            "kind": "voucher",
+            "method": "cash",
+            "number": "RCP-INV-2026-0013"
+          },
+          "id": "#00247",
+          "referenceId": "#00242",
+          "referenceNumber": "RCP-INV-2026-0013",
+          "referenceType": "receipt_in",
+          "runningBalance": "<tied>",
+          "seq": "<tied>",
+          "status": "active",
+          "type": "receipt_in"
+        },
+        {
+          "credit": 0,
+          "currency": "SYP",
+          "date": "2026-04-02",
+          "debit": 20000,
+          "description": "فاتورة بيع INV-2026-0013",
+          "document": {
+            "amount": 20000,
+            "currency": "SYP",
+            "exchangeRate": 15000,
+            "kind": "invoice",
+            "number": "INV-2026-0013",
+            "paid": 10000
+          },
+          "id": "#00248",
+          "lines": [
+            {
+              "amount": 20000,
+              "colorId": "#00233",
+              "colorName": "زهري",
+              "fabricId": "#00232",
+              "fabricName": "صبغة للحذف",
+              "pricePerKg": 16000,
+              "quantityKg": 1.25,
+              "rollId": "#00234",
+              "rollNo": "R-DYE"
+            }
+          ],
+          "pricePerKg": 16000,
+          "quantityKg": 1.25,
+          "referenceId": "#00240",
+          "referenceNumber": "INV-2026-0013",
+          "referenceType": "sales_invoice",
+          "runningBalance": 10000,
+          "seq": "<tied>",
+          "status": "active",
+          "type": "sales_invoice"
+        }
+      ],
+      "finalBalance": 10000,
+      "fromDate": null,
+      "kind": "customer",
+      "page": {
+        "balanceBeforePage": 0,
+        "balanceBeforePageByCurrency": {
+          "SYP": 0
+        },
+        "hasMore": false,
+        "limit": 200,
+        "nextCursor": null
+      },
+      "partyCode": "CUS-2026-0004",
+      "partyId": "#00229",
+      "partyName": "عميل باقٍ",
+      "previousBalance": 0,
+      "toDate": null,
+      "totalCredit": 10000,
+      "totalDebit": 20000,
+      "totalsByCurrency": {
+        "SYP": {
+          "availableCredit": 0,
+          "balanceSide": "debit",
+          "finalBalance": 10000,
+          "previousBalance": 0,
+          "totalCredit": 10000,
+          "totalDebit": 20000
+        }
+      },
+      "type": null
+    },
+    "label": "merge.survivor.statement",
+    "method": "GET",
+    "path": "/api/customers/#00229/statement",
+    "status": 200
+  },
+  {
+    "body": {
+      "attachments": [],
+      "code": "CUS-2026-0005",
+      "createdAt": "<ts>",
+      "createdBy": "#00093",
+      "creditLimit": 0,
+      "currency": "SYP",
+      "defaultDiscount": 0,
+      "id": "#00230",
+      "kind": "customer",
+      "name": "عميل مكرر",
+      "openingBalance": 0,
+      "status": "active",
+      "tenantId": "#00095",
+      "updatedAt": "<ts>",
+      "vat": 0,
+      "version": 1
+    },
+    "label": "merge.source.get",
+    "method": "GET",
+    "path": "/api/customers/#00230",
+    "status": 200
+  },
+  {
+    "body": {
+      "attachments": [],
+      "code": "CUS-2026-0006",
+      "createdAt": "<ts>",
+      "createdBy": "#00093",
+      "creditLimit": 0,
+      "currency": "SYP",
+      "defaultDiscount": 0,
+      "id": "#00231",
+      "kind": "customer",
+      "name": "عميل للحذف الكامل",
+      "openingBalance": 0,
+      "status": "active",
+      "tenantId": "#00095",
+      "updatedAt": "<ts>",
+      "vat": 0,
+      "version": 1
+    },
+    "label": "purge.party.get",
+    "method": "GET",
+    "path": "/api/customers/#00231",
+    "status": 200
+  },
+  {
+    "body": null,
+    "label": "purge.party.cascade",
+    "method": "DELETE",
+    "path": "/api/customers/#00231?expectedVersion=1&confirmCascade=true",
+    "status": 204
+  },
+  {
+    "body": {
+      "attachments": [],
+      "cancelledAt": "<ts>",
+      "cancelledBy": "#00093",
+      "code": "CUS-2026-0006",
+      "createdAt": "<ts>",
+      "createdBy": "#00093",
+      "creditLimit": 0,
+      "currency": "SYP",
+      "defaultDiscount": 0,
+      "id": "#00231",
+      "kind": "customer",
+      "name": "عميل للحذف الكامل",
+      "openingBalance": 0,
+      "status": "cancelled",
+      "tenantId": "#00095",
+      "updatedAt": "<ts>",
+      "vat": 0,
+      "version": 2
+    },
+    "label": "purge.party.after",
+    "method": "GET",
+    "path": "/api/customers/#00231",
+    "status": 200
+  },
+  {
+    "body": {
+      "currency": "SYP",
+      "entries": [
+        {
+          "credit": 10000,
+          "currency": "SYP",
+          "date": "2026-04-02",
+          "debit": 0,
+          "description": "سند قبض RCP-INV-2026-0014",
+          "document": {
+            "amount": 10000,
+            "appliedToInvoiceCurrency": "SYP",
+            "appliedToInvoiceNumber": "INV-2026-0014",
+            "crossCurrency": false,
+            "currency": "SYP",
+            "discount": 0,
+            "exchangeRate": 15000,
+            "kind": "voucher",
+            "method": "cash",
+            "number": "RCP-INV-2026-0014"
+          },
+          "id": "#00249",
+          "referenceId": "#00245",
+          "referenceNumber": "RCP-INV-2026-0014",
+          "referenceType": "receipt_in",
+          "runningBalance": "<tied>",
+          "seq": "<tied>",
+          "status": "cancelled",
+          "type": "receipt_in"
+        },
+        {
+          "credit": 0,
+          "currency": "SYP",
+          "date": "2026-04-02",
+          "debit": 48000,
+          "description": "فاتورة بيع INV-2026-0014",
+          "document": {
+            "amount": 48000,
+            "currency": "SYP",
+            "exchangeRate": 15000,
+            "kind": "invoice",
+            "number": "INV-2026-0014",
+            "paid": 15000
+          },
+          "id": "#00250",
+          "lines": [
+            {
+              "amount": 48000,
+              "colorId": "#00233",
+              "colorName": "زهري",
+              "fabricId": "#00232",
+              "fabricName": "صبغة للحذف",
+              "pricePerKg": 16000,
+              "quantityKg": 3,
+              "rollId": "#00234",
+              "rollNo": "R-DYE"
+            }
+          ],
+          "pricePerKg": 16000,
+          "quantityKg": 3,
+          "referenceId": "#00243",
+          "referenceNumber": "INV-2026-0014",
+          "referenceType": "sales_invoice",
+          "runningBalance": 0,
+          "seq": "<tied>",
+          "status": "cancelled",
+          "type": "sales_invoice"
+        },
+        {
+          "credit": 5000,
+          "currency": "SYP",
+          "date": "2026-04-03",
+          "debit": 0,
+          "description": "سند قبض VOC-2026-0006",
+          "document": {
+            "amount": 5000,
+            "appliedToInvoiceCurrency": "SYP",
+            "appliedToInvoiceNumber": "INV-2026-0014",
+            "crossCurrency": false,
+            "currency": "SYP",
+            "discount": 0,
+            "exchangeRate": 15000,
+            "kind": "voucher",
+            "method": "cash",
+            "number": "VOC-2026-0006"
+          },
+          "id": "#00251",
+          "referenceId": "#00246",
+          "referenceNumber": "VOC-2026-0006",
+          "referenceType": "receipt_in",
+          "runningBalance": 0,
+          "seq": 3,
+          "status": "cancelled",
+          "type": "receipt_in"
+        }
+      ],
+      "finalBalance": 0,
+      "fromDate": null,
+      "kind": "customer",
+      "page": {
+        "balanceBeforePage": 0,
+        "balanceBeforePageByCurrency": {
+          "SYP": 0
+        },
+        "hasMore": false,
+        "limit": 200,
+        "nextCursor": null
+      },
+      "partyCode": "CUS-2026-0006",
+      "partyId": "#00231",
+      "partyName": "عميل للحذف الكامل",
+      "previousBalance": 0,
+      "toDate": null,
+      "totalCredit": 0,
+      "totalDebit": 0,
+      "totalsByCurrency": {
+        "SYP": {
+          "availableCredit": 0,
+          "balanceSide": "zero",
+          "finalBalance": 0,
+          "previousBalance": 0,
+          "totalCredit": 0,
+          "totalDebit": 0
+        }
+      },
+      "type": null
+    },
+    "label": "purge.party.statement",
+    "method": "GET",
+    "path": "/api/customers/#00231/statement",
+    "status": 200
+  },
+  {
+    "body": {
+      "affectedCurrencies": [
+        "SYP"
+      ],
+      "affectedInvoices": [
+        {
+          "id": "#00235",
+          "number": "ENT-2026-0004",
+          "total": 360000,
+          "type": "entry"
+        },
+        {
+          "id": "#00237",
+          "number": "INV-2026-0012",
+          "total": 40000,
+          "type": "sale"
+        },
+        {
+          "id": "#00240",
+          "number": "INV-2026-0013",
+          "total": 20000,
+          "type": "sale"
+        },
+        {
+          "id": "#00243",
+          "number": "INV-2026-0014",
+          "total": 48000,
+          "type": "sale"
+        }
+      ],
+      "cashDelta": {
+        "syp": -35000,
+        "usd": 0
+      },
+      "colorsCount": 1,
+      "earliestDate": "2026-04-01",
+      "fabricId": "#00232",
+      "fabricName": "صبغة للحذف",
+      "ledgerEntriesCount": 22,
+      "otherBlocked": [],
+      "rollsCount": 1,
+      "stockMovementsCount": 6,
+      "vouchersCount": 4
+    },
+    "label": "dye.impact",
+    "method": "GET",
+    "path": "/api/inventory/dyes/#00232/deletion-impact",
+    "status": 200
+  },
+  {
+    "body": {
+      "code": "CONFIRMATION_MISMATCH",
+      "message": "للتأكيد اكتب «تأكيد» أو اسم الصبغة كما هو."
+    },
+    "label": "dye.purge.wrong-confirmation",
+    "method": "DELETE",
+    "path": "/api/inventory/dyes/#00232/purge",
+    "status": 400
+  },
+  {
+    "body": {
+      "cashDelta": {
+        "syp": -20000,
+        "usd": 0
+      },
+      "colorsDeleted": 1,
+      "currenciesRebuilt": [
+        "SYP"
+      ],
+      "fabricId": "#00232",
+      "invoiceLinesDeleted": 4,
+      "invoicesDeleted": 4,
+      "ledgerEntriesDeleted": 22,
+      "rollsDeleted": 1,
+      "stockMovementsDeleted": 6,
+      "vouchersDeleted": 4
+    },
+    "label": "dye.purge",
+    "method": "DELETE",
+    "path": "/api/inventory/dyes/#00232/purge",
+    "status": 200
+  },
+  {
+    "body": {
+      "data": [
+        {
+          "createdAt": "<ts>",
+          "createdBy": "#00093",
+          "id": "#00101",
+          "minStockKg": 0,
+          "name": "Polyester 150D",
+          "tenantId": "#00095",
+          "unit": "kg",
+          "updatedAt": "<ts>",
+          "version": 1
+        },
+        {
+          "category": "قطن",
+          "createdAt": "<ts>",
+          "createdBy": "#00093",
+          "id": "#00100",
+          "minStockKg": 10,
+          "name": "قطن مصري",
+          "tenantId": "#00095",
+          "updatedAt": "<ts>",
+          "version": 1
+        }
+      ],
+      "meta": {
+        "hasNext": false,
+        "limit": 50,
+        "nextCursor": null,
+        "page": 0,
+        "total": 2,
+        "totalPages": 1
+      }
+    },
+    "label": "dye.after.fabrics",
+    "method": "GET",
+    "path": "/api/inventory/fabrics?limit=50",
+    "status": 200
+  },
+  {
+    "body": {
+      "data": [
+        {
+          "amountDue": 18.07,
+          "baseTotal": 25.4,
+          "createdAt": "<ts>",
+          "createdBy": "#00093",
+          "creditApplied": 0,
+          "currency": "EUR",
+          "date": "2026-03-03",
+          "discount": 0,
+          "exchangeRate": 0.93,
+          "id": "#00216",
+          "lines": [
+            {
+              "colorId": "#00104",
+              "costPerKg": 2.0005,
+              "discountAmount": 0,
+              "fabricId": "#00101",
+              "id": "#00217",
+              "pieces": 0,
+              "pricePerKg": 3.33,
+              "quantityKg": 1.01,
+              "rollId": "#00201"
+            },
+            {
+              "colorId": "#00104",
+              "costPerKg": 2.0005,
+              "discountAmount": 0,
+              "fabricId": "#00101",
+              "id": "#00218",
+              "pieces": 0,
+              "pricePerKg": 0.05,
+              "quantityKg": 0.99,
+              "rollId": "#00201"
+            },
+            {
+              "colorId": "#00104",
+              "costPerKg": 2.0005,
+              "discountAmount": 0.05,
+              "fabricId": "#00101",
+              "id": "#00219",
+              "pieces": 0,
+              "pricePerKg": 4.45,
+              "quantityKg": 4.44,
+              "rollId": "#00201"
+            }
+          ],
+          "number": "INV-2026-0011",
+          "paid": 5.55,
+          "partyId": "#00097",
+          "partyType": "customer",
+          "paymentMethod": "cash",
+          "reference": "INV-2026-0011",
+          "shipping": 0.35,
+          "status": "active",
+          "subtotal": 23.12,
+          "tax": 0.15,
+          "tenantId": "#00095",
+          "total": 23.62,
+          "type": "sale",
+          "updatedAt": "<ts>",
+          "version": 1
+        },
+        {
+          "amountDue": 5.12,
+          "baseTotal": 5.51,
+          "createdAt": "<ts>",
+          "createdBy": "#00093",
+          "creditApplied": 0,
+          "currency": "EUR",
+          "date": "2026-03-02",
+          "discount": 0,
+          "exchangeRate": 0.93,
+          "id": "#00204",
+          "lines": [
+            {
+              "colorId": "#00104",
+              "costPerKg": 2.0005,
+              "discountAmount": 0,
+              "fabricId": "#00101",
+              "id": "#00205",
+              "pieces": 0,
+              "pricePerKg": 15.5,
+              "quantityKg": 0.33,
+              "rollId": "#00201"
+            }
+          ],
+          "number": "INV-2026-0005",
+          "paid": 0,
+          "partyId": "#00097",
+          "partyType": "customer",
+          "paymentMethod": null,
+          "reference": "INV-2026-0005",
+          "shipping": 0,
+          "status": "active",
+          "subtotal": 5.12,
+          "tax": 0,
+          "tenantId": "#00095",
+          "total": 5.12,
+          "type": "sale",
+          "updatedAt": "<ts>",
+          "version": 1
+        },
+        {
+          "amountDue": 0.03,
+          "baseTotal": 0.03,
+          "createdAt": "<ts>",
+          "createdBy": "#00093",
+          "creditApplied": 0,
+          "currency": "EUR",
+          "date": "2026-03-02",
+          "discount": 0,
+          "exchangeRate": 0.93,
+          "id": "#00206",
+          "lines": [
+            {
+              "colorId": "#00104",
+              "costPerKg": 2.0005,
+              "discountAmount": 0,
+              "fabricId": "#00101",
+              "id": "#00207",
+              "pieces": 0,
+              "pricePerKg": 0.01,
+              "quantityKg": 2.5,
+              "rollId": "#00201"
+            }
+          ],
+          "number": "INV-2026-0006",
+          "paid": 0,
+          "partyId": "#00097",
+          "partyType": "customer",
+          "paymentMethod": null,
+          "reference": "INV-2026-0006",
+          "shipping": 0,
+          "status": "active",
+          "subtotal": 0.03,
+          "tax": 0,
+          "tenantId": "#00095",
+          "total": 0.03,
+          "type": "sale",
+          "updatedAt": "<ts>",
+          "version": 1
+        },
+        {
+          "amountDue": 1.16,
+          "baseTotal": 1.25,
+          "createdAt": "<ts>",
+          "createdBy": "#00093",
+          "creditApplied": 0,
+          "currency": "EUR",
+          "date": "2026-03-02",
+          "discount": 0.01,
+          "exchangeRate": 0.93,
+          "id": "#00208",
+          "lines": [
+            {
+              "colorId": "#00104",
+              "costPerKg": 2.0005,
+              "discountAmount": 0,
+              "fabricId": "#00101",
+              "id": "#00209",
+              "pieces": 0,
+              "pricePerKg": 1.05,
+              "quantityKg": 1.11,
+              "rollId": "#00201"
+            }
+          ],
+          "number": "INV-2026-0007",
+          "paid": 0,
+          "partyId": "#00097",
+          "partyType": "customer",
+          "paymentMethod": null,
+          "reference": "INV-2026-0007",
+          "shipping": 0,
+          "status": "active",
+          "subtotal": 1.17,
+          "tax": 0,
+          "tenantId": "#00095",
+          "total": 1.16,
+          "type": "sale",
+          "updatedAt": "<ts>",
+          "version": 1
+        },
+        {
+          "amountDue": 0.02,
+          "baseTotal": 0.02,
+          "createdAt": "<ts>",
+          "createdBy": "#00093",
+          "creditApplied": 0,
+          "currency": "EUR",
+          "date": "2026-03-02",
+          "discount": 0,
+          "exchangeRate": 0.93,
+          "id": "#00210",
+          "lines": [
+            {
+              "colorId": "#00104",
+              "costPerKg": 2.0005,
+              "discountAmount": 0,
+              "fabricId": "#00101",
+              "id": "#00211",
+              "pieces": 0,
+              "pricePerKg": 0.35,
+              "quantityKg": 0.07,
+              "rollId": "#00201"
+            }
+          ],
+          "number": "INV-2026-0008",
+          "paid": 0,
+          "partyId": "#00097",
+          "partyType": "customer",
+          "paymentMethod": null,
+          "reference": "INV-2026-0008",
+          "shipping": 0,
+          "status": "active",
+          "subtotal": 0.02,
+          "tax": 0,
+          "tenantId": "#00095",
+          "total": 0.02,
+          "type": "sale",
+          "updatedAt": "<ts>",
+          "version": 1
+        },
+        {
+          "amountDue": 7.35,
+          "baseTotal": 7.9,
+          "createdAt": "<ts>",
+          "createdBy": "#00093",
+          "creditApplied": 0,
+          "currency": "EUR",
+          "date": "2026-03-02",
+          "discount": 0,
+          "exchangeRate": 0.93,
+          "id": "#00212",
+          "lines": [
+            {
+              "colorId": "#00104",
+              "costPerKg": 2.0005,
+              "discountAmount": 0,
+              "fabricId": "#00101",
+              "id": "#00213",
+              "pieces": 0,
+              "pricePerKg": 2.13,
+              "quantityKg": 3.45,
+              "rollId": "#00201"
+            }
+          ],
+          "number": "INV-2026-0009",
+          "paid": 0,
+          "partyId": "#00097",
+          "partyType": "customer",
+          "paymentMethod": null,
+          "reference": "INV-2026-0009",
+          "shipping": 0,
+          "status": "active",
+          "subtotal": 7.35,
+          "tax": 0,
+          "tenantId": "#00095",
+          "total": 7.35,
+          "type": "sale",
+          "updatedAt": "<ts>",
+          "version": 1
+        },
+        {
+          "amountDue": 362099.88,
+          "baseTotal": 389354.71,
+          "createdAt": "<ts>",
+          "createdBy": "#00093",
+          "creditApplied": 0,
+          "currency": "EUR",
+          "date": "2026-03-02",
+          "discount": 0,
+          "exchangeRate": 0.93,
+          "id": "#00214",
+          "lines": [
+            {
+              "colorId": "#00104",
+              "costPerKg": 2.0005,
+              "discountAmount": 0,
+              "fabricId": "#00101",
+              "id": "#00215",
+              "pieces": 0,
+              "pricePerKg": 29999.99,
+              "quantityKg": 12.07,
+              "rollId": "#00201"
+            }
+          ],
+          "number": "INV-2026-0010",
+          "paid": 0,
+          "partyId": "#00097",
+          "partyType": "customer",
+          "paymentMethod": null,
+          "reference": "INV-2026-0010",
+          "shipping": 0,
+          "status": "active",
+          "subtotal": 362099.88,
+          "tax": 0,
+          "tenantId": "#00095",
+          "total": 362099.88,
+          "type": "sale",
+          "updatedAt": "<ts>",
+          "version": 1
+        },
+        {
+          "amountDue": 100000,
+          "baseTotal": 10.07,
+          "cancelledAt": "<ts>",
+          "cancelledBy": "#00093",
+          "createdAt": "<ts>",
+          "createdBy": "#00093",
+          "creditApplied": 0,
+          "currency": "SYP",
+          "date": "2026-02-13",
+          "discount": 0,
+          "exchangeRate": 14900,
+          "id": "#00125",
+          "lines": [
+            {
+              "colorId": "#00103",
+              "costPerKg": 21000,
+              "discountAmount": 0,
+              "fabricId": "#00100",
+              "id": "#00126",
+              "pieces": 1,
+              "pricePerKg": 30000,
+              "quantityKg": 5,
+              "rollId": "#00106"
+            }
+          ],
+          "number": "INV-2026-0004",
+          "paid": 50000,
+          "partyId": "#00097",
+          "partyType": "customer",
+          "paymentMethod": "cash",
+          "reference": "INV-2026-0004",
+          "shipping": 0,
+          "status": "cancelled",
+          "subtotal": 150000,
+          "tax": 0,
+          "tenantId": "#00095",
+          "total": 150000,
+          "type": "sale",
+          "updatedAt": "<ts>",
+          "version": 2
+        },
+        {
+          "amountDue": 170499.5,
+          "baseTotal": 31.68,
+          "createdAt": "<ts>",
+          "createdBy": "#00093",
+          "creditApplied": 0,
+          "currency": "SYP",
+          "date": "2026-02-12",
+          "discount": 0,
+          "exchangeRate": 14900,
+          "id": "#00122",
+          "lines": [
+            {
+              "colorId": "#00102",
+              "costPerKg": 19000,
+              "discountAmount": 0,
+              "fabricId": "#00100",
+              "id": "#00123",
+              "pieces": 1,
+              "pricePerKg": 27000,
+              "quantityKg": 10.5,
+              "rollId": "#00108"
+            },
+            {
+              "colorId": "#00102",
+              "costPerKg": 18500.25,
+              "discountAmount": 0,
+              "fabricId": "#00100",
+              "id": "#00124",
+              "pieces": 1,
+              "pricePerKg": 26000,
+              "quantityKg": 7.25,
+              "rollId": "#00105"
+            }
+          ],
+          "number": "INV-2026-0003",
+          "paid": 301500.5,
+          "partyId": "#00096",
+          "partyType": "customer",
+          "paymentMethod": null,
+          "reference": "INV-2026-0003",
+          "shipping": 0,
+          "status": "active",
+          "subtotal": 472000,
+          "tax": 0,
+          "tenantId": "#00095",
+          "total": 472000,
+          "type": "sale",
+          "updatedAt": "<ts>",
+          "version": 1
+        },
+        {
+          "amountDue": 107.45,
+          "baseTotal": 107.45,
+          "createdAt": "<ts>",
+          "createdBy": "#00093",
+          "creditApplied": 0,
+          "currency": "USD",
+          "date": "2026-02-11",
+          "discount": 0,
+          "exchangeRate": 1,
+          "id": "#00120",
+          "lines": [
+            {
+              "colorId": "#00104",
+              "costPerKg": 3.4567,
+              "discountAmount": 0,
+              "fabricId": "#00101",
+              "id": "#00121",
+              "pieces": 1,
+              "pricePerKg": 5.37,
+              "quantityKg": 20.01,
+              "rollId": "#00107"
+            }
+          ],
+          "number": "INV-2026-0002",
+          "paid": 0,
+          "partyId": "#00096",
+          "partyType": "customer",
+          "paymentMethod": null,
+          "reference": "INV-2026-0002",
+          "shipping": 0,
+          "status": "active",
+          "subtotal": 107.45,
+          "tax": 0,
+          "tenantId": "#00095",
+          "total": 107.45,
+          "type": "sale",
+          "updatedAt": "<ts>",
+          "version": 1
+        },
+        {
+          "amountDue": 688095.1000000001,
+          "baseTotal": 83.82,
+          "createdAt": "<ts>",
+          "createdBy": "#00093",
+          "creditApplied": 0,
+          "currency": "SYP",
+          "date": "2026-02-10",
+          "discount": 5000,
+          "exchangeRate": 14800,
+          "id": "#00116",
+          "lines": [
+            {
+              "colorId": "#00102",
+              "costPerKg": 18500.25,
+              "discountAmount": 1000,
+              "fabricId": "#00100",
+              "id": "#00117",
+              "pieces": 1,
+              "pricePerKg": 26500.5,
+              "quantityKg": 33.33,
+              "rollId": "#00105"
+            },
+            {
+              "colorId": "#00103",
+              "costPerKg": 21000,
+              "discountAmount": 0,
+              "fabricId": "#00100",
+              "id": "#00118",
+              "pieces": 1,
+              "pricePerKg": 29999.99,
+              "quantityKg": 12.07,
+              "rollId": "#00106"
+            }
+          ],
+          "number": "INV-2026-0001",
+          "paid": 552501,
+          "partyId": "#00094",
+          "partyType": "customer",
+          "paymentMethod": "cash",
+          "reference": "INV-2026-0001",
+          "shipping": 0,
+          "status": "active",
+          "subtotal": 1244361.54,
+          "tax": 1234.56,
+          "tenantId": "#00095",
+          "total": 1240596.1,
+          "type": "sale",
+          "updatedAt": "<ts>",
+          "version": 1
+        }
+      ],
+      "meta": {
+        "hasNext": false,
+        "limit": 100,
+        "nextCursor": null,
+        "page": 0,
+        "total": 11,
+        "totalPages": 1
+      }
+    },
+    "label": "dye.after.invoices",
+    "method": "GET",
+    "path": "/api/invoices?type=sale&limit=100",
+    "status": 200
+  },
+  {
+    "body": {
+      "in": 0,
+      "out": 0
+    },
+    "label": "dye.after.cashbox",
+    "method": "GET",
+    "path": "/api/cashbox/movements/2026-04-02?currency=SYP",
+    "status": 200
+  },
+  {
+    "body": {
+      "data": [
+        {
+          "attachments": [],
+          "code": "CUS-2026-0005",
+          "createdAt": "<ts>",
+          "createdBy": "#00093",
+          "creditLimit": 0,
+          "currency": "SYP",
+          "defaultDiscount": 0,
+          "id": "#00230",
+          "kind": "customer",
+          "name": "عميل مكرر",
+          "openingBalance": 0,
+          "stats": {
+            "invoicesCount": 0,
+            "remaining": 0,
+            "totalAmount": 0,
+            "totalPaid": 0
+          },
+          "status": "active",
+          "tenantId": "#00095",
+          "updatedAt": "<ts>",
+          "vat": 0,
+          "version": 1
+        },
+        {
+          "attachments": [],
+          "code": "CUS-2026-0004",
+          "createdAt": "<ts>",
+          "createdBy": "#00093",
+          "creditLimit": 0,
+          "currency": "SYP",
+          "defaultDiscount": 0,
+          "id": "#00229",
+          "kind": "customer",
+          "name": "عميل باقٍ",
+          "openingBalance": 0,
+          "stats": {
+            "invoicesCount": 0,
+            "remaining": 0,
+            "totalAmount": 0,
+            "totalPaid": 0
+          },
+          "status": "active",
+          "tenantId": "#00095",
+          "updatedAt": "<ts>",
+          "vat": 0,
+          "version": 1
+        },
+        {
+          "attachments": [],
+          "code": "CUS-2026-0002",
+          "createdAt": "<ts>",
+          "createdBy": "#00093",
+          "creditLimit": 0,
+          "currency": "SYP",
+          "defaultDiscount": 0,
+          "email": "ilaf@example.com",
+          "id": "#00097",
+          "kind": "customer",
+          "name": "إيلاف للأقمشة",
+          "openingBalance": 0,
+          "stats": {
+            "byCurrency": {
+              "EUR": {
+                "invoicesCount": 7,
+                "remaining": 362131.63,
+                "totalAmount": 362137.18,
+                "totalPaid": 5.55
+              }
+            },
+            "invoicesCount": 7,
+            "lastDate": "2026-03-03",
+            "remaining": 362131.63,
+            "totalAmount": 362137.18,
+            "totalPaid": 5.55
+          },
+          "status": "active",
+          "tenantId": "#00095",
+          "updatedAt": "<ts>",
+          "vat": 0,
+          "version": 1
+        },
+        {
+          "attachments": [],
+          "code": "C-BETA",
+          "createdAt": "<ts>",
+          "createdBy": "#00093",
+          "creditLimit": 0,
+          "currency": "SYP",
+          "defaultDiscount": 0,
+          "id": "#00096",
+          "kind": "customer",
+          "name": "Beta Textiles",
+          "openingBalance": 0,
+          "stats": {
+            "byCurrency": {
+              "SYP": {
+                "invoicesCount": 1,
+                "remaining": 170499.5,
+                "totalAmount": 472000,
+                "totalPaid": 301500.5
+              },
+              "USD": {
+                "invoicesCount": 1,
+                "remaining": 56.95,
+                "totalAmount": 107.45,
+                "totalPaid": 0
+              }
+            },
+            "invoicesCount": 2,
+            "lastDate": "2026-02-12",
+            "remaining": 170499.5,
+            "totalAmount": 472000,
+            "totalPaid": 301500.5
+          },
+          "status": "active",
+          "tenantId": "#00095",
+          "updatedAt": "<ts>",
+          "vat": 0,
+          "version": 1
+        },
+        {
+          "attachments": [],
+          "city": "حلب",
+          "code": "CUS-2026-0001",
+          "createdAt": "<ts>",
+          "createdBy": "#00093",
+          "creditLimit": 0,
+          "currency": "SYP",
+          "defaultDiscount": 0,
+          "id": "#00094",
+          "kind": "customer",
+          "name": "أحمد التاجر",
+          "openingBalance": 0,
+          "phone": "0933000002",
+          "stats": {
+            "byCurrency": {
+              "SYP": {
+                "invoicesCount": 1,
+                "remaining": 599848.43,
+                "totalAmount": 1240596.1,
+                "totalPaid": 552501
+              }
+            },
+            "invoicesCount": 1,
+            "lastDate": "2026-02-10",
+            "remaining": 688095.1000000001,
+            "totalAmount": 1240596.1,
+            "totalPaid": 552501
+          },
+          "status": "active",
+          "tenantId": "#00095",
+          "updatedAt": "<ts>",
+          "vat": 0,
+          "version": 2
+        }
+      ],
+      "meta": {
+        "hasNext": false,
+        "limit": 100,
+        "nextCursor": null,
+        "page": 0,
+        "total": 5,
+        "totalPages": 1
+      }
+    },
+    "label": "customer.list.after-purge",
+    "method": "GET",
+    "path": "/api/customers?limit=100",
+    "status": 200
+  }
+]

@@ -39,6 +39,17 @@ export class CashboxApiService {
     return typeof first === "number" ? first : 0;
   }
 
+  /**
+   * Unscoped balance — the server answers with a per-currency map (DFP-031
+   * M5) instead of collapsing to one number the way cashBalanceOn does.
+   */
+  async cashBalancesOn(date: string): Promise<Record<string, number>> {
+    const res = await this.client.get<number | Record<string, number>>(
+      `/api/cashbox/balance/${date}`,
+    );
+    return typeof res.data === "number" ? {} : res.data;
+  }
+
   async cashMovementsOn(date: string): Promise<DayCashFlowDTO> {
     const res = await this.client.get<DayCashFlowDTO>(`/api/cashbox/movements/${date}`);
     return res.data;

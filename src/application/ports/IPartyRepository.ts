@@ -1,6 +1,7 @@
 import { Party } from "@/domain/entities/Party";
 import { PartyFilter } from "@/core/dtos/PartyDTO";
 import { PaginatedResult, TenantContext, UUID } from "@/domain/types";
+import type { PartyOpeningInput } from "@erp/shared";
 
 export { PartyFilter };
 
@@ -19,5 +20,19 @@ export interface IPartyRepository {
     patch: Partial<Party>,
     ctx: TenantContext,
   ): Promise<Party>;
-  delete(id: UUID, kind: "customer" | "supplier", ctx: TenantContext): Promise<void>;
+  /** Replace the opening balance (old journal cancelled, new one posted) — PUT …/:id/opening. */
+  setOpening(
+    id: UUID,
+    kind: "customer" | "supplier",
+    opening: PartyOpeningInput,
+    expectedVersion: number,
+    ctx: TenantContext,
+  ): Promise<Party>;
+  delete(
+    id: UUID,
+    kind: "customer" | "supplier",
+    ctx: TenantContext,
+    confirmCascade?: boolean,
+    expectedVersion?: number,
+  ): Promise<void>;
 }

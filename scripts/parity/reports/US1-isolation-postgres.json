@@ -1,0 +1,69 @@
+{
+  "engine": "postgres",
+  "checks": [
+    {
+      "name": "tenant B holds a full copy of A's business data",
+      "pass": true,
+      "detail": {
+        "cashbox_daily_balances": 9,
+        "cashbox_sessions": 1,
+        "colors": 3,
+        "company_profiles": 1,
+        "day_closes": 1,
+        "document_sequences": 8,
+        "expenses": 2,
+        "fabrics": 2,
+        "financial_years": 1,
+        "inventory_counts": 5,
+        "invoice_lines": 20,
+        "invoices": 14,
+        "ledger_entries": 87,
+        "manual_movements": 2,
+        "parties": 9,
+        "return_lines": 2,
+        "returns": 2,
+        "rolls": 5,
+        "stock_movements": 28,
+        "vouchers": 9,
+        "yearly_party_summaries": 8
+      }
+    },
+    {
+      "name": "no read of A changes when B exists (82 GET endpoints/queries)",
+      "pass": true,
+      "detail": []
+    },
+    {
+      "name": "no B id appears in any A response",
+      "pass": true,
+      "detail": []
+    },
+    {
+      "name": "A cannot read any of B's 147 records by id",
+      "pass": true,
+      "detail": []
+    },
+    {
+      "name": "B's rows are byte-identical after A's 78 cross-tenant write attempts",
+      "pass": true
+    },
+    {
+      "name": "B's rows are byte-identical after new writes by A",
+      "pass": true
+    }
+  ],
+  "ok": true,
+  "changedReads": {},
+  "acceptedNoopWrites": [
+    {
+      "m": "DELETE",
+      "p": "/api/cashbox/manual-movements/c76a09b5-6116-4c71-ad0f-aece230020da",
+      "status": 204
+    },
+    {
+      "m": "DELETE",
+      "p": "/api/cashbox/manual-movements/5c901c49-6eb0-4a0c-8cfa-747f20c74b70",
+      "status": 204
+    }
+  ]
+}

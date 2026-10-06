@@ -1,10 +1,13 @@
 import { describe, it, expect, beforeAll } from "vitest";
 import { pool } from "@/infrastructure/orm/drizzle.js";
 import { ensureDesktopSchema } from "@/infrastructure/orm/ensureDesktopSchema.js";
+import { pgOnly } from "./_helpers/engine.js";
 
 let reachable = false;
 
-describe("ensureDesktopSchema matches the current sync protocol", () => {
+// PostgreSQL DDL repair only. SQLite never repairs a schema in place: forward-only migrations plus a
+// fingerprint check that refuses a drifted file (tests/sqlite/connection.test.ts SCHEMA_UNVERIFIED).
+describe.skipIf(pgOnly)("ensureDesktopSchema matches the current sync protocol", () => {
   beforeAll(async () => {
     try {
       await pool.query("select 1");

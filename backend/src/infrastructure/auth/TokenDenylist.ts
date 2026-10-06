@@ -1,8 +1,7 @@
 import { Redis } from "ioredis";
 import { and, eq, gt, lt } from "drizzle-orm";
 import { config } from "../config/env.js";
-import { db } from "../orm/drizzle.js";
-import { revokedTokens } from "../orm/schemas/revoked-token.table.js";
+import { engineDb, engineSchema } from "../orm/engineSchema.js";
 
 /**
  * Token denylist (P0-004).
@@ -94,6 +93,8 @@ export class DbTokenDenylist implements TokenDenylist {
   private static readonly SWEEP_ODDS = 100;
 
   async add(jti: string, ttlSeconds: number, meta?: RevocationMeta): Promise<void> {
+    const db = await engineDb();
+    const { revokedTokens } = await engineSchema();
     if (!jti || ttlSeconds <= 0) return;
     const expiresAt = new Date(Date.now() + ttlSeconds * 1000);
 
@@ -117,6 +118,8 @@ export class DbTokenDenylist implements TokenDenylist {
   }
 
   async has(jti: string): Promise<boolean> {
+    const db = await engineDb();
+    const { revokedTokens } = await engineSchema();
     if (!jti) return false;
     try {
       const rows = await db
@@ -134,12 +137,16 @@ export class DbTokenDenylist implements TokenDenylist {
   }
 
   async delete(jti: string): Promise<void> {
+    const db = await engineDb();
+    const { revokedTokens } = await engineSchema();
     if (!jti) return;
     await db.delete(revokedTokens).where(eq(revokedTokens.jti, jti));
   }
 
   /** Drop rows whose tokens have already expired — they can never be replayed. */
   async sweepExpired(): Promise<number> {
+    const db = await engineDb();
+    const { revokedTokens } = await engineSchema();
     const deleted = await db
       .delete(revokedTokens)
       .where(lt(revokedTokens.expiresAt, new Date()))
@@ -157,6 +164,8 @@ export class DbTokenDenylist implements TokenDenylist {
    * revokes tokens it never sees.
    */
   async countRevokedForSubject(subject: string): Promise<number> {
+    const db = await engineDb();
+    const { revokedTokens } = await engineSchema();
     const rows = await db
       .select({ jti: revokedTokens.jti })
       .from(revokedTokens)

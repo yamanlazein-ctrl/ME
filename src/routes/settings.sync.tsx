@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState, type FormEvent } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   CloudCog,
   GitMerge,
@@ -22,16 +22,17 @@ import {
   hubSync,
   runSyncNow,
   useSyncRunState,
+  type HubConnectResult,
   type HubState,
   type HubTestResult,
 } from "@/lib/sync-engine";
 import { isTauri } from "@/infrastructure/tauri-bridge";
 import { FactoryResetCard } from "@/components/settings/FactoryResetCard";
+import { HubDevicesCard } from "@/components/settings/HubDevicesCard";
 import { cn } from "@/lib/utils";
+import { SYNC_HUB_KEY, useSyncStatus } from "@/presentation/hooks/useSyncStatus";
 
 export const Route = createFileRoute("/settings/sync")({ component: SyncSettingsPage });
-
-const HUB_KEY = ["sync", "hub"] as const;
 
 type Indicator = "unpaired" | "online" | "offline" | "syncing" | "stuck";
 
@@ -84,15 +85,12 @@ function SyncSettingsPage() {
 function SyncSettingsAdmin() {
   const qc = useQueryClient();
   const run = useSyncRunState();
-  const hub = useQuery({
-    queryKey: HUB_KEY,
-    queryFn: () => hubSync.state(),
-    refetchInterval: 10_000,
-  });
+  const hub = useSyncStatus();
 
   const [url, setUrl] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [code, setCode] = useState("");
   const [test, setTest] = useState<HubTestResult | null>(null);
   const [confirmDisconnect, setConfirmDisconnect] = useState(false);
 
@@ -130,6 +128,21 @@ function SyncSettingsAdmin() {
       }),
   });
 
+  const onLinked = async (r: HubConnectResult) => {
+    setPassword("");
+    setCode("");
+    toast.success("تم ربط الجهاز بالمركز", {
+      description: r.cursorReset
+        ? `مركز جديد — ستُسحب كل العمليات من البداية${
+            r.requeued ? `، وتُعاد ${r.requeued} عملية سابقة من هذا الجهاز إليه` : ""
+          }.`
+        : undefined,
+    });
+    if (r.deviceWarning) toast.warning(r.deviceWarning, { duration: 10_000 });
+    await qc.invalidateQueries({ queryKey: SYNC_HUB_KEY });
+    void syncNow();
+  };
+
   const connectMut = useMutation({
     mutationFn: () =>
       hubSync.connect({
@@ -137,19 +150,13 @@ function SyncSettingsAdmin() {
         email: email.trim() || undefined,
         password: password || undefined,
       }),
-    onSuccess: async (r) => {
-      setPassword("");
-      toast.success("تم ربط الجهاز بالمركز", {
-        description: r.cursorReset
-          ? `مركز جديد — ستُسحب كل العمليات من البداية${
-              r.requeued ? `، وتُعاد ${r.requeued} عملية سابقة من هذا الجهاز إليه` : ""
-            }.`
-          : undefined,
-      });
-      if (r.deviceWarning) toast.warning(r.deviceWarning, { duration: 10_000 });
-      await qc.invalidateQueries({ queryKey: HUB_KEY });
-      void syncNow();
-    },
+    onSuccess: onLinked,
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const enrollMut = useMutation({
+    mutationFn: () => hubSync.enroll({ url: effectiveUrl, code: code.trim() }),
+    onSuccess: onLinked,
     onError: (e: Error) => toast.error(e.message),
   });
 
@@ -158,7 +165,7 @@ function SyncSettingsAdmin() {
     onSuccess: async () => {
       setTest(null);
       toast.success("أُلغي ربط المركز — العمل يبقى محلياً");
-      await qc.invalidateQueries({ queryKey: HUB_KEY });
+      await qc.invalidateQueries({ queryKey: SYNC_HUB_KEY });
     },
     onError: (e: Error) => toast.error(e.message),
   });
@@ -188,8 +195,16 @@ function SyncSettingsAdmin() {
     }
   }
 
-  const onConnect = (e: FormEvent) => {
+  const onEnroll = (e: FormEvent) => {
     e.preventDefault();
+    if (!effectiveUrl || !code.trim()) {
+      toast.error("أدخل رابط المركز ورمز التسجيل");
+      return;
+    }
+    enrollMut.mutate();
+  };
+
+  const onConnect = () => {
     // With a stored account, changing only the URL is enough.
     const needsAccount = !state?.hasStoredCredentials;
     if (!effectiveUrl || (needsAccount && (!email.trim() || !password))) {
@@ -310,9 +325,9 @@ function SyncSettingsAdmin() {
 
       <PageCard
         title={state?.url ? "إعادة الربط / تغيير المركز" : "ربط الجهاز بالمركز"}
-        description="يُمسح الربط السابق، ثم يُسجَّل الدخول للمركز ويُسجَّل هذا الجهاز فيه ويُحفظ معرّف الشركة والترخيص تلقائياً."
+        description="مرة واحدة لكل جهاز: رابط المركز + رمز التسجيل الذي يُصدره مسؤول الشركة. يحصل الجهاز على هويته وبيانات اعتماده الخاصة، ولا يُطلب الربط ثانية بعد إعادة التشغيل."
       >
-        <form onSubmit={onConnect} className="grid gap-4 md:max-w-xl">
+        <form onSubmit={onEnroll} className="grid gap-4 md:max-w-xl">
           <div className="grid gap-1.5">
             <Label htmlFor="hub-url">رابط الخادم المركزي</Label>
             <Input
@@ -328,35 +343,73 @@ function SyncSettingsAdmin() {
             />
           </div>
           <div className="grid gap-1.5">
-            <Label htmlFor="hub-email">بريد حساب المركز</Label>
+            <Label htmlFor="hub-code">رمز تسجيل الجهاز</Label>
             <Input
-              id="hub-email"
+              id="hub-code"
               dir="ltr"
-              type="email"
-              autoComplete="username"
-              placeholder={session?.hubUserEmail ?? "admin@example.com"}
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              autoComplete="off"
+              placeholder="XXXX-XXXX-XXXX"
+              className="font-mono tracking-widest"
+              value={code}
+              onChange={(e) => setCode(e.target.value.toUpperCase())}
             />
+            <p className="text-xs text-muted-foreground">
+              يُنشئه مسؤول الشركة من «أجهزة الشركة» على جهاز مربوط. رمز واحد يكفي لعدة أجهزة حتى
+              انتهاء صلاحيته.
+            </p>
           </div>
-          <div className="grid gap-1.5">
-            <Label htmlFor="hub-password">كلمة مرور حساب المركز</Label>
-            <Input
-              id="hub-password"
-              dir="ltr"
-              type="password"
-              autoComplete="current-password"
-              placeholder={state?.hasStoredCredentials ? "محفوظة — اتركها فارغة" : undefined}
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-            />
-            {state?.hasStoredCredentials && (
-              <p className="text-xs text-muted-foreground">
-                الحساب محفوظ مشفّراً على هذا الجهاز: لتغيير رابط المركز فقط اترك البريد وكلمة المرور
-                فارغين.
-              </p>
-            )}
-          </div>
+
+          <details className="rounded-lg border border-border px-3 py-2">
+            <summary className="cursor-pointer text-sm font-medium">
+              ربط بحساب مسؤول المركز (الجهاز الأول فقط)
+            </summary>
+            <div className="mt-3 grid gap-4">
+              <div className="grid gap-1.5">
+                <Label htmlFor="hub-email">بريد حساب المركز</Label>
+                <Input
+                  id="hub-email"
+                  dir="ltr"
+                  type="email"
+                  autoComplete="username"
+                  placeholder={session?.hubUserEmail ?? "admin@example.com"}
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                />
+              </div>
+              <div className="grid gap-1.5">
+                <Label htmlFor="hub-password">كلمة مرور حساب المركز</Label>
+                <Input
+                  id="hub-password"
+                  dir="ltr"
+                  type="password"
+                  autoComplete="current-password"
+                  placeholder={state?.hasStoredCredentials ? "محفوظة — اتركها فارغة" : undefined}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                />
+                {state?.hasStoredCredentials && (
+                  <p className="text-xs text-muted-foreground">
+                    الحساب محفوظ مشفّراً على هذا الجهاز: لتغيير رابط المركز فقط اترك البريد وكلمة
+                    المرور فارغين.
+                  </p>
+                )}
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={onConnect}
+                disabled={connectMut.isPending}
+                className="justify-self-start"
+              >
+                {connectMut.isPending ? (
+                  <Loader2 className="ml-1 h-4 w-4 animate-spin" />
+                ) : (
+                  <CloudCog className="ml-1 h-4 w-4" />
+                )}
+                ربط بالحساب
+              </Button>
+            </div>
+          </details>
 
           {test && (
             <div
@@ -393,17 +446,19 @@ function SyncSettingsAdmin() {
               )}
               اختبار الاتصال
             </Button>
-            <Button type="submit" disabled={connectMut.isPending}>
-              {connectMut.isPending ? (
+            <Button type="submit" disabled={enrollMut.isPending}>
+              {enrollMut.isPending ? (
                 <Loader2 className="ml-1 h-4 w-4 animate-spin" />
               ) : (
                 <CloudCog className="ml-1 h-4 w-4" />
               )}
-              حفظ وربط
+              ربط الجهاز
             </Button>
           </div>
         </form>
       </PageCard>
+
+      {state?.url && session?.hubUserRole === "admin" && <HubDevicesCard />}
 
       {isTauri() && <FactoryResetCard />}
 

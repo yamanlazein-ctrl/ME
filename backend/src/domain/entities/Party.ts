@@ -48,6 +48,10 @@ export interface PartyData {
   country?: string;
   taxNumber?: string;
   openingBalance: number;
+  openingDate?: string;
+  openingNote?: string;
+  /** Opening journal currency; undefined = the party's own currency (pre-column rows). */
+  openingCurrency?: string;
   creditLimit: number;
   currency: string;
   paymentTerms?: string;

@@ -60,6 +60,10 @@ export interface PartyData {
   country?: string | null;
   taxNumber?: string | null;
   openingBalance?: number;
+  /** Opening journal date / note / currency (null currency = the party's own). */
+  openingDate?: string | null;
+  openingNote?: string | null;
+  openingCurrency?: Currency | null;
   creditLimit?: number;
   currency?: Currency;
   paymentTerms?: PaymentTerms;
@@ -99,6 +103,9 @@ export class Party implements PartyData {
   readonly country: string | null;
   readonly taxNumber: string | null;
   readonly openingBalance: number;
+  readonly openingDate: string | null;
+  readonly openingNote: string | null;
+  readonly openingCurrency: Currency | null;
   readonly creditLimit?: number;
   readonly currency?: Currency;
   readonly paymentTerms?: PaymentTerms;
@@ -137,6 +144,9 @@ export class Party implements PartyData {
     this.country = data.country ?? null;
     this.taxNumber = data.taxNumber ?? null;
     this.openingBalance = data.openingBalance ?? 0;
+    this.openingDate = data.openingDate ?? null;
+    this.openingNote = data.openingNote ?? null;
+    this.openingCurrency = data.openingCurrency ?? null;
     this.creditLimit = data.creditLimit;
     this.currency = data.currency;
     this.paymentTerms = data.paymentTerms;
@@ -206,6 +216,9 @@ export class Party implements PartyData {
       createdBy: base.createdBy,
       name: base.name,
       openingBalance: base.openingBalance,
+      openingDate: props.openingDate ?? null,
+      openingNote: props.openingNote ?? null,
+      openingCurrency: props.openingCurrency ?? null,
       creditLimit: base.creditLimit,
       currency: base.currency as Currency,
       defaultDiscount: base.defaultDiscount,

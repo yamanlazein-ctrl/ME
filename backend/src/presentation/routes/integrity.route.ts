@@ -34,8 +34,9 @@ export function createIntegrityRouter(auth: (req: Request, res: Response, next: 
       res.status(409).json({ code: "MANIFEST_REQUIRED", message: "لا توجد بصمة سابقة لقبولها" });
       return;
     }
-    const { pool } = await import("../../infrastructure/orm/drizzle.js");
-    const { counts, databaseSizeBytes } = await collectCounts(pool, ctx.tenantId);
+    const sqlite = (await import("../../infrastructure/orm/engine.js")).getEngine() === "sqlite";
+    const pool = sqlite ? (await import("../../infrastructure/orm/sqlite/queryable.js")).sqliteReaderQueryable() : (await import("../../infrastructure/orm/pgLazy.js")).pgPool();
+    const { counts, databaseSizeBytes } = await collectCounts(await pool, ctx.tenantId, sqlite ? "sqlite" : "postgres");
     acceptBaseline();
     await writeManifestAtomic({
       ...manifest,

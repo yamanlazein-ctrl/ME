@@ -1,9 +1,9 @@
 import { eq } from "drizzle-orm";
 import type { DB } from "../orm/drizzle.js";
 import { runWithPlatformContext } from "../orm/tenant-context.js";
-import { tenants } from "../orm/schemas/tenant.table.js";
 import { resolveDeviceLimit } from "../../domain/licensing/ownership.js";
 import type { LicenseLimits } from "../../domain/licensing/license-metadata.js";
+import { engineSchema } from "../orm/engineSchema.js";
 
 /**
  * Push Vendor Control Plane license mutations into the tenant denormalised
@@ -36,6 +36,7 @@ export async function syncTenantLicenseCacheFromLicenseRow(
     transfersUsed: number;
   },
 ): Promise<boolean> {
+  const { tenants } = await engineSchema();
   if (!lic.tenantId) return false;
   const limits = (lic.limits as LicenseLimits | null) ?? null;
   const maxDevices = resolveDeviceLimit({ limits, maxDevices: lic.maxDevices });

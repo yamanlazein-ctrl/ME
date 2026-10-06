@@ -1,0 +1,16 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "recovery-window",
+  "description": "The in-app recovery dialog is a local shell page shown when the bundled local server is unreachable — the application-level replacement for WebView2's built-in navigation-failure page. It needs nothing but its own commands: recovery (server unreachable) and startup choices (data-root states, US3).",
+  "windows": [
+    "recovery"
+  ],
+  "permissions": [
+    "allow-recovery-status",
+    "allow-recovery-retry",
+    "allow-recovery-log-tail",
+    "allow-recovery-exit",
+    "allow-startup-status",
+    "allow-startup-choose"
+  ]
+}

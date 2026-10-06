@@ -39,6 +39,8 @@ export interface InvoiceData {
   paid: number;
   /** Part of `paid` settled from the customer's credit balance (no cash moved). */
   creditApplied?: number;
+  /** «عدد الأثواب»: number of pieces on the invoice (sum of its lines' pieces), stored on the invoice. */
+  piecesCount?: number;
   /** Outstanding amount = total - paid. */
   amountDue: number;
   /** Payment method used when paid > 0 (cash/transfer/check/card). */

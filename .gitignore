@@ -86,9 +86,13 @@ desktop/package-lock.json
 desktop/src-tauri/updater.key
 desktop/src-tauri/updater.key.pub
 
-# Local backup snapshots (keep on disk, out of repo)
-backup-pre-redesign/
-backup/
+# Local backup snapshots (keep on disk, out of repo).
+# Root-anchored on purpose: an unanchored `backup/` also matched the PRODUCT
+# source dir `backend/src/infrastructure/backup/` (portableBackup.ts,
+# backupScheduler.ts), which backup.route.ts / setup.route.ts / server.ts import
+# and three backend tests cover — a fresh clone failed to compile without it.
+/backup-pre-redesign/
+/backup/
 *.dump
 
 # Postgres staging binaries (local pg_dump environment, rebuilt on demand)
@@ -161,3 +165,10 @@ backend/tmp-*.ps1
 
 .tmp-baseline-*.txt
 
+
+# Retired PostgreSQL desktop runtime (SQLite desktop, specs/001 US2): kept locally, never committed or packaged
+desktop/retired-postgres/resources-postgres/
+desktop/retired-postgres/target-release-postgres/
+
+# Disposable cert e2e stack state/logs (tests/e2e/cert-stack.mjs)
+tests/e2e/.cert-*

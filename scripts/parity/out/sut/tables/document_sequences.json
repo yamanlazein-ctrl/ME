@@ -1,0 +1,58 @@
+[
+  {
+    "entity_type": "customer",
+    "id": "#00259",
+    "last_number": 6,
+    "prefix": "CUS",
+    "tenant_id": "#00095"
+  },
+  {
+    "entity_type": "expense",
+    "id": "#00260",
+    "last_number": 2,
+    "prefix": "EXP",
+    "tenant_id": "#00095"
+  },
+  {
+    "entity_type": "invoice",
+    "id": "#00261",
+    "last_number": 23,
+    "prefix": "INV",
+    "tenant_id": "#00095"
+  },
+  {
+    "entity_type": "invoice_entry",
+    "id": "#00262",
+    "last_number": 5,
+    "prefix": "ENT",
+    "tenant_id": "#00095"
+  },
+  {
+    "entity_type": "return",
+    "id": "#00263",
+    "last_number": 2,
+    "prefix": "RET",
+    "tenant_id": "#00095"
+  },
+  {
+    "entity_type": "settlement",
+    "id": "#00264",
+    "last_number": 1,
+    "prefix": "SET",
+    "tenant_id": "#00095"
+  },
+  {
+    "entity_type": "supplier",
+    "id": "#00265",
+    "last_number": 2,
+    "prefix": "SUP",
+    "tenant_id": "#00095"
+  },
+  {
+    "entity_type": "voucher",
+    "id": "#00266",
+    "last_number": 6,
+    "prefix": "VOC",
+    "tenant_id": "#00095"
+  }
+]

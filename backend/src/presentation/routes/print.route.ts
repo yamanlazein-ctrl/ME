@@ -14,9 +14,7 @@ import {
   opIdFromRequest,
   syncDeviceIdFromRequest,
 } from "../../application/use-cases/sync/syncEnqueue.js";
-import { withTenantTx } from "../../infrastructure/orm/drizzle.js";
-import { rolls } from "../../infrastructure/orm/schemas/roll.table.js";
-import { eq } from "drizzle-orm";
+import { withTenantTx } from "../../infrastructure/orm/engine.js";
 import { logger } from "../../infrastructure/config/logger.js";
 
 export function registerPrintRoutes(
@@ -97,10 +95,7 @@ export function registerPrintRoutes(
             if (received.data.resultRollId) {
               // Read INSIDE the ambient transaction: the roll is not committed yet.
               const rid = received.data.resultRollId;
-              const [row] = await withTenantTx(c.tenantId, (tx) =>
-                tx.select({ rollNo: rolls.rollNo }).from(rolls).where(eq(rolls.id, rid)).limit(1),
-              );
-              resultRollNo = row?.rollNo;
+              resultRollNo = await withTenantTx(c.tenantId, () => printJobRepo.rollNoOf(rid, c));
             }
             await enqueuePrintReceive(
               syncOutboxRepo!,

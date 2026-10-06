@@ -1,7 +1,7 @@
 import { eq } from "drizzle-orm";
 import type { DB } from "../orm/drizzle.js";
 import { runWithPlatformContext } from "../orm/tenant-context.js";
-import { serverInstallations } from "../orm/schemas/server-installation.table.js";
+import { engineSchema } from "../orm/engineSchema.js";
 
 export type EnsureServerInstallationInput = {
   /** Canonical on-disk Installation UUID. */
@@ -21,6 +21,7 @@ export async function ensureServerInstallation(
   db: DB,
   input: EnsureServerInstallationInput,
 ): Promise<{ id: string; installationId: string }> {
+  const { serverInstallations } = await engineSchema();
   return runWithPlatformContext(async () => {
     const installationId = input.installationId.trim();
     if (!installationId) throw new Error("INSTALLATION_ID_REQUIRED");

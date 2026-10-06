@@ -106,6 +106,11 @@ export class PostgresRollRepository implements IRollRepository {
           pricePerKg: String(data.pricePerKg),
           salePricePerKg: data.salePricePerKg ? String(data.salePricePerKg) : null,
           currency: data.currency ?? "SYP",
+          // Entry price, written once: a stock-in at the roll's own price. A purchase invoice that
+          // stocks this (fresh, empty) roll records its line price instead (invoice repository).
+          entryPricePerKg: String(data.pricePerKg),
+          entryCurrency: data.currency ?? "SYP",
+          entrySource: "stock_in",
           supplierId: data.supplierId ?? null,
           entryDate: data.entryDate,
           widthCm: data.widthCm != null ? String(data.widthCm) : null,
@@ -395,6 +400,10 @@ export class PostgresRollRepository implements IRollRepository {
       pricePerKg: Number(row.pricePerKg),
       salePricePerKg: row.salePricePerKg ? Number(row.salePricePerKg) : undefined,
       currency: row.currency,
+      entryPricePerKg: row.entryPricePerKg != null ? Number(row.entryPricePerKg) : undefined,
+      entryCurrency: n(row.entryCurrency),
+      entrySource: (row.entrySource ?? undefined) as RollData["entrySource"],
+      entryReference: n(row.entryReference),
       supplierId: n(row.supplierId),
       entryDate: row.entryDate,
       widthCm: row.widthCm ? Number(row.widthCm) : undefined,

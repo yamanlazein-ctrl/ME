@@ -23,12 +23,16 @@ type TauriGlobals = {
 /**
  * The IPC function Tauri injects into every webview it controls.
  *
- * NEVER `import("@tauri-apps/api/core")` at runtime: the desktop window loads this app from the
- * embedded SSR server as a plain web page, so a bare package specifier has nothing to resolve it
- * (no bundler, no import map) and throws "Failed to resolve module specifier" — which silently
- * broke activation, hub linking, factory reset, archiving and updates in the shipped app.
+ * NEVER `import("@tauri-apps/api/core")` at runtime: it worked only while the
+ * desktop window loaded the app from the embedded SSR server as a plain web
+ * page, where a bare package specifier had nothing to resolve it (no bundler,
+ * no import map) and threw "Failed to resolve module specifier" — which
+ * silently broke activation, hub linking, factory reset, archiving and
+ * updates. Since Phase 1 the window is served from Tauri's own asset
+ * protocol, but the injected global remains the supported path: it works in
+ * both builds and adds nothing to the bundle.
  */
-async function getInvoke(): Promise<TauriInvoke> {
+export async function getInvoke(): Promise<TauriInvoke> {
   if (_invoke) return _invoke;
   if (!isTauri()) throw new Error("Not running in Tauri desktop");
   const w = window as unknown as TauriGlobals;
@@ -39,6 +43,37 @@ async function getInvoke(): Promise<TauriInvoke> {
   }
   _invoke = (cmd, args) => fn.call(internals ?? w.__TAURI__?.core, cmd, args);
   return _invoke;
+}
+
+// ── Phase 1: the API transport ────────────────────────────────────────────────
+
+export interface PipeApiRequest {
+  method: string;
+  path: string;
+  body?: string | null;
+  headers?: Record<string, string>;
+}
+
+export interface PipeApiResponse {
+  status: number;
+  /** Response headers, forwarded so `Set-Cookie` and `X-License-Grace` survive. */
+  headers: [string, string][];
+  body: string;
+  /** Set when the exchange failed before a status line arrived. */
+  error?: string | null;
+  elapsedUs: number;
+}
+
+/**
+ * Send one API request to the bundled sidecar.
+ *
+ * The desktop SPA is embedded in the binary and has no HTTP origin, so this is
+ * the ONLY way the UI reaches the API: Tauri IPC → Rust → named pipe → the
+ * same Express app. `elapsedUs` covers the whole round trip, bridge included.
+ */
+export async function apiRequest(req: PipeApiRequest): Promise<PipeApiResponse> {
+  const invoke = await getInvoke();
+  return (await invoke("api", { req })) as PipeApiResponse;
 }
 
 export interface DesktopFingerprint {
@@ -156,6 +191,19 @@ export async function requestFactoryReset(): Promise<void> {
   await invoke("request_factory_reset");
 }
 
+/**
+ * Archive the current data folder and boot a fresh install, without the
+ * operator having to close the app. Resolves only if the invoke is rejected —
+ * a successful call restarts the process and never returns.
+ */
+export async function applyFactoryResetNow(): Promise<void> {
+  if (!isTauri()) {
+    throw new Error("البدء من الصفر متاح في تطبيق سطح المكتب فقط");
+  }
+  const invoke = await getInvoke();
+  await invoke("apply_factory_reset_now");
+}
+
 /** Archive a printed/saved document into the Desktop folder tree. */
 export async function archiveDocumentPdf(
   docType: ArchiveDocType,
@@ -179,6 +227,57 @@ export async function getDesktopAppVersion(fallback = "1.0.0"): Promise<string> 
   const invoke = await getInvoke();
   const v = (await invoke("get_app_version")) as string;
   return (v && String(v).trim()) || fallback;
+}
+
+export type DataRootInfo = {
+  /** "release" for the shipped product, "dev" for a debug/dev-fast run. */
+  profile: string;
+  dataRoot: string;
+  /** The SQLite database file (`<root>\data\motard.db`). */
+  databasePath: string;
+  /** Identity of the company in that file (null before the first launch created it). */
+  dataId: string | null;
+  tenantId: string | null;
+  companyName: string | null;
+  schemaJournalIdx: number | null;
+  pipe: string;
+};
+
+/**
+ * The per-user data root this binary opened.
+ *
+ * Business data lives in `%LOCALAPPDATA%\<root>\data\motard.db`, NOT in the install
+ * folder, and uninstalling deliberately keeps it. A dev build uses a different
+ * root (`motard-erp-dev`) from the shipped one, so the two can never share a
+ * cluster. Surfacing it is what makes "the new build still shows my old
+ * customers" answerable: it is the SAME database on purpose, and this is
+ * exactly where it lives.
+ */
+export async function getDataRoot(): Promise<DataRootInfo | null> {
+  if (!isTauri()) return null;
+  const invoke = await getInvoke();
+  return (await invoke("get_data_root")) as DataRootInfo;
+}
+
+export interface SavedBackupFile {
+  path: string;
+  sizeBytes: number;
+  sha256: string;
+}
+
+/**
+ * Desktop only (T100): save a VERIFIED backup from `<data root>\backups` where the user chooses.
+ * Resolves null when the user cancels the dialog; rejects when the saved copy does not match.
+ */
+export async function saveBackupFile(args: {
+  sourcePath: string;
+  expectedSha256: string;
+  expectedSize: number;
+  suggestedName: string;
+}): Promise<SavedBackupFile | null> {
+  if (!isTauri()) throw new Error("حفظ النسخة عبر البرنامج متاح في تطبيق سطح المكتب فقط");
+  const invoke = await getInvoke();
+  return (await invoke("save_backup_file", args)) as SavedBackupFile | null;
 }
 
 export type DesktopUpdateCheckResult = {

@@ -9,6 +9,7 @@ import {
   text,
   boolean,
   jsonb,
+  date,
   uniqueIndex,
 } from "drizzle-orm/pg-core";
 import { tenants } from "./tenant.table.js";
@@ -40,6 +41,12 @@ export const parties = pgTable(
     openingBalance: numeric("opening_balance", { precision: 14, scale: 2, mode: "number" })
       .notNull()
       .default(0),
+    /** Effective calendar date of the opening journal (ledger `date`). */
+    openingDate: date("opening_date"),
+    /** Optional note appended to the opening ledger description. */
+    openingNote: text("opening_note"),
+    /** Currency of the opening journal (SYP/USD). NULL = the party's own currency. */
+    openingCurrency: varchar("opening_currency", { length: 3 }),
     creditLimit: numeric("credit_limit", { precision: 14, scale: 2, mode: "number" }).default(0),
     currency: varchar("currency", { length: 3 }).notNull().default("SYP"),
     paymentTerms: varchar("payment_terms", { length: 20 }),

@@ -11,9 +11,14 @@ const options = {
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
-      "@erp/shared": path.resolve(__dirname, "./packages/shared/src/index.ts"),
+      // Specific sub-paths MUST precede the bare "@erp/shared" entry: Vite
+      // matches string aliases as exact-or-prefix, so a bare key listed first
+      // would swallow "@erp/shared/statementPaging" and rewrite it under
+      // index.ts.
+      "@erp/shared/statementPaging": path.resolve(__dirname, "./packages/shared/src/statementPaging.ts"),
       "@erp/shared/precision": path.resolve(__dirname, "./packages/shared/src/precision.ts"),
       "@erp/shared/schemas/invoice.schema": path.resolve(__dirname, "./packages/shared/src/schemas/invoice.schema.ts"),
+      "@erp/shared": path.resolve(__dirname, "./packages/shared/src/index.ts"),
     },
   },
 };

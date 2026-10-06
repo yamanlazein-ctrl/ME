@@ -18,7 +18,7 @@ import { runWithTenantContext } from "../../../infrastructure/orm/tenant-context
 import { resolveDeviceLimit } from "../../../domain/licensing/ownership.js";
 import { composeDeviceFingerprint } from "../../../domain/licensing/installationIdentity.js";
 import { ensureServerInstallation } from "../../../infrastructure/installation/ensureServerInstallation.js";
-import { db as defaultDb } from "../../../infrastructure/orm/drizzle.js";
+import { engineDb } from "../../../infrastructure/orm/engineSchema.js";
 import { randomUUID } from "node:crypto";
 import { recordDesktopDeviceActivation } from "./recordDesktopDeviceActivation.js";
 import { MultipleTenantsDetectedError } from "../../../domain/errors/index.js";
@@ -399,7 +399,7 @@ export async function activateAndPersistUseCase(
         isCompleted = completed.isCompleted;
       }
 
-      await ensureServerInstallation(defaultDb, {
+      await ensureServerInstallation(await engineDb(), {
         installationId,
         tenantId: effectiveTenantId,
         hostname: parsed.data.hostname ?? null,
@@ -481,7 +481,7 @@ export async function activateAndPersistUseCase(
       activationId: result.activationId,
     });
 
-    await ensureServerInstallation(defaultDb, {
+    await ensureServerInstallation(await engineDb(), {
       installationId,
       tenantId: effectiveTenantId,
       hostname: parsed.data.hostname ?? null,
