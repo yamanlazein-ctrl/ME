@@ -22,9 +22,26 @@ import {
   recordHubActivity,
   setRuntimeCentralSyncUrl,
   testHubConnection,
+  registerDeviceOnHub,
+  enrollHub,
+  hubProxy,
+  rememberLocalSyncIdentity,
+  backgroundSyncIdentity,
 } from "../../application/use-cases/sync/hubConfig.js";
+import {
+  createEnrollmentCode,
+  getEnrollmentCode,
+  mintCredentialForBoundDevice,
+  revokeEnrollmentCode,
+} from "../../application/use-cases/sync/syncEnrollment.js";
+import type { TenantContext } from "../../domain/types/index.js";
+import { runWithTenantContext } from "../../infrastructure/orm/tenant-context.js";
+import { resolveSessionIdentity, revokeSubjectSessions } from "../../infrastructure/auth/sessionCutoff.js";
+import { mapRestoredSyncDeviceId } from "../../infrastructure/sync/restoredIdentity.js";
+import { reconcileRestoredSnapshot, type RestoreReconcileResult } from "../../application/use-cases/sync/syncRestoreUseCases.js";
+import { getSyncRestoreStateStore } from "../../infrastructure/repositories/engineStores.js";
 import { describeHubActivity, describePulledUnit } from "../../application/use-cases/sync/syncActivity.js";
-import { revokeSubjectSessions } from "../../infrastructure/auth/sessionCutoff.js";
+
 
 const HubConfigSchema = z.object({
   url: z.string().url().nullable(),
@@ -50,6 +67,16 @@ const HubConnectSchema = z.object({
   // new address — must not force the operator to type the password again.
   email: z.string().email().optional(),
   password: z.string().min(1).optional(),
+});
+
+const HubEnrollSchema = z.object({
+  url: z.string().url(),
+  code: z.string().trim().min(6).max(32),
+});
+
+const EnrollmentCodeSchema = z.object({
+  ttlHours: z.number().int().min(1).max(24 * 30).optional(),
+  maxUses: z.number().int().min(1).max(500).optional(),
 });
 
 const HubActivitySchema = z.object({
@@ -202,6 +229,22 @@ export function registerSyncRoutes(
   // The pre-auth pairing surface on the login screen is gone: pairing decides
   // where every document of this device is sent, so it needs an admin session.
 
+  const heldRunLocks = new Set<string>();
+  /** pool-client-shaped lock for SQLite: same try-lock / unlock / release calls as the PG path. */
+  const inProcessRunLock = () => ({
+    async query(text: string, params: unknown[]) {
+      const key = String(params[0]);
+      if (text.includes("pg_try_advisory_lock")) {
+        const ok = !heldRunLocks.has(key);
+        if (ok) heldRunLocks.add(key);
+        return { rows: [{ ok }] };
+      }
+      heldRunLocks.delete(key);
+      return { rows: [{ ok: true }] };
+    },
+    release(_destroy?: boolean) {},
+  });
+
   router.get("/sync/hub", auth, guards.operatorGuard, async (req: Request, res: Response) => {
     const ctx = req.tenantContext!;
     const url = getCentralSyncUrl();
@@ -210,8 +253,25 @@ export function registerSyncRoutes(
     // Honest health: "connected" is meaningless if work is not leaving this
     // device. Report how long the oldest unsent unit has waited and why the
     // last attempt failed, so the screen can show a problem instead of green.
-    const { pool } = await import("../../infrastructure/orm/drizzle.js");
-    const health = await pool
+    // SQLite: same answer without array_agg/FILTER/bool_or (no rows → NULLs, as on PG).
+    const health = (await import("../../infrastructure/orm/engine.js")).getEngine() === "sqlite"
+      ? await (await import("../../infrastructure/orm/sqlite/queryable.js")).sqliteReaderQueryable()
+          .query<{ oldest: string | null; last_error: string | null; has_waiting: number | null }>(
+            `SELECT min(created_at) AS oldest,
+                    (SELECT error_detail FROM sync_outbox
+                      WHERE tenant_id = $1 AND status IN ('pending', 'pushing')
+                        AND error_detail IS NOT NULL AND error_detail <> $2
+                      ORDER BY seq ASC LIMIT 1) AS last_error,
+                    max(error_detail = $2) AS has_waiting
+               FROM sync_outbox WHERE tenant_id = $1 AND status IN ('pending', 'pushing')`,
+            [ctx.tenantId, syncUc.ORDERED_LANE_WAITING],
+          )
+          .then((r) => {
+            const row = r.rows[0];
+            return row ? { ...row, has_waiting: row.has_waiting == null ? null : Boolean(row.has_waiting) } : {};
+          })
+          .catch(() => ({}) as Record<string, never>)
+      : await (await (await import("../../infrastructure/orm/pgLazy.js")).pgPool())
       .query(
         // The reason shown is the one of the unit that BLOCKS the queue: units
         // queued behind it only say "waiting for an earlier operation", which
@@ -280,6 +340,7 @@ export function registerSyncRoutes(
         url: body.url,
         email,
         password,
+        local: { tenantId: ctx.tenantId, userId: ctx.userId },
         device: localDevice
           ? {
               id: localDevice.id,
@@ -437,7 +498,9 @@ export function registerSyncRoutes(
       logger.warn({ err }, "sync claim inventory read failed");
     }
 
-    res.json({ ...status, inboxStatusCounts, numberBlocks, missingBlocks, claimInventory });
+    // T109: restore on a synced device — paused state and the new sync identity, for the status UI.
+    const restore = (await (await getSyncRestoreStateStore()).get()) ?? undefined; // absent on PostgreSQL / cloud
+    res.json({ ...status, inboxStatusCounts, numberBlocks, missingBlocks, claimInventory, restore });
   });
 
   /**
@@ -594,17 +657,21 @@ export function registerSyncRoutes(
 
   /** Push local outbox to hub, then pull peers' applied units. */
 
-  /** Push local outbox to hub, then pull peers' applied units. */
-  router.post(
-    "/sync/run",
-    auth,
-    guards.transportGuard,
-    gate.orchestration,
-    async (req: Request, res: Response) => {
-    const ctx = req.tenantContext!;
+  /**
+   * One sync cycle: push the local outbox to the hub, then pull peers' applied
+   * units. Shared by POST /sync/run (UI) and the background timer, so both
+   * take the same per-tenant lock and never overlap.
+   */
+  const runSyncCycle = async (
+    ctx: TenantContext,
+    authorization: string | undefined,
+  ): Promise<Record<string, unknown>> => {
     // REPAIR-007: per-tenant run lock on a dedicated client (held for the whole run).
-    const { pool } = await import("../../infrastructure/orm/drizzle.js");
-    const lockClient = await pool.connect();
+    // SQLite (one desktop process): the per-tenant run lock is an in-process set; PG keeps the
+    // session-level advisory lock on a dedicated client.
+    const lockClient = (await import("../../infrastructure/orm/engine.js")).getEngine() === "sqlite"
+      ? inProcessRunLock()
+      : await (await (await import("../../infrastructure/orm/pgLazy.js")).pgPool()).connect();
     let lockHeld = false;
     try {
       const lockKey = `${ctx.tenantId}:sync-run`;
@@ -614,9 +681,88 @@ export function registerSyncRoutes(
       );
       lockHeld = Boolean(lockRes.rows[0]?.ok);
       if (!lockHeld) {
-        res.json({ skipped: true, reason: "sync already running" });
-        return;
+        return { skipped: true, reason: "sync already running" };
       }
+
+    const materializeRepos = {
+      invoiceRepo: container.invoiceRepo,
+      voucherRepo: container.voucherRepo,
+      returnRepo: container.returnRepo,
+      orderRepo: container.orderRepo,
+      expenseRepo: container.expenseRepo,
+      auditRepo: container.auditRepo,
+      partyRepo: container.partyRepo,
+      fabricRepo: container.fabricRepo,
+      colorRepo: container.colorRepo,
+      rollRepo: container.rollRepo,
+      ledgerRepo: container.ledgerRepo,
+      statementRepo: container.statementRepo,
+      printJobRepo: container.printJobRepo,
+      cashboxRepo: container.cashboxRepo,
+      settingsRepo: container.settingsRepo,
+      companyRepo: container.companyRepo,
+    };
+    const pullWith = (
+      deviceId: string | null,
+      isOwnRestoredUnit?: (unit: syncUc.PulledUnit) => Promise<boolean>,
+    ) =>
+      syncUc.runLocalSyncPull(
+        container.db,
+        materializeRepos,
+        ctx,
+        authorization,
+        deviceId,
+        // Local inbox: mirrors pulled units so their retries are bounded and a
+        // permanently-failing unit cannot hold the cursor forever.
+        container.syncInboxRepo,
+        // Activity notifications for work done on other devices.
+        async (unit) => {
+          const n = describePulledUnit(unit);
+          if (n) await container.notificationRepo.create(n, ctx);
+        },
+        isOwnRestoredUnit,
+      );
+
+    // T109 — restore on a synced device: the restored database runs under a NEW sync identity.
+    // While it is being registered and the hub's newer units are pulled, nothing is pushed.
+    let restoreResult: RestoreReconcileResult | null = null;
+    if (getCentralSyncUrl()) {
+      try {
+        restoreResult = await reconcileRestoredSnapshot(
+          {
+            store: await getSyncRestoreStateStore(),
+            outbox: container.syncOutboxRepo,
+            devices: container.syncDeviceRepo,
+            registerOnHub: (device) => registerDeviceOnHub(device, authorization),
+            pullPage: (deviceId, isOwn) => pullWith(deviceId, isOwn),
+            numberBlocks: {
+              retire: (deviceId) => container.documentNumberBlockRepo.retireForDevice(ctx.tenantId, deviceId),
+              ensure: async (deviceId) => {
+                await numberBlocksUc.ensureDeviceNumberBlocks(container.documentNumberBlockRepo, container.fingerprintProvider, {
+                  tenantId: ctx.tenantId,
+                  syncDeviceId: deviceId,
+                  userId: ctx.userId,
+                  authHeader: authorization,
+                });
+              },
+            },
+          },
+          ctx,
+        );
+      } catch (err) {
+        logger.warn({ err }, "restore-on-synced reconcile failed");
+        restoreResult = { paused: true, phase: "register", deviceId: null, restoredAt: "", pulled: 0, acknowledged: 0, error: err instanceof Error ? err.message : "reconcile failed" };
+      }
+    }
+    if (restoreResult?.paused) {
+      return {
+        pushed: 0, failed: 0, rejected: 0, hubDead: 0, hubDeadOps: [], deviceGate: false, deviceTrust: null,
+        skipped: true, reason: "restored-snapshot", restore: restoreResult,
+        pull: { pulled: 0, applied: 0, skipped: 0, failed: 0, deviceTrust: null }, pullError: restoreResult.error, blocksError: null, activity: 0,
+      };
+    }
+    // After a restore every hub exchange uses the new identity, whatever id the UI still sends.
+    const runCtx = restoreResult?.deviceId ? { ...ctx, syncDeviceId: restoreResult.deviceId } : ctx;
 
     // One claim batch is 50 units. A device with history (worked standalone,
     // or restored data) can hold thousands: pushing one batch per run left
@@ -628,8 +774,8 @@ export function registerSyncRoutes(
         container.invoiceRepo,
         container.auditRepo,
         container.notificationRepo,
-        ctx,
-        req.headers.authorization,
+        runCtx,
+        authorization,
         // P1-step-1: every created document type needs its cancel use-case wired
         // so a terminally-rejected unit rolls back locally instead of forking.
         {
@@ -675,39 +821,7 @@ export function registerSyncRoutes(
       // Same drain as push: a hub page is 50 units. Keep pulling full pages
       // that made progress, within a budget (a stuck page — held units, a
       // failure — ends the loop; the next run resumes from the cursor).
-      const pullOnce = () =>
-        syncUc.runLocalSyncPull(
-          container.db,
-          {
-            invoiceRepo: container.invoiceRepo,
-            voucherRepo: container.voucherRepo,
-            returnRepo: container.returnRepo,
-            orderRepo: container.orderRepo,
-            expenseRepo: container.expenseRepo,
-            auditRepo: container.auditRepo,
-            partyRepo: container.partyRepo,
-            fabricRepo: container.fabricRepo,
-            colorRepo: container.colorRepo,
-            rollRepo: container.rollRepo,
-            ledgerRepo: container.ledgerRepo,
-            statementRepo: container.statementRepo,
-            printJobRepo: container.printJobRepo,
-            cashboxRepo: container.cashboxRepo,
-            settingsRepo: container.settingsRepo,
-            companyRepo: container.companyRepo,
-          },
-          ctx,
-          req.headers.authorization,
-          ctx.syncDeviceId ?? null,
-          // Local inbox: mirrors pulled units so their retries are bounded and a
-          // permanently-failing unit cannot hold the cursor forever.
-          container.syncInboxRepo,
-          // Activity notifications for work done on other devices.
-          async (unit) => {
-            const n = describePulledUnit(unit);
-            if (n) await container.notificationRepo.create(n, ctx);
-          },
-        );
+      const pullOnce = () => pullWith(runCtx.syncDeviceId ?? null);
       pull = await pullOnce();
       const pullDeadline = Date.now() + 30_000;
       let page = pull;
@@ -734,16 +848,17 @@ export function registerSyncRoutes(
 
     // Best-effort: refill number blocks while online.
     let blocksError: string | null = null;
-    if (ctx.syncDeviceId) {
+    const blocksDeviceId = runCtx.syncDeviceId;
+    if (blocksDeviceId) {
       try {
         await numberBlocksUc.ensureDeviceNumberBlocks(
           container.documentNumberBlockRepo,
           container.fingerprintProvider,
           {
             tenantId: ctx.tenantId,
-            syncDeviceId: ctx.syncDeviceId,
+            syncDeviceId: blocksDeviceId,
             userId: ctx.userId,
-            authHeader: req.headers.authorization,
+            authHeader: authorization,
           },
         );
       } catch (err) {
@@ -769,7 +884,9 @@ export function registerSyncRoutes(
         logger.debug({ err }, "hub activity pull failed");
       }
     }
-    res.json({ ...push, deviceTrust, pull, pullError, blocksError, activity });
+    // T109 state for the UI; undefined (absent from the JSON) when this database was not restored.
+    const restore = restoreResult ?? undefined;
+    return { ...push, deviceTrust, pull, pullError, blocksError, activity, restore };
     } finally {
       let destroy = false;
       if (lockHeld) {
@@ -786,7 +903,59 @@ export function registerSyncRoutes(
       }
       lockClient.release(destroy);
     }
-  });
+  };
+
+  /** UI trigger; also records which local user/tenant the background sync acts as. */
+  let lastUiRunAt = 0;
+  router.post(
+    "/sync/run",
+    auth,
+    guards.transportGuard,
+    gate.orchestration,
+    async (req: Request, res: Response) => {
+      const ctx = req.tenantContext!;
+      lastUiRunAt = Date.now();
+      if (getCentralSyncUrl()) rememberLocalSyncIdentity(ctx.tenantId, ctx.userId);
+      res.json(await runSyncCycle(ctx, req.headers.authorization));
+    },
+  );
+
+  /**
+   * Background sync: runs the same cycle while nobody is logged in (or the
+   * window is closed to the tray). Skipped while the UI is driving runs, and
+   * whenever this device has no hub pairing yet. Offline is just a failed run;
+   * the outbox keeps everything and the next tick retries.
+   */
+  const startBackgroundSync = (everyMs = 20_000) => {
+    const timer = setInterval(async () => {
+      if (Date.now() - lastUiRunAt < everyMs + 5_000) return;
+      const id = backgroundSyncIdentity();
+      if (!id) return;
+      try {
+        const deviceId = (await mapRestoredSyncDeviceId(id.deviceId)) ?? id.deviceId;
+        const local = await container.syncDeviceRepo.findById(id.tenantId, deviceId).catch(() => null);
+        if (local?.revokedAt) return; // same refusal as gate.orchestration
+        const ident = await runWithTenantContext({ tenantId: id.tenantId }, () =>
+          resolveSessionIdentity(id.userId, id.userId),
+        );
+        if (!ident.known || !ident.active || !ident.role) return;
+        await runSyncCycle(
+          {
+            tenantId: id.tenantId,
+            userId: id.userId,
+            userRole: ident.role as TenantContext["userRole"],
+            userName: ident.name ?? id.userId,
+            syncDeviceId: deviceId,
+          },
+          undefined,
+        );
+      } catch (err) {
+        logger.warn({ err }, "background sync run failed — retried next tick");
+      }
+    }, everyMs);
+    timer.unref();
+    return () => clearInterval(timer);
+  };
 
   /**
    * Hub endpoint: FWW claims + use-case replay (PRE_ALLOCATED invoice create).
@@ -1163,4 +1332,147 @@ export function registerSyncRoutes(
       res.json({ ok: true, id: row.id, revokedAt: row.revokedAt });
     },
   );
+
+  /* ── Hub: company enrollment code (one code, many devices) ─────────── */
+
+  router.get("/sync/enrollment-code", auth, guards.operatorGuard, async (req: Request, res: Response) => {
+    res.json({ current: await getEnrollmentCode(container, req.tenantContext!.tenantId) });
+  });
+
+  router.post(
+    "/sync/enrollment-code",
+    auth,
+    guards.operatorGuard,
+    validateBody(EnrollmentCodeSchema),
+    async (req: Request, res: Response) => {
+      const ctx = req.tenantContext!;
+      const body = (req as unknown as { validatedBody: z.infer<typeof EnrollmentCodeSchema> }).validatedBody;
+      const current = await createEnrollmentCode(container, ctx.tenantId, ctx.userId, body);
+      logger.info({ tenantId: ctx.tenantId, byUserId: ctx.userId }, "enrollment code issued");
+      res.status(201).json({ current });
+    },
+  );
+
+  router.delete("/sync/enrollment-code", auth, guards.operatorGuard, async (req: Request, res: Response) => {
+    await revokeEnrollmentCode(container, req.tenantContext!.tenantId);
+    res.json({ current: null });
+  });
+
+  /** Hub: a device paired with an account trades that pairing for its own credential. */
+  router.post("/sync/devices/self/credential", auth, guards.readGuard, async (req: Request, res: Response) => {
+    const ctx = req.tenantContext!;
+    const deviceId = (req.body as { deviceId?: string } | undefined)?.deviceId ?? ctx.syncDeviceId;
+    if (!deviceId || !/^[0-9a-f-]{36}$/i.test(deviceId)) {
+      res.status(400).json({ code: "BAD_REQUEST", message: "معرّف الجهاز غير صالح" });
+      return;
+    }
+    const r = await mintCredentialForBoundDevice(container, ctx.tenantId, deviceId, ctx.userId);
+    if (!r.ok) {
+      res.status(r.status).json({ code: r.code, message: r.error });
+      return;
+    }
+    res.status(201).json({ deviceSecret: r.deviceSecret });
+  });
+
+  /* ── Device: enroll with a code, and manage the company's devices ──── */
+
+  router.post(
+    "/sync/hub/enroll",
+    auth,
+    guards.operatorGuard,
+    validateBody(HubEnrollSchema),
+    async (req: Request, res: Response) => {
+      const ctx = req.tenantContext!;
+      const body = (req as unknown as { validatedBody: z.infer<typeof HubEnrollSchema> }).validatedBody;
+      const localDevice = ctx.syncDeviceId
+        ? await container.syncDeviceRepo.findById(ctx.tenantId, ctx.syncDeviceId).catch(() => null)
+        : null;
+      if (!localDevice) {
+        res.status(422).json({
+          code: "HUB_ENROLL_FAILED",
+          stage: "device",
+          message: "لا يوجد جهاز مزامنة محلي لهذه الجلسة — سجّل الخروج والدخول ثم أعد المحاولة",
+        });
+        return;
+      }
+      const result = await enrollHub({
+        url: body.url,
+        code: body.code,
+        local: { tenantId: ctx.tenantId, userId: ctx.userId },
+        device: {
+          id: localDevice.id,
+          fingerprint: localDevice.deviceFingerprint,
+          fingerprintVersion: localDevice.deviceFingerprintVersion,
+          platform: localDevice.platform,
+          hostname: localDevice.hostname,
+          label: localDevice.label,
+        },
+      });
+      if (!result.ok) {
+        res.status(422).json({ code: "HUB_ENROLL_FAILED", stage: result.stage, message: result.error });
+        return;
+      }
+      // Same follow-up as «حفظ وربط»: a new hub gets our history, and number ranges are reserved now.
+      let requeued = 0;
+      if (result.hubChanged) {
+        await syncUc.resetPullCursor(ctx.tenantId);
+        requeued = await container.syncOutboxRepo.requeueSyncedForNewHub(ctx.tenantId);
+      }
+      let blocksError: string | null = null;
+      await numberBlocksUc
+        .ensureDeviceNumberBlocks(container.documentNumberBlockRepo, container.fingerprintProvider, {
+          tenantId: ctx.tenantId,
+          syncDeviceId: localDevice.id,
+          userId: ctx.userId,
+          authHeader: undefined,
+        })
+        .catch((err) => {
+          blocksError = err instanceof Error ? err.message : String(err);
+        });
+      res.json({
+        url: result.info.hubUrl,
+        session: result.info,
+        cursorReset: result.hubChanged,
+        requeued,
+        blocksError,
+        deviceWarning: null,
+      });
+    },
+  );
+
+  const proxy = (method: "GET" | "POST" | "DELETE", hubPath: (req: Request) => string, withBody = false) =>
+    async (req: Request, res: Response) => {
+      const r = await hubProxy(method, hubPath(req), withBody ? (req.body ?? {}) : undefined);
+      res.status(r.status).json(r.body);
+    };
+  const deviceIdOf = (req: Request) => encodeURIComponent(String(req.params.deviceId ?? ""));
+
+  router.get("/sync/hub/devices", auth, guards.operatorGuard, proxy("GET", () => "/api/sync/devices"));
+  router.post(
+    "/sync/hub/devices/:deviceId/revoke",
+    auth,
+    guards.operatorGuard,
+    proxy("POST", (req) => `/api/sync/devices/${deviceIdOf(req)}/revoke`, true),
+  );
+  router.post(
+    "/sync/hub/devices/:deviceId/reinstate",
+    auth,
+    guards.operatorGuard,
+    proxy("POST", (req) => `/api/sync/devices/${deviceIdOf(req)}/reinstate`),
+  );
+  router.get("/sync/hub/enrollment-code", auth, guards.operatorGuard, proxy("GET", () => "/api/sync/enrollment-code"));
+  router.post(
+    "/sync/hub/enrollment-code",
+    auth,
+    guards.operatorGuard,
+    proxy("POST", () => "/api/sync/enrollment-code", true),
+  );
+  router.delete(
+    "/sync/hub/enrollment-code",
+    auth,
+    guards.operatorGuard,
+    proxy("DELETE", () => "/api/sync/enrollment-code"),
+  );
+
+  return { startBackgroundSync };
 }

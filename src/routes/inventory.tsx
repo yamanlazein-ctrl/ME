@@ -4,16 +4,16 @@ import { Search, CheckSquare, X } from "lucide-react";
 import { AppShell } from "@/components/layout/AppShell";
 import {
   colorsOfFabric,
-  deleteColor,
-  deleteFabric,
   deleteRoll,
   deleteColors,
-  deleteFabrics,
   deleteRolls,
   colorById,
   rollById,
   rollsOfColor,
   useInventory,
+  refreshInventory,
+  getInventoryLoadState,
+  retryInventoryLoad,
   fabrics,
   totalKgOfFabric,
   totalPiecesOfFabric,
@@ -32,6 +32,10 @@ import {
   type DeleteTarget,
   type BulkDeleteItem,
 } from "@/components/inventory/ConfirmDelete";
+import { DyePurgeDialog } from "@/components/inventory/DyePurgeDialog";
+import { ColorDeleteDialog } from "@/components/inventory/ColorDeleteDialog";
+import { purgeDye, CONFIRM_WORD } from "@/components/inventory/dyePurgeClient";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { DataPagination } from "@/components/common/DataPagination";
 import { formatNumber } from "@/shared/utils/formatNumber";
@@ -42,10 +46,19 @@ export const Route = createFileRoute("/inventory")({
 
 function InventoryPage() {
   useInventory();
+  const inventoryLoad = getInventoryLoadState();
   const [query, setQuery] = useState("");
   const [expandedFabric, setExpandedFabric] = useState<string | null>(fabrics[0]?.id ?? null);
   const [expandedColor, setExpandedColor] = useState<string | null>(null);
   const [toDelete, setToDelete] = useState<DeleteTarget>(null);
+  // Deleting a FABRIC is a financial operation (it can cascade into invoices,
+  // vouchers and the cashbox), so it gets its own corrective-purge dialog with a
+  // dry-run impact sheet instead of the generic one-tap confirm used for colors
+  // and rolls.
+  const [purgeTarget, setPurgeTarget] = useState<{ id: string; name: string } | null>(null);
+  const [colorDeleteTarget, setColorDeleteTarget] = useState<{ id: string; name: string } | null>(
+    null,
+  );
   const [selectMode, setSelectMode] = useState(false);
   const [selected, setSelected] = useState<Record<string, BulkDeleteItem>>({});
   const [fabForm, setFabForm] = useState<FabricFormState>({ open: false });
@@ -130,6 +143,33 @@ function InventoryPage() {
     });
   };
 
+  /**
+   * Bulk delete of fabrics must run the same corrective purge as the single-item
+   * path, one fabric at a time and sequentially: each purge is its own server
+   * transaction (they cannot be batched, and batching would hide a partial
+   * failure), and running them in parallel would interleave the cashbox rebuilds
+   * for the same currencies. Sequentially, a failure stops the run and reports
+   * which fabric stopped it, rather than silently skipping the rest.
+   */
+  const purgeFabricsSequentially = async (
+    ids: string[],
+    nameOf: (id: string) => string,
+  ): Promise<void> => {
+    for (const id of ids) {
+      try {
+        await purgeDye(id, CONFIRM_WORD, "حذف متعدد من صفحة المخزون");
+      } catch (e) {
+        toast.error(
+          `تعذّر الحذف التصحيحي لـ«${nameOf(id)}»، وتم التراجع عنه. ${
+            e instanceof Error ? e.message : "خطأ غير معروف"
+          }`,
+        );
+        return;
+      }
+    }
+    toast.success(`تم حذف ${ids.length} صبغة وتصحيح تبعاتها المالية.`);
+  };
+
   const requestBulkDelete = () => {
     if (selectionCount === 0) return;
     setToDelete({ kind: "bulk", items: selectedItems });
@@ -165,15 +205,23 @@ function InventoryPage() {
         })
         .filter((x): x is string => x !== null);
 
-      if (fabricIds.length > 0) void deleteFabrics(fabricIds);
+      // Fabrics go through the corrective purge (financial cascade), NOT the
+      // plain delete — the same path the single-row button uses.
+      if (fabricIds.length > 0) {
+        void purgeFabricsSequentially(
+          fabricIds,
+          (id) => items.find((i) => i.id === id)?.name ?? id,
+        ).then(() => refreshInventory());
+      }
       if (colorIds.length > 0) void deleteColors(colorIds);
       if (rollIds.length > 0) void deleteRolls(rollIds);
       setToDelete(null);
       exitSelectMode();
       return;
     }
-    if (toDelete.kind === "fabric") deleteFabric(toDelete.id);
-    else if (toDelete.kind === "color") deleteColor(toDelete.id);
+    if (toDelete.kind === "fabric") setPurgeTarget({ id: toDelete.id, name: toDelete.name });
+    else if (toDelete.kind === "color")
+      setColorDeleteTarget({ id: toDelete.id, name: toDelete.name });
     else deleteRoll(toDelete.id);
     setToDelete(null);
   };
@@ -227,7 +275,19 @@ function InventoryPage() {
       <div className="rounded-xl border border-border bg-card shadow-soft overflow-hidden">
         {filteredFabrics.length === 0 && (
           <div className="px-6 py-12 text-center text-sm text-muted-foreground">
-            لا نتائج مطابقة للبحث.
+            {/* D-3 / FR-068: a failed or unfinished load is never shown as "no results". */}
+            {inventoryLoad.status === "error" ? (
+              <div role="alert" className="flex flex-col items-center gap-3 text-destructive">
+                <span>تعذّر تحميل المخزون. {inventoryLoad.message}</span>
+                <Button size="sm" variant="outline" onClick={() => void retryInventoryLoad()}>
+                  إعادة المحاولة
+                </Button>
+              </div>
+            ) : inventoryLoad.status === "loading" || inventoryLoad.status === "idle" ? (
+              "جارٍ التحميل…"
+            ) : (
+              "لا نتائج مطابقة للبحث."
+            )}
           </div>
         )}
         <ul className="flex max-h-[65vh] flex-col gap-3 overflow-y-auto p-3">
@@ -258,7 +318,7 @@ function InventoryPage() {
                     }
                   }}
                   onEdit={() => setFabForm({ open: true, editing: f })}
-                  onDelete={() => setToDelete({ kind: "fabric", id: f.id, name: f.name })}
+                  onDelete={() => setPurgeTarget({ id: f.id, name: f.name })}
                   onAddColor={() => setColForm({ open: true, fabricId: f.id })}
                   selectable={selectMode}
                   selected={!!selected[selKey({ kind: "fabric", id: f.id, name: f.name })]}
@@ -375,6 +435,22 @@ function InventoryPage() {
         target={toDelete}
         onCancel={() => setToDelete(null)}
         onConfirm={handleDelete}
+      />
+      <DyePurgeDialog
+        fabricId={purgeTarget?.id ?? null}
+        fabricName={purgeTarget?.name ?? null}
+        open={purgeTarget !== null}
+        onOpenChange={(open) => {
+          if (!open) setPurgeTarget(null);
+        }}
+      />
+      <ColorDeleteDialog
+        colorId={colorDeleteTarget?.id ?? null}
+        colorName={colorDeleteTarget?.name ?? null}
+        open={colorDeleteTarget !== null}
+        onOpenChange={(open) => {
+          if (!open) setColorDeleteTarget(null);
+        }}
       />
       <FabricFormDialog state={fabForm} onClose={() => setFabForm({ open: false })} />
       <ColorFormDialog state={colForm} onClose={() => setColForm({ open: false, fabricId: "" })} />

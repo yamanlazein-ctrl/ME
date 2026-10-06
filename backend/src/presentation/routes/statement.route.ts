@@ -13,8 +13,7 @@ import type { ISyncOutboxRepository } from "../../application/ports/ISyncOutboxR
 import type { TenantContext } from "../../domain/types/index.js";
 import { logger } from "../../infrastructure/config/logger.js";
 import { idempotency } from "../../infrastructure/http/middleware/idempotency-handler.middleware.js";
-import { db, withTenantTx } from "../../infrastructure/orm/drizzle.js";
-import { customerCreditPosition } from "../../infrastructure/repositories/customerCredit.js";
+import { withTenantTx } from "../../infrastructure/orm/engine.js";
 import { respondTransactionFailure } from "../../infrastructure/http/transactionRouteError.js";
 import {
   enqueueSettlement,
@@ -26,7 +25,6 @@ import {
 } from "../../application/use-cases/sync/syncEnqueue.js";
 import { capturePartySyncDependencies } from "../../application/use-cases/sync/syncDependencySnapshots.js";
 import { statementQuerySchema, settlePartySchema, settleInvoicesSchema } from "./statement.schema.js";
-import { allocateDocumentNumberForDevice } from "../../infrastructure/utils/documentNumbers.js";
 import { settleInvoicesUseCase } from "../../application/use-cases/statements/settleInvoicesUseCase.js";
 import { BusinessRuleError } from "../../domain/errors/index.js";
 
@@ -105,12 +103,7 @@ export function registerStatementRoutes(
         if (!party || party.kind !== kind) {
           return res.status(404).json({ code: "NOT_FOUND", message: partyLabel });
         }
-        const position = await customerCreditPosition(
-          db,
-          ctx(req).tenantId,
-          req.params.id as string,
-          currency,
-        );
+        const position = await statementRepo.creditPosition(req.params.id as string, currency, ctx(req));
         res.json(position);
       });
     }
@@ -238,7 +231,7 @@ export function registerStatementRoutes(
             return res.status(404).json({ code: "NOT_FOUND", message: partyLabel });
           }
 
-          const referenceNumber = await allocateDocumentNumberForDevice("settlement", c.tenantId, c.syncDeviceId);
+          const referenceNumber = await statementRepo.allocateSettlementNumber(c);
           const settleInput = {
             date: b.date,
             currency: b.currency,

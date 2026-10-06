@@ -78,6 +78,13 @@ import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { planSaleSettlement, useCustomerCredit } from "@/presentation/hooks/useCustomerCredit";
 
 import { localToday } from "@/lib/localDate";
+import {
+  clearSaleDraft,
+  loadSaleDraft,
+  saveSaleDraft,
+  saleDraftHasContent,
+  type SaleDraft,
+} from "@/lib/invoice-draft";
 type SaleSearch = { fromOrder?: string; edit?: string };
 
 function formatMutationError(error: unknown, fallback: string): string {
@@ -114,6 +121,7 @@ function SaleInvoicePage() {
   const fulfillOrder = useFulfillOrder();
 
   const [customerId, setCustomerId] = useState("");
+  const [customerLabel, setCustomerLabel] = useState<string | null>(null);
   const [currency, setCurrency] = useState<Currency | "">("");
   // FX rule (base currency = USD): non-USD sale invoices MUST carry the
   // frozen exchange rate (units of SYP per 1 USD) captured at creation time.
@@ -257,6 +265,8 @@ function SaleInvoicePage() {
   }));
   const subtotal = dataLines.reduce((s, l) => s + l.quantityKg * l.pricePerKg, 0);
   const totalQty = dataLines.reduce((s, l) => s + (l.quantityKg || 0), 0);
+  // «عدد الأثواب» — stored on the invoice by the server with the same rule (sum of the lines).
+  const totalPieces = dataLines.reduce((s, l) => s + (l.pieces ?? 1), 0);
   // FIN-01: preview totals run the shared money authority, so they cannot
   // diverge from the subtotal/total the backend journals.
   const totalAfter = invoiceSubtotal({ lines: mathLines });
@@ -278,6 +288,42 @@ function SaleInvoicePage() {
   const remaining = edit ? invoiceRemaining(netTotal, Number(paid) || 0, 0) : settlement.debt;
   const isUSD = currency === "USD";
   const moneyClass = isUSD ? "text-success" : "text-foreground";
+
+  // An operator killed mid-invoice (power cut, task manager, logout) lost
+  // everything typed. A draft is kept locally and offered back on return.
+  // Only a brand new invoice drafts — ?edit= has a server copy to reload.
+  const [pendingDraft, setPendingDraft] = useState<SaleDraft | null>(null);
+  // AlertDialogAction closes the dialog too, so onOpenChange(false) cannot by
+  // itself mean "discarded" — it fires after a successful restore as well.
+  const draftRestoredRef = useRef(false);
+
+  const restoreDraft = (draft: SaleDraft) => {
+    setCustomerId(draft.customerId);
+    setCurrency(draft.currency);
+    setLines(draft.lines.length > 0 ? draft.lines : [emptyLine()]);
+    setPaid(draft.paid);
+    setDate(draft.date || localToday());
+    setReference(draft.reference);
+    setNotes(draft.notes);
+  };
+
+  // Offer a stored draft once, on mount, and only for a new invoice.
+  useEffect(() => {
+    if (edit || fromOrderId) return;
+    const draft = loadSaleDraft();
+    if (draft && saleDraftHasContent(draft)) setPendingDraft(draft);
+  }, [edit, fromOrderId]);
+
+  useEffect(() => {
+    if (edit || pendingDraft) return;
+    const next = { customerId, currency, lines, paid, date, reference, notes };
+    const handle = setTimeout(() => {
+      // An emptied form is not a draft: clear it so the next visit is clean.
+      if (saleDraftHasContent(next)) saveSaleDraft(next);
+      else clearSaleDraft();
+    }, 5000);
+    return () => clearTimeout(handle);
+  }, [edit, pendingDraft, customerId, currency, lines, paid, date, reference, notes]);
 
   const updateLine = (id: string, patch: Partial<SaleLine>) =>
     setLines((p) => p.map((l) => (l.id === id ? { ...l, ...patch } : l)));
@@ -530,6 +576,9 @@ function SaleInvoicePage() {
       );
     }
     const inv = res.value;
+    // Saved for real — the draft has served its purpose. A failed save above
+    // returns early, so the draft survives and can be resumed.
+    clearSaleDraft();
     toast.success(`تم إنشاء الفاتورة ${inv.number} بنجاح`, {
       description:
         [
@@ -560,6 +609,7 @@ function SaleInvoicePage() {
   };
 
   const resetForm = () => {
+    clearSaleDraft();
     setCustomerId("");
     setLines([emptyLine()]);
     setDiscount("");
@@ -695,7 +745,7 @@ function SaleInvoicePage() {
           {dataLines.length > 0 && (
             <div className="flex items-center justify-between gap-3 border-t border-border bg-secondary/40 px-4 py-2 text-xs font-semibold">
               <span className="text-muted-foreground">
-                {dataLines.length} بند • {formatNumber(totalQty)} كغ
+                {dataLines.length} بند • {formatNumber(totalQty)} كغ • {formatNumber(totalPieces)} ثوب
               </span>
               <span className={cn("text-sm font-bold tabular-nums", moneyClass)}>
                 {formatMoney(subtotal)} {currencySymbol(currency)}
@@ -717,7 +767,11 @@ function SaleInvoicePage() {
                   <PartyCombobox
                     kind="customer"
                     value={customerId}
-                    onChange={setCustomerId}
+                    valueLabel={customerLabel}
+                    onChange={(id) => {
+                      setCustomerId(id);
+                      setCustomerLabel(null);
+                    }}
                     onCreateNew={() => setQuickCustomer(true)}
                     placeholder="ابحث عن عميل..."
                   />
@@ -844,6 +898,7 @@ function SaleInvoicePage() {
           </div>
           <div className="grid gap-x-6 gap-y-2 px-4 py-3 sm:grid-cols-3">
             <TotalCell label="الكمية" value={`${formatNumber(totalQty)} كغ`} />
+            <TotalCell label="عدد الأثواب" value={formatNumber(totalPieces)} />
             <TotalInputCell
               label="الخصم"
               value={discount}
@@ -983,9 +1038,30 @@ function SaleInvoicePage() {
       <QuickCustomerDialog
         open={quickCustomer}
         onClose={() => setQuickCustomer(false)}
-        onCreated={(id) => {
+        onCreated={({ id, name }) => {
           setCustomerId(id);
+          setCustomerLabel(name);
           setQuickCustomer(false);
+        }}
+      />
+      <ConfirmDialog
+        open={pendingDraft !== null}
+        onOpenChange={(open) => {
+          if (open) return;
+          if (!draftRestoredRef.current) clearSaleDraft();
+          draftRestoredRef.current = false;
+          setPendingDraft(null);
+        }}
+        title="وجدنا مسودة فاتورة غير محفوظة"
+        description={`فاتورة باسم ${customers.find((c) => c.id === pendingDraft?.customerId)?.name ?? "عميل"} و${pendingDraft?.lines.filter(lineHasData).length ?? 0} بند لم تُحفظ. هل تريد استعادتها؟`}
+        confirmLabel="استعادة"
+        cancelLabel="تجاهل"
+        variant="default"
+        onConfirm={() => {
+          const draft = pendingDraft;
+          draftRestoredRef.current = true;
+          setPendingDraft(null);
+          if (draft) restoreDraft(draft);
         }}
       />
       <ConfirmDialog

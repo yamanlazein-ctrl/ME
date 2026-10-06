@@ -22,7 +22,7 @@ import { colors } from "../orm/schemas/color.table.js";
 import { rolls } from "../orm/schemas/roll.table.js";
 import { invoices } from "../orm/schemas/invoice.table.js";
 import { vouchers } from "../orm/schemas/voucher.table.js";
-import { allocateDocumentNumber } from "../utils/documentNumbers.js";
+import { allocateDocumentNumber, allocateDocumentNumberForDevice } from "../utils/documentNumbers.js";
 import { round2dp } from "@erp/shared";
 import { BusinessRuleError } from "../../domain/errors/index.js";
 import { customerCreditPosition } from "./customerCredit.js";
@@ -56,6 +56,15 @@ type LedgerRow = typeof ledgerEntries.$inferSelect;
 
 export class PostgresStatementRepository implements IStatementRepository {
   constructor(private readonly db: DB) {}
+
+  // Moved from statement.route.ts (S1). Behavior unchanged.
+  creditPosition(partyId: UUID, currency: string, ctx: TenantContext) {
+    return customerCreditPosition(this.db, ctx.tenantId, partyId, currency);
+  }
+
+  allocateSettlementNumber(ctx: TenantContext): Promise<string> {
+    return allocateDocumentNumberForDevice("settlement", ctx.tenantId, ctx.syncDeviceId);
+  }
 
   async getStatement(query: StatementQuery, ctx: TenantContext): Promise<PartyStatementData> {
     const party = await this.db
@@ -179,8 +188,7 @@ export class PostgresStatementRepository implements IStatementRepository {
     // Numbered-page mode: OFFSET inside ONE party's window (index-backed and
     // bounded by that party's own row count), with the carried balance summed
     // over exactly the rows that precede the page in the same total order.
-    const pageNo = !cursor && query.page != null ? Math.max(0, Math.floor(query.page)) : null;
-    const pageOffset = pageNo != null ? pageNo * pageLimit : 0;
+    let pageNo = !cursor && query.page != null ? Math.max(0, Math.floor(query.page)) : null;
     let totalRowsInWindow: number | null = null;
     if (pageNo != null) {
       const [cnt] = await this.db
@@ -188,7 +196,15 @@ export class PostgresStatementRepository implements IStatementRepository {
         .from(ledgerEntries)
         .where(and(...winConditions));
       totalRowsInWindow = Number(cnt?.n ?? 0);
+      // NOTE (bug #8): an out-of-range page is deliberately NOT clamped to the
+      // last page here. Silently serving the last page under the requested page
+      // number mislabels every row's `seq` and running balance, and it breaks
+      // the statement contract that a page past the end is empty with
+      // full-window totals. The totals returned below stay truthful for the
+      // whole window (totalRows / totalPages / finalBalance), so the client
+      // clamps the page it DISPLAYS — see useStatementPage.
     }
+    const pageOffset = pageNo != null ? pageNo * pageLimit : 0;
 
     // Balance immediately before this page (for runningBalance continuity).
     const beforePageByCurrency = new Map<string, number>(prevByCurrency);
@@ -419,7 +435,10 @@ export class PostgresStatementRepository implements IStatementRepository {
           ? {
               page: pageNo,
               totalRows: totalRowsInWindow ?? 0,
-              totalPages: Math.max(1, Math.ceil((totalRowsInWindow ?? 0) / pageLimit)),
+              totalPages: Math.max(
+                1,
+                Math.ceil((totalRowsInWindow ?? 0) / pageLimit) || 1,
+              ),
             }
           : {}),
       },

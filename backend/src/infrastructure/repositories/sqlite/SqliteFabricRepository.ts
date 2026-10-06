@@ -1,0 +1,191 @@
+// PORTED-FROM: src/infrastructure/repositories/PostgresFabricRepository.ts sha256=b1da946d07361c3e8c4928d777db3375d434fb31c06ffe605d329210ed641230
+// SQLite twin (specs/001-desktop-sqlite-engine S4). Keep behavior identical to the PG source.
+import { desc } from "./helpers/pgOrder.js";
+import { ilikeEscaped } from "./helpers/likeContains.js";
+import { eq, and, or, sql, inArray, getTableColumns } from "drizzle-orm";
+import { afterCursor, cursorColumns, decodeCursor, keysetOrder, nextCursorOf, type KeysetSpec } from "./helpers/keysetPage.js";
+import { likeContains } from "../../utils/likeEscape.js";
+import type { DB } from "../../orm/sqlite/drizzleCompat.js";
+import type {
+  IFabricRepository,
+  FabricFilter,
+  CreateFabricData,
+} from "../../../application/ports/IFabricRepository.js";
+import { fabrics } from "../../orm/sqlite/schemas/fabric.table.js";
+import { colors } from "../../orm/sqlite/schemas/color.table.js";
+import { rolls } from "../../orm/sqlite/schemas/roll.table.js";
+import { cleanupRollsForDeletion } from "./helpers/rollDeletionHelper.js";
+import { Fabric, type FabricData } from "../../../domain/entities/Fabric.js";
+import type { TenantContext, PaginatedResult, UUID } from "../../../domain/types/index.js";
+
+export class SqliteFabricRepository implements IFabricRepository {
+  constructor(private readonly db: DB) {}
+
+  async findById(id: string, ctx: TenantContext): Promise<FabricData | null> {
+    const rows = await this.db
+      .select()
+      .from(fabrics)
+      .where(and(eq(fabrics.id, id), eq(fabrics.tenantId, ctx.tenantId)))
+      .limit(1);
+    if (rows.length === 0) return null;
+    return this.toDomain(rows[0]);
+  }
+
+  async list(filter: FabricFilter, ctx: TenantContext): Promise<PaginatedResult<FabricData>> {
+    const conditions = [eq(fabrics.tenantId, ctx.tenantId)];
+    if (filter.search) {
+      conditions.push(ilikeEscaped(fabrics.name, likeContains(filter.search)));
+    }
+    const where = and(...conditions);
+    const page = Math.max(0, filter.page ?? 0);
+    const limit = Math.min(1000, Math.max(1, filter.limit ?? 20));
+    const offset = page * limit;
+    // Keyset mode for "load every row" callers: seek after the cursor instead
+    // of OFFSET (constant cost per page, strict total order). keysetPage.ts.
+    const keyset: KeysetSpec = { createdAt: fabrics.createdAt, id: fabrics.id };
+    const cursor = true ? decodeCursor(filter.cursor) : null;
+    const pageWhere = cursor ? and(where, afterCursor(keyset, cursor)) : where;
+
+    const [dataRows, countRows] = await Promise.all([
+      this.db
+        .select({ ...getTableColumns(fabrics), ...cursorColumns(keyset) })
+        .from(fabrics)
+        .where(pageWhere)
+        .limit(limit)
+        .offset(cursor ? 0 : offset)
+        .orderBy(...keysetOrder(keyset)),
+      // Cursor pages skip the COUNT: the caller stops on nextCursor and the
+      // first (cursor-less) page already carried the real total.
+      cursor
+        ? Promise.resolve([{ count: -1 }])
+        : this.db
+            .select({ count: sql<number>`count(*)` })
+            .from(fabrics)
+            .where(where),
+    ]);
+
+    const nextCursor = nextCursorOf(dataRows as unknown as Array<Record<string, unknown>>, limit);
+    return {
+      data: dataRows.map((r) => this.toDomain(r)),
+      meta: {
+        total: Number(countRows[0]?.count ?? 0),
+        page,
+        limit,
+        // Without a cursor the COUNT decides; a last page hands out no cursor.
+        nextCursor: cursor || offset + limit < Number(countRows[0]?.count ?? 0) ? nextCursor : null,
+        hasNext: cursor ? nextCursor !== null : offset + limit < Number(countRows[0]?.count ?? 0),
+        totalPages: Math.ceil(Number(countRows[0]?.count ?? 0) / limit),
+      },
+    };
+  }
+
+  async create(data: CreateFabricData, ctx: TenantContext): Promise<FabricData> {
+    const [row] = await this.db
+      .insert(fabrics)
+      .values({
+        tenantId: ctx.tenantId,
+        name: data.name,
+        category: data.category,
+        minStockKg: String(data.minStockKg ?? 0),
+        unit: data.unit,
+        notes: data.notes,
+        imageUrl: data.imageUrl,
+        createdBy: ctx.userId,
+      })
+      .returning();
+    return this.toDomain(row);
+  }
+
+  async update(
+    id: string,
+    data: Partial<CreateFabricData>,
+    ctx: TenantContext,
+    expectedVersion: number,
+  ): Promise<FabricData> {
+    const values: Record<string, unknown> = { updatedAt: new Date() };
+    if (data.name !== undefined) values.name = data.name;
+    if (data.category !== undefined) values.category = data.category ?? null;
+    if (data.minStockKg !== undefined) values.minStockKg = String(data.minStockKg);
+    if (data.unit !== undefined) values.unit = data.unit ?? null;
+    if (data.notes !== undefined) values.notes = data.notes ?? null;
+    if (data.imageUrl !== undefined) values.imageUrl = data.imageUrl ?? null;
+    // P0-001: version increment for optimistic concurrency
+    values.version = sql`${fabrics.version} + 1`;
+    // P0-001: atomic version enforcement — WHERE includes expectedVersion
+    const whereConditions = [eq(fabrics.id, id), eq(fabrics.tenantId, ctx.tenantId), eq(fabrics.version, expectedVersion)];
+    const [row] = await this.db
+      .update(fabrics)
+      .set(values)
+      .where(and(...whereConditions))
+      .returning();
+    if (!row) {
+      // P0-001: distinguish "not found" from "stale version"
+      const existing = await this.db.select({ version: fabrics.version }).from(fabrics).where(and(eq(fabrics.id, id), eq(fabrics.tenantId, ctx.tenantId))).limit(1);
+      if (existing.length > 0) {
+        throw Object.assign(new Error(`Stale version: expected ${expectedVersion}, current ${existing[0].version}`), { code: "STALE_VERSION" as const });
+      }
+      throw new Error("Fabric not found");
+    }
+    return this.toDomain(row);
+  }
+
+  async delete(id: string, ctx: TenantContext): Promise<boolean> {
+    return this.db.transaction(async (tx) => {
+      const colorRows = await tx
+        .select({ id: colors.id })
+        .from(colors)
+        .where(and(eq(colors.fabricId, id), eq(colors.tenantId, ctx.tenantId)));
+      const colorIds = colorRows.map((c) => c.id);
+
+      const rollRows = colorIds.length
+        ? await tx
+            .select({ id: rolls.id })
+            .from(rolls)
+            .where(and(inArray(rolls.colorId, colorIds), eq(rolls.tenantId, ctx.tenantId)))
+        : [];
+      const rollIds = rollRows.map((r) => r.id);
+
+      // Guard against business references and clean the rolls' stock movements so
+      // the DELETE below doesn't fail on the stock_movements.roll_id FK.
+      await cleanupRollsForDeletion({ tx, ctx, rollIds, colorIds, fabricId: id });
+
+      if (rollIds.length > 0) {
+        await tx
+          .delete(rolls)
+          .where(and(inArray(rolls.id, rollIds), eq(rolls.tenantId, ctx.tenantId)));
+      }
+      if (colorIds.length > 0) {
+        await tx
+          .delete(colors)
+          .where(and(eq(colors.fabricId, id), eq(colors.tenantId, ctx.tenantId)));
+      }
+      const deleted = await tx
+        .delete(fabrics)
+        .where(and(eq(fabrics.id, id), eq(fabrics.tenantId, ctx.tenantId)))
+        .returning({ id: fabrics.id });
+      return deleted.length > 0;
+    });
+  }
+
+  private toDomain(row: typeof fabrics.$inferSelect): FabricData {
+    return Fabric.reconstitute(this.mapRow(row)).toData();
+  }
+
+  private mapRow(row: typeof fabrics.$inferSelect): FabricData {
+    const n = (v: string | null) => v ?? undefined;
+    return {
+      id: row.id,
+      tenantId: row.tenantId,
+      name: row.name,
+      category: n(row.category),
+      minStockKg: Number(row.minStockKg ?? 0),
+      unit: n(row.unit),
+      notes: n(row.notes),
+      imageUrl: n(row.imageUrl),
+      version: row.version ?? 1,
+      createdAt: row.createdAt.toISOString(),
+      createdBy: n(row.createdBy),
+      updatedAt: row.updatedAt.toISOString(),
+    };
+  }
+}

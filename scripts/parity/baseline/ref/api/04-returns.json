@@ -1,0 +1,185 @@
+[
+  {
+    "body": {
+      "baseTotal": 5.96,
+      "createdAt": "<ts>",
+      "createdBy": "#00093",
+      "currency": "SYP",
+      "date": "2026-02-18",
+      "exchangeRate": 14800,
+      "id": "#00132",
+      "kind": "sale",
+      "lines": [
+        {
+          "id": "#00133",
+          "pieces": 1,
+          "pricePerKg": 26500.5,
+          "quantityKg": 3.33,
+          "returnId": "#00132",
+          "rollId": "#00105"
+        }
+      ],
+      "number": "RET-2026-0001",
+      "originalInvoiceId": "#00116",
+      "partyId": "#00094",
+      "reason": "defect",
+      "status": "active",
+      "tenantId": "#00095",
+      "version": 1
+    },
+    "label": "return.sale",
+    "method": "POST",
+    "path": "/api/returns",
+    "status": 201
+  },
+  {
+    "body": {
+      "baseTotal": 3.22,
+      "createdAt": "<ts>",
+      "createdBy": "#00093",
+      "currency": "SYP",
+      "date": "2026-02-19",
+      "exchangeRate": 14750,
+      "id": "#00134",
+      "kind": "entry",
+      "lines": [
+        {
+          "id": "#00135",
+          "pieces": 1,
+          "pricePerKg": 19000,
+          "quantityKg": 2.5,
+          "returnId": "#00134",
+          "rollId": "#00108"
+        }
+      ],
+      "number": "RET-2026-0002",
+      "originalInvoiceId": "#00109",
+      "partyId": "#00098",
+      "reason": "wrong_quantity",
+      "status": "active",
+      "tenantId": "#00095",
+      "version": 1
+    },
+    "label": "return.entry",
+    "method": "POST",
+    "path": "/api/returns",
+    "status": 201
+  },
+  {
+    "body": {
+      "code": "VALIDATION",
+      "message": "الكمية المرتجعة (500 كغ) تتجاوز الكمية المباعة (33.33 كغ) بعد خصم المرتجعات السابقة (3.33 كغ)"
+    },
+    "label": "return.over-return.rejected",
+    "method": "POST",
+    "path": "/api/returns",
+    "status": 422
+  },
+  {
+    "body": {
+      "baseTotal": 5.96,
+      "createdAt": "<ts>",
+      "createdBy": "#00093",
+      "currency": "SYP",
+      "date": "2026-02-18",
+      "exchangeRate": 14800,
+      "id": "#00132",
+      "kind": "sale",
+      "lines": [
+        {
+          "id": "#00133",
+          "pieces": 1,
+          "pricePerKg": 26500.5,
+          "quantityKg": 3.33,
+          "returnId": "#00132",
+          "rollId": "#00105"
+        }
+      ],
+      "number": "RET-2026-0001",
+      "originalInvoiceId": "#00116",
+      "partyId": "#00094",
+      "reason": "defect",
+      "status": "active",
+      "tenantId": "#00095",
+      "version": 1
+    },
+    "label": "return.get",
+    "method": "GET",
+    "path": "/api/returns/#00132",
+    "status": 200
+  },
+  {
+    "body": {
+      "data": [
+        {
+          "baseTotal": 3.22,
+          "createdAt": "<ts>",
+          "createdBy": "#00093",
+          "currency": "SYP",
+          "date": "2026-02-19",
+          "exchangeRate": 14750,
+          "id": "#00134",
+          "kind": "entry",
+          "lines": [
+            {
+              "id": "#00135",
+              "pieces": 1,
+              "pricePerKg": 19000,
+              "quantityKg": 2.5,
+              "returnId": "#00134",
+              "rollId": "#00108"
+            }
+          ],
+          "number": "RET-2026-0002",
+          "originalInvoiceId": "#00109",
+          "originalInvoiceNumber": "ENT-2026-0001",
+          "partyId": "#00098",
+          "reason": "wrong_quantity",
+          "status": "active",
+          "tenantId": "#00095",
+          "version": 1
+        },
+        {
+          "baseTotal": 5.96,
+          "createdAt": "<ts>",
+          "createdBy": "#00093",
+          "currency": "SYP",
+          "date": "2026-02-18",
+          "exchangeRate": 14800,
+          "id": "#00132",
+          "kind": "sale",
+          "lines": [
+            {
+              "id": "#00133",
+              "pieces": 1,
+              "pricePerKg": 26500.5,
+              "quantityKg": 3.33,
+              "returnId": "#00132",
+              "rollId": "#00105"
+            }
+          ],
+          "number": "RET-2026-0001",
+          "originalInvoiceId": "#00116",
+          "originalInvoiceNumber": "INV-2026-0001",
+          "partyId": "#00094",
+          "reason": "defect",
+          "status": "active",
+          "tenantId": "#00095",
+          "version": 1
+        }
+      ],
+      "meta": {
+        "hasNext": false,
+        "limit": 50,
+        "nextCursor": null,
+        "page": 0,
+        "total": 2,
+        "totalPages": 1
+      }
+    },
+    "label": "return.list",
+    "method": "GET",
+    "path": "/api/returns?limit=50",
+    "status": 200
+  }
+]

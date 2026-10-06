@@ -15,6 +15,16 @@ export interface RollData {
   pricePerKg: number;
   salePricePerKg?: number;
   currency: string;
+  /**
+   * The ACTUAL price at which this exact roll entered stock (purchase line, printing-factory receive or
+   * stock-in), in `entryCurrency`. Written once at entry; editing the cost price never changes it.
+   * The sales screen shows it as a reference next to the sale price.
+   */
+  entryPricePerKg?: number;
+  entryCurrency?: string;
+  entrySource?: "purchase" | "press" | "stock_in";
+  /** The entry document number (purchase invoice / print job), when there is one. */
+  entryReference?: string;
   supplierId?: UUID;
   entryDate: string;
   widthCm?: number;

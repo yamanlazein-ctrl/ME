@@ -11,6 +11,22 @@ import type { CreatePartyInput } from "@/core/dtos/PartyDTO";
 import type { Currency } from "@/domain/types";
 import { invalidateFinancialViews } from "./invalidateFinancialViews";
 import { fetchAllPaged } from "@/lib/fetchAllPaged";
+import { getQueryClient } from "@/infrastructure/queryClient";
+import type { PartyOpeningInput } from "@erp/shared";
+import { ValidationError } from "@/core/errors";
+
+function partyMutationErrorMessage(e: unknown): string {
+  if (e instanceof ValidationError) {
+    const firstKey = e.details ? Object.keys(e.details)[0] : undefined;
+    const first = firstKey ? e.details?.[firstKey]?.[0] : undefined;
+    if (first) {
+      return e.message && !e.message.includes(first) ? `${e.message} — ${first}` : first;
+    }
+    return e.message || "بيانات غير صالحة";
+  }
+  if (e instanceof Error) return e.message;
+  return "خطأ غير معروف";
+}
 const ctx = new Proxy({} as import("@/domain/types").TenantContext, {
   get: (_target, property: string) =>
     buildTenantContext()[property as keyof import("@/domain/types").TenantContext],
@@ -62,6 +78,25 @@ let loadPromise: Promise<void> | null = null;
 let loaded = false;
 let retryAttempts = 0;
 
+/**
+ * D-3 / FR-068: a failed load must never look like "no customers". The list
+ * screens read this state and show a clear error with Retry (or "loading")
+ * instead of an empty table.
+ */
+export type PartiesLoadState =
+  | { status: "idle" | "loading" | "ready" }
+  | { status: "error"; message: string };
+let loadState: PartiesLoadState = { status: "idle" };
+
+function setLoadState(next: PartiesLoadState) {
+  loadState = next;
+  notifyPartiesChange();
+}
+
+export function getPartiesLoadState(): PartiesLoadState {
+  return loadState;
+}
+
 function isPaginated<T>(x: unknown): x is { data: T[] } {
   return Array.isArray((x as { data?: unknown })?.data);
 }
@@ -69,6 +104,7 @@ function isPaginated<T>(x: unknown): x is { data: T[] } {
 async function loadAll(force = false): Promise<void> {
   if ((loaded && !force) || loadPromise) return loadPromise ?? Promise.resolve();
   loadPromise = (async () => {
+    if (!loaded) setLoadState({ status: "loading" });
     try {
       const ctx = buildTenantContext();
       // Legacy synchronous lookups (customerById/supplierById, prints, detail
@@ -81,7 +117,7 @@ async function loadAll(force = false): Promise<void> {
             const res = await container.parties.list.execute({ kind, limit, page, cursor }, ctx);
             return isPaginated<Party>(res) ? res : (res as Party[]);
           },
-          { pageSize, maxPages: 200, label: `parties:${kind}` },
+          { pageSize, label: `parties:${kind}` },
         );
       // History-only set: explicit status filter (the default list excludes cancelled).
       const loadCancelled = (kind: "customer" | "supplier") =>
@@ -93,7 +129,7 @@ async function loadAll(force = false): Promise<void> {
             );
             return isPaginated<Party>(res) ? res : (res as Party[]);
           },
-          { pageSize, maxPages: 200, label: `parties:${kind}:cancelled` },
+          { pageSize, label: `parties:${kind}:cancelled` },
         );
       const [cRes, sRes, ccRes, scRes] = await Promise.all([
         loadKind("customer"),
@@ -112,9 +148,14 @@ async function loadAll(force = false): Promise<void> {
       _suppliers.splice(0, _suppliers.length, ...sData);
       loaded = true;
       retryAttempts = 0;
-      notifyPartiesChange();
+      setLoadState({ status: "ready" });
     } catch (e) {
       console.error("[useParties] load failed", e);
+      // D-3: surface the failure; the screen offers Retry (retryPartiesLoad).
+      setLoadState({
+        status: "error",
+        message: e instanceof Error && e.message ? e.message : "تعذّر تحميل قائمة العملاء والموردين",
+      });
       if (getAccessToken() && retryAttempts < 3) {
         retryAttempts += 1;
         setTimeout(() => void loadAll(true), 1_000);
@@ -127,6 +168,12 @@ async function loadAll(force = false): Promise<void> {
 }
 
 export function refreshParties(): Promise<void> {
+  return loadAll(true);
+}
+
+/** D-3: user-initiated Retry after a failed load. */
+export function retryPartiesLoad(): Promise<void> {
+  retryAttempts = 0;
   return loadAll(true);
 }
 
@@ -282,6 +329,9 @@ async function addParty(
         country: (input.country as string) ?? undefined,
         taxNumber: (input.taxNumber as string) ?? undefined,
         openingBalance: (input.openingBalance as number) ?? undefined,
+        openingDate: (input.openingDate as string) || undefined,
+        openingNote: (input.openingNote as string) || undefined,
+        openingCurrency: (input.openingCurrency as Party["currency"]) || undefined,
         creditLimit: input.creditLimit as number,
         currency: input.currency as Party["currency"],
         paymentTerms: input.paymentTerms as Party["paymentTerms"],
@@ -306,7 +356,7 @@ async function addParty(
     );
     return party;
   } catch (e) {
-    toast.error(`فشل الحفظ: ${e instanceof Error ? e.message : "خطأ غير معروف"}`);
+    toast.error(`فشل الحفظ: ${partyMutationErrorMessage(e)}`);
     throw e;
   }
 }
@@ -327,77 +377,85 @@ export const addSupplier = (
   } & Record<string, unknown>,
 ): Promise<Party> => addParty("supplier", input);
 
-export async function updateCustomer(id: string, patch: Record<string, unknown>): Promise<void> {
+/**
+ * Field edit + (optional) opening-balance replacement. `patch.opening` — set by
+ * PartyFormDialog only when the balance changed — goes to PUT …/:id/opening
+ * after the field edit, with the version that edit returned.
+ */
+async function updateParty(
+  kind: PartyKind,
+  id: string,
+  patch: Record<string, unknown>,
+): Promise<void> {
+  const { opening, ...fields } = patch as { opening?: PartyOpeningInput } & Record<string, unknown>;
+  const repo = container.parties.repository;
+  const label = kind === "customer" ? "العميل" : "المورد";
   try {
-    const updated = await container.parties.repository.update(
-      id,
-      "customer",
-      patch as Partial<Party>,
-      ctx,
-    );
+    let updated = await repo.update(id, kind, fields as Partial<Party>, ctx);
+    if (opening) {
+      updated = await repo.setOpening(id, kind, opening, updated.version, ctx);
+      invalidateFinancialViews(getQueryClient(), { refetchDashboard: true });
+    }
     const idx = _allParties.findIndex((p) => p.id === id);
     if (idx >= 0) _allParties[idx] = updated;
     syncPartiesCache();
     notifyPartiesChange();
-    toast.info("تم تحديث العميل");
+    toast.info(`تم تحديث ${label}`);
   } catch (e) {
-    toast.error(`فشل تحديث العميل: ${e instanceof Error ? e.message : "خطأ غير معروف"}`);
+    toast.error(`فشل تحديث ${label}: ${e instanceof Error ? e.message : "خطأ غير معروف"}`);
     throw e;
   }
 }
 
-export async function updateSupplier(id: string, patch: Record<string, unknown>): Promise<void> {
-  try {
-    const updated = await container.parties.repository.update(
-      id,
-      "supplier",
-      patch as Partial<Party>,
-      ctx,
-    );
-    const idx = _allParties.findIndex((p) => p.id === id);
-    if (idx >= 0) _allParties[idx] = updated;
-    syncPartiesCache();
-    notifyPartiesChange();
-    toast.info("تم تحديث المورد");
-  } catch (e) {
-    toast.error(`فشل تحديث المورد: ${e instanceof Error ? e.message : "خطأ غير معروف"}`);
-    throw e;
-  }
-}
+export const updateCustomer = (id: string, patch: Record<string, unknown>): Promise<void> =>
+  updateParty("customer", id, patch);
 
-export async function deleteCustomer(id: string): Promise<void> {
+export const updateSupplier = (id: string, patch: Record<string, unknown>): Promise<void> =>
+  updateParty("supplier", id, patch);
+
+export async function deleteCustomer(
+  id: string,
+  confirmCascade = false,
+  expectedVersion?: number,
+): Promise<void> {
   try {
-    await container.parties.repository.delete(id, "customer", ctx);
-    // The backend cancels the party (D-4): keep it for by-id history lookups.
+    await container.parties.repository.delete(id, "customer", ctx, confirmCascade, expectedVersion);
+    // Without cascade the backend only cancels the party (D-4): keep it for
+    // by-id history lookups. A cascade purge removes it for good.
     const removed = _allParties.find((p) => p.id === id);
-    if (removed && !_cancelledParties.some((c) => c.id === id)) _cancelledParties.push(removed);
+    if (removed && !confirmCascade && !_cancelledParties.some((c) => c.id === id)) {
+      _cancelledParties.push(removed);
+    }
     _allParties = _allParties.filter((p) => p.id !== id);
     syncPartiesCache();
     notifyPartiesChange();
-    // F07 (Phase 1 audit): this was toast.error() on the SUCCESS path — a
-    // completed delete rendered with the same red/error styling as a
-    // failure, which is exactly the kind of ambiguous signal that made a
-    // blocked delete (server correctly refuses when invoices/vouchers are
-    // still linked, see PostgresPartyRepository.cancel) hard to tell apart
-    // from a real one at a glance.
     toast.success("تم حذف العميل");
   } catch (e) {
     toast.error(e instanceof Error ? e.message : "فشل حذف العميل");
+    throw e;
   }
 }
 
-export async function deleteSupplier(id: string): Promise<void> {
+export async function deleteSupplier(
+  id: string,
+  confirmCascade = false,
+  expectedVersion?: number,
+): Promise<void> {
   try {
-    await container.parties.repository.delete(id, "supplier", ctx);
-    // The backend cancels the party (D-4): keep it for by-id history lookups.
+    await container.parties.repository.delete(id, "supplier", ctx, confirmCascade, expectedVersion);
+    // Without cascade the backend only cancels the party (D-4): keep it for
+    // by-id history lookups. A cascade purge removes it for good.
     const removed = _allParties.find((p) => p.id === id);
-    if (removed && !_cancelledParties.some((c) => c.id === id)) _cancelledParties.push(removed);
+    if (removed && !confirmCascade && !_cancelledParties.some((c) => c.id === id)) {
+      _cancelledParties.push(removed);
+    }
     _allParties = _allParties.filter((p) => p.id !== id);
     syncPartiesCache();
     notifyPartiesChange();
     toast.success("تم حذف المورد");
   } catch (e) {
     toast.error(e instanceof Error ? e.message : "فشل حذف المورد");
+    throw e;
   }
 }
 

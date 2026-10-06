@@ -1,15 +1,10 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "main-window",
-  "description": "The main window loads the local server (API + UI) from a loopback origin with an OS-assigned port. Grants it exactly the app's own desktop commands and nothing else.",
+  "description": "The main window loads the embedded SPA from Tauri's own asset protocol. Its only transport permission is `api`, the bridge to the bundled sidecar over a named pipe — the app has no HTTP origin of its own.",
   "windows": [
     "main"
   ],
-  "remote": {
-    "urls": [
-      "http://127.0.0.1:*/*"
-    ]
-  },
   "permissions": [
     "allow-get-fingerprint",
     "allow-validate-license",
@@ -18,8 +13,12 @@
     "allow-get-hub-url",
     "allow-set-hub-url",
     "allow-request-factory-reset",
+    "allow-apply-factory-reset-now",
     "allow-get-app-version",
     "allow-check-desktop-update",
-    "allow-install-desktop-update"
+    "allow-install-desktop-update",
+    "allow-api",
+    "allow-get-data-root",
+    "allow-save-backup-file"
   ]
 }

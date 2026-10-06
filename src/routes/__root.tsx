@@ -17,8 +17,17 @@ import { ActivationGate } from "../components/activation/ActivationGate";
 import { ErrorBoundary } from "../components/ErrorBoundary";
 import { Toaster } from "../components/ui/sonner";
 import { loadSettings } from "../presentation/hooks/useSettings";
+import { isDesktopShellPath } from "../lib/desktop-entry-path";
 
 function NotFoundComponent() {
+  const router = useRouter();
+  useEffect(() => {
+    if (isDesktopShellPath(router.state.location.pathname)) {
+      void router.navigate({ to: "/", replace: true });
+    }
+  }, [router]);
+  if (isDesktopShellPath(router.state.location.pathname)) return null;
+
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-4">
       <div className="max-w-md text-center">

@@ -13,6 +13,7 @@ import {
   completeWizardUseCase,
 } from "../../application/use-cases/setup/setupUseCases.js";
 import { mapActivationFailure } from "../../domain/licensing/activationHttpStatus.js";
+import { isDesktopLocalCaller } from "../../infrastructure/http/localAccess.js";
 
 /**
  * Phase 0 sub-batch 0F — setup routes.
@@ -59,33 +60,16 @@ function checkSetupToken(req: { headers: Record<string, unknown> }): boolean {
  * DESKTOP_DEPLOY guard for the setup wizard's mutating endpoints.
  *
  * The wizard runs locally on the customer's machine on first launch. It must
- * be reachable only from that machine (loopback) or the customer's own private
- * LAN — never from an arbitrary public address — so a device on the same
- * network as the host cannot drive the provisioning flow. The "first run only"
- * lock is enforced separately by assertWizardMutable inside each use case
- * (once isCompleted=true, every mutating step returns ALREADY_COMPLETED).
+ * be reachable only from that machine (loopback / named pipe) or the customer's
+ * own private LAN — never from an arbitrary public address. Named-pipe
+ * connections have no TCP peer address; `isDesktopLocalCaller` treats the
+ * pipe bind as local. The "first run only" lock is enforced separately by
+ * assertWizardMutable (once isCompleted=true, every mutating step returns
+ * ALREADY_COMPLETED).
  */
-function isLocalOrPrivateLan(ip: string | undefined): boolean {
-  if (!ip) return false;
-  const host = ip.replace(/^::ffff:/, "").split(":")[0];
-  if (host === "127.0.0.1" || host === "localhost" || host === "::1") return true;
-
-  // IPv4 private / link-local ranges.
-  if (host.includes(".")) {
-    if (host.startsWith("10.")) return true;
-    if (host.startsWith("192.168.")) return true;
-    if (host.startsWith("169.254.")) return true;
-    if (/^172\.(1[6-9]|2\d|3[01])\./.test(host)) return true;
-    return false;
-  }
-  // IPv6 private (unique local) range.
-  if (host.startsWith("fc") || host.startsWith("fd")) return true;
-  return false;
-}
-
 function requireLocalAccess(req: Request): boolean {
   if (!config.DESKTOP_DEPLOY) return checkSetupToken(req);
-  return isLocalOrPrivateLan(req.ip ?? req.socket?.remoteAddress);
+  return isDesktopLocalCaller(req);
 }
 
 export function registerSetupRoutes(router: Router, container: Container): void {
@@ -347,9 +331,11 @@ export function registerSetupRoutes(router: Router, container: Container): void 
       res.status(409).json({ code: "NO_TENANT", message: "لا توجد شركة مهيأة على هذا الجهاز", statusCode: 409 });
       return;
     }
-    const { pool } = await import("../../infrastructure/orm/drizzle.js");
-    const users = await pool.query("SELECT count(*)::int AS n FROM users WHERE tenant_id = $1", [baked.id]);
-    if (users.rows[0].n > 0) {
+    const sqlite = (await import("../../infrastructure/orm/engine.js")).getEngine() === "sqlite";
+    const users = sqlite
+      ? await (await import("../../infrastructure/orm/sqlite/queryable.js")).sqliteReaderQueryable().query<{ n: number }>("SELECT count(*) AS n FROM users WHERE tenant_id = $1", [baked.id])
+      : await (await (await import("../../infrastructure/orm/pgLazy.js")).pgPool()).query("SELECT count(*)::int AS n FROM users WHERE tenant_id = $1", [baked.id]);
+    if (Number(users.rows[0].n) > 0) {
       res.status(409).json({
         code: "ALREADY_INITIALIZED",
         message: "هذا الجهاز مهيأ مسبقاً — استخدم الاستعادة من الإعدادات بعد تسجيل الدخول",
@@ -358,7 +344,7 @@ export function registerSetupRoutes(router: Router, container: Container): void 
       return;
     }
     const { restoreUploadedBackup } = await import("./backup.route.js");
-    const { BackupError } = await import("../../infrastructure/backup/portableBackup.js");
+    const { BackupError } = await import("../../infrastructure/backup/backupError.js");
     const { tmpdir } = await import("node:os");
     const { join } = await import("node:path");
     const { createWriteStream } = await import("node:fs");

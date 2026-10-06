@@ -50,6 +50,10 @@ export class ApiCashboxRepository implements ICashboxRepository {
     return this.api.cashBalanceOn(date, currency);
   }
 
+  async cashBalancesOn(date: string, ctx: TenantContext): Promise<Record<string, number>> {
+    return this.api.cashBalancesOn(date);
+  }
+
   async cashMovementsOn(date: string, ctx: TenantContext): Promise<DayCashFlowDTO> {
     return this.api.cashMovementsOn(date);
   }

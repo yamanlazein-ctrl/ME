@@ -1,0 +1,18 @@
+{
+  "tenantId": "6c48a121-8999-4055-a8ef-b8b9b75a9c09",
+  "partyId": "5bc70674-d999-4713-bb0a-c561323fb386",
+  "fabricId": "7308481f-fb42-4568-ae42-7f5b9a895f55",
+  "colorId": "136be9c2-f7dd-4660-929f-3cd0dc8f9d09",
+  "rollId": "1cab32c4-84e2-4bb8-9fa7-0f2509936c52",
+  "invoiceId": "1aeb3ace-b1be-4fec-8361-b728f819c43a",
+  "lineId": "ddb24efe-9e1e-4818-8104-bf48deace40d",
+  "movementId": "35f45ce2-9139-4f5e-99b6-a807a1054726",
+  "ledgerDebitId": "d220d562-f51d-474b-a077-8391faf88202",
+  "ledgerCreditId": "fef1cf45-98ef-4a2f-ad22-2b63b76accaa",
+  "voucherId": "a0844e84-83a5-4cb9-b88d-d36f718c6fd2",
+  "day1Number": "INV-DAY1",
+  "day1Date": "2026-01-01",
+  "seedMethod": "sql_mirror",
+  "target": 100000,
+  "scaleMethod": "bulk_sql"
+}

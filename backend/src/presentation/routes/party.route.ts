@@ -6,8 +6,15 @@ import {
 } from "../../infrastructure/http/middleware/validate.middleware.js";
 import { validateUuidParam } from "../../infrastructure/http/middleware/validate-params.middleware.js";
 import type { IPartyRepository } from "../../application/ports/IPartyRepository.js";
+import type { IInvoiceRepository } from "../../application/ports/IInvoiceRepository.js";
+import type { IVoucherRepository } from "../../application/ports/IVoucherRepository.js";
 import type { TenantContext } from "../../domain/types/index.js";
-import { createPartySchema, updatePartySchema, listPartiesSchema } from "./party.schema.js";
+import {
+  createPartySchema,
+  updatePartySchema,
+  listPartiesSchema,
+  setPartyOpeningSchema,
+} from "./party.schema.js";
 import {
   createPartyUseCase,
   updatePartyUseCase,
@@ -15,6 +22,11 @@ import {
   listPartiesUseCase,
   cancelPartyUseCase,
 } from "../../application/use-cases/parties/partyUseCases.js";
+import {
+  getPartyDeletionImpactUseCase,
+  purgePartyCascadeUseCase,
+  listPartyLinkedDocs,
+} from "../../application/use-cases/parties/purgePartyCascadeUseCase.js";
 import type { ISyncOutboxRepository } from "../../application/ports/ISyncOutboxRepository.js";
 import {
   enqueueMasterCreate,
@@ -25,11 +37,20 @@ import {
   syncDeviceIdFromRequest,
 } from "../../application/use-cases/sync/syncEnqueue.js";
 import { logger } from "../../infrastructure/config/logger.js";
-import { withTenantTx, db } from "../../infrastructure/orm/drizzle.js";
+import { withTenantTx } from "../../infrastructure/orm/engine.js";
 import { mergePartiesUseCase } from "../../application/use-cases/parties/mergePartiesUseCase.js";
 import { idempotency } from "../../infrastructure/http/middleware/idempotency-handler.middleware.js";
+import { respondTransactionFailure } from "../../infrastructure/http/transactionRouteError.js";
 
 import { localDateISO } from "../../infrastructure/utils/localDate.js";
+import { guardWithPreOperationBackup } from "../../infrastructure/backup/preOperationBackup.js";
+
+const linkedDocsQuerySchema = z.object({
+  kind: z.enum(["invoice", "voucher", "return", "order"]),
+  limit: z.coerce.number().int().min(1).max(100).optional(),
+  cursor: z.string().min(1).max(200).optional(),
+  q: z.string().max(120).optional(),
+});
 export function registerPartyRoutes(
   router: Router,
   partyRepo: IPartyRepository,
@@ -37,6 +58,8 @@ export function registerPartyRoutes(
   accountantAndUp: RequestHandler,
   readAll: RequestHandler,
   syncOutboxRepo?: ISyncOutboxRepository,
+  invoiceRepo?: IInvoiceRepository,
+  voucherRepo?: IVoucherRepository,
 ) {
   const ctxFn = (req: Request): TenantContext => req.tenantContext!;
   const paramId = (req: Request): string => req.params.id as string;
@@ -92,7 +115,9 @@ export function registerPartyRoutes(
             // The opening journal is written locally in the same transaction
             // as the party; other devices rebuild it from these two fields.
             openingBalance: p.openingBalance ?? 0,
-            openingDate: localDateISO(new Date(p.createdAt ?? Date.now())),
+            openingDate: p.openingDate ?? localDateISO(new Date(p.createdAt ?? Date.now())),
+            openingCurrency: p.openingCurrency ?? null,
+            openingNote: p.openingNote ?? null,
           },
           c,
           syncDeviceIdFromRequest(req),
@@ -107,11 +132,12 @@ export function registerPartyRoutes(
       result = syncEnabled ? await withTenantTx(c.tenantId, runCreate) : await runCreate();
     } catch (err) {
       logger.error({ err }, "transaction rolled back — party create dropped (F-07)");
-      return res.status(500).json({
-        code: "SYNC_OUTBOX_FAILED",
-        message: "تعذّر حفظ الطرف مع وحدة المزامنة — لم يُحفظ أي تغيير. أعد المحاولة.",
-        statusCode: 500,
-      });
+      return respondTransactionFailure(
+        res,
+        err,
+        "party",
+        "تعذّر حفظ الطرف مع وحدة المزامنة — لم يُحفظ أي تغيير. أعد المحاولة.",
+      );
     }
     if (!result.ok) {
       return res.status(422).json({ code: "VALIDATION", message: result.error });
@@ -226,6 +252,70 @@ export function registerPartyRoutes(
     },
   );
 
+  const registerDeletionImpact = (base: "/customers" | "/suppliers") => {
+    router.get(
+      `${base}/:id/deletion-impact`,
+      auth,
+      readAll,
+      validateUuidParam("id"),
+      async (req: Request, res: Response) => {
+        const result = await getPartyDeletionImpactUseCase(paramId(req), ctxFn(req));
+        if (!result.ok) {
+          return res.status(404).json({ code: "NOT_FOUND", message: result.error });
+        }
+        const expectedKind = base === "/customers" ? "customer" : "supplier";
+        if (result.data.kind !== expectedKind) {
+          return res.status(404).json({
+            code: "NOT_FOUND",
+            message: expectedKind === "customer" ? "العميل غير موجود" : "المورد غير موجود",
+          });
+        }
+        return res.json(result.data);
+      },
+    );
+  };
+  registerDeletionImpact("/customers");
+  registerDeletionImpact("/suppliers");
+
+  // Every linked document, paged. The impact sheet is a SUMMARY with a capped
+  // preview; this is the full set the operator must be able to review before
+  // confirming — a customer with 1000 invoices stays reviewable page by page
+  // (and searchable) instead of being truncated to the first slice.
+  const registerLinkedDocs = (base: "/customers" | "/suppliers") => {
+    router.get(
+      `${base}/:id/linked-docs`,
+      auth,
+      readAll,
+      validateUuidParam("id"),
+      validateQuery(linkedDocsQuerySchema),
+      async (req: Request, res: Response) => {
+        const id = paramId(req);
+        const c = ctxFn(req);
+        const expectedKind = base === "/customers" ? "customer" : "supplier";
+        const party = await partyRepo.findById(id, c);
+        if (!party || party.kind !== expectedKind) {
+          return res.status(404).json({
+            code: "NOT_FOUND",
+            message: expectedKind === "customer" ? "العميل غير موجود" : "المورد غير موجود",
+          });
+        }
+        const q = req.validatedQuery as z.infer<typeof linkedDocsQuerySchema>;
+        const page = await withTenantTx(c.tenantId, (tx) =>
+          listPartyLinkedDocs(tx, c.tenantId, id, {
+            kind: q.kind,
+            partyKind: expectedKind,
+            limit: q.limit,
+            cursor: q.cursor ?? null,
+            q: q.q,
+          }),
+        );
+        return res.json(page);
+      },
+    );
+  };
+  registerLinkedDocs("/customers");
+  registerLinkedDocs("/suppliers");
+
   // SYNC-13: master updates/deletes enqueue sync units in the same
   // transaction as the local mutation (F-07 pattern). The pre-edit version is
   // captured so the hub can refuse stale replays instead of overwriting a
@@ -262,10 +352,12 @@ export function registerPartyRoutes(
       result = syncEnabled ? await withTenantTx(c.tenantId, runUpdate) : await runUpdate();
     } catch (err) {
       logger.error({ err }, "transaction rolled back — party update dropped (F-07)");
-      return res.status(500).json({
-        code: "INTERNAL",
-        message: "فشل تحديث الطرف",
-      });
+      return respondTransactionFailure(
+        res,
+        err,
+        "party",
+        "تعذّر تحديث الطرف مع وحدة المزامنة — لم يُحفظ أي تغيير. أعد المحاولة.",
+      );
     }
     if (result.ok) return res.json(result.data);
     return res.status(422).json({ code: "VALIDATION", message: result.error });
@@ -274,10 +366,56 @@ export function registerPartyRoutes(
   async function deletePartyAndEnqueue(req: Request, res: Response) {
     const c = ctxFn(req);
     const id = paramId(req);
-    const expectedVersion = req.body?.expectedVersion;
-    if (typeof expectedVersion !== "number") {
+    // Body is the primary source; query is a fallback for transports that
+    // drop DELETE bodies. Never invent a version — OCC must stay closed.
+    const rawExpected = req.body?.expectedVersion ?? req.query?.expectedVersion;
+    const expectedVersion = typeof rawExpected === "number" ? rawExpected : Number(rawExpected);
+    if (!Number.isFinite(expectedVersion)) {
       return res.status(400).json({ code: "EXPECTED_VERSION_REQUIRED", message: "الإصدار المتوقع (expectedVersion) مطلوب للتحديث/الإلغاء" });
     }
+    const confirmCascade = req.body?.confirmCascade === true || req.query?.confirmCascade === "true";
+
+    // Cascade path: cancel related invoices/vouchers via existing accounting,
+    // then soft-cancel the party. OCC is re-checked on the fresh party version.
+    if (confirmCascade) {
+      if (!invoiceRepo || !voucherRepo) {
+        return res.status(500).json({
+          code: "INTERNAL",
+          message: "مسار الحذف المتكامل غير مهيأ على هذا الخادم",
+        });
+      }
+      if (!(await guardWithPreOperationBackup(res, "party-purge"))) return; // BK-4 (T097)
+      const purged = await purgePartyCascadeUseCase({
+        partyId: id,
+        ctx: c,
+        expectedVersion,
+        partyRepo,
+        invoiceRepo,
+        voucherRepo,
+      });
+      if (!purged.ok) {
+        return res.status(422).json({ code: "VALIDATION", message: purged.error });
+      }
+      if (syncOutboxRepo && isSyncEnqueueEnabled()) {
+        try {
+          await withTenantTx(c.tenantId, async () => {
+            await enqueueMasterDelete(
+              syncOutboxRepo,
+              "party",
+              id,
+              c,
+              syncDeviceIdFromRequest(req),
+              opIdFromRequest(req),
+              { version: expectedVersion },
+            );
+          });
+        } catch (err) {
+          logger.error({ err }, "party purge succeeded locally but sync enqueue failed");
+        }
+      }
+      return res.status(204).end();
+    }
+
     const syncEnabled = Boolean(syncOutboxRepo && isSyncEnqueueEnabled());
     const runDelete = async () => {
       const result = await cancelPartyUseCase(partyRepo, id, c.userId, c, expectedVersion);
@@ -303,10 +441,12 @@ export function registerPartyRoutes(
       result = syncEnabled ? await withTenantTx(c.tenantId, runDelete) : await runDelete();
     } catch (err) {
       logger.error({ err }, "transaction rolled back — party delete dropped (F-07)");
-      return res.status(500).json({
-        code: "INTERNAL",
-        message: "فشل حذف الطرف",
-      });
+      return respondTransactionFailure(
+        res,
+        err,
+        "party",
+        "تعذّر حذف الطرف مع وحدة المزامنة — لم يُحفظ أي تغيير. أعد المحاولة.",
+      );
     }
     if (result.ok) return res.status(204).end();
     return res.status(422).json({ code: "VALIDATION", message: result.error });
@@ -325,6 +465,29 @@ export function registerPartyRoutes(
     auth,
     accountantAndUp,
     validateBody(updatePartySchema),
+    updatePartyAndEnqueue,
+  );
+
+  // Opening balance replacement: body `{ opening, expectedVersion }`. Same handler as a field
+  // edit, so it shares the version check and is synced as a party update whose input is
+  // `{ opening }` — the hub and every device replay it through updatePartyUseCase → setOpening.
+  router.put(
+    "/customers/:id/opening",
+    auth,
+    accountantAndUp,
+    validateUuidParam("id"),
+    idempotency("PUT"),
+    validateBody(setPartyOpeningSchema),
+    updatePartyAndEnqueue,
+  );
+
+  router.put(
+    "/suppliers/:id/opening",
+    auth,
+    accountantAndUp,
+    validateUuidParam("id"),
+    idempotency("PUT"),
+    validateBody(setPartyOpeningSchema),
     updatePartyAndEnqueue,
   );
 
@@ -365,9 +528,10 @@ export function registerPartyRoutes(
           message: "دمج الأطراف غير متاح عند تفعيل المزامنة",
         });
       }
+      if (!(await guardWithPreOperationBackup(res, "party-merge"))) return; // BK-4 (T097)
       try {
         const b = body<{ survivorId: string; sourceId: string }>(req);
-        const result = await mergePartiesUseCase(db, b.survivorId, b.sourceId, ctxFn(req));
+        const result = await mergePartiesUseCase(partyRepo, b.survivorId, b.sourceId, ctxFn(req));
         return res.status(200).json(result);
       } catch (err) {
         const msg = err instanceof Error ? err.message : "فشل دمج الأطراف";

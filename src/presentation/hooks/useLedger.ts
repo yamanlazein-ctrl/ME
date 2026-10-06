@@ -52,7 +52,7 @@ export function useLedgerEntries(filter?: LedgerFilter, opts?: { all?: boolean }
               { ...(filter ?? {}), page, limit, cursor } as LedgerFilter,
               ctx,
             ),
-          { pageSize: 1000, maxPages: 500, label: "ledger" },
+          { pageSize: 1000, label: "ledger" },
         );
         return { data, total: data.length, hasNext: false };
       }

@@ -1,0 +1,17 @@
+# Ignore file for backend/Dockerfile, whose build context is the repository root.
+# Only the backend and the shared package are sent to the builder.
+*
+!backend
+!packages/shared
+backend/node_modules
+backend/dist
+backend/coverage
+backend/.env
+backend/.env.*
+backend/*.log
+backend/*.log.*
+packages/shared/node_modules
+packages/shared/dist
+# Colocated unit tests import vitest (a root workspace devDependency); they are not part of the image.
+backend/src/**/*.test.ts
+packages/shared/src/**/*.test.ts

@@ -152,10 +152,11 @@
   }
 }
 
-/* Logo LEFT | company name + contact RIGHT — full paper width, no crop. */
+/* Logo LEFT | company name CENTER | contact RIGHT — full paper width.
+   Equal 1fr side tracks keep the name centred on the page itself. */
 .print-brand-bar {
   display: grid;
-  grid-template-columns: 70px minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
   direction: ltr;
   align-items: center;
   column-gap: 16pt;
@@ -181,42 +182,26 @@
   overflow: visible;
 }
 
-.print-brand-identity {
-  grid-column: 2;
-  min-width: 0;
-  width: 100%;
-  text-align: right;
-  direction: rtl;
-  display: flex;
-  flex-direction: column;
-  align-items: stretch;
-  justify-content: center;
-  gap: 2pt;
-}
-
-.print-brand-identity--compact .print-brand-contact {
-  display: none;
-}
-
 .print-brand-stack {
   display: none;
 }
 
 .print-brand-name {
+  grid-column: 2;
+  grid-row: 1;
   font-family: "Segoe UI", "Tahoma", "Arial", sans-serif;
-  font-size: 16pt;
-  font-weight: 700;
+  font-size: 21pt;
+  font-weight: 800;
   color: var(--mf-black);
   letter-spacing: 0.01em;
   line-height: 1.2;
-  text-align: right;
+  text-align: center;
   direction: ltr;
   unicode-bidi: isolate;
-  white-space: normal;
+  white-space: nowrap;
   overflow: visible;
   text-overflow: clip;
   max-width: none;
-  width: 100%;
 }
 
 .print-brand-en {
@@ -224,6 +209,9 @@
 }
 
 .print-brand-contact {
+  grid-column: 3;
+  grid-row: 1;
+  min-width: 0;
   width: 100%;
   text-align: right;
   direction: rtl;
@@ -918,11 +906,18 @@
   font-size: 8pt;
 }
 .print-doc[data-paper="A5"] .print-brand-bar {
-  grid-template-columns: 48px minmax(0, 1fr);
   column-gap: 8pt;
 }
+.print-doc[data-paper="A5"] .print-logo,
+.print-doc[data-paper="A5"] .print-logo-spacer {
+  width: 48px;
+  height: 42px;
+}
 .print-doc[data-paper="A5"] .print-brand-name {
-  font-size: 12.5pt;
+  font-size: 15pt;
+}
+.print-doc[data-paper="A5"] .print-brand-contact-line {
+  font-size: 6.5pt;
 }
 .print-doc[data-paper="A5"] .print-doc-title {
   font-size: 15pt;
@@ -957,11 +952,18 @@
 .print-doc[data-paper="80mm"] {
   font-size: 6.5pt;
 }
+/* Too narrow for three columns: logo + centred name on row 1, contact
+   stacked full-width under them. */
 .print-doc[data-paper="80mm"] .print-brand-bar {
-  grid-template-columns: 34px minmax(0, 1fr);
+  grid-template-columns: 34px minmax(0, 1fr) 34px;
   column-gap: 4pt;
+  row-gap: 3pt;
   padding-bottom: 6pt;
-  align-items: start;
+  align-items: center;
+}
+.print-doc[data-paper="80mm"] .print-brand-contact {
+  grid-column: 1 / -1;
+  grid-row: 2;
 }
 .print-doc[data-paper="80mm"] .print-logo,
 .print-doc[data-paper="80mm"] .print-logo-spacer {
@@ -969,10 +971,10 @@
   height: 27px;
 }
 .print-doc[data-paper="80mm"] .print-brand-name {
-  font-size: 8pt;
+  font-size: 11pt;
   max-width: none;
   white-space: normal;
-  text-align: right;
+  text-align: center;
 }
 .print-doc[data-paper="80mm"] .print-brand-contact-line {
   font-size: 5.5pt;
@@ -1023,4 +1025,49 @@
 }
 .print-doc[data-paper="80mm"] .print-signature {
   max-width: 100%;
+}
+
+/* ============================================================================
+   Paper contrast (paper + archived PDF; screen untouched).
+   Monochrome/thermal printers turn the gold/gray palette into faint gray, so
+   at print time every colour token collapses to solid black on white and the
+   label tiers go bold. Must stay LAST so it wins over the paper-size scale.
+   ============================================================================ */
+@media print {
+  [data-print-root] {
+    --mf-gold: #000;
+    --mf-gold-dark: #000;
+    --mf-black: #000;
+    --mf-ink: #000;
+    --mf-gray: #000;
+    --mf-rule: #000;
+    --mf-line: #000;
+    --mf-line-strong: #000;
+    --mf-bg: #fff;
+    --mf-bg-soft: #fff;
+  }
+  [data-print-root],
+  [data-print-root] * {
+    color: #000 !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  [data-print-root] .print-table th,
+  [data-print-root] .print-table td {
+    border-color: #000 !important;
+  }
+  [data-print-root] .print-table tbody tr:nth-child(even) td {
+    background: #fff !important;
+  }
+  [data-print-root] .print-brand-name,
+  [data-print-root] .print-doc-title,
+  [data-print-root] .print-table th,
+  [data-print-root] .print-meta-label,
+  [data-print-root] .print-payment-label,
+  [data-print-root] .print-line-details-title,
+  [data-print-root] .print-line-detail-label,
+  [data-print-root] .pd-detail-label,
+  [data-print-root] .print-total-row > span:first-child {
+    font-weight: 700;
+  }
 }

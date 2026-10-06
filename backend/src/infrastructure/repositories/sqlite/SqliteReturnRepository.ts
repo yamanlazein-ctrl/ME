@@ -1,0 +1,835 @@
+// PORTED-FROM: src/infrastructure/repositories/PostgresReturnRepository.ts sha256=7759751249c9d324c4509b9b77046c7d0f21730ea0adabdf9385b3f6ec23d773
+// SQLite twin (specs/001-desktop-sqlite-engine S4). Keep behavior identical to the PG source.
+import { desc } from "./helpers/pgOrder.js";
+import { scaledNumber } from "./helpers/likeContains.js";
+import { pgDivSql } from "./helpers/pgNumericDiv.js";
+import { ilikeEscaped } from "./helpers/likeContains.js";
+import { eq, and, or, ne, sql, inArray, gte, lte, getTableColumns } from "drizzle-orm";
+import { afterCursor, cursorColumns, decodeCursor, keysetOrder, nextCursorOf, type KeysetSpec } from "./helpers/keysetPage.js";
+import { likeContains } from "../../utils/likeEscape.js";
+import type { DB } from "../../orm/sqlite/drizzleCompat.js";
+import { allocateDocumentNumber } from "./helpers/documentNumbers.js";
+import type { IReturnRepository, ReturnFilter } from "../../../application/ports/IReturnRepository.js";
+import { returns } from "../../orm/sqlite/schemas/return.table.js";
+import { returnLines } from "../../orm/sqlite/schemas/return-line.table.js";
+import { rolls } from "../../orm/sqlite/schemas/roll.table.js";
+import { ledgerEntries } from "../../orm/sqlite/schemas/ledger-entry.table.js";
+import { invoiceLines } from "../../orm/sqlite/schemas/invoice-line.table.js";
+import { invoices } from "../../orm/sqlite/schemas/invoice.table.js";
+import { recordStockMovement } from "./helpers/stockMovementHelper.js";
+import { round2dp, BASE_CURRENCY, computeBaseEquivalent } from "@erp/shared";
+import {
+  ReturnDoc,
+  type ReturnData,
+  type CreateReturnInput,
+} from "../../../domain/entities/Return.js";
+import type { TenantContext, PaginatedResult } from "../../../domain/types/index.js";
+
+export class SqliteReturnRepository implements IReturnRepository {
+  constructor(private readonly db: DB) {}
+
+  async findById(id: string, ctx: TenantContext): Promise<ReturnData | null> {
+    const rows = await this.db
+      .select()
+      .from(returns)
+      .where(and(eq(returns.id, id), eq(returns.tenantId, ctx.tenantId)))
+      .limit(1);
+    if (rows.length === 0) return null;
+    const lines = await this.db.select().from(returnLines).where(eq(returnLines.returnId, id));
+    return this.toDomain(rows[0], lines);
+  }
+
+  async list(filter: ReturnFilter, ctx: TenantContext): Promise<PaginatedResult<ReturnData>> {
+    const conditions = [eq(returns.tenantId, ctx.tenantId)];
+    if (filter.kind) conditions.push(eq(returns.kind, filter.kind));
+    if (filter.partyId) conditions.push(eq(returns.partyId, filter.partyId));
+    if (filter.status) conditions.push(eq(returns.status, filter.status));
+    if (filter.fromDate) conditions.push(gte(returns.date, filter.fromDate));
+    if (filter.toDate) conditions.push(lte(returns.date, filter.toDate));
+    if (filter.search) conditions.push(or(ilikeEscaped(returns.number!, likeContains(filter.search)))!);
+    const where = and(...conditions);
+    const page = Math.max(0, filter.page ?? 0);
+    const limit = Math.min(1000, Math.max(1, filter.limit ?? 20));
+    const offset = page * limit;
+    // Keyset mode for "load every row" callers: seek after the cursor instead
+    // of OFFSET (constant cost per page, strict total order). keysetPage.ts.
+    const keyset: KeysetSpec = { date: returns.date, createdAt: returns.createdAt, id: returns.id };
+    const cursor = true ? decodeCursor(filter.cursor) : null;
+    const pageWhere = cursor ? and(where, afterCursor(keyset, cursor)) : where;
+
+    const [dataRows, countRows] = await Promise.all([
+      this.db
+        .select({ ...getTableColumns(returns), ...cursorColumns(keyset) })
+        .from(returns)
+        .where(pageWhere)
+        .limit(limit)
+        .offset(cursor ? 0 : offset)
+        .orderBy(...keysetOrder(keyset)),
+      // Cursor pages skip the COUNT: the caller stops on nextCursor and the
+      // first (cursor-less) page already carried the real total.
+      cursor
+        ? Promise.resolve([{ count: -1 }])
+        : this.db
+            .select({ count: sql<number>`count(*)` })
+            .from(returns)
+            .where(where),
+    ]);
+
+    const ids = dataRows.map((r) => r.id);
+    const items =
+      ids.length > 0
+        ? await this.db.select().from(returnLines).where(inArray(returnLines.returnId, ids))
+        : [];
+    const byId = new Map<string, typeof items>();
+    for (const it of items) {
+      const l = byId.get(it.returnId) ?? [];
+      l.push(it);
+      byId.set(it.returnId, l);
+    }
+
+    // Original invoice numbers for the page (list screens used to download
+    // every invoice just to show this column).
+    const origIds = [...new Set(dataRows.map((r) => r.originalInvoiceId).filter(Boolean))] as string[];
+    const origNumbers = new Map<string, string>();
+    if (origIds.length > 0) {
+      const inv = await this.db
+        .select({ id: invoices.id, number: invoices.number })
+        .from(invoices)
+        .where(and(eq(invoices.tenantId, ctx.tenantId), inArray(invoices.id, origIds)));
+      for (const i of inv) origNumbers.set(i.id, i.number);
+    }
+
+    const nextCursor = nextCursorOf(dataRows as unknown as Array<Record<string, unknown>>, limit);
+    return {
+      data: dataRows.map((r) => ({
+        ...this.toDomain(r, byId.get(r.id) ?? []),
+        originalInvoiceNumber: r.originalInvoiceId ? origNumbers.get(r.originalInvoiceId) : undefined,
+      })),
+      meta: {
+        total: Number(countRows[0]?.count ?? 0),
+        page,
+        limit,
+        // Without a cursor the COUNT decides; a last page hands out no cursor.
+        nextCursor: cursor || offset + limit < Number(countRows[0]?.count ?? 0) ? nextCursor : null,
+        hasNext: cursor ? nextCursor !== null : offset + limit < Number(countRows[0]?.count ?? 0),
+        totalPages: Math.ceil(Number(countRows[0]?.count ?? 0) / limit),
+      },
+    };
+  }
+
+  async create(
+    input: CreateReturnInput,
+    ctx: TenantContext,
+  ): Promise<ReturnData> {
+    return this.db.transaction(async (tx) => {
+      // H-NEW (forensic audit 2026-08-25, return numbering): allocate the
+      // document number INSIDE this transaction. The conservation guards
+      // below (BUG-01/H-1 quantity-vs-history, currency mismatch, invoice
+      // linkage) throw AFTER the old route-level allocation had already
+      // burned a number; now the rollback restores the sequence too.
+      const autoNumber = await allocateDocumentNumber(tx, "return", ctx.tenantId, {
+        syncDeviceId: ctx.syncDeviceId,
+        preAllocatedNumber: input.preAllocatedNumber,
+      });
+
+      const [row] = await tx
+        .insert(returns)
+        .values({
+          ...(input.preAllocatedId ? { id: input.preAllocatedId } : {}),
+          tenantId: ctx.tenantId,
+          number: autoNumber,
+          kind: input.kind,
+          date: input.date,
+          partyId: input.partyId,
+          originalInvoiceId: input.originalInvoiceId ?? null,
+          reason: input.reason,
+          currency: input.currency ?? "SYP",
+          notesPrint: input.notesPrint,
+          notesInternal: input.notesInternal,
+          createdBy: ctx.userId,
+          clientOperationId: ctx.clientOperationId ?? null,
+        })
+        .returning();
+
+      // Return lines are inserted after validation with server-derived price (fix 3.2c)
+      // and aggregated by rollId (fix 3.2b). Insert is deferred until after guard.
+
+      // Validate return quantities against real historical movement — never
+      // allow a return to exceed what was actually sold/purchased on that
+      // exact roll for that exact party, regardless of whether a specific
+      // originalInvoiceId is given.
+      //
+      // Fix BUG-01 / H-1 (forensic audit 2026-08-15, live-reproduced against
+      // a real Postgres instance before this fix): the previous version only
+      // ran this guard `if (input.originalInvoiceId)`, and even then only
+      // checked lines whose rollId existed in the map — a line for a roll
+      // NOT on that invoice was silently skipped (`if (entry && ...)`), and
+      // a return with no originalInvoiceId at all (the UI's own default —
+      // ReturnForm.tsx ships a "— بدون فاتورة —" option) skipped this block
+      // entirely. Both paths let a sale return with `Math.max(0, currentKg
+      // + quantityKg)` (no upper bound at all for sale-kind) fabricate
+      // unlimited stock with no invoice link whatsoever. Live repro:
+      // a fresh 50kg roll became 550kg from a single unlinked sale return,
+      // and a real invoice's return became 200kg heavier on a roll that
+      // invoice never sold, recorded straight into stock_movements as if
+      // legitimate.
+      //
+      // The fix keeps the "originalInvoiceId is optional" UX (a business
+      // may legitimately not track which specific invoice a return maps
+      // to), but conservation is never optional: the eligible quantity is
+      // always derived from real invoice_lines history for that
+      // roll+party, either scoped to one invoice (when given, and then
+      // every line's roll MUST belong to it — no more silent skip) or
+      // across the party's whole active invoice history for that roll
+      // (when not given).
+      // Unified eligibility: keyed on (rollId, partyId, kind) across all active
+      // returns, regardless of originalInvoiceId linkage. Takes min(invoice-scoped,
+      // party-scoped) remaining so unlinked returns are never invisible to a
+      // later linked return (fix 3.2a). Aggregates input by rollId (fix 3.2b) and
+      // sums invoice duplicates via GROUP BY (fixes .set() overwrite).
+      const invoiceLineQtys = new Map<
+        string,
+        { original: number; returned: number; pricePerKg: number; costPerKg: number; currency: string }
+      >();
+      // costPerKg is snapshot from invoice_lines.cost_per_kg (sale cost), falls back to price if null (pre-migration rows)
+      const expectedInvoiceType = input.kind === "sale" ? "sale" : "entry";
+
+      // Currency mismatch check will run after we load the invoice(s)
+      const inputCurrency = input.currency ?? "SYP";
+      let invoiceCurrency: string | null = null;
+      // BUG-03 fix: frozen FX derived server-side from the original document(s).
+      let linkedInvoiceFx: number | null = null;
+      let unlinkedInvoiceFx: number | null = null;
+      // Lock the returned rolls BEFORE computing eligibility (invoice lock
+      // first, then rolls ascending — the same order as invoice edit/cancel,
+      // so no deadlock). The later lockRollsOrdered call re-locks harmlessly.
+      const lockReturnRollsEarly = async () => {
+        const { lockRollsOrdered: lockEarly } = await import("./helpers/rollLocking.js");
+        await lockEarly(tx, ctx.tenantId, [...new Set(input.lines.map((l) => l.rollId))], { skipMissing: true });
+      };
+
+      if (input.originalInvoiceId) {
+        const [origInv] = await tx
+          .select({
+            type: invoices.type,
+            partyId: invoices.partyId,
+            status: invoices.status,
+            currency: invoices.currency,
+            exchangeRate: invoices.exchangeRate,
+          })
+          .from(invoices)
+          .where(and(eq(invoices.id, input.originalInvoiceId), eq(invoices.tenantId, ctx.tenantId)))
+          // Serialize returns (and edits/cancels) of the same invoice: the
+          // eligibility below reads "sold − already returned"; without the lock
+          // two concurrent returns both read the same room and over-return.
+          .limit(1);
+        if (!origInv) throw new Error("الفاتورة الأصلية غير موجودة");
+        await lockReturnRollsEarly();
+        if (origInv.type !== expectedInvoiceType)
+          throw new Error(`نوع الفاتورة الأصلية (${origInv.type}) لا يطابق نوع المرتجع (${input.kind})`);
+        if (origInv.status !== "active") throw new Error("لا يمكن الإرجاع على فاتورة ملغاة");
+        if (origInv.partyId !== input.partyId) throw new Error("الفاتورة الأصلية لا تخص هذا الطرف");
+        invoiceCurrency = origInv.currency;
+        if (invoiceCurrency !== inputCurrency)
+          throw new Error(`عملة المرتجع (${inputCurrency}) لا تطابق عملة الفاتورة الأصلية (${invoiceCurrency})`);
+        // The return MUST reuse the ORIGINAL invoice's frozen rate — never a
+        // current rate and never a client-supplied value.
+        linkedInvoiceFx = origInv.exchangeRate == null ? null : Number(origInv.exchangeRate);
+        // Aggregate invoice lines by rollId (SUM) and capture price/cost/currency per roll
+        const origLines = await tx
+          .select({
+            rollId: invoiceLines.rollId,
+            qty: scaledNumber(sql`COALESCE(SUM(${invoiceLines.quantityKg}),0)`, 2),
+            // Audit F-004: quantity-WEIGHTED (10 kg @5 + 1 kg @9 → 5.36, not 7).
+            // PG numeric division, exact: Σ(q×p) at scale 4 over Σq at scale 2 (pgNumericDiv.ts).
+            price: pgDivSql(sql`SUM(${invoiceLines.quantityKg} * ${invoiceLines.pricePerKg})`, 4, sql`SUM(${invoiceLines.quantityKg})`, 2),
+            // cost (scale 4) × q = scale 6; the price fallback (scale 2) × q is up-scaled to 6.
+            cost: pgDivSql(sql`SUM(${invoiceLines.quantityKg} * COALESCE(${invoiceLines.costPerKg}, ${invoiceLines.pricePerKg} * 100))`, 6, sql`SUM(${invoiceLines.quantityKg})`, 2),
+          })
+          .from(invoiceLines)
+          .where(and(eq(invoiceLines.invoiceId, input.originalInvoiceId), eq(invoiceLines.tenantId, ctx.tenantId)))
+          .groupBy(invoiceLines.rollId);
+        for (const ol of origLines) {
+          invoiceLineQtys.set(ol.rollId, {
+            original: Math.round(Number(ol.qty) * 100) / 100,
+            returned: 0,
+            pricePerKg: Math.round(Number(ol.price) * 10000) / 10000,
+            // cost carries 4 decimals (20261017) — rounding it to 2 made the
+            // reversed COGS differ from the COGS the sale posted.
+            costPerKg: Math.round(Number(ol.cost ?? ol.price) * 10000) / 10000,
+            currency: invoiceCurrency,
+          });
+        }
+        // Two bounds, both must hold:
+        //  1. per invoice: this invoice's qty minus returns LINKED to it;
+        //  2. per party+roll: everything sold to the party from this roll minus
+        //     ALL its returns of the roll (linked or not), so unlinked returns
+        //     can never be double-dipped against a linked one.
+        // Subtracting every return of the roll from THIS invoice's qty (the old
+        // rule) refused legitimate returns when the same roll was sold on
+        // several invoices (found by the 5-year load audit).
+        const rollIds = Array.from(new Set(input.lines.map((l) => l.rollId)));
+        const prevReturns = await tx
+          .select({
+            rollId: returnLines.rollId,
+            total: scaledNumber(sql`COALESCE(SUM(${returnLines.quantityKg}),0)`, 2),
+            linked: scaledNumber(sql`COALESCE(SUM(${returnLines.quantityKg}) FILTER (WHERE ${returns.originalInvoiceId} = ${input.originalInvoiceId}),0)`, 2),
+          })
+          .from(returnLines)
+          .innerJoin(
+            returns,
+            and(
+              eq(returns.id, returnLines.returnId),
+              ne(returns.id, row.id),
+              eq(returns.status, "active"),
+              eq(returns.kind, input.kind),
+              eq(returns.partyId, input.partyId),
+              eq(returns.tenantId, ctx.tenantId),
+            ),
+          )
+          .where(inArray(returnLines.rollId, rollIds))
+          .groupBy(returnLines.rollId);
+        const soldToParty = await tx
+          .select({ rollId: invoiceLines.rollId, total: scaledNumber(sql`COALESCE(SUM(${invoiceLines.quantityKg}),0)`, 2) })
+          .from(invoiceLines)
+          .innerJoin(
+            invoices,
+            and(
+              eq(invoices.id, invoiceLines.invoiceId),
+              eq(invoices.tenantId, ctx.tenantId),
+              eq(invoices.partyId, input.partyId),
+              eq(invoices.type, expectedInvoiceType),
+              eq(invoices.status, "active"),
+            ),
+          )
+          .where(and(eq(invoiceLines.tenantId, ctx.tenantId), inArray(invoiceLines.rollId, rollIds)))
+          .groupBy(invoiceLines.rollId);
+        const round = (n: unknown) => Math.round(Number(n) * 100) / 100;
+        for (const [rollId, entry] of invoiceLineQtys) {
+          const pr = prevReturns.find((p) => p.rollId === rollId);
+          const sold = round(soldToParty.find((s) => s.rollId === rollId)?.total ?? entry.original);
+          const allReturned = round(pr?.total ?? 0);
+          const linkedReturned = round(pr?.linked ?? 0);
+          // Effective "already returned" against this invoice = the larger of
+          // the two consumptions, so `original - returned` is the tighter bound.
+          const globalRoom = round(sold - allReturned);
+          entry.returned = round(Math.max(linkedReturned, entry.original - globalRoom));
+        }
+      } else {
+        await lockReturnRollsEarly();
+        const rollIds = Array.from(new Set(input.lines.map((l) => l.rollId)));
+        const historical = await tx
+          .select({
+            rollId: invoiceLines.rollId,
+            total: scaledNumber(sql`COALESCE(SUM(${invoiceLines.quantityKg}),0)`, 2),
+            // Audit F-004: quantity-WEIGHTED (10 kg @5 + 1 kg @9 → 5.36, not 7).
+            // PG numeric division, exact: Σ(q×p) at scale 4 over Σq at scale 2 (pgNumericDiv.ts).
+            price: pgDivSql(sql`SUM(${invoiceLines.quantityKg} * ${invoiceLines.pricePerKg})`, 4, sql`SUM(${invoiceLines.quantityKg})`, 2),
+            // cost (scale 4) × q = scale 6; the price fallback (scale 2) × q is up-scaled to 6.
+            cost: pgDivSql(sql`SUM(${invoiceLines.quantityKg} * COALESCE(${invoiceLines.costPerKg}, ${invoiceLines.pricePerKg} * 100))`, 6, sql`SUM(${invoiceLines.quantityKg})`, 2),
+            currency: sql<string>`MAX(${invoices.currency})`,
+            minRate: sql<number | null>`MIN(${invoices.exchangeRate})`.mapWith(invoices.exchangeRate),
+            maxRate: sql<number | null>`MAX(${invoices.exchangeRate})`.mapWith(invoices.exchangeRate),
+          })
+          .from(invoiceLines)
+          .innerJoin(
+            invoices,
+            and(
+              eq(invoices.id, invoiceLines.invoiceId),
+              eq(invoices.tenantId, ctx.tenantId),
+              eq(invoices.partyId, input.partyId),
+              eq(invoices.type, expectedInvoiceType),
+              eq(invoices.status, "active"),
+            ),
+          )
+          .where(and(eq(invoiceLines.tenantId, ctx.tenantId), inArray(invoiceLines.rollId, rollIds)))
+          .groupBy(invoiceLines.rollId);
+        let rateMin: number | null = null;
+        let rateMax: number | null = null;
+        for (const h of historical) {
+          if (String(h.currency) !== inputCurrency)
+            throw new Error(`عملة المرتجع (${inputCurrency}) لا تطابق عملة الفواتير الأصلية (${h.currency})`);
+          // BUG-03 fix: unlinked returns may only reuse a frozen rate when EVERY
+          // candidate historical invoice shares the same non-null rate.
+          const lo = h.minRate == null ? null : Number(h.minRate);
+          const hi = h.maxRate == null ? null : Number(h.maxRate);
+          if (lo != null && (rateMin == null || lo < rateMin)) rateMin = lo;
+          if (hi != null && (rateMax == null || hi > rateMax)) rateMax = hi;
+          invoiceLineQtys.set(h.rollId, {
+            original: Math.round(Number(h.total) * 100) / 100,
+            returned: 0,
+            pricePerKg: Math.round(Number(h.price) * 10000) / 10000,
+            costPerKg: Math.round(Number(h.cost ?? h.price) * 10000) / 10000,
+            currency: String(h.currency),
+          });
+        }
+        if (rateMin != null && rateMin === rateMax) unlinkedInvoiceFx = rateMin;
+        const prevReturns = await tx
+          .select({ rollId: returnLines.rollId, total: scaledNumber(sql`COALESCE(SUM(${returnLines.quantityKg}),0)`, 2) })
+          .from(returnLines)
+          .innerJoin(
+            returns,
+            and(
+              eq(returns.id, returnLines.returnId),
+              ne(returns.id, row.id),
+              eq(returns.status, "active"),
+              eq(returns.kind, input.kind),
+              eq(returns.partyId, input.partyId),
+              eq(returns.tenantId, ctx.tenantId),
+            ),
+          )
+          .where(inArray(returnLines.rollId, rollIds))
+          .groupBy(returnLines.rollId);
+        for (const pr of prevReturns) {
+          const entry = invoiceLineQtys.get(pr.rollId);
+          if (entry) entry.returned = Math.round(Number(pr.total) * 100) / 100;
+        }
+      }
+
+      // Aggregate input lines by rollId before guard (fix 3.2b duplicate lines)
+      const inputByRoll = new Map<string, number>();
+      for (const line of input.lines) {
+        inputByRoll.set(line.rollId, (inputByRoll.get(line.rollId) ?? 0) + line.quantityKg);
+      }
+      for (const [rollId, totalQty] of inputByRoll) {
+        const entry = invoiceLineQtys.get(rollId);
+        const verb = input.kind === "sale" ? "بيعها" : "شراؤها";
+        if (!entry) {
+          throw new Error(
+            input.originalInvoiceId
+              ? `اللفافة المحددة لا تنتمي إلى بنود الفاتورة الأصلية المحددة`
+              : `لا يوجد سجل بأن هذه اللفافة تم ${verb} لهذا الطرف — لا يمكن إرجاعها`,
+          );
+        }
+        if (totalQty > entry.original - entry.returned) {
+          const verb2 = input.kind === "sale" ? "المباعة" : "المشتراة";
+          throw new Error(
+            `الكمية المرتجعة (${totalQty} كغ) تتجاوز الكمية ${verb2} (${entry.original} كغ) بعد خصم المرتجعات السابقة (${entry.returned} كغ)`,
+          );
+        }
+      }
+
+      // Insert aggregated return lines with server-derived price (fix 3.2b+3.2c)
+      // One row per rollId, price from invoice_lines, not client.
+      const piecesByRoll = new Map<string, number>();
+      for (const l of input.lines) piecesByRoll.set(l.rollId, (piecesByRoll.get(l.rollId) ?? 0) + (l.pieces ?? 1));
+      await tx.insert(returnLines).values(
+        Array.from(inputByRoll.entries()).map(([rollId, totalQty]) => {
+          const entry = invoiceLineQtys.get(rollId)!;
+          return {
+            tenantId: ctx.tenantId,
+            returnId: row.id,
+            rollId,
+            quantityKg: String(totalQty),
+            pieces: piecesByRoll.get(rollId) ?? 1,
+            pricePerKg: String(entry.pricePerKg),
+          };
+        }),
+      );
+
+      // REPAIR-012: lock all return rolls once, ascending id order.
+      const { lockRollsOrdered } = await import("./helpers/rollLocking.js");
+      const lockedRolls = await lockRollsOrdered(tx, ctx.tenantId, [...inputByRoll.keys()], {
+        skipMissing: true,
+      });
+      for (const rollId of [...inputByRoll.keys()].sort()) {
+        const totalQty = inputByRoll.get(rollId)!;
+        const totalPieces = piecesByRoll.get(rollId) ?? 1;
+        const r = lockedRolls.get(rollId);
+        if (r) {
+          const currentKg = Number(r.remainingKg);
+          const currentPieces = Number(r.remainingPieces);
+          const delta = input.kind === "entry" ? -totalQty : totalQty;
+          const piecesDelta = input.kind === "entry" ? -totalPieces : totalPieces;
+          if (input.kind === "entry" && currentKg < totalQty) {
+            throw new Error(`الكمية المرتجعة (${totalQty} كغ) تتجاوز المتاح في الصبغة (${currentKg} كغ)`);
+          }
+          if (input.kind === "entry" && currentPieces < totalPieces) {
+            throw new Error(`الأثواب المرتجعة (${totalPieces}) تتجاوز المتاح في الصبغة (${currentPieces} أثواب)`);
+          }
+          // Checked above for the only direction that removes stock — no clamp.
+          const newKg = Math.round((currentKg + delta) * 100) / 100;
+          const newPieces = currentPieces + piecesDelta;
+          const updated = await tx
+            .update(rolls)
+            .set({
+              remainingKg: String(newKg),
+              remainingPieces: newPieces,
+              status: sql`CASE WHEN ${String(newKg)} <= '0' THEN 'exhausted' ELSE 'in_stock' END`,
+              version: sql`${rolls.version} + 1`,
+              updatedAt: new Date(),
+            })
+            .where(
+              and(
+                eq(rolls.id, rollId),
+                eq(rolls.tenantId, ctx.tenantId),
+                eq(rolls.version, Number(r.version)),
+              ),
+            )
+            .returning({ id: rolls.id });
+          if (updated.length === 0) {
+            throw new Error(`تعارض على اللفافة ${r.rollNo} — تم تعديلها من جهاز آخر. حدّث الصفحة وأعد المحاولة.`);
+          }
+          await recordStockMovement(
+            tx,
+            {
+              rollId,
+              direction: input.kind === "entry" ? "out" : "in",
+              movementType: input.kind === "entry" ? "return_entry" : "return_sale",
+              quantityKg: totalQty,
+              balanceAfterKg: newKg,
+              referenceType: input.kind === "entry" ? "purchase_return" : "sales_return",
+              referenceId: row.id,
+              referenceNumber: autoNumber,
+              movementDate: input.date,
+              description: `${input.kind === "entry" ? "مرتجع شراء" : "مرتجع بيع"} ${autoNumber}`,
+            },
+            ctx,
+          );
+        }
+      }
+
+      const isEntryReturn = input.kind === "entry";
+      let saleTotal = 0;
+      let costTotal = 0;
+
+      for (const [rollId, totalQty] of inputByRoll) {
+        const entry = invoiceLineQtys.get(rollId)!;
+        saleTotal += round2dp(totalQty * entry.pricePerKg);
+        costTotal += round2dp(totalQty * entry.costPerKg);
+      }
+      const returnRefType = isEntryReturn ? "purchase_return" : "sales_return";
+      // F4: per-leg FX for USD aggregations on the ledger (S10 from audit).
+      // BUG-03 fix: the frozen rate is derived SERVER-SIDE from the ORIGINAL
+      // invoice(s) stored at their creation — never client-supplied, never a
+      // "current" rate (fx.ts rule). Legacy invoices with NULL rates keep NULL
+      // base legs (documented legacy-data constraint).
+      const returnCurrency = input.currency ?? "SYP";
+      let derivedFx = input.originalInvoiceId ? linkedInvoiceFx : unlinkedInvoiceFx;
+      if (derivedFx == null && returnCurrency === BASE_CURRENCY) derivedFx = 1;
+      const fxRate = derivedFx;
+      const legFx = (debit: number, credit: number) => ({
+        exchangeRate: fxRate,
+        baseDebit: computeBaseEquivalent(debit, returnCurrency, fxRate),
+        baseCredit: computeBaseEquivalent(credit, returnCurrency, fxRate),
+      });
+      const legs: (typeof ledgerEntries.$inferInsert)[] = [];
+      if (isEntryReturn) {
+        // Standard double-entry (revert of the C-8/BUG-3 supplier "uniform
+        // debit" convention): a purchase return DEBITS the supplier (AP
+        // decreases) and CREDITS inventory (goods leave the books). Supplier
+        // balance = credit − debit, so Dr reduces what we owe.
+        //   Dr party T       (supplier balance DECREASES)
+        //   Cr inventory T   (goods leave the books; balances ΣD = ΣC = T)
+        if (saleTotal > 0) {
+          legs.push(
+            {
+              ...legFx(saleTotal, 0),
+              tenantId: ctx.tenantId,
+              partyId: input.partyId,
+              date: input.date,
+              type: returnRefType,
+              debit: saleTotal,
+              credit: 0,
+              currency: input.currency ?? "SYP",
+              cashImpact: "none",
+              referenceType: returnRefType,
+              referenceId: row.id,
+              referenceNumber: autoNumber,
+              description: `مرتجع شراء ${autoNumber}`,
+              createdBy: ctx.userId,
+            },
+            {
+              ...legFx(0, saleTotal),
+              tenantId: ctx.tenantId,
+              partyId: null,
+              date: input.date,
+              type: "inventory_asset",
+              debit: 0,
+              credit: saleTotal,
+              currency: input.currency ?? "SYP",
+              cashImpact: "none",
+              referenceType: returnRefType,
+              referenceId: row.id,
+              referenceNumber: autoNumber,
+              description: `مخزون مرتجع ${autoNumber}`,
+              createdBy: ctx.userId,
+            },
+          );
+        }
+      } else {
+        // Sale return — BUG-02 fix, fully balanced set:
+        //   Cr party T            (customer balance decreases)
+        //   Dr sales_return_contra T  (revenue is reversed)
+        //   Dr inventory_asset C  (stock value returns at cost)
+        //   Cr cogs_expense C     (COGS reversal at cost)
+        // Σdebit = T + C = Σcredit ✓ (migration 0040 contract restored)
+        if (saleTotal > 0) {
+          legs.push({
+            ...legFx(0, saleTotal),
+            tenantId: ctx.tenantId,
+            partyId: input.partyId,
+            date: input.date,
+            type: returnRefType,
+            debit: 0,
+            credit: saleTotal,
+            currency: input.currency ?? "SYP",
+            cashImpact: "none",
+            referenceType: returnRefType,
+            referenceId: row.id,
+            referenceNumber: autoNumber,
+            description: `مرتجع بيع ${autoNumber}`,
+            createdBy: ctx.userId,
+          });
+          // Revenue contra — balances the return group (BUG-02).
+          legs.push({
+            ...legFx(saleTotal, 0),
+            tenantId: ctx.tenantId,
+            partyId: null,
+            date: input.date,
+            type: "sales_return_contra",
+            debit: saleTotal,
+            credit: 0,
+            currency: input.currency ?? "SYP",
+            cashImpact: "none",
+            referenceType: returnRefType,
+            referenceId: row.id,
+            referenceNumber: autoNumber,
+            description: `عكس إيراد ${autoNumber}`,
+            createdBy: ctx.userId,
+          });
+          // Inventory at cost
+          if (costTotal > 0) {
+            legs.push({
+              ...legFx(costTotal, 0),
+              tenantId: ctx.tenantId,
+              partyId: null,
+              date: input.date,
+              type: "inventory_asset",
+              debit: costTotal,
+              credit: 0,
+              currency: input.currency ?? "SYP",
+              cashImpact: "none",
+              referenceType: returnRefType,
+              referenceId: row.id,
+              referenceNumber: autoNumber,
+              description: `إعادة مخزون ${autoNumber}`,
+              createdBy: ctx.userId,
+            });
+            // COGS reversal
+            legs.push({
+              ...legFx(0, costTotal),
+              tenantId: ctx.tenantId,
+              partyId: null,
+              date: input.date,
+              type: "cogs_expense",
+              debit: 0,
+              credit: costTotal,
+              currency: input.currency ?? "SYP",
+              cashImpact: "none",
+              referenceType: returnRefType,
+              referenceId: row.id,
+              referenceNumber: autoNumber,
+              description: `عكس تكلفة البضاعة ${autoNumber}`,
+              createdBy: ctx.userId,
+            });
+          }
+        }
+      }
+
+      // BUG-01 fix (REGRESSION): restore the ledger insert. This line was added
+      // by 75b7ecb [P0-LOGIC-3.6c] but was accidentally dropped by the uncommitted
+      // local FX work — returns silently wrote ZERO ledger entries. The dedicated
+      // lock-in test backend/tests/return-ledger-insert-lock.test.mjs guards it.
+      if (legs.length > 0) await tx.insert(ledgerEntries).values(legs);
+
+      // BUG-03 fix: persist the frozen FX on the return row itself.
+      await tx
+        .update(returns)
+        .set({
+          exchangeRate: fxRate,
+          baseTotal: computeBaseEquivalent(saleTotal, input.currency ?? "SYP", fxRate),
+        })
+        .where(eq(returns.id, row.id));
+
+      const lines = await tx.select().from(returnLines).where(eq(returnLines.returnId, row.id));
+      // BUG-02 fix: the tx.update(...) above persists exchange_rate/base_total in
+      // PG, but the in-memory `row` captured before the update still holds NULL —
+      // re-read the committed row so the API response carries the real frozen FX.
+      const [updatedRow] = await tx
+        .select()
+        .from(returns)
+        .where(eq(returns.id, row.id))
+        .limit(1);
+      return this.toDomain(updatedRow ?? row, lines);
+    });
+  }
+
+  async cancel(id: string, cancelledBy: string, ctx: TenantContext, expectedVersion: number): Promise<ReturnData> {
+    return this.db.transaction(async (tx) => {
+      const [r] = await tx
+        .select()
+        .from(returns)
+        .where(
+          and(eq(returns.id, id), eq(returns.tenantId, ctx.tenantId), eq(returns.status, "active")),
+        )
+        .limit(1);
+      if (!r) throw new Error("المرتجع غير موجود أو ملغى مسبقاً");
+      // P0-001: optimistic concurrency — fail fast if version mismatch
+      if (r.version !== expectedVersion) {
+        throw Object.assign(new Error(`Stale version: expected ${expectedVersion}, current ${r.version}`), {
+          code: "STALE_VERSION" as const,
+        });
+      }
+
+      const lines = await tx.select().from(returnLines).where(eq(returnLines.returnId, id));
+
+      // REPAIR-012: lock cancel rolls once in ascending id order.
+      const { lockRollsOrdered } = await import("./helpers/rollLocking.js");
+      const lockedCancel = await lockRollsOrdered(
+        tx,
+        ctx.tenantId,
+        lines.map((l) => l.rollId),
+        { skipMissing: true },
+      );
+      const linesSorted = [...lines].sort((a, b) => (a.rollId < b.rollId ? -1 : a.rollId > b.rollId ? 1 : 0));
+      for (const l of linesSorted) {
+        const roll = lockedCancel.get(l.rollId);
+        if (roll) {
+          // عكس التأثير الأصلي عند الإلغاء: مرتجع إدخال → يعيد الكمية للمخزون؛ مرتجع بيع → يخصمها
+          const delta = r.kind === "entry" ? Number(l.quantityKg) : -Number(l.quantityKg);
+          const piecesDelta = r.kind === "entry" ? Number(l.pieces ?? 1) : -Number(l.pieces ?? 1);
+          // Audit F-002: cancelling a SALE return takes the returned goods back
+          // out of stock. If they were sold again meanwhile, the old
+          // Math.max(0, …) silently zeroed the roll and recorded a movement
+          // that never happened. Refuse instead — cancel the later sale first.
+          if (Number(roll.remainingKg) + delta < -0.000001) {
+            throw new Error(
+              `لا يمكن إلغاء المرتجع ${r.number}: الكمية المرتجعة (${Number(l.quantityKg)} كغ) لم تعد موجودة في اللفافة ${roll.rollNo} (المتاح ${Number(roll.remainingKg)} كغ) — بيعت أو استُهلكت بعد الإرجاع`,
+            );
+          }
+          if (Number(roll.remainingPieces) + piecesDelta < 0) {
+            throw new Error(
+              `لا يمكن إلغاء المرتجع ${r.number}: الأثواب المرتجعة (${Number(l.pieces ?? 1)}) لم تعد موجودة في اللفافة ${roll.rollNo} (المتاح ${Number(roll.remainingPieces)})`,
+            );
+          }
+          const newKg = Math.round((Number(roll.remainingKg) + delta) * 100) / 100;
+          const newPieces = Number(roll.remainingPieces) + piecesDelta;
+          const updated = await tx
+            .update(rolls)
+            .set({
+              remainingKg: String(newKg),
+              remainingPieces: newPieces,
+              status: sql`CASE WHEN ${String(newKg)} <= '0' THEN 'exhausted' ELSE 'in_stock' END`,
+              version: sql`${rolls.version} + 1`,
+              updatedAt: new Date(),
+            })
+            .where(
+              and(
+                eq(rolls.id, l.rollId),
+                eq(rolls.tenantId, ctx.tenantId),
+                eq(rolls.version, Number(roll.version)),
+              ),
+            )
+            .returning({ id: rolls.id });
+          if (updated.length === 0) {
+            throw new Error(`تعارض على اللفافة ${roll.rollNo} — تم تعديلها من جهاز آخر. حدّث الصفحة وأعد المحاولة.`);
+          }
+          await recordStockMovement(
+            tx,
+            {
+              rollId: l.rollId,
+              direction: r.kind === "entry" ? "in" : "out",
+              movementType: r.kind === "entry" ? "return_entry" : "return_sale",
+              quantityKg: Number(l.quantityKg),
+              balanceAfterKg: newKg,
+              referenceType: r.kind === "entry" ? "purchase_return_cancel" : "sales_return_cancel",
+              referenceId: r.id,
+              referenceNumber: r.number,
+              movementDate: r.date,
+              description: `إلغاء ${r.kind === "entry" ? "مرتجع شراء" : "مرتجع بيع"} ${r.number} (عكس المخزون)`,
+            },
+            ctx,
+          );
+        }
+      }
+
+      // Reverse the linked ledger entry atomically when the return is cancelled
+      // (mirrors SqliteInvoiceRepository.cancel / SqliteVoucherRepository.cancel).
+      await tx
+        .update(ledgerEntries)
+        .set({
+          status: "cancelled",
+          cancelledAt: new Date(),
+          cancelledBy,
+        })
+        .where(
+          and(
+            eq(ledgerEntries.referenceId, id),
+            eq(ledgerEntries.tenantId, ctx.tenantId),
+            or(
+              eq(ledgerEntries.referenceType, "purchase_return"),
+              eq(ledgerEntries.referenceType, "sales_return"),
+            ),
+            eq(ledgerEntries.status, "active"),
+          ),
+        );
+
+      const [updated] = await tx
+        .update(returns)
+        .set({
+          status: "cancelled",
+          cancelledAt: new Date(),
+          cancelledBy,
+          version: sql`${returns.version} + 1`,
+        })
+        .where(and(eq(returns.id, id), eq(returns.tenantId, ctx.tenantId)))
+        .returning();
+
+      return this.toDomain(updated, lines);
+    });
+  }
+
+  private toDomain(
+    row: typeof returns.$inferSelect,
+    linesRows: (typeof returnLines.$inferSelect)[],
+  ): ReturnData {
+    return ReturnDoc.reconstitute(this.mapRow(row, linesRows)).toData();
+  }
+
+  private mapRow(
+    row: typeof returns.$inferSelect,
+    linesRows: (typeof returnLines.$inferSelect)[],
+  ): ReturnData {
+    const n = (v: string | null) => v ?? undefined;
+    return {
+      id: row.id,
+      tenantId: row.tenantId,
+      number: row.number,
+      kind: row.kind as ReturnData["kind"],
+      date: row.date,
+      partyId: row.partyId,
+      originalInvoiceId: n(row.originalInvoiceId),
+      reason: row.reason,
+      currency: row.currency,
+      exchangeRate: row.exchangeRate === null ? null : Number(row.exchangeRate),
+      baseTotal: row.baseTotal == null ? null : Number(row.baseTotal),
+      notesPrint: n(row.notesPrint),
+      notesInternal: n(row.notesInternal),
+      status: row.status as ReturnData["status"],
+      version: row.version,
+      createdAt: row.createdAt.toISOString(),
+      createdBy: n(row.createdBy),
+      cancelledAt: row.cancelledAt?.toISOString(),
+      cancelledBy: n(row.cancelledBy),
+      lines: linesRows.map((l) => ({
+        id: l.id,
+        returnId: l.returnId,
+        rollId: l.rollId,
+        quantityKg: Number(l.quantityKg),
+        pieces: l.pieces ?? 1,
+        pricePerKg: Number(l.pricePerKg),
+      })),
+    };
+  }
+}

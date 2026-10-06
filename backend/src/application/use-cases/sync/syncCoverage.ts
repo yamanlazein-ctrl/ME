@@ -46,6 +46,8 @@ export const SYNC_COVERAGE: Record<string, CoverageEntry> = {
   "POST /suppliers": { sync: { entityType: "party", operation: "create" } },
   "PUT /customers/:id": { sync: { entityType: "party", operation: "update" } },
   "PUT /suppliers/:id": { sync: { entityType: "party", operation: "update" } },
+  "PUT /customers/:id/opening": { sync: { entityType: "party", operation: "update" } },
+  "PUT /suppliers/:id/opening": { sync: { entityType: "party", operation: "update" } },
   "DELETE /customers/:id": { sync: { entityType: "party", operation: "delete" } },
   "DELETE /suppliers/:id": { sync: { entityType: "party", operation: "delete" } },
   "POST /inventory/fabrics": { sync: { entityType: "fabric", operation: "create" } },
@@ -78,6 +80,40 @@ export const SYNC_COVERAGE: Record<string, CoverageEntry> = {
   "PUT /settings/:section": { sync: { entityType: "settings", operation: "update" } },
   "PUT /api/company/profile": { sync: { entityType: "company", operation: "update" } },
 
+  // ---- year-end closing: tenant-wide control plane, not a syncable document.
+  // A close is a one-shot administrative freeze of a whole year for EVERY
+  // device; replicating it as a per-device document would let two devices
+  // close independently. Devices converge instead by pulling `financial_years`.
+  // device; replicating it as a per-device document would let two devices
+  // close independently. Devices converge instead by pulling `financial_years`.
+  "POST /financial-years/begin-counting": {
+    exempt: "year-end control plane; devices converge by pulling financial_years, not by replaying a close",
+  },
+  "POST /financial-years/close": {
+    exempt: "year-end control plane; whole-tenant freeze, hub-authoritative, never replayed per device",
+  },
+  "POST /financial-years/reopen": {
+    exempt: "year-end control plane; audited admin action, hub-authoritative",
+  },
+  // The count rows are local working state for one operator's count sheet. The
+  // DOCUMENT that matters (the stock movement + ledger leg) is written by
+  // counts/post, and that variance is already covered by the roll/ledger
+  // entries it produces.
+  "POST /financial-years/counts": {
+    exempt: "count sheet is per-operator working state; the posted adjustment flows through stock_movements + ledger_entries",
+  },
+  "POST /financial-years/counts/post": {
+    exempt: "count variance posts a stock_movements + ledger_entries pair, which are themselves synced entities",
+  },
+
+  // ---- corrective dye purge: a hub-authoritative administrative repair.
+  // It rewrites documents that were ORIGINALLY synced, so replaying it as a
+  // per-device document would diverge the devices from the hub. The hub is
+  // authoritative and devices converge by pulling.
+  "DELETE /inventory/dyes/:id/purge": {
+    exempt: "corrective purge of synced documents; hub-authoritative, not replayed per device",
+  },
+
   // ---- party merge: refused (409) while sync is enabled; standalone only
   "POST /parties/merge": { exempt: "standalone-only party merge; route returns 409 when sync enqueue is enabled" },
   // ---- local integrity control plane (not business state)
@@ -89,6 +125,16 @@ export const SYNC_COVERAGE: Record<string, CoverageEntry> = {
   "POST /sync/hub/test": { exempt: "read-only hub ping" },
   "POST /sync/hub/connect": { exempt: "local hub pairing, not a business document" },
   "DELETE /sync/hub": { exempt: "local hub pairing, not a business document" },
+  "POST /sync/hub/enroll": { exempt: "local hub pairing (enrollment code), not a business document" },
+  "POST /sync/hub/devices/:deviceId/revoke": { exempt: "proxy to the hub device registry" },
+  "POST /sync/hub/devices/:deviceId/reinstate": { exempt: "proxy to the hub device registry" },
+  "POST /sync/hub/enrollment-code": { exempt: "proxy to the hub enrollment code" },
+  "DELETE /sync/hub/enrollment-code": { exempt: "proxy to the hub enrollment code" },
+  "POST /sync/enrollment-code": { exempt: "hub device enrollment code, not a business document" },
+  "DELETE /sync/enrollment-code": { exempt: "hub device enrollment code, not a business document" },
+  "POST /sync/devices/self/credential": { exempt: "hub device credential, not a business document" },
+  "POST /api/sync/enroll": { exempt: "hub device enrollment (registry is hub-authoritative)" },
+  "POST /api/sync/device-token": { exempt: "hub device token exchange, read-only for data" },
   "POST /sync/activity": { exempt: "ephemeral presence feed on the hub, not a business document" },
   "POST /sync/run": { exempt: "sync transport itself" },
   "POST /sync/claims/reap": { exempt: "operator tooling on hub state" },
@@ -127,6 +173,11 @@ export const SYNC_COVERAGE: Record<string, CoverageEntry> = {
   "POST /api/setup/wizard/restore": {
     exempt: "first-run restore of a local backup (no users yet); restored sync outbox/inbox/cursor carry the sync state",
   },
+  // ---- desktop runtime hand-off (specs/001 US3/US4; local process control, not business state) ----
+  "POST /api/desktop/runtime/pre-update-backup": {
+    exempt: "device-local backup file taken before an update; the backup is a local artifact, never a business document",
+  },
+  "POST /api/desktop/runtime/shutdown": { exempt: "device-local process shutdown for the update hand-off" },
   // ---- device-local operational mirrors ----
   "POST /notifications": { exempt: "device-local mirror; sync rejections notify per device" },
   "POST /notifications/:id/read": { exempt: "device-local read state" },

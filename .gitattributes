@@ -1,3 +1,12 @@
 # Normalize line endings to LF on checkout so the repository is
 # independent of the host platform's core.autocrlf setting.
 * text=auto eol=lf
+
+# …EXCEPT Windows batch files: cmd.exe cannot parse LF-only .cmd/.bat files
+# (it mis-splits every line, so `rem` comments and commands are executed as
+# garbage — 'x' is not recognized — and the script aborts). The desktop build
+# pipeline (build-frontend.cmd / before-build.cmd, invoked as tauri.conf's
+# beforeBuildCommand) therefore failed and the installer shipped STALE bundled
+# resources. Batch files MUST be CRLF on checkout.
+*.cmd text eol=crlf
+*.bat text eol=crlf

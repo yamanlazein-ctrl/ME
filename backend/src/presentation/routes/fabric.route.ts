@@ -25,7 +25,7 @@ import {
   syncDeviceIdFromRequest,
 } from "../../application/use-cases/sync/syncEnqueue.js";
 import { logger } from "../../infrastructure/config/logger.js";
-import { withTenantTx } from "../../infrastructure/orm/drizzle.js";
+import { withTenantTx } from "../../infrastructure/orm/engine.js";
 
 export function registerFabricRoutes(
   router: Router,

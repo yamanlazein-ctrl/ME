@@ -6,15 +6,26 @@ import { ensureDocumentFolders, isTauri } from "@/infrastructure/tauri-bridge";
 import { clearTokens, hasStoredSession, isAuthFailure } from "@/infrastructure/auth/TokenProvider";
 import { DataSafetyScreen } from "@/components/integrity/DataSafetyScreen";
 import { container } from "@/infrastructure/container";
+import { loadSettings, settings } from "@/presentation/hooks/useSettings";
 
 export function AuthGate({ children }: { children: ReactNode }) {
   const { data: user, isLoading, isFetching, isError, error, failureCount } = useCurrentUser();
   const sessionPresent = hasStoredSession();
 
-  // Issue 12: on desktop login, ensure Desktop archive folders exist.
+  // Issue 12: ONE Desktop archive root named after the real company — never a
+  // second brand fallback folder when the name is still unknown.
   useEffect(() => {
     if (!user || !isTauri()) return;
-    void ensureDocumentFolders().catch((e) => console.warn("[archive] ensure folders failed:", e));
+    void (async () => {
+      try {
+        await loadSettings();
+        const name = (settings.company?.name ?? "").trim();
+        if (!name) return;
+        await ensureDocumentFolders(name);
+      } catch (e) {
+        console.warn("[archive] ensure folders failed:", e);
+      }
+    })();
   }, [user]);
 
   // Stale JWT after DB wipe / setup reset — drop tokens so we leave the spinner.

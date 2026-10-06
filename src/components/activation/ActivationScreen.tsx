@@ -154,7 +154,13 @@ export function ActivationScreen({ onActivated }: { onActivated: () => void }) {
   async function ensureTenant(): Promise<string> {
     if (tenantId) return tenantId;
     const r = await apiPost("/api/setup/init", {});
-    if (!r.ok) throw new Error("تعذّر تهيئة التثبيت");
+    if (!r.ok) {
+      throw new Error(
+        typeof r.data?.message === "string" && r.data.message.trim()
+          ? r.data.message
+          : "تعذّر تهيئة التثبيت",
+      );
+    }
     const id = r.data?.tenantId ?? r.data?.id;
     if (!id) throw new Error("استجابة غير صالحة من الخادم");
     setTenantId(id);

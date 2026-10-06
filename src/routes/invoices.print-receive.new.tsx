@@ -36,6 +36,7 @@ import { CardField, GroupSection } from "@/components/invoices/InvoiceFormLayout
 import { showError, showSuccess } from "@/components/common/toast-helpers";
 import { resolveColorPick } from "@/domain/inventory/colorLookup";
 
+import { acceptsDecimalKeystroke } from "@/shared/utils/decimalInput";
 import { localToday } from "@/lib/localDate";
 type DocOption = { id: string; title: string; subtitle?: string };
 
@@ -44,14 +45,14 @@ type ReceiveLine = {
   key: string;
   /** Sent-job id, or `fabric:<sourceFabricId>` marker pre-filtering the picker. */
   jobId: string;
-  receivedKg: number | "";
-  printCostPerKg: number | "";
+  receivedKg: number | string;
+  printCostPerKg: number | string;
   newName: string;
   newColorName: string;
   newColorCode: string;
   newColorHex?: string;
   newColorImageUrl?: string;
-  newSalePrice: number | "";
+  newSalePrice: number | string;
 };
 
 const emptyReceiveLine = (): ReceiveLine => ({
@@ -524,43 +525,48 @@ function PrintReceivePage() {
                             type="number"
                             inputMode="decimal"
                             min={0}
-                            step={0.01}
+                            step="any"
                             value={line.receivedKg}
                             onChange={(e) => {
                               const v = e.target.value;
                               if (v === "") return updateLine(line.key, { receivedKg: "" });
-                              const n = Number(v);
-                              if (Number.isFinite(n) && n >= 0)
-                                updateLine(line.key, { receivedKg: n });
+                              if (!acceptsDecimalKeystroke(v)) return;
+                              updateLine(line.key, { receivedKg: v });
                             }}
-                            className="h-9 tabular-nums"
+                            className="no-spinner h-9 tabular-nums"
                             placeholder={job ? `حتى ${formatQuantity(job.sentKg)}` : ""}
                           />
                         </CardField>
                         <CardField label="تكلفة الطباعة / كغ" required>
                           <Input
                             type="number"
+                            inputMode="decimal"
                             min={0}
+                            step="any"
                             value={line.printCostPerKg}
-                            onChange={(e) =>
-                              updateLine(line.key, {
-                                printCostPerKg: e.target.value === "" ? "" : Number(e.target.value),
-                              })
-                            }
-                            className="h-9 tabular-nums"
+                            onChange={(e) => {
+                              const v = e.target.value;
+                              if (v === "") return updateLine(line.key, { printCostPerKg: "" });
+                              if (!acceptsDecimalKeystroke(v)) return;
+                              updateLine(line.key, { printCostPerKg: v });
+                            }}
+                            className="no-spinner h-9 tabular-nums"
                           />
                         </CardField>
                         <CardField label="سعر البيع / كغ (اختياري)">
                           <Input
                             type="number"
+                            inputMode="decimal"
                             min={0}
+                            step="any"
                             value={line.newSalePrice}
-                            onChange={(e) =>
-                              updateLine(line.key, {
-                                newSalePrice: e.target.value === "" ? "" : Number(e.target.value),
-                              })
-                            }
-                            className="h-9 tabular-nums"
+                            onChange={(e) => {
+                              const v = e.target.value;
+                              if (v === "") return updateLine(line.key, { newSalePrice: "" });
+                              if (!acceptsDecimalKeystroke(v)) return;
+                              updateLine(line.key, { newSalePrice: v });
+                            }}
+                            className="no-spinner h-9 tabular-nums"
                           />
                         </CardField>
                         {job && (

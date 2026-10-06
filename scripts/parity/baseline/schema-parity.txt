@@ -1,0 +1,20 @@
+# T039 schema parity — 2026-10-03T17:35Z
+# PG reference: journal idx 99 (src/infrastructure/orm/migrations/meta/schema-fingerprint.json)
+# SQLite: 0000_baseline.sql (scripts/generate-sqlite-baseline.mjs) → scripts/sqlite-schema-fingerprint.mts
+
+$ node scripts/generate-sqlite-baseline.mjs --check --url <erp_test>
+checked: 53 tables, 53 PK, 22 UNIQUE, 45 CHECK, 73 FK, 126 indexes (12 GIN omitted)
+
+$ npx tsx scripts/sqlite-schema-fingerprint.mts
+[sqlite-fingerprint] 56 tables, 56 PK, 22 UNIQUE, 433 CHECK, 73 FK, 126 indexes, 11 triggers → src/infrastructure/orm/sqlite/migrations/meta/schema-fingerprint.json
+
+$ node scripts/compare-schema-fingerprints.mjs src/infrastructure/orm/sqlite/migrations/meta/schema-fingerprint.json
+[schema-parity] PASS — only allowed deltas. PG 53 tables / 73 FKs  ↔  SQLite 56 tables / 73 FKs
+
+# Allowed deltas
+# - 12 GIN/trigram indexes omitted (research R7); 126 btree indexes present by PG name
+# - 388 extra CHECKs: 385 type guards named ck_sqlite_<kind>__<table>__<column> (length/json/array/boolean/date/timestamp)
+# - runtime tables motard_meta, motard_sequences, motard_tx_state (+ SQLite's own sqlite_sequence)
+# - defaults: the 3 serial PKs (audit_logs, idempotency_keys, license_audit_events) are INTEGER PRIMARY KEY AUTOINCREMENT;
+#   sync_outbox.seq and sync_inbox.received_seq are app-supplied from motard_sequences (sqlite/sequences.ts); every other PG default has a SQLite default
+# - 7 PG triggers → 11 SQLite triggers (split per event); transaction clock + session flags via motard_tx_state (no app-defined functions; trusted_schema=OFF)

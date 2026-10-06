@@ -1,6 +1,5 @@
 import { Router, type Request, type Response, type RequestHandler } from "express";
-import { db } from "../../infrastructure/orm/drizzle.js";
-import { sql } from "drizzle-orm";
+import type { IHealthRepository } from "../../application/ports/IHealthRepository.js";
 import { getLicenseIdentityDegradedReason } from "../../infrastructure/license/licenseIdentityHealth.js";
 
 export function registerHealthRoutes(
@@ -9,7 +8,8 @@ export function registerHealthRoutes(
   checkRedis: () => Promise<boolean>,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   rbac: any,
-  auth?: RequestHandler,
+  auth: RequestHandler | undefined,
+  healthRepo: IHealthRepository,
 ) {
   router.get("/api/health/live", (_req, res) => {
     res.status(200).json({ status: "ok" });
@@ -42,7 +42,7 @@ export function registerHealthRoutes(
     // 1. Database check with latency
     try {
       const dbStart = Date.now();
-      await db.execute(sql`SELECT 1`);
+      await healthRepo.ping();
       checks.database = { status: "ok", ms: Date.now() - dbStart };
     } catch (e) {
       checks.database = { status: "error", details: e instanceof Error ? e.message : "unknown" };
@@ -97,14 +97,7 @@ export function registerHealthRoutes(
 
     // 5. Database size check
     try {
-      const sizeResult = await db.execute(sql`
-        SELECT pg_size_pretty(pg_database_size(current_database())) as size
-      `);
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      checks.databaseSize = {
-        status: "ok",
-        details: (sizeResult.rows[0] as any)?.size ?? "unknown",
-      };
+      checks.databaseSize = { status: "ok", details: await healthRepo.databaseSize() };
     } catch {
       checks.databaseSize = { status: "unknown", details: "check failed" };
     }

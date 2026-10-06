@@ -12,6 +12,28 @@ vi.mock("../src/infrastructure/orm/drizzle.js", () => ({
   pool: { query: (...args: unknown[]) => query(...args) },
 }));
 
+/**
+ * Arrange the conflict-store insert outcome. PG: the store's pool.query (mocked above). SQLite: the
+ * store writes through runAutonomous on the independent handle, and engineStores loads it with a
+ * dynamic import that a module mock does not reach — so the cached store instance itself is stubbed.
+ * Either way the use case sees the same insert outcome, and both engines prove the same contract.
+ */
+async function arrangeInsert(outcome: { reject: Error } | { rowCount: number }): Promise<void> {
+  if (process.env.DB_ENGINE === "sqlite") {
+    // The store is built on the runtime's handles; the server boots the runtime at start, a unit test here.
+    const { ensureSqliteRuntime } = await import("../src/infrastructure/orm/sqlite/runtime.js");
+    await ensureSqliteRuntime();
+    const { getSyncConflictStore } = await import("../src/infrastructure/repositories/engineStores.js");
+    const store = await getSyncConflictStore();
+    const spy = vi.spyOn(store, "insertOpen");
+    if ("reject" in outcome) spy.mockRejectedValueOnce(outcome.reject);
+    else spy.mockResolvedValueOnce(outcome.rowCount);
+    return;
+  }
+  if ("reject" in outcome) query.mockRejectedValueOnce(outcome.reject);
+  else query.mockResolvedValueOnce({ rowCount: outcome.rowCount, rows: [] });
+}
+
 describe("recordSyncConflict fail-closed (Phase 2)", () => {
   beforeEach(() => {
     query.mockReset();
@@ -22,7 +44,7 @@ describe("recordSyncConflict fail-closed (Phase 2)", () => {
     const { recordSyncConflict } = await import(
       "../src/application/use-cases/sync/syncConflicts.js"
     );
-    query.mockRejectedValueOnce(new Error("transient insert failure"));
+    await arrangeInsert({ reject: new Error("transient insert failure") });
     await expect(
       runWithTenantContext({ tenantId: "11111111-1111-4111-8111-111111111111" }, () =>
         recordSyncConflict({
@@ -44,7 +66,7 @@ describe("recordSyncConflict fail-closed (Phase 2)", () => {
     const { recordSyncConflict } = await import(
       "../src/application/use-cases/sync/syncConflicts.js"
     );
-    query.mockResolvedValueOnce({ rowCount: 1, rows: [] });
+    await arrangeInsert({ rowCount: 1 });
     const wrote = await runWithTenantContext(
       { tenantId: "11111111-1111-4111-8111-111111111111" },
       () =>

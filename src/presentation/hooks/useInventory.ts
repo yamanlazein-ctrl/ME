@@ -65,6 +65,27 @@ let loaded = false;
 let retryTimer: ReturnType<typeof setTimeout> | null = null;
 let retryAttempts = 0;
 
+/** D-3 / FR-068: inventory screens show this instead of a false empty list. */
+export type InventoryLoadState =
+  | { status: "idle" | "loading" | "ready" }
+  | { status: "error"; message: string };
+let loadState: InventoryLoadState = { status: "idle" };
+
+function setLoadState(next: InventoryLoadState) {
+  loadState = next;
+  notifyInventoryChange();
+}
+
+export function getInventoryLoadState(): InventoryLoadState {
+  return loadState;
+}
+
+/** D-3: user-initiated Retry after a failed load. */
+export function retryInventoryLoad(): Promise<void> {
+  retryAttempts = 0;
+  return loadAll(true);
+}
+
 function isPaginated<T>(x: unknown): x is { data: T[] } {
   return Array.isArray((x as { data?: unknown })?.data);
 }
@@ -76,11 +97,12 @@ async function loadAll(force = false): Promise<void> {
     await loadPromise;
   }
   loadPromise = (async () => {
+    if (!loaded) setLoadState({ status: "loading" });
     try {
       const ctx = buildTenantContext();
       // Names/prints/pickers resolve fabrics, colors and rolls synchronously
       // from this cache, so it must hold every row — walk the keyset cursor until done.
-      const opts = { pageSize: 1000, maxPages: 500 };
+      const opts = { pageSize: 1000 };
       const [fRes, cRes, rRes] = await Promise.all([
         fetchAllPaged<Fabric>(
           async (page, limit, cursor) =>
@@ -106,9 +128,13 @@ async function loadAll(force = false): Promise<void> {
       rollsCache.splice(0, rollsCache.length, ...rData);
       loaded = true;
       retryAttempts = 0;
-      notifyInventoryChange();
+      setLoadState({ status: "ready" });
     } catch (e) {
       console.error("[useInventory] load failed", e);
+      setLoadState({
+        status: "error",
+        message: e instanceof Error && e.message ? e.message : "تعذّر تحميل المخزون",
+      });
       if (getAccessToken() && retryAttempts < 3 && !retryTimer) {
         retryAttempts += 1;
         retryTimer = setTimeout(() => {
@@ -245,6 +271,50 @@ export function colorById(id: string): Color | null {
 
 export function rollById(id: string): Roll | null {
   return rollsCache.find((r) => r.id === id) ?? null;
+}
+
+/** How often an open screen re-reads the selected roll's stock (another device may have synced). */
+export const LIVE_ROLL_STOCK_REFRESH_MS = 10_000;
+
+/**
+ * The CURRENT stock of one exact roll (fabric + color + dye), read from the server every time —
+ * never the list cache above, which may be up to 30 s old. Lives under the ["inventory"] key that
+ * every stock-changing mutation (invoice, return, print job, order) already invalidates, so it
+ * re-reads right after any movement; it also re-reads on mount, on focus and periodically.
+ * `data` is null when the server could not return the roll — callers show no number then.
+ */
+export function liveRollStockQuery(rollId: string | undefined) {
+  const enabled = Boolean(rollId) && !rollId!.startsWith("fabric:");
+  return {
+    queryKey: ["inventory", "roll-live", buildTenantContext().tenantId, rollId ?? ""],
+    queryFn: async () => {
+      const live = await container.inventory.repository.findRollById(rollId!, buildTenantContext());
+      // keep the screen's other stock checks (exceeds-available warnings) on the same fresh numbers
+      const idx = live ? rollsCache.findIndex((r) => r.id === live.id) : -1;
+      if (live && idx >= 0) {
+        const cur = rollsCache[idx];
+        if (
+          cur.remainingKg !== live.remainingKg ||
+          cur.remainingPieces !== live.remainingPieces ||
+          cur.version !== live.version
+        ) {
+          rollsCache[idx] = live;
+          notifyInventoryChange();
+        }
+      }
+      return live;
+    },
+    enabled,
+    staleTime: 0,
+    gcTime: 0,
+    refetchOnMount: "always" as const,
+    refetchOnWindowFocus: "always" as const,
+    refetchInterval: LIVE_ROLL_STOCK_REFRESH_MS,
+  };
+}
+
+export function useLiveRollStock(rollId: string | undefined) {
+  return useQuery(liveRollStockQuery(rollId));
 }
 
 export function colorsOfFabric(fabricId: string): Color[] {
@@ -464,10 +534,14 @@ export async function deleteColor(id: string) {
       notifyInventoryChange();
       toast.success("تم حذف اللون");
     } else {
-      toast.error("فشل حذف اللون: العنصر غير موجود أو مرتبط بمعاملات موجودة");
+      const msg = "فشل حذف اللون: العنصر غير موجود أو مرتبط بمعاملات موجودة";
+      toast.error(msg);
+      throw new Error(msg);
     }
   } catch (e) {
-    toast.error(`فشل حذف اللون: ${e instanceof Error ? e.message : "خطأ غير معروف"}`);
+    const msg = e instanceof Error ? e.message : "خطأ غير معروف";
+    if (!msg.includes("فشل حذف اللون")) toast.error(`فشل حذف اللون: ${msg}`);
+    throw e instanceof Error ? e : new Error(msg);
   }
 }
 

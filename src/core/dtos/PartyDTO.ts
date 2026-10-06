@@ -25,6 +25,10 @@ export type PartyDTO = {
   country?: string | null;
   taxNumber?: string | null;
   openingBalance: number;
+  /** Opening journal date / note / currency (null currency = the party's own). */
+  openingDate?: string | null;
+  openingNote?: string | null;
+  openingCurrency?: Currency | null;
   creditLimit?: number;
   currency?: Currency;
   paymentTerms?: string;
@@ -56,6 +60,10 @@ export type CreatePartyInput = {
   country?: string;
   taxNumber?: string;
   openingBalance?: number;
+  /** Opening journal date / note / currency (null currency = the party's own). */
+  openingDate?: string | null;
+  openingNote?: string | null;
+  openingCurrency?: Currency | null;
   creditLimit?: number;
   currency?: Currency;
   paymentTerms?: string;

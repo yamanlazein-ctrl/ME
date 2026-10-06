@@ -19,6 +19,8 @@ export interface InvoiceFilter {
 }
 
 export interface IInvoiceRepository {
+  /** Preview of the next document number (estimate only; real allocation happens at save). S1. */
+  peekNextNumber(entityType: string, ctx: TenantContext): Promise<string>;
   findById(id: string, ctx: TenantContext): Promise<InvoiceData | null>;
   findByNumber(number: string, type: string, ctx: TenantContext): Promise<InvoiceData | null>;
   list(filter: InvoiceFilter, ctx: TenantContext): Promise<PaginatedResult<InvoiceData>>;

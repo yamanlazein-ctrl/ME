@@ -1,6 +1,42 @@
 import { Redis } from "ioredis";
 import { redis } from "../../auth/TokenDenylist.js";
-import { pool } from "../../orm/drizzle.js";
+import { getEngine } from "../../orm/engine.js";
+import { pgPool } from "../../orm/pgLazy.js";
+
+/**
+ * Durable store: the PostgreSQL pool (cloud, unchanged) or the SQLite engine (desktop,
+ * specs/001-desktop-sqlite-engine). The SQLite branch runs the same statements in SQLite syntax;
+ * its writes are autonomous like pool.query (they survive a caller's rollback), TTLs come from the
+ * µs clock, and jsonb bodies keep jsonb key order — so a cached replay is byte-identical.
+ */
+type Rows = { rows: Array<Record<string, any>> };
+const isSqlite = () => getEngine() === "sqlite";
+async function q(pgText: string, sqliteText: string, params: unknown[], write = false): Promise<Rows> {
+  if (!isSqlite()) return (await pgPool()).query(pgText, params) as unknown as Rows;
+  const [{ sql }, { sqliteDb, runAutonomous }] = await Promise.all([
+    import("drizzle-orm"),
+    import("../../orm/sqlite/transaction.js"),
+  ]);
+  const parts = sqliteText.split("?");
+  const chunks = parts.map((part, i) => (i < params.length ? sql`${sql.raw(part)}${params[i]}` : sql.raw(part)));
+  const stmt = sql.join(chunks, sql``);
+  if (!write) return (await sqliteDb().execute(stmt)) as Rows;
+  return runAutonomous(async (tx) => (await tx.execute(stmt)) as Rows);
+}
+async function sqliteNowPlus(seconds: number): Promise<{ now: string; until: string }> {
+  const { transactionTimestamp, formatMicrosUtc, parseMicrosUtc } = await import("../../orm/sqlite/clock.js");
+  const now = transactionTimestamp();
+  return { now, until: formatMicrosUtc(parseMicrosUtc(now) + BigInt(seconds) * 1_000_000n) };
+}
+async function jsonbText(v: unknown): Promise<string> {
+  return (await import("../../orm/sqlite/types.js")).toJsonbText(v);
+}
+/** node-pg parses jsonb; SQLite returns the stored text. */
+function parsedBody<T extends Record<string, any> | undefined>(row: T): T {
+  return row && isSqlite() && typeof row.response_body === "string"
+    ? ({ ...row, response_body: JSON.parse(row.response_body) } as T)
+    : row;
+}
 
 /**
  * Idempotency-Key service for POST endpoints.
@@ -81,14 +117,19 @@ export async function readCached(
       // fall through to the durable DB store
     }
   }
-  const { rows } = await pool.query(
+  const nowText = isSqlite() ? (await sqliteNowPlus(0)).now : null;
+  const { rows } = await q(
     `SELECT status_code, response_body, content_type
        FROM idempotency_keys
       WHERE tenant_id = $1 AND method = $2 AND path = $3 AND idempotency_key = $4
         AND status_code > 0 AND expires_at > now()`,
-    [tenantId, method, path, key],
+    `SELECT status_code, response_body, content_type
+       FROM idempotency_keys
+      WHERE tenant_id = ? AND method = ? AND path = ? AND idempotency_key = ?
+        AND status_code > 0 AND expires_at > ?`,
+    isSqlite() ? [tenantId, method, path, key, nowText] : [tenantId, method, path, key],
   );
-  const row = rows[0];
+  const row = parsedBody(rows[0]);
   if (row) {
     return {
       status: row.status_code,
@@ -98,14 +139,18 @@ export async function readCached(
   }
   // OLD-PLAN Phase 1: durable financial_operations — survives beyond 5-minute TTL.
   try {
-    const durable = await pool.query(
+    const durable = await q(
       `SELECT status_code, response_body, content_type
          FROM financial_operations
         WHERE tenant_id = $1 AND method = $2 AND path = $3 AND operation_key = $4
           AND status_code > 0`,
+      `SELECT status_code, response_body, content_type
+         FROM financial_operations
+        WHERE tenant_id = ? AND method = ? AND path = ? AND operation_key = ?
+          AND status_code > 0`,
       [tenantId, method, path, key],
     );
-    const d = durable.rows[0];
+    const d = parsedBody(durable.rows[0]);
     if (!d) return null;
     return {
       status: d.status_code,
@@ -135,15 +180,22 @@ export async function writeCached(
       // fall through to the durable DB store
     }
   }
-  await pool.query(
+  await q(
     `UPDATE idempotency_keys
         SET status_code = $5, response_body = $6::jsonb, content_type = $7
       WHERE tenant_id = $1 AND method = $2 AND path = $3 AND idempotency_key = $4`,
-    [tenantId, method, path, key, status, JSON.stringify(body), contentType],
+    `UPDATE idempotency_keys
+        SET status_code = ?, response_body = ?, content_type = ?
+      WHERE tenant_id = ? AND method = ? AND path = ? AND idempotency_key = ?`,
+    isSqlite()
+      ? [status, await jsonbText(body), contentType, tenantId, method, path, key]
+      : [tenantId, method, path, key, status, JSON.stringify(body), contentType],
+    true,
   );
   // Persist permanently for financial retries after TTL (table may be absent on old DBs).
   try {
-    await pool.query(
+    const nowText = isSqlite() ? (await sqliteNowPlus(0)).now : null;
+    await q(
       `INSERT INTO financial_operations (tenant_id, method, path, operation_key, status_code, response_body, content_type)
        VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7)
        ON CONFLICT (tenant_id, method, path, operation_key)
@@ -151,7 +203,17 @@ export async function writeCached(
                      response_body = EXCLUDED.response_body,
                      content_type = EXCLUDED.content_type,
                      updated_at = now()`,
-      [tenantId, method, path, key, status, body, contentType],
+      `INSERT INTO financial_operations (tenant_id, method, path, operation_key, status_code, response_body, content_type, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT (tenant_id, method, path, operation_key)
+       DO UPDATE SET status_code = excluded.status_code,
+                     response_body = excluded.response_body,
+                     content_type = excluded.content_type,
+                     updated_at = excluded.updated_at`,
+      isSqlite()
+        ? [tenantId, method, path, key, status, await jsonbText(JSON.parse(body)), contentType, nowText, nowText]
+        : [tenantId, method, path, key, status, body, contentType],
+      true,
     );
   } catch {
     /* migration not applied yet — short TTL path still works */
@@ -178,9 +240,13 @@ export async function tryClaim(
 ): Promise<boolean> {
   // If a durable financial result already exists, never re-execute.
   try {
-    const { rows: durable } = await pool.query(
+    const { rows: durable } = await q(
       `SELECT 1 FROM financial_operations
         WHERE tenant_id = $1 AND method = $2 AND path = $3 AND operation_key = $4
+          AND status_code > 0
+        LIMIT 1`,
+      `SELECT 1 FROM financial_operations
+        WHERE tenant_id = ? AND method = ? AND path = ? AND operation_key = ?
           AND status_code > 0
         LIMIT 1`,
       [tenantId, method, path, key],
@@ -206,7 +272,8 @@ export async function tryClaim(
       // fall through to the durable DB store
     }
   }
-  const { rows } = await pool.query(
+  const t = isSqlite() ? await sqliteNowPlus(IDEMPOTENCY_TTL_SECONDS) : null;
+  const { rows } = await q(
     `INSERT INTO idempotency_keys (tenant_id, method, path, idempotency_key, status_code, expires_at)
      VALUES ($1, $2, $3, $4, 0, now() + interval '${IDEMPOTENCY_TTL_SECONDS} seconds')
      ON CONFLICT (tenant_id, method, path, idempotency_key)
@@ -214,7 +281,14 @@ export async function tryClaim(
                    expires_at = now() + interval '${IDEMPOTENCY_TTL_SECONDS} seconds'
      WHERE idempotency_keys.expires_at < now()
      RETURNING id`,
-    [tenantId, method, path, key],
+    `INSERT INTO idempotency_keys (tenant_id, method, path, idempotency_key, status_code, expires_at, created_at)
+     VALUES (?, ?, ?, ?, 0, ?, ?)
+     ON CONFLICT (tenant_id, method, path, idempotency_key)
+     DO UPDATE SET status_code = 0, response_body = NULL, expires_at = excluded.expires_at
+     WHERE idempotency_keys.expires_at < ?
+     RETURNING id`,
+    isSqlite() ? [tenantId, method, path, key, t!.until, t!.now, t!.now] : [tenantId, method, path, key],
+    true,
   );
   return rows.length > 0;
 }

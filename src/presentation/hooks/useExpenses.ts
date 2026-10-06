@@ -23,7 +23,7 @@ export function useExpensesList(filter?: ExpenseFilter, opts?: { all?: boolean }
         return fetchAllPaged(
           (page, limit, cursor) =>
             container.expenses.list.page({ ...(filter ?? {}), page, limit, cursor } as ExpenseFilter),
-          { pageSize: 1000, maxPages: 500, label: "expenses" },
+          { pageSize: 1000, label: "expenses" },
         );
       }
       return container.expenses.list.execute(filter);

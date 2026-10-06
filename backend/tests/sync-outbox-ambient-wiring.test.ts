@@ -26,7 +26,11 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));
 const SRC = path.join(HERE, "..", "src");
 const ROUTES_DIR = path.join(SRC, "presentation", "routes");
 const SERVER_PATH = path.join(SRC, "presentation", "server.ts");
-const CONTAINER_PATH = path.join(SRC, "infrastructure", "di", "container.ts");
+/** The container is wired per engine; the invariant must hold for both wirings. */
+const CONTAINER_PATHS = {
+  postgres: path.join(SRC, "infrastructure", "di", "postgresContainer.ts"),
+  sqlite: path.join(SRC, "infrastructure", "di", "sqliteContainer.ts"),
+};
 const REPOS_DIR = path.join(SRC, "infrastructure", "repositories");
 
 /** Text inside a balanced `(`…`)` starting at `openIdx` (which must be `(`). */
@@ -133,8 +137,8 @@ function paramToContainerField(fnName: string): Record<string, string> {
 }
 
 /** container field → repository class name (`const x = new PostgresYRepo(handle)`). */
-function containerWiring(): Record<string, { cls: string; handle: string }> {
-  const src = fs.readFileSync(CONTAINER_PATH, "utf8");
+function containerWiring(file: string): Record<string, { cls: string; handle: string }> {
+  const src = fs.readFileSync(file, "utf8");
   const out: Record<string, { cls: string; handle: string }> = {};
   const re = /const\s+(\w+)\s*=\s*new\s+(\w+)\s*\(\s*(\w+)\s*\)/g;
   let m: RegExpExecArray | null;
@@ -143,8 +147,10 @@ function containerWiring(): Record<string, { cls: string; handle: string }> {
 }
 
 function repoSourcePath(cls: string): string {
-  const p = path.join(REPOS_DIR, `${cls}.ts`);
-  return fs.existsSync(p) ? p : "";
+  for (const p of [path.join(REPOS_DIR, `${cls}.ts`), path.join(REPOS_DIR, "sqlite", `${cls}.ts`)]) {
+    if (fs.existsSync(p)) return p;
+  }
+  return "";
 }
 
 /**
@@ -160,7 +166,6 @@ const FIRE_AND_FORGET: Record<string, string> = {
 };
 
 describe("F-07 wiring — sync routes must let their business write join the outbox transaction", () => {
-  const container = containerWiring();
   const candidates: Array<{ file: string; fields: string[] }> = [];
 
   for (const file of fs.readdirSync(ROUTES_DIR)) {
@@ -189,7 +194,8 @@ describe("F-07 wiring — sync routes must let their business write join the out
     expect(candidates.length).toBeGreaterThanOrEqual(8);
   });
 
-  it("every repository used inside those transactions is ambient-aware", () => {
+  it.each(Object.entries(CONTAINER_PATHS))("every repository used inside those transactions is ambient-aware (%s wiring)", (_engine, wiringFile) => {
+    const container = containerWiring(wiringFile);
     const bad: string[] = [];
     for (const { file, fields } of candidates) {
       if (fields.length === 0) bad.push(`${file}: no repository resolved inside withTenantTx (parser drift)`);

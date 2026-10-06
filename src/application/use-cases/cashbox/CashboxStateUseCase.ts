@@ -13,6 +13,10 @@ export class CashboxStateUseCase {
     return this.cashbox.cashBalanceOn(date, ctx, currency);
   }
 
+  cashBalancesOn(date: string, ctx: TenantContext) {
+    return this.cashbox.cashBalancesOn(date, ctx);
+  }
+
   currentBalance(ctx: TenantContext, currency?: string) {
     const today = localToday();
     return this.cashbox.cashBalanceOn(today, ctx, currency);

@@ -37,6 +37,7 @@ import {
   getHubSessionInfo,
 } from "../../application/use-cases/sync/hubConfig.js";
 import { hostname } from "node:os";
+import { isDesktopLocalCaller, isLoopbackAddress } from "../../infrastructure/http/localAccess.js";
 
 // Login-specific rate limiter: 5 attempts per IP per 15 minutes
 const loginRateLimiter = rateLimit({
@@ -45,7 +46,8 @@ const loginRateLimiter = rateLimit({
   skipSuccessfulRequests: true,
   standardHeaders: true,
   legacyHeaders: false,
-  skip: (req) => config.NODE_ENV !== "production" || isLoopback(req.ip),
+  skip: (req) =>
+    config.NODE_ENV !== "production" || isDesktopLocalCaller(req) || isLoopbackAddress(req.ip),
   keyGenerator: (req) => (req.ip ?? "unknown") + (req.body?.email ?? ""),
   handler: (_req, res) => {
     res.status(429).json({
@@ -87,35 +89,6 @@ function announceLoginToHub(user: { name: string; role: string }): void {
     deviceLabel: hostname() || null,
     sourceDeviceId: getHubSessionInfo()?.hubDeviceId ?? null,
   });
-}
-
-function isLoopback(ip: string | undefined): boolean {
-  if (!ip) return false;
-  const host = ip.replace(/^::ffff:/, "").split("%")[0];
-  return (
-    host === "127.0.0.1" ||
-    host === "localhost" ||
-    host === "::1" ||
-    host === "0:0:0:0:0:0:0:1"
-  );
-}
-
-/** True when `ip` is loopback, link-local or in an IPv4/IPv6 private range.
- *  Mirrors setup.route.ts's isLocalOrPrivateLan (the desktop-SKU guard that
- *  keeps first-run provisioning on the customer's own machine/LAN). */
-function isLocalOrPrivateLan(ip: string | undefined): boolean {
-  if (!ip) return false;
-  const host = ip.replace(/^::ffff:/, "").split(":")[0];
-  if (host === "127.0.0.1" || host === "localhost" || host === "::1") return true;
-  if (host.includes(".")) {
-    if (host.startsWith("10.")) return true;
-    if (host.startsWith("192.168.")) return true;
-    if (host.startsWith("169.254.")) return true;
-    if (/^172\.(1[6-9]|2\d|3[01])\./.test(host)) return true;
-    return false;
-  }
-  if (host.startsWith("fc") || host.startsWith("fd")) return true;
-  return false;
 }
 
 /**
@@ -210,20 +183,12 @@ async function hasDeviceProvisioningProof(
     }
   }
 
-  // 4. Local operator on this machine.
-  // Desktop SKU: loopback / private LAN is the hub workstation.
-  // Local development web: Vite + PIN picker also come from loopback.
-  // Without this, a completed install still 401s DEVICE_PROOF_REQUIRED
-  // (or a prior 429) and the operator cannot sign in at :5173.
-  // Production web stays closed.
-  const fromThisMachine = isLoopback(req.ip ?? req.socket?.remoteAddress);
-  if (
-    config.DESKTOP_DEPLOY &&
-    (fromThisMachine || isLocalOrPrivateLan(req.ip ?? req.socket?.remoteAddress))
-  ) {
+  // 4. Local operator on this machine (loopback / private LAN / named pipe).
+  // Without this, a completed install still 401s DEVICE_PROOF_REQUIRED.
+  if (config.DESKTOP_DEPLOY && isDesktopLocalCaller(req)) {
     return true;
   }
-  if (config.NODE_ENV !== "production" && fromThisMachine) {
+  if (config.NODE_ENV !== "production" && isLoopbackAddress(req.ip ?? req.socket?.remoteAddress)) {
     return true;
   }
 

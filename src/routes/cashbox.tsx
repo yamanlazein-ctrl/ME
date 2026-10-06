@@ -38,6 +38,7 @@ import { Lock, Plus, RotateCw, Settings2 } from "lucide-react";
 import { FinancialSummary } from "@/components/cashbox/FinancialSummary";
 import { PeriodFilterCard, type CashboxPeriodFilter } from "@/components/cashbox/PeriodFilterCard";
 import { FinancialOverview } from "@/components/cashbox/FinancialOverview";
+import { CashPositionCard } from "@/components/cashbox/CashPositionCard";
 import { ActivityTabs } from "@/components/cashbox/ActivityTabs";
 import type { ProfitQueryParams } from "@/contracts/profit";
 
@@ -203,6 +204,9 @@ function CashBoxPage() {
 
       {/* D — Financial Overview (profitability ≠ cash position) */}
       <FinancialOverview query={profitQuery} />
+
+      {/* D2 — Real cash position: drawer cash vs what is owed out, per currency */}
+      <CashPositionCard query={profitQuery} />
 
       {/* E — Quick Actions (calm zone: ghost buttons, one row) */}
       <div className="flex flex-wrap items-center gap-1.5 rounded-xl border border-border bg-card/60 px-4 py-2.5">

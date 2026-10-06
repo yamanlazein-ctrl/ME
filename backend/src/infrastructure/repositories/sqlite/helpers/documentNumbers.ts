@@ -1,0 +1,568 @@
+// PORTED-FROM: src/infrastructure/utils/documentNumbers.ts sha256=5dcbbda2efe459d8d70d41988100cb0b52737859d237462d7222b51578e8c17d
+// SQLite twin (specs/001-desktop-sqlite-engine S4). Keep behavior identical to the PG source.
+import { db, type Tx } from "../../../orm/sqlite/drizzleCompat.js";
+import { runAutonomous } from "../../../orm/sqlite/transaction.js";
+import { documentSequences } from "../../../orm/sqlite/schemas/document-sequence.table.js";
+import { documentNumberBlocks } from "../../../orm/sqlite/schemas/document-number-block.table.js";
+import { and, eq, sql } from "drizzle-orm";
+import { BusinessRuleError } from "../../../../domain/errors/index.js";
+import { config } from "../../../config/env.js";
+import { getCentralSyncUrl } from "../../../../application/use-cases/sync/hubConfig.js";
+import { logger } from "../../../config/logger.js";
+import { consumeNextInTx } from "../SqliteDocumentNumberBlockRepository.js";
+
+const PREFIXES: Record<string, string> = {
+  invoice: "INV",
+  // Entry (purchase) invoices get their own prefix AND their own sequence
+  // counter — distinct entityType key below keeps the counters separate, so
+  // the first entry invoice after this change is ENT-<year>-0001 while the
+  // existing INV-<year>-NNNN sale-invoice counter continues untouched.
+  invoice_entry: "ENT",
+  return: "RET",
+  voucher: "VOC",
+  expense: "EXP",
+  order: "ORD",
+  print: "PRT",
+  // H-6: the roll produced when a print job is received uses the same PRT
+  // prefix as the print job's own document number, but is a DISTINCT
+  // sequence (distinct entityType key) — otherwise the job-number counter
+  // and the output-roll-number counter would become the same counter,
+  // silently changing existing numbering semantics beyond what the race
+  // fix requires.
+  print_roll: "PRT",
+  customer: "CUS",
+  supplier: "SUP",
+  settlement: "SET",
+};
+
+const WIDTHS: Record<string, number> = {
+  invoice: 4,
+  invoice_entry: 4,
+  return: 4,
+  voucher: 4,
+  expense: 4,
+  order: 4,
+  print: 4,
+  print_roll: 4,
+  settlement: 4,
+};
+
+/** Default reserved block sizes per entity (product defaults). */
+export const DEFAULT_BLOCK_SIZES: Record<string, number> = {
+  invoice: 500,
+  invoice_entry: 200,
+  return: 100,
+  voucher: 200,
+  expense: 100,
+  order: 100,
+  // Master data is created far more often than any single document type and
+  // is the cheapest thing to pre-reserve, so it gets a generous block. Without
+  // a block here two offline devices both mint `CUS-<year>-0001` and the
+  // second one's hub insert dies on `parties (tenant_id, code)` — the exact
+  // collision reproduced in the multi-device acceptance run of 2026-09-10.
+  customer: 500,
+  supplier: 500,
+  settlement: 100,
+  print: 100,
+  print_roll: 100,
+};
+
+export type AllocateNumberOpts = {
+  /** Consume from this device's reserved block (desktop offline numbering). */
+  syncDeviceId?: string | null;
+  /**
+   * Final number already reserved from a block — skip sequence bump;
+   * raise the global floor so future claims cannot collide.
+   */
+  preAllocatedNumber?: string | null;
+  /**
+   * Transitional master-data exception only (party/fabric/color/roll): a fresh
+   * install may not have received its first block yet, so those callers may use
+   * the legacy global sequence until provisioning completes. This is NOT a
+   * second authority for synced financial documents.
+   *
+   * Financial documents deliberately do NOT set this: a missing block must stop
+   * the save rather than risk handing out a number another device already used.
+   * The fallback is logged so an unprovisioned device is visible to operators.
+   */
+  allowGlobalFallback?: boolean;
+};
+
+/**
+ * Generate the next sequential document number for a given entity type and tenant.
+ *
+ * Fix (forensic audit 2026-08-15, live-reproduced 3x — settlement, expense,
+ * order): the previous implementation did SELECT ... FOR UPDATE, then
+ * branched into either an UPDATE (row exists) or an INSERT (row doesn't
+ * exist yet). The INSERT branch — hit on the FIRST-EVER document of any
+ * entityType for a tenant — was a genuine race: two concurrent callers can
+ * both run the SELECT, both see zero rows (nothing exists yet to lock),
+ * and both attempt the INSERT. One succeeds; the other throws an
+ * uncaught `23505` unique-violation on idx_doc_seq_tenant_entity_prefix,
+ * which was never caught anywhere in the call chain and crashed the
+ * entire Node process via an unhandled promise rejection.
+ *
+ * Fixed by collapsing the whole read-branch-write sequence into a single
+ * atomic `INSERT ... ON CONFLICT (tenant_id, entity_type, prefix) DO
+ * UPDATE ... RETURNING`. Postgres guarantees this upsert-increment is
+ * race-free even when two transactions attempt it for the same key at the
+ * exact same instant — there is no window where two callers can compute
+ * the same next-number, and no window where a first-use race can throw.
+ *
+ * Format: `{PREFIX}-{YYYY}-{NNNN}`
+ *
+ * @param entityType - e.g. "invoice", "return", "voucher", "expense", "order"
+ * @param tenantId  - UUID of the tenant
+ * @returns         - formatted document number string
+ */
+/**
+ * Allocate a number in its own transaction, honouring this device's number
+ * block when blocks are in use (paired with a hub). Use instead of
+ * {@link nextDocumentNumber} for anything a peer device could also number.
+ */
+export async function allocateDocumentNumberForDevice(
+  entityType: string,
+  tenantId: string,
+  syncDeviceId: string | null | undefined,
+): Promise<string> {
+  // PG commits this on its own pooled connection even inside a caller's transaction (research I-2):
+  // a settlement that later fails still consumes the number. runAutonomous gives the same effect
+  // with one writer — it joins the caller and is replayed after a rollback.
+  return runAutonomous((tx) => allocateDocumentNumber(tx, entityType, tenantId, { syncDeviceId }));
+}
+
+export async function nextDocumentNumber(entityType: string, tenantId: string): Promise<string> {
+  const prefix = PREFIXES[entityType] ?? entityType.toUpperCase();
+  const width = WIDTHS[entityType] ?? 4;
+  const year = new Date().getFullYear().toString();
+
+  const [row] = await db
+    .insert(documentSequences)
+    .values({ tenantId, entityType, prefix, lastNumber: 1 })
+    .onConflictDoUpdate({
+      target: [documentSequences.tenantId, documentSequences.entityType, documentSequences.prefix],
+      set: { lastNumber: sql`${documentSequences.lastNumber} + 1` },
+    })
+    .returning({ lastNumber: documentSequences.lastNumber });
+
+  const padded = String(row.lastNumber).padStart(width, "0");
+  return `${prefix}-${year}-${padded}`;
+}
+
+/**
+ * In-transaction number allocation. Same atomic upsert as `nextDocumentNumber`,
+ * but runs against a caller-provided `Tx` so the sequence increment and the
+ * downstream insert share one transaction — if the downstream insert fails,
+ * the rollback undoes the sequence bump as well. This is the fix for the
+ * "failed save burns a number" pathology: a use-case that throws, a FK that
+ * violates, a stock guard that rejects — none of them leave a gap in the
+ * numbering because the increment was never committed.
+ *
+ * Race-free for the same reason as `nextDocumentNumber` (single
+ * `INSERT ... ON CONFLICT DO UPDATE ... RETURNING` statement, which Postgres
+ * serializes per-row), so concurrent callers in separate transactions still
+ * receive distinct, consecutive numbers.
+ *
+ * Phase 5: when `preAllocatedNumber` is set, use it as-is (PRE_ALLOCATED) and
+ * raise the global sequence floor. When `syncDeviceId` is set on desktop,
+ * consume from a reserved device block instead of the global +1 path.
+ */
+export async function allocateDocumentNumber(
+  tx: Tx,
+  entityType: string,
+  tenantId: string,
+  opts?: AllocateNumberOpts,
+): Promise<string> {
+  const { prefix, width } = resolveNumberFormat(entityType);
+  const yearNum = new Date().getFullYear();
+  const year = yearNum.toString();
+
+  if (opts?.preAllocatedNumber) {
+    return applyPreAllocatedNumber(tx, entityType, tenantId, opts.preAllocatedNumber, {
+      prefix,
+      width,
+      yearNum,
+    });
+  }
+
+  if (opts?.syncDeviceId && shouldUseNumberBlocks()) {
+    const fromBlock = await consumeNextInTx(
+      tx,
+      tenantId,
+      opts.syncDeviceId,
+      entityType,
+      yearNum,
+    );
+    if (fromBlock) {
+      return `${prefix}-${year}-${String(fromBlock.numberValue).padStart(width, "0")}`;
+    }
+    if (!opts.allowGlobalFallback) {
+      throw new BusinessRuleError(
+        "نفدت كتلة الترقيم لهذا الجهاز أو لا توجد كتلة للسنة الحالية — اطلب كتلة جديدة عند الاتصال",
+      );
+    }
+    logger.warn(
+      { entityType, syncDeviceId: opts.syncDeviceId },
+      "no active number block for device — falling back to the shared sequence (code may collide on the hub)",
+    );
+  }
+
+  const [row] = await tx
+    .insert(documentSequences)
+    .values({ tenantId, entityType, prefix, lastNumber: 1 })
+    .onConflictDoUpdate({
+      target: [documentSequences.tenantId, documentSequences.entityType, documentSequences.prefix],
+      set: { lastNumber: sql`${documentSequences.lastNumber} + 1` },
+    })
+    .returning({ lastNumber: documentSequences.lastNumber });
+
+  const padded = String(row.lastNumber).padStart(width, "0");
+  return `${prefix}-${year}-${padded}`;
+}
+
+/**
+ * Convenience wrapper: allocate a number inside the caller's transaction, then
+ * invoke `fn` with the allocated number. The callback runs in the SAME
+ * transaction, so any throw from `fn` rolls back the sequence increment.
+ *
+ * Use this when a single repository method needs both a new number and the
+ * insert that consumes it. For repositories whose insert logic is already
+ * a multi-statement transaction, prefer calling `allocateDocumentNumber`
+ * directly at the top of the existing `db.transaction(async (tx) => ...)`
+ * block.
+ */
+export async function withNumberedSequence<T>(
+  tx: Tx,
+  entityType: string,
+  tenantId: string,
+  fn: (number: string) => Promise<T>,
+): Promise<T> {
+  const number = await allocateDocumentNumber(tx, entityType, tenantId);
+  return await fn(number);
+}
+
+export function resolveNumberFormat(entityType: string): { prefix: string; width: number } {
+  return {
+    prefix: PREFIXES[entityType] ?? entityType.toUpperCase(),
+    width: WIDTHS[entityType] ?? 4,
+  };
+}
+
+export function defaultBlockSize(entityType: string): number {
+  return DEFAULT_BLOCK_SIZES[entityType] ?? 100;
+}
+
+/**
+ * Offline number blocks are opt-in (NUMBER_BLOCKS_ENABLED). With blocks off, all
+ * numbers come from the single in-transaction counter, which is gapless.
+ */
+export function numberBlocksEnabled(): boolean {
+  return config.NUMBER_BLOCKS_ENABLED;
+}
+
+/**
+ * Per-device number blocks are REQUIRED as soon as this install syncs with a
+ * hub: several devices then create documents between syncs, and a single
+ * local counter hands out the same number on each of them (reproduced with two
+ * devices: both issued VOC-2026-0002; the hub refused the second one forever
+ * as a data conflict, so that receipt never synced). A standalone desktop
+ * keeps the gapless single counter unless NUMBER_BLOCKS_ENABLED forces blocks.
+ */
+export function numberBlocksInUse(): boolean {
+  if (getCentralSyncUrl()) return true;
+  return numberBlocksEnabled() && config.DESKTOP_DEPLOY;
+}
+
+/** The central server carves ranges for its devices (it is the numbering authority). */
+export function isNumberingAuthority(): boolean {
+  return !config.DESKTOP_DEPLOY && !getCentralSyncUrl();
+}
+
+function shouldUseNumberBlocks(): boolean {
+  return numberBlocksInUse();
+}
+
+/**
+ * Atomically reserve the next `size` numbers from document_sequences and
+ * insert a device block covering that range.
+ */
+export async function claimNumberBlockInTx(
+  tx: Tx,
+  input: {
+    tenantId: string;
+    syncDeviceId: string;
+    entityType: string;
+    size?: number;
+    year?: number;
+  },
+): Promise<{
+  id: string;
+  entityType: string;
+  year: number;
+  prefix: string;
+  startNumber: number;
+  endNumber: number;
+  nextNumber: number;
+}> {
+  const year = input.year ?? new Date().getFullYear();
+  const { prefix } = resolveNumberFormat(input.entityType);
+  const size = input.size ?? defaultBlockSize(input.entityType);
+  if (size < 1 || size > 5000) {
+    throw new BusinessRuleError("حجم كتلة الترقيم غير صالح");
+  }
+
+  // `width` is the minimum zero-padding, NOT a maximum: document_sequences has
+  // no year, so the counter accumulates over the company's whole life (local
+  // numbering already issues INV-2026-10937). Capping blocks at 10^width-1
+  // made every company past 9,999 invoices in total unable to reserve a
+  // block — pairing then refused invoices forever. Keep only a column-safety
+  // ceiling.
+  const maxValue = 99_999_999;
+
+  // Atomic tip advance: lastNumber += size, then range is (end-size+1)..end.
+  const [bumped] = await tx
+    .insert(documentSequences)
+    .values({
+      tenantId: input.tenantId,
+      entityType: input.entityType,
+      prefix,
+      lastNumber: size,
+    })
+    .onConflictDoUpdate({
+      target: [documentSequences.tenantId, documentSequences.entityType, documentSequences.prefix],
+      set: { lastNumber: sql`${documentSequences.lastNumber} + ${size}` },
+    })
+    .returning({ lastNumber: documentSequences.lastNumber });
+
+  const end = bumped.lastNumber;
+  const start = end - size + 1;
+  if (end > maxValue) {
+    // Roll the tip back so we don't leave an unusable overshoot reserved.
+    await tx
+      .update(documentSequences)
+      .set({ lastNumber: sql`${documentSequences.lastNumber} - ${size}` })
+      .where(
+        and(
+          eq(documentSequences.tenantId, input.tenantId),
+          eq(documentSequences.entityType, input.entityType),
+          eq(documentSequences.prefix, prefix),
+        ),
+      );
+    throw new BusinessRuleError(
+      `لا يمكن حجز كتلة ترقيم — تجاوز الحد الأقصى لعدّاد المستندات (${maxValue})`,
+    );
+  }
+
+  const [block] = await tx
+    .insert(documentNumberBlocks)
+    .values({
+      tenantId: input.tenantId,
+      syncDeviceId: input.syncDeviceId,
+      entityType: input.entityType,
+      year,
+      prefix,
+      startNumber: start,
+      endNumber: end,
+      nextNumber: start,
+      status: "active",
+    })
+    .returning();
+
+  return {
+    id: block.id,
+    entityType: block.entityType,
+    year: block.year,
+    prefix: block.prefix,
+    startNumber: block.startNumber,
+    endNumber: block.endNumber,
+    nextNumber: block.nextNumber,
+  };
+}
+
+/**
+ * Reclaim unused tail of an active block when it is still the tip of the
+ * global sequence (no later blocks claimed). Returns unused count.
+ */
+export async function reclaimNumberBlockTailInTx(
+  tx: Tx,
+  input: { tenantId: string; blockId: string },
+): Promise<{ reclaimed: number; newGlobalLast: number | null }> {
+  const [block] = await tx
+    .select()
+    .from(documentNumberBlocks)
+    .where(
+      and(
+        eq(documentNumberBlocks.id, input.blockId),
+        eq(documentNumberBlocks.tenantId, input.tenantId),
+      ),
+    )
+    .limit(1);
+
+  if (!block || block.status !== "active") {
+    return { reclaimed: 0, newGlobalLast: null };
+  }
+
+  const [seq] = await tx
+    .select({ lastNumber: documentSequences.lastNumber })
+    .from(documentSequences)
+    .where(
+      and(
+        eq(documentSequences.tenantId, input.tenantId),
+        eq(documentSequences.entityType, block.entityType),
+        eq(documentSequences.prefix, block.prefix),
+      ),
+    )
+    .limit(1);
+
+  if (!seq || seq.lastNumber !== block.endNumber) {
+    return { reclaimed: 0, newGlobalLast: seq?.lastNumber ?? null };
+  }
+
+  const unused = block.endNumber - block.nextNumber + 1;
+  if (unused <= 0) {
+    await tx
+      .update(documentNumberBlocks)
+      .set({ status: "exhausted", updatedAt: new Date() })
+      .where(eq(documentNumberBlocks.id, block.id));
+    return { reclaimed: 0, newGlobalLast: seq.lastNumber };
+  }
+
+  const newGlobalLast = block.nextNumber - 1;
+  await tx
+    .update(documentSequences)
+    .set({ lastNumber: Math.max(0, newGlobalLast) })
+    .where(
+      and(
+        eq(documentSequences.tenantId, input.tenantId),
+        eq(documentSequences.entityType, block.entityType),
+        eq(documentSequences.prefix, block.prefix),
+      ),
+    );
+
+  await tx
+    .update(documentNumberBlocks)
+    .set({
+      endNumber: Math.max(newGlobalLast, block.startNumber - 1),
+      status: newGlobalLast < block.startNumber ? "exhausted" : "reclaimed",
+      reclaimedAt: new Date(),
+      updatedAt: new Date(),
+    })
+    .where(eq(documentNumberBlocks.id, block.id));
+
+  return { reclaimed: unused, newGlobalLast: Math.max(0, newGlobalLast) };
+}
+
+async function applyPreAllocatedNumber(
+  tx: Tx,
+  entityType: string,
+  tenantId: string,
+  preAllocatedNumber: string,
+  fmt: { prefix: string; width: number; yearNum: number },
+): Promise<string> {
+  // A sync collision suffix (`-3f8d`, see syncNumberCollision.ts) is part of
+  // the stored number; the counter floor is driven by the base number only.
+  const split = /^([A-Z]+-\d{4}-\d+)((?:-[0-9a-f]{4})*)$/i.exec(preAllocatedNumber.trim());
+  const base = split ? split[1] : preAllocatedNumber;
+  const suffix = split ? split[2] : "";
+  const parsed = parseDocumentNumber(base);
+  if (!parsed) {
+    throw new BusinessRuleError(`رقم مستند غير صالح: ${preAllocatedNumber}`);
+  }
+  if (parsed.prefix !== fmt.prefix) {
+    throw new BusinessRuleError(
+      `بادئة الرقم المحجوز (${parsed.prefix}) لا تطابق نوع المستند (${fmt.prefix})`,
+    );
+  }
+  // A number issued in an EARLIER year is a real, already-issued document
+  // (synced after New Year, a device offline over the year change, a
+  // restore). Refusing it parked the document as dead forever. The counter
+  // is not per-year (document_sequences has no year), so accepting it is safe.
+  if (parsed.year > fmt.yearNum) {
+    throw new BusinessRuleError("لا يمكن قبول رقم محجوز من سنة لاحقة للسنة الحالية — تحقق من تاريخ الجهاز");
+  }
+
+  // Raise global floor so future claims/allocations cannot collide.
+  await tx
+    .insert(documentSequences)
+    .values({
+      tenantId,
+      entityType,
+      prefix: fmt.prefix,
+      lastNumber: parsed.n,
+    })
+    .onConflictDoUpdate({
+      target: [documentSequences.tenantId, documentSequences.entityType, documentSequences.prefix],
+      set: {
+        // GREATEST → max(): both arguments are NOT NULL integers, so SQLite's scalar max is exact.
+        lastNumber: sql`max(${documentSequences.lastNumber}, ${parsed.n})`,
+      },
+    });
+
+  return `${fmt.prefix}-${parsed.year}-${String(parsed.n).padStart(fmt.width, "0")}${suffix}`;
+}
+
+export function parseDocumentNumber(
+  value: string,
+): { prefix: string; year: number; n: number } | null {
+  const m = /^([A-Z]+)-(\d{4})-(\d+)$/i.exec(value.trim());
+  if (!m) return null;
+  const n = Number(m[3]);
+  if (!Number.isFinite(n) || n < 1) return null;
+  return { prefix: m[1].toUpperCase(), year: Number(m[2]), n };
+}
+
+/**
+ * READ-ONLY preview of the next document number — does NOT consume a number.
+ *
+ * Used by the UI to show what the number will most likely be on save
+ * (#7: the old frontend preview kept a session-local counter that restarted
+ * at 0001 on every reload, so it never matched the server-assigned number).
+ * A plain SELECT on document_sequences: if the row doesn't exist yet the
+ * first number would be 1. The real allocation still happens atomically at
+ * save time, so under concurrency the preview remains an estimate.
+ *
+ * When a device block is active, preview the block's next_number instead.
+ */
+export async function peekNextDocumentNumber(
+  entityType: string,
+  tenantId: string,
+  syncDeviceId?: string | null,
+): Promise<string> {
+  const { prefix, width } = resolveNumberFormat(entityType);
+  const yearNum = new Date().getFullYear();
+  const year = yearNum.toString();
+
+  if (syncDeviceId && shouldUseNumberBlocks()) {
+    const [block] = await db
+      .select({ nextNumber: documentNumberBlocks.nextNumber, endNumber: documentNumberBlocks.endNumber })
+      .from(documentNumberBlocks)
+      .where(
+        and(
+          eq(documentNumberBlocks.tenantId, tenantId),
+          eq(documentNumberBlocks.syncDeviceId, syncDeviceId),
+          eq(documentNumberBlocks.entityType, entityType),
+          eq(documentNumberBlocks.year, yearNum),
+          eq(documentNumberBlocks.status, "active"),
+        ),
+      )
+      .limit(1);
+    if (block && block.nextNumber <= block.endNumber) {
+      return `${prefix}-${year}-${String(block.nextNumber).padStart(width, "0")}`;
+    }
+  }
+
+  const [row] = await db
+    .select({ lastNumber: documentSequences.lastNumber })
+    .from(documentSequences)
+    .where(
+      and(
+        eq(documentSequences.tenantId, tenantId),
+        eq(documentSequences.entityType, entityType),
+        eq(documentSequences.prefix, prefix),
+      ),
+    )
+    .limit(1);
+
+  const next = (row?.lastNumber ?? 0) + 1;
+  return `${prefix}-${year}-${String(next).padStart(width, "0")}`;
+}

@@ -12,6 +12,7 @@ import {
   ArrowUpRight,
   RotateCcw,
   BookOpen,
+  Lock,
   Wallet,
   ChevronDown,
   ChevronLeft,
@@ -36,6 +37,7 @@ import { useCurrentUser, useLogout } from "@/presentation/hooks/useAuth";
 import { roleCanAccess, type UserRole } from "@/presentation/hooks/useSettings";
 import { useOpenSyncConflictCount } from "@/presentation/hooks/useSyncConflicts";
 import { ForceUpgradeBanner } from "@/components/desktop/DesktopUpdatesCard";
+import { SyncStatusBar } from "@/components/layout/SyncStatusBar";
 
 type NavItem = { to: string; label: string; icon: typeof LayoutDashboard; exact?: boolean };
 type NavGroup = { key: string; label: string; items: NavItem[] };
@@ -75,6 +77,7 @@ const GROUPS: NavGroup[] = [
       { to: "/expenses", label: "المصاريف", icon: Receipt },
       { to: "/ledger", label: "دفتر الحركات", icon: BookOpen },
       { to: "/cashbox", label: "الصندوق", icon: Wallet },
+      { to: "/closing", label: "إقفال السنة والجرد", icon: Lock },
     ],
   },
   {
@@ -487,6 +490,7 @@ export function AppShell({
               </div>
             )}
           </div>
+          <SyncStatusBar />
           {children}
         </main>
       </div>

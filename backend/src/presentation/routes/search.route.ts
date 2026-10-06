@@ -2,8 +2,7 @@
  * REPAIR-001 (A) — server-side typeahead search endpoints.
  */
 import type { Router, Request, Response, RequestHandler } from "express";
-import { sql } from "drizzle-orm";
-import { db } from "../../infrastructure/orm/drizzle.js";
+import type { ISearchRepository } from "../../application/ports/ISearchRepository.js";
 import { likeContains } from "../../infrastructure/utils/likeEscape.js";
 import type { TenantContext } from "../../domain/types/index.js";
 
@@ -33,6 +32,7 @@ export function registerSearchRoutes(
   router: Router,
   auth: RequestHandler,
   readGuard: RequestHandler,
+  searchRepo: ISearchRepository,
 ): void {
   router.get("/parties/search", auth, readGuard, async (req: Request, res: Response) => {
     const c = ctx(req);
@@ -43,27 +43,7 @@ export function registerSearchRoutes(
     const cursor = decodeCursor(typeof req.query.cursor === "string" ? req.query.cursor : undefined);
     const pattern = q ? likeContains(q) : "%";
 
-    const rows = await db.execute(sql`
-      SELECT id, name, code, kind, status, currency
-        FROM parties
-       WHERE tenant_id = ${c.tenantId}::uuid
-         AND (${kind} = '' OR kind = ${kind})
-         AND (${status} = '' OR status = ${status})
-         AND (name ILIKE ${pattern} ESCAPE '\\' OR COALESCE(code,'') ILIKE ${pattern} ESCAPE '\\')
-         AND (
-           ${cursor?.sortKey ?? null}::text IS NULL
-           OR (
-             (name, id) > (${cursor?.sortKey ?? ""}, ${cursor?.id ?? "00000000-0000-0000-0000-000000000000"}::uuid)
-             -- the exact-code match is pinned to page 1 only; never repeat it
-             AND (${q} = '' OR lower(COALESCE(code,'')) <> lower(${q}))
-           )
-         )
-       ORDER BY
-         CASE WHEN lower(COALESCE(code,'')) = lower(${q}) THEN 0 ELSE 1 END,
-         name ASC, id ASC
-       LIMIT ${limit + 1}
-    `);
-    const list = (rows as unknown as { rows: Array<Record<string, unknown>> }).rows ?? [];
+    const list = await searchRepo.searchParties({ tenantId: c.tenantId, q, kind, status, limit, pattern, cursor });
     const page = list.slice(0, limit);
     // Page 1 pins the exact-code match first; the keyset cursor must come
     // from the last (name, id)-ordered row, never from that pinned row.
@@ -85,12 +65,7 @@ export function registerSearchRoutes(
     const q = String(req.query.q ?? "").trim();
     const limit = Math.min(50, Math.max(1, Number(req.query.limit ?? 20)));
     const pattern = q ? likeContains(q) : "%";
-    const rows = await db.execute(sql`
-      SELECT id, name FROM fabrics
-       WHERE tenant_id = ${c.tenantId}::uuid AND name ILIKE ${pattern} ESCAPE '\\'
-       ORDER BY CASE WHEN lower(name) = lower(${q}) THEN 0 ELSE 1 END, name ASC
-       LIMIT ${limit}`);
-    res.json({ data: (rows as unknown as { rows: unknown[] }).rows ?? [] });
+    res.json({ data: await searchRepo.searchFabrics(c.tenantId, q, pattern, limit) });
   });
 
   router.get("/colors/search", auth, readGuard, async (req: Request, res: Response) => {
@@ -99,13 +74,7 @@ export function registerSearchRoutes(
     const fabricId = String(req.query.fabricId ?? "");
     const limit = Math.min(50, Math.max(1, Number(req.query.limit ?? 20)));
     const pattern = q ? likeContains(q) : "%";
-    const rows = await db.execute(sql`
-      SELECT id, name, fabric_id AS "fabricId", code FROM colors
-       WHERE tenant_id = ${c.tenantId}::uuid
-         AND (${fabricId} = '' OR fabric_id = ${fabricId}::uuid)
-         AND name ILIKE ${pattern} ESCAPE '\\'
-       ORDER BY name ASC LIMIT ${limit}`);
-    res.json({ data: (rows as unknown as { rows: unknown[] }).rows ?? [] });
+    res.json({ data: await searchRepo.searchColors(c.tenantId, fabricId, pattern, limit) });
   });
 
   router.get("/rolls/search", auth, readGuard, async (req: Request, res: Response) => {
@@ -115,17 +84,7 @@ export function registerSearchRoutes(
     const status = String(req.query.status ?? "in_stock");
     const limit = Math.min(50, Math.max(1, Number(req.query.limit ?? 20)));
     const pattern = q ? likeContains(q) : "%";
-    const rows = await db.execute(sql`
-      SELECT id, roll_no AS "rollNo", color_id AS "colorId", status,
-             remaining_kg AS "remainingKg", remaining_pieces AS "remainingPieces",
-             currency, price_per_kg AS "pricePerKg"
-        FROM rolls
-       WHERE tenant_id = ${c.tenantId}::uuid
-         AND (${colorId} = '' OR color_id = ${colorId}::uuid)
-         AND (${status} = '' OR status = ${status})
-         AND roll_no ILIKE ${pattern} ESCAPE '\\'
-       ORDER BY roll_no ASC LIMIT ${limit}`);
-    res.json({ data: (rows as unknown as { rows: unknown[] }).rows ?? [] });
+    res.json({ data: await searchRepo.searchRolls(c.tenantId, colorId, status, pattern, limit) });
   });
 
   router.get("/parties/by-ids", auth, readGuard, async (req: Request, res: Response) => {
@@ -139,10 +98,7 @@ export function registerSearchRoutes(
       res.json({ data: [] });
       return;
     }
-    const rows = await db.execute(sql`
-      SELECT id, name, code, kind, status, currency FROM parties
-       WHERE tenant_id = ${c.tenantId}::uuid AND id = ANY(${ids}::uuid[])`);
-    res.json({ data: (rows as unknown as { rows: unknown[] }).rows ?? [] });
+    res.json({ data: await searchRepo.partiesByIds(c.tenantId, ids) });
   });
 
   router.get("/rolls/by-ids", auth, readGuard, async (req: Request, res: Response) => {
@@ -156,11 +112,6 @@ export function registerSearchRoutes(
       res.json({ data: [] });
       return;
     }
-    const rows = await db.execute(sql`
-      SELECT id, roll_no AS "rollNo", color_id AS "colorId", status,
-             remaining_kg AS "remainingKg", remaining_pieces AS "remainingPieces"
-        FROM rolls
-       WHERE tenant_id = ${c.tenantId}::uuid AND id = ANY(${ids}::uuid[])`);
-    res.json({ data: (rows as unknown as { rows: unknown[] }).rows ?? [] });
+    res.json({ data: await searchRepo.rollsByIds(c.tenantId, ids) });
   });
 }

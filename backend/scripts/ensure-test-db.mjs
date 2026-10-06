@@ -24,6 +24,7 @@
  * Usage:  npm run db:test:setup
  */
 import path from "node:path";
+import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import dotenv from "dotenv";
 import pg from "pg";
@@ -33,9 +34,20 @@ import { migrate } from "drizzle-orm/node-postgres/migrator";
 const here = path.dirname(fileURLToPath(import.meta.url));
 const backendRoot = path.join(here, "..");
 
+// DB_ENGINE=sqlite needs no PostgreSQL: vitest.config.ts gives each run its own
+// temp SQLite file, and the SQLite migration runner creates the schema there.
+if (process.env.DB_ENGINE === "sqlite") {
+  console.log("[ensure-test-db] DB_ENGINE=sqlite — skipping PostgreSQL provisioning");
+  process.exit(0);
+}
+
 // Same precedence as vitest.config.ts: .env.test wins, .env fills the gaps.
+// Like vitest.config.ts, an explicitly set DATABASE_URL (a disposable PG for a
+// live proof) survives the .env.test override.
+const preservedDbUrl = process.env.DATABASE_URL;
 dotenv.config({ path: path.join(backendRoot, ".env.test"), override: true });
 dotenv.config({ path: path.join(backendRoot, ".env") });
+if (preservedDbUrl) process.env.DATABASE_URL = preservedDbUrl;
 
 const url = process.env.DATABASE_URL ?? "postgresql://postgres:postgres@localhost:5432/erp_test";
 const migrationsFolder = path.join(backendRoot, "src", "infrastructure", "orm", "migrations");
@@ -89,9 +101,26 @@ async function applyMigrations() {
   }
 }
 
+/**
+ * Seed the minimal baseline the live (non-mocked) suites probe for: one tenant
+ * and one active sale invoice with a pinned cost_per_kg. Without it,
+ * tests/phase8-entitlement-enforcement.test.ts and
+ * tests/fx-cogs-replay-pin.test.ts refuse to run on a fresh database, which
+ * leaves the regression gate permanently red. Idempotent, additive only.
+ */
+function seedBaseline() {
+  const result = spawnSync(process.execPath, [path.join(here, "seed-test-baseline.mjs")], {
+    stdio: "inherit",
+  });
+  if (result.status !== 0) {
+    throw new Error(`baseline seed failed with exit code ${result.status}`);
+  }
+}
+
 try {
   await ensureDatabaseExists();
   await applyMigrations();
+  seedBaseline();
   console.log(`test database ready: ${dbName}`);
 } catch (e) {
   console.error("test database setup FAILED:", e instanceof Error ? e.message : e);

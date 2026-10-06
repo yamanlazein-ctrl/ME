@@ -12,6 +12,18 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import type { PartyOpeningInput } from "@erp/shared";
+import { localToday } from "@/lib/localDate";
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -43,6 +55,11 @@ export type SimpleParty = {
   country?: string | null;
   taxNumber?: string | null;
   openingBalance?: number;
+  openingDate?: string | null;
+  openingNote?: string | null;
+  openingCurrency?: Currency | null;
+  /** Edit only, and only when the opening balance changed → PUT …/:id/opening. */
+  opening?: PartyOpeningInput;
   creditLimit?: number;
   currency?: Currency;
   paymentTerms?: PaymentTerms;
@@ -52,6 +69,13 @@ export type SimpleParty = {
   notes?: string | null;
   status?: PartyStatus;
 };
+
+type OpeningDirection = PartyOpeningInput["direction"];
+type OpeningCurrency = PartyOpeningInput["currency"];
+
+/** Positive SoT = "they owe us" for a customer, "we owe them" for a supplier. */
+const positiveDirection = (kind: PartyKind): OpeningDirection =>
+  kind === "supplier" ? "we_owe_them" : "they_owe_us";
 
 const LABELS = {
   supplier: {
@@ -93,7 +117,11 @@ type Draft = {
   address: string;
   city: string;
   country: string;
-  openingBalance: string;
+  openingAmount: string;
+  openingDirection: OpeningDirection;
+  openingCurrency: OpeningCurrency;
+  openingDate: string;
+  openingNote: string;
   creditLimit: string;
   currency: Currency;
   paymentTerms: PaymentTerms;
@@ -103,7 +131,7 @@ type Draft = {
   notes: string;
 };
 
-const emptyDraft = (): Draft => ({
+const emptyDraft = (kind: PartyKind): Draft => ({
   code: "",
   name: "",
   companyName: "",
@@ -120,7 +148,11 @@ const emptyDraft = (): Draft => ({
   address: "",
   city: "",
   country: "سوريا",
-  openingBalance: "",
+  openingAmount: "",
+  openingDirection: positiveDirection(kind),
+  openingCurrency: "SYP",
+  openingDate: "",
+  openingNote: "",
   creditLimit: "",
   currency: "SYP",
   paymentTerms: "cash",
@@ -130,7 +162,7 @@ const emptyDraft = (): Draft => ({
   notes: "",
 });
 
-const fromParty = (p: SimpleParty): Draft => ({
+export const fromParty = (p: SimpleParty, kind: PartyKind): Draft => ({
   code: p.code ?? "",
   name: p.name ?? "",
   companyName: p.companyName ?? "",
@@ -147,21 +179,53 @@ const fromParty = (p: SimpleParty): Draft => ({
   address: p.address ?? "",
   city: p.city ?? "",
   country: p.country ?? "سوريا",
-  openingBalance: p.openingBalance != null ? String(p.openingBalance) : "",
+  openingAmount: p.openingBalance ? String(Math.abs(p.openingBalance)) : "",
+  openingDirection:
+    (p.openingBalance ?? 0) < 0
+      ? positiveDirection(kind) === "they_owe_us"
+        ? "we_owe_them"
+        : "they_owe_us"
+      : positiveDirection(kind),
+  openingCurrency: (p.openingCurrency ?? p.currency) === "USD" ? "USD" : "SYP",
+  openingDate: p.openingDate ?? "",
+  openingNote: p.openingNote ?? "",
   creditLimit: p.creditLimit != null ? String(p.creditLimit) : "",
   currency: p.currency ?? "SYP",
   paymentTerms: p.paymentTerms ?? "cash",
   paymentMethod: p.paymentMethod ?? "cash",
   defaultDiscount: p.defaultDiscount != null ? String(p.defaultDiscount) : "",
-  vat: p.vat != null ? String(p.vat) : "",
+  vat:
+    p.vat != null && Number(p.vat) !== 0
+      ? String(Number(p.vat) > 1 ? Number(p.vat) : Math.round(Number(p.vat) * 10000) / 100)
+      : "",
   notes: p.notes ?? "",
 });
 
-const toPatch = (
+const openingAmountOf = (d: Draft): number =>
+  d.openingAmount === "" ? 0 : Number(d.openingAmount);
+
+/** True when the opening section differs from what the party has now. */
+const openingChanged = (d: Draft, before: Draft): boolean => {
+  const a = openingAmountOf(d);
+  const b = openingAmountOf(before);
+  if (a === 0 && b === 0) return false;
+  return (
+    a !== b ||
+    d.openingDirection !== before.openingDirection ||
+    d.openingCurrency !== before.openingCurrency ||
+    (d.openingDate || "") !== (before.openingDate || "") ||
+    d.openingNote.trim() !== before.openingNote.trim()
+  );
+};
+
+export const toPatch = (
   d: Draft,
   kind: PartyKind,
-  isEdit: boolean,
+  editing: SimpleParty | undefined,
 ): Omit<SimpleParty, "id"> => {
+  const vatPct = d.vat === "" ? 0 : Number(d.vat) || 0;
+  // UI is always percent (16); DB stores fraction (0.16) in decimal(5,4).
+  const vatFraction = Math.min(1, Math.max(0, vatPct / 100));
   const patch: Omit<SimpleParty, "id"> = {
     code: d.code.trim() || undefined,
     name: d.name.trim(),
@@ -184,13 +248,28 @@ const toPatch = (
     paymentTerms: d.paymentTerms,
     paymentMethod: d.paymentMethod,
     defaultDiscount: d.defaultDiscount === "" ? 0 : Number(d.defaultDiscount) || 0,
-    vat: d.vat === "" ? 0 : Number(d.vat) || 0,
+    vat: vatFraction,
     notes: d.notes.trim() || undefined,
   };
-  // Opening balance is journaled once on create. Sending it on edit makes
-  // PostgresPartyRepository.update reject the whole patch — including name.
-  if (!isEdit) {
-    patch.openingBalance = d.openingBalance === "" ? 0 : Number(d.openingBalance) || 0;
+  // Create: the opening journal is written with the party. Edit: a plain field
+  // update refuses opening fields, so a changed balance travels as `opening`
+  // (PUT …/:id/opening — old journal cancelled, new one posted).
+  const amount = openingAmountOf(d);
+  if (!editing) {
+    patch.openingBalance = d.openingDirection === positiveDirection(kind) ? amount : -amount;
+    if (amount !== 0) {
+      patch.openingCurrency = d.openingCurrency;
+      patch.openingDate = d.openingDate || undefined;
+      patch.openingNote = d.openingNote.trim() || undefined;
+    }
+  } else if (openingChanged(d, fromParty(editing, kind))) {
+    patch.opening = {
+      amount,
+      direction: d.openingDirection,
+      currency: d.openingCurrency,
+      date: d.openingDate || localToday(),
+      note: d.openingNote.trim() || null,
+    };
   }
   return patch;
 };
@@ -208,21 +287,23 @@ export function PartyFormDialog({
   onClose: () => void;
   onSubmit: (patch: Omit<SimpleParty, "id">) => void;
 }) {
-  const [draft, setDraft] = useState<Draft>(emptyDraft);
+  const [draft, setDraft] = useState<Draft>(() => emptyDraft(kind));
   const [err, setErr] = useState<string | null>(null);
   const [tab, setTab] = useState<TabId>("basic");
+  const [confirmOpening, setConfirmOpening] = useState(false);
 
   useEffect(() => {
     if (open) {
-      setDraft(editing ? fromParty(editing) : emptyDraft());
+      setDraft(editing ? fromParty(editing, kind) : emptyDraft(kind));
+      setConfirmOpening(false);
       setErr(null);
       setTab("basic");
     }
-  }, [open, editing]);
+  }, [open, editing, kind]);
 
   const patch = <K extends keyof Draft>(k: K, v: Draft[K]) => setDraft((d) => ({ ...d, [k]: v }));
 
-  const submit = () => {
+  const submit = (confirmed = false) => {
     if (!draft.name.trim()) {
       setErr(`${LABELS[kind].nameLabel} مطلوب.`);
       setTab("basic");
@@ -234,8 +315,27 @@ export function PartyFormDialog({
       setTab("contact");
       return;
     }
+    const vatPct = draft.vat === "" ? 0 : Number(draft.vat);
+    if (draft.vat !== "" && (!Number.isFinite(vatPct) || vatPct < 0 || vatPct > 100)) {
+      setErr("نسبة الضريبة يجب أن تكون بين 0 و 100.");
+      setTab("financial");
+      return;
+    }
+    const amount = openingAmountOf(draft);
+    if (!Number.isFinite(amount) || amount < 0 || Math.round(amount * 100) !== amount * 100) {
+      setErr("مبلغ الرصيد السابق يجب أن يكون رقماً موجباً بخانتين عشريتين على الأكثر.");
+      setTab("financial");
+      return;
+    }
     setErr(null);
-    onSubmit(toPatch(draft, kind, Boolean(editing)));
+    const out = toPatch(draft, kind, editing);
+    // Re-posting the opening journal is visible in the statement — confirm first.
+    if (out.opening && !confirmed) {
+      setConfirmOpening(true);
+      return;
+    }
+    setConfirmOpening(false);
+    onSubmit(out);
   };
 
   const L = LABELS[kind];
@@ -426,20 +526,63 @@ export function PartyFormDialog({
 
           {tab === "financial" && (
             <div className="grid gap-3 md:grid-cols-2">
-              <Field label="الرصيد الافتتاحي">
-                <Input
-                  type="number"
-                  className="h-10 tabular-nums"
-                  value={draft.openingBalance}
-                  disabled={Boolean(editing)}
-                  onChange={(e) => patch("openingBalance", e.target.value)}
-                />
-                {editing ? (
-                  <p className="mt-1 text-[11px] text-muted-foreground">
-                    الرصيد الافتتاحي يُسجَّل مرة واحدة عند الإنشاء ولا يُعدَّل لاحقاً.
-                  </p>
-                ) : null}
-              </Field>
+              <div className="grid gap-3 rounded-lg border border-border p-3 md:col-span-2 md:grid-cols-3">
+                <div className="text-xs font-bold md:col-span-3">الرصيد السابق</div>
+                <Field label="المبلغ">
+                  <Input
+                    type="number"
+                    min={0}
+                    step="0.01"
+                    className="h-10 tabular-nums"
+                    value={draft.openingAmount}
+                    onChange={(e) => patch("openingAmount", e.target.value)}
+                  />
+                </Field>
+                <Field label="النوع">
+                  <Select
+                    value={draft.openingDirection}
+                    onValueChange={(v) => patch("openingDirection", v as OpeningDirection)}
+                  >
+                    <SelectTrigger className="!h-10">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="they_owe_us">لنا / مدين</SelectItem>
+                      <SelectItem value="we_owe_them">له / دائن</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </Field>
+                <Field label="العملة">
+                  <Select
+                    value={draft.openingCurrency}
+                    onValueChange={(v) => patch("openingCurrency", v as OpeningCurrency)}
+                  >
+                    <SelectTrigger className="!h-10">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="SYP">ل.س</SelectItem>
+                      <SelectItem value="USD">$ دولار</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </Field>
+                <Field label="التاريخ (فارغ = اليوم)">
+                  <Input
+                    type="date"
+                    className="h-10"
+                    value={draft.openingDate}
+                    onChange={(e) => patch("openingDate", e.target.value)}
+                  />
+                </Field>
+                <Field label="ملاحظات" className="md:col-span-2">
+                  <Input
+                    className="h-10"
+                    maxLength={500}
+                    value={draft.openingNote}
+                    onChange={(e) => patch("openingNote", e.target.value)}
+                  />
+                </Field>
+              </div>
               <Field label="حد الائتمان">
                 <Input
                   type="number"
@@ -495,7 +638,7 @@ export function PartyFormDialog({
                   </SelectContent>
                 </Select>
               </Field>
-              <Field label="خصم افتراضي (%)">
+              <Field label="خصم افتراضي (مبلغ)">
                 <Input
                   type="number"
                   className="h-10 tabular-nums"
@@ -506,6 +649,9 @@ export function PartyFormDialog({
               <Field label="ضريبة القيمة المضافة (%)">
                 <Input
                   type="number"
+                  min={0}
+                  max={100}
+                  step="0.01"
                   className="h-10 tabular-nums"
                   value={draft.vat}
                   onChange={(e) => patch("vat", e.target.value)}
@@ -523,7 +669,7 @@ export function PartyFormDialog({
 
         <DialogFooter className="sticky bottom-0 flex-row-reverse gap-2 border-t border-border bg-card/95 px-6 py-3 backdrop-blur">
           <Button
-            onClick={submit}
+            onClick={() => submit()}
             className="h-10 bg-primary text-primary-foreground hover:bg-primary/90"
           >
             حفظ
@@ -533,6 +679,20 @@ export function PartyFormDialog({
           </Button>
         </DialogFooter>
       </DialogContent>
+      <AlertDialog open={confirmOpening} onOpenChange={setConfirmOpening}>
+        <AlertDialogContent dir="rtl">
+          <AlertDialogHeader>
+            <AlertDialogTitle>تعديل الرصيد السابق</AlertDialogTitle>
+            <AlertDialogDescription>
+              سيُلغى القيد السابق ويُسجَّل قيد جديد، ويبقى القديم ظاهراً ملغى في كشف الحساب.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>إلغاء</AlertDialogCancel>
+            <AlertDialogAction onClick={() => submit(true)}>متابعة</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Dialog>
   );
 }

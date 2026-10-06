@@ -1,4 +1,4 @@
-import { pool } from "../../../infrastructure/orm/drizzle.js";
+import { getSyncMaterializeStore } from "../../../infrastructure/repositories/engineStores.js";
 import { resolveDocumentNumberForReplay } from "./syncNumberCollision.js";
 import type { DB } from "../../../infrastructure/orm/drizzle.js";
 import { logger } from "../../../infrastructure/config/logger.js";
@@ -165,13 +165,7 @@ async function tombstoneExists(
   entityId: string,
 ): Promise<boolean> {
   try {
-    const r = await pool.query(
-      `SELECT 1 FROM sync_tombstones
-        WHERE tenant_id = $1 AND entity_type = $2 AND entity_id = $3
-        LIMIT 1`,
-      [tenantId, entityType, entityId],
-    );
-    return (r.rowCount ?? 0) > 0;
+    return await (await getSyncMaterializeStore()).tombstoneExists(tenantId, entityType, entityId);
   } catch (err) {
     // Fail closed: a lookup error must not allow recreating a deleted master.
     logger.error({ err, entityType, entityId }, "sync tombstone lookup failed — blocking recreate");
@@ -194,15 +188,7 @@ async function recordTombstone(
   opId: string | null,
   deletedByDeviceId: string | null,
 ): Promise<void> {
-  await pool.query(
-    `INSERT INTO sync_tombstones
-        (id, tenant_id, entity_type, entity_id, op_id, deleted_by_device_id, deletion_seq)
-      SELECT gen_random_uuid(), $1, $2, $3, $4, $5, COALESCE(MAX(deletion_seq), 0) + 1
-        FROM sync_tombstones
-       WHERE tenant_id = $1
-     ON CONFLICT (tenant_id, entity_type, entity_id) DO NOTHING`,
-    [tenantId, entityType, entityId, opId ?? "", deletedByDeviceId],
-  );
+  await (await getSyncMaterializeStore()).recordTombstone(tenantId, entityType, entityId, opId ?? "", deletedByDeviceId);
 }
 
 /**
@@ -1412,7 +1398,17 @@ async function materializeMasterMutation(
     return { status: "failed", error: "stale base: hub row changed, rebase the edit" };
   }
 
-  if (intentAlreadyApplied(updateInput, hub)) return { status: "exists" };
+  // A hub-canonical party update leaves the hub row at baseVersion + 1 (the hub accepts only a matching
+  // base). Mirror that number locally, or this device's next edit of the party is refused as stale.
+  const alignPartyVersion = async () => {
+    if (entityType === "party" && meta?.hubCanonical && baseVersion !== null) {
+      await repos.partyRepo.alignVersion(entityId, baseVersion + 1, rctx);
+    }
+  };
+  if (intentAlreadyApplied(updateInput, hub)) {
+    await alignPartyVersion();
+    return { status: "exists" };
+  }
 
   try {
     if (entityType === "party") {
@@ -1424,6 +1420,7 @@ async function materializeMasterMutation(
           : (hub.version as number);
       const r = await updatePartyUseCase(repos.partyRepo, entityId, updateInput as never, rctx, expectedVersionParty);
       if (!r.ok) return { status: "failed", error: r.error };
+      await alignPartyVersion();
     } else if (entityType === "fabric") {
       // P0-001: expectedVersion is REQUIRED - use baseVersion from payload
       const expectedVersionFabric = meta?.hubCanonical
@@ -1859,22 +1856,7 @@ async function materializeUser(
       ? s.updatedAt
       : new Date().toISOString();
   try {
-    await pool.query(
-      `INSERT INTO users (id, tenant_id, name, email, password_hash, pin_hash, role, active, updated_at, tokens_revoked_before)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9::timestamptz, CASE WHEN $8 = false THEN now() ELSE NULL END)
-       ON CONFLICT (id) DO UPDATE SET
-         name = EXCLUDED.name,
-         email = EXCLUDED.email,
-         password_hash = EXCLUDED.password_hash,
-         pin_hash = EXCLUDED.pin_hash,
-         role = EXCLUDED.role,
-         active = EXCLUDED.active,
-         tokens_revoked_before = CASE WHEN EXCLUDED.active = false THEN now() ELSE users.tokens_revoked_before END,
-         updated_at = EXCLUDED.updated_at
-       WHERE users.tenant_id = EXCLUDED.tenant_id
-         AND users.updated_at <= EXCLUDED.updated_at`,
-      [id, tenantId, name, email, passwordHash, pinHash, role, active, updatedAt],
-    );
+    await (await getSyncMaterializeStore()).upsertUserSnapshot({ id, tenantId, name, email, passwordHash, pinHash, role, active, updatedAt });
     return { status: "created" };
   } catch (err) {
     return {

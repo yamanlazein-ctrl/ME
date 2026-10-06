@@ -12,6 +12,18 @@ export function getRegisteredSyncDeviceId(): string | null {
   }
 }
 
+/**
+ * Restore on a synced device (T109): the backend moved this database to a new sync identity.
+ * Adopt it so later requests assert the same device the hub now knows.
+ */
+export function adoptSyncDeviceId(id: string): void {
+  try {
+    localStorage.setItem(SYNC_DEVICE_ID_KEY, id);
+  } catch {
+    // ignore storage failure — the backend keeps using the new identity regardless
+  }
+}
+
 export async function registerCurrentSyncDevice(label?: string): Promise<string | null> {
   const token = getAccessToken();
   if (!token) return null;

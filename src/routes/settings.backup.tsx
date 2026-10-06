@@ -19,8 +19,11 @@ import { Progress } from "@/components/ui/progress";
 import { settings, logActivity } from "@/presentation/hooks/useSettings";
 import { getAccessToken } from "@/infrastructure/auth/TokenProvider";
 import { DesktopUpdatesCard } from "@/components/desktop/DesktopUpdatesCard";
+import { DataRootCard } from "@/components/desktop/DataRootCard";
 import { FullRestoreCard } from "@/components/settings/FullRestoreCard";
 import { clearTokens } from "@/infrastructure/auth/TokenProvider";
+import { BackupRegistryStatus } from "@/components/desktop/BackupRegistryStatus";
+import { deliverFullBackup } from "@/lib/fullBackupDelivery";
 
 import { localToday } from "@/lib/localDate";
 const ALLOWED_SETTING_KEYS = [
@@ -64,6 +67,8 @@ function BackupPage() {
     null,
   );
   const abortRef = useRef<AbortController | null>(null);
+  const [savedVerified, setSavedVerified] = useState(false);
+  const [registryTick, setRegistryTick] = useState(0);
 
   const cancelFull = () => {
     abortRef.current?.abort();
@@ -82,34 +87,18 @@ function BackupPage() {
       const token = getAccessToken();
       setFullProgress(30);
 
-      const res = await fetch("/api/backup/full", {
-        method: "POST",
-        headers: {
-          Authorization: token ? `Bearer ${token}` : "",
-        },
-        signal: abort.signal,
-      });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({ message: "فشل الاتصال بالسيرفر" }));
-        throw new Error(err.message || "فشل إنشاء النسخة");
+      // Web: the browser download as always. Desktop: a VERIFIED file saved by the shell and
+      // re-checked (size + sha256) — the bridge cannot carry the zip bytes (T100).
+      const delivered = await deliverFullBackup(token, abort.signal);
+      if (!delivered) {
+        setFullState("idle"); // the user closed the save dialog
+        setFullProgress(0);
+        return;
       }
-      setFullProgress(70);
-
-      const blob = await res.blob();
-      const size = blob.size;
-      const disposition = res.headers.get("Content-Disposition") ?? "";
-      const fileName =
-        /filename="([^"]+)"/.exec(disposition)?.[1] ??
-        `MotardERP-Backup-${localToday()}.zip`;
-
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = fileName;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
+      const size = delivered.sizeBytes;
+      const fileName = delivered.name;
+      setSavedVerified(delivered.verified);
+      if (delivered.verified) setRegistryTick((n) => n + 1);
 
       setFullProgress(100);
       setFullState("success");
@@ -166,6 +155,7 @@ function BackupPage() {
   return (
     <div className="space-y-6">
       <DesktopUpdatesCard />
+      <DataRootCard />
 
       {/* ─── النسخة الكاملة ─── */}
       <PageCard
@@ -204,7 +194,9 @@ function BackupPage() {
             {fullState === "success" && (
               <div className="flex items-center gap-2 rounded-lg bg-emerald-50 p-3 text-sm text-emerald-700">
                 <CheckCircle2 className="h-4 w-4" />
-                تم التنزيل بنجاح! تحقق من مجلد التنزيلات.
+                {savedVerified
+                  ? "حُفظت النسخة وتطابق حجمها وبصمتها (SHA-256) مع النسخة الموثَّقة."
+                  : "تم التنزيل بنجاح! تحقق من مجلد التنزيلات."}
               </div>
             )}
             {fullState === "error" && (
@@ -287,6 +279,7 @@ function BackupPage() {
             شاشة الإعداد الأولى، أو استخدم بطاقة الاستعادة أدناه.
           </p>
         </div>
+        <BackupRegistryStatus refreshKey={registryTick} />
         <div className="mt-4">
           <FullRestoreCard
             mode="settings"

@@ -1,6 +1,6 @@
 import { and, eq } from "drizzle-orm";
 import { resolveMasterSnapshotForReplay } from "./syncNumberCollision.js";
-import { pool } from "../../../infrastructure/orm/drizzle.js";
+import { getSyncDependencyStore, getSyncMaterializeStore } from "../../../infrastructure/repositories/engineStores.js";
 import type { DB } from "../../../infrastructure/orm/drizzle.js";
 import { runWithTenantContext } from "../../../infrastructure/orm/tenant-context.js";
 import { parties } from "../../../infrastructure/orm/schemas/party.table.js";
@@ -49,6 +49,9 @@ export type SyncPartySnapshot = {
   /** Present on a party's own create unit (not on invoice dependency copies). */
   openingBalance?: number;
   openingDate?: string;
+  /** NULL/absent = the party's own currency (units from older devices). */
+  openingCurrency?: string | null;
+  openingNote?: string | null;
 };
 
 export type SyncFabricSnapshot = {
@@ -83,6 +86,11 @@ export type SyncRollSnapshot = {
   pricePerKg: number;
   salePricePerKg?: number | null;
   currency: string;
+  /** The roll's recorded entry price (absent in snapshots from devices older than this field). */
+  entryPricePerKg?: number | null;
+  entryCurrency?: string | null;
+  entrySource?: string | null;
+  entryReference?: string | null;
   supplierId?: string | null;
   entryDate: string;
   widthCm?: number | null;
@@ -256,6 +264,10 @@ export async function captureInvoiceSyncDependencies(
       pricePerKg: Number(r.pricePerKg),
       salePricePerKg: r.salePricePerKg != null ? Number(r.salePricePerKg) : null,
       currency: r.currency,
+      entryPricePerKg: r.entryPricePerKg != null ? Number(r.entryPricePerKg) : null,
+      entryCurrency: r.entryCurrency ?? null,
+      entrySource: r.entrySource ?? null,
+      entryReference: r.entryReference ?? null,
       supplierId: r.supplierId ?? null,
       entryDate: r.entryDate,
       widthCm: r.widthCm != null ? Number(r.widthCm) : null,
@@ -345,6 +357,10 @@ export async function captureReturnSyncDependencies(
       pricePerKg: Number(r.pricePerKg),
       salePricePerKg: r.salePricePerKg != null ? Number(r.salePricePerKg) : null,
       currency: r.currency,
+      entryPricePerKg: r.entryPricePerKg != null ? Number(r.entryPricePerKg) : null,
+      entryCurrency: r.entryCurrency ?? null,
+      entrySource: r.entrySource ?? null,
+      entryReference: r.entryReference ?? null,
       supplierId: r.supplierId ?? null,
       entryDate: r.entryDate,
       widthCm: r.widthCm != null ? Number(r.widthCm) : null,
@@ -435,44 +451,7 @@ export async function applyPartyOpeningForReplay(
     typeof snap.openingDate === "string" && /^\d{4}-\d{2}-\d{2}$/.test(snap.openingDate)
       ? snap.openingDate
       : localToday();
-  await runWithTenantContext({ tenantId: ctx.tenantId }, async () => {
-    await database.transaction(async (tx) => {
-      const existing = await tx
-        .select({ id: ledgerEntries.id })
-        .from(ledgerEntries)
-        .where(
-          and(
-            eq(ledgerEntries.tenantId, ctx.tenantId),
-            eq(ledgerEntries.referenceType, "opening"),
-            eq(ledgerEntries.referenceId, snap.id),
-          ),
-        )
-        .limit(1);
-      if (existing.length > 0) return;
-      const [party] = await tx
-        .select({ id: parties.id, code: parties.code, kind: parties.kind, currency: parties.currency })
-        .from(parties)
-        .where(and(eq(parties.tenantId, ctx.tenantId), eq(parties.id, snap.id)))
-        .limit(1);
-      if (!party) return;
-      await tx
-        .update(parties)
-        .set({ openingBalance: String(amount) as never })
-        .where(and(eq(parties.tenantId, ctx.tenantId), eq(parties.id, snap.id)));
-      await tx.insert(ledgerEntries).values(
-        openingJournalRows({
-          tenantId: ctx.tenantId,
-          partyId: party.id,
-          kind: party.kind,
-          openingBalance: amount,
-          currency: party.currency,
-          code: party.code ?? null,
-          date,
-          userId: ctx.userId,
-        }),
-      );
-    });
-  });
+  await (await getSyncDependencyStore()).applyPartyOpening(database, snap, ctx, amount, date);
 }
 
 /**
@@ -489,13 +468,7 @@ export async function syncTombstoneBlocksDependency(
   entityId: string,
 ): Promise<boolean> {
   try {
-    const r = await pool.query(
-      `SELECT 1 FROM sync_tombstones
-        WHERE tenant_id = $1 AND entity_type = $2 AND entity_id = $3
-        LIMIT 1`,
-      [tenantId, entityType, entityId],
-    );
-    return (r.rowCount ?? 0) > 0;
+    return await (await getSyncMaterializeStore()).tombstoneExists(tenantId, entityType, entityId);
   } catch (err) {
     logger.warn({ err, entityType, entityId }, "sync tombstone dependency check failed");
     return false;
@@ -513,131 +486,11 @@ async function ensureInvoiceSyncDependenciesInTx(
   deps: InvoiceSyncDependencies,
   ctx: TenantContext,
 ): Promise<void> {
-  for (const p of deps.parties ?? []) {
-    const [existing] = await tx
-      .select({ id: parties.id })
-      .from(parties)
-      .where(and(eq(parties.id, p.id), eq(parties.tenantId, ctx.tenantId)))
-      .limit(1);
-    if (existing) continue;
-    // §10: never resurrect a deleted master through a dependency snapshot.
-    if (await syncTombstoneBlocksDependency(ctx.tenantId, "party", p.id)) continue;
-    // Same code/name on a different party (created on another device before
-    // sync): deterministic suffix, never an endless refusal.
-    await resolveMasterSnapshotForReplay(tx, "party", p as unknown as Record<string, unknown>, ctx.tenantId);
-    try {
-      await tx.insert(parties).values({
-        id: p.id,
-        tenantId: ctx.tenantId,
-        kind: p.kind,
-        code: p.code ?? null,
-        name: p.name,
-        companyName: p.companyName ?? null,
-        commercialReg: p.commercialReg ?? null,
-        category: p.category ?? null,
-        salesRep: p.salesRep ?? null,
-        phone: p.phone ?? null,
-        mobile: p.mobile ?? null,
-        whatsapp: p.whatsapp ?? null,
-        altPhone: p.altPhone ?? null,
-        email: p.email ?? null,
-        website: p.website ?? null,
-        address: p.address ?? null,
-        city: p.city ?? null,
-        country: p.country ?? null,
-        taxNumber: p.taxNumber ?? null,
-        // Opening balance is not re-journaled here — invoice ledger legs carry AR/AP.
-        openingBalance: 0,
-        creditLimit: 0,
-        currency: p.currency || "SYP",
-        paymentTerms: p.paymentTerms ?? null,
-        paymentMethod: p.paymentMethod ?? null,
-        defaultDiscount: p.defaultDiscount ?? 0,
-        vat: p.vat != null ? String(p.vat) : "0",
-        status: p.status || "active",
-        notes: p.notes ?? null,
-        createdBy: ctx.userId,
-      }).onConflictDoNothing({ target: parties.id });
-    } catch (err) {
-      logger.warn(
-        { err, partyId: p.id },
-        "sync party insert skipped (likely natural-key conflict)",
-      );
-      throw err;
-    }
-  }
-
-  for (const f of deps.fabrics ?? []) {
-    const [existing] = await tx
-      .select({ id: fabrics.id })
-      .from(fabrics)
-      .where(and(eq(fabrics.id, f.id), eq(fabrics.tenantId, ctx.tenantId)))
-      .limit(1);
-    if (existing) continue;
-    if (await syncTombstoneBlocksDependency(ctx.tenantId, "fabric", f.id)) continue;
-    await tx.insert(fabrics).values({
-      id: f.id,
-      tenantId: ctx.tenantId,
-      name: f.name,
-      category: f.category ?? null,
-      minStockKg: f.minStockKg != null ? String(f.minStockKg) : "0",
-      unit: f.unit ?? null,
-      notes: f.notes ?? null,
-      imageUrl: f.imageUrl ?? null,
-      createdBy: ctx.userId,
-    }).onConflictDoNothing({ target: fabrics.id });
-  }
-
-  for (const c of deps.colors ?? []) {
-    const [existing] = await tx
-      .select({ id: colors.id })
-      .from(colors)
-      .where(and(eq(colors.id, c.id), eq(colors.tenantId, ctx.tenantId)))
-      .limit(1);
-    if (existing) continue;
-    if (await syncTombstoneBlocksDependency(ctx.tenantId, "color", c.id)) continue;
-    await tx.insert(colors).values({
-      id: c.id,
-      tenantId: ctx.tenantId,
-      fabricId: c.fabricId,
-      name: c.name,
-      code: c.code ?? null,
-      hex: c.hex ?? null,
-      imageUrl: c.imageUrl ?? null,
-    }).onConflictDoNothing({ target: colors.id });
-  }
-
-  for (const r of deps.rolls ?? []) {
-    const [existing] = await tx
-      .select({ id: rolls.id })
-      .from(rolls)
-      .where(and(eq(rolls.id, r.id), eq(rolls.tenantId, ctx.tenantId)))
-      .limit(1);
-    if (existing) continue;
-    if (await syncTombstoneBlocksDependency(ctx.tenantId, "roll", r.id)) continue;
-    await resolveMasterSnapshotForReplay(tx, "roll", r as unknown as Record<string, unknown>, ctx.tenantId);
-    await tx.insert(rolls).values({
-      id: r.id,
-      tenantId: ctx.tenantId,
-      colorId: r.colorId,
-      rollNo: r.rollNo,
-      dyeBatch: r.dyeBatch ?? null,
-      initialKg: String(r.initialKg),
-      remainingKg: String(r.remainingKg),
-      pieces: r.pieces,
-      remainingPieces: r.remainingPieces,
-      pricePerKg: String(r.pricePerKg),
-      salePricePerKg: r.salePricePerKg != null ? String(r.salePricePerKg) : null,
-      currency: r.currency || "SYP",
-      supplierId: r.supplierId ?? null,
-      entryDate: r.entryDate,
-      widthCm: r.widthCm != null ? String(r.widthCm) : null,
-      weightGsm: r.weightGsm != null ? String(r.weightGsm) : null,
-      status: r.status || "in_stock",
-      version: 1,
-    }).onConflictDoNothing({ target: rolls.id });
-  }
-}
+  await (await getSyncDependencyStore()).ensureDependenciesInTx(tx, deps, ctx, {
+    tombstoneBlocks: syncTombstoneBlocksDependency,
+    resolveMaster: (executor, kind, snap, tenantId) =>
+      resolveMasterSnapshotForReplay(executor as Parameters<typeof resolveMasterSnapshotForReplay>[0], kind, snap, tenantId),
+  });}
 
 export function parseDependenciesPayload(
   payload: Record<string, unknown>,

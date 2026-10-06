@@ -1,7 +1,7 @@
 import { useSyncExternalStore } from "react";
 import { getAccessToken } from "@/infrastructure/auth/TokenProvider";
 import { getApiBaseUrl } from "@/lib/api-base-url";
-import { getRegisteredSyncDeviceId } from "@/lib/sync-device";
+import { adoptSyncDeviceId, getRegisteredSyncDeviceId } from "@/lib/sync-device";
 
 export type SyncRunResult = {
   pushed: number;
@@ -36,6 +36,18 @@ export type SyncRunResult = {
   deviceTrust?: { code: string; message: string } | null;
   /** Presence events (another user logged in) turned into notifications. */
   activity?: number;
+  /**
+   * T109 — restore on a synced device. While `paused`, nothing is pushed: the device is taking a new
+   * sync identity and pulling the newer data the server holds. `deviceId` is that identity.
+   */
+  restore?: {
+    paused: boolean;
+    phase: "register" | "pull" | "done";
+    deviceId: string | null;
+    pulled: number;
+    acknowledged: number;
+    error: string | null;
+  };
 };
 
 // ── Run state, shared by the header badge and Settings → المزامنة السحابية ──
@@ -92,6 +104,9 @@ export async function runSyncNow(): Promise<SyncRunResult | null> {
       throw new Error(body.message || `فشل تشغيل المزامنة (${res.status})`);
     }
     const result = (await res.json()) as SyncRunResult;
+    if (result.restore?.deviceId && result.restore.deviceId !== getRegisteredSyncDeviceId()) {
+      adoptSyncDeviceId(result.restore.deviceId);
+    }
     // Push failures must be as visible as pull failures: the header's
     // «تعذّرت المزامنة السحابية» badge is driven by lastError. Units that do
     // not leave the device used to leave this null — a silent "متصل".
@@ -188,4 +203,36 @@ export const hubSync = {
       body: JSON.stringify(input),
     }),
   disconnect: () => hubApi<{ url: null }>("/sync/hub", { method: "DELETE" }),
+  /** Link with the company enrollment code — no hub account on this device. */
+  enroll: (input: { url: string; code: string }) =>
+    hubApi<HubConnectResult>("/sync/hub/enroll", { method: "POST", body: JSON.stringify(input) }),
+  devices: () => hubApi<{ items: HubDevice[] }>("/sync/hub/devices"),
+  revokeDevice: (id: string, reason?: string) =>
+    hubApi<{ ok: true }>(`/sync/hub/devices/${id}/revoke`, {
+      method: "POST",
+      body: JSON.stringify(reason ? { reason } : {}),
+    }),
+  reinstateDevice: (id: string) =>
+    hubApi<{ ok: true }>(`/sync/hub/devices/${id}/reinstate`, { method: "POST", body: "{}" }),
+  enrollmentCode: () => hubApi<{ current: EnrollmentCode | null }>("/sync/hub/enrollment-code"),
+  createEnrollmentCode: (input: { ttlHours?: number; maxUses?: number } = {}) =>
+    hubApi<{ current: EnrollmentCode }>("/sync/hub/enrollment-code", {
+      method: "POST",
+      body: JSON.stringify(input),
+    }),
+  revokeEnrollmentCode: () =>
+    hubApi<{ current: null }>("/sync/hub/enrollment-code", { method: "DELETE" }),
 };
+
+export type HubDevice = {
+  id: string;
+  platform: string;
+  hostname: string | null;
+  label: string | null;
+  lastSeenAt: string;
+  createdAt: string;
+  revokedAt: string | null;
+  revokeReason: string | null;
+};
+
+export type EnrollmentCode = { code: string; expiresAt: string; maxUses: number; uses: number };

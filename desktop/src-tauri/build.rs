@@ -10,9 +10,19 @@ const APP_COMMANDS: &[&str] = &[
     "get_hub_url",
     "set_hub_url",
     "request_factory_reset",
+    "apply_factory_reset_now",
     "get_app_version",
     "check_desktop_update",
     "install_desktop_update",
+    "recovery_status",
+    "recovery_retry",
+    "recovery_log_tail",
+    "recovery_exit",
+    "startup_status",
+    "startup_choose",
+    "get_data_root",
+    "save_backup_file",
+    "api",
 ];
 
 fn main() {

@@ -170,6 +170,109 @@ pub fn rotate_server_log(server_log: &Path) -> std::io::Result<File> {
     File::create(server_log)
 }
 
+// ── crash.log ───────────────────────────────────────────────────────────────
+//
+// Why this file exists
+// -------------------
+// A crash loop is the worst failure this app can have: the window flashes, the
+// user sees nothing actionable, and every real reason (a port held by another
+// process, a quarantined file, a database that will not start) scrolls past
+// inside `server.log` / `pg.log` unread. `crash.log` is the ONE file that
+// answers "what actually happened", stamped per event with the tails of both
+// child logs and the exit code, so the diagnosis survives the restart that
+// follows it.
+//
+// Best-effort by construction: this is a diagnostic aid and must never be the
+// reason boot or a restart fails. Every I/O error here is swallowed.
+
+/// How much of each child log is copied into a crash report. Enough to see the
+/// fatal line and its immediate context, small enough to stay readable.
+const CRASH_TAIL_LINES: usize = 40;
+
+/// The last `n` lines of a file, or a marker when it is missing/unreadable.
+fn tail_lines(path: &Path, n: usize) -> Vec<String> {
+    let text = match fs::read_to_string(path) {
+        Ok(t) => t,
+        Err(_) => return vec![format!("<no readable {}>", path.display())],
+    };
+    let lines: Vec<&str> = text.lines().collect();
+    if lines.is_empty() {
+        return vec!["<empty>".to_string()];
+    }
+    let start = lines.len().saturating_sub(n);
+    let mut out: Vec<String> = Vec::with_capacity(lines.len() - start + 1);
+    if start > 0 {
+        out.push(format!("… {} earlier line(s) omitted …", start));
+    }
+    out.extend(lines[start..].iter().map(|s| s.to_string()));
+    out
+}
+
+/// Append one crash report to `logs/crash.log`.
+///
+/// Called on every supervisor restart AND when the circuit breaker trips, so
+/// the file is a chronological account of the loop rather than just its last
+/// frame. Best-effort: never returns an error.
+#[allow(clippy::too_many_arguments)]
+pub fn append_crash_report(
+    app_data_root: &Path,
+    event: &str,
+    reason: &str,
+    stage: &str,
+    exit_code: Option<u32>,
+    server_log: Option<&Path>,
+    pg_log: Option<&Path>,
+) {
+    let logs_dir = app_data_root.join("logs");
+    if fs::create_dir_all(&logs_dir).is_err() {
+        return;
+    }
+    let path = logs_dir.join("crash.log");
+
+    let mut body = String::new();
+    body.push_str("\n============================================================\n");
+    body.push_str(&format!("time   : {}\n", now_iso()));
+    body.push_str(&format!("boot   : {}\n", boot_id()));
+    body.push_str(&format!("event  : {event}\n"));
+    body.push_str(&format!("stage  : {stage}\n"));
+    body.push_str(&format!("reason : {reason}\n"));
+    body.push_str(&format!(
+        "exit   : {}\n",
+        exit_code
+            .map(|c| c.to_string())
+            .unwrap_or_else(|| "none (process did not exit)".to_string())
+    ));
+
+    if let Some(server_log) = server_log {
+        body.push_str("---- server.log (tail) ----\n");
+        for line in tail_lines(server_log, CRASH_TAIL_LINES) {
+            body.push_str(&line);
+            body.push('\n');
+        }
+    }
+    if let Some(pg_log) = pg_log {
+        body.push_str("---- pg.log (tail) ----\n");
+        for line in tail_lines(pg_log, CRASH_TAIL_LINES) {
+            body.push_str(&line);
+            body.push('\n');
+        }
+    }
+
+    if let Ok(mut f) = OpenOptions::new().create(true).append(true).open(&path) {
+        let _ = f.write_all(body.as_bytes());
+    }
+}
+
+/// Local wall-clock stamp. `SystemTime` alone is unreadable in a log a human
+/// has to read at 3am, and this crate pulls in no date library for one line.
+fn now_iso() -> String {
+    let secs = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    format!("unix+{secs}")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -186,6 +289,102 @@ mod tests {
         let _ = fs::remove_dir_all(&dir);
         fs::create_dir_all(&dir).unwrap();
         dir
+    }
+
+    // ── crash.log ───────────────────────────────────────────────────────────
+
+    #[test]
+    fn a_crash_report_carries_the_child_logs_and_the_exit_code() {
+        let dir = scratch();
+        let server_log = dir.join("server.log");
+        let pg_log = dir.join("pgdata").join("pg.log");
+        fs::create_dir_all(pg_log.parent().unwrap()).unwrap();
+        fs::write(&server_log, "[FATAL] port 57542 already in use\n").unwrap();
+        fs::write(&pg_log, "LOG:  could not bind\n").unwrap();
+
+        append_crash_report(
+            &dir,
+            "supervisor-restart",
+            "the local server process exited (1)",
+            "supervisor-restart",
+            Some(1),
+            Some(&server_log),
+            Some(&pg_log),
+        );
+
+        let text = fs::read_to_string(dir.join("logs").join("crash.log")).unwrap();
+        // The whole point of the file: the REAL reason, not our summary.
+        assert!(text.contains("port 57542 already in use"), "{text}");
+        assert!(text.contains("could not bind"), "{text}");
+        assert!(text.contains("event  : supervisor-restart"), "{text}");
+        assert!(text.contains("exit   : 1"), "{text}");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn reports_append_so_the_file_is_a_timeline_of_the_loop() {
+        let dir = scratch();
+        for i in 1..=3 {
+            append_crash_report(
+                &dir,
+                "supervisor-restart",
+                &format!("attempt {i}"),
+                "supervisor-restart",
+                None,
+                None,
+                None,
+            );
+        }
+        let text = fs::read_to_string(dir.join("logs").join("crash.log")).unwrap();
+        assert_eq!(text.matches("event  : supervisor-restart").count(), 3);
+        // Ordering is the diagnosis: attempt 1, then 2, then 3.
+        let a = text.find("attempt 1").unwrap();
+        let b = text.find("attempt 2").unwrap();
+        let c = text.find("attempt 3").unwrap();
+        assert!(a < b && b < c, "crash.log must be chronological");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_missing_child_log_is_reported_not_silently_dropped() {
+        // A crash report that omits pg.log would send support hunting for a
+        // file that was never read.
+        let dir = scratch();
+        append_crash_report(
+            &dir,
+            "supervisor-stopped",
+            "circuit breaker",
+            "supervisor",
+            None,
+            Some(&dir.join("absent-server.log")),
+            Some(&dir.join("absent-pg.log")),
+        );
+        let text = fs::read_to_string(dir.join("logs").join("crash.log")).unwrap();
+        assert!(text.contains("no readable"), "{text}");
+        assert!(text.contains("absent-server.log"), "{text}");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_long_child_log_is_clipped_with_an_omission_marker() {
+        let dir = scratch();
+        let server_log = dir.join("server.log");
+        let body: String = (0..500).map(|i| format!("line {i}\n")).collect();
+        fs::write(&server_log, body).unwrap();
+        append_crash_report(
+            &dir,
+            "supervisor-restart",
+            "boom",
+            "supervisor",
+            None,
+            Some(&server_log),
+            None,
+        );
+        let text = fs::read_to_string(dir.join("logs").join("crash.log")).unwrap();
+        assert!(text.contains("earlier line(s) omitted"), "{text}");
+        assert!(text.contains("line 499"), "must keep the newest lines: {text}");
+        assert!(!text.contains("line 10\n"), "must clip the oldest lines");
+        let _ = fs::remove_dir_all(&dir);
     }
 
     #[test]

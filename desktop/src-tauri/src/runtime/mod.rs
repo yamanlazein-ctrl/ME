@@ -1,10 +1,10 @@
-// Runtime layer — process lifecycle, DB bootstrap, ports, packaging, updates,
-// recovery (Plan §1.1, §3).
+// Runtime layer — process lifecycle, data root, packaging, updates, recovery (Plan §1.1, §3).
+// The local database is embedded SQLite inside the server process: no database server, no port.
 //
 // The desktop edition is a runtime layer over the single shared ERP
 // implementation — never a second ERP. This module owns boot ORDER
-// (`stages`), failure identity (`error`), port management (`ports`),
-// readiness gates (`health`), and the process stack itself (`stack`).
+// (`stages`), failure identity (`error`), readiness gates (`health`), and the
+// process stack itself (`stack`).
 // Leaf OS primitives live beside it: `device_binding`, `secret_store`,
 // `db_meta`, `hidden_process`, `document_archive`.
 //
@@ -15,21 +15,26 @@
 mod boot_log;
 mod error;
 mod health;
-mod ports;
 mod stages;
 mod stack;
+mod pipe;
+mod supervisor;
 
 pub use boot_log::{boot_id, event as boot_event, init as init_boot_log};
 pub use error::{fail, BootFailure};
 pub use stages::{BootStage, ALL as BOOT_ORDER};
 pub use stack::{
-    boot_desktop_stack, boot_desktop_stack_with_progress, no_window_command,
+    apply_startup_choice, boot_desktop_stack, boot_desktop_stack_decided, boot_desktop_stack_with_progress,
+    default_launch_facts, no_window_command, BootOutcome,
     read_hub_url, request_factory_reset, show_fatal_dialog, shutdown, write_hub_url,
-    BootConfig, DesktopStack,
+    BootConfig, DesktopStack, StartupEnv,
 };
+pub use supervisor::{RecoveryReport, StackState, SupervisorHandle};
+pub use pipe::{request as pipe_request, PipeRequest, PipeResponse, PIPE_PATH};
+
 
 /// Single log prefix for the whole runtime layer, so support can follow one
-/// boot across postgres/backend/SSR lines.
+/// boot across runtime and server lines.
 pub(crate) fn log(msg: &str) {
     eprintln!("[desktop-runtime] {}", msg);
     boot_log::trace(msg);

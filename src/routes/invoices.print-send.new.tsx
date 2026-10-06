@@ -24,6 +24,7 @@ import { PrintPageBreak } from "@/components/print/PrintDocument";
 import { formatQuantity } from "@/shared/utils/formatNumber";
 import { DEFAULT_SUGGESTION_COUNT } from "@/shared/utils/suggestions";
 
+import { LiveStockHint } from "@/components/inventory/LiveStockHint";
 import { localToday } from "@/lib/localDate";
 type DocOption = { id: string; title: string; subtitle?: string };
 
@@ -405,13 +406,6 @@ function PrintSendPage() {
                             onPick={(rid) => pickRoll(line.key, rid)}
                           />
                         </Field>
-                        {src && (
-                          <p className="mt-1 text-[11px] text-muted-foreground">
-                            المتاح:{" "}
-                            <span className="tabular-nums">{formatQuantity(src.remainingKg)}</span>{" "}
-                            كغ — {src.remainingPieces ?? src.pieces} أثواب
-                          </p>
-                        )}
                       </div>
 
                       <Field label="الكمية المرسلة (كغ) *">
@@ -430,6 +424,8 @@ function PrintSendPage() {
                           }}
                           placeholder={src ? `حد أقصى ${formatQuantity(src.remainingKg)}` : ""}
                         />
+                        {/* live stock of the exact selected dye — read from the server, not editable */}
+                        {!isFabricOnly && <LiveStockHint rollId={line.rollId || undefined} />}
                         {qValid && src && q > src.remainingKg && (
                           <p className="mt-1 text-[11px] text-destructive">
                             الكمية تتجاوز المتاح ({formatQuantity(src.remainingKg)} كغ)

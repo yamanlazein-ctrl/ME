@@ -16,6 +16,7 @@ import { colors } from "@/infrastructure/orm/schemas/color.table.js";
 import { rolls } from "@/infrastructure/orm/schemas/roll.table.js";
 import { PostgresPrintJobRepository } from "@/infrastructure/repositories/PostgresPrintJobRepository.js";
 import type { TenantContext } from "@/domain/types/index.js";
+import { pgOnly } from "./_helpers/engine.js";
 
 const tenantId = randomUUID();
 const ctx: TenantContext = { tenantId, userId: randomUUID(), userRole: "admin", userName: "press" };
@@ -72,7 +73,9 @@ describe("press receive — waste absorbed into the net kilos", () => {
     expect(r.unit).toBeCloseTo(4.5, 4);
   });
 
-  it("cost columns carry 4 decimals", async () => {
+  // PG catalog check. SQLite: tests/sqlite/schema-type-parity.test.ts asserts every money column's
+  // scale (these two included) against the live PG schema, and the 4-decimal text is asserted above.
+  it.skipIf(pgOnly)("cost columns carry 4 decimals", async () => {
     const cols = rows(await db.execute(sql`
       select table_name t, column_name c, numeric_scale s from information_schema.columns
        where (table_name, column_name) in (('rolls','price_per_kg'), ('invoice_lines','cost_per_kg')) order by 1`));

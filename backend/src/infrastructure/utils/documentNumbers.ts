@@ -1,4 +1,5 @@
-import { db, type Tx } from "../orm/drizzle.js";
+import type { Tx } from "../orm/drizzle.js";
+import { pgDb } from "../orm/pgLazy.js";
 import { documentSequences } from "../orm/schemas/document-sequence.table.js";
 import { documentNumberBlocks } from "../orm/schemas/document-number-block.table.js";
 import { and, eq, sql } from "drizzle-orm";
@@ -122,7 +123,7 @@ export async function allocateDocumentNumberForDevice(
   tenantId: string,
   syncDeviceId: string | null | undefined,
 ): Promise<string> {
-  return db.transaction((tx) => allocateDocumentNumber(tx, entityType, tenantId, { syncDeviceId }));
+  return (await pgDb()).transaction((tx) => allocateDocumentNumber(tx, entityType, tenantId, { syncDeviceId }));
 }
 
 export async function nextDocumentNumber(entityType: string, tenantId: string): Promise<string> {
@@ -130,7 +131,7 @@ export async function nextDocumentNumber(entityType: string, tenantId: string): 
   const width = WIDTHS[entityType] ?? 4;
   const year = new Date().getFullYear().toString();
 
-  const [row] = await db
+  const [row] = await (await pgDb())
     .insert(documentSequences)
     .values({ tenantId, entityType, prefix, lastNumber: 1 })
     .onConflictDoUpdate({
@@ -528,7 +529,7 @@ export async function peekNextDocumentNumber(
   const year = yearNum.toString();
 
   if (syncDeviceId && shouldUseNumberBlocks()) {
-    const [block] = await db
+    const [block] = await (await pgDb())
       .select({ nextNumber: documentNumberBlocks.nextNumber, endNumber: documentNumberBlocks.endNumber })
       .from(documentNumberBlocks)
       .where(
@@ -546,7 +547,7 @@ export async function peekNextDocumentNumber(
     }
   }
 
-  const [row] = await db
+  const [row] = await (await pgDb())
     .select({ lastNumber: documentSequences.lastNumber })
     .from(documentSequences)
     .where(

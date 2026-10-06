@@ -9,6 +9,7 @@ import { randomUUID } from "node:crypto";
 import { startupFailureReason } from "@/infrastructure/config/startupFailure.js";
 import { repairLegacyLicenseTenantPairing } from "@/infrastructure/orm/runDesktopMigrations.js";
 import { pool } from "@/infrastructure/orm/drizzle.js";
+import { pgOnly } from "./_helpers/engine.js";
 
 describe("startupFailureReason", () => {
   it("prefers the database's own message (drizzle keeps it in `cause`) and keeps only its first line", () => {
@@ -40,7 +41,9 @@ beforeAll(async () => {
   }
 });
 
-describe("repairLegacyLicenseTenantPairing (runs before migration DFP-013)", () => {
+// Repairs PostgreSQL-era desktop data before a PG migration. The SQLite build starts clean (no
+// PG-era data is migrated, spec FR-040 / DB-8), so there is nothing to repair there.
+describe.skipIf(pgOnly)("repairLegacyLicenseTenantPairing (runs before migration DFP-013)", () => {
   it("claims an unowned license for the single tenant whose devices use it, and leaves ambiguous ones alone", async () => {
     if (!reachable) return;
     const client = await pool.connect();
@@ -102,7 +105,8 @@ describe("repairLegacyLicenseTenantPairing (runs before migration DFP-013)", () 
   });
 });
 
-describe("connection checkout", () => {
+// node-pg checkout deprecation only.
+describe.skipIf(pgOnly)("connection checkout", () => {
   it("does not trigger pg's 'client.query() while already executing a query' deprecation", () => {
     // The listener is attached at module load (below), BEFORE the first connection of this file is checked out:
     // pg emits this deprecation only once per process, on the first offending checkout.

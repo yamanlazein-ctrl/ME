@@ -1,6 +1,7 @@
-import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { container } from "@/infrastructure/container";
 import { toast } from "sonner";
+import { clampStatementPageIndex } from "@erp/shared/statementPaging";
 import type { Currency } from "@/domain/types";
 import type { PartyKind } from "@/domain/entities/Party";
 import type { StatementFilter, SettleInvoicesInput } from "@/contracts/statement";
@@ -49,7 +50,15 @@ export async function fetchFullStatement<T extends StatementPage>(
   if (filter.cursor) return first;
   let page = first.page;
   const entries = [...first.entries];
-  for (let i = 0; page?.hasMore && page.nextCursor && i < 1000; i++) {
+  // No page cap (C-11 / FR-022): walk until the server reports the end. A
+  // cursor that does not advance is a server defect — fail loudly rather than
+  // loop forever or return a silently truncated statement.
+  const seen = new Set<string>();
+  while (page?.hasMore && page.nextCursor) {
+    if (seen.has(page.nextCursor)) {
+      throw new Error("[fetchFullStatement] statement cursor did not advance — refusing to return a truncated statement");
+    }
+    seen.add(page.nextCursor);
     const next = await getPage({ ...filter, limit: 500, cursor: page.nextCursor });
     entries.push(...next.entries);
     page = next.page;
@@ -101,9 +110,15 @@ export function useStatementPage(
     queryFn: () => container.statement.api.getStatement(partyId ?? "", kind, normalized),
     enabled: !!partyId,
     staleTime: 15_000,
-    placeholderData: keepPreviousData,
+    // Do NOT keepPreviousData here: a previous party's totalPages (e.g. 100)
+    // would flash on a 4-row statement and look like broken pagination.
   });
 }
+
+// Bug #8's clamp lives in @erp/shared so the client pager and the backend
+// statement repository are provably governed by one rule (asserted together
+// in backend/tests/statement-page-clamp.test.ts).
+export { clampStatementPageIndex };
 
 /** The COMPLETE statement, fetched on demand (print / Excel export). */
 export function loadFullStatement(partyId: string, kind: PartyKind, filter: StatementFilter) {

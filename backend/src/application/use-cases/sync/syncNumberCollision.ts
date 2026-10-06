@@ -1,4 +1,4 @@
-import { sql } from "drizzle-orm";
+import { getNumberCollisionSql } from "../../../infrastructure/repositories/engineStores.js";
 import type { DB } from "../../../infrastructure/orm/drizzle.js";
 
 /** A db or an open transaction — anything that can execute SQL. */
@@ -36,8 +36,6 @@ const tag = (id: string) => id.replace(/-/g, "").slice(0, 4);
 export const numberSuffix = (value: string, id: string) => `${value}-${tag(id)}`;
 export const nameSuffix = (value: string, id: string) => `${value} (${tag(id)})`;
 
-const q = (ident: string) => `"${ident.replace(/"/g, '""')}"`;
-
 async function holderOf(
   database: Executor,
   tenantId: string,
@@ -45,16 +43,7 @@ async function holderOf(
   value: string,
   exceptId: string,
 ): Promise<string | null> {
-  const scope = Object.entries(spec.scope)
-    .map(([col, v]) => sql` AND ${sql.raw(q(col))} = ${v}`)
-    .reduce((a, b) => sql`${a}${b}`, sql``);
-  const r = await database.execute(sql`
-    SELECT id::text AS id FROM ${sql.raw(q(spec.table))}
-     WHERE tenant_id = ${tenantId} AND ${sql.raw(q(spec.column))} = ${value}
-       AND id <> ${exceptId}::uuid ${scope}
-     LIMIT 1`);
-  const rows = (Array.isArray(r) ? r : ((r as { rows?: unknown[] }).rows ?? [])) as Array<{ id: string }>;
-  return rows[0]?.id ?? null;
+  return (await getNumberCollisionSql()).holderOf(database, tenantId, spec, value, exceptId);
 }
 
 /**
@@ -79,9 +68,7 @@ export async function resolveCollision(
         // Incoming keeps the number; the existing record moves aside.
         let renamed = spec.suffix(candidate, holder);
         while (await holderOf(database, tenantId, spec, renamed, holder)) renamed = spec.suffix(renamed, holder);
-        await database.execute(sql`
-          UPDATE ${sql.raw(q(spec.table))} SET ${sql.raw(q(spec.column))} = ${renamed}
-           WHERE tenant_id = ${tenantId} AND id = ${holder}::uuid`);
+        await (await getNumberCollisionSql()).renameValue(database, tenantId, spec, holder, renamed);
         if (onRename) await onRename(holder, candidate, renamed);
         logger.warn({ table: spec.table, holder, from: candidate, to: renamed }, "sync number collision: existing record renamed");
         return candidate;
@@ -96,9 +83,7 @@ export async function resolveCollision(
 
 /** A paid invoice's receipt is numbered `RCP-<invoice number>`; keep it in step. */
 async function renameDerivedReceipt(database: Executor, tenantId: string, invoiceId: string, oldNo: string, newNo: string) {
-  await database.execute(sql`
-    UPDATE vouchers SET number = ${`RCP-${newNo}`}
-     WHERE tenant_id = ${tenantId} AND invoice_id = ${invoiceId}::uuid AND number = ${`RCP-${oldNo}`}`);
+  await (await getNumberCollisionSql()).renameDerivedReceipt(database, tenantId, invoiceId, oldNo, newNo);
 }
 
 /**

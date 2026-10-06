@@ -1,5 +1,5 @@
 import { QueryClient } from "@tanstack/react-query";
-import { isAuthFailure } from "@/infrastructure/auth/TokenProvider";
+import { isAuthFailure, isPermissionDenied } from "@/infrastructure/auth/TokenProvider";
 
 let client: QueryClient | null = null;
 
@@ -16,7 +16,7 @@ export function getQueryClient(): QueryClient {
           gcTime: 5 * 60_000,
           refetchOnWindowFocus: true,
           retry: (failureCount, error) => {
-            if (isAuthFailure(error)) return failureCount < 1;
+            if (isAuthFailure(error) || isPermissionDenied(error)) return false;
             return failureCount < 2;
           },
           retryDelay: (attempt) => Math.min(500 * 2 ** attempt, 3_000),

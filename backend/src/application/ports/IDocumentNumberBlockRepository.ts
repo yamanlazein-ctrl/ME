@@ -58,6 +58,13 @@ export interface IDocumentNumberBlockRepository {
    * Reclaim unused tail when this block is still the tip of the global sequence.
    * Returns unused count (0 if nothing to reclaim).
    */
+  /**
+   * Restore on a synced device (T109): the restored copy of a superseded identity's blocks is stale
+   * (that identity kept numbering after the backup). Mark its active blocks exhausted so nothing
+   * allocates from them again; the new identity reserves fresh blocks. Returns the count.
+   */
+  retireForDevice(tenantId: UUID, syncDeviceId: UUID): Promise<number>;
+
   reclaimTail(
     tenantId: UUID,
     blockId: UUID,

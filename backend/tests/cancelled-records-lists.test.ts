@@ -8,7 +8,7 @@
  */
 import { describe, it, expect, beforeAll } from "vitest";
 import { randomUUID } from "node:crypto";
-import { db } from "@/infrastructure/orm/drizzle.js";
+import { db, ambientDb } from "@/infrastructure/orm/drizzle.js";
 import { tenants } from "@/infrastructure/orm/schemas/tenant.table.js";
 import { parties } from "@/infrastructure/orm/schemas/party.table.js";
 import { PostgresPartyRepository } from "@/infrastructure/repositories/PostgresPartyRepository.js";
@@ -36,7 +36,7 @@ describe("D-4 — cancelled parties hidden from operational lists", () => {
     ]);
   });
 
-  const repo = () => new PostgresPartyRepository(db);
+  const repo = () => new PostgresPartyRepository(ambientDb(db));
 
   it("default customer list ('all' view) excludes cancelled but keeps active and inactive", async (t) => {
     skipUnlessDatabase(t, reachable);

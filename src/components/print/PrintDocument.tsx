@@ -1,7 +1,8 @@
 import type { CSSProperties, ReactNode } from "react";
 import { useEffect } from "react";
 import { useSettings } from "@/presentation/hooks/useSettings";
-import logoUrl from "@/assets/logo-motard-icon.png";
+// ?inline → data: URI, so paper print and the archived HTML never wait on a file fetch.
+import logoUrl from "@/assets/logo-motard-icon.png?inline";
 import { getCompanyContactLines, PRINT_BRAND_NAME } from "@/shared/constants/printConfig";
 import "./print.css";
 
@@ -44,9 +45,10 @@ const BADGE_LABEL: Record<PrintTypeBadge, string> = {
  *
  * Header contract (locked — one canonical layout for every invoice):
  *   • NOTHING above the brand row
- *   • Two physical columns (LTR grid, full paper width):
- *       LEFT  = logo alone
- *       RIGHT = company name + address/phone lines (stacked)
+ *   • Three physical columns (LTR grid, full paper width):
+ *       LEFT   = logo alone
+ *       CENTER = company name (large, bold)
+ *       RIGHT  = address/phone lines (stacked; first page only)
  *   • Exact five contact lines (getCompanyContactLines) — never
  *     concatenated, never LTR-reversed, never duplicated from settings
  *   • Gold divider, then document title + party/meta grid
@@ -108,27 +110,23 @@ export function PrintDocument({
 
   return (
     <div className="print-doc" data-paper={paper}>
-      {/* ── Brand bar: logo LEFT | company + contact RIGHT (full width). ── */}
-      <div className="print-brand-bar">
+      {/* ── Brand bar: logo LEFT | company name CENTER | contact RIGHT. ── */}
+      <div className={`print-brand-bar${isFirstPage ? "" : " print-brand-bar--compact"}`}>
         {showLogo ? (
           <img className="print-logo" src={logoUrl} alt="" />
         ) : (
           <span className="print-logo-spacer" aria-hidden="true" />
         )}
-        <div
-          className={`print-brand-identity${isFirstPage ? "" : " print-brand-identity--compact"}`}
-        >
-          <div className="print-brand-name">{PRINT_BRAND_NAME}</div>
-          {isFirstPage && (
-            <div className="print-brand-contact">
-              {contactLines.map((line) => (
-                <div key={line} className="print-brand-contact-line">
-                  {line}
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
+        <div className="print-brand-name">{PRINT_BRAND_NAME}</div>
+        {isFirstPage && (
+          <div className="print-brand-contact">
+            {contactLines.map((line) => (
+              <div key={line} className="print-brand-contact-line">
+                {line}
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       <div className="print-header-divider" />

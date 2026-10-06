@@ -1,16 +1,22 @@
-import { eq, ne, and, desc, ilike, or, sql, inArray, getTableColumns } from "drizzle-orm";
+import { eq, ne, and, desc, ilike, or, sql, inArray, notInArray, getTableColumns } from "drizzle-orm";
 import { afterCursor, cursorColumns, decodeCursor, keysetOrder, nextCursorOf, type KeysetSpec } from "./keysetPage.js";
 import { likeContains } from "../utils/likeEscape.js";
 import type { DB } from "../orm/drizzle.js";
+import { pgModule } from "../orm/pgLazy.js";
+import type { MergePartiesResult } from "../../application/use-cases/parties/mergePartiesUseCase.js";
+import { BusinessRuleError } from "../../domain/errors/index.js";
 import type {
   IPartyRepository,
   PartyFilter,
   CreatePartyData,
+  PartyOpeningData,
 } from "../../application/ports/IPartyRepository.js";
 import { parties } from "../orm/schemas/party.table.js";
 import { ledgerEntries } from "../orm/schemas/ledger-entry.table.js";
 import { invoices } from "../orm/schemas/invoice.table.js";
 import { vouchers } from "../orm/schemas/voucher.table.js";
+import { returns } from "../orm/schemas/return.table.js";
+import { orders } from "../orm/schemas/order.table.js";
 import { Party, type PartyData, type PartyListStats } from "../../domain/entities/Party.js";
 import type { TenantContext, PaginatedResult } from "../../domain/types/index.js";
 import { allocateDocumentNumber } from "../utils/documentNumbers.js";
@@ -20,6 +26,8 @@ import {
 } from "./partyListStatsAggregation.js";
 
 import { localToday } from "../utils/localDate.js";
+import { assertYearOpen } from "./dayLockHelper.js";
+import { auditLogs } from "../orm/schemas/audit-log.table.js";
 /**
  * The balanced opening journal of a party: customer positive = Dr (AR),
  * supplier positive = Cr (AP), mirrored by an equity leg (Σdebit = Σcredit).
@@ -35,6 +43,8 @@ export function openingJournalRows(input: {
   currency: string;
   code: string | null;
   date: string;
+  /** Optional operator note, appended to the party leg's description. */
+  note?: string | null;
   userId: string;
 }) {
   const absBal = Math.abs(input.openingBalance);
@@ -55,7 +65,7 @@ export function openingJournalRows(input: {
       referenceType: "opening",
       referenceId: input.partyId,
       referenceNumber: input.code,
-      description: "الرصيد الافتتاحي",
+      description: input.note ? `الرصيد الافتتاحي — ${input.note}` : "الرصيد الافتتاحي",
       createdBy: input.userId,
     },
     {
@@ -78,6 +88,95 @@ export function openingJournalRows(input: {
 
 export class PostgresPartyRepository implements IPartyRepository {
   constructor(private readonly db: DB) {}
+
+  /**
+   * Merge duplicate parties (moved verbatim from mergePartiesUseCase, S1): moves invoices,
+   * vouchers, returns and ledger party_id to the survivor and soft-cancels the source,
+   * in one transaction with the controlled ledger party remap enabled.
+   */
+  async mergeInto(survivorId: string, sourceId: string, ctx: TenantContext): Promise<MergePartiesResult> {
+    return this.db.transaction(async (tx) => {
+      await (await pgModule()).allowLedgerPartyRemap(tx);
+
+      const [survivor] = await tx
+        .select()
+        .from(parties)
+        .where(and(eq(parties.id, survivorId), eq(parties.tenantId, ctx.tenantId)))
+        .for("update")
+        .limit(1);
+      const [source] = await tx
+        .select()
+        .from(parties)
+        .where(and(eq(parties.id, sourceId), eq(parties.tenantId, ctx.tenantId)))
+        .for("update")
+        .limit(1);
+
+      if (!survivor || !source) throw new BusinessRuleError("الطرف غير موجود");
+      if (survivor.kind !== source.kind) {
+        throw new BusinessRuleError("لا يمكن دمج عميل مع مورد");
+      }
+      if (survivor.status !== "active") {
+        throw new BusinessRuleError("الطرف الهدف يجب أن يكون نشطاً");
+      }
+      if (source.status !== "active") {
+        throw new BusinessRuleError("الطرف المصدر يجب أن يكون نشطاً");
+      }
+
+      const inv = await tx
+        .update(invoices)
+        .set({ partyId: survivorId, updatedAt: new Date() })
+        .where(and(eq(invoices.partyId, sourceId), eq(invoices.tenantId, ctx.tenantId)))
+        .returning({ id: invoices.id });
+
+      const vch = await tx
+        .update(vouchers)
+        .set({ partyId: survivorId, updatedAt: new Date() })
+        .where(and(eq(vouchers.partyId, sourceId), eq(vouchers.tenantId, ctx.tenantId)))
+        .returning({ id: vouchers.id });
+
+      const ret = await tx
+        .update(returns)
+        .set({ partyId: survivorId })
+        .where(and(eq(returns.partyId, sourceId), eq(returns.tenantId, ctx.tenantId)))
+        .returning({ id: returns.id });
+
+      const led = await tx
+        .update(ledgerEntries)
+        .set({ partyId: survivorId })
+        .where(and(eq(ledgerEntries.partyId, sourceId), eq(ledgerEntries.tenantId, ctx.tenantId)))
+        .returning({ id: ledgerEntries.id });
+
+      // Soft-cancel source; rename to free unique (tenant_id, name) if needed.
+      const tombstoneName = `${source.name} [مدمج→${survivor.code ?? survivor.id.slice(0, 8)}]`;
+      await tx
+        .update(parties)
+        .set({
+          status: "cancelled",
+          name: tombstoneName.slice(0, 255),
+          code: source.code ? `${source.code}-MERGED` : null,
+          cancelledAt: new Date(),
+          cancelledBy: ctx.userId,
+          updatedAt: new Date(),
+          version: sql`${parties.version} + 1`,
+          notes: [source.notes, `Merged into ${survivorId} at ${new Date().toISOString()}`]
+            .filter(Boolean)
+            .join("\n"),
+        })
+        .where(and(eq(parties.id, sourceId), eq(parties.tenantId, ctx.tenantId)));
+
+      return {
+        survivorId,
+        sourceId,
+        moved: {
+          invoices: inv.length,
+          vouchers: vch.length,
+          returns: ret.length,
+          ledger: led.length,
+        },
+      };
+    });
+  }
+
 
   async findById(id: string, ctx: TenantContext): Promise<PartyData | null> {
     const rows = await this.db
@@ -265,6 +364,8 @@ export class PostgresPartyRepository implements IPartyRepository {
   async create(data: CreatePartyData, ctx: TenantContext): Promise<PartyData> {
     const openingBalance = data.openingBalance ?? 0;
     const currency = data.currency ?? "SYP";
+    const openingDate = data.openingDate ?? localToday();
+    const openingNote = data.openingNote?.trim() || null;
 
     return this.db.transaction(async (tx) => {
       // H-NEW: explicit client codes pass through; auto-codes allocate inside
@@ -313,6 +414,9 @@ export class PostgresPartyRepository implements IPartyRepository {
           country: data.country,
           taxNumber: data.taxNumber,
           openingBalance,
+          openingDate: openingBalance !== 0 ? openingDate : (data.openingDate ?? null),
+          openingNote,
+          openingCurrency: data.openingCurrency ?? null,
           creditLimit: data.creditLimit ?? 0,
           currency,
           paymentTerms: data.paymentTerms,
@@ -331,15 +435,17 @@ export class PostgresPartyRepository implements IPartyRepository {
       // positive = Cr (AP). The equity leg mirrors the party leg so every
       // opening journal is balanced (Σdebit = Σcredit).
       if (openingBalance !== 0) {
+        await assertYearOpen(tx, ctx.tenantId, openingDate);
         await tx.insert(ledgerEntries).values(
           openingJournalRows({
             tenantId: ctx.tenantId,
             partyId: row.id,
             kind: data.kind,
             openingBalance,
-            currency,
+            currency: data.openingCurrency ?? currency,
             code,
-            date: localToday(),
+            date: openingDate,
+            note: openingNote,
             userId: ctx.userId,
           }),
         );
@@ -355,7 +461,7 @@ export class PostgresPartyRepository implements IPartyRepository {
     // silent change here would leave the ledger and the parties.outstanding
     // column out of sync. Refuse explicitly so the caller knows to recreate.
     if (data.openingBalance !== undefined) {
-      throw new Error("لا يمكن تعديل الرصيد الافتتاحي بعد الإنشاء — أعد إنشاء الطرف لتغييره");
+      throw new Error("الرصيد الافتتاحي يُعدَّل من قسم «الرصيد السابق» فقط (PUT …/:id/opening)");
     }
     const values: Record<string, unknown> = {};
     if (data.name !== undefined) values.name = data.name;
@@ -409,6 +515,97 @@ export class PostgresPartyRepository implements IPartyRepository {
     return this.toDomain(row);
   }
 
+  async setOpening(id: string, data: PartyOpeningData, ctx: TenantContext, expectedVersion: number): Promise<PartyData> {
+    return this.db.transaction(async (tx) => {
+      const [before] = await tx
+        .select()
+        .from(parties)
+        .where(and(eq(parties.id, id), eq(parties.tenantId, ctx.tenantId)))
+        .limit(1);
+      if (!before) throw new Error("الطرف غير موجود");
+      // Version claim first (P0-001): a concurrent edit loses here, before any ledger write.
+      const [row] = await tx
+        .update(parties)
+        .set({
+          openingBalance: data.openingBalance,
+          openingCurrency: data.currency,
+          openingDate: data.date,
+          openingNote: data.note ?? null,
+          updatedAt: new Date(),
+          version: sql`${parties.version} + 1`,
+        })
+        .where(and(eq(parties.id, id), eq(parties.tenantId, ctx.tenantId), eq(parties.version, expectedVersion)))
+        .returning();
+      if (!row) {
+        throw Object.assign(new Error(`Stale version: expected ${expectedVersion}, current ${before.version}`), {
+          code: "STALE_VERSION" as const,
+        });
+      }
+
+      const old = await tx
+        .select({ id: ledgerEntries.id, date: ledgerEntries.date })
+        .from(ledgerEntries)
+        .where(
+          and(
+            eq(ledgerEntries.tenantId, ctx.tenantId),
+            eq(ledgerEntries.referenceType, "opening"),
+            eq(ledgerEntries.referenceId, id),
+            eq(ledgerEntries.status, "active"),
+          ),
+        );
+      // Neither the journal being cancelled nor the new one may sit in a closed year.
+      for (const d of new Set([...old.map((r) => String(r.date)), data.date])) {
+        await assertYearOpen(tx, ctx.tenantId, d);
+      }
+      // Cancel, never delete: the append-only trigger allows only status → cancelled, and the
+      // statement keeps showing the old journal as cancelled.
+      if (old.length > 0) {
+        await tx
+          .update(ledgerEntries)
+          .set({ status: "cancelled", cancelledAt: new Date(), cancelledBy: ctx.userId })
+          .where(and(eq(ledgerEntries.tenantId, ctx.tenantId), inArray(ledgerEntries.id, old.map((r) => r.id))));
+      }
+      if (data.openingBalance !== 0) {
+        await tx.insert(ledgerEntries).values(
+          openingJournalRows({
+            tenantId: ctx.tenantId,
+            partyId: id,
+            kind: before.kind,
+            openingBalance: data.openingBalance,
+            currency: data.currency,
+            code: before.code ?? null,
+            date: data.date,
+            note: data.note,
+            userId: ctx.userId,
+          }),
+        );
+      }
+      await tx.insert(auditLogs).values({
+        tenantId: ctx.tenantId,
+        actorId: ctx.userId,
+        actorName: ctx.userName,
+        module: "parties",
+        action: "set_opening",
+        entityType: "party",
+        entityId: id,
+        detail: "تعديل الرصيد الافتتاحي",
+        beforeSnapshot: {
+          openingBalance: Number(before.openingBalance ?? 0),
+          currency: before.openingCurrency ?? before.currency,
+          date: before.openingDate ?? null,
+          note: before.openingNote ?? null,
+        },
+        afterSnapshot: {
+          openingBalance: data.openingBalance,
+          currency: data.currency,
+          date: data.date,
+          note: data.note ?? null,
+        },
+      });
+      return this.toDomain(row);
+    });
+  }
+
   async cancel(id: string, cancelledBy: string, ctx: TenantContext, expectedVersion: number): Promise<PartyData> {
     // Security guard: refuse to cancel a party that still has active financial
     // documents (invoices or vouchers) linked to it. The party is soft-deleted
@@ -434,7 +631,21 @@ export class PostgresPartyRepository implements IPartyRepository {
         ),
       );
     if (Number(invCount?.count ?? 0) > 0) {
-      throw new Error(`لا يمكن حذف ${kindLabel} لوجود فواتير مرتبطة به`);
+      const sample = await this.db
+        .select({ number: invoices.number, type: invoices.type })
+        .from(invoices)
+        .where(
+          and(
+            eq(invoices.partyId, id),
+            eq(invoices.tenantId, ctx.tenantId),
+            eq(invoices.status, "active"),
+          ),
+        )
+        .limit(8);
+      const nums = sample.map((r) => r.number).join("، ");
+      throw new Error(
+        `لا يمكن حذف ${kindLabel} لوجود فواتير مرتبطة به (${nums}${Number(invCount.count) > 8 ? "…" : ""}). استخدم شاشة الحذف لعرض التفاصيل والتأكيد.`,
+      );
     }
 
     const [vchCount] = await this.db
@@ -448,7 +659,88 @@ export class PostgresPartyRepository implements IPartyRepository {
         ),
       );
     if (Number(vchCount?.count ?? 0) > 0) {
-      throw new Error(`لا يمكن حذف ${kindLabel} لوجود سندات قبض/صرف مرتبطة به`);
+      const sample = await this.db
+        .select({ number: vouchers.number })
+        .from(vouchers)
+        .where(
+          and(
+            eq(vouchers.partyId, id),
+            eq(vouchers.tenantId, ctx.tenantId),
+            eq(vouchers.status, "active"),
+          ),
+        )
+        .limit(8);
+      const nums = sample.map((r) => r.number).join("، ");
+      throw new Error(
+        `لا يمكن حذف ${kindLabel} لوجود سندات قبض/صرف مرتبطة به (${nums}${Number(vchCount.count) > 8 ? "…" : ""}). استخدم شاشة الحذف لعرض التفاصيل والتأكيد.`,
+      );
+    }
+
+    // AUDIT-F3: the guard above only knew about invoices and vouchers, while the
+    // impact sheet also reports RETURNS. A party holding an active return but no
+    // invoice/voucher therefore passed this guard and got soft-cancelled, leaving
+    // a live return pointing at a cancelled party (verified against PostgreSQL).
+    // The last line of defence must match the sheet the user was shown.
+    const [retCount] = await this.db
+      .select({ count: sql<number>`count(*)` })
+      .from(returns)
+      .where(
+        and(
+          eq(returns.partyId, id),
+          eq(returns.tenantId, ctx.tenantId),
+          eq(returns.status, "active"),
+        ),
+      );
+    if (Number(retCount?.count ?? 0) > 0) {
+      const sample = await this.db
+        .select({ number: returns.number })
+        .from(returns)
+        .where(
+          and(
+            eq(returns.partyId, id),
+            eq(returns.tenantId, ctx.tenantId),
+            eq(returns.status, "active"),
+          ),
+        )
+        .limit(8);
+      const nums = sample.map((r) => r.number).join("، ");
+      throw new Error(
+        `لا يمكن حذف ${kindLabel} لوجود مرتجعات مرتبطة (${nums}${
+          Number(retCount.count) > 8 ? "…" : ""
+        }). ألغِ المرتجعات أولاً أو استخدم شاشة الحذف.`,
+      );
+    }
+
+    // AUDIT-F1: only OPEN orders block the party; a fulfilled/cancelled order is
+    // history (same rule the impact sheet now applies).
+    const [ordCount] = await this.db
+      .select({ count: sql<number>`count(*)` })
+      .from(orders)
+      .where(
+        and(
+          eq(orders.customerId, id),
+          eq(orders.tenantId, ctx.tenantId),
+          notInArray(orders.status, ["fulfilled", "cancelled"]),
+        ),
+      );
+    if (Number(ordCount?.count ?? 0) > 0) {
+      const sample = await this.db
+        .select({ code: orders.code })
+        .from(orders)
+        .where(
+          and(
+            eq(orders.customerId, id),
+            eq(orders.tenantId, ctx.tenantId),
+            notInArray(orders.status, ["fulfilled", "cancelled"]),
+          ),
+        )
+        .limit(8);
+      const nums = sample.map((r) => r.code).join("، ");
+      throw new Error(
+        `لا يمكن حذف ${kindLabel} لوجود طلبيات مفتوحة (${nums}${
+          Number(ordCount.count) > 8 ? "…" : ""
+        }). أغلق أو احذف الطلبيات أولاً.`,
+      );
     }
 
     // P0-001: atomic version enforcement — WHERE includes expectedVersion
@@ -474,6 +766,13 @@ export class PostgresPartyRepository implements IPartyRepository {
       throw new Error("الطرف غير موجود أو ملغى مسبقاً");
     }
     return this.toDomain(row);
+  }
+
+  async alignVersion(id: string, version: number, ctx: TenantContext): Promise<void> {
+    await this.db
+      .update(parties)
+      .set({ version })
+      .where(and(eq(parties.id, id), eq(parties.tenantId, ctx.tenantId)));
   }
 
   private toDomain(row: typeof parties.$inferSelect): PartyData {
@@ -503,6 +802,9 @@ export class PostgresPartyRepository implements IPartyRepository {
       country: n(row.country),
       taxNumber: n(row.taxNumber),
       openingBalance: row.openingBalance,
+      openingDate: n(row.openingDate),
+      openingNote: n(row.openingNote),
+      openingCurrency: n(row.openingCurrency),
       creditLimit: row.creditLimit ?? 0,
       currency: row.currency,
       paymentTerms: n(row.paymentTerms),

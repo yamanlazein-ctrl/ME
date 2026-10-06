@@ -17,6 +17,8 @@ import { cn } from "@/lib/utils";
 import { formatNumber, formatQuantity, formatMoney } from "@/shared/utils/formatNumber";
 import { CardField, FormattedAmountInput, GroupSection } from "./InvoiceFormLayout";
 import { lineTotal, type SaleLine as SaleLineType } from "./sale-types";
+import { entryPriceReference } from "./entryPriceReference";
+import { LiveStockHint } from "@/components/inventory/LiveStockHint";
 
 export function SaleLineCard({
   line,
@@ -60,6 +62,8 @@ export function SaleLineCard({
   const piecesExceeds = roll
     ? (line.pieces ?? 1) > (roll.remainingPieces ?? roll.pieces ?? 1)
     : false;
+  // The price THIS roll actually entered stock at — a reference only, never the sale price.
+  const entryRef = entryPriceReference(roll, currency, line.pricePerKg);
 
   return (
     <article
@@ -236,6 +240,8 @@ export function SaleLineCard({
                 placeholder="1"
                 ariaLabel="عدد الأثواب"
               />
+              {/* live stock of the exact selected dye — read from the server, not editable */}
+              <LiveStockHint rollId={line.rollId || undefined} />
             </CardField>
             <CardField
               label={`السعر / كغ${currency ? ` (${currencySymbol(currency)})` : " (اختر العملة)"}`}
@@ -297,6 +303,33 @@ export function SaleLineCard({
               </div>
             </div>
           </div>
+          {entryRef && (
+            <div
+              className={cn(
+                "mt-2 flex flex-wrap items-center gap-x-2 gap-y-0.5 rounded-md border px-2.5 py-1.5 text-[11px]",
+                entryRef.belowEntry
+                  ? "border-warning/50 bg-warning/10 text-warning"
+                  : "border-border bg-secondary/30 text-muted-foreground",
+              )}
+              data-testid="entry-price-reference"
+            >
+              <span className="font-semibold text-foreground">
+                سعر الدخول الفعلي لهذه الصبغة:{" "}
+                <span className="tabular-nums">{formatMoney(entryRef.pricePerKg)}</span>{" "}
+                {currencySymbol(entryRef.currency)} / كغ
+              </span>
+              <span>
+                ({entryRef.sourceLabel} — {entryRef.entryDate})
+              </span>
+              {entryRef.otherCurrency && <span>· بعملة مختلفة عن عملة الفاتورة</span>}
+              {entryRef.belowEntry && (
+                <span className="inline-flex items-center gap-1 font-bold">
+                  <AlertTriangle className="h-3.5 w-3.5" />
+                  سعر البيع أقل من سعر الدخول
+                </span>
+              )}
+            </div>
+          )}
           {exceeds && roll && (
             <div className="mt-2 flex items-center gap-2 rounded-md border border-destructive/40 bg-destructive/10 px-2.5 py-1.5 text-[11px] font-semibold text-destructive">
               <AlertTriangle className="h-3.5 w-3.5" />

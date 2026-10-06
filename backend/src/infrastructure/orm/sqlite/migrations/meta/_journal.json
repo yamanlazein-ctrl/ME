@@ -1,0 +1,46 @@
+{
+  "version": 7,
+  "dialect": "sqlite",
+  "entries": [
+    {
+      "idx": 0,
+      "version": 7,
+      "when": 1791072000000,
+      "tag": "0000_baseline",
+      "breakpoints": false,
+      "pgReferenceJournalIdx": 99
+    },
+    {
+      "idx": 1,
+      "version": 7,
+      "when": 1791158400000,
+      "tag": "0001_statement_lookup_indexes",
+      "breakpoints": false,
+      "pgReferenceJournalIdx": 99
+    },
+    {
+      "idx": 2,
+      "version": 7,
+      "when": 1791244800000,
+      "tag": "0002_sync_restore_state",
+      "breakpoints": false,
+      "pgReferenceJournalIdx": 99
+    },
+    {
+      "idx": 3,
+      "version": 7,
+      "when": 1791331200000,
+      "tag": "0003_roll_entry_price_invoice_pieces",
+      "breakpoints": false,
+      "pgReferenceJournalIdx": 100
+    },
+    {
+      "idx": 4,
+      "version": 7,
+      "when": 1791417600000,
+      "tag": "0004_party_opening_currency",
+      "breakpoints": false,
+      "pgReferenceJournalIdx": 101
+    }
+  ]
+}

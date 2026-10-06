@@ -1,5 +1,5 @@
 import { hostname, platform as osPlatform } from "node:os";
-import { db } from "../../../infrastructure/orm/drizzle.js";
+import { getNumberBlockStore } from "../../../infrastructure/repositories/engineStores.js";
 import { logger } from "../../../infrastructure/config/logger.js";
 import { getCentralSyncUrl, getHubSessionInfo, resolveHubAuthHeader } from "./hubConfig.js";
 import {
@@ -15,9 +15,6 @@ import type { IDocumentNumberBlockRepository } from "../../ports/IDocumentNumber
 import type { IMachineFingerprintProvider } from "../../ports/IMachineFingerprintProvider.js";
 import type { UUID } from "../../../domain/types/index.js";
 import { BusinessRuleError } from "../../../domain/errors/index.js";
-import { syncDevices } from "../../../infrastructure/orm/schemas/sync-device.table.js";
-import { documentSequences } from "../../../infrastructure/orm/schemas/document-sequence.table.js";
-import { and, eq, sql } from "drizzle-orm";
 
 /**
  * Entity types provisioned automatically whenever a device comes online.
@@ -74,49 +71,11 @@ export async function claimNumberBlock(input: {
   }
   await assertDeviceBelongsToTenant(input.tenantId, input.syncDeviceId);
   const year = new Date().getFullYear();
-  return db.transaction(async (tx) => {
-    if (
-      typeof input.knownUsed === "number" &&
-      Number.isFinite(input.knownUsed) &&
-      input.knownUsed > 0
-    ) {
-      const { prefix } = resolveNumberFormat(input.entityType);
-      await tx
-        .insert(documentSequences)
-        .values({
-          tenantId: input.tenantId,
-          entityType: input.entityType,
-          prefix,
-          lastNumber: Math.min(Math.floor(input.knownUsed), 999999),
-        })
-        .onConflictDoUpdate({
-          target: [
-            documentSequences.tenantId,
-            documentSequences.entityType,
-            documentSequences.prefix,
-          ],
-          set: {
-            lastNumber: sql`LEAST(
-              GREATEST(${documentSequences.lastNumber}, ${Math.min(Math.floor(input.knownUsed), 999999)}),
-              ${documentSequences.lastNumber} + 2000
-            )`,
-          },
-        });
-    }
-    return claimNumberBlockInTx(tx, {
-      tenantId: input.tenantId,
-      syncDeviceId: input.syncDeviceId,
-      entityType: input.entityType,
-      size: input.size,
-      year,
-    });
-  });
+  return (await getNumberBlockStore()).claimBlock({ ...input, year });
 }
 
 export async function reclaimNumberBlock(input: { tenantId: UUID; blockId: UUID }) {
-  return db.transaction(async (tx) => {
-    return reclaimNumberBlockTailInTx(tx, input);
-  });
+  return (await getNumberBlockStore()).reclaimBlockTail(input);
 }
 
 /**
@@ -166,15 +125,7 @@ export async function ensureDeviceNumberBlocks(
     // Refill EARLY (below 25% of a block left across all active blocks), not
     // at exhaustion: a device that runs out while offline cannot save a
     // single document until it reconnects.
-    const remainingRes = await db.execute(sql`
-      SELECT COALESCE(SUM(end_number - next_number + 1), 0)::int AS remaining
-        FROM document_number_blocks
-       WHERE tenant_id = ${input.tenantId} AND sync_device_id = ${input.syncDeviceId}
-         AND entity_type = ${entityType} AND year = ${year}
-         AND status = 'active' AND next_number <= end_number`);
-    const remaining = Number(
-      ((remainingRes as unknown as { rows?: Array<{ remaining: number }> }).rows ?? [])[0]?.remaining ?? 0,
-    );
+    const remaining = await (await getNumberBlockStore()).remainingInActiveBlocks(input.tenantId, input.syncDeviceId, entityType, year);
     if (existing && remaining >= Math.ceil(defaultBlockSize(entityType) * 0.25)) {
       ensured.push({
         entityType,
@@ -295,18 +246,7 @@ async function mirrorClaimedBlock(
 async function readLocalSequenceTip(tenantId: UUID, entityType: string): Promise<number> {
   try {
     const { prefix } = resolveNumberFormat(entityType);
-    const [row] = await db
-      .select({ lastNumber: documentSequences.lastNumber })
-      .from(documentSequences)
-      .where(
-        and(
-          eq(documentSequences.tenantId, tenantId),
-          eq(documentSequences.entityType, entityType),
-          eq(documentSequences.prefix, prefix),
-        ),
-      )
-      .limit(1);
-    return row?.lastNumber ?? 0;
+    return await (await getNumberBlockStore()).readSequenceTip(tenantId, entityType, prefix);
   } catch {
     return 0;
   }
@@ -321,19 +261,7 @@ async function advanceLocalSequenceTip(
     const { prefix } = resolveNumberFormat(entityType);
     const target = Math.min(Math.floor(atLeast), 999999);
     if (!(target > 0)) return;
-    await db
-      .insert(documentSequences)
-      .values({ tenantId, entityType, prefix, lastNumber: target })
-      .onConflictDoUpdate({
-        target: [
-          documentSequences.tenantId,
-          documentSequences.entityType,
-          documentSequences.prefix,
-        ],
-        set: {
-          lastNumber: sql`GREATEST(${documentSequences.lastNumber}, ${target})`,
-        },
-      });
+    await (await getNumberBlockStore()).advanceSequenceTip(tenantId, entityType, prefix, target);
   } catch (err) {
     logger.warn({ err, entityType }, "local sequence tip advance failed (non-fatal)");
   }
@@ -425,12 +353,8 @@ async function claimBlockFromHub(
 }
 
 async function assertDeviceBelongsToTenant(tenantId: string, syncDeviceId: string): Promise<void> {
-  const [row] = await db
-    .select({ id: syncDevices.id })
-    .from(syncDevices)
-    .where(and(eq(syncDevices.id, syncDeviceId), eq(syncDevices.tenantId, tenantId)))
-    .limit(1);
-  if (!row) {
+  const belongs = await (await getNumberBlockStore()).deviceBelongsToTenant(tenantId, syncDeviceId);
+  if (!belongs) {
     throw new BusinessRuleError("جهاز المزامنة غير مسجّل على هذا المستأجر");
   }
 }

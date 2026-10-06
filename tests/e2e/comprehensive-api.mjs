@@ -1,3 +1,5 @@
+import { adaptRequest } from "./_currentContract.mjs";
+
 const API = "http://localhost:8080/api";
 let token = "",
   passed = 0,
@@ -13,11 +15,20 @@ async function api(path, opts = {}) {
     });
     token = (await r.json()).accessToken;
   }
-  const res = await fetch(path.startsWith("http") ? path : `${API}${path}`, {
+  const url = path.startsWith("http") ? path : `${API}${path}`;
+  const auth = { "Content-Type": "application/json", Authorization: `Bearer ${token}` };
+  const adapted = await adaptRequest(
+    url,
+    opts.method,
+    opts.body !== undefined ? JSON.parse(opts.body) : undefined,
+    async (u) => (await fetch(u, { headers: auth })).json(),
+  );
+  const res = await fetch(url, {
     ...opts,
+    ...(adapted.body !== undefined ? { body: JSON.stringify(adapted.body) } : {}),
     headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${token}`,
+      ...auth,
+      ...adapted.headers,
       ...opts.headers,
     },
   });

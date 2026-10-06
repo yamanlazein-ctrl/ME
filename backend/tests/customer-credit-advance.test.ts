@@ -122,7 +122,7 @@ async function snapshot() {
   const cash = await db.transaction((tx) => getCashboxBalanceAsOf(tx, ctx, "USD", DATE));
   const [led] = await db
     .select({
-      net: sql<number>`COALESCE(SUM(${ledgerEntries.debit} - ${ledgerEntries.credit}), 0)`,
+      net: sql<number>`COALESCE(SUM(${ledgerEntries.debit} - ${ledgerEntries.credit}), 0)`.mapWith(ledgerEntries.debit),
     })
     .from(ledgerEntries)
     .where(

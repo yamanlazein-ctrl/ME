@@ -7,8 +7,11 @@
  */
 import { describe, it, expect } from "vitest";
 import { pool } from "@/infrastructure/orm/drizzle.js";
+import { pgOnly } from "./_helpers/engine.js";
 
-describe("pool client errors", () => {
+// node-pg socket/client internals only: SQLite is in-process (no connection to drop). Its crash
+// behavior is covered by tests/sqlite/connection.test.ts (force-kill durability).
+describe.skipIf(pgOnly)("pool client errors", () => {
   it("an error on a checked-out client is handled, not thrown", async () => {
     const client = await pool.connect();
     try {

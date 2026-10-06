@@ -1,5 +1,6 @@
 import type { TenantContext, UUID } from "../../domain/types/index.js";
-import type { Tx } from "../../infrastructure/orm/drizzle.js";
+/** The active transaction handle of the running engine (PG Drizzle tx, or the SQLite tx handle). */
+type Tx = unknown;
 
 export type StockMovementDirection = "in" | "out";
 export type StockMovementType =

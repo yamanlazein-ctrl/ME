@@ -1,9 +1,8 @@
 import { and, eq, isNotNull, ne } from "drizzle-orm";
 import type { DB } from "../orm/drizzle.js";
 import { runWithPlatformContext } from "../orm/tenant-context.js";
-import { licenses } from "../orm/schemas/license.table.js";
-import { tenants } from "../orm/schemas/tenant.table.js";
 import { logger } from "../config/logger.js";
+import { engineSchema } from "../orm/engineSchema.js";
 
 /**
  * Detach stale Desktop baked licenses that share a tenant_id with a different
@@ -14,6 +13,7 @@ import { logger } from "../config/logger.js";
  * Idempotent.
  */
 export async function detachOrphanBakedLicenses(db: DB): Promise<number> {
+  const { licenses, tenants } = await engineSchema();
   return runWithPlatformContext(async () => {
     const orphans = await db
       .select({

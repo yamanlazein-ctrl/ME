@@ -8,6 +8,7 @@ import type {
   SyncOutboxStatus,
 } from "../../application/ports/ISyncOutboxRepository.js";
 import { syncOutbox } from "../orm/schemas/sync-outbox.table.js";
+import { syncDevices } from "../orm/schemas/sync-device.table.js";
 
 /**
  * How long a `pushing` row is trusted to still be in flight before another run
@@ -51,11 +52,25 @@ export class PostgresSyncOutboxRepository implements ISyncOutboxRepository {
         .limit(1);
       if (existing[0]) return mapRow(existing[0]);
 
+      // Resolve device id BEFORE insert. A stale X-Sync-Device-Id that is not
+      // in sync_devices would FK-fail the outbox row and — because this runs
+      // inside the same withTenantTx as the business write — roll back the
+      // invoice/party create too. Drop the reference instead of aborting.
+      let syncDeviceId = input.syncDeviceId ?? null;
+      if (syncDeviceId) {
+        const device = await this.db
+          .select({ id: syncDevices.id })
+          .from(syncDevices)
+          .where(and(eq(syncDevices.id, syncDeviceId), eq(syncDevices.tenantId, input.tenantId)))
+          .limit(1);
+        if (!device[0]) syncDeviceId = null;
+      }
+
       const [row] = await this.db
         .insert(syncOutbox)
         .values({
           tenantId: input.tenantId,
-          syncDeviceId: input.syncDeviceId ?? null,
+          syncDeviceId,
           opId: input.opId,
           entityType: input.entityType,
           entityId: input.entityId,
@@ -175,6 +190,35 @@ export class PostgresSyncOutboxRepository implements ISyncOutboxRepository {
           eq(syncOutbox.leaseToken, leaseToken),
         ));
       return result.rowCount ?? 0;
+    });
+  }
+
+
+  async acknowledgeByOpId(tenantId: string, opId: string): Promise<"acknowledged" | "settled" | "unknown"> {
+    return runWithTenantContext({ tenantId }, async () => {
+      const result = await this.db
+        .update(syncOutbox)
+        .set({
+          status: "synced",
+          syncedAt: new Date(),
+          updatedAt: new Date(),
+          errorDetail: null,
+          leaseOwner: null,
+          leaseToken: null,
+          leaseUntil: null,
+        })
+        .where(and(
+          eq(syncOutbox.tenantId, tenantId),
+          eq(syncOutbox.opId, opId),
+          inArray(syncOutbox.status, ["pending", "pushing", "rejected"]),
+        ));
+      if ((result.rowCount ?? 0) > 0) return "acknowledged";
+      const [held] = await this.db
+        .select({ id: syncOutbox.id })
+        .from(syncOutbox)
+        .where(and(eq(syncOutbox.tenantId, tenantId), eq(syncOutbox.opId, opId)))
+        .limit(1);
+      return held ? "settled" : "unknown";
     });
   }
 

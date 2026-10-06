@@ -1,4 +1,4 @@
-import { pool } from "../../../infrastructure/orm/drizzle.js";
+import { getSyncConflictStore } from "../../../infrastructure/repositories/engineStores.js";
 import { getAmbientTenantId } from "../../../infrastructure/orm/ambient-tx.js";
 import { tenantContext } from "../../../infrastructure/orm/tenant-context.js";
 import { logger } from "../../../infrastructure/config/logger.js";
@@ -107,24 +107,17 @@ export async function recordSyncConflict(input: RecordSyncConflictInput): Promis
   // Phase 2: never swallow insert failures — a rejected sync unit without a
   // conflict row leaves operators blind. Callers must handle thrown errors
   // (and preferably share a transaction with markRejected).
-  const r = await pool.query(
-    `INSERT INTO sync_conflicts
-       (id, tenant_id, op_id, entity_type, entity_id, operation,
-        base_version, server_version, local_intent, status)
-     VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, $8, 'open')
-     ON CONFLICT (tenant_id, op_id) DO NOTHING`,
-    [
-      input.tenantId,
-      input.opId,
-      input.entityType,
-      input.entityId,
-      input.operation,
-      input.baseVersion,
-      input.serverVersion,
-      JSON.stringify(input.localIntent),
-    ],
-  );
-  return (r.rowCount ?? 0) > 0;
+  const inserted = await (await getSyncConflictStore()).insertOpen({
+    tenantId: input.tenantId,
+    opId: input.opId,
+    entityType: input.entityType,
+    entityId: input.entityId,
+    operation: input.operation,
+    baseVersion: input.baseVersion,
+    serverVersion: input.serverVersion,
+    localIntentJson: JSON.stringify(input.localIntent),
+  });
+  return inserted > 0;
 }
 
 /**
@@ -139,16 +132,8 @@ export async function listSyncConflicts(
   const openOnly = opts?.openOnly ?? true;
   const limit = Math.min(Math.max(opts?.limit ?? 200, 1), 1000);
   try {
-    const r = await pool.query(
-      `SELECT id, op_id, entity_type, entity_id, operation, base_version,
-              server_version, status, created_at, resolved_at, resolution, local_intent
-         FROM sync_conflicts
-        WHERE tenant_id = $1 ${openOnly ? "AND status = 'open'" : ""}
-        ORDER BY created_at DESC
-        LIMIT $2`,
-      [tenantId, limit],
-    );
-    return (r.rows ?? []).map((row) => mapConflict(row));
+    const rows = await (await getSyncConflictStore()).list(tenantId, openOnly, limit);
+    return rows.map((row) => mapConflict(row));
   } catch (err) {
     logger.warn({ err }, "listSyncConflicts failed");
     return [];
@@ -172,22 +157,8 @@ export async function resolveSyncConflict(
 ): Promise<SyncConflictRow | null> {
   assertSyncConflictTenantContext(tenantId);
   try {
-    const r = await pool.query(
-      `UPDATE sync_conflicts
-          SET status = 'resolved',
-              resolved_at = now(),
-              resolution = jsonb_build_object(
-                'decision', $3::text,
-                'by_user_id', $4::text,
-                'note', $5::text,
-                'resolved_at', now()
-              )
-        WHERE id = $2 AND tenant_id = $1 AND status = 'open'
-        RETURNING id, op_id, entity_type, entity_id, operation, base_version,
-                  server_version, status, created_at, resolved_at, resolution, local_intent`,
-      [tenantId, conflictId, decision, byUserId, note ?? null],
-    );
-    return r.rowCount ? mapConflict(r.rows[0]) : null;
+    const row = await (await getSyncConflictStore()).resolve(tenantId, conflictId, decision, byUserId, note ?? null);
+    return row ? mapConflict(row) : null;
   } catch (err) {
     logger.warn({ err, conflictId }, "resolveSyncConflict failed");
     return null;
@@ -206,14 +177,7 @@ export async function resolveSyncConflictByOp(
 ): Promise<void> {
   assertSyncConflictTenantContext(tenantId);
   try {
-    await pool.query(
-      `UPDATE sync_conflicts
-          SET status = 'resolved',
-              resolved_at = now(),
-              resolution = jsonb_build_object('decision', 'applied', 'note', $3::text, 'resolved_at', now())
-        WHERE tenant_id = $1 AND op_id = $2 AND status = 'open'`,
-      [tenantId, opId, reason],
-    );
+    await (await getSyncConflictStore()).resolveByOp(tenantId, opId, reason);
   } catch (err) {
     logger.warn({ err, opId }, "resolveSyncConflictByOp failed");
   }

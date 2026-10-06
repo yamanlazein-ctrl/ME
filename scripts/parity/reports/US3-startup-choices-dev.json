@@ -1,0 +1,79 @@
+{
+  "exe": "C:/Users/Taw/Downloads/Compressed/q/ME-main/desktop/src-tauri/target/debug/motard-fabrics-erp.exe",
+  "ranAt": "2026-10-04T16:27:14.148Z",
+  "results": [
+    {
+      "name": "1 restart with nothing changed is REUSE with no prompt",
+      "pass": true,
+      "observed": "ready"
+    },
+    {
+      "name": "2a reinstall shows PRIOR_DATA_FOUND",
+      "pass": true,
+      "observed": "PRIOR_DATA_FOUND"
+    },
+    {
+      "name": "5a PRIOR_DATA_FOUND offers exactly Open existing / Restore / Start new",
+      "pass": true,
+      "options": [
+        "open_existing",
+        "restore_backup",
+        "start_new"
+      ],
+      "buttons": [
+        "فتح البيانات الموجودة",
+        "استعادة نسخة احتياطية",
+        "بدء مشروع جديد"
+      ]
+    },
+    {
+      "name": "5b no corruption wording outside CORRUPT",
+      "pass": true,
+      "title": "وُجدت بيانات سابقة على هذا الجهاز"
+    },
+    {
+      "name": "2b Open existing opens the SAME company",
+      "pass": true,
+      "before": "3428edd3-c6e8-414f-a8db-340b49bca19a",
+      "after": "3428edd3-c6e8-414f-a8db-340b49bca19a"
+    },
+    {
+      "name": "2c the new install instance is recorded and this installation is known",
+      "pass": true,
+      "recorded": true,
+      "known": true
+    },
+    {
+      "name": "2d the next restart is REUSE with no prompt",
+      "pass": true,
+      "observed": "ready"
+    },
+    {
+      "name": "3a an update with a valid hand-off token is REUSE with no prompt",
+      "pass": true,
+      "observed": "ready"
+    },
+    {
+      "name": "3b the token is consumed and the new instance recorded",
+      "pass": true,
+      "tokenLeft": false,
+      "recorded": true,
+      "sameData": true
+    },
+    {
+      "name": "4a reinstall again shows PRIOR_DATA_FOUND",
+      "pass": true,
+      "observed": "PRIOR_DATA_FOUND"
+    },
+    {
+      "name": "4b Start new creates a NEW company",
+      "pass": true,
+      "newDataId": true
+    },
+    {
+      "name": "4c the previous data is kept in set-aside, not deleted",
+      "pass": true,
+      "setAside": 1
+    }
+  ]
+}

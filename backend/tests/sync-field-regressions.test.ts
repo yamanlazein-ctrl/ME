@@ -19,6 +19,7 @@
  */
 import { describe, it, expect, beforeAll, beforeEach, afterEach, vi } from "vitest";
 import fs from "node:fs";
+import { pgOnly } from "./_helpers/engine.js";
 import os from "node:os";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
@@ -105,7 +106,9 @@ describe("sync field regressions", () => {
     expect(again.map((u) => u.opId)).toEqual(ops);
   });
 
-  it("2. cashbox functions no longer force row_security (works for a NOBYPASSRLS hub role)", async () => {
+  // PG functions + RLS only: SQLite runs the cashbox maintenance as schema triggers T2–T7 with no RLS
+  // (allowed delta); tests/sqlite/triggers.test.ts covers them.
+  it.skipIf(pgOnly)("2. cashbox functions no longer force row_security (works for a NOBYPASSRLS hub role)", async () => {
     const r = rows(
       await db.execute(sql`
         SELECT p.proname, array_to_string(p.proconfig, ',') AS cfg

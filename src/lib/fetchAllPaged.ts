@@ -24,13 +24,17 @@ type PageResult<T> =
 
 export async function fetchAllPaged<T>(
   fetchPage: (page: number, limit: number, cursor?: string) => Promise<PageResult<T>>,
-  opts?: { pageSize?: number; maxPages?: number; label?: string },
+  opts?: { pageSize?: number; label?: string },
 ): Promise<T[]> {
   const pageSize = opts?.pageSize ?? 200;
-  const maxPages = opts?.maxPages ?? 50;
   const out: T[] = [];
   let cursor: string | undefined;
-  for (let page = 0; page < maxPages; page++) {
+  // Track P (C-11 / FR-022): no page cap. Walk until the server reports the
+  // end. A keyset cursor that repeats would loop forever: that is a server
+  // defect, so fail loudly — never return a silently truncated list (the
+  // caller asked for "all" because it sums/balances the rows).
+  const seenCursors = new Set<string>();
+  for (let page = 0; ; page++) {
     const res = await fetchPage(page, pageSize, cursor);
     const batch = Array.isArray(res) ? res : (res.data ?? []);
     out.push(...batch);
@@ -41,6 +45,12 @@ export async function fetchAllPaged<T>(
     }
     const next = res.nextCursor ?? res.meta?.nextCursor ?? null;
     if (next) {
+      if (seenCursors.has(next)) {
+        throw new Error(
+          `[fetchAllPaged] ${opts?.label ?? "list"} cursor did not advance after ${out.length} rows — refusing to return a truncated list`,
+        );
+      }
+      seenCursors.add(next);
       cursor = next;
       continue;
     }
@@ -48,10 +58,4 @@ export async function fetchAllPaged<T>(
     if (cursor !== undefined) return out;
     if (!(res.hasNext ?? res.meta?.hasNext)) return out;
   }
-  // Never truncate: the caller asked for "all" because it sums/balances the
-  // rows. Returning a partial list would render WRONG totals that look valid,
-  // so fail loudly instead (the screen shows an error, not a wrong balance).
-  throw new Error(
-    `[fetchAllPaged] ${opts?.label ?? "list"} exceeded ${maxPages} pages (${out.length} rows) — refusing to return a truncated list`,
-  );
 }

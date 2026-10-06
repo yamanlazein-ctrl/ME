@@ -101,12 +101,27 @@ type Queryable = {
   query: (text: string, values?: unknown[]) => Promise<{ rows: Array<Record<string, unknown>> }>;
 };
 
+/** Same counts in SQLite syntax (desktop SQLite engine; database size from the page count). */
+const SQLITE_COUNTS_SQL = `SELECT
+       (SELECT count(*) FROM tenants) AS tenants,
+       (SELECT count(*) FROM users WHERE tenant_id = $1) AS users,
+       (SELECT count(*) FROM parties WHERE tenant_id = $1) AS parties,
+       (SELECT count(*) FROM invoices WHERE tenant_id = $1) AS invoices,
+       (SELECT count(*) FROM invoice_lines WHERE tenant_id = $1) AS "invoiceLines",
+       (SELECT count(*) FROM rolls WHERE tenant_id = $1) AS rolls,
+       (SELECT count(*) FROM ledger_entries WHERE tenant_id = $1) AS "ledgerEntries",
+       (SELECT count(*) FROM vouchers WHERE tenant_id = $1) AS vouchers,
+       (SELECT count(*) FROM returns WHERE tenant_id = $1) AS returns,
+       (SELECT count(*) FROM sync_outbox WHERE tenant_id = $1 AND status IN ('pending','pushing')) AS "syncOutboxPending",
+       (SELECT page_count * page_size FROM pragma_page_count(), pragma_page_size()) AS "databaseSizeBytes"`;
+
 export async function collectCounts(
   db: Queryable,
   tenantId: string,
+  engine: "postgres" | "sqlite" = "postgres",
 ): Promise<{ counts: IntegrityCounts; databaseSizeBytes: number }> {
   const r = await db.query(
-    `SELECT
+    engine === "sqlite" ? SQLITE_COUNTS_SQL : `SELECT
        (SELECT count(*)::int FROM tenants) AS tenants,
        (SELECT count(*)::int FROM users WHERE tenant_id = $1) AS users,
        (SELECT count(*)::int FROM parties WHERE tenant_id = $1) AS parties,
@@ -171,6 +186,7 @@ export function acceptBaseline(): void {
 export async function verifyDataAgainstManifest(
   db: Queryable,
   tenantId: string,
+  engine: "postgres" | "sqlite" = "postgres",
 ): Promise<void> {
   if (!config.DESKTOP_DEPLOY) return;
   const manifest = await readManifest();
@@ -182,7 +198,7 @@ export async function verifyDataAgainstManifest(
     // build that never wrote one): record the current counts as the baseline.
     // Without this the drop check below could never run on any install.
     if (process.env.DATA_INTEGRITY_PATH) {
-      const { counts, databaseSizeBytes } = await collectCounts(db, tenantId);
+      const { counts, databaseSizeBytes } = await collectCounts(db, tenantId, engine);
       await writeManifestAtomic({
         version: 1,
         installationId: process.env.MOTARD_INSTALLATION_ID ?? "",
@@ -202,7 +218,7 @@ export async function verifyDataAgainstManifest(
   if (manifest.resetAuthorized) return;
   const expected =
     manifest.restoreInProgress?.expectedCounts ?? manifest.lastKnownCounts;
-  const { counts, databaseSizeBytes } = await collectCounts(db, tenantId);
+  const { counts, databaseSizeBytes } = await collectCounts(db, tenantId, engine);
   const comparison = evaluateDrop(expected, counts);
   if (comparison.severe) {
     enterSafeMode("severe_data_drop", comparison);

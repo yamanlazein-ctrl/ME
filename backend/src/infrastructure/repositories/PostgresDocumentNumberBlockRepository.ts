@@ -104,6 +104,22 @@ export class PostgresDocumentNumberBlockRepository implements IDocumentNumberBlo
     });
   }
 
+  async retireForDevice(tenantId: string, syncDeviceId: string): Promise<number> {
+    return runWithTenantContext({ tenantId }, async () => {
+      const result = await this.db
+        .update(documentNumberBlocks)
+        .set({ status: "exhausted", updatedAt: new Date() })
+        .where(
+          and(
+            eq(documentNumberBlocks.tenantId, tenantId),
+            eq(documentNumberBlocks.syncDeviceId, syncDeviceId),
+            eq(documentNumberBlocks.status, "active"),
+          ),
+        );
+      return result.rowCount ?? 0;
+    });
+  }
+
   async reclaimTail(
     tenantId: string,
     blockId: string,

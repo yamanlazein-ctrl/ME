@@ -55,6 +55,8 @@ export interface InvoiceData {
    * payments). Sent on create; echoed back by the server.
    */
   creditApplied?: number;
+  /** «عدد الأثواب» — pieces on the invoice, stored by the server (sum of its lines). */
+  readonly piecesCount?: number;
   /** Receipt method used when `paid > 0`. Defaults to "cash". */
   paymentMethod?: "cash" | "transfer" | "check" | "card";
   /** Order being fulfilled by this invoice (sale only) — allows its reserved rolls. */
@@ -87,6 +89,7 @@ export class Invoice implements InvoiceData {
   notes?: string;
   readonly paid?: number;
   readonly creditApplied?: number;
+  readonly piecesCount?: number;
   readonly paymentMethod?: "cash" | "transfer" | "check" | "card";
   readonly orderId?: string;
   readonly createdAt: Timestamp;
@@ -114,6 +117,7 @@ export class Invoice implements InvoiceData {
     this.notes = data.notes;
     this.paid = data.paid;
     this.creditApplied = data.creditApplied;
+    this.piecesCount = data.piecesCount;
     this.paymentMethod = data.paymentMethod;
     this.orderId = data.orderId;
     this.createdAt = data.createdAt;

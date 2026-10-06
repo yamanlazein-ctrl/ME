@@ -10,9 +10,15 @@ import { withTenantTx } from "@/infrastructure/orm/drizzle";
  * tables land and the test database can be seeded).
  */
 describe("env schema", () => {
-  it("requires DATABASE_URL", () => {
+  it("requires the active engine's database location", () => {
     // Loaded statically above; absence would have thrown at import time.
-    expect(process.env.DATABASE_URL).toBeDefined();
+    // PostgreSQL: DATABASE_URL. SQLite (desktop, test:sqlite): SQLITE_PATH and no DATABASE_URL.
+    if (process.env.DB_ENGINE === "sqlite") {
+      expect(process.env.SQLITE_PATH).toBeDefined();
+      expect(process.env.DATABASE_URL).toBeUndefined();
+    } else {
+      expect(process.env.DATABASE_URL).toBeDefined();
+    }
   });
 
   it("requires JWT_SECRET to be at least 32 chars", () => {

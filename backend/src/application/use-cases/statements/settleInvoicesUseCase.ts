@@ -7,13 +7,7 @@ import type { VoucherData } from "../../../domain/entities/Voucher.js";
 import { BusinessRuleError } from "../../../domain/errors/index.js";
 import { allocateSettlementPayment, splitCashAndDiscountAcrossLines, round2dp } from "@erp/shared";
 import { createVoucherUseCase } from "../vouchers/voucherUseCases.js";
-import { allocateDocumentNumberForDevice } from "../../../infrastructure/utils/documentNumbers.js";
 import { deriveOperationId } from "../../../infrastructure/utils/operationId.js";
-import { db } from "../../../infrastructure/orm/drizzle.js";
-import { invoices } from "../../../infrastructure/orm/schemas/invoice.table.js";
-import { returns } from "../../../infrastructure/orm/schemas/return.table.js";
-import { returnLines } from "../../../infrastructure/orm/schemas/return-line.table.js";
-import { and, eq, inArray, sql } from "drizzle-orm";
 
 import { localToday } from "../../../infrastructure/utils/localDate.js";
 export type SettleInvoicesInput = {
@@ -89,19 +83,7 @@ export async function settleInvoicesUseCase(
     const method: VoucherMethod = input.method ?? "cash";
     const voucherKind = partyKind === "customer" ? "receipt" : "payment";
 
-    const invRows = await db
-      .select({
-        id: invoices.id,
-        number: invoices.number,
-        date: invoices.date,
-        total: invoices.total,
-        paid: invoices.paid,
-        status: invoices.status,
-        currency: invoices.currency,
-        partyId: invoices.partyId,
-      })
-      .from(invoices)
-      .where(and(eq(invoices.tenantId, ctx.tenantId), inArray(invoices.id, ids)));
+    const invRows = await voucherRepo.settlementInvoices(ids, ctx);
 
     if (invRows.length !== ids.length) {
       return { ok: false, error: "بعض الفواتير المحددة غير موجودة" };
@@ -117,21 +99,7 @@ export async function settleInvoicesUseCase(
     }
 
     // Returns reduce amount owed (same rule as voucher create).
-    const returnAggs = await db
-      .select({
-        invoiceId: returns.originalInvoiceId,
-        total: sql<number>`COALESCE(SUM(ROUND(${returnLines.quantityKg} * ${returnLines.pricePerKg}, 2)), 0)`,
-      })
-      .from(returnLines)
-      .innerJoin(returns, eq(returnLines.returnId, returns.id))
-      .where(
-        and(
-          eq(returns.tenantId, ctx.tenantId),
-          eq(returns.status, "active"),
-          inArray(returns.originalInvoiceId, ids),
-        ),
-      )
-      .groupBy(returns.originalInvoiceId);
+    const returnAggs = await voucherRepo.settlementReturnTotals(ids, ctx);
     const returnsByInvoice = new Map(
       returnAggs.map((r) => [r.invoiceId as string, round2dp(Number(r.total ?? 0))]),
     );
@@ -166,7 +134,7 @@ export async function settleInvoicesUseCase(
       return { ok: false, error: e instanceof Error ? e.message : "تعذّر توزيع الدفعة" };
     }
 
-    const batchNumber = await allocateDocumentNumberForDevice("settlement", ctx.tenantId, ctx.syncDeviceId);
+    const batchNumber = await voucherRepo.allocateSettlementBatchNumber(ctx);
     // The SET batch number is what ties the N vouchers back into one settlement
     // (invoice tracking groups by it), so it must survive custom user notes too.
     const withBatch = (text: string | undefined, fallback: string) => {

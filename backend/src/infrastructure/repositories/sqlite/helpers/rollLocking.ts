@@ -1,0 +1,96 @@
+// PORTED-FROM: src/infrastructure/repositories/rollLocking.ts sha256=ac7aae796e10ffc2f80c99566342a927a8ab9372603528ce8a90521ba4247949
+// SQLite twin (specs/001-desktop-sqlite-engine S4). Keep behavior identical to the PG source.
+import { asc } from "./pgOrder.js";
+/**
+ * REPAIR-012 / REPAIR-019 — lock rolls in ascending id order in one statement.
+ */
+import { sql, inArray, eq, and } from "drizzle-orm";
+import type { Tx } from "../../../orm/sqlite/drizzleCompat.js";
+import { rolls } from "../../../orm/sqlite/schemas/roll.table.js";
+import { colors } from "../../../orm/sqlite/schemas/color.table.js";
+import { BusinessRuleError } from "../../../../domain/errors/index.js";
+
+export type LockedRollRow = {
+  id: string;
+  remainingKg: string | number;
+  remainingPieces: string | number;
+  version: number;
+  status: string;
+  pricePerKg: string | number | null;
+  colorId: string;
+  currency: string;
+  rollNo: string;
+  fabricId: string | null;
+};
+
+export type LockRollsOptions = {
+  /** Message for a missing roll (defaults to the create-path color message). */
+  notFoundMessage?: string;
+  /** Skip missing rolls instead of throwing (paths that historically did `if (r)`). */
+  skipMissing?: boolean;
+  /** Treat a roll whose color row is gone as missing (create path only). */
+  requireColor?: boolean;
+};
+
+const DEFAULT_NOT_FOUND =
+  "الصبغة المحددة لأحد البنود غير موجودة (ربما حُذفت) — أعد اختيار الصبغة";
+
+/**
+ * SELECT … FOR UPDATE OF rolls ORDER BY id.
+ * De-duplicates ids. Throws the existing Arabic "roll not found" message for the first missing id.
+ */
+export async function lockRollsOrdered(
+  tx: Tx,
+  tenantId: string,
+  rollIds: string[],
+  opts: LockRollsOptions = { requireColor: true },
+): Promise<Map<string, LockedRollRow>> {
+  const unique = [...new Set(rollIds.filter(Boolean))];
+  const map = new Map<string, LockedRollRow>();
+  if (unique.length === 0) return map;
+
+  const rows = await tx
+    .select({
+      id: rolls.id,
+      remainingKg: rolls.remainingKg,
+      remainingPieces: rolls.remainingPieces,
+      version: rolls.version,
+      status: rolls.status,
+      pricePerKg: rolls.pricePerKg,
+      colorId: rolls.colorId,
+      currency: rolls.currency,
+      rollNo: rolls.rollNo,
+      fabricId: colors.fabricId,
+    })
+    .from(rolls)
+    .leftJoin(colors, eq(colors.id, rolls.colorId))
+    .where(and(eq(rolls.tenantId, tenantId), inArray(rolls.id, unique)))
+    .orderBy(asc(rolls.id));
+
+  for (const r of rows) {
+    if (opts.requireColor && r.fabricId == null) continue;
+    map.set(r.id, r as LockedRollRow);
+  }
+
+  if (!opts.skipMissing) {
+    for (const id of unique) {
+      if (!map.has(id)) {
+        throw new BusinessRuleError(opts.notFoundMessage ?? DEFAULT_NOT_FOUND);
+      }
+    }
+  }
+  return map;
+}
+
+/** Documented global lock order (REPAIR-012). */
+export const RESOURCE_LOCK_ORDER = [
+  "1. cashbox advisory lock (tenant:cashbox:ccy) — only when cash moves",
+  "2. invoice row(s) — ORDER BY id",
+  "3. party row — only where locked today",
+  "4. rolls — ORDER BY id (lockRollsOrdered)",
+  "5. document_sequences / number blocks",
+  "6. ledger / stock_movements / outbox inserts",
+] as const;
+
+/** Keep sql import referenced for future raw FOR UPDATE helpers. */
+void sql;

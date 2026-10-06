@@ -22,12 +22,15 @@ export function PartyCombobox({
   onChange,
   onCreateNew,
   placeholder,
+  /** Optional label when the selected party was just created and search cache is cold. */
+  valueLabel,
 }: {
   kind: "customer" | "supplier";
   value: string;
   onChange: (id: string) => void;
   onCreateNew: () => void;
   placeholder?: string;
+  valueLabel?: string | null;
 }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -42,6 +45,10 @@ export function PartyCombobox({
       return;
     }
     if (selected?.id === value) return;
+    if (valueLabel) {
+      setSelected({ id: value, name: valueLabel, kind });
+      return;
+    }
     let cancelled = false;
     void (async () => {
       try {
@@ -58,7 +65,7 @@ export function PartyCombobox({
     return () => {
       cancelled = true;
     };
-  }, [value, selected?.id]);
+  }, [value, valueLabel, selected?.id, kind]);
 
   useEffect(() => {
     if (!open) return;

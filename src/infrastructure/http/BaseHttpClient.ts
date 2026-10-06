@@ -67,6 +67,19 @@ export class BaseHttpClient {
         ? ((config.headers?.["Idempotency-Key"] as string | undefined) ?? crypto.randomUUID())
         : undefined;
 
+    // A network error is AMBIGUOUS: the sidecar may have committed the write
+    // and died before the response was framed. Re-sending such a request is
+    // only safe when re-sending cannot change the outcome — a GET, or a
+    // mutation the server de-duplicates by `Idempotency-Key`.
+    //
+    // DELETE has no key, so it used to be replayed verbatim after any transport
+    // hiccup. A party delete that had already cancelled the row was sent a
+    // second time with the same expectedVersion and the replay failed the
+    // version check — the operator saw a phantom "another session edited this"
+    // error for a delete that had in fact succeeded. Replaying an
+    // un-keyed mutation is never safe, so it is now refused outright.
+    const replaySafe = config.method === "GET" || Boolean(idempotencyKey);
+
     for (let attempt = 0; attempt <= retry.maxRetries; attempt++) {
       // Apply request interceptors on every attempt so a refreshed token is
       // picked up on retries after a 401.
@@ -117,8 +130,10 @@ export class BaseHttpClient {
           continue;
         }
 
-        // Only retry network errors, not application errors
+        // Only retry network errors, not application errors — and only when a
+        // replay provably cannot double-apply the mutation.
         if (domainErr.code !== "NETWORK") throw domainErr;
+        if (!replaySafe) throw domainErr;
         if (attempt === retry.maxRetries) throw domainErr;
 
         const delay = Math.min(retry.baseDelayMs * Math.pow(2, attempt), retry.maxDelayMs);
@@ -246,9 +261,24 @@ async function parseResponseBody(response: Response): Promise<unknown> {
 
 function extractErrorMessage(data: unknown): string | null {
   if (data && typeof data === "object") {
-    if ("message" in data && typeof data.message === "string") return data.message;
-    if ("error" in data && typeof data.error === "string") return data.error;
-    if ("detail" in data && typeof data.detail === "string") return data.detail;
+    const obj = data as {
+      message?: unknown;
+      error?: unknown;
+      detail?: unknown;
+      details?: Record<string, string[]>;
+    };
+    const details = obj.details;
+    const firstDetail =
+      details && typeof details === "object"
+        ? details[Object.keys(details)[0] ?? ""]?.[0]
+        : undefined;
+    if (typeof obj.message === "string" && firstDetail) {
+      return obj.message.includes(firstDetail) ? obj.message : `${obj.message} — ${firstDetail}`;
+    }
+    if (typeof firstDetail === "string") return firstDetail;
+    if (typeof obj.message === "string") return obj.message;
+    if (typeof obj.error === "string") return obj.error;
+    if (typeof obj.detail === "string") return obj.detail;
   }
   return null;
 }

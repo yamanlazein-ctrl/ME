@@ -17,7 +17,7 @@ function CashAmount({ n, code, className }: { n: number; code: Currency; classNa
 }
 
 /** Three independent cash boxes — never mixed or FX-converted. */
-const CASH_BOXES: {
+export const CASH_BOXES: {
   code: Currency;
   Icon: typeof Banknote;
   accent: string;

@@ -15,6 +15,8 @@
  * is safe to re-run against a live dev database without collisions.
  */
 
+import { adaptRequest } from "./_currentContract.mjs";
+
 const BASE = process.env.ERP_API_BASE_URL || "http://127.0.0.1:8080";
 const TENANT_ID = process.env.ERP_TENANT_ID;
 const EMAIL = process.env.ERP_ADMIN_EMAIL;
@@ -37,12 +39,12 @@ function dOff(days) {
 const uniq = () => `${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
 
 async function api(method, endpoint, body) {
+  const auth = { "Content-Type": "application/json", Authorization: token ? `Bearer ${token}` : undefined };
+  const adapted = await adaptRequest(`${BASE}${endpoint}`, method, body, async (u) => (await fetch(u, { headers: auth })).json());
+  body = adapted.body;
   const opts = {
     method,
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: token ? `Bearer ${token}` : undefined,
-    },
+    headers: { ...auth, ...adapted.headers },
   };
   if (body !== undefined) opts.body = JSON.stringify(body);
   const res = await fetch(`${BASE}${endpoint}`, opts);
@@ -109,6 +111,7 @@ async function mkStock(cost = 5000, kg = 500) {
       rollNo: `R-${u}`,
       initialKg: kg,
       remainingKg: kg,
+      pieces: 100, // sales deduct pieces (default 1 per line) — a 0-piece roll can't be sold
       pricePerKg: cost,
       entryDate: dOff(-5),
     })
@@ -142,6 +145,12 @@ await test("Problem 1a — every transaction is double-entry balanced", async ()
       ],
     })
   ).data;
+  // DIAG-أ: an entry invoice stocks a FRESH, EMPTY roll (as entry.new.tsx creates one).
+  const freshRoll = (
+    await api("POST", "/api/inventory/rolls", {
+      colorId: col.id, rollNo: `R-${u}-E`, initialKg: 5, remainingKg: 0, pricePerKg: 800, entryDate: today(),
+    })
+  ).data;
   const purchase = (
     await api("POST", "/api/invoices", {
       type: "entry",
@@ -150,7 +159,7 @@ await test("Problem 1a — every transaction is double-entry balanced", async ()
       partyType: "supplier",
       currency: "SYP",
       lines: [
-        { fabricId: fab.id, colorId: col.id, rollId: roll.id, quantityKg: 5, pricePerKg: 800 },
+        { fabricId: fab.id, colorId: col.id, rollId: freshRoll.id, quantityKg: 5, pricePerKg: 800 },
       ],
     })
   ).data;

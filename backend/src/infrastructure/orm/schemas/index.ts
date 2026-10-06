@@ -46,5 +46,9 @@ export * from "./idempotency-key.table.js";
 export * from "./ledger-entry-archive.table.js";
 export * from "./yearly-party-summary.table.js";
 
+// Year-end closing: the year registry + the roll-level physical count.
+export * from "./financial-year.table.js";
+export * from "./inventory-count.table.js";
+
 // P0-004 — durable token revocation (works without Redis)
 export * from "./revoked-token.table.js";

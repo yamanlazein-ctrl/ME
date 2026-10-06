@@ -23,7 +23,8 @@ export function Header() {
   const connectivity = useConnectivity();
   const { deviceGate, deviceTrust } = useAutoSync();
   useLiveNotificationToasts();
-  const { running: syncing, lastError: hubSyncError } = useSyncRunState();
+  const { running: syncing, lastError: hubSyncError, lastResult: lastSync } = useSyncRunState();
+  const restorePaused = lastSync?.restore?.paused === true;
   const online = connectivity === "online";
   const conflictCount = useOpenSyncConflictCount();
 
@@ -106,6 +107,21 @@ export function Header() {
             >
               <CloudOff className="h-3 w-3" aria-hidden />
               تعذّرت المزامنة السحابية
+            </span>
+          )}
+          {restorePaused && (
+            <span
+              className="hidden items-center gap-1.5 text-[11px] font-medium text-amber-600 lg:inline-flex dark:text-amber-400"
+              title={
+                lastSync?.restore?.error
+                  ? `استُعيدت نسخة احتياطية — المزامنة متوقفة مؤقتاً: ${lastSync.restore.error}`
+                  : "استُعيدت نسخة احتياطية على جهاز مُزامَن — لدى المركز بيانات أحدث. المزامنة متوقفة مؤقتاً حتى تُجلب، ولن يُعاد إرسال ما استلمه المركز"
+              }
+              role="status"
+              aria-live="polite"
+            >
+              <span className="h-1.5 w-1.5 rounded-full bg-amber-500" aria-hidden />
+              بيانات أحدث على المركز — جارٍ الجلب
             </span>
           )}
           {deviceGate && (

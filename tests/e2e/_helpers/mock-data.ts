@@ -49,7 +49,7 @@ export async function createSupplier(
     currency: "SYP",
     ...overrides,
   };
-  const res = await fetch(`${BACKEND}/suppliers`, {
+  const res = await fetch(`${BACKEND}/api/suppliers`, {
     method: "POST",
     headers: authHeaders(token),
     body: JSON.stringify(body),
@@ -69,7 +69,7 @@ export async function createCustomer(
     currency: "SYP",
     ...overrides,
   };
-  const res = await fetch(`${BACKEND}/customers`, {
+  const res = await fetch(`${BACKEND}/api/customers`, {
     method: "POST",
     headers: authHeaders(token),
     body: JSON.stringify(body),
@@ -88,7 +88,7 @@ export async function createFabric(
     minStockKg: 10,
     ...overrides,
   };
-  const res = await fetch(`${BACKEND}/inventory/fabrics`, {
+  const res = await fetch(`${BACKEND}/api/inventory/fabrics`, {
     method: "POST",
     headers: authHeaders(token),
     body: JSON.stringify(body),
@@ -103,7 +103,7 @@ export async function createColor(
 ): Promise<{ id: string }> {
   const token = await getAdminToken(request);
   const body = { fabricId, name: `لون-اختبار-${seq()}`, code: `C-${seq()}` };
-  const res = await fetch(`${BACKEND}/inventory/colors`, {
+  const res = await fetch(`${BACKEND}/api/inventory/colors`, {
     method: "POST",
     headers: authHeaders(token),
     body: JSON.stringify(body),
@@ -129,7 +129,7 @@ export async function createRoll(
     entryDate: new Date().toISOString().slice(0, 10),
     ...overrides,
   };
-  const res = await fetch(`${BACKEND}/inventory/rolls`, {
+  const res = await fetch(`${BACKEND}/api/inventory/rolls`, {
     method: "POST",
     headers: authHeaders(token),
     body: JSON.stringify(body),
@@ -163,7 +163,7 @@ export async function createInvoice(
     notes: "فاتورة اختبار",
     ...overrides,
   };
-  const res = await fetch(`${BACKEND}/invoices`, {
+  const res = await fetch(`${BACKEND}/api/invoices`, {
     method: "POST",
     headers: authHeaders(token),
     body: JSON.stringify(body),
@@ -190,7 +190,7 @@ export async function createOrder(
     ],
     ...overrides,
   };
-  const res = await fetch(`${BACKEND}/orders`, {
+  const res = await fetch(`${BACKEND}/api/orders`, {
     method: "POST",
     headers: authHeaders(token),
     body: JSON.stringify(body),

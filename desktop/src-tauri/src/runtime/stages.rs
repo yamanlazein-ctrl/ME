@@ -19,19 +19,14 @@ pub enum BootStage {
     Preflight,
     /// Apply a queued factory reset, if the user requested one in-app.
     FactoryReset,
-    /// Provision or adopt the local PostgreSQL data directory (identity-gated).
-    ProvisionDatabase,
-    /// Force postgresql.conf's port into lock-step with the bind port.
-    SyncDbPort,
-    /// Start postgres.exe via pg_ctl and ensure the `erp` database exists.
-    StartDatabase,
     /// Load or generate DPAPI-encrypted local secrets (JWT/APP_MASTER_KEY).
     LoadSecrets,
-    /// Spawn the ONE bundled Node server (API + built frontend, same origin, OS-assigned port).
+    /// Decide FRESH / REUSE / HALT for the SQLite data root from files only (T076, D-1).
+    EvaluateData,
+    /// Spawn the ONE bundled Node server (API + embedded SQLite engine) on the named pipe.
     StartServer,
-    /// Wait until the server reports its port (it writes the port file only once it accepts
-    /// connections) and answers /api/health/live. Liveness-based: the wait ends when the server is
-    /// ready or when the process is dead — never on an arbitrary timeout.
+    /// Wait until the server answers /api/health/live on the pipe. Liveness-based: the wait ends
+    /// when the server is ready or when the process is dead — never on an arbitrary timeout.
     WaitServer,
 }
 
@@ -41,10 +36,8 @@ pub const ALL: &[BootStage] = &[
     BootStage::DeviceBinding,
     BootStage::Preflight,
     BootStage::FactoryReset,
-    BootStage::ProvisionDatabase,
-    BootStage::SyncDbPort,
-    BootStage::StartDatabase,
     BootStage::LoadSecrets,
+    BootStage::EvaluateData,
     BootStage::StartServer,
     BootStage::WaitServer,
 ];
@@ -57,10 +50,8 @@ impl BootStage {
             BootStage::DeviceBinding => "التحقق من الجهاز…",
             BootStage::Preflight => "فحص ملفات التشغيل…",
             BootStage::FactoryReset => "مراجعة طلبات إعادة الضبط…",
-            BootStage::ProvisionDatabase => "تجهيز قاعدة البيانات المحلية (التشغيل الأول قد يستغرق وقتاً)…",
-            BootStage::SyncDbPort => "ضبط إعدادات قاعدة البيانات…",
-            BootStage::StartDatabase => "تشغيل قاعدة البيانات…",
             BootStage::LoadSecrets => "تجهيز مفاتيح التشغيل…",
+            BootStage::EvaluateData => "التحقق من بيانات الشركة…",
             BootStage::StartServer => "تشغيل النظام…",
             BootStage::WaitServer => "فتح الواجهة…",
         }
@@ -72,10 +63,8 @@ impl BootStage {
             BootStage::DeviceBinding => "device-binding",
             BootStage::Preflight => "preflight",
             BootStage::FactoryReset => "factory-reset",
-            BootStage::ProvisionDatabase => "provision-db",
-            BootStage::SyncDbPort => "sync-db-port",
-            BootStage::StartDatabase => "start-db",
             BootStage::LoadSecrets => "load-secrets",
+            BootStage::EvaluateData => "evaluate-data",
             BootStage::StartServer => "start-server",
             BootStage::WaitServer => "wait-server",
         }
@@ -97,10 +86,8 @@ mod tests {
                 "device-binding",
                 "preflight",
                 "factory-reset",
-                "provision-db",
-                "sync-db-port",
-                "start-db",
                 "load-secrets",
+                "evaluate-data",
                 "start-server",
                 "wait-server",
             ]

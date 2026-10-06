@@ -175,6 +175,9 @@ export function SaleInvoicePrint({
     }
   }
   const totals: PrintTotal[] = [];
+  // «عدد الأثواب» of the whole invoice (stored on it; a not-yet-saved copy sums its lines the same way).
+  const piecesCount = inv.piecesCount ?? inv.lines.reduce((sum, l) => sum + (l.pieces ?? 1), 0);
+  totals.push({ label: "عدد الأثواب", value: formatNumber(piecesCount) });
   if (vis.showSubtotal) {
     totals.push({ label: "المجموع", value: formatAmount(subtotal, inv.currency) });
   }

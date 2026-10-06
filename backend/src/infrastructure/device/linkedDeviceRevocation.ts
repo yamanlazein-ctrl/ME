@@ -1,8 +1,7 @@
 import { and, eq } from "drizzle-orm";
 import type { DB } from "../orm/drizzle.js";
 import { runWithTenantContext } from "../orm/tenant-context.js";
-import { deviceRegistrations } from "../orm/schemas/device-registration.table.js";
-import { syncDevices } from "../orm/schemas/sync-device.table.js";
+import { engineSchema } from "../orm/engineSchema.js";
 
 /**
  * Shared identity between license `device_registrations` and sync
@@ -13,6 +12,7 @@ export async function isLicenseFingerprintRevoked(
   tenantId: string,
   fingerprint: string,
 ): Promise<boolean> {
+  const { deviceRegistrations, syncDevices } = await engineSchema();
   return runWithTenantContext({ tenantId }, async () => {
     const rows = await db
       .select({ revokedAt: deviceRegistrations.revokedAt })
@@ -34,6 +34,7 @@ export async function revokeSyncDevicesByFingerprint(
   revoked: boolean,
   reason: string | null,
 ): Promise<void> {
+  const { deviceRegistrations, syncDevices } = await engineSchema();
   const now = new Date();
   await runWithTenantContext({ tenantId }, async () => {
     await db
@@ -56,6 +57,7 @@ export async function revokeLicenseDevicesByFingerprint(
   revoked: boolean,
   reason: string | null,
 ): Promise<void> {
+  const { deviceRegistrations, syncDevices } = await engineSchema();
   const now = new Date();
   await runWithTenantContext({ tenantId }, async () => {
     await db
