@@ -41,6 +41,11 @@ const transportStream = pino.transport({
       },
       level: config.LOG_LEVEL,
     },
+    // A cloud server's host shows only stdout/stderr: mirror the log there too.
+    // The desktop keeps the file only (its shell reads server.log).
+    ...(config.NODE_ENV === "production" && !config.DESKTOP_DEPLOY
+      ? [{ target: "pino/file", options: { destination: 1 }, level: config.LOG_LEVEL }]
+      : []),
     // Dev keeps the readable pretty console alongside the file.
     ...(config.NODE_ENV === "development"
       ? [

@@ -554,6 +554,29 @@ Sentry.setupExpressErrorHandler(app);
 // Global error handler
 app.use(createErrorHandler(logger));
 
+/**
+ * Cloud hub only, opt-in (HUB_PREPARE_ON_BOOT=1): run the project's own
+ * `scripts/migrate.mjs` before serving, then — once, while no company exists —
+ * `bootstrap-hub.mjs` with HUB_BOOTSTRAP_COMPANY / _EMAIL / _PASSWORD. A host
+ * with no shell (e.g. Render's free plan) has no other place to run them. A
+ * failure is fatal (the catch below): an unmigrated hub must never serve.
+ */
+async function prepareHubDatabase(): Promise<void> {
+  if (config.DESKTOP_DEPLOY || process.env.HUB_PREPARE_ON_BOOT !== "1") return;
+  const { spawnSync } = await import("node:child_process");
+  const run = (args: string[]) => {
+    const r = spawnSync(process.execPath, args, { stdio: "inherit", env: process.env });
+    if (r.status !== 0) throw new Error(`${args[0]} exited with ${r.status ?? r.signal}`);
+  };
+  run(["scripts/migrate.mjs"]);
+  const company = process.env.HUB_BOOTSTRAP_COMPANY;
+  const email = process.env.HUB_BOOTSTRAP_EMAIL;
+  const password = process.env.HUB_BOOTSTRAP_PASSWORD;
+  if (company && email && password && !(await container.installationStateRepo.findAnyCompleted())) {
+    run(["bootstrap-hub.mjs", company, email, password]);
+  }
+}
+
 // Start server. Desktop boot has one schema authority: the Drizzle migration
 // runner. Do not patch the live database with bespoke CREATE/ALTER statements.
 async function prepareDesktopDatabase(): Promise<void> {
@@ -632,7 +655,8 @@ async function prepareLicenseIdentity(): Promise<void> {
 }
 
 fxRateService.start();
-void prepareDesktopDatabase()
+void prepareHubDatabase()
+  .then(() => prepareDesktopDatabase())
   .then(() => prepareLicenseIdentity())
   .then(() => {
     // Desktop listens on a WINDOWS NAMED PIPE, not a TCP port. The UI is
