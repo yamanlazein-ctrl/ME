@@ -1,6 +1,6 @@
 [package]
 name = "motard-fabrics-erp"
-version = "2.0.2"
+version = "2.0.3"
 edition = "2021"
 description = "Motard Fabrics Group ERP — Fabric & roll trading management system"
 authors = ["Motard Fabrics Group"]
