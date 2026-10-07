@@ -115,7 +115,7 @@ function registerFnParams(fnName: string): string[] {
     const m = new RegExp(`export\\s+function\\s+${fnName}\\s*\\(`).exec(src);
     if (!m) continue;
     const args = balanced(src, src.indexOf("(", m.index));
-    return splitArgs(args).map((a) => a.replace(/[\s\S]*?(\w+)\s*:[\s\S]*/, "$1").trim());
+    return splitArgs(args).map((a) => a.replace(/[\s\S]*?(\w+)\s*\??\s*:[\s\S]*/, "$1").trim());
   }
   return [];
 }
@@ -125,7 +125,8 @@ function paramToContainerField(fnName: string): Record<string, string> {
   const src = fs.readFileSync(SERVER_PATH, "utf8");
   const callIdx = src.indexOf(`${fnName}(`);
   if (callIdx === -1) return {};
-  const args = splitArgs(balanced(src, src.indexOf("(", callIdx)));
+  // Line comments may hold commas; drop them before splitting the argument list.
+  const args = splitArgs(balanced(src, src.indexOf("(", callIdx)).replace(/\/\/[^\n]*/g, ""));
   const params = registerFnParams(fnName);
   const map: Record<string, string> = {};
   // args[0] is the router; params[0] is `router` too.

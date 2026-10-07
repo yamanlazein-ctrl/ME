@@ -46,7 +46,11 @@
           "English"
         ],
         "displayLanguageSelector": false,
-        "compression": "lzma"
+        "compression": "lzma",
+        "customLanguageFiles": {
+          "Arabic": "./windows/nsis-lang/Arabic.nsh",
+          "English": "./windows/nsis-lang/English.nsh"
+        }
       }
     },
     "icon": [

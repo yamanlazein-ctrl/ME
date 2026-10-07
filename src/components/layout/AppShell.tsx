@@ -48,6 +48,7 @@ const GROUPS: NavGroup[] = [
     label: "القائمة الرئيسية",
     items: [
       { to: "/inventory", label: "المخزون", icon: Boxes },
+      { to: "/inventory/adjustments", label: "تعديلات المخزون", icon: ClipboardList },
       { to: "/customers", label: "العملاء", icon: Users },
       { to: "/suppliers", label: "الموردون", icon: Truck },
     ],

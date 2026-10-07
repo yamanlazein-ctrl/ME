@@ -19,6 +19,7 @@ import { Label } from "@/components/ui/label";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { useCurrentUser } from "@/presentation/hooks/useAuth";
 import {
+  describeSyncProblem,
   hubSync,
   runSyncNow,
   useSyncRunState,
@@ -27,6 +28,7 @@ import {
   type HubTestResult,
 } from "@/lib/sync-engine";
 import { isTauri } from "@/infrastructure/tauri-bridge";
+import { adoptSyncDeviceId } from "@/lib/sync-device";
 import { FactoryResetCard } from "@/components/settings/FactoryResetCard";
 import { HubDevicesCard } from "@/components/settings/HubDevicesCard";
 import { cn } from "@/lib/utils";
@@ -129,6 +131,8 @@ function SyncSettingsAdmin() {
   });
 
   const onLinked = async (r: HubConnectResult) => {
+    // The server may have created this install's sync device while linking.
+    if (r.session?.hubDeviceId) adoptSyncDeviceId(r.session.hubDeviceId);
     setPassword("");
     setCode("");
     toast.success("تم ربط الجهاز بالمركز", {
@@ -179,9 +183,9 @@ function SyncSettingsAdmin() {
         return;
       }
       if (r.deviceGate) {
-        toast.error(r.deviceTrust?.message ?? "المركز رفض هذا الجهاز — أعد الربط");
+        toast.error(describeSyncProblem(r.deviceTrust?.code ?? r.deviceTrust?.message) ?? "المركز رفض هذا الجهاز");
       } else if (r.pullError) {
-        toast.error(`تم الدفع لكن فشل السحب: ${r.pullError}`);
+        toast.error(describeSyncProblem(r.pullError));
       } else if ((r.failed ?? 0) > 0) {
         toast.error(`لم تُرسل ${r.failed} عملية — ستُعاد المحاولة تلقائياً. أُرسل ${r.pushed} · سُحب ${r.pull?.applied ?? 0}`);
       } else {
@@ -283,7 +287,7 @@ function SyncSettingsAdmin() {
               />
             )}
             {state?.lastPushError && (
-              <Row label="سبب تعذّر الإرسال" value={state.lastPushError} danger />
+              <Row label="حالة الإرسال" value={describeSyncProblem(state.lastPushError) ?? ""} danger />
             )}
             {run.lastError && <Row label="آخر خطأ" value={run.lastError} danger />}
           </dl>

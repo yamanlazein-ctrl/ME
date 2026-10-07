@@ -89,6 +89,18 @@ export class InventoryApiService {
     return res.data;
   }
 
+  /** Quantity / pieces correction with a reason (audited, synced). */
+  async adjustRoll(
+    id: string,
+    body: { newKg?: number; newPieces?: number; reason: string; expectedVersion: number },
+  ): Promise<{ beforeKg: number; afterKg: number; beforePieces: number; afterPieces: number }> {
+    const res = await this.client.post<{ beforeKg: number; afterKg: number; beforePieces: number; afterPieces: number }>(
+      `/api/inventory/rolls/${id}/adjust`,
+      body,
+    );
+    return res.data;
+  }
+
   async reserveStock(rollId: string, quantityKg: number, expectedVersion: number): Promise<void> {
     await this.client.post(`/api/inventory/rolls/${rollId}/reserve`, {
       quantityKg,

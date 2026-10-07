@@ -1,6 +1,6 @@
 import { RefreshCw, Wifi, WifiOff } from "lucide-react";
 import { useSyncStatus, SYNC_HUB_KEY } from "@/presentation/hooks/useSyncStatus";
-import { useSyncRunState, runSyncNow } from "@/lib/sync-engine";
+import { describeSyncProblem, useSyncRunState, runSyncNow } from "@/lib/sync-engine";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -41,7 +41,7 @@ export function SyncStatusBar() {
       {failed > 0 && (
         <>
           <span className="opacity-70">·</span>
-          <span>{failed} عملية فشلت</span>
+          <span>{failed} بانتظار إعادة المحاولة</span>
         </>
       )}
       <button
@@ -51,10 +51,10 @@ export function SyncStatusBar() {
           void runSyncNow()
             .then((r) => {
               if (!r) return;
-              if (r.failed > 0) toast.error(`فشلت ${r.failed} عملية في المزامنة`);
+              if (r.failed > 0) toast.warning(`${r.failed} عمليات لم تُرسل بعد — ستُعاد المحاولة تلقائياً.`);
               else toast.success("تمت المزامنة");
             })
-            .catch((e: Error) => toast.error(e.message || "تعذّرت المزامنة"))
+            .catch((e: Error) => toast.error(describeSyncProblem(e.message) ?? "تعذّرت المزامنة — ستُعاد المحاولة تلقائياً."))
             .finally(() => qc.invalidateQueries({ queryKey: SYNC_HUB_KEY }));
         }}
         className="ms-auto inline-flex items-center gap-1 rounded-md border border-border px-2 py-1 font-medium text-foreground transition hover:border-primary/40 hover:text-primary disabled:opacity-60"

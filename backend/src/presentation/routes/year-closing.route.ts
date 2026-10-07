@@ -3,6 +3,8 @@ import { z } from "zod";
 import { validateBody, validateQuery } from "../../infrastructure/http/middleware/validate.middleware.js";
 import { withTenantTx } from "../../infrastructure/orm/engine.js";
 import { financialYearHelpers, inventoryCountHelpers } from "../../infrastructure/repositories/engineHelpers.js";
+import type { ISyncOutboxRepository } from "../../application/ports/ISyncOutboxRepository.js";
+import { enqueueRollAdjustment, isSyncEnqueueEnabled } from "../../application/use-cases/sync/syncEnqueue.js";
 import { respondTransactionFailure } from "../../infrastructure/http/transactionRouteError.js";
 import { BusinessRuleError, DayLockedError } from "../../domain/errors/index.js";
 import type { TenantContext } from "../../domain/types/index.js";
@@ -70,6 +72,7 @@ export function registerYearClosingRoutes(
   writeGuard: RequestHandler,
   readGuard: RequestHandler,
   adminGuard: RequestHandler,
+  syncOutboxRepo?: ISyncOutboxRepository,
 ): void {
   const ctxOf = (req: Request): TenantContext => req.tenantContext!;
 
@@ -182,10 +185,15 @@ export function registerYearClosingRoutes(
     async (req: Request, res: Response) => {
       const { countId } = parsed<z.infer<typeof postBodySchema>>(req);
       try {
-        const result = await withTenantTx(ctxOf(req).tenantId, async (tx) =>
-          (await inventoryCountHelpers()).postCountVariance(tx, ctxOf(req), countId),
-        );
-        return res.json(result);
+        const result = await withTenantTx(ctxOf(req).tenantId, async (tx) => {
+          const posted = await (await inventoryCountHelpers()).postCountVariance(tx, ctxOf(req), countId);
+          // The shelf changed: every device must apply the same correction.
+          if (posted.adjustment && syncOutboxRepo && isSyncEnqueueEnabled()) {
+            await enqueueRollAdjustment(syncOutboxRepo, ctxOf(req), posted.adjustment, req);
+          }
+          return posted;
+        });
+        return res.json({ rollId: result.rollId, diffKg: result.diffKg, movementId: result.movementId });
       } catch (err) {
         return fail(res, err, "تعذّر ترحيل تسوية الجرد.");
       }

@@ -1,3 +1,4 @@
+import { hostname as osHostname } from "node:os";
 import type { Router, Request, Response, RequestHandler } from "express";
 import { z } from "zod";
 import { validateBody } from "../../infrastructure/http/middleware/validate.middleware.js";
@@ -245,6 +246,41 @@ export function registerSyncRoutes(
     release(_destroy?: boolean) {},
   });
 
+  /**
+   * This install's local sync device. Linking a NEW device must not depend on the
+   * UI having registered one at login: reuse the install's single device, else
+   * create it from this machine's fingerprint (one install = one sync identity).
+   */
+  const ensureLocalSyncDevice = async (ctx: TenantContext) => {
+    if (ctx.syncDeviceId) {
+      const own = await container.syncDeviceRepo.findById(ctx.tenantId, ctx.syncDeviceId).catch(() => null);
+      if (own && !own.revokedAt) return own;
+    }
+    const live = (await container.syncDeviceRepo.listForTenant(ctx.tenantId)).filter((d) => !d.revokedAt);
+    if (live.length === 1) return live[0];
+    const meta = await container.fingerprintProvider.getMetadata(await container.fingerprintProvider.collect());
+    const os = await import("node:os");
+    const platform = os.platform() === "win32" ? "windows" : os.platform() === "darwin" ? "macos" : "linux";
+    return container.syncDeviceRepo.registerOrTouch({
+      tenantId: ctx.tenantId,
+      userId: ctx.userId,
+      deviceFingerprint: meta.hash,
+      deviceFingerprintVersion: meta.version,
+      platform,
+      hostname: os.hostname() || null,
+      label: os.hostname() || null,
+    });
+  };
+  const asHubDevice = (d: Awaited<ReturnType<typeof ensureLocalSyncDevice>>) => ({
+    id: d.id,
+    fingerprint: d.deviceFingerprint,
+    fingerprintVersion: d.deviceFingerprintVersion,
+    platform: d.platform,
+    // A device created by the setup wizard has no name; the hub's device list must still say which PC it is.
+    hostname: d.hostname || osHostname() || null,
+    label: d.label || d.hostname || osHostname() || null,
+  });
+
   router.get("/sync/hub", auth, guards.operatorGuard, async (req: Request, res: Response) => {
     const ctx = req.tenantContext!;
     const url = getCentralSyncUrl();
@@ -324,9 +360,7 @@ export function registerSyncRoutes(
       const ctx = req.tenantContext!;
       const body = (req as unknown as { validatedBody: z.infer<typeof HubConnectSchema> })
         .validatedBody;
-      const localDevice = ctx.syncDeviceId
-        ? await container.syncDeviceRepo.findById(ctx.tenantId, ctx.syncDeviceId).catch(() => null)
-        : null;
+      const localDevice = await ensureLocalSyncDevice(ctx);
       const { email, password } = resolveConnectCredentials(body);
       if (!email || !password) {
         res.status(422).json({
@@ -341,16 +375,7 @@ export function registerSyncRoutes(
         email,
         password,
         local: { tenantId: ctx.tenantId, userId: ctx.userId },
-        device: localDevice
-          ? {
-              id: localDevice.id,
-              fingerprint: localDevice.deviceFingerprint,
-              fingerprintVersion: localDevice.deviceFingerprintVersion,
-              platform: localDevice.platform,
-              hostname: localDevice.hostname,
-              label: localDevice.label,
-            }
-          : null,
+        device: asHubDevice(localDevice),
       });
       if (!result.ok) {
         res
@@ -372,11 +397,11 @@ export function registerSyncRoutes(
       // Paired = several writers: reserve this device's number ranges from the
       // hub NOW, so the very first document after pairing cannot collide.
       let blocksError: string | null = null;
-      if (ctx.syncDeviceId) {
+      {
         await numberBlocksUc
           .ensureDeviceNumberBlocks(container.documentNumberBlockRepo, container.fingerprintProvider, {
             tenantId: ctx.tenantId,
-            syncDeviceId: ctx.syncDeviceId,
+            syncDeviceId: localDevice.id,
             userId: ctx.userId,
             authHeader: req.headers.authorization,
           })
@@ -657,6 +682,9 @@ export function registerSyncRoutes(
 
   /** Push local outbox to hub, then pull peers' applied units. */
 
+  /** Bumped whenever a cycle (UI or background) applied pulled units to this database. */
+  let localDataVersion = 0;
+
   /**
    * One sync cycle: push the local outbox to the hub, then pull peers' applied
    * units. Shared by POST /sync/run (UI) and the background timer, so both
@@ -804,6 +832,8 @@ export function registerSyncRoutes(
       push.deviceTrust ??= more.deviceTrust;
       lastFull = handledOf(more) >= PUSH_BATCH;
     }
+    // A rejected unit is rolled back locally (its cancel use-case ran): local data changed.
+    if (push.rejected > 0) localDataVersion += 1;
 
     let pull: Awaited<ReturnType<typeof syncUc.runLocalSyncPull>> = {
       pulled: 0,
@@ -841,6 +871,7 @@ export function registerSyncRoutes(
           deviceTrust: pull.deviceTrust ?? page.deviceTrust,
         };
       }
+      if (pull.applied > 0) localDataVersion += 1;
     } catch (err) {
       pullError = err instanceof Error ? err.message : "pull failed";
       logger.warn({ err }, "sync pull during sync/run failed");
@@ -916,7 +947,9 @@ export function registerSyncRoutes(
       const ctx = req.tenantContext!;
       lastUiRunAt = Date.now();
       if (getCentralSyncUrl()) rememberLocalSyncIdentity(ctx.tenantId, ctx.userId);
-      res.json(await runSyncCycle(ctx, req.headers.authorization));
+      // Sent on every answer, a skipped one too: the screen must refresh after the
+      // BACKGROUND cycle applied data, not only after its own run pulled something.
+      res.json({ ...(await runSyncCycle(ctx, req.headers.authorization)), localDataVersion });
     },
   );
 
@@ -1384,29 +1417,12 @@ export function registerSyncRoutes(
     async (req: Request, res: Response) => {
       const ctx = req.tenantContext!;
       const body = (req as unknown as { validatedBody: z.infer<typeof HubEnrollSchema> }).validatedBody;
-      const localDevice = ctx.syncDeviceId
-        ? await container.syncDeviceRepo.findById(ctx.tenantId, ctx.syncDeviceId).catch(() => null)
-        : null;
-      if (!localDevice) {
-        res.status(422).json({
-          code: "HUB_ENROLL_FAILED",
-          stage: "device",
-          message: "لا يوجد جهاز مزامنة محلي لهذه الجلسة — سجّل الخروج والدخول ثم أعد المحاولة",
-        });
-        return;
-      }
+      const localDevice = await ensureLocalSyncDevice(ctx);
       const result = await enrollHub({
         url: body.url,
         code: body.code,
         local: { tenantId: ctx.tenantId, userId: ctx.userId },
-        device: {
-          id: localDevice.id,
-          fingerprint: localDevice.deviceFingerprint,
-          fingerprintVersion: localDevice.deviceFingerprintVersion,
-          platform: localDevice.platform,
-          hostname: localDevice.hostname,
-          label: localDevice.label,
-        },
+        device: asHubDevice(localDevice),
       });
       if (!result.ok) {
         res.status(422).json({ code: "HUB_ENROLL_FAILED", stage: result.stage, message: result.error });

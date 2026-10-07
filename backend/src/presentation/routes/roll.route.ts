@@ -22,12 +22,29 @@ import {
   enqueueMasterCreate,
   enqueueMasterDelete,
   enqueueMasterUpdate,
+  enqueueRollAdjustment,
   isSyncEnqueueEnabled,
   opIdFromRequest,
   syncDeviceIdFromRequest,
 } from "../../application/use-cases/sync/syncEnqueue.js";
 import { logger } from "../../infrastructure/config/logger.js";
 import { withTenantTx } from "../../infrastructure/orm/engine.js";
+import { randomUUID } from "node:crypto";
+import { round2dp } from "@erp/shared";
+import { BusinessRuleError } from "../../domain/errors/index.js";
+import { inventoryCountHelpers } from "../../infrastructure/repositories/engineHelpers.js";
+import { localToday } from "../../infrastructure/utils/localDate.js";
+import { respondTransactionFailure } from "../../infrastructure/http/transactionRouteError.js";
+
+/** Target figures the operator typed; the server turns them into a delta against the live roll. */
+const AdjustRollSchema = z
+  .object({
+    newKg: z.number().min(0).optional(),
+    newPieces: z.number().int().min(0).optional(),
+    reason: z.string().trim().min(2, "اكتب سبب التعديل").max(200),
+    expectedVersion: z.number().int(),
+  })
+  .refine((b) => b.newKg !== undefined || b.newPieces !== undefined, { message: "أدخل الكمية أو عدد الأثواب الجديد" });
 
 export function registerRollRoutes(
   router: Router,
@@ -159,6 +176,56 @@ export function registerRollRoutes(
         res.json(r.data);
       } else {
         res.status(422).json({ code: "VALIDATION", message: r.error });
+      }
+    },
+  );
+
+  /**
+   * Manual quantity / pieces correction. Never a silent overwrite: an
+   * `adjustment` stock movement, the P&L leg at cost and an audit row (who,
+   * when, before, after, why) — the same path as a posted inventory count —
+   * and one roll/adjust sync unit so every device applies the same delta.
+   */
+  router.post(
+    "/inventory/rolls/:id/adjust",
+    auth,
+    writeGuard,
+    validateUuidParam("id"),
+    idempotency("POST"),
+    validateBody(AdjustRollSchema),
+    async (req: Request, res: Response) => {
+      const c = ctx(req);
+      const id = pid(req);
+      const b = body<z.infer<typeof AdjustRollSchema>>(req);
+      try {
+        const result = await withTenantTx(c.tenantId, async (tx) => {
+          const roll = await rollRepo.findById(id, c);
+          if (!roll) throw new BusinessRuleError("اللفة غير موجودة.");
+          const refId = randomUUID();
+          const adjustment = {
+            rollId: id,
+            deltaKg: b.newKg === undefined ? 0 : round2dp(b.newKg - Number(roll.remainingKg ?? 0)),
+            deltaPieces: b.newPieces === undefined ? 0 : b.newPieces - (roll.remainingPieces ?? 0),
+            reason: b.reason,
+            date: localToday(),
+            referenceType: "inventory_adjustment" as const,
+            referenceId: refId,
+            referenceNumber: `ADJ-${refId.slice(0, 8).toUpperCase()}`,
+            expectedVersion: b.expectedVersion,
+          };
+          const applied = await (await inventoryCountHelpers()).applyRollAdjustment(tx as never, c, adjustment);
+          if (syncOutboxRepo && isSyncEnqueueEnabled()) {
+            await enqueueRollAdjustment(syncOutboxRepo, c, adjustment, req);
+          }
+          return applied;
+        });
+        res.json(result);
+      } catch (err) {
+        if (err instanceof BusinessRuleError) {
+          res.status(422).json({ code: "VALIDATION", message: err.message });
+          return;
+        }
+        respondTransactionFailure(res, err, "generic", "تعذّر تعديل الكمية — لم يُحفظ أي تغيير. أعد المحاولة.");
       }
     },
   );

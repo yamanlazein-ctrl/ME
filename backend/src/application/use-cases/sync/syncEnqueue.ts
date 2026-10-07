@@ -864,3 +864,42 @@ export async function enqueuePrintReceive(
     },
   });
 }
+
+/** A roll quantity correction (posted count or manual adjustment), replayed as a DELTA everywhere. */
+export async function enqueueRollAdjustment(
+  outbox: ISyncOutboxRepository,
+  ctx: TenantContext,
+  adjustment: {
+    rollId: string;
+    deltaKg: number;
+    deltaPieces: number;
+    reason: string;
+    date: string;
+    referenceType: string;
+    referenceId: string;
+    referenceNumber: string;
+  },
+  req: Parameters<typeof syncDeviceIdFromRequest>[0] & Parameters<typeof opIdFromRequest>[0],
+) {
+  return enqueueSyncUnit(outbox, {
+    tenantId: ctx.tenantId,
+    syncDeviceId: syncDeviceIdFromRequest(req),
+    opId: opIdFromRequest(req),
+    entityType: "roll",
+    entityId: adjustment.rollId,
+    operation: "adjust",
+    payload: {
+      rollId: adjustment.rollId,
+      deltaKg: adjustment.deltaKg,
+      deltaPieces: adjustment.deltaPieces,
+      reason: adjustment.reason,
+      date: adjustment.date,
+      referenceType: adjustment.referenceType,
+      referenceId: adjustment.referenceId,
+      referenceNumber: adjustment.referenceNumber,
+      actorUserId: ctx.userId,
+      actorRole: ctx.userRole,
+      actorUserName: ctx.userName,
+    },
+  });
+}

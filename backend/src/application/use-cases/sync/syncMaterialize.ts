@@ -319,6 +319,9 @@ export async function materializeSyncUnit(
   if (entityType === "order" && operation === "update") {
     return materializeOrderUpdate(repos, payload, ctx, meta);
   }
+  if (entityType === "roll" && operation === "adjust") {
+    return materializeRollAdjust(payload, ctx);
+  }
   if (entityType === "ledger" && operation === "create") {
     return materializeLedgerCreate(repos, payload, ctx);
   }
@@ -1446,6 +1449,41 @@ async function materializeMasterMutation(
     return { status: "created" };
   } catch (err) {
     return { status: "failed", error: err instanceof Error ? err.message : "master update failed" };
+  }
+}
+
+/**
+ * A posted count / manual adjustment from another device: the SAME correction
+ * (delta, movement, P&L leg, audit) through the same function. Deltas converge
+ * with sales made meanwhile on other devices; the inbox op id makes it once-only.
+ */
+async function materializeRollAdjust(
+  payload: Record<string, unknown>,
+  ctx: TenantContext,
+): Promise<MaterializeResult> {
+  const rollId = typeof payload.rollId === "string" && isUuid(payload.rollId) ? payload.rollId : null;
+  if (!rollId) return { status: "invalid", error: "missing rollId" };
+  const rctx = replayCtxFromPayload(payload, ctx);
+  try {
+    const { withTenantTx } = await import("../../../infrastructure/orm/engine.js");
+    const { inventoryCountHelpers } = await import("../../../infrastructure/repositories/engineHelpers.js");
+    await withTenantTx(ctx.tenantId, async (tx) =>
+      (await inventoryCountHelpers()).applyRollAdjustment(tx as never, rctx, {
+        rollId,
+        deltaKg: Number(payload.deltaKg ?? 0),
+        deltaPieces: Number(payload.deltaPieces ?? 0),
+        reason: String(payload.reason ?? "تعديل مخزون"),
+        date: String(payload.date ?? new Date().toISOString().slice(0, 10)),
+        referenceType: payload.referenceType === "inventory_count" ? "inventory_count" : "inventory_adjustment",
+        referenceId: String(payload.referenceId ?? rollId),
+        referenceNumber: String(payload.referenceNumber ?? "ADJ"),
+        expectedVersion: null,
+      }),
+    );
+    return { status: "created" };
+  } catch (err) {
+    // The roll may not be here yet (its create unit is still on its way): retryable.
+    return { status: "failed", error: err instanceof Error ? err.message : "roll adjustment replay failed" };
   }
 }
 

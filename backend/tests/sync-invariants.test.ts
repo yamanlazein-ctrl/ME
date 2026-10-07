@@ -995,7 +995,7 @@ describe("sync invariants — run-result honesty (P7)", () => {
     // The cycle (shared with the background timer) returns the result; the route sends it as is.
     expect(
       /return \{ \.\.\.push, deviceTrust, pull, pullError, blocksError(, [a-zA-Z]+)* \}/.test(ROUTE) &&
-        /res\.json\(await runSyncCycle\(/.test(ROUTE),
+        /res\.json\(\{ \.\.\.\(await runSyncCycle\(/.test(ROUTE),
       "fields must reach the client",
     ).toBe(true);
   });

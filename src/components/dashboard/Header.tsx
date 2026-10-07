@@ -101,7 +101,7 @@ export function Header() {
           {!syncing && hubSyncError && (
             <span
               className="hidden items-center gap-1.5 text-[11px] font-medium text-destructive lg:inline-flex"
-              title={`تعذّرت المزامنة مع المركز: ${hubSyncError}`}
+              title={hubSyncError}
               role="status"
               aria-live="polite"
             >

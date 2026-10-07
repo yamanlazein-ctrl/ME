@@ -5,6 +5,7 @@ import { hasStoredSession } from "@/infrastructure/auth/TokenProvider";
 import { runSyncNow } from "@/lib/sync-engine";
 import { refreshParties } from "@/presentation/hooks/useParties";
 import { refreshInventory } from "@/presentation/hooks/useInventory";
+import { loadSettings } from "@/presentation/hooks/useSettings";
 
 /**
  * When connectivity flips to online (and a session exists), trigger a local
@@ -25,6 +26,8 @@ export function useAutoSync() {
   const status = useConnectivity(15_000);
   const prev = useRef<ConnectivityStatus | null>(null);
   const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
+  // Last backend data version seen (see SyncRunResult.localDataVersion).
+  const seenDataVersion = useRef<number | null>(null);
   // Device gate: the hub refused pushes with SYNC_UNKNOWN_DEVICE. Retrying
   // cannot help — the device must register first. Surfaced as state so the
   // header can show a register-device badge instead of spinning silently.
@@ -95,17 +98,27 @@ export function useAutoSync() {
       if (!hasStoredSession()) return;
       try {
         const result = await runSyncNow();
-        if (!result || result.skipped) return;
-        setDeviceGate(Boolean(result.deviceGate));
-        setDeviceTrust(result.deviceGate ? (result.deviceTrust ?? null) : null);
-        const pulledSomething = (result.pull?.applied ?? 0) > 0 && (result.pull?.pulled ?? 0) > 0;
-        if (pulledSomething) {
+        if (!result) return;
+        // The background cycle may have applied peers' data while this run was
+        // skipped ("sync already running"): the version tells, either way.
+        const version = result.localDataVersion;
+        const dataChanged =
+          typeof version === "number" && seenDataVersion.current !== null && version !== seenDataVersion.current;
+        if (typeof version === "number") seenDataVersion.current = version;
+        const pulledSomething =
+          !result.skipped && (result.pull?.applied ?? 0) > 0 && (result.pull?.pulled ?? 0) > 0;
+        if (!result.skipped) {
+          setDeviceGate(Boolean(result.deviceGate));
+          setDeviceTrust(result.deviceGate ? (result.deviceTrust ?? null) : null);
+        }
+        if (dataChanged || pulledSomething) {
           // Peers changed documents here: every list/detail view must re-read,
           // including the two module-level caches that live outside react-query.
           void refreshParties();
           void refreshInventory();
+          void loadSettings();
           await qc.invalidateQueries();
-        } else if ((result.activity ?? 0) > 0 || (result.rejected ?? 0) > 0) {
+        } else if (!result.skipped && ((result.activity ?? 0) > 0 || (result.rejected ?? 0) > 0)) {
           await qc.invalidateQueries({ queryKey: ["notifications"] });
         }
       } catch (err) {

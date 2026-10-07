@@ -365,8 +365,10 @@ function CountSheet({
             <TableBody>
               {sheet.data.lines.map((l) => {
                 const draft = drafts[l.rollId];
-                const raw = draft !== undefined ? Number(draft) : l.countedKg;
+                // An empty field means "not counted yet" — never a count of 0.
+                const raw = draft !== undefined ? (draft.trim() === "" ? null : Number(draft)) : l.countedKg;
                 const effective = raw == null || Number.isNaN(raw) ? null : raw;
+                // Difference = actual (counted) − book, for this roll only.
                 const diff =
                   effective == null ? null : Math.round((effective - l.bookKg) * 100) / 100;
                 return (
@@ -412,14 +414,17 @@ function CountSheet({
                             حفظ
                           </Button>
                           <Button
-
                             size="sm"
                             variant="destructive"
                             disabled={disabled || posting || !l.countId || diff == null || diff === 0}
-                            title={l.countId ? "????? ????? ?????" : "???? ????? ?????? ?????"}
+                            title={
+                              l.countId
+                                ? "ترحيل الفرق: تُعدَّل كمية اللفة إلى الكمية الفعلية وتُسجَّل حركة تسوية في السجل"
+                                : "احفظ الكمية الفعلية أولاً، ثم رحّل الفرق"
+                            }
                             onClick={() => l.countId && onPost(l.countId)}
                           >
-                            ?????
+                            ترحيل الفرق
                           </Button>
                         </div>
                       )}

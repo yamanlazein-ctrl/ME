@@ -32,6 +32,7 @@ import {
   type Currency,
   type Fabric,
   type Roll,
+  adjustRoll,
 } from "@/presentation/hooks/useInventory";
 import { addSupplier, suppliers, supplierById, useParties } from "@/presentation/hooks/useParties";
 import { SectionCard, Field } from "./InventoryHelpers";
@@ -625,6 +626,94 @@ function ColorFormDialog({ state, onClose }: { state: ColorFormState; onClose: (
   );
 }
 
+/**
+ * Quantity / pieces correction for an existing roll. Never a silent overwrite:
+ * the server records an adjustment movement, the P&L at cost and an audit row
+ * (who, when, before, after, why) — see «تعديلات المخزون» — and syncs it.
+ */
+function RollAdjustSection({
+  roll,
+  onDone,
+}: {
+  roll: NonNullable<RollFormState["editing"]>;
+  onDone: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [kg, setKg] = useState(String(roll.remainingKg ?? 0));
+  const [pieces, setPieces] = useState(String(roll.remainingPieces ?? 0));
+  const [reason, setReason] = useState("");
+  const [busy, setBusy] = useState(false);
+  const newKg = Number(kg);
+  const newPieces = Number(pieces);
+  const deltaKg = Math.round((newKg - Number(roll.remainingKg ?? 0)) * 100) / 100;
+  const deltaPieces = newPieces - Number(roll.remainingPieces ?? 0);
+  const valid =
+    kg.trim() !== "" &&
+    pieces.trim() !== "" &&
+    Number.isFinite(newKg) &&
+    newKg >= 0 &&
+    Number.isInteger(newPieces) &&
+    newPieces >= 0 &&
+    (deltaKg !== 0 || deltaPieces !== 0) &&
+    reason.trim().length >= 2;
+  if (!open) {
+    return (
+      <div className="md:col-span-2">
+        <Button type="button" variant="outline" size="sm" onClick={() => setOpen(true)}>
+          تعديل الكمية / عدد الأثواب
+        </Button>
+      </div>
+    );
+  }
+  const sign = (n: number) => (n > 0 ? `+${n}` : String(n));
+  return (
+    <div className="grid gap-3 rounded-lg border border-border p-3 md:col-span-2 md:grid-cols-3">
+      <div className="text-xs font-bold md:col-span-3">تعديل المخزون (يُسجَّل في «تعديلات المخزون»)</div>
+      <div>
+        <Label>الكمية الجديدة (كغ)</Label>
+        <Input type="number" step="0.01" min="0" value={kg} onChange={(e) => setKg(e.target.value)} />
+        <p className="mt-1 text-[11px] text-muted-foreground">
+          الحالية {roll.remainingKg} · الفرق {Number.isFinite(deltaKg) ? sign(deltaKg) : "—"}
+        </p>
+      </div>
+      <div>
+        <Label>عدد الأثواب الجديد</Label>
+        <Input type="number" step="1" min="0" value={pieces} onChange={(e) => setPieces(e.target.value)} />
+        <p className="mt-1 text-[11px] text-muted-foreground">
+          الحالي {roll.remainingPieces ?? 0} · الفرق {Number.isFinite(deltaPieces) ? sign(deltaPieces) : "—"}
+        </p>
+      </div>
+      <div>
+        <Label>سبب التعديل</Label>
+        <Input value={reason} maxLength={200} placeholder="مثال: تصحيح عدّ، تلف" onChange={(e) => setReason(e.target.value)} />
+      </div>
+      <div className="flex gap-2 md:col-span-3">
+        <Button
+          type="button"
+          size="sm"
+          disabled={!valid || busy}
+          onClick={async () => {
+            setBusy(true);
+            const ok = await adjustRoll(roll.id, {
+              newKg,
+              newPieces,
+              reason: reason.trim(),
+              expectedVersion: roll.version,
+            });
+            setBusy(false);
+            if (ok) onDone();
+          }}
+        >
+          تطبيق التعديل
+        </Button>
+        <Button type="button" size="sm" variant="ghost" onClick={() => setOpen(false)}>
+          إلغاء
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 function RollFormDialog({ state, onClose }: { state: RollFormState; onClose: () => void }) {
   useParties();
   const editing = state.editing;
@@ -803,10 +892,11 @@ function RollFormDialog({ state, onClose }: { state: RollFormState; onClose: () 
                   title="الكمية المتبقية تُعدَّل عبر الفواتير والمرتجعات فقط"
                 />
                 <p className="mt-1 text-[11px] text-muted-foreground">
-                  لا يمكن تعديل المخزون من هنا — استخدم فاتورة دخول/بيع أو مرتجع.
+                  تتغيّر الكمية بالفواتير والمرتجعات، أو بتعديل مخزون موثّق أدناه.
                 </p>
               </div>
             )}
+            {editing && <RollAdjustSection roll={editing} onDone={onClose} />}
             <div>
               <Label>سعر الشراء للكغ</Label>
               <Input

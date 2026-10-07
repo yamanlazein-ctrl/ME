@@ -29,6 +29,9 @@ export async function registerCurrentSyncDevice(label?: string): Promise<string 
   if (!token) return null;
 
   const fp = await getDesktopFingerprint();
+  // Keep the identity this install already uses (e.g. the one cloud-sync linking
+  // created): pushes carry it, so it must not be replaced by a fresh row.
+  const known = getRegisteredSyncDeviceId();
   const res = await fetch(`${getApiBaseUrl()}/api/auth/sync-device`, {
     method: "POST",
     headers: {
@@ -41,11 +44,15 @@ export async function registerCurrentSyncDevice(label?: string): Promise<string 
       platform: detectPlatform(fp.os),
       hostname: fp.hostname || undefined,
       label: label?.trim() || fp.hostname || undefined,
+      ...(known ? { deviceId: known } : {}),
     }),
   });
 
   if (!res.ok) {
-    const data = (await res.json().catch(() => ({}))) as { message?: string };
+    const data = (await res.json().catch(() => ({}))) as { message?: string; code?: string };
+    // The known id was registered from this machine by the backend (another
+    // fingerprint source): it stays this device's identity.
+    if (known && data.code === "SYNC_DEVICE_FINGERPRINT_MISMATCH") return known;
     throw new Error(data.message || `فشل تسجيل جهاز المزامنة (${res.status})`);
   }
 

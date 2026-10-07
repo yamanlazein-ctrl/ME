@@ -389,11 +389,6 @@ export function markHubUnreachable(): void {
   }
 }
 
-export function isServerSideOffline(): boolean {
-  if (!getCentralSyncUrl()) return false;
-  return hubReachable === false;
-}
-
 // ── Settings → «المزامنة السحابية» (admin-only pairing surface) ──────────────
 
 export function getHubSessionInfo(): HubSessionInfo | null {

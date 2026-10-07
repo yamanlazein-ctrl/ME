@@ -88,7 +88,10 @@ export async function updatePartyUseCase(
     const party = await repo.update(id, input, ctx, expectedVersion);
     return { ok: true, data: party };
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : "فشل تحديث الطرف" };
+    if (/Stale version|STALE_VERSION/i.test(e instanceof Error ? e.message : "")) {
+      return { ok: false, error: "تغيّرت بيانات الطرف على جهاز آخر أو في نافذة أخرى — حدّث الصفحة ثم أعد المحاولة." };
+    }
+    return { ok: false, error: persistenceErrorMessage(e, "party") };
   }
 }
 
@@ -161,7 +164,7 @@ export async function cancelPartyUseCase(
       };
     }
     // Surface the repository's clear, business-level message (e.g. "لا يمكن
-    // حذف العميل لوجود فواتير مرتبطة به") so the API returns it verbatim.
-    return { ok: false, error: msg };
+    // حذف العميل لوجود فواتير مرتبطة به") verbatim; SQL text never leaves.
+    return { ok: false, error: persistenceErrorMessage(e, "party") };
   }
 }

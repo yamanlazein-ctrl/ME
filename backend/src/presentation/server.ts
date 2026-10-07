@@ -58,9 +58,9 @@ import { registerSearchRoutes } from "./routes/search.route.js";
 import { registerReportRoutes } from "./routes/reports.route.js";
 import { registerSyncBootstrapRoutes } from "./routes/syncBootstrap.route.js";
 import { registerSyncEnrollmentPublicRoutes } from "./routes/syncEnrollment.route.js";
+import { userFacingErrors } from "../infrastructure/http/middleware/userFacingErrors.middleware.js";
 import { getCentralSyncUrl, probeHubReachable } from "../application/use-cases/sync/hubConfig.js";
 import { FxRateService } from "../infrastructure/fx/FxRateService.js";
-import { offlineWriteGuard } from "../infrastructure/http/middleware/offline-write.middleware.js";
 import { createLicenseHeartbeatMiddleware } from "../infrastructure/http/middleware/license.heartbeat.middleware.js";
 import { createInstallGateMiddleware } from "../infrastructure/http/middleware/install.gate.middleware.js";
 import { createLicenseGuard } from "../infrastructure/http/middleware/license.guard.middleware.js";
@@ -190,6 +190,7 @@ app.use(
 
 // Request ID and body parsing
 app.use(requestIdMiddleware);
+app.use(userFacingErrors);
 app.use(express.json({ limit: "10mb" }));
 
 // Request logging
@@ -245,7 +246,6 @@ apiRouter.use(
     cipher: container.secretCipher,
     tokenDenylist: container.tokenDenylist,
   }),
-  offlineWriteGuard,
 );
 // Feature gating per module (frozen spec §9 layer 2). Only features that are
 // part of every issued plan are gated here, so an existing license can never
@@ -332,6 +332,7 @@ registerYearClosingRoutes(
   rbac(["admin", "accountant", "warehouse", "viewer"]),
   // Reopen is the one operation that can unfreeze a closed year — admin only.
   rbac(["admin"]),
+  container.syncOutboxRepo,
 );
 registerRollRoutes(
   apiRouter,
