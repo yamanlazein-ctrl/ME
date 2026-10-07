@@ -139,6 +139,7 @@ export const postgresSyncDependencyStore: ISyncDependencyStore = {
         .limit(1);
       if (existing) continue;
       if (await hooks.tombstoneBlocks(ctx.tenantId, "fabric", f.id)) continue;
+      await hooks.resolveMaster(tx, "fabric", f as unknown as Record<string, unknown>, ctx.tenantId);
       await tx.insert(fabrics).values({
         id: f.id,
         tenantId: ctx.tenantId,
@@ -160,6 +161,7 @@ export const postgresSyncDependencyStore: ISyncDependencyStore = {
         .limit(1);
       if (existing) continue;
       if (await hooks.tombstoneBlocks(ctx.tenantId, "color", c.id)) continue;
+      await hooks.resolveMaster(tx, "color", c as unknown as Record<string, unknown>, ctx.tenantId);
       await tx.insert(colors).values({
         id: c.id,
         tenantId: ctx.tenantId,

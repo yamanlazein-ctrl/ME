@@ -31,7 +31,8 @@ export class AuditApiService {
   }
 
   /** Every audit row of one module, newest first (e.g. "inventory_adjustments"). */
-  async listByModule(module: string, limit = 200): Promise<AuditLogDTO[]> {
+  // The route caps `limit` at 100 (200 made «تعديلات المخزون» fail to load).
+  async listByModule(module: string, limit = 100): Promise<AuditLogDTO[]> {
     const res = await this.client.get<{ data?: AuditLogDTO[] } | AuditLogDTO[]>(`/api/audit-logs`, {
       params: { module, limit: String(limit) },
     });

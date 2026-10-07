@@ -14,7 +14,7 @@ export interface DependencyReplayHooks {
   /** True when a tombstone guards (tenant, type, id) — never resurrect a deleted master. */
   tombstoneBlocks(tenantId: string, entityType: string, entityId: string): Promise<boolean>;
   /** Deterministic code/name/roll-number collision resolution (mutates the snapshot). */
-  resolveMaster(executor: unknown, kind: "party" | "roll", snap: Record<string, unknown>, tenantId: string): Promise<void>;
+  resolveMaster(executor: unknown, kind: "party" | "roll" | "fabric" | "color", snap: Record<string, unknown>, tenantId: string): Promise<void>;
 }
 
 export interface ISyncDependencyStore {

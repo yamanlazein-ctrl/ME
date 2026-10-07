@@ -217,4 +217,21 @@ describe("master edits through sync", () => {
     expect(rows.get(opId)).toMatchObject({ status: "rejected", applyAttempts: 0 });
     expect((await colorRow()).name).not.toBe("متأخر");
   });
+
+  it("two devices creating the same fabric (and colour) name converge with a visible suffix", async () => {
+    const make = (entityType: string, snapshot: Record<string, unknown>) => apply("create", entityType, { snapshot });
+    const f1 = "00000000-0000-4000-8000-00000000f001"; // smaller id keeps the name
+    const f2 = "ffffffff-0000-4000-8000-00000000f002";
+    expect((await make("fabric", { id: f2, name: "ميني ليكرا" })).status).toBe("created");
+    expect((await make("fabric", { id: f1, name: "ميني ليكرا" })).status).toBe("created");
+    const fabricNames = await q<{ id: string; name: string }>(sql`SELECT id, name FROM fabrics WHERE id IN (${f1}, ${f2}) ORDER BY id`);
+    expect(fabricNames[0].name).toBe("ميني ليكرا");
+    expect(fabricNames[1].name).toMatch(/^ميني ليكرا \(/);
+    const c1 = "00000000-0000-4000-8000-00000000c001";
+    const c2 = "ffffffff-0000-4000-8000-00000000c002";
+    expect((await make("color", { id: c1, fabricId: f1, name: "أسود", code: "BLK" })).status).toBe("created");
+    expect((await make("color", { id: c2, fabricId: f1, name: "أسود", code: "BLK" })).status).toBe("created");
+    const colorNames = await q<{ name: string }>(sql`SELECT name FROM colors WHERE id IN (${c1}, ${c2}) ORDER BY id`);
+    expect(colorNames.map((c) => c.name)).toEqual(["أسود", expect.stringMatching(/^أسود \(/)]);
+  });
 });

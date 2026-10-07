@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useMemo, useState, type KeyboardEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Check, Search } from "lucide-react";
 import { toast } from "sonner";
@@ -245,10 +245,10 @@ function CountRow({ line, year, onSaved }: { line: CountLine; year: number; onSa
   );
   const [saving, setSaving] = useState(false);
   const [savedAt, setSavedAt] = useState(0);
-  useEffect(() => {
-    setKg(line.countedKg == null ? "" : String(line.countedKg));
-    setPieces(line.countedPieces == null ? "" : String(line.countedPieces));
-  }, [line.countedKg, line.countedPieces]);
+  // Each field follows ITS saved value only: saving kg must not wipe pieces being typed.
+  useEffect(() => setKg(line.countedKg == null ? "" : String(line.countedKg)), [line.countedKg]);
+  useEffect(() => setPieces(line.countedPieces == null ? "" : String(line.countedPieces)), [line.countedPieces]);
+  const again = useRef(false);
 
   const kgN = parse(kg);
   const piecesN = parse(pieces);
@@ -257,8 +257,12 @@ function CountRow({ line, year, onSaved }: { line: CountLine; year: number; onSa
   const dirty = kgN !== line.countedKg || piecesN !== line.countedPieces;
   const posted = line.status === "posted" && !dirty;
 
-  const save = async () => {
-    if (!dirty || saving) return;
+  const save = async (): Promise<void> => {
+    if (saving) {
+      again.current = true; // saved right after the running save, with the latest figures
+      return;
+    }
+    if (!dirty) return;
     if (
       (kgN != null && (Number.isNaN(kgN) || kgN < 0)) ||
       (piecesN != null && (!Number.isInteger(piecesN) || piecesN < 0))
@@ -281,6 +285,13 @@ function CountRow({ line, year, onSaved }: { line: CountLine; year: number; onSa
       setSaving(false);
     }
   };
+  // A save asked for while another was running: run it once that one finished.
+  useEffect(() => {
+    if (!saving && again.current) {
+      again.current = false;
+      void save();
+    }
+  });
   const onKey = (e: KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Enter") (e.target as HTMLInputElement).blur();
   };

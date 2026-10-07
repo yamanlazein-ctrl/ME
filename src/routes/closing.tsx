@@ -199,7 +199,7 @@ function YearClosingPage() {
           <h3 className="mb-2 font-semibold">قائمة التحقق قبل الإقفال</h3>
           {blockers.length === 0 ? (
             <p className="text-sm text-muted-foreground">
-              لا توجد عوائق — الجرد مكتمل ولا توجد فروقات غير مرحّلة.
+              لا توجد عوائق — لا فروقات جرد غير مرحّلة.
             </p>
           ) : (
             <ul className="list-inside list-disc space-y-1 text-sm text-destructive">
