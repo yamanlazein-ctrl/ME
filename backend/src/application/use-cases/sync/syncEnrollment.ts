@@ -42,7 +42,7 @@ export type EnrollingDevice = {
 
 export type EnrollmentCodeInfo = { code: string; expiresAt: string; maxUses: number; uses: number };
 
-type CodeRecord = EnrollmentCodeInfo & { codeHash: string; createdBy: string };
+type CodeRecord = EnrollmentCodeInfo & { codeHash: string; createdBy: string; createdAt?: string };
 type CredRecord = { hash: string; userId: string };
 
 export type Failure = { ok: false; status: number; code: string; error: string };
@@ -98,6 +98,7 @@ export async function createEnrollmentCode(
     maxUses: opts.maxUses ?? 25,
     uses: 0,
     createdBy,
+    createdAt: new Date().toISOString(),
   };
   await putJson(deps, tenantId, CURRENT_KEY, rec);
   return { code, expiresAt: rec.expiresAt, maxUses: rec.maxUses, uses: 0 };
@@ -157,10 +158,25 @@ export async function redeemEnrollmentCode(
 
   const existing = await deps.syncDeviceRepo.findById(tenantId as never, device.id as never);
   if (existing?.revokedAt) return fail(403, "SYNC_DEVICE_REVOKED", "هذا الجهاز معطَّل في المركز — يجب أن يعيد المسؤول تفعيله");
+  // Same PC under an older id (reinstall, factory reset, restore = new sync identity).
+  let retiredTwin: string | null = null;
   if (!existing) {
     // ponytail: count-then-insert, two simultaneous enrollments can pass one
     // over the limit; a per-tenant lock if that ever matters.
-    const live = (await deps.syncDeviceRepo.listForTenant(tenantId as never, 500)).filter((d) => !d.revokedAt);
+    const all = await deps.syncDeviceRepo.listForTenant(tenantId as never, 500);
+    const twin = all.find((d) => d.id !== device.id && d.deviceFingerprint === device.fingerprint);
+    if (twin && !twin.revokedAt) {
+      return fail(409, "SYNC_DEVICE_ID_CONFLICT", "المركز يعرف هذا الجهاز بمعرّف آخر — عطّل الجهاز القديم من قائمة الأجهزة، ثم أصدر رمز تسجيل جديداً وأعد التسجيل");
+    }
+    if (twin) {
+      // Only a code issued AFTER the old row was disabled frees the machine, so a
+      // disabled laptop cannot wipe itself and rejoin with a code it already knew.
+      if (!rec.createdAt || Date.parse(rec.createdAt) <= twin.revokedAt!.getTime()) {
+        return fail(403, "SYNC_DEVICE_REVOKED", "هذا الجهاز معطَّل في المركز — اطلب من المسؤول رمز تسجيل جديداً");
+      }
+      retiredTwin = twin.id;
+    }
+    const live = all.filter((d) => !d.revokedAt);
     const limit = resolveDeviceLimit({ limits: lic.limits, maxDevices: lic.maxDevices });
     if (live.length >= limit) {
       return fail(403, "DEVICE_LIMIT", `تم الوصول إلى الحد الأقصى للأجهزة في الترخيص (${limit})`);
@@ -169,6 +185,10 @@ export async function redeemEnrollmentCode(
 
   const issuer = await activeUser(tenantId, rec.createdBy);
   if (!issuer) return fail(403, "ENROLL_ISSUER_INACTIVE", "حساب المسؤول الذي أصدر الرمز لم يعد فعّالاً — اطلب رمزاً جديداً");
+
+  // The admin disabled the old row and issued this code: free the machine's
+  // fingerprint so the new id can register. The old row stays, revoked, for history.
+  if (retiredTwin) await deps.syncDeviceRepo.retireFingerprint(tenantId as never, retiredTwin as never);
 
   let row;
   try {
@@ -187,7 +207,7 @@ export async function redeemEnrollmentCode(
   }
   // Pushes carry the LOCAL id; a hub row under another id would refuse them all.
   if (row.id !== device.id) {
-    return fail(409, "SYNC_DEVICE_ID_CONFLICT", "المركز يعرف هذا الجهاز بمعرّف آخر — عطّل الجهاز القديم من قائمة الأجهزة ثم أعد التسجيل");
+    return fail(409, "SYNC_DEVICE_ID_CONFLICT", "المركز يعرف هذا الجهاز بمعرّف آخر — عطّل الجهاز القديم من قائمة الأجهزة، ثم أصدر رمز تسجيل جديداً وأعد التسجيل");
   }
 
   const deviceSecret = await mintCredential(deps, tenantId, row.id, rec.createdBy);

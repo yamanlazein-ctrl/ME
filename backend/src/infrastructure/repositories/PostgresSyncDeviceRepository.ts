@@ -1,4 +1,4 @@
-import { and, desc, eq, isNull, sql } from "drizzle-orm";
+import { and, desc, eq, isNotNull, isNull, sql } from "drizzle-orm";
 import type { DB } from "../orm/drizzle.js";
 import { runWithTenantContext } from "../orm/tenant-context.js";
 import {
@@ -217,6 +217,15 @@ export class PostgresSyncDeviceRepository implements ISyncDeviceRepository {
         .limit(Math.min(Math.max(limit, 1), 500));
       return Promise.all(rows.map((r) => this.hydrateAuthorized(r)));
     });
+  }
+
+  async retireFingerprint(tenantId: string, deviceId: string): Promise<void> {
+    await runWithTenantContext({ tenantId }, () =>
+      this.db
+        .update(syncDevices)
+        .set({ deviceFingerprint: sql`substr(${syncDevices.deviceFingerprint}, 1, 83) || '#retired:' || ${syncDevices.id}`, updatedAt: new Date() })
+        .where(and(eq(syncDevices.tenantId, tenantId), eq(syncDevices.id, deviceId), isNotNull(syncDevices.revokedAt))),
+    );
   }
 
   async setRevoked(

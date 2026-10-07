@@ -103,4 +103,9 @@ export interface ISyncDeviceRepository {
    * denormalized caches). Called on soft-delete / deactivation.
    */
   revokeUserAuthorization(tenantId: UUID, userId: UUID): Promise<void>;
+  /**
+   * Release a REVOKED device's fingerprint (suffix `#retired:<id>`) so the same
+   * machine can enroll under a new id. No-op for a live device.
+   */
+  retireFingerprint(tenantId: UUID, deviceId: UUID): Promise<void>;
 }

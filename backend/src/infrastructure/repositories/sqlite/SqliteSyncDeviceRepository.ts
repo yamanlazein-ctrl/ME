@@ -1,7 +1,7 @@
 // PORTED-FROM: src/infrastructure/repositories/PostgresSyncDeviceRepository.ts sha256=3515f3a8ec8f0e926a7da3ec1fce05ac65ffcc1dfaaf6bfcda105f77ca890cf0
 // SQLite twin (specs/001-desktop-sqlite-engine S4). Keep behavior identical to the PG source.
 import { desc } from "./helpers/pgOrder.js";
-import { and, eq, isNull, sql } from "drizzle-orm";
+import { and, eq, isNotNull, isNull, sql } from "drizzle-orm";
 import type { DB as PgDB } from "../../orm/drizzle.js";
 import type { DB } from "../../orm/sqlite/drizzleCompat.js";
 import { runWithTenantContext } from "../../orm/tenant-context.js";
@@ -220,6 +220,15 @@ export class SqliteSyncDeviceRepository implements ISyncDeviceRepository {
         .limit(Math.min(Math.max(limit, 1), 500));
       return Promise.all(rows.map((r) => this.hydrateAuthorized(r)));
     });
+  }
+
+  async retireFingerprint(tenantId: string, deviceId: string): Promise<void> {
+    await runWithTenantContext({ tenantId }, () =>
+      this.db
+        .update(syncDevices)
+        .set({ deviceFingerprint: sql`substr(${syncDevices.deviceFingerprint}, 1, 83) || '#retired:' || ${syncDevices.id}`, updatedAt: new Date() })
+        .where(and(eq(syncDevices.tenantId, tenantId), eq(syncDevices.id, deviceId), isNotNull(syncDevices.revokedAt))),
+    );
   }
 
   async setRevoked(
