@@ -81,3 +81,17 @@ export function syncDeviceInterceptor(): HttpInterceptor {
     },
   };
 }
+
+/**
+ * A business write (anything but a read, sync or auth call) is sent to the hub within
+ * ~2 s instead of waiting for the next periodic sync — `schedule` debounces bursts.
+ */
+export function syncSoonInterceptor(schedule: () => void): HttpInterceptor {
+  return {
+    onRequest: (config: HttpRequestConfig): HttpRequestConfig => {
+      const method = (config.method ?? "GET").toUpperCase();
+      if (method !== "GET" && !/^\/?(api\/)?(sync|auth|health)(\/|$)/.test(config.path ?? "")) schedule();
+      return config;
+    },
+  };
+}

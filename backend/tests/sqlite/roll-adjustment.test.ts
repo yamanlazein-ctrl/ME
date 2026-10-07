@@ -110,7 +110,9 @@ describe("inventory count → posted variance", () => {
     }));
     const stale = await countId(id);
     const sheet = await run((t) => h.getCountSheet(t, ctx, 2026, { limit: 500 }));
-    expect(sheet.lines.find((l) => l.rollId === id)).toMatchObject({ bookKg: 90, countedKg: 95, diffKg: 5, bookPieces: 9 });
+    // One basis: the line shows the book AT COUNT and flags the movement since,
+    // instead of a live difference that posting would never apply.
+    expect(sheet.lines.find((l) => l.rollId === id)).toMatchObject({ bookKg: 100, countedKg: 95, diffKg: -5, movedKg: -10 });
     await expect(run((t) => h.postCountVariance(t, ctx, stale.id))).rejects.toThrow(/أعد عدّ/);
     expect(await roll(id)).toMatchObject({ kg: 90, pieces: 9 });
 
@@ -119,6 +121,106 @@ describe("inventory count → posted variance", () => {
     expect(fresh).toMatchObject({ book: 90, diff: -2 });
     await run((t) => h.postCountVariance(t, ctx, fresh.id));
     expect((await roll(id)).kg).toBe(88);
+  });
+});
+
+describe("count posting — date and pieces (corrective plan step 8)", () => {
+  it("a variance is never dated in the future, and a past-year count stays in its year", async () => {
+    const { localToday } = await import("@/infrastructure/utils/localDate.js");
+    const id = await newRoll();
+    const thisYear = Number(localToday().slice(0, 4));
+    await run((t) => h.recordCount(t, ctx, thisYear, id, 99, null, undefined));
+    {
+      const cid = (await countId(id)).id;
+      await run((t) => h.postCountVariance(t, ctx, cid));
+    }
+    const old = await newRoll();
+    await run((t) => h.recordCount(t, ctx, thisYear - 1, old, 98, null, undefined));
+    {
+      const cid = (await countId(old)).id;
+      await run((t) => h.postCountVariance(t, ctx, cid));
+    }
+    const dates = async (rollId: string) =>
+      (await q<{ d: string }>(sql`SELECT movement_date AS d FROM stock_movements WHERE roll_id = ${rollId}`))[0].d;
+    expect(await dates(id)).toBe(localToday());
+    expect(await dates(old)).toBe(`${thisYear - 1}-12-31`);
+  });
+
+  it("a pieces-only difference posts (kg equal)", async () => {
+    const id = await newRoll();
+    await run((t) => h.recordCount(t, ctx, 2026, id, 100, 7, undefined));
+    const cid = (await countId(id)).id;
+    const posted = await run((t) => h.postCountVariance(t, ctx, cid));
+    expect(posted.adjustment).toMatchObject({ deltaKg: 0, deltaPieces: -3 });
+    expect(await roll(id)).toMatchObject({ kg: 100, pieces: 7 });
+  });
+});
+
+describe("count sheet — rounds, re-count, filters (corrective plan steps 11–12)", () => {
+  const sheet = (opts: Record<string, unknown> = {}) =>
+    run((t) => h.getCountSheet(t, ctx, 2026, { limit: 500, ...opts } as never));
+  const line = async (id: string, opts: Record<string, unknown> = {}) =>
+    (await sheet(opts)).lines.find((l) => l.rollId === id);
+
+  it("a posted roll can be counted again; the new line posts the correcting difference", async () => {
+    const id = await newRoll();
+    await run((t) => h.recordCount(t, ctx, 2026, id, 96, null, undefined));
+    const first = (await countId(id)).id;
+    await run((t) => h.postCountVariance(t, ctx, first));
+    await run((t) => h.recordCount(t, ctx, 2026, id, 97, null, undefined)); // found 1 kg more
+    expect(await line(id)).toMatchObject({ status: "counted", bookKg: 96, diffKg: 1 });
+    await run((t) => h.postCountVariance(t, ctx, first));
+    expect((await roll(id)).kg).toBe(97);
+    // Both corrections stay in the stock ledger.
+    const mv = await q<{ n: number }>(sql`SELECT count(*) AS n FROM stock_movements WHERE roll_id = ${id}`);
+    expect(mv[0].n).toBe(2);
+  });
+
+  it("filters: search, status, a round's start date, and empty rolls", async () => {
+    const a = await newRoll();
+    const b = await newRoll();
+    await run((t) => h.recordCount(t, ctx, 2026, a, 99, null, undefined));
+    const rollNo = (await q<{ n: string }>(sql`SELECT roll_no AS n FROM rolls WHERE id = ${b}`))[0].n;
+    expect((await sheet({ q: rollNo })).lines.map((l) => l.rollId)).toEqual([b]);
+    expect((await sheet({ status: "variance" })).lines.some((l) => l.rollId === a)).toBe(true);
+    expect((await sheet({ status: "uncounted" })).lines.some((l) => l.rollId === a)).toBe(false);
+    // A new round from tomorrow: today's count no longer counts as done.
+    expect(await line(a, { since: "2999-01-01" })).toMatchObject({ status: "uncounted", countedKg: null });
+    await q(sql`UPDATE rolls SET remaining_kg = 0, remaining_pieces = 0 WHERE id = ${b}`);
+    expect(await line(b)).toBeUndefined();
+    expect(await line(b, { includeEmpty: true })).toMatchObject({ bookKg: 0 });
+  });
+
+  it("pages through every roll (no 100-row ceiling)", async () => {
+    for (let i = 0; i < 5; i++) await newRoll();
+    const all: string[] = [];
+    let cursor: string | undefined;
+    do {
+      const page = await sheet({ limit: 2, cursor });
+      all.push(...page.lines.map((l) => l.rollId));
+      cursor = page.nextCursor ?? undefined;
+    } while (cursor);
+    expect(new Set(all).size).toBe((await sheet()).total);
+  });
+
+  it("a received quantity is not edited from the roll card", async () => {
+    const { updateRollUseCase } = await import("@/application/use-cases/inventory/rollUseCases.js");
+    const { SqliteRollRepository } = await import("@/infrastructure/repositories/sqlite/SqliteRollRepository.js");
+    const repo = new SqliteRollRepository(tx.sqliteIndependentDb() as never);
+    const id = await newRoll();
+    const r = await updateRollUseCase(repo, id, { initialKg: 120 }, ctx);
+    expect(r).toMatchObject({ ok: false });
+    expect((await updateRollUseCase(repo, id, { initialKg: 100, dyeBatch: "B2" }, ctx)).ok).toBe(true);
+  });
+
+  it("a year closed on the hub is adopted (and a reopen too)", async () => {
+    const { adoptYearStatus } = await import("@/infrastructure/repositories/yearStatusSync.js");
+    expect(await run((t) => adoptYearStatus(t, tenantId, 2024, "closed", new Date()))).toBe(true);
+    expect(await run((t) => adoptYearStatus(t, tenantId, 2024, "closed", new Date()))).toBe(false);
+    const st = async () => (await q<{ s: string }>(sql`SELECT status AS s FROM financial_years WHERE year = 2024`))[0].s;
+    expect(await st()).toBe("closed");
+    await run((t) => adoptYearStatus(t, tenantId, 2024, "open", null));
+    expect(await st()).toBe("open");
   });
 });
 

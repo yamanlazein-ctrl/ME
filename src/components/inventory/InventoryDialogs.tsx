@@ -71,6 +71,7 @@ function FabricFormDialog({ state, onClose }: { state: FabricFormState; onClose:
   const [widthCm, setWidthCm] = useState("");
   const [weightGsm, setWeightGsm] = useState("");
   const [qty, setQty] = useState("");
+  const [pieces, setPieces] = useState("1");
   const [purchasePrice, setPurchasePrice] = useState("");
   const [salePrice, setSalePrice] = useState("");
   const [currency, setCurrency] = useState<Currency>("SYP");
@@ -97,6 +98,7 @@ function FabricFormDialog({ state, onClose }: { state: FabricFormState; onClose:
     setWidthCm("");
     setWeightGsm("");
     setQty("");
+    setPieces("1");
     setPurchasePrice("");
     setSalePrice("");
     setCurrency("SYP");
@@ -107,9 +109,7 @@ function FabricFormDialog({ state, onClose }: { state: FabricFormState; onClose:
 
   const onImagePick = (file: File | undefined) => {
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => setImageUrl(String(reader.result));
-    reader.readAsDataURL(file);
+    void toSmallDataUrl(file).then(setImageUrl);
   };
 
   const submit = async () => {
@@ -160,7 +160,7 @@ function FabricFormDialog({ state, onClose }: { state: FabricFormState; onClose:
             rollNo: `${Date.now()}`.slice(-4),
             dyeBatch,
             initialKg: qNum,
-            pieces: 1,
+            pieces: Math.max(1, Math.trunc(Number(pieces) || 1)),
             pricePerKg: purchaseNum,
             salePricePerKg: saleNum != null && saleNum > 0 ? saleNum : undefined,
             currency,
@@ -348,6 +348,17 @@ function FabricFormDialog({ state, onClose }: { state: FabricFormState; onClose:
                     onChange={(e) => setQty(e.target.value)}
                   />
                 </Field>
+                <Field label="عدد الأثواب">
+                  <Input
+                    className="h-10"
+                    type="number"
+                    inputMode="numeric"
+                    step="1"
+                    min="1"
+                    value={pieces}
+                    onChange={(e) => setPieces(e.target.value)}
+                  />
+                </Field>
                 <Field label="سعر الشراء / كغ">
                   <div className="flex gap-2">
                     <Input
@@ -477,9 +488,7 @@ function ColorFormDialog({ state, onClose }: { state: ColorFormState; onClose: (
 
   const onFile = (file?: File) => {
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => setImageUrl(String(reader.result));
-    reader.readAsDataURL(file);
+    void toSmallDataUrl(file).then(setImageUrl);
   };
 
   const submit = async () => {
@@ -626,91 +635,132 @@ function ColorFormDialog({ state, onClose }: { state: ColorFormState; onClose: (
   );
 }
 
+const ADJUST_REASONS = ["تلف", "عيّنة", "زيادة جرد", "عجز جرد", "تصحيح إدخال", "أخرى"] as const;
+
 /**
- * Quantity / pieces correction for an existing roll. Never a silent overwrite:
- * the server records an adjustment movement, the P&L at cost and an audit row
- * (who, when, before, after, why) — see «تعديلات المخزون» — and syncs it.
+ * «تعديل كمية»: add, subtract or set a roll's kg and pieces. Never a silent overwrite —
+ * the server records an adjustment movement, the P&L at cost and an audit row (who,
+ * when, before, after, why), shown in «تعديلات المخزون», and syncs it to other devices.
  */
-function RollAdjustSection({
-  roll,
-  onDone,
-}: {
-  roll: NonNullable<RollFormState["editing"]>;
-  onDone: () => void;
-}) {
-  const [open, setOpen] = useState(false);
-  const [kg, setKg] = useState(String(roll.remainingKg ?? 0));
-  const [pieces, setPieces] = useState(String(roll.remainingPieces ?? 0));
-  const [reason, setReason] = useState("");
+export function RollAdjustDialog({ roll, onClose }: { roll: Roll | null; onClose: () => void }) {
+  const [mode, setMode] = useState<"delta" | "set">("delta");
+  const [kg, setKg] = useState("");
+  const [pieces, setPieces] = useState("");
+  const [reasonType, setReasonType] = useState<string>("");
+  const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
-  const newKg = Number(kg);
-  const newPieces = Number(pieces);
-  const deltaKg = Math.round((newKg - Number(roll.remainingKg ?? 0)) * 100) / 100;
-  const deltaPieces = newPieces - Number(roll.remainingPieces ?? 0);
+  useEffect(() => {
+    setMode("delta");
+    setKg("");
+    setPieces("");
+    setReasonType("");
+    setNote("");
+  }, [roll?.id]);
+  if (!roll) return null;
+  const curKg = Number(roll.remainingKg ?? 0);
+  const curPieces = Number(roll.remainingPieces ?? 0);
+  const kgIn = kg.trim() === "" ? null : Number(kg);
+  const piecesIn = pieces.trim() === "" ? null : Number(pieces);
+  const newKg = Math.round((mode === "set" ? (kgIn ?? curKg) : curKg + (kgIn ?? 0)) * 100) / 100;
+  const newPieces = mode === "set" ? (piecesIn ?? curPieces) : curPieces + (piecesIn ?? 0);
+  const deltaKg = Math.round((newKg - curKg) * 100) / 100;
+  const deltaPieces = newPieces - curPieces;
+  const reason = [reasonType, note.trim()].filter(Boolean).join(": ");
   const valid =
-    kg.trim() !== "" &&
-    pieces.trim() !== "" &&
-    Number.isFinite(newKg) &&
+    (kgIn == null || Number.isFinite(kgIn)) &&
+    (piecesIn == null || Number.isInteger(piecesIn)) &&
     newKg >= 0 &&
-    Number.isInteger(newPieces) &&
     newPieces >= 0 &&
     (deltaKg !== 0 || deltaPieces !== 0) &&
-    reason.trim().length >= 2;
-  if (!open) {
-    return (
-      <div className="md:col-span-2">
-        <Button type="button" variant="outline" size="sm" onClick={() => setOpen(true)}>
-          تعديل الكمية / عدد الأثواب
-        </Button>
-      </div>
-    );
-  }
+    reasonType !== "" &&
+    (reasonType !== "أخرى" || note.trim().length >= 2);
   const sign = (n: number) => (n > 0 ? `+${n}` : String(n));
+  const tone = (n: number) => (n > 0 ? "text-emerald-600" : n < 0 ? "text-destructive" : "");
   return (
-    <div className="grid gap-3 rounded-lg border border-border p-3 md:col-span-2 md:grid-cols-3">
-      <div className="text-xs font-bold md:col-span-3">تعديل المخزون (يُسجَّل في «تعديلات المخزون»)</div>
-      <div>
-        <Label>الكمية الجديدة (كغ)</Label>
-        <Input type="number" step="0.01" min="0" value={kg} onChange={(e) => setKg(e.target.value)} />
-        <p className="mt-1 text-[11px] text-muted-foreground">
-          الحالية {roll.remainingKg} · الفرق {Number.isFinite(deltaKg) ? sign(deltaKg) : "—"}
-        </p>
-      </div>
-      <div>
-        <Label>عدد الأثواب الجديد</Label>
-        <Input type="number" step="1" min="0" value={pieces} onChange={(e) => setPieces(e.target.value)} />
-        <p className="mt-1 text-[11px] text-muted-foreground">
-          الحالي {roll.remainingPieces ?? 0} · الفرق {Number.isFinite(deltaPieces) ? sign(deltaPieces) : "—"}
-        </p>
-      </div>
-      <div>
-        <Label>سبب التعديل</Label>
-        <Input value={reason} maxLength={200} placeholder="مثال: تصحيح عدّ، تلف" onChange={(e) => setReason(e.target.value)} />
-      </div>
-      <div className="flex gap-2 md:col-span-3">
-        <Button
-          type="button"
-          size="sm"
-          disabled={!valid || busy}
-          onClick={async () => {
-            setBusy(true);
-            const ok = await adjustRoll(roll.id, {
-              newKg,
-              newPieces,
-              reason: reason.trim(),
-              expectedVersion: roll.version,
-            });
-            setBusy(false);
-            if (ok) onDone();
-          }}
-        >
-          تطبيق التعديل
-        </Button>
-        <Button type="button" size="sm" variant="ghost" onClick={() => setOpen(false)}>
-          إلغاء
-        </Button>
-      </div>
-    </div>
+    <Dialog open onOpenChange={(o) => !o && onClose()}>
+      <DialogContent dir="rtl" className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle>تعديل كمية — صبغة #{roll.rollNo}</DialogTitle>
+        </DialogHeader>
+        <div className="grid gap-3">
+          <div className="flex gap-1 rounded-lg bg-secondary/50 p-1 text-sm">
+            {(
+              [
+                ["delta", "زيادة / نقص"],
+                ["set", "تعيين الكمية"],
+              ] as const
+            ).map(([m, label]) => (
+              <button
+                key={m}
+                type="button"
+                onClick={() => setMode(m)}
+                className={`flex-1 rounded-md px-3 py-1.5 font-medium ${mode === m ? "bg-background shadow-sm" : "text-muted-foreground"}`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <Label>{mode === "set" ? "الكمية الجديدة (كغ)" : "الكيلوغرام (+ أو −)"}</Label>
+              <Input type="number" step="0.01" value={kg} placeholder={mode === "set" ? String(curKg) : "مثال: -2.5"} onChange={(e) => setKg(e.target.value)} />
+            </div>
+            <div>
+              <Label>{mode === "set" ? "عدد الأثواب الجديد" : "الأثواب (+ أو −)"}</Label>
+              <Input type="number" step="1" value={pieces} placeholder={mode === "set" ? String(curPieces) : "مثال: 3"} onChange={(e) => setPieces(e.target.value)} />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-2 rounded-lg border border-border p-2 text-sm tabular-nums">
+            <span>
+              كغ: {curKg} ← <b>{newKg}</b> <span className={tone(deltaKg)}>({sign(deltaKg)})</span>
+            </span>
+            <span>
+              أثواب: {curPieces} ← <b>{newPieces}</b> <span className={tone(deltaPieces)}>({sign(deltaPieces)})</span>
+            </span>
+          </div>
+          {(newKg < 0 || newPieces < 0) && (
+            <p className="text-xs text-destructive">لا يمكن أن تصبح الكمية أو عدد الأثواب سالبة.</p>
+          )}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <Label>السبب *</Label>
+              <select
+                className="h-10 w-full rounded-md border border-border bg-background px-2 text-sm"
+                value={reasonType}
+                onChange={(e) => setReasonType(e.target.value)}
+              >
+                <option value="">اختر…</option>
+                {ADJUST_REASONS.map((r) => (
+                  <option key={r} value={r}>
+                    {r}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <Label>ملاحظة{reasonType === "أخرى" ? " *" : ""}</Label>
+              <Input value={note} maxLength={160} onChange={(e) => setNote(e.target.value)} />
+            </div>
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>
+            إلغاء
+          </Button>
+          <Button
+            disabled={!valid || busy}
+            onClick={async () => {
+              setBusy(true);
+              const ok = await adjustRoll(roll.id, { newKg, newPieces, reason, expectedVersion: roll.version });
+              setBusy(false);
+              if (ok) onClose();
+            }}
+          >
+            تطبيق التعديل
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -722,6 +772,9 @@ function RollFormDialog({ state, onClose }: { state: RollFormState; onClose: () 
   const [qty, setQty] = useState<string>(
     editing?.initialKg != null ? String(editing.initialKg) : "",
   );
+  // Pieces are stock like kg (أثواب): entered on create, changed later only by a
+  // documented adjustment — never forced to 1.
+  const [pieces, setPieces] = useState<string>("1");
   const [remaining, setRemaining] = useState<string>(
     editing?.remainingKg != null ? String(editing.remainingKg) : "",
   );
@@ -749,6 +802,7 @@ function RollFormDialog({ state, onClose }: { state: RollFormState; onClose: () 
       setRollNo(e?.rollNo ?? "");
       setDyeBatch(e?.dyeBatch ?? "");
       setQty(e?.initialKg != null ? String(e.initialKg) : "");
+      setPieces("1");
       setRemaining(
         e?.remainingKg != null
           ? String(e.remainingKg)
@@ -796,6 +850,11 @@ function RollFormDialog({ state, onClose }: { state: RollFormState; onClose: () 
       setQtyErr("أدخل سعر شراء صحيح أكبر من صفر.");
       valid = false;
     }
+    const piecesNum = Number(pieces);
+    if (!editing && (!Number.isInteger(piecesNum) || piecesNum < 1)) {
+      setQtyErr("أدخل عدد أثواب صحيحاً (1 أو أكثر).");
+      valid = false;
+    }
     if (!valid || qtyNum == null || priceNum == null) return;
     try {
       if (editing) {
@@ -815,7 +874,7 @@ function RollFormDialog({ state, onClose }: { state: RollFormState; onClose: () 
           rollNo,
           dyeBatch,
           initialKg: qtyNum,
-          pieces: 1,
+          pieces: piecesNum,
           pricePerKg: priceNum,
           currency,
           supplierId,
@@ -862,12 +921,15 @@ function RollFormDialog({ state, onClose }: { state: RollFormState; onClose: () 
               {dyeErr && <p className="mt-1 text-[11px] text-destructive">{dyeErr}</p>}
             </div>
             <div>
-              <Label>الكمية (كغ) *</Label>
+              <Label>{editing ? "الكمية المستلمة (كغ)" : "الكمية (كغ) *"}</Label>
               <Input
                 type="number"
                 inputMode="decimal"
                 step="0.01"
                 min="0"
+                readOnly={!!editing}
+                disabled={!!editing}
+                title={editing ? "لتصحيح المخزون استخدم «تعديل كمية» من صف الصبغة" : undefined}
                 value={qty}
                 onChange={(e) => {
                   const v = e.target.value;
@@ -878,6 +940,22 @@ function RollFormDialog({ state, onClose }: { state: RollFormState; onClose: () 
               />
               {qtyErr && <p className="mt-1 text-[11px] text-destructive">{qtyErr}</p>}
             </div>
+            {!editing && (
+              <div>
+                <Label>عدد الأثواب *</Label>
+                <Input
+                  type="number"
+                  inputMode="numeric"
+                  step="1"
+                  min="1"
+                  value={pieces}
+                  onChange={(e) => {
+                    setPieces(e.target.value);
+                    setQtyErr(null);
+                  }}
+                />
+              </div>
+            )}
             {editing && (
               <div>
                 <Label>المتبقي (كغ) — للعرض فقط</Label>
@@ -892,11 +970,11 @@ function RollFormDialog({ state, onClose }: { state: RollFormState; onClose: () 
                   title="الكمية المتبقية تُعدَّل عبر الفواتير والمرتجعات فقط"
                 />
                 <p className="mt-1 text-[11px] text-muted-foreground">
-                  تتغيّر الكمية بالفواتير والمرتجعات، أو بتعديل مخزون موثّق أدناه.
+                  تتغيّر الكمية بالفواتير والمرتجعات، أو بزر «تعديل كمية» في صف الصبغة.
                 </p>
               </div>
             )}
-            {editing && <RollAdjustSection roll={editing} onDone={onClose} />}
+
             <div>
               <Label>سعر الشراء للكغ</Label>
               <Input
@@ -970,3 +1048,17 @@ function RollFormDialog({ state, onClose }: { state: RollFormState; onClose: () 
 
 export { FabricFormDialog, ColorFormDialog, RollFormDialog };
 export type { FabricFormState, ColorFormState, RollFormState };
+
+/**
+ * A swatch photo, downscaled to ≤480px JPEG. Images ride inside sync units: a raw
+ * phone photo (1.2 MB seen in the field) was re-sent on every retry and slowed sync.
+ */
+async function toSmallDataUrl(file: File, max = 480): Promise<string> {
+  const img = await createImageBitmap(file);
+  const k = Math.min(1, max / Math.max(img.width, img.height));
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.round(img.width * k);
+  canvas.height = Math.round(img.height * k);
+  canvas.getContext("2d")!.drawImage(img, 0, 0, canvas.width, canvas.height);
+  return canvas.toDataURL("image/jpeg", 0.8);
+}

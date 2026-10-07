@@ -1,17 +1,9 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AppShell } from "@/components/layout/AppShell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import {
   Dialog,
   DialogContent,
@@ -22,12 +14,8 @@ import {
 import { toast } from "sonner";
 import { formatNumber } from "@/shared/utils/formatNumber";
 import {
-  beginCounting,
   closeYear,
   getClosingPreview,
-  getCountSheet,
-  postVariance,
-  recordCount,
   reopenYear,
   type YearStatus,
 } from "@/infrastructure/api/YearClosingApi";
@@ -77,9 +65,6 @@ function YearClosingPage() {
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [reopenOpen, setReopenOpen] = useState(false);
   const [reopenReason, setReopenReason] = useState("");
-  // Local edits keyed by rollId, so a re-render never drops what was typed.
-  const [drafts, setDrafts] = useState<Record<string, string>>({});
-
   const preview = useQuery({
     queryKey: ["closing-preview", year],
     queryFn: () => getClosingPreview(year),
@@ -91,42 +76,6 @@ function YearClosingPage() {
     void qc.invalidateQueries({ queryKey: ["count-sheet"] });
     void qc.invalidateQueries({ queryKey: ["inventory"] });
   };
-
-  const startCounting = useMutation({
-    mutationFn: () => beginCounting(year),
-    onSuccess: () => {
-      toast.success(`بدأ جرد سنة ${year}.`);
-      refreshAll();
-    },
-    onError: (e) => toast.error(e instanceof Error ? e.message : "تعذّر بدء الجرد."),
-  });
-
-  const saveCount = useMutation({
-    mutationFn: (v: { rollId: string; countedKg: number | null }) =>
-      recordCount({ year, rollId: v.rollId, countedKg: v.countedKg }),
-    onSuccess: (_r, v) => {
-      setDrafts((d) => {
-        const next = { ...d };
-        delete next[v.rollId];
-        return next;
-      });
-      refreshAll();
-    },
-    onError: (e) => toast.error(e instanceof Error ? e.message : "تعذّر حفظ الجرد."),
-  });
-
-  const post = useMutation({
-    mutationFn: (countId: string) => postVariance(countId),
-    onSuccess: (r) => {
-      toast.success(
-        r.movementId
-          ? `تم ترحيل ${r.diffKg > 0 ? "زيادة" : "عجز"} ${Math.abs(r.diffKg)} كغ كحركة رسمية.`
-          : "لا يوجد فرق — تمت التسوية دون حركة.",
-      );
-      refreshAll();
-    },
-    onError: (e) => toast.error(e instanceof Error ? e.message : "تعذّر ترحيل التسوية."),
-  });
 
   const close = useMutation({
     mutationFn: () => closeYear(year),
@@ -159,8 +108,8 @@ function YearClosingPage() {
 
   return (
     <AppShell
-      title="إقفال السنة المالية والجرد"
-      subtitle="جرد فعلي للمخزون، ترحيل الفروقات كحركات رسمية، ثم إقفال السنة — دون حذف أي مستند سابق."
+      title="إقفال السنة المالية"
+      subtitle="تجميد سنة كاملة ضد التعديل وحفظ أرصدتها الختامية — دون حذف أي مستند سابق. الجرد الفعلي له صفحته الخاصة."
       actions={
         <div className="flex items-center gap-2">
           <Input
@@ -170,14 +119,6 @@ function YearClosingPage() {
             className="h-8 w-24"
             aria-label="السنة"
           />
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={isClosed || startCounting.isPending}
-            onClick={() => startCounting.mutate()}
-          >
-            بدء الجرد
-          </Button>
           {isClosed ? (
             <Button variant="outline" size="sm" onClick={() => setReopenOpen(true)}>
               إعادة الفتح
@@ -237,6 +178,19 @@ function YearClosingPage() {
           </div>
         </div>
 
+        <div className="flex flex-wrap items-center gap-3 rounded-xl border border-border bg-card p-4">
+          <div className="me-auto text-sm">
+            <p className="font-semibold">الجرد الفعلي (قبل الإقفال)</p>
+            <p className="text-muted-foreground">
+              عُدّ {formatNumber(p?.counts.counted ?? 0)} من {formatNumber(p?.counts.rolls ?? 0)} صبغة · فروقات غير مرحّلة:{" "}
+              {formatNumber(Math.max(0, (p?.counts.withVariance ?? 0) - (p?.counts.posted ?? 0)))}
+            </p>
+          </div>
+          <Button asChild variant="outline" size="sm">
+            <Link to="/inventory/count">فتح الجرد الفعلي</Link>
+          </Button>
+        </div>
+
         <div
           className={`rounded-xl border p-4 ${
             blockers.length ? "border-destructive/50 bg-destructive/5" : "border-border bg-card"
@@ -271,17 +225,6 @@ function YearClosingPage() {
         </div>
       </div>
 
-      <CountSheet
-        year={year}
-        disabled={isClosed}
-        drafts={drafts}
-        setDrafts={setDrafts}
-        onSave={(rollId, countedKg) => saveCount.mutate({ rollId, countedKg })}
-        onPost={(countId) => post.mutate(countId)}
-        saving={saveCount.isPending}
-        posting={post.isPending}
-      />
-
       <CloseDialogs
         year={year}
         confirmOpen={confirmOpen}
@@ -296,147 +239,6 @@ function YearClosingPage() {
         onReopen={() => reopen.mutate()}
       />
     </AppShell>
-  );
-}
-
-/**
- * The count sheet. Book vs physical vs difference, per roll.
- *
- * `drafts` holds unsaved keystrokes so a background refetch cannot wipe what
- * the counter typed. "ترحيل" is only offered once the physical figure is SAVED
- * (a count row with an id exists) and actually differs from the book figure —
- * posting needs a real `countId` to write the movement against.
- */
-function CountSheet({
-  year,
-  disabled,
-  drafts,
-  setDrafts,
-  onSave,
-  onPost,
-  saving,
-  posting,
-}: {
-  year: number;
-  disabled: boolean;
-  drafts: Record<string, string>;
-  setDrafts: React.Dispatch<React.SetStateAction<Record<string, string>>>;
-  onSave: (rollId: string, countedKg: number | null) => void;
-  onPost: (countId: string) => void;
-  saving: boolean;
-  posting: boolean;
-}) {
-  const sheet = useQuery({
-    queryKey: ["count-sheet", year],
-    queryFn: () => getCountSheet(year),
-    // One page only — the server keyset-paginates, so the WebView never holds
-    // every roll of a tenant that has thousands.
-    staleTime: 0,
-  });
-
-  return (
-    <div className="rounded-xl border border-border bg-card shadow-soft" dir="rtl">
-      <h3 className="border-b border-border p-3 font-semibold">
-        ورقة الجرد الفعلي {sheet.data ? `(${sheet.data.total} لفة)` : ""}
-      </h3>
-      {sheet.isPending && (
-        <p className="p-4 text-center text-sm text-muted-foreground">جارٍ التحميل…</p>
-      )}
-      {sheet.isError && (
-        <p className="p-4 text-center text-sm text-destructive">تعذّر تحميل ورقة الجرد.</p>
-      )}
-      {sheet.data && sheet.data.lines.length === 0 && (
-        <p className="p-4 text-center text-sm text-muted-foreground">لا توجد لفافات.</p>
-      )}
-      {sheet.data && sheet.data.lines.length > 0 && (
-        <div className="max-h-[50vh] overflow-y-auto">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>القماش</TableHead>
-                <TableHead>اللون</TableHead>
-                <TableHead>اللفة</TableHead>
-                <TableHead>الدفتري</TableHead>
-                <TableHead>الفعلي</TableHead>
-                <TableHead>الفرق</TableHead>
-                <TableHead>إجراء</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {sheet.data.lines.map((l) => {
-                const draft = drafts[l.rollId];
-                // An empty field means "not counted yet" — never a count of 0.
-                const raw = draft !== undefined ? (draft.trim() === "" ? null : Number(draft)) : l.countedKg;
-                const effective = raw == null || Number.isNaN(raw) ? null : raw;
-                // Difference = actual (counted) − book, for this roll only.
-                const diff =
-                  effective == null ? null : Math.round((effective - l.bookKg) * 100) / 100;
-                return (
-                  <TableRow key={l.rollId}>
-                    <TableCell>{l.fabricName}</TableCell>
-                    <TableCell>{l.colorName}</TableCell>
-                    <TableCell className="tabular-nums">#{l.rollNo}</TableCell>
-                    <TableCell className="tabular-nums">{formatNumber(l.bookKg)}</TableCell>
-                    <TableCell>
-                      <Input
-                        type="number"
-                        step="0.01"
-                        className="h-8 w-24"
-                        value={draft ?? (l.countedKg ?? "")}
-                        disabled={disabled}
-                        onChange={(e) =>
-                          setDrafts((d) => ({ ...d, [l.rollId]: e.target.value }))
-                        }
-                      />
-                    </TableCell>
-                    <TableCell
-                      className={`tabular-nums font-semibold ${
-                        diff == null || diff === 0
-                          ? ""
-                          : diff > 0
-                            ? "text-emerald-600"
-                            : "text-destructive"
-                      }`}
-                    >
-                      {diff == null ? "—" : `${diff > 0 ? "+" : ""}${formatNumber(diff)}`}
-                    </TableCell>
-                    <TableCell>
-                      {l.status === "posted" ? (
-                        <span className="text-xs text-muted-foreground">مرحّلة</span>
-                      ) : (
-                        <div className="flex gap-1">
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            disabled={disabled || saving}
-                            onClick={() => onSave(l.rollId, effective)}
-                          >
-                            حفظ
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="destructive"
-                            disabled={disabled || posting || !l.countId || diff == null || diff === 0}
-                            title={
-                              l.countId
-                                ? "ترحيل الفرق: تُعدَّل كمية اللفة إلى الكمية الفعلية وتُسجَّل حركة تسوية في السجل"
-                                : "احفظ الكمية الفعلية أولاً، ثم رحّل الفرق"
-                            }
-                            onClick={() => l.countId && onPost(l.countId)}
-                          >
-                            ترحيل الفرق
-                          </Button>
-                        </div>
-                      )}
-                    </TableCell>
-                  </TableRow>
-                );
-              })}
-            </TableBody>
-          </Table>
-        </div>
-      )}
-    </div>
   );
 }
 

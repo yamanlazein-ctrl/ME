@@ -23,7 +23,7 @@ export function SupplierInlineCombobox({
   onChange: (id: string) => void;
   className?: string;
 }) {
-  useParties();
+  const partiesVersion = useParties();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [addMode, setAddMode] = useState(false);
@@ -45,7 +45,7 @@ export function SupplierInlineCombobox({
   // supplierMatch.ts), so the combobox and its tests cannot drift apart.
   const exactExisting = useMemo(
     () => findSupplierByExactName(suppliers, addMode ? name : query),
-    [addMode, name, query, suppliers.length],
+    [addMode, name, query, partiesVersion],
   );
 
   const openAdd = () => {

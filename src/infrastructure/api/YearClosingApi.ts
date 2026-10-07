@@ -45,7 +45,21 @@ export type CountLine = {
   countedPieces: number | null;
   diffKg: number | null;
   diffPieces: number | null;
+  /** Stock moved since the count (live − book at count): posting asks for a re-count. */
+  movedKg: number | null;
+  movedPieces: number | null;
+  pricePerKg: number;
+  currency: string;
   status: string;
+};
+
+export type CountSheetFilter = {
+  cursor?: string | null;
+  q?: string;
+  status?: "uncounted" | "counted" | "variance" | "posted";
+  since?: string;
+  includeEmpty?: boolean;
+  limit?: number;
 };
 
 export type CloseResult = {
@@ -77,10 +91,15 @@ export function beginCounting(year: number): Promise<{ year: number; status: str
 /** Keyset-paginated: only one page of rolls is ever held in the WebView. */
 export function getCountSheet(
   year: number,
-  cursor?: string | null,
+  filter: CountSheetFilter = {},
 ): Promise<{ lines: CountLine[]; nextCursor: string | null; total: number }> {
   const params: Record<string, string> = { year: String(year) };
-  if (cursor) params.cursor = cursor;
+  if (filter.cursor) params.cursor = filter.cursor;
+  if (filter.q?.trim()) params.q = filter.q.trim();
+  if (filter.status) params.status = filter.status;
+  if (filter.since) params.since = filter.since;
+  if (filter.includeEmpty) params.includeEmpty = "1";
+  if (filter.limit) params.limit = String(filter.limit);
   return container.http
     .get<{ lines: CountLine[]; nextCursor: string | null; total: number }>(
       "/api/financial-years/count-sheet",

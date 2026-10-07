@@ -23,6 +23,7 @@ import { Route as CustomersIdRouteImport } from './routes/customers.$id'
 import { Route as ExpensesIndexRouteImport } from './routes/expenses.index'
 import { Route as ExpensesNewRouteImport } from './routes/expenses.new'
 import { Route as InventoryAdjustmentsRouteImport } from './routes/inventory_.adjustments'
+import { Route as InventoryCountRouteImport } from './routes/inventory_.count'
 import { Route as InvoicesIndexRouteImport } from './routes/invoices.index'
 import { Route as InvoicesIdRouteImport } from './routes/invoices.$id'
 import { Route as InvoicesTrackingRouteImport } from './routes/invoices.tracking'
@@ -125,6 +126,11 @@ const ExpensesNewRoute = ExpensesNewRouteImport.update({
 const InventoryAdjustmentsRoute = InventoryAdjustmentsRouteImport.update({
   id: '/inventory_/adjustments',
   path: '/inventory/adjustments',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const InventoryCountRoute = InventoryCountRouteImport.update({
+  id: '/inventory_/count',
+  path: '/inventory/count',
   getParentRoute: () => rootRouteImport,
 } as any)
 const InvoicesIndexRoute = InvoicesIndexRouteImport.update({
@@ -306,6 +312,7 @@ export interface FileRoutesByFullPath {
   '/customers/$id': typeof CustomersIdRoute
   '/expenses/new': typeof ExpensesNewRoute
   '/inventory/adjustments': typeof InventoryAdjustmentsRoute
+  '/inventory/count': typeof InventoryCountRoute
   '/invoices/$id': typeof InvoicesIdRoute
   '/invoices/tracking': typeof InvoicesTrackingRoute
   '/orders/$id': typeof OrdersIdRoute
@@ -353,6 +360,7 @@ export interface FileRoutesByTo {
   '/customers/$id': typeof CustomersIdRoute
   '/expenses/new': typeof ExpensesNewRoute
   '/inventory/adjustments': typeof InventoryAdjustmentsRoute
+  '/inventory/count': typeof InventoryCountRoute
   '/invoices/$id': typeof InvoicesIdRoute
   '/invoices/tracking': typeof InvoicesTrackingRoute
   '/orders/$id': typeof OrdersIdRoute
@@ -403,6 +411,7 @@ export interface FileRoutesById {
   '/customers/$id': typeof CustomersIdRoute
   '/expenses/new': typeof ExpensesNewRoute
   '/inventory_/adjustments': typeof InventoryAdjustmentsRoute
+  '/inventory_/count': typeof InventoryCountRoute
   '/invoices/$id': typeof InvoicesIdRoute
   '/invoices/tracking': typeof InvoicesTrackingRoute
   '/orders/$id': typeof OrdersIdRoute
@@ -454,6 +463,7 @@ export interface FileRouteTypes {
     | '/customers/$id'
     | '/expenses/new'
     | '/inventory/adjustments'
+    | '/inventory/count'
     | '/invoices/$id'
     | '/invoices/tracking'
     | '/orders/$id'
@@ -501,6 +511,7 @@ export interface FileRouteTypes {
     | '/customers/$id'
     | '/expenses/new'
     | '/inventory/adjustments'
+    | '/inventory/count'
     | '/invoices/$id'
     | '/invoices/tracking'
     | '/orders/$id'
@@ -550,6 +561,7 @@ export interface FileRouteTypes {
     | '/customers/$id'
     | '/expenses/new'
     | '/inventory_/adjustments'
+    | '/inventory_/count'
     | '/invoices/$id'
     | '/invoices/tracking'
     | '/orders/$id'
@@ -600,6 +612,7 @@ export interface RootRouteChildren {
   CustomersIdRoute: typeof CustomersIdRoute
   ExpensesNewRoute: typeof ExpensesNewRoute
   InventoryAdjustmentsRoute: typeof InventoryAdjustmentsRoute
+  InventoryCountRoute: typeof InventoryCountRoute
   InvoicesIdRoute: typeof InvoicesIdRoute
   InvoicesTrackingRoute: typeof InvoicesTrackingRoute
   OrdersIdRoute: typeof OrdersIdRoute
@@ -722,6 +735,13 @@ declare module '@tanstack/react-router' {
       path: '/inventory/adjustments'
       fullPath: '/inventory/adjustments'
       preLoaderRoute: typeof InventoryAdjustmentsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/inventory_/count': {
+      id: '/inventory_/count'
+      path: '/inventory/count'
+      fullPath: '/inventory/count'
+      preLoaderRoute: typeof InventoryCountRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/invoices/': {
@@ -1016,6 +1036,7 @@ const rootRouteChildren: RootRouteChildren = {
   CustomersIdRoute: CustomersIdRoute,
   ExpensesNewRoute: ExpensesNewRoute,
   InventoryAdjustmentsRoute: InventoryAdjustmentsRoute,
+  InventoryCountRoute: InventoryCountRoute,
   InvoicesIdRoute: InvoicesIdRoute,
   InvoicesTrackingRoute: InvoicesTrackingRoute,
   OrdersIdRoute: OrdersIdRoute,

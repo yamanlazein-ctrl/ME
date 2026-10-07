@@ -8,6 +8,7 @@ import {
   fabricById,
   searchColors,
   colorByName,
+  useInventory,
 } from "@/presentation/hooks/useInventory";
 import { normalizeInventoryName } from "@/domain/inventory/normalizeInventoryName";
 import { recentSuggestions } from "@/shared/utils/suggestions";
@@ -37,11 +38,12 @@ export const InlineFabricCell = forwardRef<
   const [open, setOpen] = useState(false);
   const q = normalizeInventoryName(value);
 
+  const invVersion = useInventory();
   const matches = useMemo(() => {
     if (!q) return recentSuggestions(fabrics);
     return fabrics.filter((f) => normalizeInventoryName(f.name).includes(q)).slice(0, 8);
     // `fabrics` is a mutable module cache; its length changes when the list loads/grows.
-  }, [q, fabrics.length]);
+  }, [q, invVersion]);
 
   const exactMatch = fabrics.find((f) => normalizeInventoryName(f.name) === q);
   const isNew = q.length > 0 && !exactMatch;
@@ -145,13 +147,14 @@ export const InlineColorCell = forwardRef<
   const codeRef = useRef<HTMLInputElement>(null);
 
   const q = normalizeInventoryName(name);
+  const invVersion = useInventory();
   const matches = useMemo(
     () =>
       q
         ? searchColors(name, 12, fabricId)
         : recentSuggestions(fabricId ? colors.filter((c) => c.fabricId === fabricId) : colors),
     // `colors` is a mutable module cache; its length changes when the list loads/grows.
-    [q, name, fabricId, colors.length],
+    [q, name, fabricId, invVersion],
   );
   const local = colorByName(name, fabricId);
   const isNew = q.length > 0 && !local && !!fabricId;

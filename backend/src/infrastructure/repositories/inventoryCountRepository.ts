@@ -1,4 +1,4 @@
-import { and, eq, inArray, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import type { Tx } from "../orm/drizzle.js";
 import { inventoryCounts } from "../orm/schemas/inventory-count.table.js";
 import { financialYears } from "../orm/schemas/financial-year.table.js";
@@ -12,6 +12,7 @@ import { lockYear } from "./dayLockHelper.js";
 import type { TenantContext } from "../../domain/types/index.js";
 import { BusinessRuleError } from "../../domain/errors/index.js";
 import { round2dp } from "@erp/shared";
+import { localToday } from "../utils/localDate.js";
 
 /**
  * Physical inventory count, at the roll (the real unit of stock in this schema).
@@ -41,6 +42,12 @@ export type CountLine = {
   countedPieces: number | null;
   diffKg: number | null;
   diffPieces: number | null;
+  /** Stock moved since the count (live − book at count); null when it did not or the line is not counted. */
+  movedKg: number | null;
+  movedPieces: number | null;
+  /** Cost per kg and its currency: the screen values a difference at cost (never mixed). */
+  pricePerKg: number;
+  currency: string;
   status: string;
 };
 
@@ -52,50 +59,70 @@ export type CountLine = {
  * materialises them all in the WebView, and the labels are resolved in one extra
  * query instead of N+1 per line.
  */
+export type CountSheetFilter = {
+  limit?: number;
+  cursor?: string;
+  /** Fabric / colour name or code, roll number or dye batch. */
+  q?: string;
+  status?: "uncounted" | "counted" | "variance" | "posted";
+  /** A count round: lines counted before this date (YYYY-MM-DD) show as not counted. */
+  since?: string;
+  /** Also rolls the system thinks are empty (stock found on them can be recorded). */
+  includeEmpty?: boolean;
+};
+
 export async function getCountSheet(
   tx: Tx,
   ctx: TenantContext,
   year: number,
-  opts: { limit?: number; cursor?: string } = {},
+  opts: CountSheetFilter = {},
 ): Promise<{ lines: CountLine[]; nextCursor: string | null; total: number }> {
   const limit = Math.min(500, Math.max(1, opts.limit ?? 100));
 
-  const base = and(
+  // Each roll's LATEST count line of the year (a roll can be re-counted after a post).
+  const latest = sql`${inventoryCounts.id} = (SELECT c2.id FROM inventory_counts c2
+    WHERE c2.tenant_id = ${ctx.tenantId} AND c2.roll_id = ${rolls.id} AND c2.year = ${year}${opts.since ? sql` AND c2.counted_at >= ${opts.since}::date` : sql``}
+    ORDER BY c2.created_at DESC LIMIT 1)`;
+  const countedCond = and(eq(inventoryCounts.tenantId, ctx.tenantId), eq(inventoryCounts.rollId, rolls.id), latest);
+  const term = opts.q?.trim().toLowerCase();
+  const like = term ? `%${term}%` : null;
+  const filters = [
     eq(rolls.tenantId, ctx.tenantId),
-    sql`${rolls.remainingKg} > 0`,
+    opts.includeEmpty ? undefined : sql`(${rolls.remainingKg} > 0 OR ${rolls.remainingPieces} > 0)`,
     sql`EXTRACT(YEAR FROM ${rolls.entryDate})::int <= ${year}`,
-  );
-  // Left join so a roll nobody has counted yet still appears.
-  const countedCond = and(
-    eq(inventoryCounts.tenantId, ctx.tenantId),
-    eq(inventoryCounts.year, year),
-    eq(inventoryCounts.rollId, rolls.id),
-  );
-  // Keyset pagination on the roll id — no OFFSET, and never more than one
-  // page of rolls in memory at a time.
-  const rows = await tx
-    .select({ roll: rolls, count: inventoryCounts })
-    .from(rolls)
-    .leftJoin(inventoryCounts, countedCond)
-    .where(opts.cursor ? and(base, sql`${rolls.id} > ${opts.cursor}::uuid`) : base)
-    .orderBy(sql`${rolls.id} ASC`)
-    .limit(limit + 1);
-
-  const rollIds = rows.map((r) => r.roll.id);
-  const labels = new Map<string, { fabric: string; color: string }>();
-  if (rollIds.length) {
-    const meta = await tx
-      .select({ id: rolls.id, fabric: fabrics.name, color: colors.name })
+    like
+      ? sql`(lower(${rolls.rollNo}) LIKE ${like} OR lower(COALESCE(${rolls.dyeBatch}, '')) LIKE ${like}
+          OR lower(${fabrics.name}) LIKE ${like} OR lower(${colors.name}) LIKE ${like} OR lower(COALESCE(${colors.code}, '')) LIKE ${like})`
+      : undefined,
+    opts.status === "uncounted" ? sql`${inventoryCounts.id} IS NULL` : undefined,
+    opts.status === "counted" ? sql`${inventoryCounts.status} = 'counted'` : undefined,
+    opts.status === "posted" ? sql`${inventoryCounts.status} = 'posted'` : undefined,
+    opts.status === "variance"
+      ? sql`${inventoryCounts.status} = 'counted' AND (COALESCE(${inventoryCounts.diffKg}, 0) <> 0 OR COALESCE(${inventoryCounts.diffPieces}, 0) <> 0)`
+      : undefined,
+  ];
+  const base = and(...filters);
+  const from = () =>
+    tx
+      .select({ roll: rolls, count: inventoryCounts, fabric: fabrics.name, color: colors.name })
       .from(rolls)
       .innerJoin(colors, eq(colors.id, rolls.colorId))
       .innerJoin(fabrics, eq(fabrics.id, colors.fabricId))
-      .where(and(eq(rolls.tenantId, ctx.tenantId), inArray(rolls.id, rollIds)));
-    for (const m of meta) labels.set(m.id, { fabric: m.fabric, color: m.color });
-  }
+      .leftJoin(inventoryCounts, countedCond);
+  // Keyset pagination on the roll id — no OFFSET, and never more than one
+  // page of rolls in memory at a time.
+  const rows = await from()
+    .where(opts.cursor ? and(base, sql`${rolls.id} > ${opts.cursor}::uuid`) : base)
+    .orderBy(sql`${rolls.id} ASC`)
+    .limit(limit + 1);
+  const labels = new Map(rows.map((r) => [r.roll.id, { fabric: r.fabric, color: r.color }]));
 
   const [totalRow] = await tx
     .select({ n: sql<number>`count(*)::int` })
     .from(rolls)
+    .innerJoin(colors, eq(colors.id, rolls.colorId))
+    .innerJoin(fabrics, eq(fabrics.id, colors.fabricId))
+    .leftJoin(inventoryCounts, countedCond)
     .where(base);
 
   const hasMore = rows.length > limit;
@@ -103,6 +130,7 @@ export async function getCountSheet(
   const lines: CountLine[] = page.map(({ roll, count }) => {
     const meta = labels.get(roll.id);
     const posted = count?.status === "posted";
+    const counted = count != null && (count.countedKg != null || count.countedPieces != null);
     const liveKg = round2dp(Number(roll.remainingKg ?? 0));
     const livePieces = Number(roll.remainingPieces ?? 0);
     return {
@@ -111,14 +139,19 @@ export async function getCountSheet(
       rollNo: roll.rollNo,
       fabricName: meta?.fabric ?? "—",
       colorName: meta?.color ?? "—",
-      // A posted line is history (its own snapshot). Otherwise book = the roll NOW,
-      // so the difference shown is always counted − current book, never a stale one.
-      bookKg: posted ? round2dp(Number(count!.bookKg)) : liveKg,
-      bookPieces: posted ? Number(count!.bookPieces ?? 0) : livePieces,
+      // ONE basis for screen and posting: a counted line shows the book AT COUNT TIME (what
+      // posting applies). If the shelf moved since, `moved*` says so and posting asks for a
+      // re-count — the screen no longer shows a difference that will not be posted.
+      bookKg: counted ? round2dp(Number(count!.bookKg)) : liveKg,
+      bookPieces: counted ? Number(count!.bookPieces ?? 0) : livePieces,
       countedKg: count?.countedKg == null ? null : Number(count.countedKg),
       countedPieces: count?.countedPieces ?? null,
-      diffKg: count?.countedKg == null ? null : posted ? Number(count.diffKg) : round2dp(Number(count.countedKg) - liveKg),
-      diffPieces: count?.countedPieces == null ? null : posted ? (count.diffPieces ?? null) : count.countedPieces - livePieces,
+      diffKg: count?.countedKg == null ? null : round2dp(Number(count.countedKg) - Number(count.bookKg)),
+      diffPieces: count?.countedPieces == null ? null : count.countedPieces - Number(count.bookPieces ?? 0),
+      movedKg: counted && !posted && round2dp(liveKg - Number(count!.bookKg)) !== 0 ? round2dp(liveKg - Number(count!.bookKg)) : null,
+      movedPieces: counted && !posted && livePieces !== Number(count!.bookPieces ?? 0) ? livePieces - Number(count!.bookPieces ?? 0) : null,
+      pricePerKg: Number(roll.pricePerKg ?? 0),
+      currency: roll.currency,
       status: count?.status ?? "uncounted",
     };
   });
@@ -172,6 +205,9 @@ export async function recordCount(
     .limit(1);
   if (!roll) throw new BusinessRuleError("اللفة غير موجودة.");
 
+  // One working line per roll and year. A re-count after a post reopens it with a fresh
+  // book snapshot: the posted correction stays as its stock movement, ledger leg and audit
+  // row (the real history), and posting the new count applies only the new difference.
   const [existing] = await tx
     .select()
     .from(inventoryCounts)
@@ -183,11 +219,6 @@ export async function recordCount(
       ),
     )
     .limit(1);
-  // A posted variance is a settled document; re-counting it would silently
-  // rewrite history, so it must be voided explicitly first.
-  if (existing?.status === "posted") {
-    throw new BusinessRuleError("تم ترحيل تسوية هذه اللفة مسبقاً. ألغِ التسوية قبل إعادة العدّ.");
-  }
 
   const bookKg = Number(roll.remainingKg ?? 0);
   const bookPieces = roll.remainingPieces ?? 0;
@@ -205,8 +236,11 @@ export async function recordCount(
         countedPieces,
         diffKg,
         diffPieces,
-        reason: reason ?? existing.reason,
+        reason: reason ?? (existing.status === "posted" ? null : existing.reason),
         status: "counted",
+        approvedBy: null,
+        approvedAt: null,
+        postedMovementId: null,
         countedBy: ctx.userId,
         countedAt: now,
         updatedAt: now,
@@ -266,7 +300,8 @@ export async function postCountVariance(
   }
 
   const diffKg = round2dp(Number(count.countedKg) - Number(count.bookKg));
-  if (diffKg === 0) {
+  const diffPieces = count.countedPieces == null ? 0 : count.countedPieces - Number(count.bookPieces ?? 0);
+  if (diffKg === 0 && diffPieces === 0) {
     // Nothing to adjust — mark it settled so it stops blocking the close.
     await tx
       .update(inventoryCounts)
@@ -284,7 +319,10 @@ export async function postCountVariance(
   // The count compared the shelf with the book quantity AT COUNT TIME. If stock
   // moved since (a sale, a return), the counted figure no longer describes the
   // shelf: posting it would erase that movement. Re-count first.
-  if (round2dp(Number(roll.remainingKg ?? 0)) !== round2dp(Number(count.bookKg))) {
+  if (
+    round2dp(Number(roll.remainingKg ?? 0)) !== round2dp(Number(count.bookKg)) ||
+    (count.countedPieces != null && (roll.remainingPieces ?? 0) !== Number(count.bookPieces ?? 0))
+  ) {
     throw new BusinessRuleError(
       "تغيّر رصيد هذه اللفة بعد الجرد (حركة بيع/إرجاع). أعد عدّ اللفة ثم رحّل الفرق.",
     );
@@ -293,9 +331,11 @@ export async function postCountVariance(
   const adjustment: RollAdjustmentInput = {
     rollId: roll.id,
     deltaKg: diffKg,
-    deltaPieces: count.countedPieces == null ? 0 : count.countedPieces - (roll.remainingPieces ?? 0),
+    deltaPieces: count.countedPieces == null ? 0 : count.countedPieces - Number(count.bookPieces ?? 0),
     reason: count.reason ?? (diffKg > 0 ? "تسوية جرد: زيادة" : "تسوية جرد: عجز"),
-    date: `${count.year}-12-31`,
+    // Never in the future: a count during the year posts today; a year-end count done
+    // after New Year still lands on 31 Dec of the year it closes.
+    date: [localToday(), `${count.year}-12-31`].sort()[0]!,
     referenceType: "inventory_count",
     referenceId: count.id,
     referenceNumber: `CNT-${count.year}-${count.id.slice(0, 8)}`,

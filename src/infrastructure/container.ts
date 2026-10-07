@@ -77,8 +77,10 @@ import {
   loggingInterceptor,
   tenantHeaderInterceptor,
   syncDeviceInterceptor,
+  syncSoonInterceptor,
 } from "./http/interceptors";
 import { createTokenProvider } from "./auth/TokenProvider";
+import { scheduleSyncSoon } from "@/lib/sync-engine";
 import {
   AuthApiService,
   AuditApiService,
@@ -119,6 +121,7 @@ apiClient.addInterceptor(
 );
 apiClient.addInterceptor(authInterceptor(createTokenProvider()));
 apiClient.addInterceptor(syncDeviceInterceptor());
+apiClient.addInterceptor(syncSoonInterceptor(() => scheduleSyncSoon()));
 apiClient.addInterceptor(
   loggingInterceptor(() => {
     try {

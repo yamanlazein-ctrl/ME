@@ -4,6 +4,12 @@ import { AppShell } from "@/components/layout/AppShell";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { container } from "@/infrastructure/container";
 import { formatNumber } from "@/shared/utils/formatNumber";
+import { useMemo, useState } from "react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { RollAdjustDialog } from "@/components/inventory/InventoryDialogs";
+import { colorById, fabricById, rollById, rolls, useInventory, type Roll } from "@/presentation/hooks/useInventory";
 
 export const Route = createFileRoute("/inventory_/adjustments")({ component: InventoryAdjustmentsPage });
 
@@ -21,11 +27,43 @@ function InventoryAdjustmentsPage() {
     queryKey: ["inventory", "adjustments"],
     queryFn: () => container.audit.api.listByModule("inventory_adjustments"),
   });
-  const rows = q.data ?? [];
+  const all = q.data ?? [];
+  const [search, setSearch] = useState("");
+  const [kind, setKind] = useState<"all" | "count" | "manual">("all");
+  const [picking, setPicking] = useState(false);
+  const [target, setTarget] = useState<Roll | null>(null);
+  const term = search.trim().toLowerCase();
+  const rows = all.filter((r) => {
+    if (kind === "count" && r.action !== "post_count_variance") return false;
+    if (kind === "manual" && r.action === "post_count_variance") return false;
+    if (!term) return true;
+    const a = (r.afterSnapshot ?? {}) as Snap;
+    return [a.rollNo, r.actorName, r.detail].some((v) => String(v ?? "").toLowerCase().includes(term));
+  });
   return (
     <AppShell>
       <div className="rounded-xl border border-border bg-card shadow-soft" dir="rtl">
-        <h2 className="border-b border-border p-3 font-semibold">تعديلات المخزون</h2>
+        <div className="flex flex-wrap items-center gap-2 border-b border-border p-3">
+          <h2 className="me-auto font-semibold">تعديلات المخزون</h2>
+          <Input
+            className="h-8 w-56"
+            placeholder="بحث: رقم الصبغة، المستخدم، السبب"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+          <select
+            className="h-8 rounded-md border border-border bg-background px-2 text-sm"
+            value={kind}
+            onChange={(e) => setKind(e.target.value as typeof kind)}
+          >
+            <option value="all">الكل</option>
+            <option value="manual">تعديل يدوي</option>
+            <option value="count">تسوية جرد</option>
+          </select>
+          <Button size="sm" onClick={() => setPicking(true)}>
+            تعديل جديد
+          </Button>
+        </div>
         {q.isPending && <p className="p-4 text-center text-sm text-muted-foreground">جارٍ التحميل…</p>}
         {q.isError && <p className="p-4 text-center text-sm text-destructive">تعذّر تحميل تعديلات المخزون.</p>}
         {!q.isPending && !q.isError && rows.length === 0 && (
@@ -78,6 +116,63 @@ function InventoryAdjustmentsPage() {
           </Table>
         )}
       </div>
+      <RollPicker
+        open={picking}
+        onClose={() => setPicking(false)}
+        onPick={(r) => {
+          setPicking(false);
+          setTarget(r);
+        }}
+      />
+      <RollAdjustDialog
+        roll={target ? (rollById(target.id) ?? target) : null}
+        onClose={() => {
+          setTarget(null);
+          void q.refetch();
+        }}
+      />
     </AppShell>
+  );
+}
+
+/** Find the roll to adjust by roll number, fabric or colour. */
+function RollPicker({ open, onClose, onPick }: { open: boolean; onClose: () => void; onPick: (r: Roll) => void }) {
+  const invVersion = useInventory();
+  const [term, setTerm] = useState("");
+  const matches = useMemo(() => {
+    const t = term.trim().toLowerCase();
+    const label = (r: Roll) => {
+      const c = colorById(r.colorId);
+      return `${r.rollNo} ${c?.name ?? ""} ${c?.code ?? ""} ${fabricById(c?.fabricId ?? "")?.name ?? ""} ${r.dyeBatch ?? ""}`.toLowerCase();
+    };
+    return (t ? rolls.filter((r) => label(r).includes(t)) : rolls).slice(0, 30);
+  }, [term, invVersion]);
+  return (
+    <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
+      <DialogContent dir="rtl" className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle>اختر الصبغة</DialogTitle>
+        </DialogHeader>
+        <Input autoFocus placeholder="رقم الصبغة، القماش، اللون…" value={term} onChange={(e) => setTerm(e.target.value)} />
+        <ul className="max-h-[50vh] divide-y divide-border overflow-y-auto text-sm">
+          {matches.map((r) => {
+            const c = colorById(r.colorId);
+            return (
+              <li key={r.id}>
+                <button type="button" className="flex w-full justify-between gap-2 px-2 py-2 text-start hover:bg-secondary" onClick={() => onPick(r)}>
+                  <span>
+                    #{r.rollNo} — {fabricById(c?.fabricId ?? "")?.name ?? "—"} / {c?.name ?? "—"}
+                  </span>
+                  <span className="tabular-nums text-muted-foreground">
+                    {formatNumber(Number(r.remainingKg ?? 0))} كغ · {r.remainingPieces ?? 0} ثوب
+                  </span>
+                </button>
+              </li>
+            );
+          })}
+          {matches.length === 0 && <li className="p-3 text-center text-muted-foreground">لا نتائج.</li>}
+        </ul>
+      </DialogContent>
+    </Dialog>
   );
 }

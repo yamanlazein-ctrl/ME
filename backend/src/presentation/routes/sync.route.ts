@@ -40,6 +40,7 @@ import { runWithTenantContext } from "../../infrastructure/orm/tenant-context.js
 import { resolveSessionIdentity, revokeSubjectSessions } from "../../infrastructure/auth/sessionCutoff.js";
 import { mapRestoredSyncDeviceId } from "../../infrastructure/sync/restoredIdentity.js";
 import { reconcileRestoredSnapshot, type RestoreReconcileResult } from "../../application/use-cases/sync/syncRestoreUseCases.js";
+import { withTenantTx } from "../../infrastructure/orm/engine.js";
 import { getSyncRestoreStateStore } from "../../infrastructure/repositories/engineStores.js";
 import { describeHubActivity, describePulledUnit } from "../../application/use-cases/sync/syncActivity.js";
 
@@ -572,6 +573,15 @@ export function registerSyncRoutes(
     // Claimable, not just `pending`: units stranded in `pushing` by a crashed
     // run are still outstanding work and must be visible here.
     const rows = await container.syncOutboxRepo.listClaimable(ctx.tenantId, 100);
+    const pairedAt = Date.parse(getHubSessionInfo()?.pairedAt ?? "");
+    // What the operator recognises: a document number or a name, never the raw payload.
+    const refOf = (p: Record<string, unknown>) => {
+      const snap = (p.snapshot ?? {}) as Record<string, unknown>;
+      const upd = (p.updateInput ?? {}) as Record<string, unknown>;
+      const v = [p.invoiceNumber, p.voucherNumber, p.returnNumber, p.expenseNumber, p.orderCode, p.referenceNumber,
+        snap.name, snap.rollNo, snap.code, upd.name, upd.rollNo].find((x) => typeof x === "string" && x);
+      return (v as string | undefined) ?? null;
+    };
     res.json({
       items: rows.map((r) => ({
         id: r.id,
@@ -582,6 +592,9 @@ export function registerSyncRoutes(
         status: r.status,
         seq: r.seq,
         createdAt: r.createdAt,
+        ref: refOf(r.payload),
+        errorDetail: r.errorDetail,
+        beforePairing: Number.isFinite(pairedAt) && new Date(r.createdAt).getTime() < pairedAt,
       })),
     });
   });
@@ -866,12 +879,15 @@ export function registerSyncRoutes(
         pull = {
           pulled: pull.pulled + page.pulled,
           applied: pull.applied + page.applied,
+          changed: (pull.changed ?? 0) + (page.changed ?? 0),
           skipped: pull.skipped + page.skipped,
           failed: pull.failed + page.failed,
           deviceTrust: pull.deviceTrust ?? page.deviceTrust,
         };
       }
-      if (pull.applied > 0) localDataVersion += 1;
+      // Only real local changes: units re-pulled while the cursor is held count as `applied`
+      // too, and bumping on them made every screen refetch everything every cycle.
+      if ((pull.changed ?? pull.applied) > 0) localDataVersion += 1;
     } catch (err) {
       pullError = err instanceof Error ? err.message : "pull failed";
       logger.warn({ err }, "sync pull during sync/run failed");
@@ -913,6 +929,23 @@ export function registerSyncRoutes(
         }
       } catch (err) {
         logger.debug({ err }, "hub activity pull failed");
+      }
+    }
+    // A year closed (or reopened) on the hub freezes it here too — best-effort, every cycle.
+    if (getCentralSyncUrl() && isHubReachableCached() !== false) {
+      try {
+        const years = await hubProxy("GET", "/api/financial-years");
+        if (years.status === 200 && Array.isArray(years.body)) {
+          const { adoptYearStatus } = await import("../../infrastructure/repositories/yearStatusSync.js");
+          for (const y of years.body as Array<{ year: number; status: string; closedAt: string | null }>) {
+            const changed = await withTenantTx(ctx.tenantId, (tx) =>
+              adoptYearStatus(tx, ctx.tenantId, y.year, y.status, y.closedAt ? new Date(y.closedAt) : null),
+            );
+            if (changed) localDataVersion += 1;
+          }
+        }
+      } catch (err) {
+        logger.debug({ err }, "hub financial-year pull failed");
       }
     }
     // T109 state for the UI; undefined (absent from the JSON) when this database was not restored.

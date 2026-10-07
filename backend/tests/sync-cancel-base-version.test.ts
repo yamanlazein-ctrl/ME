@@ -126,7 +126,7 @@ describe("cancel replay — stale base is refused, not applied blind", () => {
       ),
     );
 
-    expect(result.status).toBe("failed");
+    expect(result.status).toBe("conflict");
     expect(result.error).toContain("تعارض إلغاء");
     expect(result.error).toContain("v3");
     expect(cancelInvoice, "a stale cancel must never reach the domain cancel").not.toHaveBeenCalled();
@@ -153,7 +153,7 @@ describe("cancel replay — stale base is refused, not applied blind", () => {
       ),
     );
 
-    expect(result.status).toBe("failed");
+    expect(result.status).toBe("conflict");
     expect(result.error).toContain("تعارض إلغاء");
     expect(cancelVoucher).not.toHaveBeenCalled();
   });
@@ -233,7 +233,7 @@ describe("cancel replay — stale base is refused, not applied blind", () => {
       ),
     );
 
-    expect(result.status).toBe("failed");
+    expect(result.status).toBe("conflict");
     expect(cancelInvoice).not.toHaveBeenCalled();
   });
 });

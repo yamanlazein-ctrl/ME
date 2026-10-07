@@ -22,6 +22,7 @@ import {
   describeSyncProblem,
   hubSync,
   runSyncNow,
+  refreshScreens,
   useSyncRunState,
   type HubConnectResult,
   type HubState,
@@ -193,7 +194,8 @@ function SyncSettingsAdmin() {
           `مزامنة: أُرسل ${r.pushed} · سُحب ${r.pull?.applied ?? 0}${r.rejected ? ` · رُفض ${r.rejected}` : ""}`,
         );
       }
-      await qc.invalidateQueries();
+      // Lists AND the parties/inventory stores, not only react-query.
+      await refreshScreens();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "فشلت المزامنة");
     }

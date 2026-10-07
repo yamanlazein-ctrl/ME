@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useConnectivity, type ConnectivityStatus } from "@/presentation/hooks/useConnectivity";
 import { hasStoredSession } from "@/infrastructure/auth/TokenProvider";
-import { runSyncNow } from "@/lib/sync-engine";
+import { runSyncNow, setDataRefresher } from "@/lib/sync-engine";
 import { refreshParties } from "@/presentation/hooks/useParties";
 import { refreshInventory } from "@/presentation/hooks/useInventory";
 import { loadSettings } from "@/presentation/hooks/useSettings";
@@ -19,15 +19,17 @@ import { loadSettings } from "@/presentation/hooks/useSettings";
  * by design: sync status is observed via /sync/status, not via this hook.
  */
 const RETRY_DELAYS_MS = [30_000, 120_000];
-const PERIODIC_SYNC_MS = 20_000;
+// 5 s: a peer's invoice shows here within ~5–10 s instead of up to 40 s (two 20 s ticks).
+// A tick with nothing to do is one cheap pull on the hub.
+const PERIODIC_SYNC_MS = 5_000;
+// The header remounts with every page: the "already online" kick runs once per app session.
+let mountKickDone = false;
 
 export function useAutoSync() {
   const qc = useQueryClient();
   const status = useConnectivity(15_000);
   const prev = useRef<ConnectivityStatus | null>(null);
   const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
-  // Last backend data version seen (see SyncRunResult.localDataVersion).
-  const seenDataVersion = useRef<number | null>(null);
   // Device gate: the hub refused pushes with SYNC_UNKNOWN_DEVICE. Retrying
   // cannot help — the device must register first. Surfaced as state so the
   // header can show a register-device badge instead of spinning silently.
@@ -43,8 +45,10 @@ export function useAutoSync() {
     prev.current = status;
     if (status !== "online") return;
     if (!hasStoredSession()) return;
-    // Mount already-online, or transition offline → online.
+    // Mount already-online (first mount of the session only), or transition offline → online.
     if (previous !== null && previous !== "offline") return;
+    if (previous === null && mountKickDone) return;
+    mountKickDone = true;
 
     let cancelled = false;
     const attempt = async (retriesLeft: number[], attemptNo: number): Promise<void> => {
@@ -85,10 +89,18 @@ export function useAutoSync() {
     };
   }, [status]);
 
+  // One refresh for every trigger (tick, buttons, sync-after-save): every list/detail view
+  // re-reads, including the module-level stores that live outside react-query.
+  useEffect(() => {
+    setDataRefresher(async () => {
+      await Promise.all([refreshParties(), refreshInventory(), loadSettings()]);
+      await qc.invalidateQueries();
+    });
+  }, [qc]);
+
   // Steady cadence while online: the reconnect trigger above only fires on an
   // offline→online flip, so without this a device that stays online never
-  // pulls a peer's invoice until the next network blip. Each tick is one
-  // push+pull round trip; a tick that finds nothing is a cheap no-op on the hub.
+  // pulls a peer's invoice until the next network blip.
   useEffect(() => {
     if (status !== "online") return;
     const tick = async () => {
@@ -98,27 +110,10 @@ export function useAutoSync() {
       if (!hasStoredSession()) return;
       try {
         const result = await runSyncNow();
-        if (!result) return;
-        // The background cycle may have applied peers' data while this run was
-        // skipped ("sync already running"): the version tells, either way.
-        const version = result.localDataVersion;
-        const dataChanged =
-          typeof version === "number" && seenDataVersion.current !== null && version !== seenDataVersion.current;
-        if (typeof version === "number") seenDataVersion.current = version;
-        const pulledSomething =
-          !result.skipped && (result.pull?.applied ?? 0) > 0 && (result.pull?.pulled ?? 0) > 0;
-        if (!result.skipped) {
-          setDeviceGate(Boolean(result.deviceGate));
-          setDeviceTrust(result.deviceGate ? (result.deviceTrust ?? null) : null);
-        }
-        if (dataChanged || pulledSomething) {
-          // Peers changed documents here: every list/detail view must re-read,
-          // including the two module-level caches that live outside react-query.
-          void refreshParties();
-          void refreshInventory();
-          void loadSettings();
-          await qc.invalidateQueries();
-        } else if (!result.skipped && ((result.activity ?? 0) > 0 || (result.rejected ?? 0) > 0)) {
+        if (!result || result.skipped) return;
+        setDeviceGate(Boolean(result.deviceGate));
+        setDeviceTrust(result.deviceGate ? (result.deviceTrust ?? null) : null);
+        if ((result.activity ?? 0) > 0 || (result.rejected ?? 0) > 0) {
           await qc.invalidateQueries({ queryKey: ["notifications"] });
         }
       } catch (err) {

@@ -20,6 +20,7 @@ import {
   Activity,
   Save,
   Users as UsersIcon,
+  ClipboardCheck,
   ClipboardList,
   Printer,
   BarChart3,
@@ -47,7 +48,8 @@ const GROUPS: NavGroup[] = [
     key: "main",
     label: "القائمة الرئيسية",
     items: [
-      { to: "/inventory", label: "المخزون", icon: Boxes },
+      { to: "/inventory", label: "المخزون", icon: Boxes, exact: true },
+      { to: "/inventory/count", label: "الجرد الفعلي", icon: ClipboardCheck },
       { to: "/inventory/adjustments", label: "تعديلات المخزون", icon: ClipboardList },
       { to: "/customers", label: "العملاء", icon: Users },
       { to: "/suppliers", label: "الموردون", icon: Truck },
@@ -78,7 +80,7 @@ const GROUPS: NavGroup[] = [
       { to: "/expenses", label: "المصاريف", icon: Receipt },
       { to: "/ledger", label: "دفتر الحركات", icon: BookOpen },
       { to: "/cashbox", label: "الصندوق", icon: Wallet },
-      { to: "/closing", label: "إقفال السنة والجرد", icon: Lock },
+      { to: "/closing", label: "إقفال السنة", icon: Lock },
     ],
   },
   {

@@ -1,5 +1,5 @@
-import { useEffect } from "react";
-import { CloudOff, GitMerge } from "lucide-react";
+import { useEffect, useState } from "react";
+import { CloudOff, GitMerge, RefreshCw } from "lucide-react";
 import { Link } from "@tanstack/react-router";
 import { useOpenSyncConflictCount } from "@/presentation/hooks/useSyncConflicts";
 import { NotificationsBell } from "./NotificationsBell";
@@ -11,7 +11,7 @@ import { useSettings } from "@/presentation/hooks/useSettings";
 import { useConnectivity } from "@/presentation/hooks/useConnectivity";
 import { useAutoSync } from "@/presentation/hooks/useAutoSync";
 import { useLiveNotificationToasts } from "@/presentation/hooks/useLiveNotificationToasts";
-import { useSyncRunState } from "@/lib/sync-engine";
+import { refreshAllData, useSyncRunState } from "@/lib/sync-engine";
 import logoUrl from "@/assets/logo-motard-icon.png";
 import { cn } from "@/lib/utils";
 
@@ -42,6 +42,27 @@ export function Header() {
   useEffect(() => {
     document.title = companyName;
   }, [companyName]);
+
+  // «تحديث»: sync (when paired) and re-read every list on screen. F5 / Ctrl+R do the same
+  // instead of reloading the WebView, which would drop open forms.
+  const [refreshing, setRefreshing] = useState(false);
+  const refresh = () => {
+    if (refreshing) return;
+    setRefreshing(true);
+    void refreshAllData()
+      .catch(() => undefined)
+      .finally(() => setRefreshing(false));
+  };
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "F5" || ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "r")) {
+        e.preventDefault();
+        refresh();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  });
 
   return (
     <header
@@ -143,6 +164,16 @@ export function Header() {
           )}
 
           <div className="flex items-center gap-0.5 border-s border-border ps-4">
+            <button
+              type="button"
+              onClick={refresh}
+              disabled={refreshing}
+              title="تحديث البيانات (F5)"
+              className="inline-flex h-9 items-center gap-1.5 rounded-lg px-2.5 text-sm font-medium text-muted-foreground transition hover:bg-secondary hover:text-foreground disabled:opacity-60"
+            >
+              <RefreshCw className={cn("h-4 w-4", refreshing && "animate-spin")} />
+              تحديث
+            </button>
             <ThemeToggle />
             <Link
               to="/sync/conflicts"

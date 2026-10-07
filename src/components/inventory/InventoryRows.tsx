@@ -210,6 +210,7 @@ function RollRow({
   minKg,
   onEdit,
   onDelete,
+  onAdjust,
   selectable,
   selected,
   onSelect,
@@ -218,6 +219,7 @@ function RollRow({
   minKg: number;
   onEdit: () => void;
   onDelete: () => void;
+  onAdjust?: () => void;
   selectable?: boolean;
   selected?: boolean;
   onSelect?: () => void;
@@ -262,7 +264,9 @@ function RollRow({
           </div>
           <div className="flex justify-between gap-2">
             <dt className="text-muted-foreground">عدد الأثواب</dt>
-            <dd className="font-semibold text-foreground tabular-nums">{roll.pieces ?? 1} أثوب</dd>
+            <dd className="font-semibold text-foreground tabular-nums">
+              {roll.remainingPieces ?? 0} / {roll.pieces ?? 1} أثواب
+            </dd>
           </div>
           <div className="flex justify-between gap-2">
             <dt className="text-muted-foreground">رقم الصبغة</dt>
@@ -280,7 +284,7 @@ function RollRow({
 
         {/* Actions row: consistent bottom position */}
         <div className="mt-2 flex justify-end">
-          <RowActions onEdit={onEdit} onDelete={onDelete} />
+          <RowActions onEdit={onEdit} onDelete={onDelete} onAdjust={onAdjust} />
         </div>
       </div>
 
@@ -330,8 +334,9 @@ function RollRow({
               />
             </div>
           </div>
-          <div className="whitespace-nowrap text-sm font-bold text-primary tabular-nums">
-            {roll.pieces ?? 1}
+          {/* Remaining pieces, like the colour/fabric totals (was the count at purchase). */}
+          <div className="whitespace-nowrap text-sm font-bold text-primary tabular-nums" title={`من ${roll.pieces ?? 1}`}>
+            {roll.remainingPieces ?? 0}
           </div>
           <div className="truncate text-sm text-foreground tabular-nums">{roll.dyeBatch}</div>
           <div className="truncate text-sm text-foreground">{supplier?.name ?? "—"}</div>
@@ -339,7 +344,7 @@ function RollRow({
             {roll.entryDate}
           </div>
           <StatusChip r={roll} minKg={minKg} />
-          <RowActions onEdit={onEdit} onDelete={onDelete} />
+          <RowActions onEdit={onEdit} onDelete={onDelete} onAdjust={onAdjust} />
         </div>
       </div>
     </>

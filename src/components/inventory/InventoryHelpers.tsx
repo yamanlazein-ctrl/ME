@@ -1,4 +1,4 @@
-import { Pencil, Plus, Trash2 } from "lucide-react";
+import { ArrowUpDown, Pencil, Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 
@@ -7,11 +7,14 @@ function RowActions({
   onDelete,
   onAdd,
   addLabel,
+  onAdjust,
 }: {
   onEdit: () => void;
   onDelete: () => void;
   onAdd?: () => void;
   addLabel?: string;
+  /** Rolls only: the stock correction gets its own labelled action, not a corner of «تعديل». */
+  onAdjust?: () => void;
 }) {
   return (
     <div className="flex items-center gap-1 opacity-70 group-hover:opacity-100 transition">
@@ -29,9 +32,23 @@ function RowActions({
           <Plus className="h-4 w-4" />
         </button>
       )}
+      {onAdjust && (
+        <button
+          type="button"
+          title="تعديل الكمية أو عدد الأثواب"
+          onClick={(e) => {
+            e.stopPropagation();
+            onAdjust();
+          }}
+          className="inline-flex h-8 items-center gap-1 rounded-md border border-border bg-background px-2 text-xs font-medium text-foreground hover:border-primary hover:text-primary transition cursor-pointer"
+        >
+          <ArrowUpDown className="h-3.5 w-3.5" /> كمية
+        </button>
+      )}
       <button
         type="button"
-        aria-label="تعديل"
+        aria-label="تعديل البيانات"
+        title="تعديل البيانات"
         onClick={(e) => {
           e.stopPropagation();
           onEdit();
@@ -43,6 +60,7 @@ function RowActions({
       <button
         type="button"
         aria-label="حذف"
+        title="حذف"
         onClick={(e) => {
           e.stopPropagation();
           onDelete();

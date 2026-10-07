@@ -114,6 +114,46 @@ export function useSyncRunState(): SyncRunState {
   );
 }
 
+/* ── One refresh path for every sync trigger ───────────────────────────── */
+
+let refresher: (() => Promise<void>) | null = null;
+let seenDataVersion: number | null = null;
+
+/** Registered once by the app shell: re-reads every list, cache and store on screen. */
+export function setDataRefresher(fn: () => Promise<void>): void {
+  refresher = fn;
+}
+
+/** Re-read the screen without syncing (a caller that already ran the sync). */
+export async function refreshScreens(): Promise<void> {
+  await refresher?.();
+}
+
+/** The «تحديث» button and F5: sync when paired, then always re-read what is on screen. */
+export async function refreshAllData(): Promise<SyncRunResult | null> {
+  let result: SyncRunResult | null = null;
+  let failure: unknown = null;
+  try {
+    result = await runSyncNow();
+  } catch (err) {
+    failure = err; // offline or unpaired: the local data is still worth re-reading
+  }
+  await refresher?.();
+  if (failure) throw failure;
+  return result;
+}
+
+let soonTimer: ReturnType<typeof setTimeout> | null = null;
+/** A local write just happened: send it within ~2 s instead of waiting for the next tick. */
+export function scheduleSyncSoon(delayMs = 2_000): void {
+  if (soonTimer) clearTimeout(soonTimer);
+  soonTimer = setTimeout(() => {
+    soonTimer = null;
+    if (state.running) return scheduleSyncSoon(delayMs);
+    void runSyncNow().catch(() => undefined);
+  }, delayMs);
+}
+
 export async function runSyncNow(): Promise<SyncRunResult | null> {
   const token = getAccessToken();
   if (!token) return null;
@@ -155,6 +195,13 @@ export async function runSyncNow(): Promise<SyncRunResult | null> {
       lastResult: result,
       lastError: describeSyncProblem(result.pullError) ?? pushProblem,
     });
+    // The backend bumps localDataVersion only when a cycle (this one or the background
+    // one) really changed local data — whichever trigger ran, the screen re-reads.
+    const version = result.localDataVersion;
+    if (typeof version === "number") {
+      if (seenDataVersion !== null && version !== seenDataVersion) void refresher?.();
+      seenDataVersion = version;
+    }
     return result;
   } catch (err) {
     setState({
@@ -231,8 +278,23 @@ async function hubApi<T>(path: string, init: RequestInit = {}): Promise<T> {
   return body;
 }
 
+/** Backend marker for units held behind an earlier one (syncUseCases ORDERED_LANE_WAITING). */
+export const ORDERED_WAITING = "بانتظار إرسال عملية سابقة لها";
+
+export type PendingUnit = {
+  id: string;
+  entityType: string;
+  operation: string;
+  status: string;
+  createdAt: string;
+  ref: string | null;
+  errorDetail: string | null;
+  beforePairing: boolean;
+};
+
 export const hubSync = {
   state: () => hubApi<HubState>("/sync/hub"),
+  pending: () => hubApi<{ items: PendingUnit[] }>("/sync/pending"),
   test: (url?: string) =>
     hubApi<HubTestResult>("/sync/hub/test", { method: "POST", body: JSON.stringify({ url }) }),
   connect: (input: { url: string; email?: string; password?: string }) =>
