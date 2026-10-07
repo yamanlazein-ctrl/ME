@@ -145,7 +145,8 @@ export async function getYearClosingPreview(
 
   const [countRow] = await tx
     .select({
-      counted: sql<number>`count(*) FILTER (WHERE ${inventoryCounts.countedKg} IS NOT NULL)`,
+      // distinct: a roll re-counted after a post has two lines
+      counted: sql<number>`count(DISTINCT ${inventoryCounts.rollId}) FILTER (WHERE ${inventoryCounts.countedKg} IS NOT NULL)`,
       posted: sql<number>`count(*) FILTER (WHERE ${inventoryCounts.status} = 'posted')`,
       variance: sql<number>`count(*) FILTER (WHERE COALESCE(${inventoryCounts.diffKg}, 0) <> 0)`,
       gains: scaledTextSql(sql`COALESCE(SUM(${greatest(inventoryCounts.diffKg, sql`0`)}), 0)`, 2),

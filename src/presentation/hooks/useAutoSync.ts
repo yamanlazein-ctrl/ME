@@ -2,9 +2,10 @@ import { useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useConnectivity, type ConnectivityStatus } from "@/presentation/hooks/useConnectivity";
 import { hasStoredSession } from "@/infrastructure/auth/TokenProvider";
-import { runSyncNow } from "@/lib/sync-engine";
+import { runSyncNow, setDataRefresher } from "@/lib/sync-engine";
 import { refreshParties } from "@/presentation/hooks/useParties";
 import { refreshInventory } from "@/presentation/hooks/useInventory";
+import { loadSettings } from "@/presentation/hooks/useSettings";
 
 /**
  * When connectivity flips to online (and a session exists), trigger a local
@@ -18,7 +19,11 @@ import { refreshInventory } from "@/presentation/hooks/useInventory";
  * by design: sync status is observed via /sync/status, not via this hook.
  */
 const RETRY_DELAYS_MS = [30_000, 120_000];
-const PERIODIC_SYNC_MS = 20_000;
+// 5 s: a peer's invoice shows here within ~5–10 s instead of up to 40 s (two 20 s ticks).
+// A tick with nothing to do is one cheap pull on the hub.
+const PERIODIC_SYNC_MS = 5_000;
+// The header remounts with every page: the "already online" kick runs once per app session.
+let mountKickDone = false;
 
 export function useAutoSync() {
   const qc = useQueryClient();
@@ -40,8 +45,10 @@ export function useAutoSync() {
     prev.current = status;
     if (status !== "online") return;
     if (!hasStoredSession()) return;
-    // Mount already-online, or transition offline → online.
+    // Mount already-online (first mount of the session only), or transition offline → online.
     if (previous !== null && previous !== "offline") return;
+    if (previous === null && mountKickDone) return;
+    mountKickDone = true;
 
     let cancelled = false;
     const attempt = async (retriesLeft: number[], attemptNo: number): Promise<void> => {
@@ -82,10 +89,18 @@ export function useAutoSync() {
     };
   }, [status]);
 
+  // One refresh for every trigger (tick, buttons, sync-after-save): every list/detail view
+  // re-reads, including the module-level stores that live outside react-query.
+  useEffect(() => {
+    setDataRefresher(async () => {
+      await Promise.all([refreshParties(), refreshInventory(), loadSettings()]);
+      await qc.invalidateQueries();
+    });
+  }, [qc]);
+
   // Steady cadence while online: the reconnect trigger above only fires on an
   // offline→online flip, so without this a device that stays online never
-  // pulls a peer's invoice until the next network blip. Each tick is one
-  // push+pull round trip; a tick that finds nothing is a cheap no-op on the hub.
+  // pulls a peer's invoice until the next network blip.
   useEffect(() => {
     if (status !== "online") return;
     const tick = async () => {
@@ -98,14 +113,7 @@ export function useAutoSync() {
         if (!result || result.skipped) return;
         setDeviceGate(Boolean(result.deviceGate));
         setDeviceTrust(result.deviceGate ? (result.deviceTrust ?? null) : null);
-        const pulledSomething = (result.pull?.applied ?? 0) > 0 && (result.pull?.pulled ?? 0) > 0;
-        if (pulledSomething) {
-          // Peers changed documents here: every list/detail view must re-read,
-          // including the two module-level caches that live outside react-query.
-          void refreshParties();
-          void refreshInventory();
-          await qc.invalidateQueries();
-        } else if ((result.activity ?? 0) > 0 || (result.rejected ?? 0) > 0) {
+        if ((result.activity ?? 0) > 0 || (result.rejected ?? 0) > 0) {
           await qc.invalidateQueries({ queryKey: ["notifications"] });
         }
       } catch (err) {

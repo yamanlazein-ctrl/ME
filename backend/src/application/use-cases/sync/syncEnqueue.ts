@@ -422,6 +422,29 @@ export async function enqueueInvoiceUpdate(
  * claims (one winner per entity) serialize concurrent edits; stock-affecting
  * types reuse the roll pool.
  */
+/**
+ * The fields an edit actually changed. A master update syncs only these: re-sending an
+ * unchanged `code` that the hub had renamed on a number collision broke its unique index
+ * and the edit died after 5 attempts. Loose compare: "0" and 0 are the same value.
+ */
+export function changedFields(
+  input: Record<string, unknown>,
+  before: Record<string, unknown> | null | undefined,
+): Record<string, unknown> {
+  if (!before) return input;
+  const same = (a: unknown, b: unknown) =>
+    a !== null && typeof a === "object" ? JSON.stringify(a) === JSON.stringify(b) : String(a ?? "") === String(b ?? "");
+  return Object.fromEntries(Object.entries(input).filter(([k, v]) => k === "opening" || !same(v, before[k])));
+}
+
+/** Backstop for old clients: an image data URL over ~300 KB is not synced (the edit still is). */
+function withoutOversizedImage(input: Record<string, unknown>): Record<string, unknown> {
+  const img = input.imageUrl;
+  if (typeof img !== "string" || !img.startsWith("data:") || img.length <= 400_000) return input;
+  const { imageUrl: _dropped, ...rest } = input;
+  return rest;
+}
+
 export async function enqueueMasterUpdate(
   outbox: ISyncOutboxRepository,
   entityType: "party" | "fabric" | "color" | "roll",
@@ -447,7 +470,7 @@ export async function enqueueMasterUpdate(
     operation: "update",
     payload: {
       entityId,
-      updateInput,
+      updateInput: withoutOversizedImage(updateInput),
       baseVersion: base?.version ?? null,
       baseUpdatedAt: base?.updatedAt ?? null,
       actorUserId: ctx.userId,
@@ -858,6 +881,45 @@ export async function enqueuePrintReceive(
         resultRollId: job.resultRollId,
         resultRollNo: job.resultRollNo,
       },
+      actorUserId: ctx.userId,
+      actorRole: ctx.userRole,
+      actorUserName: ctx.userName,
+    },
+  });
+}
+
+/** A roll quantity correction (posted count or manual adjustment), replayed as a DELTA everywhere. */
+export async function enqueueRollAdjustment(
+  outbox: ISyncOutboxRepository,
+  ctx: TenantContext,
+  adjustment: {
+    rollId: string;
+    deltaKg: number;
+    deltaPieces: number;
+    reason: string;
+    date: string;
+    referenceType: string;
+    referenceId: string;
+    referenceNumber: string;
+  },
+  req: Parameters<typeof syncDeviceIdFromRequest>[0] & Parameters<typeof opIdFromRequest>[0],
+) {
+  return enqueueSyncUnit(outbox, {
+    tenantId: ctx.tenantId,
+    syncDeviceId: syncDeviceIdFromRequest(req),
+    opId: opIdFromRequest(req),
+    entityType: "roll",
+    entityId: adjustment.rollId,
+    operation: "adjust",
+    payload: {
+      rollId: adjustment.rollId,
+      deltaKg: adjustment.deltaKg,
+      deltaPieces: adjustment.deltaPieces,
+      reason: adjustment.reason,
+      date: adjustment.date,
+      referenceType: adjustment.referenceType,
+      referenceId: adjustment.referenceId,
+      referenceNumber: adjustment.referenceNumber,
       actorUserId: ctx.userId,
       actorRole: ctx.userRole,
       actorUserName: ctx.userName,

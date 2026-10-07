@@ -29,4 +29,14 @@ export class AuditApiService {
     const body = res.data;
     return Array.isArray(body) ? body : (body.data ?? []);
   }
+
+  /** Every audit row of one module, newest first (e.g. "inventory_adjustments"). */
+  // The route caps `limit` at 100 (200 made «تعديلات المخزون» fail to load).
+  async listByModule(module: string, limit = 100): Promise<AuditLogDTO[]> {
+    const res = await this.client.get<{ data?: AuditLogDTO[] } | AuditLogDTO[]>(`/api/audit-logs`, {
+      params: { module, limit: String(limit) },
+    });
+    const body = res.data;
+    return Array.isArray(body) ? body : (body.data ?? []);
+  }
 }

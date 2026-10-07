@@ -47,6 +47,15 @@ import {
  */
 export const MATERIALIZE_MAX_ATTEMPTS = 5;
 
+/** The user-facing reason of a conflict refusal (raw "stale base: …" codes stay in the log). */
+export function conflictMessage(error: string | undefined): string {
+  if (error && /[؀-ۿ]/.test(error)) return error;
+  if (error && /unique|duplicate|23505|SQLITE_CONSTRAINT/i.test(error)) {
+    return "تعارض مزامنة: القيمة مستخدمة لسجل آخر (رقم أو اسم مكرر) — راجع السجل وعدّله";
+  }
+  return "تعارض مزامنة: عدّل جهاز آخر هذا السجل قبل وصول تعديلك — راجع «تعارضات المزامنة»";
+}
+
 export async function enqueueInvoiceCreate(
   outbox: ISyncOutboxRepository,
   invoice: {
@@ -420,6 +429,19 @@ export async function runLocalSyncPush(
         if (res.status === 409 || parsed.code === "SYNC_CONFLICT") {
           await outbox.markRejected(unit.id, ctx.tenantId, detail, leaseToken);
           delta.rejected += 1;
+          // The loser of an edit conflict must see it here, not only in the hub's log.
+          if (unit.operation === "update" || unit.operation === "cancel" || unit.operation === "delete") {
+            await recordSyncConflict({
+              tenantId: ctx.tenantId,
+              opId: unit.opId,
+              entityType: unit.entityType,
+              entityId: unit.entityId,
+              operation: unit.operation === "update" ? "update" : "cancel",
+              baseVersion: typeof unit.payload.baseVersion === "number" ? unit.payload.baseVersion : null,
+              serverVersion: null,
+              localIntent: unit.payload,
+            }).catch((err) => logger.warn({ err, opId: unit.opId }, "local conflict record failed"));
+          }
           await rollbackRejectedUnitLocally(
             invoiceRepo,
             auditRepo,
@@ -738,6 +760,8 @@ export async function runLocalSyncPull(
   failed: number;
   /** Own restored units acknowledged instead of applied (T109). */
   acknowledged?: number;
+  /** Units created locally by this pull (drives the screen refresh). */
+  changed?: number;
   /** 4B: set when the hub refused the DEVICE (revoked / unknown / not bound). */
   deviceTrust?: SyncDeviceTrustFailure;
 }> {
@@ -813,6 +837,8 @@ export async function runLocalSyncPull(
   };
 
   let applied = 0;
+  // Units this pull really created locally (re-pulled applied units only count in `applied`).
+  let changed = 0;
   let skipped = 0;
   let failed = 0;
   let acknowledged = 0;
@@ -932,9 +958,12 @@ export async function runLocalSyncPull(
     if (result.status === "created" || result.status === "exists") {
       applied += 1;
       await markLocalApplied(unit.opId);
-      if (result.status === "created") await notifyApplied(unit);
+      if (result.status === "created") {
+        changed += 1;
+        await notifyApplied(unit);
+      }
       processed.push({ seq, receivedAt, blocked: false });
-    } else if (result.status === "invalid") {
+    } else if (result.status === "invalid" || result.status === "conflict") {
       // Permanently unappliable (malformed payload / unsupported operation).
       // Park it as `dead` and move on: keeping the cursor here would strand
       // every later operation behind a unit that can never succeed.
@@ -975,7 +1004,10 @@ export async function runLocalSyncPull(
         const rec = processed.find((p) => p.blocked && p.seq === d.seq);
         if (rec) rec.blocked = false;
         await markLocalApplied(d.unit.opId);
-        if (result.status === "created") await notifyApplied(d.unit);
+        if (result.status === "created") {
+          changed += 1;
+          await notifyApplied(d.unit);
+        }
       } else {
         d.error = result.error ?? d.error;
       }
@@ -1038,7 +1070,7 @@ export async function runLocalSyncPull(
     await setPullCursor(ctx.tenantId, newSeq, newAt);
   }
 
-  return { pulled: body.items?.length ?? 0, applied, skipped, failed, acknowledged, deviceTrust: null };
+  return { pulled: body.items?.length ?? 0, applied, changed, skipped, failed, acknowledged, deviceTrust: null };
 }
 
 /**
@@ -1125,6 +1157,7 @@ export async function receiveSyncPush(
     if (mat) await releaseClaimsAfterApply(claims, input);
     {
       const row = (await inbox.findByOpId(input.tenantId, input.opId)) ?? existing.row;
+      if (row.status === "rejected") return await refusedAsConflict(claims, input, row);
       return {
         accepted: true,
         created: false,
@@ -1252,6 +1285,7 @@ export async function receiveSyncPush(
   if (materialized) await releaseClaimsAfterApply(claims, input);
   {
     const row = (await inbox.findByOpId(input.tenantId, input.opId)) ?? existing.row;
+    if (row.status === "rejected") return await refusedAsConflict(claims, input, row);
     return {
       accepted: true,
       created: true,
@@ -1394,6 +1428,23 @@ export async function reapTerminalSyncClaims(
  * unit carries a different `opId` than the create that made the claim.
  * Best-effort: a failure here must not fail the sync unit itself.
  */
+/** A unit the materializer refused as a conflict: answer 409 now (no retries), free its claims. */
+async function refusedAsConflict(
+  claims: ISyncResourceClaimRepository,
+  input: { tenantId: UUID; entityType: string; entityId: string; operation: string; opId: string },
+  row: SyncInboxRow,
+) {
+  await releaseClaimsAfterApply(claims, input);
+  return {
+    accepted: false as const,
+    conflict: true as const,
+    message: row.rejectReason || "تعارض مزامنة: عدّل جهاز آخر هذا السجل أولاً",
+    conflictOpId: row.conflictOpId ?? null,
+    conflicts: row.conflictDetail ?? null,
+    row,
+  };
+}
+
 async function releaseClaimsAfterApply(
   claims: ISyncResourceClaimRepository,
   input: { tenantId: UUID; entityType: string; entityId: string; operation: string; opId: string },
@@ -1461,6 +1512,14 @@ async function tryMaterializeAcceptedUnit(
       await resolveSyncConflictByOp(row.tenantId, row.opId, "unit applied");
     }
     return true;
+  }
+
+  if (result.status === "conflict") {
+    // Another device edited first (stale base) or a unique rule is broken: the
+    // conflict is already recorded; refuse now instead of 5 hopeless retries.
+    await inbox.markRejected(row.tenantId, row.opId, conflictMessage(result.error));
+    logger.warn({ opId: row.opId, error: result.error }, "sync unit refused as conflict");
+    return false;
   }
 
   if (result.status === "invalid") {

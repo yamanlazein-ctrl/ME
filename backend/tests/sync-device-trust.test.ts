@@ -346,7 +346,7 @@ describe("4D — master delete refuses a stale base", () => {
         { opId: OP_ID, syncDeviceId: null },
       );
 
-      expect(result.status).toBe("failed");
+      expect(result.status).toBe("conflict");
       expect(result.error).toContain("تعارض حذف");
       expect(result.error).toContain("v3");
       expect(
@@ -411,7 +411,7 @@ describe("4D — master delete refuses a stale base", () => {
       { opId: OP_ID, syncDeviceId: null },
     );
 
-    expect(result.status).toBe("failed");
+    expect(result.status).toBe("conflict");
     expect(deleteFn).not.toHaveBeenCalled();
   });
 

@@ -1,67 +1,41 @@
 import { useEffect, useState } from "react";
-import { setOfflineModeFlag } from "@/infrastructure/http/interceptors";
 import { getApiBaseUrl } from "@/lib/api-base-url";
 
 export type ConnectivityStatus = "online" | "offline";
 
 /**
- * Real connectivity for the top-bar indicator.
- * Online = browser reports online AND local API `/api/health/live` responds OK.
- * Uses `getApiBaseUrl()` so desktop (SSR same-origin proxy) does not probe
- * a hardcoded absolute backend port.
- * the wrong origin via a relative `/api/...` URL.
+ * Is THIS device's local server answering? (top-bar indicator)
+ *
+ * Only the local API `/api/health/live` decides. Internet access is NOT part of
+ * it: the local server, SQLite and every screen keep working without internet,
+ * and cloud sync reports its own state separately (sync status badge). Using
+ * `navigator.onLine` here used to show «لا يوجد اتصال بالخادم المحلي» the moment
+ * the router went down, although the local server was fine.
  */
 export function useConnectivity(pollMs = 15_000): ConnectivityStatus {
-  const [status, setStatus] = useState<ConnectivityStatus>(() =>
-    typeof navigator !== "undefined" && navigator.onLine ? "online" : "offline",
-  );
+  const [status, setStatus] = useState<ConnectivityStatus>("online");
 
   useEffect(() => {
     let cancelled = false;
 
-    const apply = (next: ConnectivityStatus) => {
-      if (cancelled) return;
-      setStatus(next);
-      setOfflineModeFlag(next === "offline");
-    };
-
     const probe = async () => {
-      if (typeof navigator !== "undefined" && !navigator.onLine) {
-        apply("offline");
-        return;
-      }
       try {
-        const ctrl = new AbortController();
-        const kill = setTimeout(() => ctrl.abort(), 4_000);
         const res = await fetch(`${getApiBaseUrl()}/api/health/live`, {
           method: "GET",
           cache: "no-store",
-          signal: ctrl.signal,
+          signal: AbortSignal.timeout(4_000),
         });
-        clearTimeout(kill);
-        apply(res.ok ? "online" : "offline");
+        if (!cancelled) setStatus(res.ok ? "online" : "offline");
       } catch {
-        apply("offline");
+        if (!cancelled) setStatus("offline");
       }
-    };
-
-    const onOnline = () => {
-      void probe();
-    };
-    const onOffline = () => {
-      apply("offline");
     };
 
     void probe();
     const timer = setInterval(() => void probe(), pollMs);
-    window.addEventListener("online", onOnline);
-    window.addEventListener("offline", onOffline);
-
     return () => {
       cancelled = true;
       clearInterval(timer);
-      window.removeEventListener("online", onOnline);
-      window.removeEventListener("offline", onOffline);
     };
   }, [pollMs]);
 

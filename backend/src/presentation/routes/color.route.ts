@@ -20,6 +20,7 @@ import {
   enqueueMasterCreate,
   enqueueMasterDelete,
   enqueueMasterUpdate,
+  changedFields,
   isSyncEnqueueEnabled,
   opIdFromRequest,
   syncDeviceIdFromRequest,
@@ -121,11 +122,14 @@ export function registerColorRoutes(
             syncOutboxRepo,
             "color",
             id,
-            input,
+            changedFields(input, before as unknown as Record<string, unknown> | null),
             c,
             syncDeviceIdFromRequest(req),
             opIdFromRequest(req),
+            // Version, not updatedAt: each node stamps its own clock, so a timestamp base
+            // never matches across devices and every edit after a sync died as "stale".
             {
+              version: (before as unknown as { version?: number } | null)?.version ?? null,
               updatedAt: (before as unknown as { updatedAt?: string } | null)?.updatedAt ?? null,
             },
           );

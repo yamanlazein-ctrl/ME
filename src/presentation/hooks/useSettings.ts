@@ -86,6 +86,7 @@ export const ROLE_ALLOWED_PATHS: Record<UserRole, string[]> = {
     "/ledger",
     "/cashbox",
     "/closing",
+    "/inventory/count",
     "/reports/",
     "/reports",
     "/print-center",

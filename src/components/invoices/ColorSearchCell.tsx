@@ -9,6 +9,7 @@ import {
   fabricById,
   searchColors,
   type Color,
+  useInventory,
 } from "@/presentation/hooks/useInventory";
 import { ColorSwatch } from "@/components/common/ColorSwatch";
 import { recentSuggestions } from "@/shared/utils/suggestions";
@@ -55,16 +56,18 @@ export function ColorSearchCell({
   const fileRef = useRef<HTMLInputElement>(null);
 
   const query = activeField === "code" ? code : name;
+  // Store version, not `colors.length`: an edit synced from another device keeps the length.
+  const invVersion = useInventory();
   const matches = useMemo(
     () =>
       query.trim()
         ? searchColors(query, 12, fabricId)
         : recentSuggestions(fabricId ? colors.filter((c) => c.fabricId === fabricId) : colors),
     // `colors` is a mutable module cache; its length changes when the list loads/grows.
-    [query, fabricId, colors.length],
+    [query, fabricId, invVersion],
   );
-  const localByCode = useMemo(() => colorByCode(code, fabricId), [code, fabricId]);
-  const localByName = useMemo(() => colorByName(name, fabricId), [name, fabricId]);
+  const localByCode = useMemo(() => colorByCode(code, fabricId), [code, fabricId, invVersion]);
+  const localByName = useMemo(() => colorByName(name, fabricId), [name, fabricId, invVersion]);
   const local = localByCode ?? localByName;
   const matched = Boolean(existingColorId || local);
   const typed = code.trim().length > 0 || name.trim().length > 0;

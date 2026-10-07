@@ -61,26 +61,10 @@ export function loggingInterceptor(getToken?: () => string | null): HttpIntercep
   };
 }
 
-const OFFLINE_MODE_KEY = "erp.sync.offlineMode";
-
-export function setOfflineModeFlag(offline: boolean): void {
-  try {
-    if (offline) localStorage.setItem(OFFLINE_MODE_KEY, "1");
-    else localStorage.removeItem(OFFLINE_MODE_KEY);
-  } catch {
-    // ignore
-  }
-}
-
-export function offlineModeInterceptor(): HttpInterceptor {
+/** Every request names this device's sync identity (attribution of local writes). */
+export function syncDeviceInterceptor(): HttpInterceptor {
   return {
     onRequest: async (config: HttpRequestConfig): Promise<HttpRequestConfig> => {
-      let offline = false;
-      try {
-        offline = localStorage.getItem(OFFLINE_MODE_KEY) === "1";
-      } catch {
-        offline = false;
-      }
       let syncDeviceId: string | null = null;
       try {
         syncDeviceId = localStorage.getItem("erp.sync.deviceId");
@@ -91,10 +75,23 @@ export function offlineModeInterceptor(): HttpInterceptor {
         ...config,
         headers: {
           ...config.headers,
-          ...(offline ? { "X-Offline-Mode": "1" } : {}),
           ...(syncDeviceId ? { "X-Sync-Device-Id": syncDeviceId } : {}),
         },
       };
+    },
+  };
+}
+
+/**
+ * A business write (anything but a read, sync or auth call) is sent to the hub within
+ * ~2 s instead of waiting for the next periodic sync — `schedule` debounces bursts.
+ */
+export function syncSoonInterceptor(schedule: () => void): HttpInterceptor {
+  return {
+    onRequest: (config: HttpRequestConfig): HttpRequestConfig => {
+      const method = (config.method ?? "GET").toUpperCase();
+      if (method !== "GET" && !/^\/?(api\/)?(sync|auth|health)(\/|$)/.test(config.path ?? "")) schedule();
+      return config;
     },
   };
 }

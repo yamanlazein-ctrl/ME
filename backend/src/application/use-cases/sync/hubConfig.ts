@@ -382,16 +382,19 @@ export async function probeHubReachable(force = false): Promise<boolean> {
   return hubReachable;
 }
 
+/** A request just reached the hub: clear an earlier "unreachable" mark at once. */
+export function markHubReachable(): void {
+  if (getCentralSyncUrl()) {
+    hubReachable = true;
+    lastProbeAt = Date.now();
+  }
+}
+
 export function markHubUnreachable(): void {
   if (getCentralSyncUrl()) {
     hubReachable = false;
     lastProbeAt = Date.now();
   }
-}
-
-export function isServerSideOffline(): boolean {
-  if (!getCentralSyncUrl()) return false;
-  return hubReachable === false;
 }
 
 // ── Settings → «المزامنة السحابية» (admin-only pairing surface) ──────────────

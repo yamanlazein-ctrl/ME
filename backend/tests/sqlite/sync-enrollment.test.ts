@@ -108,6 +108,28 @@ describe("hub device enrollment", () => {
     expect((await en.exchangeDeviceToken(deps, tenantId, d.id, r.deviceSecret)).ok).toBe(true);
   });
 
+  it("the same PC under a new id (reinstall/restore) re-enrolls only after disable + a NEW code", async () => {
+    for (const d of await deps.syncDeviceRepo.listForTenant(tenantId as never)) {
+      if (!d.revokedAt) await deps.syncDeviceRepo.setRevoked(tenantId as never, d.id as never, true, "free seats");
+    }
+    const old = device("same-pc");
+    const first = await en.createEnrollmentCode(deps, tenantId, adminId);
+    expect((await en.redeemEnrollmentCode(deps, tenantId, first.code, old)).ok).toBe(true);
+    const fresh = { ...old, id: randomUUID() };
+    // old row still active: the admin must disable it first
+    expect(await en.redeemEnrollmentCode(deps, tenantId, first.code, fresh)).toMatchObject({ ok: false, code: "SYNC_DEVICE_ID_CONFLICT" });
+    await deps.syncDeviceRepo.setRevoked(tenantId as never, old.id as never, true, "reinstalled");
+    // a code the machine already knew does not let it back in
+    expect(await en.redeemEnrollmentCode(deps, tenantId, first.code, fresh)).toMatchObject({ ok: false, code: "SYNC_DEVICE_REVOKED" });
+    await new Promise((r) => setTimeout(r, 5));
+    const second = await en.createEnrollmentCode(deps, tenantId, adminId);
+    const r = await en.redeemEnrollmentCode(deps, tenantId, second.code, fresh);
+    expect(r).toMatchObject({ ok: true, deviceId: fresh.id });
+    const kept = await deps.syncDeviceRepo.findById(tenantId as never, old.id as never);
+    expect(kept?.revokedAt).not.toBeNull(); // history kept, still disabled
+    expect(kept?.deviceFingerprint).toContain("#retired:");
+  });
+
   it("a wrong, replaced, cancelled, used-up or expired code is refused", async () => {
     const first = await en.createEnrollmentCode(deps, tenantId, adminId);
     await en.createEnrollmentCode(deps, tenantId, adminId); // replaces the first

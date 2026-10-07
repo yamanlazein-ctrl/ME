@@ -17,12 +17,14 @@ import {
   fabrics,
   totalKgOfFabric,
   totalPiecesOfFabric,
+  type Roll,
 } from "@/presentation/hooks/useInventory";
 import { FabricRow, ColorRow, RollRow, RollsHeader } from "@/components/inventory/InventoryRows";
 import {
   FabricFormDialog,
   ColorFormDialog,
   RollFormDialog,
+  RollAdjustDialog,
   type FabricFormState,
   type ColorFormState,
   type RollFormState,
@@ -45,7 +47,7 @@ export const Route = createFileRoute("/inventory")({
 });
 
 function InventoryPage() {
-  useInventory();
+  const invVersion = useInventory();
   const inventoryLoad = getInventoryLoadState();
   const [query, setQuery] = useState("");
   const [expandedFabric, setExpandedFabric] = useState<string | null>(fabrics[0]?.id ?? null);
@@ -64,6 +66,7 @@ function InventoryPage() {
   const [fabForm, setFabForm] = useState<FabricFormState>({ open: false });
   const [colForm, setColForm] = useState<ColorFormState>({ open: false, fabricId: "" });
   const [rolForm, setRolForm] = useState<RollFormState>({ open: false, colorId: "" });
+  const [adjustTarget, setAdjustTarget] = useState<Roll | null>(null);
 
   // Pagination: hard cap of 10 items per page (task spec forbids unbounded lists).
   const [page, setPage] = useState(0);
@@ -84,7 +87,7 @@ function InventoryPage() {
         );
       });
     });
-  }, [q, fabrics.length]);
+  }, [q, invVersion]);
 
   // Reset to the first page whenever the search term changes.
   useEffect(() => {
@@ -229,7 +232,7 @@ function InventoryPage() {
   return (
     <AppShell
       title="المخزون"
-      subtitle="شجرة الأقمشة والألوان والصبغات — جميع الكميات محسوبة بالكيلوغرام."
+      subtitle="شجرة الأقمشة والألوان والصبغات — الكمية بالكيلوغرام وعدد الأثواب لكل صبغة."
       actions={
         <div className="flex items-center gap-2">
           {!selectMode ? (
@@ -379,6 +382,7 @@ function InventoryPage() {
                                         onEdit={() =>
                                           setRolForm({ open: true, colorId: c.id, editing: r })
                                         }
+                                        onAdjust={() => setAdjustTarget(r)}
                                         onDelete={() =>
                                           setToDelete({
                                             kind: "roll",
@@ -455,6 +459,11 @@ function InventoryPage() {
       <FabricFormDialog state={fabForm} onClose={() => setFabForm({ open: false })} />
       <ColorFormDialog state={colForm} onClose={() => setColForm({ open: false, fabricId: "" })} />
       <RollFormDialog state={rolForm} onClose={() => setRolForm({ open: false, colorId: "" })} />
+      <RollAdjustDialog
+        // The live row: a sync or sale since the click must not adjust from a stale base.
+        roll={adjustTarget ? (rollById(adjustTarget.id) ?? adjustTarget) : null}
+        onClose={() => setAdjustTarget(null)}
+      />
     </AppShell>
   );
 }

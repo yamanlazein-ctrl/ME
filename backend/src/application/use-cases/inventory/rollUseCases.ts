@@ -30,6 +30,18 @@ export async function updateRollUseCase(
   ctx: TenantContext,
 ): Promise<Result<RollData>> {
   try {
+    // The received quantity is history (it matches the entry document). A correction of
+    // stock goes through «تعديل كمية» (movement + P&L + audit); a silent initialKg edit
+    // used to leave stock unchanged while the card looked corrected.
+    if (input.initialKg !== undefined) {
+      const current = await repo.findById(id, ctx);
+      if (current && Number(current.initialKg) !== Number(input.initialKg)) {
+        return {
+          ok: false,
+          error: "الكمية المستلمة لا تُعدَّل من بطاقة الصبغة — لتصحيح المخزون استخدم «تعديل كمية».",
+        };
+      }
+    }
     return { ok: true, data: await repo.update(id, input, ctx) };
   } catch (e) {
     // F05: the frozen-cost guard (and other business-rule refusals) throw a

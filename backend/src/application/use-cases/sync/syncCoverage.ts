@@ -59,6 +59,7 @@ export const SYNC_COVERAGE: Record<string, CoverageEntry> = {
   "POST /inventory/rolls": { sync: { entityType: "roll", operation: "create" } },
   "PUT /inventory/rolls/:id": { sync: { entityType: "roll", operation: "update" } },
   "DELETE /inventory/rolls/:id": { sync: { entityType: "roll", operation: "delete" } },
+  "POST /inventory/rolls/:id/adjust": { sync: { entityType: "roll", operation: "adjust" } },
   // ---- ledger (direct writes) ----
   "POST /ledger": { sync: { entityType: "ledger", operation: "create" } },
   "POST /ledger/:id/cancel": { sync: { entityType: "ledger", operation: "cancel" } },
@@ -102,9 +103,8 @@ export const SYNC_COVERAGE: Record<string, CoverageEntry> = {
   "POST /financial-years/counts": {
     exempt: "count sheet is per-operator working state; the posted adjustment flows through stock_movements + ledger_entries",
   },
-  "POST /financial-years/counts/post": {
-    exempt: "count variance posts a stock_movements + ledger_entries pair, which are themselves synced entities",
-  },
+  // A posted variance changes the shelf: replayed on every device as a roll delta.
+  "POST /financial-years/counts/post": { sync: { entityType: "roll", operation: "adjust" } },
 
   // ---- corrective dye purge: a hub-authoritative administrative repair.
   // It rewrites documents that were ORIGINALLY synced, so replaying it as a

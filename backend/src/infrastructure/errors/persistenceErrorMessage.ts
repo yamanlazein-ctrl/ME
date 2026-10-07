@@ -41,7 +41,7 @@ function hasCode(errors: Collected[], code: string): boolean {
   return errors.some((x) => x.code === code);
 }
 
-function looksTechnical(msg: string): boolean {
+export function looksTechnical(msg: string): boolean {
   return /INSERT|UPDATE|SELECT|DELETE|FROM\s+\w+|constraint|violates|drizzle|postgres|SQLSTATE|Failed query|params:|at\s+\w+\s+\(/i.test(
     msg,
   );

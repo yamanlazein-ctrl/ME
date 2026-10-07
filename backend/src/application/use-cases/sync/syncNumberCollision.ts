@@ -143,7 +143,7 @@ export async function resolveDocumentNumberForReplay(
 /** Party code/name and roll number of a dependency or master snapshot. */
 export async function resolveMasterSnapshotForReplay(
   database: Executor,
-  kind: "party" | "roll",
+  kind: "party" | "roll" | "fabric" | "color",
   snap: Record<string, unknown>,
   tenantId: string,
 ): Promise<void> {
@@ -155,6 +155,15 @@ export async function resolveMasterSnapshotForReplay(
     }
     if (typeof snap.name === "string" && snap.name) {
       snap.name = await resolveCollision(database, tenantId, { table: "parties", column: "name", scope: {}, suffix: nameSuffix }, id, snap.name);
+    }
+  } else if (kind === "fabric" || kind === "color") {
+    // Two devices naming a fabric (or a colour of the same fabric) alike before syncing:
+    // the unique name used to fail the insert on every retry and hold the device's
+    // ordered queue — every later colour, roll and invoice of that device stalled.
+    if (typeof snap.name === "string" && snap.name) {
+      const scope: Record<string, string> =
+        kind === "color" && typeof snap.fabricId === "string" ? { fabric_id: snap.fabricId } : {};
+      snap.name = await resolveCollision(database, tenantId, { table: kind === "fabric" ? "fabrics" : "colors", column: "name", scope, suffix: nameSuffix }, id, snap.name);
     }
   } else if (typeof snap.rollNo === "string" && snap.rollNo) {
     snap.rollNo = await resolveCollision(database, tenantId, { table: "rolls", column: "roll_no", scope: {}, suffix: numberSuffix }, id, snap.rollNo);

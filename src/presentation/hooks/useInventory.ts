@@ -585,6 +585,22 @@ export async function updateRoll(
   }
 }
 
+/** Correct a roll's quantity / pieces with a reason (audited, synced to every device). */
+export async function adjustRoll(
+  id: string,
+  input: { newKg?: number; newPieces?: number; reason: string; expectedVersion: number },
+): Promise<boolean> {
+  try {
+    const r = await container.inventory.api.adjustRoll(id, input);
+    await refreshInventory();
+    toast.success(`تم تعديل المخزون: ${r.beforeKg} ← ${r.afterKg} كغ · ${r.beforePieces} ← ${r.afterPieces} ثوب`);
+    return true;
+  } catch (e) {
+    toast.error(e instanceof Error ? e.message : "تعذّر تعديل الكمية");
+    return false;
+  }
+}
+
 export async function deleteRoll(id: string) {
   try {
     const ok = await container.inventory.repository.deleteRoll(id, ctx);

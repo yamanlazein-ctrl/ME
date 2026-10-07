@@ -1,6 +1,8 @@
 import { getSyncMaterializeStore } from "../../../infrastructure/repositories/engineStores.js";
 import { resolveDocumentNumberForReplay } from "./syncNumberCollision.js";
 import type { DB } from "../../../infrastructure/orm/drizzle.js";
+import { and, eq } from "drizzle-orm";
+import { engineSchema } from "../../../infrastructure/orm/engineSchema.js";
 import { logger } from "../../../infrastructure/config/logger.js";
 import { recordSyncConflict } from "./syncConflicts.js";
 import type { IInvoiceRepository } from "../../ports/IInvoiceRepository.js";
@@ -96,8 +98,12 @@ export type MaterializeResult = {
    *                     entity/operation is not supported. Retrying can never
    *                     help, so it is parked for an operator instead of being
    *                     silently marked as applied.
+   * conflict          — TERMINAL. The unit's base no longer matches (another
+   *                     device edited first) or it breaks a unique rule. It is
+   *                     recorded as a sync conflict and refused at once —
+   *                     retrying can never make it apply.
    */
-  status: "created" | "exists" | "failed" | "invalid";
+  status: "created" | "exists" | "failed" | "invalid" | "conflict";
   error?: string;
 };
 
@@ -319,6 +325,9 @@ export async function materializeSyncUnit(
   if (entityType === "order" && operation === "update") {
     return materializeOrderUpdate(repos, payload, ctx, meta);
   }
+  if (entityType === "roll" && operation === "adjust") {
+    return materializeRollAdjust(payload, ctx);
+  }
   if (entityType === "ledger" && operation === "create") {
     return materializeLedgerCreate(repos, payload, ctx);
   }
@@ -390,7 +399,7 @@ async function refuseStaleCancelBase(
       tenantId,
     );
     return {
-      status: "failed",
+      status: "conflict",
       error:
         `تعارض إلغاء ${documentLabel}: الوحدة بلا رقم إصدار أساسي` +
         (serverVersion !== null ? ` والمركز على v${serverVersion}` : "") +
@@ -409,7 +418,7 @@ async function refuseStaleCancelBase(
     tenantId,
   );
   return {
-    status: "failed",
+    status: "conflict",
     error:
       `تعارض إلغاء ${documentLabel}: القاعدة v${baseVersion} والمركز v${serverVersion} — ` +
       `عُدِّل المستند على جهاز آخر بعد نسختك. راجع النسخة الفائزة ثم أعد الإلغاء إن بقي صحيحاً.`,
@@ -578,7 +587,7 @@ async function materializeInvoiceUpdate(
       ctx.tenantId,
     );
     return {
-      status: "failed",
+      status: "conflict",
       error:
         `تعارض تعديل: الوحدة بلا رقم إصدار أساسي والمركز على v${existing.version} — ` +
         `راجع وأعد الإدخال. الحقول المختلفة: ${differing.join(",")}`,
@@ -596,7 +605,7 @@ async function materializeInvoiceUpdate(
       ctx.tenantId,
     );
     return {
-      status: "failed",
+      status: "conflict",
       error:
         `تعارض تعديل: القاعدة v${baseVersion} والمركز v${existing.version} — ` +
         `راجع وأعد الإدخال. الحقول المختلفة: ${differing.join(",")}`,
@@ -1261,7 +1270,7 @@ async function materializeMasterMutation(
         ctx.tenantId,
       );
       return {
-        status: "failed",
+        status: "conflict",
         error:
           `تعارض حذف ${entityType}: القاعدة v${baseVersion} والمركز v${hubVersion} — ` +
           `عُدِّل السجل على جهاز آخر بعد نسختك. راجع النسخة الفائزة ثم أعد الحذف إن بقي صحيحاً.`,
@@ -1285,7 +1294,7 @@ async function materializeMasterMutation(
         ctx.tenantId,
       );
       return {
-        status: "failed",
+        status: "conflict",
         error: `تعارض حذف ${entityType}: تغيّر السجل على المركز بعد نسختك — راجع النسخة الفائزة أولاً.`,
       };
     }
@@ -1358,7 +1367,7 @@ async function materializeMasterMutation(
       typeof hub.version === "number" ? hub.version : null,
       ctx.tenantId,
     );
-    return { status: "failed", error: "stale base: missing baseVersion — rebase the edit" };
+    return { status: "conflict", error: "stale base: missing baseVersion — rebase the edit" };
   }
   if (
     !meta?.hubCanonical &&
@@ -1376,7 +1385,7 @@ async function materializeMasterMutation(
       typeof hub.version === "number" ? hub.version : null,
       ctx.tenantId,
     );
-    return { status: "failed", error: "stale base: hub row is newer, rebase the edit" };
+    return { status: "conflict", error: "stale base: hub row is newer, rebase the edit" };
   }
   if (
     !meta?.hubCanonical &&
@@ -1395,20 +1404,35 @@ async function materializeMasterMutation(
       typeof hub.version === "number" ? hub.version : null,
       ctx.tenantId,
     );
-    return { status: "failed", error: "stale base: hub row changed, rebase the edit" };
+    return { status: "conflict", error: "stale base: hub row changed, rebase the edit" };
   }
 
-  // A hub-canonical party update leaves the hub row at baseVersion + 1 (the hub accepts only a matching
-  // base). Mirror that number locally, or this device's next edit of the party is refused as stale.
-  const alignPartyVersion = async () => {
-    if (entityType === "party" && meta?.hubCanonical && baseVersion !== null) {
+  // A hub-canonical update leaves the hub row at baseVersion + 1 (the hub accepts only a matching
+  // base). Mirror that number locally, or this device's next edit of the row is refused as stale.
+  const alignMasterVersion = async () => {
+    if (!meta?.hubCanonical || baseVersion === null || entityType === "roll") return;
+    if (entityType === "party") {
       await repos.partyRepo.alignVersion(entityId, baseVersion + 1, rctx);
+      return;
     }
+    const s = await engineSchema();
+    const table = entityType === "color" ? s.colors : s.fabrics;
+    await database
+      .update(table)
+      .set({ version: baseVersion + 1 } as never)
+      .where(and(eq(table.id, entityId), eq(table.tenantId, ctx.tenantId)));
   };
   if (intentAlreadyApplied(updateInput, hub)) {
-    await alignPartyVersion();
+    await alignMasterVersion();
     return { status: "exists" };
   }
+
+  // A duplicate code/name is a conflict (no retry can fix it); anything else stays retryable.
+  const updateRefused = async (error: string | undefined): Promise<MaterializeResult> => {
+    if (!isUniqueViolation({ message: error })) return { status: "failed", error };
+    await recordStaleConflict(meta, payload, entityType, entityId, "update", baseVersion, typeof hub.version === "number" ? hub.version : null, ctx.tenantId);
+    return { status: "conflict", error };
+  };
 
   try {
     if (entityType === "party") {
@@ -1419,8 +1443,8 @@ async function materializeMasterMutation(
           ? payload.baseVersion
           : (hub.version as number);
       const r = await updatePartyUseCase(repos.partyRepo, entityId, updateInput as never, rctx, expectedVersionParty);
-      if (!r.ok) return { status: "failed", error: r.error };
-      await alignPartyVersion();
+      if (!r.ok) return await updateRefused(r.error);
+      await alignMasterVersion();
     } else if (entityType === "fabric") {
       // P0-001: expectedVersion is REQUIRED - use baseVersion from payload
       const expectedVersionFabric = meta?.hubCanonical
@@ -1429,7 +1453,8 @@ async function materializeMasterMutation(
           ? payload.baseVersion
           : (hub.version as number);
       const r = await updateFabricUseCase(repos.fabricRepo, entityId, updateInput as never, rctx, expectedVersionFabric);
-      if (!r.ok) return { status: "failed", error: r.error };
+      if (!r.ok) return await updateRefused(r.error);
+      await alignMasterVersion();
     } else if (entityType === "color") {
       // P0-001: expectedVersion is REQUIRED - use baseVersion from payload
       const expectedVersionColor = meta?.hubCanonical
@@ -1438,14 +1463,67 @@ async function materializeMasterMutation(
           ? payload.baseVersion
           : (hub.version as number);
       const r = await updateColorUseCase(repos.colorRepo, entityId, updateInput as never, rctx, expectedVersionColor);
-      if (!r.ok) return { status: "failed", error: r.error };
+      if (!r.ok) return await updateRefused(r.error);
+      await alignMasterVersion();
     } else {
       const r = await updateRollUseCase(repos.rollRepo, entityId, updateInput as never, rctx);
       if (!r.ok) return { status: "failed", error: r.error };
     }
     return { status: "created" };
   } catch (err) {
+    // A unique rule (code / name) is broken: no retry can fix that — it is a conflict.
+    if (isUniqueViolation(err)) {
+      await recordStaleConflict(meta, payload, entityType, entityId, "update", baseVersion, typeof hub.version === "number" ? hub.version : null, ctx.tenantId);
+      return { status: "conflict", error: "unique violation" };
+    }
     return { status: "failed", error: err instanceof Error ? err.message : "master update failed" };
+  }
+}
+
+function isUniqueViolation(err: unknown): boolean {
+  const e = err as { code?: unknown; message?: unknown; cause?: { code?: unknown; message?: unknown } } | null;
+  return /23505|SQLITE_CONSTRAINT_UNIQUE|UNIQUE constraint failed|duplicate key|مكرر/i.test(
+    [e?.code, e?.cause?.code, e?.cause?.message, e?.message].map(String).join(" "),
+  );
+}
+
+/**
+ * A posted count / manual adjustment from another device: the SAME correction
+ * (delta, movement, P&L leg, audit) through the same function. Deltas converge
+ * with sales made meanwhile on other devices; the inbox op id makes it once-only.
+ */
+async function materializeRollAdjust(
+  payload: Record<string, unknown>,
+  ctx: TenantContext,
+): Promise<MaterializeResult> {
+  const rollId = typeof payload.rollId === "string" && isUuid(payload.rollId) ? payload.rollId : null;
+  if (!rollId) return { status: "invalid", error: "missing rollId" };
+  const rctx = replayCtxFromPayload(payload, ctx);
+  try {
+    const { withTenantTx } = await import("../../../infrastructure/orm/engine.js");
+    const { inventoryCountHelpers } = await import("../../../infrastructure/repositories/engineHelpers.js");
+    await withTenantTx(ctx.tenantId, async (tx) =>
+      (await inventoryCountHelpers()).applyRollAdjustment(tx as never, rctx, {
+        rollId,
+        deltaKg: Number(payload.deltaKg ?? 0),
+        deltaPieces: Number(payload.deltaPieces ?? 0),
+        reason: String(payload.reason ?? "تعديل مخزون"),
+        date: String(payload.date ?? new Date().toISOString().slice(0, 10)),
+        referenceType: payload.referenceType === "inventory_count" ? "inventory_count" : "inventory_adjustment",
+        referenceId: String(payload.referenceId ?? rollId),
+        referenceNumber: String(payload.referenceNumber ?? "ADJ"),
+        expectedVersion: null,
+        // Display provenance only (the audit row): the replay's authority stays `rctx`.
+        originActor: {
+          id: typeof payload.actorUserId === "string" && isUuid(payload.actorUserId) ? payload.actorUserId : null,
+          name: typeof payload.actorUserName === "string" && payload.actorUserName.trim() ? payload.actorUserName.slice(0, 255) : null,
+        },
+      }),
+    );
+    return { status: "created" };
+  } catch (err) {
+    // The roll may not be here yet (its create unit is still on its way): retryable.
+    return { status: "failed", error: err instanceof Error ? err.message : "roll adjustment replay failed" };
   }
 }
 
@@ -1496,7 +1574,7 @@ async function materializeOrderUpdate(
         ctx.tenantId,
       );
       return {
-        status: "failed",
+        status: "conflict",
         error: "تعارض تعديل الطلب: الوحدة بلا رقم إصدار أساسي — راجع وأعد الإدخال",
       };
     }
@@ -1516,7 +1594,7 @@ async function materializeOrderUpdate(
         typeof hubRow.version === "number" ? hubRow.version : null,
         ctx.tenantId,
       );
-      return { status: "failed", error: "stale base: hub order is newer, rebase the edit" };
+      return { status: "conflict", error: "stale base: hub order is newer, rebase the edit" };
     }
     if (intentAlreadyApplied(updateInput, hubRow)) return { status: "exists" };
     // P0-001: expectedVersion is REQUIRED - use baseVersion from payload

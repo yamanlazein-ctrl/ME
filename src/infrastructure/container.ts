@@ -76,9 +76,11 @@ import {
   authInterceptor,
   loggingInterceptor,
   tenantHeaderInterceptor,
-  offlineModeInterceptor,
+  syncDeviceInterceptor,
+  syncSoonInterceptor,
 } from "./http/interceptors";
 import { createTokenProvider } from "./auth/TokenProvider";
+import { scheduleSyncSoon } from "@/lib/sync-engine";
 import {
   AuthApiService,
   AuditApiService,
@@ -118,7 +120,8 @@ apiClient.addInterceptor(
   }),
 );
 apiClient.addInterceptor(authInterceptor(createTokenProvider()));
-apiClient.addInterceptor(offlineModeInterceptor());
+apiClient.addInterceptor(syncDeviceInterceptor());
+apiClient.addInterceptor(syncSoonInterceptor(() => scheduleSyncSoon()));
 apiClient.addInterceptor(
   loggingInterceptor(() => {
     try {
@@ -132,7 +135,8 @@ apiClient.addInterceptor(
 /* ── API repository instances ───────────────────────────────────── */
 const expenseRepo = new ApiExpenseRepository(new ExpenseApiService(apiClient));
 const expenseNamesRepo = new ApiExpenseNamesRepository(new ExpenseApiService(apiClient));
-const inventoryRepo = new ApiInventoryRepository(new InventoryApiService(apiClient));
+const inventoryApi = new InventoryApiService(apiClient);
+const inventoryRepo = new ApiInventoryRepository(inventoryApi);
 const invoiceRepo = new ApiInvoiceRepository(new InvoiceApiService(apiClient));
 const invoiceApi = new InvoiceApiService(apiClient);
 const auditApi = new AuditApiService(apiClient);
@@ -187,6 +191,7 @@ export const container = {
       return new ListRollsUseCase(inventoryRepo);
     },
     repository: inventoryRepo,
+    api: inventoryApi,
   },
 
   invoices: {

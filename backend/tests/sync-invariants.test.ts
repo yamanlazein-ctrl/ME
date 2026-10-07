@@ -770,11 +770,11 @@ describe("sync invariants — update base-version (P3b)", () => {
       "converged duplicate must be exists",
     ).toBe(true);
     expect(
-      /baseVersion === null && !meta\?\.hubCanonical[\s\S]{0,400}status: "failed"/.test(fn),
+      /baseVersion === null && !meta\?\.hubCanonical[\s\S]{0,400}status: "conflict"/.test(fn),
       "missing baseVersion must fail visibly (no silent overwrite)",
     ).toBe(true);
     expect(
-      /baseVersion !== null && existing\.version !== baseVersion[\s\S]{0,300}status: "failed"/.test(
+      /baseVersion !== null && existing\.version !== baseVersion[\s\S]{0,300}status: "conflict"/.test(
         fn,
       ) && /الحقول المختلفة/.test(fn),
       "stale base must fail retryably with the differing field list",
@@ -995,7 +995,7 @@ describe("sync invariants — run-result honesty (P7)", () => {
     // The cycle (shared with the background timer) returns the result; the route sends it as is.
     expect(
       /return \{ \.\.\.push, deviceTrust, pull, pullError, blocksError(, [a-zA-Z]+)* \}/.test(ROUTE) &&
-        /res\.json\(await runSyncCycle\(/.test(ROUTE),
+        /res\.json\(\{ \.\.\.\(await runSyncCycle\(/.test(ROUTE),
       "fields must reach the client",
     ).toBe(true);
   });
