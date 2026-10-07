@@ -26,6 +26,7 @@ import {
   registerDeviceOnHub,
   enrollHub,
   hubProxy,
+  markHubReachable,
   rememberLocalSyncIdentity,
   backgroundSyncIdentity,
 } from "../../application/use-cases/sync/hubConfig.js";
@@ -888,6 +889,9 @@ export function registerSyncRoutes(
       // Only real local changes: units re-pulled while the cursor is held count as `applied`
       // too, and bumping on them made every screen refetch everything every cycle.
       if ((pull.changed ?? pull.applied) > 0) localDataVersion += 1;
+      // The pull reached the hub: a blip's "unreachable" mark must not keep skipping the
+      // presence and financial-year pulls below until the next probe.
+      markHubReachable();
     } catch (err) {
       pullError = err instanceof Error ? err.message : "pull failed";
       logger.warn({ err }, "sync pull during sync/run failed");
@@ -945,7 +949,7 @@ export function registerSyncRoutes(
           }
         }
       } catch (err) {
-        logger.debug({ err }, "hub financial-year pull failed");
+        logger.warn({ err }, "hub financial-year pull failed");
       }
     }
     // T109 state for the UI; undefined (absent from the JSON) when this database was not restored.
