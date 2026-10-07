@@ -1,4 +1,4 @@
-﻿LangString addOrReinstall ${LANG_ENGLISH} "Reinstall the program files (company data is kept)"
+LangString addOrReinstall ${LANG_ENGLISH} "Reinstall the program files (company data is kept)"
 LangString alreadyInstalled ${LANG_ENGLISH} "${PRODUCTNAME} is installed on this computer"
 LangString alreadyInstalledLong ${LANG_ENGLISH} "${PRODUCTNAME} ${VERSION} is installed on this computer. Choose an operation and click Next. Company data is never deleted by any option."
 LangString appRunning ${LANG_ENGLISH} "${PRODUCTNAME} is running! Please close it first then try again."

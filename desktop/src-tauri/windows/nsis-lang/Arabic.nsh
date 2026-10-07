@@ -1,4 +1,4 @@
-﻿LangString addOrReinstall ${LANG_ARABIC} "إعادة تثبيت ملفات البرنامج (بيانات الشركة تبقى محفوظة)"
+LangString addOrReinstall ${LANG_ARABIC} "إعادة تثبيت ملفات البرنامج (بيانات الشركة تبقى محفوظة)"
 LangString alreadyInstalled ${LANG_ARABIC} "${PRODUCTNAME} مثبت على هذا الجهاز"
 LangString alreadyInstalledLong ${LANG_ARABIC} "${PRODUCTNAME} ${VERSION} مثبت على هذا الجهاز. اختر العملية ثم اضغط «التالي». بيانات الشركة لا تُحذف في أي خيار."
 LangString appRunning ${LANG_ARABIC} "${PRODUCTNAME} مازال يعمل! من فضلك، قم بإغلاق التطبيق أولاً ثم حاول مرة أخرى."
