@@ -13,7 +13,7 @@ import { colorById, fabricById, rollById, rolls, useInventory, type Roll } from 
 
 export const Route = createFileRoute("/inventory_/adjustments")({ component: InventoryAdjustmentsPage });
 
-type Snap = { rollNo?: string; remainingKg?: number; remainingPieces?: number; deltaKg?: number; deltaPieces?: number; reference?: string };
+type Snap = { rollNo?: string; remainingKg?: number; remainingPieces?: number; deltaKg?: number; deltaPieces?: number; reference?: string; syncedFrom?: string };
 
 const signed = (n: number | undefined) => (n == null ? "—" : `${n > 0 ? "+" : ""}${formatNumber(n)}`);
 
@@ -93,7 +93,10 @@ function InventoryAdjustmentsPage() {
                     <TableCell className="whitespace-nowrap">
                       {new Date(r.createdAt).toLocaleString("ar", { dateStyle: "short", timeStyle: "short" })}
                     </TableCell>
-                    <TableCell>{r.actorName ?? "—"}</TableCell>
+                    <TableCell>
+                      {r.actorName ?? "—"}
+                      {a.syncedFrom && <span className="ms-1 text-[11px] text-muted-foreground">(من جهاز آخر)</span>}
+                    </TableCell>
                     <TableCell className="tabular-nums">#{a.rollNo ?? b.rollNo ?? "—"}</TableCell>
                     <TableCell>{r.action === "post_count_variance" ? "تسوية جرد" : "تعديل يدوي"}</TableCell>
                     <TableCell className="tabular-nums">

@@ -1513,6 +1513,11 @@ async function materializeRollAdjust(
         referenceId: String(payload.referenceId ?? rollId),
         referenceNumber: String(payload.referenceNumber ?? "ADJ"),
         expectedVersion: null,
+        // Display provenance only (the audit row): the replay's authority stays `rctx`.
+        originActor: {
+          id: typeof payload.actorUserId === "string" && isUuid(payload.actorUserId) ? payload.actorUserId : null,
+          name: typeof payload.actorUserName === "string" && payload.actorUserName.trim() ? payload.actorUserName.slice(0, 255) : null,
+        },
       }),
     );
     return { status: "created" };

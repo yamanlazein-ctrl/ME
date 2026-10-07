@@ -234,4 +234,25 @@ describe("master edits through sync", () => {
     const colorNames = await q<{ name: string }>(sql`SELECT name FROM colors WHERE id IN (${c1}, ${c2}) ORDER BY id`);
     expect(colorNames.map((c) => c.name)).toEqual(["أسود", expect.stringMatching(/^أسود \(/)]);
   });
+
+  it("a synced roll adjustment keeps the real creator from the source device", async () => {
+    const rollId = randomUUID();
+    await q(sql`INSERT INTO rolls (id, tenant_id, color_id, roll_no, initial_kg, remaining_kg, remaining_pieces, price_per_kg, entry_date, currency)
+                VALUES (${rollId}, ${tenantId}, ${colorId}, ${"R-" + rollId.slice(0, 6)}, 5000, 5000, 5, 1000, '2026-01-01', 'USD')`);
+    const origin = randomUUID();
+    const r = await apply("adjust", "roll", {
+      rollId, deltaKg: -2, deltaPieces: -1, reason: "تلف", date: "2026-10-07",
+      referenceType: "inventory_adjustment", referenceId: randomUUID(), referenceNumber: "ADJ-X",
+      actorUserId: origin, actorUserName: "سامر (المستودع)",
+    });
+    expect(r.status).toBe("created");
+    const [audit] = await q<{ actor_id: string; actor_name: string; after: string }>(
+      sql`SELECT actor_id, actor_name, after_snapshot AS after FROM audit_logs WHERE entity_id = ${rollId}`,
+    );
+    expect(audit).toMatchObject({ actor_id: origin, actor_name: "سامر (المستودع)" });
+    expect(JSON.parse(audit.after)).toMatchObject({ syncedFrom: "device", appliedBy: "tester" });
+    // Authority / FK columns stay the receiver's.
+    const [mv] = await q<{ by: string }>(sql`SELECT created_by AS by FROM stock_movements WHERE roll_id = ${rollId}`);
+    expect(mv.by).toBe(ctx.userId);
+  });
 });

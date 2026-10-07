@@ -373,6 +373,11 @@ export type RollAdjustmentInput = {
   referenceNumber: string;
   /** Optimistic lock: the roll version the operator saw. Null on sync replay (deltas converge). */
   expectedVersion: number | null;
+  /**
+   * Sync replay: who really made the change on the source device. Recorded in the
+   * audit row (history / «تعديلات المخزون»); authority and FK columns stay the receiver's.
+   */
+  originActor?: { id: string | null; name: string | null };
 };
 
 /**
@@ -457,8 +462,8 @@ export async function applyRollAdjustment(
 
   await tx.insert(auditLogs).values({
     tenantId: ctx.tenantId,
-    actorId: ctx.userId,
-    actorName: ctx.userName,
+    actorId: input.originActor?.id ?? ctx.userId,
+    actorName: input.originActor?.name ?? ctx.userName,
     module: "inventory_adjustments",
     action: input.referenceType === "inventory_count" ? "post_count_variance" : "roll_adjust",
     entityType: "roll",
@@ -473,6 +478,7 @@ export async function applyRollAdjustment(
       deltaPieces,
       reference: input.referenceNumber,
       movementId,
+      ...(input.originActor ? { syncedFrom: "device", appliedBy: ctx.userName } : {}),
     },
   });
 
