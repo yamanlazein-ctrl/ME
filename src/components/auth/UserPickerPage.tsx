@@ -9,8 +9,10 @@ import {
   getServerFingerprint,
   setActivationId as saveActivationId,
   setLicenseKey as saveLicenseKey,
+  clearLicense,
+  clearRememberedEmail,
 } from "@/lib/license-state";
-import { registerCurrentSyncDevice } from "@/lib/sync-device";
+import { registerCurrentSyncDevice, clearSyncDeviceState } from "@/lib/sync-device";
 import { useQueryClient } from "@tanstack/react-query";
 import { consumeInvitation, validateInvitation } from "@/lib/invitations";
 import {
@@ -701,8 +703,15 @@ export function UserPickerPage() {
                     // The reset needs no session, which is why it works from the
                     // login screen. The Rust side archives the data folder on the
                     // next boot and restarts the process itself, so there is no
-                    // manual close-and-reopen step.
+                    // manual close-and-reopen step. Every per-company marker in
+                    // this WebView (tokens, license/activation, install tenant,
+                    // remembered email, sync device id) dies WITH the company:
+                    // left behind they would trap the fresh boot in a stale
+                    // "restore session" state against an empty database.
                     clearTokens();
+                    clearLicense();
+                    clearRememberedEmail();
+                    clearSyncDeviceState();
                     applyFactoryResetNow()
                       .then(() => setWipeDone(true))
                       .catch((e: Error) => setWipeError(e.message || "تعذّر بدء التصفير"))

@@ -50,9 +50,23 @@ export function isDesktopRuntime(): boolean {
 function toBridgeRequest(input: RequestInfo | URL, init?: RequestInit) {
   const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
   const method = init?.method ?? (typeof input === "object" && "method" in input ? input.method : "GET");
-  // Only a string body can cross the bridge intact. The app's mutations send
-  // JSON; anything else is sent without a body rather than silently corrupted.
-  const body = typeof init?.body === "string" ? init.body : null;
+  // Only a string body can cross the bridge intact: `PipeRequest.body` is a `String`, so binary or a
+  // `File`/`Blob`/`FormData` would be corrupted or silently lost.
+  //
+  // Silently sending `null` instead was the bug behind "restore always fails with ملف غير صالح": a
+  // backup upload posted `body: file`, the body vanished, the server saw zero bytes and reported a
+  // damaged archive for a file that was perfectly valid. A dropped body is a TRANSPORT failure, so it
+  // is now a typed, actionable error the caller can render — never a silent empty request. Binary
+  // payloads must go through the shell (see `pickBackupFile` / `saveBackupFile`), which is the same
+  // arrangement the outbound backup already uses.
+  const raw = init?.body;
+  if (raw !== undefined && raw !== null && typeof raw !== "string") {
+    const kind = raw instanceof Blob ? "file/blob" : Array.isArray(raw) ? "array" : typeof raw;
+    throw new Error(
+      `لا يمكن إرسال بيانات ثنائية (${kind}) عبر قناة سطح المكتب — استخدم حوار اختيار الملف في البرنامج.`,
+    );
+  }
+  const body = typeof raw === "string" ? raw : null;
   const headers: Record<string, string> = {};
   const source = init?.headers ?? (typeof input === "object" && "headers" in input ? input.headers : undefined);
   if (source) {

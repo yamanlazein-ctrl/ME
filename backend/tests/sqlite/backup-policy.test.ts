@@ -16,6 +16,11 @@ const mirror = mkdtempSync(join(tmpdir(), "motard-bkp-mirror-"));
 process.env.DB_ENGINE = "sqlite";
 process.env.SQLITE_PATH = join(root, "data", "motard.db");
 process.env.MOTARD_STARTUP_STATE = "FRESH";
+// The desktop runtime refuses to CREATE a database without an installation
+// identity (INSTALLATION_ID_REQUIRED) — mint one for this first-launch sim.
+process.env.MOTARD_INSTALLATION_ID ??= randomUUID();
+process.env.MOTARD_INSTALL_INSTANCE_ID ??= randomUUID();
+process.env.MOTARD_DATA_ID ??= randomUUID();
 delete process.env.DATABASE_URL;
 delete process.env.DESKTOP_SEED_PATH;
 const prevMirror = process.env.BACKUP_MIRROR_DIR;

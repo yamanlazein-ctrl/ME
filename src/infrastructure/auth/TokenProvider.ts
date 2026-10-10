@@ -3,6 +3,36 @@ import type { TokenProvider } from "@/infrastructure/http/types";
 const TOKEN_KEY = "erp.auth.accessToken";
 const REFRESH_KEY = "erp.auth.refreshToken";
 
+/**
+ * Field incident (2026-10-09): after a factory reset the WebView kept its stale
+ * tokens while the fresh database had a new JWT secret and an incomplete setup
+ * wizard. Every refresh was refused (never a 401/403 that would clear the
+ * session), some caller kept re-entering this function, and the install logged
+ * 13,146 POST /api/auth/refresh in ~113 s while the UI sat on
+ * «جاري استعادة الجلسة» forever. Two guards make that state impossible:
+ *
+ *  1. SINGLE-FLIGHT: concurrent 401s share one refresh instead of racing (a
+ *     racing second refresh used to rotate the token twice and trip reuse
+ *     detection, destroying a perfectly good session).
+ *  2. ATTEMPT CAP: a refresh that keeps failing can only be retried a bounded
+ *     number of times per session; past the cap the stored session is dropped,
+ *     so the AuthGate lands on the user picker instead of spinning forever.
+ *     `persistTokens` (any successful login) resets the counter.
+ */
+const MAX_REFRESH_ATTEMPTS = 5;
+let refreshInFlight: Promise<string | null> | null = null;
+let refreshAttempts = 0;
+/**
+ * Re-entrancy guard (field incident, boot e1579c10): the refresh POST itself
+ * goes through the same interceptor chain, so its own 401 re-enters
+ * onTokenExpired. Returning the in-flight promise there made the refresh
+ * await itself — a circular await that never settled, the UI sat on
+ * «جاري استعادة الجلسة» forever and clearTokens was never reached. While the
+ * refresh is ON THE WIRE, a nested onTokenExpired must answer null (fail the
+ * caller) instead of awaiting its own flight.
+ */
+let refreshOnWire = false;
+
 /** HTTP status carried by a thrown error, if any. NetworkError reports 0. */
 function errorStatus(err: unknown): number | undefined {
   if (!err || typeof err !== "object") return undefined;
@@ -57,32 +87,56 @@ export function createTokenProvider(): TokenProvider {
     },
     async onTokenExpired(): Promise<string | null> {
       if (typeof window === "undefined") return null;
-      try {
-        const refreshToken = localStorage.getItem(REFRESH_KEY);
-        if (!refreshToken) return null;
-        const { container } = await import("@/infrastructure/container");
-        const res = await container.auth.repository.refreshToken({
-          refreshToken,
-        });
-        localStorage.setItem(TOKEN_KEY, res.accessToken);
-        if (res.refreshToken) localStorage.setItem(REFRESH_KEY, res.refreshToken);
-        return res.accessToken;
-      } catch (err) {
-        // Issue 18: only a server *rejection* of the refresh token ends the
-        // session. Everything else keeps both tokens so the next request can
-        // retry — NetworkError (status 0), 5xx, and the 503 SETUP_REQUIRED
-        // the install gate returns before the wizard is done.
-        const status = errorStatus(err);
-        if (status === 401 || status === 403) {
-          try {
-            localStorage.removeItem(TOKEN_KEY);
-            localStorage.removeItem(REFRESH_KEY);
-          } catch {
-            /* ignore */
-          }
+      // Single-flight: concurrent 401s share one in-progress refresh. A
+      // NESTED call (the refresh request's own 401 passing through the same
+      // interceptor) must not await the flight — that is the circular await
+      // that deadlocked the cold boot; it answers null and fails the caller.
+      if (refreshInFlight) return refreshOnWire ? null : refreshInFlight;
+      // Attempt cap: a session that cannot be refreshed must not be retried
+      // forever — drop it and let the AuthGate show the user picker.
+      if (refreshAttempts >= MAX_REFRESH_ATTEMPTS) {
+        try {
+          localStorage.removeItem(TOKEN_KEY);
+          localStorage.removeItem(REFRESH_KEY);
+        } catch {
+          /* ignore */
         }
         return null;
       }
+      refreshAttempts += 1;
+      refreshOnWire = true;
+      refreshInFlight = (async (): Promise<string | null> => {
+        try {
+          const refreshToken = localStorage.getItem(REFRESH_KEY);
+          if (!refreshToken) return null;
+          const { container } = await import("@/infrastructure/container");
+          const res = await container.auth.repository.refreshToken({
+            refreshToken,
+          });
+          localStorage.setItem(TOKEN_KEY, res.accessToken);
+          if (res.refreshToken) localStorage.setItem(REFRESH_KEY, res.refreshToken);
+          return res.accessToken;
+        } catch (err) {
+          // Issue 18: only a server *rejection* of the refresh token ends the
+          // session. Everything else keeps both tokens so the next request can
+          // retry — NetworkError (status 0), 5xx, and the 503 SETUP_REQUIRED
+          // the install gate returns before the wizard is done.
+          const status = errorStatus(err);
+          if (status === 401 || status === 403) {
+            try {
+              localStorage.removeItem(TOKEN_KEY);
+              localStorage.removeItem(REFRESH_KEY);
+            } catch {
+              /* ignore */
+            }
+          }
+          return null;
+        } finally {
+          refreshOnWire = false;
+          refreshInFlight = null;
+        }
+      })();
+      return refreshInFlight;
     },
   };
 }
@@ -95,6 +149,9 @@ export const SESSION_ENDED_EVENT = "erp:session-ended";
 
 export function persistTokens(accessToken: string, refreshToken?: string): void {
   if (typeof window === "undefined") return;
+  // A successful login is a working session — give the refresh cap a fresh budget.
+  refreshAttempts = 0;
+  refreshInFlight = null;
   let hadSession = false;
   try {
     hadSession = !!localStorage.getItem(TOKEN_KEY);

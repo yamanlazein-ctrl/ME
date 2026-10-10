@@ -5,6 +5,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { requestFactoryReset } from "@/infrastructure/tauri-bridge";
+import { clearTokens } from "@/infrastructure/auth/TokenProvider";
+import { clearLicense, clearRememberedEmail } from "@/lib/license-state";
+import { clearSyncDeviceState } from "@/lib/sync-device";
 
 /**
  * Field incident (2026-09): a one-click factory reset sat next to "فصل" on the
@@ -60,6 +63,18 @@ export function FactoryResetCard() {
               disabled={!canConfirmFactoryReset(typed) || busy}
               onClick={() => {
                 setBusy(true);
+                // Field incident (2026-10-09): the sync-area reset used to leave
+                // the WebView session state (tokens, license, remembered email,
+                // sync device id) alive across the reset reboot. The fresh
+                // database has a NEW JWT secret, so the stale tokens could
+                // never restore a session — the next boot hung on
+                // «جاري استعادة الجلسة» retrying /api/auth/refresh against a
+                // wizard-incomplete install. The same clearing the login-screen
+                // reset does must happen here too.
+                clearTokens();
+                clearLicense();
+                clearRememberedEmail();
+                clearSyncDeviceState();
                 requestFactoryReset()
                   .then(() => {
                     toast.success("طُلبت إعادة الضبط. ستُنفَّذ عند إعادة تشغيل البرنامج.");

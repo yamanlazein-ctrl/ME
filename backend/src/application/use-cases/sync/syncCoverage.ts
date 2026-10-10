@@ -173,6 +173,13 @@ export const SYNC_COVERAGE: Record<string, CoverageEntry> = {
   "POST /api/setup/wizard/restore": {
     exempt: "first-run restore of a local backup (no users yet); restored sync outbox/inbox/cursor carry the sync state",
   },
+  // ---- first-run restore of a full backup (the text-only-IPC hand-off fix)
+  "POST /api/setup/wizard/restore-path": {
+    exempt: "first-run restore taken by path from the shell (backup bytes never cross the IPC bridge); restored sync outbox/inbox/cursor carry the sync state",
+  },
+  "POST /api/backup/restore-path": {
+    exempt: "admin restore of a full backup taken by path from the shell; no sync unit is produced",
+  },
   // ---- desktop runtime hand-off (specs/001 US3/US4; local process control, not business state) ----
   "POST /api/desktop/runtime/pre-update-backup": {
     exempt: "device-local backup file taken before an update; the backup is a local artifact, never a business document",

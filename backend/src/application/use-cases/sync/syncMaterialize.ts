@@ -145,6 +145,15 @@ export type SyncMaterializeMeta = {
   syncDeviceId?: string | null;
   /** Pull of a unit the hub already applied — rebase local state to hub truth. */
   hubCanonical?: boolean;
+  /**
+   * DISPLAY-ONLY origin actor name for the audit row (SYNC-06 / P6): the
+   * materialize layer itself never reads actor fields from the wire payload —
+   * the call site (pull / push receive, both display contexts) may pass the
+   * origin device's recorded display name through. Authority stays the
+   * authenticated receiver everywhere; the audit actor_id is always the
+   * receiver's own user.
+   */
+  originActorName?: string | null;
 };
 
 /**
@@ -326,7 +335,7 @@ export async function materializeSyncUnit(
     return materializeOrderUpdate(repos, payload, ctx, meta);
   }
   if (entityType === "roll" && operation === "adjust") {
-    return materializeRollAdjust(payload, ctx);
+    return materializeRollAdjust(payload, ctx, meta);
   }
   if (entityType === "ledger" && operation === "create") {
     return materializeLedgerCreate(repos, payload, ctx);
@@ -1495,6 +1504,7 @@ function isUniqueViolation(err: unknown): boolean {
 async function materializeRollAdjust(
   payload: Record<string, unknown>,
   ctx: TenantContext,
+  meta?: SyncMaterializeMeta,
 ): Promise<MaterializeResult> {
   const rollId = typeof payload.rollId === "string" && isUuid(payload.rollId) ? payload.rollId : null;
   if (!rollId) return { status: "invalid", error: "missing rollId" };
@@ -1514,9 +1524,11 @@ async function materializeRollAdjust(
         referenceNumber: String(payload.referenceNumber ?? "ADJ"),
         expectedVersion: null,
         // Display provenance only (the audit row): the replay's authority stays `rctx`.
+        // SYNC-06: the origin NAME comes through meta (call-site display context), never
+        // from the wire payload here; the audit actor_id is always the receiver's user.
         originActor: {
-          id: typeof payload.actorUserId === "string" && isUuid(payload.actorUserId) ? payload.actorUserId : null,
-          name: typeof payload.actorUserName === "string" && payload.actorUserName.trim() ? payload.actorUserName.slice(0, 255) : null,
+          id: null,
+          name: meta?.originActorName ?? null,
         },
       }),
     );

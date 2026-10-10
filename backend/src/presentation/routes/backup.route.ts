@@ -1,9 +1,9 @@
 import { Router, type Request, type Response } from "express";
-import { createReadStream, createWriteStream, existsSync, statSync } from "fs";
+import { createReadStream, createWriteStream, existsSync, readFileSync, statSync } from "fs";
 import { join } from "path";
 import { tmpdir } from "os";
 import { mkdir, rm } from "fs/promises";
-import { randomUUID } from "crypto";
+import { createHash, randomUUID } from "crypto";
 import { pipeline } from "stream/promises";
 import { config } from "../../infrastructure/config/env.js";
 import { logger } from "../../infrastructure/config/logger.js";
@@ -33,21 +33,63 @@ async function asBackupError(err: unknown): Promise<unknown> {
   // VERIFY_ARCHIVE: map the underlying refusal, so the user gets its specific message and code.
   if (err instanceof RestoreError && err.step === "VERIFY_ARCHIVE" && err.cause instanceof BackupV3Error) err = err.cause;
   if (err instanceof BackupV3Error) {
+    // Preserve the SPECIFIC refusal code. Collapsing every archive refusal into BACKUP_CORRUPT is what
+    // made the UI show one generic "ملف غير صالح" for genuinely different situations: an unsupported
+    // format, a newer app version, a missing manifest, a bad checksum and a missing database are all
+    // distinct, actionable failures. The wire contract keeps BACKUP_CORRUPT as the fallback for codes
+    // no screen special-cases, so existing clients are unchanged.
+    const KNOWN_V3_CODES = new Set([
+      "BACKUP_NOT_A_ZIP",
+      "BACKUP_MANIFEST_MISSING",
+      "BACKUP_MANIFEST_HASH_MISMATCH",
+      "BACKUP_DATABASE_MISSING",
+      "BACKUP_FILE_HASH_MISMATCH",
+      "BACKUP_INTEGRITY_FAILED",
+      "BACKUP_FOREIGN_KEYS_FAILED",
+      "BACKUP_TABLE_MISMATCH",
+      "BACKUP_FILE_MISSING",
+      "BACKUP_NO_FILE_RECEIVED",
+    ]);
     const code =
       err.code === "BACKUP_NEWER_THAN_APP" || err.code === "BACKUP_SCHEMA_NEWER_THAN_APP"
         ? "BACKUP_NEWER_THAN_APP"
         : err.code === "BACKUP_POSTGRES_ERA" || err.code === "BACKUP_FORMAT_UNKNOWN"
           ? "BACKUP_UNSUPPORTED_FORMAT"
-          : "BACKUP_CORRUPT";
+          : KNOWN_V3_CODES.has(err.code)
+            ? err.code
+            : "BACKUP_CORRUPT";
     const msg =
       err.code === "BACKUP_POSTGRES_ERA"
-        ? "هذه نسخة احتياطية من إصدار PostgreSQL السابق (PostgreSQL-era backup) ولا يمكن استعادتها في هذا الإصدار"
-        : err.message;
+        ? "هذه نسخة احتياطية من إصدار PostgreSQL السابق (format v2) ولا يمكن استعادتها في هذا الإصدار — صدّر نسخة جديدة من إصدار حديث."
+        : err.code === "BACKUP_NEWER_THAN_APP"
+          ? `هذه النسخة الاحتياطية أُنشئت بإصدار أحدث من البرنامج المثبَّت (${err.message}). حدّث البرنامج أولًا ثم أعد الاستعادة.`
+          : err.code === "BACKUP_SCHEMA_NEWER_THAN_APP"
+            ? `قاعدة البيانات داخل هذه النسخة تحتوي ترحيلات أحدث من إصدار البرنامج المثبَّت (${err.message}). حدّث البرنامج أولًا.`
+            : err.code === "BACKUP_NOT_A_ZIP"
+              ? "الملف المختار ليس أرشيف ZIP صالحًا — قد يكون ناقص التنزيل أو تالفًا. أعد تنزيل النسخة أو اختر ملفًا آخر."
+              : err.code === "BACKUP_MANIFEST_MISSING"
+                ? "الأرشيف لا يحتوي على ملف معلومات صالح (manifest.json) — قد يكون أرشيف نسخة احتياطية سابقة بصيغة مختلفة."
+                : err.code === "BACKUP_MANIFEST_HASH_MISMATCH"
+                  ? "بصمة ملف المعلومات لا تطابق محتواه — الأرشيف تالف أو عُدِّل. لا يمكن الاستعادة منه."
+                  : err.code === "BACKUP_DATABASE_MISSING"
+                    ? "الأرشيف لا يحتوي على قاعدة البيانات (database.sqlite) — الأرشيف ناقص."
+                    : err.code === "BACKUP_FILE_HASH_MISMATCH"
+                      ? `أحد ملفات الأرشيف لا يطابق بصمته المسجّلة (${err.message}) — الأرشيف تالف.`
+                      : err.code === "BACKUP_INTEGRITY_FAILED"
+                        ? `قاعدة البيانات داخل الأرشيف لم تجتز فحص السلامة (${err.message}).`
+                        : err.code === "BACKUP_FOREIGN_KEYS_FAILED"
+                          ? `قاعدة البيانات داخل الأرشيف تحتوي ارتباطات غير متسقة (${err.message}).`
+                          : err.code === "BACKUP_TABLE_MISMATCH"
+                            ? `محتوى الأرشيف لا يطابق ملف المعلومات (${err.message}) — الأرشيف تالف أو ناقص.`
+                            : err.message;
     return new BackupError(code, msg);
   }
   if (err instanceof RestoreError) {
     return new BackupError(err.step === "VERIFY_ARCHIVE" ? "RESTORE_VERIFY_FAILED" : "RESTORE_FAILED", `فشلت الاستعادة ولم تتغير البيانات الحالية: ${err.message}`);
   }
+  // Already a BackupError (the hand-off refusals above): pass it through with its own code and message
+  // so the UI can tell "no file arrived" from "the archive is damaged".
+  if (err instanceof BackupError) return err;
   return err;
 }
 
@@ -104,14 +146,85 @@ async function receiveUpload(req: Request): Promise<string> {
   await pipeline(req, createWriteStream(file));
   if (bytes === 0) {
     await rm(file, { force: true });
-    throw new BackupError("BACKUP_CORRUPT", "لم يصل أي ملف");
+    // Distinguish "nothing was sent at all" from "a zero-byte file was chosen": on the desktop the
+    // former is what the text-only IPC bridge produces when a `File` body is dropped, and the caller
+    // must be told the transfer failed rather than that the archive is damaged.
+    throw new BackupError(
+      "BACKUP_NO_FILE_RECEIVED",
+      "لم يصل أي ملف إلى الخادم — تعذّر نقل الملف. أعد اختيار الملف من جديد.",
+    );
   }
   return file;
 }
 
+/**
+ * Desktop-only: accept an archive the shell already placed on disk, instead of an octet-stream body.
+ *
+ * WHY: the desktop SPA is embedded in the binary and reaches this API over the Tauri IPC bridge, whose
+ * request body is a `String` (`desktop/src-tauri/src/runtime/pipe.rs`: `PipeRequest.body`). A `File`
+ * cannot cross it — the patched `fetch` (`src/infrastructure/http/desktopTransport.ts`) therefore drops
+ * every non-string body, `receiveUpload` sees zero bytes and answers "لم يصل أي ملف" for a perfectly
+ * valid archive. The bridge is text-only BY DESIGN, so the file is handed over as a PATH (exactly how
+ * `save_backup_file` already delivers a backup outward) and re-verified here from its own bytes.
+ *
+ * The path is NOT trusted: size + sha256 are recomputed on this side and compared with what the shell
+ * reported, and the archive then goes through the same `openAndVerifyBackupV3` / `restoreBackupV3` the
+ * upload path uses. A tampered, truncated or substituted file is refused before anything is swapped.
+ */
+async function receiveShellPath(req: Request): Promise<{ path: string; reportedSha256: string | null; reportedSize: number | null }> {
+  const body = (req.body ?? {}) as { path?: unknown; sha256?: unknown; sizeBytes?: unknown };
+  const path = typeof body.path === "string" ? body.path.trim() : "";
+  if (!path) throw new BackupError("BACKUP_CORRUPT", "لم يُحدَّد مسار ملف النسخة الاحتياطية");
+  const reportedSha256 = typeof body.sha256 === "string" && /^[0-9a-f]{64}$/i.test(body.sha256) ? body.sha256 : null;
+  const reportedSize = typeof body.sizeBytes === "number" && Number.isFinite(body.sizeBytes) && body.sizeBytes > 0 ? body.sizeBytes : null;
+  if (!existsSync(path)) throw new BackupError("BACKUP_FILE_MISSING", `الملف غير موجود: ${path}`);
+  const st = statSync(path);
+  if (!st.isFile()) throw new BackupError("BACKUP_FILE_MISSING", `المسار ليس ملفًا: ${path}`);
+  if (st.size === 0) throw new BackupError("BACKUP_CORRUPT", "الملف المحدد فارغ");
+  if (reportedSize !== null && st.size !== reportedSize) {
+    throw new BackupError("BACKUP_FILE_HASH_MISMATCH", `حجم الملف لا يطابق النسخة المختارة (${st.size} مقابل ${reportedSize} بايت)`);
+  }
+  if (reportedSha256 !== null) {
+    const actual = createHash("sha256").update(readFileSync(path)).digest("hex");
+    if (actual !== reportedSha256.toLowerCase()) {
+      throw new BackupError("BACKUP_FILE_HASH_MISMATCH", "بصمة الملف لا تطابق النسخة المختارة — قد يكون الملف تغيّر بعد اختياره");
+    }
+  }
+  return { path, reportedSha256, reportedSize };
+}
+
+/**
+ * The newest SQLite migration index this build can apply.
+ *
+ * Used by BOTH verify and restore so the two agree: verify must not report "✓ سليم" for an archive
+ * whose schema the app cannot apply, only for the restore to refuse it a moment later. `restoreBackupV3`
+ * already enforces this (`openAndVerifyBackupV3Sync(file, { maxJournalIdx })`); verify simply never
+ * passed it, which let the card show a green check for a backup that could never be restored.
+ */
+async function appMaxJournalIdx(): Promise<number | undefined> {
+  try {
+    const { sqliteRuntimeMigrationsDir } = await import("../../infrastructure/orm/sqlite/runtime.js");
+    const { loadSqliteJournal } = await import("../../infrastructure/orm/sqlite/schemaFingerprint.js");
+    return loadSqliteJournal(sqliteRuntimeMigrationsDir()).entries.at(-1)!.idx;
+  } catch {
+    return undefined; // not a SQLite build (cloud/v2) — the gate does not apply
+  }
+}
+
 function sendBackupError(res: Response, err: unknown) {
   if (err instanceof BackupError) {
-    const status = err.code === "RESTORE_CONFIRM_REQUIRED" ? 409 : err.code === "RESTORE_FAILED" ? 500 : 422;
+    // 404 when the chosen file is gone (the user can pick another), 400 when nothing was transferred at
+    // all (a client/transport problem, not a damaged archive), 409 when confirmation is still needed.
+    const status =
+      err.code === "RESTORE_CONFIRM_REQUIRED"
+        ? 409
+        : err.code === "RESTORE_FAILED"
+          ? 500
+          : err.code === "BACKUP_FILE_MISSING"
+            ? 404
+            : err.code === "BACKUP_NO_FILE_RECEIVED"
+              ? 400
+              : 422;
     res.status(status).json({ code: err.code, message: err.message, statusCode: status });
     return;
   }
@@ -336,6 +449,47 @@ export function createBackupRouter(_deps: BackupRouteDeps): Router {
     res.json({ entries });
   });
 
+  /**
+   * POST /api/backup/verify-path — desktop verify, by path instead of by upload.
+   *
+   * The desktop SPA reaches this API over the Tauri IPC bridge, whose request body is a `String`
+   * (`desktop/src-tauri/src/runtime/pipe.rs`: `PipeRequest.body`). A `File` cannot cross it, so the
+   * patched `fetch` (src/infrastructure/http/desktopTransport.ts) drops every non-string body and the
+   * server sees zero bytes — which is exactly why a valid archive was reported as "لم يصل أي ملف".
+   * The bridge is text-only by design, so the file is handed over as a PATH with the size and sha256
+   * the shell measured, and this route re-verifies both from the file's own bytes before running the
+   * exact same `openAndVerifyBackupV3` the upload path uses.
+   */
+  backupRouter.post("/backup/verify-path", async (req: Request, res: Response) => {
+    try {
+      const { path } = await receiveShellPath(req); // size/sha256 re-checked from the file's own bytes
+      if (isSqlite()) {
+        const { openAndVerifyBackupV3 } = await import("../../infrastructure/backup/sqliteBackup.js");
+        try {
+          const { manifest } = await openAndVerifyBackupV3(path, { maxJournalIdx: await appMaxJournalIdx() });
+          res.json({
+            ok: true,
+            createdAt: manifest.createdAt,
+            appVersion: manifest.app.version,
+            schemaMigrations: manifest.schema.journalIdx,
+            company: manifest.tenant.name,
+            tables: manifest.tables.length,
+            rows: manifest.tables.reduce((a, t) => a + t.rows, 0),
+            rowsByTable: Object.fromEntries(manifest.tables.map((t) => [t.name, t.rows])),
+            formatVersion: manifest.formatVersion,
+          });
+        } catch (err) {
+          throw await asBackupError(err);
+        }
+        return;
+      }
+      const { manifest } = await (await v2()).openAndVerifyBackup(path);
+      res.json({ ok: true, ...manifestSummary(manifest) });
+    } catch (err) {
+      sendBackupError(res, err);
+    }
+  });
+
   backupRouter.post("/backup/verify", async (req: Request, res: Response) => {
     let file: string | null = null;
     try {
@@ -343,7 +497,7 @@ export function createBackupRouter(_deps: BackupRouteDeps): Router {
       if (isSqlite()) {
         const { openAndVerifyBackupV3 } = await import("../../infrastructure/backup/sqliteBackup.js");
         try {
-          const { manifest } = await openAndVerifyBackupV3(file);
+          const { manifest } = await openAndVerifyBackupV3(file, { maxJournalIdx: await appMaxJournalIdx() });
           res.json({
             ok: true,
             createdAt: manifest.createdAt,
@@ -369,6 +523,42 @@ export function createBackupRouter(_deps: BackupRouteDeps): Router {
     }
   });
 
+  /**
+   * POST /api/backup/verify-path — the desktop verify, by path instead of by upload.
+   * The SPA's `File` cannot cross the text-only IPC bridge, so the shell picks the archive, reports its
+   * size + sha256, and this route re-verifies both before opening the archive. Same verification
+   * (`openAndVerifyBackupV3`) and the same response shape as `/backup/verify`.
+   */
+  backupRouter.post("/backup/verify-path", async (req: Request, res: Response) => {
+    try {
+      const { path } = await receiveShellPath(req); // size/sha256 re-checked from the file's own bytes
+      if (isSqlite()) {
+        const { openAndVerifyBackupV3 } = await import("../../infrastructure/backup/sqliteBackup.js");
+        try {
+          const { manifest } = await openAndVerifyBackupV3(path, { maxJournalIdx: await appMaxJournalIdx() });
+          res.json({
+            ok: true,
+            createdAt: manifest.createdAt,
+            appVersion: manifest.app.version,
+            schemaMigrations: manifest.schema.journalIdx,
+            company: manifest.tenant.name,
+            tables: manifest.tables.length,
+            rows: manifest.tables.reduce((a, t) => a + t.rows, 0),
+            rowsByTable: Object.fromEntries(manifest.tables.map((t) => [t.name, t.rows])),
+            formatVersion: manifest.formatVersion,
+          });
+        } catch (err) {
+          throw await asBackupError(err);
+        }
+        return;
+      }
+      const { manifest } = await (await v2()).openAndVerifyBackup(path);
+      res.json({ ok: true, ...manifestSummary(manifest) });
+    } catch (err) {
+      sendBackupError(res, err);
+    }
+  });
+
   // POST /api/backup/restore?confirm=replace — replace this company's data
   backupRouter.post("/backup/restore", async (req: Request, res: Response) => {
     const ctx = (req as unknown as { tenantContext?: TenantContext }).tenantContext;
@@ -389,6 +579,31 @@ export function createBackupRouter(_deps: BackupRouteDeps): Router {
       sendBackupError(res, err);
     } finally {
       if (file) await rm(file, { force: true }).catch(() => {});
+    }
+  });
+
+  /**
+   * POST /api/backup/restore-path?confirm=replace — the desktop restore, by path instead of by upload.
+   * Everything after the hand-off is identical to `/backup/restore`: the same `restoreUploadedBackup`,
+   * so the same v3 verification, safety backup, staging migration, RS-5 comparison, device-state
+   * carry-over and atomic swap. The archive itself is only ever READ, never moved or deleted.
+   */
+  backupRouter.post("/backup/restore-path", async (req: Request, res: Response) => {
+    const ctx = (req as unknown as { tenantContext?: TenantContext }).tenantContext;
+    if (!ctx?.tenantId || ctx.userRole !== "admin") {
+      res.status(403).json({ code: "FORBIDDEN", message: "غير مصرح" });
+      return;
+    }
+    if (!config.DESKTOP_DEPLOY) {
+      res.status(400).json({ code: "NOT_SUPPORTED", message: "الاستعادة من الواجهة متاحة في نسخة سطح المكتب فقط" });
+      return;
+    }
+    try {
+      const { path } = await receiveShellPath(req);
+      const report = await restoreUploadedBackup(path, ctx.tenantId, req.query.confirm === "replace");
+      res.json(report);
+    } catch (err) {
+      sendBackupError(res, err);
     }
   });
 

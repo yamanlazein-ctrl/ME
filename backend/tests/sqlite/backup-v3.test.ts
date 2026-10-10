@@ -18,6 +18,12 @@ const freshRoot = mkdtempSync(join(tmpdir(), "motard-bk3-fresh-"));
 process.env.DB_ENGINE = "sqlite";
 process.env.SQLITE_PATH = join(root, "data", "motard.db");
 process.env.MOTARD_STARTUP_STATE = "FRESH";
+// The desktop runtime refuses to CREATE a database without an installation
+// identity (INSTALLATION_ID_REQUIRED) — the suite simulates a first launch,
+// so mint one (and the matching instance/data ids) up front.
+process.env.MOTARD_INSTALLATION_ID ??= randomUUID();
+process.env.MOTARD_INSTALL_INSTANCE_ID ??= randomUUID();
+process.env.MOTARD_DATA_ID ??= randomUUID();
 delete process.env.DATABASE_URL;
 delete process.env.DESKTOP_SEED_PATH;
 

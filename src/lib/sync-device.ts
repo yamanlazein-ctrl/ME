@@ -13,6 +13,18 @@ export function getRegisteredSyncDeviceId(): string | null {
 }
 
 /**
+ * Forget this WebView's sync identity (factory reset): the archived company's
+ * hub pairing is gone with it, so the id must not survive into the fresh boot.
+ */
+export function clearSyncDeviceState(): void {
+  try {
+    localStorage.removeItem(SYNC_DEVICE_ID_KEY);
+  } catch {
+    // ignore storage failure — nothing to forget then
+  }
+}
+
+/**
  * Restore on a synced device (T109): the backend moved this database to a new sync identity.
  * Adopt it so later requests assert the same device the hub now knows.
  */

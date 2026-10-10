@@ -1,9 +1,11 @@
 import { useRef, useState } from "react";
 import { AlertCircle, CheckCircle2, Loader2, ShieldCheck, Upload } from "lucide-react";
 import { getAccessToken } from "@/infrastructure/auth/TokenProvider";
+import { isDesktopRuntime } from "@/infrastructure/http/desktopTransport";
+import { pickBackupFile, type SavedBackupFile } from "@/infrastructure/tauri-bridge";
 
 /**
- * Full restore from a portable backup (.zip, format v2).
+ * Full restore from a portable backup (.zip, format v3).
  *
  *  - mode "settings": signed-in admin; the file is verified first and the
  *    current data is replaced only after a typed confirmation. The server
@@ -13,8 +15,22 @@ import { getAccessToken } from "@/infrastructure/auth/TokenProvider";
  *
  * The server does the whole restore in a staging database and swaps it in
  * with one transaction: on any error the current data is untouched.
+ *
+ * TWO hand-off paths, because the desktop SPA has no HTTP origin
+ * -------------------------------------------------------------
+ * On the desktop the SPA is embedded in the binary and reaches the API only over the Tauri IPC bridge,
+ * whose request body is a `String`. A `File` cannot cross it: the patched `fetch` drops every non-string
+ * body, so `fetch(url, { body: file })` arrives as ZERO bytes and the server answers "لم يصل أي ملف" for
+ * a perfectly valid archive. The bridge is text-only by design, so here — exactly as the outbound backup
+ * already does via `saveBackupFile` — the SHELL owns the file: the native dialog picks it
+ * (`pickBackupFile`), the shell measures its size + sha256, and the restore goes to
+ * `/api/backup/restore-path`, which re-verifies those from the file's own bytes. On the web the ordinary
+ * octet-stream upload is used unchanged.
  */
 const CONFIRM_PHRASE = "استبدل البيانات";
+
+/** The archive chosen by the operator, on either hand-off path. */
+type Picked = { kind: "upload"; file: File } | { kind: "path"; file: SavedBackupFile };
 
 type Summary = {
   createdAt: string;
@@ -33,7 +49,7 @@ export function FullRestoreCard({
   onRestored: () => void;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
-  const [file, setFile] = useState<File | null>(null);
+  const [picked, setPicked] = useState<Picked | null>(null);
   const [summary, setSummary] = useState<Summary | null>(null);
   const [phrase, setPhrase] = useState("");
   const [state, setState] = useState<"idle" | "verifying" | "restoring" | "done" | "error">("idle");
@@ -45,21 +61,44 @@ export function FullRestoreCard({
     return token ? { Authorization: `Bearer ${token}` } : {};
   };
 
-  async function pick(f: File) {
-    setFile(f);
-    setSummary(null);
+  /** Choose the archive: the native dialog on desktop (a `File` cannot cross the IPC bridge), the
+   *  ordinary file input on the web. Resolves false when the user cancels, which changes nothing. */
+  async function choose(): Promise<boolean> {
     setError(null);
-    setResult(null);
+    if (isDesktopRuntime()) {
+      const chosen = await pickBackupFile().catch((e: unknown) => {
+        setState("error");
+        setError(e instanceof Error ? e.message : "تعذّر اختيار الملف");
+        return null;
+      });
+      if (!chosen) return false;
+      setPicked({ kind: "path", file: chosen });
+      setSummary(null);
+      setResult(null);
+      return true;
+    }
+    inputRef.current?.click();
+    return false; // the input's onChange continues the flow
+  }
+
+  async function verifyAndContinue(p: Picked) {
     if (mode === "wizard") return; // verified as part of the restore itself
     setState("verifying");
     try {
-      const res = await fetch("/api/backup/verify", {
-        method: "POST",
-        headers: { ...authHeaders(), "Content-Type": "application/octet-stream" },
-        body: f,
-      });
+      const res =
+        p.kind === "path"
+          ? await fetch("/api/backup/verify-path", {
+              method: "POST",
+              headers: { ...authHeaders(), "Content-Type": "application/json" },
+              body: JSON.stringify({ path: p.file.path, sha256: p.file.sha256, sizeBytes: p.file.sizeBytes }),
+            })
+          : await fetch("/api/backup/verify", {
+              method: "POST",
+              headers: { ...authHeaders(), "Content-Type": "application/octet-stream" },
+              body: p.file,
+            });
       const body = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(body.message || "الملف غير صالح");
+      if (!res.ok) throw new Error(body.message || "تعذّر التحقق من الملف");
       setSummary(body as Summary);
       setState("idle");
     } catch (e) {
@@ -68,20 +107,43 @@ export function FullRestoreCard({
     }
   }
 
+  async function pick(f: File) {
+    const p: Picked = { kind: "upload", file: f };
+    setPicked(p);
+    setSummary(null);
+    setError(null);
+    setResult(null);
+    await verifyAndContinue(p);
+  }
+
   async function restore() {
-    if (!file) return;
+    if (!picked) return;
     setState("restoring");
     setError(null);
     try {
+      const byPath =
+        picked.kind === "path"
+          ? {
+              body: JSON.stringify({
+                path: picked.file.path,
+                sha256: picked.file.sha256,
+                sizeBytes: picked.file.sizeBytes,
+              }),
+              contentType: "application/json",
+            }
+          : { body: picked.file, contentType: "application/octet-stream" };
       const url =
-        mode === "wizard" ? "/api/setup/wizard/restore" : "/api/backup/restore?confirm=replace";
+        mode === "wizard"
+          ? picked.kind === "path"
+            ? "/api/setup/wizard/restore-path"
+            : "/api/setup/wizard/restore"
+          : picked.kind === "path"
+            ? "/api/backup/restore-path?confirm=replace"
+            : "/api/backup/restore?confirm=replace";
       const res = await fetch(url, {
         method: "POST",
-        headers: {
-          ...(mode === "settings" ? authHeaders() : {}),
-          "Content-Type": "application/octet-stream",
-        },
-        body: file,
+        headers: { ...(mode === "settings" ? authHeaders() : {}), "Content-Type": byPath.contentType },
+        body: byPath.body,
       });
       const body = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(body.message || "فشلت الاستعادة — لم تتغير البيانات الحالية");
@@ -102,9 +164,10 @@ export function FullRestoreCard({
     }
   }
 
+  const fileName = picked?.kind === "path" ? picked.file.path.split(/[\\/]/).pop() ?? picked.file.path : picked?.file.name ?? null;
   const busy = state === "verifying" || state === "restoring";
   const canRestore =
-    !!file &&
+    !!picked &&
     !busy &&
     state !== "done" &&
     (mode === "wizard" || (!!summary && phrase.trim() === CONFIRM_PHRASE));
@@ -131,11 +194,11 @@ export function FullRestoreCard({
       <button
         type="button"
         disabled={busy || state === "done"}
-        onClick={() => inputRef.current?.click()}
+        onClick={() => void choose()}
         className="flex w-full items-center justify-center gap-2 rounded-lg border border-dashed px-4 py-3 text-sm hover:bg-secondary disabled:opacity-50"
       >
         <Upload className="h-4 w-4" />
-        {file ? file.name : "اختر ملف النسخة الاحتياطية (.zip)"}
+        {fileName ? fileName : "اختر ملف النسخة الاحتياطية (.zip)"}
       </button>
 
       {state === "verifying" && (

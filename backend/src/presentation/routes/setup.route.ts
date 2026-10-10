@@ -368,6 +368,64 @@ export function registerSetupRoutes(router: Router, container: Container): void 
     }
   });
 
+  // POST /api/setup/wizard/restore-path — the first-run restore, by path instead of by upload.
+  // Same guards and the same `restoreUploadedBackup` as `/wizard/restore`; only the hand-off differs.
+  // The SPA's `File` cannot cross the text-only Tauri IPC bridge, so the shell picks the archive and
+  // hands over its path with the size + sha256 it measured. Those are re-verified here from the file's
+  // own bytes before the archive is opened, so a substituted or truncated file is refused.
+  router.post("/api/setup/wizard/restore-path", async (req, res) => {
+    if (!config.DESKTOP_DEPLOY || !requireLocalAccess(req)) {
+      res.status(401).json({ code: "UNAUTHORIZED", message: "غير مصرح", statusCode: 401 });
+      return;
+    }
+    const baked = await container.tenantRepo.findBySlug("default");
+    if (!baked) {
+      res.status(409).json({ code: "NO_TENANT", message: "لا توجد شركة مهيأة على هذا الجهاز", statusCode: 409 });
+      return;
+    }
+    const sqlite = (await import("../../infrastructure/orm/engine.js")).getEngine() === "sqlite";
+    const users = sqlite
+      ? await (await import("../../infrastructure/orm/sqlite/queryable.js")).sqliteReaderQueryable().query<{ n: number }>("SELECT count(*) AS n FROM users WHERE tenant_id = $1", [baked.id])
+      : await (await (await import("../../infrastructure/orm/pgLazy.js")).pgPool()).query("SELECT count(*)::int AS n FROM users WHERE tenant_id = $1", [baked.id]);
+    if (Number(users.rows[0].n) > 0) {
+      res.status(409).json({
+        code: "ALREADY_INITIALIZED",
+        message: "هذا الجهاز مهيأ مسبقًا — استخدم الاستعادة من الإعدادات بعد تسجيل الدخول",
+        statusCode: 409,
+      });
+      return;
+    }
+    const { restoreUploadedBackup } = await import("./backup.route.js");
+    const { BackupError } = await import("../../infrastructure/backup/backupError.js");
+    const { existsSync, readFileSync, statSync } = await import("node:fs");
+    const { createHash } = await import("node:crypto");
+    try {
+      const body = (req.body ?? {}) as { path?: unknown; sha256?: unknown; sizeBytes?: unknown };
+      const path = typeof body.path === "string" ? body.path.trim() : "";
+      if (!path) throw new BackupError("BACKUP_CORRUPT", "لم يُحدَّد مسار ملف النسخة الاحتياطية");
+      if (!existsSync(path)) throw new BackupError("BACKUP_FILE_MISSING", `الملف غير موجود: ${path}`);
+      const st = statSync(path);
+      if (!st.isFile() || st.size === 0) throw new BackupError("BACKUP_CORRUPT", "الملف المحدد فارغ أو ليس ملفًا");
+      const expected = typeof body.sha256 === "string" && /^[0-9a-f]{64}$/i.test(body.sha256) ? body.sha256 : null;
+      if (expected) {
+        const actual = createHash("sha256").update(readFileSync(path)).digest("hex");
+        if (actual !== expected.toLowerCase()) {
+          throw new BackupError("BACKUP_FILE_HASH_MISMATCH", "بصمة الملف لا تطابق النسخة المختارة — قد يكون الملف تغيّر بعد اختياره");
+        }
+      }
+      const report = await restoreUploadedBackup(path, baked.id, false);
+      res.json(report);
+    } catch (err) {
+      const e = err instanceof BackupError ? err : null;
+      const status = e ? (e.code === "RESTORE_FAILED" ? 500 : 422) : 500;
+      res.status(status).json({
+        code: e?.code ?? "RESTORE_FAILED",
+        message: e?.message ?? `فشلت الاستعادة ولم تتغير البيانات: ${(err as Error).message}`,
+        statusCode: status,
+      });
+    }
+  });
+
   router.post("/api/setup/wizard/complete", async (req, res, next) => {
     try {
       if (!requireLocalAccess(req)) {

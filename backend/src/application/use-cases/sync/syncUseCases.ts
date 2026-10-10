@@ -878,7 +878,17 @@ export async function runLocalSyncPull(
         repos,
         unit,
         ctx,
-        { opId: unit.opId, syncDeviceId: unit.syncDeviceId, hubCanonical: true },
+        {
+          opId: unit.opId,
+          syncDeviceId: unit.syncDeviceId,
+          hubCanonical: true,
+          // Display-only origin actor for the audit row (SYNC-06): the name is
+          // passed at this display context, never read inside materialize.
+          originActorName:
+            typeof unit.payload.actorUserName === "string" && unit.payload.actorUserName.trim()
+              ? unit.payload.actorUserName.trim().slice(0, 255)
+              : null,
+        },
       );
     } catch (err) {
       logger.warn({ err, opId: unit.opId }, "pull unit apply failed");
@@ -1501,7 +1511,15 @@ async function tryMaterializeAcceptedUnit(
       payload: row.payload,
     },
     ctx,
-    { opId: row.opId, syncDeviceId: row.syncDeviceId },
+    {
+      opId: row.opId,
+      syncDeviceId: row.syncDeviceId,
+      // Display-only origin actor for the audit row (SYNC-06).
+      originActorName:
+        typeof row.payload?.actorUserName === "string" && row.payload.actorUserName.trim()
+          ? row.payload.actorUserName.trim().slice(0, 255)
+          : null,
+    },
   );
 
   if (result.status === "created" || result.status === "exists") {

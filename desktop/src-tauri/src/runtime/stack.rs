@@ -203,12 +203,21 @@ pub(crate) fn move_data_aside(app_data_root: &Path) -> io::Result<Option<PathBuf
     }
     // The identity and integrity records describe the archived company, not the fresh one: kept
     // WITH the archive. Left in place they would make the next boot refuse ("data missing").
+    // The manifest rename is mandatory: a manifest left in place is read as a LIVE manifest by
+    // the next boot (prior_data_evidence) and escalates a successful reset to DATA_MISSING.
     if meta.exists() {
         fs::rename(&meta, target.join("db-meta.before-reset.json"))?;
     }
     let manifest = db_meta::integrity_manifest_path(app_data_root);
     if manifest.exists() {
-        let _ = fs::rename(&manifest, target.join("data-integrity.before-reset.json"));
+        fs::rename(&manifest, target.join("data-integrity.before-reset.json"))?;
+    }
+    // The retired PostgreSQL-era cluster is prior-data evidence too (db_meta::prior_data_evidence):
+    // left in place it makes the next boot refuse to start fresh even though the SQLite company
+    // data is fully archived. It belongs to the archived era, so it moves into the archive.
+    let pgdata = app_data_root.join("pgdata");
+    if pgdata.exists() {
+        fs::rename(&pgdata, target.join("pgdata"))?;
     }
     // The hub pairing belongs to the archived company too: a fresh company left paired to the
     // OLD hub would pull the old company's documents. Kept with the archive, never deleted.
@@ -1029,6 +1038,29 @@ mod boot_lifecycle_tests {
         // and the next decision is FRESH
         let launch = db_meta::LaunchFacts { installation_id: "id-a".into(), running_version: "1".into(), ..Default::default() };
         assert!(matches!(decide_startup(&cfg_for(&dir), &launch), Ok(StartupEnv { state: "FRESH", .. })));
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn reset_on_a_root_with_leftover_pgdata_and_manifest_boots_fresh() {
+        // The field report: after a factory reset the app reopened into the dead "restore
+        // session" prompt because `pgdata` (the retired PostgreSQL cluster) and an unmoveable
+        // manifest counted as prior-data evidence (DATA_MISSING) on the very next boot.
+        let dir = scratch("reset-pgdata");
+        fs::create_dir_all(dir.join("data")).unwrap();
+        fs::write(dir.join("data").join("motard.db"), b"SQLite format 3\0company").unwrap();
+        fs::create_dir_all(dir.join("pgdata")).unwrap();
+        fs::write(dir.join("pgdata").join("PG_VERSION"), "17\n").unwrap();
+        fs::write(db_meta::integrity_manifest_path(&dir), r#"{"lastKnownCounts":{"invoices":5,"parties":2,"rolls":1}}"#).unwrap();
+        fs::write(dir.join(FACTORY_RESET_FLAG), b"1").unwrap();
+        apply_requested_factory_reset(&cfg_for(&dir)).expect("a confirmed reset must not brick boot");
+        assert!(!dir.join("pgdata").exists(), "the PostgreSQL-era cluster must move into the archive");
+        assert!(!db_meta::integrity_manifest_path(&dir).exists(), "no live manifest may remain");
+        let launch = db_meta::LaunchFacts { installation_id: "id-a".into(), running_version: "1".into(), ..Default::default() };
+        assert!(matches!(decide_startup(&cfg_for(&dir), &launch), Ok(StartupEnv { state: "FRESH", .. })), "the reported dead-end");
+        let archive = fs::read_dir(&dir).unwrap().filter_map(|e| e.ok()).find(|e| e.file_name().to_string_lossy().starts_with("data.reset-")).expect("archive exists");
+        assert!(archive.path().join("pgdata").join("PG_VERSION").exists(), "the old cluster is kept, not deleted");
+        assert!(archive.path().join("data-integrity.before-reset.json").exists(), "manifest kept with the archive");
         let _ = fs::remove_dir_all(&dir);
     }
 

@@ -280,6 +280,22 @@ export async function saveBackupFile(args: {
   return (await invoke("save_backup_file", args)) as SavedBackupFile | null;
 }
 
+/**
+ * Desktop only: let the operator choose the backup archive to restore, in the NATIVE dialog.
+ *
+ * WHY not the page's `<input type="file">`: this SPA reaches the API only over the Tauri IPC bridge,
+ * and the bridge's request body is a `String` (`runtime/pipe.rs`). A `File` cannot cross it, so the
+ * patched `fetch` drops it and the server sees zero bytes — the exact cause of "لم يصل أي ملف" on a
+ * perfectly valid archive. The bridge is text-only by design, so the shell owns the file: it picks it
+ * here and returns its path + size + sha256, which the restore endpoint re-verifies from the file's own
+ * bytes. Resolves null when the user cancels.
+ */
+export async function pickBackupFile(): Promise<SavedBackupFile | null> {
+  if (!isTauri()) throw new Error("اختيار ملف النسخة متاح في تطبيق سطح المكتب فقط");
+  const invoke = await getInvoke();
+  return (await invoke("pick_backup_file")) as SavedBackupFile | null;
+}
+
 export type DesktopUpdateCheckResult = {
   available: boolean;
   version?: string | null;

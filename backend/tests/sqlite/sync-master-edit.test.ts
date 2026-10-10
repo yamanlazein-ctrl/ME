@@ -57,6 +57,12 @@ const apply = (
       opId: randomUUID(),
       syncDeviceId: null,
       ...(hubCanonical ? { hubCanonical: true } : {}),
+      // SYNC-06: the origin actor NAME travels through meta (display context),
+      // never as authority — the audit actor_id stays the receiver's user.
+      originActorName:
+        typeof payload.actorUserName === "string" && payload.actorUserName.trim()
+          ? payload.actorUserName.trim().slice(0, 255)
+          : null,
     } as never),
   );
 
@@ -249,7 +255,10 @@ describe("master edits through sync", () => {
     const [audit] = await q<{ actor_id: string; actor_name: string; after: string }>(
       sql`SELECT actor_id, actor_name, after_snapshot AS after FROM audit_logs WHERE entity_id = ${rollId}`,
     );
-    expect(audit).toMatchObject({ actor_id: origin, actor_name: "سامر (المستودع)" });
+    // SYNC-06/P6: a wire actorUserId is NEVER the audit identity (it would let a
+    // forged push attribute work to a stranger). The origin device survives as the
+    // display name; the actor id stays the authenticated receiver's user.
+    expect(audit).toMatchObject({ actor_id: ctx.userId, actor_name: "سامر (المستودع)" });
     expect(JSON.parse(audit.after)).toMatchObject({ syncedFrom: "device", appliedBy: "tester" });
     // Authority / FK columns stay the receiver's.
     const [mv] = await q<{ by: string }>(sql`SELECT created_by AS by FROM stock_movements WHERE roll_id = ${rollId}`);

@@ -382,6 +382,7 @@ fn main() {
             get_app_version,
             get_data_root,
             save_backup_file,
+            pick_backup_file,
             check_desktop_update,
             install_desktop_update,
             recovery_status,
@@ -840,6 +841,62 @@ async fn save_backup_file(
         .await
         .map_err(|e| e.to_string())?
         .map(Some)
+}
+
+/// The inbound mirror of `save_backup_file`: let the operator choose the backup archive to restore.
+///
+/// WHY a native picker rather than the page's `<input type="file">`: the SPA reaches the API only over
+/// the Tauri IPC bridge, whose request body is a `String` (`runtime/pipe.rs`: `PipeRequest.body`). A
+/// `File` cannot cross it, so the patched `fetch` drops every non-string body and the server sees zero
+/// bytes — which is exactly the "لم يصل أي ملف" a valid archive produced. The bridge is text-only by
+/// design, so — as with the outbound backup — the SHELL owns the file: it picks it here, measures its
+/// size and sha256, and hands the backend a PATH (`POST /api/backup/restore-path`). The backend
+/// re-verifies size + sha256 from the file's own bytes before opening the archive, so a substituted or
+/// truncated file is still refused. The archive itself is only ever READ.
+///
+/// `Ok(None)` = the user cancelled the dialog.
+#[tauri::command]
+#[hotpath::measure]
+async fn pick_backup_file() -> Result<Option<SavedBackup>, String> {
+    let picked = tokio::task::spawn_blocking(|| {
+        rfd::FileDialog::new()
+            .set_title("اختر ملف النسخة الاحتياطية للاستعادة")
+            .add_filter("Motard backup", &["zip"])
+            .pick_file()
+    })
+    .await
+    .map_err(|e| e.to_string())?;
+    let Some(path) = picked else {
+        return Ok(None);
+    };
+    // Measure the chosen file so the server can confirm it received the very same bytes.
+    tokio::task::spawn_blocking(move || {
+        use sha2::{Digest, Sha256};
+        use std::io::Read;
+        let mut f = std::fs::File::open(&path).map_err(|e| format!("تعذّر فتح الملف: {e}"))?;
+        let mut hasher = Sha256::new();
+        let mut buf = vec![0u8; 1 << 20];
+        let mut size = 0u64;
+        loop {
+            let n = f.read(&mut buf).map_err(|e| e.to_string())?;
+            if n == 0 {
+                break;
+            }
+            size += n as u64;
+            hasher.update(&buf[..n]);
+        }
+        if size == 0 {
+            return Err("الملف المختار فارغ".to_string());
+        }
+        Ok(SavedBackup {
+            path: path.display().to_string(),
+            size_bytes: size,
+            sha256: format!("{:x}", hasher.finalize()),
+        })
+    })
+    .await
+    .map_err(|e| e.to_string())?
+    .map(Some)
 }
 
 #[derive(Serialize)]
