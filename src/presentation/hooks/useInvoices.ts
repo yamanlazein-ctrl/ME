@@ -116,18 +116,13 @@ export function useCreateInvoice() {
       if (res.ok) {
         qc.invalidateQueries({ queryKey: KEYS.root });
         qc.invalidateQueries({ queryKey: KEYS.detail(res.value.id) });
-        qc.invalidateQueries({ queryKey: ["dashboard"] });
-        // Actively refetch the dashboard right now (even with no active observer)
-        // so "فواتير اليوم" / "فواتير غير مسددة" / todaySales are already fresh
-        // when the user returns to the dashboard — no reliance on refetchInterval.
-        qc.refetchQueries({ queryKey: ["dashboard"] });
+        // F-05: route through the central helper so ALL financial families
+        // refresh together (dashboard, cashbox, ledger, profit, statement,
+        // party, invoices) — no ad-hoc subsets that leave stale screens.
+        invalidateFinancialViews(qc, { refetchDashboard: true });
         // Invoice create changes stock (entry +, sale -) — refresh inventory caches.
         void refreshInventory();
         qc.invalidateQueries({ queryKey: ["inventory"] });
-        // New invoice changes profit/debts/ledger — keep cashbox center fresh.
-        qc.invalidateQueries({ queryKey: ["cashbox"] });
-        qc.invalidateQueries({ queryKey: ["ledger"] });
-        qc.invalidateQueries({ queryKey: ["profit"] });
       } else {
         const rawErr = (res.error as any) ?? {};
         const details = rawErr.details as Record<string, string[]> | undefined;
@@ -158,7 +153,7 @@ export function useCancelInvoice() {
     },
     onSuccess: (res) => {
       if (res.ok) {
-        toast.error("تم إلغاء الفاتورة");
+        toast.success("تم إلغاء الفاتورة");
         qc.invalidateQueries({ queryKey: KEYS.root });
         qc.invalidateQueries({ queryKey: KEYS.detail(res.value.id) });
         // Party list stats (invoice counts / balances) live in a module cache
@@ -206,15 +201,10 @@ export function useUpdateInvoice(opts?: { silent?: boolean }) {
         if (!opts?.silent) toast.success("تم حفظ التعديلات بنجاح");
         qc.invalidateQueries({ queryKey: KEYS.root });
         qc.invalidateQueries({ queryKey: KEYS.detail(res.value.id) });
-        qc.invalidateQueries({ queryKey: ["dashboard"] });
-        qc.refetchQueries({ queryKey: ["dashboard"] });
+        // F-05: central helper — updates balances/statement/party stats too.
+        invalidateFinancialViews(qc, { refetchDashboard: true });
         void refreshInventory();
         qc.invalidateQueries({ queryKey: ["inventory"] });
-        // Edited invoice must be reflected immediately by cashbox/profit/ledger.
-        qc.invalidateQueries({ queryKey: ["cashbox"] });
-        qc.invalidateQueries({ queryKey: ["ledger"] });
-        qc.invalidateQueries({ queryKey: ["profit"] });
-        qc.invalidateQueries({ queryKey: ["statement"] });
       } else {
         const rawErr = (res.error as any) ?? {};
         const details = rawErr.details as Record<string, string[]> | undefined;

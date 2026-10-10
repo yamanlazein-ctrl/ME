@@ -1308,43 +1308,43 @@ async function materializeMasterMutation(
       };
     }
     try {
-      if (entityType === "party") {
-        // P0-001: expectedVersion is REQUIRED; it is now the CALLER's base (not
-        // the hub's current version, which made the guard vacuous).
-        const expectedVersionParty =
-          baseVersion ?? (await repos.partyRepo.findById(entityId, ctx))?.version ?? 1;
-        await cancelPartyUseCase(repos.partyRepo, entityId, rctx.userId, rctx, expectedVersionParty);
-      } else if (entityType === "fabric") {
-        await deleteFabricUseCase(repos.fabricRepo, entityId, rctx);
-      } else if (entityType === "color") {
-        await deleteColorUseCase(repos.colorRepo, entityId, rctx);
-      } else {
-        await deleteRollUseCase(repos.rollRepo, entityId, rctx);
-      }
+      // F-03: the delete and its tombstone are ONE transaction — a failure in
+      // either rolls both back, so a deleted row can never be left without its
+      // tombstone (which is what lets a stale create resurrect it later).
+      // Engine-neutral runInTransaction (orm/engine.ts): on PG it opens a
+      // pooled transaction; on SQLite the repos' own transactions nest as
+      // savepoints inside it and recordTombstone's runAutonomous joins the
+      // ambient transaction instead of committing aside.
+      const { runInTransaction } = await import("../../../infrastructure/orm/engine.js");
+      await runInTransaction(async () => {
+        if (entityType === "party") {
+          // P0-001: expectedVersion is REQUIRED; it is now the CALLER's base (not
+          // the hub's current version, which made the guard vacuous).
+          const expectedVersionParty =
+            baseVersion ?? (await repos.partyRepo.findById(entityId, ctx))?.version ?? 1;
+          await cancelPartyUseCase(repos.partyRepo, entityId, rctx.userId, rctx, expectedVersionParty);
+        } else if (entityType === "fabric") {
+          await deleteFabricUseCase(repos.fabricRepo, entityId, rctx);
+        } else if (entityType === "color") {
+          await deleteColorUseCase(repos.colorRepo, entityId, rctx);
+        } else {
+          await deleteRollUseCase(repos.rollRepo, entityId, rctx);
+        }
+        // Delete applied — record the tombstone so any stale create / dependency
+        // snapshot replaying later is refused instead of resurrecting the row.
+        // Inside the same transaction: if this write fails the delete rolls back.
+        await recordTombstone(
+          ctx.tenantId,
+          entityType,
+          entityId,
+          meta?.opId ?? null,
+          meta?.syncDeviceId ?? null,
+        );
+      });
     } catch (err) {
       return {
         status: "failed",
         error: err instanceof Error ? err.message : "master delete failed",
-      };
-    }
-    // Delete applied — record the tombstone so any stale create / dependency
-    // snapshot replaying later is refused instead of resurrecting the row.
-    // If the tombstone write fails we report `failed` so the retry re-asserts
-    // it (the idempotent `!hub` path above). This keeps delete + tombstone
-    // causally durable despite the absence of a single wrapping transaction.
-    try {
-      await recordTombstone(
-        ctx.tenantId,
-        entityType,
-        entityId,
-        meta?.opId ?? null,
-        meta?.syncDeviceId ?? null,
-      );
-    } catch (err) {
-      logger.error({ err, entityType, entityId }, "recordTombstone failed — delete retried");
-      return {
-        status: "failed",
-        error: err instanceof Error ? err.message : "tombstone record failed after delete",
       };
     }
     return { status: "created" };
@@ -1425,11 +1425,20 @@ async function materializeMasterMutation(
       return;
     }
     const s = await engineSchema();
-    const table = entityType === "color" ? s.colors : s.fabrics;
-    await database
-      .update(table)
-      .set({ version: baseVersion + 1 } as never)
-      .where(and(eq(table.id, entityId), eq(table.tenantId, ctx.tenantId)));
+    // N-07: branch on the concrete table instead of silencing the union with
+    // `as never` — a real type error here (e.g. a column rename on one engine's
+    // schema) must fail compilation, not surface as a sync behavior bug.
+    if (entityType === "color") {
+      await database
+        .update(s.colors)
+        .set({ version: baseVersion + 1 })
+        .where(and(eq(s.colors.id, entityId), eq(s.colors.tenantId, ctx.tenantId)));
+    } else {
+      await database
+        .update(s.fabrics)
+        .set({ version: baseVersion + 1 })
+        .where(and(eq(s.fabrics.id, entityId), eq(s.fabrics.tenantId, ctx.tenantId)));
+    }
   };
   if (intentAlreadyApplied(updateInput, hub)) {
     await alignMasterVersion();

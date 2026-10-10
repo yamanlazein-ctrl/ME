@@ -6,6 +6,7 @@ import type { PurgeActor } from "../../infrastructure/repositories/dyePurgeRepos
 import { dyePurgeHelpers } from "../../infrastructure/repositories/engineHelpers.js";
 import { logger } from "../../infrastructure/config/logger.js";
 import { guardWithPreOperationBackup } from "../../infrastructure/backup/preOperationBackup.js";
+import type { ISyncDeviceRepository } from "../../application/ports/ISyncDeviceRepository.js";
 
 /**
  * Corrective cascade endpoints for an inventory dye (fabric).
@@ -42,6 +43,7 @@ export function registerDyeRoutes(
   auth: RequestHandler,
   writeGuard: RequestHandler,
   readGuard: RequestHandler,
+  deps?: { devices?: ISyncDeviceRepository },
 ): void {
   const pid = (req: Request): string => req.params.id as string;
 
@@ -100,6 +102,32 @@ export function registerDyeRoutes(
           code: "CONFIRMATION_MISMATCH",
           message: `للتأكيد اكتب «${CONFIRM_WORD}» أو اسم الصبغة كما هو.`,
         });
+      }
+
+      // N-05 (sync-enrollment guard): the purge is sync-exempt (syncCoverage.ts —
+      // "hub-authoritative, not replayed per device"), so running it on a device
+      // that is enrolled with a hub silently diverges every other device from
+      // the hub. Refuse while any non-revoked sync device exists for this tenant.
+      if (deps?.devices) {
+        try {
+          const devices = await deps.devices.listForTenant(tenantId);
+          const live = devices.filter((d) => !d.revokedAt);
+          if (live.length > 0) {
+            return res.status(409).json({
+              code: "SYNC_DEVICES_ENROLLED",
+              message:
+                "لا يمكن حذف الصبغة التصحيحي أثناء وجود أجهزة مُسجَّلة للمزامنة: هذا الحذف لا يُزامَن، وسيُبقي الأجهزة الأخرى نسخاً مختلفة عن المركز. ألغِ تسجيل كل الأجهزة أولاً ثم أعد المحاولة.",
+            });
+          }
+        } catch (err) {
+          // Fail CLOSED: an unreadable device roster must not let an unsyncable
+          // destructive purge through.
+          logger.error({ err, tenantId }, "DYE_PURGE_DEVICE_ROSTER_UNREADABLE");
+          return res.status(409).json({
+            code: "SYNC_DEVICES_ENROLLED",
+            message: "تعذّر التحقق من حالة تسجيل أجهزة المزامنة، والعملية الحذفية لا تُزامَن — مُنعت احتياطاً.",
+          });
+        }
       }
 
       if (!(await guardWithPreOperationBackup(res, "dye-purge"))) return; // BK-4 (T097)

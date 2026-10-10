@@ -322,6 +322,8 @@ registerDyeRoutes(
   // deliberately narrower than creating an inventory master.
   rbac(["admin", "accountant"]),
   rbac(["admin", "accountant", "warehouse", "viewer"]),
+  // N-05: the purge is sync-exempt; refuse it while sync devices are enrolled.
+  { devices: container.syncDeviceRepo },
 );
 registerYearClosingRoutes(
   apiRouter,

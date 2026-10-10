@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import type { CreateExpenseInput, ExpenseFilter } from "@/core/dtos/ExpenseDTO";
 import { isOk } from "@/core/result";
 import type { ValidationError } from "@/core/errors/DomainError";
+import { invalidateFinancialViews } from "./invalidateFinancialViews";
 
 const KEYS = {
   root: ["expenses"] as const,
@@ -71,11 +72,10 @@ export function useCreateExpense() {
       if (res.ok) {
         toast.success("تم إنشاء المصروف");
         qc.invalidateQueries({ queryKey: KEYS.root });
-        // Expenses write a ledger entry (type=expense); cash expenses affect cashbox/dashboard.
-        qc.invalidateQueries({ queryKey: ["ledger"] });
-        qc.invalidateQueries({ queryKey: ["dashboard"] });
-        qc.invalidateQueries({ queryKey: ["cashbox"] });
-        qc.invalidateQueries({ queryKey: ["profit"] });
+        // F-05: central helper — expenses write a ledger entry (type=expense);
+        // cash expenses affect cashbox/dashboard; statements and party stats
+        // read the ledger, so they refresh together.
+        invalidateFinancialViews(qc);
       } else {
         toast.error(res.error.message ?? (res.error as unknown as string));
       }
@@ -88,12 +88,11 @@ export function useCancelExpense() {
   return useMutation({
     mutationFn: (id: string) => container.expenses.cancel.execute(id),
     onSuccess: () => {
-      toast.error("تم إلغاء المصروف");
+      toast.success("تم إلغاء المصروف");
       qc.invalidateQueries({ queryKey: KEYS.root });
-      qc.invalidateQueries({ queryKey: ["ledger"] });
-      qc.invalidateQueries({ queryKey: ["dashboard"] });
-      qc.invalidateQueries({ queryKey: ["cashbox"] });
-      qc.invalidateQueries({ queryKey: ["profit"] });
+      // F-05: central helper — the cancel reverses the same ledger/cashbox
+      // legs the create wrote, so the same families must refresh.
+      invalidateFinancialViews(qc);
     },
     onError: (e: Error) => {
       toast.error(`فشل إلغاء المصروف: ${e.message}`);

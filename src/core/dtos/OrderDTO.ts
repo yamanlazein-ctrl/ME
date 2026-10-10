@@ -69,5 +69,6 @@ export type OrderFilter = {
   status?: OrderStatus | "all";
   search?: string;
   limit?: number;
-  offset?: number;
+  /** N-06: server-side paging — the repositories accept `page` (0-based). */
+  page?: number;
 };

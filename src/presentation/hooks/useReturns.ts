@@ -6,6 +6,7 @@ import { isOk } from "@/core/result";
 import { toast } from "sonner";
 import type { ReturnFilter, ReturnDTO } from "@/application/ports/IReturnRepository";
 import { refreshInventory } from "./useInventory";
+import { invalidateFinancialViews } from "./invalidateFinancialViews";
 
 const ctx = new Proxy({} as import("@/domain/types").TenantContext, {
   get: (_target, property: string) =>
@@ -57,12 +58,13 @@ export function useCreateReturn() {
     onSuccess: () => {
       toast.success("تم إنشاء المرتجع");
       qc.invalidateQueries({ queryKey: KEYS.root });
-      // Returns change inventory (entry return decreases stock, sale return increases)
-      // and write a ledger entry — refresh related caches.
+      // Returns change inventory (entry return decreases stock, sale return
+      // increases) and write a ledger entry — refresh related caches.
       void refreshInventory();
       qc.invalidateQueries({ queryKey: ["inventory"] });
-      qc.invalidateQueries({ queryKey: ["ledger"] });
-      qc.invalidateQueries({ queryKey: ["dashboard"] });
+      // F-05: central helper — the ledger leg also moves statements, party
+      // stats, cashbox and profit; no ad-hoc subset.
+      invalidateFinancialViews(qc);
     },
     onError: (e: Error) => {
       toast.error(
@@ -81,13 +83,13 @@ export function useCancelReturn() {
   return useMutation({
     mutationFn: (id: string) => container.returns.cancel.execute(id, ctx),
     onSuccess: () => {
-      toast.error("تم إلغاء المرتجع");
+      toast.success("تم إلغاء المرتجع");
       qc.invalidateQueries({ queryKey: KEYS.root });
       // Return cancel reverses the stock change and ledger entry.
       void refreshInventory();
       qc.invalidateQueries({ queryKey: ["inventory"] });
-      qc.invalidateQueries({ queryKey: ["ledger"] });
-      qc.invalidateQueries({ queryKey: ["dashboard"] });
+      // F-05: central helper — same families the create touched.
+      invalidateFinancialViews(qc);
     },
     onError: (e: Error) => {
       toast.error(

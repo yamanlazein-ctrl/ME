@@ -65,8 +65,13 @@ function availabilityFromStatus(status: OrderStatus): "full" | "partial" | "none
 }
 
 function OrdersIndexPage() {
-  const { data: paginated } = useOrdersList();
+  // N-06: server-side paging — the repository defaults to `limit ?? 20`, so the
+  // page must carry which page it is on and let the operator walk the rest.
+  const [page, setPage] = useState(0);
+  const { data: paginated, isFetching: ordersFetching } = useOrdersList({ page });
   const orders = useMemo(() => paginated?.data ?? [], [paginated?.data]);
+  const totalOrders = paginated?.total ?? orders.length;
+  const hasNextPage = paginated?.hasNext ?? false;
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | OrderStatus>("all");
   const cancelOrderMut = useCancelOrder();
@@ -308,6 +313,35 @@ function OrdersIndexPage() {
             </tbody>
           </table>
         )}
+
+        {/* N-06: paging footer — the list is server-paged (default 20/page);
+            show the total and let the operator walk the pages. */}
+        <div className="flex items-center justify-between gap-2 border-t border-border px-3 py-2 text-xs text-muted-foreground">
+          <span>
+            {ordersFetching
+              ? "جارٍ التحميل…"
+              : `إجمالي الطلبيات: ${totalOrders}${hasNextPage ? " — تُعرض 20 طلبية في الصفحة" : ""}`}
+          </span>
+          <div className="flex items-center gap-1">
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={page === 0 || ordersFetching}
+              onClick={() => setPage((p) => Math.max(0, p - 1))}
+            >
+              السابق
+            </Button>
+            <span className="px-2 font-semibold tabular-nums">{page + 1}</span>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={!hasNextPage || ordersFetching}
+              onClick={() => setPage((p) => p + 1)}
+            >
+              التالي
+            </Button>
+          </div>
+        </div>
       </PageCard>
 
       <ConfirmBulkAction
