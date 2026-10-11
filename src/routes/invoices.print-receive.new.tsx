@@ -233,9 +233,14 @@ function PrintReceivePage() {
     });
   }, [currency, lines, allJobs]);
 
+  // FE-09: each click mints its own Idempotency-Key, so the server cannot dedupe a double click —
+  // the buttons must be inert for the whole multi-document save.
+  const [saving, setSaving] = useState(false);
   const save = async (thenPrint = false) => {
+    if (saving) return;
     setError(null);
     setOk(null);
+    setSaving(true);
     const valid = lines.filter(
       (l) =>
         !l.jobId.startsWith("fabric:") && l.jobId && Number(l.receivedKg) > 0 && l.newName.trim(),
@@ -314,6 +319,8 @@ function PrintReceivePage() {
       const msg = (e as Error).message || "فشل الحفظ";
       setError(msg);
       showError(msg);
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -332,6 +339,7 @@ function PrintReceivePage() {
                 variant="outline"
                 size="sm"
                 onClick={() => save(true)}
+                disabled={saving}
                 className="border-border bg-transparent text-foreground hover:bg-secondary"
               >
                 <Printer className="ml-1 h-4 w-4" /> حفظ وطباعة
@@ -339,6 +347,7 @@ function PrintReceivePage() {
               <Button
                 size="sm"
                 onClick={() => save(false)}
+                disabled={saving}
                 className="bg-primary text-primary-foreground hover:brightness-110"
               >
                 <Save className="ml-1 h-4 w-4" /> حفظ

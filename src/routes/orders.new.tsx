@@ -457,6 +457,7 @@ function NewOrderPage() {
 
       <DocumentFooter
         onSave={save}
+        isSaving={createOrder.isPending}
         onCancel={() => history.back()}
         saveLabel="حفظ الطلب"
         extra={

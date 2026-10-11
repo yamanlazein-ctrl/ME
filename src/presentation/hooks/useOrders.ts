@@ -107,7 +107,7 @@ export function useCancelOrder() {
       return res.value;
     },
     onSuccess: () => {
-      toast.error("تم إلغاء الطلب");
+      toast.success("تم إلغاء الطلب");
       qc.invalidateQueries({ queryKey: KEYS.root });
       // Order cancel releases reservations → stock availability changed.
       void refreshInventory();

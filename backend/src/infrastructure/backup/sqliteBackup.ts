@@ -31,6 +31,12 @@ export const EXCLUDED_TABLES = [
   "idempotency_keys",
   "invitation_codes",
   "license_audit_events",
+  // DB-08: the Google Drive upload ledger is per-device runtime state (0005_drive_archive.sql). A
+  // restore keeps the restoring device's own ledger (carry-over) instead of another device's "done"
+  // rows, which would make this device skip files that exist only in the other device's Drive.
+  "motard_drive_folders",
+  "motard_drive_uploads",
+  "motard_drive_runs",
 ] as const;
 
 /** Device-bound columns nulled in the copy (each column is nullable; FKs allow NULL). */

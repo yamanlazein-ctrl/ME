@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { container } from "@/infrastructure/container";
 import { toast } from "sonner";
+import { invalidateFinancialViews } from "./invalidateFinancialViews";
 import { clampStatementPageIndex } from "@erp/shared/statementPaging";
 import type { Currency } from "@/domain/types";
 import type { PartyKind } from "@/domain/entities/Party";
@@ -129,14 +130,10 @@ export function loadFullStatement(partyId: string, kind: PartyKind, filter: Stat
 }
 
 function invalidateAfterSettlement(qc: ReturnType<typeof useQueryClient>) {
-  qc.invalidateQueries({ queryKey: KEYS.root });
-  qc.invalidateQueries({ queryKey: ["ledger"] });
-  qc.invalidateQueries({ queryKey: ["parties"] });
-  qc.invalidateQueries({ queryKey: ["dashboard"] });
-  qc.invalidateQueries({ queryKey: ["invoices"] });
+  // Settlement writes vouchers + ledger legs and may consume return credit.
+  invalidateFinancialViews(qc);
   qc.invalidateQueries({ queryKey: ["vouchers"] });
   qc.invalidateQueries({ queryKey: ["returns"] });
-  qc.invalidateQueries({ queryKey: ["cashbox"] });
 }
 
 export function useSettleParty(partyId: string | undefined, kind: PartyKind) {

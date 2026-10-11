@@ -65,9 +65,21 @@ transportStream.on("error", (err: unknown) => {
   console.error("[logger] transport error (non-fatal, logging degraded):", err);
 });
 
+// SEC-02: defense in depth. No call site logs bodies or headers today, but one `logger.error({ err })`
+// on an HTTP-client error (whose config carries the Authorization header) would write a live token to
+// logs/erp.log in cleartext. pino's built-in redaction masks these keys wherever they appear in the
+// first two levels of a log object.
+export const LOG_REDACT_PATHS = [
+  "password", "token", "accessToken", "refreshToken", "apiKey", "secret", "authorization", "cookie",
+  "*.password", "*.token", "*.accessToken", "*.refreshToken", "*.apiKey", "*.secret", "*.authorization", "*.cookie",
+  "*.headers.authorization", "*.headers.Authorization", "*.headers.cookie",
+  "err.config.headers.Authorization", "err.config.headers.authorization",
+];
+
 const pinoLogger = pino(
   {
     level: config.LOG_LEVEL,
+    redact: { paths: LOG_REDACT_PATHS, censor: "***" },
     // REPAIR-013: correlate backend lines with the desktop boot log.
     ...(process.env.MOTARD_BOOT_ID
       ? { base: { bootId: process.env.MOTARD_BOOT_ID } }

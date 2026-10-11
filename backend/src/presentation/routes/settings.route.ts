@@ -45,6 +45,7 @@ export function registerSettingsRoutes(
         "units",
         "warehouses",
         "printing",
+        "drive",
       ].includes(section)
     ) {
       return res.status(400).json({ code: "VALIDATION", message: "قسم غير صالح" });

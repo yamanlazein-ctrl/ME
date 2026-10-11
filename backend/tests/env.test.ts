@@ -32,3 +32,16 @@ describe("withTenantTx", () => {
     await expect(withTenantTx("", async () => 1)).rejects.toThrow(/tenantId is required/);
   });
 });
+
+describe("DESKTOP_DEPLOY parsing (NEW-01)", () => {
+  it('reads "false"/"0"/unset as false — coerce.boolean read "false" as true', async () => {
+    const { envSchema } = await import("@/infrastructure/config/env");
+    const parse = (v: string | undefined) => envSchema.parse({ ...process.env, DESKTOP_DEPLOY: v }).DESKTOP_DEPLOY;
+    expect(parse("false")).toBe(false);
+    expect(parse("0")).toBe(false);
+    expect(parse(undefined)).toBe(false);
+    expect(parse("true")).toBe(true);
+    expect(parse("1")).toBe(true);
+    expect(() => parse("yes")).toThrow();
+  });
+});

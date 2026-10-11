@@ -17,6 +17,8 @@ pub mod db_meta;
 pub mod device_binding;
 pub mod document_archive;
 pub mod fingerprint;
+pub mod google_ipc;
+pub mod google_oauth;
 pub mod hidden_process;
 pub mod identity;
 pub mod runtime;

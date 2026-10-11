@@ -3,7 +3,7 @@ import { PageCard } from "@/components/layout/PageCard";
 import { Button } from "@/components/ui/button";
 import { Link, createFileRoute } from "@tanstack/react-router";
 import { Plus } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Input } from "@/components/ui/input";
 import { NameCombobox } from "@/components/ui/name-combobox";
 import { formatAmount } from "@/presentation/hooks/useCurrency";
@@ -21,7 +21,18 @@ function ExpensesList() {
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
   const { data: names = [] } = useExpenseNamesList();
-  const { data: list = [] } = useExpensesList({ category: cat, from, to });
+  // FE-03: the API pages at 20 — walk the pages and show the server's total, never the page length.
+  const [page, setPage] = useState(0);
+  useEffect(() => setPage(0), [cat, from, to]);
+  const { data: paginated, isFetching } = useExpensesList({
+    category: cat,
+    fromDate: from,
+    toDate: to,
+    page,
+  });
+  const list = paginated?.data ?? [];
+  const total = paginated?.total ?? list.length;
+  const hasNextPage = paginated?.hasNext ?? false;
   const cancel = useCancelExpense();
   return (
     <AppShell
@@ -58,7 +69,7 @@ function ExpensesList() {
         </div>
       </PageCard>
 
-      <PageCard title="القائمة" description={`${list.length} مصروف.`} noBodyPadding>
+      <PageCard title="القائمة" description={`${total} مصروف.`} noBodyPadding>
         <div className="w-full overflow-x-auto">
           <table className="w-full min-w-[800px] text-right text-sm">
             <thead className="bg-secondary/60 text-[11px] uppercase text-muted-foreground">
@@ -112,6 +123,32 @@ function ExpensesList() {
               )}
             </tbody>
           </table>
+        </div>
+        <div className="flex items-center justify-between gap-2 border-t border-border px-3 py-2 text-xs text-muted-foreground">
+          <span>
+            {isFetching
+              ? "جارٍ التحميل…"
+              : `إجمالي المصاريف: ${total}${hasNextPage || page > 0 ? " — تُعرض 20 مصروفاً في الصفحة" : ""}`}
+          </span>
+          <div className="flex items-center gap-1">
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={page === 0 || isFetching}
+              onClick={() => setPage((p) => Math.max(0, p - 1))}
+            >
+              السابق
+            </Button>
+            <span className="px-2 font-semibold tabular-nums">{page + 1}</span>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={!hasNextPage || isFetching}
+              onClick={() => setPage((p) => p + 1)}
+            >
+              التالي
+            </Button>
+          </div>
         </div>
       </PageCard>
     </AppShell>

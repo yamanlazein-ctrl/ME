@@ -1,6 +1,11 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
-import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  keepPreviousData,
+  useInfiniteQuery,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 import { Check, Search } from "lucide-react";
 import { toast } from "sonner";
 import { AppShell } from "@/components/layout/AppShell";
@@ -80,6 +85,9 @@ function PhysicalCountPage() {
     initialPageParam: null as string | null,
     getNextPageParam: (last) => last.nextCursor,
     staleTime: 0,
+    // Keep the rows on screen while a new search/filter loads. Without it the table unmounted for the
+    // fetch, and a count typed meanwhile (search still debouncing) was silently thrown away unsaved.
+    placeholderData: keepPreviousData,
   });
   const progress = useQuery({
     queryKey: ["count-sheet", year, "progress", since, includeEmpty],

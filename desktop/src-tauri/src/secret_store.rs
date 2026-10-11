@@ -24,6 +24,18 @@ pub struct SecretStore {
     /// alongside the application secrets and never shipped in pgdata.
     #[serde(default)]
     pub db_password: String,
+    /// Google OAuth refresh token for the Drive archive (DPAPI-encrypted at
+    /// rest via the same file). Empty = not connected. Never logged, never
+    /// sent to the frontend or the sidecar.
+    #[serde(default)]
+    pub google_refresh_token: String,
+    /// OAuth client id (not a secret for a desktop-app client; stored here so
+    /// the settings screen and token refresh agree on it).
+    #[serde(default)]
+    pub google_client_id: String,
+    /// Authorized account email (display only).
+    #[serde(default)]
+    pub google_account_email: String,
 }
 
 pub fn secrets_path() -> Result<PathBuf, String> {
@@ -159,6 +171,9 @@ pub fn load_or_generate() -> Result<SecretStore, String> {
         jwt_secret: base64_encode(&random_bytes(32)),
         app_master_key: base64_encode(&random_bytes(32)),
         db_password: generate_db_password(),
+        google_refresh_token: String::new(),
+        google_client_id: String::new(),
+        google_account_email: String::new(),
     };
     persist(&store)?;
     Ok(store)
@@ -245,6 +260,12 @@ pub fn clear_for_test() {
 /// so the boot can retire `trust` authentication on the very first launch.
 pub fn db_password() -> Result<String, String> {
     Ok(load_or_generate()?.db_password)
+}
+
+/// sha256(APP_MASTER_KEY): authenticates the runtime's own calls to /api/desktop/runtime/* (T083).
+pub fn runtime_token() -> Result<String, String> {
+    use sha2::{Digest, Sha256};
+    Ok(format!("{:x}", Sha256::digest(load_or_generate()?.app_master_key.as_bytes())))
 }
 
 fn random_bytes(n: usize) -> Vec<u8> {

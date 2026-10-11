@@ -60,27 +60,36 @@ const EXEMPT = new Set(["schema_migrations", "__drizzle_migrations", "revoked_to
  *
  * These counts are the VERIFIED runtime state produced by applying
  * `src/infrastructure/orm/rls/enable-rls.sql` to a database that has run all
- * migrations, and were re-measured after the six sync tables
- * (sync_devices / sync_outbox / sync_inbox / sync_resource_claims /
- * sync_state / document_number_blocks) were added to the tenant-scoped
- * family:
+ * migrations. They were re-measured on a live PostgreSQL 17 (2026-10-11) after
+ * `db:migrate` + `apply-rls.mjs`:
  *
- *   tenant_isolation   = 37 array entries - 1 (party_balances is dropped by
- *                        0038_drop_party_balances) = 36
- *                        (36 = 34 + sync_tombstones + sync_conflicts, added to
- *                        the canonical family by 20260914_sync_rls_canonical_policies)
+ *   tenant_isolation   = 42 array entries - 1 (party_balances is dropped by
+ *                        0038_drop_party_balances) = 41
+ *                        (the enable-rls.sql canonical array: 34 core +
+ *                        financial_years/inventory_counts + the six sync
+ *                        tables + document_number_blocks + sync_tombstones +
+ *                        sync_conflicts + attachments/audit_logs/
+ *                        ledger_entry_archive/sync_device_authorized_users/
+ *                        yearly_party_summaries)
  *   platform_or_tenant = 8
  *   tenant_directory   = 1   (tenants)
  *   platform_only      = 1   (system_admins)
- *   total              = 46 RLS-enabled business tables, each with exactly
+ *   total              = 51 RLS-enabled business tables, each with exactly
  *                        one canonical policy.
+ *
+ * RV-03: the previous value (36) was stale — five tenant-scoped tables added
+ * after the count was written (attachments, audit_logs, ledger_entry_archive,
+ * sync_device_authorized_users, yearly_party_summaries) each carry a NOT NULL
+ * tenant_id and are listed in the canonical array, so a fresh database
+ * correctly carries 41. The verifier now fails closed against the real
+ * canonical list rather than a remembered number.
  *
  * Proof command (repeat whenever the policy layer changes):
  *   select policyname, count(*) from pg_policies
  *   where schemaname='public' group by 1;
  */
 const EXPECTED_POLICIES = {
-  tenant_isolation: 36,
+  tenant_isolation: 41,
   platform_or_tenant: 8,
   tenant_directory: 1,
   platform_only: 1,

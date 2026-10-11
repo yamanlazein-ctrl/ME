@@ -174,3 +174,6 @@ desktop/retired-postgres/target-release-postgres/
 
 # Disposable cert e2e stack state/logs (tests/e2e/cert-stack.mjs)
 tests/e2e/.cert-*
+
+# TesterArmy e2e output (report, results, replay cache, app log) — e2e.config.ts
+.e2e/

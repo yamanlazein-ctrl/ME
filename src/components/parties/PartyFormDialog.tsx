@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import {
   Dialog,
   DialogContent,
@@ -9,8 +9,8 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { FormField } from "@/components/common/FormField";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -288,6 +288,8 @@ export function PartyFormDialog({
   onSubmit: (patch: Omit<SimpleParty, "id">) => void;
 }) {
   const [draft, setDraft] = useState<Draft>(() => emptyDraft(kind));
+  // Ids that tie each Select's label to its trigger (plain inputs are wired by FormField itself).
+  const fid = useId();
   const [err, setErr] = useState<string | null>(null);
   const [tab, setTab] = useState<TabId>("basic");
   const [confirmOpening, setConfirmOpening] = useState(false);
@@ -381,12 +383,12 @@ export function PartyFormDialog({
                   onChange={(e) => patch("code", e.target.value)}
                 />
               </Field>
-              <Field label="الحالة">
+              <Field label="الحالة" htmlFor={`${fid}-status`}>
                 <Select
                   value={draft.status}
                   onValueChange={(v) => patch("status", v as PartyStatus)}
                 >
-                  <SelectTrigger className="!h-10">
+                  <SelectTrigger id={`${fid}-status`} className="!h-10">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -538,12 +540,12 @@ export function PartyFormDialog({
                     onChange={(e) => patch("openingAmount", e.target.value)}
                   />
                 </Field>
-                <Field label="النوع">
+                <Field label="النوع" htmlFor={`${fid}-opening-kind`}>
                   <Select
                     value={draft.openingDirection}
                     onValueChange={(v) => patch("openingDirection", v as OpeningDirection)}
                   >
-                    <SelectTrigger className="!h-10">
+                    <SelectTrigger id={`${fid}-opening-kind`} className="!h-10">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -552,12 +554,12 @@ export function PartyFormDialog({
                     </SelectContent>
                   </Select>
                 </Field>
-                <Field label="العملة">
+                <Field label="العملة" htmlFor={`${fid}-opening-currency`}>
                   <Select
                     value={draft.openingCurrency}
                     onValueChange={(v) => patch("openingCurrency", v as OpeningCurrency)}
                   >
-                    <SelectTrigger className="!h-10">
+                    <SelectTrigger id={`${fid}-opening-currency`} className="!h-10">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -591,12 +593,12 @@ export function PartyFormDialog({
                   onChange={(e) => patch("creditLimit", e.target.value)}
                 />
               </Field>
-              <Field label="العملة الافتراضية">
+              <Field label="العملة الافتراضية" htmlFor={`${fid}-currency`}>
                 <Select
                   value={draft.currency}
                   onValueChange={(v) => patch("currency", v as Currency)}
                 >
-                  <SelectTrigger className="!h-10">
+                  <SelectTrigger id={`${fid}-currency`} className="!h-10">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -605,12 +607,12 @@ export function PartyFormDialog({
                   </SelectContent>
                 </Select>
               </Field>
-              <Field label="شروط الدفع">
+              <Field label="شروط الدفع" htmlFor={`${fid}-payment-terms`}>
                 <Select
                   value={draft.paymentTerms}
                   onValueChange={(v) => patch("paymentTerms", v as PaymentTerms)}
                 >
-                  <SelectTrigger className="!h-10">
+                  <SelectTrigger id={`${fid}-payment-terms`} className="!h-10">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -622,12 +624,12 @@ export function PartyFormDialog({
                   </SelectContent>
                 </Select>
               </Field>
-              <Field label="طريقة الدفع المفضلة">
+              <Field label="طريقة الدفع المفضلة" htmlFor={`${fid}-payment-method`}>
                 <Select
                   value={draft.paymentMethod}
                   onValueChange={(v) => patch("paymentMethod", v as PaymentMethod)}
                 >
-                  <SelectTrigger className="!h-10">
+                  <SelectTrigger id={`${fid}-payment-method`} className="!h-10">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -697,19 +699,21 @@ export function PartyFormDialog({
   );
 }
 
+/** Label tied to its control (accessible name) — see FormField. */
 function Field({
   label,
   children,
   className = "",
+  htmlFor,
 }: {
   label: string;
   children: React.ReactNode;
   className?: string;
+  htmlFor?: string;
 }) {
   return (
-    <div className={className}>
-      <Label className="mb-1 block text-[11px] font-semibold text-muted-foreground">{label}</Label>
+    <FormField label={label} className={className} htmlFor={htmlFor}>
       {children}
-    </div>
+    </FormField>
   );
 }

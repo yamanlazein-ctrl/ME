@@ -32,6 +32,9 @@ describe("resolveTenantId (F08 regression — stale company picker)", () => {
     vi.unstubAllEnvs();
   });
 
+  // RV-01: the first test dynamically imports the full UserPickerPage module tree; under parallel
+  // worker load the transform+import exceeds vitest's 5000 ms default. Targeted timeout (same
+  // pattern as dfp029-credentials.test.ts) — a global raise would hide real hangs.
   it("desktop deploy: prefers this device's own recorded activation over the baked build-time tenant", async () => {
     vi.stubEnv("VITE_DESKTOP_DEPLOY", "true");
     vi.stubEnv("VITE_DEFAULT_TENANT_ID", BAKED_BUILD_TIME_TENANT);
@@ -39,7 +42,7 @@ describe("resolveTenantId (F08 regression — stale company picker)", () => {
 
     const { resolveTenantId } = await import("./UserPickerPage");
     expect(resolveTenantId()).toBe(REAL_ACTIVATION_TENANT);
-  });
+  }, 30_000);
 
   it("desktop deploy: falls back to the baked tenant only when this device has never activated anything", async () => {
     vi.stubEnv("VITE_DESKTOP_DEPLOY", "true");

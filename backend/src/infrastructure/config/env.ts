@@ -14,14 +14,19 @@ if (process.env.DB_ENGINE === "sqlite" && explicitDatabaseUrl === undefined) {
   delete process.env.DATABASE_URL;
 }
 
-const envSchema = z.object({
+export const envSchema = z.object({
   NODE_ENV: z.enum(["development", "production", "test"]).default("development"),
   // Desktop packaging mode: the backend is launched by the Tauri sidecar on a
   // single self-contained machine. Relaxes three production boot gates that
   // assume a server operator is present to provision secrets (see gates below).
   // Does NOT relax APP_MASTER_KEY, JWT_SECRET, DATABASE_URL, CORS, or any
   // auth/RLS hardening — those still fail closed.
-  DESKTOP_DEPLOY: z.coerce.boolean().default(false),
+  // Parsed explicitly like NUMBER_BLOCKS_ENABLED: z.coerce.boolean() read "false" as true, which
+  // would silently relax the production boot gates on a hub that wrote DESKTOP_DEPLOY=false.
+  DESKTOP_DEPLOY: z
+    .enum(["true", "false", "1", "0", ""])
+    .default("false")
+    .transform((v) => v === "true" || v === "1"),
   // Offline number blocks (per-device pre-reserved ranges of document numbers).
   // OFF by default: every document number then comes from the single tenant
   // counter inside the save transaction, so numbering is gapless (0001, 0002…).

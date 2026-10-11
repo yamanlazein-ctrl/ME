@@ -1,10 +1,19 @@
 /** PostgreSQL SQL for sync materialization — moved verbatim from syncMaterialize.ts (S1). */
 /** The shared pool from drizzle.ts (structural type: only drizzle.ts may import pg — rls-guard). */
 type QueryPool = { query: (text: string, params?: unknown[]) => Promise<{ rowCount: number | null; rows: Array<Record<string, unknown>> }> };
+import { sql, type SQL } from "drizzle-orm";
 import type { ISyncMaterializeStore, SyncUserSnapshotRow } from "../../application/ports/ISyncMaterializeStore.js";
 
 export class PostgresSyncMaterializeStore implements ISyncMaterializeStore {
-  constructor(private readonly pool: QueryPool) {}
+  /**
+   * `ambient` is drizzle.ts's `txDb`: it joins the caller's `withTenantTx` when one is active.
+   * S-02: the tombstone MUST commit with the delete it records (F-03) — on the raw pool it
+   * committed on its own connection, so a failure after it left a deleted row's state split.
+   */
+  constructor(
+    private readonly pool: QueryPool,
+    private readonly ambient: { execute: (query: SQL) => Promise<unknown> },
+  ) {}
 
   async tombstoneExists(tenantId: string, entityType: string, entityId: string): Promise<boolean> {
     const r = await this.pool.query(
@@ -23,15 +32,14 @@ export class PostgresSyncMaterializeStore implements ISyncMaterializeStore {
     opId: string,
     deletedByDeviceId: string | null,
   ): Promise<void> {
-    await this.pool.query(
-      `INSERT INTO sync_tombstones
+    await this.ambient.execute(sql`
+      INSERT INTO sync_tombstones
           (id, tenant_id, entity_type, entity_id, op_id, deleted_by_device_id, deletion_seq)
-        SELECT gen_random_uuid(), $1, $2, $3, $4, $5, COALESCE(MAX(deletion_seq), 0) + 1
+        SELECT gen_random_uuid(), ${tenantId}, ${entityType}, ${entityId}, ${opId}, ${deletedByDeviceId},
+               COALESCE(MAX(deletion_seq), 0) + 1
           FROM sync_tombstones
-         WHERE tenant_id = $1
-       ON CONFLICT (tenant_id, entity_type, entity_id) DO NOTHING`,
-      [tenantId, entityType, entityId, opId, deletedByDeviceId],
-    );
+         WHERE tenant_id = ${tenantId}
+       ON CONFLICT (tenant_id, entity_type, entity_id) DO NOTHING`);
   }
 
   async upsertUserSnapshot(u: SyncUserSnapshotRow): Promise<void> {

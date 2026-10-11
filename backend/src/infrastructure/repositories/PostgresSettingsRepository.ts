@@ -13,7 +13,20 @@ const ALLOWED_SECTIONS = [
   "units",
   "warehouses",
   "printing",
+  // SS-01: the Drive archive settings section, accepted by `PUT /settings/drive` and materialized
+  // by the sync admin-snapshot path. Replicated through the hub like every other section.
+  "drive",
 ] as const;
+
+/** SS-01: `upsertSection` interpolates the section name into the SET clause, so a payload-supplied
+ * name could write the protected `id`/`tenant_id` columns (or any future column) of the settings
+ * row — re-pointing a company's settings at another tenant. Only the allowlisted sections may
+ * reach the write; everything else is refused before any SQL is issued. */
+function assertAllowedSection(section: string): void {
+  if (!(ALLOWED_SECTIONS as readonly string[]).includes(section)) {
+    throw new Error(`SETTINGS_SECTION_NOT_ALLOWED: ${section}`);
+  }
+}
 
 export class PostgresSettingsRepository implements ISettingsRepository {
   constructor(private readonly db: DB) {}
@@ -29,6 +42,7 @@ export class PostgresSettingsRepository implements ISettingsRepository {
   }
 
   async upsertSection(section: string, value: unknown, ctx: TenantContext): Promise<SettingsData> {
+    assertAllowedSection(section);
     const [existing] = await this.db
       .select()
       .from(settings)
@@ -71,6 +85,7 @@ export class PostgresSettingsRepository implements ISettingsRepository {
       units: (row.units as unknown[]) ?? [],
       warehouses: (row.warehouses as unknown[]) ?? [],
       printing: (row.printing as Record<string, unknown>) ?? {},
+      drive: (row.drive as Record<string, unknown>) ?? {},
       updatedAt: row.updatedAt.toISOString(),
     };
   }

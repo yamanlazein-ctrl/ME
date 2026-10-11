@@ -46,6 +46,8 @@ export class SqliteExpenseRepository implements IExpenseRepository {
         or(
           ilikeEscaped(expenses.number!, likeContains(filter.search)),
           ilikeEscaped(expenses.description!, likeContains(filter.search)),
+          // The expense name operators type into the global search (FE-04).
+          ilikeEscaped(expenses.category, likeContains(filter.search)),
         )!,
       );
     const where = and(...conditions);

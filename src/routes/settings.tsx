@@ -16,6 +16,7 @@ const NAV: { to: string; label: string; adminOnly?: boolean }[] = [
   { to: "/settings/users", label: "المستخدمون والصلاحيات" },
   { to: "/settings/activity", label: "سجل النشاط" },
   { to: "/settings/sync", label: "المزامنة السحابية", adminOnly: true },
+  { to: "/settings/drive", label: "أرشيف Google Drive", adminOnly: true },
 ];
 
 function SettingsLayout() {

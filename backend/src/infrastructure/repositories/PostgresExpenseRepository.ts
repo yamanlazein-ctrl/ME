@@ -42,6 +42,8 @@ export class PostgresExpenseRepository implements IExpenseRepository {
         or(
           ilike(expenses.number!, likeContains(filter.search)),
           ilike(expenses.description!, likeContains(filter.search)),
+          // The expense name operators type into the global search (FE-04).
+          ilike(expenses.category, likeContains(filter.search)),
         )!,
       );
     const where = and(...conditions);

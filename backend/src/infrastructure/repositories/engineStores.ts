@@ -41,13 +41,13 @@ export function getSyncMaterializeStore(): Promise<ISyncMaterializeStore> {
   syncMaterializeStore ??= (async () => {
     if (getEngine() === "sqlite") {
       const [{ SqliteSyncMaterializeStore }, h] = await Promise.all([import("./sqlite/SqliteSyncMaterializeStore.js"), sqliteHandles()]);
-      return new SqliteSyncMaterializeStore(h.independent);
+      return new SqliteSyncMaterializeStore(h.independent, h.ambient);
     }
-    const [{ pool }, { PostgresSyncMaterializeStore }] = await Promise.all([
+    const [{ pool, txDb }, { PostgresSyncMaterializeStore }] = await Promise.all([
       import("../orm/drizzle.js"),
       import("./PostgresSyncMaterializeStore.js"),
     ]);
-    return new PostgresSyncMaterializeStore(pool);
+    return new PostgresSyncMaterializeStore(pool, txDb);
   })();
   return syncMaterializeStore;
 }

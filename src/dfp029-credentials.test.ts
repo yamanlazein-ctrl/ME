@@ -68,5 +68,6 @@ describe("DFP-029 credential hygiene", () => {
       }
     }
     expect(hits).toEqual([]);
-  });
+    // T-07: walks three source trees; a cold full run on Windows disk exceeded vitest's 5 s default.
+  }, 30_000);
 });

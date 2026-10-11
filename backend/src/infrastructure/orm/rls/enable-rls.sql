@@ -203,6 +203,17 @@ COMMIT;
 -- ────────────────────────────────────────────────────────────────────────────
 -- 4. FORCE ROW LEVEL SECURITY (D5 / DFP-018) — restricts even table owner.
 --    Applied to every public table that carries tenant_id. Idempotent.
+--
+--    RV-03 (2026-10-11, found on a live PostgreSQL 17): this blanket loop swept
+--    up `revoked_tokens` — it carries a NULLABLE tenant_id (a revocation is not
+--    tenant-scoped work), so it matched the "has a tenant_id column" predicate
+--    and got ENABLE + FORCE RLS with NO policy. Under FORCE RLS that applies
+--    even to the table owner, so `SELECT ... FROM revoked_tokens` returned ZERO
+--    rows for the application role: `isRevoked(jti)` always answered "not
+--    revoked" and a revoked JWT stayed valid until natural expiry — the exact P0
+--    that migration 20260927_revoked_tokens_no_rls fixed. Applying this file
+--    re-broke it. The exemption is asserted here (not only in verify-rls.mjs)
+--    so the canonical layer is self-consistent.
 -- ────────────────────────────────────────────────────────────────────────────
 DO $$
 DECLARE
@@ -214,6 +225,7 @@ BEGIN
     JOIN pg_namespace n ON n.oid = c.relnamespace
     WHERE n.nspname = 'public'
       AND c.relkind = 'r'
+      AND c.relname <> 'revoked_tokens'  -- RV-03: auth denylist, readable pre-tenant (see 20260927)
       AND EXISTS (
         SELECT 1 FROM pg_attribute a
         WHERE a.attrelid = c.oid
@@ -225,6 +237,9 @@ BEGIN
     EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY', t);
     EXECUTE format('ALTER TABLE %I FORCE ROW LEVEL SECURITY', t);
   END LOOP;
+  -- RV-03: repair databases a previous run of this file already broke.
+  EXECUTE 'ALTER TABLE revoked_tokens NO FORCE ROW LEVEL SECURITY';
+  EXECUTE 'ALTER TABLE revoked_tokens DISABLE ROW LEVEL SECURITY';
 END $$;
 
 -- ============================================================================

@@ -19,6 +19,12 @@
     "allow-install-desktop-update",
     "allow-api",
     "allow-get-data-root",
-    "allow-save-backup-file"
+    "allow-save-backup-file",
+    "allow-pick-backup-file",
+    "allow-google-configure-cmd",
+    "allow-google-status-cmd",
+    "allow-google-connect-start-cmd",
+    "allow-google-connect-finish-cmd",
+    "allow-google-disconnect-cmd"
   ]
 }

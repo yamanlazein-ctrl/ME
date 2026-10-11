@@ -8,7 +8,6 @@ import type { InvoiceFilter } from "@/application/ports/IInvoiceRepository";
 import type { InvoiceData } from "@/domain/entities/Invoice";
 import type { InvoiceType } from "@/domain/types";
 import { refreshInventory } from "./useInventory";
-import { refreshParties } from "./useParties";
 import { invalidateFinancialViews } from "./invalidateFinancialViews";
 
 /**
@@ -156,10 +155,8 @@ export function useCancelInvoice() {
         toast.success("تم إلغاء الفاتورة");
         qc.invalidateQueries({ queryKey: KEYS.root });
         qc.invalidateQueries({ queryKey: KEYS.detail(res.value.id) });
-        // Party list stats (invoice counts / balances) live in a module cache
-        // that React Query alone cannot see — refresh it with financial views.
+        // Also refreshes the party-list module cache (invoice counts / balances).
         invalidateFinancialViews(qc, { refetchDashboard: true });
-        void refreshParties();
         // Invoice cancel restores stock — refresh inventory caches.
         void refreshInventory();
         qc.invalidateQueries({ queryKey: ["inventory"] });

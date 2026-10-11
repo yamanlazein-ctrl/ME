@@ -14,6 +14,7 @@ function bump4(price: string): string {
   return `${t.slice(0, -4)}.${t.slice(-4)}`;
 }
 import { runWithTenantContext } from "../src/infrastructure/orm/tenant-context.js";
+import { isSqliteRun } from "./_helpers/engine.js";
 
 describe("historical sale cost pinning", () => {
   it("keeps a captured cost when the current roll price changes", () => {
@@ -22,8 +23,14 @@ describe("historical sale cost pinning", () => {
     expect(resolveSaleCostPerKg(undefined, 3)).toBe(3);
   });
 
-  it("live: stored invoice FX/COGS stay put after roll price change and create-replay", async () => {
-    await pool.query("select 1");
+  // RV-02: this test reads whatever sale invoice the LIVE PostgreSQL database happens to hold.
+  // Under DB_ENGINE=sqlite the drizzle shim executes the same SQL against an empty per-run temp
+  // database, so the seeded-invoice precondition can never be met. `databaseReachable()` cannot
+  // detect this (the shim answers `select 1`), so the gate is the engine flag itself — this is a
+  // PostgreSQL-only check with no SQLite counterpart (the SQLite engine's cost pinning is covered
+  // by tests/sqlite/roll-adjustment.test.ts). FIN-09 policy: skip visibly, never fail vacuously.
+  it("live: stored invoice FX/COGS stay put after roll price change and create-replay", async (ctx) => {
+    if (isSqliteRun) ctx.skip("live-PostgreSQL suite — skipped under DB_ENGINE=sqlite (cost pinning covered by tests/sqlite/roll-adjustment.test.ts)");
     const row = await pool.query<{
       tenant_id: string;
       invoice_id: string;

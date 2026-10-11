@@ -1,10 +1,11 @@
-// PORTED-FROM: src/infrastructure/repositories/PostgresSyncMaterializeStore.ts sha256=fb1d875a388c2e2deece37a390e92626a67fe2957109f09764bf4eeb40ab0b36
+// PORTED-FROM: src/infrastructure/repositories/PostgresSyncMaterializeStore.ts sha256=34e7a873742ea11b32c40218f5b5ce68c354345c2943e496d7ce9bda36845d74
 // SQLite twin (specs/001-desktop-sqlite-engine S4). Keep behavior identical to the PG source.
 /**
  * Sync materialization writes on SQLite (tombstones, user snapshots).
  *
- * PG runs them on the shared pool, committing independently of the caller's transaction
- * (research I-2); here they go through `runAutonomous`. `now()` of that autonomous statement is
+ * The tombstone joins the caller's transaction (`ambient`), as on PG (S-02): it must commit or roll
+ * back with the delete it records — never be replayed alone after a rollback. The user snapshot is
+ * autonomous as on PG's shared pool (research I-2) and goes through `runAutonomous`. `now()` of that autonomous statement is
  * the transaction clock; bound timestamps keep microseconds (`$n::timestamptz` → toTimestamptzText).
  */
 import { sql } from "drizzle-orm";
@@ -15,7 +16,10 @@ import { randomUuid, toTimestamptzText } from "../../orm/sqlite/types.js";
 import type { ISyncMaterializeStore, SyncUserSnapshotRow } from "../../../application/ports/ISyncMaterializeStore.js";
 
 export class SqliteSyncMaterializeStore implements ISyncMaterializeStore {
-  constructor(private readonly db: DB) {}
+  constructor(
+    private readonly db: DB,
+    private readonly ambient: DB,
+  ) {}
 
   async tombstoneExists(tenantId: string, entityType: string, entityId: string): Promise<boolean> {
     const r = await this.db.execute(sql`
@@ -32,8 +36,7 @@ export class SqliteSyncMaterializeStore implements ISyncMaterializeStore {
     opId: string,
     deletedByDeviceId: string | null,
   ): Promise<void> {
-    await runAutonomous(async (tx) => {
-      await tx.execute(sql`
+    await this.ambient.execute(sql`
         INSERT INTO sync_tombstones
             (id, tenant_id, entity_type, entity_id, op_id, deleted_by_device_id, deletion_seq, created_at)
           SELECT ${randomUuid()}, ${tenantId}, ${entityType}, ${entityId}, ${opId}, ${deletedByDeviceId},
@@ -41,7 +44,6 @@ export class SqliteSyncMaterializeStore implements ISyncMaterializeStore {
             FROM sync_tombstones
            WHERE tenant_id = ${tenantId}
          ON CONFLICT (tenant_id, entity_type, entity_id) DO NOTHING`);
-    });
   }
 
   async upsertUserSnapshot(u: SyncUserSnapshotRow): Promise<void> {

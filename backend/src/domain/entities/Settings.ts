@@ -10,6 +10,7 @@ export interface SettingsData {
   units: unknown[];
   warehouses: unknown[];
   printing: Record<string, unknown>;
+  drive: Record<string, unknown>;
   updatedAt: string;
 }
 
@@ -27,6 +28,7 @@ export class Settings {
       units: [],
       warehouses: [],
       printing: {},
+      drive: {},
       updatedAt: "",
     });
   }

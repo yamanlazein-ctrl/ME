@@ -59,9 +59,11 @@ export class BaseHttpClient {
 
     // BUG-16 fix: generate one Idempotency-Key per logical mutating request and
     // reuse it across retries. The backend caches POST responses under this key
-    // (Redis/in-memory, 5-min TTL), so a double-fire — double-click, network
-    // retry after the server already committed — returns the cached response
-    // instead of creating a duplicate record. GETs and DELETEs are excluded.
+    // (Redis/in-memory, 5-min TTL), so a retry after the server already
+    // committed returns the cached response instead of creating a duplicate.
+    // A double-CLICK is two request() calls with two keys and is NOT deduped:
+    // submit buttons must stay disabled while saving (FE-09). GETs and DELETEs
+    // are excluded.
     const idempotencyKey =
       config.method !== "GET" && config.method !== "DELETE"
         ? ((config.headers?.["Idempotency-Key"] as string | undefined) ?? crypto.randomUUID())

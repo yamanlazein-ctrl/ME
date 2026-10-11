@@ -1168,6 +1168,7 @@ export async function receiveSyncPush(
     {
       const row = (await inbox.findByOpId(input.tenantId, input.opId)) ?? existing.row;
       if (row.status === "rejected") return await refusedAsConflict(claims, input, row);
+      if (row.status === "dead") await releaseDeadUnitClaims(claims, input);
       return {
         accepted: true,
         created: false,
@@ -1296,6 +1297,7 @@ export async function receiveSyncPush(
   {
     const row = (await inbox.findByOpId(input.tenantId, input.opId)) ?? existing.row;
     if (row.status === "rejected") return await refusedAsConflict(claims, input, row);
+    if (row.status === "dead") await releaseDeadUnitClaims(claims, input);
     return {
       accepted: true,
       created: true,
@@ -1453,6 +1455,24 @@ async function refusedAsConflict(
     conflicts: row.conflictDetail ?? null,
     row,
   };
+}
+
+/**
+ * S-04: a unit parked `dead` is never retried, so its claims can never serve a future apply (the
+ * same argument `reapTerminalSyncClaims` rests on). Release them the moment it dies instead of
+ * holding the roll against every other device until an operator reaps. Only this op's own claims:
+ * a dead cancel must not free the claims of the create it failed to cancel.
+ */
+async function releaseDeadUnitClaims(
+  claims: ISyncResourceClaimRepository,
+  input: { tenantId: UUID; opId: string },
+): Promise<void> {
+  try {
+    const n = await claims.releaseByOp(input.tenantId, input.opId);
+    if (n > 0) logger.info({ opId: input.opId, released: n }, "released resource claims of dead sync unit");
+  } catch (err) {
+    logger.warn({ err, opId: input.opId }, "releasing claims of dead unit failed");
+  }
 }
 
 async function releaseClaimsAfterApply(

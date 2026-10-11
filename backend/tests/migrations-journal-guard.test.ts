@@ -27,7 +27,9 @@ import { describe, expect, it } from "vitest";
 
 const BACKEND_ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const MIGRATIONS_DIR = join(BACKEND_ROOT, "src", "infrastructure", "orm", "migrations");
-const JOURNAL_PATH = join(MIGRATIONS_DIR, "meta", "_journal.json");
+// DB-06: the desktop (production) engine has its own journal; `sqlite/runtime.ts` applies only the
+// entries it lists, by idx, so an orphaned SQLite .sql is skipped just as silently as a PG one.
+const SQLITE_MIGRATIONS_DIR = join(BACKEND_ROOT, "src", "infrastructure", "orm", "sqlite", "migrations");
 
 interface JournalEntry {
   idx: number;
@@ -37,43 +39,46 @@ interface JournalEntry {
   breakpoints: boolean;
 }
 
-function readJournal(): { version: number; dialect: string; entries: JournalEntry[] } {
-  return JSON.parse(readFileSync(JOURNAL_PATH, "utf8"));
+function readJournal(dir = MIGRATIONS_DIR): { version: number; dialect: string; entries: JournalEntry[] } {
+  return JSON.parse(readFileSync(join(dir, "meta", "_journal.json"), "utf8"));
 }
 
-function sqlTagsOnDisk(): string[] {
-  return readdirSync(MIGRATIONS_DIR)
+function sqlTagsOnDisk(dir = MIGRATIONS_DIR): string[] {
+  return readdirSync(dir)
     .filter((f) => f.endsWith(".sql"))
     .map((f) => f.slice(0, -".sql".length));
 }
 
-describe("migration journal ↔ disk parity guards (P0-001)", () => {
+describe.each([
+  ["postgres", MIGRATIONS_DIR],
+  ["sqlite", SQLITE_MIGRATIONS_DIR],
+])("%s migration journal ↔ disk parity (P0-001 / DB-06)", (_engine, dir) => {
   it("every .sql file on disk is registered in meta/_journal.json", () => {
-    const registered = new Set(readJournal().entries.map((e) => e.tag));
+    const registered = new Set(readJournal(dir).entries.map((e) => e.tag));
 
-    const orphans = sqlTagsOnDisk().filter((tag) => !registered.has(tag));
+    const orphans = sqlTagsOnDisk(dir).filter((tag) => !registered.has(tag));
 
     expect(
       orphans,
-      `migrations present on disk but missing from _journal.json — db:migrate will never run them:\n${orphans.join("\n")}`,
+      `migrations present on disk but missing from _journal.json — the migrator will never run them:\n${orphans.join("\n")}`,
     ).toEqual([]);
   });
 
   it("every journal entry has a matching .sql file (else migrate throws)", () => {
-    const onDisk = new Set(sqlTagsOnDisk());
+    const onDisk = new Set(sqlTagsOnDisk(dir));
 
-    const dangling = readJournal()
+    const dangling = readJournal(dir)
       .entries.map((e) => e.tag)
       .filter((tag) => !onDisk.has(tag));
 
     expect(
       dangling,
-      `journal entries without a .sql file — readMigrationFiles() throws on these:\n${dangling.join("\n")}`,
+      `journal entries without a .sql file — the migrator throws on these:\n${dangling.join("\n")}`,
     ).toEqual([]);
   });
 
   it("journal idx is sequential and `when` is strictly ascending", () => {
-    const { entries } = readJournal();
+    const { entries } = readJournal(dir);
 
     const badIdx = entries
       .filter((e, i) => e.idx !== i)
@@ -91,7 +96,9 @@ describe("migration journal ↔ disk parity guards (P0-001)", () => {
       `journal \`when\` is not strictly ascending — the migrator's skip check compares it against __drizzle_migrations.created_at:\n${badWhen.join("\n")}`,
     ).toEqual([]);
   });
+});
 
+describe("migration journal ↔ disk parity guards (P0-001)", () => {
   it("drizzle's own migrator resolves every journal entry, carrying `when` through", () => {
     const { entries } = readJournal();
     const migrations = readMigrationFiles({ migrationsFolder: MIGRATIONS_DIR });

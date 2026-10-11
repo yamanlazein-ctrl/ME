@@ -13,21 +13,25 @@ const KEYS = {
   names: ["expenses", "names"] as const,
 };
 
-/** `opts.all`: page through the API and return every matching expense. */
+/**
+ * One server page (`{ data, total, hasNext }` — the API defaults to 20 rows) so screens show the true
+ * total, not the page length (FE-03). `opts.all`: page through the API and return every match.
+ */
 export function useExpensesList(filter?: ExpenseFilter, opts?: { all?: boolean }) {
   const all = Boolean(opts?.all);
   return useQuery({
     queryKey: all ? [...KEYS.list(filter), "all"] : KEYS.list(filter),
-    queryFn: ({ signal }) => {
+    queryFn: async ({ signal }) => {
       void signal;
       if (all) {
-        return fetchAllPaged(
+        const data = await fetchAllPaged(
           (page, limit, cursor) =>
             container.expenses.list.page({ ...(filter ?? {}), page, limit, cursor } as ExpenseFilter),
           { pageSize: 1000, label: "expenses" },
         );
+        return { data, total: data.length, hasNext: false };
       }
-      return container.expenses.list.execute(filter);
+      return container.expenses.list.page(filter ?? {});
     },
   });
 }

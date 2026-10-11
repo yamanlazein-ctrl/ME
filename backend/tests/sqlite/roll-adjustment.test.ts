@@ -253,4 +253,35 @@ describe("manual roll adjustment", () => {
     await run((t) => h.applyRollAdjustment(t, ctx, input(id, 5, 1, null))); // replayed from another device
     expect(await roll(id)).toMatchObject({ kg: 75, pieces: 11, version: 3 });
   });
+
+  // S-01: the hub/device commits the delta, then marks the inbox row applied in a SEPARATE step. A crash
+  // (or 5xx) in between leaves the row `received` and the next push/pull replays the very same unit.
+  it("the same adjustment delivered twice applies once — kg, pieces, movement, P&L leg (S-01)", async () => {
+    const id = await newRoll();
+    const { materializeSyncUnit } = await import("@/application/use-cases/sync/syncMaterialize.js");
+    const unit = {
+      entityType: "roll",
+      operation: "adjust",
+      payload: {
+        rollId: id, deltaKg: -4, deltaPieces: 1, reason: "عجز", date: "2026-03-02",
+        referenceType: "inventory_adjustment", referenceId: randomUUID(), referenceNumber: "ADJ-DUP",
+      },
+    };
+    const meta = { opId: randomUUID() };
+    expect((await materializeSyncUnit({} as never, {} as never, unit, ctx, meta)).status).toBe("created");
+    expect((await materializeSyncUnit({} as never, {} as never, unit, ctx, meta)).status).toBe("exists");
+    expect(await roll(id)).toMatchObject({ kg: 96, pieces: 11, version: 2 });
+    const ref = unit.payload.referenceId;
+    expect((await q(sql`SELECT id FROM stock_movements WHERE reference_id = ${ref}`)).length).toBe(1);
+    expect((await q(sql`SELECT id FROM ledger_entries WHERE reference_id = ${ref}`)).length).toBe(1);
+  });
+
+  it("a pieces-only adjustment delivered twice applies once (S-01: no movement row to key on)", async () => {
+    const id = await newRoll();
+    const adj = { ...input(id, 0, 3, null), syncOpId: randomUUID() };
+    await run((t) => h.applyRollAdjustment(t, ctx, adj));
+    const again = await run((t) => h.applyRollAdjustment(t, ctx, adj));
+    expect(again).toMatchObject({ alreadyApplied: true });
+    expect(await roll(id)).toMatchObject({ kg: 100, pieces: 13, version: 2 });
+  });
 });

@@ -5,7 +5,7 @@ const options = {
   test: {
     globals: true,
     environment: "node",
-    include: ["src/**/*.test.ts", "src/**/*.test.tsx"],
+    include: ["src/**/*.test.ts", "src/**/*.test.tsx", "packages/shared/src/**/*.test.ts"],
     exclude: ["node_modules", "dist", ".output"],
   },
   resolve: {

@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useId } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { PageCard } from "@/components/layout/PageCard";
 import { Button } from "@/components/ui/button";
@@ -89,6 +89,8 @@ export function VoucherForm({
   const { data: editing } = useVoucher(editId ?? "");
   const isReceipt = kind === "receipt";
   const [partyId, setPartyId] = useState(initialPartyId ?? "");
+  // Ties each Select / notes label to its control (plain inputs are wired by FormField itself).
+  const fid = useId();
   const [invoiceId, setInvoiceId] = useState<string>(initialInvoiceId ?? "");
   const [amount, setAmount] = useState<number | "">("");
   const [discount, setDiscount] = useState<number | "">("");
@@ -389,13 +391,13 @@ export function VoucherForm({
               placeholder={isReceipt ? "اختر العميل" : "اختر المورد"}
             />
           </FormField>
-          <Field label="الفاتورة المرتبطة (اختياري)">
+          <Field label="الفاتورة المرتبطة (اختياري)" htmlFor={`${fid}-invoice`}>
             <Select
               value={invoiceId || "none"}
               onValueChange={(v) => setInvoiceId(v === "none" ? "" : v)}
               disabled={!partyId}
             >
-              <SelectTrigger className="!h-10">
+              <SelectTrigger id={`${fid}-invoice`} className="!h-10">
                 <SelectValue placeholder="دفعة على الحساب" />
               </SelectTrigger>
               <SelectContent>
@@ -517,9 +519,9 @@ export function VoucherForm({
               </p>
             ) : null}
           </FormField>
-          <Field label="العملة">
+          <Field label="العملة" htmlFor={`${fid}-currency`}>
             <Select value={currency} onValueChange={(v) => setCurrency(v as Currency)}>
-              <SelectTrigger className="!h-10">
+              <SelectTrigger id={`${fid}-currency`} className="!h-10">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -570,9 +572,9 @@ export function VoucherForm({
               </FormField>
             </div>
           )}
-          <Field label={isReceipt ? "طريقة الاستلام" : "طريقة الدفع"}>
+          <Field label={isReceipt ? "طريقة الاستلام" : "طريقة الدفع"} htmlFor={`${fid}-method`}>
             <Select value={method} onValueChange={(v) => setMethod(v as VoucherMethod)}>
-              <SelectTrigger className="!h-10">
+              <SelectTrigger id={`${fid}-method`} className="!h-10">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -591,14 +593,25 @@ export function VoucherForm({
       >
         <div className="grid gap-3 md:grid-cols-2">
           <div>
-            <Label className="text-[11px] text-muted-foreground">ملاحظات الفاتورة (تُطبع)</Label>
-            <Textarea rows={3} value={notesPrint} onChange={(e) => setNotesPrint(e.target.value)} />
+            <Label htmlFor={`${fid}-notes-print`} className="text-[11px] text-muted-foreground">
+              ملاحظات الفاتورة (تُطبع)
+            </Label>
+            <Textarea
+              id={`${fid}-notes-print`}
+              rows={3}
+              value={notesPrint}
+              onChange={(e) => setNotesPrint(e.target.value)}
+            />
           </div>
           <div>
-            <Label className="text-[11px] text-muted-foreground flex items-center gap-1">
+            <Label
+              htmlFor={`${fid}-notes-internal`}
+              className="text-[11px] text-muted-foreground flex items-center gap-1"
+            >
               <Lock className="h-3 w-3" /> ملاحظات داخلية (لا تُطبع)
             </Label>
             <Textarea
+              id={`${fid}-notes-internal`}
               rows={3}
               value={notesInternal}
               onChange={(e) => setNotesInternal(e.target.value)}
@@ -653,11 +666,19 @@ export function VoucherForm({
   );
 }
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
+/** Label tied to its control (accessible name) — see FormField. */
+function Field({
+  label,
+  children,
+  htmlFor,
+}: {
+  label: string;
+  children: React.ReactNode;
+  htmlFor?: string;
+}) {
   return (
-    <div>
-      <Label className="mb-1 block text-[11px] font-semibold text-muted-foreground">{label}</Label>
+    <FormField label={label} htmlFor={htmlFor}>
       {children}
-    </div>
+    </FormField>
   );
 }

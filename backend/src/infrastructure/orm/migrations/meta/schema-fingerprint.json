@@ -1,178 +1,6 @@
 {
-  "journalIdx": 101,
+  "journalIdx": 102,
   "tables": {
-    "system_admins": {
-      "columns": {
-        "id": {
-          "type": "uuid",
-          "nullable": false,
-          "default": "gen_random_uuid()"
-        },
-        "email": {
-          "type": "character varying(320)",
-          "nullable": false,
-          "default": null
-        },
-        "password_hash": {
-          "type": "character varying(255)",
-          "nullable": false,
-          "default": null
-        },
-        "name": {
-          "type": "character varying(255)",
-          "nullable": true,
-          "default": null
-        },
-        "role": {
-          "type": "character varying(20)",
-          "nullable": false,
-          "default": "'super_admin'::character varying"
-        },
-        "created_at": {
-          "type": "timestamp with time zone",
-          "nullable": false,
-          "default": "now()"
-        },
-        "updated_at": {
-          "type": "timestamp with time zone",
-          "nullable": false,
-          "default": "now()"
-        }
-      }
-    },
-    "idempotency_keys": {
-      "columns": {
-        "id": {
-          "type": "bigint",
-          "nullable": false,
-          "default": "nextval('idempotency_keys_id_seq'::regclass)"
-        },
-        "tenant_id": {
-          "type": "uuid",
-          "nullable": false,
-          "default": null
-        },
-        "method": {
-          "type": "character varying(10)",
-          "nullable": false,
-          "default": null
-        },
-        "path": {
-          "type": "text",
-          "nullable": false,
-          "default": null
-        },
-        "idempotency_key": {
-          "type": "character varying(200)",
-          "nullable": false,
-          "default": null
-        },
-        "status_code": {
-          "type": "integer",
-          "nullable": false,
-          "default": null
-        },
-        "response_body": {
-          "type": "jsonb",
-          "nullable": true,
-          "default": null
-        },
-        "content_type": {
-          "type": "character varying(100)",
-          "nullable": false,
-          "default": "'application/json; charset=utf-8'::character varying"
-        },
-        "created_at": {
-          "type": "timestamp with time zone",
-          "nullable": false,
-          "default": "now()"
-        },
-        "expires_at": {
-          "type": "timestamp with time zone",
-          "nullable": false,
-          "default": null
-        }
-      }
-    },
-    "stock_movements": {
-      "columns": {
-        "id": {
-          "type": "uuid",
-          "nullable": false,
-          "default": "gen_random_uuid()"
-        },
-        "tenant_id": {
-          "type": "uuid",
-          "nullable": false,
-          "default": null
-        },
-        "roll_id": {
-          "type": "uuid",
-          "nullable": false,
-          "default": null
-        },
-        "direction": {
-          "type": "character varying(10)",
-          "nullable": false,
-          "default": null
-        },
-        "movement_type": {
-          "type": "character varying(30)",
-          "nullable": false,
-          "default": null
-        },
-        "quantity_kg": {
-          "type": "numeric(12,2)",
-          "nullable": false,
-          "default": null
-        },
-        "balance_after_kg": {
-          "type": "numeric(12,2)",
-          "nullable": false,
-          "default": null
-        },
-        "reference_type": {
-          "type": "character varying(50)",
-          "nullable": true,
-          "default": null
-        },
-        "reference_id": {
-          "type": "uuid",
-          "nullable": true,
-          "default": null
-        },
-        "reference_number": {
-          "type": "character varying(100)",
-          "nullable": true,
-          "default": null
-        },
-        "movement_date": {
-          "type": "date",
-          "nullable": false,
-          "default": null
-        },
-        "description": {
-          "type": "text",
-          "nullable": true,
-          "default": null
-        },
-        "status": {
-          "type": "character varying(20)",
-          "nullable": false,
-          "default": "'active'::character varying"
-        },
-        "created_by": {
-          "type": "uuid",
-          "nullable": true,
-          "default": null
-        },
-        "created_at": {
-          "type": "timestamp with time zone",
-          "nullable": false,
-          "default": "now()"
-        }
-      }
-    },
     "tenants": {
       "columns": {
         "id": {
@@ -327,272 +155,6 @@
         }
       }
     },
-    "schema_migrations": {
-      "columns": {
-        "version": {
-          "type": "character varying(20)",
-          "nullable": false,
-          "default": null
-        },
-        "applied_at": {
-          "type": "timestamp with time zone",
-          "nullable": false,
-          "default": "now()"
-        },
-        "applied_by": {
-          "type": "character varying(255)",
-          "nullable": true,
-          "default": null
-        },
-        "description": {
-          "type": "text",
-          "nullable": true,
-          "default": null
-        },
-        "checksum": {
-          "type": "character varying(64)",
-          "nullable": true,
-          "default": null
-        },
-        "success": {
-          "type": "boolean",
-          "nullable": false,
-          "default": "true"
-        }
-      }
-    },
-    "attachments": {
-      "columns": {
-        "id": {
-          "type": "uuid",
-          "nullable": false,
-          "default": "uuid_generate_v4()"
-        },
-        "tenant_id": {
-          "type": "uuid",
-          "nullable": false,
-          "default": null
-        },
-        "entity_type": {
-          "type": "character varying(50)",
-          "nullable": false,
-          "default": null
-        },
-        "entity_id": {
-          "type": "uuid",
-          "nullable": false,
-          "default": null
-        },
-        "filename": {
-          "type": "character varying(500)",
-          "nullable": false,
-          "default": null
-        },
-        "mime_type": {
-          "type": "character varying(255)",
-          "nullable": true,
-          "default": null
-        },
-        "size_bytes": {
-          "type": "bigint",
-          "nullable": true,
-          "default": null
-        },
-        "storage_key": {
-          "type": "character varying(500)",
-          "nullable": false,
-          "default": null
-        },
-        "storage_url": {
-          "type": "text",
-          "nullable": true,
-          "default": null
-        },
-        "uploaded_by": {
-          "type": "uuid",
-          "nullable": true,
-          "default": null
-        },
-        "created_at": {
-          "type": "timestamp with time zone",
-          "nullable": false,
-          "default": "now()"
-        }
-      }
-    },
-    "audit_logs": {
-      "columns": {
-        "id": {
-          "type": "bigint",
-          "nullable": false,
-          "default": "nextval('audit_logs_id_seq'::regclass)"
-        },
-        "tenant_id": {
-          "type": "uuid",
-          "nullable": false,
-          "default": null
-        },
-        "actor_id": {
-          "type": "uuid",
-          "nullable": true,
-          "default": null
-        },
-        "actor_name": {
-          "type": "character varying(255)",
-          "nullable": true,
-          "default": null
-        },
-        "module": {
-          "type": "character varying(50)",
-          "nullable": false,
-          "default": null
-        },
-        "action": {
-          "type": "character varying(50)",
-          "nullable": false,
-          "default": null
-        },
-        "entity_type": {
-          "type": "character varying(50)",
-          "nullable": true,
-          "default": null
-        },
-        "entity_id": {
-          "type": "uuid",
-          "nullable": true,
-          "default": null
-        },
-        "detail": {
-          "type": "text",
-          "nullable": true,
-          "default": null
-        },
-        "before_snapshot": {
-          "type": "jsonb",
-          "nullable": true,
-          "default": null
-        },
-        "after_snapshot": {
-          "type": "jsonb",
-          "nullable": true,
-          "default": null
-        },
-        "ip_address": {
-          "type": "inet",
-          "nullable": true,
-          "default": null
-        },
-        "created_at": {
-          "type": "timestamp with time zone",
-          "nullable": false,
-          "default": "now()"
-        }
-      }
-    },
-    "returns": {
-      "columns": {
-        "id": {
-          "type": "uuid",
-          "nullable": false,
-          "default": "uuid_generate_v4()"
-        },
-        "tenant_id": {
-          "type": "uuid",
-          "nullable": false,
-          "default": null
-        },
-        "number": {
-          "type": "character varying(50)",
-          "nullable": false,
-          "default": null
-        },
-        "kind": {
-          "type": "character varying(10)",
-          "nullable": false,
-          "default": null
-        },
-        "date": {
-          "type": "date",
-          "nullable": false,
-          "default": null
-        },
-        "party_id": {
-          "type": "uuid",
-          "nullable": false,
-          "default": null
-        },
-        "original_invoice_id": {
-          "type": "uuid",
-          "nullable": true,
-          "default": null
-        },
-        "reason": {
-          "type": "character varying(20)",
-          "nullable": false,
-          "default": null
-        },
-        "currency": {
-          "type": "character varying(3)",
-          "nullable": false,
-          "default": "'SYP'::character varying"
-        },
-        "notes_print": {
-          "type": "text",
-          "nullable": true,
-          "default": null
-        },
-        "notes_internal": {
-          "type": "text",
-          "nullable": true,
-          "default": null
-        },
-        "status": {
-          "type": "character varying(20)",
-          "nullable": false,
-          "default": "'active'::character varying"
-        },
-        "version": {
-          "type": "integer",
-          "nullable": false,
-          "default": "1"
-        },
-        "created_at": {
-          "type": "timestamp with time zone",
-          "nullable": false,
-          "default": "now()"
-        },
-        "created_by": {
-          "type": "uuid",
-          "nullable": true,
-          "default": null
-        },
-        "cancelled_at": {
-          "type": "timestamp with time zone",
-          "nullable": true,
-          "default": null
-        },
-        "cancelled_by": {
-          "type": "uuid",
-          "nullable": true,
-          "default": null
-        },
-        "exchange_rate": {
-          "type": "numeric(18,6)",
-          "nullable": true,
-          "default": null
-        },
-        "base_total": {
-          "type": "numeric(14,2)",
-          "nullable": true,
-          "default": null
-        },
-        "client_operation_id": {
-          "type": "uuid",
-          "nullable": true,
-          "default": null
-        }
-      }
-    },
     "fabrics": {
       "columns": {
         "id": {
@@ -657,7 +219,7 @@
         }
       }
     },
-    "orders": {
+    "colors": {
       "columns": {
         "id": {
           "type": "uuid",
@@ -669,50 +231,193 @@
           "nullable": false,
           "default": null
         },
-        "code": {
-          "type": "character varying(50)",
+        "fabric_id": {
+          "type": "uuid",
           "nullable": false,
           "default": null
         },
-        "customer_id": {
-          "type": "uuid",
-          "nullable": true,
-          "default": null
-        },
-        "customer_name_snapshot": {
+        "name": {
           "type": "character varying(255)",
           "nullable": false,
           "default": null
         },
-        "customer_phone_snapshot": {
-          "type": "character varying(30)",
+        "code": {
+          "type": "character varying(50)",
           "nullable": true,
           "default": null
         },
-        "date": {
-          "type": "date",
+        "image_url": {
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        "created_at": {
+          "type": "timestamp with time zone",
+          "nullable": false,
+          "default": "now()"
+        },
+        "updated_at": {
+          "type": "timestamp with time zone",
+          "nullable": false,
+          "default": "now()"
+        },
+        "hex": {
+          "type": "character varying(9)",
+          "nullable": true,
+          "default": null
+        },
+        "version": {
+          "type": "integer",
+          "nullable": false,
+          "default": "1"
+        }
+      }
+    },
+    "users": {
+      "columns": {
+        "id": {
+          "type": "uuid",
+          "nullable": false,
+          "default": "uuid_generate_v4()"
+        },
+        "tenant_id": {
+          "type": "uuid",
           "nullable": false,
           "default": null
         },
-        "status": {
+        "name": {
+          "type": "character varying(255)",
+          "nullable": false,
+          "default": null
+        },
+        "email": {
+          "type": "character varying(320)",
+          "nullable": false,
+          "default": null
+        },
+        "password_hash": {
+          "type": "character varying(255)",
+          "nullable": false,
+          "default": null
+        },
+        "role": {
           "type": "character varying(20)",
           "nullable": false,
-          "default": "'open'::character varying"
+          "default": null
+        },
+        "active": {
+          "type": "boolean",
+          "nullable": false,
+          "default": "true"
+        },
+        "permissions": {
+          "type": "jsonb",
+          "nullable": true,
+          "default": "'[]'::jsonb"
+        },
+        "created_at": {
+          "type": "timestamp with time zone",
+          "nullable": false,
+          "default": "now()"
+        },
+        "updated_at": {
+          "type": "timestamp with time zone",
+          "nullable": false,
+          "default": "now()"
+        },
+        "is_license_owner": {
+          "type": "boolean",
+          "nullable": false,
+          "default": "false"
+        },
+        "pin_hash": {
+          "type": "character varying(255)",
+          "nullable": true,
+          "default": null
+        },
+        "tokens_revoked_before": {
+          "type": "timestamp with time zone",
+          "nullable": true,
+          "default": null
+        }
+      }
+    },
+    "rolls": {
+      "columns": {
+        "id": {
+          "type": "uuid",
+          "nullable": false,
+          "default": "uuid_generate_v4()"
+        },
+        "tenant_id": {
+          "type": "uuid",
+          "nullable": false,
+          "default": null
+        },
+        "color_id": {
+          "type": "uuid",
+          "nullable": false,
+          "default": null
+        },
+        "roll_no": {
+          "type": "character varying(100)",
+          "nullable": false,
+          "default": null
+        },
+        "dye_batch": {
+          "type": "character varying(100)",
+          "nullable": true,
+          "default": null
+        },
+        "initial_kg": {
+          "type": "numeric(12,2)",
+          "nullable": false,
+          "default": null
+        },
+        "remaining_kg": {
+          "type": "numeric(12,2)",
+          "nullable": false,
+          "default": null
+        },
+        "price_per_kg": {
+          "type": "numeric(14,4)",
+          "nullable": false,
+          "default": null
+        },
+        "sale_price_per_kg": {
+          "type": "numeric(12,2)",
+          "nullable": true,
+          "default": null
         },
         "currency": {
           "type": "character varying(3)",
           "nullable": false,
           "default": "'SYP'::character varying"
         },
-        "notes": {
-          "type": "text",
-          "nullable": true,
-          "default": null
-        },
-        "fulfilled_invoice_id": {
+        "supplier_id": {
           "type": "uuid",
           "nullable": true,
           "default": null
+        },
+        "entry_date": {
+          "type": "date",
+          "nullable": false,
+          "default": null
+        },
+        "width_cm": {
+          "type": "numeric(7,2)",
+          "nullable": true,
+          "default": null
+        },
+        "weight_gsm": {
+          "type": "numeric(7,2)",
+          "nullable": true,
+          "default": null
+        },
+        "status": {
+          "type": "character varying(20)",
+          "nullable": false,
+          "default": "'in_stock'::character varying"
         },
         "version": {
           "type": "integer",
@@ -728,148 +433,36 @@
           "type": "timestamp with time zone",
           "nullable": false,
           "default": "now()"
-        }
-      }
-    },
-    "document_sequences": {
-      "columns": {
-        "id": {
-          "type": "uuid",
+        },
+        "pieces": {
+          "type": "integer",
           "nullable": false,
-          "default": "uuid_generate_v4()"
+          "default": "1"
         },
-        "tenant_id": {
-          "type": "uuid",
-          "nullable": false,
-          "default": null
-        },
-        "entity_type": {
-          "type": "character varying(30)",
-          "nullable": false,
-          "default": null
-        },
-        "prefix": {
-          "type": "character varying(10)",
-          "nullable": true,
-          "default": null
-        },
-        "last_number": {
-          "type": "bigint",
+        "remaining_pieces": {
+          "type": "integer",
           "nullable": false,
           "default": "0"
-        }
-      }
-    },
-    "notifications": {
-      "columns": {
-        "id": {
-          "type": "uuid",
-          "nullable": false,
-          "default": "uuid_generate_v4()"
         },
-        "tenant_id": {
-          "type": "uuid",
-          "nullable": false,
-          "default": null
-        },
-        "user_id": {
-          "type": "uuid",
+        "entry_price_per_kg": {
+          "type": "numeric(14,4)",
           "nullable": true,
           "default": null
         },
-        "title": {
-          "type": "character varying(255)",
-          "nullable": false,
-          "default": null
-        },
-        "detail": {
-          "type": "text",
+        "entry_currency": {
+          "type": "character varying(3)",
           "nullable": true,
           "default": null
         },
-        "kind": {
+        "entry_source": {
           "type": "character varying(20)",
-          "nullable": false,
-          "default": null
-        },
-        "severity": {
-          "type": "character varying(10)",
-          "nullable": false,
-          "default": null
-        },
-        "target_path": {
-          "type": "character varying(500)",
           "nullable": true,
           "default": null
         },
-        "is_read": {
-          "type": "boolean",
-          "nullable": false,
-          "default": "false"
-        },
-        "is_dismissed": {
-          "type": "boolean",
-          "nullable": false,
-          "default": "false"
-        },
-        "created_at": {
-          "type": "timestamp with time zone",
-          "nullable": false,
-          "default": "now()"
-        }
-      }
-    },
-    "settings": {
-      "columns": {
-        "id": {
-          "type": "uuid",
-          "nullable": false,
-          "default": "uuid_generate_v4()"
-        },
-        "tenant_id": {
-          "type": "uuid",
-          "nullable": false,
+        "entry_reference": {
+          "type": "character varying(100)",
+          "nullable": true,
           "default": null
-        },
-        "company": {
-          "type": "jsonb",
-          "nullable": true,
-          "default": "'{}'::jsonb"
-        },
-        "currencies": {
-          "type": "jsonb",
-          "nullable": true,
-          "default": "'[]'::jsonb"
-        },
-        "payment_methods": {
-          "type": "jsonb",
-          "nullable": true,
-          "default": "'[]'::jsonb"
-        },
-        "taxes": {
-          "type": "jsonb",
-          "nullable": true,
-          "default": "'[]'::jsonb"
-        },
-        "units": {
-          "type": "jsonb",
-          "nullable": true,
-          "default": "'[]'::jsonb"
-        },
-        "warehouses": {
-          "type": "jsonb",
-          "nullable": true,
-          "default": "'[]'::jsonb"
-        },
-        "printing": {
-          "type": "jsonb",
-          "nullable": true,
-          "default": "'{}'::jsonb"
-        },
-        "updated_at": {
-          "type": "timestamp with time zone",
-          "nullable": false,
-          "default": "now()"
         }
       }
     },
@@ -1007,7 +600,7 @@
         }
       }
     },
-    "expenses": {
+    "invoice_lines": {
       "columns": {
         "id": {
           "type": "uuid",
@@ -1019,57 +612,42 @@
           "nullable": false,
           "default": null
         },
-        "number": {
-          "type": "character varying(50)",
+        "invoice_id": {
+          "type": "uuid",
           "nullable": false,
           "default": null
         },
-        "category": {
-          "type": "character varying(100)",
+        "fabric_id": {
+          "type": "uuid",
           "nullable": false,
           "default": null
         },
-        "description": {
-          "type": "text",
+        "color_id": {
+          "type": "uuid",
           "nullable": false,
           "default": null
         },
-        "amount": {
+        "roll_id": {
+          "type": "uuid",
+          "nullable": false,
+          "default": null
+        },
+        "quantity_kg": {
+          "type": "numeric(12,2)",
+          "nullable": false,
+          "default": null
+        },
+        "price_per_kg": {
+          "type": "numeric(12,2)",
+          "nullable": false,
+          "default": null
+        },
+        "discount_amount": {
           "type": "numeric(14,2)",
           "nullable": false,
-          "default": null
+          "default": "0"
         },
-        "currency": {
-          "type": "character varying(3)",
-          "nullable": false,
-          "default": "'SYP'::character varying"
-        },
-        "date": {
-          "type": "date",
-          "nullable": false,
-          "default": null
-        },
-        "method": {
-          "type": "character varying(20)",
-          "nullable": false,
-          "default": null
-        },
-        "paid_from_cashbox": {
-          "type": "boolean",
-          "nullable": false,
-          "default": "true"
-        },
-        "status": {
-          "type": "character varying(20)",
-          "nullable": false,
-          "default": "'active'::character varying"
-        },
-        "notes_print": {
-          "type": "text",
-          "nullable": true,
-          "default": null
-        },
-        "notes_internal": {
+        "note": {
           "type": "text",
           "nullable": true,
           "default": null
@@ -1079,17 +657,71 @@
           "nullable": false,
           "default": "now()"
         },
-        "created_by": {
+        "pieces": {
+          "type": "integer",
+          "nullable": false,
+          "default": "1"
+        },
+        "cost_per_kg": {
+          "type": "numeric(14,4)",
+          "nullable": true,
+          "default": null
+        }
+      }
+    },
+    "orders": {
+      "columns": {
+        "id": {
+          "type": "uuid",
+          "nullable": false,
+          "default": "uuid_generate_v4()"
+        },
+        "tenant_id": {
+          "type": "uuid",
+          "nullable": false,
+          "default": null
+        },
+        "code": {
+          "type": "character varying(50)",
+          "nullable": false,
+          "default": null
+        },
+        "customer_id": {
           "type": "uuid",
           "nullable": true,
           "default": null
         },
-        "cancelled_at": {
-          "type": "timestamp with time zone",
+        "customer_name_snapshot": {
+          "type": "character varying(255)",
+          "nullable": false,
+          "default": null
+        },
+        "customer_phone_snapshot": {
+          "type": "character varying(30)",
           "nullable": true,
           "default": null
         },
-        "cancelled_by": {
+        "date": {
+          "type": "date",
+          "nullable": false,
+          "default": null
+        },
+        "status": {
+          "type": "character varying(20)",
+          "nullable": false,
+          "default": "'open'::character varying"
+        },
+        "currency": {
+          "type": "character varying(3)",
+          "nullable": false,
+          "default": "'SYP'::character varying"
+        },
+        "notes": {
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        "fulfilled_invoice_id": {
           "type": "uuid",
           "nullable": true,
           "default": null
@@ -1099,15 +731,89 @@
           "nullable": false,
           "default": "1"
         },
-        "updated_at": {
+        "created_at": {
           "type": "timestamp with time zone",
           "nullable": false,
           "default": "now()"
         },
-        "client_operation_id": {
+        "updated_at": {
+          "type": "timestamp with time zone",
+          "nullable": false,
+          "default": "now()"
+        }
+      }
+    },
+    "order_items": {
+      "columns": {
+        "id": {
+          "type": "uuid",
+          "nullable": false,
+          "default": "uuid_generate_v4()"
+        },
+        "tenant_id": {
+          "type": "uuid",
+          "nullable": false,
+          "default": null
+        },
+        "order_id": {
+          "type": "uuid",
+          "nullable": false,
+          "default": null
+        },
+        "fabric_id": {
           "type": "uuid",
           "nullable": true,
           "default": null
+        },
+        "fabric_name": {
+          "type": "character varying(255)",
+          "nullable": false,
+          "default": null
+        },
+        "color_id": {
+          "type": "uuid",
+          "nullable": true,
+          "default": null
+        },
+        "color_name": {
+          "type": "character varying(255)",
+          "nullable": false,
+          "default": null
+        },
+        "color_code": {
+          "type": "character varying(50)",
+          "nullable": true,
+          "default": null
+        },
+        "requested_kg": {
+          "type": "numeric(12,2)",
+          "nullable": false,
+          "default": null
+        },
+        "width_cm": {
+          "type": "numeric(7,2)",
+          "nullable": true,
+          "default": null
+        },
+        "weight_gsm": {
+          "type": "numeric(7,2)",
+          "nullable": true,
+          "default": null
+        },
+        "notes": {
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        "roll_id": {
+          "type": "uuid",
+          "nullable": true,
+          "default": null
+        },
+        "pieces": {
+          "type": "integer",
+          "nullable": false,
+          "default": "1"
         }
       }
     },
@@ -1227,6 +933,752 @@
           "type": "uuid",
           "nullable": true,
           "default": null
+        }
+      }
+    },
+    "returns": {
+      "columns": {
+        "id": {
+          "type": "uuid",
+          "nullable": false,
+          "default": "uuid_generate_v4()"
+        },
+        "tenant_id": {
+          "type": "uuid",
+          "nullable": false,
+          "default": null
+        },
+        "number": {
+          "type": "character varying(50)",
+          "nullable": false,
+          "default": null
+        },
+        "kind": {
+          "type": "character varying(10)",
+          "nullable": false,
+          "default": null
+        },
+        "date": {
+          "type": "date",
+          "nullable": false,
+          "default": null
+        },
+        "party_id": {
+          "type": "uuid",
+          "nullable": false,
+          "default": null
+        },
+        "original_invoice_id": {
+          "type": "uuid",
+          "nullable": true,
+          "default": null
+        },
+        "reason": {
+          "type": "character varying(20)",
+          "nullable": false,
+          "default": null
+        },
+        "currency": {
+          "type": "character varying(3)",
+          "nullable": false,
+          "default": "'SYP'::character varying"
+        },
+        "notes_print": {
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        "notes_internal": {
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        "status": {
+          "type": "character varying(20)",
+          "nullable": false,
+          "default": "'active'::character varying"
+        },
+        "version": {
+          "type": "integer",
+          "nullable": false,
+          "default": "1"
+        },
+        "created_at": {
+          "type": "timestamp with time zone",
+          "nullable": false,
+          "default": "now()"
+        },
+        "created_by": {
+          "type": "uuid",
+          "nullable": true,
+          "default": null
+        },
+        "cancelled_at": {
+          "type": "timestamp with time zone",
+          "nullable": true,
+          "default": null
+        },
+        "cancelled_by": {
+          "type": "uuid",
+          "nullable": true,
+          "default": null
+        },
+        "exchange_rate": {
+          "type": "numeric(18,6)",
+          "nullable": true,
+          "default": null
+        },
+        "base_total": {
+          "type": "numeric(14,2)",
+          "nullable": true,
+          "default": null
+        },
+        "client_operation_id": {
+          "type": "uuid",
+          "nullable": true,
+          "default": null
+        }
+      }
+    },
+    "return_lines": {
+      "columns": {
+        "id": {
+          "type": "uuid",
+          "nullable": false,
+          "default": "uuid_generate_v4()"
+        },
+        "tenant_id": {
+          "type": "uuid",
+          "nullable": false,
+          "default": null
+        },
+        "return_id": {
+          "type": "uuid",
+          "nullable": false,
+          "default": null
+        },
+        "roll_id": {
+          "type": "uuid",
+          "nullable": false,
+          "default": null
+        },
+        "quantity_kg": {
+          "type": "numeric(12,2)",
+          "nullable": false,
+          "default": null
+        },
+        "price_per_kg": {
+          "type": "numeric(14,4)",
+          "nullable": false,
+          "default": null
+        },
+        "pieces": {
+          "type": "integer",
+          "nullable": false,
+          "default": "1"
+        }
+      }
+    },
+    "licenses": {
+      "columns": {
+        "id": {
+          "type": "uuid",
+          "nullable": false,
+          "default": "gen_random_uuid()"
+        },
+        "key": {
+          "type": "character varying(64)",
+          "nullable": false,
+          "default": null
+        },
+        "type": {
+          "type": "character varying(20)",
+          "nullable": false,
+          "default": null
+        },
+        "status": {
+          "type": "character varying(20)",
+          "nullable": false,
+          "default": "'active'::character varying"
+        },
+        "issued_at": {
+          "type": "timestamp with time zone",
+          "nullable": false,
+          "default": "now()"
+        },
+        "expires_at": {
+          "type": "timestamp with time zone",
+          "nullable": true,
+          "default": null
+        },
+        "grace_days": {
+          "type": "integer",
+          "nullable": false,
+          "default": "7"
+        },
+        "max_devices": {
+          "type": "integer",
+          "nullable": false,
+          "default": "3"
+        },
+        "features": {
+          "type": "text[]",
+          "nullable": false,
+          "default": "'{}'::text[]"
+        },
+        "vendor_id": {
+          "type": "character varying(64)",
+          "nullable": true,
+          "default": null
+        },
+        "vendor_metadata": {
+          "type": "jsonb",
+          "nullable": true,
+          "default": null
+        },
+        "tenant_id": {
+          "type": "uuid",
+          "nullable": true,
+          "default": null
+        },
+        "created_at": {
+          "type": "timestamp with time zone",
+          "nullable": false,
+          "default": "now()"
+        },
+        "updated_at": {
+          "type": "timestamp with time zone",
+          "nullable": false,
+          "default": "now()"
+        },
+        "edition": {
+          "type": "character varying(32)",
+          "nullable": true,
+          "default": null
+        },
+        "plan": {
+          "type": "character varying(32)",
+          "nullable": true,
+          "default": null
+        },
+        "license_version": {
+          "type": "character varying(16)",
+          "nullable": false,
+          "default": "'v1'::character varying"
+        },
+        "product_version": {
+          "type": "character varying(16)",
+          "nullable": true,
+          "default": null
+        },
+        "license_model": {
+          "type": "character varying(16)",
+          "nullable": false,
+          "default": "'perpetual'::character varying"
+        },
+        "binding_type": {
+          "type": "character varying(16)",
+          "nullable": true,
+          "default": null
+        },
+        "binding_value": {
+          "type": "character varying(255)",
+          "nullable": true,
+          "default": null
+        },
+        "limits": {
+          "type": "jsonb",
+          "nullable": false,
+          "default": "'{}'::jsonb"
+        },
+        "transfer_policy": {
+          "type": "jsonb",
+          "nullable": false,
+          "default": "'{\"allowed\": true, \"max_transfers\": 3, \"requires_super_admin\": true}'::jsonb"
+        },
+        "update_policy": {
+          "type": "jsonb",
+          "nullable": false,
+          "default": "'{\"channel\": \"stable\", \"allow_updates\": true, \"minimum_version\": \"1.0.0\"}'::jsonb"
+        },
+        "backup_policy": {
+          "type": "jsonb",
+          "nullable": false,
+          "default": "'{\"enabled\": true, \"max_backups\": 30, \"cloud_backup\": false}'::jsonb"
+        },
+        "transfers_used": {
+          "type": "integer",
+          "nullable": false,
+          "default": "0"
+        },
+        "customer_name": {
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        "customer_phone": {
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        "customer_notes": {
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        "offline_token": {
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        "offline_token_jti": {
+          "type": "text",
+          "nullable": true,
+          "default": null
+        }
+      }
+    },
+    "license_activations": {
+      "columns": {
+        "id": {
+          "type": "uuid",
+          "nullable": false,
+          "default": "gen_random_uuid()"
+        },
+        "license_id": {
+          "type": "uuid",
+          "nullable": false,
+          "default": null
+        },
+        "tenant_id": {
+          "type": "uuid",
+          "nullable": false,
+          "default": null
+        },
+        "server_fingerprint": {
+          "type": "character varying(128)",
+          "nullable": false,
+          "default": null
+        },
+        "server_fingerprint_version": {
+          "type": "integer",
+          "nullable": false,
+          "default": "1"
+        },
+        "hostname": {
+          "type": "character varying(255)",
+          "nullable": true,
+          "default": null
+        },
+        "app_version": {
+          "type": "character varying(32)",
+          "nullable": true,
+          "default": null
+        },
+        "last_seen_at": {
+          "type": "timestamp with time zone",
+          "nullable": false,
+          "default": "now()"
+        },
+        "deactivated_at": {
+          "type": "timestamp with time zone",
+          "nullable": true,
+          "default": null
+        },
+        "deactivation_reason": {
+          "type": "character varying(64)",
+          "nullable": true,
+          "default": null
+        },
+        "notes": {
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        "created_at": {
+          "type": "timestamp with time zone",
+          "nullable": false,
+          "default": "now()"
+        }
+      }
+    },
+    "device_registrations": {
+      "columns": {
+        "id": {
+          "type": "uuid",
+          "nullable": false,
+          "default": "gen_random_uuid()"
+        },
+        "license_id": {
+          "type": "uuid",
+          "nullable": false,
+          "default": null
+        },
+        "tenant_id": {
+          "type": "uuid",
+          "nullable": false,
+          "default": null
+        },
+        "device_id": {
+          "type": "uuid",
+          "nullable": false,
+          "default": null
+        },
+        "device_fingerprint": {
+          "type": "character varying(128)",
+          "nullable": false,
+          "default": null
+        },
+        "device_fingerprint_version": {
+          "type": "integer",
+          "nullable": false,
+          "default": "1"
+        },
+        "platform": {
+          "type": "character varying(16)",
+          "nullable": false,
+          "default": null
+        },
+        "name": {
+          "type": "character varying(100)",
+          "nullable": true,
+          "default": null
+        },
+        "signed_token": {
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        "signed_token_expires_at": {
+          "type": "timestamp with time zone",
+          "nullable": true,
+          "default": null
+        },
+        "last_seen_at": {
+          "type": "timestamp with time zone",
+          "nullable": false,
+          "default": "now()"
+        },
+        "revoked_at": {
+          "type": "timestamp with time zone",
+          "nullable": true,
+          "default": null
+        },
+        "revoke_reason": {
+          "type": "character varying(64)",
+          "nullable": true,
+          "default": null
+        },
+        "created_at": {
+          "type": "timestamp with time zone",
+          "nullable": false,
+          "default": "now()"
+        },
+        "user_id": {
+          "type": "uuid",
+          "nullable": true,
+          "default": null
+        }
+      }
+    },
+    "schema_migrations": {
+      "columns": {
+        "version": {
+          "type": "character varying(20)",
+          "nullable": false,
+          "default": null
+        },
+        "applied_at": {
+          "type": "timestamp with time zone",
+          "nullable": false,
+          "default": "now()"
+        },
+        "applied_by": {
+          "type": "character varying(255)",
+          "nullable": true,
+          "default": null
+        },
+        "description": {
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        "checksum": {
+          "type": "character varying(64)",
+          "nullable": true,
+          "default": null
+        },
+        "success": {
+          "type": "boolean",
+          "nullable": false,
+          "default": "true"
+        }
+      }
+    },
+    "invoices": {
+      "columns": {
+        "id": {
+          "type": "uuid",
+          "nullable": false,
+          "default": "uuid_generate_v4()"
+        },
+        "tenant_id": {
+          "type": "uuid",
+          "nullable": false,
+          "default": null
+        },
+        "number": {
+          "type": "character varying(50)",
+          "nullable": false,
+          "default": null
+        },
+        "type": {
+          "type": "character varying(10)",
+          "nullable": false,
+          "default": null
+        },
+        "date": {
+          "type": "date",
+          "nullable": false,
+          "default": null
+        },
+        "party_id": {
+          "type": "uuid",
+          "nullable": false,
+          "default": null
+        },
+        "party_type": {
+          "type": "character varying(10)",
+          "nullable": false,
+          "default": null
+        },
+        "currency": {
+          "type": "character varying(3)",
+          "nullable": false,
+          "default": "'SYP'::character varying"
+        },
+        "subtotal": {
+          "type": "numeric(14,2)",
+          "nullable": false,
+          "default": "0"
+        },
+        "discount": {
+          "type": "numeric(14,2)",
+          "nullable": false,
+          "default": "0"
+        },
+        "tax": {
+          "type": "numeric(14,2)",
+          "nullable": false,
+          "default": "0"
+        },
+        "total": {
+          "type": "numeric(14,2)",
+          "nullable": false,
+          "default": "0"
+        },
+        "notes": {
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        "status": {
+          "type": "character varying(20)",
+          "nullable": false,
+          "default": "'active'::character varying"
+        },
+        "version": {
+          "type": "integer",
+          "nullable": false,
+          "default": "1"
+        },
+        "created_at": {
+          "type": "timestamp with time zone",
+          "nullable": false,
+          "default": "now()"
+        },
+        "created_by": {
+          "type": "uuid",
+          "nullable": true,
+          "default": null
+        },
+        "updated_at": {
+          "type": "timestamp with time zone",
+          "nullable": false,
+          "default": "now()"
+        },
+        "cancelled_at": {
+          "type": "timestamp with time zone",
+          "nullable": true,
+          "default": null
+        },
+        "cancelled_by": {
+          "type": "uuid",
+          "nullable": true,
+          "default": null
+        },
+        "cancellation_reference_id": {
+          "type": "uuid",
+          "nullable": true,
+          "default": null
+        },
+        "shipping": {
+          "type": "numeric(14,2)",
+          "nullable": false,
+          "default": "0"
+        },
+        "paid": {
+          "type": "numeric(14,2)",
+          "nullable": false,
+          "default": "0"
+        },
+        "payment_method": {
+          "type": "character varying(20)",
+          "nullable": true,
+          "default": null
+        },
+        "reference": {
+          "type": "character varying(100)",
+          "nullable": true,
+          "default": null
+        },
+        "exchange_rate": {
+          "type": "numeric(18,6)",
+          "nullable": true,
+          "default": null
+        },
+        "base_total": {
+          "type": "numeric(14,2)",
+          "nullable": true,
+          "default": null
+        },
+        "base_paid": {
+          "type": "numeric(14,2)",
+          "nullable": true,
+          "default": null
+        },
+        "credit_applied": {
+          "type": "numeric(14,2)",
+          "nullable": false,
+          "default": "0"
+        },
+        "client_operation_id": {
+          "type": "uuid",
+          "nullable": true,
+          "default": null
+        },
+        "pieces_count": {
+          "type": "integer",
+          "nullable": true,
+          "default": null
+        }
+      }
+    },
+    "cashbox_sessions": {
+      "columns": {
+        "id": {
+          "type": "uuid",
+          "nullable": false,
+          "default": "uuid_generate_v4()"
+        },
+        "tenant_id": {
+          "type": "uuid",
+          "nullable": false,
+          "default": null
+        },
+        "opening_balance": {
+          "type": "numeric(14,2)",
+          "nullable": false,
+          "default": "0"
+        },
+        "opening_date": {
+          "type": "date",
+          "nullable": false,
+          "default": null
+        },
+        "currency": {
+          "type": "character varying(3)",
+          "nullable": false,
+          "default": "'SYP'::character varying"
+        },
+        "created_at": {
+          "type": "timestamp with time zone",
+          "nullable": false,
+          "default": "now()"
+        },
+        "updated_at": {
+          "type": "timestamp with time zone",
+          "nullable": false,
+          "default": "now()"
+        }
+      }
+    },
+    "yearly_party_summaries": {
+      "columns": {
+        "id": {
+          "type": "uuid",
+          "nullable": false,
+          "default": "gen_random_uuid()"
+        },
+        "tenant_id": {
+          "type": "uuid",
+          "nullable": false,
+          "default": null
+        },
+        "party_id": {
+          "type": "uuid",
+          "nullable": false,
+          "default": null
+        },
+        "year": {
+          "type": "integer",
+          "nullable": false,
+          "default": null
+        },
+        "currency": {
+          "type": "character varying(3)",
+          "nullable": false,
+          "default": "'SYP'::character varying"
+        },
+        "opening_balance": {
+          "type": "numeric(14,2)",
+          "nullable": false,
+          "default": "0"
+        },
+        "closing_balance": {
+          "type": "numeric(14,2)",
+          "nullable": false,
+          "default": "0"
+        },
+        "total_debit": {
+          "type": "numeric(14,2)",
+          "nullable": false,
+          "default": "0"
+        },
+        "total_credit": {
+          "type": "numeric(14,2)",
+          "nullable": false,
+          "default": "0"
+        },
+        "invoice_count": {
+          "type": "integer",
+          "nullable": false,
+          "default": "0"
+        },
+        "voucher_count": {
+          "type": "integer",
+          "nullable": false,
+          "default": "0"
+        },
+        "generated_at": {
+          "type": "timestamp with time zone",
+          "nullable": false,
+          "default": "now()"
+        },
+        "updated_at": {
+          "type": "timestamp with time zone",
+          "nullable": false,
+          "default": "now()"
         }
       }
     },
@@ -1424,7 +1876,7 @@
         }
       }
     },
-    "order_items": {
+    "manual_movements": {
       "columns": {
         "id": {
           "type": "uuid",
@@ -1433,445 +1885,6 @@
         },
         "tenant_id": {
           "type": "uuid",
-          "nullable": false,
-          "default": null
-        },
-        "order_id": {
-          "type": "uuid",
-          "nullable": false,
-          "default": null
-        },
-        "fabric_id": {
-          "type": "uuid",
-          "nullable": true,
-          "default": null
-        },
-        "fabric_name": {
-          "type": "character varying(255)",
-          "nullable": false,
-          "default": null
-        },
-        "color_id": {
-          "type": "uuid",
-          "nullable": true,
-          "default": null
-        },
-        "color_name": {
-          "type": "character varying(255)",
-          "nullable": false,
-          "default": null
-        },
-        "color_code": {
-          "type": "character varying(50)",
-          "nullable": true,
-          "default": null
-        },
-        "requested_kg": {
-          "type": "numeric(12,2)",
-          "nullable": false,
-          "default": null
-        },
-        "width_cm": {
-          "type": "numeric(7,2)",
-          "nullable": true,
-          "default": null
-        },
-        "weight_gsm": {
-          "type": "numeric(7,2)",
-          "nullable": true,
-          "default": null
-        },
-        "notes": {
-          "type": "text",
-          "nullable": true,
-          "default": null
-        },
-        "roll_id": {
-          "type": "uuid",
-          "nullable": true,
-          "default": null
-        },
-        "pieces": {
-          "type": "integer",
-          "nullable": false,
-          "default": "1"
-        }
-      }
-    },
-    "rolls": {
-      "columns": {
-        "id": {
-          "type": "uuid",
-          "nullable": false,
-          "default": "uuid_generate_v4()"
-        },
-        "tenant_id": {
-          "type": "uuid",
-          "nullable": false,
-          "default": null
-        },
-        "color_id": {
-          "type": "uuid",
-          "nullable": false,
-          "default": null
-        },
-        "roll_no": {
-          "type": "character varying(100)",
-          "nullable": false,
-          "default": null
-        },
-        "dye_batch": {
-          "type": "character varying(100)",
-          "nullable": true,
-          "default": null
-        },
-        "initial_kg": {
-          "type": "numeric(12,2)",
-          "nullable": false,
-          "default": null
-        },
-        "remaining_kg": {
-          "type": "numeric(12,2)",
-          "nullable": false,
-          "default": null
-        },
-        "price_per_kg": {
-          "type": "numeric(14,4)",
-          "nullable": false,
-          "default": null
-        },
-        "sale_price_per_kg": {
-          "type": "numeric(12,2)",
-          "nullable": true,
-          "default": null
-        },
-        "currency": {
-          "type": "character varying(3)",
-          "nullable": false,
-          "default": "'SYP'::character varying"
-        },
-        "supplier_id": {
-          "type": "uuid",
-          "nullable": true,
-          "default": null
-        },
-        "entry_date": {
-          "type": "date",
-          "nullable": false,
-          "default": null
-        },
-        "width_cm": {
-          "type": "numeric(7,2)",
-          "nullable": true,
-          "default": null
-        },
-        "weight_gsm": {
-          "type": "numeric(7,2)",
-          "nullable": true,
-          "default": null
-        },
-        "status": {
-          "type": "character varying(20)",
-          "nullable": false,
-          "default": "'in_stock'::character varying"
-        },
-        "version": {
-          "type": "integer",
-          "nullable": false,
-          "default": "1"
-        },
-        "created_at": {
-          "type": "timestamp with time zone",
-          "nullable": false,
-          "default": "now()"
-        },
-        "updated_at": {
-          "type": "timestamp with time zone",
-          "nullable": false,
-          "default": "now()"
-        },
-        "pieces": {
-          "type": "integer",
-          "nullable": false,
-          "default": "1"
-        },
-        "remaining_pieces": {
-          "type": "integer",
-          "nullable": false,
-          "default": "0"
-        },
-        "entry_price_per_kg": {
-          "type": "numeric(14,4)",
-          "nullable": true,
-          "default": null
-        },
-        "entry_currency": {
-          "type": "character varying(3)",
-          "nullable": true,
-          "default": null
-        },
-        "entry_source": {
-          "type": "character varying(20)",
-          "nullable": true,
-          "default": null
-        },
-        "entry_reference": {
-          "type": "character varying(100)",
-          "nullable": true,
-          "default": null
-        }
-      }
-    },
-    "users": {
-      "columns": {
-        "id": {
-          "type": "uuid",
-          "nullable": false,
-          "default": "uuid_generate_v4()"
-        },
-        "tenant_id": {
-          "type": "uuid",
-          "nullable": false,
-          "default": null
-        },
-        "name": {
-          "type": "character varying(255)",
-          "nullable": false,
-          "default": null
-        },
-        "email": {
-          "type": "character varying(320)",
-          "nullable": false,
-          "default": null
-        },
-        "password_hash": {
-          "type": "character varying(255)",
-          "nullable": false,
-          "default": null
-        },
-        "role": {
-          "type": "character varying(20)",
-          "nullable": false,
-          "default": null
-        },
-        "active": {
-          "type": "boolean",
-          "nullable": false,
-          "default": "true"
-        },
-        "permissions": {
-          "type": "jsonb",
-          "nullable": true,
-          "default": "'[]'::jsonb"
-        },
-        "created_at": {
-          "type": "timestamp with time zone",
-          "nullable": false,
-          "default": "now()"
-        },
-        "updated_at": {
-          "type": "timestamp with time zone",
-          "nullable": false,
-          "default": "now()"
-        },
-        "is_license_owner": {
-          "type": "boolean",
-          "nullable": false,
-          "default": "false"
-        },
-        "pin_hash": {
-          "type": "character varying(255)",
-          "nullable": true,
-          "default": null
-        },
-        "tokens_revoked_before": {
-          "type": "timestamp with time zone",
-          "nullable": true,
-          "default": null
-        }
-      }
-    },
-    "colors": {
-      "columns": {
-        "id": {
-          "type": "uuid",
-          "nullable": false,
-          "default": "uuid_generate_v4()"
-        },
-        "tenant_id": {
-          "type": "uuid",
-          "nullable": false,
-          "default": null
-        },
-        "fabric_id": {
-          "type": "uuid",
-          "nullable": false,
-          "default": null
-        },
-        "name": {
-          "type": "character varying(255)",
-          "nullable": false,
-          "default": null
-        },
-        "code": {
-          "type": "character varying(50)",
-          "nullable": true,
-          "default": null
-        },
-        "image_url": {
-          "type": "text",
-          "nullable": true,
-          "default": null
-        },
-        "created_at": {
-          "type": "timestamp with time zone",
-          "nullable": false,
-          "default": "now()"
-        },
-        "updated_at": {
-          "type": "timestamp with time zone",
-          "nullable": false,
-          "default": "now()"
-        },
-        "hex": {
-          "type": "character varying(9)",
-          "nullable": true,
-          "default": null
-        },
-        "version": {
-          "type": "integer",
-          "nullable": false,
-          "default": "1"
-        }
-      }
-    },
-    "cashbox_sessions": {
-      "columns": {
-        "id": {
-          "type": "uuid",
-          "nullable": false,
-          "default": "uuid_generate_v4()"
-        },
-        "tenant_id": {
-          "type": "uuid",
-          "nullable": false,
-          "default": null
-        },
-        "opening_balance": {
-          "type": "numeric(14,2)",
-          "nullable": false,
-          "default": "0"
-        },
-        "opening_date": {
-          "type": "date",
-          "nullable": false,
-          "default": null
-        },
-        "currency": {
-          "type": "character varying(3)",
-          "nullable": false,
-          "default": "'SYP'::character varying"
-        },
-        "created_at": {
-          "type": "timestamp with time zone",
-          "nullable": false,
-          "default": "now()"
-        },
-        "updated_at": {
-          "type": "timestamp with time zone",
-          "nullable": false,
-          "default": "now()"
-        }
-      }
-    },
-    "invoice_lines": {
-      "columns": {
-        "id": {
-          "type": "uuid",
-          "nullable": false,
-          "default": "uuid_generate_v4()"
-        },
-        "tenant_id": {
-          "type": "uuid",
-          "nullable": false,
-          "default": null
-        },
-        "invoice_id": {
-          "type": "uuid",
-          "nullable": false,
-          "default": null
-        },
-        "fabric_id": {
-          "type": "uuid",
-          "nullable": false,
-          "default": null
-        },
-        "color_id": {
-          "type": "uuid",
-          "nullable": false,
-          "default": null
-        },
-        "roll_id": {
-          "type": "uuid",
-          "nullable": false,
-          "default": null
-        },
-        "quantity_kg": {
-          "type": "numeric(12,2)",
-          "nullable": false,
-          "default": null
-        },
-        "price_per_kg": {
-          "type": "numeric(12,2)",
-          "nullable": false,
-          "default": null
-        },
-        "discount_amount": {
-          "type": "numeric(14,2)",
-          "nullable": false,
-          "default": "0"
-        },
-        "note": {
-          "type": "text",
-          "nullable": true,
-          "default": null
-        },
-        "created_at": {
-          "type": "timestamp with time zone",
-          "nullable": false,
-          "default": "now()"
-        },
-        "pieces": {
-          "type": "integer",
-          "nullable": false,
-          "default": "1"
-        },
-        "cost_per_kg": {
-          "type": "numeric(14,4)",
-          "nullable": true,
-          "default": null
-        }
-      }
-    },
-    "invoices": {
-      "columns": {
-        "id": {
-          "type": "uuid",
-          "nullable": false,
-          "default": "uuid_generate_v4()"
-        },
-        "tenant_id": {
-          "type": "uuid",
-          "nullable": false,
-          "default": null
-        },
-        "number": {
-          "type": "character varying(50)",
-          "nullable": false,
-          "default": null
-        },
-        "type": {
-          "type": "character varying(10)",
           "nullable": false,
           "default": null
         },
@@ -1880,13 +1893,18 @@
           "nullable": false,
           "default": null
         },
-        "party_id": {
-          "type": "uuid",
+        "type": {
+          "type": "character varying(20)",
           "nullable": false,
           "default": null
         },
-        "party_type": {
-          "type": "character varying(10)",
+        "direction": {
+          "type": "character varying(5)",
+          "nullable": false,
+          "default": null
+        },
+        "amount": {
+          "type": "numeric(14,2)",
           "nullable": false,
           "default": null
         },
@@ -1895,40 +1913,15 @@
           "nullable": false,
           "default": "'SYP'::character varying"
         },
-        "subtotal": {
-          "type": "numeric(14,2)",
-          "nullable": false,
-          "default": "0"
-        },
-        "discount": {
-          "type": "numeric(14,2)",
-          "nullable": false,
-          "default": "0"
-        },
-        "tax": {
-          "type": "numeric(14,2)",
-          "nullable": false,
-          "default": "0"
-        },
-        "total": {
-          "type": "numeric(14,2)",
-          "nullable": false,
-          "default": "0"
-        },
-        "notes": {
+        "description": {
           "type": "text",
           "nullable": true,
           "default": null
         },
-        "status": {
-          "type": "character varying(20)",
-          "nullable": false,
-          "default": "'active'::character varying"
-        },
-        "version": {
-          "type": "integer",
-          "nullable": false,
-          "default": "1"
+        "notes_internal": {
+          "type": "text",
+          "nullable": true,
+          "default": null
         },
         "created_at": {
           "type": "timestamp with time zone",
@@ -1940,75 +1933,280 @@
           "nullable": true,
           "default": null
         },
-        "updated_at": {
-          "type": "timestamp with time zone",
-          "nullable": false,
-          "default": "now()"
-        },
-        "cancelled_at": {
-          "type": "timestamp with time zone",
-          "nullable": true,
-          "default": null
-        },
-        "cancelled_by": {
-          "type": "uuid",
-          "nullable": true,
-          "default": null
-        },
-        "cancellation_reference_id": {
-          "type": "uuid",
-          "nullable": true,
-          "default": null
-        },
-        "shipping": {
-          "type": "numeric(14,2)",
-          "nullable": false,
-          "default": "0"
-        },
-        "paid": {
-          "type": "numeric(14,2)",
-          "nullable": false,
-          "default": "0"
-        },
-        "payment_method": {
-          "type": "character varying(20)",
-          "nullable": true,
-          "default": null
-        },
-        "reference": {
-          "type": "character varying(100)",
-          "nullable": true,
-          "default": null
-        },
-        "exchange_rate": {
-          "type": "numeric(18,6)",
-          "nullable": true,
-          "default": null
-        },
-        "base_total": {
-          "type": "numeric(14,2)",
-          "nullable": true,
-          "default": null
-        },
-        "base_paid": {
-          "type": "numeric(14,2)",
-          "nullable": true,
-          "default": null
-        },
-        "credit_applied": {
-          "type": "numeric(14,2)",
-          "nullable": false,
-          "default": "0"
-        },
         "client_operation_id": {
           "type": "uuid",
           "nullable": true,
           "default": null
+        }
+      }
+    },
+    "system_admins": {
+      "columns": {
+        "id": {
+          "type": "uuid",
+          "nullable": false,
+          "default": "gen_random_uuid()"
         },
-        "pieces_count": {
-          "type": "integer",
+        "email": {
+          "type": "character varying(320)",
+          "nullable": false,
+          "default": null
+        },
+        "password_hash": {
+          "type": "character varying(255)",
+          "nullable": false,
+          "default": null
+        },
+        "name": {
+          "type": "character varying(255)",
           "nullable": true,
           "default": null
+        },
+        "role": {
+          "type": "character varying(20)",
+          "nullable": false,
+          "default": "'super_admin'::character varying"
+        },
+        "created_at": {
+          "type": "timestamp with time zone",
+          "nullable": false,
+          "default": "now()"
+        },
+        "updated_at": {
+          "type": "timestamp with time zone",
+          "nullable": false,
+          "default": "now()"
+        }
+      }
+    },
+    "idempotency_keys": {
+      "columns": {
+        "id": {
+          "type": "bigint",
+          "nullable": false,
+          "default": "nextval('idempotency_keys_id_seq'::regclass)"
+        },
+        "tenant_id": {
+          "type": "uuid",
+          "nullable": false,
+          "default": null
+        },
+        "method": {
+          "type": "character varying(10)",
+          "nullable": false,
+          "default": null
+        },
+        "path": {
+          "type": "text",
+          "nullable": false,
+          "default": null
+        },
+        "idempotency_key": {
+          "type": "character varying(200)",
+          "nullable": false,
+          "default": null
+        },
+        "status_code": {
+          "type": "integer",
+          "nullable": false,
+          "default": null
+        },
+        "response_body": {
+          "type": "jsonb",
+          "nullable": true,
+          "default": null
+        },
+        "content_type": {
+          "type": "character varying(100)",
+          "nullable": false,
+          "default": "'application/json; charset=utf-8'::character varying"
+        },
+        "created_at": {
+          "type": "timestamp with time zone",
+          "nullable": false,
+          "default": "now()"
+        },
+        "expires_at": {
+          "type": "timestamp with time zone",
+          "nullable": false,
+          "default": null
+        }
+      }
+    },
+    "stock_movements": {
+      "columns": {
+        "id": {
+          "type": "uuid",
+          "nullable": false,
+          "default": "gen_random_uuid()"
+        },
+        "tenant_id": {
+          "type": "uuid",
+          "nullable": false,
+          "default": null
+        },
+        "roll_id": {
+          "type": "uuid",
+          "nullable": false,
+          "default": null
+        },
+        "direction": {
+          "type": "character varying(10)",
+          "nullable": false,
+          "default": null
+        },
+        "movement_type": {
+          "type": "character varying(30)",
+          "nullable": false,
+          "default": null
+        },
+        "quantity_kg": {
+          "type": "numeric(12,2)",
+          "nullable": false,
+          "default": null
+        },
+        "balance_after_kg": {
+          "type": "numeric(12,2)",
+          "nullable": false,
+          "default": null
+        },
+        "reference_type": {
+          "type": "character varying(50)",
+          "nullable": true,
+          "default": null
+        },
+        "reference_id": {
+          "type": "uuid",
+          "nullable": true,
+          "default": null
+        },
+        "reference_number": {
+          "type": "character varying(100)",
+          "nullable": true,
+          "default": null
+        },
+        "movement_date": {
+          "type": "date",
+          "nullable": false,
+          "default": null
+        },
+        "description": {
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        "status": {
+          "type": "character varying(20)",
+          "nullable": false,
+          "default": "'active'::character varying"
+        },
+        "created_by": {
+          "type": "uuid",
+          "nullable": true,
+          "default": null
+        },
+        "created_at": {
+          "type": "timestamp with time zone",
+          "nullable": false,
+          "default": "now()"
+        }
+      }
+    },
+    "document_sequences": {
+      "columns": {
+        "id": {
+          "type": "uuid",
+          "nullable": false,
+          "default": "uuid_generate_v4()"
+        },
+        "tenant_id": {
+          "type": "uuid",
+          "nullable": false,
+          "default": null
+        },
+        "entity_type": {
+          "type": "character varying(30)",
+          "nullable": false,
+          "default": null
+        },
+        "prefix": {
+          "type": "character varying(10)",
+          "nullable": true,
+          "default": null
+        },
+        "last_number": {
+          "type": "bigint",
+          "nullable": false,
+          "default": "0"
+        }
+      }
+    },
+    "audit_logs": {
+      "columns": {
+        "id": {
+          "type": "bigint",
+          "nullable": false,
+          "default": "nextval('audit_logs_id_seq'::regclass)"
+        },
+        "tenant_id": {
+          "type": "uuid",
+          "nullable": false,
+          "default": null
+        },
+        "actor_id": {
+          "type": "uuid",
+          "nullable": true,
+          "default": null
+        },
+        "actor_name": {
+          "type": "character varying(255)",
+          "nullable": true,
+          "default": null
+        },
+        "module": {
+          "type": "character varying(50)",
+          "nullable": false,
+          "default": null
+        },
+        "action": {
+          "type": "character varying(50)",
+          "nullable": false,
+          "default": null
+        },
+        "entity_type": {
+          "type": "character varying(50)",
+          "nullable": true,
+          "default": null
+        },
+        "entity_id": {
+          "type": "uuid",
+          "nullable": true,
+          "default": null
+        },
+        "detail": {
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        "before_snapshot": {
+          "type": "jsonb",
+          "nullable": true,
+          "default": null
+        },
+        "after_snapshot": {
+          "type": "jsonb",
+          "nullable": true,
+          "default": null
+        },
+        "ip_address": {
+          "type": "inet",
+          "nullable": true,
+          "default": null
+        },
+        "created_at": {
+          "type": "timestamp with time zone",
+          "nullable": false,
+          "default": "now()"
         }
       }
     },
@@ -2076,7 +2274,7 @@
         }
       }
     },
-    "yearly_party_summaries": {
+    "sync_devices": {
       "columns": {
         "id": {
           "type": "uuid",
@@ -2088,52 +2286,42 @@
           "nullable": false,
           "default": null
         },
-        "party_id": {
+        "last_seen_by_user_id": {
           "type": "uuid",
+          "nullable": true,
+          "default": null
+        },
+        "device_fingerprint": {
+          "type": "character varying(128)",
           "nullable": false,
           "default": null
         },
-        "year": {
+        "device_fingerprint_version": {
           "type": "integer",
+          "nullable": false,
+          "default": "1"
+        },
+        "platform": {
+          "type": "character varying(16)",
           "nullable": false,
           "default": null
         },
-        "currency": {
-          "type": "character varying(3)",
-          "nullable": false,
-          "default": "'SYP'::character varying"
+        "hostname": {
+          "type": "character varying(120)",
+          "nullable": true,
+          "default": null
         },
-        "opening_balance": {
-          "type": "numeric(14,2)",
-          "nullable": false,
-          "default": "0"
+        "label": {
+          "type": "character varying(120)",
+          "nullable": true,
+          "default": null
         },
-        "closing_balance": {
-          "type": "numeric(14,2)",
+        "last_seen_at": {
+          "type": "timestamp with time zone",
           "nullable": false,
-          "default": "0"
+          "default": "now()"
         },
-        "total_debit": {
-          "type": "numeric(14,2)",
-          "nullable": false,
-          "default": "0"
-        },
-        "total_credit": {
-          "type": "numeric(14,2)",
-          "nullable": false,
-          "default": "0"
-        },
-        "invoice_count": {
-          "type": "integer",
-          "nullable": false,
-          "default": "0"
-        },
-        "voucher_count": {
-          "type": "integer",
-          "nullable": false,
-          "default": "0"
-        },
-        "generated_at": {
+        "created_at": {
           "type": "timestamp with time zone",
           "nullable": false,
           "default": "now()"
@@ -2142,67 +2330,23 @@
           "type": "timestamp with time zone",
           "nullable": false,
           "default": "now()"
-        }
-      }
-    },
-    "manual_movements": {
-      "columns": {
-        "id": {
-          "type": "uuid",
-          "nullable": false,
-          "default": "uuid_generate_v4()"
         },
-        "tenant_id": {
-          "type": "uuid",
-          "nullable": false,
-          "default": null
-        },
-        "date": {
-          "type": "date",
-          "nullable": false,
-          "default": null
-        },
-        "type": {
-          "type": "character varying(20)",
-          "nullable": false,
-          "default": null
-        },
-        "direction": {
-          "type": "character varying(5)",
-          "nullable": false,
-          "default": null
-        },
-        "amount": {
-          "type": "numeric(14,2)",
-          "nullable": false,
-          "default": null
-        },
-        "currency": {
-          "type": "character varying(3)",
-          "nullable": false,
-          "default": "'SYP'::character varying"
-        },
-        "description": {
-          "type": "text",
-          "nullable": true,
-          "default": null
-        },
-        "notes_internal": {
-          "type": "text",
-          "nullable": true,
-          "default": null
-        },
-        "created_at": {
+        "revoked_at": {
           "type": "timestamp with time zone",
-          "nullable": false,
-          "default": "now()"
-        },
-        "created_by": {
-          "type": "uuid",
           "nullable": true,
           "default": null
         },
-        "client_operation_id": {
+        "revoke_reason": {
+          "type": "character varying(64)",
+          "nullable": true,
+          "default": null
+        },
+        "authorized_user_ids": {
+          "type": "uuid[]",
+          "nullable": false,
+          "default": "'{}'::uuid[]"
+        },
+        "device_registration_id": {
           "type": "uuid",
           "nullable": true,
           "default": null
@@ -2303,6 +2447,40 @@
         }
       }
     },
+    "revoked_tokens": {
+      "columns": {
+        "jti": {
+          "type": "uuid",
+          "nullable": false,
+          "default": null
+        },
+        "subject": {
+          "type": "uuid",
+          "nullable": true,
+          "default": null
+        },
+        "tenant_id": {
+          "type": "uuid",
+          "nullable": true,
+          "default": null
+        },
+        "reason": {
+          "type": "character varying(40)",
+          "nullable": false,
+          "default": null
+        },
+        "expires_at": {
+          "type": "timestamp with time zone",
+          "nullable": false,
+          "default": null
+        },
+        "created_at": {
+          "type": "timestamp with time zone",
+          "nullable": false,
+          "default": "now()"
+        }
+      }
+    },
     "sync_resource_claims": {
       "columns": {
         "id": {
@@ -2359,119 +2537,6 @@
           "type": "integer",
           "nullable": true,
           "default": null
-        }
-      }
-    },
-    "sync_devices": {
-      "columns": {
-        "id": {
-          "type": "uuid",
-          "nullable": false,
-          "default": "gen_random_uuid()"
-        },
-        "tenant_id": {
-          "type": "uuid",
-          "nullable": false,
-          "default": null
-        },
-        "last_seen_by_user_id": {
-          "type": "uuid",
-          "nullable": true,
-          "default": null
-        },
-        "device_fingerprint": {
-          "type": "character varying(128)",
-          "nullable": false,
-          "default": null
-        },
-        "device_fingerprint_version": {
-          "type": "integer",
-          "nullable": false,
-          "default": "1"
-        },
-        "platform": {
-          "type": "character varying(16)",
-          "nullable": false,
-          "default": null
-        },
-        "hostname": {
-          "type": "character varying(120)",
-          "nullable": true,
-          "default": null
-        },
-        "label": {
-          "type": "character varying(120)",
-          "nullable": true,
-          "default": null
-        },
-        "last_seen_at": {
-          "type": "timestamp with time zone",
-          "nullable": false,
-          "default": "now()"
-        },
-        "created_at": {
-          "type": "timestamp with time zone",
-          "nullable": false,
-          "default": "now()"
-        },
-        "updated_at": {
-          "type": "timestamp with time zone",
-          "nullable": false,
-          "default": "now()"
-        },
-        "revoked_at": {
-          "type": "timestamp with time zone",
-          "nullable": true,
-          "default": null
-        },
-        "revoke_reason": {
-          "type": "character varying(64)",
-          "nullable": true,
-          "default": null
-        },
-        "authorized_user_ids": {
-          "type": "uuid[]",
-          "nullable": false,
-          "default": "'{}'::uuid[]"
-        },
-        "device_registration_id": {
-          "type": "uuid",
-          "nullable": true,
-          "default": null
-        }
-      }
-    },
-    "revoked_tokens": {
-      "columns": {
-        "jti": {
-          "type": "uuid",
-          "nullable": false,
-          "default": null
-        },
-        "subject": {
-          "type": "uuid",
-          "nullable": true,
-          "default": null
-        },
-        "tenant_id": {
-          "type": "uuid",
-          "nullable": true,
-          "default": null
-        },
-        "reason": {
-          "type": "character varying(40)",
-          "nullable": false,
-          "default": null
-        },
-        "expires_at": {
-          "type": "timestamp with time zone",
-          "nullable": false,
-          "default": null
-        },
-        "created_at": {
-          "type": "timestamp with time zone",
-          "nullable": false,
-          "default": "now()"
         }
       }
     },
@@ -2544,64 +2609,89 @@
         }
       }
     },
-    "licenses": {
+    "inventory_counts": {
       "columns": {
         "id": {
           "type": "uuid",
           "nullable": false,
           "default": "gen_random_uuid()"
         },
-        "key": {
-          "type": "character varying(64)",
+        "tenant_id": {
+          "type": "uuid",
           "nullable": false,
           "default": null
         },
-        "type": {
-          "type": "character varying(20)",
+        "year": {
+          "type": "integer",
           "nullable": false,
+          "default": null
+        },
+        "roll_id": {
+          "type": "uuid",
+          "nullable": false,
+          "default": null
+        },
+        "book_kg": {
+          "type": "numeric(14,2)",
+          "nullable": false,
+          "default": null
+        },
+        "book_pieces": {
+          "type": "integer",
+          "nullable": false,
+          "default": "0"
+        },
+        "counted_kg": {
+          "type": "numeric(14,2)",
+          "nullable": true,
+          "default": null
+        },
+        "counted_pieces": {
+          "type": "integer",
+          "nullable": true,
+          "default": null
+        },
+        "diff_kg": {
+          "type": "numeric(14,2)",
+          "nullable": true,
+          "default": null
+        },
+        "diff_pieces": {
+          "type": "integer",
+          "nullable": true,
           "default": null
         },
         "status": {
           "type": "character varying(20)",
           "nullable": false,
-          "default": "'active'::character varying"
+          "default": "'counted'::character varying"
         },
-        "issued_at": {
+        "reason": {
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        "counted_by": {
+          "type": "uuid",
+          "nullable": true,
+          "default": null
+        },
+        "counted_at": {
           "type": "timestamp with time zone",
-          "nullable": false,
-          "default": "now()"
+          "nullable": true,
+          "default": null
         },
-        "expires_at": {
+        "approved_by": {
+          "type": "uuid",
+          "nullable": true,
+          "default": null
+        },
+        "approved_at": {
           "type": "timestamp with time zone",
           "nullable": true,
           "default": null
         },
-        "grace_days": {
-          "type": "integer",
-          "nullable": false,
-          "default": "7"
-        },
-        "max_devices": {
-          "type": "integer",
-          "nullable": false,
-          "default": "3"
-        },
-        "features": {
-          "type": "text[]",
-          "nullable": false,
-          "default": "'{}'::text[]"
-        },
-        "vendor_id": {
-          "type": "character varying(64)",
-          "nullable": true,
-          "default": null
-        },
-        "vendor_metadata": {
-          "type": "jsonb",
-          "nullable": true,
-          "default": null
-        },
-        "tenant_id": {
+        "posted_movement_id": {
           "type": "uuid",
           "nullable": true,
           "default": null
@@ -2615,89 +2705,108 @@
           "type": "timestamp with time zone",
           "nullable": false,
           "default": "now()"
+        }
+      }
+    },
+    "expenses": {
+      "columns": {
+        "id": {
+          "type": "uuid",
+          "nullable": false,
+          "default": "uuid_generate_v4()"
         },
-        "edition": {
-          "type": "character varying(32)",
+        "tenant_id": {
+          "type": "uuid",
+          "nullable": false,
+          "default": null
+        },
+        "number": {
+          "type": "character varying(50)",
+          "nullable": false,
+          "default": null
+        },
+        "category": {
+          "type": "character varying(100)",
+          "nullable": false,
+          "default": null
+        },
+        "description": {
+          "type": "text",
+          "nullable": false,
+          "default": null
+        },
+        "amount": {
+          "type": "numeric(14,2)",
+          "nullable": false,
+          "default": null
+        },
+        "currency": {
+          "type": "character varying(3)",
+          "nullable": false,
+          "default": "'SYP'::character varying"
+        },
+        "date": {
+          "type": "date",
+          "nullable": false,
+          "default": null
+        },
+        "method": {
+          "type": "character varying(20)",
+          "nullable": false,
+          "default": null
+        },
+        "paid_from_cashbox": {
+          "type": "boolean",
+          "nullable": false,
+          "default": "true"
+        },
+        "status": {
+          "type": "character varying(20)",
+          "nullable": false,
+          "default": "'active'::character varying"
+        },
+        "notes_print": {
+          "type": "text",
           "nullable": true,
           "default": null
         },
-        "plan": {
-          "type": "character varying(32)",
+        "notes_internal": {
+          "type": "text",
           "nullable": true,
           "default": null
         },
-        "license_version": {
-          "type": "character varying(16)",
+        "created_at": {
+          "type": "timestamp with time zone",
           "nullable": false,
-          "default": "'v1'::character varying"
+          "default": "now()"
         },
-        "product_version": {
-          "type": "character varying(16)",
+        "created_by": {
+          "type": "uuid",
           "nullable": true,
           "default": null
         },
-        "license_model": {
-          "type": "character varying(16)",
-          "nullable": false,
-          "default": "'perpetual'::character varying"
-        },
-        "binding_type": {
-          "type": "character varying(16)",
+        "cancelled_at": {
+          "type": "timestamp with time zone",
           "nullable": true,
           "default": null
         },
-        "binding_value": {
-          "type": "character varying(255)",
+        "cancelled_by": {
+          "type": "uuid",
           "nullable": true,
           "default": null
         },
-        "limits": {
-          "type": "jsonb",
-          "nullable": false,
-          "default": "'{}'::jsonb"
-        },
-        "transfer_policy": {
-          "type": "jsonb",
-          "nullable": false,
-          "default": "'{\"allowed\": true, \"max_transfers\": 3, \"requires_super_admin\": true}'::jsonb"
-        },
-        "update_policy": {
-          "type": "jsonb",
-          "nullable": false,
-          "default": "'{\"channel\": \"stable\", \"allow_updates\": true, \"minimum_version\": \"1.0.0\"}'::jsonb"
-        },
-        "backup_policy": {
-          "type": "jsonb",
-          "nullable": false,
-          "default": "'{\"enabled\": true, \"max_backups\": 30, \"cloud_backup\": false}'::jsonb"
-        },
-        "transfers_used": {
+        "version": {
           "type": "integer",
           "nullable": false,
-          "default": "0"
+          "default": "1"
         },
-        "customer_name": {
-          "type": "text",
-          "nullable": true,
-          "default": null
+        "updated_at": {
+          "type": "timestamp with time zone",
+          "nullable": false,
+          "default": "now()"
         },
-        "customer_phone": {
-          "type": "text",
-          "nullable": true,
-          "default": null
-        },
-        "customer_notes": {
-          "type": "text",
-          "nullable": true,
-          "default": null
-        },
-        "offline_token": {
-          "type": "text",
-          "nullable": true,
-          "default": null
-        },
-        "offline_token_jti": {
-          "type": "text",
+        "client_operation_id": {
+          "type": "uuid",
           "nullable": true,
           "default": null
         }
@@ -2867,6 +2976,89 @@
         }
       }
     },
+    "notifications": {
+      "columns": {
+        "id": {
+          "type": "uuid",
+          "nullable": false,
+          "default": "uuid_generate_v4()"
+        },
+        "tenant_id": {
+          "type": "uuid",
+          "nullable": false,
+          "default": null
+        },
+        "user_id": {
+          "type": "uuid",
+          "nullable": true,
+          "default": null
+        },
+        "title": {
+          "type": "character varying(255)",
+          "nullable": false,
+          "default": null
+        },
+        "detail": {
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        "kind": {
+          "type": "character varying(20)",
+          "nullable": false,
+          "default": null
+        },
+        "severity": {
+          "type": "character varying(10)",
+          "nullable": false,
+          "default": null
+        },
+        "target_path": {
+          "type": "character varying(500)",
+          "nullable": true,
+          "default": null
+        },
+        "is_read": {
+          "type": "boolean",
+          "nullable": false,
+          "default": "false"
+        },
+        "is_dismissed": {
+          "type": "boolean",
+          "nullable": false,
+          "default": "false"
+        },
+        "created_at": {
+          "type": "timestamp with time zone",
+          "nullable": false,
+          "default": "now()"
+        }
+      }
+    },
+    "sync_state": {
+      "columns": {
+        "tenant_id": {
+          "type": "uuid",
+          "nullable": false,
+          "default": null
+        },
+        "last_pull_at": {
+          "type": "timestamp with time zone",
+          "nullable": true,
+          "default": null
+        },
+        "updated_at": {
+          "type": "timestamp with time zone",
+          "nullable": false,
+          "default": "now()"
+        },
+        "last_pull_seq": {
+          "type": "bigint",
+          "nullable": true,
+          "default": null
+        }
+      }
+    },
     "sync_tombstones": {
       "columns": {
         "id": {
@@ -2913,30 +3105,6 @@
           "type": "integer",
           "nullable": false,
           "default": "1"
-        }
-      }
-    },
-    "sync_state": {
-      "columns": {
-        "tenant_id": {
-          "type": "uuid",
-          "nullable": false,
-          "default": null
-        },
-        "last_pull_at": {
-          "type": "timestamp with time zone",
-          "nullable": true,
-          "default": null
-        },
-        "updated_at": {
-          "type": "timestamp with time zone",
-          "nullable": false,
-          "default": "now()"
-        },
-        "last_pull_seq": {
-          "type": "bigint",
-          "nullable": true,
-          "default": null
         }
       }
     },
@@ -3006,6 +3174,153 @@
           "type": "jsonb",
           "nullable": true,
           "default": null
+        }
+      }
+    },
+    "sync_device_authorized_users": {
+      "columns": {
+        "device_id": {
+          "type": "uuid",
+          "nullable": false,
+          "default": null
+        },
+        "user_id": {
+          "type": "uuid",
+          "nullable": false,
+          "default": null
+        },
+        "tenant_id": {
+          "type": "uuid",
+          "nullable": false,
+          "default": null
+        },
+        "created_at": {
+          "type": "timestamp with time zone",
+          "nullable": false,
+          "default": "now()"
+        }
+      }
+    },
+    "company_profiles": {
+      "columns": {
+        "id": {
+          "type": "uuid",
+          "nullable": false,
+          "default": "gen_random_uuid()"
+        },
+        "tenant_id": {
+          "type": "uuid",
+          "nullable": false,
+          "default": null
+        },
+        "name": {
+          "type": "character varying(255)",
+          "nullable": false,
+          "default": null
+        },
+        "commercial_reg": {
+          "type": "character varying(100)",
+          "nullable": true,
+          "default": null
+        },
+        "tax_number": {
+          "type": "character varying(100)",
+          "nullable": true,
+          "default": null
+        },
+        "address": {
+          "type": "character varying(500)",
+          "nullable": true,
+          "default": null
+        },
+        "city": {
+          "type": "character varying(100)",
+          "nullable": true,
+          "default": null
+        },
+        "country": {
+          "type": "character varying(100)",
+          "nullable": true,
+          "default": null
+        },
+        "phone": {
+          "type": "character varying(30)",
+          "nullable": true,
+          "default": null
+        },
+        "email": {
+          "type": "character varying(320)",
+          "nullable": true,
+          "default": null
+        },
+        "logo_path": {
+          "type": "character varying(500)",
+          "nullable": true,
+          "default": null
+        },
+        "currency": {
+          "type": "character varying(3)",
+          "nullable": false,
+          "default": "'SYP'::character varying"
+        },
+        "language": {
+          "type": "character varying(5)",
+          "nullable": false,
+          "default": "'ar'::character varying"
+        },
+        "fiscal_year_start": {
+          "type": "date",
+          "nullable": true,
+          "default": null
+        },
+        "default_tax_rate": {
+          "type": "numeric(5,4)",
+          "nullable": false,
+          "default": "0.0000"
+        },
+        "customization": {
+          "type": "jsonb",
+          "nullable": true,
+          "default": "'{}'::jsonb"
+        },
+        "created_at": {
+          "type": "timestamp with time zone",
+          "nullable": false,
+          "default": "now()"
+        },
+        "updated_at": {
+          "type": "timestamp with time zone",
+          "nullable": false,
+          "default": "now()"
+        }
+      }
+    },
+    "cashbox_daily_balances": {
+      "columns": {
+        "tenant_id": {
+          "type": "uuid",
+          "nullable": false,
+          "default": null
+        },
+        "currency": {
+          "type": "character varying(3)",
+          "nullable": false,
+          "default": null
+        },
+        "balance_date": {
+          "type": "date",
+          "nullable": false,
+          "default": null
+        },
+        "closing_balance": {
+          "type": "numeric(14,2)",
+          "nullable": false,
+          "default": "0"
+        },
+        "updated_at": {
+          "type": "timestamp with time zone",
+          "nullable": false,
+          "default": "now()"
         }
       }
     },
@@ -3161,149 +3476,6 @@
         }
       }
     },
-    "license_activations": {
-      "columns": {
-        "id": {
-          "type": "uuid",
-          "nullable": false,
-          "default": "gen_random_uuid()"
-        },
-        "license_id": {
-          "type": "uuid",
-          "nullable": false,
-          "default": null
-        },
-        "tenant_id": {
-          "type": "uuid",
-          "nullable": false,
-          "default": null
-        },
-        "server_fingerprint": {
-          "type": "character varying(128)",
-          "nullable": false,
-          "default": null
-        },
-        "server_fingerprint_version": {
-          "type": "integer",
-          "nullable": false,
-          "default": "1"
-        },
-        "hostname": {
-          "type": "character varying(255)",
-          "nullable": true,
-          "default": null
-        },
-        "app_version": {
-          "type": "character varying(32)",
-          "nullable": true,
-          "default": null
-        },
-        "last_seen_at": {
-          "type": "timestamp with time zone",
-          "nullable": false,
-          "default": "now()"
-        },
-        "deactivated_at": {
-          "type": "timestamp with time zone",
-          "nullable": true,
-          "default": null
-        },
-        "deactivation_reason": {
-          "type": "character varying(64)",
-          "nullable": true,
-          "default": null
-        },
-        "notes": {
-          "type": "text",
-          "nullable": true,
-          "default": null
-        },
-        "created_at": {
-          "type": "timestamp with time zone",
-          "nullable": false,
-          "default": "now()"
-        }
-      }
-    },
-    "device_registrations": {
-      "columns": {
-        "id": {
-          "type": "uuid",
-          "nullable": false,
-          "default": "gen_random_uuid()"
-        },
-        "license_id": {
-          "type": "uuid",
-          "nullable": false,
-          "default": null
-        },
-        "tenant_id": {
-          "type": "uuid",
-          "nullable": false,
-          "default": null
-        },
-        "device_id": {
-          "type": "uuid",
-          "nullable": false,
-          "default": null
-        },
-        "device_fingerprint": {
-          "type": "character varying(128)",
-          "nullable": false,
-          "default": null
-        },
-        "device_fingerprint_version": {
-          "type": "integer",
-          "nullable": false,
-          "default": "1"
-        },
-        "platform": {
-          "type": "character varying(16)",
-          "nullable": false,
-          "default": null
-        },
-        "name": {
-          "type": "character varying(100)",
-          "nullable": true,
-          "default": null
-        },
-        "signed_token": {
-          "type": "text",
-          "nullable": true,
-          "default": null
-        },
-        "signed_token_expires_at": {
-          "type": "timestamp with time zone",
-          "nullable": true,
-          "default": null
-        },
-        "last_seen_at": {
-          "type": "timestamp with time zone",
-          "nullable": false,
-          "default": "now()"
-        },
-        "revoked_at": {
-          "type": "timestamp with time zone",
-          "nullable": true,
-          "default": null
-        },
-        "revoke_reason": {
-          "type": "character varying(64)",
-          "nullable": true,
-          "default": null
-        },
-        "created_at": {
-          "type": "timestamp with time zone",
-          "nullable": false,
-          "default": "now()"
-        },
-        "user_id": {
-          "type": "uuid",
-          "nullable": true,
-          "default": null
-        }
-      }
-    },
     "setup_wizard_state": {
       "columns": {
         "tenant_id": {
@@ -3407,94 +3579,59 @@
         }
       }
     },
-    "company_profiles": {
+    "attachments": {
       "columns": {
         "id": {
           "type": "uuid",
           "nullable": false,
-          "default": "gen_random_uuid()"
+          "default": "uuid_generate_v4()"
         },
         "tenant_id": {
           "type": "uuid",
           "nullable": false,
           "default": null
         },
-        "name": {
+        "entity_type": {
+          "type": "character varying(50)",
+          "nullable": false,
+          "default": null
+        },
+        "entity_id": {
+          "type": "uuid",
+          "nullable": false,
+          "default": null
+        },
+        "filename": {
+          "type": "character varying(500)",
+          "nullable": false,
+          "default": null
+        },
+        "mime_type": {
           "type": "character varying(255)",
-          "nullable": false,
-          "default": null
-        },
-        "commercial_reg": {
-          "type": "character varying(100)",
           "nullable": true,
           "default": null
         },
-        "tax_number": {
-          "type": "character varying(100)",
+        "size_bytes": {
+          "type": "bigint",
           "nullable": true,
           "default": null
         },
-        "address": {
+        "storage_key": {
           "type": "character varying(500)",
-          "nullable": true,
-          "default": null
-        },
-        "city": {
-          "type": "character varying(100)",
-          "nullable": true,
-          "default": null
-        },
-        "country": {
-          "type": "character varying(100)",
-          "nullable": true,
-          "default": null
-        },
-        "phone": {
-          "type": "character varying(30)",
-          "nullable": true,
-          "default": null
-        },
-        "email": {
-          "type": "character varying(320)",
-          "nullable": true,
-          "default": null
-        },
-        "logo_path": {
-          "type": "character varying(500)",
-          "nullable": true,
-          "default": null
-        },
-        "currency": {
-          "type": "character varying(3)",
           "nullable": false,
-          "default": "'SYP'::character varying"
+          "default": null
         },
-        "language": {
-          "type": "character varying(5)",
-          "nullable": false,
-          "default": "'ar'::character varying"
-        },
-        "fiscal_year_start": {
-          "type": "date",
+        "storage_url": {
+          "type": "text",
           "nullable": true,
           "default": null
         },
-        "default_tax_rate": {
-          "type": "numeric(5,4)",
-          "nullable": false,
-          "default": "0.0000"
-        },
-        "customization": {
-          "type": "jsonb",
+        "uploaded_by": {
+          "type": "uuid",
           "nullable": true,
-          "default": "'{}'::jsonb"
+          "default": null
         },
         "created_at": {
-          "type": "timestamp with time zone",
-          "nullable": false,
-          "default": "now()"
-        },
-        "updated_at": {
           "type": "timestamp with time zone",
           "nullable": false,
           "default": "now()"
@@ -3714,7 +3851,7 @@
         }
       }
     },
-    "return_lines": {
+    "settings": {
       "columns": {
         "id": {
           "type": "uuid",
@@ -3726,83 +3863,50 @@
           "nullable": false,
           "default": null
         },
-        "return_id": {
-          "type": "uuid",
-          "nullable": false,
-          "default": null
+        "company": {
+          "type": "jsonb",
+          "nullable": true,
+          "default": "'{}'::jsonb"
         },
-        "roll_id": {
-          "type": "uuid",
-          "nullable": false,
-          "default": null
+        "currencies": {
+          "type": "jsonb",
+          "nullable": true,
+          "default": "'[]'::jsonb"
         },
-        "quantity_kg": {
-          "type": "numeric(12,2)",
-          "nullable": false,
-          "default": null
+        "payment_methods": {
+          "type": "jsonb",
+          "nullable": true,
+          "default": "'[]'::jsonb"
         },
-        "price_per_kg": {
-          "type": "numeric(14,4)",
-          "nullable": false,
-          "default": null
+        "taxes": {
+          "type": "jsonb",
+          "nullable": true,
+          "default": "'[]'::jsonb"
         },
-        "pieces": {
-          "type": "integer",
-          "nullable": false,
-          "default": "1"
-        }
-      }
-    },
-    "sync_device_authorized_users": {
-      "columns": {
-        "device_id": {
-          "type": "uuid",
-          "nullable": false,
-          "default": null
+        "units": {
+          "type": "jsonb",
+          "nullable": true,
+          "default": "'[]'::jsonb"
         },
-        "user_id": {
-          "type": "uuid",
-          "nullable": false,
-          "default": null
+        "warehouses": {
+          "type": "jsonb",
+          "nullable": true,
+          "default": "'[]'::jsonb"
         },
-        "tenant_id": {
-          "type": "uuid",
-          "nullable": false,
-          "default": null
-        },
-        "created_at": {
-          "type": "timestamp with time zone",
-          "nullable": false,
-          "default": "now()"
-        }
-      }
-    },
-    "cashbox_daily_balances": {
-      "columns": {
-        "tenant_id": {
-          "type": "uuid",
-          "nullable": false,
-          "default": null
-        },
-        "currency": {
-          "type": "character varying(3)",
-          "nullable": false,
-          "default": null
-        },
-        "balance_date": {
-          "type": "date",
-          "nullable": false,
-          "default": null
-        },
-        "closing_balance": {
-          "type": "numeric(14,2)",
-          "nullable": false,
-          "default": "0"
+        "printing": {
+          "type": "jsonb",
+          "nullable": true,
+          "default": "'{}'::jsonb"
         },
         "updated_at": {
           "type": "timestamp with time zone",
           "nullable": false,
           "default": "now()"
+        },
+        "drive": {
+          "type": "jsonb",
+          "nullable": true,
+          "default": "'{}'::jsonb"
         }
       }
     },
@@ -3929,105 +4033,6 @@
         },
         "notes": {
           "type": "text",
-          "nullable": true,
-          "default": null
-        },
-        "created_at": {
-          "type": "timestamp with time zone",
-          "nullable": false,
-          "default": "now()"
-        },
-        "updated_at": {
-          "type": "timestamp with time zone",
-          "nullable": false,
-          "default": "now()"
-        }
-      }
-    },
-    "inventory_counts": {
-      "columns": {
-        "id": {
-          "type": "uuid",
-          "nullable": false,
-          "default": "gen_random_uuid()"
-        },
-        "tenant_id": {
-          "type": "uuid",
-          "nullable": false,
-          "default": null
-        },
-        "year": {
-          "type": "integer",
-          "nullable": false,
-          "default": null
-        },
-        "roll_id": {
-          "type": "uuid",
-          "nullable": false,
-          "default": null
-        },
-        "book_kg": {
-          "type": "numeric(14,2)",
-          "nullable": false,
-          "default": null
-        },
-        "book_pieces": {
-          "type": "integer",
-          "nullable": false,
-          "default": "0"
-        },
-        "counted_kg": {
-          "type": "numeric(14,2)",
-          "nullable": true,
-          "default": null
-        },
-        "counted_pieces": {
-          "type": "integer",
-          "nullable": true,
-          "default": null
-        },
-        "diff_kg": {
-          "type": "numeric(14,2)",
-          "nullable": true,
-          "default": null
-        },
-        "diff_pieces": {
-          "type": "integer",
-          "nullable": true,
-          "default": null
-        },
-        "status": {
-          "type": "character varying(20)",
-          "nullable": false,
-          "default": "'counted'::character varying"
-        },
-        "reason": {
-          "type": "text",
-          "nullable": true,
-          "default": null
-        },
-        "counted_by": {
-          "type": "uuid",
-          "nullable": true,
-          "default": null
-        },
-        "counted_at": {
-          "type": "timestamp with time zone",
-          "nullable": true,
-          "default": null
-        },
-        "approved_by": {
-          "type": "uuid",
-          "nullable": true,
-          "default": null
-        },
-        "approved_at": {
-          "type": "timestamp with time zone",
-          "nullable": true,
-          "default": null
-        },
-        "posted_movement_id": {
-          "type": "uuid",
           "nullable": true,
           "default": null
         },
@@ -4661,14 +4666,6 @@
       "table": "sync_resource_claims",
       "definition": "create unique index uq_sync_claims_identity on public.sync_resource_claims using btree (tenant_id, resource_type, resource_id) where ((quantity_kg is null) and (quantity_pieces is null))"
     },
-    "inventory_counts_pkey": {
-      "table": "inventory_counts",
-      "definition": "create unique index inventory_counts_pkey on public.inventory_counts using btree (id)"
-    },
-    "inventory_counts_roll_year_key": {
-      "table": "inventory_counts",
-      "definition": "create unique index inventory_counts_roll_year_key on public.inventory_counts using btree (tenant_id, year, roll_id)"
-    },
     "uq_sync_claims_qty_op": {
       "table": "sync_resource_claims",
       "definition": "create unique index uq_sync_claims_qty_op on public.sync_resource_claims using btree (tenant_id, resource_type, resource_id, claimed_by_op_id) where ((quantity_kg is not null) or (quantity_pieces is not null))"
@@ -4781,10 +4778,6 @@
       "table": "sync_outbox",
       "definition": "create index idx_sync_outbox_lease_until on public.sync_outbox using btree (tenant_id, lease_until) where ((status)::text = 'pushing'::text)"
     },
-    "idx_inventory_counts_tenant_year": {
-      "table": "inventory_counts",
-      "definition": "create index idx_inventory_counts_tenant_year on public.inventory_counts using btree (tenant_id, year, status)"
-    },
     "idx_sync_outbox_synced_at": {
       "table": "sync_outbox",
       "definition": "create index idx_sync_outbox_synced_at on public.sync_outbox using btree (tenant_id, synced_at) where ((status)::text = 'synced'::text)"
@@ -4896,6 +4889,18 @@
     "idx_financial_years_tenant_status": {
       "table": "financial_years",
       "definition": "create index idx_financial_years_tenant_status on public.financial_years using btree (tenant_id, status)"
+    },
+    "inventory_counts_pkey": {
+      "table": "inventory_counts",
+      "definition": "create unique index inventory_counts_pkey on public.inventory_counts using btree (id)"
+    },
+    "inventory_counts_roll_year_key": {
+      "table": "inventory_counts",
+      "definition": "create unique index inventory_counts_roll_year_key on public.inventory_counts using btree (tenant_id, year, roll_id)"
+    },
+    "idx_inventory_counts_tenant_year": {
+      "table": "inventory_counts",
+      "definition": "create index idx_inventory_counts_tenant_year on public.inventory_counts using btree (tenant_id, year, status)"
     }
   },
   "constraints": {
@@ -4943,6 +4948,11 @@
       "table": "license_activations",
       "type": "f",
       "definition": "foreign key (license_id) references licenses(id)"
+    },
+    "license_activations_tenant_id_tenants_id_fk": {
+      "table": "license_activations",
+      "type": "f",
+      "definition": "foreign key (tenant_id) references tenants(id)"
     },
     "parties_currency_check": {
       "table": "parties",
@@ -5023,6 +5033,11 @@
       "table": "invoice_lines",
       "type": "f",
       "definition": "foreign key (color_id) references colors(id)"
+    },
+    "invitation_codes_pkey": {
+      "table": "invitation_codes",
+      "type": "p",
+      "definition": "primary key (id)"
     },
     "rolls_status_check": {
       "table": "rolls",
@@ -5144,15 +5159,15 @@
       "type": "c",
       "definition": "check (((party_kind)::text = any ((array['customer'::character varying, 'supplier'::character varying])::text[])))"
     },
-    "license_activations_tenant_id_tenants_id_fk": {
-      "table": "license_activations",
-      "type": "f",
-      "definition": "foreign key (tenant_id) references tenants(id)"
-    },
     "license_audit_events_license_id_licenses_id_fk": {
       "table": "license_audit_events",
       "type": "f",
       "definition": "foreign key (license_id) references licenses(id)"
+    },
+    "license_audit_events_tenant_id_tenants_id_fk": {
+      "table": "license_audit_events",
+      "type": "f",
+      "definition": "foreign key (tenant_id) references tenants(id)"
     },
     "vouchers_currency_check": {
       "table": "vouchers",
@@ -5194,11 +5209,6 @@
       "type": "c",
       "definition": "check (((currency)::text = any ((array['syp'::character varying, 'usd'::character varying, 'eur'::character varying])::text[])))"
     },
-    "license_audit_events_tenant_id_tenants_id_fk": {
-      "table": "license_audit_events",
-      "type": "f",
-      "definition": "foreign key (tenant_id) references tenants(id)"
-    },
     "secrets_tenant_id_tenants_id_fk": {
       "table": "secrets",
       "type": "f",
@@ -5206,6 +5216,11 @@
     },
     "server_installations_tenant_id_tenants_id_fk": {
       "table": "server_installations",
+      "type": "f",
+      "definition": "foreign key (tenant_id) references tenants(id)"
+    },
+    "setup_wizard_state_tenant_id_tenants_id_fk": {
+      "table": "setup_wizard_state",
       "type": "f",
       "definition": "foreign key (tenant_id) references tenants(id)"
     },
@@ -5471,16 +5486,6 @@
     },
     "server_installations_pkey": {
       "table": "server_installations",
-      "type": "p",
-      "definition": "primary key (id)"
-    },
-    "setup_wizard_state_tenant_id_tenants_id_fk": {
-      "table": "setup_wizard_state",
-      "type": "f",
-      "definition": "foreign key (tenant_id) references tenants(id)"
-    },
-    "invitation_codes_pkey": {
-      "table": "invitation_codes",
       "type": "p",
       "definition": "primary key (id)"
     },
@@ -5866,6 +5871,101 @@
     }
   },
   "policies": {
+    "public.fabrics.tenant_isolation": {
+      "cmd": "ALL",
+      "using": "(tenant_id = (NULLIF(current_setting('app.current_tenant_id'::text, true), ''::text))::uuid)",
+      "withCheck": null
+    },
+    "public.colors.tenant_isolation": {
+      "cmd": "ALL",
+      "using": "(tenant_id = (NULLIF(current_setting('app.current_tenant_id'::text, true), ''::text))::uuid)",
+      "withCheck": null
+    },
+    "public.users.tenant_isolation": {
+      "cmd": "ALL",
+      "using": "(tenant_id = (NULLIF(current_setting('app.current_tenant_id'::text, true), ''::text))::uuid)",
+      "withCheck": null
+    },
+    "public.rolls.tenant_isolation": {
+      "cmd": "ALL",
+      "using": "(tenant_id = (NULLIF(current_setting('app.current_tenant_id'::text, true), ''::text))::uuid)",
+      "withCheck": null
+    },
+    "public.vouchers.tenant_isolation": {
+      "cmd": "ALL",
+      "using": "(tenant_id = (NULLIF(current_setting('app.current_tenant_id'::text, true), ''::text))::uuid)",
+      "withCheck": null
+    },
+    "public.invoice_lines.tenant_isolation": {
+      "cmd": "ALL",
+      "using": "(tenant_id = (NULLIF(current_setting('app.current_tenant_id'::text, true), ''::text))::uuid)",
+      "withCheck": null
+    },
+    "public.orders.tenant_isolation": {
+      "cmd": "ALL",
+      "using": "(tenant_id = (NULLIF(current_setting('app.current_tenant_id'::text, true), ''::text))::uuid)",
+      "withCheck": null
+    },
+    "public.order_items.tenant_isolation": {
+      "cmd": "ALL",
+      "using": "(tenant_id = (NULLIF(current_setting('app.current_tenant_id'::text, true), ''::text))::uuid)",
+      "withCheck": null
+    },
+    "public.ledger_entries.tenant_isolation": {
+      "cmd": "ALL",
+      "using": "(tenant_id = (NULLIF(current_setting('app.current_tenant_id'::text, true), ''::text))::uuid)",
+      "withCheck": null
+    },
+    "public.returns.tenant_isolation": {
+      "cmd": "ALL",
+      "using": "(tenant_id = (NULLIF(current_setting('app.current_tenant_id'::text, true), ''::text))::uuid)",
+      "withCheck": null
+    },
+    "public.return_lines.tenant_isolation": {
+      "cmd": "ALL",
+      "using": "(tenant_id = (NULLIF(current_setting('app.current_tenant_id'::text, true), ''::text))::uuid)",
+      "withCheck": null
+    },
+    "public.licenses.platform_or_tenant": {
+      "cmd": "ALL",
+      "using": "((tenant_id = (NULLIF(current_setting('app.current_tenant_id'::text, true), ''::text))::uuid) OR (current_setting('app.platform_mode'::text, true) = 'on'::text))",
+      "withCheck": "((tenant_id = (NULLIF(current_setting('app.current_tenant_id'::text, true), ''::text))::uuid) OR (current_setting('app.platform_mode'::text, true) = 'on'::text))"
+    },
+    "public.license_activations.platform_or_tenant": {
+      "cmd": "ALL",
+      "using": "((tenant_id = (NULLIF(current_setting('app.current_tenant_id'::text, true), ''::text))::uuid) OR (current_setting('app.platform_mode'::text, true) = 'on'::text))",
+      "withCheck": "((tenant_id = (NULLIF(current_setting('app.current_tenant_id'::text, true), ''::text))::uuid) OR (current_setting('app.platform_mode'::text, true) = 'on'::text))"
+    },
+    "public.device_registrations.platform_or_tenant": {
+      "cmd": "ALL",
+      "using": "((tenant_id = (NULLIF(current_setting('app.current_tenant_id'::text, true), ''::text))::uuid) OR (current_setting('app.platform_mode'::text, true) = 'on'::text))",
+      "withCheck": "((tenant_id = (NULLIF(current_setting('app.current_tenant_id'::text, true), ''::text))::uuid) OR (current_setting('app.platform_mode'::text, true) = 'on'::text))"
+    },
+    "public.invoices.tenant_isolation": {
+      "cmd": "ALL",
+      "using": "(tenant_id = (NULLIF(current_setting('app.current_tenant_id'::text, true), ''::text))::uuid)",
+      "withCheck": null
+    },
+    "public.cashbox_sessions.tenant_isolation": {
+      "cmd": "ALL",
+      "using": "(tenant_id = (NULLIF(current_setting('app.current_tenant_id'::text, true), ''::text))::uuid)",
+      "withCheck": null
+    },
+    "public.yearly_party_summaries.tenant_isolation": {
+      "cmd": "ALL",
+      "using": "(tenant_id = (NULLIF(current_setting('app.current_tenant_id'::text, true), ''::text))::uuid)",
+      "withCheck": null
+    },
+    "public.parties.tenant_isolation": {
+      "cmd": "ALL",
+      "using": "(tenant_id = (NULLIF(current_setting('app.current_tenant_id'::text, true), ''::text))::uuid)",
+      "withCheck": null
+    },
+    "public.manual_movements.tenant_isolation": {
+      "cmd": "ALL",
+      "using": "(tenant_id = (NULLIF(current_setting('app.current_tenant_id'::text, true), ''::text))::uuid)",
+      "withCheck": null
+    },
     "public.idempotency_keys.tenant_isolation": {
       "cmd": "ALL",
       "using": "(tenant_id = (NULLIF(current_setting('app.current_tenant_id'::text, true), ''::text))::uuid)",
@@ -5876,112 +5976,12 @@
       "using": "(tenant_id = (NULLIF(current_setting('app.current_tenant_id'::text, true), ''::text))::uuid)",
       "withCheck": null
     },
-    "public.fabrics.tenant_isolation": {
-      "cmd": "ALL",
-      "using": "(tenant_id = (NULLIF(current_setting('app.current_tenant_id'::text, true), ''::text))::uuid)",
-      "withCheck": null
-    },
-    "public.orders.tenant_isolation": {
-      "cmd": "ALL",
-      "using": "(tenant_id = (NULLIF(current_setting('app.current_tenant_id'::text, true), ''::text))::uuid)",
-      "withCheck": null
-    },
-    "public.returns.tenant_isolation": {
-      "cmd": "ALL",
-      "using": "(tenant_id = (NULLIF(current_setting('app.current_tenant_id'::text, true), ''::text))::uuid)",
-      "withCheck": null
-    },
     "public.document_sequences.tenant_isolation": {
       "cmd": "ALL",
       "using": "(tenant_id = (NULLIF(current_setting('app.current_tenant_id'::text, true), ''::text))::uuid)",
       "withCheck": null
     },
     "public.audit_logs.tenant_isolation": {
-      "cmd": "ALL",
-      "using": "(tenant_id = (NULLIF(current_setting('app.current_tenant_id'::text, true), ''::text))::uuid)",
-      "withCheck": null
-    },
-    "public.notifications.tenant_isolation": {
-      "cmd": "ALL",
-      "using": "(tenant_id = (NULLIF(current_setting('app.current_tenant_id'::text, true), ''::text))::uuid)",
-      "withCheck": null
-    },
-    "public.settings.tenant_isolation": {
-      "cmd": "ALL",
-      "using": "(tenant_id = (NULLIF(current_setting('app.current_tenant_id'::text, true), ''::text))::uuid)",
-      "withCheck": null
-    },
-    "public.colors.tenant_isolation": {
-      "cmd": "ALL",
-      "using": "(tenant_id = (NULLIF(current_setting('app.current_tenant_id'::text, true), ''::text))::uuid)",
-      "withCheck": null
-    },
-    "public.rolls.tenant_isolation": {
-      "cmd": "ALL",
-      "using": "(tenant_id = (NULLIF(current_setting('app.current_tenant_id'::text, true), ''::text))::uuid)",
-      "withCheck": null
-    },
-    "public.order_items.tenant_isolation": {
-      "cmd": "ALL",
-      "using": "(tenant_id = (NULLIF(current_setting('app.current_tenant_id'::text, true), ''::text))::uuid)",
-      "withCheck": null
-    },
-    "public.return_lines.tenant_isolation": {
-      "cmd": "ALL",
-      "using": "(tenant_id = (NULLIF(current_setting('app.current_tenant_id'::text, true), ''::text))::uuid)",
-      "withCheck": null
-    },
-    "public.users.tenant_isolation": {
-      "cmd": "ALL",
-      "using": "(tenant_id = (NULLIF(current_setting('app.current_tenant_id'::text, true), ''::text))::uuid)",
-      "withCheck": null
-    },
-    "public.print_jobs.tenant_isolation": {
-      "cmd": "ALL",
-      "using": "(tenant_id = (NULLIF(current_setting('app.current_tenant_id'::text, true), ''::text))::uuid)",
-      "withCheck": null
-    },
-    "public.invoices.tenant_isolation": {
-      "cmd": "ALL",
-      "using": "(tenant_id = (NULLIF(current_setting('app.current_tenant_id'::text, true), ''::text))::uuid)",
-      "withCheck": null
-    },
-    "public.invoice_lines.tenant_isolation": {
-      "cmd": "ALL",
-      "using": "(tenant_id = (NULLIF(current_setting('app.current_tenant_id'::text, true), ''::text))::uuid)",
-      "withCheck": null
-    },
-    "public.ledger_entries.tenant_isolation": {
-      "cmd": "ALL",
-      "using": "(tenant_id = (NULLIF(current_setting('app.current_tenant_id'::text, true), ''::text))::uuid)",
-      "withCheck": null
-    },
-    "public.vouchers.tenant_isolation": {
-      "cmd": "ALL",
-      "using": "(tenant_id = (NULLIF(current_setting('app.current_tenant_id'::text, true), ''::text))::uuid)",
-      "withCheck": null
-    },
-    "public.expenses.tenant_isolation": {
-      "cmd": "ALL",
-      "using": "(tenant_id = (NULLIF(current_setting('app.current_tenant_id'::text, true), ''::text))::uuid)",
-      "withCheck": null
-    },
-    "public.parties.tenant_isolation": {
-      "cmd": "ALL",
-      "using": "(tenant_id = (NULLIF(current_setting('app.current_tenant_id'::text, true), ''::text))::uuid)",
-      "withCheck": null
-    },
-    "public.yearly_party_summaries.tenant_isolation": {
-      "cmd": "ALL",
-      "using": "(tenant_id = (NULLIF(current_setting('app.current_tenant_id'::text, true), ''::text))::uuid)",
-      "withCheck": null
-    },
-    "public.cashbox_sessions.tenant_isolation": {
-      "cmd": "ALL",
-      "using": "(tenant_id = (NULLIF(current_setting('app.current_tenant_id'::text, true), ''::text))::uuid)",
-      "withCheck": null
-    },
-    "public.manual_movements.tenant_isolation": {
       "cmd": "ALL",
       "using": "(tenant_id = (NULLIF(current_setting('app.current_tenant_id'::text, true), ''::text))::uuid)",
       "withCheck": null
@@ -6001,7 +6001,7 @@
       "using": "(((tenant_id)::text = current_setting('app.current_tenant_id'::text, true)) OR (current_setting('app.platform_mode'::text, true) = 'on'::text))",
       "withCheck": "(((tenant_id)::text = current_setting('app.current_tenant_id'::text, true)) OR (current_setting('app.platform_mode'::text, true) = 'on'::text))"
     },
-    "public.sync_inbox.sync_inbox_tenant_isolation": {
+    "public.sync_resource_claims.sync_resource_claims_tenant_isolation": {
       "cmd": "ALL",
       "using": "(((tenant_id)::text = current_setting('app.current_tenant_id'::text, true)) OR (current_setting('app.platform_mode'::text, true) = 'on'::text))",
       "withCheck": "(((tenant_id)::text = current_setting('app.current_tenant_id'::text, true)) OR (current_setting('app.platform_mode'::text, true) = 'on'::text))"
@@ -6011,10 +6011,25 @@
       "using": "(((tenant_id)::text = current_setting('app.current_tenant_id'::text, true)) OR (current_setting('app.platform_mode'::text, true) = 'on'::text))",
       "withCheck": "(((tenant_id)::text = current_setting('app.current_tenant_id'::text, true)) OR (current_setting('app.platform_mode'::text, true) = 'on'::text))"
     },
-    "public.sync_resource_claims.sync_resource_claims_tenant_isolation": {
+    "public.inventory_counts.tenant_isolation": {
       "cmd": "ALL",
-      "using": "(((tenant_id)::text = current_setting('app.current_tenant_id'::text, true)) OR (current_setting('app.platform_mode'::text, true) = 'on'::text))",
-      "withCheck": "(((tenant_id)::text = current_setting('app.current_tenant_id'::text, true)) OR (current_setting('app.platform_mode'::text, true) = 'on'::text))"
+      "using": "(tenant_id = (NULLIF(current_setting('app.current_tenant_id'::text, true), ''::text))::uuid)",
+      "withCheck": "(tenant_id = (NULLIF(current_setting('app.current_tenant_id'::text, true), ''::text))::uuid)"
+    },
+    "public.expenses.tenant_isolation": {
+      "cmd": "ALL",
+      "using": "(tenant_id = (NULLIF(current_setting('app.current_tenant_id'::text, true), ''::text))::uuid)",
+      "withCheck": null
+    },
+    "public.print_jobs.tenant_isolation": {
+      "cmd": "ALL",
+      "using": "(tenant_id = (NULLIF(current_setting('app.current_tenant_id'::text, true), ''::text))::uuid)",
+      "withCheck": null
+    },
+    "public.notifications.tenant_isolation": {
+      "cmd": "ALL",
+      "using": "(tenant_id = (NULLIF(current_setting('app.current_tenant_id'::text, true), ''::text))::uuid)",
+      "withCheck": null
     },
     "public.sync_state.sync_state_tenant_isolation": {
       "cmd": "ALL",
@@ -6036,15 +6051,15 @@
       "using": "(tenant_id = (NULLIF(current_setting('app.current_tenant_id'::text, true), ''::text))::uuid)",
       "withCheck": "(tenant_id = (NULLIF(current_setting('app.current_tenant_id'::text, true), ''::text))::uuid)"
     },
-    "public.cashbox_daily_balances.tenant_isolation": {
+    "public.company_profiles.tenant_isolation": {
       "cmd": "ALL",
       "using": "(tenant_id = (NULLIF(current_setting('app.current_tenant_id'::text, true), ''::text))::uuid)",
       "withCheck": "(tenant_id = (NULLIF(current_setting('app.current_tenant_id'::text, true), ''::text))::uuid)"
     },
-    "public.licenses.platform_or_tenant": {
+    "public.cashbox_daily_balances.tenant_isolation": {
       "cmd": "ALL",
-      "using": "((tenant_id = (NULLIF(current_setting('app.current_tenant_id'::text, true), ''::text))::uuid) OR (current_setting('app.platform_mode'::text, true) = 'on'::text))",
-      "withCheck": "((tenant_id = (NULLIF(current_setting('app.current_tenant_id'::text, true), ''::text))::uuid) OR (current_setting('app.platform_mode'::text, true) = 'on'::text))"
+      "using": "(tenant_id = (NULLIF(current_setting('app.current_tenant_id'::text, true), ''::text))::uuid)",
+      "withCheck": "(tenant_id = (NULLIF(current_setting('app.current_tenant_id'::text, true), ''::text))::uuid)"
     },
     "public.secrets.platform_or_tenant": {
       "cmd": "ALL",
@@ -6061,16 +6076,6 @@
       "using": "((tenant_id = (NULLIF(current_setting('app.current_tenant_id'::text, true), ''::text))::uuid) OR (current_setting('app.platform_mode'::text, true) = 'on'::text))",
       "withCheck": "((tenant_id = (NULLIF(current_setting('app.current_tenant_id'::text, true), ''::text))::uuid) OR (current_setting('app.platform_mode'::text, true) = 'on'::text))"
     },
-    "public.license_activations.platform_or_tenant": {
-      "cmd": "ALL",
-      "using": "((tenant_id = (NULLIF(current_setting('app.current_tenant_id'::text, true), ''::text))::uuid) OR (current_setting('app.platform_mode'::text, true) = 'on'::text))",
-      "withCheck": "((tenant_id = (NULLIF(current_setting('app.current_tenant_id'::text, true), ''::text))::uuid) OR (current_setting('app.platform_mode'::text, true) = 'on'::text))"
-    },
-    "public.device_registrations.platform_or_tenant": {
-      "cmd": "ALL",
-      "using": "((tenant_id = (NULLIF(current_setting('app.current_tenant_id'::text, true), ''::text))::uuid) OR (current_setting('app.platform_mode'::text, true) = 'on'::text))",
-      "withCheck": "((tenant_id = (NULLIF(current_setting('app.current_tenant_id'::text, true), ''::text))::uuid) OR (current_setting('app.platform_mode'::text, true) = 'on'::text))"
-    },
     "public.setup_wizard_state.platform_or_tenant": {
       "cmd": "ALL",
       "using": "((tenant_id = (NULLIF(current_setting('app.current_tenant_id'::text, true), ''::text))::uuid) OR (current_setting('app.platform_mode'::text, true) = 'on'::text))",
@@ -6080,11 +6085,6 @@
       "cmd": "ALL",
       "using": "((tenant_id = (NULLIF(current_setting('app.current_tenant_id'::text, true), ''::text))::uuid) OR (current_setting('app.platform_mode'::text, true) = 'on'::text))",
       "withCheck": "((tenant_id = (NULLIF(current_setting('app.current_tenant_id'::text, true), ''::text))::uuid) OR (current_setting('app.platform_mode'::text, true) = 'on'::text))"
-    },
-    "public.company_profiles.tenant_isolation": {
-      "cmd": "ALL",
-      "using": "(tenant_id = (NULLIF(current_setting('app.current_tenant_id'::text, true), ''::text))::uuid)",
-      "withCheck": "(tenant_id = (NULLIF(current_setting('app.current_tenant_id'::text, true), ''::text))::uuid)"
     },
     "public.attachments.tenant_isolation": {
       "cmd": "ALL",
@@ -6096,6 +6096,16 @@
       "using": "(tenant_id = (NULLIF(current_setting('app.current_tenant_id'::text, true), ''::text))::uuid)",
       "withCheck": "(tenant_id = (NULLIF(current_setting('app.current_tenant_id'::text, true), ''::text))::uuid)"
     },
+    "public.sync_inbox.sync_inbox_tenant_isolation": {
+      "cmd": "ALL",
+      "using": "(((tenant_id)::text = current_setting('app.current_tenant_id'::text, true)) OR (current_setting('app.platform_mode'::text, true) = 'on'::text))",
+      "withCheck": "(((tenant_id)::text = current_setting('app.current_tenant_id'::text, true)) OR (current_setting('app.platform_mode'::text, true) = 'on'::text))"
+    },
+    "public.settings.tenant_isolation": {
+      "cmd": "ALL",
+      "using": "(tenant_id = (NULLIF(current_setting('app.current_tenant_id'::text, true), ''::text))::uuid)",
+      "withCheck": null
+    },
     "public.financial_operations.tenant_isolation": {
       "cmd": "ALL",
       "using": "(tenant_id = (NULLIF(current_setting('app.current_tenant_id'::text, true), ''::text))::uuid)",
@@ -6105,14 +6115,93 @@
       "cmd": "ALL",
       "using": "(tenant_id = (NULLIF(current_setting('app.current_tenant_id'::text, true), ''::text))::uuid)",
       "withCheck": "(tenant_id = (NULLIF(current_setting('app.current_tenant_id'::text, true), ''::text))::uuid)"
-    },
-    "public.inventory_counts.tenant_isolation": {
-      "cmd": "ALL",
-      "using": "(tenant_id = (NULLIF(current_setting('app.current_tenant_id'::text, true), ''::text))::uuid)",
-      "withCheck": "(tenant_id = (NULLIF(current_setting('app.current_tenant_id'::text, true), ''::text))::uuid)"
     }
   },
   "rls": {
+    "tenants": {
+      "enabled": false,
+      "forced": false
+    },
+    "fabrics": {
+      "enabled": true,
+      "forced": true
+    },
+    "colors": {
+      "enabled": true,
+      "forced": true
+    },
+    "users": {
+      "enabled": true,
+      "forced": true
+    },
+    "rolls": {
+      "enabled": true,
+      "forced": true
+    },
+    "vouchers": {
+      "enabled": true,
+      "forced": true
+    },
+    "invoice_lines": {
+      "enabled": true,
+      "forced": true
+    },
+    "orders": {
+      "enabled": true,
+      "forced": true
+    },
+    "order_items": {
+      "enabled": true,
+      "forced": true
+    },
+    "ledger_entries": {
+      "enabled": true,
+      "forced": true
+    },
+    "returns": {
+      "enabled": true,
+      "forced": true
+    },
+    "return_lines": {
+      "enabled": true,
+      "forced": true
+    },
+    "licenses": {
+      "enabled": true,
+      "forced": true
+    },
+    "license_activations": {
+      "enabled": true,
+      "forced": true
+    },
+    "device_registrations": {
+      "enabled": true,
+      "forced": true
+    },
+    "schema_migrations": {
+      "enabled": false,
+      "forced": false
+    },
+    "invoices": {
+      "enabled": true,
+      "forced": true
+    },
+    "cashbox_sessions": {
+      "enabled": true,
+      "forced": true
+    },
+    "yearly_party_summaries": {
+      "enabled": true,
+      "forced": true
+    },
+    "parties": {
+      "enabled": true,
+      "forced": true
+    },
+    "manual_movements": {
+      "enabled": true,
+      "forced": true
+    },
     "system_admins": {
       "enabled": false,
       "forced": false
@@ -6125,15 +6214,7 @@
       "enabled": true,
       "forced": true
     },
-    "tenants": {
-      "enabled": false,
-      "forced": false
-    },
-    "schema_migrations": {
-      "enabled": false,
-      "forced": false
-    },
-    "attachments": {
+    "document_sequences": {
       "enabled": true,
       "forced": true
     },
@@ -6141,91 +6222,7 @@
       "enabled": true,
       "forced": true
     },
-    "returns": {
-      "enabled": true,
-      "forced": true
-    },
-    "fabrics": {
-      "enabled": true,
-      "forced": true
-    },
-    "orders": {
-      "enabled": true,
-      "forced": true
-    },
-    "document_sequences": {
-      "enabled": true,
-      "forced": true
-    },
-    "notifications": {
-      "enabled": true,
-      "forced": true
-    },
-    "settings": {
-      "enabled": true,
-      "forced": true
-    },
-    "vouchers": {
-      "enabled": true,
-      "forced": true
-    },
-    "expenses": {
-      "enabled": true,
-      "forced": true
-    },
-    "ledger_entries": {
-      "enabled": true,
-      "forced": true
-    },
-    "parties": {
-      "enabled": true,
-      "forced": true
-    },
-    "order_items": {
-      "enabled": true,
-      "forced": true
-    },
-    "rolls": {
-      "enabled": true,
-      "forced": true
-    },
-    "users": {
-      "enabled": true,
-      "forced": true
-    },
-    "colors": {
-      "enabled": true,
-      "forced": true
-    },
-    "cashbox_sessions": {
-      "enabled": true,
-      "forced": true
-    },
-    "invoice_lines": {
-      "enabled": true,
-      "forced": true
-    },
-    "invoices": {
-      "enabled": true,
-      "forced": true
-    },
     "day_closes": {
-      "enabled": true,
-      "forced": true
-    },
-    "yearly_party_summaries": {
-      "enabled": true,
-      "forced": true
-    },
-    "manual_movements": {
-      "enabled": true,
-      "forced": true
-    },
-    "sync_outbox": {
-      "enabled": true,
-      "forced": true
-    },
-    "sync_resource_claims": {
       "enabled": true,
       "forced": true
     },
@@ -6233,15 +6230,27 @@
       "enabled": true,
       "forced": true
     },
+    "sync_outbox": {
+      "enabled": true,
+      "forced": true
+    },
     "revoked_tokens": {
       "enabled": false,
       "forced": false
+    },
+    "sync_resource_claims": {
+      "enabled": true,
+      "forced": true
     },
     "document_number_blocks": {
       "enabled": true,
       "forced": true
     },
-    "licenses": {
+    "inventory_counts": {
+      "enabled": true,
+      "forced": true
+    },
+    "expenses": {
       "enabled": true,
       "forced": true
     },
@@ -6249,7 +6258,7 @@
       "enabled": true,
       "forced": true
     },
-    "sync_tombstones": {
+    "notifications": {
       "enabled": true,
       "forced": true
     },
@@ -6257,7 +6266,23 @@
       "enabled": true,
       "forced": true
     },
+    "sync_tombstones": {
+      "enabled": true,
+      "forced": true
+    },
     "sync_conflicts": {
+      "enabled": true,
+      "forced": true
+    },
+    "sync_device_authorized_users": {
+      "enabled": true,
+      "forced": true
+    },
+    "company_profiles": {
+      "enabled": true,
+      "forced": true
+    },
+    "cashbox_daily_balances": {
       "enabled": true,
       "forced": true
     },
@@ -6273,14 +6298,6 @@
       "enabled": true,
       "forced": true
     },
-    "license_activations": {
-      "enabled": true,
-      "forced": true
-    },
-    "device_registrations": {
-      "enabled": true,
-      "forced": true
-    },
     "setup_wizard_state": {
       "enabled": true,
       "forced": true
@@ -6289,7 +6306,7 @@
       "enabled": true,
       "forced": true
     },
-    "company_profiles": {
+    "attachments": {
       "enabled": true,
       "forced": true
     },
@@ -6301,15 +6318,7 @@
       "enabled": true,
       "forced": true
     },
-    "return_lines": {
-      "enabled": true,
-      "forced": true
-    },
-    "sync_device_authorized_users": {
-      "enabled": true,
-      "forced": true
-    },
-    "cashbox_daily_balances": {
+    "settings": {
       "enabled": true,
       "forced": true
     },
@@ -6318,10 +6327,6 @@
       "forced": true
     },
     "financial_years": {
-      "enabled": true,
-      "forced": true
-    },
-    "inventory_counts": {
       "enabled": true,
       "forced": true
     }
@@ -6402,9 +6407,9 @@
     "gtrgm_out": "5e901fe0cf3368f47fbb22f0760bd7b7be92395af90181a6f6316f5a3219ec15",
     "gtrgm_consistent": "eac36db5e91cdab7e2cdfefcad59af774f6ddd17ea53d2c91e07cf4194747b56",
     "gtrgm_distance": "4a4e97bb47b3a48534f5aedf2e4742b8744d645e5d9bd4c7a557474370d9957b",
-    "trg_cashbox_daily_from_manual": "189f3bd3c2dc9905cfca3f298a0b727470a4ce50d13a9d598dfe180c301c7aca",
     "trg_cashbox_daily_from_ledger": "0857df97ce7d441a15c690f788f50f25dbe5e1965a9116c7fb2f6693a8f42c0b",
-    "sync_inbox_stamp_applied_seq": "449c2609dda9fb80616a0c3e8067923662efeb9ba8cc25256ec920c30bf699ed"
+    "trg_cashbox_daily_from_manual": "189f3bd3c2dc9905cfca3f298a0b727470a4ce50d13a9d598dfe180c301c7aca",
+    "sync_inbox_stamp_applied_seq": "f49ee4d17b81ce29cd6b5008cc19e5643155ef1c8c379ecb3686deb6430f20aa"
   },
   "enums": {},
   "extensions": [
@@ -6412,6 +6417,6 @@
     "plpgsql",
     "uuid-ossp"
   ],
-  "generatedAt": "2026-10-06T06:20:07.160Z",
-  "sha256": "69d97aa2a1dac36feb596302c252cffc8e4d276dac1d90e155fdabaa06be60f7"
+  "generatedAt": "2026-10-10T15:12:43.565Z",
+  "sha256": "55acc971fa15f39ac37bcbef54e99cc82ab000660b551818d3a9c5b1bb040148"
 }

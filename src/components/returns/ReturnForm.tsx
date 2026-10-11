@@ -410,7 +410,11 @@ export function ReturnForm({ kind }: { kind: ReturnKind }) {
           <Button variant="ghost" onClick={() => history.back()}>
             <X className="h-4 w-4 ml-1" /> إلغاء
           </Button>
-          <Button onClick={save} className="bg-primary text-primary-foreground">
+          <Button
+            onClick={save}
+            disabled={createReturnMut.isPending}
+            className="bg-primary text-primary-foreground"
+          >
             <Save className="h-4 w-4 ml-1" /> حفظ المرتجع
           </Button>
         </div>

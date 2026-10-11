@@ -185,6 +185,7 @@ export const SYNC_COVERAGE: Record<string, CoverageEntry> = {
     exempt: "device-local backup file taken before an update; the backup is a local artifact, never a business document",
   },
   "POST /api/desktop/runtime/shutdown": { exempt: "device-local process shutdown for the update hand-off" },
+  "POST /api/desktop/runtime/drive-token": { exempt: "device-local, memory-only Google access token hand-off from the shell" },
   // ---- device-local operational mirrors ----
   "POST /notifications": { exempt: "device-local mirror; sync rejections notify per device" },
   "POST /notifications/:id/read": { exempt: "device-local read state" },
@@ -198,5 +199,17 @@ export const SYNC_COVERAGE: Record<string, CoverageEntry> = {
   "POST /orders/pending-conflicts": { exempt: "read-only availability query (readGuard)" },
   "POST /expenses/names": {
     exempt: "no-op by design: returns 201 without writing (names derive from expense categories)",
+  },
+
+  // ---- Google Drive archive: device-local operational control plane ----
+  // The archive uploads device-local exports to the customer's Drive; it never
+  // creates or mutates business documents. Upload eligibility is governed by
+  // the fail-closed primary-device gate (coordinator.ts), not by sync replay.
+  "POST /drive/test": { exempt: "device-local Drive connectivity probe; no business state" },
+  "POST /drive/sync-now": {
+    exempt: "device-local archive worker trigger; primary-device gated, produces no sync units",
+  },
+  "POST /drive/queue/:id/retry": {
+    exempt: "device-local upload queue retry; the queue is per-device runtime state, not company data",
   },
 };

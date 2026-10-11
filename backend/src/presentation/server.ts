@@ -4,6 +4,7 @@ import helmet from "helmet";
 import compression from "compression";
 import rateLimit from "express-rate-limit";
 import * as Sentry from "@sentry/node";
+import { scrubSentryEvent } from "../infrastructure/config/sentryScrub.js";
 import { installProcessGuards, markServing } from "../infrastructure/config/processGuard.js";
 import { config, corsOrigins } from "../infrastructure/config/env.js";
 import { logger } from "../infrastructure/config/logger.js";
@@ -84,6 +85,9 @@ if (config.SENTRY_DSN) {
     environment: config.NODE_ENV ?? "development",
     tracesSampleRate: config.NODE_ENV === "production" ? 0.1 : 1.0,
     profilesSampleRate: config.NODE_ENV === "production" ? 0.1 : 1.0,
+    // Privacy: no PII, and tokens/cookies/bodies are stripped from every event (sentryScrub.ts).
+    sendDefaultPii: false,
+    beforeSend: (event) => scrubSentryEvent(event),
   });
   logger.info({ dsn: config.SENTRY_DSN.slice(0, 30) + "…" }, "Sentry initialized");
 } else {
@@ -91,7 +95,9 @@ if (config.SENTRY_DSN) {
 }
 
 const app = express();
-app.set("trust proxy", 1);
+// The hub sits behind one reverse proxy; the desktop sidecar has none, so trusting X-Forwarded-For
+// there would let any caller claim `127.0.0.1` and pass the loopback checks (SEC-01 / SEC-04).
+app.set("trust proxy", config.DESKTOP_DEPLOY ? false : 1);
 const container = buildContainer();
 const authMiddleware = createAuthMiddleware(container.jwtSigner, container.tokenDenylist);
 
@@ -535,6 +541,58 @@ apiRouter.use(
   }),
 );
 apiRouter.use(createIntegrityRouter(authMiddleware));
+// Google Drive archive — admin routes + fail-closed primary-device worker wiring.
+// Desktop-SQLite only: the drive tables exist only in the desktop engine.
+if (config.DESKTOP_DEPLOY && getEngine() === "sqlite") {
+  void (async () => {
+    try {
+      const { createDriveRouter } = await import("./routes/drive.route.js");
+      const { UploadQueue } = await import("../infrastructure/googledrive/uploadQueue.js");
+      const { FolderOrganizer } = await import("../infrastructure/googledrive/folderOrganizer.js");
+      const { Exporters } = await import("../infrastructure/googledrive/exporters.js");
+      const { DriveClient, liveDriveToken, liveDriveTokenAvailable, onLiveDriveConnected } = await import("../infrastructure/googledrive/driveClient.js");
+      const { startDriveArchiveWorker, runArchivePass } = await import("../infrastructure/googledrive/monthlyArchiveJob.js");
+      const { sqliteDb } = await import("../infrastructure/orm/sqlite/transaction.js");
+      // The gated handle, not the raw writer: a raw write issued while a business transaction holds
+      // the writer would land INSIDE that transaction and roll back with it.
+      const db = sqliteDb();
+      // One client for the process; its token comes from the shell's push (D-01).
+      const client = new DriveClient({ token: liveDriveToken });
+      const folders = new FolderOrganizer(db, client);
+      const queue = new UploadQueue(db, client, folders);
+      const exporters = new Exporters(db);
+      // D-05: this installation's stable, device-bound id (identity.rs) is the archive device identity
+      // that the primary-device designation names.
+      const localDeviceId = config.MOTARD_INSTALLATION_ID || null;
+      const deps = {
+        db,
+        queue,
+        folders,
+        exporters,
+        localDeviceId,
+        get driveClient() {
+          return liveDriveTokenAvailable() ? client : null;
+        },
+        get drive() {
+          return liveDriveTokenAvailable() ? client : null;
+        },
+        syncNow: async () => {
+          const r = await runArchivePass(deps, "manual");
+          return { queued: r.enqueued, started: r.processed > 0 };
+        },
+      };
+      apiRouter.use(createDriveRouter(deps));
+      startDriveArchiveWorker(deps);
+      // Upload as soon as the shell's first token arrives, not at the next 6-hour tick.
+      onLiveDriveConnected(() => {
+        void runArchivePass(deps, "connect").catch((err) => logger.error({ err }, "DRIVE_ARCHIVE_CONNECT_PASS_FAILED"));
+      });
+      logger.info("DRIVE_ARCHIVE_WORKER_STARTED");
+    } catch (err) {
+      logger.warn({ err }, "DRIVE_ARCHIVE_WORKER_START_FAILED (non-fatal)");
+    }
+  })();
+}
 
 app.use("/api", apiRouter);
 

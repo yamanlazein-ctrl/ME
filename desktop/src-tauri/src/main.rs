@@ -108,12 +108,7 @@ fn close_startup_screen(app: &tauri::AppHandle) {
     });
 }
 
-/// sha256(APP_MASTER_KEY): authenticates the runtime's own calls to /api/desktop/runtime/* (T083).
-fn runtime_token() -> Result<String, String> {
-    use sha2::{Digest, Sha256};
-    let store = motard_fabrics_erp::secret_store::load_or_generate().map_err(|e| e.to_string())?;
-    Ok(format!("{:x}", Sha256::digest(store.app_master_key.as_bytes())))
-}
+use motard_fabrics_erp::secret_store::runtime_token;
 
 fn runtime_call(path: &str, token: &str) -> motard_fabrics_erp::runtime::PipeResponse {
     let mut headers = std::collections::HashMap::new();
@@ -391,6 +386,11 @@ fn main() {
             recovery_exit,
             startup_status,
             startup_choose,
+            google_configure_cmd,
+            google_status_cmd,
+            google_connect_start_cmd,
+            google_connect_finish_cmd,
+            google_disconnect_cmd,
             api,
         ])
         .build(tauri::generate_context!())
@@ -559,6 +559,15 @@ fn main() {
             apply_stack_state(&for_session_end, state);
         }));
         handle.manage(Arc::clone(&supervisor));
+        handle.manage(motard_fabrics_erp::google_ipc::GoogleState::default());
+        // D-01: keep the sidecar fed with a fresh Google access token (or tell it "disconnected").
+        let for_drive = handle.clone();
+        std::thread::spawn(move || loop {
+            let wait = motard_fabrics_erp::google_ipc::push_token_to_sidecar(
+                &for_drive.state::<motard_fabrics_erp::google_ipc::GoogleState>(),
+            );
+            std::thread::sleep(wait);
+        });
 
         let for_main = handle.clone();
         let for_end = Arc::clone(&supervisor);
@@ -737,6 +746,48 @@ fn archive_document_pdf(
     company_name: Option<String>,
 ) -> Result<motard_fabrics_erp::document_archive::ArchiveResult, String> {
     motard_fabrics_erp::document_archive::archive_document_pdf(doc_type, file_stem, html, company_name)
+}
+
+// ── Google Drive connection (google_ipc.rs owns the logic) ──────────────────
+
+// Async + spawn_blocking: synchronous commands run on the main thread, and `connect_finish` waits up
+// to 5 minutes for the browser consent (plus blocking HTTP to Google) — that froze the whole window.
+async fn google_blocking<T: Send + 'static>(
+    app: tauri::AppHandle,
+    f: impl FnOnce(&motard_fabrics_erp::google_ipc::GoogleState) -> Result<T, String> + Send + 'static,
+) -> Result<T, String> {
+    tauri::async_runtime::spawn_blocking(move || f(&app.state::<motard_fabrics_erp::google_ipc::GoogleState>()))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+async fn google_configure_cmd(client_id: String) -> Result<motard_fabrics_erp::google_ipc::GoogleStatus, String> {
+    tauri::async_runtime::spawn_blocking(move || motard_fabrics_erp::google_ipc::google_configure(client_id))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+async fn google_status_cmd() -> Result<motard_fabrics_erp::google_ipc::GoogleStatus, String> {
+    tauri::async_runtime::spawn_blocking(motard_fabrics_erp::google_ipc::google_status)
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+async fn google_connect_start_cmd(app: tauri::AppHandle) -> Result<motard_fabrics_erp::google_ipc::ConnectStart, String> {
+    google_blocking(app, motard_fabrics_erp::google_ipc::google_connect_start).await
+}
+
+#[tauri::command]
+async fn google_connect_finish_cmd(app: tauri::AppHandle) -> Result<motard_fabrics_erp::google_ipc::GoogleStatus, String> {
+    google_blocking(app, motard_fabrics_erp::google_ipc::google_connect_finish).await
+}
+
+#[tauri::command]
+async fn google_disconnect_cmd(app: tauri::AppHandle) -> Result<motard_fabrics_erp::google_ipc::GoogleStatus, String> {
+    google_blocking(app, motard_fabrics_erp::google_ipc::google_disconnect).await
 }
 
 /// App semver from Cargo (kept in sync with tauri.conf.json `version`).

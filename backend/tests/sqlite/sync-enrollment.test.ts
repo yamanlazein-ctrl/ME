@@ -148,4 +148,18 @@ describe("hub device enrollment", () => {
     const old = await en.createEnrollmentCode(deps, tenantId, adminId, { ttlHours: -1 });
     expect(await en.redeemEnrollmentCode(deps, tenantId, old.code, again)).toMatchObject({ ok: false, code: "ENROLL_CODE_EXPIRED" });
   });
+
+  // S-06: count-then-insert (device limit) and read-modify-write (`uses`) let simultaneous redeems of
+  // a ONE-use code all pass — enrolling several devices, past the license's device limit.
+  it("simultaneous redeems of a one-use code enroll exactly one device (S-06)", async () => {
+    for (const d of await deps.syncDeviceRepo.listForTenant(tenantId as never)) {
+      if (!d.revokedAt) await deps.syncDeviceRepo.setRevoked(tenantId as never, d.id as never, true, "free seats");
+    }
+    const one = await en.createEnrollmentCode(deps, tenantId, adminId, { maxUses: 1 });
+    const results = await Promise.all(["p1", "p2", "p3"].map((n) => en.redeemEnrollmentCode(deps, tenantId, one.code, device(n))));
+    expect(results.filter((r) => r.ok)).toHaveLength(1);
+    expect(results.filter((r) => !r.ok).every((r) => !r.ok && r.code === "ENROLL_CODE_USED_UP")).toBe(true);
+    expect((await deps.syncDeviceRepo.listForTenant(tenantId as never)).filter((d) => !d.revokedAt)).toHaveLength(1);
+    expect((await en.getEnrollmentCode(deps, tenantId))?.uses).toBe(1);
+  });
 });

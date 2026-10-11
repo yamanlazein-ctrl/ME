@@ -1,7 +1,14 @@
 import type { BaseHttpClient } from "@/infrastructure/http";
 
 export type SettingsSection =
-  "company" | "currencies" | "paymentMethods" | "taxes" | "units" | "warehouses" | "printing";
+  | "company"
+  | "currencies"
+  | "paymentMethods"
+  | "taxes"
+  | "units"
+  | "warehouses"
+  | "printing"
+  | "drive";
 
 export interface SettingsData {
   id?: string;

@@ -11,11 +11,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { container } from "@/infrastructure/container";
-import {
-  deleteCustomer,
-  deleteSupplier,
-  refreshParties,
-} from "@/presentation/hooks/useParties";
+import { deleteCustomer, deleteSupplier } from "@/presentation/hooks/useParties";
 import { invalidateFinancialViews } from "@/presentation/hooks/invalidateFinancialViews";
 import { toast } from "sonner";
 
@@ -193,8 +189,7 @@ export function PartyDeleteDialog({
       else await deleteCustomer(partyId, cascade, sheet.version);
     },
     onSuccess: () => {
-      invalidateFinancialViews(qc, { refetchDashboard: true });
-      void refreshParties();
+      invalidateFinancialViews(qc, { refetchDashboard: true }); // also refreshes the party list cache
       onOpenChange(false);
       onDeleted?.();
     },

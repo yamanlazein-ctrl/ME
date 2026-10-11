@@ -3,6 +3,7 @@ import { container } from "@/infrastructure/container";
 import { buildTenantContext } from "@/infrastructure/di/auth-context";
 import { isOk } from "@/core/result";
 import { toast } from "sonner";
+import { invalidateFinancialViews } from "./invalidateFinancialViews";
 import type {
   CreateManualMovementInput,
   CloseDayInput,
@@ -73,9 +74,9 @@ export function useAddManualMovement() {
     },
     onSuccess: () => {
       toast.success("تمت إضافة الحركة اليدوية");
-      qc.invalidateQueries({ queryKey: KEYS.state });
       qc.invalidateQueries({ queryKey: KEYS.movements });
-      qc.invalidateQueries({ queryKey: ["dashboard"] });
+      // A manual movement also writes/cancels a ledger leg (cashbox repository) — not cashbox-only.
+      invalidateFinancialViews(qc);
     },
     onError: (e: Error) => {
       toast.error(`فشل إضافة الحركة اليدوية: ${e.message}`);
@@ -89,10 +90,10 @@ export function useDeleteManualMovement() {
     mutationFn: (id: string) =>
       container.cashbox.state.deleteManualMovement(id, buildTenantContext()),
     onSuccess: () => {
-      toast.error("تم حذف الحركة اليدوية");
-      qc.invalidateQueries({ queryKey: KEYS.state });
+      toast.success("تم حذف الحركة اليدوية");
       qc.invalidateQueries({ queryKey: KEYS.movements });
-      qc.invalidateQueries({ queryKey: ["dashboard"] });
+      // A manual movement also writes/cancels a ledger leg (cashbox repository) — not cashbox-only.
+      invalidateFinancialViews(qc);
     },
     onError: (e: Error) => {
       toast.error(`فشل حذف الحركة اليدوية: ${e.message}`);

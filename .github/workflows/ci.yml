@@ -31,16 +31,48 @@ jobs:
       - name: Typecheck backend
         run: npm run typecheck:backend
 
+      # DB-09: the desktop (production) engine's schema gate — tsc over the SQLite
+      # test project, Drizzle schema regeneration check, and the committed
+      # fingerprint. Drift used to be caught only locally or at boot.
+      - name: SQLite typecheck + schema fingerprint gate (DB-09)
+        run: cd backend && npm run typecheck:sqlite
+
+      # T-05: the backend's production dependency set (what ships in the sidecar
+      # bundle) is clean today, so it is a hard gate.
+      - name: Backend production dependency audit (T-05)
+        run: cd backend && npm audit --omit=dev --audit-level=high
+
+      # T-05: the root tree is NOT clean today (seroval critical via
+      # @tanstack/router-core; nanoid/source-map-js/js-yaml are build-time
+      # tooling listed as prod deps). Advisory until those are upgraded.
+      - name: Frontend production dependency audit (T-05, advisory)
+        continue-on-error: true
+        run: npm audit --omit=dev --audit-level=high
+
       # FND-1/FND-2: Drizzle migrations are the sole schema authority and the
       # journal must resolve every on-disk migration exactly once.
       - name: Migration and schema authority guards
         run: npx vitest run backend/tests/migrations-journal-guard.test.ts backend/tests/schema-migration-parity.test.ts
 
+      # Also collects packages/shared/src/**/*.test.ts (T-01: the shared
+      # money-math suites were outside every include and had never run).
       - name: Run unit tests
         run: npm run test:logic
 
+      # T-09: the desktop ships on SQLite, but CI only ran the backend suite in
+      # PostgreSQL mode. test:sqlite runs it against a temp SQLite file.
+      - name: Backend suite on SQLite (T-09)
+        run: cd backend && npm run test:sqlite
+
       - name: Desktop resource-manifest unit gate (DFP-001 / DFP-008)
         run: node --test desktop/scripts/validate-resource-manifest.test.mjs
+
+      # DT-06: every command registered in main.rs `invoke_handler` must appear in build.rs
+      # APP_COMMANDS (the app manifest that grants ACL permissions) — otherwise the command is
+      # registered but ACL-dead and the shipped build silently breaks that feature
+      # (pick_backup_file = desktop restore-from-file; google_*_cmd = the Drive screen).
+      - name: Tauri IPC ACL wiring gate (DT-06)
+        run: node --test desktop/scripts/ipc-acl-wiring.test.mjs
 
       - name: Print blank-first-page contract (DFP-002)
         run: npx vitest run src/components/print/blankFirstPage.test.ts src/components/print/PrintDocument.header.test.tsx
@@ -224,6 +256,11 @@ jobs:
       - name: Resource manifest unit tests
         run: node --test desktop/scripts/validate-resource-manifest.test.mjs
 
+      # DT-06: the ACL wiring guard runs here too — this is the job that actually builds the
+      # Windows bundle, so a registered-but-ACL-dead command is caught at packaging time.
+      - name: Tauri IPC ACL wiring gate (DT-06)
+        run: node --test desktop/scripts/ipc-acl-wiring.test.mjs
+
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
 
@@ -250,6 +287,12 @@ jobs:
       - name: Desktop Rust secret-store fail-closed (DFP-011)
         working-directory: desktop/src-tauri
         run: cargo test corrupt_fail_message_documents_explicit_reset_env -- --nocapture
+
+      # T-08: the named filters above are spot checks; this runs every lib + bin
+      # test (111 locally on 2026-10-11).
+      - name: Desktop Rust full test suite (T-08)
+        working-directory: desktop/src-tauri
+        run: cargo test
 
       # Full MSI/NSIS build + clean-machine lifecycle remain DFP-004 (manual/VM).
       # This job fails the PR when Node staging or Rust cleanup regressions land.

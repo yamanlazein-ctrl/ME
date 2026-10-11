@@ -1,4 +1,5 @@
 import type { QueryClient } from "@tanstack/react-query";
+import { refreshParties } from "./useParties";
 
 /**
  * Central financial query invalidation (DFP-016 / DFP-017).
@@ -16,7 +17,11 @@ export function invalidateFinancialViews(
   qc.invalidateQueries({ queryKey: ["ledger"] });
   qc.invalidateQueries({ queryKey: ["profit"] });
   qc.invalidateQueries({ queryKey: ["statement"] });
-  qc.invalidateQueries({ queryKey: ["party"] });
+  qc.invalidateQueries({ queryKey: ["party"] }); // usePartyBalance
+  qc.invalidateQueries({ queryKey: ["parties"] }); // party list/detail queries
+  // The party list screens render `stats` from useParties' module cache, which no React Query
+  // invalidation reaches (FE-02) — refresh it here so every financial mutation updates the list.
+  void refreshParties();
   // Order fulfill / invoice-adjacent mutations.
   qc.invalidateQueries({ queryKey: ["invoices"] });
   if (options.refetchDashboard) {

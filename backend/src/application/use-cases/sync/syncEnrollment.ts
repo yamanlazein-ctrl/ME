@@ -134,8 +134,32 @@ async function mintCredential(deps: EnrollmentDeps, tenantId: string, deviceId: 
   return secret;
 }
 
+/**
+ * S-06: one redemption at a time per tenant. The device-limit check counts then inserts, and the
+ * code's `uses` is read-modify-write — run concurrently, N requests all passed both checks, so a
+ * one-use code enrolled N devices past the license's device limit.
+ * ponytail: in-process lock (the hub runs one instance); several instances need a DB advisory lock.
+ */
+const redeeming = new Map<string, Promise<unknown>>();
+
 /** Public: a device presents the company code and receives its identity + credential + tokens. */
 export async function redeemEnrollmentCode(
+  deps: EnrollmentDeps,
+  tenantId: string,
+  code: string,
+  device: EnrollingDevice,
+): Promise<({ ok: true; deviceId: string; deviceSecret: string } & HubTokens) | Failure> {
+  const run = (redeeming.get(tenantId) ?? Promise.resolve()).then(() => redeemUnlocked(deps, tenantId, code, device));
+  const tail = run.catch(() => undefined);
+  redeeming.set(tenantId, tail);
+  try {
+    return await run;
+  } finally {
+    if (redeeming.get(tenantId) === tail) redeeming.delete(tenantId);
+  }
+}
+
+async function redeemUnlocked(
   deps: EnrollmentDeps,
   tenantId: string,
   code: string,
@@ -161,8 +185,6 @@ export async function redeemEnrollmentCode(
   // Same PC under an older id (reinstall, factory reset, restore = new sync identity).
   let retiredTwin: string | null = null;
   if (!existing) {
-    // ponytail: count-then-insert, two simultaneous enrollments can pass one
-    // over the limit; a per-tenant lock if that ever matters.
     const all = await deps.syncDeviceRepo.listForTenant(tenantId as never, 500);
     const twin = all.find((d) => d.id !== device.id && d.deviceFingerprint === device.fingerprint);
     if (twin && !twin.revokedAt) {
@@ -211,7 +233,6 @@ export async function redeemEnrollmentCode(
   }
 
   const deviceSecret = await mintCredential(deps, tenantId, row.id, rec.createdBy);
-  // ponytail: read-modify-write; a simultaneous redeem can be counted once.
   await putJson(deps, tenantId, CURRENT_KEY, { ...rec, uses: rec.uses + 1 });
   const tokens = await issueTokens(deps, tenantId, rec.createdBy, issuer.name, issuer.role);
   return { ok: true, deviceId: row.id, deviceSecret, ...tokens };

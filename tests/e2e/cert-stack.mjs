@@ -105,7 +105,11 @@ await withClient(dbUrl, async (c) => {
     [tenantId],
   );
 });
-writeFileSync(join(here, ".cert-stack.json"), JSON.stringify({ tenantId, email, backend: "http://localhost:8080", ui: "http://localhost:8081" }, null, 2));
+// CERT_BACKEND_PORT / CERT_UI_PORT: run beside another server already holding 8080/8081; point the
+// suites at it with PLAYWRIGHT_BACKEND_URL / PLAYWRIGHT_BASE_URL.
+const BACKEND_PORT = process.env.CERT_BACKEND_PORT ?? "8080";
+const UI_PORT = process.env.CERT_UI_PORT ?? "8081";
+writeFileSync(join(here, ".cert-stack.json"), JSON.stringify({ tenantId, email, backend: `http://localhost:${BACKEND_PORT}`, ui: `http://localhost:${UI_PORT}` }, null, 2));
 console.log(`[cert-stack] ${DB} ready (tenant ${tenantId})`);
 
 // ── 3. servers ──
@@ -117,16 +121,16 @@ const start = (name, cmd, args, cwd, env, log) => {
   children.push(child);
   return child;
 };
-const backendEnv = { ...process.env, NODE_ENV: "test", DB_ENGINE: "postgres", DATABASE_URL: dbUrl, TEST_DB_URL: dbUrl, PORT: "8080", HOST: "127.0.0.1",
+const backendEnv = { ...process.env, NODE_ENV: "test", DB_ENGINE: "postgres", DATABASE_URL: dbUrl, TEST_DB_URL: dbUrl, PORT: BACKEND_PORT, HOST: "127.0.0.1",
   JWT_SECRET: process.env.JWT_SECRET ?? "cert-stack-jwt-secret-32-chars-minimum!!", APP_MASTER_KEY: process.env.APP_MASTER_KEY ?? "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa=",
-  CORS_ORIGIN: "http://localhost:8081", RATE_LIMIT_RPS: "100000", RATE_LIMIT_WINDOW_MS: "60000", LOG_LEVEL: "warn", DEFAULT_TENANT_ID: tenantId };
+  CORS_ORIGIN: `http://localhost:${UI_PORT}`, RATE_LIMIT_RPS: "100000", RATE_LIMIT_WINDOW_MS: "60000", LOG_LEVEL: "warn", DEFAULT_TENANT_ID: tenantId };
 for (const k of ["DESKTOP_DEPLOY", "DESKTOP_PIPE", "CENTRAL_SYNC_URL", "SQLITE_PATH", "MOTARD_STARTUP_STATE"]) delete backendEnv[k];
 start("backend", process.execPath, [join(BACKEND, "node_modules/tsx/dist/cli.mjs"), "src/presentation/server.ts"], join(SERVE, "backend"), backendEnv, ".cert-backend.log");
 // VITE_ACTIVATION_BYPASS: the UI's existing dev/test switch for the local device-activation marker
 // (ActivationGate). The suites test the ERP screens, not licence activation.
-const uiEnv = { ...process.env, VITE_API_BASE_URL: "http://localhost:8080", VITE_ACTIVATION_BYPASS: "1" };
+const uiEnv = { ...process.env, VITE_API_BASE_URL: `http://localhost:${BACKEND_PORT}`, VITE_ACTIVATION_BYPASS: "1" };
 delete uiEnv.VITE_DESKTOP_DEPLOY;
-start("ui", process.execPath, [join(REPO, "node_modules/vite/bin/vite.js"), "--port", "8081", "--strictPort", "--host", "localhost"], SERVE, uiEnv, ".cert-ui.log");
+start("ui", process.execPath, [join(REPO, "node_modules/vite/bin/vite.js"), "--port", UI_PORT, "--strictPort", "--host", "localhost"], SERVE, uiEnv, ".cert-ui.log");
 
 const wait = async (url, label) => {
   for (let i = 0; i < 240; i++) {
@@ -139,9 +143,9 @@ const wait = async (url, label) => {
   }
   throw new Error(`${label} did not start (see tests/e2e/.cert-${label}.log)`);
 };
-await wait("http://127.0.0.1:8080/api/health/live", "backend");
-await wait("http://localhost:8081/", "ui");
-console.log("[cert-stack] backend :8080 and ui :8081 up — Ctrl+C to stop");
+await wait(`http://127.0.0.1:${BACKEND_PORT}/api/health/live`, "backend");
+await wait(`http://localhost:${UI_PORT}/`, "ui");
+console.log(`[cert-stack] backend :${BACKEND_PORT} and ui :${UI_PORT} up — Ctrl+C to stop`);
 
 const stop = () => {
   for (const c of children) {

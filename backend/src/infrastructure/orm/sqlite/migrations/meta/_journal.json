@@ -41,6 +41,14 @@
       "tag": "0004_party_opening_currency",
       "breakpoints": false,
       "pgReferenceJournalIdx": 101
+    },
+    {
+      "idx": 5,
+      "version": 7,
+      "when": 1791643046822,
+      "tag": "0005_drive_archive",
+      "breakpoints": false,
+      "pgReferenceJournalIdx": 101
     }
   ]
 }

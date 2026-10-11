@@ -14,5 +14,6 @@ export const settings = pgTable("settings", {
   units: jsonb("units").default("[]"),
   warehouses: jsonb("warehouses").default("[]"),
   printing: jsonb("printing").default("{}"),
+  drive: jsonb("drive").default("{}"),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 }).enableRLS();

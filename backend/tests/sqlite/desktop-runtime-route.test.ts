@@ -99,6 +99,32 @@ describe("desktop runtime endpoints (T083)", () => {
     expect(entry?.kind).toBe("pre-update");
   });
 
+  // D-01: the shell's only way to hand the sidecar a Google access token (memory only).
+  it("drive-token: runtime-token gated; sets, then clears, the live Drive token", async () => {
+    const drive = await import("@/infrastructure/googledrive/driveClient.js");
+    const send = (body: unknown, token?: string) =>
+      fetch(`${base}/api/desktop/runtime/drive-token`, {
+        method: "POST",
+        headers: { "content-type": "application/json", ...(token ? { "x-motard-runtime-token": token } : {}) },
+        body: JSON.stringify(body),
+      });
+    const exp = Math.floor(Date.now() / 1000) + 3600;
+    expect((await send({ accessToken: "ya29.live-token-value", expiresAt: exp })).status).toBe(404);
+    expect(drive.liveDriveTokenAvailable()).toBe(false);
+
+    expect((await send({ accessToken: "short", expiresAt: exp }, TOKEN)).status).toBe(400);
+    const set = await send({ accessToken: "ya29.live-token-value", expiresAt: exp }, TOKEN);
+    expect(set.status).toBe(200);
+    expect(await set.json()).toEqual({ ok: true, connected: true });
+    expect(drive.liveDriveTokenAvailable()).toBe(true);
+    await expect(drive.liveDriveToken()).resolves.toBe("ya29.live-token-value");
+
+    const cleared = await send({ accessToken: null }, TOKEN);
+    expect(await cleared.json()).toEqual({ ok: true, connected: false });
+    expect(drive.liveDriveTokenAvailable()).toBe(false);
+    await expect(drive.liveDriveToken()).rejects.toThrow(drive.DriveAuthError);
+  });
+
   it("shutdown checkpoints the WAL to zero, closes the database and exits", async () => {
     const exit = vi.spyOn(process, "exit").mockImplementation((() => undefined) as never);
     try {

@@ -14,6 +14,7 @@ import type {
 } from "../../domain/entities/Statement.js";
 import type { LedgerEntryData } from "../../domain/entities/LedgerEntry.js";
 import type { TenantContext, UUID } from "../../domain/types/index.js";
+import { STATEMENT_DOCUMENT_TYPES } from "../../domain/ledger-entry-type.js";
 import { ledgerEntries } from "../orm/schemas/ledger-entry.table.js";
 import { parties } from "../orm/schemas/party.table.js";
 import { invoiceLines } from "../orm/schemas/invoice-line.table.js";
@@ -30,6 +31,11 @@ import { customerCreditPosition } from "./customerCredit.js";
 import { localToday } from "../utils/localDate.js";
 const INVOICE_TYPES = ["sales_invoice", "purchase_invoice"];
 const VOUCHER_REF_TYPES = ["receipt_in", "payment_out"];
+/** Tie-break inside one (date, created_at): documents (0) before the payments booked with them (1). */
+const docRank = sql`CASE WHEN ${ledgerEntries.type} IN (${sql.join(
+  STATEMENT_DOCUMENT_TYPES.map((t) => sql`${t}`),
+  sql`, `,
+)}) THEN 0 ELSE 1 END`;
 
 const TYPE_LABEL: Record<string, string> = {
   opening: "الرصيد الافتتاحي",
@@ -150,6 +156,17 @@ export class PostgresStatementRepository implements IStatementRepository {
       return { date: parts[0]!, createdAt: parts[1]!, id: parts[2]! };
     };
     const cursor = parseCursor(query.cursor);
+    // The cursor row's rank, read from the row itself: the cursor format (date|createdAt|id) — and any
+    // cursor a client still holds — stays valid.
+    let cursorRank = 1;
+    if (cursor) {
+      const [row] = await this.db
+        .select({ type: ledgerEntries.type })
+        .from(ledgerEntries)
+        .where(eq(ledgerEntries.id, cursor.id))
+        .limit(1);
+      cursorRank = row && (STATEMENT_DOCUMENT_TYPES as readonly string[]).includes(row.type) ? 0 : 1;
+    }
 
     const pageConditions = [...winConditions];
     if (cursor) {
@@ -157,7 +174,8 @@ export class PostgresStatementRepository implements IStatementRepository {
         sql`(
           ${ledgerEntries.date} > ${cursor.date}
           OR (${ledgerEntries.date} = ${cursor.date} AND ${ledgerEntries.createdAt} > ${cursor.createdAt}::timestamptz)
-          OR (${ledgerEntries.date} = ${cursor.date} AND ${ledgerEntries.createdAt} = ${cursor.createdAt}::timestamptz AND ${ledgerEntries.id} > ${cursor.id}::uuid)
+          OR (${ledgerEntries.date} = ${cursor.date} AND ${ledgerEntries.createdAt} = ${cursor.createdAt}::timestamptz AND ${docRank} > ${cursorRank})
+          OR (${ledgerEntries.date} = ${cursor.date} AND ${ledgerEntries.createdAt} = ${cursor.createdAt}::timestamptz AND ${docRank} = ${cursorRank} AND ${ledgerEntries.id} > ${cursor.id}::uuid)
         )`,
       );
     }
@@ -218,7 +236,7 @@ export class PostgresStatementRepository implements IStatementRepository {
         })
         .from(ledgerEntries)
         .where(and(...winConditions))
-        .orderBy(asc(ledgerEntries.date), asc(ledgerEntries.createdAt), asc(ledgerEntries.id))
+        .orderBy(asc(ledgerEntries.date), asc(ledgerEntries.createdAt), asc(docRank), asc(ledgerEntries.id))
         .limit(pageOffset)
         .as("head");
       const headRows = await this.db
@@ -243,7 +261,8 @@ export class PostgresStatementRepository implements IStatementRepository {
         sql`(
           ${ledgerEntries.date} < ${cursor.date}
           OR (${ledgerEntries.date} = ${cursor.date} AND ${ledgerEntries.createdAt} < ${cursor.createdAt}::timestamptz)
-          OR (${ledgerEntries.date} = ${cursor.date} AND ${ledgerEntries.createdAt} = ${cursor.createdAt}::timestamptz AND ${ledgerEntries.id} <= ${cursor.id}::uuid)
+          OR (${ledgerEntries.date} = ${cursor.date} AND ${ledgerEntries.createdAt} = ${cursor.createdAt}::timestamptz AND ${docRank} < ${cursorRank})
+          OR (${ledgerEntries.date} = ${cursor.date} AND ${ledgerEntries.createdAt} = ${cursor.createdAt}::timestamptz AND ${docRank} = ${cursorRank} AND ${ledgerEntries.id} <= ${cursor.id}::uuid)
         )`,
       ];
       const beforeRows = await this.db
@@ -276,7 +295,7 @@ export class PostgresStatementRepository implements IStatementRepository {
       })
       .from(ledgerEntries)
       .where(and(...pageConditions))
-      .orderBy(asc(ledgerEntries.date), asc(ledgerEntries.createdAt), asc(ledgerEntries.id))
+      .orderBy(asc(ledgerEntries.date), asc(ledgerEntries.createdAt), asc(docRank), asc(ledgerEntries.id))
       .limit(fetchLimit)
       .offset(pageOffset);
 

@@ -248,9 +248,10 @@ for (const [table, { file, exportName }] of Object.entries(RAW_ONLY)) {
 }
 
 // ── coverage: every live table exactly once, party_balances absent ─────────
+const HAND_WRITTEN = ["motard_meta", "motard_sequences", "motard_tx_state", "motard_sync_restore", "motard_drive_folders", "motard_drive_uploads", "motard_drive_runs"];
 const generated = new Set([...definedIn.keys(), ...Object.keys(RAW_ONLY)]);
 const live = Object.keys(FP.tables);
-const missing = live.filter((t) => !generated.has(t));
+const missing = live.filter((t) => !generated.has(t) && !HAND_WRITTEN.includes(t));
 const extra = [...generated].filter((t) => !FP.tables[t]);
 if (missing.length || extra.length || generated.has("party_balances")) {
   throw new Error(`table coverage mismatch: missing ${missing} extra ${extra}`);
@@ -263,6 +264,8 @@ const indexLines = [
   ...Object.values(RAW_ONLY).map((r) => `export * from "./${r.file.replace(/\.ts$/, ".js")}";`),
   // SQLite-only runtime tables (hand-written, T035).
   `export * from "./motard-meta.table.js";`,
+  // Hand-written SQLite-only tables beyond motard-meta (drive archive, migration 0005+).
+  `export * from "./drive-archive.table.js";`,
 ];
 outputs.set("index.ts", indexLines.join("\n") + "\n");
 

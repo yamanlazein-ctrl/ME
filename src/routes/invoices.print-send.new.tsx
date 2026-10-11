@@ -209,9 +209,14 @@ function PrintSendPage() {
 
   const openJobs = jobs.filter((j) => j.status === "sent");
 
+  // FE-09: each click mints its own Idempotency-Key, so the server cannot dedupe a double click —
+  // the buttons must be inert for the whole multi-document save.
+  const [saving, setSaving] = useState(false);
   const save = async (thenPrint = false) => {
+    if (saving) return;
     setError(null);
     setOk(null);
+    setSaving(true);
     const valid = lines.filter(
       (l) => !l.rollId.startsWith("fabric:") && l.rollId && Number(l.quantityKg) > 0,
     );
@@ -283,6 +288,8 @@ function PrintSendPage() {
       setNotes("");
     } catch (e) {
       setError((e as Error).message);
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -301,6 +308,7 @@ function PrintSendPage() {
                 variant="outline"
                 size="sm"
                 onClick={() => save(true)}
+                disabled={saving}
                 className="border-border bg-transparent text-foreground hover:bg-secondary"
               >
                 <Printer className="ml-1 h-4 w-4" /> حفظ وطباعة
@@ -308,6 +316,7 @@ function PrintSendPage() {
               <Button
                 size="sm"
                 onClick={() => save(false)}
+                disabled={saving}
                 className="bg-primary text-primary-foreground hover:brightness-110"
               >
                 <Save className="ml-1 h-4 w-4" /> حفظ

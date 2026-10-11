@@ -4,6 +4,7 @@ import { fetchAllPaged } from "@/lib/fetchAllPaged";
 import { buildTenantContext } from "@/infrastructure/di/auth-context";
 import { isOk } from "@/core/result";
 import { toast } from "sonner";
+import { invalidateFinancialViews } from "./invalidateFinancialViews";
 import type { VoucherFilter, CreateVoucherInput } from "@/core/dtos/VoucherDTO";
 import type { VoucherKind, VoucherMethod } from "@/domain/types";
 
@@ -87,20 +88,11 @@ export function useCreateReceiptVoucher() {
       if (!isOk(res)) throw res.error;
       return res.value;
     },
-    onSuccess: (_data, variables) => {
+    onSuccess: () => {
       toast.success("تم إنشاء سند القبض");
       qc.invalidateQueries({ queryKey: KEYS.root });
-      qc.invalidateQueries({ queryKey: ["dashboard"] });
-      // A voucher writes a ledger row + moves cash → refresh those caches too.
-      qc.invalidateQueries({ queryKey: ["ledger"] });
-      qc.invalidateQueries({ queryKey: ["cashbox"] });
-      qc.invalidateQueries({ queryKey: ["statement"] });
-      qc.invalidateQueries({ queryKey: ["parties"] });
-      qc.invalidateQueries({ queryKey: ["profit"] });
-      // A receipt linked to an invoice changes its paid/remaining.
-      if (variables.invoiceId) {
-        qc.invalidateQueries({ queryKey: ["invoices", "detail", variables.invoiceId] });
-      }
+      // A voucher writes a ledger row, moves cash and changes a linked invoice's paid/remaining.
+      invalidateFinancialViews(qc);
     },
     onError: (e: Error) => {
       toast.error(`فشل إنشاء سند القبض: ${e.message}`);
@@ -116,19 +108,11 @@ export function useCreatePaymentVoucher() {
       if (!isOk(res)) throw res.error;
       return res.value;
     },
-    onSuccess: (_data, variables) => {
+    onSuccess: () => {
       toast.success("تم إنشاء سند الصرف");
       qc.invalidateQueries({ queryKey: KEYS.root });
-      qc.invalidateQueries({ queryKey: ["dashboard"] });
-      qc.invalidateQueries({ queryKey: ["ledger"] });
-      qc.invalidateQueries({ queryKey: ["cashbox"] });
-      qc.invalidateQueries({ queryKey: ["statement"] });
-      qc.invalidateQueries({ queryKey: ["parties"] });
-      qc.invalidateQueries({ queryKey: ["profit"] });
-      // A payment linked to an invoice changes its paid/remaining.
-      if (variables.invoiceId) {
-        qc.invalidateQueries({ queryKey: ["invoices", "detail", variables.invoiceId] });
-      }
+      // A voucher writes a ledger row, moves cash and changes a linked invoice's paid/remaining.
+      invalidateFinancialViews(qc);
     },
     onError: (e: Error) => {
       toast.error(`فشل إنشاء سند الصرف: ${e.message}`);
@@ -147,14 +131,8 @@ export function useCancelVoucher() {
     onSuccess: () => {
       toast.success("تم إلغاء السند");
       qc.invalidateQueries({ queryKey: KEYS.root });
-      qc.invalidateQueries({ queryKey: ["dashboard"] });
-      qc.invalidateQueries({ queryKey: ["ledger"] });
-      qc.invalidateQueries({ queryKey: ["cashbox"] });
-      qc.invalidateQueries({ queryKey: ["statement"] });
-      qc.invalidateQueries({ queryKey: ["parties"] });
-      qc.invalidateQueries({ queryKey: ["profit"] });
-      // Cancelling a voucher may change an invoice's paid/remaining.
-      qc.invalidateQueries({ queryKey: ["invoices", "detail"] });
+      // A voucher writes a ledger row, moves cash and changes a linked invoice's paid/remaining.
+      invalidateFinancialViews(qc);
     },
     onError: (e: Error) => {
       toast.error(`فشل إلغاء السند: ${e.message}`);

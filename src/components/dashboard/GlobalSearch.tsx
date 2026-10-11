@@ -28,12 +28,12 @@ export function GlobalSearch() {
   const docFilter = term ? { search: term, limit: 20 } : { limit: 1 };
   const { data: invoicesData } = useInvoicesList(docFilter);
   const { data: vouchersData } = useVouchersList(docFilter);
-  const { data: expensesData } = useExpensesList();
+  const { data: expensesData } = useExpensesList(docFilter);
   const { data: returnsData } = useReturnsList(docFilter);
 
   const invoices = useMemo(() => invoicesData?.data ?? [], [invoicesData?.data]);
   const vouchers = useMemo(() => vouchersData?.data ?? [], [vouchersData?.data]);
-  const expenses = useMemo(() => expensesData ?? [], [expensesData]);
+  const expenses = useMemo(() => expensesData?.data ?? [], [expensesData?.data]);
   const returns = useMemo(() => returnsData?.data ?? [], [returnsData?.data]);
 
   useEffect(() => {

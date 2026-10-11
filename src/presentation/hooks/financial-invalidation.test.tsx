@@ -47,6 +47,10 @@ vi.mock("@/presentation/hooks/useInventory", () => ({
   rolls: [],
   refreshInventory: vi.fn(),
 }));
+// FE-02: the party list renders `p.stats` from useParties' module cache, which React Query cannot
+// reach — the central helper must refresh it, or the list shows stale totals after every mutation.
+const refreshParties = vi.fn(() => Promise.resolve());
+vi.mock("@/presentation/hooks/useParties", () => ({ refreshParties: () => refreshParties() }));
 vi.mock("@/infrastructure/di/auth-context", () => ({
   buildTenantContext: () => ({ tenantId: "t-1", userId: "u-1", userRole: "admin" }),
 }));
@@ -70,8 +74,23 @@ let lastMutationOptions: Record<string, unknown> | undefined;
 let activeQueryClient: QueryClient;
 
 import { useCreateInvoice } from "./useInvoices";
+import { invalidateFinancialViews } from "./invalidateFinancialViews";
+import { useCreateReceiptVoucher, useCreatePaymentVoucher, useCancelVoucher } from "./useVouchers";
+// Opening balance / day close write no ledger row — their cashbox+dashboard scope is correct.
+import { useAddManualMovement, useDeleteManualMovement } from "./useCashbox";
+import { useSettleParty, useSettleInvoices } from "./useStatement";
 
-const REQUIRED_FAMILIES = ["dashboard", "cashbox", "ledger", "profit", "statement", "party", "invoices"];
+// "party" = usePartyBalance (["party","balance",…]); "parties" = the party list/detail family (useParties KEYS.root).
+const REQUIRED_FAMILIES = [
+  "dashboard",
+  "cashbox",
+  "ledger",
+  "profit",
+  "statement",
+  "party",
+  "parties",
+  "invoices",
+];
 
 describe("financial mutations go through invalidateFinancialViews (F-05)", () => {
   beforeEach(() => {
@@ -85,7 +104,47 @@ describe("financial mutations go through invalidateFinancialViews (F-05)", () =>
     const opts = lastMutationOptions as { onSuccess: (r: unknown, v: unknown, c: unknown) => void };
     opts.onSuccess({ ok: true, value: { id: "inv-1" } }, undefined, activeQueryClient);
     for (const family of REQUIRED_FAMILIES) {
-      expect(invalidated, `missing invalidation of [${family}] after invoice create`).toContain(family);
+      expect(invalidated, `missing invalidation of [${family}] after invoice create`).toContain(
+        family,
+      );
     }
   });
+
+  it("refreshes the party-list module cache (FE-02) — not only React Query families", () => {
+    activeQueryClient = fakeQueryClient();
+    invalidateFinancialViews(activeQueryClient);
+    expect(refreshParties).toHaveBeenCalledTimes(1);
+    expect(invalidated).toContain("parties");
+  });
+
+  // FE-05: every money-moving mutation — vouchers write ledger + cash, manual cashbox movements write a
+  // ledger leg (SqliteCashboxRepository), settlement writes vouchers + ledger — must refresh the same
+  // families. These used hand-rolled subsets that skipped ledger/profit/statement/party.
+  const MONEY_MUTATIONS: Array<[string, () => void, unknown]> = [
+    ["receipt voucher create", () => useCreateReceiptVoucher(), {}],
+    ["payment voucher create", () => useCreatePaymentVoucher(), {}],
+    ["voucher cancel", () => useCancelVoucher(), {}],
+    ["manual cash movement add", () => useAddManualMovement(), {}],
+    ["manual cash movement delete", () => useDeleteManualMovement(), {}],
+    ["party settle", () => useSettleParty("p-1", "customer"), { ok: true, referenceNumber: "R-1" }],
+    [
+      "invoice settle",
+      () => useSettleInvoices("p-1", "customer"),
+      { ok: true, referenceNumber: "R-1" },
+    ],
+  ];
+  for (const [name, hook, result] of MONEY_MUTATIONS) {
+    it(`${name} refreshes every financial family + the party list cache`, () => {
+      activeQueryClient = fakeQueryClient();
+      hook();
+      const opts = lastMutationOptions as {
+        onSuccess: (r: unknown, v: unknown, c: unknown) => void;
+      };
+      opts.onSuccess(result, {}, undefined);
+      for (const family of REQUIRED_FAMILIES) {
+        expect(invalidated, `${name}: missing [${family}]`).toContain(family);
+      }
+      expect(refreshParties, `${name}: party list cache not refreshed`).toHaveBeenCalled();
+    });
+  }
 });

@@ -1,5 +1,5 @@
 {
-  "journalIdx": 4,
+  "journalIdx": 5,
   "engine": "sqlite",
   "tables": {
     "attachments": {
@@ -1897,6 +1897,213 @@
         }
       }
     },
+    "motard_drive_folders": {
+      "columns": {
+        "id": {
+          "type": "INTEGER",
+          "nullable": false,
+          "default": null
+        },
+        "kind": {
+          "type": "TEXT",
+          "nullable": false,
+          "default": null
+        },
+        "drive_file_id": {
+          "type": "TEXT",
+          "nullable": false,
+          "default": null
+        },
+        "parent_drive_id": {
+          "type": "TEXT",
+          "nullable": true,
+          "default": null
+        },
+        "label": {
+          "type": "TEXT",
+          "nullable": false,
+          "default": null
+        },
+        "period_key": {
+          "type": "TEXT",
+          "nullable": true,
+          "default": null
+        },
+        "verified_at": {
+          "type": "TEXT",
+          "nullable": true,
+          "default": null
+        },
+        "created_at": {
+          "type": "TEXT",
+          "nullable": false,
+          "default": null
+        }
+      }
+    },
+    "motard_drive_runs": {
+      "columns": {
+        "id": {
+          "type": "TEXT",
+          "nullable": false,
+          "default": null
+        },
+        "period_key": {
+          "type": "TEXT",
+          "nullable": true,
+          "default": null
+        },
+        "kind": {
+          "type": "TEXT",
+          "nullable": false,
+          "default": null
+        },
+        "state": {
+          "type": "TEXT",
+          "nullable": false,
+          "default": "'running'"
+        },
+        "detail": {
+          "type": "TEXT",
+          "nullable": true,
+          "default": null
+        },
+        "started_at": {
+          "type": "TEXT",
+          "nullable": false,
+          "default": null
+        },
+        "finished_at": {
+          "type": "TEXT",
+          "nullable": true,
+          "default": null
+        }
+      }
+    },
+    "motard_drive_uploads": {
+      "columns": {
+        "id": {
+          "type": "TEXT",
+          "nullable": false,
+          "default": null
+        },
+        "stable_key": {
+          "type": "TEXT",
+          "nullable": false,
+          "default": null
+        },
+        "entity_type": {
+          "type": "TEXT",
+          "nullable": false,
+          "default": null
+        },
+        "entity_id": {
+          "type": "TEXT",
+          "nullable": false,
+          "default": null
+        },
+        "period_key": {
+          "type": "TEXT",
+          "nullable": false,
+          "default": null
+        },
+        "section": {
+          "type": "TEXT",
+          "nullable": false,
+          "default": null
+        },
+        "file_name": {
+          "type": "TEXT",
+          "nullable": false,
+          "default": null
+        },
+        "mime_type": {
+          "type": "TEXT",
+          "nullable": false,
+          "default": null
+        },
+        "staging_path": {
+          "type": "TEXT",
+          "nullable": true,
+          "default": null
+        },
+        "content_sha256": {
+          "type": "TEXT",
+          "nullable": false,
+          "default": null
+        },
+        "content_bytes": {
+          "type": "INTEGER",
+          "nullable": false,
+          "default": null
+        },
+        "revision": {
+          "type": "INTEGER",
+          "nullable": false,
+          "default": "1"
+        },
+        "status": {
+          "type": "TEXT",
+          "nullable": false,
+          "default": "'pending'"
+        },
+        "drive_file_id": {
+          "type": "TEXT",
+          "nullable": true,
+          "default": null
+        },
+        "retry_count": {
+          "type": "INTEGER",
+          "nullable": false,
+          "default": "0"
+        },
+        "next_attempt_at": {
+          "type": "TEXT",
+          "nullable": true,
+          "default": null
+        },
+        "lease_owner": {
+          "type": "TEXT",
+          "nullable": true,
+          "default": null
+        },
+        "lease_token": {
+          "type": "TEXT",
+          "nullable": true,
+          "default": null
+        },
+        "lease_until": {
+          "type": "TEXT",
+          "nullable": true,
+          "default": null
+        },
+        "last_error": {
+          "type": "TEXT",
+          "nullable": true,
+          "default": null
+        },
+        "device_id": {
+          "type": "TEXT",
+          "nullable": true,
+          "default": null
+        },
+        "created_at": {
+          "type": "TEXT",
+          "nullable": false,
+          "default": null
+        },
+        "updated_at": {
+          "type": "TEXT",
+          "nullable": false,
+          "default": null
+        },
+        "uploaded_at": {
+          "type": "TEXT",
+          "nullable": true,
+          "default": null
+        }
+      }
+    },
     "motard_meta": {
       "columns": {
         "id": {
@@ -3097,6 +3304,11 @@
           "type": "TEXT",
           "nullable": false,
           "default": "strftime('%Y-%m-%dT%H:%M:%f', 'now') || '000Z'"
+        },
+        "drive": {
+          "type": "TEXT",
+          "nullable": true,
+          "default": "'{}'"
         }
       }
     },
@@ -5860,6 +6072,78 @@
       "type": "c",
       "definition": "CHECK (\"created_at\" IS NULL OR (\"created_at\" GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9].[0-9][0-9][0-9][0-9][0-9][0-9]Z'))"
     },
+    "motard_drive_folders_pkey": {
+      "table": "motard_drive_folders",
+      "type": "p",
+      "columns": [
+        "id"
+      ],
+      "definition": "PRIMARY KEY (\"id\")"
+    },
+    "motard_drive_folders_kind": {
+      "table": "motard_drive_folders",
+      "type": "c",
+      "definition": "CHECK (\"kind\" IN ('root', 'year', 'month', 'section'))"
+    },
+    "motard_drive_folders_period": {
+      "table": "motard_drive_folders",
+      "type": "c",
+      "definition": "CHECK (\"period_key\" IS NULL OR \"period_key\" GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]')"
+    },
+    "motard_drive_folders_unique": {
+      "table": "motard_drive_folders",
+      "type": "u",
+      "columns": [
+        "kind",
+        "parent_drive_id",
+        "label"
+      ],
+      "definition": "UNIQUE (\"kind\", \"parent_drive_id\", \"label\")"
+    },
+    "motard_drive_runs_pkey": {
+      "table": "motard_drive_runs",
+      "type": "p",
+      "columns": [
+        "id"
+      ],
+      "definition": "PRIMARY KEY (\"id\")"
+    },
+    "motard_drive_runs_kind": {
+      "table": "motard_drive_runs",
+      "type": "c",
+      "definition": "CHECK (\"kind\" IN ('documents', 'month_close', 'db_backup', 'catchup'))"
+    },
+    "motard_drive_runs_state": {
+      "table": "motard_drive_runs",
+      "type": "c",
+      "definition": "CHECK (\"state\" IN ('running', 'done', 'failed', 'partial'))"
+    },
+    "motard_drive_uploads_pkey": {
+      "table": "motard_drive_uploads",
+      "type": "p",
+      "columns": [
+        "id"
+      ],
+      "definition": "PRIMARY KEY (\"id\")"
+    },
+    "motard_drive_uploads_stable_key": {
+      "table": "motard_drive_uploads",
+      "type": "u",
+      "columns": [
+        "stable_key"
+      ],
+      "definition": "UNIQUE (\"stable_key\")"
+    },
+    "motard_drive_uploads_status": {
+      "table": "motard_drive_uploads",
+      "type": "c",
+      "definition": "CHECK (\"status\" IN ('pending', 'uploading', 'done', 'failed', 'blocked'))"
+    },
+    "motard_drive_uploads_period": {
+      "table": "motard_drive_uploads",
+      "type": "c",
+      "definition": "CHECK (\"period_key\" GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]')"
+    },
     "motard_meta_pkey": {
       "table": "motard_meta",
       "type": "p",
@@ -8445,6 +8729,22 @@
     "licenses_tenant_id_uidx": {
       "table": "licenses",
       "definition": "CREATE UNIQUE INDEX \"licenses_tenant_id_uidx\" ON \"licenses\" (\"tenant_id\", \"id\")"
+    },
+    "motard_drive_folders_period_idx": {
+      "table": "motard_drive_folders",
+      "definition": "CREATE INDEX \"motard_drive_folders_period_idx\" ON \"motard_drive_folders\" (\"period_key\")"
+    },
+    "motard_drive_runs_period_idx": {
+      "table": "motard_drive_runs",
+      "definition": "CREATE INDEX \"motard_drive_runs_period_idx\" ON \"motard_drive_runs\" (\"period_key\", \"kind\")"
+    },
+    "motard_drive_uploads_period_idx": {
+      "table": "motard_drive_uploads",
+      "definition": "CREATE INDEX \"motard_drive_uploads_period_idx\" ON \"motard_drive_uploads\" (\"period_key\", \"section\")"
+    },
+    "motard_drive_uploads_status_idx": {
+      "table": "motard_drive_uploads",
+      "definition": "CREATE INDEX \"motard_drive_uploads_status_idx\" ON \"motard_drive_uploads\" (\"status\", \"next_attempt_at\")"
     },
     "sync_devices_tenant_id_uidx": {
       "table": "sync_devices",

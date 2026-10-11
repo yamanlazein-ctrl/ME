@@ -25,6 +25,7 @@
     "license:genkey": "node scripts/generate-license-signing-key.mjs",
     "test:sync-multidevice": "node scripts/verify-sync-multidevice.mjs --refresh-template",
     "db:restore": "node scripts/restore-from-backup.mjs",
+    "integrity:sqlite": "node scripts/reconcile-integrity-sqlite.mjs",
     "typecheck:sqlite": "tsc -p tsconfig.sqlite-tests.json && tsx scripts/generate-sqlite-schema.mts --check && tsx scripts/sqlite-schema-fingerprint.mts --check"
   },
   "dependencies": {

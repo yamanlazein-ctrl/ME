@@ -50,3 +50,4 @@ export * from "./financial-operation.table.js";
 export * from "./sync-conflict.table.js";
 export * from "./sync-tombstone.table.js";
 export * from "./motard-meta.table.js";
+export * from "./drive-archive.table.js";

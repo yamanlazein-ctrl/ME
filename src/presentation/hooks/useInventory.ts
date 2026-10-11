@@ -635,7 +635,7 @@ export async function deleteRolls(ids: string[]): Promise<number> {
   const failed = ids.length - removed.size;
   if (removed.size > 0) {
     notifyInventoryChange();
-    toast.error(`تم حذف ${removed.size} صبغة`);
+    toast.success(`تم حذف ${removed.size} صبغة`);
   }
   if (failed > 0) {
     toast.error(`تعذر حذف ${failed} صبغة (مرتبطة بمعاملات موجودة)`);
@@ -663,7 +663,7 @@ export async function deleteColors(ids: string[]): Promise<number> {
   const failed = ids.length - removed.size;
   if (removed.size > 0) {
     notifyInventoryChange();
-    toast.error(`تم حذف ${removed.size} لون`);
+    toast.success(`تم حذف ${removed.size} لون`);
   }
   if (failed > 0) {
     toast.error(`تعذر حذف ${failed} لون (مرتبط بمعاملات موجودة)`);
@@ -697,7 +697,7 @@ export async function deleteFabrics(ids: string[]): Promise<number> {
   const failed = ids.length - removed.size;
   if (removed.size > 0) {
     notifyInventoryChange();
-    toast.error(`تم حذف ${removed.size} قماش`);
+    toast.success(`تم حذف ${removed.size} قماش`);
   }
   if (failed > 0) {
     toast.error(`تعذر حذف ${failed} قماش (مرتبط بمعاملات موجودة)`);

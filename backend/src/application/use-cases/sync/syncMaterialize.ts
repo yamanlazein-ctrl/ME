@@ -1183,6 +1183,37 @@ async function findMasterHubRow(
   }
 }
 
+/**
+ * S-03: compare-and-set on the row's version inside the caller's transaction (a no-op write that
+ * also holds PG's row lock until commit). False only when the row is still there at ANOTHER version;
+ * a row already gone (a concurrent delete won) is not a conflict — the delete + tombstone proceed.
+ */
+async function masterStillAtVersion(
+  tx: DB,
+  entityType: "fabric" | "color" | "roll",
+  id: string,
+  tenantId: string,
+  version: number,
+): Promise<boolean> {
+  const s = await engineSchema();
+  let locked: unknown[];
+  let present: unknown[];
+  if (entityType === "fabric") {
+    const t = s.fabrics;
+    locked = await tx.update(t).set({ version }).where(and(eq(t.id, id), eq(t.tenantId, tenantId), eq(t.version, version))).returning({ id: t.id });
+    present = locked.length ? locked : await tx.select({ id: t.id }).from(t).where(and(eq(t.id, id), eq(t.tenantId, tenantId))).limit(1);
+  } else if (entityType === "color") {
+    const t = s.colors;
+    locked = await tx.update(t).set({ version }).where(and(eq(t.id, id), eq(t.tenantId, tenantId), eq(t.version, version))).returning({ id: t.id });
+    present = locked.length ? locked : await tx.select({ id: t.id }).from(t).where(and(eq(t.id, id), eq(t.tenantId, tenantId))).limit(1);
+  } else {
+    const t = s.rolls;
+    locked = await tx.update(t).set({ version }).where(and(eq(t.id, id), eq(t.tenantId, tenantId), eq(t.version, version))).returning({ id: t.id });
+    present = locked.length ? locked : await tx.select({ id: t.id }).from(t).where(and(eq(t.id, id), eq(t.tenantId, tenantId))).limit(1);
+  }
+  return locked.length > 0 || present.length === 0;
+}
+
 /** Shallow field equality: every intent field already equals the hub row. */
 function intentAlreadyApplied(
   updateInput: Record<string, unknown>,
@@ -1311,12 +1342,23 @@ async function materializeMasterMutation(
       // F-03: the delete and its tombstone are ONE transaction — a failure in
       // either rolls both back, so a deleted row can never be left without its
       // tombstone (which is what lets a stale create resurrect it later).
-      // Engine-neutral runInTransaction (orm/engine.ts): on PG it opens a
-      // pooled transaction; on SQLite the repos' own transactions nest as
-      // savepoints inside it and recordTombstone's runAutonomous joins the
-      // ambient transaction instead of committing aside.
-      const { runInTransaction } = await import("../../../infrastructure/orm/engine.js");
-      await runInTransaction(async () => {
+      // withTenantTx, not runInTransaction (S-02): on PG only withTenantTx
+      // publishes the AMBIENT transaction the ambient-aware repos and the
+      // tombstone store join — runInTransaction's db.transaction() was ignored
+      // by both, so the delete and the tombstone each committed alone. On
+      // SQLite the repos nest as savepoints and runAutonomous joins it.
+      const { withTenantTx } = await import("../../../infrastructure/orm/engine.js");
+      let movedOn = false;
+      await withTenantTx(ctx.tenantId, async (tx) => {
+        // S-03: the base check above is a READ; another device's edit can commit
+        // after it. Re-assert the base on the row itself (PG: also takes its row
+        // lock until commit). Party is covered by cancel()'s versioned WHERE.
+        if (!meta?.hubCanonical && baseVersion !== null && entityType !== "party") {
+          if (!(await masterStillAtVersion(tx as unknown as DB, entityType, entityId, ctx.tenantId, baseVersion))) {
+            movedOn = true;
+            return;
+          }
+        }
         if (entityType === "party") {
           // P0-001: expectedVersion is REQUIRED; it is now the CALLER's base (not
           // the hub's current version, which made the guard vacuous).
@@ -1341,6 +1383,13 @@ async function materializeMasterMutation(
           meta?.syncDeviceId ?? null,
         );
       });
+      if (movedOn) {
+        await recordStaleConflict(meta, payload, entityType, entityId, "cancel", baseVersion, null, ctx.tenantId);
+        return {
+          status: "conflict",
+          error: `تعارض حذف ${entityType}: عُدِّل السجل على جهاز آخر أثناء الحذف — راجع النسخة الفائزة ثم أعد الحذف إن بقي صحيحاً.`,
+        };
+      }
     } catch (err) {
       return {
         status: "failed",
@@ -1484,7 +1533,16 @@ async function materializeMasterMutation(
       if (!r.ok) return await updateRefused(r.error);
       await alignMasterVersion();
     } else {
-      const r = await updateRollUseCase(repos.rollRepo, entityId, updateInput as never, rctx);
+      // S-03: the roll repo's versioned WHERE (H-5) — the same expected version
+      // as the siblings, so an edit that commits after the read above is not
+      // overwritten. A miss is retryable; the retry's read then sees the conflict.
+      const expectedVersionRoll = meta?.hubCanonical
+        ? hub.version
+        : typeof payload.baseVersion === "number"
+          ? payload.baseVersion
+          : hub.version;
+      const rollInput = typeof expectedVersionRoll === "number" ? { ...updateInput, expectedVersion: expectedVersionRoll } : updateInput;
+      const r = await updateRollUseCase(repos.rollRepo, entityId, rollInput as never, rctx);
       if (!r.ok) return { status: "failed", error: r.error };
     }
     return { status: "created" };
@@ -1521,7 +1579,7 @@ async function materializeRollAdjust(
   try {
     const { withTenantTx } = await import("../../../infrastructure/orm/engine.js");
     const { inventoryCountHelpers } = await import("../../../infrastructure/repositories/engineHelpers.js");
-    await withTenantTx(ctx.tenantId, async (tx) =>
+    const applied = await withTenantTx(ctx.tenantId, async (tx) =>
       (await inventoryCountHelpers()).applyRollAdjustment(tx as never, rctx, {
         rollId,
         deltaKg: Number(payload.deltaKg ?? 0),
@@ -1532,6 +1590,7 @@ async function materializeRollAdjust(
         referenceId: String(payload.referenceId ?? rollId),
         referenceNumber: String(payload.referenceNumber ?? "ADJ"),
         expectedVersion: null,
+        syncOpId: meta?.opId,
         // Display provenance only (the audit row): the replay's authority stays `rctx`.
         // SYNC-06: the origin NAME comes through meta (call-site display context), never
         // from the wire payload here; the audit actor_id is always the receiver's user.
@@ -1541,7 +1600,8 @@ async function materializeRollAdjust(
         },
       }),
     );
-    return { status: "created" };
+    // S-01: a re-delivered unit (crash between this commit and markApplied) is a no-op, not a second delta.
+    return { status: applied.alreadyApplied ? "exists" : "created" };
   } catch (err) {
     // The roll may not be here yet (its create unit is still on its way): retryable.
     return { status: "failed", error: err instanceof Error ? err.message : "roll adjustment replay failed" };

@@ -373,7 +373,39 @@ fn monitor_loop(
     // The monitor owns the stack for the whole session, so this is the one
     // place the teardown can happen — main.rs no longer holds a copy to stop.
     log("supervisor: monitor finished — shutting down the local stack");
+    graceful_stop(&store);
     stack::shutdown(&mut stack);
+}
+
+/// Upper bound on the graceful stop. Windows gives a session-end handler only a few seconds, and the
+/// hard stop after it still needs its own wait.
+const GRACEFUL_STOP_WAIT: Duration = Duration::from_secs(4);
+
+/// DT-07: before the hard stop, ask the sidecar to wait out in-flight writes, checkpoint the WAL and
+/// exit (`/api/desktop/runtime/shutdown`, the same call the update path makes). Normal exit and session
+/// end then leave a closed database instead of relying on WAL replay. Bounded: the pipe read has no
+/// timeout of its own, so the call runs on a helper thread and a wedged sidecar is simply terminated by
+/// `stack::shutdown` afterwards, exactly as before.
+fn graceful_stop(store: &SecretStore) {
+    use sha2::{Digest, Sha256};
+    let token = format!("{:x}", Sha256::digest(store.app_master_key.as_bytes()));
+    let (tx, rx) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        let mut headers = std::collections::HashMap::new();
+        headers.insert("x-motard-runtime-token".to_string(), token);
+        headers.insert("content-type".to_string(), "application/json".to_string());
+        let _ = tx.send(pipe::request(&pipe::PipeRequest {
+            method: "POST".into(),
+            path: "/api/desktop/runtime/shutdown".into(),
+            body: Some("{}".into()),
+            headers: Some(headers),
+        }));
+    });
+    match rx.recv_timeout(GRACEFUL_STOP_WAIT) {
+        Ok(r) if r.error.is_none() && r.status == 200 => log("supervisor: server checkpointed the database and is exiting"),
+        Ok(r) => log(&format!("supervisor: graceful stop refused (status {}, {:?}) — terminating", r.status, r.error)),
+        Err(_) => log("supervisor: graceful stop timed out — terminating"),
+    }
 }
 
 fn cycle(
@@ -599,6 +631,14 @@ mod tests {
 
     use std::collections::VecDeque;
     const FIVE_MIN: Duration = Duration::from_secs(300);
+
+    // DT-07: the graceful stop must never hold up exit — with no sidecar answering it returns within its bound.
+    #[test]
+    fn graceful_stop_is_bounded_when_no_server_answers() {
+        let started = Instant::now();
+        graceful_stop(&SecretStore::default());
+        assert!(started.elapsed() <= GRACEFUL_STOP_WAIT + Duration::from_secs(1));
+    }
 
     #[test]
     fn the_spec_is_three_restarts_per_rolling_five_minutes() {

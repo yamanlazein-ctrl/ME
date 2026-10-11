@@ -3,6 +3,7 @@ import { routeTree } from "./routeTree.gen";
 import { getQueryClient } from "@/infrastructure/queryClient";
 import { installDesktopTransport } from "./infrastructure/http/desktopTransport";
 import { normalizeDesktopEntryPath } from "./lib/desktop-entry-path";
+import { initSentry } from "./lib/sentry";
 
 // Phase 1: on the desktop this must run before the router renders anything,
 // because a route component can fire its first query on mount. Module scope
@@ -10,6 +11,8 @@ import { normalizeDesktopEntryPath } from "./lib/desktop-entry-path";
 // a no-op and `fetch` is left exactly as it was.
 installDesktopTransport();
 normalizeDesktopEntryPath();
+// Web build only, and only when VITE_SENTRY_DSN is set (see lib/sentry.ts).
+initSentry();
 
 export const getRouter = () => {
   normalizeDesktopEntryPath();

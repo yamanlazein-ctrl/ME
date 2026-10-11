@@ -373,6 +373,8 @@ export type RollAdjustmentInput = {
   referenceNumber: string;
   /** Optimistic lock: the roll version the operator saw. Null on sync replay (deltas converge). */
   expectedVersion: number | null;
+  /** Sync replay: the unit's op id — a re-delivered unit with the same id is a no-op (S-01). */
+  syncOpId?: string;
   /**
    * Sync replay: who really made the change on the source device. Recorded in the
    * audit row (history / «تعديلات المخزون»); authority and FK columns stay the receiver's.
@@ -391,13 +393,29 @@ export async function applyRollAdjustment(
   tx: Tx,
   ctx: TenantContext,
   input: RollAdjustmentInput,
-): Promise<{ rollId: string; beforeKg: number; afterKg: number; beforePieces: number; afterPieces: number; movementId: string | null }> {
+): Promise<{ rollId: string; beforeKg: number; afterKg: number; beforePieces: number; afterPieces: number; movementId: string | null; alreadyApplied?: true }> {
   const [roll] = await tx
     .select()
     .from(rolls)
     .where(and(eq(rolls.tenantId, ctx.tenantId), eq(rolls.id, input.rollId)))
     .limit(1);
   if (!roll) throw new BusinessRuleError("اللفة غير موجودة.");
+  // S-01: a sync unit moves a roll ONCE. Replay commits this delta and marks its inbox row applied in
+  // separate steps, so a crash in between re-delivers the same unit (same op id); without this the roll,
+  // its movement and its P&L leg would all be applied twice. Not keyed on referenceId: one count line
+  // legitimately posts a new correction after every re-count. The receiver's audit row is the marker
+  // because every adjustment writes one (a pieces-only change writes no movement).
+  if (input.syncOpId) {
+    const prior = await tx
+      .select({ after: auditLogs.afterSnapshot })
+      .from(auditLogs)
+      .where(and(eq(auditLogs.tenantId, ctx.tenantId), eq(auditLogs.module, "inventory_adjustments"), eq(auditLogs.entityType, "roll"), eq(auditLogs.entityId, roll.id)));
+    if (prior.some((a) => (a.after as { syncOpId?: unknown } | null)?.syncOpId === input.syncOpId)) {
+      const kg = round2dp(Number(roll.remainingKg ?? 0));
+      const pieces = roll.remainingPieces ?? 0;
+      return { rollId: roll.id, beforeKg: kg, afterKg: kg, beforePieces: pieces, afterPieces: pieces, movementId: null, alreadyApplied: true };
+    }
+  }
   if (input.expectedVersion != null && roll.version !== input.expectedVersion) {
     throw new BusinessRuleError("تغيّرت كمية هذه اللفة على جهاز آخر أو في نافذة أخرى — حدّث الصفحة ثم أعد التعديل.");
   }
@@ -478,6 +496,7 @@ export async function applyRollAdjustment(
       deltaPieces,
       reference: input.referenceNumber,
       movementId,
+      ...(input.syncOpId ? { syncOpId: input.syncOpId } : {}),
       ...(input.originActor ? { syncedFrom: "device", appliedBy: ctx.userName } : {}),
     },
   });

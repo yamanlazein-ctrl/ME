@@ -9,6 +9,8 @@
  *                                                   backups.json; the update is blocked if this fails
  *   POST /api/desktop/runtime/shutdown           → wait for in-flight writes, WAL checkpoint(TRUNCATE),
  *                                                   close, exit — so the update replaces nothing in use
+ *   POST /api/desktop/runtime/drive-token        → the shell's Google access token for the Drive archive
+ *                                                   (memory only; `null` clears it on disconnect)
  */
 import type { Router, Request, Response } from "express";
 import { createHash, timingSafeEqual } from "node:crypto";
@@ -38,6 +40,24 @@ export function registerDesktopRuntimeRoutes(router: Router): void {
       logger.error({ err }, "PRE_UPDATE_BACKUP_FAILED");
       return res.status(500).json({ code: "PRE_UPDATE_BACKUP_FAILED", message: err instanceof Error ? err.message : String(err) });
     }
+  });
+
+  // Google Drive (audit D-01): the shell pushes a short-lived access token after connect, on every
+  // refresh and `null` on disconnect. The refresh token never leaves the shell; this one is kept in
+  // memory only and never echoed or logged.
+  router.post("/api/desktop/runtime/drive-token", async (req: Request, res: Response) => {
+    if (!runtimeAuthorized(req)) return res.status(404).json({ code: "NOT_FOUND", message: "المسار غير موجود" });
+    const { accessToken, expiresAt } = (req.body ?? {}) as { accessToken?: unknown; expiresAt?: unknown };
+    const { setLiveDriveToken } = await import("../../infrastructure/googledrive/driveClient.js");
+    if (accessToken === null) {
+      setLiveDriveToken(null);
+      return res.json({ ok: true, connected: false });
+    }
+    if (typeof accessToken !== "string" || accessToken.length < 16 || typeof expiresAt !== "number" || !Number.isFinite(expiresAt)) {
+      return res.status(400).json({ code: "VALIDATION", message: "رمز Google غير صالح" });
+    }
+    setLiveDriveToken(accessToken, expiresAt);
+    return res.json({ ok: true, connected: true });
   });
 
   router.post("/api/desktop/runtime/shutdown", async (req: Request, res: Response) => {

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -23,6 +23,7 @@ export function QuickCustomerDialog({
   onCreated: (party: { id: string; name: string }) => void;
 }) {
   const [name, setName] = useState("");
+  const fid = useId(); // ties each label to its input (accessible names)
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
   const [err, setErr] = useState<string | null>(null);
@@ -70,8 +71,11 @@ export function QuickCustomerDialog({
         </DialogHeader>
         <div className="space-y-3">
           <div>
-            <Label className="text-xs">الاسم *</Label>
+            <Label htmlFor={`${fid}-name`} className="text-xs">
+              الاسم *
+            </Label>
             <Input
+              id={`${fid}-name`}
               autoComplete="off"
               value={name}
               onChange={(e) => setName(e.target.value)}
@@ -80,8 +84,11 @@ export function QuickCustomerDialog({
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <Label className="text-xs">الهاتف</Label>
+              <Label htmlFor={`${fid}-phone`} className="text-xs">
+                الهاتف
+              </Label>
               <Input
+                id={`${fid}-phone`}
                 autoComplete="off"
                 value={phone}
                 onChange={(e) => setPhone(e.target.value)}
@@ -89,9 +96,12 @@ export function QuickCustomerDialog({
               />
             </div>
             <div>
-              <Label className="text-xs">البريد الإلكتروني</Label>
+              <Label htmlFor={`${fid}-email`} className="text-xs">
+                البريد الإلكتروني
+              </Label>
               <Input
                 {...PARTY_EMAIL_INPUT_PROPS}
+                id={`${fid}-email`}
                 value={email}
                 onChange={(e) => {
                   setEmail(e.target.value);

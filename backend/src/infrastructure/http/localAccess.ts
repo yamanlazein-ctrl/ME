@@ -20,22 +20,6 @@ export function isLoopbackAddress(ip: string | undefined): boolean {
   );
 }
 
-/** Loopback, link-local, or RFC1918 / unique-local. */
-export function isLocalOrPrivateLan(ip: string | undefined): boolean {
-  if (!ip) return false;
-  if (isLoopbackAddress(ip)) return true;
-  const host = ip.replace(/^::ffff:/, "").split("%")[0];
-  if (host.includes(".")) {
-    if (host.startsWith("10.")) return true;
-    if (host.startsWith("192.168.")) return true;
-    if (host.startsWith("169.254.")) return true;
-    if (/^172\.(1[6-9]|2\d|3[01])\./.test(host)) return true;
-    return false;
-  }
-  if (host.startsWith("fc") || host.startsWith("fd")) return true;
-  return false;
-}
-
 /**
  * True when this request is from the local desktop shell.
  *
@@ -44,10 +28,14 @@ export function isLocalOrPrivateLan(ip: string | undefined): boolean {
  * first-run wizard POST (`تعذّر تهيئة التثبيت`). The pipe itself is
  * local-only (`.` namespace); treating a pipe-bound process as local is
  * the same trust boundary as 127.0.0.1 was on TCP.
+ *
+ * On TCP only loopback counts (SEC-01). A private-LAN peer is another
+ * machine: accepting it opened the pre-auth wizard restore and the
+ * DEVICE_PROOF bypass to anyone on the office network.
  */
 export function resolveDesktopLocalCaller(pipeBound: boolean, address: string | undefined): boolean {
   if (pipeBound) return true;
-  return isLocalOrPrivateLan(address);
+  return isLoopbackAddress(address);
 }
 
 export function isDesktopLocalCaller(req: AddressedRequest): boolean {

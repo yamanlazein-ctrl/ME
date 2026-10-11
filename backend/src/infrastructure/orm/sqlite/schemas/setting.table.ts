@@ -15,6 +15,7 @@ export const settings = sqliteTable(
     units: jsonb("units").default([]),
     warehouses: jsonb("warehouses").default([]),
     printing: jsonb("printing").default({}),
+    drive: jsonb("drive").default({}),
     updatedAt: timestamptz("updated_at").notNull().$defaultFn(nowDefault),
   },
 );

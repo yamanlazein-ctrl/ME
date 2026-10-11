@@ -34,10 +34,13 @@ export type CreateExpenseInput = {
   notesInternal?: string;
 };
 
+// Keys mirror the API's listExpensesSchema — an unknown key is silently stripped there (FE-06).
 export type ExpenseFilter = {
   category?: string;
-  from?: string;
-  to?: string;
+  fromDate?: string;
+  toDate?: string;
+  /** Server-side match on number, description and name (category), across all history. */
+  search?: string;
   page?: number;
   limit?: number;
   cursor?: string;

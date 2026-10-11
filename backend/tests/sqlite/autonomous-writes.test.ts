@@ -7,7 +7,9 @@
  *   1. settle-invoices number: `allocateDocumentNumberForDevice` inside the settle `withTenantTx`
  *      — a settlement that fails still consumes its number (the next allocation is the next number);
  *   2. sync conflict rows (`SqliteSyncConflictStore.insertOpen`) survive the caller's rollback;
- *   3. sync tombstones (`SqliteSyncMaterializeStore.recordTombstone`) survive the caller's rollback;
+ *   3. sync tombstones (`SqliteSyncMaterializeStore.recordTombstone`) are NOT autonomous any more
+ *      (S-02): on both engines they join the caller's transaction, so a delete and its tombstone
+ *      commit or roll back together;
  *   4. a nested `runInTransaction` joins the outer one as a savepoint (single writer): it is NOT
  *      autonomous and rolls back with it;
  *   5. no call site can deadlock the write gate: autonomous writes inside a held gate complete, and
@@ -81,9 +83,9 @@ describe("autonomous writes — same durable effect as PostgreSQL's separate poo
     expect(await count(sql`SELECT count(*) n FROM sync_conflicts WHERE tenant_id = ${tenantId} AND op_id = ${opId}`)).toBe(1);
   });
 
-  it("3. a sync tombstone recorded inside a transaction survives its rollback", async () => {
+  it("3. a sync tombstone joins the caller's transaction: rolls back with it, commits alone outside one (S-02)", async () => {
     const { SqliteSyncMaterializeStore } = await import("@/infrastructure/repositories/sqlite/SqliteSyncMaterializeStore.js");
-    const store = new SqliteSyncMaterializeStore(tx.sqliteIndependentDb() as never);
+    const store = new SqliteSyncMaterializeStore(tx.sqliteIndependentDb() as never, tx.sqliteDb() as never);
     const entityId = randomUUID();
     await expect(
       tx.withTenantTx(tenantId, async () => {
@@ -91,6 +93,8 @@ describe("autonomous writes — same durable effect as PostgreSQL's separate poo
         boom();
       }),
     ).rejects.toThrow();
+    expect(await store.tombstoneExists(tenantId, "party", entityId)).toBe(false);
+    await store.recordTombstone(tenantId, "party", entityId, randomUUID(), null); // the re-assert path
     expect(await store.tombstoneExists(tenantId, "party", entityId)).toBe(true);
   });
 

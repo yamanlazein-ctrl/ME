@@ -4,6 +4,10 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { invalidateFinancialViews } from "./invalidateFinancialViews";
 
+// The helper also refreshes useParties' module cache (FE-02); keep the real container out of this test.
+const refreshParties = vi.fn(() => Promise.resolve());
+vi.mock("./useParties", () => ({ refreshParties: () => refreshParties() }));
+
 describe("invalidateFinancialViews (DFP-016/017)", () => {
   it("invalidates every financial query family", () => {
     const invalidateQueries = vi.fn();
@@ -20,8 +24,10 @@ describe("invalidateFinancialViews (DFP-016/017)", () => {
       "profit",
       "statement",
       "party",
+      "parties",
       "invoices",
     ]);
+    expect(refreshParties).toHaveBeenCalled();
     expect(refetchQueries).not.toHaveBeenCalled();
   });
 
@@ -45,6 +51,7 @@ describe("invalidateFinancialViews (DFP-016/017)", () => {
       "profit",
       "statement",
       "party",
+      "parties",
       "invoices",
     ] as const) {
       qc.setQueryData([key], { seed: key });
@@ -57,6 +64,7 @@ describe("invalidateFinancialViews (DFP-016/017)", () => {
       "profit",
       "statement",
       "party",
+      "parties",
       "invoices",
     ] as const) {
       expect(qc.getQueryState([key])?.isInvalidated, key).toBe(true);

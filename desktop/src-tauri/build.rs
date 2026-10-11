@@ -22,6 +22,12 @@ const APP_COMMANDS: &[&str] = &[
     "startup_choose",
     "get_data_root",
     "save_backup_file",
+    "pick_backup_file",
+    "google_configure_cmd",
+    "google_status_cmd",
+    "google_connect_start_cmd",
+    "google_connect_finish_cmd",
+    "google_disconnect_cmd",
     "api",
 ];
 

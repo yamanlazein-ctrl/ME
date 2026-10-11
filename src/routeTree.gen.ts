@@ -41,6 +41,7 @@ import { Route as SettingsIndexRouteImport } from './routes/settings.index'
 import { Route as SettingsActivityRouteImport } from './routes/settings.activity'
 import { Route as SettingsBackupRouteImport } from './routes/settings.backup'
 import { Route as SettingsCompanyRouteImport } from './routes/settings.company'
+import { Route as SettingsDriveRouteImport } from './routes/settings.drive'
 import { Route as SettingsInvoiceRouteImport } from './routes/settings.invoice'
 import { Route as SettingsPaymentMethodsRouteImport } from './routes/settings.payment-methods'
 import { Route as SettingsPrintingRouteImport } from './routes/settings.printing'
@@ -218,6 +219,11 @@ const SettingsCompanyRoute = SettingsCompanyRouteImport.update({
   path: '/company',
   getParentRoute: () => SettingsRoute,
 } as any)
+const SettingsDriveRoute = SettingsDriveRouteImport.update({
+  id: '/drive',
+  path: '/drive',
+  getParentRoute: () => SettingsRoute,
+} as any)
 const SettingsInvoiceRoute = SettingsInvoiceRouteImport.update({
   id: '/invoice',
   path: '/invoice',
@@ -323,6 +329,7 @@ export interface FileRoutesByFullPath {
   '/settings/activity': typeof SettingsActivityRoute
   '/settings/backup': typeof SettingsBackupRoute
   '/settings/company': typeof SettingsCompanyRoute
+  '/settings/drive': typeof SettingsDriveRoute
   '/settings/invoice': typeof SettingsInvoiceRoute
   '/settings/payment-methods': typeof SettingsPaymentMethodsRoute
   '/settings/printing': typeof SettingsPrintingRoute
@@ -371,6 +378,7 @@ export interface FileRoutesByTo {
   '/settings/activity': typeof SettingsActivityRoute
   '/settings/backup': typeof SettingsBackupRoute
   '/settings/company': typeof SettingsCompanyRoute
+  '/settings/drive': typeof SettingsDriveRoute
   '/settings/invoice': typeof SettingsInvoiceRoute
   '/settings/payment-methods': typeof SettingsPaymentMethodsRoute
   '/settings/printing': typeof SettingsPrintingRoute
@@ -422,6 +430,7 @@ export interface FileRoutesById {
   '/settings/activity': typeof SettingsActivityRoute
   '/settings/backup': typeof SettingsBackupRoute
   '/settings/company': typeof SettingsCompanyRoute
+  '/settings/drive': typeof SettingsDriveRoute
   '/settings/invoice': typeof SettingsInvoiceRoute
   '/settings/payment-methods': typeof SettingsPaymentMethodsRoute
   '/settings/printing': typeof SettingsPrintingRoute
@@ -474,6 +483,7 @@ export interface FileRouteTypes {
     | '/settings/activity'
     | '/settings/backup'
     | '/settings/company'
+    | '/settings/drive'
     | '/settings/invoice'
     | '/settings/payment-methods'
     | '/settings/printing'
@@ -522,6 +532,7 @@ export interface FileRouteTypes {
     | '/settings/activity'
     | '/settings/backup'
     | '/settings/company'
+    | '/settings/drive'
     | '/settings/invoice'
     | '/settings/payment-methods'
     | '/settings/printing'
@@ -572,6 +583,7 @@ export interface FileRouteTypes {
     | '/settings/activity'
     | '/settings/backup'
     | '/settings/company'
+    | '/settings/drive'
     | '/settings/invoice'
     | '/settings/payment-methods'
     | '/settings/printing'
@@ -863,6 +875,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SettingsCompanyRouteImport
       parentRoute: typeof SettingsRoute
     }
+    '/settings/drive': {
+      id: '/settings/drive'
+      path: '/drive'
+      fullPath: '/settings/drive'
+      preLoaderRoute: typeof SettingsDriveRouteImport
+      parentRoute: typeof SettingsRoute
+    }
     '/settings/invoice': {
       id: '/settings/invoice'
       path: '/invoice'
@@ -995,6 +1014,7 @@ interface SettingsRouteChildren {
   SettingsActivityRoute: typeof SettingsActivityRoute
   SettingsBackupRoute: typeof SettingsBackupRoute
   SettingsCompanyRoute: typeof SettingsCompanyRoute
+  SettingsDriveRoute: typeof SettingsDriveRoute
   SettingsInvoiceRoute: typeof SettingsInvoiceRoute
   SettingsPaymentMethodsRoute: typeof SettingsPaymentMethodsRoute
   SettingsPrintingRoute: typeof SettingsPrintingRoute
@@ -1009,6 +1029,7 @@ const SettingsRouteChildren: SettingsRouteChildren = {
   SettingsActivityRoute: SettingsActivityRoute,
   SettingsBackupRoute: SettingsBackupRoute,
   SettingsCompanyRoute: SettingsCompanyRoute,
+  SettingsDriveRoute: SettingsDriveRoute,
   SettingsInvoiceRoute: SettingsInvoiceRoute,
   SettingsPaymentMethodsRoute: SettingsPaymentMethodsRoute,
   SettingsPrintingRoute: SettingsPrintingRoute,

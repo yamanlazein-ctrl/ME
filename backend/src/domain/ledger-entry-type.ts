@@ -42,6 +42,18 @@ export const LEDGER_ENTRY_TYPES = [
 
 export type LedgerEntryType = (typeof LEDGER_ENTRY_TYPES)[number];
 
+/**
+ * Party-statement order on a (date, created_at) tie: these documents come before the payments booked
+ * with them in the same transaction (a sale paid at the counter), so the running balance never shows
+ * a false credit before the sale. Used by both statement repositories' ORDER BY and cursor.
+ */
+export const STATEMENT_DOCUMENT_TYPES: readonly LedgerEntryType[] = [
+  "sales_invoice",
+  "purchase_invoice",
+  "sales_return",
+  "purchase_return",
+];
+
 /** Validate at runtime; useful for zod/contract tests. */
 export function isLedgerEntryType(value: string): value is LedgerEntryType {
   return (LEDGER_ENTRY_TYPES as readonly string[]).includes(value);
