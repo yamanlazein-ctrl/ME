@@ -84342,3 +84342,560 @@ The mission's Phase 2 requirement — "for EVERY page, inspect every relevant UI
 field, label, placeholder, default value, required rule, validation rule, and error state" — remains
 **substantially incomplete** for these 13 routes (~5,900 lines). §13 covers the six highest-yield
 systematic checks and nothing more.
+
+
+---
+
+# Current audit — ERP-20261012-95f3568b
+
+## Checkpoint A1: source baseline and registry (2026-10-12 UTC)
+
+**IN PROGRESS. This section supersedes earlier coverage/results only for this new audit; the preceding historical report is preserved verbatim.** No application changes, installs, migrations, startup, production access, commit or push performed. Earlier reported reproductions and passes have not been reused.
+
+### Source of truth
+
+- Repository: `yamanlazein-ctrl/ME`; branch `coderabbit/erp-repository-audit/95f3568b`.
+- Revision: `a3882558a696a1a0de8d930bf49db408504147a8`. Full local Git history is available (not shallow).
+- Initial working tree: 1,797 tracked files; zero staged changes, tracked modifications, untracked files or ignored files. SHA-256 for each initial tracked file is in the JSON `files` array.
+- `git ls-remote origin refs/heads/main` returned this same revision. Whether this is the customer-approved delivery candidate remains unverified. Local `main` is older (`729fcd9`); audit uses checked-out HEAD.
+- No applicable AGENTS.md/CLAUDE.md found in the checkout or inspected ancestor locations. `knowledge-base/` absent; workspace repo-knowledge has no fact files. Historical reports referencing CLAUDE.md do not establish that file exists here.
+- Existing report is 84,344 lines before this append. Historical reports/findings/progress remain intact. They include different commits, machines and partial review scopes.
+
+### Environment and command safety
+
+Node v24.14.1, npm 11.11.0, Python 3.9.25. Repo declares Node >=22 <23 and npm@10.9.2; CI uses Node 22. No node_modules in root/backend/admin/desktop, no dist/.output/desktop target, no local .db/.sqlite/.sqlite3 files discovered. No application environment values were disclosed. Tracked `.env.test` is not proof of a disposable target. `ss` unavailable; local service readiness not established. No services were started. Rust/Cargo, tsc, eslint, prettier and vitest absent from PATH. SQLite and Docker commands exist; neither proves service readiness.
+
+Root `format` runs Prettier --write and is prohibited. Backend `test` calls `ensure-test-db.mjs`, which creates a DB, migrates and seeds, and accepts an inherited DATABASE_URL; do not run without independently establishing isolation. License-server startup can append signing keys to `.env` and seed a system admin; ordinary startup is therefore not read-only. Builds generate artifacts; no build run in checkout. No package install permitted, including npx downloads.
+
+### Architecture map
+
+```mermaid
+flowchart TD
+  Routes[React / TanStack routes] --> Gates[ActivationGate / AuthGate]
+  Routes --> Hooks[Presentation hooks / Query cache]
+  Hooks --> Client[Application ports / API adapters / HTTP transport]
+  Client --> Express[Express server / auth / license / RBAC]
+  Express --> Usecases[Use cases / ports]
+  Usecases --> DI[Engine-selected DI repositories]
+  DI --> PG[PostgreSQL / RLS / SQL migrations]
+  DI --> SQLite[SQLite runtime / migrations / local state]
+  DI --> Sync[Outbox / inbox / materialization / conflicts]
+  Tauri[Windows Tauri shell / Rust commands] --> Client
+  Tauri --> SQLite
+  Admin[Separate licensing dashboard] --> License[License server / vendor routes]
+  License --> PG
+```
+
+Evidence: `src/router.tsx`, `src/routes/__root.tsx`, `src/components/auth/AuthGate.tsx`, `src/infrastructure/container.ts`, `backend/src/presentation/server.ts`, `backend/src/infrastructure/di/container.ts`, `backend/src/infrastructure/orm/engine.ts`, `admin-dashboard/src/App.tsx`, `backend/src/scripts/license-server.ts`, `desktop/src-tauri/Cargo.toml`. Connections are architecture-level; detailed invocation contracts remain pending.
+
+ERP routes mount under ActivationGate then AuthGate; root uses React Query and loads settings. Backend mounts health/auth/setup/license/company/invitation public/platform paths at root, then auth+license heartbeat+license guard on apiRouter, followed by module feature and per-operation role guards. Business router mounts at `/api`. Backup/integrity and conditional desktop Drive routes follow sync registration. License-server is a separate PostgreSQL/platform-context service. Admin App uses state rather than a URL router; login/list/create page components require separate inspection.
+
+### Registry scope and limitations
+
+The JSON contains every tracked file with content hash, category, import/dependant candidates, exported symbol candidates, related audit IDs and inspection state. Also contains page, component, endpoint group, HTTP registration candidate, schema object, migration, test, desktop command and workflow registries. Regex extraction is an inventory aid; it is not a semantic parser or proof of complete runtime registration. No percentage coverage claimed.
+
+| Registry | Indexed records | Meaning |
+|---|---:|---|
+| pages | 53 | Candidate/source definition count; deep inspection pending |
+| components | 131 | Candidate/source definition count; deep inspection pending |
+| endpoint_groups | 40 | Candidate/source definition count; deep inspection pending |
+| endpoints | 240 | Candidate/source definition count; deep inspection pending |
+| database_objects | 109 | Candidate/source definition count; deep inspection pending |
+| migrations | 109 | Candidate/source definition count; deep inspection pending |
+| tests | 333 | Candidate/source definition count; deep inspection pending |
+| workflows | 22 | Candidate/source definition count; deep inspection pending |
+| desktop_commands | 26 | Candidate/source definition count; deep inspection pending |
+
+### Route/screen starting inventory
+
+| ID | Route identifier (URL removes TanStack escape underscore) | Source | Status |
+|---|---|---|---|
+| PAGE-001 | `state:CreateLicensePage` | `admin-dashboard/src/pages/CreateLicensePage.tsx` | NOT_STARTED |
+| PAGE-002 | `state:LicenseListPage` | `admin-dashboard/src/pages/LicenseListPage.tsx` | NOT_STARTED |
+| PAGE-003 | `state:LoginPage` | `admin-dashboard/src/pages/LoginPage.tsx` | NOT_STARTED |
+| PAGE-004 | `__root__` | `src/routes/__root.tsx` | NOT_STARTED |
+| PAGE-005 | `/cashbox` | `src/routes/cashbox.tsx` | NOT_STARTED |
+| PAGE-006 | `/closing` | `src/routes/closing.tsx` | NOT_STARTED |
+| PAGE-007 | `/customers/$id` | `src/routes/customers.$id.tsx` | NOT_STARTED |
+| PAGE-008 | `/customers/` | `src/routes/customers.index.tsx` | NOT_STARTED |
+| PAGE-009 | `/expenses/` | `src/routes/expenses.index.tsx` | NOT_STARTED |
+| PAGE-010 | `/expenses/new` | `src/routes/expenses.new.tsx` | NOT_STARTED |
+| PAGE-011 | `/` | `src/routes/index.tsx` | NOT_STARTED |
+| PAGE-012 | `/inventory` | `src/routes/inventory.tsx` | NOT_STARTED |
+| PAGE-013 | `/inventory_/adjustments` | `src/routes/inventory_.adjustments.tsx` | NOT_STARTED |
+| PAGE-014 | `/inventory_/count` | `src/routes/inventory_.count.tsx` | NOT_STARTED |
+| PAGE-015 | `/invoices/$id` | `src/routes/invoices.$id.tsx` | NOT_STARTED |
+| PAGE-016 | `/invoices/entry/new` | `src/routes/invoices.entry.new.tsx` | NOT_STARTED |
+| PAGE-017 | `/invoices/` | `src/routes/invoices.index.tsx` | NOT_STARTED |
+| PAGE-018 | `/invoices/print-receive/new` | `src/routes/invoices.print-receive.new.tsx` | NOT_STARTED |
+| PAGE-019 | `/invoices/print-send/new` | `src/routes/invoices.print-send.new.tsx` | NOT_STARTED |
+| PAGE-020 | `/invoices/sale/new` | `src/routes/invoices.sale.new.tsx` | NOT_STARTED |
+| PAGE-021 | `/invoices/tracking` | `src/routes/invoices.tracking.tsx` | NOT_STARTED |
+| PAGE-022 | `/ledger` | `src/routes/ledger.tsx` | NOT_STARTED |
+| PAGE-023 | `/login` | `src/routes/login.tsx` | NOT_STARTED |
+| PAGE-024 | `/orders/$id` | `src/routes/orders.$id.tsx` | NOT_STARTED |
+| PAGE-025 | `/orders/` | `src/routes/orders.index.tsx` | NOT_STARTED |
+| PAGE-026 | `/orders/new` | `src/routes/orders.new.tsx` | NOT_STARTED |
+| PAGE-027 | `/payments/` | `src/routes/payments.index.tsx` | NOT_STARTED |
+| PAGE-028 | `/payments/new` | `src/routes/payments.new.tsx` | NOT_STARTED |
+| PAGE-029 | `/print-center` | `src/routes/print-center.tsx` | NOT_STARTED |
+| PAGE-030 | `/receipts/` | `src/routes/receipts.index.tsx` | NOT_STARTED |
+| PAGE-031 | `/receipts/new` | `src/routes/receipts.new.tsx` | NOT_STARTED |
+| PAGE-032 | `/reports/$slug` | `src/routes/reports.$slug.tsx` | NOT_STARTED |
+| PAGE-033 | `/reports/` | `src/routes/reports.index.tsx` | NOT_STARTED |
+| PAGE-034 | `/reports` | `src/routes/reports.tsx` | NOT_STARTED |
+| PAGE-035 | `/returns/entry/new` | `src/routes/returns.entry.new.tsx` | NOT_STARTED |
+| PAGE-036 | `/returns/` | `src/routes/returns.index.tsx` | NOT_STARTED |
+| PAGE-037 | `/returns/sale/new` | `src/routes/returns.sale.new.tsx` | NOT_STARTED |
+| PAGE-038 | `/settings/activity` | `src/routes/settings.activity.tsx` | NOT_STARTED |
+| PAGE-039 | `/settings/backup` | `src/routes/settings.backup.tsx` | NOT_STARTED |
+| PAGE-040 | `/settings/company` | `src/routes/settings.company.tsx` | NOT_STARTED |
+| PAGE-041 | `/settings/drive` | `src/routes/settings.drive.tsx` | NOT_STARTED |
+| PAGE-042 | `/settings/` | `src/routes/settings.index.tsx` | NOT_STARTED |
+| PAGE-043 | `/settings/invoice` | `src/routes/settings.invoice.tsx` | NOT_STARTED |
+| PAGE-044 | `/settings/payment-methods` | `src/routes/settings.payment-methods.tsx` | NOT_STARTED |
+| PAGE-045 | `/settings/printing` | `src/routes/settings.printing.tsx` | NOT_STARTED |
+| PAGE-046 | `/settings/sync` | `src/routes/settings.sync.tsx` | NOT_STARTED |
+| PAGE-047 | `/settings` | `src/routes/settings.tsx` | NOT_STARTED |
+| PAGE-048 | `/settings/units` | `src/routes/settings.units.tsx` | NOT_STARTED |
+| PAGE-049 | `/settings/users` | `src/routes/settings.users.tsx` | NOT_STARTED |
+| PAGE-050 | `/settings/warehouses` | `src/routes/settings.warehouses.tsx` | NOT_STARTED |
+| PAGE-051 | `/suppliers/$id` | `src/routes/suppliers.$id.tsx` | NOT_STARTED |
+| PAGE-052 | `/suppliers/` | `src/routes/suppliers.index.tsx` | NOT_STARTED |
+| PAGE-053 | `/sync/conflicts` | `src/routes/sync.conflicts.tsx` | NOT_STARTED |
+
+### API groups
+
+| ID | Source | Registrations indexed | Status |
+|---|---|---:|---|
+| APIG-001 | `backend/src/presentation/routes/audit.route.ts` | 2 | PARTIAL inventory; guards/contracts pending |
+| APIG-002 | `backend/src/presentation/routes/auth.route.ts` | 8 | PARTIAL inventory; guards/contracts pending |
+| APIG-003 | `backend/src/presentation/routes/backup.route.ts` | 0 | PARTIAL inventory; guards/contracts pending |
+| APIG-004 | `backend/src/presentation/routes/cashbox.route.ts` | 11 | PARTIAL inventory; guards/contracts pending |
+| APIG-005 | `backend/src/presentation/routes/color.route.ts` | 6 | PARTIAL inventory; guards/contracts pending |
+| APIG-006 | `backend/src/presentation/routes/company.route.ts` | 3 | PARTIAL inventory; guards/contracts pending |
+| APIG-007 | `backend/src/presentation/routes/dashboard.route.ts` | 1 | PARTIAL inventory; guards/contracts pending |
+| APIG-008 | `backend/src/presentation/routes/desktopRuntime.route.ts` | 3 | PARTIAL inventory; guards/contracts pending |
+| APIG-009 | `backend/src/presentation/routes/documentTrack.route.ts` | 1 | PARTIAL inventory; guards/contracts pending |
+| APIG-010 | `backend/src/presentation/routes/drive.route.ts` | 5 | PARTIAL inventory; guards/contracts pending |
+| APIG-011 | `backend/src/presentation/routes/dye.route.ts` | 2 | PARTIAL inventory; guards/contracts pending |
+| APIG-012 | `backend/src/presentation/routes/expense.route.ts` | 6 | PARTIAL inventory; guards/contracts pending |
+| APIG-013 | `backend/src/presentation/routes/fabric.route.ts` | 5 | PARTIAL inventory; guards/contracts pending |
+| APIG-014 | `backend/src/presentation/routes/fx.route.ts` | 0 | PARTIAL inventory; guards/contracts pending |
+| APIG-015 | `backend/src/presentation/routes/health.route.ts` | 3 | PARTIAL inventory; guards/contracts pending |
+| APIG-016 | `backend/src/presentation/routes/integrity.route.ts` | 3 | PARTIAL inventory; guards/contracts pending |
+| APIG-017 | `backend/src/presentation/routes/invitation.route.ts` | 5 | PARTIAL inventory; guards/contracts pending |
+| APIG-018 | `backend/src/presentation/routes/invoice.route.ts` | 7 | PARTIAL inventory; guards/contracts pending |
+| APIG-019 | `backend/src/presentation/routes/ledger.route.ts` | 10 | PARTIAL inventory; guards/contracts pending |
+| APIG-020 | `backend/src/presentation/routes/license.route.ts` | 11 | PARTIAL inventory; guards/contracts pending |
+| APIG-021 | `backend/src/presentation/routes/notification.route.ts` | 6 | PARTIAL inventory; guards/contracts pending |
+| APIG-022 | `backend/src/presentation/routes/order.route.ts` | 8 | PARTIAL inventory; guards/contracts pending |
+| APIG-023 | `backend/src/presentation/routes/party.route.ts` | 17 | PARTIAL inventory; guards/contracts pending |
+| APIG-024 | `backend/src/presentation/routes/print.route.ts` | 5 | PARTIAL inventory; guards/contracts pending |
+| APIG-025 | `backend/src/presentation/routes/profit.route.ts` | 2 | PARTIAL inventory; guards/contracts pending |
+| APIG-026 | `backend/src/presentation/routes/reports.route.ts` | 3 | PARTIAL inventory; guards/contracts pending |
+| APIG-027 | `backend/src/presentation/routes/return.route.ts` | 4 | PARTIAL inventory; guards/contracts pending |
+| APIG-028 | `backend/src/presentation/routes/roll.route.ts` | 7 | PARTIAL inventory; guards/contracts pending |
+| APIG-029 | `backend/src/presentation/routes/search.route.ts` | 6 | PARTIAL inventory; guards/contracts pending |
+| APIG-030 | `backend/src/presentation/routes/settings.route.ts` | 2 | PARTIAL inventory; guards/contracts pending |
+| APIG-031 | `backend/src/presentation/routes/setup.route.ts` | 9 | PARTIAL inventory; guards/contracts pending |
+| APIG-032 | `backend/src/presentation/routes/statement.route.ts` | 4 | PARTIAL inventory; guards/contracts pending |
+| APIG-033 | `backend/src/presentation/routes/sync.route.ts` | 37 | PARTIAL inventory; guards/contracts pending |
+| APIG-034 | `backend/src/presentation/routes/syncBootstrap.route.ts` | 2 | PARTIAL inventory; guards/contracts pending |
+| APIG-035 | `backend/src/presentation/routes/syncEnrollment.route.ts` | 2 | PARTIAL inventory; guards/contracts pending |
+| APIG-036 | `backend/src/presentation/routes/user.route.ts` | 5 | PARTIAL inventory; guards/contracts pending |
+| APIG-037 | `backend/src/presentation/routes/voucher.route.ts` | 9 | PARTIAL inventory; guards/contracts pending |
+| APIG-038 | `backend/src/presentation/routes/year-closing.route.ts` | 8 | PARTIAL inventory; guards/contracts pending |
+| APIG-039 | `backend/src/scripts/license-admin.route.ts` | 7 | PARTIAL inventory; guards/contracts pending |
+| APIG-040 | `backend/src/scripts/license-v1.route.ts` | 5 | PARTIAL inventory; guards/contracts pending |
+
+### Workflow starting inventory
+
+| ID | Workflow | Entry source | Status |
+|---|---|---|---|
+| FLOW-001 | Provisioning, activation, invitation and device binding | `backend/src/presentation/routes/setup.route.ts` | NOT_STARTED |
+| FLOW-002 | Authentication, session restoration and revocation | `backend/src/presentation/routes/auth.route.ts` | NOT_STARTED |
+| FLOW-003 | Tenant users and permissions | `src/routes/settings.users.tsx` | NOT_STARTED |
+| FLOW-004 | Customer/supplier creation, balances, merge, purge | `backend/src/presentation/routes/party.route.ts` | NOT_STARTED |
+| FLOW-005 | Entry invoices and roll creation | `src/routes/invoices.entry.new.tsx` | NOT_STARTED |
+| FLOW-006 | Sale invoices, stock and cancellation | `src/routes/invoices.sale.new.tsx` | NOT_STARTED |
+| FLOW-007 | Returns and financial/inventory reversal | `backend/src/presentation/routes/return.route.ts` | NOT_STARTED |
+| FLOW-008 | Receipts/payments and invoice allocation | `backend/src/presentation/routes/voucher.route.ts` | NOT_STARTED |
+| FLOW-009 | Statements and settlement | `backend/src/presentation/routes/statement.route.ts` | NOT_STARTED |
+| FLOW-010 | Ledger, reconciliation, currency and precision | `backend/src/presentation/routes/ledger.route.ts` | NOT_STARTED |
+| FLOW-011 | Cashbox, expenses and daily close | `backend/src/presentation/routes/cashbox.route.ts` | NOT_STARTED |
+| FLOW-012 | Financial year close and reopen | `backend/src/presentation/routes/year-closing.route.ts` | NOT_STARTED |
+| FLOW-013 | Fabric/color/roll and stock movement | `backend/src/presentation/routes/roll.route.ts` | NOT_STARTED |
+| FLOW-014 | Inventory counts and adjustments | `src/routes/inventory_.count.tsx` | NOT_STARTED |
+| FLOW-015 | Orders and reservations | `backend/src/presentation/routes/order.route.ts` | NOT_STARTED |
+| FLOW-016 | Print send/receive and document output | `backend/src/presentation/routes/print.route.ts` | NOT_STARTED |
+| FLOW-017 | Reports, dashboards and historical exports | `backend/src/presentation/routes/reports.route.ts` | NOT_STARTED |
+| FLOW-018 | Offline outbox/inbox, conflict and multi-device recovery | `backend/src/presentation/routes/sync.route.ts` | NOT_STARTED |
+| FLOW-019 | Backups, restore, integrity and safe mode | `backend/src/presentation/routes/backup.route.ts` | NOT_STARTED |
+| FLOW-020 | Google Drive archives and credentials | `backend/src/presentation/routes/drive.route.ts` | NOT_STARTED |
+| FLOW-021 | Desktop startup, shutdown, upgrade and storage | `desktop/src-tauri/src/main.rs` | NOT_STARTED |
+| FLOW-022 | Licensing vendor control plane | `backend/src/scripts/license-server.ts` | NOT_STARTED |
+
+### Remaining stages and release assessment
+
+Stage A remains PARTIAL until literal/dynamic endpoint registrations, generated schema objects, constraints, test classification and component reachability are reconciled. Stage B–F remain NOT_STARTED at this checkpoint. No page or workflow is complete. Runtime checks are blocked by absent dependencies and unverified disposable infrastructure; installation remains prohibited.
+
+**Customer readiness cannot yet be assessed adequately.** Historical serious findings require current-revision verification; inventory alone establishes no assurance of security, financial integrity, synchronization, recovery or desktop behavior.
+
+
+## Checkpoint A2/B1: registry reconciliation and first deep page trace
+
+### Exact bounded coverage
+
+- ERP route definitions **50/50** matched against generated route-tree imports: 47 page definitions, two section layouts and the root. No missing/extra import observed. This checks registration, not rendering.
+- Separate licensing app: **3 state-driven screen components**; actual reachability/dialog composition still partial. Combined registry: **53** records.
+- **240** literal HTTP registrations in **40** route modules. A wider receiver search produced 242 matches; the other two are JSDoc examples in validate-params.middleware.ts:11–12, not endpoints. Dynamic dispatch and non-HTTP boundaries still require reconciliation. Method/path/source line are itemized in JSON.
+- **50 PostgreSQL + 59 SQLite** Drizzle table definitions. Engine-exclusive tables are not automatically mismatches. SQL-only objects/triggers/indexes and all relationships remain to be reconciled. Column/constraint line candidates are now table-scoped.
+- Migration-name consistency: **103/103 PostgreSQL SQL files/journal entries**, **6/6 SQLite**, no missing or unlisted names. Migration execution, constraints, ordering correctness, rollback, drift and restoration remain unverified.
+- Root/backend/desktop/admin manifest direct dependency declarations match their lockfile root entries. This does not prove transitive lock completeness or reproducible installation.
+- **0/53 page/screen records COMPLETE; 0/22 workflow groups COMPLETE.** New findings do not substitute for remaining audit work.
+
+### PAGE-049 — `/settings/users` — PARTIAL
+
+Files inspected: settings.users.tsx; parent settings.tsx; AuthGate; useAuth (partial); FormField; Input/Label; ConfirmDialog; InvitationManager; UsersApiService and its tests; invitations.ts; user.route.ts; invitation.route.ts; invitation generation/list/revoke use cases (partial); PG/SQLite UserRepository; user schema definitions; sessionCutoff; auth/RBAC middleware; tenant context; sync enqueue and DI wiring (partial). Primitive dialog/select internals, AppShell descendants, user-picker acceptance, all HTTP retry paths and live schema constraints remain incomplete.
+
+**Initialization:** current user gates query `['users']`; admin/accountant admitted by both frontend and rbac helper. UsersApiService walks page=0..N with limit=100 until hasNext is false. List loading/error/retry states exist. Save closes editor and invalidates only users after mutation success; error toasts retain draft if dialog remains open. Deactivation confirmation closes before response; mutation completion invalidates users. InvitationManager owns independent local state and refresh, with no request cancellation/ordering guard; overlapping request effects are not reproduced.
+
+**Permission evidence:** rbac(['admin']) intentionally admits accountant under the current helper; this is also stated by repository tests/comments. It is not recorded as an accidental accountant escalation. Backend separately refuses self-demotion/deactivation and accountant changes to admin accounts/admin grants. Resource checks read target user before writes. Concurrency, tenant isolation and actual denied-request behavior remain unexecuted.
+
+**Fields:** nine field records in JSON (`FIELD-001`–`FIELD-009`), with line/default/UI/backend/storage mapping. No field is runtime-complete.
+
+| Field ID | Visible meaning | State/payload/storage path | Observed rules / unresolved boundaries |
+|---|---|---|---|
+| FIELD-001 | الاسم | `user-name` → `users.name` via `PATCH /api/users/:id` | String; UI save disabled for trim-empty, changedUserFields trims; server 1..255 chars, no trim; PG varchar(255), SQLite text |
+| FIELD-002 | البريد | `user-email` → `users.email` via `PATCH /api/users/:id` | type=email outside form; changed values trimmed; server email validation; PG varchar(320), SQLite text; tenant/email unique |
+| FIELD-003 | الدور | `user-role` → `users.role` via `PATCH /api/users/:id` | admin/accountant/warehouse/viewer; own role disabled; accountant cannot grant/edit admin; backend independently checks |
+| FIELD-004 | الحساب مفعّل | `user-active` → `users.active` via `PATCH /api/users/:id` | Boolean; self disabled; server refuses self deactivate |
+| FIELD-005 | نوع الدعوة | `invitation-type` → `invitation_codes.type` via `POST /api/invitations/generate` | user/device; backend checks membership |
+| FIELD-006 | اسم المدعو | `invitation-name` → `invitation_codes.metadata.targetName` via `POST /api/invitations/generate` | UI trim required for user; server only truthiness; no length/type schema on route |
+| FIELD-007 | بريد المدعو | `invitation-email` → `invitation_codes.metadata.targetEmail` via `POST /api/invitations/generate` | type=email outside form; trim required UI; server truthiness; full consume validation pending |
+| FIELD-008 | الدور | `invitation-role` → `invitation_codes.metadata.targetRole` via `POST /api/invitations/generate` | UI accountant/warehouse/viewer; backend also permits admin but only admin caller may grant it |
+| FIELD-009 | مدة الصلاحية (دقائق) | `invitation-ttl` → `invitation_codes.expiresAt` via `POST /api/invitations/generate` | Number(e.target.value); min1/max1440 attributes; backend Number conversion and range comparison; finite/integer checks absent; invalid-date persistence behavior unverified |
+
+**Actions:** eleven groups (`ACTION-001`–`ACTION-011`) include repeated row actions; these are handler groups, not total rendered button instances.
+
+| Action ID | Handler | Behavior / limitation |
+|---|---|---|
+| ACTION-001 | `users.refetch` | Read; only rendered on query error |
+| ACTION-002 | `openEdit(u)` | Copies row into draft; accountant cannot open admin edit |
+| ACTION-003 | `save.mutate(editing)` | Pending disables save; changed fields only; success closes and invalidates users; error toast retains dialog unless separately closed |
+| ACTION-004 | `setEditing(null)` | Cancel/dismiss remains possible during in-flight save; completion targeting newer dialog not executed |
+| ACTION-005 | `setRemoving(u)` | Disabled for inactive/self/pending/admin reserved |
+| ACTION-006 | `deactivate.mutate(removing.id)` | Closes confirmation immediately; success invalidates users; error toast |
+| ACTION-007 | `onOpenChange` | Drops selected record; no mutation |
+| ACTION-008 | `refresh` | Disables refresh while loading; requests lack cancellation/sequence guard |
+| ACTION-009 | `issue` | Trims required user name/email, disables while issuing; clears fields on success and refreshes |
+| ACTION-010 | `revoke` | Native confirm; no per-row pending flag; awaits API and refresh |
+| ACTION-011 | `CopyCode` | Clipboard write; check icon for 1200ms; catch ignores failure; timeout cleanup not present |
+
+**Table:** name/email, role lookup, active status, createdAt.slice(0,10), edit/deactivate. All API pages are accumulated; no sorting/filtering UI or statement totals on this page. CreatedAt malformed response handling and same-createdAt pagination stability untested. Empty users list renders no explicit empty message. Invitation list displays code/type/role/target/name/email/expiry/use state; repository excludes revoked records, so the suspected revoked-code badge defect is **not established**.
+
+**Data trace FLOW-003:** row → edit draft → changedUserFields trims name/email and omits unchanged fields → UsersApiService PATCH → BaseHttpClient (full retry/idempotency review pending) → server auth+license guard → route auth+rbac+UUID/body validation → tenant target lookup and role restrictions → PG/SQLite user update → optional credential/device effects → snapshot → enqueue user sync unit → response → onSuccess close+users invalidation. Reads return user DTO without password/PIN hash. Sync snapshot includes hashes internally; transport/authorization of those snapshots still needs review.
+
+**Database map:** users has tenant FK, id PK, required name/email/passwordHash/role/active, default active=true, optional PIN and session cutoff; PG varchar lengths 255 name/320 email; unique tenant/email and tenant/id indexes. SQLite generated ORM uses text and does not itself enumerate SQL constraints; migration constraints remain to verify. Deactivation preserves historical records. Role/name updates and session identity cache cross a separate boundary (ERP-001). User mutation and outbox cross a persistence boundary (ERP-002).
+
+**Tests:** UsersApiService actual code executed with mocked HTTP (seven assertions). Existing Vitest user API, permission and reset-password tests were identified/source inspected; they were not executed. No real browser, DB transaction, tenant isolation, duplicate submission, Arabic input, cross-device or accessibility execution.
+
+**Required remaining matrix:** name empty/whitespace/255/256/Unicode; changed and unchanged email, invalid/over-320/duplicate/case behavior on each engine; self/other role and active changes; last-admin concurrent operations; save cancellation and reopen with outstanding response; query pagination concurrent writes; invitation expiry invalid/fractional/NaN/zero/1440/above-limit values, email/type validation; clipboard failure; keyboard/focus; outbox failure/retry; remote cache propagation. Business rules not documented by source remain questions.
+
+### Other page records partially examined
+
+- **Root route (`src/routes/__root.tsx`)**: ActivationGate → AuthGate → ErrorBoundary → Outlet, QueryClient provider, settings boot effect, web-only service-worker registration and 404/error actions examined. Activation/setup descendants, service-worker interactions, root query lifecycle and restart behavior pending. Status PARTIAL.
+- **PAGE-047 `/settings` layout**: role gate before Outlet, navigation destinations and active link matching examined. Eleven navigation entries identified; AppShell descendants, responsive/sidebar keyboard behavior and each child page pending. Status PARTIAL.
+- **PAGE-023 `/login`**: UserPickerPage composition and authenticated redirect effect examined. UserPickerPage fields/PIN/device roster/acceptance flow still NOT_STARTED. No login behavior or redirects executed. Status PARTIAL.
+- **Admin root App**: state-based loopback/token gating examined; full LoginPage/LicenseListPage/CreateLicensePage form/UI reviews pending. No licensing page marked audited/complete from the proxy finding alone.
+
+### Current findings and root-cause impacts
+
+**Four findings confirmed by current source; one strongly suspected integration risk with a bounded middleware reproduction. None is represented as a completed live workflow reproduction.**
+
+#### ERP-001 — Role changes leave the previous authorization cached for up to 60 seconds
+
+- **Severity / confidence / status:** High / High / Confirmed.
+- **Primary evidence:** `backend/src/infrastructure/repositories/PostgresUserRepository.ts:208` (`PostgresUserRepository.update / SqliteUserRepository.update`).
+- `backend/src/infrastructure/repositories/PostgresUserRepository.ts:216`: Role is updated, but invalidateIdentityCache is called only for active === false.
+- `backend/src/infrastructure/repositories/sqlite/SqliteUserRepository.ts:218`: Same role write and deactivation-only invalidation in SQLite twin.
+- `backend/src/infrastructure/auth/sessionCutoff.ts:43`: Identity cache TTL is 60,000 ms and valid cached role returns before reading DB.
+- `backend/src/infrastructure/http/middleware/auth.middleware.ts:91`: Request authorization role comes from resolved identity; no separate fresh role lookup.
+- **Expected:** A successful demotion must remove previous privileges on subsequent authorization checks.
+- **Actual:** Source-confirmed: a previously cached admin/accountant identity survives a role-only update until cache expiry. No live unauthorized write was performed.
+- **Root cause:** The mutation and authorization cache have no invalidation contract for role/name changes.
+- **Impact:** A demoted account can retain elevated authorization for the remainder of the 60-second cache window on a warmed process. Other processes need independent invalidation or fresh reads.
+- **Smallest correction direction:** Invalidate cached identity after every authorization-affecting committed update; define multi-process revocation propagation/fresh-read policy.
+- **Verified affected endpoint paths:** `PATCH /api/users/:id`, `Any subsequently role-guarded ERP endpoint`.
+- **Required regression evidence:** Warm real identity cache; demote through route; immediately verify old JWT is denied at privileged route on both engines and each replica.
+- **Regression risks:** Transaction rollback must not publish an incorrect cache state; role grants/name updates and replica invalidation need coverage.
+- **Remaining blockers:** Database/Express runtime not available; source reasoning only, live sequence pending.
+
+#### ERP-002 — User mutations and their durable sync records do not commit atomically
+
+- **Severity / confidence / status:** High / High / Confirmed.
+- **Primary evidence:** `backend/src/presentation/routes/user.route.ts:150` (`registerUserRoutes PATCH/DELETE/reset-password`).
+- `backend/src/presentation/routes/user.route.ts:150`: update resolves before snapshot and enqueue; an enqueue failure returns 500 after the write.
+- `backend/src/presentation/routes/user.route.ts:203`: deactivation also precedes snapshot/enqueue.
+- `backend/src/infrastructure/orm/tenant-context.ts:42`: runWithTenantContext only invokes AsyncLocalStorage.run; it is not a transaction.
+- `backend/src/infrastructure/di/postgresContainer.ts:153`: userRepo takes raw db while outbox takes ambient dbx.
+- `backend/src/presentation/routes/invitation.route.ts:121`: Invitation consume finishes before created-user snapshot is enqueued.
+- **Expected:** User state and its outbox event must commit together, with retries preserving the same result.
+- **Actual:** Source-confirmed: user update/deactivation/password reset (and invitation-created user enqueue) run as separate persistence steps; failure between them can leave committed user state absent from outbox.
+- **Root cause:** Route lacks a shared committing transaction; user repository is wired to raw DB and uses tenant context, while outbox is a separate call.
+- **Impact:** Peer devices may retain stale role, credentials or active state. HTTP failure can conceal a successful local write; invitation retry may encounter an already-consumed code. Failure and two-device divergence not executed.
+- **Smallest correction direction:** Make user write, session/device changes and outbox share one transaction and a transaction-aware user repository. Invitation consumption must include durable user event before commitment.
+- **Verified affected endpoint paths:** `PATCH /api/users/:id`, `DELETE /api/users/:id`, `POST /api/users/:id/reset-password`, `POST /api/invitations/consume`.
+- **Required regression evidence:** Inject snapshot and outbox failures after each mutation on PG/SQLite; assert rollback or durable retry record; verify peer user state after restart.
+- **Regression risks:** Simply wrapping the route is insufficient if raw DB ignores ambient transaction; maintain RLS, rollback safety and idempotency.
+- **Remaining blockers:** No isolated DB or two-device stack; failure injection not executed.
+
+#### ERP-003 — Invitation controls have visible labels without programmatic associations
+
+- **Severity / confidence / status:** Low / High / Confirmed.
+- **Primary evidence:** `src/components/invitations/InvitationManager.tsx:139` (`InvitationManager`).
+- `src/components/invitations/InvitationManager.tsx:139`: Type/name/email/role/TTL labels are siblings of controls without htmlFor or matching id/aria-labelledby.
+- `src/components/ui/label.tsx:18`: Label forwards props; it does not infer sibling control association.
+- `src/components/ui/input.tsx:5`: Input forwards props; it does not create a matching label/control id.
+- **Expected:** Each invitation control should expose its visible field label as the associated accessible label.
+- **Actual:** Source confirms no association for five controls; particularly name and TTL have neither an associated label nor explicit accessible name. Browser accessibility tree not inspected.
+- **Root cause:** InvitationManager uses raw sibling Label/Input/Select while FormField provides association elsewhere.
+- **Impact:** Assistive technology cannot reliably identify fields by their displayed purpose; label click will not focus sibling input.
+- **Smallest correction direction:** Use stable htmlFor/id or the existing FormField association; wire SelectTrigger explicitly.
+- **Verified affected endpoint paths:** `POST /api/invitations/generate`.
+- **Required regression evidence:** Render InvitationManager and assert getByLabel for all five fields; keyboard/focus and Arabic accessible-name checks.
+- **Regression risks:** Retain RTL layout and unique IDs when multiple dialogs/managers exist.
+- **Remaining blockers:** Browser/component dependencies absent; source confirmation only.
+
+#### ERP-004 — User-list permission test accepts an internal server error as success
+
+- **Severity / confidence / status:** Low / High / Confirmed.
+- **Primary evidence:** `backend/tests/accountant-admin-privileges.test.ts:34` (`call / passes every admin-only guard`).
+- `backend/tests/accountant-admin-privileges.test.ts:34`: Mock repository provides findById/update/delete/findSyncSnapshot but no list.
+- `backend/tests/accountant-admin-privileges.test.ts:84`: Allowed accountant GET /users assertion checks only status != 403.
+- `backend/src/presentation/routes/user.route.ts:76`: Handler calls missing userRepo.list and catches error with HTTP 500.
+- **Expected:** An allowed path test must prove HTTP success and expected response; guard-only tests should isolate and label their narrower contract.
+- **Actual:** Given this fixture, allowed GET /users reaches a missing list function and returns 500, which satisfies not.toBe(403). Test was inspected, not run.
+- **Root cause:** Incomplete mock plus a negative-only success assertion masks the handler failure.
+- **Impact:** Passing test cannot demonstrate accountant can actually list users; 401/404/500 also satisfy that assertion.
+- **Smallest correction direction:** Assert exact successful response and give the mock a faithful list method.
+- **Verified affected endpoint paths:** `GET /api/users`.
+- **Required regression evidence:** Provide list mock; assert 200, body shape and correct tenant context; preserve denied-role no-write/read assertions.
+- **Regression risks:** Avoid interpreting mock integration as database/tenant-isolation coverage.
+- **Remaining blockers:** Vitest/Express absent; no test modifications permitted.
+
+#### ERP-005 — Dashboard development proxy can forward remote callers into passwordless loopback licensing administration
+
+- **Severity / confidence / status:** High / High / Strongly suspected.
+- **Primary evidence:** `admin-dashboard/vite.config.ts:18` (`server.host / server.proxy`).
+- `admin-dashboard/vite.config.ts:8`: host:true exposes dev proxy on all interfaces; /license-admin forwards to loopback license server by default.
+- `backend/src/scripts/license-server.ts:184`: openLoopback defaults on outside production unless explicitly disabled; binding helper restricts only backend listener.
+- `backend/src/infrastructure/http/middleware/super-admin-auth.middleware.ts:34`: Any loopback socket is accepted as super_admin without credential even if req.ip is remote.
+- CHECK-098: Actual transformed middleware with synthetic remote req.ip + loopback socket calls next with super_admin; remote socket and closed-loopback controls return 401.
+- **Expected:** A network-accessible proxy must not confer the local owner bypass on unauthenticated remote requests.
+- **Actual:** Middleware policy reproduced in memory; configured proxy creates the required socket origin by source analysis. Live Vite→license-server→DB path and network reachability not reproduced.
+- **Root cause:** Backend trusts proxy socket loopback while frontend dev server accepts non-loopback clients.
+- **Impact:** If both development services run with defaults on the same machine and port 5174 is reachable, unauthenticated remote clients may read or control licensing through the proxy. Production default disables openLoopback; no unconditional production exposure claimed.
+- **Smallest correction direction:** Bind owner dashboard to loopback or require authenticated backend admin requests across proxy; constrain bypass to a verifiable local-only boundary.
+- **Verified affected endpoint paths:** `GET/POST /license-admin/licenses`, `PATCH /license-admin/licenses/:id`, `POST /license-admin/licenses/:id/suspend`, `POST /license-admin/activations/:id/deactivate`.
+- **Required regression evidence:** Real local Vite proxy with isolated licensing DB: remote-client-shaped unauthenticated requests denied; local owner path still meets intended policy.
+- **Regression risks:** Preserve intended owner console and automation tokens; forwarded IP trust alone cannot override current socket OR check.
+- **Remaining blockers:** Dependencies unavailable; live proxy integration and external reachability unverified. No remote systems contacted.
+
+
+| Root cause | Functions / endpoints | Data | Consumer / workflow | Priority |
+|---|---|---|---|---|
+| ERP-001 cache invalidation omission | user update → session identity → auth/RBAC | users.role | All protected ERP operations following demotion; FLOW-002/003 | High; establish revocation contract and both-engine regression |
+| ERP-002 separate commits | user mutation → snapshot → enqueue | users, sync_outbox, device authorizations | User manager, peer credentials/permissions; FLOW-001/003/018 | High; transaction-aware repository before route grouping |
+| ERP-003 missing label relationship | InvitationManager controls | metadata input | settings/users invitation creation | Low; existing FormField/explicit SelectTrigger ID |
+| ERP-004 negative-only success assertion | GET users test fixture | Mock repository | Authorization test can pass on 500 | Low; exact response and faithful fixture |
+| ERP-005 proxy changes caller origin | Vite proxy → loopback super-admin gate | licenses, activations | Vendor administration FLOW-022 | High conditional risk; verify safely and constrain boundary |
+
+No fixes applied. Financial/inventory, backup/restore, Windows startup/shutdown and complete synchronization invariants remain pending. Historical financial findings are not silently accepted or cleared.
+
+### Executed checks and limitations
+
+| Check | Current result | Scope |
+|---|---|---|
+| `node --test desktop/scripts/dfp008-ci-gates.test.mjs` | exit 0; 3 passed, 0 failed/skipped | CI source regex assertions; no pipeline or desktop execution |
+| `node --check <file>` | 95/95 passed, each exit 0 | Every tracked JS/MJS/CJS file; individual paths and hashes in JSON CHECK-002..096 |
+| `node --input-type=module` (exact stdin CHECK-097) | exit 0; 7 assertions | Actual UsersApiService transformed in memory, mocked HTTP |
+| `node --input-type=module` (exact stdin CHECK-098) | exit 0; 3 assertions | Actual super-admin middleware, synthetic requests; no live Vite/DB |
+| Route-tree, migration-name and direct lock declarations | Matched within defined scope | Python standard-library comparison; no build/migration/install |
+
+Node probes used available v24.14.1, not declared Node22. Existing Vitest, TypeScript, ESLint, Prettier, Knip, Semgrep, build, PG/SQLite integration, Playwright, two-device, recovery and Windows/Rust checks remain **BLOCKED**, not passed or silently skipped. No dependency installs are authorized in this pass. `ss` was unavailable; no service health assumed. The CodeRabbit skill was consulted for review scope: its CLI is diff-based; no CLI review was run or credited as repository audit evidence.
+
+### Byte-level style observations (separate from defects)
+
+Scanned **1545** tracked code/script/SQL files. **2** have trailing-whitespace or .gitattributes EOL observations. Full file/line arrays in JSON style_observations. No automatic fix, no formatter run and no claim that literal/template whitespace is unintended. Files outside these suffixes and syntax/indentation/quote rules remain for configured tools.
+
+Algorithm: read bytes; for every split line record `endswith(space or tab)`; count LF and CRLF; compare with `.gitattributes` (`*.cmd/*.bat` CRLF, other text LF). This is read-only and does not replace Prettier.
+
+| Observation | File | Trailing-whitespace lines | EOL mismatch |
+|---|---|---|---|
+| STYLE-001 | `backend/src/infrastructure/orm/migrations/0023_invoice_paid_and_payment_method.sql` | 3 | False |
+| STYLE-002 | `specs/001-desktop-sqlite-engine/research-appendix-pg-triggers.sql` | none | True |
+
+
+## Checkpoint B2/C1 — receipts, payments and cancellation callers
+
+### PAGE-028 — `/payments/new` — PARTIAL
+
+- **Entrypoint:** payments.new.tsx validates string search parameters `partyId/invoiceId/edit` and renders AppShell → VoucherForm(kind=payment). Supplied strings are not UUID-validated by search parser; backend validates identifiers.
+- **Inspected dependency paths:** VoucherForm, PartyCombobox, FormField, FormattedAmountInput, useVouchers, VoucherApiService, ApiVoucherRepository, voucher use cases (cancel fully; create-receipt relevant path), actual ApiLedgerRepository, container wiring, shared voucher schema, voucher.route, PG create/cancel portions and PG/SQLite voucher schema definitions. SQLite full mutation parity, shared FX helpers, HTTP retry implementation, PartyFormDialog and AppShell descendants remain pending.
+- **Fields:** shares FIELD-010..021 with receipt form (12 direct/search fields). Party creation dialog has additional fields not yet enumerated; no claim of complete field inventory.
+- **Actions:** ACTION-012..017 covers save, navigation cancel, party selection, inline party creation and rate acknowledgment. Individual Select/open/close/focus actions and child dialog actions still incomplete.
+- **Initialization:** invoice and return lists request all pages for selected party; edit effect loads existing voucher once via hydratedEdit boolean; form ignores edit query loading/error as separate visible states. Invoice remaining preview includes paid, returns and edit credit-back. Backend independently checks linked invoice party/type/status and locks the row. Exact shared rounding parity and concurrent fetch behavior remain untested.
+- **Permissions:** backend writeGuard from server allows admin/accountant; readGuard admits operational/viewer roles. Full form action visibility and direct navigation denial behavior not executed.
+- **Persistence:** wire amount is cash; backend derives gross cash+discount, updates vouchers/invoices/ledger and enqueues within route transaction. Separate amend cancellation is not atomic with create (ERP-008); current cancellation adapter mismatch blocks amendment before creation (ERP-007).
+- **Failure handling:** mutation error toast; success-only invalidations; draft retained by form catch. Navigation cancel and party dialog close are possible while mutations are pending. No failure or navigation race executed in browser.
+- **Not supported:** attachments area explicitly says placeholder/no actual storage and contains no upload handler. Recorded as unsupported UI placeholder, not a verified file-upload implementation.
+- **Tests:** CHECK-100/101 are actual source probes with mocked boundaries. Existing `voucher-lifecycle.test.ts` begins with local arrays/helper calculations and does not exercise this production adapter/DB wiring; its “Integration Test” title is not accepted as proof of integration.
+- **Findings:** ERP-007, ERP-008. No page completion claimed.
+
+### PAGE-031 — `/receipts/new` — PARTIAL
+
+- **Entrypoint:** receipts.new.tsx passes kind=receipt to same VoucherForm through AppShell. Inspected independently; receipt/customer branch, hydration guard, allowance of excess customer payment (unless concession) and receipt navigation were traced.
+- **Receipt-specific trace:** receipts list edit link and cashbox VoucherTable edit link → search.edit → useVoucher → generic adapter findById → GET payments/:id → generic backend lookup returns receipt → paymentToVoucher overwrites kind/partyKind → form hydration exits. Mapping failure reproduced in CHECK-100; actual browser rendering blocked.
+- **Fields/actions/data:** shared FIELD-010..021 and ACTION-012..017; receipt excess/advance explanation and linked-invoice preview examined. Positive cash validation conflicts with shared schema permitting zero cash plus positive concession; business intent/runtime support remains an open question, not a new confirmed defect. Payment method UI omits schema-supported card; intended exposure requires confirmation from project requirements.
+- **Permissions/errors/tests:** same traced backend guards and current blockers as payment page. No live creation, accounting reconciliation, print, or refund proof. Findings ERP-006/007/008. Child party creation, query-dependent loading states, invalid date/amount/FX boundary behavior, duplicate clicks and Arabic keyboard handling pending.
+
+### Related pages reached by the shared cancellation root cause
+
+**PAGE-027 `/payments/`, PAGE-030 `/receipts/`, PAGE-036 `/returns/`: PARTIAL action trace only.** useCancelVoucher/useCancelReturn callers and edit/cancel links verified. These pages' full filters, tables, pagination, printing, totals, accessibility and dependency trees are not yet audited. Cashbox VoucherTable links were traced; the cashbox page itself remains NOT_STARTED for full-page review. Do not count these caller searches as complete page inspection.
+
+### Workflow trace — FLOW-008 cancellation/amendment
+
+```mermaid
+sequenceDiagram
+  participant UI as VoucherForm or list
+  participant UC as CancelVoucherUseCase
+  participant API as Voucher backend
+  participant DB as DB and outbox
+  participant L as API ledger adapter
+  UI->>UC: cancel voucher
+  UC->>API: POST cancel + expectedVersion
+  API->>DB: version/day guard, cancel voucher + ledger, reverse paid, enqueue
+  DB-->>API: commit
+  API-->>UC: success
+  UC->>L: cancelByReference
+  L-->>UC: throws unconditionally
+  UC-->>UI: rejection after document persistence
+  Note over UI: failure toast; success invalidation skipped; amend create not reached
+```
+
+FLOW-007 return cancellation uses the same redundant ledger call after its own backend cancellation. PG return repository cancellation adjusts rolls, records stock movement, cancels associated ledger rows and marks return cancelled within transaction (PostgresReturnRepository.ts:759–899); source only, no DB execution.
+
+### New current-revision findings
+
+#### ERP-006 — Receipt lookup is reconstituted as a payment, blocking receipt edit hydration
+
+- **Severity / confidence / status:** Medium / High / Confirmed.
+- **Primary location:** `src/infrastructure/repositories/api/ApiVoucherRepository.ts:72` (`findById / paymentToVoucher`).
+- `src/infrastructure/repositories/api/ApiVoucherRepository.ts:10`: paymentToVoucher hardcodes kind=payment and partyKind=supplier.
+- `src/infrastructure/repositories/api/ApiVoucherRepository.ts:72`: findById tries payments first and falls back to receipt only on not-found.
+- `backend/src/presentation/routes/voucher.route.ts:160`: Both typed GET aliases call same findVoucherUseCase with only id; no kind filter.
+- `src/components/vouchers/VoucherForm.tsx:110`: Edit hydration exits when editing.kind differs from form kind.
+- CHECK-100: Actual adapter/entity returned payment/supplier for synthetic receipt/customer DTO; receipt fallback never called.
+- **Expected:** Reading a receipt must preserve receipt/customer kind and hydrate its edit form.
+- **Observed or source-established behavior:** Adapter defect reproduced with mocked server response consistent with source: receipt becomes payment/supplier. Receipt edit hydration is then rejected by source guard. No live browser/API test run.
+- **Root cause:** Client assumes /payments/:id filters by kind while server aliases are generic by ID. Mapper trusts endpoint name and overwrites DTO kind.
+- **Impact:** Existing receipt edit opens without its values. Any generic lookup consumer sees the wrong kind/party kind. Database rows are not changed by this mapping itself. Payment edits use matching mapper.
+- **Recommended correction:** Use generic voucher endpoint with kind-aware mapping, or enforce kind in typed backend routes so fallback semantics are valid. Keep DTO kind authoritative.
+- **Affected endpoints:** `GET /api/payments/:id`, `GET /api/receipts/:id`, `GET /api/vouchers/:id`.
+- **Required regression evidence:** Real route+adapter integration for receipt and payment IDs through all aliases; assert preserved kind; browser edit hydration.
+- **Regression risks:** Typed cancel aliases and receipt print/edit flows must be checked; do not fix by accepting arbitrary mismatched edit kind.
+- **Blockers:** No installed browser/API/DB stack; mapping probe uses mocked HTTP.
+
+#### ERP-007 — Voucher and return cancellation always throw after the backend cancellation succeeds
+
+- **Severity / confidence / status:** High / High / Confirmed.
+- **Primary location:** `src/infrastructure/repositories/api/ApiLedgerRepository.ts:32` (`cancelByReference and its two use-case callers`).
+- `src/infrastructure/repositories/api/ApiLedgerRepository.ts:32`: cancelByReference unconditionally throws Ledger cancellation is performed by domain use cases.
+- `src/application/use-cases/vouchers/CancelVoucherUseCase.ts:28`: Awaits voucher cancel, then calls throwing ledger cancellation.
+- `src/application/use-cases/returns/CancelReturnUseCase.ts:16`: Awaits return cancel, then same throwing call.
+- `src/infrastructure/container.ts:235`: Production container connects both use cases to the ApiLedgerRepository instance (declared at line144).
+- `src/presentation/hooks/useReturns.ts:81`: Stock/query/financial invalidation occurs only onSuccess; rejection instead triggers failure toast.
+- CHECK-101: Actual use cases with actual ledger adapter rejected after both synthetic document cancellation operations succeeded.
+- **Expected:** Successful backend cancellation should resolve successfully, refresh affected views, and allow amendment continuation. Backend owns financial and stock reversal.
+- **Observed or source-established behavior:** Both use cases always reject after a successful document cancellation when wired to actual API ledger adapter. Hook success invalidation is skipped; voucher amend aborts before replacement creation.
+- **Root cause:** Frontend use cases still attempt an extra ledger cancellation although API adapter explicitly refuses it and backend cancellation already owns that side effect.
+- **Impact:** Users see cancellation failure while backend has cancelled a financial/stock document; stale balances/stock and retries mislead operators. Voucher amendment cancels original but never reaches replacement creation. Backend DB effects traced by source, not executed.
+- **Recommended correction:** Remove redundant client ledger cancellation from API-backed document cancellation orchestration, following current CancelInvoiceUseCase ownership; retain authoritative backend reversal and test actual container wiring.
+- **Affected endpoints:** `POST /api/payments/:id/cancel`, `POST /api/receipts/:id/cancel`, `POST /api/returns/:id/cancel`.
+- **Required regression evidence:** Use actual API ledger adapter with real use-case wiring; assert cancellation resolves and invalidates all consumers. Integration DB checks should verify single reversal and repeat safety.
+- **Regression risks:** Mocks currently assert extra ledger call; update tests to business outcome without weakening backend reversal checks. Amendment still needs atomic replacement (ERP-008).
+- **Blockers:** Live persistence/cross-screen checks require safe installed stack; current reproduction uses synthetic successful document repositories.
+
+#### ERP-008 — Voucher amendment has no transaction spanning cancellation and replacement
+
+- **Severity / confidence / status:** High / High / Confirmed.
+- **Primary location:** `src/components/vouchers/VoucherForm.tsx:332` (`VoucherForm.save`).
+- `src/components/vouchers/VoucherForm.tsx:332`: save awaits cancellation before independent create; catch does not restore original.
+- `src/infrastructure/api/VoucherApiService.ts:32`: Create and cancel are separate POST operations.
+- `backend/src/presentation/routes/voucher.route.ts:51`: Creation has its own transaction; cancellation routes have separate transactions, no replace operation.
+- `backend/src/infrastructure/repositories/PostgresVoucherRepository.ts:712`: Cancel changes ledger status and reverses invoice paid before create request can begin.
+- **Expected:** An amendment either commits a replacement together with cancellation or preserves original financial effect on failure.
+- **Observed or source-established behavior:** Confirmed source design: cancellation commits before replacement validation/network/DB persistence. Currently ERP-007 deterministically aborts even earlier; after that issue is fixed, independent create failure still leaves original cancelled. This is a separate transaction-design cause, not a second count of ERP-007 runtime symptom.
+- **Root cause:** Two standalone HTTP mutations implement one business amendment without transactional replacement or durable recovery orchestration.
+- **Impact:** A rejected or interrupted correction removes the original financial effect without recording the replacement. Separate sync events can also expose intermediate cancelled state.
+- **Recommended correction:** Implement one idempotent version-checked backend replace operation covering cancel+create+ledger+outbox, validating replacement before committing either side.
+- **Affected endpoints:** `POST /api/payments/:id/cancel + POST /api/payments`, `POST /api/receipts/:id/cancel + POST /api/receipts`.
+- **Required regression evidence:** Both-engine atomic replace; invalid input, stale expectedVersion, insufficient data, outbox failure and lost response; idempotent retry; peer convergence.
+- **Regression risks:** Document numbering, reference history, consumed advances, day/year locks and retry/version semantics must remain valid. Fixing ERP-007 alone does not close this issue.
+- **Blockers:** No installed DB/browser; direct two-request failure/crash test unexecuted; ERP-007 currently interrupts normal UI amend flow.
+
+
+### Financial field/action ledger extension
+
+| Field ID | Meaning | Default / storage | Validation and remaining questions |
+|---|---|---|---|
+| FIELD-010 | Party | initialPartyId or empty; edit loads existing → `partyId` | Required UUID; customer for receipt/supplier for payment; change clears invoice |
+| FIELD-011 | Linked invoice | initialInvoiceId or empty → `invoiceId` | Optional UUID; options filter party/type/noncancelled and derive remaining; backend validates party/type |
+| FIELD-012 | Date | localToday; edit date → `date` | HTML date; shared schema regex YYYY-MM-DD only; real calendar/closed-period checks downstream |
+| FIELD-013 | Actual paid amount | Empty; edit gross minus discount → `amount` | Form requires >0; schema allows zero if amount+discount>0; 2dp schema, DB numeric14,2 |
+| FIELD-014 | Settlement concession | Empty; edit positive discount → `discount` | UI rejects negative; schema >=0 and 2dp; default0; gross=cash+discount persisted |
+| FIELD-015 | Currency | SYP; edit currency → `currency` | SYP/USD/EUR; manual FX if non-USD or cross-currency |
+| FIELD-016 | Exchange rate | Empty; edit positive rate → `exchangeRate` | Positive manual rate; SYP sanity floor/warning; DB numeric18,6; full shared helper domain pending |
+| FIELD-017 | Confirm unusual rate | false; reset on rate/currency change → `not persisted` | Checkbox required only for visible soft warning; frontend only |
+| FIELD-018 | Payment/receipt method | cash; edit method → `method` | UI cash/transfer/check; backend additionally card; business support discrepancy unresolved |
+| FIELD-019 | Printed notes | Empty; edit saved text → `notesPrint` | UI no maxLength; shared schema max2000; backend text |
+| FIELD-020 | Internal notes | Empty; edit saved text → `notesInternal` | UI no maxLength; shared schema max2000; printing exclusion requires downstream check |
+| FIELD-021 | Party search | Empty query → `GET /api/parties/search q` | PartyCombobox trim/debounce200ms, active party limit30; stale request guarded by cancelled flag |
+
+Voucher DB schema evidence: vouchers has UUID PK; tenant/party/invoice FKs in PG ORM; unique tenant/kind/number; monetary numeric(14,2), exchangeRate numeric(18,6), appliedAmount in linked invoice currency, default active/version1, nullable cancel timestamps/users, text notes. SQLite generated ORM uses custom numeric/date types; actual storage representation, SQL foreign keys/checks/indexes and adapter rounding must be audited separately. No monetary precision policy certified.
+
+### Remediation order (planning only; no fixes authorized)
+
+1. **ERP-007 High:** correct cancellation ownership with actual DI wiring tests; verify backend exactly-once reversal and successful invalidation of invoices/statements/cashbox/stock/returns.
+2. **ERP-001 High / ERP-002 High:** establish immediate privilege revocation and atomic user/outbox writes; transaction-aware repository wiring precedes route transaction changes. Test failure injection and two-process/two-device state.
+3. **ERP-005 High, strongly suspected:** close/verify remote proxy path to loopback administrative bypass in a disposable licensing stack. Reachability and deployment mode are conditions, not universal production exposure.
+4. **ERP-006 Medium → ERP-008 High:** preserve voucher kind, then implement atomic amendment with expected-version/idempotency and both-engine ledger/outbox tests. Fixing the mapping or redundant ledger call alone does not make amendments safe.
+5. **ERP-003/004 Low:** invitation label associations and faithful successful-path permission test.
+
+Regression checks must use real integration boundaries for financial persistence. The inspected return-cancellation unit test supplies `cancelByReference: vi.fn()` and asserts that redundant call; it cannot detect the production adapter's unconditional throw.
+
+### Latest validation results
+
+- CHECK-100: `node --experimental-vm-modules --input-type=module` (exact stdin retained in JSON), exit0; **defect reproduced**: receipt/customer → payment/supplier; three assertions.
+- CHECK-101: same command (different retained stdin), exit0; **defect reproduced** in both cancellation use cases after mocked persistence success; four assertions.
+- Actual modules were transformed only in memory; dependencies not relevant to exercised branches were inert shims. This is source-level unit evidence; no real browser/API/database/reversal/stock/sync run occurred. A passing reproduction probe means the defect was demonstrated, not that the feature passed.
+
+### Latest coverage and release recommendation
+
+Current findings: **8 roots — 5 High, 1 Medium, 2 Low**. Seven confirmed at the explicitly recorded source/mock-execution scope; ERP-005 strongly suspected at full proxy integration scope. No Critical finding established. All historical findings remain preserved and mostly unverified at this revision. H-09 source failure catch and H-01 PG invoice ownership/type condition have changed; this does not establish complete remediation.
+
+**Release recommendation: NOT READY on current evidence**, because cancellation/amendment failure paths and authorization/sync integrity defects remain, with substantial unverified delivery-critical behavior. This is an interim decision; the full repository-wide audit is **INCOMPLETE**.
+
+No route/page/workflow is COMPLETE. The source baseline and bounded static registries are established; Stage A's semantic inventory, Stage B's remaining pages, Stage C's full data paths, Stage D's security/financial/sync/recovery matrices, blocked Stage E tools and Stage F evidence/coverage reconciliation remain open. Exact next steps are in CODEBASE_AUDIT_PROGRESS.md.
+
+
+### Evidence citation correction
+
+The first automated audit-document validator (CHECK-102) rejected two ERP-003 range endpoints outside their files. Corrected JSON evidence: label.tsx:16–18 (file length21), input.tsx:5–19 (length22). Earlier report label.tsx:18 refers to the same component; prop forwarding is precisely at line17. No application behavior or source changed. The failed validation remains recorded and a full rerun follows.
+
+
+### Checkpoint integrity verification
+
+After correcting the two audit citation ranges, CHECK-103/104 passed: JSON, stable IDs/counts and evidence path/line bounds validated; 1,796 original tracked files unchanged and original report byte prefix identical. Only the three permitted audit files differ from baseline; no staged or ignored files appeared. `git diff --check` exit0 for report additions. No application/database/configuration changes, installs, commits or remote writes. Audit remains INCOMPLETE at checkpoint B2/C1.
