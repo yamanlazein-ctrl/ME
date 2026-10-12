@@ -64,7 +64,9 @@ export function SettlementPrintDocument({
   return (
     <PrintDocument
       title="دفعة على الحساب"
-      subtitle={partyKind === "customer" ? "سند قبض مجمّع لعدة فواتير" : "سند صرف مجمّع لعدة فواتير"}
+      subtitle={
+        partyKind === "customer" ? "سند قبض مجمّع لعدة فواتير" : "سند صرف مجمّع لعدة فواتير"
+      }
       meta={meta}
       party={party}
       totals={totals}

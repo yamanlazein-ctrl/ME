@@ -7,8 +7,11 @@ import {
   writeManifestAtomic,
 } from "../../infrastructure/integrity/dataIntegrityManifest.js";
 import type { TenantContext } from "../../domain/types/index.js";
+import { hasAdminPrivileges } from "../../infrastructure/http/middleware/rbac.middleware.js";
 
-export function createIntegrityRouter(auth: (req: Request, res: Response, next: () => void) => void): Router {
+export function createIntegrityRouter(
+  auth: (req: Request, res: Response, next: () => void) => void,
+): Router {
   const router = Router();
 
   router.get("/integrity/status", auth, async (_req: Request, res: Response) => {
@@ -25,7 +28,7 @@ export function createIntegrityRouter(auth: (req: Request, res: Response, next: 
 
   router.post("/integrity/accept-baseline", auth, async (req: Request, res: Response) => {
     const ctx = (req as unknown as { tenantContext?: TenantContext }).tenantContext;
-    if (ctx?.userRole !== "admin") {
+    if (!ctx || !hasAdminPrivileges(ctx.userRole)) {
       res.status(403).json({ code: "FORBIDDEN", message: "غير مصرح" });
       return;
     }
@@ -35,8 +38,14 @@ export function createIntegrityRouter(auth: (req: Request, res: Response, next: 
       return;
     }
     const sqlite = (await import("../../infrastructure/orm/engine.js")).getEngine() === "sqlite";
-    const pool = sqlite ? (await import("../../infrastructure/orm/sqlite/queryable.js")).sqliteReaderQueryable() : (await import("../../infrastructure/orm/pgLazy.js")).pgPool();
-    const { counts, databaseSizeBytes } = await collectCounts(await pool, ctx.tenantId, sqlite ? "sqlite" : "postgres");
+    const pool = sqlite
+      ? (await import("../../infrastructure/orm/sqlite/queryable.js")).sqliteReaderQueryable()
+      : (await import("../../infrastructure/orm/pgLazy.js")).pgPool();
+    const { counts, databaseSizeBytes } = await collectCounts(
+      await pool,
+      ctx.tenantId,
+      sqlite ? "sqlite" : "postgres",
+    );
     acceptBaseline();
     await writeManifestAtomic({
       ...manifest,
@@ -53,7 +62,7 @@ export function createIntegrityRouter(auth: (req: Request, res: Response, next: 
 
   router.post("/integrity/authorize-reset", auth, async (req: Request, res: Response) => {
     const ctx = (req as unknown as { tenantContext?: TenantContext }).tenantContext;
-    if (ctx?.userRole !== "admin") {
+    if (!ctx || !hasAdminPrivileges(ctx.userRole)) {
       res.status(403).json({ code: "FORBIDDEN", message: "غير مصرح" });
       return;
     }

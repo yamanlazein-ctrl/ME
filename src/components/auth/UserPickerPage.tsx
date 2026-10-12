@@ -647,7 +647,6 @@ export function UserPickerPage() {
                 نسيت الرمز السري؟
               </button>
             )}
-
           </form>
         )}
         <button
@@ -671,8 +670,8 @@ export function UserPickerPage() {
             </p>
             {wipeDone ? (
               <p className="rounded-md border border-primary/40 bg-primary/10 px-3 py-2 text-xs text-foreground">
-                سيُؤرشف مجلد البيانات القديم ويبدأ البرنامج من جديد تلقائياً، ثم تُنشئ حساب
-                Admin جديداً من معالج الإعداد.
+                سيُؤرشف مجلد البيانات القديم ويبدأ البرنامج من جديد تلقائياً، ثم تُنشئ حساب Admin
+                جديداً من معالج الإعداد.
               </p>
             ) : isTauri() ? (
               <>

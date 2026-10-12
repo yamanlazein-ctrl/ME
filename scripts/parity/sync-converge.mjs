@@ -48,7 +48,11 @@ const USER_ID = "22222222-2222-4222-8222-222222222222";
 const DEV_A = "33333333-3333-4333-8333-333333333333";
 const DEV_B = "44444444-4444-4444-8444-444444444444";
 const PORTS = { hub: 8191, A: 8192, B: 8193 };
-const JWT = { hub: "hub-sync-jwt-secret-key-min-32-chars!!", A: "device-a-offline-sync-jwt-secret-key!!", B: "device-b-offline-sync-jwt-secret-key!!" };
+const JWT = {
+  hub: "hub-sync-jwt-secret-key-min-32-chars!!",
+  A: "device-a-offline-sync-jwt-secret-key!!",
+  B: "device-b-offline-sync-jwt-secret-key!!",
+};
 const APP_MASTER_KEY = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa=";
 const TEMPLATE = "parity_sync_tpl";
 const RUN = `${Date.now()}`;
@@ -57,8 +61,15 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 // ── PostgreSQL (the 55432 test cluster; URL from backend/.env.test, never printed) ──────────────
 function pgAdminUrl() {
   if (process.env.PARITY_PG_URL) return process.env.PARITY_PG_URL;
-  const line = readFileSync(join(BACKEND, ".env.test"), "utf8").split(/\r?\n/).find((l) => l.startsWith("DATABASE_URL="));
-  const u = new URL(line.slice("DATABASE_URL=".length).trim().replace(/^["']|["']$/g, ""));
+  const line = readFileSync(join(BACKEND, ".env.test"), "utf8")
+    .split(/\r?\n/)
+    .find((l) => l.startsWith("DATABASE_URL="));
+  const u = new URL(
+    line
+      .slice("DATABASE_URL=".length)
+      .trim()
+      .replace(/^["']|["']$/g, ""),
+  );
   u.port = process.env.PARITY_PG_PORT ?? "55432";
   u.pathname = "/postgres";
   return u.toString();
@@ -89,15 +100,24 @@ async function onPg(db, fn) {
 }
 
 async function ensureTemplate() {
-  const exists = (await admin(`SELECT 1 FROM pg_database WHERE datname = '${TEMPLATE}'`)).rows.length > 0;
+  const exists =
+    (await admin(`SELECT 1 FROM pg_database WHERE datname = '${TEMPLATE}'`)).rows.length > 0;
   if (exists) {
-    const ok = await onPg(TEMPLATE, async (c) =>
-      (await c.query(`SELECT count(*)::int AS n FROM information_schema.columns WHERE table_name='sync_inbox' AND column_name='applied_seq'`)).rows[0].n === 1,
+    const ok = await onPg(
+      TEMPLATE,
+      async (c) =>
+        (
+          await c.query(
+            `SELECT count(*)::int AS n FROM information_schema.columns WHERE table_name='sync_inbox' AND column_name='applied_seq'`,
+          )
+        ).rows[0].n === 1,
     ).catch(() => false);
     if (ok) return;
     await admin(`DROP DATABASE IF EXISTS ${TEMPLATE} WITH (FORCE)`);
   }
-  await admin(`CREATE DATABASE ${TEMPLATE} TEMPLATE template0 ENCODING 'UTF8' LC_COLLATE 'C' LC_CTYPE 'C'`);
+  await admin(
+    `CREATE DATABASE ${TEMPLATE} TEMPLATE template0 ENCODING 'UTF8' LC_COLLATE 'C' LC_CTYPE 'C'`,
+  );
   console.log("  migrating the PostgreSQL template (once, ~2 min)…");
   execFileSync(process.execPath, ["node_modules/drizzle-kit/bin.cjs", "migrate"], {
     cwd: BACKEND,
@@ -107,13 +127,28 @@ async function ensureTemplate() {
 }
 
 const SEED_PG = [
-  [`INSERT INTO tenants (id, name, slug, status, license_status, license_type) VALUES ($1, 'Sync Parity Co', $2, 'active', 'no_license', 'trial') ON CONFLICT (id) DO NOTHING`, (n) => [TENANT_ID, `sync-parity-${n}`]],
-  [`INSERT INTO users (id, tenant_id, name, email, password_hash, role, active) VALUES ($1, $2, 'Sync Admin', $3, 'tokens-are-minted', 'admin', true) ON CONFLICT (id) DO NOTHING`, (n) => [USER_ID, TENANT_ID, `admin-${n}@sync.local`]],
+  [
+    `INSERT INTO tenants (id, name, slug, status, license_status, license_type) VALUES ($1, 'Sync Parity Co', $2, 'active', 'no_license', 'trial') ON CONFLICT (id) DO NOTHING`,
+    (n) => [TENANT_ID, `sync-parity-${n}`],
+  ],
+  [
+    `INSERT INTO users (id, tenant_id, name, email, password_hash, role, active) VALUES ($1, $2, 'Sync Admin', $3, 'tokens-are-minted', 'admin', true) ON CONFLICT (id) DO NOTHING`,
+    (n) => [USER_ID, TENANT_ID, `admin-${n}@sync.local`],
+  ],
   ...[DEV_A, DEV_B].flatMap((d, i) => [
-    [`INSERT INTO sync_devices (id, tenant_id, device_fingerprint, platform, hostname, label, last_seen_by_user_id, authorized_user_ids) VALUES ($1, $2, $3, 'windows', $4, $4, $5, ARRAY[$5]::uuid[]) ON CONFLICT (id) DO NOTHING`, (n) => [d, TENANT_ID, `fp-${i}-${n}`, `device-${"ab"[i]}`, USER_ID]],
-    [`INSERT INTO sync_device_authorized_users (tenant_id, device_id, user_id) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING`, () => [TENANT_ID, d, USER_ID]],
+    [
+      `INSERT INTO sync_devices (id, tenant_id, device_fingerprint, platform, hostname, label, last_seen_by_user_id, authorized_user_ids) VALUES ($1, $2, $3, 'windows', $4, $4, $5, ARRAY[$5]::uuid[]) ON CONFLICT (id) DO NOTHING`,
+      (n) => [d, TENANT_ID, `fp-${i}-${n}`, `device-${"ab"[i]}`, USER_ID],
+    ],
+    [
+      `INSERT INTO sync_device_authorized_users (tenant_id, device_id, user_id) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING`,
+      () => [TENANT_ID, d, USER_ID],
+    ],
   ]),
-  [`INSERT INTO setup_wizard_state (tenant_id, current_step, completed_steps, is_completed, completed_at) VALUES ($1, 'done', ARRAY['welcome'], true, now()) ON CONFLICT (tenant_id) DO UPDATE SET is_completed = true, current_step = 'done'`, () => [TENANT_ID]],
+  [
+    `INSERT INTO setup_wizard_state (tenant_id, current_step, completed_steps, is_completed, completed_at) VALUES ($1, 'done', ARRAY['welcome'], true, now()) ON CONFLICT (tenant_id) DO UPDATE SET is_completed = true, current_step = 'done'`,
+    () => [TENANT_ID],
+  ],
 ];
 
 /** The same rows on SQLite (arrays are JSON text, booleans 0/1, timestamps ISO). */
@@ -121,13 +156,31 @@ function seedSqlite(path, n) {
   const db = new Database(path);
   const now = new Date().toISOString().replace("Z", "000Z");
   try {
-    db.prepare(`INSERT OR IGNORE INTO tenants (id, name, slug, status, license_status, license_type) VALUES (?, 'Sync Parity Co', ?, 'active', 'no_license', 'trial')`).run(TENANT_ID, `sync-parity-${n}`);
-    db.prepare(`INSERT OR IGNORE INTO users (id, tenant_id, name, email, password_hash, role, active) VALUES (?, ?, 'Sync Admin', ?, 'tokens-are-minted', 'admin', 1)`).run(USER_ID, TENANT_ID, `admin-${n}@sync.local`);
+    db.prepare(
+      `INSERT OR IGNORE INTO tenants (id, name, slug, status, license_status, license_type) VALUES (?, 'Sync Parity Co', ?, 'active', 'no_license', 'trial')`,
+    ).run(TENANT_ID, `sync-parity-${n}`);
+    db.prepare(
+      `INSERT OR IGNORE INTO users (id, tenant_id, name, email, password_hash, role, active) VALUES (?, ?, 'Sync Admin', ?, 'tokens-are-minted', 'admin', 1)`,
+    ).run(USER_ID, TENANT_ID, `admin-${n}@sync.local`);
     [DEV_A, DEV_B].forEach((d, i) => {
-      db.prepare(`INSERT OR IGNORE INTO sync_devices (id, tenant_id, device_fingerprint, platform, hostname, label, last_seen_by_user_id, authorized_user_ids) VALUES (?, ?, ?, 'windows', ?, ?, ?, ?)`).run(d, TENANT_ID, `fp-${i}-${n}`, `device-${"ab"[i]}`, `device-${"ab"[i]}`, USER_ID, JSON.stringify([USER_ID]));
-      db.prepare(`INSERT OR IGNORE INTO sync_device_authorized_users (tenant_id, device_id, user_id) VALUES (?, ?, ?)`).run(TENANT_ID, d, USER_ID);
+      db.prepare(
+        `INSERT OR IGNORE INTO sync_devices (id, tenant_id, device_fingerprint, platform, hostname, label, last_seen_by_user_id, authorized_user_ids) VALUES (?, ?, ?, 'windows', ?, ?, ?, ?)`,
+      ).run(
+        d,
+        TENANT_ID,
+        `fp-${i}-${n}`,
+        `device-${"ab"[i]}`,
+        `device-${"ab"[i]}`,
+        USER_ID,
+        JSON.stringify([USER_ID]),
+      );
+      db.prepare(
+        `INSERT OR IGNORE INTO sync_device_authorized_users (tenant_id, device_id, user_id) VALUES (?, ?, ?)`,
+      ).run(TENANT_ID, d, USER_ID);
     });
-    db.prepare(`INSERT INTO setup_wizard_state (tenant_id, current_step, completed_steps, is_completed, completed_at) VALUES (?, 'done', '["welcome"]', 1, ?) ON CONFLICT (tenant_id) DO UPDATE SET is_completed = 1, current_step = 'done'`).run(TENANT_ID, now);
+    db.prepare(
+      `INSERT INTO setup_wizard_state (tenant_id, current_step, completed_steps, is_completed, completed_at) VALUES (?, 'done', '["welcome"]', 1, ?) ON CONFLICT (tenant_id) DO UPDATE SET is_completed = 1, current_step = 'done'`,
+    ).run(TENANT_ID, now);
   } finally {
     db.close();
   }
@@ -150,11 +203,25 @@ function baseEnv(port, secret) {
     LICENSE_SERVER_MODE: "embedded",
     BACKUP_MIRROR_DIR: "off",
   };
-  for (const k of ["DATABASE_URL", "TEST_DB_URL", "DESKTOP_DEPLOY", "CENTRAL_SYNC_URL", "HUB_SYNC_ACCESS_TOKEN", "DB_ENGINE", "SQLITE_PATH", "MOTARD_STARTUP_STATE"]) delete env[k];
+  for (const k of [
+    "DATABASE_URL",
+    "TEST_DB_URL",
+    "DESKTOP_DEPLOY",
+    "CENTRAL_SYNC_URL",
+    "HUB_SYNC_ACCESS_TOKEN",
+    "DB_ENGINE",
+    "SQLITE_PATH",
+    "MOTARD_STARTUP_STATE",
+  ])
+    delete env[k];
   return env;
 }
 async function start(name, env) {
-  const p = spawn(process.execPath, [join(BACKEND, "node_modules/tsx/dist/cli.mjs"), "src/presentation/server.ts"], { cwd: BACKEND, env, stdio: ["ignore", "pipe", "pipe"] });
+  const p = spawn(
+    process.execPath,
+    [join(BACKEND, "node_modules/tsx/dist/cli.mjs"), "src/presentation/server.ts"],
+    { cwd: BACKEND, env, stdio: ["ignore", "pipe", "pipe"] },
+  );
   let log = "";
   p.stdout.on("data", (d) => (log += d));
   p.stderr.on("data", (d) => (log += d));
@@ -174,7 +241,8 @@ async function start(name, env) {
 }
 function kill(p) {
   try {
-    if (process.platform === "win32") execFileSync("taskkill", ["/pid", String(p.pid), "/T", "/F"], { stdio: "ignore" });
+    if (process.platform === "win32")
+      execFileSync("taskkill", ["/pid", String(p.pid), "/T", "/F"], { stdio: "ignore" });
     else p.kill("SIGKILL");
   } catch {
     /* gone */
@@ -182,7 +250,13 @@ function kill(p) {
 }
 
 const mint = (secret) =>
-  new SignJWT({ sub: USER_ID, tenantId: TENANT_ID, role: "admin", jti: randomUUID(), type: "access" })
+  new SignJWT({
+    sub: USER_ID,
+    tenantId: TENANT_ID,
+    role: "admin",
+    jti: randomUUID(),
+    type: "access",
+  })
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt()
     .setExpirationTime(Math.floor(Date.now() / 1000) + 7200)
@@ -216,9 +290,11 @@ const must = async (label, p) => {
 async function syncUntilDrained(node, max = 8) {
   for (let i = 0; i < max; i++) {
     const r = await api(node, "POST", "/api/sync/run");
-    if (r.status !== 200) throw new Error(`${node} /sync/run HTTP ${r.status} ${r.text.slice(0, 300)}`);
+    if (r.status !== 200)
+      throw new Error(`${node} /sync/run HTTP ${r.status} ${r.text.slice(0, 300)}`);
     const j = r.json;
-    if (!(j.pushed ?? 0) && !(j.failed ?? 0) && !(j.rejected ?? 0) && !(j.pull?.pulled ?? 0)) return;
+    if (!(j.pushed ?? 0) && !(j.failed ?? 0) && !(j.rejected ?? 0) && !(j.pull?.pulled ?? 0))
+      return;
   }
 }
 
@@ -226,10 +302,16 @@ async function syncUntilDrained(node, max = 8) {
 const DROP = /^(createdAt|updatedAt|syncedAt|deletedAt|version|lastSeenAt|cancelledAt|_links)$/;
 function strip(v) {
   if (Array.isArray(v)) return v.map(strip);
-  if (v && typeof v === "object") return Object.fromEntries(Object.entries(v).filter(([k]) => !DROP.test(k)).sort(([a], [b]) => (a < b ? -1 : 1)).map(([k, x]) => [k, strip(x)]));
+  if (v && typeof v === "object")
+    return Object.fromEntries(
+      Object.entries(v)
+        .filter(([k]) => !DROP.test(k))
+        .sort(([a], [b]) => (a < b ? -1 : 1))
+        .map(([k, x]) => [k, strip(x)]),
+    );
   return v;
 }
-const items = (j) => (Array.isArray(j) ? j : j?.items ?? j?.data ?? j?.rows ?? j);
+const items = (j) => (Array.isArray(j) ? j : (j?.items ?? j?.data ?? j?.rows ?? j));
 /**
  * Rows each node DERIVES while materializing a synced document (invoice lines, ledger entries) carry
  * node-local surrogate ids, and same-date ledger ties follow each node's own insertion order — the
@@ -237,12 +319,23 @@ const items = (j) => (Array.isArray(j) ? j : j?.items ?? j?.data ?? j?.rows ?? j
  * compared by content: line ids masked; ledger entries without id/seq/runningBalance, as a sorted set.
  */
 function derivedLines(invoices) {
-  return invoices.map((inv) => (Array.isArray(inv.lines) ? { ...inv, lines: inv.lines.map(({ id, ...rest }) => rest).sort((x, y) => (JSON.stringify(x) < JSON.stringify(y) ? -1 : 1)) } : inv));
+  return invoices.map((inv) =>
+    Array.isArray(inv.lines)
+      ? {
+          ...inv,
+          lines: inv.lines
+            .map(({ id, ...rest }) => rest)
+            .sort((x, y) => (JSON.stringify(x) < JSON.stringify(y) ? -1 : 1)),
+        }
+      : inv,
+  );
 }
 function ledgerSet(entries) {
-  const list = Array.isArray(entries) ? entries : entries?.entries ?? entries?.items ?? entries;
+  const list = Array.isArray(entries) ? entries : (entries?.entries ?? entries?.items ?? entries);
   if (!Array.isArray(list)) return list;
-  return list.map(({ id, seq, runningBalance, ...rest }) => rest).sort((x, y) => (JSON.stringify(x) < JSON.stringify(y) ? -1 : 1));
+  return list
+    .map(({ id, seq, runningBalance, ...rest }) => rest)
+    .sort((x, y) => (JSON.stringify(x) < JSON.stringify(y) ? -1 : 1));
 }
 async function stateOf(node, c1, date) {
   const get = async (p) => strip(items(await must(`${node} GET ${p}`, api(node, "GET", p))));
@@ -264,7 +357,10 @@ async function inboxOf(node, handle) {
   if (handle.kind === "pg") return onPg(handle.db, async (c) => (await c.query(sql)).rows);
   const db = new Database(handle.path, { readonly: true });
   try {
-    return db.prepare(sql).all().map((r) => ({ ...r, payload: JSON.parse(r.payload) }));
+    return db
+      .prepare(sql)
+      .all()
+      .map((r) => ({ ...r, payload: JSON.parse(r.payload) }));
   } finally {
     db.close();
   }
@@ -274,7 +370,9 @@ async function inboxOf(node, handle) {
 const checks = [];
 const check = (name, ok, detail) => {
   checks.push({ name, pass: !!ok, detail });
-  console.log(`  ${ok ? "PASS" : "FAIL"}  ${name}${detail && !ok ? ` — ${typeof detail === "string" ? detail : JSON.stringify(detail).slice(0, 600)}` : ""}`);
+  console.log(
+    `  ${ok ? "PASS" : "FAIL"}  ${name}${detail && !ok ? ` — ${typeof detail === "string" ? detail : JSON.stringify(detail).slice(0, 600)}` : ""}`,
+  );
 };
 const work = mkdtempSync(join(tmpdir(), `motard-sync-${ENGINE}-`));
 const handles = {};
@@ -296,7 +394,11 @@ async function main() {
 
   await start("hub", { ...baseEnv(PORTS.hub, JWT.hub), DATABASE_URL: dbUrl(handles.hub.db) });
   for (const node of ["A", "B"]) {
-    const env = { ...baseEnv(PORTS[node], JWT[node]), CENTRAL_SYNC_URL: `http://127.0.0.1:${PORTS.hub}`, HUB_SYNC_ACCESS_TOKEN: tokens.hub };
+    const env = {
+      ...baseEnv(PORTS[node], JWT[node]),
+      CENTRAL_SYNC_URL: `http://127.0.0.1:${PORTS.hub}`,
+      HUB_SYNC_ACCESS_TOKEN: tokens.hub,
+    };
     if (ENGINE === "postgres") {
       await start(node, { ...env, DATABASE_URL: dbUrl(handles[node].db) });
     } else {
@@ -316,35 +418,118 @@ async function main() {
 
   // ── online: shared customer + shared roll, number blocks ──
   for (const node of ["A", "B"]) {
-    await must(`${node} number blocks`, call(node, "POST", "/api/sync/number-blocks/ensure", { syncDeviceId: dev[node], entityTypes: ["customer", "supplier", "invoice", "invoice_entry"] }));
+    await must(
+      `${node} number blocks`,
+      call(node, "POST", "/api/sync/number-blocks/ensure", {
+        syncDeviceId: dev[node],
+        entityTypes: ["customer", "supplier", "invoice", "invoice_entry"],
+      }),
+    );
   }
-  const c1 = (await must("A customer C1", call("A", "POST", "/api/customers", { name: "عميل مشترك", phone: "000" }))).id;
-  const fabric = (await must("A fabric", call("A", "POST", "/api/inventory/fabrics", { name: "قماش مشترك" }))).id;
-  const color = (await must("A color", call("A", "POST", "/api/inventory/colors", { fabricId: fabric, name: "أحمر" }))).id;
-  const shared = (await must("A shared roll", call("A", "POST", "/api/inventory/rolls", { colorId: color, rollNo: "R-SHARED", initialKg: 100, pieces: 4, pricePerKg: 10, currency: "USD", entryDate: date }))).id;
+  const c1 = (
+    await must(
+      "A customer C1",
+      call("A", "POST", "/api/customers", { name: "عميل مشترك", phone: "000" }),
+    )
+  ).id;
+  const fabric = (
+    await must("A fabric", call("A", "POST", "/api/inventory/fabrics", { name: "قماش مشترك" }))
+  ).id;
+  const color = (
+    await must(
+      "A color",
+      call("A", "POST", "/api/inventory/colors", { fabricId: fabric, name: "أحمر" }),
+    )
+  ).id;
+  const shared = (
+    await must(
+      "A shared roll",
+      call("A", "POST", "/api/inventory/rolls", {
+        colorId: color,
+        rollNo: "R-SHARED",
+        initialKg: 100,
+        pieces: 4,
+        pricePerKg: 10,
+        currency: "USD",
+        entryDate: date,
+      }),
+    )
+  ).id;
   await syncUntilDrained("A");
   await syncUntilDrained("B");
   const bKnows = await call("B", "GET", `/api/customers/${c1}`);
-  check("online: B pulled the shared customer and roll", bKnows.status === 200 && (await call("B", "GET", `/api/inventory/rolls?limit=50`)).text.includes("R-SHARED"));
+  check(
+    "online: B pulled the shared customer and roll",
+    bKnows.status === 200 &&
+      (await call("B", "GET", `/api/inventory/rolls?limit=50`)).text.includes("R-SHARED"),
+  );
 
   // ── offline work ──
   async function ownRoll(node) {
-    return (await must(`${node} own roll`, call(node, "POST", "/api/inventory/rolls", { colorId: color, rollNo: `R-${node}`, initialKg: 200, pieces: 40, pricePerKg: 9, currency: "USD", entryDate: date }))).id;
+    return (
+      await must(
+        `${node} own roll`,
+        call(node, "POST", "/api/inventory/rolls", {
+          colorId: color,
+          rollNo: `R-${node}`,
+          initialKg: 200,
+          pieces: 40,
+          pricePerKg: 9,
+          currency: "USD",
+          entryDate: date,
+        }),
+      )
+    ).id;
   }
   async function sell(node, roll, kg, paid, i) {
-    return must(`${node} invoice ${i}`, api(node, "POST", "/api/invoices", {
-      type: "sale", date, partyId: c1, partyType: "customer", currency: "USD", paid,
-      lines: [{ fabricId: fabric, colorId: color, rollId: roll, quantityKg: kg, pieces: 1, pricePerKg: 12.5 }],
-    }, { deviceId: dev[node] }));
+    return must(
+      `${node} invoice ${i}`,
+      api(
+        node,
+        "POST",
+        "/api/invoices",
+        {
+          type: "sale",
+          date,
+          partyId: c1,
+          partyType: "customer",
+          currency: "USD",
+          paid,
+          lines: [
+            {
+              fabricId: fabric,
+              colorId: color,
+              rollId: roll,
+              quantityKg: kg,
+              pieces: 1,
+              pricePerKg: 12.5,
+            },
+          ],
+        },
+        { deviceId: dev[node] },
+      ),
+    );
   }
   const rollA = await ownRoll("A");
   const rollB = await ownRoll("B");
-  for (let i = 0; i < 20; i++) await sell("A", i === 0 ? shared : rollA, i === 0 ? 2 : 1, i % 3 === 0 ? 12.5 : 0, i);
-  for (let i = 0; i < 30; i++) await sell("B", i === 0 ? shared : rollB, i === 0 ? 3 : 1.5, i % 4 === 0 ? 18.75 : 0, i);
+  for (let i = 0; i < 20; i++)
+    await sell("A", i === 0 ? shared : rollA, i === 0 ? 2 : 1, i % 3 === 0 ? 12.5 : 0, i);
+  for (let i = 0; i < 30; i++)
+    await sell("B", i === 0 ? shared : rollB, i === 0 ? 3 : 1.5, i % 4 === 0 ? 18.75 : 0, i);
   // same-record edit on both devices while offline
-  for (const [node, phone] of [["A", "111"], ["B", "222"]]) {
+  for (const [node, phone] of [
+    ["A", "111"],
+    ["B", "222"],
+  ]) {
     const cur = await must(`${node} read C1`, call(node, "GET", `/api/customers/${c1}`));
-    await must(`${node} edit C1`, call(node, "PUT", `/api/customers/${c1}`, { name: cur.name, phone, expectedVersion: cur.version }));
+    await must(
+      `${node} edit C1`,
+      call(node, "PUT", `/api/customers/${c1}`, {
+        name: cur.name,
+        phone,
+        expectedVersion: cur.version,
+      }),
+    );
   }
 
   // ── reconnect ──
@@ -354,8 +539,16 @@ async function main() {
   await syncUntilDrained("B");
 
   // ── convergence ──
-  const st = { hub: await stateOf("hub", c1, date), A: await stateOf("A", c1, date), B: await stateOf("B", c1, date) };
-  check("50 sale invoices on every node", ["hub", "A", "B"].every((n) => st[n].invoices.length === 50), Object.fromEntries(["hub", "A", "B"].map((n) => [n, st[n].invoices.length])));
+  const st = {
+    hub: await stateOf("hub", c1, date),
+    A: await stateOf("A", c1, date),
+    B: await stateOf("B", c1, date),
+  };
+  check(
+    "50 sale invoices on every node",
+    ["hub", "A", "B"].every((n) => st[n].invoices.length === 50),
+    Object.fromEntries(["hub", "A", "B"].map((n) => [n, st[n].invoices.length])),
+  );
   const numbers = st.hub.invoices.map((x) => x.number);
   check("document numbers are unique", new Set(numbers).size === numbers.length);
   for (const k of Object.keys(st.hub)) {
@@ -364,17 +557,29 @@ async function main() {
     check(`B ≡ hub: ${k}`, JSON.stringify(st.B[k]) === h, firstDiff(st.B[k], st.hub[k]));
   }
   const sharedRoll = st.hub.rolls.find((r) => r.rollNo === "R-SHARED");
-  check("the shared roll lost exactly 2 + 3 kg", sharedRoll && Number(sharedRoll.remainingKg ?? sharedRoll.remaining_kg) === 95, sharedRoll);
+  check(
+    "the shared roll lost exactly 2 + 3 kg",
+    sharedRoll && Number(sharedRoll.remainingKg ?? sharedRoll.remaining_kg) === 95,
+    sharedRoll,
+  );
 
   // sync health: nothing stuck
   for (const node of ["A", "B"]) {
     const s = await must(`${node} sync status`, call(node, "GET", "/api/sync/status"));
-    check(`${node}: outbox drained, nothing rejected`, (s.pending ?? s.outbox?.pending ?? 0) === 0 && (s.rejected ?? s.outbox?.rejected ?? 0) === 0, s);
+    check(
+      `${node}: outbox drained, nothing rejected`,
+      (s.pending ?? s.outbox?.pending ?? 0) === 0 && (s.rejected ?? s.outbox?.rejected ?? 0) === 0,
+      s,
+    );
   }
 
   if (OUT) {
     mkdirSync(OUT, { recursive: true });
-    const wire = { hubInbox: await inboxOf("hub", handles.hub), aInbox: await inboxOf("A", handles.A), bInbox: await inboxOf("B", handles.B) };
+    const wire = {
+      hubInbox: await inboxOf("hub", handles.hub),
+      aInbox: await inboxOf("A", handles.A),
+      bInbox: await inboxOf("B", handles.B),
+    };
     writeFileSync(join(OUT, `wire-${ENGINE}.raw.json`), JSON.stringify(wire, null, 2));
     writeFileSync(join(OUT, `state-${ENGINE}.raw.json`), JSON.stringify(st.hub, null, 2));
     writeFileSync(join(OUT, `checks-${ENGINE}.json`), JSON.stringify(checks, null, 2));
@@ -403,7 +608,8 @@ try {
   for (const p of procs) kill(p);
   await sleep(800);
   if (!KEEP) {
-    for (const db of created) await admin(`DROP DATABASE IF EXISTS ${db} WITH (FORCE)`).catch(() => {});
+    for (const db of created)
+      await admin(`DROP DATABASE IF EXISTS ${db} WITH (FORCE)`).catch(() => {});
     rmSync(work, { recursive: true, force: true });
   }
 }

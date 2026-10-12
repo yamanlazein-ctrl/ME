@@ -31,7 +31,9 @@ const urlIdx = process.argv.indexOf("--url");
 const URL = (urlIdx !== -1 ? process.argv[urlIdx + 1] : undefined) ?? process.env.DATABASE_URL;
 const check = process.argv.includes("--check");
 if (!URL) {
-  console.error("generate-sqlite-baseline: pass --url to a PostgreSQL database migrated to the reference journal");
+  console.error(
+    "generate-sqlite-baseline: pass --url to a PostgreSQL database migrated to the reference journal",
+  );
   process.exit(1);
 }
 
@@ -45,14 +47,16 @@ const WALL_NOW = "(strftime('%Y-%m-%dT%H:%M:%f', 'now') || '000Z')";
 /** The writer stamps the transaction clock into motard_tx_state at BEGIN (connection layer, T042). */
 const TX_NOW = `COALESCE((SELECT "ts" FROM "motard_tx_state" WHERE "id" = 1), ${WALL_NOW})`;
 const txFlag = (name) => `COALESCE((SELECT "${name}" FROM "motard_tx_state" WHERE "id" = 1), 0)`;
-const TS_GLOB = "[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9].[0-9][0-9][0-9][0-9][0-9][0-9]Z";
+const TS_GLOB =
+  "[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9].[0-9][0-9][0-9][0-9][0-9][0-9]Z";
 
 /** Exact numeric literal → scaled integer text (round half away from zero; literals here are exact). */
 function scaled(literal, scale) {
   const neg = literal.startsWith("-");
   const [i, f = ""] = literal.replace(/^[-+]/, "").split(".");
   const digits = (i + f.padEnd(scale, "0").slice(0, scale)).replace(/^0+(?=\d)/, "");
-  if (f.length > scale && Number(f[scale]) >= 5) throw new Error(`default ${literal} needs rounding at scale ${scale}`);
+  if (f.length > scale && Number(f[scale]) >= 5)
+    throw new Error(`default ${literal} needs rounding at scale ${scale}`);
   return (neg && digits !== "0" ? "-" : "") + digits;
 }
 
@@ -63,9 +67,11 @@ function jsonbText(value) {
     if (v && typeof v === "object") {
       const out = {};
       for (const k of Object.keys(v).sort((a, b) => {
-        const ba = Buffer.from(a), bb = Buffer.from(b);
+        const ba = Buffer.from(a),
+          bb = Buffer.from(b);
         return ba.length !== bb.length ? ba.length - bb.length : Buffer.compare(ba, bb);
-      })) out[k] = norm(v[k]);
+      }))
+        out[k] = norm(v[k]);
       return out;
     }
     return v;
@@ -82,7 +88,8 @@ function defaultExpr(table, col) {
   if (/^nextval\(/.test(d)) return null; // serial: AUTOINCREMENT PK, or app-supplied via motard_sequences
   if (d === "true") return "1";
   if (d === "false") return "0";
-  if (/^-?\d+(\.\d+)?$/.test(d)) return col.data_type === "numeric" ? scaled(d, col.numeric_scale) : d;
+  if (/^-?\d+(\.\d+)?$/.test(d))
+    return col.data_type === "numeric" ? scaled(d, col.numeric_scale) : d;
   let m = /^'((?:[^']|'')*)'::(character varying|text)$/.exec(d);
   if (m) return sqlString(m[1].replace(/''/g, "'"));
   m = /^'((?:[^']|'')*)'::jsonb$/.exec(d);
@@ -93,7 +100,19 @@ function defaultExpr(table, col) {
 
 function storage(col) {
   const t = col.data_type;
-  if (t === "ARRAY" || ["uuid", "text", "character varying", "timestamp with time zone", "date", "jsonb", "inet"].includes(t)) return "TEXT";
+  if (
+    t === "ARRAY" ||
+    [
+      "uuid",
+      "text",
+      "character varying",
+      "timestamp with time zone",
+      "date",
+      "jsonb",
+      "inet",
+    ].includes(t)
+  )
+    return "TEXT";
   if (["integer", "bigint", "numeric", "boolean"].includes(t)) return "INTEGER";
   throw new Error(`unmapped type ${col.table_name}.${col.column_name}: ${t}`);
 }
@@ -105,7 +124,12 @@ function typeChecks(table, col) {
   const nullOr = (e) => `${c} IS NULL OR (${e})`;
   switch (col.data_type) {
     case "character varying":
-      return [[`ck_sqlite_len_${col.character_maximum_length}__${table}__${col.column_name}`, `length(${c}) <= ${col.character_maximum_length}`]];
+      return [
+        [
+          `ck_sqlite_len_${col.character_maximum_length}__${table}__${col.column_name}`,
+          `length(${c}) <= ${col.character_maximum_length}`,
+        ],
+      ];
     case "jsonb":
       return [[name("json"), nullOr(`json_valid(${c})`)]];
     case "ARRAY":
@@ -125,13 +149,20 @@ function typeChecks(table, col) {
 function translateExpr(expr, ctx) {
   let s = expr;
   // `= ANY ((ARRAY['a'::character varying, …])::text[])` → `IN ('a', …)`
-  s = s.replace(/=\s*ANY\s*\(\(ARRAY\[([^\]]*)\]\)::[a-z ]+\[\]\)/g, (_, items) =>
-    `IN (${items.split(",").map((x) => x.trim().replace(/::[a-z ]+$/, "")).join(", ")})`);
+  s = s.replace(
+    /=\s*ANY\s*\(\(ARRAY\[([^\]]*)\]\)::[a-z ]+\[\]\)/g,
+    (_, items) =>
+      `IN (${items
+        .split(",")
+        .map((x) => x.trim().replace(/::[a-z ]+$/, ""))
+        .join(", ")})`,
+  );
   s = s.replace(/'((?:[^']|'')*)'::(character varying|text)/g, "'$1'");
   s = s.replace(/\(([a-z_][a-z0-9_]*)\)::(text|character varying|double precision|numeric)/g, "$1");
   s = s.replace(/\((-?\d+(?:\.\d+)?)\)::(numeric|double precision|integer)/g, "$1");
   s = s.replace(/\b(\w+) = true\b/g, "$1 = 1").replace(/\b(\w+) = false\b/g, "$1 = 0");
-  if (/::|ARRAY\[|ANY\s*\(|~~|ILIKE|now\(\)/i.test(s)) throw new Error(`untranslated expression in ${ctx}: ${s}`);
+  if (/::|ARRAY\[|ANY\s*\(|~~|ILIKE|now\(\)/i.test(s))
+    throw new Error(`untranslated expression in ${ctx}: ${s}`);
   return s;
 }
 
@@ -182,8 +213,10 @@ function triggersSql() {
      SET "applied_seq" = (SELECT "value" FROM "motard_sequences" WHERE "name" = 'sync_inbox_applied_seq'),
          "applied_at" = COALESCE("applied_at", ${WALL_NOW})
    WHERE "id" = NEW."id";`;
-  const manualIn = (r) => `CASE WHEN ${r}."direction" = 'in' THEN ${r}."amount" ELSE -${r}."amount" END`;
-  const manualOut = (r) => `CASE WHEN ${r}."direction" = 'in' THEN -${r}."amount" ELSE ${r}."amount" END`;
+  const manualIn = (r) =>
+    `CASE WHEN ${r}."direction" = 'in' THEN ${r}."amount" ELSE -${r}."amount" END`;
+  const manualOut = (r) =>
+    `CASE WHEN ${r}."direction" = 'in' THEN -${r}."amount" ELSE ${r}."amount" END`;
   return `-- ── Trigger equivalents T1–T7 (data-model.md §4, T037) ──
 -- Session flags and the transaction clock come from the single row of motard_tx_state, which the
 -- writer stamps at BEGIN and resets before COMMIT (T042). The schema calls no app functions, so it
@@ -210,8 +243,11 @@ CREATE TRIGGER "cashbox_daily_ledger_ai" AFTER INSERT ON "ledger_entries"
 WHEN COALESCE(NEW."status", 'active') = 'active' AND NEW."cash_impact" IN ('in', 'out')
 BEGIN
 ${applyDelta({
-  tenant: 'NEW."tenant_id"', currency: 'NEW."currency"', date: 'NEW."date"',
-  delta: `CASE WHEN NEW."cash_impact" = 'in' THEN ${amt("NEW")} ELSE -${amt("NEW")} END`, guard: "1",
+  tenant: 'NEW."tenant_id"',
+  currency: 'NEW."currency"',
+  date: 'NEW."date"',
+  delta: `CASE WHEN NEW."cash_impact" = 'in' THEN ${amt("NEW")} ELSE -${amt("NEW")} END`,
+  guard: "1",
 })}
 END;
 
@@ -221,12 +257,16 @@ CREATE TRIGGER "cashbox_daily_ledger_au" AFTER UPDATE OF "status", "cash_impact"
 WHEN NOT COALESCE((${bothNotCash}), 0)
 BEGIN
 ${applyDelta({
-  tenant: 'OLD."tenant_id"', currency: 'OLD."currency"', date: 'OLD."date"',
+  tenant: 'OLD."tenant_id"',
+  currency: 'OLD."currency"',
+  date: 'OLD."date"',
   delta: `CASE WHEN OLD."cash_impact" = 'in' THEN -${amt("OLD")} ELSE ${amt("OLD")} END`,
   guard: `COALESCE(OLD."status", 'active') = 'active' AND COALESCE(NEW."status", 'active') = 'cancelled' AND OLD."cash_impact" IN ('in', 'out')`,
 })}
 ${applyDelta({
-  tenant: 'NEW."tenant_id"', currency: 'NEW."currency"', date: 'NEW."date"',
+  tenant: 'NEW."tenant_id"',
+  currency: 'NEW."currency"',
+  date: 'NEW."date"',
   delta: `CASE WHEN NEW."cash_impact" = 'in' THEN ${amt("NEW")} ELSE -${amt("NEW")} END`,
   guard: `COALESCE(OLD."status", 'active') = 'cancelled' AND COALESCE(NEW."status", 'active') = 'active' AND NEW."cash_impact" IN ('in', 'out')`,
 })}
@@ -311,7 +351,8 @@ await client.end();
 const byTable = new Map();
 for (const c of columns) byTable.set(c.table_name, [...(byTable.get(c.table_name) ?? []), c]);
 if (byTable.size !== jr[0].n) throw new Error("column/table count mismatch");
-if (byTable.has("party_balances")) throw new Error("party_balances must not exist (dropped by migration 0038)");
+if (byTable.has("party_balances"))
+  throw new Error("party_balances must not exist (dropped by migration 0038)");
 
 const out = [];
 out.push(
@@ -327,7 +368,10 @@ for (const [table, cols] of [...byTable].sort(([a], [b]) => a.localeCompare(b)))
   counts.tables++;
   const cons = constraints.filter((c) => c.table_name === table);
   const pk = cons.find((c) => c.contype === "p");
-  const serialPk = pk && pk.cols.length === 1 && /^nextval\(/.test(cols.find((c) => c.column_name === pk.cols[0]).column_default ?? "");
+  const serialPk =
+    pk &&
+    pk.cols.length === 1 &&
+    /^nextval\(/.test(cols.find((c) => c.column_name === pk.cols[0]).column_default ?? "");
   const lines = [];
   for (const col of cols) {
     let line = `  ${q(col.column_name)} ${storage(col)}`;
@@ -343,7 +387,8 @@ for (const [table, cols] of [...byTable].sort(([a], [b]) => a.localeCompare(b)))
   for (const c of cons) {
     if (c.contype === "p") {
       counts.p++;
-      if (!serialPk) lines.push(`  CONSTRAINT ${q(c.conname)} PRIMARY KEY (${c.cols.map(q).join(", ")})`);
+      if (!serialPk)
+        lines.push(`  CONSTRAINT ${q(c.conname)} PRIMARY KEY (${c.cols.map(q).join(", ")})`);
     } else if (c.contype === "u") {
       counts.u++;
       lines.push(`  CONSTRAINT ${q(c.conname)} UNIQUE (${c.cols.map(q).join(", ")})`);
@@ -354,19 +399,31 @@ for (const [table, cols] of [...byTable].sort(([a], [b]) => a.localeCompare(b)))
       lines.push(`  CONSTRAINT ${q(c.conname)} CHECK (${translateExpr(m[1], c.conname)})`);
     } else if (c.contype === "f") {
       counts.f++;
-      const action = { a: "", r: " ON DELETE RESTRICT", c: " ON DELETE CASCADE", n: " ON DELETE SET NULL", d: " ON DELETE SET DEFAULT" }[c.confdeltype];
-      if (action === undefined) throw new Error(`unexpected FK action ${c.confdeltype} on ${c.conname}`);
+      const action = {
+        a: "",
+        r: " ON DELETE RESTRICT",
+        c: " ON DELETE CASCADE",
+        n: " ON DELETE SET NULL",
+        d: " ON DELETE SET DEFAULT",
+      }[c.confdeltype];
+      if (action === undefined)
+        throw new Error(`unexpected FK action ${c.confdeltype} on ${c.conname}`);
       lines.push(
         `  CONSTRAINT ${q(c.conname)} FOREIGN KEY (${c.cols.map(q).join(", ")}) REFERENCES ${q(c.ref_table)} (${c.ref_cols.map(q).join(", ")})${action}`,
       );
     }
   }
-  for (const col of cols) for (const [name, expr] of typeChecks(table, col)) lines.push(`  CONSTRAINT ${q(name)} CHECK (${expr})`);
+  for (const col of cols)
+    for (const [name, expr] of typeChecks(table, col))
+      lines.push(`  CONSTRAINT ${q(name)} CHECK (${expr})`);
   out.push(`CREATE TABLE ${q(table)} (\n${lines.join(",\n")}\n) STRICT;`, "");
 }
 
 for (const ix of indexes) {
-  const m = /^CREATE (UNIQUE )?INDEX (\S+) ON public\.(\S+) USING (\w+) \((.*?)\)(?: WHERE \((.*)\))?$/s.exec(ix.indexdef);
+  const m =
+    /^CREATE (UNIQUE )?INDEX (\S+) ON public\.(\S+) USING (\w+) \((.*?)\)(?: WHERE \((.*)\))?$/s.exec(
+      ix.indexdef,
+    );
   if (!m) throw new Error(`unparsed index ${ix.indexname}: ${ix.indexdef}`);
   const [, unique, name, table, method, colList, where] = m;
   if (method === "gin") {
@@ -376,7 +433,8 @@ for (const ix of indexes) {
   if (method !== "btree") throw new Error(`unexpected index method ${method} on ${name}`);
   const items = colList.split(",").map((s) => {
     const [col, ...rest] = s.trim().split(/\s+/);
-    if (!/^[a-z_][a-z0-9_]*$/.test(col) || rest.some((r) => !["DESC", "ASC"].includes(r))) throw new Error(`unexpected index item ${s} in ${name}`);
+    if (!/^[a-z_][a-z0-9_]*$/.test(col) || rest.some((r) => !["DESC", "ASC"].includes(r)))
+      throw new Error(`unexpected index item ${s} in ${name}`);
     return [q(col), ...rest].join(" ");
   });
   counts.idx++;

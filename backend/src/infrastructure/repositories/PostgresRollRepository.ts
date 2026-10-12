@@ -1,5 +1,12 @@
 import { eq, and, desc, ilike, sql, getTableColumns } from "drizzle-orm";
-import { afterCursor, cursorColumns, decodeCursor, keysetOrder, nextCursorOf, type KeysetSpec } from "./keysetPage.js";
+import {
+  afterCursor,
+  cursorColumns,
+  decodeCursor,
+  keysetOrder,
+  nextCursorOf,
+  type KeysetSpec,
+} from "./keysetPage.js";
 import { likeContains } from "../utils/likeEscape.js";
 import type { DB } from "../orm/drizzle.js";
 import type {
@@ -102,7 +109,9 @@ export class PostgresRollRepository implements IRollRepository {
           // Mirror remainingKg semantics: born with stock → pieces available;
           // entry-invoice flow (remainingKg=0) → invoice transaction increments.
           remainingPieces:
-            Number(data.remainingKg ?? data.initialKg) > 0 ? (data.pieces ?? 1) : (data.remainingPieces ?? 0),
+            Number(data.remainingKg ?? data.initialKg) > 0
+              ? (data.pieces ?? 1)
+              : (data.remainingPieces ?? 0),
           pricePerKg: String(data.pricePerKg),
           salePricePerKg: data.salePricePerKg ? String(data.salePricePerKg) : null,
           currency: data.currency ?? "SYP",
@@ -240,7 +249,9 @@ export class PostgresRollRepository implements IRollRepository {
             .returning();
           if (!row) {
             if (data.expectedVersion !== undefined) {
-              throw new Error("تم تعديل اللفافة بواسطة عملية أخرى — أعد التحميل والمحاولة مرة أخرى");
+              throw new Error(
+                "تم تعديل اللفافة بواسطة عملية أخرى — أعد التحميل والمحاولة مرة أخرى",
+              );
             }
             throw new Error("Roll not found");
           }

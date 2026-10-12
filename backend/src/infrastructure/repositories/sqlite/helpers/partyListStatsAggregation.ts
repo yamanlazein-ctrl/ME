@@ -35,9 +35,7 @@ export interface PartyInvoiceStatsRow {
  * must never do (mixed-currency totals are shown per-currency via
  * `byCurrency` instead).
  */
-export function aggregatePartyListStats(
-  rows: PartyInvoiceStatsRow[],
-): Map<string, PartyListStats> {
+export function aggregatePartyListStats(rows: PartyInvoiceStatsRow[]): Map<string, PartyListStats> {
   const map = new Map<string, PartyListStats>();
   const get = (id: string): PartyListStats => {
     const existing = map.get(id);

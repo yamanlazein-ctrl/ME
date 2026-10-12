@@ -19,7 +19,10 @@ import {
   SyncDeviceRevokedError,
 } from "../../application/ports/ISyncDeviceRepository.js";
 import { randomUUID } from "crypto";
-import { runWithTenantContext, runWithPlatformContext } from "../../infrastructure/orm/tenant-context.js";
+import {
+  runWithTenantContext,
+  runWithPlatformContext,
+} from "../../infrastructure/orm/tenant-context.js";
 import { config } from "../../infrastructure/config/env.js";
 import {
   isTokenBeforeCutoff,
@@ -132,9 +135,7 @@ async function hasDeviceProvisioningProof(
         !(await container.tokenDenylist.has(payload.jti)) &&
         payload.type !== "refresh"
       ) {
-        const user = await withJwtTenantContext(tenantId, () =>
-          authRepo.findUserById(payload.sub),
-        );
+        const user = await withJwtTenantContext(tenantId, () => authRepo.findUserById(payload.sub));
         if (user && user.active) return true;
       }
     } catch {
@@ -594,13 +595,7 @@ export function registerAuthRoutes(router: Router, container: Container) {
           };
           const snapshot = await container.userRepo.findSyncSnapshot(userId, ctx);
           if (snapshot) {
-            await enqueueUserMutation(
-              container.syncOutboxRepo,
-              snapshot,
-              "set-pin",
-              ctx,
-              null,
-            );
+            await enqueueUserMutation(container.syncOutboxRepo, snapshot, "set-pin", ctx, null);
           }
         }
         res.status(200).json({ ok: true });

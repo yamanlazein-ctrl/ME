@@ -218,7 +218,14 @@ export function SalesInvoicesTable({ query }: { query: ProfitQueryParams }) {
           })}
         </TableBody>
       </Table>
-      <ClientPager page={spg.page} totalPages={spg.totalPages} total={spg.total} pageSize={spg.pageSize} onPage={spg.setPage} onPageSize={spg.setPageSize} />
+      <ClientPager
+        page={spg.page}
+        totalPages={spg.totalPages}
+        total={spg.total}
+        pageSize={spg.pageSize}
+        onPage={spg.setPage}
+        onPageSize={spg.setPageSize}
+      />
     </div>
   );
 }

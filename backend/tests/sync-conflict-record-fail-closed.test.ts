@@ -23,7 +23,8 @@ async function arrangeInsert(outcome: { reject: Error } | { rowCount: number }):
     // The store is built on the runtime's handles; the server boots the runtime at start, a unit test here.
     const { ensureSqliteRuntime } = await import("../src/infrastructure/orm/sqlite/runtime.js");
     await ensureSqliteRuntime();
-    const { getSyncConflictStore } = await import("../src/infrastructure/repositories/engineStores.js");
+    const { getSyncConflictStore } =
+      await import("../src/infrastructure/repositories/engineStores.js");
     const store = await getSyncConflictStore();
     const spy = vi.spyOn(store, "insertOpen");
     if ("reject" in outcome) spy.mockRejectedValueOnce(outcome.reject);
@@ -41,9 +42,8 @@ describe("recordSyncConflict fail-closed (Phase 2)", () => {
 
   it("propagates a transient insert failure (no silent false)", async () => {
     const { runWithTenantContext } = await import("../src/infrastructure/orm/tenant-context.js");
-    const { recordSyncConflict } = await import(
-      "../src/application/use-cases/sync/syncConflicts.js"
-    );
+    const { recordSyncConflict } =
+      await import("../src/application/use-cases/sync/syncConflicts.js");
     await arrangeInsert({ reject: new Error("transient insert failure") });
     await expect(
       runWithTenantContext({ tenantId: "11111111-1111-4111-8111-111111111111" }, () =>
@@ -63,9 +63,8 @@ describe("recordSyncConflict fail-closed (Phase 2)", () => {
 
   it("returns true when a new row is written", async () => {
     const { runWithTenantContext } = await import("../src/infrastructure/orm/tenant-context.js");
-    const { recordSyncConflict } = await import(
-      "../src/application/use-cases/sync/syncConflicts.js"
-    );
+    const { recordSyncConflict } =
+      await import("../src/application/use-cases/sync/syncConflicts.js");
     await arrangeInsert({ rowCount: 1 });
     const wrote = await runWithTenantContext(
       { tenantId: "11111111-1111-4111-8111-111111111111" },

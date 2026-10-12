@@ -279,7 +279,11 @@ export function registerLicenseAdminRoutes(
       const { licenses } = await import("../infrastructure/orm/schemas/license.table.js");
       const { eq } = await import("drizzle-orm");
       const id = String(req.params.id);
-      const [current] = await db.select().from(licenses).where(eq(licenses.id, id as never)).limit(1);
+      const [current] = await db
+        .select()
+        .from(licenses)
+        .where(eq(licenses.id, id as never))
+        .limit(1);
       if (!current) {
         res.status(404).json({ code: "NOT_FOUND", message: "الترخيص غير موجود", statusCode: 404 });
         return;

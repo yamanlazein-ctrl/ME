@@ -56,9 +56,8 @@ export async function purgeDye(
   confirmation: string,
   reason?: string,
 ): Promise<DyePurgeResult> {
-  const res = await container.http.delete<DyePurgeResult>(
-    `/api/inventory/dyes/${fabricId}/purge`,
-    { body: { confirmation: confirmation.trim(), ...(reason ? { reason } : {}) } },
-  );
+  const res = await container.http.delete<DyePurgeResult>(`/api/inventory/dyes/${fabricId}/purge`, {
+    body: { confirmation: confirmation.trim(), ...(reason ? { reason } : {}) },
+  });
   return res.data;
 }

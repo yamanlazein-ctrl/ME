@@ -59,7 +59,13 @@ export function roundDiv(expr: SQL | SQLWrapper, divisor: number): SQL {
 }
 
 /** `ROUND(a × b, target)` for scaled columns a (scale sa) and b (scale sb) → scaled at `target`. */
-export function mulRound(a: SQL | SQLWrapper, sa: number, b: SQL | SQLWrapper, sb: number, target: number): SQL {
+export function mulRound(
+  a: SQL | SQLWrapper,
+  sa: number,
+  b: SQL | SQLWrapper,
+  sb: number,
+  target: number,
+): SQL {
   return roundDiv(sql`(${a}) * (${b})`, 10 ** (sa + sb - target));
 }
 
@@ -107,7 +113,9 @@ export function pgDivText(a: SQL | SQLWrapper, sa: number, b: SQL | SQLWrapper, 
 
 /** Exact `COALESCE(SUM(textExpr), 0)` over decimal texts, decoded as Number(pgText). */
 export function decSumNumber(textExpr: SQL | SQLWrapper): SQL<number> {
-  return sql`COALESCE(motard_decsum(${textExpr}), '0')`.mapWith((v: unknown) => Number(v)) as SQL<number>;
+  return sql`COALESCE(motard_decsum(${textExpr}), '0')`.mapWith((v: unknown) =>
+    Number(v),
+  ) as SQL<number>;
 }
 
 /** Scale factor of a numeric(p,s) column as an SQL literal (10^s). */

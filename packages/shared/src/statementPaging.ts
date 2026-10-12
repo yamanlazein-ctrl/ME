@@ -21,10 +21,7 @@
  * Clamps into `[0, totalPages - 1]`. `totalPages` is treated as at least 1, so
  * an unknown or absent count (first paint) yields page 0 rather than a crash.
  */
-export function clampStatementPageIndex(
-  requested: number,
-  totalPages: number | undefined,
-): number {
+export function clampStatementPageIndex(requested: number, totalPages: number | undefined): number {
   const max = Math.max(0, (totalPages ?? 1) - 1);
   const page = Math.floor(Number.isFinite(requested) ? requested : 0);
   return Math.min(Math.max(0, page), max);

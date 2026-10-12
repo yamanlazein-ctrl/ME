@@ -178,9 +178,6 @@ fn apply_requested_factory_reset(cfg: &BootConfig) -> io::Result<()> {
 /// Hub pairing state written by the server next to the data (hubConfig.ts).
 const HUB_PAIRING_FILES: [&str; 3] = ["hub.json", "hub-session.json", "hub-credentials.dat"];
 
-/// How many reset archives (`data.reset-*`) to keep; older ones are removed.
-const RESET_ARCHIVES_KEPT: usize = 3;
-
 /// Rename `data` to `data.reset-<utc>` (same volume → atomic) and move the company's identity
 /// sidecar, integrity manifest and hub pairing into it. Returns the archive, or None when there
 /// was nothing to move.
@@ -227,15 +224,8 @@ pub(crate) fn move_data_aside(app_data_root: &Path) -> io::Result<Option<PathBuf
             let _ = fs::rename(&p, target.join(format!("{name}.before-reset")));
         }
     }
-    let mut archives: Vec<PathBuf> = fs::read_dir(app_data_root)?
-        .filter_map(|e| e.ok().map(|e| e.path()))
-        .filter(|p| p.is_dir() && p.file_name().and_then(|n| n.to_str()).map_or(false, |n| n.starts_with("data.reset-")))
-        .collect();
-    archives.sort();
-    while archives.len() > RESET_ARCHIVES_KEPT {
-        let oldest = archives.remove(0);
-        let _ = fs::remove_dir_all(&oldest);
-    }
+    // Every reset archive is kept: each one is a complete earlier company database, and the reset
+    // screen promises "تُنقل جانباً ولا تُحذف". (A 3-archive cap used to delete the oldest for good.)
     Ok(Some(target))
 }
 
@@ -1085,7 +1075,7 @@ mod boot_lifecycle_tests {
     }
 
     #[test]
-    fn factory_reset_keeps_only_newest_archives() {
+    fn factory_reset_never_deletes_earlier_archives() {
         let dir = scratch("reset-keep");
         for old in ["data.reset-utc-1", "data.reset-utc-2", "data.reset-utc-3"] {
             fs::create_dir_all(dir.join(old)).unwrap();
@@ -1094,8 +1084,8 @@ mod boot_lifecycle_tests {
         fs::write(dir.join("data").join("motard.db"), b"x").unwrap();
         move_data_aside(&dir).unwrap();
         let left = fs::read_dir(&dir).unwrap().filter_map(|e| e.ok()).filter(|e| e.file_name().to_string_lossy().starts_with("data.reset-")).count();
-        assert_eq!(left, RESET_ARCHIVES_KEPT);
-        assert!(!dir.join("data.reset-utc-1").exists());
+        assert_eq!(left, 4, "the three earlier archives and the new one are all kept");
+        assert!(dir.join("data.reset-utc-1").exists(), "the oldest archive is never deleted");
         let _ = fs::remove_dir_all(&dir);
     }
 

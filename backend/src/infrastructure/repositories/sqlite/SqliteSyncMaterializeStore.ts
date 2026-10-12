@@ -13,7 +13,10 @@ import type { DB } from "../../orm/sqlite/drizzleCompat.js";
 import { runAutonomous } from "../../orm/sqlite/transaction.js";
 import { transactionTimestamp } from "../../orm/sqlite/clock.js";
 import { randomUuid, toTimestamptzText } from "../../orm/sqlite/types.js";
-import type { ISyncMaterializeStore, SyncUserSnapshotRow } from "../../../application/ports/ISyncMaterializeStore.js";
+import type {
+  ISyncMaterializeStore,
+  SyncUserSnapshotRow,
+} from "../../../application/ports/ISyncMaterializeStore.js";
 
 export class SqliteSyncMaterializeStore implements ISyncMaterializeStore {
   constructor(

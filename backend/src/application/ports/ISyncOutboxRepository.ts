@@ -45,11 +45,7 @@ export interface ISyncOutboxRepository {
    * otherwise strand those units in `pushing` forever — invisible to both the
    * retry loop and the UI counter.
    */
-  listClaimable(
-    tenantId: UUID,
-    limit?: number,
-    stalePushingMs?: number,
-  ): Promise<SyncOutboxRow[]>;
+  listClaimable(tenantId: UUID, limit?: number, stalePushingMs?: number): Promise<SyncOutboxRow[]>;
   /** @deprecated Prefer claimBatch (REPAIR-007). */
   markPushing(ids: UUID[], tenantId: UUID): Promise<void>;
   /**
@@ -71,12 +67,7 @@ export interface ISyncOutboxRepository {
    * op-id as synced; `unknown`: not an operation of this database.
    */
   acknowledgeByOpId(tenantId: UUID, opId: UUID): Promise<"acknowledged" | "settled" | "unknown">;
-  markRejected(
-    id: UUID,
-    tenantId: UUID,
-    errorDetail: string,
-    leaseToken: UUID,
-  ): Promise<number>;
+  markRejected(id: UUID, tenantId: UUID, errorDetail: string, leaseToken: UUID): Promise<number>;
   /** Soft failure — keep unit eligible for the next sync run. */
   resetToPending(
     id: UUID,

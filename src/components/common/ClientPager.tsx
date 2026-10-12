@@ -45,7 +45,13 @@ export function ClientPager({
       data-testid="client-pager"
     >
       <div className="flex items-center gap-2">
-        <Button type="button" size="sm" variant="outline" disabled={page === 0} onClick={() => onPage(page - 1)}>
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          disabled={page === 0}
+          onClick={() => onPage(page - 1)}
+        >
           الصفحة السابقة
         </Button>
         <span className="tabular-nums font-semibold">

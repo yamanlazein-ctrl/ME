@@ -1,7 +1,13 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { refreshInventory } from "@/presentation/hooks/useInventory";
-import { fetchDyeImpact, purgeDye, CONFIRM_WORD, type DyeImpact, type DyePurgeResult } from "./dyePurgeClient";
+import {
+  fetchDyeImpact,
+  purgeDye,
+  CONFIRM_WORD,
+  type DyeImpact,
+  type DyePurgeResult,
+} from "./dyePurgeClient";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -81,9 +87,7 @@ export function DyePurgeDialog({
       onOpenChange(false);
     },
     onError: (err) => {
-      toast.error(
-        err instanceof Error ? err.message : "تعذّر إتمام الحذف التصحيحي.",
-      );
+      toast.error(err instanceof Error ? err.message : "تعذّر إتمام الحذف التصحيحي.");
     },
   });
 
@@ -95,8 +99,7 @@ export function DyePurgeDialog({
 
   const expected = CONFIRM_WORD;
   const confirmationOk = typed.trim() === expected || typed.trim() === (data?.fabricName ?? "");
-  const canPurge =
-    Boolean(data) && confirmationOk && !purge.isPending && !impact.isPending;
+  const canPurge = Boolean(data) && confirmationOk && !purge.isPending && !impact.isPending;
 
   return (
     <Dialog
@@ -112,15 +115,13 @@ export function DyePurgeDialog({
             تحذير تصحيحي: حذف الصبغة بالكامل وتصفية التبعات
           </DialogTitle>
           <DialogDescription>
-            {fabricName ? `الصبغة: ${fabricName}` : "الصبغة"}{" "}
-            — سيُحذف ما يلي **نهائياً** ولا يمكن التراجع عنه بعد التأكيد.
+            {fabricName ? `الصبغة: ${fabricName}` : "الصبغة"} — سيُحذف ما يلي **نهائياً** ولا يمكن
+            التراجع عنه بعد التأكيد.
           </DialogDescription>
         </DialogHeader>
 
         {impact.isPending && (
-          <p className="py-6 text-center text-sm text-muted-foreground">
-            جارٍ فحص التبعات…
-          </p>
+          <p className="py-6 text-center text-sm text-muted-foreground">جارٍ فحص التبعات…</p>
         )}
 
         {impact.isError && (
@@ -167,8 +168,8 @@ export function DyePurgeDialog({
                   {data.cashDelta.usd !== 0 && <li>{money(data.cashDelta.usd, "$")}</li>}
                 </ul>
                 <p className="mt-2 text-xs text-muted-foreground">
-                  Signs indicate the direction the drawer moves; balances and
-                  receivables are recomputed immediately, with no page reload.
+                  Signs indicate the direction the drawer moves; balances and receivables are
+                  recomputed immediately, with no page reload.
                 </p>
               </div>
             )}
@@ -190,8 +191,8 @@ export function DyePurgeDialog({
 
             <div className="space-y-2">
               <label htmlFor="dye-purge-confirm" className="font-semibold">
-                للتأكيد اكتب: <code className="rounded bg-muted px-1">{expected}</code>{" "}
-                أو اسم الصبغة
+                للتأكيد اكتب: <code className="rounded bg-muted px-1">{expected}</code> أو اسم
+                الصبغة
               </label>
               <Input
                 id="dye-purge-confirm"
@@ -208,11 +209,7 @@ export function DyePurgeDialog({
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={purge.isPending}>
             إلغاء
           </Button>
-          <Button
-            variant="destructive"
-            onClick={() => purge.mutate()}
-            disabled={!canPurge}
-          >
+          <Button variant="destructive" onClick={() => purge.mutate()} disabled={!canPurge}>
             {purge.isPending ? "جارٍ الحذف…" : "نعم، احذف كل شيء واضبط الحسابات"}
           </Button>
         </DialogFooter>

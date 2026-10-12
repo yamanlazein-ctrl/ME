@@ -24,7 +24,11 @@ export async function readDriveSettings(db: DB): Promise<DriveSettings> {
 }
 
 /** Write the drive section (merges); callers enqueue the settings sync unit via the normal route. */
-export async function writeDriveSettings(db: DB, patch: DriveSettings, tenantId: string): Promise<DriveSettings> {
+export async function writeDriveSettings(
+  db: DB,
+  patch: DriveSettings,
+  tenantId: string,
+): Promise<DriveSettings> {
   const current = await readDriveSettings(db);
   const next = { ...current, ...patch };
   await db
@@ -41,7 +45,10 @@ export type CoordinatorDecision =
 /**
  * The worker's authorization gate. Fail-closed: any ambiguity → no upload.
  */
-export async function authorizeUploadDevice(db: DB, localDeviceId: string): Promise<CoordinatorDecision> {
+export async function authorizeUploadDevice(
+  db: DB,
+  localDeviceId: string,
+): Promise<CoordinatorDecision> {
   const s = await readDriveSettings(db);
   if (!s.archiveEnabled) return { allowed: false, reason: "NOT_ENABLED" };
   if (!s.coordinatorDeviceId) return { allowed: false, reason: "NO_COORDINATOR" };

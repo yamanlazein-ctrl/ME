@@ -11,15 +11,22 @@ import { SQLiteTable } from "drizzle-orm/sqlite-core";
 import * as pg from "@/infrastructure/orm/schemas/index.js";
 import * as sq from "@/infrastructure/orm/sqlite/schemas/index.js";
 
-type Equal<A, B> = (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false;
-type PgTables = { [K in keyof typeof pg as (typeof pg)[K] extends PgTable ? K : never]: (typeof pg)[K] };
+type Equal<A, B> =
+  (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false;
+type PgTables = {
+  [K in keyof typeof pg as (typeof pg)[K] extends PgTable ? K : never]: (typeof pg)[K];
+};
 type Select<T> = T extends { $inferSelect: infer S } ? S : never;
 type Insert<T> = T extends { $inferInsert: infer I } ? I : never;
 type SelectParity = {
-  [K in keyof PgTables]: K extends keyof typeof sq ? Equal<Select<PgTables[K]>, Select<(typeof sq)[K]>> : "missing";
+  [K in keyof PgTables]: K extends keyof typeof sq
+    ? Equal<Select<PgTables[K]>, Select<(typeof sq)[K]>>
+    : "missing";
 };
 type InsertParity = {
-  [K in keyof PgTables]: K extends keyof typeof sq ? Equal<Insert<PgTables[K]>, Insert<(typeof sq)[K]>> : "missing";
+  [K in keyof PgTables]: K extends keyof typeof sq
+    ? Equal<Insert<PgTables[K]>, Insert<(typeof sq)[K]>>
+    : "missing";
 };
 type Failing<P> = { [K in keyof P]: P[K] extends true ? never : K }[keyof P];
 // If either line fails to compile, the error names the tables whose types differ.
@@ -38,7 +45,11 @@ describe("SQLite schema mirrors the PG Drizzle schema (T034)", () => {
       expect(is(s, SQLiteTable), k).toBe(true);
       expect(getTableName(s as SQLiteTable)).toBe(getTableName(v));
     }
-    const sqTables = new Set(Object.values(sq).filter((v) => is(v, SQLiteTable)).map((v) => getTableName(v as SQLiteTable)));
+    const sqTables = new Set(
+      Object.values(sq)
+        .filter((v) => is(v, SQLiteTable))
+        .map((v) => getTableName(v as SQLiteTable)),
+    );
     expect(sqTables.size).toBe(59); // 53 live + motard_meta + motard_sequences + motard_tx_state + 3 drive tables (0005_drive_archive)
     expect(sqTables.has("party_balances")).toBe(false);
   });

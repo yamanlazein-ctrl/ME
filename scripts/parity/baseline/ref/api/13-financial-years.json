@@ -140,9 +140,7 @@
     "body": {
       "code": "VALIDATION_ERROR",
       "details": {
-        "confirm": [
-          "Invalid literal value, expected \"إقفال\""
-        ]
+        "confirm": ["Invalid literal value, expected \"إقفال\""]
       },
       "message": "البيانات المدخلة غير صحيحة",
       "statusCode": 422
@@ -213,9 +211,7 @@
     "body": {
       "code": "VALIDATION_ERROR",
       "details": {
-        "reason": [
-          "سبب إعادة الفتح إلزامي"
-        ]
+        "reason": ["سبب إعادة الفتح إلزامي"]
       },
       "message": "البيانات المدخلة غير صحيحة",
       "statusCode": 422

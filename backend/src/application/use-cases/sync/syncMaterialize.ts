@@ -203,7 +203,9 @@ async function recordTombstone(
   opId: string | null,
   deletedByDeviceId: string | null,
 ): Promise<void> {
-  await (await getSyncMaterializeStore()).recordTombstone(tenantId, entityType, entityId, opId ?? "", deletedByDeviceId);
+  await (
+    await getSyncMaterializeStore()
+  ).recordTombstone(tenantId, entityType, entityId, opId ?? "", deletedByDeviceId);
 }
 
 /**
@@ -273,7 +275,10 @@ export async function materializeSyncUnit(
   // refused forever or mistaken for a duplicate. See syncNumberCollision.ts.
   if (
     operation === "create" &&
-    (entityType === "invoice" || entityType === "voucher" || entityType === "return" || entityType === "expense")
+    (entityType === "invoice" ||
+      entityType === "voucher" ||
+      entityType === "return" ||
+      entityType === "expense")
   ) {
     await resolveDocumentNumberForReplay(database, entityType, payload, ctx.tenantId);
   }
@@ -1200,16 +1205,46 @@ async function masterStillAtVersion(
   let present: unknown[];
   if (entityType === "fabric") {
     const t = s.fabrics;
-    locked = await tx.update(t).set({ version }).where(and(eq(t.id, id), eq(t.tenantId, tenantId), eq(t.version, version))).returning({ id: t.id });
-    present = locked.length ? locked : await tx.select({ id: t.id }).from(t).where(and(eq(t.id, id), eq(t.tenantId, tenantId))).limit(1);
+    locked = await tx
+      .update(t)
+      .set({ version })
+      .where(and(eq(t.id, id), eq(t.tenantId, tenantId), eq(t.version, version)))
+      .returning({ id: t.id });
+    present = locked.length
+      ? locked
+      : await tx
+          .select({ id: t.id })
+          .from(t)
+          .where(and(eq(t.id, id), eq(t.tenantId, tenantId)))
+          .limit(1);
   } else if (entityType === "color") {
     const t = s.colors;
-    locked = await tx.update(t).set({ version }).where(and(eq(t.id, id), eq(t.tenantId, tenantId), eq(t.version, version))).returning({ id: t.id });
-    present = locked.length ? locked : await tx.select({ id: t.id }).from(t).where(and(eq(t.id, id), eq(t.tenantId, tenantId))).limit(1);
+    locked = await tx
+      .update(t)
+      .set({ version })
+      .where(and(eq(t.id, id), eq(t.tenantId, tenantId), eq(t.version, version)))
+      .returning({ id: t.id });
+    present = locked.length
+      ? locked
+      : await tx
+          .select({ id: t.id })
+          .from(t)
+          .where(and(eq(t.id, id), eq(t.tenantId, tenantId)))
+          .limit(1);
   } else {
     const t = s.rolls;
-    locked = await tx.update(t).set({ version }).where(and(eq(t.id, id), eq(t.tenantId, tenantId), eq(t.version, version))).returning({ id: t.id });
-    present = locked.length ? locked : await tx.select({ id: t.id }).from(t).where(and(eq(t.id, id), eq(t.tenantId, tenantId))).limit(1);
+    locked = await tx
+      .update(t)
+      .set({ version })
+      .where(and(eq(t.id, id), eq(t.tenantId, tenantId), eq(t.version, version)))
+      .returning({ id: t.id });
+    present = locked.length
+      ? locked
+      : await tx
+          .select({ id: t.id })
+          .from(t)
+          .where(and(eq(t.id, id), eq(t.tenantId, tenantId)))
+          .limit(1);
   }
   return locked.length > 0 || present.length === 0;
 }
@@ -1349,12 +1384,21 @@ async function materializeMasterMutation(
       // SQLite the repos nest as savepoints and runAutonomous joins it.
       const { withTenantTx } = await import("../../../infrastructure/orm/engine.js");
       let movedOn = false;
+      let deleted: { ok: true } | { ok: false; error: string };
       await withTenantTx(ctx.tenantId, async (tx) => {
         // S-03: the base check above is a READ; another device's edit can commit
         // after it. Re-assert the base on the row itself (PG: also takes its row
         // lock until commit). Party is covered by cancel()'s versioned WHERE.
         if (!meta?.hubCanonical && baseVersion !== null && entityType !== "party") {
-          if (!(await masterStillAtVersion(tx as unknown as DB, entityType, entityId, ctx.tenantId, baseVersion))) {
+          if (
+            !(await masterStillAtVersion(
+              tx as unknown as DB,
+              entityType,
+              entityId,
+              ctx.tenantId,
+              baseVersion,
+            ))
+          ) {
             movedOn = true;
             return;
           }
@@ -1364,14 +1408,24 @@ async function materializeMasterMutation(
           // the hub's current version, which made the guard vacuous).
           const expectedVersionParty =
             baseVersion ?? (await repos.partyRepo.findById(entityId, ctx))?.version ?? 1;
-          await cancelPartyUseCase(repos.partyRepo, entityId, rctx.userId, rctx, expectedVersionParty);
+          deleted = await cancelPartyUseCase(
+            repos.partyRepo,
+            entityId,
+            rctx.userId,
+            rctx,
+            expectedVersionParty,
+          );
         } else if (entityType === "fabric") {
-          await deleteFabricUseCase(repos.fabricRepo, entityId, rctx);
+          deleted = await deleteFabricUseCase(repos.fabricRepo, entityId, rctx);
         } else if (entityType === "color") {
-          await deleteColorUseCase(repos.colorRepo, entityId, rctx);
+          deleted = await deleteColorUseCase(repos.colorRepo, entityId, rctx);
         } else {
-          await deleteRollUseCase(repos.rollRepo, entityId, rctx);
+          deleted = await deleteRollUseCase(repos.rollRepo, entityId, rctx);
         }
+        // H-11: these return a Result instead of throwing. A refused delete (e.g. a party that still
+        // has active invoices) must roll back and fail the unit — not record a tombstone for a row
+        // that is still active and report it created.
+        if (!deleted.ok) throw new Error(deleted.error);
         // Delete applied — record the tombstone so any stale create / dependency
         // snapshot replaying later is refused instead of resurrecting the row.
         // Inside the same transaction: if this write fails the delete rolls back.
@@ -1384,7 +1438,16 @@ async function materializeMasterMutation(
         );
       });
       if (movedOn) {
-        await recordStaleConflict(meta, payload, entityType, entityId, "cancel", baseVersion, null, ctx.tenantId);
+        await recordStaleConflict(
+          meta,
+          payload,
+          entityType,
+          entityId,
+          "cancel",
+          baseVersion,
+          null,
+          ctx.tenantId,
+        );
         return {
           status: "conflict",
           error: `تعارض حذف ${entityType}: عُدِّل السجل على جهاز آخر أثناء الحذف — راجع النسخة الفائزة ثم أعد الحذف إن بقي صحيحاً.`,
@@ -1410,11 +1473,7 @@ async function materializeMasterMutation(
       ? payload.baseVersion
       : null;
   const baseUpdatedAt = typeof payload.baseUpdatedAt === "string" ? payload.baseUpdatedAt : null;
-  if (
-    !meta?.hubCanonical &&
-    baseVersion === null &&
-    baseUpdatedAt === null
-  ) {
+  if (!meta?.hubCanonical && baseVersion === null && baseUpdatedAt === null) {
     await recordStaleConflict(
       meta,
       payload,
@@ -1497,7 +1556,16 @@ async function materializeMasterMutation(
   // A duplicate code/name is a conflict (no retry can fix it); anything else stays retryable.
   const updateRefused = async (error: string | undefined): Promise<MaterializeResult> => {
     if (!isUniqueViolation({ message: error })) return { status: "failed", error };
-    await recordStaleConflict(meta, payload, entityType, entityId, "update", baseVersion, typeof hub.version === "number" ? hub.version : null, ctx.tenantId);
+    await recordStaleConflict(
+      meta,
+      payload,
+      entityType,
+      entityId,
+      "update",
+      baseVersion,
+      typeof hub.version === "number" ? hub.version : null,
+      ctx.tenantId,
+    );
     return { status: "conflict", error };
   };
 
@@ -1509,7 +1577,13 @@ async function materializeMasterMutation(
         : typeof payload.baseVersion === "number"
           ? payload.baseVersion
           : (hub.version as number);
-      const r = await updatePartyUseCase(repos.partyRepo, entityId, updateInput as never, rctx, expectedVersionParty);
+      const r = await updatePartyUseCase(
+        repos.partyRepo,
+        entityId,
+        updateInput as never,
+        rctx,
+        expectedVersionParty,
+      );
       if (!r.ok) return await updateRefused(r.error);
       await alignMasterVersion();
     } else if (entityType === "fabric") {
@@ -1519,7 +1593,13 @@ async function materializeMasterMutation(
         : typeof payload.baseVersion === "number"
           ? payload.baseVersion
           : (hub.version as number);
-      const r = await updateFabricUseCase(repos.fabricRepo, entityId, updateInput as never, rctx, expectedVersionFabric);
+      const r = await updateFabricUseCase(
+        repos.fabricRepo,
+        entityId,
+        updateInput as never,
+        rctx,
+        expectedVersionFabric,
+      );
       if (!r.ok) return await updateRefused(r.error);
       await alignMasterVersion();
     } else if (entityType === "color") {
@@ -1529,7 +1609,13 @@ async function materializeMasterMutation(
         : typeof payload.baseVersion === "number"
           ? payload.baseVersion
           : (hub.version as number);
-      const r = await updateColorUseCase(repos.colorRepo, entityId, updateInput as never, rctx, expectedVersionColor);
+      const r = await updateColorUseCase(
+        repos.colorRepo,
+        entityId,
+        updateInput as never,
+        rctx,
+        expectedVersionColor,
+      );
       if (!r.ok) return await updateRefused(r.error);
       await alignMasterVersion();
     } else {
@@ -1541,7 +1627,10 @@ async function materializeMasterMutation(
         : typeof payload.baseVersion === "number"
           ? payload.baseVersion
           : hub.version;
-      const rollInput = typeof expectedVersionRoll === "number" ? { ...updateInput, expectedVersion: expectedVersionRoll } : updateInput;
+      const rollInput =
+        typeof expectedVersionRoll === "number"
+          ? { ...updateInput, expectedVersion: expectedVersionRoll }
+          : updateInput;
       const r = await updateRollUseCase(repos.rollRepo, entityId, rollInput as never, rctx);
       if (!r.ok) return { status: "failed", error: r.error };
     }
@@ -1549,7 +1638,16 @@ async function materializeMasterMutation(
   } catch (err) {
     // A unique rule (code / name) is broken: no retry can fix that — it is a conflict.
     if (isUniqueViolation(err)) {
-      await recordStaleConflict(meta, payload, entityType, entityId, "update", baseVersion, typeof hub.version === "number" ? hub.version : null, ctx.tenantId);
+      await recordStaleConflict(
+        meta,
+        payload,
+        entityType,
+        entityId,
+        "update",
+        baseVersion,
+        typeof hub.version === "number" ? hub.version : null,
+        ctx.tenantId,
+      );
       return { status: "conflict", error: "unique violation" };
     }
     return { status: "failed", error: err instanceof Error ? err.message : "master update failed" };
@@ -1557,7 +1655,11 @@ async function materializeMasterMutation(
 }
 
 function isUniqueViolation(err: unknown): boolean {
-  const e = err as { code?: unknown; message?: unknown; cause?: { code?: unknown; message?: unknown } } | null;
+  const e = err as {
+    code?: unknown;
+    message?: unknown;
+    cause?: { code?: unknown; message?: unknown };
+  } | null;
   return /23505|SQLITE_CONSTRAINT_UNIQUE|UNIQUE constraint failed|duplicate key|مكرر/i.test(
     [e?.code, e?.cause?.code, e?.cause?.message, e?.message].map(String).join(" "),
   );
@@ -1573,12 +1675,14 @@ async function materializeRollAdjust(
   ctx: TenantContext,
   meta?: SyncMaterializeMeta,
 ): Promise<MaterializeResult> {
-  const rollId = typeof payload.rollId === "string" && isUuid(payload.rollId) ? payload.rollId : null;
+  const rollId =
+    typeof payload.rollId === "string" && isUuid(payload.rollId) ? payload.rollId : null;
   if (!rollId) return { status: "invalid", error: "missing rollId" };
   const rctx = replayCtxFromPayload(payload, ctx);
   try {
     const { withTenantTx } = await import("../../../infrastructure/orm/engine.js");
-    const { inventoryCountHelpers } = await import("../../../infrastructure/repositories/engineHelpers.js");
+    const { inventoryCountHelpers } =
+      await import("../../../infrastructure/repositories/engineHelpers.js");
     const applied = await withTenantTx(ctx.tenantId, async (tx) =>
       (await inventoryCountHelpers()).applyRollAdjustment(tx as never, rctx, {
         rollId,
@@ -1586,7 +1690,8 @@ async function materializeRollAdjust(
         deltaPieces: Number(payload.deltaPieces ?? 0),
         reason: String(payload.reason ?? "تعديل مخزون"),
         date: String(payload.date ?? new Date().toISOString().slice(0, 10)),
-        referenceType: payload.referenceType === "inventory_count" ? "inventory_count" : "inventory_adjustment",
+        referenceType:
+          payload.referenceType === "inventory_count" ? "inventory_count" : "inventory_adjustment",
         referenceId: String(payload.referenceId ?? rollId),
         referenceNumber: String(payload.referenceNumber ?? "ADJ"),
         expectedVersion: null,
@@ -1604,7 +1709,10 @@ async function materializeRollAdjust(
     return { status: applied.alreadyApplied ? "exists" : "created" };
   } catch (err) {
     // The roll may not be here yet (its create unit is still on its way): retryable.
-    return { status: "failed", error: err instanceof Error ? err.message : "roll adjustment replay failed" };
+    return {
+      status: "failed",
+      error: err instanceof Error ? err.message : "roll adjustment replay failed",
+    };
   }
 }
 
@@ -1684,7 +1792,13 @@ async function materializeOrderUpdate(
       : typeof payload.baseVersion === "number"
         ? payload.baseVersion
         : (hubRow.version as number);
-    const r = await updateOrderUseCase(repos.orderRepo, orderId, updateInput as never, rctx, expectedVersionOrder);
+    const r = await updateOrderUseCase(
+      repos.orderRepo,
+      orderId,
+      updateInput as never,
+      rctx,
+      expectedVersionOrder,
+    );
     if (!r.ok) return { status: "failed", error: r.error };
     return { status: "created" };
   } catch (err) {
@@ -1765,7 +1879,12 @@ async function materializePrint(
     const input = payload.sendInput as Record<string, unknown> | undefined;
     const number = typeof payload.jobNumber === "string" ? payload.jobNumber : null;
     if (!input || !number) return { status: "invalid", error: "missing sendInput/jobNumber" };
-    const r = await createPrintJobUseCase(repos.printJobRepo, { ...input, presetId: jobId } as never, number, rctx);
+    const r = await createPrintJobUseCase(
+      repos.printJobRepo,
+      { ...input, presetId: jobId } as never,
+      number,
+      rctx,
+    );
     return r.ok ? { status: "created" } : { status: "failed", error: r.error };
   }
   if (operation === "receive") {
@@ -1965,7 +2084,8 @@ async function materializeAdminSnapshot(
     if (hub) {
       const incomingAt =
         typeof payload.updatedAt === "string" ? Date.parse(payload.updatedAt) : Number.NaN;
-      const hubAt = hub.updatedAt instanceof Date ? hub.updatedAt.getTime() : Date.parse(String(hub.updatedAt));
+      const hubAt =
+        hub.updatedAt instanceof Date ? hub.updatedAt.getTime() : Date.parse(String(hub.updatedAt));
       if (Number.isFinite(incomingAt) && Number.isFinite(hubAt) && hubAt > incomingAt) {
         return { status: "exists" };
       }
@@ -1997,7 +2117,8 @@ async function materializeUser(
   ctx: TenantContext,
 ): Promise<MaterializeResult> {
   const snap = payload.snapshot;
-  if (!snap || typeof snap !== "object") return { status: "invalid", error: "missing user snapshot" };
+  if (!snap || typeof snap !== "object")
+    return { status: "invalid", error: "missing user snapshot" };
   const s = snap as Record<string, unknown>;
   const id = typeof s.id === "string" && isUuid(s.id) ? s.id : null;
   const tenantId = ctx.tenantId;
@@ -2015,7 +2136,19 @@ async function materializeUser(
       ? s.updatedAt
       : new Date().toISOString();
   try {
-    await (await getSyncMaterializeStore()).upsertUserSnapshot({ id, tenantId, name, email, passwordHash, pinHash, role, active, updatedAt });
+    await (
+      await getSyncMaterializeStore()
+    ).upsertUserSnapshot({
+      id,
+      tenantId,
+      name,
+      email,
+      passwordHash,
+      pinHash,
+      role,
+      active,
+      updatedAt,
+    });
     return { status: "created" };
   } catch (err) {
     return {

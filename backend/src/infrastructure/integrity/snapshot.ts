@@ -4,26 +4,13 @@
  */
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import {
-  chmod,
-  mkdir,
-  readFile,
-  readdir,
-  rename,
-  rm,
-  stat,
-  writeFile,
-} from "node:fs/promises";
+import { chmod, mkdir, readFile, readdir, rename, rm, stat, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { logger } from "../config/logger.js";
 
 export type SnapshotOperation =
-  | "migrate"
-  | "legacy_repair"
-  | "factory_reset"
-  | "restore"
-  | "upgrade";
+  "migrate" | "legacy_repair" | "factory_reset" | "restore" | "upgrade";
 
 export type SnapshotSidecar = {
   operationId: string;
@@ -79,11 +66,11 @@ export async function takePreOpSnapshot(opts: {
   const dumpPath = join(root, `${base}.dump`);
   const sidecarPath = join(root, `${base}.json`);
 
-  const r = spawnSync(
-    pgDump,
-    ["-Fc", "--no-owner", "--no-acl", "-f", dumpPath, opts.databaseUrl],
-    { encoding: "utf8", windowsHide: true, timeout: 30 * 60 * 1000 },
-  );
+  const r = spawnSync(pgDump, ["-Fc", "--no-owner", "--no-acl", "-f", dumpPath, opts.databaseUrl], {
+    encoding: "utf8",
+    windowsHide: true,
+    timeout: 30 * 60 * 1000,
+  });
   if (r.status !== 0 || !existsSync(dumpPath)) {
     const reason = `SNAPSHOT_FAILED: ${r.stderr || r.stdout || `exit ${r.status}`}`;
     logger.fatal({ bootId: process.env.MOTARD_BOOT_ID }, `[FATAL] ${reason}`);
@@ -112,9 +99,7 @@ export async function takePreOpSnapshot(opts: {
     /* ACL may deny chmod on Windows — ignore */
   }
 
-  await pruneSnapshots(root).catch((err) =>
-    logger.warn({ err }, "snapshot prune failed"),
-  );
+  await pruneSnapshots(root).catch((err) => logger.warn({ err }, "snapshot prune failed"));
   logger.info(
     { bootId: process.env.MOTARD_BOOT_ID, dumpPath, operation: opts.operation },
     "SNAPSHOT_CREATED",

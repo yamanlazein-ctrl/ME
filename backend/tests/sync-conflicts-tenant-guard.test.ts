@@ -11,9 +11,9 @@ describe("DFP-019 syncConflicts tenant context guard", () => {
 
   it("fails closed on mismatch", () => {
     runWithTenantContext({ tenantId: "11111111-1111-4111-8111-111111111111" }, () => {
-      expect(() =>
-        assertSyncConflictTenantContext("22222222-2222-4222-8222-222222222222"),
-      ).toThrow(/tenant mismatch/);
+      expect(() => assertSyncConflictTenantContext("22222222-2222-4222-8222-222222222222")).toThrow(
+        /tenant mismatch/,
+      );
     });
   });
 

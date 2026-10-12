@@ -49,7 +49,8 @@ export function isDesktopRuntime(): boolean {
 
 function toBridgeRequest(input: RequestInfo | URL, init?: RequestInit) {
   const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
-  const method = init?.method ?? (typeof input === "object" && "method" in input ? input.method : "GET");
+  const method =
+    init?.method ?? (typeof input === "object" && "method" in input ? input.method : "GET");
   // Only a string body can cross the bridge intact: `PipeRequest.body` is a `String`, so binary or a
   // `File`/`Blob`/`FormData` would be corrupted or silently lost.
   //
@@ -68,7 +69,8 @@ function toBridgeRequest(input: RequestInfo | URL, init?: RequestInit) {
   }
   const body = typeof raw === "string" ? raw : null;
   const headers: Record<string, string> = {};
-  const source = init?.headers ?? (typeof input === "object" && "headers" in input ? input.headers : undefined);
+  const source =
+    init?.headers ?? (typeof input === "object" && "headers" in input ? input.headers : undefined);
   if (source) {
     new Headers(source).forEach((value, key) => {
       headers[key] = value;
@@ -106,10 +108,9 @@ export function installDesktopTransport(): void {
       // sees whatever the app shows for a failed request, and the supervisor
       // owns recovery.
       w.__motardApiUnavailable = true;
-      throw new Error(
-        `الخادم المحلي غير متاح (${res.error}) — يمكن إعادة المحاولة.`,
-        { cause: res.error },
-      );
+      throw new Error(`الخادم المحلي غير متاح (${res.error}) — يمكن إعادة المحاولة.`, {
+        cause: res.error,
+      });
     }
     w.__motardApiUnavailable = false;
     // Headers are forwarded, not just the body: the app's session layer reads

@@ -166,7 +166,7 @@ export function SaleLineCard({
 
         <GroupSection title="بيانات الصبغة">
           <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
-            <CardField label="رقم الصبغة" required>
+            <CardField label="رقم الصبغة" required htmlFor={`${line.id}-roll`}>
               <Select
                 value={line.rollId}
                 onValueChange={(v) => {
@@ -180,7 +180,7 @@ export function SaleLineCard({
                 }}
                 disabled={!line.colorId}
               >
-                <SelectTrigger className="!h-9">
+                <SelectTrigger id={`${line.id}-roll`} className="!h-9">
                   <SelectValue
                     placeholder={line.colorId ? "اختر صبغة" : "اختر القماش واللون أولاً"}
                   />

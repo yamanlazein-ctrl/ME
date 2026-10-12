@@ -13,7 +13,7 @@ import { auditLogs } from "../../../orm/sqlite/schemas/audit-log.table.js";
 import { lockYear } from "./dayLockHelper.js";
 import type { TenantContext } from "../../../../domain/types/index.js";
 import { BusinessRuleError } from "../../../../domain/errors/index.js";
-import { round2dp } from "@erp/shared";
+import { round2dp, computeBaseEquivalent, BASE_CURRENCY } from "@erp/shared";
 import { localToday } from "../../../utils/localDate.js";
 
 /**
@@ -85,7 +85,11 @@ export async function getCountSheet(
   const latest = sql`${inventoryCounts.id} = (SELECT c2.id FROM inventory_counts c2
     WHERE c2.tenant_id = ${ctx.tenantId} AND c2.roll_id = ${rolls.id} AND c2.year = ${year}${opts.since ? sql` AND substr(c2.counted_at, 1, 10) >= ${opts.since}` : sql``}
     ORDER BY c2.created_at DESC LIMIT 1)`;
-  const countedCond = and(eq(inventoryCounts.tenantId, ctx.tenantId), eq(inventoryCounts.rollId, rolls.id), latest);
+  const countedCond = and(
+    eq(inventoryCounts.tenantId, ctx.tenantId),
+    eq(inventoryCounts.rollId, rolls.id),
+    latest,
+  );
   const term = opts.q?.trim().toLowerCase();
   const like = term ? `%${term}%` : null;
   const filters = [
@@ -148,10 +152,18 @@ export async function getCountSheet(
       bookPieces: counted ? Number(count!.bookPieces ?? 0) : livePieces,
       countedKg: count?.countedKg == null ? null : Number(count.countedKg),
       countedPieces: count?.countedPieces ?? null,
-      diffKg: count?.countedKg == null ? null : round2dp(Number(count.countedKg) - Number(count.bookKg)),
-      diffPieces: count?.countedPieces == null ? null : count.countedPieces - Number(count.bookPieces ?? 0),
-      movedKg: counted && !posted && round2dp(liveKg - Number(count!.bookKg)) !== 0 ? round2dp(liveKg - Number(count!.bookKg)) : null,
-      movedPieces: counted && !posted && livePieces !== Number(count!.bookPieces ?? 0) ? livePieces - Number(count!.bookPieces ?? 0) : null,
+      diffKg:
+        count?.countedKg == null ? null : round2dp(Number(count.countedKg) - Number(count.bookKg)),
+      diffPieces:
+        count?.countedPieces == null ? null : count.countedPieces - Number(count.bookPieces ?? 0),
+      movedKg:
+        counted && !posted && round2dp(liveKg - Number(count!.bookKg)) !== 0
+          ? round2dp(liveKg - Number(count!.bookKg))
+          : null,
+      movedPieces:
+        counted && !posted && livePieces !== Number(count!.bookPieces ?? 0)
+          ? livePieces - Number(count!.bookPieces ?? 0)
+          : null,
       pricePerKg: Number(roll.pricePerKg ?? 0),
       currency: roll.currency,
       status: count?.status ?? "uncounted",
@@ -201,7 +213,11 @@ export async function recordCount(
   await assertYearNotClosed(tx, ctx.tenantId, year);
 
   const [roll] = await tx
-    .select({ id: rolls.id, remainingKg: rolls.remainingKg, remainingPieces: rolls.remainingPieces })
+    .select({
+      id: rolls.id,
+      remainingKg: rolls.remainingKg,
+      remainingPieces: rolls.remainingPieces,
+    })
     .from(rolls)
     .where(and(eq(rolls.tenantId, ctx.tenantId), eq(rolls.id, rollId)))
     .limit(1);
@@ -287,7 +303,12 @@ export async function postCountVariance(
   tx: Tx,
   ctx: TenantContext,
   countId: string,
-): Promise<{ rollId: string; diffKg: number; movementId: string | null; adjustment: RollAdjustmentInput | null }> {
+): Promise<{
+  rollId: string;
+  diffKg: number;
+  movementId: string | null;
+  adjustment: RollAdjustmentInput | null;
+}> {
   const [count] = await tx
     .select()
     .from(inventoryCounts)
@@ -302,12 +323,18 @@ export async function postCountVariance(
   }
 
   const diffKg = round2dp(Number(count.countedKg) - Number(count.bookKg));
-  const diffPieces = count.countedPieces == null ? 0 : count.countedPieces - Number(count.bookPieces ?? 0);
+  const diffPieces =
+    count.countedPieces == null ? 0 : count.countedPieces - Number(count.bookPieces ?? 0);
   if (diffKg === 0 && diffPieces === 0) {
     // Nothing to adjust — mark it settled so it stops blocking the close.
     await tx
       .update(inventoryCounts)
-      .set({ status: "posted", approvedBy: ctx.userId, approvedAt: new Date(), updatedAt: new Date() })
+      .set({
+        status: "posted",
+        approvedBy: ctx.userId,
+        approvedAt: new Date(),
+        updatedAt: new Date(),
+      })
       .where(eq(inventoryCounts.id, countId));
     return { rollId: count.rollId, diffKg, movementId: null, adjustment: null };
   }
@@ -333,7 +360,8 @@ export async function postCountVariance(
   const adjustment: RollAdjustmentInput = {
     rollId: roll.id,
     deltaKg: diffKg,
-    deltaPieces: count.countedPieces == null ? 0 : count.countedPieces - Number(count.bookPieces ?? 0),
+    deltaPieces:
+      count.countedPieces == null ? 0 : count.countedPieces - Number(count.bookPieces ?? 0),
     reason: count.reason ?? (diffKg > 0 ? "تسوية جرد: زيادة" : "تسوية جرد: عجز"),
     // Never in the future: a count during the year posts today; a year-end count done
     // after New Year still lands on 31 Dec of the year it closes.
@@ -393,7 +421,15 @@ export async function applyRollAdjustment(
   tx: Tx,
   ctx: TenantContext,
   input: RollAdjustmentInput,
-): Promise<{ rollId: string; beforeKg: number; afterKg: number; beforePieces: number; afterPieces: number; movementId: string | null; alreadyApplied?: true }> {
+): Promise<{
+  rollId: string;
+  beforeKg: number;
+  afterKg: number;
+  beforePieces: number;
+  afterPieces: number;
+  movementId: string | null;
+  alreadyApplied?: true;
+}> {
   const [roll] = await tx
     .select()
     .from(rolls)
@@ -409,15 +445,34 @@ export async function applyRollAdjustment(
     const prior = await tx
       .select({ after: auditLogs.afterSnapshot })
       .from(auditLogs)
-      .where(and(eq(auditLogs.tenantId, ctx.tenantId), eq(auditLogs.module, "inventory_adjustments"), eq(auditLogs.entityType, "roll"), eq(auditLogs.entityId, roll.id)));
-    if (prior.some((a) => (a.after as { syncOpId?: unknown } | null)?.syncOpId === input.syncOpId)) {
+      .where(
+        and(
+          eq(auditLogs.tenantId, ctx.tenantId),
+          eq(auditLogs.module, "inventory_adjustments"),
+          eq(auditLogs.entityType, "roll"),
+          eq(auditLogs.entityId, roll.id),
+        ),
+      );
+    if (
+      prior.some((a) => (a.after as { syncOpId?: unknown } | null)?.syncOpId === input.syncOpId)
+    ) {
       const kg = round2dp(Number(roll.remainingKg ?? 0));
       const pieces = roll.remainingPieces ?? 0;
-      return { rollId: roll.id, beforeKg: kg, afterKg: kg, beforePieces: pieces, afterPieces: pieces, movementId: null, alreadyApplied: true };
+      return {
+        rollId: roll.id,
+        beforeKg: kg,
+        afterKg: kg,
+        beforePieces: pieces,
+        afterPieces: pieces,
+        movementId: null,
+        alreadyApplied: true,
+      };
     }
   }
   if (input.expectedVersion != null && roll.version !== input.expectedVersion) {
-    throw new BusinessRuleError("تغيّرت كمية هذه اللفة على جهاز آخر أو في نافذة أخرى — حدّث الصفحة ثم أعد التعديل.");
+    throw new BusinessRuleError(
+      "تغيّرت كمية هذه اللفة على جهاز آخر أو في نافذة أخرى — حدّث الصفحة ثم أعد التعديل.",
+    );
   }
   const deltaKg = round2dp(Number(input.deltaKg) || 0);
   const deltaPieces = Math.trunc(Number(input.deltaPieces) || 0);
@@ -430,10 +485,26 @@ export async function applyRollAdjustment(
     throw new BusinessRuleError("لا يمكن أن تصبح الكمية أو عدد الأثواب سالبة.");
   }
 
+  // M-01: stock status follows the quantity (as a sale/return does), or restored stock stays unsellable.
+  // A reserved roll keeps its reservation.
+  const status =
+    afterKg > 0 && roll.status === "exhausted"
+      ? "in_stock"
+      : afterKg <= 0 && roll.status === "in_stock"
+        ? "exhausted"
+        : roll.status;
   const [updated] = await tx
     .update(rolls)
-    .set({ remainingKg: String(afterKg), remainingPieces: afterPieces, version: roll.version + 1, updatedAt: new Date() } as never)
-    .where(and(eq(rolls.tenantId, ctx.tenantId), eq(rolls.id, roll.id), eq(rolls.version, roll.version)))
+    .set({
+      remainingKg: String(afterKg),
+      remainingPieces: afterPieces,
+      status,
+      version: roll.version + 1,
+      updatedAt: new Date(),
+    } as never)
+    .where(
+      and(eq(rolls.tenantId, ctx.tenantId), eq(rolls.id, roll.id), eq(rolls.version, roll.version)),
+    )
     .returning({ id: rolls.id });
   if (!updated) throw new BusinessRuleError("تغيّرت كمية هذه اللفة أثناء التعديل — أعد المحاولة.");
 
@@ -458,23 +529,48 @@ export async function applyRollAdjustment(
       .returning({ id: stockMovements.id });
     movementId = movement?.id ?? null;
 
-    // Inventory P&L leg. `cashImpact: 'none'` — a stock correction moves no cash.
+    // Inventory P&L leg plus its inventory-asset contra (H-06: the P&L leg alone left the journal
+    // unbalanced). `cashImpact: 'none'` — a stock correction moves no cash. A roll carries no frozen
+    // FX rate, so base amounts are known only for USD; non-USD legs keep NULL base (legacy rule).
     const amount = round2dp(Math.abs(deltaKg) * Number(roll.pricePerKg ?? 0));
     if (amount > 0) {
-      await tx.insert(ledgerEntries).values({
+      const gain = deltaKg > 0;
+      const base = computeBaseEquivalent(
+        amount,
+        roll.currency,
+        roll.currency === BASE_CURRENCY ? 1 : null,
+      );
+      const leg = (type: "expense" | "inventory_asset", debit: boolean, description: string) => ({
         tenantId: ctx.tenantId,
         date: input.date,
-        type: "expense",
-        debit: deltaKg > 0 ? 0 : amount,
-        credit: deltaKg > 0 ? amount : 0,
+        type,
+        debit: debit ? amount : 0,
+        credit: debit ? 0 : amount,
         currency: roll.currency,
+        exchangeRate: roll.currency === BASE_CURRENCY ? 1 : null,
+        baseDebit: base === null ? null : debit ? base : 0,
+        baseCredit: base === null ? null : debit ? 0 : base,
         cashImpact: "none",
         referenceType: input.referenceType,
         referenceId: input.referenceId,
         referenceNumber: input.referenceNumber,
-        description: deltaKg > 0 ? `${input.reason} — زيادة مخزون` : `${input.reason} — عجز مخزون`,
+        description,
         createdBy: ctx.userId,
-      } as never);
+      });
+      await tx
+        .insert(ledgerEntries)
+        .values([
+          leg(
+            "expense",
+            !gain,
+            gain ? `${input.reason} — زيادة مخزون` : `${input.reason} — عجز مخزون`,
+          ),
+          leg(
+            "inventory_asset",
+            gain,
+            gain ? `${input.reason} — قيمة مخزون مضافة` : `${input.reason} — قيمة مخزون مخفّضة`,
+          ),
+        ] as never);
     }
   }
 

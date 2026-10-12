@@ -30,15 +30,29 @@ function runtimeAuthorized(req: Request): boolean {
 
 export function registerDesktopRuntimeRoutes(router: Router): void {
   router.post("/api/desktop/runtime/pre-update-backup", async (req: Request, res: Response) => {
-    if (!runtimeAuthorized(req)) return res.status(404).json({ code: "NOT_FOUND", message: "المسار غير موجود" });
+    if (!runtimeAuthorized(req))
+      return res.status(404).json({ code: "NOT_FOUND", message: "المسار غير موجود" });
     try {
       const { createAndVerifyBackup } = await import("../../infrastructure/backup/sqliteBackup.js");
-      const created = await createAndVerifyBackup({ kind: "pre-update", appVersion: process.env.MOTARD_APP_VERSION });
+      const created = await createAndVerifyBackup({
+        kind: "pre-update",
+        appVersion: process.env.MOTARD_APP_VERSION,
+      });
       logger.info({ path: created.path }, "PRE_UPDATE_BACKUP_VERIFIED");
-      return res.json({ ok: true, path: created.path, sha256: created.sha256, sizeBytes: created.sizeBytes });
+      return res.json({
+        ok: true,
+        path: created.path,
+        sha256: created.sha256,
+        sizeBytes: created.sizeBytes,
+      });
     } catch (err) {
       logger.error({ err }, "PRE_UPDATE_BACKUP_FAILED");
-      return res.status(500).json({ code: "PRE_UPDATE_BACKUP_FAILED", message: err instanceof Error ? err.message : String(err) });
+      return res
+        .status(500)
+        .json({
+          code: "PRE_UPDATE_BACKUP_FAILED",
+          message: err instanceof Error ? err.message : String(err),
+        });
     }
   });
 
@@ -46,14 +60,23 @@ export function registerDesktopRuntimeRoutes(router: Router): void {
   // refresh and `null` on disconnect. The refresh token never leaves the shell; this one is kept in
   // memory only and never echoed or logged.
   router.post("/api/desktop/runtime/drive-token", async (req: Request, res: Response) => {
-    if (!runtimeAuthorized(req)) return res.status(404).json({ code: "NOT_FOUND", message: "المسار غير موجود" });
-    const { accessToken, expiresAt } = (req.body ?? {}) as { accessToken?: unknown; expiresAt?: unknown };
+    if (!runtimeAuthorized(req))
+      return res.status(404).json({ code: "NOT_FOUND", message: "المسار غير موجود" });
+    const { accessToken, expiresAt } = (req.body ?? {}) as {
+      accessToken?: unknown;
+      expiresAt?: unknown;
+    };
     const { setLiveDriveToken } = await import("../../infrastructure/googledrive/driveClient.js");
     if (accessToken === null) {
       setLiveDriveToken(null);
       return res.json({ ok: true, connected: false });
     }
-    if (typeof accessToken !== "string" || accessToken.length < 16 || typeof expiresAt !== "number" || !Number.isFinite(expiresAt)) {
+    if (
+      typeof accessToken !== "string" ||
+      accessToken.length < 16 ||
+      typeof expiresAt !== "number" ||
+      !Number.isFinite(expiresAt)
+    ) {
       return res.status(400).json({ code: "VALIDATION", message: "رمز Google غير صالح" });
     }
     setLiveDriveToken(accessToken, expiresAt);
@@ -61,7 +84,8 @@ export function registerDesktopRuntimeRoutes(router: Router): void {
   });
 
   router.post("/api/desktop/runtime/shutdown", async (req: Request, res: Response) => {
-    if (!runtimeAuthorized(req)) return res.status(404).json({ code: "NOT_FOUND", message: "المسار غير موجود" });
+    if (!runtimeAuthorized(req))
+      return res.status(404).json({ code: "NOT_FOUND", message: "المسار غير موجود" });
     try {
       const { withWriteGateHeld } = await import("../../infrastructure/orm/sqlite/transaction.js");
       const { shutdownSqliteRuntime } = await import("../../infrastructure/orm/sqlite/runtime.js");
@@ -72,7 +96,12 @@ export function registerDesktopRuntimeRoutes(router: Router): void {
       res.on("finish", () => setTimeout(() => process.exit(0), 50));
     } catch (err) {
       logger.error({ err }, "DESKTOP_SHUTDOWN_FAILED");
-      res.status(500).json({ code: "SHUTDOWN_FAILED", message: err instanceof Error ? err.message : String(err) });
+      res
+        .status(500)
+        .json({
+          code: "SHUTDOWN_FAILED",
+          message: err instanceof Error ? err.message : String(err),
+        });
     }
   });
 }

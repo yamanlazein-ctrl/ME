@@ -19,19 +19,19 @@ be re-gated.
 
 ## Gates AC-1…AC-12 (details: `RELEASE-GATES.md`)
 
-| Gate | Result |
-|---|---|
-| AC-1 no PostgreSQL / no port / no PG process | PASS on the developer machine (package, running instance on the named pipe, V8 coverage); VM: NOT RUN |
-| AC-2 shipped = tested; no console window | hash recorded and freshness PASS; console-window check NOT RUN (VM) |
-| AC-3 accounting parity | **PASS**: empty diff, 67 files, vs the frozen PostgreSQL reference |
-| AC-4 lifecycle (install, reopen, kill, reboot) | NOT RUN (VM) |
-| AC-5 update keeps data, no prompt | NOT RUN (VM) |
-| AC-6 reinstall → PRIOR_DATA_FOUND | NOT RUN (VM) |
-| AC-7 backup / restore | PARTIAL: VERIFIED v3 backup and v2 refusal on the RC; RS-5 restore in suites and in the T110 run; second-device restore on VMs NOT RUN |
-| AC-8 sync | **FAIL as written**: engine parity PASS (golden wire empty diff); restore on a synced device PASS; A = B = hub fails on pre-existing shared-sync behaviors, identical with PostgreSQL desktops |
-| AC-9 volume | **PASS** 18/18 (100% completeness, statement sha256 = PG baseline, full statement 8.0 s) |
-| AC-10 negative cases | NOT RUN on the RC / VM (debug build 6/6) |
-| AC-11 / AC-12 backup and restore in the lifecycle | NOT RUN (VM) |
+| Gate                                              | Result                                                                                                                                                                                         |
+| ------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| AC-1 no PostgreSQL / no port / no PG process      | PASS on the developer machine (package, running instance on the named pipe, V8 coverage); VM: NOT RUN                                                                                          |
+| AC-2 shipped = tested; no console window          | hash recorded and freshness PASS; console-window check NOT RUN (VM)                                                                                                                            |
+| AC-3 accounting parity                            | **PASS**: empty diff, 67 files, vs the frozen PostgreSQL reference                                                                                                                             |
+| AC-4 lifecycle (install, reopen, kill, reboot)    | NOT RUN (VM)                                                                                                                                                                                   |
+| AC-5 update keeps data, no prompt                 | NOT RUN (VM)                                                                                                                                                                                   |
+| AC-6 reinstall → PRIOR_DATA_FOUND                 | NOT RUN (VM)                                                                                                                                                                                   |
+| AC-7 backup / restore                             | PARTIAL: VERIFIED v3 backup and v2 refusal on the RC; RS-5 restore in suites and in the T110 run; second-device restore on VMs NOT RUN                                                         |
+| AC-8 sync                                         | **FAIL as written**: engine parity PASS (golden wire empty diff); restore on a synced device PASS; A = B = hub fails on pre-existing shared-sync behaviors, identical with PostgreSQL desktops |
+| AC-9 volume                                       | **PASS** 18/18 (100% completeness, statement sha256 = PG baseline, full statement 8.0 s)                                                                                                       |
+| AC-10 negative cases                              | NOT RUN on the RC / VM (debug build 6/6)                                                                                                                                                       |
+| AC-11 / AC-12 backup and restore in the lifecycle | NOT RUN (VM)                                                                                                                                                                                   |
 
 ## U-1 and U-2 (FR-067), stated explicitly
 

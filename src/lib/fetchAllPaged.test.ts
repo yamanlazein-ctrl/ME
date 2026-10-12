@@ -38,7 +38,10 @@ describe("fetchAllPaged", () => {
   it("has no page cap: walks past the old 200/500-page limits to the end (track P)", async () => {
     const pages = 1200;
     const rows = await fetchAllPaged(
-      async (page, limit) => ({ data: [page * limit, page * limit + 1], hasNext: page + 1 < pages }),
+      async (page, limit) => ({
+        data: [page * limit, page * limit + 1],
+        hasNext: page + 1 < pages,
+      }),
       { pageSize: 2, label: "t" },
     );
     expect(rows).toHaveLength(pages * 2);
@@ -46,10 +49,10 @@ describe("fetchAllPaged", () => {
 
   it("refuses to return a truncated list when a keyset cursor does not advance", async () => {
     await expect(
-      fetchAllPaged(
-        async (page, limit) => ({ data: pageOf(page, limit), nextCursor: "stuck" }),
-        { pageSize: 10, label: "t" },
-      ),
+      fetchAllPaged(async (page, limit) => ({ data: pageOf(page, limit), nextCursor: "stuck" }), {
+        pageSize: 10,
+        label: "t",
+      }),
     ).rejects.toThrow(/refusing to return a truncated list/);
   });
   it("follows nextCursor (keyset) and passes it back — page numbers are not used for seeking", async () => {
@@ -60,7 +63,10 @@ describe("fetchAllPaged", () => {
         const start = cursor ? Number(cursor) : 0;
         const data = rows.slice(start, start + limit);
         const end = start + data.length;
-        return { data, meta: { hasNext: end < rows.length, nextCursor: end < rows.length ? String(end) : null } };
+        return {
+          data,
+          meta: { hasNext: end < rows.length, nextCursor: end < rows.length ? String(end) : null },
+        };
       },
       { pageSize: 10 },
     );
@@ -88,7 +94,12 @@ describe("fetchAllPaged", () => {
         const start = cursor ? Number(cursor) : 0;
         const data = rows.slice(start, start + limit);
         const end = start + data.length;
-        return { data, total: rows.length, hasNext: end < rows.length, nextCursor: end < rows.length ? String(end) : undefined };
+        return {
+          data,
+          total: rows.length,
+          hasNext: end < rows.length,
+          nextCursor: end < rows.length ? String(end) : undefined,
+        };
       },
       { pageSize: 7 },
     );

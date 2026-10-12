@@ -153,9 +153,9 @@ function CashBoxPage() {
   // Today's transaction count (light query; separate cache entry from the tab feed).
   const { data: todayLedgerResult } = useLedgerEntries(
     {
-    fromDate: today,
-    toDate: today,
-  },
+      fromDate: today,
+      toDate: today,
+    },
     { all: true },
   );
   const txCount =
@@ -468,8 +468,8 @@ function ManualDialog({ open, onClose }: { open: boolean; onClose: () => void })
             className="rounded-md border border-warning/40 bg-warning/10 px-3 py-2 text-[12px] text-foreground"
           >
             تنبيه: سيصبح رصيد الصندوق ({currency}) سالباً بعد هذا السحب (المتاح{" "}
-            {(cashNow ?? 0).toLocaleString("en-US")}، المطلوب {Number(amount).toLocaleString("en-US")}).
-            يمكن المتابعة والحفظ.
+            {(cashNow ?? 0).toLocaleString("en-US")}، المطلوب{" "}
+            {Number(amount).toLocaleString("en-US")}). يمكن المتابعة والحفظ.
           </div>
         ) : null}
         <DialogFooter>

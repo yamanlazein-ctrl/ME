@@ -13,17 +13,26 @@ const rows = vi.hoisted(() => [
   { id: "s-cancelled", kind: "supplier", status: "cancelled", name: "SX" },
 ]);
 
-const { execute } = vi.hoisted(() => ({ execute: vi.fn(async (filter: { kind: string; status?: string }) => {
-  // Mirrors the backend contract: no status → cancelled excluded; explicit status → exact match.
-  const data = rows.filter(
-    (r) => r.kind === filter.kind && (filter.status ? r.status === filter.status : r.status !== "cancelled"),
-  );
-  return { data, meta: { total: data.length, hasNext: false, nextCursor: null } };
-}) }));
+const { execute } = vi.hoisted(() => ({
+  execute: vi.fn(async (filter: { kind: string; status?: string }) => {
+    // Mirrors the backend contract: no status → cancelled excluded; explicit status → exact match.
+    const data = rows.filter(
+      (r) =>
+        r.kind === filter.kind &&
+        (filter.status ? r.status === filter.status : r.status !== "cancelled"),
+    );
+    return { data, meta: { total: data.length, hasNext: false, nextCursor: null } };
+  }),
+}));
 
 vi.mock("@/infrastructure/container", () => ({ container: { parties: { list: { execute } } } }));
-vi.mock("@/infrastructure/di/auth-context", () => ({ buildTenantContext: () => ({ tenantId: "t" }) }));
-vi.mock("@/infrastructure/auth/TokenProvider", () => ({ getAccessToken: () => null, SESSION_STARTED_EVENT: "x" }));
+vi.mock("@/infrastructure/di/auth-context", () => ({
+  buildTenantContext: () => ({ tenantId: "t" }),
+}));
+vi.mock("@/infrastructure/auth/TokenProvider", () => ({
+  getAccessToken: () => null,
+  SESSION_STARTED_EVENT: "x",
+}));
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 
 describe("useParties cache — D-4 cancelled parties", () => {
@@ -44,7 +53,9 @@ describe("useParties cache — D-4 cancelled parties", () => {
   it("requests the cancelled set only through the explicit status filter", async () => {
     const mod = await import("../useParties");
     await mod.refreshParties();
-    const statuses = execute.mock.calls.map((c) => (c[0] as { status?: string }).status ?? "default");
+    const statuses = execute.mock.calls.map(
+      (c) => (c[0] as { status?: string }).status ?? "default",
+    );
     expect(statuses.filter((s) => s === "cancelled")).toHaveLength(2);
     expect(statuses.filter((s) => s === "default")).toHaveLength(2);
   });

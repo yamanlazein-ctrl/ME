@@ -354,9 +354,7 @@ export function ActivationScreen({ onActivated }: { onActivated: () => void }) {
                 ? "تم تضمين الترخيص مسبقاً في هذا التثبيت"
                 : "تفعيل الجهاز مرة واحدة — ترخيص أو دعوة")}
             {step === "bootstrap" &&
-              (isDesktopPreBaked
-                ? "عيّن اسمك ورقمك السري لأول مرة"
-                : "مبروك — تم تفعيل الترخيص")}
+              (isDesktopPreBaked ? "عيّن اسمك ورقمك السري لأول مرة" : "مبروك — تم تفعيل الترخيص")}
             {step === "done" && "تم تفعيل النظام بنجاح"}
           </p>
         </div>

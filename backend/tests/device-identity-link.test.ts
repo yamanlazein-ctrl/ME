@@ -6,7 +6,10 @@ import {
   revokeLicenseDevicesByFingerprint,
   revokeSyncDevicesByFingerprint,
 } from "../src/infrastructure/device/linkedDeviceRevocation.js";
-import { runWithTenantContext, runWithPlatformContext } from "../src/infrastructure/orm/tenant-context.js";
+import {
+  runWithTenantContext,
+  runWithPlatformContext,
+} from "../src/infrastructure/orm/tenant-context.js";
 import { databaseReachable, skipUnlessDatabase } from "./_helpers/requireDatabase.js";
 
 describe("license ↔ sync device fingerprint link", () => {

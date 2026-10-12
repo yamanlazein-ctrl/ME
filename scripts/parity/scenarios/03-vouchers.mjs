@@ -48,8 +48,14 @@ export default async function vouchers({ step, state }) {
   state.payments = [idOf(p1)];
   const cur = await step("receipt.get", "GET", `/api/receipts/${state.receipts[2]}`);
   const version = cur?.version ?? cur?.data?.version;
-  await step("receipt.cancel", "POST", `/api/receipts/${state.receipts[2]}/cancel`, { expectedVersion: version, reason: "خطأ إدخال" });
-  await step("receipt.cancel.again.rejected", "POST", `/api/receipts/${state.receipts[2]}/cancel`, { expectedVersion: version, reason: "مكرر" });
+  await step("receipt.cancel", "POST", `/api/receipts/${state.receipts[2]}/cancel`, {
+    expectedVersion: version,
+    reason: "خطأ إدخال",
+  });
+  await step("receipt.cancel.again.rejected", "POST", `/api/receipts/${state.receipts[2]}/cancel`, {
+    expectedVersion: version,
+    reason: "مكرر",
+  });
   await step("receipt.list", "GET", "/api/receipts?limit=50");
   await step("receipt.list.active", "GET", "/api/receipts?status=active&limit=50");
   await step("payment.list", "GET", "/api/payments?limit=50");

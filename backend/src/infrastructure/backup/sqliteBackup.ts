@@ -8,7 +8,19 @@
  * A file is only ever listed as a backup once it has been VERIFIED.
  */
 import { createHash, randomUUID } from "node:crypto";
-import { closeSync, existsSync, fsyncSync, mkdirSync, openSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
+import {
+  closeSync,
+  existsSync,
+  fsyncSync,
+  mkdirSync,
+  openSync,
+  readdirSync,
+  readFileSync,
+  renameSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import Database from "better-sqlite3";
@@ -61,7 +73,14 @@ export interface BackupManifestV3 {
   files: Array<{ path: string; bytes: number; sha256: string }>;
   excludedTables: string[];
   nulledColumns: Record<string, string[]>;
-  licence: { licenseId: string; key: string; type: string | null; edition: string | null; plan: string | null; status: string | null } | null;
+  licence: {
+    licenseId: string;
+    key: string;
+    type: string | null;
+    edition: string | null;
+    plan: string | null;
+    status: string | null;
+  } | null;
   sync: { deviceId: string; lastPushedSeq: number | null; lastPulledCursor: number | null } | null;
   kind: BackupKind;
 }
@@ -107,7 +126,12 @@ function fsyncPath(path: string): void {
 
 /** Primary-key column list of a table (rowid when it has no declared PK). */
 function pkColumns(db: Database.Database, table: string): string[] {
-  const cols = (db.prepare("SELECT name, pk FROM pragma_table_info(?)").all(table) as Array<{ name: string; pk: number }>)
+  const cols = (
+    db.prepare("SELECT name, pk FROM pragma_table_info(?)").all(table) as Array<{
+      name: string;
+      pk: number;
+    }>
+  )
     .filter((c) => c.pk > 0)
     .sort((a, b) => a.pk - b.pk)
     .map((c) => c.name);
@@ -118,8 +142,13 @@ function pkColumns(db: Database.Database, table: string): string[] {
  * Canonical content hash of one table: rows ordered by PK, each row a JSON object with sorted keys
  * and stored values (int64 as decimal text so nothing is lost), one row per line.
  */
-export function tableDigest(db: Database.Database, table: string): { rows: number; sha256: string } {
-  const order = pkColumns(db, table).map((c) => `"${c}"`).join(", ");
+export function tableDigest(
+  db: Database.Database,
+  table: string,
+): { rows: number; sha256: string } {
+  const order = pkColumns(db, table)
+    .map((c) => `"${c}"`)
+    .join(", ");
   const stmt = db.prepare(`SELECT * FROM "${table}" ORDER BY ${order}`).safeIntegers(true);
   const h = createHash("sha256");
   let rows = 0;
@@ -127,7 +156,8 @@ export function tableDigest(db: Database.Database, table: string): { rows: numbe
     const canon: Record<string, unknown> = {};
     for (const k of Object.keys(row).sort()) {
       const v = row[k];
-      canon[k] = typeof v === "bigint" ? v.toString() : Buffer.isBuffer(v) ? `\\x${v.toString("hex")}` : v;
+      canon[k] =
+        typeof v === "bigint" ? v.toString() : Buffer.isBuffer(v) ? `\\x${v.toString("hex")}` : v;
     }
     h.update(JSON.stringify(canon));
     h.update("\n");
@@ -137,15 +167,26 @@ export function tableDigest(db: Database.Database, table: string): { rows: numbe
 }
 
 export function businessTables(db: Database.Database): string[] {
-  return (db.prepare("SELECT name FROM sqlite_schema WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name").pluck().all() as string[])
-    .filter((t) => !INTERNAL_TABLES.has(t));
+  return (
+    db
+      .prepare(
+        "SELECT name FROM sqlite_schema WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name",
+      )
+      .pluck()
+      .all() as string[]
+  ).filter((t) => !INTERNAL_TABLES.has(t));
 }
 
 function assertHealthy(db: Database.Database, stage: string): void {
   const ic = db.pragma("integrity_check", { simple: true });
-  if (ic !== "ok") throw new BackupV3Error("BACKUP_INTEGRITY_FAILED", `${stage}: integrity_check = ${String(ic)}`);
+  if (ic !== "ok")
+    throw new BackupV3Error("BACKUP_INTEGRITY_FAILED", `${stage}: integrity_check = ${String(ic)}`);
   const fk = db.pragma("foreign_key_check") as unknown[];
-  if (fk.length) throw new BackupV3Error("BACKUP_FOREIGN_KEYS_FAILED", `${stage}: ${fk.length} foreign-key violation(s)`);
+  if (fk.length)
+    throw new BackupV3Error(
+      "BACKUP_FOREIGN_KEYS_FAILED",
+      `${stage}: ${fk.length} foreign-key violation(s)`,
+    );
 }
 
 /** Remove device-bound state from a standalone copy (never from the live database). */
@@ -154,7 +195,9 @@ export function stripDeviceBoundState(db: Database.Database): void {
   // license_audit_events is append-only by trigger; the copy drops and recreates the exact trigger
   // text so the schema (and its fingerprint) stays identical to the live one.
   const triggers = db
-    .prepare("SELECT name, sql FROM sqlite_schema WHERE type = 'trigger' AND tbl_name = 'license_audit_events'")
+    .prepare(
+      "SELECT name, sql FROM sqlite_schema WHERE type = 'trigger' AND tbl_name = 'license_audit_events'",
+    )
     .all() as Array<{ name: string; sql: string }>;
   db.exec("BEGIN");
   for (const t of triggers) db.exec(`DROP TRIGGER "${t.name}"`);
@@ -173,7 +216,8 @@ function collectFiles(): Array<{ path: string; data: Uint8Array }> {
   if (logoDir && existsSync(logoDir)) {
     for (const name of readdirSync(logoDir).sort()) {
       const full = join(logoDir, name);
-      if (statSync(full).isFile()) out.push({ path: `files/logos/${name}`, data: readFileSync(full) });
+      if (statSync(full).isFile())
+        out.push({ path: `files/logos/${name}`, data: readFileSync(full) });
     }
   }
   return out;
@@ -182,34 +226,85 @@ function collectFiles(): Array<{ path: string; data: Uint8Array }> {
 function attachmentFiles(db: Database.Database): Array<{ path: string; data: Uint8Array }> {
   const dir = process.env.ATTACHMENTS_DIR;
   if (!dir || !existsSync(dir)) return [];
-  const keys = db.prepare("SELECT storage_key FROM attachments ORDER BY storage_key").pluck().all() as string[];
+  const keys = db
+    .prepare("SELECT storage_key FROM attachments ORDER BY storage_key")
+    .pluck()
+    .all() as string[];
   const out: Array<{ path: string; data: Uint8Array }> = [];
   for (const key of keys) {
     const full = join(dir, key);
-    if (existsSync(full) && statSync(full).isFile()) out.push({ path: `files/attachments/${key.replace(/\\/g, "/")}`, data: readFileSync(full) });
+    if (existsSync(full) && statSync(full).isFile())
+      out.push({ path: `files/attachments/${key.replace(/\\/g, "/")}`, data: readFileSync(full) });
   }
   return out;
 }
 
-function readIdentity(db: Database.Database): Pick<BackupManifestV3, "data" | "tenant" | "licence" | "sync" | "schema"> & { journalIdx: number } {
-  const meta = db.prepare("SELECT * FROM motard_meta WHERE id = 1").get() as { data_id: string; tenant_id: string | null; schema_journal_idx: number };
-  const tenant = (meta.tenant_id
-    ? db.prepare("SELECT id, name FROM tenants WHERE id = ?").get(meta.tenant_id)
-    : db.prepare("SELECT id, name FROM tenants ORDER BY created_at LIMIT 1").get()) as { id: string; name: string } | undefined;
-  const lic = (tenant
-    ? db.prepare("SELECT id, key, type, edition, plan, status FROM licenses WHERE tenant_id = ? ORDER BY created_at LIMIT 1").get(tenant.id)
-    : undefined) as { id: string; key: string; type: string | null; edition: string | null; plan: string | null; status: string | null } | undefined;
-  const device = db.prepare("SELECT id FROM sync_devices ORDER BY created_at LIMIT 1").pluck().get() as string | undefined;
-  const pushed = db.prepare("SELECT max(seq) FROM sync_outbox WHERE status = 'synced'").pluck().get() as number | null;
-  const pulled = tenant ? (db.prepare("SELECT last_pull_seq FROM sync_state WHERE tenant_id = ?").pluck().get(tenant.id) as number | null | undefined) : null;
+function readIdentity(
+  db: Database.Database,
+): Pick<BackupManifestV3, "data" | "tenant" | "licence" | "sync" | "schema"> & {
+  journalIdx: number;
+} {
+  const meta = db.prepare("SELECT * FROM motard_meta WHERE id = 1").get() as {
+    data_id: string;
+    tenant_id: string | null;
+    schema_journal_idx: number;
+  };
+  const tenant = (
+    meta.tenant_id
+      ? db.prepare("SELECT id, name FROM tenants WHERE id = ?").get(meta.tenant_id)
+      : db.prepare("SELECT id, name FROM tenants ORDER BY created_at LIMIT 1").get()
+  ) as { id: string; name: string } | undefined;
+  const lic = (
+    tenant
+      ? db
+          .prepare(
+            "SELECT id, key, type, edition, plan, status FROM licenses WHERE tenant_id = ? ORDER BY created_at LIMIT 1",
+          )
+          .get(tenant.id)
+      : undefined
+  ) as
+    | {
+        id: string;
+        key: string;
+        type: string | null;
+        edition: string | null;
+        plan: string | null;
+        status: string | null;
+      }
+    | undefined;
+  const device = db
+    .prepare("SELECT id FROM sync_devices ORDER BY created_at LIMIT 1")
+    .pluck()
+    .get() as string | undefined;
+  const pushed = db
+    .prepare("SELECT max(seq) FROM sync_outbox WHERE status = 'synced'")
+    .pluck()
+    .get() as number | null;
+  const pulled = tenant
+    ? (db
+        .prepare("SELECT last_pull_seq FROM sync_state WHERE tenant_id = ?")
+        .pluck()
+        .get(tenant.id) as number | null | undefined)
+    : null;
   const fp = readSqliteFingerprint(db, meta.schema_journal_idx);
   return {
     journalIdx: meta.schema_journal_idx,
     schema: { journalIdx: meta.schema_journal_idx, fingerprintSha256: sha256(JSON.stringify(fp)) },
     data: { dataId: meta.data_id },
     tenant: { id: tenant?.id ?? null, name: tenant?.name ?? null },
-    licence: lic ? { licenseId: lic.id, key: lic.key, type: lic.type, edition: lic.edition, plan: lic.plan, status: lic.status } : null,
-    sync: device ? { deviceId: device, lastPushedSeq: pushed ?? null, lastPulledCursor: pulled ?? null } : null,
+    licence: lic
+      ? {
+          licenseId: lic.id,
+          key: lic.key,
+          type: lic.type,
+          edition: lic.edition,
+          plan: lic.plan,
+          status: lic.status,
+        }
+      : null,
+    sync: device
+      ? { deviceId: device, lastPushedSeq: pushed ?? null, lastPulledCursor: pulled ?? null }
+      : null,
   };
 }
 
@@ -240,7 +335,13 @@ export interface CreatedBackup {
  * Steps 2–9 on an existing raw copy (`tmpDb`, produced by step 1 by the caller). Synchronous.
  * `root` is the data root (parent of data\) used for the registry.
  */
-function finishBackup(opts: CreateBackupOptions, root: string, dir: string, work: string, tmpDb: string): CreatedBackup {
+function finishBackup(
+  opts: CreateBackupOptions,
+  root: string,
+  dir: string,
+  work: string,
+  tmpDb: string,
+): CreatedBackup {
   const stamp = new Date().toISOString().replace(/[:.]/g, "-");
   const finalPath = join(dir, opts.fileName ?? `${opts.kind}-${stamp}.zip`);
   const partial = `${finalPath}.partial`;
@@ -269,7 +370,11 @@ function finishBackup(opts: CreateBackupOptions, root: string, dir: string, work
         data: identity.data,
         tenant: identity.tenant,
         tables: businessTables(copy).map((name) => ({ name, ...tableDigest(copy, name) })),
-        files: files.map((f) => ({ path: f.path, bytes: f.data.byteLength, sha256: sha256(f.data) })),
+        files: files.map((f) => ({
+          path: f.path,
+          bytes: f.data.byteLength,
+          sha256: sha256(f.data),
+        })),
         excludedTables: [...EXCLUDED_TABLES],
         nulledColumns: NULLED_COLUMNS,
         licence: identity.licence,
@@ -297,10 +402,23 @@ function finishBackup(opts: CreateBackupOptions, root: string, dir: string, work
     // 8. verify the file we just wrote, exactly as a restore would
     const verified = openAndVerifyBackupV3Sync(finalPath);
     const bytes = readFileSync(finalPath);
-    const created: CreatedBackup = { path: finalPath, sizeBytes: bytes.byteLength, sha256: sha256(bytes), manifest: verified.manifest };
+    const created: CreatedBackup = {
+      path: finalPath,
+      sizeBytes: bytes.byteLength,
+      sha256: sha256(bytes),
+      manifest: verified.manifest,
+    };
     // 9. registry: VERIFIED
     recordBackup(
-      { path: finalPath, kind: opts.kind, status: "VERIFIED", sizeBytes: created.sizeBytes, sha256: created.sha256, manifestSha256: sha256(manifestText), error: undefined },
+      {
+        path: finalPath,
+        kind: opts.kind,
+        status: "VERIFIED",
+        sizeBytes: created.sizeBytes,
+        sha256: created.sha256,
+        manifestSha256: sha256(manifestText),
+        error: undefined,
+      },
       root,
     );
     return created;
@@ -308,8 +426,18 @@ function finishBackup(opts: CreateBackupOptions, root: string, dir: string, work
     rmSync(partial, { force: true });
     // A file that did not reach VERIFIED is never kept under a backup's name.
     if (renamed) rmSync(finalPath, { force: true });
-    recordBackup({ path: finalPath, kind: opts.kind, status: "FAILED", error: err instanceof Error ? err.message : String(err) }, root);
-    throw err instanceof BackupV3Error ? err : new BackupV3Error("BACKUP_CREATE_FAILED", err instanceof Error ? err.message : String(err));
+    recordBackup(
+      {
+        path: finalPath,
+        kind: opts.kind,
+        status: "FAILED",
+        error: err instanceof Error ? err.message : String(err),
+      },
+      root,
+    );
+    throw err instanceof BackupV3Error
+      ? err
+      : new BackupV3Error("BACKUP_CREATE_FAILED", err instanceof Error ? err.message : String(err));
   }
 }
 
@@ -330,8 +458,19 @@ export async function createAndVerifyBackup(opts: CreateBackupOptions): Promise<
       await rt.conns.reader.backup(tmpDb);
     } catch (err) {
       const root2 = root;
-      recordBackup({ path: join(dir, opts.fileName ?? `${opts.kind}-failed.zip`), kind: opts.kind, status: "FAILED", error: String(err) }, root2);
-      throw new BackupV3Error("BACKUP_CREATE_FAILED", `online copy failed: ${err instanceof Error ? err.message : String(err)}`);
+      recordBackup(
+        {
+          path: join(dir, opts.fileName ?? `${opts.kind}-failed.zip`),
+          kind: opts.kind,
+          status: "FAILED",
+          error: String(err),
+        },
+        root2,
+      );
+      throw new BackupV3Error(
+        "BACKUP_CREATE_FAILED",
+        `online copy failed: ${err instanceof Error ? err.message : String(err)}`,
+      );
     }
     return finishBackup(opts, root, dir, work, tmpDb);
   } finally {
@@ -343,7 +482,11 @@ export async function createAndVerifyBackup(opts: CreateBackupOptions): Promise<
  * Same backup, synchronously, from an already-open connection — used at boot for the pre-migration
  * backup (T074/T095), before the runtime is registered. Step 1 is a VACUUM INTO snapshot.
  */
-export function createAndVerifyBackupSync(conn: Database.Database, dbPath: string, opts: CreateBackupOptions): CreatedBackup {
+export function createAndVerifyBackupSync(
+  conn: Database.Database,
+  dbPath: string,
+  opts: CreateBackupOptions,
+): CreatedBackup {
   const root = rootOf(dbPath);
   const dir = opts.dir ?? join(root, "backups");
   mkdirSync(dir, { recursive: true });
@@ -370,16 +513,25 @@ export interface OpenedBackup {
  * T093: verify an archive completely — zip CRCs, manifest hash, every file hash, then the
  * extracted database (integrity, FKs, per-table rows + sha256). The source file is only read.
  */
-export async function openAndVerifyBackupV3(file: string, opts: { keep?: boolean; maxJournalIdx?: number } = {}): Promise<OpenedBackup> {
+export async function openAndVerifyBackupV3(
+  file: string,
+  opts: { keep?: boolean; maxJournalIdx?: number } = {},
+): Promise<OpenedBackup> {
   return openAndVerifyBackupV3Sync(file, opts);
 }
 
-export function openAndVerifyBackupV3Sync(file: string, opts: { keep?: boolean; maxJournalIdx?: number } = {}): OpenedBackup {
+export function openAndVerifyBackupV3Sync(
+  file: string,
+  opts: { keep?: boolean; maxJournalIdx?: number } = {},
+): OpenedBackup {
   let entries: Record<string, Uint8Array>;
   try {
     entries = unzipSync(new Uint8Array(readFileSync(file))); // validates every entry's CRC-32
   } catch (e) {
-    throw new BackupV3Error("BACKUP_NOT_A_ZIP", `not a readable backup archive (${e instanceof Error ? e.message : String(e)})`);
+    throw new BackupV3Error(
+      "BACKUP_NOT_A_ZIP",
+      `not a readable backup archive (${e instanceof Error ? e.message : String(e)})`,
+    );
   }
   const mBytes = entries["manifest.json"];
   if (!mBytes) {
@@ -393,19 +545,36 @@ export function openAndVerifyBackupV3Sync(file: string, opts: { keep?: boolean; 
   } catch {
     throw new BackupV3Error("BACKUP_MANIFEST_MISSING", "manifest.json is not valid JSON");
   }
-  if (manifest.format !== BACKUP_FORMAT) throw new BackupV3Error("BACKUP_FORMAT_UNKNOWN", `unknown backup format "${String(manifest.format)}"`);
+  if (manifest.format !== BACKUP_FORMAT)
+    throw new BackupV3Error(
+      "BACKUP_FORMAT_UNKNOWN",
+      `unknown backup format "${String(manifest.format)}"`,
+    );
   const formatVersion = Number(manifest.formatVersion);
   if (formatVersion < 3 || "postgres" in (manifest as object)) {
     // Same archive family, PostgreSQL-era content (pg_dump-based v2): never imported into SQLite (DB-8, OQ-3).
-    throw new BackupV3Error("BACKUP_POSTGRES_ERA", "this is a PostgreSQL-era backup (format v2) and cannot be restored by this version");
+    throw new BackupV3Error(
+      "BACKUP_POSTGRES_ERA",
+      "this is a PostgreSQL-era backup (format v2) and cannot be restored by this version",
+    );
   }
-  if (formatVersion > BACKUP_FORMAT_VERSION) throw new BackupV3Error("BACKUP_NEWER_THAN_APP", `backup format ${formatVersion} is newer than this app`);
+  if (formatVersion > BACKUP_FORMAT_VERSION)
+    throw new BackupV3Error(
+      "BACKUP_NEWER_THAN_APP",
+      `backup format ${formatVersion} is newer than this app`,
+    );
   const declared = entries["manifest.sha256"] ? strFromU8(entries["manifest.sha256"]).trim() : null;
   if (!declared || declared !== sha256(manifestText)) {
-    throw new BackupV3Error("BACKUP_MANIFEST_HASH_MISMATCH", "manifest.sha256 does not match manifest.json");
+    throw new BackupV3Error(
+      "BACKUP_MANIFEST_HASH_MISMATCH",
+      "manifest.sha256 does not match manifest.json",
+    );
   }
   if (opts.maxJournalIdx !== undefined && manifest.schema.journalIdx > opts.maxJournalIdx) {
-    throw new BackupV3Error("BACKUP_SCHEMA_NEWER_THAN_APP", `backup schema ${manifest.schema.journalIdx} is newer than this app (${opts.maxJournalIdx})`);
+    throw new BackupV3Error(
+      "BACKUP_SCHEMA_NEWER_THAN_APP",
+      `backup schema ${manifest.schema.journalIdx} is newer than this app (${opts.maxJournalIdx})`,
+    );
   }
   for (const f of manifest.files) {
     const data = entries[f.path];
@@ -414,7 +583,8 @@ export function openAndVerifyBackupV3Sync(file: string, opts: { keep?: boolean; 
     }
   }
   const dbBytes = entries["database.sqlite"];
-  if (!dbBytes) throw new BackupV3Error("BACKUP_DATABASE_MISSING", "archive has no database.sqlite");
+  if (!dbBytes)
+    throw new BackupV3Error("BACKUP_DATABASE_MISSING", "archive has no database.sqlite");
   const workDir = join(tmpdir(), `motard-verify-${randomUUID()}`);
   mkdirSync(workDir, { recursive: true });
   const databasePath = join(workDir, "database.sqlite");
@@ -424,28 +594,44 @@ export function openAndVerifyBackupV3Sync(file: string, opts: { keep?: boolean; 
     try {
       db = new Database(databasePath, { readonly: true });
     } catch (e) {
-      throw new BackupV3Error("BACKUP_INTEGRITY_FAILED", `database.sqlite cannot be opened (${e instanceof Error ? e.message : String(e)})`);
+      throw new BackupV3Error(
+        "BACKUP_INTEGRITY_FAILED",
+        `database.sqlite cannot be opened (${e instanceof Error ? e.message : String(e)})`,
+      );
     }
     try {
       try {
         assertHealthy(db, "backup database");
       } catch (e) {
         if (e instanceof BackupV3Error) throw e;
-        throw new BackupV3Error("BACKUP_INTEGRITY_FAILED", e instanceof Error ? e.message : String(e));
+        throw new BackupV3Error(
+          "BACKUP_INTEGRITY_FAILED",
+          e instanceof Error ? e.message : String(e),
+        );
       }
       const actual = new Map(businessTables(db).map((t) => [t, tableDigest(db, t)]));
       for (const t of manifest.tables) {
         const a = actual.get(t.name);
         if (!a || a.rows !== t.rows || a.sha256 !== t.sha256) {
-          throw new BackupV3Error("BACKUP_TABLE_MISMATCH", `table ${t.name}: manifest ${t.rows} rows ${t.sha256.slice(0, 12)}…, archive ${a?.rows ?? "missing"}`);
+          throw new BackupV3Error(
+            "BACKUP_TABLE_MISMATCH",
+            `table ${t.name}: manifest ${t.rows} rows ${t.sha256.slice(0, 12)}…, archive ${a?.rows ?? "missing"}`,
+          );
         }
       }
       if (actual.size !== manifest.tables.length) {
-        throw new BackupV3Error("BACKUP_TABLE_MISMATCH", `archive has ${actual.size} tables, manifest lists ${manifest.tables.length}`);
+        throw new BackupV3Error(
+          "BACKUP_TABLE_MISMATCH",
+          `archive has ${actual.size} tables, manifest lists ${manifest.tables.length}`,
+        );
       }
       for (const t of manifest.excludedTables) {
         const n = db.prepare(`SELECT count(*) FROM "${t}"`).pluck().get() as number;
-        if (n !== 0) throw new BackupV3Error("BACKUP_TABLE_MISMATCH", `device-bound table ${t} is not empty in the archive`);
+        if (n !== 0)
+          throw new BackupV3Error(
+            "BACKUP_TABLE_MISMATCH",
+            `device-bound table ${t} is not empty in the archive`,
+          );
       }
     } finally {
       db.close();
@@ -457,4 +643,3 @@ export function openAndVerifyBackupV3Sync(file: string, opts: { keep?: boolean; 
     throw e;
   }
 }
-

@@ -13,7 +13,11 @@ import type { Server } from "node:http";
 import express from "express";
 
 process.env.DB_ENGINE = "sqlite";
-process.env.SQLITE_PATH = join(mkdtempSync(join(tmpdir(), "motard-drive-route-")), "data", "motard.db");
+process.env.SQLITE_PATH = join(
+  mkdtempSync(join(tmpdir(), "motard-drive-route-")),
+  "data",
+  "motard.db",
+);
 process.env.MOTARD_STARTUP_STATE = "FRESH";
 process.env.MOTARD_INSTALLATION_ID ??= randomUUID();
 process.env.MOTARD_INSTALL_INSTANCE_ID ??= randomUUID();
@@ -33,11 +37,13 @@ beforeAll(async () => {
   await rtm.ensureSqliteRuntime({});
   const raw = rtm.getSqliteRuntime()!.conns.writer;
   raw.prepare(`INSERT INTO tenants (id, name, slug) VALUES (?, 't', 'drive-route')`).run(tenantId);
-  raw.prepare(`INSERT INTO settings (id, tenant_id, drive) VALUES (?, ?, ?)`).run(
-    randomUUID(),
-    tenantId,
-    JSON.stringify({ archiveEnabled: true, coordinatorDeviceId: "this-device" }),
-  );
+  raw
+    .prepare(`INSERT INTO settings (id, tenant_id, drive) VALUES (?, ?, ?)`)
+    .run(
+      randomUUID(),
+      tenantId,
+      JSON.stringify({ archiveEnabled: true, coordinatorDeviceId: "this-device" }),
+    );
   const db = (await import("../src/infrastructure/orm/sqlite/transaction.js")).sqliteDb() as never;
   const { createDriveRouter } = await import("../src/presentation/routes/drive.route.js");
   const { UploadQueue } = await import("../src/infrastructure/googledrive/uploadQueue.js");
@@ -45,7 +51,12 @@ beforeAll(async () => {
   // Stand-in for authMiddleware: the real one sets req.tenantContext (auth.middleware.ts).
   app.use((req, _res, next) => {
     const role = req.headers["x-test-role"];
-    if (typeof role === "string") (req as unknown as { tenantContext: unknown }).tenantContext = { tenantId, userId: "u", userRole: role };
+    if (typeof role === "string")
+      (req as unknown as { tenantContext: unknown }).tenantContext = {
+        tenantId,
+        userId: "u",
+        userRole: role,
+      };
     next();
   });
   app.use(
@@ -72,8 +83,18 @@ describe("drive routes", () => {
   it("D-02: an admin reaches /drive/status; a non-admin is 403; no session is 401", async () => {
     const ok = await call("GET", "/drive/status", "admin");
     expect(ok.status).toBe(200);
-    const body = (await ok.json()) as { archiveEnabled: boolean; isPrimaryDevice: boolean; localDeviceId: string; connected: boolean };
-    expect(body).toMatchObject({ archiveEnabled: true, isPrimaryDevice: true, localDeviceId: "this-device", connected: false });
+    const body = (await ok.json()) as {
+      archiveEnabled: boolean;
+      isPrimaryDevice: boolean;
+      localDeviceId: string;
+      connected: boolean;
+    };
+    expect(body).toMatchObject({
+      archiveEnabled: true,
+      isPrimaryDevice: true,
+      localDeviceId: "this-device",
+      connected: false,
+    });
     expect((await call("GET", "/drive/status", "viewer")).status).toBe(403);
     expect((await call("GET", "/drive/status")).status).toBe(401);
   });
@@ -85,8 +106,10 @@ describe("drive routes", () => {
       ["GET", "/drive/queue"],
       ["POST", `/drive/queue/${randomUUID()}/retry`],
     ]) {
-      expect((await call(method, path, "accountant")).status, `${method} ${path}`).toBe(403);
+      expect((await call(method, path, "warehouse")).status, `${method} ${path}`).toBe(403);
     }
     expect((await call("POST", "/drive/test", "admin")).status).toBe(409); // NOT_CONNECTED, past the guard
+    // owner decision 2026-10-12: the accountant holds admin privileges
+    expect((await call("POST", "/drive/test", "accountant")).status).toBe(409);
   });
 });

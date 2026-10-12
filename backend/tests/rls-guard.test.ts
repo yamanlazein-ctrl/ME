@@ -42,11 +42,7 @@ const SRC_DIR = join(BACKEND_ROOT, "src");
  * itself. A tenant-scoped policy would hide the row on those checkouts and the
  * revocation would silently fail (fail-open). See revoked-token.table.ts.
  */
-const RLS_EXEMPT_TABLES = new Set([
-  "schema_migrations",
-  "__drizzle_migrations",
-  "revoked_tokens",
-]);
+const RLS_EXEMPT_TABLES = new Set(["schema_migrations", "__drizzle_migrations", "revoked_tokens"]);
 
 function listTsFiles(dir: string): string[] {
   return readdirSync(dir, { withFileTypes: true }).flatMap((e) => {
@@ -88,7 +84,12 @@ function schemaTables(): { file: string; name: string; call: string; end: number
     .filter((f) => f.endsWith(".table.ts"))
     .flatMap((f) => {
       const src = readFileSync(join(SCHEMAS_DIR, f), "utf8");
-      return extractTableCalls(src).map((t) => ({ file: f, name: t.name, call: src.slice(t.start, t.end + 1), end: t.end }));
+      return extractTableCalls(src).map((t) => ({
+        file: f,
+        name: t.name,
+        call: src.slice(t.start, t.end + 1),
+        end: t.end,
+      }));
     });
 }
 
@@ -99,7 +100,12 @@ describe("RLS regression guards (Phase F, D-006)", () => {
 
     const missing = tables
       .filter((t) => !RLS_EXEMPT_TABLES.has(t.name))
-      .filter((t) => !/^\s*\.enableRLS\(\)/.test(readFileSync(join(SCHEMAS_DIR, t.file), "utf8").slice(t.end + 1, t.end + 40)))
+      .filter(
+        (t) =>
+          !/^\s*\.enableRLS\(\)/.test(
+            readFileSync(join(SCHEMAS_DIR, t.file), "utf8").slice(t.end + 1, t.end + 40),
+          ),
+      )
       .map((t) => `${t.file} → ${t.name}`);
 
     expect(missing, `tables without .enableRLS():\n${missing.join("\n")}`).toEqual([]);
@@ -159,7 +165,9 @@ describe("RLS regression guards (Phase F, D-006)", () => {
     //   current_setting(''app.current_tenant_id'', true)::uuid  (no NULLIF)
     const unguarded =
       /(?<!NULLIF\()current_setting\((?:''|')app\.current_tenant_id(?:''|')(?:,\s*(?:missing_ok\s*=\s*)?true)?\)\s*::uuid/g;
-    const hits = [...sql.matchAll(unguarded)].map((m) => sql.slice(Math.max(0, m.index - 60), m.index + m[0].length));
+    const hits = [...sql.matchAll(unguarded)].map((m) =>
+      sql.slice(Math.max(0, m.index - 60), m.index + m[0].length),
+    );
     expect(hits, hits.join("\n---\n")).toEqual([]);
 
     // The guarded form must actually be present (guards not silently dropped).
@@ -168,7 +176,12 @@ describe("RLS regression guards (Phase F, D-006)", () => {
 
   it("enable-rls.sql declares the four canonical policy families", () => {
     const sql = readFileSync(RLS_SQL, "utf8");
-    for (const policy of ["tenant_isolation", "platform_or_tenant", "tenant_directory", "platform_only"]) {
+    for (const policy of [
+      "tenant_isolation",
+      "platform_or_tenant",
+      "tenant_directory",
+      "platform_only",
+    ]) {
       expect(sql, `missing policy family: ${policy}`).toContain(policy);
     }
   });
@@ -237,7 +250,10 @@ describe("RLS regression guards (Phase F, D-006)", () => {
     const pkg = JSON.parse(readFileSync(join(BACKEND_ROOT, "package.json"), "utf8"));
     const scripts: Record<string, string> = pkg.scripts ?? {};
 
-    expect(scripts, "bare db:push script must not be reintroduced — use db:push:scratch").not.toHaveProperty("db:push");
+    expect(
+      scripts,
+      "bare db:push script must not be reintroduced — use db:push:scratch",
+    ).not.toHaveProperty("db:push");
 
     const scratch = scripts["db:push:scratch"];
     expect(scratch, "db:push:scratch must keep its WARNING preamble").toMatch(/WARNING/i);

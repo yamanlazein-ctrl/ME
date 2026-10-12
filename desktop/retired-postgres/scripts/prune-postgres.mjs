@@ -36,7 +36,13 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const PG = resolve(dirname(fileURLToPath(import.meta.url)), "..", "src-tauri", "resources", "postgres");
+const PG = resolve(
+  dirname(fileURLToPath(import.meta.url)),
+  "..",
+  "src-tauri",
+  "resources",
+  "postgres",
+);
 if (!existsSync(join(PG, "bin", "postgres.exe"))) {
   console.error(`[prune-postgres] ERROR: ${PG} has no bin/postgres.exe`);
   process.exit(1);
@@ -90,7 +96,11 @@ function loadedDlls(exePath) {
   // zeroed descriptor.
   const staticStart = toOffset(buf.readUInt32LE(directories + 8));
   const staticSize = buf.readUInt32LE(directories + 12);
-  for (let at = staticStart, guard = 0; staticStart >= 0 && at < staticStart + staticSize && guard < 1024; guard++, at += 20) {
+  for (
+    let at = staticStart, guard = 0;
+    staticStart >= 0 && at < staticStart + staticSize && guard < 1024;
+    guard++, at += 20
+  ) {
     if (buf.readUInt32LE(at) === 0 && buf.readUInt32LE(at + 12) === 0) break;
     const name = readCString(buf.readUInt32LE(at + 12));
     if (name) names.add(name);
@@ -102,7 +112,11 @@ function loadedDlls(exePath) {
   const delaySize = buf.readUInt32LE(directories + 13 * 8 + 4);
   if (delayRva) {
     const start = toOffset(delayRva);
-    for (let at = start, guard = 0; start >= 0 && at < start + delaySize && guard < 1024; guard++, at += 32) {
+    for (
+      let at = start, guard = 0;
+      start >= 0 && at < start + delaySize && guard < 1024;
+      guard++, at += 32
+    ) {
       const name = readCString(buf.readUInt32LE(at + 4));
       if (name) names.add(name);
     }
@@ -125,7 +139,10 @@ function loadClosure(seeds) {
 }
 
 const count = (d) =>
-  readdirSync(d, { withFileTypes: true }).reduce((n, e) => (e.isDirectory() ? n + count(join(d, e.name)) : n + 1), 0);
+  readdirSync(d, { withFileTypes: true }).reduce(
+    (n, e) => (e.isDirectory() ? n + count(join(d, e.name)) : n + 1),
+    0,
+  );
 
 const before = count(PG);
 const binFiles = readdirSync(binDir);
@@ -167,12 +184,16 @@ for (const f of binFiles) {
   const size = readFileSync(join(binDir, f)).length;
   rmSync(join(binDir, f));
   removedBytes += size;
-  console.log(`[prune-postgres] removed bin/${f} (${(size / 1048576).toFixed(1)} MB, loaded by nothing)`);
+  console.log(
+    `[prune-postgres] removed bin/${f} (${(size / 1048576).toFixed(1)} MB, loaded by nothing)`,
+  );
 }
 
 const icuFamilies = binFiles.filter((f) => /^icu[a-z]+\d+\.dll$/i.test(f));
 if (icuFamilies.length === 0) {
-  console.error("[prune-postgres] ERROR: no ICU DLLs left — every backend would die with 0xC0000142");
+  console.error(
+    "[prune-postgres] ERROR: no ICU DLLs left — every backend would die with 0xC0000142",
+  );
   process.exit(1);
 }
 

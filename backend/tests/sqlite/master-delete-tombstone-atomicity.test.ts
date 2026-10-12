@@ -43,12 +43,15 @@ afterAll(async () => {
 
 describe("master delete + tombstone atomicity (F-03)", () => {
   it("a delete whose tombstone write fails ROLLS BACK — the row survives", async () => {
-    const w = runtime.getSqliteRuntime()!.conns.writer as unknown as import("better-sqlite3").Database;
+    const w = runtime.getSqliteRuntime()!.conns
+      .writer as unknown as import("better-sqlite3").Database;
 
     // Seed a fabric the unit will delete.
     const fabricId = randomUUID();
     await tx.runInTransaction(async (t) => {
-      await t.execute(sql`INSERT INTO tenants (id, name, slug) VALUES (${TENANT}, 'شركة الذرية', 'f03')`);
+      await t.execute(
+        sql`INSERT INTO tenants (id, name, slug) VALUES (${TENANT}, 'شركة الذرية', 'f03')`,
+      );
       await t.execute(
         sql`INSERT INTO fabrics (id, tenant_id, name, min_stock_kg, version) VALUES (${fabricId}, ${TENANT}, 'قماش الذرية', 0, 1)`,
       );
@@ -62,9 +65,8 @@ describe("master delete + tombstone atomicity (F-03)", () => {
     });
 
     const { materializeSyncUnit } = await import("@/application/use-cases/sync/syncMaterialize.js");
-    const { SqliteFabricRepository } = await import(
-      "@/infrastructure/repositories/sqlite/SqliteFabricRepository.js"
-    );
+    const { SqliteFabricRepository } =
+      await import("@/infrastructure/repositories/sqlite/SqliteFabricRepository.js");
     // Production wiring (sqliteContainer.ts:79) builds repos on sqliteDb() —
     // the AMBIENT handle that joins the outer transaction. Using it here is
     // what makes the test exercise the real nesting semantics.

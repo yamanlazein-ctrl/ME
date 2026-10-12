@@ -60,7 +60,11 @@ describe("settle-invoices route path — commit survives past the response", () 
       reachable = true;
       await db
         .insert(tenants)
-        .values({ id: tenantId, name: "Settle Persist Tenant", slug: `sp-${tenantId.slice(0, 8)}` });
+        .values({
+          id: tenantId,
+          name: "Settle Persist Tenant",
+          slug: `sp-${tenantId.slice(0, 8)}`,
+        });
       await db.insert(parties).values({
         id: customerId,
         tenantId,
@@ -132,10 +136,7 @@ describe("settle-invoices route path — commit survives past the response", () 
       .select({ id: ledgerEntries.id, status: ledgerEntries.status })
       .from(ledgerEntries)
       .where(
-        and(
-          eq(ledgerEntries.tenantId, tenantId),
-          inArray(ledgerEntries.referenceId, voucherIds),
-        ),
+        and(eq(ledgerEntries.tenantId, tenantId), inArray(ledgerEntries.referenceId, voucherIds)),
       );
     expect(ledgerRows.length).toBeGreaterThan(0);
     expect(ledgerRows.every((l) => l.status === "active")).toBe(true);

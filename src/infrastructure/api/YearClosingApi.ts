@@ -141,7 +141,10 @@ export function closeYear(year: number, reason?: string): Promise<CloseResult> {
     .then((r) => r.data);
 }
 
-export function reopenYear(year: number, reason: string): Promise<{ year: number; status: string }> {
+export function reopenYear(
+  year: number,
+  reason: string,
+): Promise<{ year: number; status: string }> {
   return container.http
     .post<{ year: number; status: string }>("/api/financial-years/reopen", { year, reason })
     .then((r) => r.data);

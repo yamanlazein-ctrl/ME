@@ -38,11 +38,14 @@ const ctx = { tenantId: TENANT } as never;
 beforeAll(async () => {
   runtime = await import("@/infrastructure/orm/sqlite/runtime.js");
   tx = await import("@/infrastructure/orm/sqlite/transaction.js");
-  const { SqliteSettingsRepository } = await import("@/infrastructure/repositories/sqlite/SqliteSettingsRepository.js");
+  const { SqliteSettingsRepository } =
+    await import("@/infrastructure/repositories/sqlite/SqliteSettingsRepository.js");
   await runtime.ensureSqliteRuntime();
   await tx.runInTransaction(async (t) => {
     await t.execute(sql`INSERT INTO tenants (id, name, slug) VALUES (${TENANT}, 'SS01', 'ss01')`);
-    await t.execute(sql`INSERT INTO tenants (id, name, slug) VALUES (${OTHER_TENANT}, 'SS01-other', 'ss01-other')`);
+    await t.execute(
+      sql`INSERT INTO tenants (id, name, slug) VALUES (${OTHER_TENANT}, 'SS01-other', 'ss01-other')`,
+    );
   });
   repo = new SqliteSettingsRepository(runtime.getSqliteRuntime()!.conns.writerDb as never);
   // A settings row must exist before the attack tests: the `id` test correctly throws before any
@@ -74,7 +77,16 @@ describe("SS-01: settings section allowlist", () => {
   });
 
   it("still accepts every section the settings route allows, including drive", async () => {
-    for (const section of ["company", "currencies", "paymentMethods", "taxes", "units", "warehouses", "printing", "drive"]) {
+    for (const section of [
+      "company",
+      "currencies",
+      "paymentMethods",
+      "taxes",
+      "units",
+      "warehouses",
+      "printing",
+      "drive",
+    ]) {
       await expect(repo.upsertSection(section, {}, ctx)).resolves.not.toThrow();
     }
   });

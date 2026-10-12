@@ -96,7 +96,8 @@ export async function updateInvoiceUseCase(
   ctx: TenantContext,
   expectedVersion: number,
 ): Promise<Result<InvoiceData> & { code?: string }> {
-  if (!input.lines?.length) return { ok: false, error: "يجب إضافة بند واحد على الأقل", code: "VALIDATION" };
+  if (!input.lines?.length)
+    return { ok: false, error: "يجب إضافة بند واحد على الأقل", code: "VALIDATION" };
   try {
     // Fetch the pre-edit state first so the audit trail can show exactly
     // what changed (invoice-tracking feature).
@@ -138,13 +139,17 @@ export async function updateInvoiceUseCase(
     } else {
       logger.error({ err: e }, "[updateInvoiceUseCase] failed");
     }
-    const code =
-      e instanceof Error && "code" in e ? (e as { code?: string }).code : undefined;
+    const code = e instanceof Error && "code" in e ? (e as { code?: string }).code : undefined;
     if (code === "NOT_FOUND") return { ok: false, error: "الفاتورة غير موجودة.", code };
     if (code === "ALREADY_CANCELLED")
       return { ok: false, error: "لا يمكن تعديل فاتورة ملغاة.", code };
     if (code === "STALE_VERSION")
-      return { ok: false, error: "تعارض في الإصدار: تم تعديل الفاتورة من قبل جهاز آخر. يرجى التحديث والمحاولة مرة أخرى.", code };
+      return {
+        ok: false,
+        error:
+          "تعارض في الإصدار: تم تعديل الفاتورة من قبل جهاز آخر. يرجى التحديث والمحاولة مرة أخرى.",
+        code,
+      };
     return { ok: false, error: invoiceErrorMessage(e), code };
   }
 }
@@ -194,6 +199,7 @@ export async function cancelInvoiceUseCase(
       logger.warn({ err: e.message }, "[cancelInvoiceUseCase] business rule violation");
       return { ok: false, error: e.message, code: "BUSINESS_RULE" };
     }
+    if (e instanceof DayLockedError) return { ok: false, error: e.message, code: "BUSINESS_RULE" };
     logger.error({ err: e }, "[cancelInvoiceUseCase] failed");
     // TX11: surface the structured code so the route can map NOT_FOUND → 404.
     const code = e instanceof Error && "code" in e ? (e as { code?: string }).code : undefined;
@@ -202,7 +208,12 @@ export async function cancelInvoiceUseCase(
       return { ok: false, error: "لا يمكن إلغاء هذه الفاتورة في حالتها الحالية.", code };
     }
     if (code === "STALE_VERSION") {
-      return { ok: false, error: "تعارض في الإصدار: تم تعديل الفاتورة من قبل جهاز آخر. يرجى التحديث والمحاولة مرة أخرى.", code };
+      return {
+        ok: false,
+        error:
+          "تعارض في الإصدار: تم تعديل الفاتورة من قبل جهاز آخر. يرجى التحديث والمحاولة مرة أخرى.",
+        code,
+      };
     }
     return { ok: false, error: "تعذّر إلغاء الفاتورة بسبب خطأ داخلي. أعد المحاولة.", code };
   }

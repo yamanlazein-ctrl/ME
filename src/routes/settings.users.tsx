@@ -1,10 +1,14 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
-import { Pencil, Plus, Trash2, ShieldCheck, ShieldAlert } from "lucide-react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Pencil, Trash2, ShieldCheck, ShieldAlert } from "lucide-react";
+import { toast } from "sonner";
 import { PageCard } from "@/components/layout/PageCard";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { FormField } from "@/components/common/FormField";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import {
   Dialog,
   DialogContent,
@@ -22,47 +26,74 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
-  useSettings,
-  addUser,
-  updateUser,
-  deleteUser,
   ROLE_LABEL,
   ROLE_PERMISSIONS,
-  type SystemUser,
+  hasAdminPrivileges,
   type UserRole,
 } from "@/presentation/hooks/useSettings";
 import { useCurrentUser } from "@/presentation/hooks/useAuth";
+import { container } from "@/infrastructure/container";
+import {
+  changedUserFields,
+  type TenantUserDTO,
+  type UserDraft,
+} from "@/infrastructure/api/UsersApiService";
 import { InvitationManager } from "@/components/invitations/InvitationManager";
 
 export const Route = createFileRoute("/settings/users")({ component: UsersPage });
 
-type Draft = {
-  id: string;
-  name: string;
-  email: string;
-  password: string;
-  role: UserRole;
-  active: boolean;
-};
+type Draft = UserDraft;
 
-const EMPTY: Draft = {
-  id: "",
-  name: "",
-  email: "",
-  password: "",
-  role: "accountant",
-  active: true,
-};
+const USERS_KEY = ["users"] as const;
+const errMsg = (e: unknown, fallback: string) =>
+  e instanceof Error && e.message ? e.message : fallback;
 
+/**
+ * hermes F-015: this page used to edit an in-memory list with no server call, so "added" users
+ * vanished on reload and could never sign in. It now shows the tenant's real users
+ * (`GET /api/users`), edits them with `PATCH`, and deactivates with `DELETE`. New accounts join
+ * through an invitation code (InvitationManager below) — the backend has no direct-create endpoint,
+ * and no secret is typed or kept here (C1-11).
+ */
 function UsersPage() {
-  const s = useSettings();
   const { data: me } = useCurrentUser();
-  const [editing, setEditing] = useState<Draft | null>(null);
-  const [open, setOpen] = useState(false);
+  const qc = useQueryClient();
+  const isAdmin = hasAdminPrivileges(me?.role);
+  // The admin role (granting it, or editing an admin account) stays with the admin — server-enforced.
+  const adminReserved = me?.role !== "admin";
+  const users = useQuery({
+    queryKey: USERS_KEY,
+    queryFn: () => container.users.api.list(),
+    enabled: isAdmin,
+  });
+  const [editing, setEditing] = useState<{ draft: Draft; original: TenantUserDTO } | null>(null);
+  const [removing, setRemoving] = useState<TenantUserDTO | null>(null);
 
-  if (!me || me.role !== "admin") {
+  const save = useMutation({
+    mutationFn: async ({ draft, original }: { draft: Draft; original: TenantUserDTO }) => {
+      const patch = changedUserFields(draft, original);
+      if (Object.keys(patch).length) await container.users.api.update(original.id, patch);
+    },
+    onSuccess: () => {
+      toast.success("تم حفظ المستخدم");
+      setEditing(null);
+      void qc.invalidateQueries({ queryKey: USERS_KEY });
+    },
+    onError: (e) => toast.error(errMsg(e, "تعذّر حفظ المستخدم")),
+  });
+
+  const deactivate = useMutation({
+    mutationFn: (id: string) => container.users.api.deactivate(id),
+    onSuccess: () => {
+      toast.success("تم تعطيل المستخدم");
+      void qc.invalidateQueries({ queryKey: USERS_KEY });
+    },
+    onError: (e) => toast.error(errMsg(e, "تعذّر تعطيل المستخدم")),
+  });
+
+  if (!me || !isAdmin) {
     return (
-      <PageCard title="الوصول مرفوض" description="هذه الصفحة متاحة لمدير النظام فقط.">
+      <PageCard title="الوصول مرفوض" description="هذه الصفحة متاحة لمدير النظام والمحاسب فقط.">
         <div className="flex items-center gap-3 rounded-lg border border-destructive/40 bg-destructive/5 p-4 text-sm text-destructive">
           <ShieldAlert className="h-5 w-5" />
           <span>ليس لديك صلاحية لإدارة المستخدمين.</span>
@@ -71,54 +102,20 @@ function UsersPage() {
     );
   }
 
-  const openNew = () => {
-    setEditing({ ...EMPTY });
-    setOpen(true);
-  };
-  const openEdit = (u: SystemUser) => {
+  const list = users.data ?? [];
+  const openEdit = (u: TenantUserDTO) =>
     setEditing({
-      id: u.id,
-      name: u.name,
-      email: u.email,
-      password: u.password ?? "",
-      role: u.role,
-      active: u.active,
+      draft: { name: u.name, email: u.email, role: u.role, active: u.active },
+      original: u,
     });
-    setOpen(true);
-  };
-  const save = () => {
-    if (!editing || !editing.name.trim()) return;
-    if (editing.id) {
-      updateUser(editing.id, {
-        name: editing.name.trim(),
-        email: editing.email.trim(),
-        password: editing.password || undefined,
-        role: editing.role,
-        active: editing.active,
-      });
-    } else {
-      addUser({
-        name: editing.name.trim(),
-        email: editing.email.trim(),
-        password: editing.password || undefined,
-        role: editing.role,
-        active: editing.active,
-      });
-    }
-    setOpen(false);
-  };
+  const isSelf = editing?.original.id === me.id;
 
   return (
     <div className="space-y-4">
       <PageCard
         title="المستخدمون والصلاحيات"
-        description="أنشئ حساباً واختر دوره. الانضمام للأجهزة يتم عبر رمز دعوة؛ الدخول بعد التفعيل باختيار المستخدم والرقم السري."
+        description="المستخدمون المسجّلون فعلاً على هذه الشركة. لإضافة موظف أنشئ له رمز دعوة أدناه؛ يُنشأ حسابه عند قبول الدعوة، ثم يدخل باختيار اسمه والرقم السري."
         noBodyPadding
-        actions={
-          <Button size="sm" onClick={openNew} className="bg-primary text-primary-foreground">
-            <Plus className="h-4 w-4 ml-1" /> إضافة مستخدم
-          </Button>
-        }
       >
         <div className="overflow-x-auto">
           <table className="w-full text-right text-sm">
@@ -132,7 +129,24 @@ function UsersPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
-              {s.users.map((u) => (
+              {users.isLoading && (
+                <tr>
+                  <td colSpan={5} className="p-6 text-center text-muted-foreground">
+                    جارٍ تحميل المستخدمين…
+                  </td>
+                </tr>
+              )}
+              {users.isError && (
+                <tr>
+                  <td colSpan={5} className="p-6 text-center text-destructive" role="alert">
+                    {errMsg(users.error, "تعذّر تحميل المستخدمين")}{" "}
+                    <Button size="sm" variant="outline" onClick={() => void users.refetch()}>
+                      إعادة المحاولة
+                    </Button>
+                  </td>
+                </tr>
+              )}
+              {list.map((u) => (
                 <tr key={u.id}>
                   <td className="px-3 py-2">
                     <div className="font-medium">{u.name}</div>
@@ -147,17 +161,29 @@ function UsersPage() {
                     </span>
                   </td>
                   <td className="px-3 py-2 font-mono text-xs text-muted-foreground">
-                    {u.createdAt}
+                    {u.createdAt.slice(0, 10)}
                   </td>
                   <td className="px-3 py-2 text-left">
-                    <Button size="sm" variant="ghost" onClick={() => openEdit(u)}>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      aria-label={`تعديل المستخدم ${u.name}`}
+                      onClick={() => openEdit(u)}
+                      disabled={adminReserved && u.role === "admin"}
+                    >
                       <Pencil className="h-3.5 w-3.5" />
                     </Button>
                     <Button
                       size="sm"
                       variant="ghost"
-                      onClick={() => confirm(`حذف المستخدم "${u.name}"؟`) && deleteUser(u.id)}
-                      disabled={s.users.length <= 1 || u.id === me.id}
+                      aria-label={`تعطيل المستخدم ${u.name}`}
+                      onClick={() => setRemoving(u)}
+                      disabled={
+                        !u.active ||
+                        u.id === me.id ||
+                        deactivate.isPending ||
+                        (adminReserved && u.role === "admin")
+                      }
                     >
                       <Trash2 className="h-3.5 w-3.5 text-destructive" />
                     </Button>
@@ -189,71 +215,89 @@ function UsersPage() {
 
       <InvitationManager />
 
-      <Dialog open={open} onOpenChange={setOpen}>
+      <ConfirmDialog
+        open={removing !== null}
+        onOpenChange={(o) => !o && setRemoving(null)}
+        title="تعطيل المستخدم"
+        description={removing ? `سيُعطَّل حساب "${removing.name}" ولن يتمكن من الدخول.` : ""}
+        confirmLabel="تعطيل"
+        variant="destructive"
+        onConfirm={() => {
+          if (removing) deactivate.mutate(removing.id);
+          setRemoving(null);
+        }}
+      />
+
+      <Dialog open={editing !== null} onOpenChange={(o) => !o && setEditing(null)}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>{editing?.id ? "تعديل مستخدم" : "إضافة مستخدم"}</DialogTitle>
+            <DialogTitle>تعديل مستخدم</DialogTitle>
             <DialogDescription>
-              اختر الدور المناسب. للموظفين الجدد على أجهزة أخرى استخدم رمز الدعوة أدناه.
+              عدّل الاسم أو البريد أو الدور أو حالة الحساب. الرقم السري يختاره الموظف بنفسه.
             </DialogDescription>
           </DialogHeader>
           {editing && (
             <div className="grid gap-3">
-              <div className="grid gap-1.5">
-                <Label>الاسم</Label>
+              <FormField label="الاسم">
                 <Input
-                  value={editing.name}
-                  onChange={(e) => setEditing({ ...editing, name: e.target.value })}
+                  value={editing.draft.name}
+                  onChange={(e) =>
+                    setEditing({ ...editing, draft: { ...editing.draft, name: e.target.value } })
+                  }
                 />
-              </div>
-              <div className="grid gap-1.5">
-                <Label>البريد (اختياري)</Label>
+              </FormField>
+              <FormField label="البريد">
                 <Input
                   type="email"
-                  value={editing.email}
-                  onChange={(e) => setEditing({ ...editing, email: e.target.value })}
+                  value={editing.draft.email}
+                  onChange={(e) =>
+                    setEditing({ ...editing, draft: { ...editing.draft, email: e.target.value } })
+                  }
                 />
-              </div>
-              <div className="grid gap-1.5">
-                <Label>كلمة المرور (لتعيين الرقم السري أول مرة)</Label>
-                <Input
-                  type="text"
-                  value={editing.password}
-                  onChange={(e) => setEditing({ ...editing, password: e.target.value })}
-                />
-              </div>
-              <div className="grid gap-1.5">
-                <Label>الدور</Label>
+              </FormField>
+              <FormField label="الدور" htmlFor="user-role">
                 <Select
-                  value={editing.role}
-                  onValueChange={(v) => setEditing({ ...editing, role: v as UserRole })}
+                  value={editing.draft.role}
+                  disabled={isSelf}
+                  onValueChange={(v) =>
+                    setEditing({ ...editing, draft: { ...editing.draft, role: v as UserRole } })
+                  }
                 >
-                  <SelectTrigger>
+                  <SelectTrigger id="user-role">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
                     {(Object.keys(ROLE_LABEL) as UserRole[]).map((r) => (
-                      <SelectItem key={r} value={r}>
+                      <SelectItem key={r} value={r} disabled={adminReserved && r === "admin"}>
                         {ROLE_LABEL[r]}
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
-              </div>
+              </FormField>
               <div className="flex items-center justify-between rounded-lg border px-3 py-2">
-                <Label>الحساب مفعّل</Label>
+                <Label htmlFor="user-active">الحساب مفعّل</Label>
                 <Switch
-                  checked={editing.active}
-                  onCheckedChange={(v) => setEditing({ ...editing, active: v })}
+                  id="user-active"
+                  checked={editing.draft.active}
+                  disabled={isSelf}
+                  onCheckedChange={(v) =>
+                    setEditing({ ...editing, draft: { ...editing.draft, active: v } })
+                  }
                 />
               </div>
             </div>
           )}
           <DialogFooter>
-            <Button variant="outline" onClick={() => setOpen(false)}>
+            <Button variant="outline" onClick={() => setEditing(null)}>
               إلغاء
             </Button>
-            <Button onClick={save}>حفظ</Button>
+            <Button
+              onClick={() => editing && save.mutate(editing)}
+              disabled={!editing?.draft.name.trim() || save.isPending}
+            >
+              حفظ
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

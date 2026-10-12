@@ -9,15 +9,15 @@
 
 ## Executive Summary
 
-| # | Problem | Verdict | Severity |
-|---|---|---|---|
-| 1 | Factory reset reopens into a dead "Restore Session" screen | **Confirmed, root cause found in code** | **P0** |
-| 2 | Test/business data in the current desktop data roots | **Confirmed (runtime + repo carriers)** | P1 |
-| 3 | Render Hub test data cleanup | **Safe procedure derived from existing wipe code** | P1 |
-| 4 | Repo temporary/AI/artifact files | **Confirmed (16 MB of committed dumps/output)** | P1 |
-| 5 | Clean-build = first-use guarantee | **Achievable; needs a defined cleaning checklist** | P1 |
-| 6 | Upgrade vs uninstall | **Upgrade path is correct by design; two gaps remain** | P1 |
-| 7 | Newly discovered release blockers | **6 additional findings** (2 high) | — |
+| #   | Problem                                                    | Verdict                                                | Severity |
+| --- | ---------------------------------------------------------- | ------------------------------------------------------ | -------- |
+| 1   | Factory reset reopens into a dead "Restore Session" screen | **Confirmed, root cause found in code**                | **P0**   |
+| 2   | Test/business data in the current desktop data roots       | **Confirmed (runtime + repo carriers)**                | P1       |
+| 3   | Render Hub test data cleanup                               | **Safe procedure derived from existing wipe code**     | P1       |
+| 4   | Repo temporary/AI/artifact files                           | **Confirmed (16 MB of committed dumps/output)**        | P1       |
+| 5   | Clean-build = first-use guarantee                          | **Achievable; needs a defined cleaning checklist**     | P1       |
+| 6   | Upgrade vs uninstall                                       | **Upgrade path is correct by design; two gaps remain** | P1       |
+| 7   | Newly discovered release blockers                          | **6 additional findings** (2 high)                     | —        |
 
 ---
 
@@ -32,21 +32,21 @@ The factory reset is defined too narrowly. `apply_requested_factory_reset` (`des
 3. **`DataMissing` offers only unusable options.** `db_meta.rs:291` defines the `DataMissing` choices as exactly `[restore_backup, locate, start_new]`. `restore_backup` needs a backup ZIP the operator does not have (their data is intact in `data.reset-*`, not a restorable archive); `locate` needs a `motard.db` file. Hence "no usable options."
 4. **The recovery screen.** `main.rs:84-108,196-211` (`ask_user`) renders the Tauri recovery window with `desktop/src-tauri/resources/server/web/recovery.html:75` — "جارٍ استعادة التشغيل…" — which is the dead-end screen the app reopens into after the reset-triggered restart (`main.rs:972-980`: `apply_factory_reset_now` writes the flag then `app.restart()`).
 5. **WebView2 localStorage survives.** Auth tokens and license markers live in localStorage (`src/infrastructure/auth/TokenProvider.ts:3-4`; `src/lib/license-state.ts:6-8`): `erp.auth.accessToken/refreshToken`, `erp.license.key/activationId/hostname`, `installTenantId`. The Rust reset never clears them, so the reopened SPA holds a stored session and an "activated" license marker against an empty database.
-6. **Session restore masks the empty DB.** `JWT_SECRET` comes from `secrets.dat` (`stack.rs:676-688`), which also survives the reset — so the stored token *verifies*. `/api/auth/me` on the fresh DB answers **401 UNAUTHORIZED "user not found"** (`backend/src/presentation/routes/auth.route.ts:215-218`) because no user exists. `AuthGate.tsx:37-51` shows the second "جاري استعادة الجلسة…" spinner, then falls to `UserPickerPage`, whose device-roster call returns **503 SETUP_REQUIRED** (`auth.route.ts:460-476`) because the fresh DB has no completed `installation_state` — a second dead-end.
+6. **Session restore masks the empty DB.** `JWT_SECRET` comes from `secrets.dat` (`stack.rs:676-688`), which also survives the reset — so the stored token _verifies_. `/api/auth/me` on the fresh DB answers **401 UNAUTHORIZED "user not found"** (`backend/src/presentation/routes/auth.route.ts:215-218`) because no user exists. `AuthGate.tsx:37-51` shows the second "جاري استعادة الجلسة…" spinner, then falls to `UserPickerPage`, whose device-roster call returns **503 SETUP_REQUIRED** (`auth.route.ts:460-476`) because the fresh DB has no completed `installation_state` — a second dead-end.
 7. **Reinstall cannot fix it.** Every stuck piece (`pgdata/`, WebView localStorage, `secrets.dat`, `data.reset-*`) lives in AppData, not the install dir — the same survival-in-AppData mechanism already proven as P-4 in `docs/PRD-DESKTOP-SQLITE.md:35`.
 
-**Git window:** `5df80b11` ("SQLite desktop engine") switched the runtime to `data/` + SQLite but left the `pgdata` check in `db_meta.rs:312`; `f2b8b263` introduced session-restore handling. The factory-reset tests (`stack.rs:1009-1056`) only assert the flag is consumed and the archive exists — no test covers `evaluate_startup_state` *after* a reset on a root containing `pgdata` or an unmoveable manifest, which is exactly the regression window.
+**Git window:** `5df80b11` ("SQLite desktop engine") switched the runtime to `data/` + SQLite but left the `pgdata` check in `db_meta.rs:312`; `f2b8b263` introduced session-restore handling. The factory-reset tests (`stack.rs:1009-1056`) only assert the flag is consumed and the archive exists — no test covers `evaluate_startup_state` _after_ a reset on a root containing `pgdata` or an unmoveable manifest, which is exactly the regression window.
 
 ## 1.2 Affected files / components
 
-| Component | File |
-|---|---|
-| Reset execution + archive | `desktop/src-tauri/src/runtime/stack.rs:160-231,972-980,1009-1056` |
-| Startup state machine | `desktop/src-tauri/src/db_meta.rs:19-21,27-33,291,308-322,336-342,361-401` |
-| Boot / recovery prompt | `desktop/src-tauri/src/main.rs:84-108,196-211,305-342,957,972-980` |
-| Recovery UI | `desktop/src-tauri/resources/server/web/recovery.html:75` |
-| Frontend session gate | `src/infrastructure/auth/TokenProvider.ts`, `src/lib/license-state.ts`, `src/lib/AuthGate.tsx` (UserPickerPage) |
-| Backend gates | `backend/src/presentation/routes/auth.route.ts:201-230,460-476` |
+| Component                 | File                                                                                                            |
+| ------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| Reset execution + archive | `desktop/src-tauri/src/runtime/stack.rs:160-231,972-980,1009-1056`                                              |
+| Startup state machine     | `desktop/src-tauri/src/db_meta.rs:19-21,27-33,291,308-322,336-342,361-401`                                      |
+| Boot / recovery prompt    | `desktop/src-tauri/src/main.rs:84-108,196-211,305-342,957,972-980`                                              |
+| Recovery UI               | `desktop/src-tauri/resources/server/web/recovery.html:75`                                                       |
+| Frontend session gate     | `src/infrastructure/auth/TokenProvider.ts`, `src/lib/license-state.ts`, `src/lib/AuthGate.tsx` (UserPickerPage) |
+| Backend gates             | `backend/src/presentation/routes/auth.route.ts:201-230,460-476`                                                 |
 
 ## 1.3 Dependencies
 
@@ -99,16 +99,16 @@ Delete these directories/values (nothing inside them is required-to-keep; the FR
 
 ## 2.3 Repo files that are test-data carriers
 
-| File/Dir | Status | Action |
-|---|---|---|
-| `backup\erp-dev-20260905-170828.dump`, `erp-dev-pre-rls-20260905-195632.dump`, `backup\pgdump-staging\`, `backup\_verify_*.sql` | ignored (`/backup/`, `.gitignore:95`) — 84 MB PG-era dev-business snapshots | Delete from disk |
-| `backend\sync-test-a.log` … `sync-test-hub.log` (5 files) | ignored (`backend/.gitignore:4`) | Delete from disk |
-| `logs\erp.1.log`, `erp.2.log` | ignored (`.gitignore:2`) | Delete from disk |
-| `test-results\` | ignored (`.gitignore:28`) — cert-audit artifacts naming test records (INV-2863, fabrics, parties) | Delete from disk |
-| `backend\seed-test-admin.mjs` | tracked, self-guarded (`NODE_ENV=test` / `ALLOW_TEST_SEED=1`) | **Keep** (tool, not data) |
-| `backend\scripts\seed-test-baseline.mjs` | tracked, idempotent, `erp_test` only | **Keep** (tool) |
-| `backend\bootstrap-hub.mjs`, `backend\reset-hub-admin.mjs` | tracked, one-shot manual tools | **Keep** (tools) |
-| `backend\.env` | gitignored; **contains live secrets** (JWT_SECRET, APP_MASTER_KEY, LICENSE_SIGNING_KEY) | **Keep — required by product** (see §5.3) |
+| File/Dir                                                                                                                        | Status                                                                                            | Action                                    |
+| ------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- | ----------------------------------------- |
+| `backup\erp-dev-20260905-170828.dump`, `erp-dev-pre-rls-20260905-195632.dump`, `backup\pgdump-staging\`, `backup\_verify_*.sql` | ignored (`/backup/`, `.gitignore:95`) — 84 MB PG-era dev-business snapshots                       | Delete from disk                          |
+| `backend\sync-test-a.log` … `sync-test-hub.log` (5 files)                                                                       | ignored (`backend/.gitignore:4`)                                                                  | Delete from disk                          |
+| `logs\erp.1.log`, `erp.2.log`                                                                                                   | ignored (`.gitignore:2`)                                                                          | Delete from disk                          |
+| `test-results\`                                                                                                                 | ignored (`.gitignore:28`) — cert-audit artifacts naming test records (INV-2863, fabrics, parties) | Delete from disk                          |
+| `backend\seed-test-admin.mjs`                                                                                                   | tracked, self-guarded (`NODE_ENV=test` / `ALLOW_TEST_SEED=1`)                                     | **Keep** (tool, not data)                 |
+| `backend\scripts\seed-test-baseline.mjs`                                                                                        | tracked, idempotent, `erp_test` only                                                              | **Keep** (tool)                           |
+| `backend\bootstrap-hub.mjs`, `backend\reset-hub-admin.mjs`                                                                      | tracked, one-shot manual tools                                                                    | **Keep** (tools)                          |
+| `backend\.env`                                                                                                                  | gitignored; **contains live secrets** (JWT_SECRET, APP_MASTER_KEY, LICENSE_SIGNING_KEY)           | **Keep — required by product** (see §5.3) |
 
 ## 2.4 Required to keep (do NOT clean)
 
@@ -131,6 +131,7 @@ Hub: Render Postgres `motard-sync-test1` + Redis + API service `ME`. **No dedica
 ## 3.2 Safe wipe procedure (per-tenant, transactional)
 
 Pattern sources (already in repo):
+
 - FK-safe delete order: `backend/scripts/restore-from-backup.mjs:220-230` — business tables first, then sync state with children of `sync_devices` deleted **before** `sync_devices`.
 - RLS context: `backend/scripts/durability-proof.mjs:120-188` — `set_config('app.current_tenant_id', tenant, true)` + `set_config('app.platform_mode','on',true)` + `SET LOCAL row_security = off` + per-table SAVEPOINTs. Commit `7314c174` proves RLS tenant context is mandatory for device-row operations (`FORCE RLS` applies to the table owner — `bootstrap-hub.mjs:32`).
 - Trigger handling: `restore-from-backup.mjs:264-280` — must `DROP TRIGGER trg_ledger_entries_append_only` inside the transaction and recreate after; otherwise the wipe fails halfway on `ledger_entries`.
@@ -163,18 +164,18 @@ Pre/post counts per table = 0 (business, sync); hub `/api/sync/status` healthy; 
 
 ## 4.1 Committed bloat (tracked in git — needs a removal commit)
 
-| Path | Size | Status | Verdict |
-|---|---|---|---|
-| `scripts/parity/out/` | 889 files, **12 MB** test-run output (diff.txt, desktop-seed.json, durability-sqlite/report.json) | tracked, **not gitignored** | **Remove from tracking + add to .gitignore** |
-| `docs/durability-proof/` | 41 files, **4.8 MB** raw ndjson dumps (`dump-2026-10-01T*`) | tracked | **Remove raw dumps from tracking** (keep `docs/DURABILITY-PROOF-RESULTS.md`, which is the real evidence record) |
-| `scripts/parity/baseline/ref/` | 67 files, 940 KB frozen PostgreSQL reference | tracked; README says the frozen baseline is intentional | **Keep** (deliberate parity input) |
-| `my-project/.specify/` | 20 files speckit scaffolding from a throwaway dir name | tracked | **Remove** (verify `specs/` docs first) |
-| `desktop/retired-postgres/scripts/` | 5 tracked files, superseded PG-era code | tracked | **Keep for now** (referenced by build gates; mark for later retirement) |
-| `bunfig.toml` | 463 B; repo uses npm, no bun references in package.json | tracked | **Remove** |
-| `skills-lock.json` | 259 B AI/skill lockfile | tracked | **Remove** (AI tooling) |
-| `ERP_GENOME.md` | 38 KB agent-generated system map | tracked | Decision: keep (useful doc) or remove; **owner decision** |
-| One-off AI plan docs (`TASK_PLAN_OPENING_BALANCE_AND_PRINT.md`, `AUDIT-V2-VERIFICATION.md`, `SYSTEM-FULL-AUDIT.md`, `CORRECTIVE-ACTION-PLAN-2026-10-07.md`) | tracked | Session notes superseded by `PROJECT-STATUS.md` convention | Owner decision — `PROJECT-STATUS.md:5-9` already establishes the single-source-of-truth rule |
-| `hotpath/policy.toml` | tracked, referenced by hotpath docs | **Keep** |
+| Path                                                                                                                                                        | Size                                                                                              | Status                                                     | Verdict                                                                                                         |
+| ----------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- | ---------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| `scripts/parity/out/`                                                                                                                                       | 889 files, **12 MB** test-run output (diff.txt, desktop-seed.json, durability-sqlite/report.json) | tracked, **not gitignored**                                | **Remove from tracking + add to .gitignore**                                                                    |
+| `docs/durability-proof/`                                                                                                                                    | 41 files, **4.8 MB** raw ndjson dumps (`dump-2026-10-01T*`)                                       | tracked                                                    | **Remove raw dumps from tracking** (keep `docs/DURABILITY-PROOF-RESULTS.md`, which is the real evidence record) |
+| `scripts/parity/baseline/ref/`                                                                                                                              | 67 files, 940 KB frozen PostgreSQL reference                                                      | tracked; README says the frozen baseline is intentional    | **Keep** (deliberate parity input)                                                                              |
+| `my-project/.specify/`                                                                                                                                      | 20 files speckit scaffolding from a throwaway dir name                                            | tracked                                                    | **Remove** (verify `specs/` docs first)                                                                         |
+| `desktop/retired-postgres/scripts/`                                                                                                                         | 5 tracked files, superseded PG-era code                                                           | tracked                                                    | **Keep for now** (referenced by build gates; mark for later retirement)                                         |
+| `bunfig.toml`                                                                                                                                               | 463 B; repo uses npm, no bun references in package.json                                           | tracked                                                    | **Remove**                                                                                                      |
+| `skills-lock.json`                                                                                                                                          | 259 B AI/skill lockfile                                                                           | tracked                                                    | **Remove** (AI tooling)                                                                                         |
+| `ERP_GENOME.md`                                                                                                                                             | 38 KB agent-generated system map                                                                  | tracked                                                    | Decision: keep (useful doc) or remove; **owner decision**                                                       |
+| One-off AI plan docs (`TASK_PLAN_OPENING_BALANCE_AND_PRINT.md`, `AUDIT-V2-VERIFICATION.md`, `SYSTEM-FULL-AUDIT.md`, `CORRECTIVE-ACTION-PLAN-2026-10-07.md`) | tracked                                                                                           | Session notes superseded by `PROJECT-STATUS.md` convention | Owner decision — `PROJECT-STATUS.md:5-9` already establishes the single-source-of-truth rule                    |
+| `hotpath/policy.toml`                                                                                                                                       | tracked, referenced by hotpath docs                                                               | **Keep**                                                   |
 
 ## 4.2 Untracked disk-only cleanup (safe to delete from the working tree)
 
@@ -286,4 +287,4 @@ The in-app updater gets a verified pre-update backup + WAL checkpoint, but a **m
 5. **Decide/fix F3, F4, F6, F7** with the owner; each has a defined validation.
 6. Final gate: full checklist §5.2 + §6.4 acceptance run + §1.6 factory-reset E2E before shipping.
 
-*Nothing in this document has been implemented. Owner approval is required before any code, data, or file changes.*
+_Nothing in this document has been implemented. Owner approval is required before any code, data, or file changes._

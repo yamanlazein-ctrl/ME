@@ -74,7 +74,10 @@ function DocumentAutocomplete({
   placeholder,
   options,
   onPick,
+  id,
 }: {
+  /** Put on the trigger button, for a field label's `htmlFor`. */
+  id?: string;
   selectedLabel: string;
   placeholder: string;
   options: DocOption[];
@@ -100,6 +103,7 @@ function DocumentAutocomplete({
     >
       <PopoverTrigger asChild>
         <button
+          id={id}
           type="button"
           className={cn(
             "flex h-10 w-full items-center justify-between gap-2 rounded-md border border-border bg-background px-3 text-right text-sm hover:border-primary focus:border-primary focus:outline-none",
@@ -479,8 +483,9 @@ function PrintReceivePage() {
                   <div className="space-y-3">
                     <GroupSection title="سند الإرسال والصنف">
                       <div className="grid gap-3 md:grid-cols-2">
-                        <CardField label="سند الإرسال" required>
+                        <CardField label="سند الإرسال" required htmlFor={`${line.key}-job`}>
                           <DocumentAutocomplete
+                            id={`${line.key}-job`}
                             selectedLabel={labelForLine(line)}
                             placeholder="ابحث برقم السند أو القماش أو المطبعة..."
                             options={optionsForLine(line)}

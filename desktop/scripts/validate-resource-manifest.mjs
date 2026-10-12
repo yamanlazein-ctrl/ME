@@ -99,10 +99,15 @@ export function checkSqliteEngineLoads(resources) {
     "d.exec('create table t(x integer) strict');d.prepare('insert into t values (?)').run(9007199254740993n);" +
     "console.log(JSON.stringify({v,ok:d.prepare('select x from t').safeIntegers(true).get().x===9007199254740993n}))";
   const r = spawnSync(node, ["-e", probe, addonDir], { encoding: "utf8", windowsHide: true });
-  if (r.status !== 0) return [`bundled node.exe cannot load better-sqlite3: exit ${r.status ?? r.error?.code} ${(r.stderr || "").slice(0, 300)}`];
+  if (r.status !== 0)
+    return [
+      `bundled node.exe cannot load better-sqlite3: exit ${r.status ?? r.error?.code} ${(r.stderr || "").slice(0, 300)}`,
+    ];
   try {
     const out = JSON.parse(r.stdout.trim().split(/\r?\n/).at(-1));
-    return out.ok ? [] : [`better-sqlite3 loaded (SQLite ${out.v}) but lost 64-bit integer precision`];
+    return out.ok
+      ? []
+      : [`better-sqlite3 loaded (SQLite ${out.v}) but lost 64-bit integer precision`];
   } catch {
     return [`unexpected probe output: ${r.stdout.slice(0, 200)}`];
   }
@@ -110,7 +115,8 @@ export function checkSqliteEngineLoads(resources) {
 
 /** The desktop is SQLite-only (US2, SC-002): no PostgreSQL artefact may be packaged. */
 export function checkNoPostgresArtefacts(resources) {
-  const forbidden = /^(postgres\.exe|pg_ctl\.exe|initdb\.exe|pg_dump\.exe|pg_restore\.exe|psql\.exe|libpq.*\.dll|db-port\.txt)$/i;
+  const forbidden =
+    /^(postgres\.exe|pg_ctl\.exe|initdb\.exe|pg_dump\.exe|pg_restore\.exe|psql\.exe|libpq.*\.dll|db-port\.txt)$/i;
   const found = [];
   const walk = (dir, rel = "") => {
     let entries = [];
@@ -158,7 +164,9 @@ function main() {
 
   // --skip-exec-check exists only for unit-test fixtures (dummy files); the
   // release build (before-build.cmd) never passes it.
-  const engineFailures = process.argv.includes("--skip-exec-check") ? [] : checkSqliteEngineLoads(resources);
+  const engineFailures = process.argv.includes("--skip-exec-check")
+    ? []
+    : checkSqliteEngineLoads(resources);
   if (engineFailures.length) {
     console.error("[validate-resource-manifest] FAIL: the bundled SQLite engine does not load");
     for (const f of engineFailures) console.error(`    - ${f}`);
@@ -167,7 +175,9 @@ function main() {
 
   const pgLeftovers = checkNoPostgresArtefacts(resources);
   if (pgLeftovers.length) {
-    console.error("[validate-resource-manifest] FAIL: PostgreSQL artefacts would be packaged (SQLite-only desktop)");
+    console.error(
+      "[validate-resource-manifest] FAIL: PostgreSQL artefacts would be packaged (SQLite-only desktop)",
+    );
     for (const f of pgLeftovers) console.error(`    - ${f}`);
     process.exit(1);
   }
@@ -180,8 +190,7 @@ function main() {
 }
 
 const isMain =
-  process.argv[1] &&
-  fileURLToPath(import.meta.url) === process.argv[1].replace(/\//g, "\\");
+  process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1].replace(/\//g, "\\");
 // Windows path compare is messy; always run main when not imported for tests.
 if (process.argv[1] && process.argv[1].includes("validate-resource-manifest")) {
   main();

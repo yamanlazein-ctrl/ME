@@ -45,14 +45,14 @@ The SQLite baseline now seeds `motard_sequences('sync_inbox_applied_seq', 1)`, a
 
 `node backend/scripts/verify-sync-multidevice.mjs --ac8 --device-engine sqlite` (or `postgres`):
 
-| Check | SQLite desktops | PostgreSQL desktops |
-|---|---|---|
-| hub / A / B hold 50 invoices | PASS | PASS |
-| identical invoice numbers on A, B, hub | PASS | PASS |
-| A and B outboxes drained | PASS | PASS |
-| one hub conflict for the same-record edit, resolved keep-server | PASS | PASS |
-| A business state identical to the hub | **FAIL** | **FAIL** (same rows) |
-| B business state identical to the hub | **FAIL** | **FAIL** (same rows) |
+| Check                                                           | SQLite desktops | PostgreSQL desktops  |
+| --------------------------------------------------------------- | --------------- | -------------------- |
+| hub / A / B hold 50 invoices                                    | PASS            | PASS                 |
+| identical invoice numbers on A, B, hub                          | PASS            | PASS                 |
+| A and B outboxes drained                                        | PASS            | PASS                 |
+| one hub conflict for the same-record edit, resolved keep-server | PASS            | PASS                 |
+| A business state identical to the hub                           | **FAIL**        | **FAIL** (same rows) |
+| B business state identical to the hub                           | **FAIL**        | **FAIL** (same rows) |
 
 The comparison covers every business table:
 
@@ -120,18 +120,18 @@ scenario after AC-8:
 5. B is restored through the same `restoreBackupV3` call as the desktop's startup "restore" choice.
 6. B syncs, then works on (1 invoice).
 
-| Check | Result |
-|---|---|
-| first run after the restore reconciles before pushing anything | PASS |
-| reconcile done under a NEW sync identity | PASS |
-| the hub knows the new identity as its own device (own id and fingerprint) | PASS |
-| units the hub already held were NOT pushed again (SY-7) | PASS (1 push after the restore: the new invoice) |
-| pushes after the restore carry the new identity | PASS |
-| restored pending units acknowledged `synced` locally | PASS (3/3) |
-| B got its own post-backup work back from the hub | PASS (5/5) |
-| B got the peer's newer data | PASS |
-| A, B and hub hold the same 61 invoices, no duplicate number | PASS |
-| A / B business state = hub | FAIL: **only** pre-existing items 1–3 below, same as without a restore |
+| Check                                                                     | Result                                                                 |
+| ------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| first run after the restore reconciles before pushing anything            | PASS                                                                   |
+| reconcile done under a NEW sync identity                                  | PASS                                                                   |
+| the hub knows the new identity as its own device (own id and fingerprint) | PASS                                                                   |
+| units the hub already held were NOT pushed again (SY-7)                   | PASS (1 push after the restore: the new invoice)                       |
+| pushes after the restore carry the new identity                           | PASS                                                                   |
+| restored pending units acknowledged `synced` locally                      | PASS (3/3)                                                             |
+| B got its own post-backup work back from the hub                          | PASS (5/5)                                                             |
+| B got the peer's newer data                                               | PASS                                                                   |
+| A, B and hub hold the same 61 invoices, no duplicate number               | PASS                                                                   |
+| A / B business state = hub                                                | FAIL: **only** pre-existing items 1–3 below, same as without a restore |
 
 Along the way, the restore exposed a stale-number-block collision ("رقم الفاتورة مكرر" on B's first post-restore
 invoice). It is fixed by retiring the previous identities' blocks and mapping the old identity, as described above.
@@ -145,14 +145,14 @@ the hub is unreachable (a proxy refuses connections), and the device and hub clo
 via a test-only preload (`lib/clockShift.mjs`). At each step the device creates an invoice, cancels the previous
 one, records a receipt and a stock-in, and reads its statement, sync status and licence status. Then it reconnects.
 
-| Check | PostgreSQL | SQLite |
-|---|---|---|
-| ERP work offline at +1, +7, +30 days | PASS | PASS |
-| ERP work offline at **+90 days (2027-01-03)** | **refused**: invoice and receipt 422 «نفدت كتلة الترقيم … لا توجد كتلة للسنة الحالية» | **same** |
-| licence status identical at every step (no offline expiry) | PASS (404, no licence row on the test tenant) | PASS |
-| all offline work queued (17 units) and drained after reconnecting | PASS | PASS |
-| device = hub after reconnecting (`cancelled_at` aside) | PASS | PASS |
-| PostgreSQL vs SQLite canonical diff | **PASS: empty diff across 107 files** | |
+| Check                                                             | PostgreSQL                                                                            | SQLite   |
+| ----------------------------------------------------------------- | ------------------------------------------------------------------------------------- | -------- |
+| ERP work offline at +1, +7, +30 days                              | PASS                                                                                  | PASS     |
+| ERP work offline at **+90 days (2027-01-03)**                     | **refused**: invoice and receipt 422 «نفدت كتلة الترقيم … لا توجد كتلة للسنة الحالية» | **same** |
+| licence status identical at every step (no offline expiry)        | PASS (404, no licence row on the test tenant)                                         | PASS     |
+| all offline work queued (17 units) and drained after reconnecting | PASS                                                                                  | PASS     |
+| device = hub after reconnecting (`cancelled_at` aside)            | PASS                                                                                  | PASS     |
+| PostgreSQL vs SQLite canonical diff                               | **PASS: empty diff across 107 files**                                                 |          |
 
 **SY-2 conflict (owner decision needed; not changed, as T104 requires).** Document number blocks are reserved per
 calendar year, and a device holds blocks only for the year in which it was last online. A device that stays offline

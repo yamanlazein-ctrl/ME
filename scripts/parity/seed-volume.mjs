@@ -43,7 +43,9 @@ if (!url) throw new Error("DATABASE_URL is required (disposable database)");
 const target = new URL(url);
 const dbName = target.pathname.slice(1);
 if (!/^erp_(volume|durability|parity)/.test(dbName)) {
-  throw new Error(`refusing to seed "${dbName}": only disposable erp_volume*/erp_parity*/erp_durability* databases`);
+  throw new Error(
+    `refusing to seed "${dbName}": only disposable erp_volume*/erp_parity*/erp_durability* databases`,
+  );
 }
 
 const admin = new URL(url);
@@ -57,7 +59,9 @@ if ((await a.query("SELECT 1 FROM pg_database WHERE datname=$1", [dbName])).rowC
 await a.end();
 
 const pool = new pg.Pool({ connectionString: url, max: 1 });
-await migrate(drizzle(pool), { migrationsFolder: path.join(repoRoot, "backend", "src", "infrastructure", "orm", "migrations") });
+await migrate(drizzle(pool), {
+  migrationsFolder: path.join(repoRoot, "backend", "src", "infrastructure", "orm", "migrations"),
+});
 const c = await pool.connect();
 const t0 = Date.now();
 const tenantId = randomUUID();
@@ -67,7 +71,10 @@ const deepShare = Math.round(INVOICES * 0.2);
 await c.query("BEGIN");
 await c.query("SELECT set_config('app.platform_mode','on',true)");
 await c.query("SELECT set_config('app.current_tenant_id',$1,true)", [tenantId]);
-await c.query("INSERT INTO tenants (id,name,slug) VALUES ($1,'Volume Co',$2)", [tenantId, `vol-${tenantId.slice(0, 8)}`]);
+await c.query("INSERT INTO tenants (id,name,slug) VALUES ($1,'Volume Co',$2)", [
+  tenantId,
+  `vol-${tenantId.slice(0, 8)}`,
+]);
 // parties: p1..pN; p1 is the deep customer
 await c.query(
   `INSERT INTO parties (id,tenant_id,kind,code,name,currency,opening_balance,status,version)
@@ -110,11 +117,25 @@ await c.query("SELECT set_config('app.platform_mode','on',true)");
 await c.query("SELECT set_config('app.current_tenant_id',$1,true)", [tenantId]);
 const one = async (q, p = [tenantId]) => (await c.query(q, p)).rows[0];
 const counts = {
-  customersList: Number((await one("SELECT count(*) n FROM parties WHERE tenant_id=$1 AND kind='customer' AND status<>'cancelled'")).n),
-  suppliersList: Number((await one("SELECT count(*) n FROM parties WHERE tenant_id=$1 AND kind='supplier' AND status<>'cancelled'")).n),
+  customersList: Number(
+    (
+      await one(
+        "SELECT count(*) n FROM parties WHERE tenant_id=$1 AND kind='customer' AND status<>'cancelled'",
+      )
+    ).n,
+  ),
+  suppliersList: Number(
+    (
+      await one(
+        "SELECT count(*) n FROM parties WHERE tenant_id=$1 AND kind='supplier' AND status<>'cancelled'",
+      )
+    ).n,
+  ),
   invoices: Number((await one("SELECT count(*) n FROM invoices WHERE tenant_id=$1")).n),
   ledgerRows: Number((await one("SELECT count(*) n FROM ledger_entries WHERE tenant_id=$1")).n),
-  cashboxDailyRows: Number((await one("SELECT count(*) n FROM cashbox_daily_balances WHERE tenant_id=$1")).n),
+  cashboxDailyRows: Number(
+    (await one("SELECT count(*) n FROM cashbox_daily_balances WHERE tenant_id=$1")).n,
+  ),
 };
 // statements: ordered ledger ids per party (statement order: date, created_at, id) → one digest
 const h = createHash("sha256");
@@ -140,7 +161,12 @@ const baseline = {
   engine: "postgres",
   params: { invoices: INVOICES, parties: PARTIES, deepShare },
   counts,
-  statements: { parties: cur.rows.length, totalLines: statementLines, deepest, sha256: h.digest("hex") },
+  statements: {
+    parties: cur.rows.length,
+    totalLines: statementLines,
+    deepest,
+    sha256: h.digest("hex"),
+  },
   cashboxClosingSYP: closing?.v ?? null,
   tenantId,
 };

@@ -36,4 +36,3 @@ export function findSupplierByExactName<T extends NameMatchable>(
   if (!needle) return null;
   return suppliers.find((s) => normalize(s.name) === needle) ?? null;
 }
-

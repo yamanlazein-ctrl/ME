@@ -1,6 +1,6 @@
 import { type ReactNode, useState } from "react";
 import { cn } from "@/lib/utils";
-import { Label } from "@/components/ui/label";
+import { FormField } from "@/components/common/FormField";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -27,7 +27,10 @@ export function FormattedAmountInput({
   ariaLabel,
   onKeyDown,
   showZero,
+  id,
 }: {
+  /** Forwarded to the input so a field label can name it (hermes F-011). */
+  id?: string;
   value: number | "";
   onChange: (v: number | "") => void;
   className?: string;
@@ -53,6 +56,7 @@ export function FormattedAmountInput({
         : formatThousands(value);
   return (
     <Input
+      id={id}
       type="text"
       inputMode="decimal"
       dir="ltr"
@@ -79,6 +83,8 @@ export function FormattedAmountInput({
   );
 }
 
+FormattedAmountInput.autoWireId = true;
+
 /**
  * "الدفع" dropdown shared by the sale and purchase invoice headers.
  * Always lists the current value even if it is not among the enabled methods
@@ -89,10 +95,13 @@ export function PaymentMethodSelect({
   value,
   onChange,
   methods,
+  id,
 }: {
   value: string;
   onChange: (name: string) => void;
   methods: { id: string; name: string }[];
+  /** Put on the trigger, for a field label's `htmlFor`. */
+  id?: string;
 }) {
   const options = methods.some((m) => m.name === value)
     ? methods
@@ -101,7 +110,7 @@ export function PaymentMethodSelect({
       : methods;
   return (
     <Select value={value} onValueChange={onChange}>
-      <SelectTrigger className="!h-9">
+      <SelectTrigger id={id} className="!h-9">
         <SelectValue placeholder="اختر طريقة الدفع" />
       </SelectTrigger>
       <SelectContent>
@@ -115,14 +124,25 @@ export function PaymentMethodSelect({
   );
 }
 
-export function HeaderField({ label, children }: { label: string; children: ReactNode }) {
+// hermes F-011: both field shells name their control through FormField's wiring — an Input /
+// FormattedAmountInput child automatically, a Select / combobox via `htmlFor` + the trigger's id.
+export function HeaderField({
+  label,
+  children,
+  htmlFor,
+}: {
+  label: string;
+  children: ReactNode;
+  htmlFor?: string;
+}) {
   return (
-    <div>
-      <Label className="mb-1 block text-[10.5px] font-semibold uppercase tracking-wide text-muted-foreground">
-        {label}
-      </Label>
+    <FormField
+      label={label}
+      htmlFor={htmlFor}
+      labelClassName="mb-1 block text-[10.5px] font-semibold uppercase tracking-wide text-muted-foreground"
+    >
       {children}
-    </div>
+    </FormField>
   );
 }
 
@@ -130,19 +150,26 @@ export function CardField({
   label,
   required,
   children,
+  htmlFor,
 }: {
   label: string;
   required?: boolean;
   children: ReactNode;
+  htmlFor?: string;
 }) {
   return (
-    <div>
-      <Label className="mb-1 flex items-center gap-1 text-[11px] font-semibold text-muted-foreground">
-        {label}
-        {required && <span className="text-destructive">*</span>}
-      </Label>
+    <FormField
+      label={
+        <>
+          {label}
+          {required && <span className="text-destructive">*</span>}
+        </>
+      }
+      htmlFor={htmlFor}
+      labelClassName="mb-1 flex items-center gap-1 text-[11px] font-semibold text-muted-foreground"
+    >
       {children}
-    </div>
+    </FormField>
   );
 }
 

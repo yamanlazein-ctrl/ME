@@ -15,9 +15,15 @@ const options = {
       // matches string aliases as exact-or-prefix, so a bare key listed first
       // would swallow "@erp/shared/statementPaging" and rewrite it under
       // index.ts.
-      "@erp/shared/statementPaging": path.resolve(__dirname, "./packages/shared/src/statementPaging.ts"),
+      "@erp/shared/statementPaging": path.resolve(
+        __dirname,
+        "./packages/shared/src/statementPaging.ts",
+      ),
       "@erp/shared/precision": path.resolve(__dirname, "./packages/shared/src/precision.ts"),
-      "@erp/shared/schemas/invoice.schema": path.resolve(__dirname, "./packages/shared/src/schemas/invoice.schema.ts"),
+      "@erp/shared/schemas/invoice.schema": path.resolve(
+        __dirname,
+        "./packages/shared/src/schemas/invoice.schema.ts",
+      ),
       "@erp/shared": path.resolve(__dirname, "./packages/shared/src/index.ts"),
     },
   },

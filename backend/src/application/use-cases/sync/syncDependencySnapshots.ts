@@ -1,6 +1,9 @@
 import { and, eq } from "drizzle-orm";
 import { resolveMasterSnapshotForReplay } from "./syncNumberCollision.js";
-import { getSyncDependencyStore, getSyncMaterializeStore } from "../../../infrastructure/repositories/engineStores.js";
+import {
+  getSyncDependencyStore,
+  getSyncMaterializeStore,
+} from "../../../infrastructure/repositories/engineStores.js";
 import type { DB } from "../../../infrastructure/orm/drizzle.js";
 import { runWithTenantContext } from "../../../infrastructure/orm/tenant-context.js";
 import { parties } from "../../../infrastructure/orm/schemas/party.table.js";
@@ -486,11 +489,19 @@ async function ensureInvoiceSyncDependenciesInTx(
   deps: InvoiceSyncDependencies,
   ctx: TenantContext,
 ): Promise<void> {
-  await (await getSyncDependencyStore()).ensureDependenciesInTx(tx, deps, ctx, {
+  await (
+    await getSyncDependencyStore()
+  ).ensureDependenciesInTx(tx, deps, ctx, {
     tombstoneBlocks: syncTombstoneBlocksDependency,
     resolveMaster: (executor, kind, snap, tenantId) =>
-      resolveMasterSnapshotForReplay(executor as Parameters<typeof resolveMasterSnapshotForReplay>[0], kind, snap, tenantId),
-  });}
+      resolveMasterSnapshotForReplay(
+        executor as Parameters<typeof resolveMasterSnapshotForReplay>[0],
+        kind,
+        snap,
+        tenantId,
+      ),
+  });
+}
 
 export function parseDependenciesPayload(
   payload: Record<string, unknown>,

@@ -130,12 +130,13 @@ export function AppShell({
   const { data: me } = useCurrentUser();
   const logout = useLogout();
   const openConflictCount = useOpenSyncConflictCount();
-  const visibleGroups: NavGroup[] = me
-    ? GROUPS.map((g) => ({
-        ...g,
-        items: g.items.filter((it) => roleCanAccess(me.role as UserRole, it.to)),
-      })).filter((g) => g.items.length > 0)
-    : GROUPS;
+  // C1-19: until the role is known, show the least-privileged nav — it used to show EVERY group
+  // (admin-only ones included) for a moment while the current-user query resolved.
+  const navRole = (me?.role as UserRole | undefined) ?? "viewer";
+  const visibleGroups: NavGroup[] = GROUPS.map((g) => ({
+    ...g,
+    items: g.items.filter((it) => roleCanAccess(navRole, it.to)),
+  })).filter((g) => g.items.length > 0);
   const activeGroup = groupForPath(pathname);
   const [open, setOpen] = useState<string>(activeGroup);
   const [collapsed, setCollapsed] = useState(false);

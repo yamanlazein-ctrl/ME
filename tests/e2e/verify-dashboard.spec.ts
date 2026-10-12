@@ -15,9 +15,13 @@ test.describe("dashboard today-invoices & session bar", () => {
     await page.fill('input[autocomplete="username"]', __e2eAdmin.email);
     await page.fill('input[type="password"]', __e2eAdmin.password);
     await page.click('button[type="submit"]');
-    await page.waitForURL((u) => !u.pathname.startsWith("/login"), { timeout: 20000 }).catch(() => {});
+    await page
+      .waitForURL((u) => !u.pathname.startsWith("/login"), { timeout: 20000 })
+      .catch(() => {});
     // Wait for dashboard hero card to render
-    await page.waitForSelector('[data-od-id="hero-today-invoices"]', { timeout: 15000 }).catch(() => {});
+    await page
+      .waitForSelector('[data-od-id="hero-today-invoices"]', { timeout: 15000 })
+      .catch(() => {});
     // Wait for the KPI grid too
     await page.waitForTimeout(2500);
 
@@ -38,12 +42,30 @@ test.describe("dashboard today-invoices & session bar", () => {
     const countIsDash = /فواتير اليوم\s*\n?\s*—/.test(body);
 
     // 5) Session status bar present (الجلسة غير مفتوحة / جلسة)
-    const hasSessionBar = body.includes("الجلسة غير مفتوحة") || body.includes("الجلسة") || body.includes("افتتحت الجلسة");
+    const hasSessionBar =
+      body.includes("الجلسة غير مفتوحة") ||
+      body.includes("الجلسة") ||
+      body.includes("افتتحت الجلسة");
 
-    console.log("hasTitle:", hasTitle, "| hasTodayDateChip:", hasTodayDateChip, "| hasDate:", hasDate, "| heroCount:", heroCount, "| countIsDash:", countIsDash, "| hasSessionBar:", hasSessionBar);
+    console.log(
+      "hasTitle:",
+      hasTitle,
+      "| hasTodayDateChip:",
+      hasTodayDateChip,
+      "| hasDate:",
+      hasDate,
+      "| heroCount:",
+      heroCount,
+      "| countIsDash:",
+      countIsDash,
+      "| hasSessionBar:",
+      hasSessionBar,
+    );
     console.log("--- dashboard text excerpt ---");
     const idx = body.indexOf("فواتير اليوم");
-    console.log(JSON.stringify(idx >= 0 ? body.slice(Math.max(0, idx - 60), idx + 160) : "(not found)"));
+    console.log(
+      JSON.stringify(idx >= 0 ? body.slice(Math.max(0, idx - 60), idx + 160) : "(not found)"),
+    );
 
     await page.screenshot({ path: "test-results/dashboard-after.png", fullPage: true });
 

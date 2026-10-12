@@ -108,12 +108,7 @@ export class PostgresUserRepository implements IUserRepository {
 
       if (filter.search) {
         const searchTerm = `%${filter.search}%`;
-        conditions.push(
-          or(
-            like(users.name, searchTerm),
-            like(users.email, searchTerm),
-          )!,
-        );
+        conditions.push(or(like(users.name, searchTerm), like(users.email, searchTerm))!);
       }
 
       if (filter.role) {

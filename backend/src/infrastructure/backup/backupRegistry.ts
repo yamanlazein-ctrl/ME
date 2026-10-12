@@ -11,7 +11,8 @@ import { dirname, join, resolve } from "node:path";
 import { getSqliteRuntime } from "../orm/sqlite/runtime.js";
 import { logger } from "../config/logger.js";
 
-export type BackupKind = "manual" | "automatic" | "pre-operation" | "pre-migration" | "pre-restore" | "pre-update";
+export type BackupKind =
+  "manual" | "automatic" | "pre-operation" | "pre-migration" | "pre-restore" | "pre-update";
 export type BackupStatus = "CREATING" | "VERIFIED" | "FAILED";
 
 export interface RestoreTestResult {
@@ -56,7 +57,10 @@ export function readRegistry(root?: string): RegistryFile {
     return { version: 1, entries: Array.isArray(parsed.entries) ? parsed.entries : [] };
   } catch (err) {
     // An unreadable registry never hides backups silently: it is kept aside and rebuilt.
-    logger.error({ err, p }, "BACKUP_REGISTRY_UNREADABLE — keeping the file aside and starting a new registry");
+    logger.error(
+      { err, p },
+      "BACKUP_REGISTRY_UNREADABLE — keeping the file aside and starting a new registry",
+    );
     renameSync(p, `${p}.unreadable-${Date.now()}`);
     return { version: 1, entries: [] };
   }
@@ -72,10 +76,17 @@ function writeRegistry(reg: RegistryFile, root?: string): void {
 
 const same = (a: string, b: string) => resolve(a).toLowerCase() === resolve(b).toLowerCase();
 
-export function recordBackup(e: Omit<BackupEntry, "createdAt"> & { createdAt?: string }, root?: string): BackupEntry {
+export function recordBackup(
+  e: Omit<BackupEntry, "createdAt"> & { createdAt?: string },
+  root?: string,
+): BackupEntry {
   const reg = readRegistry(root);
   const existing = reg.entries.find((x) => same(x.path, e.path));
-  const entry: BackupEntry = { ...existing, ...e, createdAt: e.createdAt ?? existing?.createdAt ?? new Date().toISOString() } as BackupEntry;
+  const entry: BackupEntry = {
+    ...existing,
+    ...e,
+    createdAt: e.createdAt ?? existing?.createdAt ?? new Date().toISOString(),
+  } as BackupEntry;
   reg.entries = [...reg.entries.filter((x) => !same(x.path, e.path)), entry];
   writeRegistry(reg, root);
   if (entry.status === "VERIFIED") void markLastSuccessfulBackup(entry.createdAt);
@@ -97,13 +108,16 @@ export function removeBackupEntry(path: string): void {
 /** VERIFIED entries whose file still exists, newest first. */
 export function verifiedBackups(kind?: BackupKind): BackupEntry[] {
   return readRegistry()
-    .entries.filter((e) => e.status === "VERIFIED" && (!kind || e.kind === kind) && existsSync(e.path))
+    .entries.filter(
+      (e) => e.status === "VERIFIED" && (!kind || e.kind === kind) && existsSync(e.path),
+    )
     .sort((a, b) => (a.createdAt < b.createdAt ? 1 : a.createdAt > b.createdAt ? -1 : 0));
 }
 
 async function markLastSuccessfulBackup(at: string): Promise<void> {
   try {
-    const { readManifest, writeManifestAtomic } = await import("../integrity/dataIntegrityManifest.js");
+    const { readManifest, writeManifestAtomic } =
+      await import("../integrity/dataIntegrityManifest.js");
     const m = await readManifest();
     if (m && (!m.lastSuccessfulBackupAt || m.lastSuccessfulBackupAt < at)) {
       await writeManifestAtomic({ ...m, lastSuccessfulBackupAt: at });

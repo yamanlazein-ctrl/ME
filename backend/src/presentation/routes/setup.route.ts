@@ -328,13 +328,21 @@ export function registerSetupRoutes(router: Router, container: Container): void 
     }
     const baked = await container.tenantRepo.findBySlug("default");
     if (!baked) {
-      res.status(409).json({ code: "NO_TENANT", message: "لا توجد شركة مهيأة على هذا الجهاز", statusCode: 409 });
+      res
+        .status(409)
+        .json({ code: "NO_TENANT", message: "لا توجد شركة مهيأة على هذا الجهاز", statusCode: 409 });
       return;
     }
     const sqlite = (await import("../../infrastructure/orm/engine.js")).getEngine() === "sqlite";
     const users = sqlite
-      ? await (await import("../../infrastructure/orm/sqlite/queryable.js")).sqliteReaderQueryable().query<{ n: number }>("SELECT count(*) AS n FROM users WHERE tenant_id = $1", [baked.id])
-      : await (await (await import("../../infrastructure/orm/pgLazy.js")).pgPool()).query("SELECT count(*)::int AS n FROM users WHERE tenant_id = $1", [baked.id]);
+      ? await (
+          await import("../../infrastructure/orm/sqlite/queryable.js")
+        )
+          .sqliteReaderQueryable()
+          .query<{ n: number }>("SELECT count(*) AS n FROM users WHERE tenant_id = $1", [baked.id])
+      : await (
+          await (await import("../../infrastructure/orm/pgLazy.js")).pgPool()
+        ).query("SELECT count(*)::int AS n FROM users WHERE tenant_id = $1", [baked.id]);
     if (Number(users.rows[0].n) > 0) {
       res.status(409).json({
         code: "ALREADY_INITIALIZED",
@@ -380,13 +388,21 @@ export function registerSetupRoutes(router: Router, container: Container): void 
     }
     const baked = await container.tenantRepo.findBySlug("default");
     if (!baked) {
-      res.status(409).json({ code: "NO_TENANT", message: "لا توجد شركة مهيأة على هذا الجهاز", statusCode: 409 });
+      res
+        .status(409)
+        .json({ code: "NO_TENANT", message: "لا توجد شركة مهيأة على هذا الجهاز", statusCode: 409 });
       return;
     }
     const sqlite = (await import("../../infrastructure/orm/engine.js")).getEngine() === "sqlite";
     const users = sqlite
-      ? await (await import("../../infrastructure/orm/sqlite/queryable.js")).sqliteReaderQueryable().query<{ n: number }>("SELECT count(*) AS n FROM users WHERE tenant_id = $1", [baked.id])
-      : await (await (await import("../../infrastructure/orm/pgLazy.js")).pgPool()).query("SELECT count(*)::int AS n FROM users WHERE tenant_id = $1", [baked.id]);
+      ? await (
+          await import("../../infrastructure/orm/sqlite/queryable.js")
+        )
+          .sqliteReaderQueryable()
+          .query<{ n: number }>("SELECT count(*) AS n FROM users WHERE tenant_id = $1", [baked.id])
+      : await (
+          await (await import("../../infrastructure/orm/pgLazy.js")).pgPool()
+        ).query("SELECT count(*)::int AS n FROM users WHERE tenant_id = $1", [baked.id]);
     if (Number(users.rows[0].n) > 0) {
       res.status(409).json({
         code: "ALREADY_INITIALIZED",
@@ -395,24 +411,11 @@ export function registerSetupRoutes(router: Router, container: Container): void 
       });
       return;
     }
-    const { restoreUploadedBackup } = await import("./backup.route.js");
+    const { restoreUploadedBackup, receiveShellPath } = await import("./backup.route.js");
     const { BackupError } = await import("../../infrastructure/backup/backupError.js");
-    const { existsSync, readFileSync, statSync } = await import("node:fs");
-    const { createHash } = await import("node:crypto");
     try {
-      const body = (req.body ?? {}) as { path?: unknown; sha256?: unknown; sizeBytes?: unknown };
-      const path = typeof body.path === "string" ? body.path.trim() : "";
-      if (!path) throw new BackupError("BACKUP_CORRUPT", "لم يُحدَّد مسار ملف النسخة الاحتياطية");
-      if (!existsSync(path)) throw new BackupError("BACKUP_FILE_MISSING", `الملف غير موجود: ${path}`);
-      const st = statSync(path);
-      if (!st.isFile() || st.size === 0) throw new BackupError("BACKUP_CORRUPT", "الملف المحدد فارغ أو ليس ملفًا");
-      const expected = typeof body.sha256 === "string" && /^[0-9a-f]{64}$/i.test(body.sha256) ? body.sha256 : null;
-      if (expected) {
-        const actual = createHash("sha256").update(readFileSync(path)).digest("hex");
-        if (actual !== expected.toLowerCase()) {
-          throw new BackupError("BACKUP_FILE_HASH_MISMATCH", "بصمة الملف لا تطابق النسخة المختارة — قد يكون الملف تغيّر بعد اختياره");
-        }
-      }
+      // One validator for every shell path hand-off (hermes F-014): .zip only, size + sha256 re-checked.
+      const { path } = await receiveShellPath(req);
       const report = await restoreUploadedBackup(path, baked.id, false);
       res.json(report);
     } catch (err) {
@@ -436,7 +439,9 @@ export function registerSetupRoutes(router: Router, container: Container): void 
       }
       const tenantId = await resolveWizardTenantId((req.body?.tenantId as string) ?? "");
       if (!tenantId) {
-        res.status(422).json({ code: "VALIDATION_ERROR", message: "tenantId مطلوب", statusCode: 422 });
+        res
+          .status(422)
+          .json({ code: "VALIDATION_ERROR", message: "tenantId مطلوب", statusCode: 422 });
         return;
       }
       const r = await completeWizardUseCase(

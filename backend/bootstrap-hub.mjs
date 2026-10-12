@@ -10,7 +10,10 @@ if (!DATABASE_URL) throw new Error("اضبط DATABASE_URL أولاً");
 const COMPANY_NAME = process.argv[2] || "شركتي";
 const ADMIN_EMAIL = process.argv[3] || "admin@hub.local";
 const ADMIN_PASSWORD = process.argv[4];
-if (!ADMIN_PASSWORD) throw new Error("الاستخدام: node bootstrap-hub.mjs \"اسم الشركة\" admin@example.com كلمة_مرور_قوية");
+if (!ADMIN_PASSWORD)
+  throw new Error(
+    'الاستخدام: node bootstrap-hub.mjs "اسم الشركة" admin@example.com كلمة_مرور_قوية',
+  );
 
 const pool = new pg.Pool({ connectionString: DATABASE_URL, max: 1 });
 const tenantId = randomUUID();
@@ -36,10 +39,11 @@ try {
     [tenantId],
   );
 
-  await client.query(
-    `INSERT INTO tenants (id, name, slug) VALUES ($1, $2, $3)`,
-    [tenantId, COMPANY_NAME, slug],
-  );
+  await client.query(`INSERT INTO tenants (id, name, slug) VALUES ($1, $2, $3)`, [
+    tenantId,
+    COMPANY_NAME,
+    slug,
+  ]);
 
   await client.query(
     `INSERT INTO licenses (id, key, type, status, expires_at, grace_days, max_devices, features, customer_name, edition, plan, license_version, product_version, license_model, binding_type, tenant_id, limits)

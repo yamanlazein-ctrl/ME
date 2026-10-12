@@ -71,11 +71,7 @@ async function main() {
 
   // 2. Insert (or reuse) the license row under platform RLS context.
   const row = await runWithPlatformContext(async () => {
-    const [existing] = await db
-      .select()
-      .from(licenses)
-      .where(eq(licenses.key, BAKED_KEY))
-      .limit(1);
+    const [existing] = await db.select().from(licenses).where(eq(licenses.key, BAKED_KEY)).limit(1);
     if (existing) {
       console.log(`[bake] license key already exists id=${existing.id} — re-baking token`);
       return existing;

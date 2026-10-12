@@ -1,5 +1,12 @@
 import { eq, and, desc, ilike, or, sql, gte, lte, getTableColumns } from "drizzle-orm";
-import { afterCursor, cursorColumns, decodeCursor, keysetOrder, nextCursorOf, type KeysetSpec } from "./keysetPage.js";
+import {
+  afterCursor,
+  cursorColumns,
+  decodeCursor,
+  keysetOrder,
+  nextCursorOf,
+  type KeysetSpec,
+} from "./keysetPage.js";
 import { likeContains } from "../utils/likeEscape.js";
 import type { DB } from "../orm/drizzle.js";
 import type {
@@ -52,7 +59,11 @@ export class PostgresExpenseRepository implements IExpenseRepository {
     const offset = page * limit;
     // Keyset mode for "load every row" callers: seek after the cursor instead
     // of OFFSET (constant cost per page, strict total order). keysetPage.ts.
-    const keyset: KeysetSpec = { date: expenses.date, createdAt: expenses.createdAt, id: expenses.id };
+    const keyset: KeysetSpec = {
+      date: expenses.date,
+      createdAt: expenses.createdAt,
+      id: expenses.id,
+    };
     const cursor = true ? decodeCursor(filter.cursor) : null;
     const pageWhere = cursor ? and(where, afterCursor(keyset, cursor)) : where;
 
@@ -182,7 +193,12 @@ export class PostgresExpenseRepository implements IExpenseRepository {
     });
   }
 
-  async cancel(id: string, cancelledBy: string, ctx: TenantContext, expectedVersion: number): Promise<ExpenseData> {
+  async cancel(
+    id: string,
+    cancelledBy: string,
+    ctx: TenantContext,
+    expectedVersion: number,
+  ): Promise<ExpenseData> {
     return this.db.transaction(async (tx) => {
       // P0-001: lock the row first for version check
       const [currentRow] = await tx
@@ -200,10 +216,15 @@ export class PostgresExpenseRepository implements IExpenseRepository {
       if (!currentRow) throw new Error("Expense not found or already cancelled");
       // P0-001: optimistic concurrency — fail fast if version mismatch
       if (currentRow.version !== expectedVersion) {
-        throw Object.assign(new Error(`Stale version: expected ${expectedVersion}, current ${currentRow.version}`), {
-          code: "STALE_VERSION" as const,
-        });
+        throw Object.assign(
+          new Error(`Stale version: expected ${expectedVersion}, current ${currentRow.version}`),
+          {
+            code: "STALE_VERSION" as const,
+          },
+        );
       }
+      // H-07: mirrors create() — a cancel reverses the expense (and its cash) on the expense's own date.
+      await assertDayUnlocked(tx, ctx.tenantId, currentRow.date);
 
       const [row] = await tx
         .update(expenses)

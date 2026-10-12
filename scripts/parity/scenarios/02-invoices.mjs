@@ -20,7 +20,11 @@ export default async function invoices({ step, state }) {
     partyType: "supplier",
     currency: "SYP",
     exchangeRate: 14750,
-    lines: [line(0, 120.5, 18500.25, { pieces: 6 }), line(1, 98.75, 21000, { pieces: 6 }), line(3, 45, 19000, { pieces: 4 })],
+    lines: [
+      line(0, 120.5, 18500.25, { pieces: 6 }),
+      line(1, 98.75, 21000, { pieces: 6 }),
+      line(3, 45, 19000, { pieces: 4 }),
+    ],
     shipping: 25000,
     paid: 1000000,
     paymentMethod: "cash",

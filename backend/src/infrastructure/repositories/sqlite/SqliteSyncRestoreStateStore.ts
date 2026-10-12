@@ -3,12 +3,18 @@
 import { sql } from "drizzle-orm";
 import { runAutonomous } from "../../orm/sqlite/transaction.js";
 import { invalidateRestoredIdentity } from "../../sync/restoredIdentity.js";
-import type { ISyncRestoreStateStore, SyncRestorePhase, SyncRestoreState } from "../../../application/ports/ISyncRestoreStateStore.js";
+import type {
+  ISyncRestoreStateStore,
+  SyncRestorePhase,
+  SyncRestoreState,
+} from "../../../application/ports/ISyncRestoreStateStore.js";
 
 const nowText = () => new Date().toISOString().replace("Z", "000Z");
 
 function rowsOf(r: unknown): Array<Record<string, unknown>> {
-  return (Array.isArray(r) ? r : ((r as { rows?: unknown[] }).rows ?? [])) as Array<Record<string, unknown>>;
+  return (Array.isArray(r) ? r : ((r as { rows?: unknown[] }).rows ?? [])) as Array<
+    Record<string, unknown>
+  >;
 }
 
 export class SqliteSyncRestoreStateStore implements ISyncRestoreStateStore {
@@ -47,7 +53,9 @@ export class SqliteSyncRestoreStateStore implements ISyncRestoreStateStore {
 
   async setError(message: string | null): Promise<void> {
     await runAutonomous(async (tx) => {
-      await tx.execute(sql`UPDATE motard_sync_restore SET last_error = ${message}, updated_at = ${nowText()} WHERE id = 1`);
+      await tx.execute(
+        sql`UPDATE motard_sync_restore SET last_error = ${message}, updated_at = ${nowText()} WHERE id = 1`,
+      );
     });
   }
 

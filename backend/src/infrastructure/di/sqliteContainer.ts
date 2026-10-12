@@ -16,14 +16,23 @@ import type { ISecretsRepository } from "../../application/ports/ISecretsReposit
 import type { IMachineFingerprintProvider } from "../../application/ports/IMachineFingerprintProvider.js";
 import type { IInstallationIdStorage } from "../../application/ports/IInstallationIdStorage.js";
 import type { ILicenseProvider } from "../../application/ports/ILicenseProvider.js";
-import { redis, DbTokenDenylist, RedisTokenDenylist, CompositeTokenDenylist } from "../auth/TokenDenylist.js";
+import {
+  redis,
+  DbTokenDenylist,
+  RedisTokenDenylist,
+  CompositeTokenDenylist,
+} from "../auth/TokenDenylist.js";
 import { JwtSigner } from "../auth/JwtSigner.js";
 import { Argon2PasswordHasher } from "../auth/PasswordHasher.js";
 import { config } from "../config/env.js";
 import { logger } from "../config/logger.js";
 import { AesGcmSecretStore, decodeMasterKey } from "../secrets/AesGcmSecretStore.js";
 import { NodeFingerprintProvider } from "../fingerprint/NodeFingerprintProvider.js";
-import { DesktopInstallationIdStorage, InstallationIdStorage, desktopDataRoot } from "../installation/InstallationIdStorage.js";
+import {
+  DesktopInstallationIdStorage,
+  InstallationIdStorage,
+  desktopDataRoot,
+} from "../installation/InstallationIdStorage.js";
 import { SelfHostedLicenseProvider } from "../license/SelfHostedLicenseProvider.js";
 import { buildLicenseTokenSignerForInstall } from "./licenseTokenSignerForInstall.js";
 import { ensureSqliteRuntime } from "../orm/sqlite/runtime.js";
@@ -133,7 +142,10 @@ export function buildContainer(): Container {
   // linked to the device-binding id. A non-desktop SQLite process (tests, tools) keeps the default.
   const installationIdStorage: IInstallationIdStorage =
     config.DESKTOP_DEPLOY && config.SQLITE_PATH
-      ? new DesktopInstallationIdStorage(desktopDataRoot(config.SQLITE_PATH), config.MOTARD_INSTALLATION_ID)
+      ? new DesktopInstallationIdStorage(
+          desktopDataRoot(config.SQLITE_PATH),
+          config.MOTARD_INSTALLATION_ID,
+        )
       : new InstallationIdStorage();
   const licenseTokenSigner = buildLicenseTokenSignerForInstall();
   // Single source for both engines: tables resolved per engine (orm/engineSchema.ts).

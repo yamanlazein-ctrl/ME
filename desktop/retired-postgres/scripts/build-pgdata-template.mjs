@@ -26,7 +26,17 @@
  */
 import { spawnSync } from "node:child_process";
 import { randomBytes, createHash } from "node:crypto";
-import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
+import {
+  cpSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -75,20 +85,28 @@ function readSigningKeys() {
     priv ||= pick("LICENSE_SIGNING_KEY");
     pub ||= pick("LICENSE_SIGNING_PUBLIC_KEY");
   }
-  if (!priv || !pub) fail("LICENSE_SIGNING_KEY / LICENSE_SIGNING_PUBLIC_KEY not found (env or backend/.env)");
+  if (!priv || !pub)
+    fail("LICENSE_SIGNING_KEY / LICENSE_SIGNING_PUBLIC_KEY not found (env or backend/.env)");
   const nl = (s) => s.replace(/\\n/g, "\n");
   return { priv: nl(priv), pub: nl(pub) };
 }
 const keys = readSigningKeys();
 
 // The shipped public key must be the pair of the signing key, or no customer could verify the license.
-const shippedPem = readFileSync(join(REPO_ROOT, "desktop", "src-tauri", "resources", "license-public.pem"), "utf8");
+const shippedPem = readFileSync(
+  join(REPO_ROOT, "desktop", "src-tauri", "resources", "license-public.pem"),
+  "utf8",
+);
 const strip = (s) => s.replace(/-----[^-]+-----|\s+/g, "");
 if (strip(shippedPem) !== strip(keys.pub)) {
-  fail("resources/license-public.pem does not match LICENSE_SIGNING_PUBLIC_KEY — the baked license would not verify on the customer machine");
+  fail(
+    "resources/license-public.pem does not match LICENSE_SIGNING_PUBLIC_KEY — the baked license would not verify on the customer machine",
+  );
 }
 
-const licenseKey = process.env.DESKTOP_LICENSE_KEY?.trim() || `LIC-DESKTOP-${randomBytes(8).toString("hex").toUpperCase()}`;
+const licenseKey =
+  process.env.DESKTOP_LICENSE_KEY?.trim() ||
+  `LIC-DESKTOP-${randomBytes(8).toString("hex").toUpperCase()}`;
 const devices = String(process.env.BAKED_LICENSE_DEVICES ?? "1");
 
 // ── build ────────────────────────────────────────────────────────────────────
@@ -109,9 +127,20 @@ const cleanup = () => {
 try {
   log(`workdir ${work}`);
   log("initdb (UTF8, locale C, trust bootstrap — runtime hardens to scram on first start)");
-  run(pgTool("initdb"), ["-D", pgdata, "-U", DB_SUPERUSER, "-E", "UTF8", "--locale=C", "--auth=trust"]);
+  run(pgTool("initdb"), [
+    "-D",
+    pgdata,
+    "-U",
+    DB_SUPERUSER,
+    "-E",
+    "UTF8",
+    "--locale=C",
+    "--auth=trust",
+  ]);
   // Deterministic server timezone: builds must not depend on the build machine's zone.
-  writeFileSync(join(pgdata, "postgresql.conf"), `\ntimezone = 'UTC'\nlog_timezone = 'UTC'\n`, { flag: "a" });
+  writeFileSync(join(pgdata, "postgresql.conf"), `\ntimezone = 'UTC'\nlog_timezone = 'UTC'\n`, {
+    flag: "a",
+  });
 
   const port = await freePort();
   const pgLog = join(work, "pg.log");
@@ -139,7 +168,12 @@ try {
   };
   const step = (name, args) => {
     log(name);
-    const r = spawnSync(process.execPath, args, { cwd: BACKEND_ROOT, env: backendEnv, encoding: "utf8", windowsHide: true });
+    const r = spawnSync(process.execPath, args, {
+      cwd: BACKEND_ROOT,
+      env: backendEnv,
+      encoding: "utf8",
+      windowsHide: true,
+    });
     if (r.status !== 0) fail(`${name} failed (exit ${r.status})\n${r.stdout}\n${r.stderr}`);
     return r.stdout;
   };
@@ -154,15 +188,21 @@ try {
 
   log("asserting migrated + clean + empty sequences");
   const summary = await assertCleanSeed(url, { expectTenantId: tenantId });
-  const seq = await withClient(url, (c) => c.query("SELECT count(*)::int AS n FROM document_sequences"));
+  const seq = await withClient(url, (c) =>
+    c.query("SELECT count(*)::int AS n FROM document_sequences"),
+  );
   if (seq.rows[0].n !== 0) fail("document_sequences is not empty");
-  log(`OK — ${summary.migrationsApplied}/${summary.journalEntries} migrations, ${summary.tableCount} tables, rows: ${JSON.stringify(summary.nonEmpty)}`);
+  log(
+    `OK — ${summary.migrationsApplied}/${summary.journalEntries} migrations, ${summary.tableCount} tables, rows: ${JSON.stringify(summary.nonEmpty)}`,
+  );
 
   log("clean shutdown (pg_ctl stop -m smart)");
   stopPostgresClean(pgdata);
   started = false;
-  if (existsSync(join(pgdata, "postmaster.pid"))) fail("postmaster.pid still present after clean stop");
-  for (const stale of ["postmaster.opts", "current_logfiles"]) rmSync(join(pgdata, stale), { force: true });
+  if (existsSync(join(pgdata, "postmaster.pid")))
+    fail("postmaster.pid still present after clean stop");
+  for (const stale of ["postmaster.opts", "current_logfiles"])
+    rmSync(join(pgdata, stale), { force: true });
 
   // Clean shutdown is proven by verify-pgdata-template.mjs (server log on first open), below.
 
@@ -173,10 +213,16 @@ try {
   cpSync(pgdata, TEMPLATE_DIR, { recursive: true });
 
   const fileCount = (d) =>
-    readdirSync(d, { withFileTypes: true }).reduce((n, e) => n + (e.isDirectory() ? fileCount(join(d, e.name)) : 1), 0);
+    readdirSync(d, { withFileTypes: true }).reduce(
+      (n, e) => n + (e.isDirectory() ? fileCount(join(d, e.name)) : 1),
+      0,
+    );
   const manifest = {
     builtAt: new Date().toISOString(),
-    postgresVersion: run(join(REPO_ROOT, "desktop", "src-tauri", "resources", "postgres", "bin", "postgres.exe"), ["--version"]).stdout.trim(),
+    postgresVersion: run(
+      join(REPO_ROOT, "desktop", "src-tauri", "resources", "postgres", "bin", "postgres.exe"),
+      ["--version"],
+    ).stdout.trim(),
     database: DB_NAME,
     tenantId,
     adminEmail: null,
@@ -188,9 +234,14 @@ try {
     cleanShutdown: true,
     files: fileCount(TEMPLATE_DIR),
     sizeBytes: (function size(d) {
-      return readdirSync(d, { withFileTypes: true }).reduce((n, e) => n + (e.isDirectory() ? size(join(d, e.name)) : statSync(join(d, e.name)).size), 0);
+      return readdirSync(d, { withFileTypes: true }).reduce(
+        (n, e) => n + (e.isDirectory() ? size(join(d, e.name)) : statSync(join(d, e.name)).size),
+        0,
+      );
     })(TEMPLATE_DIR),
-    controlFileSha256: createHash("sha256").update(readFileSync(join(TEMPLATE_DIR, "global", "pg_control"))).digest("hex"),
+    controlFileSha256: createHash("sha256")
+      .update(readFileSync(join(TEMPLATE_DIR, "global", "pg_control")))
+      .digest("hex"),
   };
   writeFileSync(TEMPLATE_MANIFEST, JSON.stringify(manifest, null, 2) + "\n");
   log(`template installed (${manifest.files} files, ${(manifest.sizeBytes / 1e6).toFixed(1)} MB)`);
@@ -201,9 +252,13 @@ try {
 cleanup();
 
 // ── re-verify the shipped copy exactly as the release gate will ─────────────────
-const v = spawnSync(process.execPath, [join(REPO_ROOT, "desktop", "scripts", "verify-pgdata-template.mjs")], {
-  stdio: "inherit",
-  windowsHide: true,
-});
+const v = spawnSync(
+  process.execPath,
+  [join(REPO_ROOT, "desktop", "scripts", "verify-pgdata-template.mjs")],
+  {
+    stdio: "inherit",
+    windowsHide: true,
+  },
+);
 if (v.status !== 0) fail("verification of the installed template failed");
 log(`DONE — license key: ${licenseKey}`);

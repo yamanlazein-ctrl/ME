@@ -161,6 +161,7 @@ and a running instance is checked for zero listening database ports (AC-1, AC-2)
 
   Producing a file is not success. Backup files MUST be written atomically, so a partial file is
   never presented as a backup.
+
 - Manual backup, automatic pre-operation backup (update, restore, year close/reopen, purge, merge,
   bulk-impact operations), and periodic background backup MUST exist (BK-3, BK-4, BK-5).
 - Restore MUST work on the same device and on a new device (RS-1). It MUST follow these steps
@@ -172,6 +173,7 @@ and a running instance is checked for zero listening database ports (AC-1, AC-2)
   5. Open it.
 
   The original backup MUST NEVER be modified.
+
 - Incompatible or incomplete backups MUST be rejected clearly. A partial database is never opened
   (RS-4).
 - After restore, the result MUST be compared against the source (RS-5): record counts, parties,
@@ -288,6 +290,7 @@ and a running instance is checked for zero listening database ports (AC-1, AC-2)
   6. Run the full EXE lifecycle protocol.
 
   A design MUST NOT be finalized before step 2 is complete.
+
 - **Evidence over assertion:** every claim that something works, is fixed, or is unchanged MUST be
   backed by an executed test or reproducible evidence. Unknowns stay labelled UNKNOWN until proven.
 - **Constitution Check:** every `/speckit-plan` MUST map its design to Principles I–X and list any

@@ -70,14 +70,21 @@ if (!dbName) {
 async function ensureDatabaseExists() {
   const admin = new URL(target.toString());
   admin.pathname = "/postgres";
-  const client = new pg.Client({ connectionString: admin.toString(), connectionTimeoutMillis: 10_000 });
+  const client = new pg.Client({
+    connectionString: admin.toString(),
+    connectionTimeoutMillis: 10_000,
+  });
   try {
     await client.connect();
     const exists = await client.query("SELECT 1 FROM pg_database WHERE datname = $1", [dbName]);
     if (exists.rowCount === 0) {
       // Identifiers cannot be parameterised; dbName comes from our own
       // DATABASE_URL, and is quoted to keep it safe.
-      await client.query(`CREATE DATABASE "${dbName.replace(/"/g, '""')}"`);
+      // Locale C: the search-parity tests' contract (L-02) — a cluster defaulting to en_US.utf8
+      // would fold non-ASCII case (ü/Ü) where SQLite LIKE does not.
+      await client.query(
+        `CREATE DATABASE "${dbName.replace(/"/g, '""')}" TEMPLATE template0 LC_COLLATE 'C' LC_CTYPE 'C'`,
+      );
       console.log(`created database ${dbName}`);
     } else {
       console.log(`database ${dbName} already exists`);

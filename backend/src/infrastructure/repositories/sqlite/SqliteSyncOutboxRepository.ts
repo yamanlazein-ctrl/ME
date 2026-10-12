@@ -148,7 +148,9 @@ export class SqliteSyncOutboxRepository implements ISyncOutboxRepository {
     return runWithTenantContext({ tenantId }, () =>
       this.db.transaction(async (tx) => {
         const now = transactionTimestamp();
-        const leaseUntil = formatMicrosUtc(parseMicrosUtc(now) + BigInt(Math.trunc(leaseMs)) * 1000n);
+        const leaseUntil = formatMicrosUtc(
+          parseMicrosUtc(now) + BigInt(Math.trunc(leaseMs)) * 1000n,
+        );
         const claimable = await tx.execute<{ id: string }>(sql`
           SELECT id FROM sync_outbox
            WHERE tenant_id = ${tenantId}
@@ -172,10 +174,16 @@ export class SqliteSyncOutboxRepository implements ISyncOutboxRepository {
                  o.lease_owner AS "leaseOwner", o.lease_token AS "leaseToken",
                  o.lease_until AS "leaseUntil", o.claimed_at AS "claimedAt"
             FROM sync_outbox o
-           WHERE o.id IN (${sql.join(ids.map((i) => sql`${i}`), sql`, `)})`);
-        const rows = pgRawRows(result.rows, { timestamps: ["createdAt", "updatedAt", "syncedAt", "leaseUntil", "claimedAt"] }).map(
-          (r) => ({ ...r, payload: r.payload == null ? null : JSON.parse(String(r.payload)) }),
-        ) as unknown as Array<typeof syncOutbox.$inferSelect>;
+           WHERE o.id IN (${sql.join(
+             ids.map((i) => sql`${i}`),
+             sql`, `,
+           )})`);
+        const rows = pgRawRows(result.rows, {
+          timestamps: ["createdAt", "updatedAt", "syncedAt", "leaseUntil", "claimedAt"],
+        }).map((r) => ({
+          ...r,
+          payload: r.payload == null ? null : JSON.parse(String(r.payload)),
+        })) as unknown as Array<typeof syncOutbox.$inferSelect>;
         return rows.map(mapRow).sort((a, b) => a.seq - b.seq);
       }),
     );
@@ -194,18 +202,22 @@ export class SqliteSyncOutboxRepository implements ISyncOutboxRepository {
           leaseToken: null,
           leaseUntil: null,
         })
-        .where(and(
-          eq(syncOutbox.id, id),
-          eq(syncOutbox.tenantId, tenantId),
-          eq(syncOutbox.status, "pushing"),
-          eq(syncOutbox.leaseToken, leaseToken),
-        ));
+        .where(
+          and(
+            eq(syncOutbox.id, id),
+            eq(syncOutbox.tenantId, tenantId),
+            eq(syncOutbox.status, "pushing"),
+            eq(syncOutbox.leaseToken, leaseToken),
+          ),
+        );
       return (result as unknown as { changes?: number }).changes ?? 0; // PG rowCount = better-sqlite3 changes
     });
   }
 
-
-  async acknowledgeByOpId(tenantId: string, opId: string): Promise<"acknowledged" | "settled" | "unknown"> {
+  async acknowledgeByOpId(
+    tenantId: string,
+    opId: string,
+  ): Promise<"acknowledged" | "settled" | "unknown"> {
     return runWithTenantContext({ tenantId }, async () => {
       const result = await this.db
         .update(syncOutbox)
@@ -218,11 +230,13 @@ export class SqliteSyncOutboxRepository implements ISyncOutboxRepository {
           leaseToken: null,
           leaseUntil: null,
         })
-        .where(and(
-          eq(syncOutbox.tenantId, tenantId),
-          eq(syncOutbox.opId, opId),
-          inArray(syncOutbox.status, ["pending", "pushing", "rejected"]),
-        ));
+        .where(
+          and(
+            eq(syncOutbox.tenantId, tenantId),
+            eq(syncOutbox.opId, opId),
+            inArray(syncOutbox.status, ["pending", "pushing", "rejected"]),
+          ),
+        );
       if (((result as unknown as { changes?: number }).changes ?? 0) > 0) return "acknowledged";
       const [held] = await this.db
         .select({ id: syncOutbox.id })
@@ -250,12 +264,14 @@ export class SqliteSyncOutboxRepository implements ISyncOutboxRepository {
           leaseToken: null,
           leaseUntil: null,
         })
-        .where(and(
-          eq(syncOutbox.id, id),
-          eq(syncOutbox.tenantId, tenantId),
-          eq(syncOutbox.status, "pushing"),
-          eq(syncOutbox.leaseToken, leaseToken),
-        ));
+        .where(
+          and(
+            eq(syncOutbox.id, id),
+            eq(syncOutbox.tenantId, tenantId),
+            eq(syncOutbox.status, "pushing"),
+            eq(syncOutbox.leaseToken, leaseToken),
+          ),
+        );
       return (result as unknown as { changes?: number }).changes ?? 0; // PG rowCount = better-sqlite3 changes
     });
   }
@@ -277,12 +293,14 @@ export class SqliteSyncOutboxRepository implements ISyncOutboxRepository {
           leaseToken: null,
           leaseUntil: null,
         })
-        .where(and(
-          eq(syncOutbox.id, id),
-          eq(syncOutbox.tenantId, tenantId),
-          eq(syncOutbox.status, "pushing"),
-          eq(syncOutbox.leaseToken, leaseToken),
-        ));
+        .where(
+          and(
+            eq(syncOutbox.id, id),
+            eq(syncOutbox.tenantId, tenantId),
+            eq(syncOutbox.status, "pushing"),
+            eq(syncOutbox.leaseToken, leaseToken),
+          ),
+        );
       return (result as unknown as { changes?: number }).changes ?? 0; // PG rowCount = better-sqlite3 changes
     });
   }

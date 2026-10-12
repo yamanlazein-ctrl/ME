@@ -67,14 +67,23 @@ export async function resolveCollision(
       if (incomingId.toLowerCase() < holder.toLowerCase()) {
         // Incoming keeps the number; the existing record moves aside.
         let renamed = spec.suffix(candidate, holder);
-        while (await holderOf(database, tenantId, spec, renamed, holder)) renamed = spec.suffix(renamed, holder);
-        await (await getNumberCollisionSql()).renameValue(database, tenantId, spec, holder, renamed);
+        while (await holderOf(database, tenantId, spec, renamed, holder))
+          renamed = spec.suffix(renamed, holder);
+        await (
+          await getNumberCollisionSql()
+        ).renameValue(database, tenantId, spec, holder, renamed);
         if (onRename) await onRename(holder, candidate, renamed);
-        logger.warn({ table: spec.table, holder, from: candidate, to: renamed }, "sync number collision: existing record renamed");
+        logger.warn(
+          { table: spec.table, holder, from: candidate, to: renamed },
+          "sync number collision: existing record renamed",
+        );
         return candidate;
       }
       const next = spec.suffix(candidate, incomingId);
-      logger.warn({ table: spec.table, incomingId, from: candidate, to: next }, "sync number collision: incoming record renamed");
+      logger.warn(
+        { table: spec.table, incomingId, from: candidate, to: next },
+        "sync number collision: incoming record renamed",
+      );
       candidate = next;
     }
     return candidate;
@@ -82,8 +91,16 @@ export async function resolveCollision(
 }
 
 /** A paid invoice's receipt is numbered `RCP-<invoice number>`; keep it in step. */
-async function renameDerivedReceipt(database: Executor, tenantId: string, invoiceId: string, oldNo: string, newNo: string) {
-  await (await getNumberCollisionSql()).renameDerivedReceipt(database, tenantId, invoiceId, oldNo, newNo);
+async function renameDerivedReceipt(
+  database: Executor,
+  tenantId: string,
+  invoiceId: string,
+  oldNo: string,
+  newNo: string,
+) {
+  await (
+    await getNumberCollisionSql()
+  ).renameDerivedReceipt(database, tenantId, invoiceId, oldNo, newNo);
 }
 
 /**
@@ -151,10 +168,22 @@ export async function resolveMasterSnapshotForReplay(
   if (!id) return;
   if (kind === "party") {
     if (typeof snap.code === "string" && snap.code) {
-      snap.code = await resolveCollision(database, tenantId, { table: "parties", column: "code", scope: {}, suffix: numberSuffix }, id, snap.code);
+      snap.code = await resolveCollision(
+        database,
+        tenantId,
+        { table: "parties", column: "code", scope: {}, suffix: numberSuffix },
+        id,
+        snap.code,
+      );
     }
     if (typeof snap.name === "string" && snap.name) {
-      snap.name = await resolveCollision(database, tenantId, { table: "parties", column: "name", scope: {}, suffix: nameSuffix }, id, snap.name);
+      snap.name = await resolveCollision(
+        database,
+        tenantId,
+        { table: "parties", column: "name", scope: {}, suffix: nameSuffix },
+        id,
+        snap.name,
+      );
     }
   } else if (kind === "fabric" || kind === "color") {
     // Two devices naming a fabric (or a colour of the same fabric) alike before syncing:
@@ -163,9 +192,26 @@ export async function resolveMasterSnapshotForReplay(
     if (typeof snap.name === "string" && snap.name) {
       const scope: Record<string, string> =
         kind === "color" && typeof snap.fabricId === "string" ? { fabric_id: snap.fabricId } : {};
-      snap.name = await resolveCollision(database, tenantId, { table: kind === "fabric" ? "fabrics" : "colors", column: "name", scope, suffix: nameSuffix }, id, snap.name);
+      snap.name = await resolveCollision(
+        database,
+        tenantId,
+        {
+          table: kind === "fabric" ? "fabrics" : "colors",
+          column: "name",
+          scope,
+          suffix: nameSuffix,
+        },
+        id,
+        snap.name,
+      );
     }
   } else if (typeof snap.rollNo === "string" && snap.rollNo) {
-    snap.rollNo = await resolveCollision(database, tenantId, { table: "rolls", column: "roll_no", scope: {}, suffix: numberSuffix }, id, snap.rollNo);
+    snap.rollNo = await resolveCollision(
+      database,
+      tenantId,
+      { table: "rolls", column: "roll_no", scope: {}, suffix: numberSuffix },
+      id,
+      snap.rollNo,
+    );
   }
 }

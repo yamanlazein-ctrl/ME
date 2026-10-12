@@ -19,8 +19,7 @@ export type PageMeta = {
 };
 
 type PageResult<T> =
-  | { data: T[]; meta?: PageMeta; hasNext?: boolean; nextCursor?: string | null }
-  | T[];
+  { data: T[]; meta?: PageMeta; hasNext?: boolean; nextCursor?: string | null } | T[];
 
 export async function fetchAllPaged<T>(
   fetchPage: (page: number, limit: number, cursor?: string) => Promise<PageResult<T>>,

@@ -6,14 +6,14 @@
 
 ## Content Quality
 
-- [x] No implementation details (languages, frameworks, APIs) — *justified exception, see Notes 1*
+- [x] No implementation details (languages, frameworks, APIs) — _justified exception, see Notes 1_
 - [x] Focused on user value and business needs
 - [x] Written for non-technical stakeholders
 - [x] All mandatory sections completed
 
 ## Requirement Completeness
 
-- [x] No [NEEDS CLARIFICATION] markers remain — *resolved 2026-10-03, see Notes 2*
+- [x] No [NEEDS CLARIFICATION] markers remain — _resolved 2026-10-03, see Notes 2_
 - [x] Requirements are testable and unambiguous
 - [x] Success criteria are measurable
 - [x] Success criteria are technology-agnostic (no implementation details)
@@ -27,11 +27,11 @@
 - [x] All functional requirements have clear acceptance criteria
 - [x] User scenarios cover primary flows
 - [x] Feature meets measurable outcomes defined in Success Criteria
-- [x] No implementation details leak into specification — *same exception as Notes 1*
+- [x] No implementation details leak into specification — _same exception as Notes 1_
 
 ## Notes
 
-1. **Engine names are scope, not implementation choice.** The feature *is* replacing PostgreSQL with
+1. **Engine names are scope, not implementation choice.** The feature _is_ replacing PostgreSQL with
    SQLite on the desktop, so both names, "local TCP port", "`db-port.txt`", "Named Pipe / IPC",
    "AppData" and the PostgreSQL mechanisms listed in FR-012 come verbatim from the PRD
    requirements (DB-1, RT-1, ID-1, DB-7). FR-012 describes each mechanism by its observable behavior

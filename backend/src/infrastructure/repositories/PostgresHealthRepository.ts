@@ -14,6 +14,6 @@ export class PostgresHealthRepository implements IHealthRepository {
     const sizeResult = await this.db.execute(sql`
         SELECT pg_size_pretty(pg_database_size(current_database())) as size
       `);
-    return ((sizeResult as unknown as { rows: Array<{ size?: string }> }).rows[0]?.size) ?? "unknown";
+    return (sizeResult as unknown as { rows: Array<{ size?: string }> }).rows[0]?.size ?? "unknown";
   }
 }

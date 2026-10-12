@@ -29,6 +29,7 @@ describe("container engine selection", () => {
   });
 
   it("keeps the members that never touch the database", () => {
-    for (const k of ["jwtSigner", "passwordHasher", "fingerprintProvider"]) expect(c[k]).toBeTruthy();
+    for (const k of ["jwtSigner", "passwordHasher", "fingerprintProvider"])
+      expect(c[k]).toBeTruthy();
   });
 });

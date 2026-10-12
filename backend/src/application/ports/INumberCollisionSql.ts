@@ -12,8 +12,26 @@ export interface CollisionTarget {
 
 export interface INumberCollisionSql {
   /** Id of another row (≠ exceptId) holding `value`, or null. */
-  holderOf(executor: unknown, tenantId: string, target: CollisionTarget, value: string, exceptId: string): Promise<string | null>;
-  renameValue(executor: unknown, tenantId: string, target: CollisionTarget, holderId: string, newValue: string): Promise<void>;
+  holderOf(
+    executor: unknown,
+    tenantId: string,
+    target: CollisionTarget,
+    value: string,
+    exceptId: string,
+  ): Promise<string | null>;
+  renameValue(
+    executor: unknown,
+    tenantId: string,
+    target: CollisionTarget,
+    holderId: string,
+    newValue: string,
+  ): Promise<void>;
   /** Keep a paid invoice's `RCP-<number>` receipt in step with a renamed invoice number. */
-  renameDerivedReceipt(executor: unknown, tenantId: string, invoiceId: string, oldNo: string, newNo: string): Promise<void>;
+  renameDerivedReceipt(
+    executor: unknown,
+    tenantId: string,
+    invoiceId: string,
+    oldNo: string,
+    newNo: string,
+  ): Promise<void>;
 }

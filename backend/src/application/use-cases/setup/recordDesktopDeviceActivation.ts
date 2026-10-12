@@ -11,7 +11,9 @@ import type { DesktopActivationInput } from "../../ports/IDesktopActivationStore
  *
  * No re-signing: the baked offline token already lives in secrets.
  */
-export async function recordDesktopDeviceActivation(input: DesktopActivationInput): Promise<{ activationId: string }> {
+export async function recordDesktopDeviceActivation(
+  input: DesktopActivationInput,
+): Promise<{ activationId: string }> {
   // Phase 3: web / browser fingerprints cannot claim a device seat.
   if (!isBindingFingerprint(input.serverFingerprint)) {
     throw new Error("WEB_FINGERPRINT_NON_BINDING");

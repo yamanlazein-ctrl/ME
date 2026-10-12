@@ -16,7 +16,11 @@ import {
 import { PageCard } from "@/components/layout/PageCard";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
-import { settings, logActivity } from "@/presentation/hooks/useSettings";
+import {
+  logActivity,
+  exportableSettings,
+  applyImportedSettings,
+} from "@/presentation/hooks/useSettings";
 import { getAccessToken } from "@/infrastructure/auth/TokenProvider";
 import { DesktopUpdatesCard } from "@/components/desktop/DesktopUpdatesCard";
 import { DataRootCard } from "@/components/desktop/DataRootCard";
@@ -26,19 +30,6 @@ import { BackupRegistryStatus } from "@/components/desktop/BackupRegistryStatus"
 import { deliverFullBackup } from "@/lib/fullBackupDelivery";
 
 import { localToday } from "@/lib/localDate";
-const ALLOWED_SETTING_KEYS = [
-  "company",
-  "currencies",
-  "paymentMethods",
-  "taxes",
-  "units",
-  "warehouses",
-  "printing",
-  "users",
-  "activity",
-  "companyId",
-  "version",
-] as const;
 
 function validateBackup(data: unknown): boolean {
   if (typeof data !== "object" || data === null || Array.isArray(data)) return false;
@@ -123,7 +114,12 @@ function BackupPage() {
 
   // ─── نسخة الإعدادات (القديمة) ───
   const exportSettings = () => {
-    const payload = { version: 1, exportedAt: new Date().toISOString(), settings };
+    // C1-17: the server-stored sections only — never user records or the device-local activity.
+    const payload = {
+      version: 1,
+      exportedAt: new Date().toISOString(),
+      settings: exportableSettings(),
+    };
     const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -141,12 +137,13 @@ function BackupPage() {
         alert("ملف غير صالح.");
         return;
       }
-      const src = data.settings as Record<string, unknown>;
-      for (const key of ALLOWED_SETTING_KEYS) {
-        if (key in src) (settings as Record<string, unknown>)[key] = src[key];
-      }
-      logActivity("النسخ الاحتياطي", "استعادة إعدادات", file.name);
-      alert("تم استعادة الإعدادات بنجاح.");
+      // C1-16: each section is saved to the server (it used to change memory only).
+      const applied = applyImportedSettings(data.settings as Record<string, unknown>);
+      alert(
+        applied.length
+          ? "تم تطبيق الإعدادات وإرسالها للحفظ — تظهر رسالة تأكيد لكل قسم."
+          : "لا يحتوي الملف على أقسام إعدادات معروفة.",
+      );
     } catch {
       alert("فشل قراءة الملف.");
     }

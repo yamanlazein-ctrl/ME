@@ -12,22 +12,50 @@ import { businessTables } from "./sqliteBackup.js";
 export type Rs5Figures = Record<string, string>;
 
 const FIGURES: Array<[string, string]> = [
-  ["parties by kind/status", "SELECT kind || '/' || status AS k, count(*) AS v FROM parties GROUP BY 1"],
-  ["invoices by type/currency/status (count, total, paid)", "SELECT type || '/' || currency || '/' || status AS k, count(*) || ':' || sum(total) || ':' || sum(paid) AS v FROM invoices GROUP BY 1"],
-  ["vouchers by kind/currency/status", "SELECT kind || '/' || currency || '/' || status AS k, count(*) || ':' || sum(amount) AS v FROM vouchers GROUP BY 1"],
-  ["returns by kind/status", "SELECT kind || '/' || status AS k, count(*) AS v FROM returns GROUP BY 1"],
-  ["ledger by currency/status (debit, credit)", "SELECT currency || '/' || status AS k, count(*) || ':' || sum(debit) || ':' || sum(credit) AS v FROM ledger_entries GROUP BY 1"],
-  ["party balances", "SELECT coalesce(party_id, '-') || '/' || currency AS k, sum(debit) - sum(credit) AS v FROM ledger_entries WHERE status = 'active' GROUP BY 1"],
-  ["inventory by currency/status (rolls, kg)", "SELECT currency || '/' || status AS k, count(*) || ':' || sum(remaining_kg) || ':' || sum(remaining_pieces) AS v FROM rolls GROUP BY 1"],
-  ["cash box closing by currency/day", "SELECT currency || '/' || balance_date AS k, closing_balance AS v FROM cashbox_daily_balances"],
-  ["manual movements by currency/direction", "SELECT currency || '/' || direction AS k, count(*) || ':' || sum(amount) AS v FROM manual_movements GROUP BY 1"],
+  [
+    "parties by kind/status",
+    "SELECT kind || '/' || status AS k, count(*) AS v FROM parties GROUP BY 1",
+  ],
+  [
+    "invoices by type/currency/status (count, total, paid)",
+    "SELECT type || '/' || currency || '/' || status AS k, count(*) || ':' || sum(total) || ':' || sum(paid) AS v FROM invoices GROUP BY 1",
+  ],
+  [
+    "vouchers by kind/currency/status",
+    "SELECT kind || '/' || currency || '/' || status AS k, count(*) || ':' || sum(amount) AS v FROM vouchers GROUP BY 1",
+  ],
+  [
+    "returns by kind/status",
+    "SELECT kind || '/' || status AS k, count(*) AS v FROM returns GROUP BY 1",
+  ],
+  [
+    "ledger by currency/status (debit, credit)",
+    "SELECT currency || '/' || status AS k, count(*) || ':' || sum(debit) || ':' || sum(credit) AS v FROM ledger_entries GROUP BY 1",
+  ],
+  [
+    "party balances",
+    "SELECT coalesce(party_id, '-') || '/' || currency AS k, sum(debit) - sum(credit) AS v FROM ledger_entries WHERE status = 'active' GROUP BY 1",
+  ],
+  [
+    "inventory by currency/status (rolls, kg)",
+    "SELECT currency || '/' || status AS k, count(*) || ':' || sum(remaining_kg) || ':' || sum(remaining_pieces) AS v FROM rolls GROUP BY 1",
+  ],
+  [
+    "cash box closing by currency/day",
+    "SELECT currency || '/' || balance_date AS k, closing_balance AS v FROM cashbox_daily_balances",
+  ],
+  [
+    "manual movements by currency/direction",
+    "SELECT currency || '/' || direction AS k, count(*) || ':' || sum(amount) AS v FROM manual_movements GROUP BY 1",
+  ],
 ];
 
 export function rs5Figures(dbPath: string): Rs5Figures {
   const db = new Database(dbPath, { readonly: true });
   try {
     const out: Rs5Figures = {};
-    for (const t of businessTables(db)) out[`rows:${t}`] = String(db.prepare(`SELECT count(*) FROM "${t}"`).pluck().get());
+    for (const t of businessTables(db))
+      out[`rows:${t}`] = String(db.prepare(`SELECT count(*) FROM "${t}"`).pluck().get());
     for (const [name, q] of FIGURES) {
       for (const r of db.prepare(q).safeIntegers(true).all() as Array<{ k: string; v: unknown }>) {
         out[`${name}:${r.k}`] = String(r.v);
@@ -47,7 +75,8 @@ export function rs5Diff(expected: Rs5Figures, actual: Rs5Figures): string[] {
   // this app) holds no rows there: its count compares as "0", so an empty new table is not a loss.
   const value = (f: Rs5Figures, k: string) => f[k] ?? (k.startsWith("rows:") ? "0" : undefined);
   for (const k of [...keys].sort()) {
-    if (value(expected, k) !== value(actual, k)) out.push(`${k}: expected ${expected[k] ?? "∅"}, got ${actual[k] ?? "∅"}`);
+    if (value(expected, k) !== value(actual, k))
+      out.push(`${k}: expected ${expected[k] ?? "∅"}, got ${actual[k] ?? "∅"}`);
   }
   return out;
 }

@@ -34,13 +34,18 @@ let runtime: Runtime;
 beforeAll(async () => {
   runtime = await import("@/infrastructure/orm/sqlite/runtime.js");
   await runtime.ensureSqliteRuntime();
-  const w = runtime.getSqliteRuntime()!.conns.writer as unknown as import("better-sqlite3").Database;
+  const w = runtime.getSqliteRuntime()!.conns
+    .writer as unknown as import("better-sqlite3").Database;
   w.prepare(`INSERT INTO tenants (id, name, slug) VALUES (?, 'شركة التنزيل', 'dl')`).run(TENANT);
   const { createBackupRouter } = await import("@/presentation/routes/backup.route.js");
   const app = express();
   app.use(express.json());
   app.use((req, _res, next) => {
-    (req as unknown as { tenantContext: unknown }).tenantContext = { tenantId: TENANT, userRole: role, userId: randomUUID() };
+    (req as unknown as { tenantContext: unknown }).tenantContext = {
+      tenantId: TENANT,
+      userRole: role,
+      userId: randomUUID(),
+    };
     next();
   });
   app.use("/api", createBackupRouter({} as never));
@@ -61,7 +66,13 @@ describe("desktop backup delivery (T100)", () => {
     const r = await fetch(`${base}/api/backup/full?deliver=metadata`, { method: "POST" });
     expect(r.status).toBe(200);
     expect(r.headers.get("content-type")).toMatch(/json/);
-    const m = (await r.json()) as { status: string; path: string; sizeBytes: number; sha256: string; fileName: string };
+    const m = (await r.json()) as {
+      status: string;
+      path: string;
+      sizeBytes: number;
+      sha256: string;
+      fileName: string;
+    };
     expect(m.status).toBe("VERIFIED");
     expect(m.fileName).toMatch(/^MotardERP-Backup-\d{4}-\d{2}-\d{2}\.zip$/);
     expect(statSync(m.path).size).toBe(m.sizeBytes);
@@ -79,16 +90,22 @@ describe("desktop backup delivery (T100)", () => {
   it("the registry lists the backups newest first with their status", async () => {
     const r = await fetch(`${base}/api/backup/registry`);
     expect(r.status).toBe(200);
-    const { entries } = (await r.json()) as { entries: Array<{ status: string; kind: string; exists: boolean; createdAt: string }> };
+    const { entries } = (await r.json()) as {
+      entries: Array<{ status: string; kind: string; exists: boolean; createdAt: string }>;
+    };
     expect(entries.length).toBeGreaterThanOrEqual(2);
-    expect(entries.every((e) => e.status === "VERIFIED" && e.kind === "manual" && e.exists)).toBe(true);
+    expect(entries.every((e) => e.status === "VERIFIED" && e.kind === "manual" && e.exists)).toBe(
+      true,
+    );
     expect(entries[0].createdAt >= entries[1].createdAt).toBe(true);
   });
 
-  it("only an admin may read the registry", async () => {
-    role = "accountant";
+  it("only an admin (or the accountant, owner decision 2026-10-12) may read the registry", async () => {
+    role = "warehouse";
     try {
       expect((await fetch(`${base}/api/backup/registry`)).status).toBe(403);
+      role = "accountant";
+      expect((await fetch(`${base}/api/backup/registry`)).status).toBe(200);
     } finally {
       role = "admin";
     }
@@ -110,7 +127,10 @@ describe("restore refusal messages", () => {
     const v2 = join(root, "postgres-era.zip");
     writeFileSync(v2, zipSync(e));
     const { restoreUploadedBackup } = await import("@/presentation/routes/backup.route.js");
-    const err = (await restoreUploadedBackup(v2, TENANT, true).catch((x: unknown) => x)) as { code?: string; message?: string };
+    const err = (await restoreUploadedBackup(v2, TENANT, true).catch((x: unknown) => x)) as {
+      code?: string;
+      message?: string;
+    };
     expect(err.code).toBe("BACKUP_UNSUPPORTED_FORMAT");
     expect(err.message).toMatch(/PostgreSQL/);
     expect(err.message).not.toMatch(/RESTORE_FAILED at/);

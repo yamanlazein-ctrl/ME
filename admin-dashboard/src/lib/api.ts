@@ -106,10 +106,13 @@ export async function deactivateActivation(activationId: string, reason?: string
 
 /** Vendor Control Plane: suspend a license (customer ERP cannot do this). */
 export async function suspendLicense(licenseId: string): Promise<License> {
-  const data = await apiFetch<{ license: License }>(`/license-admin/licenses/${licenseId}/suspend`, {
-    method: "POST",
-    body: JSON.stringify({}),
-  });
+  const data = await apiFetch<{ license: License }>(
+    `/license-admin/licenses/${licenseId}/suspend`,
+    {
+      method: "POST",
+      body: JSON.stringify({}),
+    },
+  );
   return data.license;
 }
 

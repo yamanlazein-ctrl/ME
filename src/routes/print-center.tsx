@@ -2,6 +2,8 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { Printer, FileText, Receipt, RotateCcw } from "lucide-react";
 import { PageCard } from "@/components/layout/PageCard";
 import { AppShell } from "@/components/layout/AppShell";
+import { useCurrentUser } from "@/presentation/hooks/useAuth";
+import { hasAdminPrivileges } from "@/presentation/hooks/useSettings";
 
 export const Route = createFileRoute("/print-center")({ component: PrintCenterPage });
 
@@ -22,6 +24,8 @@ const TEMPLATES = [
 ];
 
 function PrintCenterPage() {
+  // Printing settings are saved by admins only (C1-12) — others are not sent to a page they cannot use.
+  const { data: me } = useCurrentUser();
   return (
     <AppShell title="مركز الطباعة" subtitle="نماذج الطباعة الجاهزة">
       <PageCard title="النماذج المتاحة" description="اختر مستنداً للطباعة أو اذهب لسجل الوحدة.">
@@ -41,15 +45,17 @@ function PrintCenterPage() {
           ))}
         </div>
       </PageCard>
-      <div className="h-3" />
-      <PageCard title="إعدادات الطباعة" description="حجم الورق، الشعار، هامش التذييل، عدد النسخ.">
-        <Link
-          to="/settings/printing"
-          className="inline-flex items-center gap-2 rounded-lg bg-primary px-3 py-2 text-xs font-semibold text-primary-foreground"
-        >
-          <Printer className="h-4 w-4" /> فتح إعدادات الطباعة
-        </Link>
-      </PageCard>
+      {hasAdminPrivileges(me?.role) && <div className="h-3" />}
+      {hasAdminPrivileges(me?.role) && (
+        <PageCard title="إعدادات الطباعة" description="حجم الورق، الشعار، هامش التذييل، عدد النسخ.">
+          <Link
+            to="/settings/printing"
+            className="inline-flex items-center gap-2 rounded-lg bg-primary px-3 py-2 text-xs font-semibold text-primary-foreground"
+          >
+            <Printer className="h-4 w-4" /> فتح إعدادات الطباعة
+          </Link>
+        </PageCard>
+      )}
     </AppShell>
   );
 }

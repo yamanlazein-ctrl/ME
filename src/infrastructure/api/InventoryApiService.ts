@@ -94,10 +94,12 @@ export class InventoryApiService {
     id: string,
     body: { newKg?: number; newPieces?: number; reason: string; expectedVersion: number },
   ): Promise<{ beforeKg: number; afterKg: number; beforePieces: number; afterPieces: number }> {
-    const res = await this.client.post<{ beforeKg: number; afterKg: number; beforePieces: number; afterPieces: number }>(
-      `/api/inventory/rolls/${id}/adjust`,
-      body,
-    );
+    const res = await this.client.post<{
+      beforeKg: number;
+      afterKg: number;
+      beforePieces: number;
+      afterPieces: number;
+    }>(`/api/inventory/rolls/${id}/adjust`, body);
     return res.data;
   }
 

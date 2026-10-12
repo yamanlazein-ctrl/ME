@@ -57,7 +57,10 @@ export function buildLicenseTokenSignerForInstall(): LicenseTokenSigner {
   }
   const { privateKey, publicKey } = generateKeyPairSync("ed25519");
   const privPem = privateKey.export({ type: "pkcs8", format: "pem" }).toString().trim();
-  const pubPem = createPublicKey(privateKey).export({ type: "spki", format: "pem" }).toString().trim();
+  const pubPem = createPublicKey(privateKey)
+    .export({ type: "spki", format: "pem" })
+    .toString()
+    .trim();
   const oneLine = (pem: string) => pem.replace(/\n/g, "\\n");
 
   // Derive backend/.env path relative to this source file.
@@ -77,7 +80,10 @@ export function buildLicenseTokenSignerForInstall(): LicenseTokenSigner {
 
   // Append to .env only if LICENSE_SIGNING_KEY is not already present.
   try {
-    if (!existsSync(envPath) || !/^\s*LICENSE_SIGNING_KEY\s*=/m.test(readFileSync(envPath, "utf8"))) {
+    if (
+      !existsSync(envPath) ||
+      !/^\s*LICENSE_SIGNING_KEY\s*=/m.test(readFileSync(envPath, "utf8"))
+    ) {
       appendFileSync(envPath, envBlock, "utf8");
       logger.info(
         { envPath },
@@ -86,7 +92,10 @@ export function buildLicenseTokenSignerForInstall(): LicenseTokenSigner {
       );
     }
   } catch (err) {
-    logger.warn({ err, envPath }, "Failed to persist LICENSE_SIGNING_KEY to .env — using in-memory key only");
+    logger.warn(
+      { err, envPath },
+      "Failed to persist LICENSE_SIGNING_KEY to .env — using in-memory key only",
+    );
   }
 
   // Set the keys in process.env so the rest of the boot (and any

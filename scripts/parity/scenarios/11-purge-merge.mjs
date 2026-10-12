@@ -2,14 +2,23 @@
 import { idOf } from "./01-master-data.mjs";
 
 export default async function purgeMerge({ step, state }) {
-  const mk = async (label, name) => idOf(await step(label, "POST", "/api/customers", { kind: "customer", name }));
+  const mk = async (label, name) =>
+    idOf(await step(label, "POST", "/api/customers", { kind: "customer", name }));
   const survivor = await mk("merge.survivor", "عميل باقٍ");
   const source = await mk("merge.source", "عميل مكرر");
   const doomed = await mk("purge.party", "عميل للحذف الكامل");
 
   // a dedicated dye (fabric + colour + roll) with its own history, for the dye purge
-  const dye = idOf(await step("dye.fabric", "POST", "/api/inventory/fabrics", { name: "صبغة للحذف" }));
-  const dyeColor = idOf(await step("dye.color", "POST", "/api/inventory/colors", { fabricId: dye, name: "زهري", hex: "#ff00ff" }));
+  const dye = idOf(
+    await step("dye.fabric", "POST", "/api/inventory/fabrics", { name: "صبغة للحذف" }),
+  );
+  const dyeColor = idOf(
+    await step("dye.color", "POST", "/api/inventory/colors", {
+      fabricId: dye,
+      name: "زهري",
+      hex: "#ff00ff",
+    }),
+  );
   const dyeRoll = idOf(
     await step("dye.roll", "POST", "/api/inventory/rolls", {
       colorId: dyeColor,
@@ -30,7 +39,16 @@ export default async function purgeMerge({ step, state }) {
     partyType: "supplier",
     currency: "SYP",
     exchangeRate: 15000,
-    lines: [{ fabricId: dye, colorId: dyeColor, rollId: dyeRoll, quantityKg: 30, pricePerKg: 12000, pieces: 6 }],
+    lines: [
+      {
+        fabricId: dye,
+        colorId: dyeColor,
+        rollId: dyeRoll,
+        quantityKg: 30,
+        pricePerKg: 12000,
+        pieces: 6,
+      },
+    ],
   });
   const sale = (party, kg, label) =>
     step(label, "POST", "/api/invoices", {
@@ -40,7 +58,16 @@ export default async function purgeMerge({ step, state }) {
       partyType: "customer",
       currency: "SYP",
       exchangeRate: 15000,
-      lines: [{ fabricId: dye, colorId: dyeColor, rollId: dyeRoll, quantityKg: kg, pricePerKg: 16000, pieces: 1 }],
+      lines: [
+        {
+          fabricId: dye,
+          colorId: dyeColor,
+          rollId: dyeRoll,
+          quantityKg: kg,
+          pricePerKg: 16000,
+          pieces: 1,
+        },
+      ],
       paid: 10000,
       paymentMethod: "cash",
     });
@@ -68,14 +95,24 @@ export default async function purgeMerge({ step, state }) {
   // party purge cascade (cancels its invoices/vouchers through accounting, soft-cancels the party)
   const p = await step("purge.party.get", "GET", `/api/customers/${doomed}`);
   const v = p?.version ?? p?.data?.version;
-  await step("purge.party.cascade", "DELETE", `/api/customers/${doomed}?expectedVersion=${v}&confirmCascade=true`, { expectedVersion: v, confirmCascade: true });
+  await step(
+    "purge.party.cascade",
+    "DELETE",
+    `/api/customers/${doomed}?expectedVersion=${v}&confirmCascade=true`,
+    { expectedVersion: v, confirmCascade: true },
+  );
   await step("purge.party.after", "GET", `/api/customers/${doomed}`);
   await step("purge.party.statement", "GET", `/api/customers/${doomed}/statement`);
 
   // dye purge cascade (impact first, then the purge with the typed confirmation)
   await step("dye.impact", "GET", `/api/inventory/dyes/${dye}/deletion-impact`);
-  await step("dye.purge.wrong-confirmation", "DELETE", `/api/inventory/dyes/${dye}/purge`, { confirmation: "خطأ" });
-  await step("dye.purge", "DELETE", `/api/inventory/dyes/${dye}/purge`, { confirmation: "تأكيد", reason: "اختبار" });
+  await step("dye.purge.wrong-confirmation", "DELETE", `/api/inventory/dyes/${dye}/purge`, {
+    confirmation: "خطأ",
+  });
+  await step("dye.purge", "DELETE", `/api/inventory/dyes/${dye}/purge`, {
+    confirmation: "تأكيد",
+    reason: "اختبار",
+  });
   await step("dye.after.fabrics", "GET", "/api/inventory/fabrics?limit=50");
   await step("dye.after.invoices", "GET", "/api/invoices?type=sale&limit=100");
   await step("dye.after.cashbox", "GET", "/api/cashbox/movements/2026-04-02?currency=SYP");

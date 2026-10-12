@@ -849,11 +849,7 @@
       ],
       "partyId": "#00098",
       "preAllocated": true,
-      "rollIds": [
-        "#00105",
-        "#00106",
-        "#00108"
-      ]
+      "rollIds": ["#00105", "#00106", "#00108"]
     },
     "seq": 16,
     "status": "pending",
@@ -1008,9 +1004,7 @@
       ],
       "partyId": "#00099",
       "preAllocated": true,
-      "rollIds": [
-        "#00107"
-      ]
+      "rollIds": ["#00107"]
     },
     "seq": 17,
     "status": "pending",
@@ -1213,10 +1207,7 @@
       ],
       "partyId": "#00094",
       "preAllocated": true,
-      "rollIds": [
-        "#00105",
-        "#00106"
-      ]
+      "rollIds": ["#00105", "#00106"]
     },
     "seq": 18,
     "status": "pending",
@@ -1371,9 +1362,7 @@
       ],
       "partyId": "#00096",
       "preAllocated": true,
-      "rollIds": [
-        "#00107"
-      ]
+      "rollIds": ["#00107"]
     },
     "seq": 19,
     "status": "pending",
@@ -1562,10 +1551,7 @@
       ],
       "partyId": "#00096",
       "preAllocated": true,
-      "rollIds": [
-        "#00108",
-        "#00105"
-      ]
+      "rollIds": ["#00108", "#00105"]
     },
     "seq": 20,
     "status": "pending",
@@ -1752,9 +1738,7 @@
       ],
       "partyId": "#00097",
       "preAllocated": true,
-      "rollIds": [
-        "#00106"
-      ]
+      "rollIds": ["#00106"]
     },
     "seq": 21,
     "status": "pending",
@@ -2223,9 +2207,7 @@
       "returnId": "#00132",
       "returnKind": "sale",
       "returnNumber": "RET-2026-0001",
-      "rollIds": [
-        "#00105"
-      ]
+      "rollIds": ["#00105"]
     },
     "seq": 27,
     "status": "pending",
@@ -2370,9 +2352,7 @@
       "returnId": "#00134",
       "returnKind": "entry",
       "returnNumber": "RET-2026-0002",
-      "rollIds": [
-        "#00108"
-      ]
+      "rollIds": ["#00108"]
     },
     "seq": 28,
     "status": "pending",
@@ -2867,9 +2847,7 @@
       ],
       "partyId": "#00099",
       "preAllocated": true,
-      "rollIds": [
-        "#00201"
-      ]
+      "rollIds": ["#00201"]
     },
     "seq": 42,
     "status": "pending",
@@ -3025,9 +3003,7 @@
       ],
       "partyId": "#00097",
       "preAllocated": true,
-      "rollIds": [
-        "#00201"
-      ]
+      "rollIds": ["#00201"]
     },
     "seq": 43,
     "status": "pending",
@@ -3183,9 +3159,7 @@
       ],
       "partyId": "#00097",
       "preAllocated": true,
-      "rollIds": [
-        "#00201"
-      ]
+      "rollIds": ["#00201"]
     },
     "seq": 44,
     "status": "pending",
@@ -3342,9 +3316,7 @@
       ],
       "partyId": "#00097",
       "preAllocated": true,
-      "rollIds": [
-        "#00201"
-      ]
+      "rollIds": ["#00201"]
     },
     "seq": 45,
     "status": "pending",
@@ -3500,9 +3472,7 @@
       ],
       "partyId": "#00097",
       "preAllocated": true,
-      "rollIds": [
-        "#00201"
-      ]
+      "rollIds": ["#00201"]
     },
     "seq": 46,
     "status": "pending",
@@ -3658,9 +3628,7 @@
       ],
       "partyId": "#00097",
       "preAllocated": true,
-      "rollIds": [
-        "#00201"
-      ]
+      "rollIds": ["#00201"]
     },
     "seq": 47,
     "status": "pending",
@@ -3816,9 +3784,7 @@
       ],
       "partyId": "#00097",
       "preAllocated": true,
-      "rollIds": [
-        "#00201"
-      ]
+      "rollIds": ["#00201"]
     },
     "seq": 48,
     "status": "pending",
@@ -4010,11 +3976,7 @@
       ],
       "partyId": "#00097",
       "preAllocated": true,
-      "rollIds": [
-        "#00201",
-        "#00201",
-        "#00201"
-      ]
+      "rollIds": ["#00201", "#00201", "#00201"]
     },
     "seq": 49,
     "status": "pending",
@@ -4435,9 +4397,7 @@
       ],
       "partyId": "#00098",
       "preAllocated": true,
-      "rollIds": [
-        "#00234"
-      ]
+      "rollIds": ["#00234"]
     },
     "seq": 56,
     "status": "pending",
@@ -4596,9 +4556,7 @@
       ],
       "partyId": "#00230",
       "preAllocated": true,
-      "rollIds": [
-        "#00234"
-      ]
+      "rollIds": ["#00234"]
     },
     "seq": 57,
     "status": "pending",
@@ -4757,9 +4715,7 @@
       ],
       "partyId": "#00229",
       "preAllocated": true,
-      "rollIds": [
-        "#00234"
-      ]
+      "rollIds": ["#00234"]
     },
     "seq": 58,
     "status": "pending",
@@ -4918,9 +4874,7 @@
       ],
       "partyId": "#00231",
       "preAllocated": true,
-      "rollIds": [
-        "#00234"
-      ]
+      "rollIds": ["#00234"]
     },
     "seq": 59,
     "status": "pending",
@@ -5165,9 +5119,7 @@
       ],
       "partyId": "#00098",
       "preAllocated": true,
-      "rollIds": [
-        "#00252"
-      ]
+      "rollIds": ["#00252"]
     },
     "seq": 63,
     "status": "pending",
@@ -5353,9 +5305,7 @@
       ],
       "partyId": "#00094",
       "preAllocated": true,
-      "rollIds": [
-        "#00252"
-      ]
+      "rollIds": ["#00252"]
     },
     "seq": "<commit-order>",
     "status": "pending",
@@ -5511,9 +5461,7 @@
       ],
       "partyId": "#00094",
       "preAllocated": true,
-      "rollIds": [
-        "#00252"
-      ]
+      "rollIds": ["#00252"]
     },
     "seq": "<commit-order>",
     "status": "pending",
@@ -5669,9 +5617,7 @@
       ],
       "partyId": "#00094",
       "preAllocated": true,
-      "rollIds": [
-        "#00252"
-      ]
+      "rollIds": ["#00252"]
     },
     "seq": "<commit-order>",
     "status": "pending",
@@ -5826,9 +5772,7 @@
       ],
       "partyId": "#00096",
       "preAllocated": true,
-      "rollIds": [
-        "#00107"
-      ]
+      "rollIds": ["#00107"]
     },
     "seq": "<commit-order>",
     "status": "pending",
@@ -5983,9 +5927,7 @@
       ],
       "partyId": "#00096",
       "preAllocated": true,
-      "rollIds": [
-        "#00107"
-      ]
+      "rollIds": ["#00107"]
     },
     "seq": "<commit-order>",
     "status": "pending",
@@ -6140,9 +6082,7 @@
       ],
       "partyId": "#00096",
       "preAllocated": true,
-      "rollIds": [
-        "#00107"
-      ]
+      "rollIds": ["#00107"]
     },
     "seq": "<commit-order>",
     "status": "pending",
@@ -6297,9 +6237,7 @@
       ],
       "partyId": "#00096",
       "preAllocated": true,
-      "rollIds": [
-        "#00107"
-      ]
+      "rollIds": ["#00107"]
     },
     "seq": "<commit-order>",
     "status": "pending",
@@ -6454,9 +6392,7 @@
       ],
       "partyId": "#00096",
       "preAllocated": true,
-      "rollIds": [
-        "#00107"
-      ]
+      "rollIds": ["#00107"]
     },
     "seq": "<commit-order>",
     "status": "pending",
@@ -6611,9 +6547,7 @@
       ],
       "partyId": "#00096",
       "preAllocated": true,
-      "rollIds": [
-        "#00107"
-      ]
+      "rollIds": ["#00107"]
     },
     "seq": "<commit-order>",
     "status": "pending",

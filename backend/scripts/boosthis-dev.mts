@@ -29,6 +29,8 @@ if (process.env.BOOSTHIS_PROJECT_KEY && isServer) {
       appName: "Motard ERP backend (dev)",
     });
   } catch (e) {
-    console.warn(`[boosthis-dev] kit not loaded, running without telemetry: ${(e as Error).message}`);
+    console.warn(
+      `[boosthis-dev] kit not loaded, running without telemetry: ${(e as Error).message}`,
+    );
   }
 }

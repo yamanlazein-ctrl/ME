@@ -90,7 +90,11 @@ export function FullRestoreCard({
           ? await fetch("/api/backup/verify-path", {
               method: "POST",
               headers: { ...authHeaders(), "Content-Type": "application/json" },
-              body: JSON.stringify({ path: p.file.path, sha256: p.file.sha256, sizeBytes: p.file.sizeBytes }),
+              body: JSON.stringify({
+                path: p.file.path,
+                sha256: p.file.sha256,
+                sizeBytes: p.file.sizeBytes,
+              }),
             })
           : await fetch("/api/backup/verify", {
               method: "POST",
@@ -142,7 +146,10 @@ export function FullRestoreCard({
             : "/api/backup/restore?confirm=replace";
       const res = await fetch(url, {
         method: "POST",
-        headers: { ...(mode === "settings" ? authHeaders() : {}), "Content-Type": byPath.contentType },
+        headers: {
+          ...(mode === "settings" ? authHeaders() : {}),
+          "Content-Type": byPath.contentType,
+        },
         body: byPath.body,
       });
       const body = await res.json().catch(() => ({}));
@@ -164,7 +171,10 @@ export function FullRestoreCard({
     }
   }
 
-  const fileName = picked?.kind === "path" ? picked.file.path.split(/[\\/]/).pop() ?? picked.file.path : picked?.file.name ?? null;
+  const fileName =
+    picked?.kind === "path"
+      ? (picked.file.path.split(/[\\/]/).pop() ?? picked.file.path)
+      : (picked?.file.name ?? null);
   const busy = state === "verifying" || state === "restoring";
   const canRestore =
     !!picked &&

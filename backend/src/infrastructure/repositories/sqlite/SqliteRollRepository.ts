@@ -3,7 +3,14 @@
 import { desc } from "./helpers/pgOrder.js";
 import { ilikeEscaped } from "./helpers/likeContains.js";
 import { eq, and, sql, getTableColumns } from "drizzle-orm";
-import { afterCursor, cursorColumns, decodeCursor, keysetOrder, nextCursorOf, type KeysetSpec } from "./helpers/keysetPage.js";
+import {
+  afterCursor,
+  cursorColumns,
+  decodeCursor,
+  keysetOrder,
+  nextCursorOf,
+  type KeysetSpec,
+} from "./helpers/keysetPage.js";
 import { likeContains } from "../../utils/likeEscape.js";
 import type { DB } from "../../orm/sqlite/drizzleCompat.js";
 import type {
@@ -106,7 +113,9 @@ export class SqliteRollRepository implements IRollRepository {
           // Mirror remainingKg semantics: born with stock → pieces available;
           // entry-invoice flow (remainingKg=0) → invoice transaction increments.
           remainingPieces:
-            Number(data.remainingKg ?? data.initialKg) > 0 ? (data.pieces ?? 1) : (data.remainingPieces ?? 0),
+            Number(data.remainingKg ?? data.initialKg) > 0
+              ? (data.pieces ?? 1)
+              : (data.remainingPieces ?? 0),
           pricePerKg: String(data.pricePerKg),
           salePricePerKg: data.salePricePerKg ? String(data.salePricePerKg) : null,
           currency: data.currency ?? "SYP",
@@ -243,7 +252,9 @@ export class SqliteRollRepository implements IRollRepository {
             .returning();
           if (!row) {
             if (data.expectedVersion !== undefined) {
-              throw new Error("تم تعديل اللفافة بواسطة عملية أخرى — أعد التحميل والمحاولة مرة أخرى");
+              throw new Error(
+                "تم تعديل اللفافة بواسطة عملية أخرى — أعد التحميل والمحاولة مرة أخرى",
+              );
             }
             throw new Error("Roll not found");
           }

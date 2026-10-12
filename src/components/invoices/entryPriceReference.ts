@@ -44,7 +44,8 @@ export function entryPriceReference(
     currency: roll.entryCurrency,
     sourceLabel,
     entryDate: roll.entryDate,
-    belowEntry: !otherCurrency && saleCurrency !== "" && salePricePerKg > 0 && salePricePerKg < price,
+    belowEntry:
+      !otherCurrency && saleCurrency !== "" && salePricePerKg > 0 && salePricePerKg < price,
     otherCurrency,
   };
 }

@@ -111,9 +111,7 @@ export class SqliteSyncDeviceRepository implements ISyncDeviceRepository {
         const [byId] = await this.db
           .select()
           .from(syncDevices)
-          .where(
-            and(eq(syncDevices.tenantId, input.tenantId), eq(syncDevices.id, input.deviceId)),
-          )
+          .where(and(eq(syncDevices.tenantId, input.tenantId), eq(syncDevices.id, input.deviceId)))
           .limit(1);
         if (byId) {
           if (byId.deviceFingerprint !== input.deviceFingerprint) {
@@ -155,7 +153,13 @@ export class SqliteSyncDeviceRepository implements ISyncDeviceRepository {
           ...touch,
           ...(registration ? { deviceRegistrationId: registration.id } : {}),
         };
-        if (await isLicenseFingerprintRevoked(this.db as unknown as PgDB, input.tenantId, input.deviceFingerprint)) {
+        if (
+          await isLicenseFingerprintRevoked(
+            this.db as unknown as PgDB,
+            input.tenantId,
+            input.deviceFingerprint,
+          )
+        ) {
           throw new SyncDeviceRevokedError("license_revoked");
         }
         const [updated] = await this.db
@@ -167,7 +171,13 @@ export class SqliteSyncDeviceRepository implements ISyncDeviceRepository {
         return { ...updated, authorizedUserIds };
       }
 
-      if (await isLicenseFingerprintRevoked(this.db as unknown as PgDB, input.tenantId, input.deviceFingerprint)) {
+      if (
+        await isLicenseFingerprintRevoked(
+          this.db as unknown as PgDB,
+          input.tenantId,
+          input.deviceFingerprint,
+        )
+      ) {
         throw new SyncDeviceRevokedError("license_revoked");
       }
 
@@ -198,7 +208,11 @@ export class SqliteSyncDeviceRepository implements ISyncDeviceRepository {
       const hydrated = await this.hydrateAuthorized(row);
       if (
         !hydrated.revokedAt &&
-        (await isLicenseFingerprintRevoked(this.db as unknown as PgDB, tenantId, hydrated.deviceFingerprint))
+        (await isLicenseFingerprintRevoked(
+          this.db as unknown as PgDB,
+          tenantId,
+          hydrated.deviceFingerprint,
+        ))
       ) {
         return {
           ...hydrated,
@@ -227,8 +241,17 @@ export class SqliteSyncDeviceRepository implements ISyncDeviceRepository {
     await runWithTenantContext({ tenantId }, async () => {
       await this.db
         .update(syncDevices)
-        .set({ deviceFingerprint: sql`substr(${syncDevices.deviceFingerprint}, 1, 83) || '#retired:' || ${syncDevices.id}`, updatedAt: new Date() })
-        .where(and(eq(syncDevices.tenantId, tenantId), eq(syncDevices.id, deviceId), isNotNull(syncDevices.revokedAt)));
+        .set({
+          deviceFingerprint: sql`substr(${syncDevices.deviceFingerprint}, 1, 83) || '#retired:' || ${syncDevices.id}`,
+          updatedAt: new Date(),
+        })
+        .where(
+          and(
+            eq(syncDevices.tenantId, tenantId),
+            eq(syncDevices.id, deviceId),
+            isNotNull(syncDevices.revokedAt),
+          ),
+        );
     });
   }
 

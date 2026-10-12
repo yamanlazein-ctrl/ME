@@ -27,7 +27,9 @@ describe("voucher settlement discount", () => {
     reachable = await databaseReachable();
     if (!reachable) return;
     try {
-      await db.insert(tenants).values({ id: tenantId, name: "Discount Tenant", slug: `disc-${tenantId.slice(0, 8)}` });
+      await db
+        .insert(tenants)
+        .values({ id: tenantId, name: "Discount Tenant", slug: `disc-${tenantId.slice(0, 8)}` });
       await db.insert(parties).values([
         {
           id: customerId,

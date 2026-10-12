@@ -8,14 +8,22 @@ import { canonicalUuid } from "../../orm/sqlite/types.js";
  */
 import { sql } from "drizzle-orm";
 import type { DB } from "../../orm/sqlite/drizzleCompat.js";
-import type { ISearchRepository, PartySearchInput, SearchRow } from "../../../application/ports/ISearchRepository.js";
+import type {
+  ISearchRepository,
+  PartySearchInput,
+  SearchRow,
+} from "../../../application/ports/ISearchRepository.js";
 
 const rowsOf = (r: unknown): SearchRow[] => (r as { rows?: SearchRow[] }).rows ?? [];
 
 /** The error PG raises for `id = ANY(${ids}::uuid[])` with a JS array (see partiesByIds). */
 function pgByIdsFailure(ids: string[]): Error {
   const cause = Object.assign(
-    new Error(ids.length === 1 ? `malformed array literal: "${ids[0]}"` : "cannot cast type record to uuid[]"),
+    new Error(
+      ids.length === 1
+        ? `malformed array literal: "${ids[0]}"`
+        : "cannot cast type record to uuid[]",
+    ),
     { code: ids.length === 1 ? "22P02" : "42846" },
   );
   return new Error("Failed query: by-ids lookup", { cause });
@@ -24,7 +32,15 @@ function pgByIdsFailure(ids: string[]): Error {
 export class SqliteSearchRepository implements ISearchRepository {
   constructor(private readonly db: DB) {}
 
-  async searchParties({ tenantId, q, kind, status, limit, pattern, cursor }: PartySearchInput): Promise<SearchRow[]> {
+  async searchParties({
+    tenantId,
+    q,
+    kind,
+    status,
+    limit,
+    pattern,
+    cursor,
+  }: PartySearchInput): Promise<SearchRow[]> {
     const rows = await this.db.execute(sql`
       SELECT id, name, code, kind, status, currency
         FROM parties
@@ -48,7 +64,12 @@ export class SqliteSearchRepository implements ISearchRepository {
     return rowsOf(rows);
   }
 
-  async searchFabrics(tenantId: string, q: string, pattern: string, limit: number): Promise<SearchRow[]> {
+  async searchFabrics(
+    tenantId: string,
+    q: string,
+    pattern: string,
+    limit: number,
+  ): Promise<SearchRow[]> {
     const rows = await this.db.execute(sql`
       SELECT id, name FROM fabrics
        WHERE tenant_id = ${tenantId} AND name LIKE ${pattern} ESCAPE '\\'
@@ -57,7 +78,12 @@ export class SqliteSearchRepository implements ISearchRepository {
     return rowsOf(rows);
   }
 
-  async searchColors(tenantId: string, fabricId: string, pattern: string, limit: number): Promise<SearchRow[]> {
+  async searchColors(
+    tenantId: string,
+    fabricId: string,
+    pattern: string,
+    limit: number,
+  ): Promise<SearchRow[]> {
     // PG binds `${fabricId}::uuid` even when the `= ''` branch is taken: any non-uuid text (the route
     // default "" included) fails with 22P02 before the query runs. Same cast here (owner item O-2).
     const fabricUuid = canonicalUuid(fabricId);
@@ -70,7 +96,13 @@ export class SqliteSearchRepository implements ISearchRepository {
     return rowsOf(rows);
   }
 
-  async searchRolls(tenantId: string, colorId: string, status: string, pattern: string, limit: number): Promise<SearchRow[]> {
+  async searchRolls(
+    tenantId: string,
+    colorId: string,
+    status: string,
+    pattern: string,
+    limit: number,
+  ): Promise<SearchRow[]> {
     const colorUuid = canonicalUuid(colorId); // PG `${colorId}::uuid`: see searchColors (O-2)
     const rows = await this.db.execute(sql`
       SELECT id, roll_no AS "rollNo", color_id AS "colorId", status,
@@ -94,7 +126,6 @@ export class SqliteSearchRepository implements ISearchRepository {
     throw pgByIdsFailure(ids);
   }
 
-
   async rollsByIds(tenantId: string, ids: string[]): Promise<SearchRow[]> {
     void tenantId;
     // OWNER DECISION O-1 (research R13c): on PostgreSQL this query always fails — Drizzle expands the
@@ -102,5 +133,4 @@ export class SqliteSearchRepository implements ISearchRepository {
     // both engines, the SQLite twin fails identically (locked by tests/search-repository.test.ts).
     throw pgByIdsFailure(ids);
   }
-
 }

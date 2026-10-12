@@ -73,7 +73,9 @@ function transactionBody(fileSrc: string, callArgs: string): string {
   const ident = /^[A-Za-z_$][\w$]*$/.exec(cb.trim());
   if (!ident) return cb; // inline arrow: the argument text IS the body
   const name = ident[0];
-  const decl = new RegExp(`(?:const|let|var)\\s+${name}\\s*=\\s*(?:async\\s*)?(?:\\([^)]*\\)|[\\w$]+)\\s*=>`);
+  const decl = new RegExp(
+    `(?:const|let|var)\\s+${name}\\s*=\\s*(?:async\\s*)?(?:\\([^)]*\\)|[\\w$]+)\\s*=>`,
+  );
   const m = decl.exec(fileSrc);
   if (!m) return "";
   const braceIdx = fileSrc.indexOf("{", m.index + m[0].length - 1);
@@ -148,7 +150,10 @@ function containerWiring(file: string): Record<string, { cls: string; handle: st
 }
 
 function repoSourcePath(cls: string): string {
-  for (const p of [path.join(REPOS_DIR, `${cls}.ts`), path.join(REPOS_DIR, "sqlite", `${cls}.ts`)]) {
+  for (const p of [
+    path.join(REPOS_DIR, `${cls}.ts`),
+    path.join(REPOS_DIR, "sqlite", `${cls}.ts`),
+  ]) {
     if (fs.existsSync(p)) return p;
   }
   return "";
@@ -195,32 +200,36 @@ describe("F-07 wiring — sync routes must let their business write join the out
     expect(candidates.length).toBeGreaterThanOrEqual(8);
   });
 
-  it.each(Object.entries(CONTAINER_PATHS))("every repository used inside those transactions is ambient-aware (%s wiring)", (_engine, wiringFile) => {
-    const container = containerWiring(wiringFile);
-    const bad: string[] = [];
-    for (const { file, fields } of candidates) {
-      if (fields.length === 0) bad.push(`${file}: no repository resolved inside withTenantTx (parser drift)`);
-      for (const field of fields) {
-        if (field.startsWith("sync")) continue; // outbox/inbox: already dbx-wired by design
-        if (FIRE_AND_FORGET[field]) continue; // documented fire-and-forget side record
-        const wire = container[field];
-        if (!wire) {
-          bad.push(`${file}: container.${field} has no constructor wiring`);
-          continue;
+  it.each(Object.entries(CONTAINER_PATHS))(
+    "every repository used inside those transactions is ambient-aware (%s wiring)",
+    (_engine, wiringFile) => {
+      const container = containerWiring(wiringFile);
+      const bad: string[] = [];
+      for (const { file, fields } of candidates) {
+        if (fields.length === 0)
+          bad.push(`${file}: no repository resolved inside withTenantTx (parser drift)`);
+        for (const field of fields) {
+          if (field.startsWith("sync")) continue; // outbox/inbox: already dbx-wired by design
+          if (FIRE_AND_FORGET[field]) continue; // documented fire-and-forget side record
+          const wire = container[field];
+          if (!wire) {
+            bad.push(`${file}: container.${field} has no constructor wiring`);
+            continue;
+          }
+          if (wire.handle === "dbx") continue; // (1) ambient proxy
+          const repoPath = repoSourcePath(wire.cls);
+          const repo = repoPath ? fs.readFileSync(repoPath, "utf8") : "";
+          // (2) opens its transaction through withTenantTx → joins as a savepoint.
+          if (/\bwithTenantTx\s*\(/.test(repo)) continue;
+          bad.push(
+            `${file}: ${wire.cls} is wired with \`${wire.handle}\` and never joins an ambient transaction — ` +
+              "its writes would commit outside the route's transaction",
+          );
         }
-        if (wire.handle === "dbx") continue; // (1) ambient proxy
-        const repoPath = repoSourcePath(wire.cls);
-        const repo = repoPath ? fs.readFileSync(repoPath, "utf8") : "";
-        // (2) opens its transaction through withTenantTx → joins as a savepoint.
-        if (/\bwithTenantTx\s*\(/.test(repo)) continue;
-        bad.push(
-          `${file}: ${wire.cls} is wired with \`${wire.handle}\` and never joins an ambient transaction — ` +
-            "its writes would commit outside the route's transaction",
-        );
       }
-    }
-    expect(bad, bad.join("; ")).toEqual([]);
-  });
+      expect(bad, bad.join("; ")).toEqual([]);
+    },
+  );
 
   it("fire-and-forget exceptions carry a reason", () => {
     for (const [field, reason] of Object.entries(FIRE_AND_FORGET)) {
@@ -228,7 +237,8 @@ describe("F-07 wiring — sync routes must let their business write join the out
     }
   });
 
-  it("the company profile route enqueues inside the tenant transaction (regression)", () => {    const src = fs.readFileSync(path.join(ROUTES_DIR, "company.route.ts"), "utf8");
+  it("the company profile route enqueues inside the tenant transaction (regression)", () => {
+    const src = fs.readFileSync(path.join(ROUTES_DIR, "company.route.ts"), "utf8");
     const putIdx = src.indexOf('"/api/company/profile"');
     expect(putIdx, "PUT /api/company/profile must exist").toBeGreaterThan(-1);
     const region = src.slice(putIdx);

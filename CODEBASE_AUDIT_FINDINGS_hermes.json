@@ -1,0 +1,801 @@
+{
+  "$schema_note": "Machine-readable findings index for CODEBASE_AUDIT_REPORT.md. Every record was verified by the lead auditor at the cited file:line before inclusion. Subagent self-reports are recorded separately in section 'subagent_claims_unverified'.",
+  "audit": {
+    "repository": "C:/Users/Taw/Downloads/Compressed/q/ME-main",
+    "head": "2b9b602cb1f5e74c9db2fd39a1aae8c11fbb79f7",
+    "head_subject": "Sync full working tree: audit fixes, Drive archive, e2e/Sentry setup, statement order, form labels",
+    "branch": "main",
+    "working_tree": "clean (0 modified files)",
+    "mode": "read-only",
+    "report": "CODEBASE_AUDIT_REPORT_hermes.md (1894 lines, 20 sections)",
+    "loc": {
+      "src": 65517,
+      "backend_src": 48136,
+      "packages_shared": 1702,
+      "rust": 8045
+    },
+    "inventory": {
+      "frontend_routes": 53,
+      "backend_route_modules": 32,
+      "backend_endpoints_approx": 270,
+      "pg_schema_tables": 47,
+      "sqlite_schema_tables": 52
+    },
+    "filename_collision": "An unrelated whole-repository audit wrote CODEBASE_AUDIT_REPORT.md at 18:58, overwriting this document. Relocated to CODEBASE_AUDIT_REPORT_hermes.md / CODEBASE_AUDIT_FINDINGS_hermes.json. HEAD was unchanged throughout (2b9b602c); no repository file was modified by either audit. The two audits are independent — compare evidence where they overlap rather than assuming agreement.",
+    "status": "All 9 dispatched groups worked. Group C is the only one that completed as a subagent; its Critical and High findings were independently re-verified by the lead auditor. Groups A, B, D, E1, E2, F, G were worked directly by the lead auditor after their dispatches were rate-limited."
+  },
+  "findings": [
+    {
+      "id": "F-001",
+      "title": "Two CI steps can never execute a single test; they fail for the wrong reason",
+      "severity": "High",
+      "type": "integration defect",
+      "confidence": "Confirmed",
+      "verification_status": "Confirmed",
+      "page_or_endpoint": "CI pipeline",
+      "location": ".github/workflows/ci.yml",
+      "file_lines": [
+        ".github/workflows/ci.yml:55",
+        ".github/workflows/ci.yml:98",
+        "vitest.config.ts:8",
+        "backend/vitest.config.ts:33"
+      ],
+      "evidence": "Root vitest.config.ts includes only src/** and packages/shared/src/**. CI line 55 runs `npx vitest run backend/tests/...` from the repo root -> 'No test files found, exiting with code 1'. CI line 98's second command runs after `cd backend`, so src/contracts/reports.dfp015.test.ts is matched against the backend config's tests/** glob -> also 'No test files found', exit 1.",
+      "actual": "Both steps exit 1 having run zero tests. The migration-journal and schema-parity guards they exist to enforce never execute.",
+      "expected": "Each step runs from the directory whose vitest config covers the tests it names.",
+      "affected": [
+        ".github/workflows/ci.yml:55",
+        ".github/workflows/ci.yml:98"
+      ],
+      "downstream_effects": "Migration journal drift and schema/PG divergence would reach main undetected.",
+      "reproduction": "From repo root: npx vitest run backend/tests/migrations-journal-guard.test.ts backend/tests/schema-migration-parity.test.ts ; echo $?  -> 1",
+      "existing_test_coverage": "None — this is a defect in the gate itself.",
+      "recommended_fix": "Prefix line 55 with `cd backend && `; move line 98's second command above its `cd backend` or into its own root-level step.",
+      "regression_risk": "None. Both target files exist on disk (verified with ls).",
+      "regression_test": "A CI step asserting the string 'No test files found' is absent from output."
+    },
+    {
+      "id": "F-002",
+      "title": "npm run lint exits 1 with 245 errors plus 50 warnings; repo cannot pass its own CI Lint gate",
+      "severity": "High",
+      "type": "maintainability",
+      "confidence": "Confirmed",
+      "verification_status": "Confirmed",
+      "location": "repo-wide, src/",
+      "file_lines": [
+        "src/shared/utils/supplierMatch.ts:39",
+        "src/routes/settings.drive.tsx:43",
+        "src/routes/settings.sync.tsx:187",
+        "src/routes/orders.new.tsx:157"
+      ],
+      "evidence": "`npm run lint` -> '✖ 295 problems (245 errors, 50 warnings)', exit 1. All 245 errors are the prettier/prettier rule. `npx prettier --check .` -> 'Code style issues found in 812 files'.",
+      "actual": "Lint gate is a hard failure on formatting alone, independent of any code defect.",
+      "expected": "CLAUDE.md claims 'Lint warnings are at exactly 50 (the limit)' — that describes warnings only and is materially stale; the 245 errors are a separate harder failure the note omits.",
+      "affected": [
+        "CI build job Lint step",
+        "812 files repo-wide for formatting"
+      ],
+      "downstream_effects": "CI Lint job fails; real lint findings are buried under formatting noise.",
+      "reproduction": "npm run lint ; echo $?",
+      "existing_test_coverage": "n/a",
+      "recommended_fix": "Run `npx prettier --write` in a dedicated formatting commit, then re-run the lint gate.",
+      "regression_risk": "Rewrites 812 files and would bury any functional change in an enormous diff — reformat separately from behaviour changes.",
+      "regression_test": "npm run lint exits 0."
+    },
+    {
+      "id": "F-004",
+      "title": "FORCE-RLS sweep exempts only revoked_tokens by name; six other tables have a NULLABLE tenant_id",
+      "severity": "High",
+      "type": "data integrity / security",
+      "confidence": "Confirmed (structure) / Not verified (runtime)",
+      "verification_status": "Confirmed",
+      "location": "backend/src/infrastructure/orm/migrations/20260923_force_rls_all_tenant_tables.sql",
+      "file_lines": [
+        "backend/src/infrastructure/orm/migrations/20260923_force_rls_all_tenant_tables.sql:19-31",
+        "backend/src/infrastructure/orm/schemas/sync-state.table.ts",
+        "backend/src/infrastructure/orm/schemas/setup-wizard-state.table.ts",
+        "backend/src/infrastructure/orm/schemas/secret.table.ts",
+        "backend/src/infrastructure/orm/schemas/license.table.ts",
+        "backend/src/infrastructure/orm/schemas/server-installation.table.ts",
+        "backend/src/infrastructure/orm/schemas/license-audit-event.table.ts",
+        "backend/src/infrastructure/orm/rls/enable-rls.sql:71",
+        "backend/src/infrastructure/orm/migrations/20260929_rls_nullif_guard_license_platform.sql"
+      ],
+      "evidence": "The loop's only exemption is `c.relname <> 'revoked_tokens'`; it tests that a tenant_id column EXISTS but never `a.attnotnull`. Seven schema tables declare tenantId without .notNull(). Migration 20260929 grants platform_or_tenant policies to five of them (licenses, secrets, server_installations, license_audit_events, setup_wizard_state) — but sync_state has NO policy: a grep for `CREATE POLICY ... ON sync_state` across all migrations and rls/enable-rls.sql returns zero matches.",
+      "actual": "sync_state (tenant_id is its primary key, one row per tenant) is force-RLS'd with no matching policy; a NULL-tenant row cannot match any tenant_id = NULLIF(...) policy.",
+      "expected": "A structural exemption (`AND a.attnotnull`) or an explicit platform-table allow-list, not a hard-coded table name.",
+      "affected": [
+        "sync_state (no policy — highest risk)",
+        "setup_wizard_state",
+        "secrets",
+        "licenses",
+        "server_installations",
+        "license_audit_events"
+      ],
+      "downstream_effects": "Forced tables with no policy return 0 rows to the app role even for the legitimate owner. revoked_tokens had exactly this bug and was fixed by name in 20260927; the same class survives.",
+      "reproduction": "On a migrated erp_test DB as the NOBYPASSRLS app role with no tenant context: SELECT count(*) FROM sync_state; — 0 rows against a correct database proves the defect.",
+      "existing_test_coverage": "None found.",
+      "recommended_fix": "Replace the name-based exemption with a structural one or allow-list; add a platform_or_tenant policy for sync_state.",
+      "regression_risk": "HIGH — the table classification determines which tables the platform role can read. Requires an owner decision.",
+      "regression_test": "Migration-time assertion, run as the app role, that every FORCE-RLS table has at least one policy.",
+      "blockers": [
+        "No live PostgreSQL contacted — runtime effect NOT VERIFIED"
+      ]
+    },
+    {
+      "id": "F-006",
+      "title": "Monetary columns passed through a REAL (IEEE-754 float) representation in migration history",
+      "severity": "Medium",
+      "type": "data integrity",
+      "confidence": "Confirmed (migration text) / Not verified (corruption magnitude)",
+      "verification_status": "Confirmed",
+      "location": "backend/src/infrastructure/orm/migrations/",
+      "file_lines": [
+        "backend/src/infrastructure/orm/migrations/0024_monetary_fields_to_decimal.sql:9-55",
+        "backend/src/infrastructure/orm/migrations/0026_monetary_amounts_to_bigint.sql:16",
+        "backend/src/infrastructure/orm/migrations/0036_live_monetary_hardening.sql:14"
+      ],
+      "evidence": "0024 casts 33 monetary columns to REAL; 0026 then casts them to BIGINT with `USING col::BIGINT`, truncating the already-lossy float; 0036 repeats the BIGINT cast.",
+      "actual": "Any database live while 0024 was applied had money rounded to ~7 significant digits, then truncated by 0026's cast.",
+      "expected": "Money is scaled-integer throughout; REAL should never be an intermediate state for a monetary column.",
+      "affected": [
+        "invoices",
+        "invoice_lines",
+        "ledger_entries",
+        "vouchers",
+        "expenses",
+        "parties",
+        "cashbox_sessions",
+        "manual_movements",
+        "day_closes",
+        "party_balances",
+        "yearly_party_summaries"
+      ],
+      "downstream_effects": "Potential silent cent-level corruption in financial history on databases migrated through 0024.",
+      "reproduction": "Inspect any production DB that existed when 0024 applied; compare stored amounts against ledger_entries.",
+      "existing_test_coverage": "None found.",
+      "recommended_fix": "Owner decision first: determine whether any live DB passed through 0024, then reconcile against ledger_entries. Never apply blind.",
+      "regression_risk": "HIGH — touches financial history.",
+      "regression_test": "Row-level reconciliation report, not an automated test.",
+      "blockers": [
+        "No production database inspected"
+      ]
+    },
+    {
+      "id": "F-007",
+      "title": "Twelve backend use-case subsystems have no subsystem-named test file",
+      "severity": "Medium",
+      "type": "testing gap",
+      "confidence": "Confirmed (filename absence) / Suspected (untested conclusion)",
+      "verification_status": "Confirmed",
+      "location": "backend/src/application/use-cases/ vs backend/tests/",
+      "file_lines": [],
+      "evidence": "20 use-case subsystems, 139 backend test files. No test file names: dashboard, expenses, inventory, notifications, orders, parties, printing, returns, settings, statements, super-admin, vouchers.",
+      "actual": "No subsystem-named test file exists for these twelve.",
+      "expected": "METHOD CAVEAT: this is a filename match, not proof of zero coverage — financial-lock-in.test.ts may exercise vouchers and statements without naming them. A content-level check is required before calling any subsystem untested.",
+      "affected": [
+        "12 of 20 use-case subsystems"
+      ],
+      "downstream_effects": "Unknown real coverage in the financial core (vouchers, statements, returns, expenses).",
+      "reproduction": "Compare directory names under backend/src/application/use-cases/ against backend/tests/*.test.ts filenames.",
+      "existing_test_coverage": "0 skipped markers found anywhere (it.skip/it.todo/it.only/describe.skip/xit/xdescribe across backend/tests, backend/src, src, packages/shared/src).",
+      "recommended_fix": "Content-level audit of each subsystem; add subsystem-named tests where genuinely uncovered.",
+      "regression_risk": "None.",
+      "regression_test": "New subsystem-named test files."
+    },
+    {
+      "id": "F-008",
+      "title": "The money arithmetic layer is IEEE-754 float, not scaled-integer",
+      "severity": "Medium",
+      "type": "data integrity",
+      "confidence": "Confirmed (implementation) / Not verified (drift magnitude)",
+      "verification_status": "Confirmed",
+      "location": "packages/shared/src/precision.ts",
+      "file_lines": [
+        "packages/shared/src/precision.ts:34-38",
+        "packages/shared/src/precision.ts:11-13",
+        "packages/shared/src/precision.ts:30-32"
+      ],
+      "evidence": "round2dp(n) { return Math.round((Number.isFinite(n) ? n : 0) * 100) / 100; } — float arithmetic with post-hoc rounding. Storage IS scaled-integer (bigint whole units per the file header), so the defect is confined to arithmetic. A comment at :35-36 explicitly gates any change on an owner decision.",
+      "actual": "All monetary arithmetic is JS float with one rounding at the end. SYP sums in the 10^10 range stay inside MAX_SAFE_INTEGER, but intermediate products (quantity x unit price, then x exchange rate) can cross it.",
+      "expected": "Scaled-integer or decimal-string arithmetic so no intermediate product is ever a float.",
+      "affected": [
+        "Every monetary computation routing through round2dp/round4dp/is2dp/hasMoreThan2dp — the whole shared money layer, both engines"
+      ],
+      "downstream_effects": "Potential cent-level drift on large SYP sums; bounded in practice by the 2dp rounding.",
+      "reproduction": "Compute quantity x unit_price x exchangeRate for a large SYP order and compare against scaled-integer arithmetic.",
+      "existing_test_coverage": "Unknown — the shared money-math test files were reported orphaned by the older audit; not re-verified here.",
+      "recommended_fix": "Owner decision required — the source comment gates it explicitly. Do not change unilaterally.",
+      "regression_risk": "HIGH — alters every total in the system; must be reconciled against ledger_entries.",
+      "regression_test": "Property test over large SYP sums comparing float vs scaled-integer results."
+    },
+    {
+      "id": "F-010",
+      "title": "POST /orders accepts a financial mutation with no Idempotency-Key",
+      "severity": "Medium",
+      "type": "data integrity / reliability",
+      "confidence": "Confirmed — read directly and compared against nine sibling routes in the same call style.",
+      "verification_status": "Confirmed",
+      "page_or_endpoint": "POST /api/orders",
+      "location": "backend/src/presentation/routes/order.route.ts",
+      "file_lines": [
+        "backend/src/presentation/routes/order.route.ts:57-62",
+        "backend/src/infrastructure/http/middleware/idempotency-handler.middleware.ts:17-18",
+        "backend/src/presentation/routes/invoice.route.ts:61",
+        "backend/src/presentation/routes/return.route.ts:54",
+        "backend/src/presentation/routes/voucher.route.ts:107",
+        "backend/src/presentation/routes/cashbox.route.ts:130",
+        "backend/src/presentation/routes/expense.route.ts:43",
+        "backend/src/presentation/routes/ledger.route.ts:201",
+        "backend/src/presentation/routes/statement.route.ts:117",
+        "backend/src/presentation/routes/party.route.ts:520"
+      ],
+      "evidence": "order.route.ts:61 uses idempotency(\"POST\") with no { required: true }, while all nine other financial POSTs use { required: true }. The middleware documents the contract at :17-18: 'pass { required: true } on financial mutations so a missing key yields HTTP 428 IDEMPOTENCY_KEY_REQUIRED'. POST /orders writes the order AND its sync-outbox unit in one transaction (order.route.ts:68-71) and mints the order code from the device's reserved block, so a duplicate is not blocked by a unique constraint on the number.",
+      "actual": "A request with no Idempotency-Key header is accepted. A retried POST (lost response after commit, or double-tapped submit) creates a second order and a second outbox unit.",
+      "expected": "idempotency(\"POST\", { required: true }), matching every sibling financial route.",
+      "affected": [
+        "POST /orders only — the single outlier among ten financial mutations"
+      ],
+      "downstream_effects": "Duplicate orders produce duplicated stock commitments and duplicated sync-outbox units that propagate to the hub and other devices.",
+      "reproduction": "curl -X POST /api/orders with a valid body and NO Idempotency-Key header -> expect 428 IDEMPOTENCY_KEY_REQUIRED, observe 201. Send twice with the same key -> both succeed instead of the second returning the cached response.",
+      "existing_test_coverage": "Unknown — no test asserting 428 on POST /orders was located.",
+      "recommended_fix": "Change order.route.ts:61 to idempotency(\"POST\", { required: true }).",
+      "regression_risk": "BOUNDED BUT REAL — any client POSTing an order without a key starts receiving 428. Audit src/routes/orders.new.tsx and the order API client in src/infrastructure/ for key generation before deploying. All nine other financial routes already require it, so the client very likely sends one — verify, do not assume.",
+      "regression_test": "Integration test: POST /orders without a key asserts 428; two POSTs with the same key produce exactly one order."
+    },
+    {
+      "id": "F-011",
+      "title": "HeaderField renders a label with no htmlFor, breaking label/control association on the invoice forms",
+      "severity": "Low",
+      "type": "accessibility",
+      "confidence": "Confirmed",
+      "verification_status": "Confirmed",
+      "location": "src/components/invoices/InvoiceFormLayout.tsx",
+      "file_lines": [
+        "src/components/invoices/InvoiceFormLayout.tsx:118-127",
+        "src/components/ui/label.tsx",
+        "src/routes/invoices.sale.new.tsx (8 HeaderField uses)",
+        "src/routes/invoices.entry.new.tsx (6 HeaderField uses)"
+      ],
+      "evidence": "HeaderField wraps <Label>{label}</Label> and {children} in sibling <div>s with no htmlFor/id pairing. The underlying Label is Radix-based and DOES forward arbitrary props including htmlFor (src/components/ui/label.tsx spreads {...props} onto LabelPrimitive.Root), so the capability exists and is unused. CLAUDE.md requires FormField 'so the label is tied to its control (htmlFor/useId)'. 14 labelled header fields across the two invoice forms have no programmatic association.",
+      "actual": "A screen reader announces the input with no name; clicking the label does not focus the control.",
+      "expected": "HeaderField accepts and forwards an htmlFor, or these fields use FormField as the repo rule requires.",
+      "affected": [
+        "src/components/invoices/InvoiceFormLayout.tsx:118",
+        "src/routes/invoices.sale.new.tsx (8 uses)",
+        "src/routes/invoices.entry.new.tsx (6 uses)",
+        "CardField at InvoiceFormLayout.tsx:129 — NOT verified, same pattern suspected"
+      ],
+      "downstream_effects": "Accessibility only. Arabic RTL forms with 14 unlabelled inputs is a real barrier for screen-reader users; no data-integrity consequence.",
+      "reproduction": "Open a new sale invoice, inspect any header field — the <label> has no `for` attribute and the sibling input/select has no matching id.",
+      "existing_test_coverage": "None found.",
+      "recommended_fix": "Add an optional htmlFor prop to HeaderField and pass it at all 14 call sites, or migrate them to FormField. Check CardField and the two raw <label> checkbox cases in the same pass.",
+      "regression_risk": "Low.",
+      "regression_test": "A component test asserting every HeaderField renders a <label for> matching its child control's id."
+    },
+    {
+      "id": "F-012",
+      "title": "POST /users/:id/reset-password enforces only a 6-char minimum and bypasses the PIN-strength rule",
+      "severity": "Medium",
+      "type": "security issue",
+      "confidence": "Confirmed",
+      "verification_status": "Confirmed",
+      "page_or_endpoint": "POST /api/users/:id/reset-password",
+      "location": "backend/src/presentation/routes/user.route.ts",
+      "file_lines": [
+        "backend/src/presentation/routes/user.route.ts:34",
+        "backend/src/presentation/routes/user.route.ts:183-197",
+        "backend/src/presentation/routes/auth.schema.ts:33",
+        "backend/src/application/use-cases/setup/setupUseCases.ts:620",
+        "backend/src/presentation/server.ts:299-306"
+      ],
+      "evidence": "user.route.ts:34 declares `password: z.string().min(6).max(128)`. The repo has a PIN-strength rule enforced at auth.schema.ts:33 (`.refine((pin) => !isWeakPin(pin))`) and setupUseCases.ts:620 (`if (parsed.data.pin && isWeakPin(parsed.data.pin))`), but neither is on the reset-password path.",
+      "actual": "An admin can reset any user's password to any 6-character string, including isWeakPin-rejected values. The rule is bypassable by choosing a different endpoint.",
+      "expected": "The reset path applies the same isWeakPin / minimum-length policy as the other credential-setting paths.",
+      "affected": [
+        "backend/src/presentation/routes/user.route.ts:34",
+        "backend/src/presentation/routes/user.route.ts:183-197"
+      ],
+      "downstream_effects": "An admin-set weak credential survives every other guard in the system. Classic 'the rule exists but one door does not check it' pattern.",
+      "reproduction": "As admin: POST /api/users/<id>/reset-password with {\"password\":\"111111\"} -> 200. The same value on the PIN-change path is rejected by the isWeakPin refine at auth.schema.ts:33.",
+      "existing_test_coverage": "None found for this route.",
+      "recommended_fix": "Apply the same isWeakPin refine (or an equivalent strength rule) to the reset-password schema at user.route.ts:34.",
+      "regression_risk": "Low. RBAC is already correct (rbac([\"admin\"]) at server.ts:299-306), so this is policy bypass, not missing authorization. Any client setting a 6-char weak password would start receiving 422; the desktop UI is a PIN picker already subject to the stricter rule elsewhere.",
+      "regression_test": "Test asserting POST /users/:id/reset-password rejects a weak password with 422."
+    },
+    {
+      "id": "F-013",
+      "title": "dyePurgeRepository hard-DELETEs ledger_entries on PostgreSQL, where the append-only trigger forbids it",
+      "severity": "High",
+      "type": "data integrity / functional defect",
+      "confidence": "Confirmed (code + trigger) / Not verified (runtime)",
+      "verification_status": "Confirmed",
+      "location": "backend/src/infrastructure/repositories/dyePurgeRepository.ts",
+      "file_lines": [
+        "backend/src/infrastructure/repositories/dyePurgeRepository.ts:492-497",
+        "backend/src/infrastructure/orm/migrations/0013_db_hardening.sql:16-19",
+        "backend/src/infrastructure/repositories/engineHelpers.ts:24-25",
+        "backend/src/infrastructure/repositories/sqlite/helpers/dyePurgeRepository.ts:489,505",
+        "backend/src/infrastructure/orm/sqlite/transaction.ts:229-232",
+        "backend/src/presentation/routes/dye.route.ts:62,92"
+      ],
+      "evidence": "dyePurgeRepository.ts:494 calls .delete(ledgerEntries). The PG trigger 0013_db_hardening.sql:16-19 raises 'ledger_entries is append-only: DELETE not allowed' USING ERRCODE 'insufficient_privilege' on any DELETE. The SQLite twin calls an explicit escape hatch (allowDyePurge -> setFlag('allow_dye_purge')) at sqlite/helpers/dyePurgeRepository.ts:489 before its DELETE. engineHelpers.ts:24-25 dispatches SQLite vs PostgreSQL explicitly. A grep across ALL PG migrations for allow_dye_purge / DISABLE TRIGGER / session_replication_role returns 0 matches.",
+      "actual": "On the hub engine any dye purge with ledger rows in scope raises insufficient_privilege and the whole transaction rolls back. The same operation succeeds on the desktop SQLite engine.",
+      "expected": "Either the PostgreSQL path cancels the ledger rows (status -> 'cancelled', which the trigger permits and which 21 other call sites already do), or it has a documented trigger-aware escape hatch matching the SQLite twin.",
+      "affected": [
+        "backend/src/infrastructure/repositories/dyePurgeRepository.ts:492-497",
+        "reachable via dye.route.ts:92 -> dyePurgeHelpers()",
+        "PostgreSQL only; SQLite is correct"
+      ],
+      "downstream_effects": "Purge is non-functional on the hub and fails LATE — computeDyePurgeImpact (dye.route.ts:62) has already counted the rows it intends to delete, so the impact sheet shown to the user promises a deletion that cannot complete.",
+      "reproduction": "On a PostgreSQL-backed install with a dye having invoices/returns/vouchers (hence ledger rows) in scope, run the purge -> insufficient_privilege. On SQLite the same purge succeeds. NOT VERIFIED live — no PostgreSQL contacted.",
+      "existing_test_coverage": "The backend suite defaults to SQLite (npm run test:sqlite), so any existing purge test exercises the WORKING engine. This is precisely the defect class a SQLite-default suite cannot catch.",
+      "recommended_fix": "Mirror the cancel pattern used by the other 21 call sites — replace the DELETE with a scoped status -> 'cancelled' update — or add a PostgreSQL equivalent of allowDyePurge.",
+      "regression_risk": "Cancel leaves rows in place, so any downstream count of 'purged' rows and any test asserting the rows are gone must be updated. Reconcile against ledger_entries.",
+      "regression_test": "A PostgreSQL-engine purge test asserting success and that the ledger rows end status='cancelled'. Must run against PostgreSQL, not only SQLite."
+    },
+    {
+      "id": "F-014",
+      "title": "/backup/verify-path and /backup/restore-path accept an arbitrary host filesystem path with no directory restriction",
+      "severity": "Medium",
+      "type": "security issue",
+      "confidence": "Confirmed",
+      "verification_status": "Confirmed",
+      "location": "backend/src/presentation/routes/backup.route.ts",
+      "file_lines": [
+        "backend/src/presentation/routes/backup.route.ts:174-194",
+        "backend/src/presentation/routes/backup.route.ts:463-465",
+        "backend/src/presentation/routes/backup.route.ts:532-534",
+        "backend/src/presentation/server.ts:533-536"
+      ],
+      "evidence": "receiveShellPath validates existence (existsSync), file-type (statSync().isFile()), non-emptiness, and an optional size/sha256 match — but never restricts WHICH path may be named. openAndVerifyBackupV3(path, ...) and the restore path then open that arbitrary file. The sha256/sizeBytes checks verify integrity against the caller's own claim, not provenance.",
+      "actual": "An authenticated admin can name any path on the host and have the server open, hash, parse and report on it; via restore, load an attacker-chosen SQLite file into the live application.",
+      "expected": "The path should be confined to the application's backup root or an allow-list of sanctioned directories.",
+      "affected": [
+        "backup.route.ts:463-465 (verify-path)",
+        "backup.route.ts:532-534 (second verify-path)",
+        "the restore-path handler sharing receiveShellPath"
+      ],
+      "downstream_effects": "Arbitrary file read (metadata, hash, parse errors leaking path content) and attacker-chosen SQLite loaded via restore. Requires admin credentials.",
+      "reproduction": "As admin, POST /api/backup/verify-path with {\"path\":\"C:/Windows/System32/config/SAM\"} — the server opens and hashes the file instead of rejecting the path.",
+      "existing_test_coverage": "The dfp028 backup script gate tests the pipeline, not path provenance. No test asserts an out-of-root path is refused.",
+      "recommended_fix": "Resolve the path and assert it is inside the configured backup root before existsSync; reject otherwise. The desktop shell legitimately hands over a user-picked file (pick_backup_file), so the allow-list must include the OS file-picker's sanctioned location, not only the backup root.",
+      "regression_risk": "MEDIUM — over-restricting breaks the legitimate 'restore from a user-picked file' desktop flow, which is the entire purpose of the path-based endpoints.",
+      "regression_test": "A test that a path outside every sanctioned directory is rejected with a distinct error, and that a path inside the backup root still succeeds.",
+      "mitigation": "Router is behind authMiddleware AND rbac(['admin']) (server.ts:533-536), so this is NOT unauthenticated/LAN-reachable. That is why severity is Medium, not Critical.",
+      "correction_to_prior_audit": "MOTARD_ERP_FULL_FORENSIC_AUDIT.md section 0 lists 'one unauthenticated LAN-reachable arbitrary-path restore (P1)'. That characterisation does NOT hold at this HEAD — the route is behind auth and admin RBAC. The path-restriction defect is real; the unauthenticated part is not."
+    },
+    {
+      "id": "F-015",
+      "title": "/settings/users CRUD mutates an in-memory array with no server call, so created users vanish on reload and can never authenticate",
+      "severity": "Critical",
+      "type": "functional defect",
+      "confidence": "Confirmed",
+      "verification_status": "Confirmed",
+      "page_or_endpoint": "/settings/users",
+      "location": "src/presentation/hooks/useSettings.ts + src/routes/settings.users.tsx",
+      "file_lines": [
+        "src/presentation/hooks/useSettings.ts:417-442",
+        "src/routes/settings.users.tsx:89-109",
+        "backend/src/presentation/routes/settings.route.ts:39-52",
+        "backend/src/presentation/routes/user.route.ts:50,87,137,184",
+        "src/presentation/hooks/useSettings.ts:50-60"
+      ],
+      "evidence": "addUser/updateUser/deleteUser (useSettings.ts:417-442) push to settings.users, call logActivity() and notify() — no persistSection(). Every OTHER section persists (:282 company, :307/318/326 units, :337/348/356 warehouses, :366/376/384 taxes, :394/404/412 paymentMethods, :450 company, :457 printing, :468 currencies); there is NO persistSection('users') anywhere. The backend allowlist (settings.route.ts:39-52) has no 'users' section either. The real routes POST/PATCH/DELETE /users and POST /users/:id/reset-password (user.route.ts:50,87,137,184) exist and are never called by the UI.",
+      "actual": "An admin adds a user, sees the success toast, and the row disappears on reload. The account cannot authenticate at all — it was never written to the users table the auth middleware reads. The in-memory SystemUser type carries a plaintext password?: string with no passwordHash, so even a hypothetical local login could not match the Argon2 hashes PasswordHasher produces.",
+      "expected": "The page calls the real user endpoints (list on load, PATCH on edit, POST + reset-password on create, DELETE on remove) so created users exist server-side and can log in; at minimum the page must not present itself as a working user manager.",
+      "affected": [
+        "src/presentation/hooks/useSettings.ts:417-442",
+        "src/routes/settings.users.tsx:89-109",
+        "backend/src/presentation/routes/user.route.ts (written but unused by the UI)",
+        "src/components/auth/UserPickerPage.tsx (cannot see these users)"
+      ],
+      "downstream_effects": "An admin believes they have provisioned staff accounts; those staff cannot log in. In a multi-device deployment the phantom users exist in one browser only. Combined with F-016, the activity log records the creation as if it succeeded.",
+      "reproduction": "/settings/users -> add a user -> reload. The row is gone. Attempt to log in as that user -> rejected.",
+      "existing_test_coverage": "None.",
+      "recommended_fix": "Wire the page to POST/PATCH/DELETE /users and POST /users/:id/reset-password; remove the plaintext password from SystemUser. Do NOT add 'users' to the settings allowlist — user records are tenant business data with their own routes.",
+      "regression_risk": "Medium — the screen currently drives off a synchronous in-memory list; server calls introduce loading and error states it does not render yet.",
+      "regression_test": "Add a user, reload, assert present; log in as that user and assert success.",
+      "verified_by": "lead auditor — CRUD functions, the full persistSection call-site list, the backend allowlist, the unused user routes, the SystemUser type and the login component all read directly."
+    },
+    {
+      "id": "F-016",
+      "title": "/settings/activity reads a module-scope array that is never persisted, so the audit trail is empty after refresh",
+      "severity": "High",
+      "type": "data integrity",
+      "confidence": "Confirmed",
+      "verification_status": "Confirmed",
+      "page_or_endpoint": "/settings/activity",
+      "location": "src/presentation/hooks/useSettings.ts",
+      "file_lines": [
+        "src/presentation/hooks/useSettings.ts:198",
+        "src/presentation/hooks/useSettings.ts:207-217",
+        "src/presentation/hooks/useSettings.ts:473-476",
+        "src/presentation/hooks/useSettings.ts:250-297",
+        "backend/src/presentation/routes/sync.route.ts:452"
+      ],
+      "evidence": "activity: [] as ActivityEntry[] (:198); logActivity unshifts into it and caps at 500 (:207-217) with no persistence; clearActivity wipes it (:473-476). loadSettings (:250-297) merges only company/units/taxes/warehouses/paymentMethods/currencies/printing — never activity. No activity settings section, no backend route. Backend DOES expose GET /sync/activity (sync.route.ts:452), unused by this page.",
+      "actual": "All 23 logActivity call sites write to a JS array discarded on reload. The page advertises the recent-actions trail but is empty after a refresh; the clear button destroys the rest behind a bare window.confirm.",
+      "expected": "Durable server-side per-tenant trail, or an explicit statement that the log is local and non-authoritative.",
+      "affected": [
+        "23 logActivity call sites across src/",
+        "backend/src/presentation/routes/sync.route.ts:452 (unused durable alternative)"
+      ],
+      "downstream_effects": "The audit trail an admin relies on for accountability silently does not exist after any reload.",
+      "reproduction": "Perform any settings action, reload /settings/activity — the entry is gone.",
+      "existing_test_coverage": "None.",
+      "recommended_fix": "Persist activity server-side (GET /sync/activity already exists) or relabel the screen as a local session log.",
+      "regression_risk": "Low.",
+      "regression_test": "Perform an action, reload, assert the entry survives.",
+      "verified_by": "lead auditor"
+    },
+    {
+      "id": "F-017",
+      "title": "Invoice print-field visibility is written to localStorage and never replicates to other devices",
+      "severity": "High",
+      "type": "integration defect",
+      "confidence": "Confirmed",
+      "verification_status": "Confirmed",
+      "page_or_endpoint": "/settings/invoice",
+      "location": "src/components/print/invoices/visibility.ts",
+      "file_lines": [
+        "src/components/print/invoices/visibility.ts:57",
+        "src/components/print/invoices/visibility.ts:166-169",
+        "src/routes/settings.invoice.tsx:117-124",
+        "backend/src/presentation/routes/settings.route.ts:47"
+      ],
+      "evidence": "STORAGE_KEY = 'motard.invoice.printVisibility.v2' (:57); saveVisibility writes localStorage (:166-169). The same screen's printing block DOES persist (updatePrinting -> PUT /settings/printing, settings.invoice.tsx:117-124) and 'printing' is allowlisted (settings.route.ts:47) — so one screen mixes a replicated section with a local-only one.",
+      "actual": "Toggling field visibility writes one browser's localStorage. A second workstation or a reinstalled desktop prints every field.",
+      "expected": "Visibility belongs in the printing section so it replicates like paperSize and footerNote already do.",
+      "affected": [
+        "src/components/print/invoices/visibility.ts",
+        "the Sale/Entry/Return print components reading this local store"
+      ],
+      "downstream_effects": "Print layout is inconsistent across devices with no indication why.",
+      "reproduction": "Hide a field on device A, print the same invoice on device B — the field appears.",
+      "existing_test_coverage": "None.",
+      "recommended_fix": "Move visibility into the printing settings section.",
+      "regression_risk": "Low-medium — existing localStorage values need a one-time migration or they are lost.",
+      "regression_test": "Toggle visibility, reload on a second device profile, assert the setting replicates.",
+      "verified_by": "lead auditor"
+    },
+    {
+      "id": "F-018",
+      "title": "Settings forms seed useState from built-in defaults before the server GET resolves, so an early save overwrites persisted values",
+      "severity": "High",
+      "type": "functional defect",
+      "confidence": "Confirmed",
+      "verification_status": "Confirmed",
+      "page_or_endpoint": "/settings/company, /settings/printing, /settings/invoice",
+      "location": "src/routes/settings.*.tsx",
+      "file_lines": [
+        "src/routes/settings.company.tsx:12-13",
+        "src/routes/settings.printing.tsx:13-14",
+        "src/routes/settings.invoice.tsx:177-180",
+        "src/presentation/hooks/useSettings.ts:250-297"
+      ],
+      "evidence": "useSettings(); const [c, setC] = useState({ ...settings.company }); — seeded from built-in defaults. useSettings() fires loadSettings() in an effect which awaits getSettings() and then REPLACES settings.company/settings.printing. Local useState is never re-synced; no effect is keyed on the loaded object.",
+      "actual": "If the operator types and presses save before the GET returns (a few hundred ms on a cold desktop start), updateCompany/updatePrinting PUTs the hard-coded defaults over the company's saved name, address, tax number and paper size. The page shows the typed text and a success toast while the stored record reverts.",
+      "expected": "Form state initialises from the loaded server value, or is re-seeded when the loaded object changes, before save is enabled.",
+      "affected": [
+        "src/presentation/hooks/useSettings.ts:250-297",
+        "src/routes/settings.invoice.tsx:117-124"
+      ],
+      "downstream_effects": "Silent loss of company/printing configuration with a success toast — the worst kind of failure to diagnose.",
+      "reproduction": "On a cold start, open /settings/company and save immediately; compare the stored value afterwards.",
+      "existing_test_coverage": "None.",
+      "recommended_fix": "Seed from the loaded value or re-seed on load; disable save until the GET resolves.",
+      "regression_risk": "Low.",
+      "regression_test": "Save before the GET resolves and assert the persisted value is the typed one.",
+      "verified_by": "lead auditor"
+    },
+    {
+      "id": "F-019",
+      "title": "closing.tsx refreshAll() omits invalidateFinancialViews, leaving cashbox/ledger/statement stale after a year close",
+      "severity": "Medium",
+      "type": "functional defect",
+      "confidence": "Confirmed",
+      "verification_status": "Confirmed",
+      "page_or_endpoint": "/closing",
+      "location": "src/routes/closing.tsx",
+      "file_lines": [
+        "src/routes/closing.tsx:74-78",
+        "src/routes/closing.tsx:88",
+        "src/routes/closing.tsx:99",
+        "src/presentation/hooks/invalidateFinancialViews.ts:15-26"
+      ],
+      "evidence": "refreshAll() invalidates only ['closing-preview'], ['count-sheet'], ['inventory']; called from both close.mutate onSuccess (:88) and reopen.mutate onSuccess (:99). invalidateFinancialViews.ts:15-26 covers dashboard, cashbox, ledger, profit, statement, party, parties, invoices plus refreshParties(). Project rule: frontend money mutations must call invalidateFinancialViews(qc).",
+      "actual": "After closing — the operation that freezes the books and the closing cashbox balances — the cashbox, ledger, statement, profit, dashboard and party-balance caches keep serving pre-close numbers until something else invalidates them.",
+      "expected": "refreshAll() calls invalidateFinancialViews(qc) alongside the count-sheet/inventory keys.",
+      "affected": [
+        "every screen reading ['cashbox'], ['ledger'], ['statement'], ['parties'] after a close"
+      ],
+      "downstream_effects": "Stale financial figures shown immediately after the books are frozen.",
+      "reproduction": "Close a year, then open the cashbox or statement screen without a full reload.",
+      "existing_test_coverage": "None.",
+      "recommended_fix": "Add invalidateFinancialViews(qc) to refreshAll().",
+      "regression_risk": "Low.",
+      "regression_test": "Close a year and assert the cashbox/ledger caches refetch.",
+      "verified_by": "lead auditor"
+    }
+  ],
+  "positive_findings": [
+    {
+      "id": "F-003",
+      "title": "npm audit is clean; the older audit's 14/10 vulnerability counts are resolved",
+      "severity": "Informational",
+      "evidence": "npm audit --omit=dev --audit-level=high -> 'found 0 vulnerabilities', exit 0.",
+      "note": "MOTARD_ERP_FULL_FORENSIC_AUDIT.md records 14 root + 10 backend vulns. Production profile now reports zero; dev-dependency profile NOT re-run and not claimed clean."
+    },
+    {
+      "id": "F-005",
+      "title": "Schema and journal parity hold across both engines",
+      "severity": "Informational",
+      "evidence": "PG 47 tables / SQLite 52 (5 SQLite-only are the documented desktop-only set: drive-archive, financial-operation, motard-meta, sync-conflict, sync-tombstone). Zero column differences across the 47 shared tables. PG 103 .sql / 103 journal entries; SQLite 6 / 6 — both resolve exactly.",
+      "note": "Independently corroborated by a second agent's database-layer audit with identical counts."
+    },
+    {
+      "id": "F-009",
+      "title": "The two-engine repository twin discipline holds across all 37 pairs",
+      "severity": "Informational",
+      "type": "positive finding",
+      "confidence": "Confirmed",
+      "verification_status": "Confirmed",
+      "location": "backend/src/infrastructure/repositories/",
+      "file_lines": [],
+      "evidence": "Semantic-difference extractor over every Postgres*Repository.ts / sqlite/Sqlite*Repository.ts pair, normalising imports/comments/PORTED-FROM headers/whitespace, comparing behavioural signals (assert*, record*/compute*/notify*, runInTransaction/withTenantTx/sqliteDb/sqliteIndependentDb, orderBy(...), .limit(...), round2dp/round4dp/normalizeMoney2dp, idempotency refs, keyset helpers): 0 of 37 pairs diverge. Raw line counts differ by 29-87 per pair but every difference is import style, comment text, or drizzle dialect syntax.",
+      "actual": "No behavioural divergence between engines at the repository layer.",
+      "expected": "Same.",
+      "affected": [
+        "all 37 repository pairs"
+      ],
+      "downstream_effects": "Rules cannot silently exist in one engine only.",
+      "reproduction": "Run the semantic signal diff over repositories/ vs repositories/sqlite/.",
+      "existing_test_coverage": "backend/tests/schema-migration-parity.test.ts exists but is NOT executed by CI (see F-001).",
+      "recommended_fix": "None.",
+      "regression_risk": "n/a",
+      "regression_test": "n/a",
+      "caveat": "Proves the same functions are CALLED; does not prove their bodies are byte-identical, so a logic change inside a shared helper would not surface."
+    }
+  ],
+  "subagent_claims_unverified": [
+    {
+      "subsystem": "Frontend (src/, 9 scope items)",
+      "claim": "All loading/error states, double-submit guards and a11y attributes checked; login.tsx has no isError but UserPickerPage.tsx:101 owns it and renders at :426,:484,:622",
+      "status": "lead — 3 headline claims from this agent were DISPROVED (see disproved_claims)"
+    },
+    {
+      "subsystem": "Security / auth / tenancy / deps",
+      "claim": "openLoopback super-admin (F-04) verified resolved at backend/src/scripts/license-server.ts:174-177; RLS assessed statically only (PostgreSQL down)",
+      "status": "lead — not re-verified"
+    },
+    {
+      "subsystem": "Sync engine",
+      "claim": "22 sync test files executed; master-delete-tombstone-atomicity 1 passed",
+      "status": "lead — not re-verified"
+    },
+    {
+      "subsystem": "Google Drive",
+      "claim": "Drive suite 59 passed across 6 files; the completion ledger's per-file counts are wrong (coordinator 6, upload-queue 9, swapped in the ledger)",
+      "status": "lead — token-bridge claim from this agent DISPROVED"
+    },
+    {
+      "subsystem": "Desktop / Tauri",
+      "claim": "Supervisor poll 2s, MAX_RESTARTS=3 per 5-min window, backoff 0,2,4,8,15s, readiness ceiling 300s",
+      "status": "lead — not re-verified"
+    },
+    {
+      "subsystem": "Backup pipeline",
+      "claim": "v3 pipeline 2,076 LOC across 9 files; staged VERIFY -> SAFETY_BACKUP -> EXTRACT -> MIGRATE -> VERIFY -> SWAP",
+      "status": "lead — not re-verified"
+    }
+  ],
+  "disproved_claims": [
+    {
+      "claim": "google_access_token has zero callers anywhere — the Drive token bridge is entirely absent",
+      "disproof": "grep over backend/src, desktop/src-tauri/src, src returns 3 references. desktop/src-tauri/src/google_ipc.rs:242 defines pub fn google_access_token(state: &GoogleState), called at :292 by push_token_to_sidecar. server.ts:553 imports liveDriveToken/liveDriveTokenAvailable/onLiveDriveConnected, :560 constructs new DriveClient({ token: liveDriveToken }), :587 runs an archive pass on connect.",
+      "lesson": "The agent grepped a different tree state (HEAD 729fcd98) and inferred absence from a narrow grep."
+    },
+    {
+      "claim": "useVouchers.ts:96-103 is missing dashboard and party from its invalidation set",
+      "disproof": "src/presentation/hooks/useVouchers.ts:95 and :115 both call invalidateFinancialViews(qc), and that helper (invalidateFinancialViews.ts:15-21) already invalidates dashboard, cashbox, ledger, profit, statement, party and parties, plus void refreshParties() at :24.",
+      "lesson": "The agent did not follow the call into the helper it was criticising."
+    },
+    {
+      "claim": "3 P1 toast.error-on-success bugs in the inventory screens",
+      "disproof": "src/routes/inventory.tsx:165 sits inside a catch block (:162-171) and the success path at :173 uses toast.success. The inventory_.count.tsx and useInventory.ts hits are all validation or onError paths.",
+      "lesson": "A grep for toast.error without reading the surrounding control flow produces false positives."
+    }
+  ],
+  "test_evidence": [
+    {
+      "command": "npx tsc --noEmit (root)",
+      "exit": 0,
+      "result": "no errors",
+      "class": "TEST-EXECUTED"
+    },
+    {
+      "command": "cd backend && npx tsc --noEmit",
+      "exit": 0,
+      "result": "no errors",
+      "class": "TEST-EXECUTED"
+    },
+    {
+      "command": "npm run lint",
+      "exit": 1,
+      "result": "295 problems (245 errors, 50 warnings)",
+      "class": "TEST-EXECUTED"
+    },
+    {
+      "command": "npx prettier --check .",
+      "exit": 1,
+      "result": "812 files with style issues",
+      "class": "TEST-EXECUTED"
+    },
+    {
+      "command": "npm audit --omit=dev --audit-level=high",
+      "exit": 0,
+      "result": "0 vulnerabilities",
+      "class": "TEST-EXECUTED"
+    },
+    {
+      "command": "npx vitest run backend/tests/migrations-journal-guard.test.ts backend/tests/schema-migration-parity.test.ts (from root, as CI runs it)",
+      "exit": 1,
+      "result": "No test files found",
+      "class": "TEST-EXECUTED"
+    },
+    {
+      "command": "cd backend && npx vitest run ../../src/contracts/reports.dfp015.test.ts",
+      "exit": 1,
+      "result": "No test files found",
+      "class": "TEST-EXECUTED"
+    },
+    {
+      "command": "npx vitest run (frontend, 74 files)",
+      "exit": null,
+      "result": "NOT RUN — ~410MB free RAM of 7.9GB; repo rule forbids concurrent heavy suites",
+      "class": "NOT RUN"
+    },
+    {
+      "command": "cd backend && DB_ENGINE=sqlite npx vitest run",
+      "exit": null,
+      "result": "NOT RUN — same memory constraint",
+      "class": "NOT RUN"
+    },
+    {
+      "command": "cargo test",
+      "exit": null,
+      "result": "NOT RUN — same memory constraint",
+      "class": "NOT RUN"
+    },
+    {
+      "command": "npm run typecheck:sqlite",
+      "exit": null,
+      "result": "NOT RUN — same memory constraint",
+      "class": "NOT RUN"
+    },
+    {
+      "command": "Live PostgreSQL / RLS drill",
+      "exit": null,
+      "result": "NOT RUN — no database contacted; read-only audit",
+      "class": "BLOCKED"
+    },
+    {
+      "command": "Playwright / TesterArmy e2e",
+      "exit": null,
+      "result": "NOT RUN — needs live stack on 18080/18081 and E2E_ADMIN_PASSWORD",
+      "class": "BLOCKED"
+    }
+  ],
+  "coverage": {
+    "frontend_routes": "Group A: 8 systematic checks by lead auditor (F-011). Group B: 8 systematic checks, no defect. Group C: COMPLETED by subagent with 20 findings; 5 admitted to the register after lead-auditor re-verification (F-015 Critical, F-016/F-017/F-018 High, F-019 Medium); 15 remain leads. Mission Phase 2 field-by-field inspection remains incomplete for groups A and B.",
+    "backend_routes": "Group G complete. Group D complete (engine parity, statement ordering, idempotency, auth internals, RBAC, error handler, credential strength). Groups E1 and E2 complete for: FX direction, money rounding, cashbox day boundary, idempotency, ledger append-only (all 22 call sites), dye-purge engine asymmetry (F-013), statement ordering, engine parity across 37 twins. NOT verified: cashbox balance vs day-close agreement, concurrency on same-party receipts, compensating ledger entries on reversal, voucher write-set atomicity, year-closing double-run, dashboard/report totals vs ledger, statement balance list-vs-detail. Group F read by subagent, unverified.",
+    "static_gates": "Complete",
+    "database_schema_parity": "Complete",
+    "migration_journals": "Complete",
+    "rls": "Complete (static only; runtime NOT VERIFIED)",
+    "ci": "Complete — 2 defects proven",
+    "test_suites_executed": "None — zero of ~230 test files ran (memory constraint).",
+    "business_workflow_tracing": "Not done — mission Phase 4 not traced for any workflow.",
+    "page_by_page_field_audit": "Not done — mission Phase 2 substantially incomplete"
+  },
+  "environmental_limitations": [
+    "Provider fair-share rate limit (HTTP 429) killed 3 of 9 dispatched audit groups after they completed their reads but before they could synthesise findings; 2 re-dispatches were killed the same way.",
+    "7.9 GB total RAM, ~410 MB free during the audit — no test suite could be run without violating the repo's own 'run heavy suites one at a time' rule.",
+    "No live PostgreSQL, so RLS runtime behaviour and migration-history corruption are unverified.",
+    "No production database inspected.",
+    "Three lead-auditor parser false-positives were caught and corrected before publication (see CODEBASE_AUDIT_REPORT.md section 11)."
+  ],
+  "files_written_by_this_audit": [
+    "CODEBASE_AUDIT_REPORT_hermes.md",
+    "CODEBASE_AUDIT_FINDINGS_hermes.json",
+    "AUDIT_PROGRESS.md"
+  ],
+  "verified_sound": [
+    {
+      "area": "Auth subsystem",
+      "detail": "login rate limiting (5/15min), refresh reuse detection, single-use rotation, session cutoff, license gate before minting, logout revocation, error handler leaks no stack/SQL/PII",
+      "evidence": "auth.route.ts:43-45,326-347,355-364,380-382,418-430; error-handler.middleware.ts"
+    },
+    {
+      "area": "Ledger append-only",
+      "detail": "21 of 22 application writes are trigger-compliant cancellations; only the dye purge violates it (F-013)",
+      "evidence": "0013_db_hardening.sql:13-49; PostgresCashboxRepository.ts:168-186 et al."
+    },
+    {
+      "area": "Statement ordering",
+      "detail": "Both engines, both query paths: date, created_at, docRank, id",
+      "evidence": "PostgresStatementRepository.ts:239,298; SqliteStatementRepository.ts:243,303"
+    },
+    {
+      "area": "Currency separation",
+      "detail": "Independent SYP/USD balances, never summed, explicit no-FX-mix comment",
+      "evidence": "cashbox.tsx:78-82,138-145,191"
+    },
+    {
+      "area": "Cache invalidation",
+      "detail": "Every money-writing hook calls invalidateFinancialViews; useInventory correctly omits it (catalogue only)",
+      "evidence": "useCashbox/useExpenses/useParties/useStatement; useInventory.ts:195-241"
+    },
+    {
+      "area": "Engine twin parity",
+      "detail": "0 of 37 repository pairs diverge on any behavioural signal",
+      "evidence": "scripted semantic-signal diff over all 37 pairs"
+    },
+    {
+      "area": "Typecheck",
+      "detail": "Both tsc --noEmit runs clean across ~114k lines",
+      "evidence": "exit 0, both"
+    },
+    {
+      "area": "FX conversion direction",
+      "detail": "USD->SYP multiplies (fx.ts:129), SYP->USD divides (fx.ts:133); both paths route through round2dp; invalid rate returns null rather than substituting 1. convertAmount (fx.ts:89-96) routes each side via base then rounds.",
+      "evidence": "packages/shared/src/fx.ts:89-96, 119-134"
+    },
+    {
+      "area": "Cashbox day boundary",
+      "detail": "Day is a client-supplied business-date string validated as YYYY-MM-DD (voucher.schema.ts:8), compared as a string against day_closes.date. Neither cashbox.route.ts nor voucher.route.ts calls new Date()/toISOString() — zero matches — so no local<->UTC conversion exists in the path.",
+      "evidence": "dayLockHelper.ts:24-33,52-53; packages/shared/src/schemas/voucher.schema.ts:8"
+    },
+    {
+      "area": "Sync endpoint authorization",
+      "detail": "All 37 /sync/* endpoints carry auth plus a scoped guard. Reads (readGuard) separated from operator actions (operatorGuard), plus transportGuard for /run and /push, conflictGuard for /conflicts/resolve, numberingGuard for /number-blocks/claim.",
+      "evidence": "sync.route.ts:192, 211-215, 1039-1043 and the full endpoint enumeration"
+    },
+    {
+      "area": "Tauri command / build.rs / capability ACL wiring",
+      "detail": "26 generate_handler entries = 26 build.rs APP_COMMANDS = 26 capability ACL grants (unioning main-window.json and recovery-window.json). Exact match, nothing ACL-dead.",
+      "evidence": "main.rs:368-440; build.rs; capabilities/main-window.json; capabilities/recovery-window.json:9-14",
+      "false_positive_note": "Comparing against main-window.json alone flags 6 commands as ACL-dead. Wrong: Tauri ACL keys are hyphenated while Rust commands are underscored, and those six (recovery_*, startup_*) are granted by the separate recovery-window capability. Normalise underscores->hyphens and union all capability files."
+    }
+  ],
+  "structural_test_gap": "F-004 (RLS), F-006 (REAL money migration) and F-013 (dye purge on PostgreSQL) share one cause: the default test suite runs SQLite and all three defects exist only on PostgreSQL. A PostgreSQL-engine test run is the only thing that would surface them. This is the highest-value gap in the project's verification setup — higher than any individual finding.",
+  "remaining_work": [
+    "Sync outbox replay idempotency and conflict-resolution data-loss behaviour — HIGHEST-RISK unexamined area; a non-idempotent replay corrupts data across every device.",
+    "Rust unwrap()/expect() panic surface on user input, and DPAPI secret handling vs env/localStorage.",
+    "Backup/restore partial-state handling (the v3 pipeline was read but not analysed).",
+    "webview localStorage retaining tokens/license/sync-device ids across factory reset.",
+    "syncCoverage.ts completeness.",
+    "Frontend group C (settings x13, reports x3, print-center, closing) — read by subagent, unverified.",
+    "Mission Phase 2 field-by-field and Phase 4 workflow invariants.",
+    "Money-integrity checks in section 18.6.",
+    "Every test suite — zero of ~230 test files executed (memory constraint)."
+  ],
+  "subagent_leads_unverified": [
+    "C1-05 reports 'الأطراف' tile links to slug 'receivables' absent from the backend switch; 3 implemented slugs unreachable",
+    "C1-06 party balances sorted by SYP only — a party owing entirely in USD sorts as zero",
+    "C1-08 DriveQueueJob.entityId typed required but /drive/status omits it",
+    "C1-09 settings dialogs use raw <Label> with no htmlFor across 6 route files",
+    "C1-10 destructive deletes use window.confirm instead of ConfirmDialog",
+    "C1-11 plaintext password input in the user form and password in exported JSON",
+    "C1-12 ROLE_ALLOWED_PATHS disagrees with the nav admin gate",
+    "C1-13 role-label typo",
+    "C1-14 inline rounding instead of round2dp",
+    "C1-15 print-center never surfaces the print-job lifecycle",
+    "C1-16 backup import writes memory only, no PUT",
+    "C1-17 password field exported",
+    "C1-18 dead nameEn field",
+    "C1-19 admin-gate flicker while the current-user query resolves",
+    "C1-20 duplicated printing form in two settings screens, last write wins"
+  ]
+}

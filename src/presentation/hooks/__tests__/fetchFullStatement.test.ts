@@ -51,7 +51,11 @@ describe("fetchFullStatement", () => {
 
   it("fails loudly instead of truncating when the cursor does not advance", async () => {
     const stuck = (): Promise<Page> =>
-      Promise.resolve({ entries: [{ id: 0, runningBalance: 1 }], finalBalance: 1, page: { hasMore: true, nextCursor: "same", limit: 1 } });
+      Promise.resolve({
+        entries: [{ id: 0, runningBalance: 1 }],
+        finalBalance: 1,
+        page: { hasMore: true, nextCursor: "same", limit: 1 },
+      });
     await expect(fetchFullStatement(stuck, { limit: 1 })).rejects.toThrow(/did not advance/);
   });
 

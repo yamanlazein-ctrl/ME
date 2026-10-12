@@ -3,10 +3,7 @@
  * cashbox moves by cash only; invoice historical totals are never mutated.
  */
 import { describe, it, expect } from "vitest";
-import {
-  settlementFromCashAndDiscount,
-  splitCashAndDiscountAcrossLines,
-} from "@erp/shared";
+import { settlementFromCashAndDiscount, splitCashAndDiscountAcrossLines } from "@erp/shared";
 
 describe("discount settlement equations (issues 3 + 7)", () => {
   it("130 cash + 6 discount closes 136 — cashbox stays 130", () => {

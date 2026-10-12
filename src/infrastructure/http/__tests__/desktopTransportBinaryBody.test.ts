@@ -69,12 +69,19 @@ describe("a File body over the desktop bridge is a typed transport error, not a 
       }),
     ).rejects.toThrow(/لا يمكن إرسال بيانات ثنائية/);
 
-    expect(invocations, "nothing was sent, so the server could not mistake it for a damaged file").toHaveLength(0);
+    expect(
+      invocations,
+      "nothing was sent, so the server could not mistake it for a damaged file",
+    ).toHaveLength(0);
   });
 
   it("still sends a JSON string body normally (every ordinary mutation is unaffected)", async () => {
     invocations = [];
-    apiAnswer = { status: 200, headers: [["content-type", "application/json"]], body: JSON.stringify({ ok: true }) };
+    apiAnswer = {
+      status: 200,
+      headers: [["content-type", "application/json"]],
+      body: JSON.stringify({ ok: true }),
+    };
     installDesktopWindow();
 
     const res = await desktopFetch()("/api/parties", {
@@ -85,7 +92,11 @@ describe("a File body over the desktop bridge is a typed transport error, not a 
 
     expect(res.status).toBe(200);
     expect(invocations).toHaveLength(1);
-    expect(invocations[0].args?.req).toMatchObject({ method: "POST", path: "/api/parties", body: '{"name":"زبون"}' });
+    expect(invocations[0].args?.req).toMatchObject({
+      method: "POST",
+      path: "/api/parties",
+      body: '{"name":"زبون"}',
+    });
   });
 });
 
@@ -93,7 +104,11 @@ describe("the desktop restore hand-off", () => {
   it("picks the archive in the native dialog and asks for it by path — no binary over the bridge", async () => {
     invocations = [];
     apiAnswer = { status: 200, headers: [["content-type", "application/json"]], body: "{}" };
-    picked = { path: "C:\\Users\\Taw\\Downloads\\MotardERP-Backup-2026-10-07.zip", sizeBytes: 4091968, sha256: "e21382f3c44c14d2e609cbda43c3bce346da715a4e17112087917be2369712a1" };
+    picked = {
+      path: "C:\\Users\\Taw\\Downloads\\MotardERP-Backup-2026-10-07.zip",
+      sizeBytes: 4091968,
+      sha256: "e21382f3c44c14d2e609cbda43c3bce346da715a4e17112087917be2369712a1",
+    };
     installDesktopWindow();
 
     const chosen = await pickBackupFile();
@@ -104,7 +119,11 @@ describe("the desktop restore hand-off", () => {
     const res = await desktopFetch()("/api/backup/restore-path?confirm=replace", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ path: chosen!.path, sha256: chosen!.sha256, sizeBytes: chosen!.sizeBytes }),
+      body: JSON.stringify({
+        path: chosen!.path,
+        sha256: chosen!.sha256,
+        sizeBytes: chosen!.sizeBytes,
+      }),
     });
 
     expect(res.status).toBe(200);
@@ -113,7 +132,11 @@ describe("the desktop restore hand-off", () => {
     const sent = apiCalls[0].args?.req as { method: string; path: string; body: string };
     expect(sent.method).toBe("POST");
     expect(sent.path).toBe("/api/backup/restore-path?confirm=replace");
-    expect(JSON.parse(sent.body)).toMatchObject({ path: picked!.path, sha256: picked!.sha256, sizeBytes: picked!.sizeBytes });
+    expect(JSON.parse(sent.body)).toMatchObject({
+      path: picked!.path,
+      sha256: picked!.sha256,
+      sizeBytes: picked!.sizeBytes,
+    });
     // The bridge carried a few hundred bytes of JSON, never 4 MB of zip.
     expect(sent.body.length).toBeLessThan(1000);
   });

@@ -26,7 +26,9 @@ const sha = (s) => createHash("sha256").update(s).digest("hex");
 
 /** Repository-dir helpers that get SQLite twins in sqlite/helpers/. */
 const HELPERS = new Set(
-  readdirSync(REPO).filter((f) => f.endsWith(".ts") && !f.startsWith("Postgres") && f !== "engineStores.ts"),
+  readdirSync(REPO).filter(
+    (f) => f.endsWith(".ts") && !f.startsWith("Postgres") && f !== "engineStores.ts",
+  ),
 );
 /** Infrastructure utils with SQL that get SQLite twins in sqlite/helpers/. */
 const UTIL_TWINS = new Set(["documentNumbers.ts"]);
@@ -47,15 +49,18 @@ function rewrite(src, text) {
     const abs = resolve(dirname(src), spec);
     const relInfra = relative(resolve(REPO, ".."), abs).replace(/\\/g, "/"); // e.g. orm/schemas/party.table.js
     const b = basename(abs).replace(/\.js$/, ".ts");
-    if (relInfra.startsWith("orm/schemas/")) return `from "${up}orm/sqlite/schemas/${relInfra.slice("orm/schemas/".length)}"`;
+    if (relInfra.startsWith("orm/schemas/"))
+      return `from "${up}orm/sqlite/schemas/${relInfra.slice("orm/schemas/".length)}"`;
     if (relInfra === "orm/drizzle.js") return `from "${up}orm/sqlite/drizzleCompat.js"`;
     if (relInfra.startsWith("repositories/")) {
       const f = relInfra.slice("repositories/".length);
-      if (f.startsWith("Postgres")) return `from "${isHelper ? "../" : "./"}${f.replace(/^Postgres/, "Sqlite")}"`;
+      if (f.startsWith("Postgres"))
+        return `from "${isHelper ? "../" : "./"}${f.replace(/^Postgres/, "Sqlite")}"`;
       if (HELPERS.has(b)) return `from "${isHelper ? "./" : "./helpers/"}${f}"`;
       return `from "${up}repositories/${f}"`;
     }
-    if (relInfra.startsWith("utils/") && UTIL_TWINS.has(b)) return `from "${isHelper ? "./" : "./helpers/"}${b.replace(/\.ts$/, ".js")}"`;
+    if (relInfra.startsWith("utils/") && UTIL_TWINS.has(b))
+      return `from "${isHelper ? "./" : "./helpers/"}${b.replace(/\.ts$/, ".js")}"`;
     if (relInfra.startsWith("..")) return `from "${up}${relInfra}"`; // application/, domain/ (relative to src/infrastructure)
     return `from "${up}${relInfra}"`;
   });
@@ -76,17 +81,26 @@ function rewrite(src, text) {
 
 if (process.argv.includes("--check")) {
   let drift = 0;
-  const walk = (d) => readdirSync(d, { withFileTypes: true }).flatMap((e) => (e.isDirectory() ? walk(join(d, e.name)) : [join(d, e.name)]));
+  const walk = (d) =>
+    readdirSync(d, { withFileTypes: true }).flatMap((e) =>
+      e.isDirectory() ? walk(join(d, e.name)) : [join(d, e.name)],
+    );
   for (const f of walk(OUT).filter((p) => p.endsWith(".ts"))) {
     const m = /PORTED-FROM: (\S+) sha256=([0-9a-f]{64})/.exec(readFileSync(f, "utf8"));
     if (!m) continue;
     const srcPath = resolve(here, "..", m[1]);
     if (!existsSync(srcPath) || sha(readFileSync(srcPath, "utf8")) !== m[2]) {
-      console.error(`drift: ${relative(resolve(here, ".."), f)} — its PG source ${m[1]} changed; review and re-stamp`);
+      console.error(
+        `drift: ${relative(resolve(here, ".."), f)} — its PG source ${m[1]} changed; review and re-stamp`,
+      );
       drift++;
     }
   }
-  console.log(drift ? `${drift} SQLite twin(s) need review` : "no drift: every SQLite twin matches its PG source");
+  console.log(
+    drift
+      ? `${drift} SQLite twin(s) need review`
+      : "no drift: every SQLite twin matches its PG source",
+  );
   process.exit(drift ? 1 : 0);
 }
 

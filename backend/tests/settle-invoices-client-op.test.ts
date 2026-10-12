@@ -26,15 +26,29 @@ const customerId = randomUUID();
 async function mkInvoice(total: number): Promise<string> {
   const id = randomUUID();
   await db.insert(invoices).values({
-    id, tenantId, number: `SCO-${id.slice(0, 6)}`, type: "sale", date: "2026-09-20",
-    partyId: customerId, partyType: "customer", currency: "USD", exchangeRate: 1,
-    subtotal: total, total, paid: 0, status: "active",
+    id,
+    tenantId,
+    number: `SCO-${id.slice(0, 6)}`,
+    type: "sale",
+    date: "2026-09-20",
+    partyId: customerId,
+    partyType: "customer",
+    currency: "USD",
+    exchangeRate: 1,
+    subtotal: total,
+    total,
+    paid: 0,
+    status: "active",
   } as never);
   return id;
 }
 
 const repos = () =>
-  [new PostgresVoucherRepository(db), new PostgresAuditRepository(db), new PostgresPartyRepository(db)] as const;
+  [
+    new PostgresVoucherRepository(db),
+    new PostgresAuditRepository(db),
+    new PostgresPartyRepository(db),
+  ] as const;
 
 describe("deriveOperationId", () => {
   it("is deterministic, uuid-shaped, and salt-specific", () => {
@@ -49,27 +63,47 @@ describe("deriveOperationId", () => {
 
 describe("settle-invoices with one client operation id", () => {
   beforeAll(async () => {
-    await db.insert(tenants).values({ id: tenantId, name: "SCO", slug: `sco-${tenantId.slice(0, 8)}` });
+    await db
+      .insert(tenants)
+      .values({ id: tenantId, name: "SCO", slug: `sco-${tenantId.slice(0, 8)}` });
     await db.insert(parties).values({
-      id: customerId, tenantId, name: "SCO C", code: "SCO", kind: "customer", currency: "USD",
+      id: customerId,
+      tenantId,
+      name: "SCO C",
+      code: "SCO",
+      kind: "customer",
+      currency: "USD",
     });
   });
 
   it("creates one voucher per invoice and refuses a replay of the same key", async () => {
     const ids = [await mkInvoice(100), await mkInvoice(100)];
     const ctx = {
-      tenantId, userId: randomUUID(), userRole: "admin", userName: "t",
+      tenantId,
+      userId: randomUUID(),
+      userRole: "admin",
+      userName: "t",
       clientOperationId: randomUUID(),
     } as TenantContext;
-    const input = { invoiceIds: ids, amountPaid: 150, currency: "USD" as const, exchangeRate: 1, date: "2026-09-20" };
+    const input = {
+      invoiceIds: ids,
+      amountPaid: 150,
+      currency: "USD" as const,
+      exchangeRate: 1,
+      date: "2026-09-20",
+    };
 
     const r = await settleInvoicesUseCase(...repos(), customerId, "customer", input, ctx);
     expect(r.ok).toBe(true);
     if (r.ok) expect(r.data.vouchers).toHaveLength(2);
 
-    const replay = await settleInvoicesUseCase(...repos(), customerId, "customer", input, ctx).catch(
-      (e: unknown) => ({ ok: false as const, error: String(e) }),
-    );
+    const replay = await settleInvoicesUseCase(
+      ...repos(),
+      customerId,
+      "customer",
+      input,
+      ctx,
+    ).catch((e: unknown) => ({ ok: false as const, error: String(e) }));
     expect(replay.ok).toBe(false);
 
     const active = await db
@@ -82,11 +116,16 @@ describe("settle-invoices with one client operation id", () => {
   it("overpayment advance voucher gets its own id too", async () => {
     const ids = [await mkInvoice(40), await mkInvoice(40)];
     const ctx = {
-      tenantId, userId: randomUUID(), userRole: "admin", userName: "t",
+      tenantId,
+      userId: randomUUID(),
+      userRole: "admin",
+      userName: "t",
       clientOperationId: randomUUID(),
     } as TenantContext;
     const r = await settleInvoicesUseCase(
-      ...repos(), customerId, "customer",
+      ...repos(),
+      customerId,
+      "customer",
       { invoiceIds: ids, amountPaid: 100, currency: "USD", exchangeRate: 1, date: "2026-09-20" },
       ctx,
     );

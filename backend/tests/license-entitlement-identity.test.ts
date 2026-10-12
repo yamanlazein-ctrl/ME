@@ -14,7 +14,10 @@ import { syncTenantLicenseCacheFromLicenseRow } from "../src/infrastructure/lice
 import { createLicenseHeartbeatMiddleware } from "../src/infrastructure/http/middleware/license.heartbeat.middleware.js";
 import { createLicenseGuard } from "../src/infrastructure/http/middleware/license.guard.middleware.js";
 import { LicenseTokenSigner } from "../src/infrastructure/auth/LicenseTokenSigner.js";
-import { AesGcmSecretStore, decodeMasterKey } from "../src/infrastructure/secrets/AesGcmSecretStore.js";
+import {
+  AesGcmSecretStore,
+  decodeMasterKey,
+} from "../src/infrastructure/secrets/AesGcmSecretStore.js";
 import { PostgresSecretsRepository } from "../src/infrastructure/repositories/PostgresSecretsRepository.js";
 import { DbTokenDenylist } from "../src/infrastructure/auth/TokenDenylist.js";
 import { config } from "../src/infrastructure/config/env.js";
@@ -158,7 +161,11 @@ describe("License entitlement identity — no baked hijack + post-activation gat
     expect(n).toBeGreaterThanOrEqual(1);
 
     const [row] = await runWithPlatformContext(async () =>
-      db.select().from(licenses).where(eq(licenses.id, bakedLicenseId as never)).limit(1),
+      db
+        .select()
+        .from(licenses)
+        .where(eq(licenses.id, bakedLicenseId as never))
+        .limit(1),
     );
     expect(row?.tenantId).toBeNull();
     expect(row?.key).toBe(bakedKey);
@@ -179,13 +186,21 @@ describe("License entitlement identity — no baked hijack + post-activation gat
     });
 
     const [bakedRow] = await runWithPlatformContext(async () =>
-      db.select().from(licenses).where(eq(licenses.id, bakedLicenseId as never)).limit(1),
+      db
+        .select()
+        .from(licenses)
+        .where(eq(licenses.id, bakedLicenseId as never))
+        .limit(1),
     );
     const synced = await syncTenantLicenseCacheFromLicenseRow(db, bakedRow as never);
     expect(synced).toBe(false);
 
     const [tenant] = await runWithPlatformContext(async () =>
-      db.select().from(tenants).where(eq(tenants.id, tenantId as never)).limit(1),
+      db
+        .select()
+        .from(tenants)
+        .where(eq(tenants.id, tenantId as never))
+        .limit(1),
     );
     expect(tenant?.licenseKey).toBe(activeKey);
     expect(tenant?.licenseStatus).toBe("active");
@@ -228,10 +243,10 @@ describe("License entitlement identity — no baked hijack + post-activation gat
   it("heartbeat+guard block missing entitlement after activation pointer set", async () => {
     // Point tenant at a non-existent key → findLatest null + activated → missing
     await runWithPlatformContext(async () => {
-      await pool.query(
-        `UPDATE tenants SET license_key = $1 WHERE id = $2::uuid`,
-        [`LIC-MISSING-${randomUUID().slice(0, 8)}`, tenantId],
-      );
+      await pool.query(`UPDATE tenants SET license_key = $1 WHERE id = $2::uuid`, [
+        `LIC-MISSING-${randomUUID().slice(0, 8)}`,
+        tenantId,
+      ]);
     });
 
     const heartbeat = createLicenseHeartbeatMiddleware(
@@ -278,10 +293,7 @@ describe("License entitlement identity — no baked hijack + post-activation gat
     const before = await pool.query<{
       password_hash: string;
       pin_hash: string | null;
-    }>(
-      `SELECT password_hash, pin_hash FROM users WHERE tenant_id = $1::uuid LIMIT 1`,
-      [tenantId],
-    );
+    }>(`SELECT password_hash, pin_hash FROM users WHERE tenant_id = $1::uuid LIMIT 1`, [tenantId]);
     if (before.rowCount === 0) return; // no users on fixture — skip
 
     const snap = before.rows[0]!;
@@ -291,17 +303,17 @@ describe("License entitlement identity — no baked hijack + post-activation gat
         .update(licenses)
         .set({ status: "suspended", updatedAt: new Date() })
         .where(eq(licenses.id, activeLicenseId as never));
-      const [row] = await db.select().from(licenses).where(eq(licenses.id, activeLicenseId as never));
+      const [row] = await db
+        .select()
+        .from(licenses)
+        .where(eq(licenses.id, activeLicenseId as never));
       await syncTenantLicenseCacheFromLicenseRow(db, row as never);
     });
 
     const after = await pool.query<{
       password_hash: string;
       pin_hash: string | null;
-    }>(
-      `SELECT password_hash, pin_hash FROM users WHERE tenant_id = $1::uuid LIMIT 1`,
-      [tenantId],
-    );
+    }>(`SELECT password_hash, pin_hash FROM users WHERE tenant_id = $1::uuid LIMIT 1`, [tenantId]);
     expect(after.rows[0]?.password_hash).toBe(snap.password_hash);
     expect(after.rows[0]?.pin_hash).toBe(snap.pin_hash);
 
@@ -310,7 +322,10 @@ describe("License entitlement identity — no baked hijack + post-activation gat
         .update(licenses)
         .set({ status: "active", updatedAt: new Date() })
         .where(eq(licenses.id, activeLicenseId as never));
-      const [row] = await db.select().from(licenses).where(eq(licenses.id, activeLicenseId as never));
+      const [row] = await db
+        .select()
+        .from(licenses)
+        .where(eq(licenses.id, activeLicenseId as never));
       await syncTenantLicenseCacheFromLicenseRow(db, row as never);
     });
   });

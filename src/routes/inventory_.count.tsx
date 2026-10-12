@@ -255,7 +255,10 @@ function CountRow({ line, year, onSaved }: { line: CountLine; year: number; onSa
   const [savedAt, setSavedAt] = useState(0);
   // Each field follows ITS saved value only: saving kg must not wipe pieces being typed.
   useEffect(() => setKg(line.countedKg == null ? "" : String(line.countedKg)), [line.countedKg]);
-  useEffect(() => setPieces(line.countedPieces == null ? "" : String(line.countedPieces)), [line.countedPieces]);
+  useEffect(
+    () => setPieces(line.countedPieces == null ? "" : String(line.countedPieces)),
+    [line.countedPieces],
+  );
   const again = useRef(false);
 
   const kgN = parse(kg);

@@ -12,8 +12,14 @@
 import { Router, type Response } from "express";
 import { rbac } from "../../infrastructure/http/middleware/rbac.middleware.js";
 import { desc, eq } from "drizzle-orm";
-import { motardDriveUploads, motardDriveRuns } from "../../infrastructure/orm/sqlite/schemas/drive-archive.table.js";
-import { authorizeUploadDevice, readDriveSettings } from "../../infrastructure/googledrive/coordinator.js";
+import {
+  motardDriveUploads,
+  motardDriveRuns,
+} from "../../infrastructure/orm/sqlite/schemas/drive-archive.table.js";
+import {
+  authorizeUploadDevice,
+  readDriveSettings,
+} from "../../infrastructure/googledrive/coordinator.js";
 import { DriveAuthError } from "../../infrastructure/googledrive/driveClient.js";
 import type { DriveClient } from "../../infrastructure/googledrive/driveClient.js";
 import type { UploadQueue } from "../../infrastructure/googledrive/uploadQueue.js";
@@ -41,13 +47,20 @@ export function createDriveRouter(deps: DriveRouterDeps): Router {
   /** Primary-device gate for state-changing actions - fail-closed. */
   const refuseIfNotPrimary = async (res: Response): Promise<boolean> => {
     if (!localDeviceId) {
-      res.status(409).json({ code: "NO_DEVICE_IDENTITY", message: "لا توجد هوية جهاز على هذا التثبيت" });
+      res
+        .status(409)
+        .json({ code: "NO_DEVICE_IDENTITY", message: "لا توجد هوية جهاز على هذا التثبيت" });
       return true;
     }
     const decision = await authorizeUploadDevice(db, localDeviceId);
     if (!decision.allowed) {
       logger.warn({ reason: decision.reason }, "drive action refused");
-      res.status(403).json({ code: `NOT_PRIMARY_${decision.reason}`, message: "هذا الجهاز ليس جهاز الأرشفة الأساسي" });
+      res
+        .status(403)
+        .json({
+          code: `NOT_PRIMARY_${decision.reason}`,
+          message: "هذا الجهاز ليس جهاز الأرشفة الأساسي",
+        });
       return true;
     }
     return false;
@@ -56,7 +69,9 @@ export function createDriveRouter(deps: DriveRouterDeps): Router {
   router.get("/drive/status", adminGuard, async (_req, res) => {
     try {
       const settings = await readDriveSettings(db);
-      const rows = await db.select({ status: motardDriveUploads.status, id: motardDriveUploads.id }).from(motardDriveUploads);
+      const rows = await db
+        .select({ status: motardDriveUploads.status, id: motardDriveUploads.id })
+        .from(motardDriveUploads);
       const byStatus = rows.reduce<Record<string, number>>((acc, r) => {
         acc[r.status] = (acc[r.status] ?? 0) + 1;
         return acc;
@@ -71,10 +86,16 @@ export function createDriveRouter(deps: DriveRouterDeps): Router {
         .where(eq(motardDriveUploads.status, "done"))
         .orderBy(desc(motardDriveUploads.uploadedAt))
         .limit(1);
-      const [lastRun] = await db.select().from(motardDriveRuns).orderBy(desc(motardDriveRuns.startedAt)).limit(1);
+      const [lastRun] = await db
+        .select()
+        .from(motardDriveRuns)
+        .orderBy(desc(motardDriveRuns.startedAt))
+        .limit(1);
       res.json({
         archiveEnabled: Boolean(settings.archiveEnabled),
-        isPrimaryDevice: Boolean(settings.coordinatorDeviceId && settings.coordinatorDeviceId === localDeviceId),
+        isPrimaryDevice: Boolean(
+          settings.coordinatorDeviceId && settings.coordinatorDeviceId === localDeviceId,
+        ),
         coordinatorDeviceId: settings.coordinatorDeviceId ?? null,
         localDeviceId,
         connected: Boolean(deps.driveClient),
@@ -106,11 +127,15 @@ export function createDriveRouter(deps: DriveRouterDeps): Router {
       res.json({ ok: true, email: ping.email });
     } catch (err) {
       if (err instanceof DriveAuthError) {
-        res.status(401).json({ code: "TOKEN_EXPIRED", message: "انتهت صلاحية التفويض - أعد ربط الحساب" });
+        res
+          .status(401)
+          .json({ code: "TOKEN_EXPIRED", message: "انتهت صلاحية التفويض - أعد ربط الحساب" });
         return;
       }
       logger.error({ err }, "drive/test failed");
-      res.status(502).json({ code: "GOOGLE_UNREACHABLE", message: "تعذر الوصول إلى Google - تحقق من الاتصال" });
+      res
+        .status(502)
+        .json({ code: "GOOGLE_UNREACHABLE", message: "تعذر الوصول إلى Google - تحقق من الاتصال" });
     }
   });
 

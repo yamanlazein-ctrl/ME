@@ -125,8 +125,23 @@ export class Exporters {
     if (!rows.length) return [];
     const csv = toCsv(
       ["الرقم", "التاريخ", "التصنيف", "الوصف", "المبلغ", "طريقة الدفع", "الحالة"],
-      rows.map((r) => [r.number, r.date, r.category, r.description, r.amount, r.method, r.status === "cancelled" ? "ملغاة" : "نشطة"]),
+      rows.map((r) => [
+        r.number,
+        r.date,
+        r.category,
+        r.description,
+        r.amount,
+        r.method,
+        r.status === "cancelled" ? "ملغاة" : "نشطة",
+      ]),
     );
-    return [{ fileName: `${periodKey}-01_مصروفات-الشهر.csv`, mimeType: "text/csv;charset=utf-8", content: csv, rowCount: rows.length }];
+    return [
+      {
+        fileName: `${periodKey}-01_مصروفات-الشهر.csv`,
+        mimeType: "text/csv;charset=utf-8",
+        content: csv,
+        rowCount: rows.length,
+      },
+    ];
   }
 }

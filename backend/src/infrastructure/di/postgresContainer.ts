@@ -6,7 +6,12 @@
 import type { Container } from "./container.js";
 import { db } from "../orm/drizzle.js";
 import { ambientDb } from "../orm/ambient-tx.js";
-import { redis, DbTokenDenylist, RedisTokenDenylist, CompositeTokenDenylist } from "../auth/TokenDenylist.js";
+import {
+  redis,
+  DbTokenDenylist,
+  RedisTokenDenylist,
+  CompositeTokenDenylist,
+} from "../auth/TokenDenylist.js";
 import type { TokenDenylist } from "../auth/TokenDenylist.js";
 import { JwtSigner } from "../auth/JwtSigner.js";
 import { Argon2PasswordHasher } from "../auth/PasswordHasher.js";
@@ -93,7 +98,6 @@ import type { ILicenseProvider } from "../../application/ports/ILicenseProvider.
 import { buildLicenseTokenSignerForInstall } from "./licenseTokenSignerForInstall.js";
 import type { ILicenseTokenSigner } from "../../application/ports/ILicenseTokenSigner.js";
 import { logger } from "../config/logger.js";
-
 
 export function buildContainer(): Container {
   const jwtSigner = new JwtSigner();
@@ -233,4 +237,3 @@ export function buildContainer(): Container {
   };
   return built;
 }
-

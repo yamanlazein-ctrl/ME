@@ -703,11 +703,23 @@ export function RollAdjustDialog({ roll, onClose }: { roll: Roll | null; onClose
           <div className="grid grid-cols-2 gap-3">
             <div>
               <Label>{mode === "set" ? "الكمية الجديدة (كغ)" : "الكيلوغرام (+ أو −)"}</Label>
-              <Input type="number" step="0.01" value={kg} placeholder={mode === "set" ? String(curKg) : "مثال: -2.5"} onChange={(e) => setKg(e.target.value)} />
+              <Input
+                type="number"
+                step="0.01"
+                value={kg}
+                placeholder={mode === "set" ? String(curKg) : "مثال: -2.5"}
+                onChange={(e) => setKg(e.target.value)}
+              />
             </div>
             <div>
               <Label>{mode === "set" ? "عدد الأثواب الجديد" : "الأثواب (+ أو −)"}</Label>
-              <Input type="number" step="1" value={pieces} placeholder={mode === "set" ? String(curPieces) : "مثال: 3"} onChange={(e) => setPieces(e.target.value)} />
+              <Input
+                type="number"
+                step="1"
+                value={pieces}
+                placeholder={mode === "set" ? String(curPieces) : "مثال: 3"}
+                onChange={(e) => setPieces(e.target.value)}
+              />
             </div>
           </div>
           <div className="grid grid-cols-2 gap-2 rounded-lg border border-border p-2 text-sm tabular-nums">
@@ -715,7 +727,8 @@ export function RollAdjustDialog({ roll, onClose }: { roll: Roll | null; onClose
               كغ: {curKg} ← <b>{newKg}</b> <span className={tone(deltaKg)}>({sign(deltaKg)})</span>
             </span>
             <span>
-              أثواب: {curPieces} ← <b>{newPieces}</b> <span className={tone(deltaPieces)}>({sign(deltaPieces)})</span>
+              أثواب: {curPieces} ← <b>{newPieces}</b>{" "}
+              <span className={tone(deltaPieces)}>({sign(deltaPieces)})</span>
             </span>
           </div>
           {(newKg < 0 || newPieces < 0) && (
@@ -751,7 +764,12 @@ export function RollAdjustDialog({ roll, onClose }: { roll: Roll | null; onClose
             disabled={!valid || busy}
             onClick={async () => {
               setBusy(true);
-              const ok = await adjustRoll(roll.id, { newKg, newPieces, reason, expectedVersion: roll.version });
+              const ok = await adjustRoll(roll.id, {
+                newKg,
+                newPieces,
+                reason,
+                expectedVersion: roll.version,
+              });
               setBusy(false);
               if (ok) onClose();
             }}
@@ -789,9 +807,7 @@ function RollFormDialog({ state, onClose }: { state: RollFormState; onClose: () 
   // supplier. Only an EDIT should ever pre-fill a supplier (the roll's own
   // recorded one); a new roll starts unset.
   const [supplierId, setSupplierId] = useState<string>(editing?.supplierId ?? "");
-  const [date, setDate] = useState<string>(
-    editing?.entryDate ?? localToday(),
-  );
+  const [date, setDate] = useState<string>(editing?.entryDate ?? localToday());
   const [rollErr, setRollErr] = useState<string | null>(null);
   const [dyeErr, setDyeErr] = useState<string | null>(null);
   const [qtyErr, setQtyErr] = useState<string | null>(null);

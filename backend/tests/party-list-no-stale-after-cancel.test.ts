@@ -47,35 +47,73 @@ let reachable = false;
 async function seedParty(kind: "customer" | "supplier") {
   const id = randomUUID();
   await db.insert(parties).values({
-    id, tenantId, name: `Stale-${kind}-${randomUUID().slice(0, 8)}`,
-    kind, currency: "SYP", status: "active",
+    id,
+    tenantId,
+    name: `Stale-${kind}-${randomUUID().slice(0, 8)}`,
+    kind,
+    currency: "SYP",
+    status: "active",
   });
   const invIds: string[] = [];
   for (let i = 0; i < 2; i += 1) {
     const rollId = randomUUID();
     await db.insert(rolls).values({
-      id: rollId, tenantId, colorId, rollNo: `R-${randomUUID().slice(0, 6)}`,
-      initialKg: 100, remainingKg: 100, pieces: 1, remainingPieces: 1,
-      pricePerKg: 1000, currency: "SYP", entryDate: "2026-04-01", supplierId: id,
+      id: rollId,
+      tenantId,
+      colorId,
+      rollNo: `R-${randomUUID().slice(0, 6)}`,
+      initialKg: 100,
+      remainingKg: 100,
+      pieces: 1,
+      remainingPieces: 1,
+      pricePerKg: 1000,
+      currency: "SYP",
+      entryDate: "2026-04-01",
+      supplierId: id,
     });
     const invId = randomUUID();
     invIds.push(invId);
     await db.insert(invoices).values({
-      id: invId, tenantId, number: `INV-${randomUUID().slice(0, 8)}`,
+      id: invId,
+      tenantId,
+      number: `INV-${randomUUID().slice(0, 8)}`,
       // The list-stats query scopes by invoice TYPE derived from the party
       // kind: customers aggregate their sales, suppliers their purchases.
       type: kind === "customer" ? "sale" : "entry",
-      partyId: id, partyType: kind, status: "active", currency: "SYP",
-      date: "2026-04-01", subtotal: 40_000, total: 40_000, paid: 0,
+      partyId: id,
+      partyType: kind,
+      status: "active",
+      currency: "SYP",
+      date: "2026-04-01",
+      subtotal: 40_000,
+      total: 40_000,
+      paid: 0,
     });
     await db.insert(invoiceLines).values({
-      id: randomUUID(), tenantId, invoiceId: invId, rollId, colorId, fabricId,
-      quantityKg: 10, pricePerKg: 4000, discountAmount: 0, pieces: 1,
+      id: randomUUID(),
+      tenantId,
+      invoiceId: invId,
+      rollId,
+      colorId,
+      fabricId,
+      quantityKg: 10,
+      pricePerKg: 4000,
+      discountAmount: 0,
+      pieces: 1,
     });
     await db.insert(ledgerEntries).values({
-      id: randomUUID(), tenantId, partyId: id, date: "2026-04-01", type: "sales_invoice",
-      debit: 40_000, credit: 0, currency: "SYP", referenceType: "invoice",
-      referenceId: invId, status: "active", cashImpact: "none",
+      id: randomUUID(),
+      tenantId,
+      partyId: id,
+      date: "2026-04-01",
+      type: "sales_invoice",
+      debit: 40_000,
+      credit: 0,
+      currency: "SYP",
+      referenceType: "invoice",
+      referenceId: invId,
+      status: "active",
+      cashImpact: "none",
     });
   }
   return { id, invIds };
@@ -99,13 +137,19 @@ const activeLegIds = (party: string) =>
     .then((r) => r.map((x) => x.id));
 
 const invStatus = (id: string) =>
-  db.select({ status: invoices.status }).from(invoices).where(eq(invoices.id, id)).then((r) => r[0]?.status);
+  db
+    .select({ status: invoices.status })
+    .from(invoices)
+    .where(eq(invoices.id, id))
+    .then((r) => r[0]?.status);
 
 beforeAll(async () => {
   reachable = await databaseReachable();
   if (!reachable) return;
   await db.insert(tenants).values({
-    id: tenantId, name: "Stale Check", slug: `sc-${tenantId.slice(0, 8)}`,
+    id: tenantId,
+    name: "Stale Check",
+    slug: `sc-${tenantId.slice(0, 8)}`,
   });
   await db.insert(fabrics).values({ id: fabricId, tenantId, name: "F" });
   await db.insert(colors).values({ id: colorId, tenantId, fabricId, name: "C" });

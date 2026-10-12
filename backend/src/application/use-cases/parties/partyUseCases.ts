@@ -15,7 +15,11 @@ type OpeningDirection = "they_owe_us" | "we_owe_them";
  * UI (amount + direction) → the signed SoT of openingJournalRows: positive is
  * "they owe us" for a customer and "we owe them" for a supplier.
  */
-export function signedOpeningBalance(kind: string, amount: number, direction: OpeningDirection): number {
+export function signedOpeningBalance(
+  kind: string,
+  amount: number,
+  direction: OpeningDirection,
+): number {
   const positive = kind === "supplier" ? direction === "we_owe_them" : direction === "they_owe_us";
   return amount === 0 ? 0 : positive ? amount : -amount;
 }
@@ -40,7 +44,14 @@ export async function createPartyUseCase(
   // The UI sends an absolute amount + direction; it wins over a signed openingBalance.
   const data =
     input.openingAmount !== undefined && input.openingDirection
-      ? { ...input, openingBalance: signedOpeningBalance(input.kind, input.openingAmount, input.openingDirection) }
+      ? {
+          ...input,
+          openingBalance: signedOpeningBalance(
+            input.kind,
+            input.openingAmount,
+            input.openingDirection,
+          ),
+        }
       : input;
 
   try {
@@ -89,7 +100,10 @@ export async function updatePartyUseCase(
     return { ok: true, data: party };
   } catch (e) {
     if (/Stale version|STALE_VERSION/i.test(e instanceof Error ? e.message : "")) {
-      return { ok: false, error: "تغيّرت بيانات الطرف على جهاز آخر أو في نافذة أخرى — حدّث الصفحة ثم أعد المحاولة." };
+      return {
+        ok: false,
+        error: "تغيّرت بيانات الطرف على جهاز آخر أو في نافذة أخرى — حدّث الصفحة ثم أعد المحاولة.",
+      };
     }
     return { ok: false, error: persistenceErrorMessage(e, "party") };
   }

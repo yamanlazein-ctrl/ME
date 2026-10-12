@@ -59,7 +59,20 @@ export const createPartySchema = z.object({
   status: z.enum(["active", "inactive"]).optional(),
 });
 
-export const updatePartySchema = createPartySchema.partial().omit({ kind: true });
+/**
+ * Edit: a blank email CLEARS it (null) — on create blank means "not provided". The create mapping
+ * (blank → undefined) made an email impossible to remove: the field was dropped and the old one kept.
+ */
+const clearableEmail = z.preprocess((v) => {
+  if (typeof v !== "string") return v;
+  const t = v.trim();
+  return t === "" ? null : t;
+}, z.string().email("صيغة البريد الإلكتروني غير صحيحة").max(320).nullable().optional());
+
+export const updatePartySchema = createPartySchema
+  .partial()
+  .omit({ kind: true })
+  .extend({ email: clearableEmail });
 
 /** Replace a party's opening balance (old journal cancelled, new one posted). */
 export const partyOpeningSchema = z.object({

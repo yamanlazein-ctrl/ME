@@ -32,7 +32,14 @@ function weightAndFirst(mag: bigint, scale: number): { weight: number; first: nu
 }
 
 /** PG numeric division of a/10^sa by b/10^sb (dscales da, db) → PG's text result, or null when b = 0. */
-export function pgNumericDivide(a: bigint, sa: number, b: bigint, sb: number, da = sa, db = sb): string | null {
+export function pgNumericDivide(
+  a: bigint,
+  sa: number,
+  b: bigint,
+  sb: number,
+  da = sa,
+  db = sb,
+): string | null {
   if (b === 0n) return null; // callers wrap the divisor in NULLIF(…, 0)
   const neg = a < 0n !== b < 0n && a !== 0n;
   const ma = a < 0n ? -a : a;
@@ -65,10 +72,12 @@ export function pgDivSql(
   denominator: SQL | SQLWrapper,
   denScale: number,
 ): SQL<number | null> {
-  return sql`(CAST((${numerator}) AS TEXT) || '/' || CAST((${denominator}) AS TEXT))`.mapWith((v: unknown) => {
-    if (v === null || v === undefined) return null;
-    const [n, d] = String(v).split("/");
-    const t = pgNumericDivide(BigInt(n), numScale, BigInt(d), denScale);
-    return t === null ? null : Number(t);
-  }) as SQL<number | null>;
+  return sql`(CAST((${numerator}) AS TEXT) || '/' || CAST((${denominator}) AS TEXT))`.mapWith(
+    (v: unknown) => {
+      if (v === null || v === undefined) return null;
+      const [n, d] = String(v).split("/");
+      const t = pgNumericDivide(BigInt(n), numScale, BigInt(d), denScale);
+      return t === null ? null : Number(t);
+    },
+  ) as SQL<number | null>;
 }

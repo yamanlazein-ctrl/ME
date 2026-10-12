@@ -42,17 +42,25 @@ export function registerReportRoutes(
     if (from === "invalid") {
       return res.status(400).json({ code: "BAD_REQUEST", message: "تاريخ غير صالح" });
     }
-    const [sales, purchases, salesReturns, entryReturns, expenses, inventory, fabricsTop, customersTop] =
-      await Promise.all([
-        reports.invoiceTotalsByCurrency(c.tenantId, "sale", from),
-        reports.invoiceTotalsByCurrency(c.tenantId, "entry", from),
-        reports.returnTotalsByCurrency(c.tenantId, "sale", from),
-        reports.returnTotalsByCurrency(c.tenantId, "entry", from),
-        reports.expenseTotalsByCurrency(c.tenantId, from),
-        reports.inventoryValue(c.tenantId),
-        reports.topFabrics(c.tenantId, from, 5),
-        reports.topCustomers(c.tenantId, from, 5, "usdFirst"),
-      ]);
+    const [
+      sales,
+      purchases,
+      salesReturns,
+      entryReturns,
+      expenses,
+      inventory,
+      fabricsTop,
+      customersTop,
+    ] = await Promise.all([
+      reports.invoiceTotalsByCurrency(c.tenantId, "sale", from),
+      reports.invoiceTotalsByCurrency(c.tenantId, "entry", from),
+      reports.returnTotalsByCurrency(c.tenantId, "sale", from),
+      reports.returnTotalsByCurrency(c.tenantId, "entry", from),
+      reports.expenseTotalsByCurrency(c.tenantId, from),
+      reports.inventoryValue(c.tenantId),
+      reports.topFabrics(c.tenantId, from, 5),
+      reports.topCustomers(c.tenantId, from, 5, "usdFirst"),
+    ]);
     return res.json({
       from,
       sales: sales.total,
@@ -83,7 +91,11 @@ export function registerReportRoutes(
     switch (slug) {
       case "net-sales":
       case "purchases": {
-        const t = await reports.invoiceTotalsByCurrency(c.tenantId, slug === "net-sales" ? "sale" : "entry", from);
+        const t = await reports.invoiceTotalsByCurrency(
+          c.tenantId,
+          slug === "net-sales" ? "sale" : "entry",
+          from,
+        );
         summary = { count: t.count, total: t.total, paid: t.paid, remaining: t.remaining };
         break;
       }
@@ -110,15 +122,27 @@ export function registerReportRoutes(
         const total: ByCurrency = {};
         for (const f of byFabric)
           for (const [ccy, v] of Object.entries(f.value)) total[ccy] = (total[ccy] ?? 0) + v;
-        return res.json({ summary: { total }, rows: byFabric, meta: { total: byFabric.length, page: 0, limit: byFabric.length, hasNext: false } });
+        return res.json({
+          summary: { total },
+          rows: byFabric,
+          meta: { total: byFabric.length, page: 0, limit: byFabric.length, hasNext: false },
+        });
       }
       case "top-fabrics": {
         const top = await reports.topFabrics(c.tenantId, from, 10);
-        return res.json({ summary: {}, rows: top, meta: { total: top.length, page: 0, limit: 10, hasNext: false } });
+        return res.json({
+          summary: {},
+          rows: top,
+          meta: { total: top.length, page: 0, limit: 10, hasNext: false },
+        });
       }
       case "top-customers": {
         const top = await reports.topCustomers(c.tenantId, from, 10, "syp");
-        return res.json({ summary: {}, rows: top, meta: { total: top.length, page: 0, limit: 10, hasNext: false } });
+        return res.json({
+          summary: {},
+          rows: top,
+          meta: { total: top.length, page: 0, limit: 10, hasNext: false },
+        });
       }
       default:
         return res.status(404).json({ code: "NOT_FOUND", message: "التقرير غير موجود" });
@@ -133,14 +157,9 @@ export function registerReportRoutes(
   });
 
   /** Party balances — ledger remaining per currency (REPAIR-002). */
-  router.get(
-    "/reports/party-balances",
-    auth,
-    readGuard,
-    async (req: Request, res: Response) => {
-      const c = ctx(req);
-      const kind = String(req.query.kind ?? "customer");
-      res.json({ data: await reports.partyBalances(c.tenantId, kind) });
-    },
-  );
+  router.get("/reports/party-balances", auth, readGuard, async (req: Request, res: Response) => {
+    const c = ctx(req);
+    const kind = String(req.query.kind ?? "customer");
+    res.json({ data: await reports.partyBalances(c.tenantId, kind) });
+  });
 }

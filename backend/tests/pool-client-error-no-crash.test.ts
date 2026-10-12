@@ -15,13 +15,17 @@ describe.skipIf(pgOnly)("pool client errors", () => {
   it("an error on a checked-out client is handled, not thrown", async () => {
     const client = await pool.connect();
     try {
-      expect(() => client.emit("error", new Error("Connection terminated unexpectedly"))).not.toThrow();
+      expect(() =>
+        client.emit("error", new Error("Connection terminated unexpectedly")),
+      ).not.toThrow();
     } finally {
       client.release(true);
     }
   });
 
   it("an idle-client error on the pool is handled, not thrown", () => {
-    expect(() => pool.emit("error", new Error("idle client died"), undefined as never)).not.toThrow();
+    expect(() =>
+      pool.emit("error", new Error("idle client died"), undefined as never),
+    ).not.toThrow();
   });
 });

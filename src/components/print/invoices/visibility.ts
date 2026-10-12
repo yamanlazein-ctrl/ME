@@ -8,7 +8,7 @@
  * default — every real field on the invoice must be in the print
  * unless the user explicitly opts out.
  */
-import { useEffect, useState } from "react";
+import { settings, useSettings, updatePrintVisibility } from "@/presentation/hooks/useSettings";
 
 export type InvoiceKind = "purchase" | "sale" | "return_in" | "return_out";
 
@@ -148,38 +148,40 @@ export const FIELD_LABELS: Record<FieldKey, string> = {
   showFooter: "تذييل المستند",
 };
 
-function loadVisibility(): Record<InvoiceKind, Record<FieldKey, boolean>> {
+type Stored = Partial<Record<InvoiceKind, Partial<Record<FieldKey, boolean>>>>;
+
+/** The pre-F-017 device-local copy: still honoured until this device's next save moves it to the server. */
+function legacyLocal(): Stored | undefined {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return DEFAULT_VISIBILITY;
-    const parsed = JSON.parse(raw) as Record<InvoiceKind, Record<FieldKey, boolean>>;
-    // Merge defaults so newly added fields default to ON
-    for (const kind of Object.keys(DEFAULT_VISIBILITY) as InvoiceKind[]) {
-      parsed[kind] = { ...DEFAULT_VISIBILITY[kind], ...(parsed[kind] ?? {}) };
-    }
-    return parsed;
+    return raw ? (JSON.parse(raw) as Stored) : undefined;
   } catch {
-    return DEFAULT_VISIBILITY;
+    return undefined;
   }
+}
+
+/**
+ * hermes F-017: the source of truth is `settings.printing.invoiceVisibility`, which is saved with
+ * PUT /api/settings/printing and replicates to every device (it used to be one browser's
+ * localStorage, so another workstation printed every field). Defaults merge in, so new fields are ON.
+ */
+function loadVisibility(): Record<InvoiceKind, Record<FieldKey, boolean>> {
+  const stored = (settings.printing.invoiceVisibility as Stored | undefined) ?? legacyLocal();
+  const out = {} as Record<InvoiceKind, Record<FieldKey, boolean>>;
+  for (const kind of Object.keys(DEFAULT_VISIBILITY) as InvoiceKind[]) {
+    out[kind] = { ...DEFAULT_VISIBILITY[kind], ...(stored?.[kind] ?? {}) };
+  }
+  return out;
 }
 
 function saveVisibility(v: Record<InvoiceKind, Record<FieldKey, boolean>>) {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(v));
-  } catch {
-    /* ignore quota */
-  }
+  updatePrintVisibility(v);
 }
 
-/** Hook: returns the current visibility map for a given kind. */
+/** Hook: returns the current visibility map for a given kind (re-renders when settings change). */
 export function useInvoiceVisibility(kind: InvoiceKind): Record<FieldKey, boolean> {
-  const [vis, setVis] = useState<Record<FieldKey, boolean>>(() => loadVisibility()[kind]);
-  useEffect(() => {
-    const onStorage = () => setVis(loadVisibility()[kind]);
-    window.addEventListener("storage", onStorage);
-    return () => window.removeEventListener("storage", onStorage);
-  }, [kind]);
-  return vis;
+  useSettings();
+  return loadVisibility()[kind];
 }
 
 /** Imperative API for the settings page to toggle fields and persist. */
@@ -191,8 +193,6 @@ export function setFieldVisibility(
   const cur = loadVisibility();
   cur[kind] = { ...cur[kind], [field]: visible };
   saveVisibility(cur);
-  // Notify other tabs / listeners in the same page
-  window.dispatchEvent(new StorageEvent("storage", { key: STORAGE_KEY }));
   return cur;
 }
 
@@ -200,7 +200,6 @@ export function resetKindVisibility(kind: InvoiceKind) {
   const cur = loadVisibility();
   cur[kind] = { ...DEFAULT_VISIBILITY[kind] };
   saveVisibility(cur);
-  window.dispatchEvent(new StorageEvent("storage", { key: STORAGE_KEY }));
   return cur;
 }
 

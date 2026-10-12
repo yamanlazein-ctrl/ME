@@ -64,7 +64,11 @@ export function describeSyncProblem(raw: string | null | undefined): string | nu
   if (/not yet applied|retrying|deferred|waiting|بانتظار|already running|in progress/.test(t)) {
     return "عملية قيد المزامنة — ستُرسل تلقائياً.";
   }
-  if (/fetch failed|econn|enotfound|eai_again|timeout|timed out|aborted|network|socket|\b50[234]\b|لا يستجيب|unreachable/.test(t)) {
+  if (
+    /fetch failed|econn|enotfound|eai_again|timeout|timed out|aborted|network|socket|\b50[234]\b|لا يستجيب|unreachable/.test(
+      t,
+    )
+  ) {
     return "لا يوجد اتصال بالمركز الآن — العمليات محفوظة على هذا الجهاز وستُرسل تلقائياً عند عودة الاتصال.";
   }
   if (/sync_device_revoked|معطَّل|مُلغى/.test(t)) {
@@ -80,7 +84,10 @@ export function describeSyncProblem(raw: string | null | undefined): string | nu
     return "عملية تحتاج مراجعة: تعارضت مع تعديل من جهاز آخر — افتح «تعارضات المزامنة».";
   }
   // Already a plain Arabic sentence without technical tokens: keep it.
-  if (/[\u0600-\u06FF]/.test(raw) && !/failed query|sql|select |insert |update |\bat \w+ \(|\{|\}|_[a-z]+_/i.test(raw)) {
+  if (
+    /[\u0600-\u06FF]/.test(raw) &&
+    !/failed query|sql|select |insert |update |\bat \w+ \(|\{|\}|_[a-z]+_/i.test(raw)
+  ) {
     return raw;
   }
   return "تعذّرت مزامنة عملية — ستُعاد المحاولة تلقائياً.";
@@ -206,7 +213,9 @@ export async function runSyncNow(): Promise<SyncRunResult | null> {
   } catch (err) {
     setState({
       lastRunAt: new Date().toISOString(),
-      lastError: describeSyncProblem(err instanceof Error ? err.message : null) ?? "تعذّرت المزامنة — ستُعاد المحاولة تلقائياً.",
+      lastError:
+        describeSyncProblem(err instanceof Error ? err.message : null) ??
+        "تعذّرت المزامنة — ستُعاد المحاولة تلقائياً.",
     });
     throw err;
   } finally {

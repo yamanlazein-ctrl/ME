@@ -40,10 +40,20 @@ export function registerSearchRoutes(
     const kind = String(req.query.kind ?? "");
     const status = String(req.query.status ?? "active");
     const limit = Math.min(50, Math.max(1, Number(req.query.limit ?? 20)));
-    const cursor = decodeCursor(typeof req.query.cursor === "string" ? req.query.cursor : undefined);
+    const cursor = decodeCursor(
+      typeof req.query.cursor === "string" ? req.query.cursor : undefined,
+    );
     const pattern = q ? likeContains(q) : "%";
 
-    const list = await searchRepo.searchParties({ tenantId: c.tenantId, q, kind, status, limit, pattern, cursor });
+    const list = await searchRepo.searchParties({
+      tenantId: c.tenantId,
+      q,
+      kind,
+      status,
+      limit,
+      pattern,
+      cursor,
+    });
     const page = list.slice(0, limit);
     // Page 1 pins the exact-code match first; the keyset cursor must come
     // from the last (name, id)-ordered row, never from that pinned row.

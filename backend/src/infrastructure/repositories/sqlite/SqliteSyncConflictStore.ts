@@ -13,7 +13,10 @@ import type { DB } from "../../orm/sqlite/drizzleCompat.js";
 import { runAutonomous } from "../../orm/sqlite/transaction.js";
 import { transactionTimestamp } from "../../orm/sqlite/clock.js";
 import { pgJsonTimestamptz, randomUuid, toJsonbText } from "../../orm/sqlite/types.js";
-import type { ISyncConflictStore, SyncConflictDbRow } from "../../../application/ports/ISyncConflictStore.js";
+import type {
+  ISyncConflictStore,
+  SyncConflictDbRow,
+} from "../../../application/ports/ISyncConflictStore.js";
 
 const COLUMNS = sql.raw(`id, op_id, entity_type, entity_id, operation, base_version,
               server_version, status, created_at, resolved_at, resolution, local_intent`);
@@ -67,13 +70,20 @@ export class SqliteSyncConflictStore implements ISyncConflictStore {
     return runAutonomous(async (tx) => {
       const now = transactionTimestamp();
       // jsonb_build_object(...) — same keys and values; toJsonbText applies jsonb key order.
-      const resolution = toJsonbText({ decision, by_user_id: byUserId, note, resolved_at: pgJsonTimestamptz(now) });
+      const resolution = toJsonbText({
+        decision,
+        by_user_id: byUserId,
+        note,
+        resolved_at: pgJsonTimestamptz(now),
+      });
       const updated = await tx.execute(sql`
         UPDATE sync_conflicts
            SET status = 'resolved', resolved_at = ${now}, resolution = ${resolution}
          WHERE id = ${conflictId} AND tenant_id = ${tenantId} AND status = 'open'`);
       if (!updated.rowCount) return null;
-      const r = await tx.execute(sql`SELECT ${COLUMNS} FROM sync_conflicts WHERE id = ${conflictId} AND tenant_id = ${tenantId}`);
+      const r = await tx.execute(
+        sql`SELECT ${COLUMNS} FROM sync_conflicts WHERE id = ${conflictId} AND tenant_id = ${tenantId}`,
+      );
       return r.rows[0] ? pgRow(r.rows[0]) : null;
     });
   }
@@ -81,7 +91,11 @@ export class SqliteSyncConflictStore implements ISyncConflictStore {
   async resolveByOp(tenantId: string, opId: string, reason: string): Promise<void> {
     await runAutonomous(async (tx) => {
       const now = transactionTimestamp();
-      const resolution = toJsonbText({ decision: "applied", note: reason, resolved_at: pgJsonTimestamptz(now) });
+      const resolution = toJsonbText({
+        decision: "applied",
+        note: reason,
+        resolved_at: pgJsonTimestamptz(now),
+      });
       await tx.execute(sql`
         UPDATE sync_conflicts
            SET status = 'resolved', resolved_at = ${now}, resolution = ${resolution}

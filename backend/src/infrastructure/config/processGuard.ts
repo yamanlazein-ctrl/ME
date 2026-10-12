@@ -47,7 +47,12 @@ export interface ProcessGuard {
   readonly givenUp: boolean;
 }
 
-type GuardState = { crashes: number; givenUp: boolean; fatalUntilServing: boolean; serving: boolean };
+type GuardState = {
+  crashes: number;
+  givenUp: boolean;
+  fatalUntilServing: boolean;
+  serving: boolean;
+};
 
 function describe(err: unknown): string {
   if (err instanceof Error) return err.stack ?? `${err.name}: ${err.message}`;
@@ -109,10 +114,7 @@ export function installProcessGuards(opts: { fatalUntilServing?: boolean } = {})
   process.on("uncaughtException", (err) => onFault("exception", err));
   process.on("unhandledRejection", (reason) => onFault("rejection", reason));
 
-  logger.info(
-    { maxToleratedCrashes: MAX_TOLERATED_CRASHES },
-    "PROCESS_GUARDS_INSTALLED",
-  );
+  logger.info({ maxToleratedCrashes: MAX_TOLERATED_CRASHES }, "PROCESS_GUARDS_INSTALLED");
   return state;
 }
 

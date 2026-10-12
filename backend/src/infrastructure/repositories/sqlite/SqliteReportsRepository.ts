@@ -7,7 +7,10 @@ import { scaledText } from "./helpers/likeContains.js";
  */
 import { sql } from "drizzle-orm";
 import type { DB } from "../../orm/sqlite/drizzleCompat.js";
-import type { IReportsRepository, ReportRow } from "../../../application/ports/IReportsRepository.js";
+import type {
+  IReportsRepository,
+  ReportRow,
+} from "../../../application/ports/IReportsRepository.js";
 import * as agg from "./helpers/reportAggregates.js";
 
 export class SqliteReportsRepository implements IReportsRepository {
@@ -37,7 +40,12 @@ export class SqliteReportsRepository implements IReportsRepository {
   ledgerTotalsByCurrency(tenantId: string, from: string | null) {
     return agg.ledgerTotalsByCurrency(this.db, tenantId, from);
   }
-  pagedRows(tenantId: string, slug: string, from: string | null, page: { page: number; limit: number }) {
+  pagedRows(
+    tenantId: string,
+    slug: string,
+    from: string | null,
+    page: { page: number; limit: number },
+  ) {
     return agg.pagedRows(this.db, tenantId, slug, from, page);
   }
 

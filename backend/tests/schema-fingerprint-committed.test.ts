@@ -46,7 +46,10 @@ describe("committed schema fingerprint (Phase 0.1)", () => {
 
   it("is at the current journal head", () => {
     const journal = JSON.parse(
-      readFileSync(join(process.cwd(), "src/infrastructure/orm/migrations/meta/_journal.json"), "utf8"),
+      readFileSync(
+        join(process.cwd(), "src/infrastructure/orm/migrations/meta/_journal.json"),
+        "utf8",
+      ),
     ) as { entries: { idx: number }[] };
     const head = Math.max(...journal.entries.map((e) => e.idx));
     expect(raw.journalIdx).toBe(head);

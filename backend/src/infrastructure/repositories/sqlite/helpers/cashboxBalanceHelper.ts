@@ -28,17 +28,21 @@ export async function recomputeCashboxBalanceAsOf(
   const [session] = await tx
     .select()
     .from(cashboxSessions)
-    .where(
-      and(eq(cashboxSessions.tenantId, ctx.tenantId), eq(cashboxSessions.currency, currency)),
-    )
+    .where(and(eq(cashboxSessions.tenantId, ctx.tenantId), eq(cashboxSessions.currency, currency)))
     .limit(1);
   const opening = session?.openingBalance ?? 0;
   const from = session?.openingDate ?? "0001-01-01";
 
   const [ledger] = await tx
     .select({
-      amountIn: scaledNumber(sql`COALESCE(SUM(CASE WHEN ${ledgerEntries.cashImpact} = 'in' THEN ${ledgerEntries.debit} + ${ledgerEntries.credit} ELSE 0 END), 0)`, 2),
-      amountOut: scaledNumber(sql`COALESCE(SUM(CASE WHEN ${ledgerEntries.cashImpact} = 'out' THEN ${ledgerEntries.debit} + ${ledgerEntries.credit} ELSE 0 END), 0)`, 2),
+      amountIn: scaledNumber(
+        sql`COALESCE(SUM(CASE WHEN ${ledgerEntries.cashImpact} = 'in' THEN ${ledgerEntries.debit} + ${ledgerEntries.credit} ELSE 0 END), 0)`,
+        2,
+      ),
+      amountOut: scaledNumber(
+        sql`COALESCE(SUM(CASE WHEN ${ledgerEntries.cashImpact} = 'out' THEN ${ledgerEntries.debit} + ${ledgerEntries.credit} ELSE 0 END), 0)`,
+        2,
+      ),
     })
     .from(ledgerEntries)
     .where(

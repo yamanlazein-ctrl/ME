@@ -21,7 +21,13 @@ describe("addManualMovementUseCase — negative cash allowed", () => {
     };
     const r = await addManualMovementUseCase(
       repo as never,
-      { date: "2026-09-16", type: "capital", direction: "out", amount: 5000, currency: "SYP" } as never,
+      {
+        date: "2026-09-16",
+        type: "capital",
+        direction: "out",
+        amount: 5000,
+        currency: "SYP",
+      } as never,
       ctx,
     );
     expect(r.ok).toBe(false);
@@ -46,7 +52,13 @@ describe("addManualMovementUseCase — negative cash allowed", () => {
     };
     const r = await addManualMovementUseCase(
       repo as never,
-      { date: "2026-09-16", type: "capital", direction: "out", amount: 110, currency: "USD" } as never,
+      {
+        date: "2026-09-16",
+        type: "capital",
+        direction: "out",
+        amount: 110,
+        currency: "USD",
+      } as never,
       ctx,
     );
     expect(r.ok).toBe(true);
@@ -67,7 +79,13 @@ describe("addManualMovementUseCase — negative cash allowed", () => {
     };
     const r = await addManualMovementUseCase(
       repo as never,
-      { date: "2026-09-16", type: "capital", direction: "in", amount: 5000, currency: "SYP" } as never,
+      {
+        date: "2026-09-16",
+        type: "capital",
+        direction: "in",
+        amount: 5000,
+        currency: "SYP",
+      } as never,
       ctx,
     );
     expect(r.ok).toBe(true);

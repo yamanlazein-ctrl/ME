@@ -14,7 +14,7 @@
  * Usage:  npm run test:integration [-- vitest args…]
  */
 import { spawn, execSync } from "node:child_process";
-import { readFileSync, readdirSync, existsSync } from "node:fs";
+import { TREE_SPAWN, killTree } from "./processTree.mjs";
 import { join } from "node:path";
 import pg from "pg";
 
@@ -45,8 +45,7 @@ const env = {
   RATE_LIMIT_WINDOW_MS: "60000",
   LOG_LEVEL: "error",
   LICENSE_SERVER_MODE: "embedded",
-  APP_MASTER_KEY:
-    process.env.APP_MASTER_KEY ?? "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa=",
+  APP_MASTER_KEY: process.env.APP_MASTER_KEY ?? "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa=",
   E2E_ADMIN_EMAIL: SEED_EMAIL,
   E2E_ADMIN_PASSWORD: SEED_PASSWORD,
 };
@@ -55,28 +54,20 @@ async function prepareDatabase() {
   const c = new pg.Client({ connectionString: TEST_DB });
   await c.connect();
 
-  const dir = join(process.cwd(), "src/infrastructure/orm/migrations");
-  const files = readdirSync(dir).filter((f) => f.endsWith(".sql")).sort();
-  for (const f of files) {
-    const raw = readFileSync(join(dir, f), "utf8");
-    // Some migrations hardcode the production DB name — adapt for the test DB.
-    const sql = raw.replaceAll("DATABASE fabric_erp", "DATABASE erp_test");
-    const stmts = sql.split("--> statement-breakpoint");
-    try {
-      await c.query("BEGIN");
-      for (const s of stmts) {
-        const t = s.trim();
-        if (!t) continue;
-        await c.query(t);
-      }
-      await c.query("COMMIT");
-      console.log("migration OK:", f);
-    } catch (e) {
-      await c.query("ROLLBACK");
-      // Already-applied non-idempotent files are fine to skip mid-way.
-      console.log(`migration SKIP (${e.message.split("\n")[0].slice(0, 60)}):`, f);
-    }
+  // L-05: the journal-aware migrator (same path as scripts/migrate.mjs / ensure-test-db.mjs). The
+  // old per-file loop logged ANY SQL error as "SKIP" and carried on with a half-built schema.
+  const { drizzle } = await import("drizzle-orm/node-postgres");
+  const { migrate } = await import("drizzle-orm/node-postgres/migrator");
+  try {
+    await migrate(drizzle(c), {
+      migrationsFolder: join(process.cwd(), "src/infrastructure/orm/migrations"),
+    });
+  } catch (e) {
+    await c.end();
+    console.error("migration FAILED:", e instanceof Error ? (e.stack ?? e.message) : e);
+    process.exit(1);
   }
+  console.log("migrations applied");
 
   // Seed the login identity used by audit-findings.test.ts (password from env).
   const { hash } = await import("@node-rs/argon2");
@@ -119,12 +110,13 @@ const server = spawn("npx tsx src/presentation/server.ts", {
   env,
   stdio: ["ignore", "inherit", "inherit"],
   shell: true,
+  ...TREE_SPAWN,
 });
 
 const healthy = await waitForHealth(server);
 if (!healthy) {
   console.error("Server failed to become healthy — aborting.");
-  server.kill("SIGKILL");
+  killTree(server);
   process.exit(1);
 }
 
@@ -139,10 +131,8 @@ try {
 } catch (e) {
   code = e.status ?? 1;
 } finally {
-  // shell:true wraps the server in cmd.exe → killing the shell orphans the
-  // child node process on Windows. Kill the whole tree instead.
-  try {
-    execSync(`taskkill /pid ${server.pid} /T /F`, { stdio: "ignore" });
-  } catch {}
+  // shell:true wraps the server in a shell → killing the shell orphans the child node process.
+  // Kill the whole tree (taskkill /T on Windows, the process group elsewhere — M-11).
+  killTree(server);
 }
 process.exit(code);

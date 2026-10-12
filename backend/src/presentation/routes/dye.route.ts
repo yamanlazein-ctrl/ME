@@ -125,7 +125,8 @@ export function registerDyeRoutes(
           logger.error({ err, tenantId }, "DYE_PURGE_DEVICE_ROSTER_UNREADABLE");
           return res.status(409).json({
             code: "SYNC_DEVICES_ENROLLED",
-            message: "تعذّر التحقق من حالة تسجيل أجهزة المزامنة، والعملية الحذفية لا تُزامَن — مُنعت احتياطاً.",
+            message:
+              "تعذّر التحقق من حالة تسجيل أجهزة المزامنة، والعملية الحذفية لا تُزامَن — مُنعت احتياطاً.",
           });
         }
       }

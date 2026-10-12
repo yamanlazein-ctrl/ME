@@ -4,10 +4,20 @@ import { desc } from "./helpers/pgOrder.js";
 import { moneyParam, scaledNumber, mulRound } from "./helpers/likeContains.js";
 import { ilikeEscaped } from "./helpers/likeContains.js";
 import { eq, and, or, sql, gte, lte, isNotNull, inArray } from "drizzle-orm";
-import { afterCursor, cursorColumns, decodeCursor, keysetOrder, nextCursorOf, type KeysetSpec } from "./helpers/keysetPage.js";
+import {
+  afterCursor,
+  cursorColumns,
+  decodeCursor,
+  keysetOrder,
+  nextCursorOf,
+  type KeysetSpec,
+} from "./helpers/keysetPage.js";
 import { likeContains } from "../../utils/likeEscape.js";
 import { BusinessRuleError } from "../../../domain/errors/index.js";
-import { allocateDocumentNumber, allocateDocumentNumberForDevice } from "./helpers/documentNumbers.js";
+import {
+  allocateDocumentNumber,
+  allocateDocumentNumberForDevice,
+} from "./helpers/documentNumbers.js";
 import type { DB } from "../../orm/sqlite/drizzleCompat.js";
 import type {
   IVoucherRepository,
@@ -16,6 +26,7 @@ import type {
 } from "../../../application/ports/IVoucherRepository.js";
 import { vouchers } from "../../orm/sqlite/schemas/voucher.table.js";
 import { invoices } from "../../orm/sqlite/schemas/invoice.table.js";
+import { parties } from "../../orm/sqlite/schemas/party.table.js";
 import { ledgerEntries } from "../../orm/sqlite/schemas/ledger-entry.table.js";
 import { returns } from "../../orm/sqlite/schemas/return.table.js";
 import { returnLines } from "../../orm/sqlite/schemas/return-line.table.js";
@@ -62,14 +73,19 @@ export class SqliteVoucherRepository implements IVoucherRepository {
         partyId: invoices.partyId,
       })
       .from(invoices)
-      .where(and(eq(invoices.tenantId, ctx.tenantId), inArray(invoices.id, ids))) as unknown as Promise<SettlementInvoiceRow[]>;
+      .where(
+        and(eq(invoices.tenantId, ctx.tenantId), inArray(invoices.id, ids)),
+      ) as unknown as Promise<SettlementInvoiceRow[]>;
   }
 
   async settlementReturnTotals(ids: string[], ctx: TenantContext) {
     return this.db
       .select({
         invoiceId: returns.originalInvoiceId,
-        total: scaledNumber(sql`COALESCE(SUM(${mulRound(returnLines.quantityKg, 2, returnLines.pricePerKg, 4, 2)}), 0)`, 2),
+        total: scaledNumber(
+          sql`COALESCE(SUM(${mulRound(returnLines.quantityKg, 2, returnLines.pricePerKg, 4, 2)}), 0)`,
+          2,
+        ),
       })
       .from(returnLines)
       .innerJoin(returns, eq(returnLines.returnId, returns.id))
@@ -113,14 +129,19 @@ export class SqliteVoucherRepository implements IVoucherRepository {
     if (filter.status) conditions.push(eq(vouchers.status, filter.status));
     if (filter.fromDate) conditions.push(gte(vouchers.date, filter.fromDate));
     if (filter.toDate) conditions.push(lte(vouchers.date, filter.toDate));
-    if (filter.search) conditions.push(or(ilikeEscaped(vouchers.number!, likeContains(filter.search)))!);
+    if (filter.search)
+      conditions.push(or(ilikeEscaped(vouchers.number!, likeContains(filter.search)))!);
     const where = and(...conditions);
     const page = Math.max(0, filter.page ?? 0);
     const limit = Math.min(1000, Math.max(1, filter.limit ?? 20));
     const offset = page * limit;
     // Keyset mode for "load every row" callers: seek after the cursor instead
     // of OFFSET (constant cost per page, strict total order). keysetPage.ts.
-    const keyset: KeysetSpec = { date: vouchers.date, createdAt: vouchers.createdAt, id: vouchers.id };
+    const keyset: KeysetSpec = {
+      date: vouchers.date,
+      createdAt: vouchers.createdAt,
+      id: vouchers.id,
+    };
     const cursor = true ? decodeCursor(filter.cursor) : null;
     const pageWhere = cursor ? and(where, afterCursor(keyset, cursor)) : where;
 
@@ -152,7 +173,12 @@ export class SqliteVoucherRepository implements IVoucherRepository {
             .where(where),
     ]);
 
-    const nextCursor = nextCursorOf(dataRows.map((r) => ({ ...r, id: r.voucher.id })) as unknown as Array<Record<string, unknown>>, limit);
+    const nextCursor = nextCursorOf(
+      dataRows.map((r) => ({ ...r, id: r.voucher.id })) as unknown as Array<
+        Record<string, unknown>
+      >,
+      limit,
+    );
     return {
       data: dataRows.map((r) =>
         this.toDomain(r.voucher, {
@@ -176,6 +202,14 @@ export class SqliteVoucherRepository implements IVoucherRepository {
   async create(input: CreateVoucherInput, ctx: TenantContext): Promise<VoucherData> {
     return this.db.transaction(async (tx) => {
       await assertDayUnlocked(tx, ctx.tenantId, input.date);
+      // The party must be this tenant's and of the stated kind: RLS scopes the voucher row, not the
+      // party UUID it references, so a foreign tenant's party id would otherwise persist.
+      const [party] = await tx
+        .select({ kind: parties.kind })
+        .from(parties)
+        .where(and(eq(parties.id, input.partyId), eq(parties.tenantId, ctx.tenantId)))
+        .limit(1);
+      if (!party || party.kind !== input.partyKind) throw new BusinessRuleError("الطرف غير موجود");
       // H-NEW (forensic audit 2026-08-25, voucher numbering): allocate the
       // document number INSIDE this transaction so a failure in the guards
       // below (over-collection, cross-currency, cancelled-invoice, FK) does
@@ -255,11 +289,21 @@ export class SqliteVoucherRepository implements IVoucherRepository {
             status: invoices.status,
             currency: invoices.currency,
             exchangeRate: invoices.exchangeRate,
+            partyId: invoices.partyId,
+            type: invoices.type,
           })
           .from(invoices)
           .where(and(eq(invoices.id, input.invoiceId), eq(invoices.tenantId, ctx.tenantId)))
           .limit(1);
         if (!inv) throw new BusinessRuleError("الفاتورة المرتبطة غير موجودة");
+        // Same rule as the voucher form: a receipt settles this party's sale, a payment its purchase.
+        // Otherwise one customer's receipt advances another's invoice, or a payment reduces a receivable.
+        if (
+          inv.partyId !== input.partyId ||
+          inv.type !== (input.kind === "receipt" ? "sale" : "entry")
+        ) {
+          throw new BusinessRuleError("الفاتورة المرتبطة لا تخص هذا الطرف أو لا تطابق نوع السند");
+        }
         // TX5 fix: refuse vouchers against cancelled invoices so the user
         // can't collect on a cancelled document (silent data corruption).
         if (inv.status === "cancelled") {
@@ -327,7 +371,10 @@ export class SqliteVoucherRepository implements IVoucherRepository {
         // rates created leftover lira on remaining vs the party ledger.
         const [retAgg] = await tx
           .select({
-            total: scaledNumber(sql`COALESCE(SUM(${mulRound(returnLines.quantityKg, 2, returnLines.pricePerKg, 4, 2)}), 0)`, 2),
+            total: scaledNumber(
+              sql`COALESCE(SUM(${mulRound(returnLines.quantityKg, 2, returnLines.pricePerKg, 4, 2)}), 0)`,
+              2,
+            ),
           })
           .from(returnLines)
           .innerJoin(returns, eq(returnLines.returnId, returns.id))
@@ -512,7 +559,9 @@ export class SqliteVoucherRepository implements IVoucherRepository {
       // Posted in BASE currency with no party: it is a P&L item, and must not
       // perturb the party's invoice-currency sub-ledger (which reconciles
       // against invoices.paid).
-      if (partyCurrency !== voucherCurrency) {
+      // Same currency at two rates (an SYP invoice frozen at 10,000 settled by an SYP voucher at
+      // 20,000) is the same base mismatch — the currencies being equal does not balance the bases.
+      if (partyCurrency !== voucherCurrency || partyFx !== fxRate) {
         // FIN-17: `?? 0` used to substitute zero for an unconvertible side,
         // which fabricates an fx_gain/fx_loss leg equal to the OTHER side's
         // full base value and unbalances the base-currency ledger. Both sides
@@ -724,14 +773,16 @@ export class SqliteVoucherRepository implements IVoucherRepository {
         const reversed =
           row.appliedAmount !== null && row.appliedAmount !== undefined
             ? round2dp(Number(row.appliedAmount))
-            : postedPartyAmount !== null && Number.isFinite(postedPartyAmount) && postedPartyAmount > 0
-            ? round2dp(postedPartyAmount)
-            : convertForSettlement(
-                Number(row.amount),
-                voucherCurrencyOnCancel,
-                invoiceFx.currency,
-                isValidFxRate(row.exchangeRate) ? Number(row.exchangeRate) : null,
-              );
+            : postedPartyAmount !== null &&
+                Number.isFinite(postedPartyAmount) &&
+                postedPartyAmount > 0
+              ? round2dp(postedPartyAmount)
+              : convertForSettlement(
+                  Number(row.amount),
+                  voucherCurrencyOnCancel,
+                  invoiceFx.currency,
+                  isValidFxRate(row.exchangeRate) ? Number(row.exchangeRate) : null,
+                );
         if (reversed === null) {
           throw new BusinessRuleError(
             `لا يمكن إلغاء سند بعملة ${voucherCurrencyOnCancel} مرتبط بفاتورة بعملة ${invoiceFx.currency} — ${FX_REQUIRED_MESSAGE}`,
@@ -739,7 +790,10 @@ export class SqliteVoucherRepository implements IVoucherRepository {
         }
         await tx
           .update(invoices)
-          .set({ paid: sql`max(0, ${invoices.paid} - ${moneyParam(reversed, 2)})`, updatedAt: new Date() })
+          .set({
+            paid: sql`max(0, ${invoices.paid} - ${moneyParam(reversed, 2)})`,
+            updatedAt: new Date(),
+          })
           .where(and(eq(invoices.id, row.invoiceId), eq(invoices.tenantId, ctx.tenantId)));
       }
 

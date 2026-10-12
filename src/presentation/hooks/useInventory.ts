@@ -4,7 +4,11 @@ import { toast } from "sonner";
 import { container } from "@/infrastructure/container";
 import { fetchAllPaged } from "@/lib/fetchAllPaged";
 import { buildTenantContext } from "@/infrastructure/di/auth-context";
-import { getAccessToken, SESSION_STARTED_EVENT } from "@/infrastructure/auth/TokenProvider";
+import {
+  getAccessToken,
+  SESSION_ENDED_EVENT,
+  SESSION_STARTED_EVENT,
+} from "@/infrastructure/auth/TokenProvider";
 import { InventoryFilter } from "@/application/ports";
 import { Fabric, type FabricData } from "@/domain/entities/Fabric";
 import { Color, type ColorData } from "@/domain/entities/Color";
@@ -64,11 +68,12 @@ let loadPromise: Promise<void> | null = null;
 let loaded = false;
 let retryTimer: ReturnType<typeof setTimeout> | null = null;
 let retryAttempts = 0;
+// S-01: bumped when a session ends; a load from an older session is dropped when it lands.
+let session = 0;
 
 /** D-3 / FR-068: inventory screens show this instead of a false empty list. */
 export type InventoryLoadState =
-  | { status: "idle" | "loading" | "ready" }
-  | { status: "error"; message: string };
+  { status: "idle" | "loading" | "ready" } | { status: "error"; message: string };
 let loadState: InventoryLoadState = { status: "idle" };
 
 function setLoadState(next: InventoryLoadState) {
@@ -97,6 +102,7 @@ async function loadAll(force = false): Promise<void> {
     await loadPromise;
   }
   loadPromise = (async () => {
+    const gen = session;
     if (!loaded) setLoadState({ status: "loading" });
     try {
       const ctx = buildTenantContext();
@@ -120,6 +126,7 @@ async function loadAll(force = false): Promise<void> {
           { ...opts, label: "rolls" },
         ),
       ]);
+      if (gen !== session) return;
       const fData = isPaginated<Fabric>(fRes) ? fRes.data : (fRes as Fabric[]);
       const cData = isPaginated<Color>(cRes) ? cRes.data : (cRes as Color[]);
       const rData = isPaginated<Roll>(rRes) ? rRes.data : (rRes as Roll[]);
@@ -130,6 +137,7 @@ async function loadAll(force = false): Promise<void> {
       retryAttempts = 0;
       setLoadState({ status: "ready" });
     } catch (e) {
+      if (gen !== session) return;
       console.error("[useInventory] load failed", e);
       setLoadState({
         status: "error",
@@ -143,7 +151,7 @@ async function loadAll(force = false): Promise<void> {
         }, 1_000);
       }
     } finally {
-      loadPromise = null;
+      if (gen === session) loadPromise = null;
     }
   })();
   return loadPromise;
@@ -161,6 +169,17 @@ if (typeof window !== "undefined") {
   window.addEventListener(SESSION_STARTED_EVENT, () => {
     retryAttempts = 0;
     void loadAll(true);
+  });
+  // S-01: logout / rejected refresh — forget this session's inventory at once.
+  window.addEventListener(SESSION_ENDED_EVENT, () => {
+    session++;
+    loadPromise = null;
+    loaded = false;
+    retryAttempts = 0;
+    if (retryTimer) clearTimeout(retryTimer);
+    retryTimer = null;
+    for (const list of [fabricsCache, colorsCache, rollsCache]) list.splice(0);
+    setLoadState({ status: "idle" });
   });
 }
 
@@ -593,7 +612,9 @@ export async function adjustRoll(
   try {
     const r = await container.inventory.api.adjustRoll(id, input);
     await refreshInventory();
-    toast.success(`تم تعديل المخزون: ${r.beforeKg} ← ${r.afterKg} كغ · ${r.beforePieces} ← ${r.afterPieces} ثوب`);
+    toast.success(
+      `تم تعديل المخزون: ${r.beforeKg} ← ${r.afterKg} كغ · ${r.beforePieces} ← ${r.afterPieces} ثوب`,
+    );
     return true;
   } catch (e) {
     toast.error(e instanceof Error ? e.message : "تعذّر تعديل الكمية");

@@ -50,10 +50,7 @@ export interface LicenseGuardDeps {
 }
 
 export function createLicenseGuard(deps: LicenseGuardDeps) {
-  async function rejectIfOfflineTokenDenylisted(
-    tenantId: string,
-    res: Response,
-  ): Promise<boolean> {
+  async function rejectIfOfflineTokenDenylisted(tenantId: string, res: Response): Promise<boolean> {
     const tokenRow = await deps.secretsRepo.get(tenantId, "license.token.current");
     if (!tokenRow) return false;
     try {

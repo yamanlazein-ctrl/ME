@@ -19,7 +19,8 @@ import { existsSync, readdirSync, statSync, readFileSync } from "node:fs";
 import { join, basename } from "node:path";
 import { spawnSync } from "node:child_process";
 
-const FORBIDDEN_FILE = /^(postgres\.exe|pg_ctl\.exe|initdb\.exe|pg_dump\.exe|pg_restore\.exe|psql\.exe|libpq.*\.dll|db-port\.txt)$/i;
+const FORBIDDEN_FILE =
+  /^(postgres\.exe|pg_ctl\.exe|initdb\.exe|pg_dump\.exe|pg_restore\.exe|psql\.exe|libpq.*\.dll|db-port\.txt)$/i;
 const FORBIDDEN_DIR = /^(pgdata-template|postgres|pgdata)$/i;
 
 export function scanTree(root) {
@@ -43,18 +44,33 @@ export function scanInstaller(file) {
   const bytes = readFileSync(file);
   const text = bytes.toString("latin1");
   const utf16 = bytes.toString("utf16le");
-  const needles = ["postgres.exe", "pg_ctl.exe", "initdb.exe", "pg_dump.exe", "pgdata-template", "libpq.dll", "db-port.txt"];
+  const needles = [
+    "postgres.exe",
+    "pg_ctl.exe",
+    "initdb.exe",
+    "pg_dump.exe",
+    "pgdata-template",
+    "libpq.dll",
+    "db-port.txt",
+  ];
   return needles.filter((n) => text.toLowerCase().includes(n) || utf16.toLowerCase().includes(n));
 }
 
 function ps(command) {
-  const r = spawnSync("powershell", ["-NoProfile", "-NonInteractive", "-Command", command], { encoding: "utf8", windowsHide: true });
+  const r = spawnSync("powershell", ["-NoProfile", "-NonInteractive", "-Command", command], {
+    encoding: "utf8",
+    windowsHide: true,
+  });
   if (r.status !== 0) throw new Error(`powershell failed: ${(r.stderr || "").slice(0, 300)}`);
   return r.stdout;
 }
 
 export function scanRunning(pid) {
-  const rows = JSON.parse(ps("Get-CimInstance Win32_Process | Select-Object ProcessId,ParentProcessId,Name,ExecutablePath | ConvertTo-Json -Compress") || "[]");
+  const rows = JSON.parse(
+    ps(
+      "Get-CimInstance Win32_Process | Select-Object ProcessId,ParentProcessId,Name,ExecutablePath | ConvertTo-Json -Compress",
+    ) || "[]",
+  );
   const byParent = new Map();
   for (const p of rows) {
     if (!byParent.has(p.ParentProcessId)) byParent.set(p.ParentProcessId, []);
@@ -71,20 +87,30 @@ export function scanRunning(pid) {
   }
   const problems = [];
   for (const p of tree) {
-    if (/^(postgres|pg_ctl|initdb)\.exe$/i.test(p.Name ?? "")) problems.push(`process ${p.ProcessId} is ${p.Name}`);
+    if (/^(postgres|pg_ctl|initdb)\.exe$/i.test(p.Name ?? ""))
+      problems.push(`process ${p.ProcessId} is ${p.Name}`);
   }
   // also any postgres.exe started from this app's install folder (it would not be our child after a crash)
-  const installDir = root.ExecutablePath ? root.ExecutablePath.replace(/\\[^\\]+$/, "").toLowerCase() : null;
+  const installDir = root.ExecutablePath
+    ? root.ExecutablePath.replace(/\\[^\\]+$/, "").toLowerCase()
+    : null;
   for (const p of rows) {
-    if (/^postgres\.exe$/i.test(p.Name ?? "") && installDir && (p.ExecutablePath ?? "").toLowerCase().startsWith(installDir)) {
+    if (
+      /^postgres\.exe$/i.test(p.Name ?? "") &&
+      installDir &&
+      (p.ExecutablePath ?? "").toLowerCase().startsWith(installDir)
+    ) {
       problems.push(`postgres.exe ${p.ProcessId} runs from the app folder`);
     }
   }
   const ids = tree.map((p) => p.ProcessId).join(",");
-  const listen = ps(`Get-NetTCPConnection -State Listen -ErrorAction SilentlyContinue | Where-Object { @(${ids}) -contains $_.OwningProcess } | Select-Object LocalAddress,LocalPort,OwningProcess | ConvertTo-Json -Compress`).trim();
+  const listen = ps(
+    `Get-NetTCPConnection -State Listen -ErrorAction SilentlyContinue | Where-Object { @(${ids}) -contains $_.OwningProcess } | Select-Object LocalAddress,LocalPort,OwningProcess | ConvertTo-Json -Compress`,
+  ).trim();
   if (listen) {
     const l = JSON.parse(listen);
-    for (const c of Array.isArray(l) ? l : [l]) problems.push(`process ${c.OwningProcess} LISTENS on ${c.LocalAddress}:${c.LocalPort}`);
+    for (const c of Array.isArray(l) ? l : [l])
+      problems.push(`process ${c.OwningProcess} LISTENS on ${c.LocalAddress}:${c.LocalPort}`);
   }
   return { tree: tree.map((p) => `${p.ProcessId} ${p.Name}`), problems };
 }
@@ -114,5 +140,7 @@ if (isMain) {
     for (const p of problems) console.error(`  - ${p}`);
     process.exit(1);
   }
-  console.log(`[verify-no-postgres] PASS — ${what}: no PostgreSQL binary, template, client library, port file or listening port`);
+  console.log(
+    `[verify-no-postgres] PASS — ${what}: no PostgreSQL binary, template, client library, port file or listening port`,
+  );
 }

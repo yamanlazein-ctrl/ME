@@ -184,7 +184,11 @@ export function registerLicenseRoutes(
     }
   });
 
-  const listDevicesHandler = async (req: import("express").Request, res: import("express").Response, next: import("express").NextFunction) => {
+  const listDevicesHandler = async (
+    req: import("express").Request,
+    res: import("express").Response,
+    next: import("express").NextFunction,
+  ) => {
     try {
       const ctx = req.tenantContext!;
       const r = await listDevicesUseCase(container.licenseProvider, container.licenseRepo, ctx);

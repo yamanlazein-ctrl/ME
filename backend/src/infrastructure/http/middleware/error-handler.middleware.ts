@@ -15,8 +15,7 @@ export function createErrorHandler(logger: Logger) {
     }
 
     if (err instanceof AuthError) {
-      const statusCode =
-        err.code === "FORBIDDEN" || err.code.startsWith("LICENSE_") ? 403 : 401;
+      const statusCode = err.code === "FORBIDDEN" || err.code.startsWith("LICENSE_") ? 403 : 401;
       res.status(statusCode).json({
         code: err.code,
         message: err.message,

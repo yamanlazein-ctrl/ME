@@ -9,7 +9,10 @@
  *   node backend/node_modules/tsx/dist/cli.mjs scripts/parity/lib/sqliteBackupRestore.mts restore <archive>
  * Prints one JSON line.
  */
-import { ensureSqliteRuntime, shutdownSqliteRuntime } from "../../../backend/src/infrastructure/orm/sqlite/runtime.js";
+import {
+  ensureSqliteRuntime,
+  shutdownSqliteRuntime,
+} from "../../../backend/src/infrastructure/orm/sqlite/runtime.js";
 import { createAndVerifyBackup } from "../../../backend/src/infrastructure/backup/sqliteBackup.js";
 import { restoreBackupV3 } from "../../../backend/src/infrastructure/backup/sqliteRestore.js";
 

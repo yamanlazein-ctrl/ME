@@ -57,7 +57,9 @@ export function createSyncDeviceGate(
   return async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     const ctx = req.tenantContext;
     if (!ctx) {
-      res.status(401).json({ code: "UNAUTHORIZED", message: "مطلوب تسجيل الدخول", statusCode: 401 });
+      res
+        .status(401)
+        .json({ code: "UNAUTHORIZED", message: "مطلوب تسجيل الدخول", statusCode: 401 });
       return;
     }
 
@@ -67,7 +69,7 @@ export function createSyncDeviceGate(
     // parameters are never an authority source.
     const asserted = policy.assertFromQuery
       ? asUuid(ctx.syncDeviceId)
-      : asUuid(body.syncDeviceId) ?? asUuid(ctx.syncDeviceId);
+      : (asUuid(body.syncDeviceId) ?? asUuid(ctx.syncDeviceId));
 
     // No device asserted: unattributed local flow. Allowed by design — it
     // carries no device authority.

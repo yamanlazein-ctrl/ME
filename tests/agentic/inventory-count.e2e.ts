@@ -7,7 +7,10 @@ import { randomUUID } from "node:crypto";
 // reviewed and posted — the roll must end at 48 kg on the server.
 const BACKEND = `http://localhost:${process.env.CERT_BACKEND_PORT ?? "18080"}`;
 const stack = () =>
-  JSON.parse(readFileSync("tests/e2e/.cert-stack.json", "utf8")) as { tenantId: string; email: string };
+  JSON.parse(readFileSync("tests/e2e/.cert-stack.json", "utf8")) as {
+    tenantId: string;
+    email: string;
+  };
 
 async function apiLogin() {
   const { tenantId, email } = stack();
@@ -43,11 +46,23 @@ describe("inventory count", () => {
     const s = await apiLogin();
     const run = Date.now().toString(36);
     const fabricId = idOf(await api(s, "POST", "/inventory/fabrics", { name: `جرد ${run}` }));
-    const colorId = idOf(await api(s, "POST", "/inventory/colors", { fabricId, name: `أزرق ${run}`, code: `B-${run}` }));
+    const colorId = idOf(
+      await api(s, "POST", "/inventory/colors", {
+        fabricId,
+        name: `أزرق ${run}`,
+        code: `B-${run}`,
+      }),
+    );
     const rollNo = `CNT-${run}`;
     const rollId = idOf(
       await api(s, "POST", "/inventory/rolls", {
-        colorId, rollNo, initialKg: 50, pieces: 2, pricePerKg: 4, currency: "USD", entryDate: "2026-10-01",
+        colorId,
+        rollNo,
+        initialKg: 50,
+        pieces: 2,
+        pricePerKg: 4,
+        currency: "USD",
+        entryDate: "2026-10-01",
       }),
     );
 
@@ -80,10 +95,17 @@ describe("inventory count", () => {
     await review.getByRole("button").filter({ hasText: "ترحيل" }).last().tap();
 
     await expect
-      .poll(async () => {
-        const r = await api<{ data?: { remainingKg: number }; remainingKg?: number }>(s, "GET", `/inventory/rolls/${rollId}`);
-        return Number(r.data?.remainingKg ?? r.remainingKg);
-      }, { timeout: 10_000 })
+      .poll(
+        async () => {
+          const r = await api<{ data?: { remainingKg: number }; remainingKg?: number }>(
+            s,
+            "GET",
+            `/inventory/rolls/${rollId}`,
+          );
+          return Number(r.data?.remainingKg ?? r.remainingKg);
+        },
+        { timeout: 10_000 },
+      )
       .toBe(48);
   });
 });

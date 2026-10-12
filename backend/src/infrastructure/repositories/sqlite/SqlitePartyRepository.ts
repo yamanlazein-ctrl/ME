@@ -3,7 +3,14 @@
 import { desc } from "./helpers/pgOrder.js";
 import { ilikeEscaped, scaledTextSql } from "./helpers/likeContains.js";
 import { eq, ne, and, or, sql, inArray, notInArray, getTableColumns } from "drizzle-orm";
-import { afterCursor, cursorColumns, decodeCursor, keysetOrder, nextCursorOf, type KeysetSpec } from "./helpers/keysetPage.js";
+import {
+  afterCursor,
+  cursorColumns,
+  decodeCursor,
+  keysetOrder,
+  nextCursorOf,
+  type KeysetSpec,
+} from "./helpers/keysetPage.js";
 import { likeContains } from "../../utils/likeEscape.js";
 import { allowLedgerPartyRemap, type DB } from "../../orm/sqlite/drizzleCompat.js";
 import type { MergePartiesResult } from "../../../application/use-cases/parties/mergePartiesUseCase.js";
@@ -97,7 +104,11 @@ export class SqlitePartyRepository implements IPartyRepository {
    * vouchers, returns and ledger party_id to the survivor and soft-cancels the source,
    * in one transaction with the controlled ledger party remap enabled.
    */
-  async mergeInto(survivorId: string, sourceId: string, ctx: TenantContext): Promise<MergePartiesResult> {
+  async mergeInto(
+    survivorId: string,
+    sourceId: string,
+    ctx: TenantContext,
+  ): Promise<MergePartiesResult> {
     return this.db.transaction(async (tx) => {
       await allowLedgerPartyRemap(tx);
 
@@ -177,7 +188,6 @@ export class SqlitePartyRepository implements IPartyRepository {
       };
     });
   }
-
 
   async findById(id: string, ctx: TenantContext): Promise<PartyData | null> {
     const rows = await this.db
@@ -456,7 +466,12 @@ export class SqlitePartyRepository implements IPartyRepository {
     });
   }
 
-  async update(id: string, data: Partial<CreatePartyData>, ctx: TenantContext, expectedVersion: number): Promise<PartyData> {
+  async update(
+    id: string,
+    data: Partial<CreatePartyData>,
+    ctx: TenantContext,
+    expectedVersion: number,
+  ): Promise<PartyData> {
     // TX6 fix: openingBalance cannot be edited after creation. The opening
     // ledger row is written exactly once on create (Phase 0). Allowing a
     // silent change here would leave the ledger and the parties.outstanding
@@ -464,30 +479,31 @@ export class SqlitePartyRepository implements IPartyRepository {
     if (data.openingBalance !== undefined) {
       throw new Error("الرصيد الافتتاحي يُعدَّل من قسم «الرصيد السابق» فقط (PUT …/:id/opening)");
     }
+    // A cleared text field arrives as "" and is stored as NULL (it used to be impossible to clear).
     const values: Record<string, unknown> = {};
     if (data.name !== undefined) values.name = data.name;
     if (data.code !== undefined) values.code = data.code ?? null;
-    if (data.companyName !== undefined) values.companyName = data.companyName ?? null;
-    if (data.commercialReg !== undefined) values.commercialReg = data.commercialReg ?? null;
-    if (data.category !== undefined) values.category = data.category ?? null;
-    if (data.salesRep !== undefined) values.salesRep = data.salesRep ?? null;
-    if (data.phone !== undefined) values.phone = data.phone ?? null;
-    if (data.mobile !== undefined) values.mobile = data.mobile ?? null;
-    if (data.whatsapp !== undefined) values.whatsapp = data.whatsapp ?? null;
-    if (data.altPhone !== undefined) values.altPhone = data.altPhone ?? null;
-    if (data.email !== undefined) values.email = data.email ?? null;
-    if (data.website !== undefined) values.website = data.website ?? null;
-    if (data.address !== undefined) values.address = data.address ?? null;
-    if (data.city !== undefined) values.city = data.city ?? null;
-    if (data.country !== undefined) values.country = data.country ?? null;
-    if (data.taxNumber !== undefined) values.taxNumber = data.taxNumber ?? null;
+    if (data.companyName !== undefined) values.companyName = data.companyName || null;
+    if (data.commercialReg !== undefined) values.commercialReg = data.commercialReg || null;
+    if (data.category !== undefined) values.category = data.category || null;
+    if (data.salesRep !== undefined) values.salesRep = data.salesRep || null;
+    if (data.phone !== undefined) values.phone = data.phone || null;
+    if (data.mobile !== undefined) values.mobile = data.mobile || null;
+    if (data.whatsapp !== undefined) values.whatsapp = data.whatsapp || null;
+    if (data.altPhone !== undefined) values.altPhone = data.altPhone || null;
+    if (data.email !== undefined) values.email = data.email || null;
+    if (data.website !== undefined) values.website = data.website || null;
+    if (data.address !== undefined) values.address = data.address || null;
+    if (data.city !== undefined) values.city = data.city || null;
+    if (data.country !== undefined) values.country = data.country || null;
+    if (data.taxNumber !== undefined) values.taxNumber = data.taxNumber || null;
     if (data.currency !== undefined) values.currency = data.currency;
-    if (data.paymentTerms !== undefined) values.paymentTerms = data.paymentTerms ?? null;
-    if (data.paymentMethod !== undefined) values.paymentMethod = data.paymentMethod ?? null;
+    if (data.paymentTerms !== undefined) values.paymentTerms = data.paymentTerms || null;
+    if (data.paymentMethod !== undefined) values.paymentMethod = data.paymentMethod || null;
     if (data.creditLimit !== undefined) values.creditLimit = data.creditLimit;
     if (data.defaultDiscount !== undefined) values.defaultDiscount = data.defaultDiscount;
     if (data.vat !== undefined) values.vat = data.vat;
-    if (data.notes !== undefined) values.notes = data.notes ?? null;
+    if (data.notes !== undefined) values.notes = data.notes || null;
     if (data.status !== undefined && data.status !== "cancelled") values.status = data.status;
     if (Object.keys(values).length === 0) {
       const existing = await this.findById(id, ctx);
@@ -498,7 +514,11 @@ export class SqlitePartyRepository implements IPartyRepository {
     values.version = sql`${parties.version} + 1`;
 
     // P0-001: atomic version enforcement — WHERE includes expectedVersion
-    const whereConditions = [eq(parties.id, id), eq(parties.tenantId, ctx.tenantId), eq(parties.version, expectedVersion)];
+    const whereConditions = [
+      eq(parties.id, id),
+      eq(parties.tenantId, ctx.tenantId),
+      eq(parties.version, expectedVersion),
+    ];
     const [row] = await this.db
       .update(parties)
       .set(values)
@@ -507,16 +527,28 @@ export class SqlitePartyRepository implements IPartyRepository {
 
     if (!row) {
       // P0-001: distinguish "not found" from "stale version"
-      const existing = await this.db.select({ version: parties.version }).from(parties).where(and(eq(parties.id, id), eq(parties.tenantId, ctx.tenantId))).limit(1);
+      const existing = await this.db
+        .select({ version: parties.version })
+        .from(parties)
+        .where(and(eq(parties.id, id), eq(parties.tenantId, ctx.tenantId)))
+        .limit(1);
       if (existing.length > 0) {
-        throw Object.assign(new Error(`Stale version: expected ${expectedVersion}, current ${existing[0].version}`), { code: "STALE_VERSION" as const });
+        throw Object.assign(
+          new Error(`Stale version: expected ${expectedVersion}, current ${existing[0].version}`),
+          { code: "STALE_VERSION" as const },
+        );
       }
       throw new Error("Party not found");
     }
     return this.toDomain(row);
   }
 
-  async setOpening(id: string, data: PartyOpeningData, ctx: TenantContext, expectedVersion: number): Promise<PartyData> {
+  async setOpening(
+    id: string,
+    data: PartyOpeningData,
+    ctx: TenantContext,
+    expectedVersion: number,
+  ): Promise<PartyData> {
     return this.db.transaction(async (tx) => {
       const [before] = await tx
         .select()
@@ -535,12 +567,21 @@ export class SqlitePartyRepository implements IPartyRepository {
           updatedAt: new Date(),
           version: sql`${parties.version} + 1`,
         })
-        .where(and(eq(parties.id, id), eq(parties.tenantId, ctx.tenantId), eq(parties.version, expectedVersion)))
+        .where(
+          and(
+            eq(parties.id, id),
+            eq(parties.tenantId, ctx.tenantId),
+            eq(parties.version, expectedVersion),
+          ),
+        )
         .returning();
       if (!row) {
-        throw Object.assign(new Error(`Stale version: expected ${expectedVersion}, current ${before.version}`), {
-          code: "STALE_VERSION" as const,
-        });
+        throw Object.assign(
+          new Error(`Stale version: expected ${expectedVersion}, current ${before.version}`),
+          {
+            code: "STALE_VERSION" as const,
+          },
+        );
       }
 
       const old = await tx
@@ -564,7 +605,15 @@ export class SqlitePartyRepository implements IPartyRepository {
         await tx
           .update(ledgerEntries)
           .set({ status: "cancelled", cancelledAt: new Date(), cancelledBy: ctx.userId })
-          .where(and(eq(ledgerEntries.tenantId, ctx.tenantId), inArray(ledgerEntries.id, old.map((r) => r.id))));
+          .where(
+            and(
+              eq(ledgerEntries.tenantId, ctx.tenantId),
+              inArray(
+                ledgerEntries.id,
+                old.map((r) => r.id),
+              ),
+            ),
+          );
       }
       if (data.openingBalance !== 0) {
         await tx.insert(ledgerEntries).values(
@@ -607,7 +656,12 @@ export class SqlitePartyRepository implements IPartyRepository {
     });
   }
 
-  async cancel(id: string, cancelledBy: string, ctx: TenantContext, expectedVersion: number): Promise<PartyData> {
+  async cancel(
+    id: string,
+    cancelledBy: string,
+    ctx: TenantContext,
+    expectedVersion: number,
+  ): Promise<PartyData> {
     // Security guard: refuse to cancel a party that still has active financial
     // documents (invoices or vouchers) linked to it. The party is soft-deleted
     // (status → cancelled), but the FK references remain valid, so this is a
@@ -745,7 +799,12 @@ export class SqlitePartyRepository implements IPartyRepository {
     }
 
     // P0-001: atomic version enforcement — WHERE includes expectedVersion
-    const whereConditions = [eq(parties.id, id), eq(parties.tenantId, ctx.tenantId), eq(parties.status, "active"), eq(parties.version, expectedVersion)];
+    const whereConditions = [
+      eq(parties.id, id),
+      eq(parties.tenantId, ctx.tenantId),
+      eq(parties.status, "active"),
+      eq(parties.version, expectedVersion),
+    ];
     const [row] = await this.db
       .update(parties)
       .set({
@@ -760,9 +819,16 @@ export class SqlitePartyRepository implements IPartyRepository {
 
     if (!row) {
       // P0-001: distinguish "not found" from "stale version"
-      const existing = await this.db.select({ version: parties.version }).from(parties).where(and(eq(parties.id, id), eq(parties.tenantId, ctx.tenantId))).limit(1);
+      const existing = await this.db
+        .select({ version: parties.version })
+        .from(parties)
+        .where(and(eq(parties.id, id), eq(parties.tenantId, ctx.tenantId)))
+        .limit(1);
       if (existing.length > 0) {
-        throw Object.assign(new Error(`Stale version: expected ${expectedVersion}, current ${existing[0].version}`), { code: "STALE_VERSION" as const });
+        throw Object.assign(
+          new Error(`Stale version: expected ${expectedVersion}, current ${existing[0].version}`),
+          { code: "STALE_VERSION" as const },
+        );
       }
       throw new Error("الطرف غير موجود أو ملغى مسبقاً");
     }

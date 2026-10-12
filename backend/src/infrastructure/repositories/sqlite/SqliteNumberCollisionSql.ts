@@ -3,7 +3,10 @@
 /** PostgreSQL statements of the sync number-collision rule — moved verbatim from syncNumberCollision.ts (S1). */
 import { sql } from "drizzle-orm";
 import type { DB } from "../../orm/sqlite/drizzleCompat.js";
-import type { CollisionTarget, INumberCollisionSql } from "../../../application/ports/INumberCollisionSql.js";
+import type {
+  CollisionTarget,
+  INumberCollisionSql,
+} from "../../../application/ports/INumberCollisionSql.js";
 
 type Executor = Pick<DB, "execute">;
 const q = (ident: string) => `"${ident.replace(/"/g, '""')}"`;
@@ -19,7 +22,9 @@ export const sqliteNumberCollisionSql: INumberCollisionSql = {
      WHERE tenant_id = ${tenantId} AND ${sql.raw(q(spec.column))} = ${value}
        AND id <> ${exceptId} ${scope}
      LIMIT 1`);
-    const rows = (Array.isArray(r) ? r : ((r as { rows?: unknown[] }).rows ?? [])) as Array<{ id: string }>;
+    const rows = (Array.isArray(r) ? r : ((r as { rows?: unknown[] }).rows ?? [])) as Array<{
+      id: string;
+    }>;
     return rows[0]?.id ?? null;
   },
 

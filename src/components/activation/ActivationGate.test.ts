@@ -18,9 +18,9 @@ describe("shouldTrustLocalActivation", () => {
   });
 
   it("does not trust local activation on a tenant id mismatch even when isCompleted is true", () => {
-    expect(shouldTrustLocalActivation({ isCompleted: true, tenantId: "new-tenant" }, "old-tenant")).toBe(
-      false,
-    );
+    expect(
+      shouldTrustLocalActivation({ isCompleted: true, tenantId: "new-tenant" }, "old-tenant"),
+    ).toBe(false);
   });
 
   it("trusts local activation when either side has no tenant id to compare (legacy installs)", () => {

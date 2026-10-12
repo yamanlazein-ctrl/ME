@@ -23,9 +23,18 @@ import { createRequire } from "node:module";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const REPO = resolve(here, "../..");
-const { createSqlite, nodeEnv, startNode, waitHealthy, kill, mintToken, client, must, JWT_A, DEV_A } = await import(
-  new URL("../../scripts/parity/lib/syncAc8.mjs", import.meta.url).href
-);
+const {
+  createSqlite,
+  nodeEnv,
+  startNode,
+  waitHealthy,
+  kill,
+  mintToken,
+  client,
+  must,
+  JWT_A,
+  DEV_A,
+} = await import(new URL("../../scripts/parity/lib/syncAc8.mjs", import.meta.url).href);
 const Database = createRequire(join(here, "..", "package.json"))("better-sqlite3");
 
 const arg = (n, d) => {
@@ -40,7 +49,13 @@ const dbPath = join(work, "data", "motard.db");
 mkdirSync(dirname(dbPath), { recursive: true });
 createSqlite(dbPath, "durability");
 
-const env = nodeEnv({ DB_ENGINE: "sqlite", SQLITE_PATH: dbPath, MOTARD_STARTUP_STATE: "OPEN_EXISTING", PORT: String(PORT), JWT_SECRET: JWT_A });
+const env = nodeEnv({
+  DB_ENGINE: "sqlite",
+  SQLITE_PATH: dbPath,
+  MOTARD_STARTUP_STATE: "OPEN_EXISTING",
+  PORT: String(PORT),
+  JWT_SECRET: JWT_A,
+});
 let server = null;
 const start = async (round) => {
   server = startNode(`backend-${round}`, env, join(work, `backend-${round}.log`));
@@ -49,14 +64,40 @@ const start = async (round) => {
 await start(0);
 const api = client(PORT, await mintToken(JWT_A), DEV_A);
 const DATE = new Date().toISOString().slice(0, 10);
-const customer = (await must(api, "customer", "POST", "/api/customers", { name: "Durability Customer" })).id;
-const fabric = (await must(api, "fabric", "POST", "/api/inventory/fabrics", { name: "Durability Fabric" })).id;
-const color = (await must(api, "color", "POST", "/api/inventory/colors", { fabricId: fabric, name: "Durability Color" })).id;
-const roll = (await must(api, "roll", "POST", "/api/inventory/rolls", { colorId: color, rollNo: "DUR-R1", initialKg: 100_000, pieces: 100_000, pricePerKg: 2, currency: "USD", entryDate: DATE })).id;
+const customer = (
+  await must(api, "customer", "POST", "/api/customers", { name: "Durability Customer" })
+).id;
+const fabric = (
+  await must(api, "fabric", "POST", "/api/inventory/fabrics", { name: "Durability Fabric" })
+).id;
+const color = (
+  await must(api, "color", "POST", "/api/inventory/colors", {
+    fabricId: fabric,
+    name: "Durability Color",
+  })
+).id;
+const roll = (
+  await must(api, "roll", "POST", "/api/inventory/rolls", {
+    colorId: color,
+    rollNo: "DUR-R1",
+    initialKg: 100_000,
+    pieces: 100_000,
+    pricePerKg: 2,
+    currency: "USD",
+    entryDate: DATE,
+  })
+).id;
 const sale = () =>
   api("POST", "/api/invoices", {
-    type: "sale", date: DATE, partyId: customer, partyType: "customer", currency: "USD",
-    lines: [{ fabricId: fabric, colorId: color, rollId: roll, quantityKg: 1, pieces: 1, pricePerKg: 3 }], paid: 3,
+    type: "sale",
+    date: DATE,
+    partyId: customer,
+    partyType: "customer",
+    currency: "USD",
+    lines: [
+      { fabricId: fabric, colorId: color, rollId: roll, quantityKg: 1, pieces: 1, pricePerKg: 3 },
+    ],
+    paid: 3,
   });
 
 const shapeOf = (db, id) => ({
@@ -65,7 +106,8 @@ const shapeOf = (db, id) => ({
   stock: db.prepare("SELECT count(*) FROM stock_movements WHERE reference_id = ?").pluck().get(id),
 });
 const ref = await sale();
-if (ref.status !== 201) throw new Error(`reference sale failed: HTTP ${ref.status} ${ref.text.slice(0, 200)}`);
+if (ref.status !== 201)
+  throw new Error(`reference sale failed: HTTP ${ref.status} ${ref.text.slice(0, 200)}`);
 const confirmed = new Set([ref.json.id]);
 kill(server);
 await new Promise((r) => setTimeout(r, 1000));
@@ -93,7 +135,8 @@ for (let round = 1; round <= ROUNDS; round++) {
     }
   })();
   await new Promise((r) => setTimeout(r, 300 + Math.floor(Math.random() * 1500)));
-  if (process.platform === "win32") spawnSync("taskkill", ["/pid", String(server.pid), "/T", "/F"], { stdio: "ignore" });
+  if (process.platform === "win32")
+    spawnSync("taskkill", ["/pid", String(server.pid), "/T", "/F"], { stdio: "ignore" });
   else kill(server);
   stop = true;
   await loop;
@@ -108,13 +151,41 @@ for (let round = 1; round <= ROUNDS; round++) {
   const incomplete = ids.filter((id) => JSON.stringify(shapeOf(db, id)) !== refShape);
   db.close();
   const ok = integrity === "ok" && fk === 0 && missing.length === 0 && incomplete.length === 0;
-  rounds.push({ round, sent, confirmed: confirmed.size, invoicesInFile: ids.length, integrity, fkViolations: fk, missingConfirmed: missing.length, incomplete: incomplete.length, ok });
-  console.log(`  round ${String(round).padStart(2)}: ${ok ? "PASS" : "FAIL"}  sent=${sent} confirmed=${confirmed.size} inFile=${ids.length} integrity=${integrity} fk=${fk} missing=${missing.length} incomplete=${incomplete.length}`);
+  rounds.push({
+    round,
+    sent,
+    confirmed: confirmed.size,
+    invoicesInFile: ids.length,
+    integrity,
+    fkViolations: fk,
+    missingConfirmed: missing.length,
+    incomplete: incomplete.length,
+    ok,
+  });
+  console.log(
+    `  round ${String(round).padStart(2)}: ${ok ? "PASS" : "FAIL"}  sent=${sent} confirmed=${confirmed.size} inFile=${ids.length} integrity=${integrity} fk=${fk} missing=${missing.length} incomplete=${incomplete.length}`,
+  );
 }
 
 const pass = rounds.every((r) => r.ok);
 mkdirSync(OUT, { recursive: true });
-writeFileSync(join(OUT, "report.json"), JSON.stringify({ generatedAt: new Date().toISOString(), engine: "sqlite", rounds: ROUNDS, referenceShape: JSON.parse(refShape), results: rounds, pass }, null, 2));
-console.log(`[durability-sqlite] ${rounds.filter((r) => r.ok).length}/${ROUNDS} rounds passed — reference sale shape ${refShape}`);
+writeFileSync(
+  join(OUT, "report.json"),
+  JSON.stringify(
+    {
+      generatedAt: new Date().toISOString(),
+      engine: "sqlite",
+      rounds: ROUNDS,
+      referenceShape: JSON.parse(refShape),
+      results: rounds,
+      pass,
+    },
+    null,
+    2,
+  ),
+);
+console.log(
+  `[durability-sqlite] ${rounds.filter((r) => r.ok).length}/${ROUNDS} rounds passed — reference sale shape ${refShape}`,
+);
 rmSync(work, { recursive: true, force: true });
 process.exit(pass ? 0 : 1);

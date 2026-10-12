@@ -104,7 +104,12 @@ export interface ReceivePrintJobInput {
    * fabric, colour and roll, so every node holds the SAME rows (a later sale
    * of the printed roll references them by id).
    */
-  preset?: { resultFabricId?: UUID; resultColorId?: UUID; resultRollId?: UUID; resultRollNo?: string };
+  preset?: {
+    resultFabricId?: UUID;
+    resultColorId?: UUID;
+    resultRollId?: UUID;
+    resultRollNo?: string;
+  };
   jobId: UUID;
   date: string;
   receivedKg: number;

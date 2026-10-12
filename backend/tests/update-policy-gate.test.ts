@@ -37,11 +37,15 @@ describe("evaluateUpdateEligibility", () => {
   });
 
   it("rejects mismatched channel preference", () => {
-    const r = evaluateUpdateEligibility("1.0.0", {
-      channel: "stable",
-      allow_updates: true,
-      minimum_version: "1.0.0",
-    }, "beta");
+    const r = evaluateUpdateEligibility(
+      "1.0.0",
+      {
+        channel: "stable",
+        allow_updates: true,
+        minimum_version: "1.0.0",
+      },
+      "beta",
+    );
     expect(r.mayCheckForUpdates).toBe(false);
   });
 

@@ -58,7 +58,8 @@ export function registerOrderRoutes(
     "/orders",
     auth,
     writeGuard,
-    idempotency("POST"),
+    // F-010: required like every other document POST — a retried create would mint a second order.
+    idempotency("POST", { required: true }),
     validateBody(createOrderSchema),
     async (req: Request, res: Response) => {
       const input = body<CreateOrderInput>(req);
@@ -120,7 +121,12 @@ export function registerOrderRoutes(
       const input = body<Record<string, unknown>>(req) as Record<string, unknown>;
       const expectedVersion = req.body?.expectedVersion;
       if (typeof expectedVersion !== "number") {
-        return res.status(400).json({ code: "EXPECTED_VERSION_REQUIRED", message: "الإصدار المتوقع (expectedVersion) مطلوب للتحديث/الإلغاء" });
+        return res
+          .status(400)
+          .json({
+            code: "EXPECTED_VERSION_REQUIRED",
+            message: "الإصدار المتوقع (expectedVersion) مطلوب للتحديث/الإلغاء",
+          });
       }
       const syncEnabled = Boolean(syncOutboxRepo && isSyncEnqueueEnabled());
       const runUpdate = async () => {
@@ -235,7 +241,12 @@ export function registerOrderRoutes(
       const c = ctx(req);
       const expectedVersion = req.body?.expectedVersion;
       if (typeof expectedVersion !== "number") {
-        return res.status(400).json({ code: "EXPECTED_VERSION_REQUIRED", message: "الإصدار المتوقع (expectedVersion) مطلوب للتحديث/الإلغاء" });
+        return res
+          .status(400)
+          .json({
+            code: "EXPECTED_VERSION_REQUIRED",
+            message: "الإصدار المتوقع (expectedVersion) مطلوب للتحديث/الإلغاء",
+          });
       }
       const syncEnabled = Boolean(syncOutboxRepo && isSyncEnqueueEnabled());
 

@@ -24,7 +24,12 @@ const customerId = randomUUID();
 const supplierId = randomUUID();
 const fabricId = randomUUID();
 const colorId = randomUUID();
-const ctx: TenantContext = { tenantId, userId: randomUUID(), userRole: "admin", userName: "ret-tester" };
+const ctx: TenantContext = {
+  tenantId,
+  userId: randomUUID(),
+  userRole: "admin",
+  userName: "ret-tester",
+};
 const invoiceRepo = new PostgresInvoiceRepository(db);
 const rollRepo = new PostgresRollRepository(db);
 const returnRepo = new PostgresReturnRepository(db);
@@ -62,15 +67,41 @@ const ret = (invoiceId: string, kg: number) =>
 describe("linked returns on a roll sold across several invoices", () => {
   beforeAll(async () => {
     await db.execute(sql`select 1`);
-    await db.insert(tenants).values({ id: tenantId, name: "Ret Tenant", slug: `ret-${tenantId.slice(0, 8)}` });
+    await db
+      .insert(tenants)
+      .values({ id: tenantId, name: "Ret Tenant", slug: `ret-${tenantId.slice(0, 8)}` });
     await db.insert(parties).values([
-      { id: customerId, tenantId, name: "Ret Customer", code: "RET-C", kind: "customer", currency: "USD" },
-      { id: supplierId, tenantId, name: "Ret Supplier", code: "RET-S", kind: "supplier", currency: "USD" },
+      {
+        id: customerId,
+        tenantId,
+        name: "Ret Customer",
+        code: "RET-C",
+        kind: "customer",
+        currency: "USD",
+      },
+      {
+        id: supplierId,
+        tenantId,
+        name: "Ret Supplier",
+        code: "RET-S",
+        kind: "supplier",
+        currency: "USD",
+      },
     ]);
     await db.insert(fabrics).values({ id: fabricId, tenantId, name: "Cotton", minStockKg: "0" });
     await db.insert(colors).values({ id: colorId, tenantId, fabricId, name: "White" });
     const roll = await rollRepo.create(
-      { colorId, rollNo: `R-${randomUUID().slice(0, 8)}`, initialKg: 100, remainingKg: 100, pieces: 1, pricePerKg: 4, currency: "USD", supplierId, entryDate: "2026-09-01" },
+      {
+        colorId,
+        rollNo: `R-${randomUUID().slice(0, 8)}`,
+        initialKg: 100,
+        remainingKg: 100,
+        pieces: 1,
+        pricePerKg: 4,
+        currency: "USD",
+        supplierId,
+        entryDate: "2026-09-01",
+      },
       ctx,
     );
     rollId = roll.id;

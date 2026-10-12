@@ -56,20 +56,14 @@ describe("mapActivationError (Phase 2)", () => {
 
 describe("activation routes use the shared mapper (Phase 2)", () => {
   it("license-v1 activate catch uses mapActivationError", () => {
-    const src = readFileSync(
-      resolve(HERE, "../src/scripts/license-v1.route.ts"),
-      "utf8",
-    );
+    const src = readFileSync(resolve(HERE, "../src/scripts/license-v1.route.ts"), "utf8");
     expect(src).toMatch(/from ["'].*activationHttpStatus\.js["']/);
     expect(src).toMatch(/mapActivationError\(/);
     expect(src).not.toMatch(/msg === "INVALID_LICENSE" \? 400/);
   });
 
   it("setup wizard activate uses mapActivationFailure with r.code", () => {
-    const src = readFileSync(
-      resolve(HERE, "../src/presentation/routes/setup.route.ts"),
-      "utf8",
-    );
+    const src = readFileSync(resolve(HERE, "../src/presentation/routes/setup.route.ts"), "utf8");
     expect(src).toMatch(/from ["'].*activationHttpStatus\.js["']/);
     expect(src).toMatch(/mapActivationFailure\(\s*\{\s*code:\s*r\.code/);
     expect(src).not.toMatch(/ACTIVATION_FAILED", message: r\.error/);

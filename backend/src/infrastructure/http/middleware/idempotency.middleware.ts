@@ -11,20 +11,28 @@ import { pgPool } from "../../orm/pgLazy.js";
  */
 type Rows = { rows: Array<Record<string, any>> };
 const isSqlite = () => getEngine() === "sqlite";
-async function q(pgText: string, sqliteText: string, params: unknown[], write = false): Promise<Rows> {
+async function q(
+  pgText: string,
+  sqliteText: string,
+  params: unknown[],
+  write = false,
+): Promise<Rows> {
   if (!isSqlite()) return (await pgPool()).query(pgText, params) as unknown as Rows;
   const [{ sql }, { sqliteDb, runAutonomous }] = await Promise.all([
     import("drizzle-orm"),
     import("../../orm/sqlite/transaction.js"),
   ]);
   const parts = sqliteText.split("?");
-  const chunks = parts.map((part, i) => (i < params.length ? sql`${sql.raw(part)}${params[i]}` : sql.raw(part)));
+  const chunks = parts.map((part, i) =>
+    i < params.length ? sql`${sql.raw(part)}${params[i]}` : sql.raw(part),
+  );
   const stmt = sql.join(chunks, sql``);
   if (!write) return (await sqliteDb().execute(stmt)) as Rows;
   return runAutonomous(async (tx) => (await tx.execute(stmt)) as Rows);
 }
 async function sqliteNowPlus(seconds: number): Promise<{ now: string; until: string }> {
-  const { transactionTimestamp, formatMicrosUtc, parseMicrosUtc } = await import("../../orm/sqlite/clock.js");
+  const { transactionTimestamp, formatMicrosUtc, parseMicrosUtc } =
+    await import("../../orm/sqlite/clock.js");
   const now = transactionTimestamp();
   return { now, until: formatMicrosUtc(parseMicrosUtc(now) + BigInt(seconds) * 1_000_000n) };
 }
@@ -133,7 +141,8 @@ export async function readCached(
   if (row) {
     return {
       status: row.status_code,
-      body: typeof row.response_body === "string" ? JSON.parse(row.response_body) : row.response_body,
+      body:
+        typeof row.response_body === "string" ? JSON.parse(row.response_body) : row.response_body,
       contentType: row.content_type,
     };
   }
@@ -211,7 +220,17 @@ export async function writeCached(
                      content_type = excluded.content_type,
                      updated_at = excluded.updated_at`,
       isSqlite()
-        ? [tenantId, method, path, key, status, await jsonbText(JSON.parse(body)), contentType, nowText, nowText]
+        ? [
+            tenantId,
+            method,
+            path,
+            key,
+            status,
+            await jsonbText(JSON.parse(body)),
+            contentType,
+            nowText,
+            nowText,
+          ]
         : [tenantId, method, path, key, status, body, contentType],
       true,
     );
@@ -287,10 +306,43 @@ export async function tryClaim(
      DO UPDATE SET status_code = 0, response_body = NULL, expires_at = excluded.expires_at
      WHERE idempotency_keys.expires_at < ?
      RETURNING id`,
-    isSqlite() ? [tenantId, method, path, key, t!.until, t!.now, t!.now] : [tenantId, method, path, key],
+    isSqlite()
+      ? [tenantId, method, path, key, t!.until, t!.now, t!.now]
+      : [tenantId, method, path, key],
     true,
   );
   return rows.length > 0;
+}
+
+/**
+ * M-04: drop this request's in-flight claim (status 0) after it ended in a 5xx, so the client's retry
+ * runs instead of getting DUPLICATE_IN_FLIGHT for the whole TTL. Never touches a cached result. A
+ * financial write that did commit before the 5xx is still caught on retry by its document's unique
+ * (tenant_id, client_operation_id) index — the key is that client operation id.
+ */
+export async function releaseClaim(
+  tenantId: string,
+  method: string,
+  path: string,
+  key: string,
+): Promise<void> {
+  if (redis) {
+    try {
+      const raw = await redis.get(buildKey(tenantId, method, path, key));
+      if (raw && (JSON.parse(raw) as CachedResponse).status === 0)
+        await redis.del(buildKey(tenantId, method, path, key));
+    } catch {
+      /* the DB row below is the durable claim */
+    }
+  }
+  await q(
+    `DELETE FROM idempotency_keys
+      WHERE tenant_id = $1 AND method = $2 AND path = $3 AND idempotency_key = $4 AND status_code = 0`,
+    `DELETE FROM idempotency_keys
+      WHERE tenant_id = ? AND method = ? AND path = ? AND idempotency_key = ? AND status_code = 0`,
+    [tenantId, method, path, key],
+    true,
+  );
 }
 
 export { redis };

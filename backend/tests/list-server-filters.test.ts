@@ -24,23 +24,59 @@ const ctx = { tenantId, userId: randomUUID(), userRole: "admin", userName: "t" }
 
 beforeAll(async () => {
   await db.insert(tenants).values({ id: tenantId, name: "LF", slug: `lf-${tenantId.slice(0, 8)}` });
-  await db.insert(parties).values({ id: partyId, tenantId, name: "LF C", code: "LFC", kind: "customer", currency: "USD" } as never);
+  await db
+    .insert(parties)
+    .values({
+      id: partyId,
+      tenantId,
+      name: "LF C",
+      code: "LFC",
+      kind: "customer",
+      currency: "USD",
+    } as never);
   await db.insert(invoices).values({
-    id: invoiceId, tenantId, number: "INV-LF-777", type: "sale", date: "2026-07-01",
-    partyId, partyType: "customer", currency: "USD", exchangeRate: 1, subtotal: 50, total: 50, paid: 0, status: "active",
+    id: invoiceId,
+    tenantId,
+    number: "INV-LF-777",
+    type: "sale",
+    date: "2026-07-01",
+    partyId,
+    partyType: "customer",
+    currency: "USD",
+    exchangeRate: 1,
+    subtotal: 50,
+    total: 50,
+    paid: 0,
+    status: "active",
   } as never);
   const le = (over: Record<string, unknown>) => ({
-    tenantId, partyId, currency: "USD", debit: 10, credit: 0, description: "حركة", ...over,
+    tenantId,
+    partyId,
+    currency: "USD",
+    debit: 10,
+    credit: 0,
+    description: "حركة",
+    ...over,
   });
-  await db.insert(ledgerEntries).values([
-    le({ date: "2025-01-01", type: "opening", description: "رصيد افتتاحي" }),
-    le({ date: "2026-07-01", type: "sales_invoice", referenceNumber: "INV-LF-777" }),
-    le({ date: "2026-07-02", type: "receipt_in", status: "cancelled" }),
-    le({ date: "2026-01-01", type: "sales_invoice" }),
-  ] as never);
+  await db
+    .insert(ledgerEntries)
+    .values([
+      le({ date: "2025-01-01", type: "opening", description: "رصيد افتتاحي" }),
+      le({ date: "2026-07-01", type: "sales_invoice", referenceNumber: "INV-LF-777" }),
+      le({ date: "2026-07-02", type: "receipt_in", status: "cancelled" }),
+      le({ date: "2026-01-01", type: "sales_invoice" }),
+    ] as never);
   await db.insert(vouchers).values({
-    tenantId, kind: "receipt", number: "RCP-LF-1", date: "2026-07-03", partyId, partyKind: "customer",
-    invoiceId, amount: 20, currency: "USD", method: "cash",
+    tenantId,
+    kind: "receipt",
+    number: "RCP-LF-1",
+    date: "2026-07-03",
+    partyId,
+    partyKind: "customer",
+    invoiceId,
+    amount: 20,
+    currency: "USD",
+    method: "cash",
   } as never);
 });
 

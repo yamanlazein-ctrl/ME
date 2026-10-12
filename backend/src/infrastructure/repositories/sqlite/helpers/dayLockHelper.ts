@@ -20,11 +20,7 @@ import { DayLockedError } from "../../../../domain/errors/index.js";
  * single call site. A closed financial year rejects writes exactly like a
  * closed day does, and the operator sees the same clear message.
  */
-export async function assertDayUnlocked(
-  tx: Tx,
-  tenantId: string,
-  date: string,
-): Promise<void> {
+export async function assertDayUnlocked(tx: Tx, tenantId: string, date: string): Promise<void> {
   const [row] = await tx
     .select({ id: dayCloses.id })
     .from(dayCloses)
@@ -80,4 +76,11 @@ export async function lockYear(tx: Tx, tenantId: string, year: number): Promise<
   void tx;
   void tenantId;
   void year;
+}
+
+export async function lockDay(tx: Tx, tenantId: string, date: string): Promise<void> {
+  // PG: exclusive advisory lock on tenant:day. SQLite: the write gate already serializes every writer.
+  void tx;
+  void tenantId;
+  void date;
 }

@@ -1,9 +1,6 @@
 import { describe, it, expect, beforeAll } from "vitest";
 import { db } from "@/infrastructure/orm/drizzle.js";
-import {
-  cashboxSessions,
-  manualMovements,
-} from "@/infrastructure/orm/schemas/cashbox.table.js";
+import { cashboxSessions, manualMovements } from "@/infrastructure/orm/schemas/cashbox.table.js";
 import { ledgerEntries } from "@/infrastructure/orm/schemas/ledger-entry.table.js";
 import { tenants } from "@/infrastructure/orm/schemas/tenant.table.js";
 import { parties } from "@/infrastructure/orm/schemas/party.table.js";

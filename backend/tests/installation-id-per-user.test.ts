@@ -7,7 +7,11 @@ import { describe, it, expect, afterAll } from "vitest";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync, mkdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { DesktopInstallationIdStorage, InstallationIdStorage, desktopDataRoot } from "@/infrastructure/installation/InstallationIdStorage.js";
+import {
+  DesktopInstallationIdStorage,
+  InstallationIdStorage,
+  desktopDataRoot,
+} from "@/infrastructure/installation/InstallationIdStorage.js";
 
 const base = mkdtempSync(join(tmpdir(), "motard-install-id-"));
 // two Windows users on one PC: two %LOCALAPPDATA% roots, two device bindings
@@ -28,14 +32,18 @@ describe("desktop installation id is per Windows user (D-2)", () => {
   });
 
   it("is stable across restarts for the same user", async () => {
-    expect(await new DesktopInstallationIdStorage(userA, "binding-user-a").readOrCreate()).toBe("binding-user-a");
+    expect(await new DesktopInstallationIdStorage(userA, "binding-user-a").readOrCreate()).toBe(
+      "binding-user-a",
+    );
   });
 
   it("a stored id that differs from the device binding is reported and NOT overwritten", async () => {
     const root = join(base, "Copied", "motard-erp");
     mkdirSync(root, { recursive: true });
     writeFileSync(join(root, "install-id"), "someone-elses-id");
-    await expect(new DesktopInstallationIdStorage(root, "this-device-binding").readOrCreate()).rejects.toMatchObject({ code: "INSTALLATION_ID_MISMATCH" });
+    await expect(
+      new DesktopInstallationIdStorage(root, "this-device-binding").readOrCreate(),
+    ).rejects.toMatchObject({ code: "INSTALLATION_ID_MISMATCH" });
     expect(readFileSync(join(root, "install-id"), "utf8")).toBe("someone-elses-id");
   });
 

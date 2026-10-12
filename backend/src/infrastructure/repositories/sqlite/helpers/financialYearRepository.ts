@@ -220,13 +220,25 @@ export async function getYearClosingPreview(
       ),
     )
     .groupBy(ledgerEntries.referenceType, ledgerEntries.referenceId)
-    .having(sql`SUM(${ledgerEntries.debit}) <> SUM(${ledgerEntries.credit})`)
+    // M-13: a cross-currency voucher's legs are in two currencies (party leg in the invoice's SYP,
+    // cash in USD, FX leg in base), so a NOMINAL sum adds unlike currencies and flags a balanced
+    // document. When every leg carries its frozen base amount, balance is checked in base
+    // (tolerance 1 (scaled ×100 = 0.01): each leg's base is rounded separately). Legacy legs without base are
+    // checked nominally only when the document is single-currency; a mixed-currency one without
+    // base cannot be verified and stays a blocker.
+    .having(
+      sql`CASE
+        WHEN COUNT(${ledgerEntries.baseDebit}) = COUNT(*) AND COUNT(${ledgerEntries.baseCredit}) = COUNT(*)
+          THEN ABS(SUM(${ledgerEntries.baseDebit}) - SUM(${ledgerEntries.baseCredit})) > 1
+        WHEN COUNT(DISTINCT ${ledgerEntries.currency}) = 1
+          THEN SUM(${ledgerEntries.debit}) <> SUM(${ledgerEntries.credit})
+        ELSE TRUE
+      END`,
+    )
     .as("unbalanced_docs");
   const [unbalanced] = await tx.select({ n: sql<number>`count(*)` }).from(unbalancedDocs);
   if (Number(unbalanced?.n ?? 0) > 0) {
-    blockers.push(
-      `يوجد ${unbalanced?.n} مستند بقيود غير متوازنة (مدين ≠ دائن) داخل ${year}.`,
-    );
+    blockers.push(`يوجد ${unbalanced?.n} مستند بقيود غير متوازنة (مدين ≠ دائن) داخل ${year}.`);
   }
 
   return {
@@ -273,9 +285,18 @@ async function writeYearlyPartySnapshots(
       .select({
         partyId: ledgerEntries.partyId,
         net: scaledTextSql(sql`SUM(${ledgerEntries.debit} - ${ledgerEntries.credit})`, 2),
-        before: scaledTextSql(sql`COALESCE(SUM(CASE WHEN ${ledgerEntries.date} < ${periodStart} THEN ${ledgerEntries.debit} - ${ledgerEntries.credit} ELSE 0 END), 0)`, 2),
-        inYearD: scaledTextSql(sql`COALESCE(SUM(CASE WHEN ${ledgerEntries.date} >= ${periodStart} THEN ${ledgerEntries.debit} ELSE 0 END), 0)`, 2),
-        inYearC: scaledTextSql(sql`COALESCE(SUM(CASE WHEN ${ledgerEntries.date} >= ${periodStart} THEN ${ledgerEntries.credit} ELSE 0 END), 0)`, 2),
+        before: scaledTextSql(
+          sql`COALESCE(SUM(CASE WHEN ${ledgerEntries.date} < ${periodStart} THEN ${ledgerEntries.debit} - ${ledgerEntries.credit} ELSE 0 END), 0)`,
+          2,
+        ),
+        inYearD: scaledTextSql(
+          sql`COALESCE(SUM(CASE WHEN ${ledgerEntries.date} >= ${periodStart} THEN ${ledgerEntries.debit} ELSE 0 END), 0)`,
+          2,
+        ),
+        inYearC: scaledTextSql(
+          sql`COALESCE(SUM(CASE WHEN ${ledgerEntries.date} >= ${periodStart} THEN ${ledgerEntries.credit} ELSE 0 END), 0)`,
+          2,
+        ),
       })
       .from(ledgerEntries)
       .innerJoin(parties, eq(parties.id, ledgerEntries.partyId))

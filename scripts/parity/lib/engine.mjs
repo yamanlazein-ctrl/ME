@@ -21,16 +21,35 @@ export const BACKEND = join(REPO, "backend");
 const requireBackend = createRequire(join(BACKEND, "package.json"));
 
 export const TENANT_ID = "00000000-0000-4000-8000-0000000000aa";
-const FP = JSON.parse(readFileSync(join(BACKEND, "src/infrastructure/orm/migrations/meta/schema-fingerprint.json"), "utf8"));
+const FP = JSON.parse(
+  readFileSync(
+    join(BACKEND, "src/infrastructure/orm/migrations/meta/schema-fingerprint.json"),
+    "utf8",
+  ),
+);
 
 /** Build (once) the desktop seed used by both engines. */
 export function ensureSeed(seedPath) {
   if (existsSync(seedPath)) return seedPath;
-  execFileSync(process.execPath, ["--env-file=.env", join(BACKEND, "node_modules/tsx/dist/cli.mjs"), "src/scripts/build-desktop-seed.ts", "--out", seedPath], {
-    cwd: BACKEND,
-    env: { ...process.env, SEED_TENANT_ID: TENANT_ID, BAKED_LICENSE_KEY: "LIC-DESKTOP-PARITY0000000001" },
-    stdio: "inherit",
-  });
+  execFileSync(
+    process.execPath,
+    [
+      "--env-file=.env",
+      join(BACKEND, "node_modules/tsx/dist/cli.mjs"),
+      "src/scripts/build-desktop-seed.ts",
+      "--out",
+      seedPath,
+    ],
+    {
+      cwd: BACKEND,
+      env: {
+        ...process.env,
+        SEED_TENANT_ID: TENANT_ID,
+        BAKED_LICENSE_KEY: "LIC-DESKTOP-PARITY0000000001",
+      },
+      stdio: "inherit",
+    },
+  );
   return seedPath;
 }
 
@@ -57,7 +76,10 @@ async function seedPostgres(url, seed) {
   const c = new pg.Client({ connectionString: url });
   await c.connect();
   try {
-    for (const [table, row] of [["tenants", seed.tenant], ["licenses", seed.license]]) {
+    for (const [table, row] of [
+      ["tenants", seed.tenant],
+      ["licenses", seed.license],
+    ]) {
       const cols = Object.keys(row);
       const types = FP.tables[table].columns;
       const vals = cols.map((k) => {
@@ -67,8 +89,13 @@ async function seedPostgres(url, seed) {
         if (t.endsWith("[]")) return JSON.parse(v);
         return v;
       });
-      const ph = cols.map((k, i) => `$${i + 1}::${types[k].type.replace(/^character varying\(\d+\)$/, "varchar")}`);
-      await c.query(`INSERT INTO "${table}" (${cols.map((k) => `"${k}"`).join(", ")}) VALUES (${ph.join(", ")})`, vals);
+      const ph = cols.map(
+        (k, i) => `$${i + 1}::${types[k].type.replace(/^character varying\(\d+\)$/, "varchar")}`,
+      );
+      await c.query(
+        `INSERT INTO "${table}" (${cols.map((k) => `"${k}"`).join(", ")}) VALUES (${ph.join(", ")})`,
+        vals,
+      );
     }
   } finally {
     await c.end();
@@ -115,16 +142,25 @@ export async function startEngine(engine, opts) {
     dbName = `parity_${Date.now()}_${Math.floor(Math.random() * 1e6)}`;
     const admin = new pg.Client({ connectionString: opts.pgAdminUrl });
     await admin.connect();
-    await admin.query(`CREATE DATABASE ${dbName} TEMPLATE template0 ENCODING 'UTF8' LC_COLLATE 'C' LC_CTYPE 'C'`);
+    await admin.query(
+      `CREATE DATABASE ${dbName} TEMPLATE template0 ENCODING 'UTF8' LC_COLLATE 'C' LC_CTYPE 'C'`,
+    );
     await admin.end();
     const url = new URL(opts.pgAdminUrl);
     url.pathname = `/${dbName}`;
-    Object.assign(env, { DB_ENGINE: "postgres", DATABASE_URL: url.toString(), TEST_DB_URL: url.toString() });
+    Object.assign(env, {
+      DB_ENGINE: "postgres",
+      DATABASE_URL: url.toString(),
+      TEST_DB_URL: url.toString(),
+    });
   }
   // opts.serverEntry: a frozen server bundle (the T026 reference build) instead of the source tree.
-  const entry = opts.serverEntry ? [opts.serverEntry] : [join(BACKEND, "node_modules/tsx/dist/cli.mjs"), "src/presentation/server.ts"];
+  const entry = opts.serverEntry
+    ? [opts.serverEntry]
+    : [join(BACKEND, "node_modules/tsx/dist/cli.mjs"), "src/presentation/server.ts"];
   // A packaged SQLite build migrates with ITS OWN bundled migrations, not the source tree's (T119).
-  if (opts.serverEntry && engine === "sqlite") env.DESKTOP_SQLITE_MIGRATIONS_FOLDER = join(dirname(opts.serverEntry), "sqlite-migrations");
+  if (opts.serverEntry && engine === "sqlite")
+    env.DESKTOP_SQLITE_MIGRATIONS_FOLDER = join(dirname(opts.serverEntry), "sqlite-migrations");
   const proc = spawn(process.execPath, entry, {
     cwd: BACKEND,
     env,
@@ -150,7 +186,8 @@ export async function startEngine(engine, opts) {
     log: () => log,
     async stop() {
       try {
-        if (process.platform === "win32") execFileSync("taskkill", ["/pid", String(proc.pid), "/T", "/F"], { stdio: "ignore" });
+        if (process.platform === "win32")
+          execFileSync("taskkill", ["/pid", String(proc.pid), "/T", "/F"], { stdio: "ignore" });
         else proc.kill("SIGKILL");
       } catch {
         /* already gone */
@@ -177,8 +214,14 @@ export function apiClient(base) {
     async call(method, path, body, opts = {}) {
       const headers = { "Content-Type": "application/json" };
       if (token) headers.Authorization = `Bearer ${token}`;
-      if (method !== "GET") headers["Idempotency-Key"] = `parity-${opts.tag ? `${opts.tag}-` : ""}${String(++seq).padStart(8, "0")}-${method}-${path.length}`;
-      const res = await fetch(`${base}${path}`, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) });
+      if (method !== "GET")
+        headers["Idempotency-Key"] =
+          `parity-${opts.tag ? `${opts.tag}-` : ""}${String(++seq).padStart(8, "0")}-${method}-${path.length}`;
+      const res = await fetch(`${base}${path}`, {
+        method,
+        headers,
+        body: body === undefined ? undefined : JSON.stringify(body),
+      });
       const text = await res.text();
       let json = null;
       try {
@@ -201,16 +244,38 @@ export async function provisionCompany(api, tenantId = TENANT_ID) {
   const must = async (label, method, path, body) => {
     const r = await api.call(method, path, body);
     steps.push({ label, status: r.status });
-    if (r.status >= 300) throw new Error(`${label} failed: ${r.status} ${JSON.stringify(r.body).slice(0, 300)}`);
+    if (r.status >= 300)
+      throw new Error(`${label} failed: ${r.status} ${JSON.stringify(r.body).slice(0, 300)}`);
     return r.body;
   };
   await must("init", "POST", "/api/setup/init", {});
-  await must("activate", "POST", "/api/setup/wizard/activate", { key: "", tenantId, platform: "windows", hostname: "parity-host", fingerprint: "parity-fingerprint-0000000000000001" });
-  await must("company", "POST", "/api/setup/wizard/company", { tenantId, name: "شركة التكافؤ", currency: "SYP", city: "دمشق", fiscalYearStart: "2026-01-01" });
-  await must("admin", "POST", "/api/setup/wizard/admin", { tenantId, name: "المدير", email: "admin@erp.local", password: "Parity-Pass-2026!" });
+  await must("activate", "POST", "/api/setup/wizard/activate", {
+    key: "",
+    tenantId,
+    platform: "windows",
+    hostname: "parity-host",
+    fingerprint: "parity-fingerprint-0000000000000001",
+  });
+  await must("company", "POST", "/api/setup/wizard/company", {
+    tenantId,
+    name: "شركة التكافؤ",
+    currency: "SYP",
+    city: "دمشق",
+    fiscalYearStart: "2026-01-01",
+  });
+  await must("admin", "POST", "/api/setup/wizard/admin", {
+    tenantId,
+    name: "المدير",
+    email: "admin@erp.local",
+    password: "Parity-Pass-2026!",
+  });
   await must("review", "POST", "/api/setup/wizard/review", { tenantId, confirmed: true });
   await must("complete", "POST", "/api/setup/wizard/complete", { tenantId });
-  const login = await must("login", "POST", "/api/auth/login", { email: "admin@erp.local", password: "Parity-Pass-2026!", tenantId });
+  const login = await must("login", "POST", "/api/auth/login", {
+    email: "admin@erp.local",
+    password: "Parity-Pass-2026!",
+    tenantId,
+  });
   api.setToken(login.accessToken);
   return steps;
 }
@@ -229,11 +294,14 @@ export async function readTables(handle) {
     try {
       for (const t of tables) {
         const cols = FP.tables[t].columns;
-        out[t] = db.prepare(`SELECT * FROM "${t}"`).all().map((r) => {
-          const o = {};
-          for (const [k, v] of Object.entries(r)) o[k] = normalize(cols[k]?.type, v, "sqlite");
-          return o;
-        });
+        out[t] = db
+          .prepare(`SELECT * FROM "${t}"`)
+          .all()
+          .map((r) => {
+            const o = {};
+            for (const [k, v] of Object.entries(r)) o[k] = normalize(cols[k]?.type, v, "sqlite");
+            return o;
+          });
       }
     } finally {
       db.close();
@@ -246,7 +314,15 @@ export async function readTables(handle) {
     try {
       for (const t of tables) {
         const cols = FP.tables[t].columns;
-        const r = await c.query({ text: `SELECT * FROM "${t}"`, types: { getTypeParser: (oid) => (oid === 1700 || oid === 1184 || oid === 1082 || oid === 20) ? (v) => v : pg.types.getTypeParser(oid) } });
+        const r = await c.query({
+          text: `SELECT * FROM "${t}"`,
+          types: {
+            getTypeParser: (oid) =>
+              oid === 1700 || oid === 1184 || oid === 1082 || oid === 20
+                ? (v) => v
+                : pg.types.getTypeParser(oid),
+          },
+        });
         out[t] = r.rows.map((row) => {
           const o = {};
           for (const [k, v] of Object.entries(row)) o[k] = normalize(cols[k]?.type, v, "pg");

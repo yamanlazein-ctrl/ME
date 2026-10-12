@@ -30,7 +30,13 @@ const PER_SCALE = 100_000;
 const CHUNK = 20_000;
 /** Live numeric types (schema-fingerprint.json). */
 const SCALES: Array<[number, number]> = [
-  [14, 2], [12, 2], [18, 6], [7, 2], [14, 4], [5, 4], [14, 3],
+  [14, 2],
+  [12, 2],
+  [18, 6],
+  [7, 2],
+  [14, 4],
+  [5, 4],
+  [14, 3],
 ];
 
 /** Deterministic PRNG so a failure is reproducible. */
@@ -71,7 +77,9 @@ function generate(p: number, s: number, seed: number): Array<number | string> {
     } else if (kind === 7) {
       // largest representable magnitudes (just under 10^(p-s))
       const top = "9".repeat(intDigits) + "." + "9".repeat(s);
-      out.push(rnd() < 0.5 ? `${sign() < 0 ? "-" : ""}${top}` : sign() * (max - 10 ** -s) * rnd() ** 0.01);
+      out.push(
+        rnd() < 0.5 ? `${sign() < 0 ? "-" : ""}${top}` : sign() * (max - 10 ** -s) * rnd() ** 0.01,
+      );
     } else if (kind === 8) {
       // integers and whole-number strings
       out.push(rnd() < 0.5 ? sign() * Math.floor(rnd() * Math.min(max, 1e15)) : `${intText()}`);
@@ -123,7 +131,9 @@ describe.skipIf(!PG_URL)("SQLite numeric(p,s) parity with PostgreSQL (T033)", ()
       db.transaction((tx) => {
         for (let i = 0; i < fits.length; i += 500) {
           tx.insert(m)
-            .values(fits.slice(i, i + 500).map((v, j) => ({ id: i + j, n: v as number, t: v as string })))
+            .values(
+              fits.slice(i, i + 500).map((v, j) => ({ id: i + j, n: v as number, t: v as string })),
+            )
             .run();
         }
       });
@@ -150,7 +160,9 @@ describe.skipIf(!PG_URL)("SQLite numeric(p,s) parity with PostgreSQL (T033)", ()
         // exact int64 and raises "integer overflow" when a running total leaves
         // ±2^63 scaled units (allowed delta: an error, never a wrong value).
         const ids = [c, c + slice.length - 1];
-        const sumStmt = raw.prepare("SELECT sum(t) AS s FROM m WHERE id BETWEEN ? AND ?").safeIntegers(true);
+        const sumStmt = raw
+          .prepare("SELECT sum(t) AS s FROM m WHERE id BETWEEN ? AND ?")
+          .safeIntegers(true);
         const ps = await client.query<{ s: string }>(
           `SELECT sum(v::numeric(${p},${s}))::text AS s FROM unnest($1::text[]) AS u(v)`,
           [slice.map(asPgText)],
@@ -182,16 +194,21 @@ describe.skipIf(!PG_URL)("SQLite numeric(p,s) parity with PostgreSQL (T033)", ()
 
       // Overflow parity: everything SQLite refuses, PG refuses with 22003.
       for (const v of over.slice(0, 200)) {
-        await expect(client.query(`SELECT $1::numeric(${p},${s})`, [asPgText(v)])).rejects.toMatchObject({ code: "22003" });
+        await expect(
+          client.query(`SELECT $1::numeric(${p},${s})`, [asPgText(v)]),
+        ).rejects.toMatchObject({ code: "22003" });
       }
       // And the boundary itself: the largest value fits, one unit more overflows.
       const top = "9".repeat(p - s) + (s ? "." + "9".repeat(s) : "");
       expect(formatScaled(toScaledInteger(top, p, s), s)).toBe(
-        (await client.query<{ t: string }>(`SELECT $1::numeric(${p},${s})::text AS t`, [top])).rows[0].t,
+        (await client.query<{ t: string }>(`SELECT $1::numeric(${p},${s})::text AS t`, [top]))
+          .rows[0].t,
       );
       const past = top + "5"; // rounds up to 10^(p-s)
       expect(overflows(past, p, s)).toBe(true);
-      await expect(client.query(`SELECT $1::numeric(${p},${s})`, [past])).rejects.toMatchObject({ code: "22003" });
+      await expect(client.query(`SELECT $1::numeric(${p},${s})`, [past])).rejects.toMatchObject({
+        code: "22003",
+      });
 
       raw.close();
     }, 120_000);
@@ -200,11 +217,23 @@ describe.skipIf(!PG_URL)("SQLite numeric(p,s) parity with PostgreSQL (T033)", ()
   it("Drizzle writes through the same path as PG for drizzle-level SUM()", () => {
     const raw = new Database(":memory:");
     raw.exec("CREATE TABLE m (id INTEGER PRIMARY KEY, n INTEGER NOT NULL)");
-    const m = sqliteTable("m", { id: integer("id").primaryKey(), n: numeric("n", { precision: 14, scale: 2 }).notNull() });
+    const m = sqliteTable("m", {
+      id: integer("id").primaryKey(),
+      n: numeric("n", { precision: 14, scale: 2 }).notNull(),
+    });
     const db = drizzle(withExactIntegers(raw));
-    db.insert(m).values([{ id: 1, n: 0.1 }, { id: 2, n: 0.2 }, { id: 3, n: 1.005 }]).run();
+    db.insert(m)
+      .values([
+        { id: 1, n: 0.1 },
+        { id: 2, n: 0.2 },
+        { id: 3, n: 1.005 },
+      ])
+      .run();
     // 0.10 + 0.20 + 1.01 (String(1.005) = "1.005" rounds half away from zero) = 1.31 exactly.
-    const r = db.select({ s: sql<number>`sum(${m.n})` }).from(m).get();
+    const r = db
+      .select({ s: sql<number>`sum(${m.n})` })
+      .from(m)
+      .get();
     expect(formatScaled(BigInt(r!.s), 2)).toBe("1.31");
     raw.close();
   });

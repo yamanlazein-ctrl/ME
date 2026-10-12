@@ -433,8 +433,12 @@ export function changedFields(
 ): Record<string, unknown> {
   if (!before) return input;
   const same = (a: unknown, b: unknown) =>
-    a !== null && typeof a === "object" ? JSON.stringify(a) === JSON.stringify(b) : String(a ?? "") === String(b ?? "");
-  return Object.fromEntries(Object.entries(input).filter(([k, v]) => k === "opening" || !same(v, before[k])));
+    a !== null && typeof a === "object"
+      ? JSON.stringify(a) === JSON.stringify(b)
+      : String(a ?? "") === String(b ?? "");
+  return Object.fromEntries(
+    Object.entries(input).filter(([k, v]) => k === "opening" || !same(v, before[k])),
+  );
 }
 
 /** Backstop for old clients: an image data URL over ~300 KB is not synced (the edit still is). */

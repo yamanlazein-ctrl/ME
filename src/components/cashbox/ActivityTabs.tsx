@@ -64,9 +64,9 @@ export function ActivityTabs({
     error,
   } = useLedgerEntries(
     {
-    fromDate: query.fromDate,
-    toDate: query.toDate,
-  },
+      fromDate: query.fromDate,
+      toDate: query.toDate,
+    },
     { all: true },
   );
 
@@ -154,7 +154,14 @@ export function ActivityTabs({
                   )}
                 </TableBody>
               </Table>
-              <ClientPager page={apg.page} totalPages={apg.totalPages} total={apg.total} pageSize={apg.pageSize} onPage={apg.setPage} onPageSize={apg.setPageSize} />
+              <ClientPager
+                page={apg.page}
+                totalPages={apg.totalPages}
+                total={apg.total}
+                pageSize={apg.pageSize}
+                onPage={apg.setPage}
+                onPageSize={apg.setPageSize}
+              />
             </div>
           )}
         </TabsContent>

@@ -34,7 +34,12 @@ export class PostgresReportsRepository implements IReportsRepository {
   ledgerTotalsByCurrency(tenantId: string, from: string | null) {
     return agg.ledgerTotalsByCurrency(this.db, tenantId, from);
   }
-  pagedRows(tenantId: string, slug: string, from: string | null, page: { page: number; limit: number }) {
+  pagedRows(
+    tenantId: string,
+    slug: string,
+    from: string | null,
+    page: { page: number; limit: number },
+  ) {
     return agg.pagedRows(this.db, tenantId, slug, from, page);
   }
 

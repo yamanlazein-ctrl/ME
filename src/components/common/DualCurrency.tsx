@@ -1,4 +1,5 @@
 import { cn } from "@/lib/utils";
+import { round2dp } from "@erp/shared";
 import { currencyState, currencySymbol, type Currency } from "@/presentation/hooks/useCurrency";
 
 /**
@@ -45,7 +46,11 @@ export function DualCurrency({
   const symUsd = currencySymbol("USD" as Currency);
 
   const fmt = (n: number, decimals = 0) =>
-    (decimals === 0 ? Math.round(n) : Math.round(n * 100) / 100).toLocaleString("en-US", {
+    // F-008: the shared decimal rounding (half away from zero, = the database), also for whole units.
+    (decimals === 0
+      ? Math.sign(n) * Math.round(Math.abs(round2dp(n)))
+      : round2dp(n)
+    ).toLocaleString("en-US", {
       minimumFractionDigits: decimals,
       maximumFractionDigits: decimals,
     });

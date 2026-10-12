@@ -18,7 +18,15 @@ export default async function currencyRounding({ step, state }) {
       pieces: 8,
     }),
   );
-  const line = (kg, price, extra = {}) => ({ fabricId: state.fabrics[1], colorId: state.colors[2], rollId: roll, quantityKg: kg, pricePerKg: price, pieces: 0, ...extra });
+  const line = (kg, price, extra = {}) => ({
+    fabricId: state.fabrics[1],
+    colorId: state.colors[2],
+    rollId: roll,
+    quantityKg: kg,
+    pricePerKg: price,
+    pieces: 0,
+    ...extra,
+  });
   await step("invoice.entry.eur", "POST", "/api/invoices", {
     type: "entry",
     date: "2026-03-01",
@@ -62,6 +70,10 @@ export default async function currencyRounding({ step, state }) {
     paid: 5.55,
     paymentMethod: "cash",
   });
-  await step("statement.customer.2.eur", "GET", `/api/customers/${state.customers[2]}/statement?currency=EUR`);
+  await step(
+    "statement.customer.2.eur",
+    "GET",
+    `/api/customers/${state.customers[2]}/statement?currency=EUR`,
+  );
   await step("invoice.list.eur", "GET", "/api/invoices?type=sale&limit=100");
 }

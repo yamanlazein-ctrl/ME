@@ -225,19 +225,28 @@ describe("master edits through sync", () => {
   });
 
   it("two devices creating the same fabric (and colour) name converge with a visible suffix", async () => {
-    const make = (entityType: string, snapshot: Record<string, unknown>) => apply("create", entityType, { snapshot });
+    const make = (entityType: string, snapshot: Record<string, unknown>) =>
+      apply("create", entityType, { snapshot });
     const f1 = "00000000-0000-4000-8000-00000000f001"; // smaller id keeps the name
     const f2 = "ffffffff-0000-4000-8000-00000000f002";
     expect((await make("fabric", { id: f2, name: "ميني ليكرا" })).status).toBe("created");
     expect((await make("fabric", { id: f1, name: "ميني ليكرا" })).status).toBe("created");
-    const fabricNames = await q<{ id: string; name: string }>(sql`SELECT id, name FROM fabrics WHERE id IN (${f1}, ${f2}) ORDER BY id`);
+    const fabricNames = await q<{ id: string; name: string }>(
+      sql`SELECT id, name FROM fabrics WHERE id IN (${f1}, ${f2}) ORDER BY id`,
+    );
     expect(fabricNames[0].name).toBe("ميني ليكرا");
     expect(fabricNames[1].name).toMatch(/^ميني ليكرا \(/);
     const c1 = "00000000-0000-4000-8000-00000000c001";
     const c2 = "ffffffff-0000-4000-8000-00000000c002";
-    expect((await make("color", { id: c1, fabricId: f1, name: "أسود", code: "BLK" })).status).toBe("created");
-    expect((await make("color", { id: c2, fabricId: f1, name: "أسود", code: "BLK" })).status).toBe("created");
-    const colorNames = await q<{ name: string }>(sql`SELECT name FROM colors WHERE id IN (${c1}, ${c2}) ORDER BY id`);
+    expect((await make("color", { id: c1, fabricId: f1, name: "أسود", code: "BLK" })).status).toBe(
+      "created",
+    );
+    expect((await make("color", { id: c2, fabricId: f1, name: "أسود", code: "BLK" })).status).toBe(
+      "created",
+    );
+    const colorNames = await q<{ name: string }>(
+      sql`SELECT name FROM colors WHERE id IN (${c1}, ${c2}) ORDER BY id`,
+    );
     expect(colorNames.map((c) => c.name)).toEqual(["أسود", expect.stringMatching(/^أسود \(/)]);
   });
 
@@ -247,9 +256,16 @@ describe("master edits through sync", () => {
                 VALUES (${rollId}, ${tenantId}, ${colorId}, ${"R-" + rollId.slice(0, 6)}, 5000, 5000, 5, 1000, '2026-01-01', 'USD')`);
     const origin = randomUUID();
     const r = await apply("adjust", "roll", {
-      rollId, deltaKg: -2, deltaPieces: -1, reason: "تلف", date: "2026-10-07",
-      referenceType: "inventory_adjustment", referenceId: randomUUID(), referenceNumber: "ADJ-X",
-      actorUserId: origin, actorUserName: "سامر (المستودع)",
+      rollId,
+      deltaKg: -2,
+      deltaPieces: -1,
+      reason: "تلف",
+      date: "2026-10-07",
+      referenceType: "inventory_adjustment",
+      referenceId: randomUUID(),
+      referenceNumber: "ADJ-X",
+      actorUserId: origin,
+      actorUserName: "سامر (المستودع)",
     });
     expect(r.status).toBe("created");
     const [audit] = await q<{ actor_id: string; actor_name: string; after: string }>(
@@ -261,7 +277,9 @@ describe("master edits through sync", () => {
     expect(audit).toMatchObject({ actor_id: ctx.userId, actor_name: "سامر (المستودع)" });
     expect(JSON.parse(audit.after)).toMatchObject({ syncedFrom: "device", appliedBy: "tester" });
     // Authority / FK columns stay the receiver's.
-    const [mv] = await q<{ by: string }>(sql`SELECT created_by AS by FROM stock_movements WHERE roll_id = ${rollId}`);
+    const [mv] = await q<{ by: string }>(
+      sql`SELECT created_by AS by FROM stock_movements WHERE roll_id = ${rollId}`,
+    );
     expect(mv.by).toBe(ctx.userId);
   });
 });

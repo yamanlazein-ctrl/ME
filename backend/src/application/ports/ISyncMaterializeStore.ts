@@ -20,7 +20,13 @@ export interface SyncUserSnapshotRow {
 
 export interface ISyncMaterializeStore {
   tombstoneExists(tenantId: string, entityType: string, entityId: string): Promise<boolean>;
-  recordTombstone(tenantId: string, entityType: string, entityId: string, opId: string, deletedByDeviceId: string | null): Promise<void>;
+  recordTombstone(
+    tenantId: string,
+    entityType: string,
+    entityId: string,
+    opId: string,
+    deletedByDeviceId: string | null,
+  ): Promise<void>;
   /** Upsert a synced user snapshot; newer local rows (`updated_at` greater) are kept. */
   upsertUserSnapshot(u: SyncUserSnapshotRow): Promise<void>;
 }

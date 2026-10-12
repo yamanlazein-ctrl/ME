@@ -4,7 +4,14 @@ import { desc, asc } from "./helpers/pgOrder.js";
 import { scaledNumber } from "./helpers/likeContains.js";
 import { ilikeEscaped } from "./helpers/likeContains.js";
 import { eq, and, or, sql, gte, lte, inArray, getTableColumns } from "drizzle-orm";
-import { afterCursor, cursorColumns, decodeCursor, keysetOrder, nextCursorOf, type KeysetSpec } from "./helpers/keysetPage.js";
+import {
+  afterCursor,
+  cursorColumns,
+  decodeCursor,
+  keysetOrder,
+  nextCursorOf,
+  type KeysetSpec,
+} from "./helpers/keysetPage.js";
 import { likeContains } from "../../utils/likeEscape.js";
 import type { DB } from "../../orm/sqlite/drizzleCompat.js";
 import type {
@@ -65,7 +72,10 @@ export class SqliteLedgerRepository implements ILedgerRepository {
       const pat = likeContains(filter.search);
       conditions.push(
         filter.keepOpening
-          ? or(ilikeEscaped(ledgerEntries.description!, pat), ilikeEscaped(ledgerEntries.referenceNumber!, pat))!
+          ? or(
+              ilikeEscaped(ledgerEntries.description!, pat),
+              ilikeEscaped(ledgerEntries.referenceNumber!, pat),
+            )!
           : or(ilikeEscaped(ledgerEntries.description!, pat))!,
       );
     }
@@ -326,8 +336,14 @@ export class SqliteLedgerRepository implements ILedgerRepository {
   ): Promise<{ in: number; out: number }> {
     const rows = await this.db
       .select({
-        amountIn: scaledNumber(sql`COALESCE(SUM(CASE WHEN ${ledgerEntries.cashImpact} = 'in' THEN ${ledgerEntries.debit} + ${ledgerEntries.credit} ELSE 0 END), 0)`, 2),
-        amountOut: scaledNumber(sql`COALESCE(SUM(CASE WHEN ${ledgerEntries.cashImpact} = 'out' THEN ${ledgerEntries.debit} + ${ledgerEntries.credit} ELSE 0 END), 0)`, 2),
+        amountIn: scaledNumber(
+          sql`COALESCE(SUM(CASE WHEN ${ledgerEntries.cashImpact} = 'in' THEN ${ledgerEntries.debit} + ${ledgerEntries.credit} ELSE 0 END), 0)`,
+          2,
+        ),
+        amountOut: scaledNumber(
+          sql`COALESCE(SUM(CASE WHEN ${ledgerEntries.cashImpact} = 'out' THEN ${ledgerEntries.debit} + ${ledgerEntries.credit} ELSE 0 END), 0)`,
+          2,
+        ),
       })
       .from(ledgerEntries)
       .where(

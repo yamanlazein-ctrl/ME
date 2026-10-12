@@ -192,7 +192,11 @@ export class PostgresOrderRepository implements IOrderRepository {
       values.customerPhoneSnapshot = data.customerPhoneSnapshot ?? null;
     if (data.date !== undefined) values.date = data.date;
     // P0-001: atomic version enforcement — WHERE includes expectedVersion
-    const whereConditions = [eq(orders.id, id), eq(orders.tenantId, ctx.tenantId), eq(orders.version, expectedVersion)];
+    const whereConditions = [
+      eq(orders.id, id),
+      eq(orders.tenantId, ctx.tenantId),
+      eq(orders.version, expectedVersion),
+    ];
     const [row] = await this.db
       .update(orders)
       .set(values)
@@ -200,9 +204,16 @@ export class PostgresOrderRepository implements IOrderRepository {
       .returning();
     if (!row) {
       // P0-001: distinguish "not found" from "stale version"
-      const existing = await this.db.select({ version: orders.version }).from(orders).where(and(eq(orders.id, id), eq(orders.tenantId, ctx.tenantId))).limit(1);
+      const existing = await this.db
+        .select({ version: orders.version })
+        .from(orders)
+        .where(and(eq(orders.id, id), eq(orders.tenantId, ctx.tenantId)))
+        .limit(1);
       if (existing.length > 0) {
-        throw Object.assign(new Error(`Stale version: expected ${expectedVersion}, current ${existing[0].version}`), { code: "STALE_VERSION" as const });
+        throw Object.assign(
+          new Error(`Stale version: expected ${expectedVersion}, current ${existing[0].version}`),
+          { code: "STALE_VERSION" as const },
+        );
       }
       throw new Error("Order not found");
     }
@@ -256,9 +267,16 @@ export class PostgresOrderRepository implements IOrderRepository {
         .returning();
       if (!row) {
         // P0-001: distinguish "not found" from "stale version"
-        const existing = await tx.select({ version: orders.version }).from(orders).where(and(eq(orders.id, id), eq(orders.tenantId, ctx.tenantId))).limit(1);
+        const existing = await tx
+          .select({ version: orders.version })
+          .from(orders)
+          .where(and(eq(orders.id, id), eq(orders.tenantId, ctx.tenantId)))
+          .limit(1);
         if (existing.length > 0) {
-          throw Object.assign(new Error(`Stale version: expected ${expectedVersion}, current ${existing[0].version}`), { code: "STALE_VERSION" as const });
+          throw Object.assign(
+            new Error(`Stale version: expected ${expectedVersion}, current ${existing[0].version}`),
+            { code: "STALE_VERSION" as const },
+          );
         }
         throw new Error("Order not found or already processed");
       }

@@ -104,19 +104,19 @@ src/
 
 ## Environment Variables
 
-| Variable                  | Required | Default       | Description                  |
-| ------------------------- | -------- | ------------- | ---------------------------- |
-| `NODE_ENV`                | No       | `development` | Runtime environment          |
-| `HOST`                    | No       | `0.0.0.0`     | Bind address for the API     |
-| `PORT`                    | No       | `8080`        | Server port                  |
-| `DATABASE_URL`            | Yes      | —             | PostgreSQL connection string |
-| `REDIS_URL`               | No       | —             | Redis connection string      |
-| `JWT_SECRET`              | Yes      | —             | Min 32 chars                 |
-| `JWT_EXPIRY_MS`           | No       | `1800000`     | Access token TTL (30 min)    |
-| `REFRESH_TOKEN_EXPIRY_MS` | No       | `31536000000` | Refresh token TTL (365 days) |
-| `CORS_ORIGIN`             | No       | local allowlist | Allowed CORS origins       |
-| `RATE_LIMIT_RPS`          | No       | `100`         | Max requests per window      |
-| `LOG_LEVEL`               | No       | `info`        | Pino log level               |
+| Variable                  | Required | Default         | Description                  |
+| ------------------------- | -------- | --------------- | ---------------------------- |
+| `NODE_ENV`                | No       | `development`   | Runtime environment          |
+| `HOST`                    | No       | `0.0.0.0`       | Bind address for the API     |
+| `PORT`                    | No       | `8080`          | Server port                  |
+| `DATABASE_URL`            | Yes      | —               | PostgreSQL connection string |
+| `REDIS_URL`               | No       | —               | Redis connection string      |
+| `JWT_SECRET`              | Yes      | —               | Min 32 chars                 |
+| `JWT_EXPIRY_MS`           | No       | `1800000`       | Access token TTL (30 min)    |
+| `REFRESH_TOKEN_EXPIRY_MS` | No       | `31536000000`   | Refresh token TTL (365 days) |
+| `CORS_ORIGIN`             | No       | local allowlist | Allowed CORS origins         |
+| `RATE_LIMIT_RPS`          | No       | `100`           | Max requests per window      |
+| `LOG_LEVEL`               | No       | `info`          | Pino log level               |
 
 ## Docker
 

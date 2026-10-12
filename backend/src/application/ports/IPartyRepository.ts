@@ -62,19 +62,38 @@ export interface IPartyRepository {
     survivorId: string,
     sourceId: string,
     ctx: TenantContext,
-  ): Promise<{ survivorId: string; sourceId: string; moved: { invoices: number; vouchers: number; returns: number; ledger: number } }>;
+  ): Promise<{
+    survivorId: string;
+    sourceId: string;
+    moved: { invoices: number; vouchers: number; returns: number; ledger: number };
+  }>;
   findById(id: string, ctx: TenantContext): Promise<PartyData | null>;
   findByCode(code: string, ctx: TenantContext): Promise<PartyData | null>;
   list(filter: PartyFilter, ctx: TenantContext): Promise<PaginatedResult<PartyData>>;
   create(data: CreatePartyData, ctx: TenantContext): Promise<PartyData>;
-  update(id: string, data: Partial<CreatePartyData>, ctx: TenantContext, expectedVersion: number): Promise<PartyData>;
+  update(
+    id: string,
+    data: Partial<CreatePartyData>,
+    ctx: TenantContext,
+    expectedVersion: number,
+  ): Promise<PartyData>;
   /**
    * Replace the opening balance in one transaction: the active opening journal is cancelled
    * (kept for audit, never deleted), a new balanced one is posted when the amount ≠ 0, the
    * parties.opening_* columns are rewritten and the version bumped. Refused in a closed year.
    */
-  setOpening(id: string, data: PartyOpeningData, ctx: TenantContext, expectedVersion: number): Promise<PartyData>;
-  cancel(id: string, cancelledBy: string, ctx: TenantContext, expectedVersion: number): Promise<PartyData>;
+  setOpening(
+    id: string,
+    data: PartyOpeningData,
+    ctx: TenantContext,
+    expectedVersion: number,
+  ): Promise<PartyData>;
+  cancel(
+    id: string,
+    cancelledBy: string,
+    ctx: TenantContext,
+    expectedVersion: number,
+  ): Promise<PartyData>;
   /**
    * Sync: after applying a hub-canonical update, mirror the HUB's version number. The hub accepts an
    * update only when its base version equals the hub row's version, so a device whose counter ran ahead

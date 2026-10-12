@@ -49,7 +49,8 @@ beforeAll(async () => {
     });
     res.writeHead(200, { "Content-Type": "application/json" });
     if ((req.url ?? "").startsWith("/api/sync/pull")) return res.end(JSON.stringify({ items: [] }));
-    if ((req.url ?? "").startsWith("/api/sync/activity")) return res.end(JSON.stringify({ items: [] }));
+    if ((req.url ?? "").startsWith("/api/sync/activity"))
+      return res.end(JSON.stringify({ items: [] }));
     res.end("{}");
   });
   await new Promise<void>((r) => server.listen(0, "127.0.0.1", r));
@@ -59,7 +60,9 @@ beforeAll(async () => {
   const tx = await import("@/infrastructure/orm/sqlite/transaction.js");
   await runtime.ensureSqliteRuntime();
   await tx.runInTransaction(async (t) => {
-    await t.execute(sql`INSERT INTO tenants (id, name, slug) VALUES (${tenantId}, 'Local Co', 'local')`);
+    await t.execute(
+      sql`INSERT INTO tenants (id, name, slug) VALUES (${tenantId}, 'Local Co', 'local')`,
+    );
     await t.execute(sql`INSERT INTO users (id, tenant_id, name, email, password_hash, role)
                         VALUES (${userId}, ${tenantId}, 'مدير', 'admin@local.test', 'x', 'admin')`);
   });
@@ -69,7 +72,13 @@ beforeAll(async () => {
   const container = buildContainer();
   const pass: RequestHandler = (_req, _res, next) => next();
   const auth: RequestHandler = (req, _res, next) => {
-    req.tenantContext = { tenantId, userId, userRole: "admin", userName: "مدير", syncDeviceId: deviceId };
+    req.tenantContext = {
+      tenantId,
+      userId,
+      userRole: "admin",
+      userName: "مدير",
+      syncDeviceId: deviceId,
+    };
     next();
   };
   const router = express.Router();
@@ -77,7 +86,13 @@ beforeAll(async () => {
     router,
     container,
     auth,
-    { readGuard: pass, transportGuard: pass, numberingGuard: pass, conflictGuard: pass, operatorGuard: pass },
+    {
+      readGuard: pass,
+      transportGuard: pass,
+      numberingGuard: pass,
+      conflictGuard: pass,
+      operatorGuard: pass,
+    },
     { attributed: pass, pull: pass, orchestration: pass },
   );
   start = rt.startBackgroundSync;
@@ -102,7 +117,13 @@ describe("background sync", () => {
     writeFileSync(process.env.HUB_CONFIG_PATH!, JSON.stringify({ url: hubUrl }));
     writeFileSync(
       process.env.HUB_SESSION_PATH!,
-      JSON.stringify({ accessToken: "hub-token-xyz", hubUrl, hubDeviceId: deviceId, localTenantId: tenantId, localUserId: userId }),
+      JSON.stringify({
+        accessToken: "hub-token-xyz",
+        hubUrl,
+        hubDeviceId: deviceId,
+        localTenantId: tenantId,
+        localUserId: userId,
+      }),
     );
     const stop = start(30);
     const pulled = await until(() => hits.some((h) => h.path === "/api/sync/pull"));
@@ -115,7 +136,7 @@ describe("background sync", () => {
 
   it("stays out of the way while the UI is running syncs", async () => {
     // let the previous test's in-flight cycle finish (stop() only cancels future ticks)
-    for (let n = -1; n !== hits.length; ) {
+    for (let n = -1; n !== hits.length;) {
       n = hits.length;
       await new Promise((r) => setTimeout(r, 250));
     }

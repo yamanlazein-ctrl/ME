@@ -1,4 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { round2dp } from "@erp/shared";
 import { useMemo, useState, type ComponentType } from "react";
 import {
   Package,
@@ -133,7 +134,7 @@ function convertBreakdown(
   for (const [code, amt] of Object.entries(byCurrency)) {
     sum += convertAmount(amt, (code as Currency) || "SYP", target, mode);
   }
-  return Math.round(sum * 100) / 100;
+  return round2dp(sum); // C1-14: the shared helper, not an inline copy
 }
 
 function pick(by: Record<string, number>, code: Currency): number {
@@ -374,9 +375,16 @@ function ReportsPage() {
       <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-6">
         {(
           [
+            // C1-05: every report the detail page implements has an entry point (payables, purchases,
+            // returns and the two rankings had none; "الأطراف" opened customers only).
             ["net-sales", "المبيعات"],
+            ["purchases", "المشتريات"],
+            ["sales-returns", "المرتجعات"],
             ["inventory-value", "المخزون"],
-            ["receivables", "الأطراف"],
+            ["receivables", "ذمم العملاء"],
+            ["payables", "ذمم الموردين"],
+            ["top-customers", "أعلى العملاء"],
+            ["top-fabrics", "أعلى الأصناف"],
             ["ledger", "الأستاذ"],
             ["expenses", "المصاريف"],
             ["cashbox", "الصندوق"],

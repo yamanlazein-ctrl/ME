@@ -13,7 +13,8 @@ const BASE = process.env.ERP_API_BASE_URL || "http://127.0.0.1:8080";
 const TENANT_ID = process.env.ERP_TENANT_ID;
 const EMAIL = process.env.ERP_ADMIN_EMAIL;
 const PASSWORD = process.env.ERP_ADMIN_PASSWORD;
-if (!TENANT_ID || !EMAIL || !PASSWORD) throw new Error("ERP_TENANT_ID, ERP_ADMIN_EMAIL, and ERP_ADMIN_PASSWORD are required");
+if (!TENANT_ID || !EMAIL || !PASSWORD)
+  throw new Error("ERP_TENANT_ID, ERP_ADMIN_EMAIL, and ERP_ADMIN_PASSWORD are required");
 
 const AUDIT_DIR = path.resolve(process.cwd(), "audit");
 let token = "";

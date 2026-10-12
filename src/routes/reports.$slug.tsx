@@ -640,10 +640,15 @@ function PartyBalances({ kind }: { kind: "customer" | "supplier" }) {
     }>
   >([]);
   const [loading, setLoading] = useState(true);
+  // A failed load must never read as "no balances" (D-3) — a debtors list that silently empties is
+  // indistinguishable from "nobody owes anything".
+  const [failed, setFailed] = useState(false);
+  const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
+    setFailed(false);
     void container.http
       .get<{
         data: Array<{
@@ -692,22 +697,37 @@ function PartyBalances({ kind }: { kind: "customer" | "supplier" }) {
                 Object.values(r.remaining).some((v) => v !== 0) ||
                 Object.values(r.total).some((v) => v !== 0),
             )
-            .sort((a, b) => (b.remaining.SYP ?? 0) - (a.remaining.SYP ?? 0)),
+            // C1-06: SYP first, then USD — USD-only debtors used to sit in arbitrary order at
+            // SYP 0. Currencies are never converted to rank each other (no FX mixing).
+            .sort(
+              (a, b) =>
+                (b.remaining.SYP ?? 0) - (a.remaining.SYP ?? 0) ||
+                (b.remaining.USD ?? 0) - (a.remaining.USD ?? 0),
+            ),
         );
         setLoading(false);
       })
       .catch(() => {
-        if (!cancelled) setLoading(false);
+        if (cancelled) return;
+        setFailed(true);
+        setLoading(false);
       });
     return () => {
       cancelled = true;
     };
-  }, [kind]);
+  }, [kind, attempt]);
 
   return (
     <PageCard title={kind === "customer" ? "ذمم العملاء" : "ذمم الموردين"} noBodyPadding>
       {loading ? (
         <Empty text="جاري التحميل…" />
+      ) : failed ? (
+        <div className="p-8 text-center text-sm text-destructive" role="alert">
+          تعذّر تحميل الأرصدة.{" "}
+          <Button size="sm" variant="outline" onClick={() => setAttempt((n) => n + 1)}>
+            إعادة المحاولة
+          </Button>
+        </div>
       ) : rows.length === 0 ? (
         <Empty text="لا بيانات." />
       ) : (

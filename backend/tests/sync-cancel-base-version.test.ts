@@ -129,7 +129,10 @@ describe("cancel replay — stale base is refused, not applied blind", () => {
     expect(result.status).toBe("conflict");
     expect(result.error).toContain("تعارض إلغاء");
     expect(result.error).toContain("v3");
-    expect(cancelInvoice, "a stale cancel must never reach the domain cancel").not.toHaveBeenCalled();
+    expect(
+      cancelInvoice,
+      "a stale cancel must never reach the domain cancel",
+    ).not.toHaveBeenCalled();
   });
 
   it("voucher: stale base is refused through the same shared guard", async () => {

@@ -104,9 +104,7 @@ export function registerCompanyRoutes(
       };
       let profile: Awaited<ReturnType<typeof container.companyRepo.upsert>>;
       try {
-        profile = syncEnabled
-          ? await withTenantTx(ctx.tenantId, runUpsert)
-          : await runUpsert();
+        profile = syncEnabled ? await withTenantTx(ctx.tenantId, runUpsert) : await runUpsert();
       } catch (err) {
         logger.error({ err }, "transaction rolled back — company profile update dropped (F-07)");
         res.status(500).json({

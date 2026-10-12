@@ -89,19 +89,31 @@ async function computeCounts(
     .select({ n: sql<number>`count(*)` })
     .from(invoices)
     .where(
-      and(eq(invoices.partyId, partyId), eq(invoices.tenantId, tenantId), eq(invoices.status, "active")),
+      and(
+        eq(invoices.partyId, partyId),
+        eq(invoices.tenantId, tenantId),
+        eq(invoices.status, "active"),
+      ),
     );
   const [vch] = await tx
     .select({ n: sql<number>`count(*)` })
     .from(vouchers)
     .where(
-      and(eq(vouchers.partyId, partyId), eq(vouchers.tenantId, tenantId), eq(vouchers.status, "active")),
+      and(
+        eq(vouchers.partyId, partyId),
+        eq(vouchers.tenantId, tenantId),
+        eq(vouchers.status, "active"),
+      ),
     );
   const [ret] = await tx
     .select({ n: sql<number>`count(*)` })
     .from(returns)
     .where(
-      and(eq(returns.partyId, partyId), eq(returns.tenantId, tenantId), eq(returns.status, "active")),
+      and(
+        eq(returns.partyId, partyId),
+        eq(returns.tenantId, tenantId),
+        eq(returns.status, "active"),
+      ),
     );
   // Only OPEN orders block a party. A fulfilled or cancelled order is history:
   // counting it made the sheet say "مرتبط" (and refused the delete) for a party
@@ -408,19 +420,43 @@ async function computeRecentActivity(
 ): Promise<PartyRecentActivity[]> {
   const n = RECENT_ACTIVITY_ROWS;
   const inv = await tx
-    .select({ id: invoices.id, number: invoices.number, type: invoices.type, date: invoices.date, total: invoices.total, currency: invoices.currency, status: invoices.status, createdAt: invoices.createdAt })
+    .select({
+      id: invoices.id,
+      number: invoices.number,
+      type: invoices.type,
+      date: invoices.date,
+      total: invoices.total,
+      currency: invoices.currency,
+      status: invoices.status,
+      createdAt: invoices.createdAt,
+    })
     .from(invoices)
     .where(and(eq(invoices.partyId, partyId), eq(invoices.tenantId, tenantId)))
     .orderBy(desc(invoices.date), desc(invoices.createdAt))
     .limit(n);
   const vch = await tx
-    .select({ id: vouchers.id, number: vouchers.number, kind: vouchers.kind, date: vouchers.date, amount: vouchers.amount, currency: vouchers.currency, status: vouchers.status, createdAt: vouchers.createdAt })
+    .select({
+      id: vouchers.id,
+      number: vouchers.number,
+      kind: vouchers.kind,
+      date: vouchers.date,
+      amount: vouchers.amount,
+      currency: vouchers.currency,
+      status: vouchers.status,
+      createdAt: vouchers.createdAt,
+    })
     .from(vouchers)
     .where(and(eq(vouchers.partyId, partyId), eq(vouchers.tenantId, tenantId)))
     .orderBy(desc(vouchers.date), desc(vouchers.createdAt))
     .limit(n);
   const ret = await tx
-    .select({ id: returns.id, number: returns.number, date: returns.date, status: returns.status, createdAt: returns.createdAt })
+    .select({
+      id: returns.id,
+      number: returns.number,
+      date: returns.date,
+      status: returns.status,
+      createdAt: returns.createdAt,
+    })
     .from(returns)
     .where(and(eq(returns.partyId, partyId), eq(returns.tenantId, tenantId)))
     .orderBy(desc(returns.date), desc(returns.createdAt))
@@ -428,7 +464,13 @@ async function computeRecentActivity(
   const ord =
     kind === "customer"
       ? await tx
-          .select({ id: orders.id, code: orders.code, date: orders.date, status: orders.status, createdAt: orders.createdAt })
+          .select({
+            id: orders.id,
+            code: orders.code,
+            date: orders.date,
+            status: orders.status,
+            createdAt: orders.createdAt,
+          })
           .from(orders)
           .where(and(eq(orders.customerId, partyId), eq(orders.tenantId, tenantId)))
           .orderBy(desc(orders.date), desc(orders.createdAt))
@@ -437,27 +479,53 @@ async function computeRecentActivity(
   const cancelled = (s: string) => (s === "cancelled" ? " — ملغاة" : "");
   const all: Array<PartyRecentActivity & { at: number }> = [
     ...inv.map((r) => ({
-      kind: "invoice" as const, id: r.id, date: r.date, number: r.number, amount: Number(r.total), currency: r.currency, status: r.status,
+      kind: "invoice" as const,
+      id: r.id,
+      date: r.date,
+      number: r.number,
+      amount: Number(r.total),
+      currency: r.currency,
+      status: r.status,
       label: `فاتورة ${r.type === "entry" ? "شراء/دخول" : "بيع/خروج"} رقم ${r.number} (${r.total} ${r.currency})${cancelled(r.status)}`,
       at: new Date(r.createdAt).getTime(),
     })),
     ...vch.map((r) => ({
-      kind: "voucher" as const, id: r.id, date: r.date, number: r.number, amount: Number(r.amount), currency: r.currency, status: r.status,
+      kind: "voucher" as const,
+      id: r.id,
+      date: r.date,
+      number: r.number,
+      amount: Number(r.amount),
+      currency: r.currency,
+      status: r.status,
       label: `سند ${r.kind === "receipt" || r.kind === "in" ? "قبض" : "صرف"} رقم ${r.number} (${r.amount} ${r.currency})${cancelled(r.status)}`,
       at: new Date(r.createdAt).getTime(),
     })),
     ...ret.map((r) => ({
-      kind: "return" as const, id: r.id, date: r.date, number: r.number, status: r.status,
+      kind: "return" as const,
+      id: r.id,
+      date: r.date,
+      number: r.number,
+      status: r.status,
       label: `مرتجع رقم ${r.number}${cancelled(r.status)}`,
       at: new Date(r.createdAt).getTime(),
     })),
     ...ord.map((r) => ({
-      kind: "order" as const, id: r.id, date: r.date, number: r.code, status: r.status,
+      kind: "order" as const,
+      id: r.id,
+      date: r.date,
+      number: r.code,
+      status: r.status,
       label: `طلبية رقم ${r.code}${cancelled(r.status)}`,
       at: new Date(r.createdAt).getTime(),
     })),
   ];
-  all.sort((a, b) => (String(b.date ?? "") === String(a.date ?? "") ? b.at - a.at : String(b.date ?? "") < String(a.date ?? "") ? -1 : 1));
+  all.sort((a, b) =>
+    String(b.date ?? "") === String(a.date ?? "")
+      ? b.at - a.at
+      : String(b.date ?? "") < String(a.date ?? "")
+        ? -1
+        : 1,
+  );
   return all.slice(0, n).map(({ at: _at, ...doc }) => doc);
 }
 
@@ -477,11 +545,29 @@ async function computeDeletionAccounting(
   const activeDocIds = or(
     inArray(
       ledgerEntries.referenceId,
-      tx.select({ id: invoices.id }).from(invoices).where(and(eq(invoices.tenantId, tenantId), eq(invoices.partyId, partyId), eq(invoices.status, "active"))),
+      tx
+        .select({ id: invoices.id })
+        .from(invoices)
+        .where(
+          and(
+            eq(invoices.tenantId, tenantId),
+            eq(invoices.partyId, partyId),
+            eq(invoices.status, "active"),
+          ),
+        ),
     ),
     inArray(
       ledgerEntries.referenceId,
-      tx.select({ id: vouchers.id }).from(vouchers).where(and(eq(vouchers.tenantId, tenantId), eq(vouchers.partyId, partyId), eq(vouchers.status, "active"))),
+      tx
+        .select({ id: vouchers.id })
+        .from(vouchers)
+        .where(
+          and(
+            eq(vouchers.tenantId, tenantId),
+            eq(vouchers.partyId, partyId),
+            eq(vouchers.status, "active"),
+          ),
+        ),
     ),
   )!;
   const sign = kind === "supplier" ? -1 : 1;
@@ -494,23 +580,40 @@ async function computeDeletionAccounting(
       reversedCredit: money(sql`CASE WHEN ${activeDocIds} THEN ${ledgerEntries.credit} ELSE 0 END`),
     })
     .from(ledgerEntries)
-    .where(and(eq(ledgerEntries.partyId, partyId), eq(ledgerEntries.tenantId, tenantId), eq(ledgerEntries.status, "active")))
+    .where(
+      and(
+        eq(ledgerEntries.partyId, partyId),
+        eq(ledgerEntries.tenantId, tenantId),
+        eq(ledgerEntries.status, "active"),
+      ),
+    )
     .groupBy(ledgerEntries.currency);
   const cashLegs = requiresCascade
     ? await tx
         .select({
           currency: ledgerEntries.currency,
-          net: money(sql`CASE WHEN ${ledgerEntries.cashImpact} = 'in' THEN COALESCE(${ledgerEntries.debit}, 0) + COALESCE(${ledgerEntries.credit}, 0) ELSE -(COALESCE(${ledgerEntries.debit}, 0) + COALESCE(${ledgerEntries.credit}, 0)) END`),
+          net: money(
+            sql`CASE WHEN ${ledgerEntries.cashImpact} = 'in' THEN COALESCE(${ledgerEntries.debit}, 0) + COALESCE(${ledgerEntries.credit}, 0) ELSE -(COALESCE(${ledgerEntries.debit}, 0) + COALESCE(${ledgerEntries.credit}, 0)) END`,
+          ),
         })
         .from(ledgerEntries)
-        .where(and(eq(ledgerEntries.tenantId, tenantId), eq(ledgerEntries.status, "active"), inArray(ledgerEntries.cashImpact, ["in", "out"]), activeDocIds))
+        .where(
+          and(
+            eq(ledgerEntries.tenantId, tenantId),
+            eq(ledgerEntries.status, "active"),
+            inArray(ledgerEntries.cashImpact, ["in", "out"]),
+            activeDocIds,
+          ),
+        )
         .groupBy(ledgerEntries.currency)
     : [];
   const balanceNow: PartyMoney[] = [];
   const balanceAfter: PartyMoney[] = [];
   for (const r of partyLegs) {
     const now = round2(sign * (Number(r.debit) - Number(r.credit)));
-    const reversed = requiresCascade ? round2(sign * (Number(r.reversedDebit) - Number(r.reversedCredit))) : 0;
+    const reversed = requiresCascade
+      ? round2(sign * (Number(r.reversedDebit) - Number(r.reversedCredit)))
+      : 0;
     balanceNow.push({ currency: r.currency, amount: now });
     balanceAfter.push({ currency: r.currency, amount: round2(now - reversed) });
   }
@@ -525,7 +628,6 @@ async function computeDeletionAccounting(
     affectsBalance: balanceNow.some((b, i) => b.amount !== balanceAfter[i]!.amount),
   };
 }
-
 
 /* ── Paged browsing of every linked document ──────────────────────────────── */
 
@@ -561,7 +663,10 @@ function decodeCursor(cursor: string | null | undefined): LinkedCursor {
 
 function clampLimit(limit: number | undefined): number {
   if (!Number.isFinite(limit)) return LINKED_DOCS_DEFAULT_LIMIT;
-  return Math.min(LINKED_DOCS_MAX_LIMIT, Math.max(LINKED_DOCS_MIN_LIMIT, Math.trunc(limit as number)));
+  return Math.min(
+    LINKED_DOCS_MAX_LIMIT,
+    Math.max(LINKED_DOCS_MIN_LIMIT, Math.trunc(limit as number)),
+  );
 }
 
 /**
@@ -619,7 +724,14 @@ export async function listPartyLinkedDocs(
     notInArray(orders.status, ["fulfilled", "cancelled"]),
   );
 
-  type Row = { id: string; number: string; date: string; amount: number | null; currency: string | null; extra: string | null };
+  type Row = {
+    id: string;
+    number: string;
+    date: string;
+    amount: number | null;
+    currency: string | null;
+    extra: string | null;
+  };
   let rows: Row[] = [];
   let total = 0;
 

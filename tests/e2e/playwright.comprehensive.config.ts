@@ -1,7 +1,10 @@
 import { defineConfig } from "@playwright/test";
 
 export default defineConfig({
-  testDir: "./tests/e2e",
+  // Relative to THIS file (M-08: "./tests/e2e" resolved to tests/e2e/tests/e2e and found nothing).
+  // The cert-* suites need the disposable cert stack and run under playwright.cert.config.ts.
+  testDir: ".",
+  testIgnore: ["cert-*/**"],
   timeout: 30_000,
   retries: 0,
   use: {

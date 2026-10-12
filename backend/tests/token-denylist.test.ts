@@ -75,7 +75,9 @@ const brokenFastPath: TokenDenylist = {
 };
 
 beforeAll(async () => {
-  if ((await liveColumns((q) => db.execute(q as never), sql as never, "revoked_tokens")).length === 0) {
+  if (
+    (await liveColumns((q) => db.execute(q as never), sql as never, "revoked_tokens")).length === 0
+  ) {
     throw new Error(
       "revoked_tokens is missing — run `npm run db:migrate` (migration 0052) against the test database first.",
     );
@@ -96,20 +98,23 @@ describe("P0-004 · revoked_tokens provisioning", () => {
 
   // PG mechanism only: SQLite has no RLS at all (research.md allowed delta RLS → app predicate), so
   // revoked_tokens is readable before a tenant context there by construction.
-  it.skipIf(pgOnly)("is deliberately NOT RLS-managed (readable before a tenant context exists)", async () => {
-    const res = await db.execute(sql`
+  it.skipIf(pgOnly)(
+    "is deliberately NOT RLS-managed (readable before a tenant context exists)",
+    async () => {
+      const res = await db.execute(sql`
       select c.relrowsecurity as rls
       from pg_class c
       join pg_namespace n on n.oid = c.relnamespace
       where n.nspname = 'public' and c.relname = 'revoked_tokens'
     `);
-    const rows = (res as unknown as { rows: { rls: boolean }[] }).rows ?? [];
-    expect(rows).toHaveLength(1);
-    // The auth middleware checks every bearer token — including on routes that
-    // resolve the tenant FROM the token. A tenant-scoped policy would hide the
-    // row on those checkouts and the revocation would silently fail.
-    expect(rows[0].rls).toBe(false);
-  });
+      const rows = (res as unknown as { rows: { rls: boolean }[] }).rows ?? [];
+      expect(rows).toHaveLength(1);
+      // The auth middleware checks every bearer token — including on routes that
+      // resolve the tenant FROM the token. A tenant-scoped policy would hide the
+      // row on those checkouts and the revocation would silently fail.
+      expect(rows[0].rls).toBe(false);
+    },
+  );
 });
 
 describe("P0-004 · DbTokenDenylist (durable path, no Redis)", () => {
@@ -131,11 +136,7 @@ describe("P0-004 · DbTokenDenylist (durable path, no Redis)", () => {
 
     await durable.add(jti, 3600, { reason: "device-revoke", subject, tenantId });
 
-    const row = await db
-      .select()
-      .from(revokedTokens)
-      .where(eq(revokedTokens.jti, jti))
-      .limit(1);
+    const row = await db.select().from(revokedTokens).where(eq(revokedTokens.jti, jti)).limit(1);
 
     expect(row).toHaveLength(1);
     expect(row[0].reason).toBe("device-revoke");
@@ -208,7 +209,10 @@ describe("P0-004 · CompositeTokenDenylist (the wiring the container uses)", () 
 
   it("honours a revocation written while Redis was down (DB is the source of truth)", async () => {
     const fake = new FakeRedis();
-    const denylist = new CompositeTokenDenylist(new DbTokenDenylist(), new RedisTokenDenylist(fake as never));
+    const denylist = new CompositeTokenDenylist(
+      new DbTokenDenylist(),
+      new RedisTokenDenylist(fake as never),
+    );
     const jti = newJti();
 
     await denylist.add(jti, 3600);

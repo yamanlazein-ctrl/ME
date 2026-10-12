@@ -16,22 +16,22 @@ today. Gate IDs refer to the spec and PRD.
 
 ## 1. Engine conformance (developer machine, per stage)
 
-| Step | Command | Expected |
-|---|---|---|
-| Reference suite | `cd backend && npm test` | green on PostgreSQL (unchanged baseline) |
-| SQLite suite **(planned)** | `cd backend && DB_ENGINE=sqlite npm test` | the same tests green on SQLite |
-| Schema parity **(planned)** | `node backend/scripts/compare-schema-fingerprints.mjs` | only the allowed deltas from [data-model.md §1](./data-model.md) |
-| Tenant isolation **(planned)** | `DB_ENGINE=sqlite npx vitest run tests/tenant-isolation` | zero cross-tenant rows through every port |
+| Step                           | Command                                                  | Expected                                                         |
+| ------------------------------ | -------------------------------------------------------- | ---------------------------------------------------------------- |
+| Reference suite                | `cd backend && npm test`                                 | green on PostgreSQL (unchanged baseline)                         |
+| SQLite suite **(planned)**     | `cd backend && DB_ENGINE=sqlite npm test`                | the same tests green on SQLite                                   |
+| Schema parity **(planned)**    | `node backend/scripts/compare-schema-fingerprints.mjs`   | only the allowed deltas from [data-model.md §1](./data-model.md) |
+| Tenant isolation **(planned)** | `DB_ENGINE=sqlite npx vitest run tests/tenant-isolation` | zero cross-tenant rows through every port                        |
 
 ## 2. Accounting parity (AC-3, SC-001)
 
-| Step | Command | Expected |
-|---|---|---|
-| Run scenarios on both engines **(planned)** | `node scripts/parity/run.mjs --engine postgres --out ref/` then `--engine sqlite --out sut/` | both complete |
-| Compare **(planned)** | `node scripts/parity/diff.mjs ref/ sut/` | **empty diff**: statements, balances, ledger, cash box per currency (SYP/USD/EUR), stock, relationships, `cashbox_daily_balances` row-for-row |
-| Edge cases | included in the scenario set | rounding `x.xx5`, cancellations, purge (party and dye), merge, year close and reopen, concurrent same-roll and same-number |
-| Cancelled records (D-4) | included in the scenario set | a cancelled party is absent from every operational list, including "all", on **both** engines, and still resolves by id on its historical documents, statements and audit |
-| Schema parity | `compare-schema-fingerprints.mjs` **(planned)** | 53 tables, 73 enforced FKs identical. `party_balances` absent. The 24 non-enforced tenant references remain non-enforced. |
+| Step                                        | Command                                                                                      | Expected                                                                                                                                                                  |
+| ------------------------------------------- | -------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Run scenarios on both engines **(planned)** | `node scripts/parity/run.mjs --engine postgres --out ref/` then `--engine sqlite --out sut/` | both complete                                                                                                                                                             |
+| Compare **(planned)**                       | `node scripts/parity/diff.mjs ref/ sut/`                                                     | **empty diff**: statements, balances, ledger, cash box per currency (SYP/USD/EUR), stock, relationships, `cashbox_daily_balances` row-for-row                             |
+| Edge cases                                  | included in the scenario set                                                                 | rounding `x.xx5`, cancellations, purge (party and dye), merge, year close and reopen, concurrent same-roll and same-number                                                |
+| Cancelled records (D-4)                     | included in the scenario set                                                                 | a cancelled party is absent from every operational list, including "all", on **both** engines, and still resolves by id on its historical documents, statements and audit |
+| Schema parity                               | `compare-schema-fingerprints.mjs` **(planned)**                                              | 53 tables, 73 enforced FKs identical. `party_balances` absent. The 24 non-enforced tenant references remain non-enforced.                                                 |
 
 ## 3. Durability (SC-004)
 

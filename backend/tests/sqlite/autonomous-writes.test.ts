@@ -33,14 +33,17 @@ delete process.env.DESKTOP_SEED_PATH;
 const tenantId = randomUUID();
 let tx: typeof import("@/infrastructure/orm/sqlite/transaction.js");
 let runtime: typeof import("@/infrastructure/orm/sqlite/runtime.js");
-const count = async (q: ReturnType<typeof sql>) => Number(((await tx.sqliteDb().execute(q)).rows[0] as { n: number }).n);
+const count = async (q: ReturnType<typeof sql>) =>
+  Number(((await tx.sqliteDb().execute(q)).rows[0] as { n: number }).n);
 
 beforeAll(async () => {
   runtime = await import("@/infrastructure/orm/sqlite/runtime.js");
   tx = await import("@/infrastructure/orm/sqlite/transaction.js");
   await runtime.ensureSqliteRuntime();
   await tx.runInTransaction(async (t) => {
-    await t.execute(sql`INSERT INTO tenants (id, name, slug) VALUES (${tenantId}, 'Autonomous', 'autonomous')`);
+    await t.execute(
+      sql`INSERT INTO tenants (id, name, slug) VALUES (${tenantId}, 'Autonomous', 'autonomous')`,
+    );
   });
 }, 60_000);
 
@@ -55,7 +58,8 @@ const boom = () => {
 
 describe("autonomous writes — same durable effect as PostgreSQL's separate pooled connection", () => {
   it("1. a failed settlement still consumes its batch number (allocateDocumentNumberForDevice)", async () => {
-    const { allocateDocumentNumberForDevice } = await import("@/infrastructure/repositories/sqlite/helpers/documentNumbers.js");
+    const { allocateDocumentNumberForDevice } =
+      await import("@/infrastructure/repositories/sqlite/helpers/documentNumbers.js");
     const first = await allocateDocumentNumberForDevice("settlement", tenantId, null);
     let insideFailed: string | null = null;
     await expect(
@@ -71,21 +75,39 @@ describe("autonomous writes — same durable effect as PostgreSQL's separate poo
   });
 
   it("2. a sync conflict row recorded inside a transaction survives its rollback", async () => {
-    const { SqliteSyncConflictStore } = await import("@/infrastructure/repositories/sqlite/SqliteSyncConflictStore.js");
+    const { SqliteSyncConflictStore } =
+      await import("@/infrastructure/repositories/sqlite/SqliteSyncConflictStore.js");
     const store = new SqliteSyncConflictStore(tx.sqliteIndependentDb() as never);
     const opId = randomUUID();
     await expect(
       tx.withTenantTx(tenantId, async () => {
-        await store.insertOpen({ tenantId, opId, entityType: "invoice", entityId: randomUUID(), operation: "update", baseVersion: 1, serverVersion: 2, localIntentJson: "{}" });
+        await store.insertOpen({
+          tenantId,
+          opId,
+          entityType: "invoice",
+          entityId: randomUUID(),
+          operation: "update",
+          baseVersion: 1,
+          serverVersion: 2,
+          localIntentJson: "{}",
+        });
         boom();
       }),
     ).rejects.toThrow();
-    expect(await count(sql`SELECT count(*) n FROM sync_conflicts WHERE tenant_id = ${tenantId} AND op_id = ${opId}`)).toBe(1);
+    expect(
+      await count(
+        sql`SELECT count(*) n FROM sync_conflicts WHERE tenant_id = ${tenantId} AND op_id = ${opId}`,
+      ),
+    ).toBe(1);
   });
 
   it("3. a sync tombstone joins the caller's transaction: rolls back with it, commits alone outside one (S-02)", async () => {
-    const { SqliteSyncMaterializeStore } = await import("@/infrastructure/repositories/sqlite/SqliteSyncMaterializeStore.js");
-    const store = new SqliteSyncMaterializeStore(tx.sqliteIndependentDb() as never, tx.sqliteDb() as never);
+    const { SqliteSyncMaterializeStore } =
+      await import("@/infrastructure/repositories/sqlite/SqliteSyncMaterializeStore.js");
+    const store = new SqliteSyncMaterializeStore(
+      tx.sqliteIndependentDb() as never,
+      tx.sqliteDb() as never,
+    );
     const entityId = randomUUID();
     await expect(
       tx.withTenantTx(tenantId, async () => {
@@ -103,7 +125,9 @@ describe("autonomous writes — same durable effect as PostgreSQL's separate poo
     await expect(
       tx.runInTransaction(async () => {
         await tx.runInTransaction(async (inner) => {
-          await inner.execute(sql`INSERT INTO tenants (id, name, slug) VALUES (${randomUUID()}, 'nested', ${slug})`);
+          await inner.execute(
+            sql`INSERT INTO tenants (id, name, slug) VALUES (${randomUUID()}, 'nested', ${slug})`,
+          );
         });
         boom();
       }),
@@ -112,17 +136,31 @@ describe("autonomous writes — same durable effect as PostgreSQL's separate poo
   });
 
   it("5. no deadlock: autonomous writes inside a held gate complete; outside a transaction they commit at once", async () => {
-    const { allocateDocumentNumberForDevice } = await import("@/infrastructure/repositories/sqlite/helpers/documentNumbers.js");
+    const { allocateDocumentNumberForDevice } =
+      await import("@/infrastructure/repositories/sqlite/helpers/documentNumbers.js");
     const withDeadline = <T>(p: Promise<T>) =>
-      Promise.race([p, new Promise<never>((_, rej) => setTimeout(() => rej(new Error("DEADLOCK: gate never released")), 5_000))]);
+      Promise.race([
+        p,
+        new Promise<never>((_, rej) =>
+          setTimeout(() => rej(new Error("DEADLOCK: gate never released")), 5_000),
+        ),
+      ]);
     // inside a transaction (the gate is held by this async context)
-    const inside = await withDeadline(tx.withTenantTx(tenantId, () => allocateDocumentNumberForDevice("settlement", tenantId, null)));
+    const inside = await withDeadline(
+      tx.withTenantTx(tenantId, () =>
+        allocateDocumentNumberForDevice("settlement", tenantId, null),
+      ),
+    );
     expect(inside).toMatch(/-\d+$/);
     // 20 concurrent autonomous allocations + transactions interleaved: all finish, numbers unique
     const all = await withDeadline(
       Promise.all(
         Array.from({ length: 20 }, (_, i) =>
-          i % 2 ? allocateDocumentNumberForDevice("settlement", tenantId, null) : tx.withTenantTx(tenantId, () => allocateDocumentNumberForDevice("settlement", tenantId, null)),
+          i % 2
+            ? allocateDocumentNumberForDevice("settlement", tenantId, null)
+            : tx.withTenantTx(tenantId, () =>
+                allocateDocumentNumberForDevice("settlement", tenantId, null),
+              ),
         ),
       ),
     );

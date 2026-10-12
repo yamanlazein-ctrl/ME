@@ -121,7 +121,9 @@ export async function collectCounts(
   engine: "postgres" | "sqlite" = "postgres",
 ): Promise<{ counts: IntegrityCounts; databaseSizeBytes: number }> {
   const r = await db.query(
-    engine === "sqlite" ? SQLITE_COUNTS_SQL : `SELECT
+    engine === "sqlite"
+      ? SQLITE_COUNTS_SQL
+      : `SELECT
        (SELECT count(*)::int FROM tenants) AS tenants,
        (SELECT count(*)::int FROM users WHERE tenant_id = $1) AS users,
        (SELECT count(*)::int FROM parties WHERE tenant_id = $1) AS parties,
@@ -216,8 +218,7 @@ export async function verifyDataAgainstManifest(
     return;
   }
   if (manifest.resetAuthorized) return;
-  const expected =
-    manifest.restoreInProgress?.expectedCounts ?? manifest.lastKnownCounts;
+  const expected = manifest.restoreInProgress?.expectedCounts ?? manifest.lastKnownCounts;
   const { counts, databaseSizeBytes } = await collectCounts(db, tenantId, engine);
   const comparison = evaluateDrop(expected, counts);
   if (comparison.severe) {

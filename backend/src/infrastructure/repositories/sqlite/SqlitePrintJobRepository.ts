@@ -230,7 +230,11 @@ export class SqlitePrintJobRepository implements IPrintJobRepository {
   async rollNoOf(rollId: string, _ctx: TenantContext): Promise<string | undefined> {
     // Moved verbatim from print.route.ts (S1): `this.db` is the ambient proxy, so
     // this reads inside the caller's transaction — the roll is not committed yet.
-    const [row] = await this.db.select({ rollNo: rolls.rollNo }).from(rolls).where(eq(rolls.id, rollId)).limit(1);
+    const [row] = await this.db
+      .select({ rollNo: rolls.rollNo })
+      .from(rolls)
+      .where(eq(rolls.id, rollId))
+      .limit(1);
     return row?.rollNo;
   }
 
@@ -264,8 +268,11 @@ export class SqlitePrintJobRepository implements IPrintJobRepository {
         // Sync replay: reuse the origin PC's printed fabric/colour when present.
         const presetFab = input.preset?.resultFabricId;
         if (!resultFabricId && presetFab) {
-          const [f] = await tx.select({ id: fabrics.id }).from(fabrics)
-            .where(and(eq(fabrics.id, presetFab), eq(fabrics.tenantId, ctx.tenantId))).limit(1);
+          const [f] = await tx
+            .select({ id: fabrics.id })
+            .from(fabrics)
+            .where(and(eq(fabrics.id, presetFab), eq(fabrics.tenantId, ctx.tenantId)))
+            .limit(1);
           if (f) resultFabricId = f.id;
         }
         if (!resultFabricId) {
@@ -303,8 +310,11 @@ export class SqlitePrintJobRepository implements IPrintJobRepository {
           // reusing source colorId left the old fabric name on the new roll.
           const presetCol = input.preset?.resultColorId;
           const [presetColRow] = presetCol
-            ? await tx.select({ id: colors.id }).from(colors)
-                .where(and(eq(colors.id, presetCol), eq(colors.tenantId, ctx.tenantId))).limit(1)
+            ? await tx
+                .select({ id: colors.id })
+                .from(colors)
+                .where(and(eq(colors.id, presetCol), eq(colors.tenantId, ctx.tenantId)))
+                .limit(1)
             : [];
           if (presetColRow) {
             resultColorId = presetColRow.id;
@@ -374,8 +384,7 @@ export class SqlitePrintJobRepository implements IPrintJobRepository {
         const fxRate = input.exchangeRate;
         // Same FX rule as invoices: non-USD receive needs a manual rate.
         // Cross-currency also needs a rate when the non-USD side is involved.
-        const needsFx =
-          currency !== "USD" || (srcCur !== currency && srcCur !== "USD");
+        const needsFx = currency !== "USD" || (srcCur !== currency && srcCur !== "USD");
         // Soft FX (N8): do not hard-block receive when rate is missing —
         // convertAmount falls back to source price; FE asks for confirmation.
         if (srcCur !== currency && srcCur !== "USD" && currency !== "USD") {
@@ -421,7 +430,9 @@ export class SqlitePrintJobRepository implements IPrintJobRepository {
         // minimum 1 when anything was received.
         const resultPieces = Math.max(
           (input.receivedKg ?? 0) > 0 ? 1 : 0,
-          Math.round((Number(job.pieces) || 1) * ((input.receivedKg ?? 0) / (Number(job.quantityKg) || 1))),
+          Math.round(
+            (Number(job.pieces) || 1) * ((input.receivedKg ?? 0) / (Number(job.quantityKg) || 1)),
+          ),
         );
 
         const [newRoll] = await tx
@@ -570,7 +581,9 @@ export class SqlitePrintJobRepository implements IPrintJobRepository {
           newColorName: input.newColorName ?? job.newColorName,
           newColorCode: input.newColorCode ?? job.newColorCode,
           newSalePricePerKg:
-            input.newSalePricePerKg != null ? String(input.newSalePricePerKg) : job.newSalePricePerKg,
+            input.newSalePricePerKg != null
+              ? String(input.newSalePricePerKg)
+              : job.newSalePricePerKg,
           resultRollId,
           resultFabricId: resultFabricId ?? null,
           resultColorId: resultColorId ?? null,

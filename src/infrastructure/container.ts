@@ -97,6 +97,7 @@ import {
   ProfitApiService,
   ReturnApiService,
   SettingsApiService,
+  UsersApiService,
   StatementApiService,
   SyncConflictsApiService,
   VoucherApiService,
@@ -147,6 +148,7 @@ const orderRepo = new ApiOrderRepository(new OrderApiService(apiClient));
 const returnRepo = new ApiReturnRepository(new ReturnApiService(apiClient));
 const cashboxRepo = new ApiCashboxRepository(new CashboxApiService(apiClient));
 const settingsApi = new SettingsApiService(apiClient);
+const usersApi = new UsersApiService(apiClient);
 const statementApi = new StatementApiService(apiClient);
 const profitApi = new ProfitApiService(apiClient);
 const dashboardRepo = new ApiDashboardRepository(new DashboardApiService(apiClient));
@@ -282,6 +284,10 @@ export const container = {
 
   settings: {
     api: settingsApi,
+  },
+
+  users: {
+    api: usersApi,
   },
 
   fx: {

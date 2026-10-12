@@ -19,13 +19,21 @@ export interface IVoucherRepository {
   findById(id: string, ctx: TenantContext): Promise<VoucherData | null>;
   list(filter: VoucherFilter, ctx: TenantContext): Promise<PaginatedResult<VoucherData>>;
   create(input: CreateVoucherInput, ctx: TenantContext): Promise<VoucherData>;
-  cancel(id: string, cancelledBy: string, ctx: TenantContext, expectedVersion: number): Promise<VoucherData>;
+  cancel(
+    id: string,
+    cancelledBy: string,
+    ctx: TenantContext,
+    expectedVersion: number,
+  ): Promise<VoucherData>;
 
   // ── Multi-invoice settlement reads (moved from settleInvoicesUseCase, S1) ──
   /** Invoices selected for a settlement (tenant-scoped; any status). */
   settlementInvoices(ids: string[], ctx: TenantContext): Promise<SettlementInvoiceRow[]>;
   /** Active return totals per original invoice: SUM(ROUND(kg × price, 2)) per invoice. */
-  settlementReturnTotals(ids: string[], ctx: TenantContext): Promise<Array<{ invoiceId: string | null; total: number | string | null }>>;
+  settlementReturnTotals(
+    ids: string[],
+    ctx: TenantContext,
+  ): Promise<Array<{ invoiceId: string | null; total: number | string | null }>>;
   /** Allocate the SET batch number in its OWN transaction (autonomous commit, research I-2). */
   allocateSettlementBatchNumber(ctx: TenantContext): Promise<string>;
 }

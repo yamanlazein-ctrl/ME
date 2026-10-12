@@ -1,7 +1,15 @@
 /** PostgreSQL `sync_conflicts` SQL — moved verbatim from syncConflicts.ts (S1). */
 /** The shared pool from drizzle.ts (structural type: only drizzle.ts may import pg — rls-guard). */
-type QueryPool = { query: (text: string, params?: unknown[]) => Promise<{ rowCount: number | null; rows: Array<Record<string, unknown>> }> };
-import type { ISyncConflictStore, SyncConflictDbRow } from "../../application/ports/ISyncConflictStore.js";
+type QueryPool = {
+  query: (
+    text: string,
+    params?: unknown[],
+  ) => Promise<{ rowCount: number | null; rows: Array<Record<string, unknown>> }>;
+};
+import type {
+  ISyncConflictStore,
+  SyncConflictDbRow,
+} from "../../application/ports/ISyncConflictStore.js";
 
 export class PostgresSyncConflictStore implements ISyncConflictStore {
   constructor(private readonly pool: QueryPool) {}

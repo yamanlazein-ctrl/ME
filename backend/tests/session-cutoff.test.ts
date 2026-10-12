@@ -2,12 +2,18 @@ import { describe, expect, it, beforeAll, afterAll } from "vitest";
 import { SignJWT } from "jose";
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
-import { isTokenBeforeCutoff, revokeSubjectSessions } from "../src/infrastructure/auth/sessionCutoff.js";
+import {
+  isTokenBeforeCutoff,
+  revokeSubjectSessions,
+} from "../src/infrastructure/auth/sessionCutoff.js";
 import { db } from "../src/infrastructure/orm/drizzle.js";
 import { config } from "../src/infrastructure/config/env.js";
 import { createAuthMiddleware } from "../src/infrastructure/http/middleware/auth.middleware.js";
 import { JwtSigner } from "../src/infrastructure/auth/JwtSigner.js";
-import { runWithTenantContext, runWithPlatformContext } from "../src/infrastructure/orm/tenant-context.js";
+import {
+  runWithTenantContext,
+  runWithPlatformContext,
+} from "../src/infrastructure/orm/tenant-context.js";
 import type { Request, Response, NextFunction } from "express";
 import { databaseReachable, skipUnlessDatabase } from "./_helpers/requireDatabase.js";
 

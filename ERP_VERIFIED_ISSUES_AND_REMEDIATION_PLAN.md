@@ -21,23 +21,23 @@
 
 **حالة التنفيذ (2026-10-10 15:20):** 8 مهام نُفِّذت وتحقق منها بالتشغيل الفعلي؛ 2 موثّقة بعائق قرار؛ الباقي تحسينات مؤجلة.
 
-| # | العنوان | الخطورة | الحالة |
-|---|---|---|---|
-| F-01 | ازدواج مسار الهجرة | P1 | **VERIFIED RESOLVED** (قبل التنفيذ) |
-| F-02 | اختبارات مزامنة نصّية لا سلوكية | P1 | مُخفَّفة: +4 اختبارات سلوكية جديدة (T-11/T-05)؛ التحويل الكامل مؤجَّل |
-| F-03 | تطبيق الحذف+ال tombstone غير ذرّي | P2 | **FIXED & VERIFIED** (T-11) |
-| F-04 | `openLoopback` يمنح super-admin بلا مصادقة | P2 | **VERIFIED RESOLVED** (قبل التنفيذ — مقفل في الإنتاج افتراضيًا + DFP-030 + موثّق) |
-| F-05 | ازدواج قوائم invalidation | P2 | **FIXED & VERIFIED** (T-09) |
-| F-06 | نجاح معروض كخطأ (`toast.error`) | P3 | **FIXED & VERIFIED** (T-06) |
-| F-07 | `drizzle-kit` تبعية إنتاج | P3 | **FIXED & VERIFIED** (T-14) |
-| F-08 | تكرار `uuidFromString` | P4 | **GUARDED** (T-10 — حاجز تطابق) |
-| N-01 | لا فحص تكامل على SQLite (محرك الإنتاج) | P1 | **FIXED & VERIFIED** (T-05) |
-| N-02 | `createUpdaterArtifacts: false` يمنع أي تحديث | P1 | **BLOCKED — قرار مالك** (T-03: مفتاح توقيع + قرار نشر) |
-| N-03 | 5 سيناريوهات متانة NOT_RUN | P1 | **BLOCKED — يحتاج مثبِّتًا حقيقيًا** (T-04) |
-| N-04 | ثغرة critical في `proxy-addr` (تبعية إنتاج) | P1 | **FIXED & VERIFIED** (T-01) |
-| N-05 | حذف الصبغة معفى من المزامنة بلا حاجز أجهزة | P1 | **FIXED & VERIFIED** (T-02) |
-| N-06 | قائمة الطلبات تعرض 20 بلا ترقيم | P2 | **FIXED & VERIFIED** (T-08) |
-| N-07 | 29 استخدامًا لـ `as never` في حدود المزامنة | P2 | **PARTIALLY FIXED** (T-15: أخطر موقع — رقم الإصدار OCC)؛ 28 موقعًا متبقيًا |
+| #    | العنوان                                       | الخطورة | الحالة                                                                            |
+| ---- | --------------------------------------------- | ------- | --------------------------------------------------------------------------------- |
+| F-01 | ازدواج مسار الهجرة                            | P1      | **VERIFIED RESOLVED** (قبل التنفيذ)                                               |
+| F-02 | اختبارات مزامنة نصّية لا سلوكية               | P1      | مُخفَّفة: +4 اختبارات سلوكية جديدة (T-11/T-05)؛ التحويل الكامل مؤجَّل             |
+| F-03 | تطبيق الحذف+ال tombstone غير ذرّي             | P2      | **FIXED & VERIFIED** (T-11)                                                       |
+| F-04 | `openLoopback` يمنح super-admin بلا مصادقة    | P2      | **VERIFIED RESOLVED** (قبل التنفيذ — مقفل في الإنتاج افتراضيًا + DFP-030 + موثّق) |
+| F-05 | ازدواج قوائم invalidation                     | P2      | **FIXED & VERIFIED** (T-09)                                                       |
+| F-06 | نجاح معروض كخطأ (`toast.error`)               | P3      | **FIXED & VERIFIED** (T-06)                                                       |
+| F-07 | `drizzle-kit` تبعية إنتاج                     | P3      | **FIXED & VERIFIED** (T-14)                                                       |
+| F-08 | تكرار `uuidFromString`                        | P4      | **GUARDED** (T-10 — حاجز تطابق)                                                   |
+| N-01 | لا فحص تكامل على SQLite (محرك الإنتاج)        | P1      | **FIXED & VERIFIED** (T-05)                                                       |
+| N-02 | `createUpdaterArtifacts: false` يمنع أي تحديث | P1      | **BLOCKED — قرار مالك** (T-03: مفتاح توقيع + قرار نشر)                            |
+| N-03 | 5 سيناريوهات متانة NOT_RUN                    | P1      | **BLOCKED — يحتاج مثبِّتًا حقيقيًا** (T-04)                                       |
+| N-04 | ثغرة critical في `proxy-addr` (تبعية إنتاج)   | P1      | **FIXED & VERIFIED** (T-01)                                                       |
+| N-05 | حذف الصبغة معفى من المزامنة بلا حاجز أجهزة    | P1      | **FIXED & VERIFIED** (T-02)                                                       |
+| N-06 | قائمة الطلبات تعرض 20 بلا ترقيم               | P2      | **FIXED & VERIFIED** (T-08)                                                       |
+| N-07 | 29 استخدامًا لـ `as never` في حدود المزامنة   | P2      | **PARTIALLY FIXED** (T-15: أخطر موقع — رقم الإصدار OCC)؛ 28 موقعًا متبقيًا        |
 
 ---
 
@@ -48,7 +48,7 @@
 - **التصنيف:** Database / Upgrades · **الخطورة:** P1 (كانت) · **الحالة:** أُصلحت فعليًا
 - **ادعاء المرجع:** `db:migrate` معطوب بسبب `CREATE POLICY IF NOT EXISTS` في 0001، و`db:push` هو المسار الحقيقي (`idempotency-key.table.ts:21-29`).
 - **التحقق الفعلي:**
-  - `backend/package.json:16` — `db:push` أُعيد تسميته إلى **`db:push:scratch`** ويطبع تحذيرًا صريحًا: *"db:push is scratch-only. It does not emit check() constraints or triggers. Use db:migrate for any real database."*
+  - `backend/package.json:16` — `db:push` أُعيد تسميته إلى **`db:push:scratch`** ويطبع تحذيرًا صريحًا: _"db:push is scratch-only. It does not emit check() constraints or triggers. Use db:migrate for any real database."_
   - `backend/package.json:12` — `db:migrate` = `node scripts/migrate.mjs`، وهو مغلّف FIN-06 يقود مُهاجِر drizzle نفسه ويخرج برمز غير صفري عند الفشل (`backend/scripts/migrate.mjs:1-30`).
   - `backend/src/infrastructure/orm/migrations/meta/_journal.json` يحمل **102 مدخلًا** (كان 3 فقط حسب D-001) — ملفات الهجرة كلها مُسجَّلة الآن.
   - `backend/tests/migrations-journal-guard.test.ts` يثبّت التكافؤ بين القرص والسجل في الاتجاهين، مع توثيق السبب (`0046_user_pin_hash` كان مفقودًا على التثبيتات النظيفة).
@@ -224,29 +224,30 @@
 
 الترتيب: مخاطر البيانات والأمان → الأعطال الحرجة → الحماية بالاختبارات → الأسباب الجذرية → الترابط والأداء.
 
-| المهمة | العنوان | يعتمد على | الملفات | مخاطرة التنفيذ |
-|---|---|---|---|---|
-| **T-01** | ترقية `express` + `compression` (N-04) | — | `backend/package.json`, `backend/src/presentation/server.ts` | متوسطة |
-| **T-02** | حاجز أجهزة على حذف الصبغة (N-05) | — | `backend/src/presentation/routes/dye.route.ts` | منخفضة |
-| **T-03** | تفعيل إنتاج المُحدِّث (N-02) | — | `desktop/src-tauri/tauri.conf.json`, `.github/workflows/ci.yml` | منخفضة |
-| **T-04** | تشغيل 5 سيناريوهات متانة (N-03) | T-03 (للحزمة النهائية) | `docs/DURABILITY-PROOF-RESULTS.md` | منخفضة (تشغيلي) |
-| **T-05** | أداة فحص تكامل SQLite (N-01) | — | `backend/scripts/reconcile-integrity-sqlite.mjs` (جديد) | منخفضة |
-| **T-06** | `toast.success` بدل `toast.error` (F-06) | — | `useReturns.ts:84`, `useExpenses.ts:91`, `useInvoices.ts:161` | منخفضة جدًا |
-| **T-07** | اختبار RED: ترقيم الطلبات + إبطال `statement` | — | اختبارات جديدة | منخفضة |
-| **T-08** | ترقيم شاشة الطلبات (N-06) | T-07 | `useOrders.ts`, `orders.index.tsx` | منخفضة |
-| **T-09** | توحيد invalidation عبر الدالة المركزية (F-05) | T-07 | `useInvoices.ts`, `useExpenses.ts`, `useReturns.ts` | منخفضة |
-| **T-10** | اختبار تطابق `uuidFromString` (F-08) | — | اختبار جديد | منخفضة |
-| **T-11** | ذرّية delete+tombstone على الـ hub (F-03) | T-05 | `syncMaterialize.ts` + use-cases | متوسطة |
-| **T-12** | تحويل ثوابت المزامنة لسلوكية (F-02) | T-11 | `sync-invariants.test.ts` + جديدة | متوسطة |
-| **T-13** | تعطيل `openLoopback` افتراضيًا (F-04) | — | `super-admin-auth.middleware.ts` + توثيق | منخفضة |
-| **T-14** | `drizzle-kit` إلى devDependencies (F-07) | — | `package.json` (جذر) | منخفضة |
-| **T-15** | إزالة `as never` تدريجيًا (N-07) | T-12 | `syncMaterialize.ts`, `syncEnrollment.ts` | متوسطة |
+| المهمة   | العنوان                                       | يعتمد على              | الملفات                                                         | مخاطرة التنفيذ  |
+| -------- | --------------------------------------------- | ---------------------- | --------------------------------------------------------------- | --------------- |
+| **T-01** | ترقية `express` + `compression` (N-04)        | —                      | `backend/package.json`, `backend/src/presentation/server.ts`    | متوسطة          |
+| **T-02** | حاجز أجهزة على حذف الصبغة (N-05)              | —                      | `backend/src/presentation/routes/dye.route.ts`                  | منخفضة          |
+| **T-03** | تفعيل إنتاج المُحدِّث (N-02)                  | —                      | `desktop/src-tauri/tauri.conf.json`, `.github/workflows/ci.yml` | منخفضة          |
+| **T-04** | تشغيل 5 سيناريوهات متانة (N-03)               | T-03 (للحزمة النهائية) | `docs/DURABILITY-PROOF-RESULTS.md`                              | منخفضة (تشغيلي) |
+| **T-05** | أداة فحص تكامل SQLite (N-01)                  | —                      | `backend/scripts/reconcile-integrity-sqlite.mjs` (جديد)         | منخفضة          |
+| **T-06** | `toast.success` بدل `toast.error` (F-06)      | —                      | `useReturns.ts:84`, `useExpenses.ts:91`, `useInvoices.ts:161`   | منخفضة جدًا     |
+| **T-07** | اختبار RED: ترقيم الطلبات + إبطال `statement` | —                      | اختبارات جديدة                                                  | منخفضة          |
+| **T-08** | ترقيم شاشة الطلبات (N-06)                     | T-07                   | `useOrders.ts`, `orders.index.tsx`                              | منخفضة          |
+| **T-09** | توحيد invalidation عبر الدالة المركزية (F-05) | T-07                   | `useInvoices.ts`, `useExpenses.ts`, `useReturns.ts`             | منخفضة          |
+| **T-10** | اختبار تطابق `uuidFromString` (F-08)          | —                      | اختبار جديد                                                     | منخفضة          |
+| **T-11** | ذرّية delete+tombstone على الـ hub (F-03)     | T-05                   | `syncMaterialize.ts` + use-cases                                | متوسطة          |
+| **T-12** | تحويل ثوابت المزامنة لسلوكية (F-02)           | T-11                   | `sync-invariants.test.ts` + جديدة                               | متوسطة          |
+| **T-13** | تعطيل `openLoopback` افتراضيًا (F-04)         | —                      | `super-admin-auth.middleware.ts` + توثيق                        | منخفضة          |
+| **T-14** | `drizzle-kit` إلى devDependencies (F-07)      | —                      | `package.json` (جذر)                                            | منخفضة          |
+| **T-15** | إزالة `as never` تدريجيًا (N-07)              | T-12                   | `syncMaterialize.ts`, `syncEnrollment.ts`                       | متوسطة          |
 
 **المسار الحرج:** T-01 → T-07 → T-08/T-09 → T-12. تأخير T-01 يحجب كل ما بعده لأنه يمسّ `server.ts`.
 
 **متوازٍ آمن (حدود ملفات وبيانات مستقلة تمامًا):** {T-02, T-03, T-05, T-06, T-10, T-13, T-14}.
 
 **نقاط اتصال ساخنة (كاتب واحد فقط):**
+
 - `backend/package.json` — T-01 فقط
 - `dye.route.ts` — T-02 فقط
 - `useOrders.ts` + `orders.index.tsx` — T-08 فقط
@@ -259,16 +260,19 @@
 ## 4. ما يُصلَح بأمان / يحتاج اختبارات أولًا / يُحفَظ / لا يُعاد هيكلته
 
 **يُصلَح بأمان بلا اختبار مسبق (تغييرات معزولة وسطحية):**
+
 - T-06 (`toast.error` → `toast.success`) — عرض فقط، صفر منطق.
 - T-14 (نقل `drizzle-kit` إلى devDependencies) — لا استيراد لها في `src/`.
 - T-02 (حاجز 409) — يضيف رفضًا لمسار نادر، ولا يغيّر مسارًا ناجحًا قائمًا.
 
 **يحتاج اختبارًا أحمر قبل التعديل:**
+
 - T-08 وT-09 — يُكتب الاختبار، يُتأكَّد أنه يفشل، ثم يُصلَح.
 - T-11 (ذرّية) — يجب إثبات النافذة باختبار أولًا.
 - T-01 — يجب تشغيل الحزمة كاملة قبل وبعد.
 
 **يُحفَظ بلا مساس (الدليل أنه سليم):**
+
 - `backend/src/infrastructure/orm/sqlite/connection.ts` — `synchronous = FULL` + `journal_mode = WAL` + `foreign_keys = ON` عبر `setAndAssert` (فشل التثبيت قاتل).
 - طبقة `scaled-integer` money — تكافؤ دقيق مع PostgreSQL على 100,000 مدخل لكل مقياس (`decimal-types.test.ts`).
 - مشغّلات الإلحاق فقط على `ledger_entries` في SQLite (`0000_baseline.sql:1668, 1674`).
@@ -290,6 +294,7 @@
 `src/components/parties/PartyDetails.tsx` · `backend/src/infrastructure/repositories/*` (بحث `assertDayUnlocked`/`assertYearOpen`) · `backend/src/application/use-cases/sync/*.ts` (29 استخدام `as never`) · `.github/workflows/ci.yml` · `docs/*.md` · `src/presentation/hooks/*.ts`
 
 **لم يُفحص (بالسبب):**
+
 - `admin-dashboard/` — لوحة ترخيص منفصلة، خارج مسار ERP الأساسي، ولا دليل على تأثّرها بأي نتيجة.
 - `packages/shared` تفصيلًا — عُرفت سلطتها (`precision.ts`, `round2dp`) لكن لم تُقرأ بالكامل.
 - `desktop/src-tauri/src/hidden_process.rs`, `pipe.rs`, `supervisor.rs`, `health.rs` — لم تدخل في أي نتيجة.
@@ -297,6 +302,7 @@
 - `my-project/` — **محذوف من الشجرة** (لم يبقَ أثره).
 
 **لم يُشغَّل (بالسبب):**
+
 - بناء/تثبيت NSIS — يستغرق ترجمة Rust كاملة (~5 دقائق) وتثبيتًا فعليًا؛ كل ما يخص المثبِّت الحقيقي مصنَّف NOT VERIFIED.
 - Playwright E2E — يتطلب تشغيل الخادم.
 - اختبارات PostgreSQL (37 مُتخطّاة) — `ensure-test-db.mjs` يحتاج PostgreSQL محليًا؛ **النتيجة البيئية ليست نتيجة كود**.
@@ -304,16 +310,16 @@
 
 **ما شُغِّل فعليًا في هذه الجلسة (نتائج حقيقية):**
 
-| البوابة | النتيجة |
-|---|---|
-| frontend `npx vitest run` | 72 ملفًا — **312 ناجح / 1 فاشل**؛ الفاشل `dfp029-credentials.test.ts` مهلة 5s عند المسح الشامل، ونجح **4/4 منفردًا في 355ms** → بيئي لا عيب منتج |
-| backend `DB_ENGINE=sqlite npx vitest run` | 145 ملفًا — **815 ناجح / 37 مُتخطّى / 0 فاشل** |
-| `cargo test` (desktop/src-tauri) | **95 + 7 = 102 ناجح / 0 فاشل** |
-| `node --test desktop/scripts/*.test.mjs` | **27/27** |
-| `npx tsc --noEmit` (frontend) | **0 أخطاء** |
-| `cd backend && npx tsc --noEmit -p .` | **0 أخطاء** |
-| `npm audit` (backend) | critical 1 · high 7 · moderate 8 |
-| `npm audit` (جذر) | critical 1 · high 8 · moderate 5 |
+| البوابة                                   | النتيجة                                                                                                                                          |
+| ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| frontend `npx vitest run`                 | 72 ملفًا — **312 ناجح / 1 فاشل**؛ الفاشل `dfp029-credentials.test.ts` مهلة 5s عند المسح الشامل، ونجح **4/4 منفردًا في 355ms** → بيئي لا عيب منتج |
+| backend `DB_ENGINE=sqlite npx vitest run` | 145 ملفًا — **815 ناجح / 37 مُتخطّى / 0 فاشل**                                                                                                   |
+| `cargo test` (desktop/src-tauri)          | **95 + 7 = 102 ناجح / 0 فاشل**                                                                                                                   |
+| `node --test desktop/scripts/*.test.mjs`  | **27/27**                                                                                                                                        |
+| `npx tsc --noEmit` (frontend)             | **0 أخطاء**                                                                                                                                      |
+| `cd backend && npx tsc --noEmit -p .`     | **0 أخطاء**                                                                                                                                      |
+| `npm audit` (backend)                     | critical 1 · high 7 · moderate 8                                                                                                                 |
+| `npm audit` (جذر)                         | critical 1 · high 8 · moderate 5                                                                                                                 |
 
 **تنبيه تقني:** `npx vitest run --reporter=basic` يفشل عند الإقلاع بـ `ERR_LOAD_URL` (المُ reporter غير موجود في vitest v4) **ويخرج برمز 0 بصفر اختبارات** — فخ «نجاح كاذب». استُخدم `npx vitest run` المجرّد في كل النتائج أعلاه.
 
@@ -321,10 +327,10 @@
 
 ## 6. ملاحظة ختامية
 
-- ~~**لم يُعدَّل** أي ملف منتج أو تبعية أو قاعدة بيانات في هذه المهمة.~~ *(كانت حالة مرحلة التحقيق؛ انظر سجل التنفيذ §7)*
+- ~~**لم يُعدَّل** أي ملف منتج أو تبعية أو قاعدة بيانات في هذه المهمة.~~ _(كانت حالة مرحلة التحقيق؛ انظر سجل التنفيذ §7)_
 - الفصل بين «مُثبَت بالكود» و«NOT VERIFIED» محفوظ في كل بند.
 - المرجع `devin-ai.md` كان دقيقًا في 7 من 8 بنود؛ بنده الوحيد المُصلَح هو F-01 — وهذا يدل على أن مراجعة مستقلة للخطة القديمة كانت ضرورية.
-- لرفع الحالة إلى GREEN: T-01 + T-02 + T-05 + T-12 هي المهام الأربع التي تُغيّر الحكم فعليًا؛ الباقي تحسينات. *(T-01/T-02/T-05 نُفِّذت — انظر §7؛ T-12 مُغطاة جزئيًا باختبارات سلوكية جديدة)*
+- لرفع الحالة إلى GREEN: T-01 + T-02 + T-05 + T-12 هي المهام الأربع التي تُغيّر الحكم فعليًا؛ الباقي تحسينات. _(T-01/T-02/T-05 نُفِّذت — انظر §7؛ T-12 مُغطاة جزئيًا باختبارات سلوكية جديدة)_
 
 ---
 
@@ -335,44 +341,45 @@
 
 ### 7.1 ما نُفِّذ وتحقق منه
 
-| المهمة | البند | الإصلاح | دليل RED (فشل قبل الإصلاح) | دليل GREEN |
-|---|---|---|---|---|
-| **T-01** | N-04 | `npm audit fix` في backend: `express 4.21.2→4.22.3`، `proxy-addr 2.0.7→2.0.8` (critical)، `compression 1.8.1→1.8.2` (high) — كلها ضمن نطاق semver بلا كسر | `npm audit`: critical 1 + high 7 (قبل) | `npm audit --audit-level=high`: **صفر critical/high في الإنتاج** (المتبقي 6 high كلها dev عبر `tsc-alias` — أداة بناء لا تُشحَّن)؛ backend vitest 815/815؛ typecheck 0 أخطاء |
-| **T-02** | N-05 | حاجز في `dye.route.ts`: رفض 409 `SYNC_DEVICES_ENROLLED` ما دام جهاز مزامنة غير ملغى موجودًا؛ fail-closed عند تعذّر قراءة السجل. حقن `container.syncDeviceRepo` عبر `deps` اختياري | `dye-purge-sync-guard.test.ts`: الاستجابة كانت **200** والصبغة **حُذفت فعليًا** مع وجود جهاز مسجَّل | نفس الاختبار: 409 + الصبغة باقية؛ وبعد إلغاء التسجيل: 200 + حذف ناجح. `tsc` 0 أخطاء |
-| **T-06** | F-06 | `toast.error`→`toast.success` في 3 مسارات إلغاء ناجح: `useReturns.ts:84`، `useExpenses.ts:91`، `useInvoices.ts:161` | (تغيير عرضي صرف — أقل من عتبة TDD؛ أُثبت بالنص والجولة الكاملة) | frontend vitest 317/317 |
-| **T-08** | N-06 | `OrderFilter` صار يحمل `page` بدل `offset` (المرفوض خادميًا)؛ `orders.index.tsx` يمرر `page` ويعرض `إجمالي الطلبيات` + أزرار السابق/التالي + `hasNext` | `useOrders.test.tsx`: `tsc` رفض `{ page: 2 }` — «'page' does not exist in type 'OrderFilter'» | الاختبار 3/3 ناجحة (يمرير page، لا يرسل offset، queryKey يحمل الصفحة)؛ `tsc` 0 أخطاء |
-| **T-09** | F-05 | توحيد 6 مسارات يدوية عبر `invalidateFinancialViews`: invoice create/update/cancel + expense create/cancel + return create/cancel | `financial-invalidation.test.tsx`: إنشاء فاتورة لم يُبطل `statement` — «missing invalidation of [statement]» | نفس الاختبار: العائلات السبع كلها تُبطل؛ frontend 317/317 |
-| **T-10** | F-08 | حاجز تطابق نصّي بين نسختي `uuidFromString` (حاجز انحدار، ليس عيبًا) | (النسختان متطابقتان أصلًا — الغرض منع الانحراف) | `uuid-from-string-guard.test.ts`: 2/2 |
-| **T-05** | N-01 | أداة جديدة `backend/scripts/reconcile-integrity-sqlite.mjs`: نفس فحوص PG الأربعة (مخزون مقابل حركات، `cost_per_kg` فارغ، قيود يتيمة، sync ميت) على better-sqlite3 بوضع `readonly: true` | (أداة جديدة — الاختبار يثبت اكتشافها للفساد لا مجرد تشغيلها) | `reconcile-integrity-sqlite.test.ts`: 3/3 — قاعدة سليمة→PASS، انحراف مخزون مُفتعل→يُكتشف + exit 1، وحدة sync ميتة→تُكتشف |
-| **T-11** | F-03 | لفّ حذف الماستر + كتابة الـ tombstone في `runInTransaction` واحدة (محايد للمحركين عبر `orm/engine.ts`): فشل إما الكتابتين يتراجع بالاثنتين معًا | `master-delete-tombstone-atomicity.test.ts`: مع `sync_tombstones` معطوبة، القماش **حُذف رغم فشل الـ tombstone** (row = undefined) | نفس الاختبار: الحذف **يتراجع** والقماش باقٍ؛ اختبارات المزامنة 98/98 (sync-master-edit + sync-invariants + background-sync + sync-enrollment) |
-| **T-14** | F-07 | `drizzle-kit` من dependencies إلى devDependencies في جذر `package.json` (سطر واحد)؛ صفر استخدام لها في `src/` (تحقق grep) | (نقل تصنيفي — أُثبت بالبناء) | `vite build` نجح كاملًا بعد النقل (14:49) |
-| **T-15** | N-07 | إزالة أخطر `as never` (`syncMaterialize.ts:1431` — `.set({version: baseVersion+1})`، قلب محاذاة OCC): تفريع حسب الجدول الملموس بدل إسكات الاتحاد | (الإسكات كان يخفي خطأ الأنواع) | `tsc` 0 أخطاء؛ sync-master-edit 8/8 |
+| المهمة   | البند | الإصلاح                                                                                                                                                                                 | دليل RED (فشل قبل الإصلاح)                                                                                                        | دليل GREEN                                                                                                                                                                   |
+| -------- | ----- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **T-01** | N-04  | `npm audit fix` في backend: `express 4.21.2→4.22.3`، `proxy-addr 2.0.7→2.0.8` (critical)، `compression 1.8.1→1.8.2` (high) — كلها ضمن نطاق semver بلا كسر                               | `npm audit`: critical 1 + high 7 (قبل)                                                                                            | `npm audit --audit-level=high`: **صفر critical/high في الإنتاج** (المتبقي 6 high كلها dev عبر `tsc-alias` — أداة بناء لا تُشحَّن)؛ backend vitest 815/815؛ typecheck 0 أخطاء |
+| **T-02** | N-05  | حاجز في `dye.route.ts`: رفض 409 `SYNC_DEVICES_ENROLLED` ما دام جهاز مزامنة غير ملغى موجودًا؛ fail-closed عند تعذّر قراءة السجل. حقن `container.syncDeviceRepo` عبر `deps` اختياري       | `dye-purge-sync-guard.test.ts`: الاستجابة كانت **200** والصبغة **حُذفت فعليًا** مع وجود جهاز مسجَّل                               | نفس الاختبار: 409 + الصبغة باقية؛ وبعد إلغاء التسجيل: 200 + حذف ناجح. `tsc` 0 أخطاء                                                                                          |
+| **T-06** | F-06  | `toast.error`→`toast.success` في 3 مسارات إلغاء ناجح: `useReturns.ts:84`، `useExpenses.ts:91`، `useInvoices.ts:161`                                                                     | (تغيير عرضي صرف — أقل من عتبة TDD؛ أُثبت بالنص والجولة الكاملة)                                                                   | frontend vitest 317/317                                                                                                                                                      |
+| **T-08** | N-06  | `OrderFilter` صار يحمل `page` بدل `offset` (المرفوض خادميًا)؛ `orders.index.tsx` يمرر `page` ويعرض `إجمالي الطلبيات` + أزرار السابق/التالي + `hasNext`                                  | `useOrders.test.tsx`: `tsc` رفض `{ page: 2 }` — «'page' does not exist in type 'OrderFilter'»                                     | الاختبار 3/3 ناجحة (يمرير page، لا يرسل offset، queryKey يحمل الصفحة)؛ `tsc` 0 أخطاء                                                                                         |
+| **T-09** | F-05  | توحيد 6 مسارات يدوية عبر `invalidateFinancialViews`: invoice create/update/cancel + expense create/cancel + return create/cancel                                                        | `financial-invalidation.test.tsx`: إنشاء فاتورة لم يُبطل `statement` — «missing invalidation of [statement]»                      | نفس الاختبار: العائلات السبع كلها تُبطل؛ frontend 317/317                                                                                                                    |
+| **T-10** | F-08  | حاجز تطابق نصّي بين نسختي `uuidFromString` (حاجز انحدار، ليس عيبًا)                                                                                                                     | (النسختان متطابقتان أصلًا — الغرض منع الانحراف)                                                                                   | `uuid-from-string-guard.test.ts`: 2/2                                                                                                                                        |
+| **T-05** | N-01  | أداة جديدة `backend/scripts/reconcile-integrity-sqlite.mjs`: نفس فحوص PG الأربعة (مخزون مقابل حركات، `cost_per_kg` فارغ، قيود يتيمة، sync ميت) على better-sqlite3 بوضع `readonly: true` | (أداة جديدة — الاختبار يثبت اكتشافها للفساد لا مجرد تشغيلها)                                                                      | `reconcile-integrity-sqlite.test.ts`: 3/3 — قاعدة سليمة→PASS، انحراف مخزون مُفتعل→يُكتشف + exit 1، وحدة sync ميتة→تُكتشف                                                     |
+| **T-11** | F-03  | لفّ حذف الماستر + كتابة الـ tombstone في `runInTransaction` واحدة (محايد للمحركين عبر `orm/engine.ts`): فشل إما الكتابتين يتراجع بالاثنتين معًا                                         | `master-delete-tombstone-atomicity.test.ts`: مع `sync_tombstones` معطوبة، القماش **حُذف رغم فشل الـ tombstone** (row = undefined) | نفس الاختبار: الحذف **يتراجع** والقماش باقٍ؛ اختبارات المزامنة 98/98 (sync-master-edit + sync-invariants + background-sync + sync-enrollment)                                |
+| **T-14** | F-07  | `drizzle-kit` من dependencies إلى devDependencies في جذر `package.json` (سطر واحد)؛ صفر استخدام لها في `src/` (تحقق grep)                                                               | (نقل تصنيفي — أُثبت بالبناء)                                                                                                      | `vite build` نجح كاملًا بعد النقل (14:49)                                                                                                                                    |
+| **T-15** | N-07  | إزالة أخطر `as never` (`syncMaterialize.ts:1431` — `.set({version: baseVersion+1})`، قلب محاذاة OCC): تفريع حسب الجدول الملموس بدل إسكات الاتحاد                                        | (الإسكات كان يخفي خطأ الأنواع)                                                                                                    | `tsc` 0 أخطاء؛ sync-master-edit 8/8                                                                                                                                          |
 
 ### 7.2 الجولة الكاملة بعد كل الإصلاحات (نتائج فعلية)
 
-| البوابة | النتيجة |
-|---|---|
+| البوابة                                   | النتيجة                                                                         |
+| ----------------------------------------- | ------------------------------------------------------------------------------- |
 | backend `DB_ENGINE=sqlite npx vitest run` | **823 ناجح / 0 فاشل / 37 مُتخطّى** (148 ملفًا — كان 815/145؛ +8 اختبارات جديدة) |
-| frontend `npx vitest run` | **317 ناجح / 0 فاشل** (74 ملفًا — كان 313/72؛ +4 اختبارات) |
-| `npx tsc --noEmit` (frontend) | **0 أخطاء** |
-| `cd backend && npx tsc --noEmit -p .` | **0 أخطاء** |
-| `node --test desktop/scripts/*.test.mjs` | **27/27** |
-| `vite build` (بعد نقل drizzle-kit) | **نجح كاملًا** |
-| `npm audit` backend (تبعيات الإنتاج) | **صفر critical / صفر high** |
+| frontend `npx vitest run`                 | **317 ناجح / 0 فاشل** (74 ملفًا — كان 313/72؛ +4 اختبارات)                      |
+| `npx tsc --noEmit` (frontend)             | **0 أخطاء**                                                                     |
+| `cd backend && npx tsc --noEmit -p .`     | **0 أخطاء**                                                                     |
+| `node --test desktop/scripts/*.test.mjs`  | **27/27**                                                                       |
+| `vite build` (بعد نقل drizzle-kit)        | **نجح كاملًا**                                                                  |
+| `npm audit` backend (تبعيات الإنتاج)      | **صفر critical / صفر high**                                                     |
 
-*ملاحظة: اختبارات PG الحية (`dye-purge-cash-legs.test.ts` وغيرها) تفشل بيئيًا في هذه الجلسة
+_ملاحظة: اختبارات PG الحية (`dye-purge-cash-legs.test.ts` وغيرها) تفشل بيئيًا في هذه الجلسة
 لأن `backend/.env` يضبط `DATABASE_URL` والـ PostgreSQL المحلي متوقف (قرار مالك). حارس
 `FIN-09` في `tests/_helpers/requireDatabase.ts` يُفشلها **عمدًا** (fail-closed).
-تأكدنا أن الفشل سابق للتغييرات: نفس النتيجة على الشجرة النظيفة عبر `git stash` مؤقت.*
+تأكدنا أن الفشل سابق للتغييرات: نفس النتيجة على الشجرة النظيفة عبر `git stash` مؤقت._
 
 ### 7.3 البنود المتوقفة — العوائق الموثّقة
 
 **T-03 (N-02 — المحدِّث):** تفعيل `createUpdaterArtifacts: true` يتطلب:
+
 1. **مفتاح توقيع minisign خاصًا** (`tauri signer`) — سر تسليم لا يوجد في المستودع ولا يصح إنشاؤه
    تلقائيًا: مفتاح خاطئ = تحديث يرفضه كل تركيب قائم.
 2. **قرار نشر**: أين يستضاف `latest.json` والثنائي الموقَّع — `updates.motardfabrics.com` غير
    مهيأ، ولا خطوة CI نشر موجودة.
-هذا قرار مالك، لا إصلاح هندسي. (`write-latest-json.mjs` موجود وجاهز للاستخدام بعد القرار.)
+   هذا قرار مالك، لا إصلاح هندسي. (`write-latest-json.mjs` موجود وجاهز للاستخدام بعد القرار.)
 
 **T-04 (N-03 — المتانة):** السيناريوهات الخمسة (`DESKTOP-FORCE-KILL`, `DESKTOP-NODE-CHILD-KILL`,
 `DESKTOP-WIN-SHUTDOWN`, `DESKTOP-NORMAL-EXIT`, `NSIS-REINSTALL-LIVE`) تتطلب بناء مثبِّت 2.0.4

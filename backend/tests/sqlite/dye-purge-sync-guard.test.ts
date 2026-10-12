@@ -58,9 +58,8 @@ beforeAll(async () => {
   ).run(randomUUID(), TENANT);
 
   const { registerDyeRoutes } = await import("@/presentation/routes/dye.route.js");
-  const { SqliteSyncDeviceRepository } = await import(
-    "@/infrastructure/repositories/sqlite/SqliteSyncDeviceRepository.js"
-  );
+  const { SqliteSyncDeviceRepository } =
+    await import("@/infrastructure/repositories/sqlite/SqliteSyncDeviceRepository.js");
   const txMod = await import("@/infrastructure/orm/sqlite/transaction.js");
   const db = txMod.sqliteIndependentDb() as never;
 
@@ -107,9 +106,8 @@ describe("dye purge sync-enrollment guard (N-05)", () => {
     // Enroll one device directly through the repository.
     const txMod2 = await import("@/infrastructure/orm/sqlite/transaction.js");
     const db2 = txMod2.sqliteIndependentDb() as never;
-    const { SqliteSyncDeviceRepository } = await import(
-      "@/infrastructure/repositories/sqlite/SqliteSyncDeviceRepository.js"
-    );
+    const { SqliteSyncDeviceRepository } =
+      await import("@/infrastructure/repositories/sqlite/SqliteSyncDeviceRepository.js");
     const repo = new SqliteSyncDeviceRepository(db2);
     await repo.registerOrTouch({
       tenantId: TENANT,
@@ -121,7 +119,9 @@ describe("dye purge sync-enrollment guard (N-05)", () => {
       label: "جهاز الاختبار",
     } as never);
 
-    const fabrics = w.prepare(`SELECT id, name FROM fabrics WHERE tenant_id = ?`).all(TENANT) as Array<{ id: string; name: string }>;
+    const fabrics = w
+      .prepare(`SELECT id, name FROM fabrics WHERE tenant_id = ?`)
+      .all(TENANT) as Array<{ id: string; name: string }>;
     const fabric = fabrics[0];
     expect(fabric).toBeTruthy();
 
@@ -142,16 +142,17 @@ describe("dye purge sync-enrollment guard (N-05)", () => {
   it("allows the purge once no non-revoked device remains", async () => {
     const txMod3 = await import("@/infrastructure/orm/sqlite/transaction.js");
     const db3 = txMod3.sqliteIndependentDb() as never;
-    const { SqliteSyncDeviceRepository } = await import(
-      "@/infrastructure/repositories/sqlite/SqliteSyncDeviceRepository.js"
-    );
+    const { SqliteSyncDeviceRepository } =
+      await import("@/infrastructure/repositories/sqlite/SqliteSyncDeviceRepository.js");
     const repo = new SqliteSyncDeviceRepository(db3);
     const devices = await repo.listForTenant(TENANT as never);
     for (const d of devices) {
       await repo.setRevoked(TENANT as never, d.id, true, "test teardown");
     }
 
-    const fabrics = w.prepare(`SELECT id, name FROM fabrics WHERE tenant_id = ?`).all(TENANT) as Array<{ id: string; name: string }>;
+    const fabrics = w
+      .prepare(`SELECT id, name FROM fabrics WHERE tenant_id = ?`)
+      .all(TENANT) as Array<{ id: string; name: string }>;
     const fabric = fabrics[0];
     expect(fabric).toBeTruthy();
 

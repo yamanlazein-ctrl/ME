@@ -678,9 +678,7 @@
   },
   {
     "body": {
-      "affectedCurrencies": [
-        "SYP"
-      ],
+      "affectedCurrencies": ["SYP"],
       "affectedInvoices": [
         {
           "id": "#00235",
@@ -743,9 +741,7 @@
         "usd": 0
       },
       "colorsDeleted": 1,
-      "currenciesRebuilt": [
-        "SYP"
-      ],
+      "currenciesRebuilt": ["SYP"],
       "fabricId": "#00232",
       "invoiceLinesDeleted": 4,
       "invoicesDeleted": 4,

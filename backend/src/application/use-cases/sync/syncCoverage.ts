@@ -88,10 +88,12 @@ export const SYNC_COVERAGE: Record<string, CoverageEntry> = {
   // device; replicating it as a per-device document would let two devices
   // close independently. Devices converge instead by pulling `financial_years`.
   "POST /financial-years/begin-counting": {
-    exempt: "year-end control plane; devices converge by pulling financial_years, not by replaying a close",
+    exempt:
+      "year-end control plane; devices converge by pulling financial_years, not by replaying a close",
   },
   "POST /financial-years/close": {
-    exempt: "year-end control plane; whole-tenant freeze, hub-authoritative, never replayed per device",
+    exempt:
+      "year-end control plane; whole-tenant freeze, hub-authoritative, never replayed per device",
   },
   "POST /financial-years/reopen": {
     exempt: "year-end control plane; audited admin action, hub-authoritative",
@@ -101,7 +103,8 @@ export const SYNC_COVERAGE: Record<string, CoverageEntry> = {
   // counts/post, and that variance is already covered by the roll/ledger
   // entries it produces.
   "POST /financial-years/counts": {
-    exempt: "count sheet is per-operator working state; the posted adjustment flows through stock_movements + ledger_entries",
+    exempt:
+      "count sheet is per-operator working state; the posted adjustment flows through stock_movements + ledger_entries",
   },
   // A posted variance changes the shelf: replayed on every device as a roll delta.
   "POST /financial-years/counts/post": { sync: { entityType: "roll", operation: "adjust" } },
@@ -115,24 +118,34 @@ export const SYNC_COVERAGE: Record<string, CoverageEntry> = {
   },
 
   // ---- party merge: refused (409) while sync is enabled; standalone only
-  "POST /parties/merge": { exempt: "standalone-only party merge; route returns 409 when sync enqueue is enabled" },
+  "POST /parties/merge": {
+    exempt: "standalone-only party merge; route returns 409 when sync enqueue is enabled",
+  },
   // ---- local integrity control plane (not business state)
-  "POST /integrity/accept-baseline": { exempt: "admin data-integrity baseline control, not a business document" },
-  "POST /integrity/authorize-reset": { exempt: "admin reset authorization control, not a business document" },
+  "POST /integrity/accept-baseline": {
+    exempt: "admin data-integrity baseline control, not a business document",
+  },
+  "POST /integrity/authorize-reset": {
+    exempt: "admin reset authorization control, not a business document",
+  },
   // ---- transport (never business state) ----
   "PUT /sync/hub-config": { exempt: "local hub pairing, not a business document" },
   "POST /sync/hub-pair": { exempt: "local hub pairing, not a business document" },
   "POST /sync/hub/test": { exempt: "read-only hub ping" },
   "POST /sync/hub/connect": { exempt: "local hub pairing, not a business document" },
   "DELETE /sync/hub": { exempt: "local hub pairing, not a business document" },
-  "POST /sync/hub/enroll": { exempt: "local hub pairing (enrollment code), not a business document" },
+  "POST /sync/hub/enroll": {
+    exempt: "local hub pairing (enrollment code), not a business document",
+  },
   "POST /sync/hub/devices/:deviceId/revoke": { exempt: "proxy to the hub device registry" },
   "POST /sync/hub/devices/:deviceId/reinstate": { exempt: "proxy to the hub device registry" },
   "POST /sync/hub/enrollment-code": { exempt: "proxy to the hub enrollment code" },
   "DELETE /sync/hub/enrollment-code": { exempt: "proxy to the hub enrollment code" },
   "POST /sync/enrollment-code": { exempt: "hub device enrollment code, not a business document" },
   "DELETE /sync/enrollment-code": { exempt: "hub device enrollment code, not a business document" },
-  "POST /sync/devices/self/credential": { exempt: "hub device credential, not a business document" },
+  "POST /sync/devices/self/credential": {
+    exempt: "hub device credential, not a business document",
+  },
   "POST /api/sync/enroll": { exempt: "hub device enrollment (registry is hub-authoritative)" },
   "POST /api/sync/device-token": { exempt: "hub device token exchange, read-only for data" },
   "POST /sync/activity": { exempt: "ephemeral presence feed on the hub, not a business document" },
@@ -171,21 +184,28 @@ export const SYNC_COVERAGE: Record<string, CoverageEntry> = {
   "POST /api/setup/wizard/review": { exempt: "one-time provisioning, pre-tenant" },
   "POST /api/setup/wizard/complete": { exempt: "one-time provisioning, pre-tenant" },
   "POST /api/setup/wizard/restore": {
-    exempt: "first-run restore of a local backup (no users yet); restored sync outbox/inbox/cursor carry the sync state",
+    exempt:
+      "first-run restore of a local backup (no users yet); restored sync outbox/inbox/cursor carry the sync state",
   },
   // ---- first-run restore of a full backup (the text-only-IPC hand-off fix)
   "POST /api/setup/wizard/restore-path": {
-    exempt: "first-run restore taken by path from the shell (backup bytes never cross the IPC bridge); restored sync outbox/inbox/cursor carry the sync state",
+    exempt:
+      "first-run restore taken by path from the shell (backup bytes never cross the IPC bridge); restored sync outbox/inbox/cursor carry the sync state",
   },
   "POST /api/backup/restore-path": {
     exempt: "admin restore of a full backup taken by path from the shell; no sync unit is produced",
   },
   // ---- desktop runtime hand-off (specs/001 US3/US4; local process control, not business state) ----
   "POST /api/desktop/runtime/pre-update-backup": {
-    exempt: "device-local backup file taken before an update; the backup is a local artifact, never a business document",
+    exempt:
+      "device-local backup file taken before an update; the backup is a local artifact, never a business document",
   },
-  "POST /api/desktop/runtime/shutdown": { exempt: "device-local process shutdown for the update hand-off" },
-  "POST /api/desktop/runtime/drive-token": { exempt: "device-local, memory-only Google access token hand-off from the shell" },
+  "POST /api/desktop/runtime/shutdown": {
+    exempt: "device-local process shutdown for the update hand-off",
+  },
+  "POST /api/desktop/runtime/drive-token": {
+    exempt: "device-local, memory-only Google access token hand-off from the shell",
+  },
   // ---- device-local operational mirrors ----
   "POST /notifications": { exempt: "device-local mirror; sync rejections notify per device" },
   "POST /notifications/:id/read": { exempt: "device-local read state" },
@@ -210,6 +230,7 @@ export const SYNC_COVERAGE: Record<string, CoverageEntry> = {
     exempt: "device-local archive worker trigger; primary-device gated, produces no sync units",
   },
   "POST /drive/queue/:id/retry": {
-    exempt: "device-local upload queue retry; the queue is per-device runtime state, not company data",
+    exempt:
+      "device-local upload queue retry; the queue is per-device runtime state, not company data",
   },
 };

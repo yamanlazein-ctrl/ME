@@ -6,11 +6,7 @@
 import { describe, it, expect, beforeAll } from "vitest";
 import { randomUUID } from "node:crypto";
 import { eq, and, sql } from "drizzle-orm";
-import {
-  convertForSettlement,
-  computeBaseEquivalent,
-  round2dp,
-} from "@erp/shared";
+import { convertForSettlement, computeBaseEquivalent, round2dp } from "@erp/shared";
 import { db } from "@/infrastructure/orm/drizzle.js";
 import { tenants } from "@/infrastructure/orm/schemas/tenant.table.js";
 import { parties } from "@/infrastructure/orm/schemas/party.table.js";
@@ -303,7 +299,10 @@ describe("cross-currency voucher settlement (DB)", () => {
 
     const cancelled = await repo.cancel(recB.id, ctx.userId, ctx, recB.version);
     expect(cancelled.status).toBe("cancelled");
-    const [after] = await db.select({ paid: invoices.paid }).from(invoices).where(eq(invoices.id, invB));
+    const [after] = await db
+      .select({ paid: invoices.paid })
+      .from(invoices)
+      .where(eq(invoices.id, invB));
     expect(Number(after.paid)).toBe(0);
 
     const debtsAfter = await profit.getSummary(
@@ -340,7 +339,10 @@ describe("cross-currency voucher settlement (DB)", () => {
       ctx,
     );
 
-    const [inv] = await db.select({ paid: invoices.paid }).from(invoices).where(eq(invoices.id, invId));
+    const [inv] = await db
+      .select({ paid: invoices.paid })
+      .from(invoices)
+      .where(eq(invoices.id, invId));
     expect(Number(inv.paid)).toBe(1_000_000);
 
     const stmt = await statements.getStatement(
@@ -424,7 +426,10 @@ describe("cross-currency voucher settlement (DB)", () => {
       ctx,
     );
 
-    const [inv] = await db.select({ paid: invoices.paid }).from(invoices).where(eq(invoices.id, invId));
+    const [inv] = await db
+      .select({ paid: invoices.paid })
+      .from(invoices)
+      .where(eq(invoices.id, invId));
     expect(Number(inv.paid)).toBe(40);
 
     const debts = await profit.getSummary({ fromDate: "2026-09-16", toDate: "2026-09-16" }, ctx);

@@ -36,7 +36,9 @@ describe("DFP-038 refresh token policy", () => {
   it("access and refresh tokens share the same 365-day default", () => {
     const src = readFileSync(resolve(here, "../src/infrastructure/config/env.ts"), "utf8");
     expect(src).toMatch(
-      new RegExp(`JWT_EXPIRY_MS:\\s*z\\.coerce\\.number\\(\\)\\.default\\((${ONE_YEAR_LITERAL})\\)`),
+      new RegExp(
+        `JWT_EXPIRY_MS:\\s*z\\.coerce\\.number\\(\\)\\.default\\((${ONE_YEAR_LITERAL})\\)`,
+      ),
     );
     // A refresh token shorter than the access token would make the access
     // token's 365 days pointless — the refresh would be the real ceiling.

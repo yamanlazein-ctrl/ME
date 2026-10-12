@@ -119,7 +119,9 @@ export function archiveFileName(input: FileStemInput, ext: string): string {
 /** True when `candidate` differs only by a trailing `-N` collision suffix. */
 export function isCollisionSuffixOf(candidate: string, base: string): boolean {
   if (candidate === base) return true;
-  const m = new RegExp(`^${base.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}-([2-9]\\d*)$`).exec(candidate);
+  const m = new RegExp(`^${base.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}-([2-9]\\d*)$`).exec(
+    candidate,
+  );
   return m !== null;
 }
 

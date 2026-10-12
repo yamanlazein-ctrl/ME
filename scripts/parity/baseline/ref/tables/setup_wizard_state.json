@@ -1,12 +1,7 @@
 [
   {
     "completed_at": "<ts>",
-    "completed_steps": [
-      "activate",
-      "company",
-      "admin",
-      "review"
-    ],
+    "completed_steps": ["activate", "company", "admin", "review"],
     "created_at": "<ts>",
     "current_step": "done",
     "data": {

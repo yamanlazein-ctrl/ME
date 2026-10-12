@@ -21,7 +21,9 @@ const env = Object.fromEntries(
 );
 
 if (!process.argv.includes("--force")) {
-  console.error("This script resets a production admin password. Pass --force and set ADMIN_BOOTSTRAP_PASSWORD to proceed.");
+  console.error(
+    "This script resets a production admin password. Pass --force and set ADMIN_BOOTSTRAP_PASSWORD to proceed.",
+  );
   process.exit(1);
 }
 const DATABASE_URL = env.DATABASE_URL;

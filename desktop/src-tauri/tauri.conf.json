@@ -31,9 +31,7 @@
   },
   "bundle": {
     "active": true,
-    "targets": [
-      "nsis"
-    ],
+    "targets": ["nsis"],
     "windows": {
       "webviewInstallMode": {
         "type": "embedBootstrapper"
@@ -41,10 +39,7 @@
       "nsis": {
         "installMode": "currentUser",
         "installerHooks": "./windows/hooks.nsh",
-        "languages": [
-          "Arabic",
-          "English"
-        ],
+        "languages": ["Arabic", "English"],
         "displayLanguageSelector": false,
         "compression": "lzma",
         "customLanguageFiles": {
@@ -53,10 +48,7 @@
         }
       }
     },
-    "icon": [
-      "icons/icon.ico",
-      "icons/icon.png"
-    ],
+    "icon": ["icons/icon.ico", "icons/icon.png"],
     "createUpdaterArtifacts": false,
     "resources": {
       "resources/node.exe": "node.exe",
@@ -67,9 +59,7 @@
   "plugins": {
     "updater": {
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDg0QzhCQTU2RDdDMzIzQTEKUldTaEk4UFhWcnJJaE1vNVJGMnlyWWlya2NtcVhXSVlqWStkNGNJa2J2cE1MNXdTMUFtOW5PNnAK",
-      "endpoints": [
-        "https://updates.motardfabrics.com/desktop/latest.json"
-      ],
+      "endpoints": ["https://updates.motardfabrics.com/desktop/latest.json"],
       "windows": {
         "installMode": "passive"
       }

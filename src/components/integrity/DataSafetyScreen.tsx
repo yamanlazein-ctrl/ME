@@ -64,8 +64,8 @@ export function DataSafetyScreen({ client }: { client: BaseHttpClient }) {
       <div style={{ maxWidth: 560, width: "100%" }}>
         <h1 style={{ fontSize: 28, marginBottom: 8 }}>وضع أمان البيانات</h1>
         <p style={{ opacity: 0.85, lineHeight: 1.6 }}>
-          تم اكتشاف انخفاض حاد في صفوف الأعمال مقارنة بآخر تحقق. الكتابة موقوفة حتى
-          تُستعاد نسخة احتياطية أو يقبل المسؤول الوضع الحالي كخط أساس جديد.
+          تم اكتشاف انخفاض حاد في صفوف الأعمال مقارنة بآخر تحقق. الكتابة موقوفة حتى تُستعاد نسخة
+          احتياطية أو يقبل المسؤول الوضع الحالي كخط أساس جديد.
         </p>
         {status.reason && (
           <p style={{ marginTop: 12 }}>

@@ -47,7 +47,9 @@ async function readLive(client) {
   }
   const indexes = {};
   for (const row of (
-    await client.query(`SELECT indexname, tablename, indexdef FROM pg_indexes WHERE schemaname='public'`)
+    await client.query(
+      `SELECT indexname, tablename, indexdef FROM pg_indexes WHERE schemaname='public'`,
+    )
   ).rows) {
     indexes[row.indexname] = { table: row.tablename, definition: normalizeDef(row.indexdef) };
   }
@@ -96,7 +98,9 @@ async function readLive(client) {
     await client.query(`
       SELECT p.proname, p.prosrc FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname='public'`)
   ).rows) {
-    functions[row.proname] = createHash("sha256").update(row.prosrc ?? "").digest("hex");
+    functions[row.proname] = createHash("sha256")
+      .update(row.prosrc ?? "")
+      .digest("hex");
   }
   const enums = {};
   for (const row of (
@@ -108,9 +112,9 @@ async function readLive(client) {
     enums[row.typname] ??= [];
     enums[row.typname].push(row.enumlabel);
   }
-  const extensions = (
-    await client.query(`SELECT extname FROM pg_extension ORDER BY 1`)
-  ).rows.map((r) => r.extname);
+  const extensions = (await client.query(`SELECT extname FROM pg_extension ORDER BY 1`)).rows.map(
+    (r) => r.extname,
+  );
 
   let journalIdx = 0;
   const journalPath = join(MIGRATIONS, "meta", "_journal.json");
@@ -119,7 +123,18 @@ async function readLive(client) {
     journalIdx = j.entries?.at(-1)?.idx ?? 0;
   }
 
-  const body = { journalIdx, tables, indexes, constraints, policies, rls, triggers, functions, enums, extensions };
+  const body = {
+    journalIdx,
+    tables,
+    indexes,
+    constraints,
+    policies,
+    rls,
+    triggers,
+    functions,
+    enums,
+    extensions,
+  };
   const sha256 = createHash("sha256").update(JSON.stringify(body)).digest("hex");
   return { ...body, generatedAt: new Date().toISOString(), sha256 };
 }

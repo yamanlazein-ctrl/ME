@@ -8,12 +8,12 @@ Monetary columns were stored as PostgreSQL `real` (IEEE-754 single precision).
 This is exact for integers only to 16,777,216; Syrian Pound amounts routinely
 exceed this. Verified drift while stored as `real`:
 
-| true | stored | error |
-|------|--------|-------|
-| 20,000,001 | 20,000,000 | −1 |
-| 45,678,903 | 45,678,904 | +1 |
-| 137,500,007 | 137,500,000 | −7 |
-| 260,000,005 | 260,000,000 | −5 |
+| true        | stored      | error |
+| ----------- | ----------- | ----- |
+| 20,000,001  | 20,000,000  | −1    |
+| 45,678,903  | 45,678,904  | +1    |
+| 137,500,007 | 137,500,000 | −7    |
+| 260,000,005 | 260,000,000 | −5    |
 
 `SUM(real)` also returns `real`, so running balances accumulate in single
 precision and a trial balance never balances exactly.

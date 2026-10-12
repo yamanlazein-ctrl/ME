@@ -20,6 +20,12 @@ export interface ISyncConflictStore {
     localIntentJson: string;
   }): Promise<number>;
   list(tenantId: string, openOnly: boolean, limit: number): Promise<SyncConflictDbRow[]>;
-  resolve(tenantId: string, conflictId: string, decision: string, byUserId: string | null, note: string | null): Promise<SyncConflictDbRow | null>;
+  resolve(
+    tenantId: string,
+    conflictId: string,
+    decision: string,
+    byUserId: string | null,
+    note: string | null,
+  ): Promise<SyncConflictDbRow | null>;
   resolveByOp(tenantId: string, opId: string, reason: string): Promise<void>;
 }

@@ -31,7 +31,9 @@ let fmod: typeof import("../src/infrastructure/googledrive/folderOrganizer.js");
 let emod: typeof import("../src/infrastructure/googledrive/exporters.js");
 
 beforeAll(async () => {
-  await import("../src/infrastructure/orm/sqlite/runtime.js").then((m) => m.ensureSqliteRuntime({}));
+  await import("../src/infrastructure/orm/sqlite/runtime.js").then((m) =>
+    m.ensureSqliteRuntime({}),
+  );
   const rt = (await import("../src/infrastructure/orm/sqlite/runtime.js")).getSqliteRuntime()!;
   raw = rt.conns.writer;
   writerDb = rt.conns.writerDb;
@@ -55,9 +57,11 @@ function makeDeps(drive: unknown, localDeviceId: string | null) {
 describe("monthly archive job", () => {
   it("catches up only months that have documents (business dates)", async () => {
     // Invoices in 2026-09 and current month; nothing older.
-    raw.prepare(
-      `INSERT INTO parties (id, tenant_id, kind, name, currency) VALUES (?, ?, 'customer', 'C', 'SYP')`,
-    ).run(randomUUID(), tenantId);
+    raw
+      .prepare(
+        `INSERT INTO parties (id, tenant_id, kind, name, currency) VALUES (?, ?, 'customer', 'C', 'SYP')`,
+      )
+      .run(randomUUID(), tenantId);
     const pid = raw.prepare(`SELECT id FROM parties LIMIT 1`).get() as { id: string };
     const stmt = raw.prepare(
       `INSERT INTO invoices (id, tenant_id, number, type, date, party_id, party_type, subtotal, total, paid, status)
@@ -75,14 +79,18 @@ describe("monthly archive job", () => {
 
   it("secondary device cannot upload: fail-closed with reason NOT_COORDINATOR", async () => {
     // Enable archive with a DIFFERENT coordinator.
-    raw.prepare(`UPDATE settings SET drive = ?`).run(JSON.stringify({ archiveEnabled: true, coordinatorDeviceId: "device-primary" }));
+    raw
+      .prepare(`UPDATE settings SET drive = ?`)
+      .run(JSON.stringify({ archiveEnabled: true, coordinatorDeviceId: "device-primary" }));
     const deps = makeDeps(null, "device-secondary");
     const report = await job.runArchivePass(deps, "manual");
     expect(report.skipped).toBe("NOT_COORDINATOR");
   });
 
   it("assigned primary with Drive available processes the queue (mocked Drive)", async () => {
-    raw.prepare(`UPDATE settings SET drive = ?`).run(JSON.stringify({ archiveEnabled: true, coordinatorDeviceId: "device-a" }));
+    raw
+      .prepare(`UPDATE settings SET drive = ?`)
+      .run(JSON.stringify({ archiveEnabled: true, coordinatorDeviceId: "device-a" }));
     // Scripted Drive: folders map + uploads record.
     const folders = new Map<string, string>();
     const uploaded: Array<{ parentId: string; name: string }> = [];
@@ -152,8 +160,19 @@ describe("monthly archive job", () => {
       JSON.stringify({
         version: 1,
         entries: [
-          { path: good, kind: "automatic", createdAt: "2026-10-10T10:00:00Z", status: "VERIFIED", sha256: createHash("sha256").update("zip-bytes").digest("hex") },
-          { path: join(sandbox, "wip.zip"), kind: "automatic", createdAt: "2026-10-10T11:00:00Z", status: "CREATING" },
+          {
+            path: good,
+            kind: "automatic",
+            createdAt: "2026-10-10T10:00:00Z",
+            status: "VERIFIED",
+            sha256: createHash("sha256").update("zip-bytes").digest("hex"),
+          },
+          {
+            path: join(sandbox, "wip.zip"),
+            kind: "automatic",
+            createdAt: "2026-10-10T11:00:00Z",
+            status: "CREATING",
+          },
         ],
       }),
     );
@@ -172,9 +191,14 @@ describe("monthly archive job", () => {
     const folders = new fmod.FolderOrganizer(db, null as never);
     const first = new qmod.UploadQueue(db, null as never, folders);
     await first.enqueue({
-      entityType: "invoice", entityId: "restart-1", businessDate: "2026-10-05",
-      section: "salesInvoices", fileName: "2026-10-05_R-1.csv", mimeType: "text/csv",
-      content: "restart-test", deviceId: "device-a",
+      entityType: "invoice",
+      entityId: "restart-1",
+      businessDate: "2026-10-05",
+      section: "salesInvoices",
+      fileName: "2026-10-05_R-1.csv",
+      mimeType: "text/csv",
+      content: "restart-test",
+      deviceId: "device-a",
     });
     const second = new qmod.UploadQueue(db, null as never, folders);
     // Drain until we find our job (older pending jobs from earlier tests come first).
@@ -182,7 +206,10 @@ describe("monthly archive job", () => {
     for (let i = 0; i < 50; i++) {
       const c = await second.claim("device-a");
       if (!c) break;
-      if (c.fileName === "2026-10-05_R-1.csv") { found = c.fileName; break; }
+      if (c.fileName === "2026-10-05_R-1.csv") {
+        found = c.fileName;
+        break;
+      }
     }
     expect(found).toBe("2026-10-05_R-1.csv");
   });

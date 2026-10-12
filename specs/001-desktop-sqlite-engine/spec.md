@@ -103,7 +103,7 @@ Owner decisions on the findings (final, 2026-10-03):
   **before** the parity reference is frozen. They are the only behavior changes this work makes to shared or cloud
   code paths. No other cloud behavior changes are permitted (FR-070).
 
-## User Scenarios & Testing *(mandatory)*
+## User Scenarios & Testing _(mandatory)_
 
 Actors: **Store user** (owner/accountant/warehouse/viewer roles working in the desktop app),
 **Installer/updater** (the person installing, updating, uninstalling or reinstalling the app),
@@ -345,7 +345,7 @@ truncation.
   show which database, data root and tenant it is connected to so the cause can be diagnosed (ID-7);
   the root cause is investigated, not assumed fixed (§9).
 
-## Requirements *(mandatory)*
+## Requirements _(mandatory)_
 
 ### Functional Requirements
 
@@ -617,7 +617,7 @@ truncation.
   (FR-025). Each MUST be applied to and verified on the PostgreSQL build before the parity reference is
   frozen. Every other shared-code change MUST leave cloud behavior unchanged (FR-006).
 
-### Key Entities *(include if feature involves data)*
+### Key Entities _(include if feature involves data)_
 
 All 54 entities in `ERP_GENOME.md` are in scope and preserved; the groups below are those this
 feature touches most directly.
@@ -652,7 +652,7 @@ feature touches most directly.
 - **Installation identity / data identity**: The pair used to decide reuse vs new install vs
   mismatch; stored separately from business data (OQ-10).
 
-## Success Criteria *(mandatory)*
+## Success Criteria _(mandatory)_
 
 ### Measurable Outcomes
 
@@ -721,17 +721,17 @@ feature touches most directly.
 All twelve are resolved as of 2026-10-03: owner decisions for OQ-1–6, 11 and 12, and repository
 findings for OQ-7–10 (details in Clarifications).
 
-| ID | Question | Resolution | Affects |
-|---|---|---|---|
-| OQ-1 | Supported Windows versions | Windows 10 22H2 + Windows 11, 64-bit | FR-063, SC-003 |
-| OQ-2 | Restart bound | 3 restarts per rolling 5 minutes | FR-004, SC-011 |
-| OQ-3 | Backup compatibility window | All SQLite-era versions; PostgreSQL-era rejected | FR-050 |
-| OQ-4 | Test volumes and targets | 100k gate (<2 s lists, <10 s full statement) + 1M soak | FR-064, SC-008 |
-| OQ-5 | Periodic backup | Daily, keep 7, AppData + Documents mirror | FR-045, FR-047, SC-012 |
-| OQ-6 | Restore-test frequency | Weekly in-app + per-release clean VM | FR-048, SC-012 |
-| OQ-7 | `ledger_entry_archive` role | Supplementary, unused (finding) | FR-011 |
-| OQ-8 | U-1 / U-2 causes | Mechanisms found; incident causes unproven (finding) | FR-067 |
-| OQ-9 | One backend for both? | Yes, one codebase and entry point (finding) | FR-006 |
-| OQ-10 | Identity definition | Documented (finding); reinstall policy decided (D-1) | FR-027–FR-029 |
-| OQ-11 | Pagination track | Before acceptance; all capped paths | FR-025 |
-| OQ-12 | Restore on synced device | Auto re-download; review only on conflict | FR-060 |
+| ID    | Question                    | Resolution                                             | Affects                |
+| ----- | --------------------------- | ------------------------------------------------------ | ---------------------- |
+| OQ-1  | Supported Windows versions  | Windows 10 22H2 + Windows 11, 64-bit                   | FR-063, SC-003         |
+| OQ-2  | Restart bound               | 3 restarts per rolling 5 minutes                       | FR-004, SC-011         |
+| OQ-3  | Backup compatibility window | All SQLite-era versions; PostgreSQL-era rejected       | FR-050                 |
+| OQ-4  | Test volumes and targets    | 100k gate (<2 s lists, <10 s full statement) + 1M soak | FR-064, SC-008         |
+| OQ-5  | Periodic backup             | Daily, keep 7, AppData + Documents mirror              | FR-045, FR-047, SC-012 |
+| OQ-6  | Restore-test frequency      | Weekly in-app + per-release clean VM                   | FR-048, SC-012         |
+| OQ-7  | `ledger_entry_archive` role | Supplementary, unused (finding)                        | FR-011                 |
+| OQ-8  | U-1 / U-2 causes            | Mechanisms found; incident causes unproven (finding)   | FR-067                 |
+| OQ-9  | One backend for both?       | Yes, one codebase and entry point (finding)            | FR-006                 |
+| OQ-10 | Identity definition         | Documented (finding); reinstall policy decided (D-1)   | FR-027–FR-029          |
+| OQ-11 | Pagination track            | Before acceptance; all capped paths                    | FR-025                 |
+| OQ-12 | Restore on synced device    | Auto re-download; review only on conflict              | FR-060                 |

@@ -37,7 +37,7 @@ export function mapDashboardResponse(raw: BackendDashboardResponse): DashboardDa
       openedAt: raw.cashbox?.openingDate ?? "",
     },
     cashBalance: {
-      syp: raw.cashbox?.balanceByCurrency?.SYP ?? (raw.cashbox?.balance ?? 0),
+      syp: raw.cashbox?.balanceByCurrency?.SYP ?? raw.cashbox?.balance ?? 0,
       usd: raw.cashbox?.balanceByCurrency?.USD ?? 0,
     },
     cashBalanceByCurrency: raw.cashbox?.balanceByCurrency ?? {},

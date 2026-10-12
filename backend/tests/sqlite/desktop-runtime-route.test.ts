@@ -31,20 +31,31 @@ let runtime: Runtime;
 const post = (path: string, token?: string) =>
   fetch(`${base}${path}`, {
     method: "POST",
-    headers: { "content-type": "application/json", ...(token ? { "x-motard-runtime-token": token } : {}) },
+    headers: {
+      "content-type": "application/json",
+      ...(token ? { "x-motard-runtime-token": token } : {}),
+    },
     body: "{}",
   });
 
 beforeAll(async () => {
-  prev = { deploy: process.env.DESKTOP_DEPLOY, key: process.env.APP_MASTER_KEY, inst: process.env.MOTARD_INSTALLATION_ID };
+  prev = {
+    deploy: process.env.DESKTOP_DEPLOY,
+    key: process.env.APP_MASTER_KEY,
+    inst: process.env.MOTARD_INSTALLATION_ID,
+  };
   process.env.DESKTOP_DEPLOY = "true";
   process.env.MOTARD_INSTALLATION_ID = randomUUID(); // a desktop database is created FOR an installation
   process.env.APP_MASTER_KEY = MASTER;
   runtime = await import("@/infrastructure/orm/sqlite/runtime.js");
   await runtime.ensureSqliteRuntime();
-  const w = runtime.getSqliteRuntime()!.conns.writer as unknown as import("better-sqlite3").Database;
-  w.prepare(`INSERT INTO tenants (id, name, slug) VALUES (?, 'شركة التحديث', 'upd')`).run(randomUUID());
-  const { registerDesktopRuntimeRoutes } = await import("@/presentation/routes/desktopRuntime.route.js");
+  const w = runtime.getSqliteRuntime()!.conns
+    .writer as unknown as import("better-sqlite3").Database;
+  w.prepare(`INSERT INTO tenants (id, name, slug) VALUES (?, 'شركة التحديث', 'upd')`).run(
+    randomUUID(),
+  );
+  const { registerDesktopRuntimeRoutes } =
+    await import("@/presentation/routes/desktopRuntime.route.js");
   const app = express();
   app.use(express.json());
   const router = express.Router();
@@ -87,14 +98,18 @@ describe("desktop runtime endpoints (T083)", () => {
   it("pre-update-backup creates a VERIFIED backup of kind pre-update", async () => {
     const r = await post("/api/desktop/runtime/pre-update-backup", TOKEN);
     expect(r.status).toBe(200);
-    const body = (await r.json()) as { ok: boolean; path: string; sha256: string; sizeBytes: number };
+    const body = (await r.json()) as {
+      ok: boolean;
+      path: string;
+      sha256: string;
+      sizeBytes: number;
+    };
     expect(body.ok).toBe(true);
     expect(existsSync(body.path)).toBe(true);
     expect(statSync(body.path).size).toBe(body.sizeBytes);
     const { readRegistry } = await import("@/infrastructure/backup/backupRegistry.js");
     const entry = readRegistry(root).entries.find((e: { path: string }) => e.path === body.path) as
-      | { status: string; kind: string }
-      | undefined;
+      { status: string; kind: string } | undefined;
     expect(entry?.status).toBe("VERIFIED");
     expect(entry?.kind).toBe("pre-update");
   });
@@ -105,7 +120,10 @@ describe("desktop runtime endpoints (T083)", () => {
     const send = (body: unknown, token?: string) =>
       fetch(`${base}/api/desktop/runtime/drive-token`, {
         method: "POST",
-        headers: { "content-type": "application/json", ...(token ? { "x-motard-runtime-token": token } : {}) },
+        headers: {
+          "content-type": "application/json",
+          ...(token ? { "x-motard-runtime-token": token } : {}),
+        },
         body: JSON.stringify(body),
       });
     const exp = Math.floor(Date.now() / 1000) + 3600;

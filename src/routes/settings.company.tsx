@@ -1,16 +1,15 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { PageCard } from "@/components/layout/PageCard";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { FormField } from "@/components/common/FormField";
 import { Button } from "@/components/ui/button";
-import { useSettings, settings, updateCompany } from "@/presentation/hooks/useSettings";
-import { useState } from "react";
+import { useSettingsDraft, updateCompany } from "@/presentation/hooks/useSettings";
 
 export const Route = createFileRoute("/settings/company")({ component: CompanyPage });
 
 function CompanyPage() {
-  useSettings();
-  const [c, setC] = useState({ ...settings.company });
+  // F-018: seeded from the server's data, not the built-in defaults; save waits for it.
+  const [c, setC, ready] = useSettingsDraft("company");
   return (
     <PageCard
       title="معلومات الشركة"
@@ -52,7 +51,11 @@ function CompanyPage() {
         </div>
       </div>
       <div className="mt-4 flex justify-end">
-        <Button onClick={() => updateCompany(c)} className="bg-primary text-primary-foreground">
+        <Button
+          onClick={() => updateCompany(c)}
+          disabled={!ready}
+          className="bg-primary text-primary-foreground"
+        >
           حفظ
         </Button>
       </div>
@@ -60,11 +63,14 @@ function CompanyPage() {
   );
 }
 
+// C1-09: the label names its input (FormField wires a single Input child by itself).
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <div>
-      <Label className="mb-1 block text-[11px] font-semibold text-muted-foreground">{label}</Label>
+    <FormField
+      label={label}
+      labelClassName="mb-1 block text-[11px] font-semibold text-muted-foreground"
+    >
       {children}
-    </div>
+    </FormField>
   );
 }

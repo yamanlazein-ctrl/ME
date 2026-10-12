@@ -80,16 +80,14 @@ describe("exact invoice closure on payment", () => {
       await db
         .insert(tenants)
         .values({ id: tenantId, name: "Closure Tenant", slug: `clo-${tenantId.slice(0, 8)}` });
-      await db
-        .insert(parties)
-        .values({
-          id: customerId,
-          tenantId,
-          name: "Cust",
-          code: "C1",
-          kind: "customer",
-          currency: "SYP",
-        });
+      await db.insert(parties).values({
+        id: customerId,
+        tenantId,
+        name: "Cust",
+        code: "C1",
+        kind: "customer",
+        currency: "SYP",
+      });
     } catch {
       reachable = false;
     }

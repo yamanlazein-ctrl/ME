@@ -111,9 +111,9 @@ describe("gapless invoice numbering", () => {
 
     // Failed saves (entry invoice against a customer) roll the allocation back.
     for (let i = 0; i < 3; i++) {
-      await expect(repo.create(await entryInput(customerId, "supplier"), ctx)).rejects.toBeInstanceOf(
-        BusinessRuleError,
-      );
+      await expect(
+        repo.create(await entryInput(customerId, "supplier"), ctx),
+      ).rejects.toBeInstanceOf(BusinessRuleError);
     }
     expect(await peekNextDocumentNumber("invoice_entry", tenantId)).toBe(`ENT-${year}-0002`);
 

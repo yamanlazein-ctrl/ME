@@ -37,6 +37,7 @@ import { container } from "@/infrastructure/container";
 import { toast } from "sonner";
 
 import { localToday } from "@/lib/localDate";
+import { round2dp } from "@erp/shared";
 const _nextFormId = 0;
 function toMockPatch(patch: Record<string, unknown>): Record<string, unknown> {
   const out: Record<string, unknown> = {};
@@ -79,7 +80,9 @@ export function PartyListPage({
   description: string;
 }) {
   useInventory();
-  useParties();
+  // The cache refreshes by replacing the objects INSIDE the same `customers`/`suppliers` array, so its
+  // length does not change on an edit or a balance update — `partiesVersion` does.
+  const partiesVersion = useParties();
   const loadState = getPartiesLoadState();
   const navigate = useNavigate();
 
@@ -144,9 +147,7 @@ export function PartyListPage({
         const blocked =
           (impact.data?.counts?.returns ?? 0) > 0 || (impact.data?.counts?.orders ?? 0) > 0;
         if (blocked) {
-          toast.error(
-            `لا يمكن حذف «${p.name}» — ألغِ المرتجعات والطلبيات المفتوحة أولاً.`,
-          );
+          toast.error(`لا يمكن حذف «${p.name}» — ألغِ المرتجعات والطلبيات المفتوحة أولاً.`);
           break;
         }
         if (isSup) await deleteSupplier(p.id, Boolean(impact.data?.requiresCascade), version);
@@ -188,7 +189,7 @@ export function PartyListPage({
       return arCollator.compare(a.name ?? "", b.name ?? "");
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [q, status, credit, list.length]);
+  }, [q, status, credit, list, partiesVersion]);
 
   const total = filtered.length;
   const pageCount = Math.max(1, Math.ceil(total / pageSize));
@@ -227,10 +228,10 @@ export function PartyListPage({
           p.phone ?? "",
           p.city ?? "",
           String(s.invoicesCount),
-          String(Math.round(s.totalAmount)),
-          String(Math.round(s.totalPaid)),
-          String(Math.round(s.remaining)),
-          String(Math.round(s.creditLimit)),
+          String(round2dp(s.totalAmount)),
+          String(round2dp(s.totalPaid)),
+          String(round2dp(s.remaining)),
+          String(round2dp(s.creditLimit)),
           s.lastDate ?? "",
           (p.status ?? "active") === "active" ? "نشط" : "موقوف",
         ];
@@ -342,9 +343,13 @@ export function PartyListPage({
                   >
                     {/* D-3 / FR-068: a failed or unfinished load is never shown as "no results". */}
                     {loadState.status === "error" ? (
-                      <div role="alert" className="flex flex-col items-center gap-3 text-destructive">
+                      <div
+                        role="alert"
+                        className="flex flex-col items-center gap-3 text-destructive"
+                      >
                         <span>
-                          {isSup ? "تعذّر تحميل قائمة الموردين." : "تعذّر تحميل قائمة العملاء."} {loadState.message}
+                          {isSup ? "تعذّر تحميل قائمة الموردين." : "تعذّر تحميل قائمة العملاء."}{" "}
+                          {loadState.message}
                         </span>
                         <Button size="sm" variant="outline" onClick={() => void retryPartiesLoad()}>
                           إعادة المحاولة
@@ -451,7 +456,10 @@ export function PartyListPage({
                       }`}
                     >
                       {s.byCurrency.length > 0 ? (
-                        <div className="flex flex-col gap-0.5 items-start" data-testid="party-balances">
+                        <div
+                          className="flex flex-col gap-0.5 items-start"
+                          data-testid="party-balances"
+                        >
                           {s.byCurrency.map(([ccy, b]) => (
                             <span key={ccy}>
                               {ccy === "USD" ? "USD: " : ccy === "SYP" ? "SYP: " : `${ccy}: `}

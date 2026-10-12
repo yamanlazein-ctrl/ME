@@ -28,35 +28,60 @@ const refreshTemplate = process.argv.includes("--refresh-template");
 const keep = process.argv.includes("--keep");
 
 const runs = {};
-for (const [engine, basePort] of [["postgres", 8200], ["sqlite", 8210]]) {
+for (const [engine, basePort] of [
+  ["postgres", 8200],
+  ["sqlite", 8210],
+]) {
   console.log(`[sync-wire] ${engine} desktops → PostgreSQL hub`);
-  const r = await runAc8({ deviceEngine: engine, basePort, refreshTemplate: refreshTemplate && engine === "postgres", keep });
+  const r = await runAc8({
+    deviceEngine: engine,
+    basePort,
+    refreshTemplate: refreshTemplate && engine === "postgres",
+    keep,
+  });
   const tables = {};
-  for (const node of ["hub", "a", "b"]) for (const [t, rows] of Object.entries(r.tables[node])) tables[`${node}.${t}`] = rows;
+  for (const node of ["hub", "a", "b"])
+    for (const [t, rows] of Object.entries(r.tables[node])) tables[`${node}.${t}`] = rows;
   // Proxy ports, hub URLs and request ids differ between the two runs by construction.
-  const scrub = (v) => JSON.parse(JSON.stringify(v).replace(/127\.0\.0\.1:\d+/g, "127.0.0.1:<port>"));
+  const scrub = (v) =>
+    JSON.parse(JSON.stringify(v).replace(/127\.0\.0\.1:\d+/g, "127.0.0.1:<port>"));
   // The hub reachability probe (`probeHubReachable`, TTL-cached) fires on wall-clock age, not on a
   // sync step: whether one lands between two pushes is timing on either engine. It is not sync wire.
   const wire = r.wire.filter((x) => x.path !== "/api/health/live");
-  const canon = canonicalize({ transcript: { "01-wire": scrub(wire), "02-scenario": scrub(r.log), "03-conflicts": scrub(r.conflicts) }, tables });
+  const canon = canonicalize({
+    transcript: {
+      "01-wire": scrub(wire),
+      "02-scenario": scrub(r.log),
+      "03-conflicts": scrub(r.conflicts),
+    },
+    tables,
+  });
   // Activity notifications are a device-local feed whose ids nothing references; tables are read
   // without ORDER BY, so their physical order (PG heap vs SQLite primary key) is not behavior.
   // Compare them as a multiset.
   for (const k of Object.keys(canon.tables)) {
     if (!k.endsWith(".notifications")) continue;
-    canon.tables[k] = canon.tables[k].map((row) => ({ ...row, id: "<row>" })).sort((x, y) => (JSON.stringify(x) < JSON.stringify(y) ? -1 : 1));
+    canon.tables[k] = canon.tables[k]
+      .map((row) => ({ ...row, id: "<row>" }))
+      .sort((x, y) => (JSON.stringify(x) < JSON.stringify(y) ? -1 : 1));
   }
   const out = join(outRoot, engine);
   rmSync(out, { recursive: true, force: true });
   mkdirSync(join(out, "api"), { recursive: true });
   mkdirSync(join(out, "tables"), { recursive: true });
-  for (const [k, v] of Object.entries(canon.transcript)) writeFileSync(join(out, "api", `${k}.json`), JSON.stringify(v, null, 2));
-  for (const [k, v] of Object.entries(canon.tables)) writeFileSync(join(out, "tables", `${k}.json`), JSON.stringify(v, null, 2));
+  for (const [k, v] of Object.entries(canon.transcript))
+    writeFileSync(join(out, "api", `${k}.json`), JSON.stringify(v, null, 2));
+  for (const [k, v] of Object.entries(canon.tables))
+    writeFileSync(join(out, "tables", `${k}.json`), JSON.stringify(v, null, 2));
   runs[engine] = { exchanges: r.wire.length, out };
   console.log(`[sync-wire] ${engine}: ${r.wire.length} exchanges captured → ${out}`);
 }
 
-const d = spawnSync(process.execPath, [join(here, "diff.mjs"), runs.postgres.out, runs.sqlite.out], { encoding: "utf8" });
+const d = spawnSync(
+  process.execPath,
+  [join(here, "diff.mjs"), runs.postgres.out, runs.sqlite.out],
+  { encoding: "utf8" },
+);
 writeFileSync(join(outRoot, "diff.txt"), (d.stdout ?? "") + (d.stderr ?? ""));
 process.stdout.write(d.stdout ?? "");
 process.stderr.write(d.stderr ?? "");

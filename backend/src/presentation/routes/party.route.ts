@@ -29,9 +29,11 @@ import {
 } from "../../application/use-cases/parties/purgePartyCascadeUseCase.js";
 import type { ISyncOutboxRepository } from "../../application/ports/ISyncOutboxRepository.js";
 import {
+  enqueueInvoiceCancel,
   enqueueMasterCreate,
   enqueueMasterDelete,
   enqueueMasterUpdate,
+  enqueueVoucherCancel,
   changedFields,
   isSyncEnqueueEnabled,
   opIdFromRequest,
@@ -150,6 +152,10 @@ export function registerPartyRoutes(
     "/customers",
     auth,
     accountantAndUp,
+    // The web client REPLAYS a keyed POST after an ambiguous network error (BaseHttpClient), trusting
+    // the server to de-duplicate — without this a retry created a second customer and a second opening
+    // journal. Not `required`: un-keyed callers keep working, they just get no replay protection.
+    idempotency("POST"),
     validateBody(createPartySchema.omit({ kind: true })),
     async (req: Request, res: Response) => createPartyAndEnqueue(req, res, "customer"),
   );
@@ -158,6 +164,10 @@ export function registerPartyRoutes(
     "/suppliers",
     auth,
     accountantAndUp,
+    // The web client REPLAYS a keyed POST after an ambiguous network error (BaseHttpClient), trusting
+    // the server to de-duplicate — without this a retry created a second supplier and a second opening
+    // journal. Not `required`: un-keyed callers keep working, they just get no replay protection.
+    idempotency("POST"),
     validateBody(createPartySchema.omit({ kind: true })),
     async (req: Request, res: Response) => createPartyAndEnqueue(req, res, "supplier"),
   );
@@ -327,7 +337,12 @@ export function registerPartyRoutes(
     const input = body<Record<string, unknown>>(req) as Record<string, unknown>;
     const expectedVersion = req.body?.expectedVersion;
     if (typeof expectedVersion !== "number") {
-      return res.status(400).json({ code: "EXPECTED_VERSION_REQUIRED", message: "الإصدار المتوقع (expectedVersion) مطلوب للتحديث/الإلغاء" });
+      return res
+        .status(400)
+        .json({
+          code: "EXPECTED_VERSION_REQUIRED",
+          message: "الإصدار المتوقع (expectedVersion) مطلوب للتحديث/الإلغاء",
+        });
     }
     const syncEnabled = Boolean(syncOutboxRepo && isSyncEnqueueEnabled());
     const runUpdate = async () => {
@@ -372,9 +387,15 @@ export function registerPartyRoutes(
     const rawExpected = req.body?.expectedVersion ?? req.query?.expectedVersion;
     const expectedVersion = typeof rawExpected === "number" ? rawExpected : Number(rawExpected);
     if (!Number.isFinite(expectedVersion)) {
-      return res.status(400).json({ code: "EXPECTED_VERSION_REQUIRED", message: "الإصدار المتوقع (expectedVersion) مطلوب للتحديث/الإلغاء" });
+      return res
+        .status(400)
+        .json({
+          code: "EXPECTED_VERSION_REQUIRED",
+          message: "الإصدار المتوقع (expectedVersion) مطلوب للتحديث/الإلغاء",
+        });
     }
-    const confirmCascade = req.body?.confirmCascade === true || req.query?.confirmCascade === "true";
+    const confirmCascade =
+      req.body?.confirmCascade === true || req.query?.confirmCascade === "true";
 
     // Cascade path: cancel related invoices/vouchers via existing accounting,
     // then soft-cancel the party. OCC is re-checked on the fresh party version.
@@ -386,33 +407,46 @@ export function registerPartyRoutes(
         });
       }
       if (!(await guardWithPreOperationBackup(res, "party-purge"))) return; // BK-4 (T097)
-      const purged = await purgePartyCascadeUseCase({
-        partyId: id,
-        ctx: c,
-        expectedVersion,
-        partyRepo,
-        invoiceRepo,
-        voucherRepo,
-      });
+      // H-10: the cascade and its sync units commit together — an enqueue failure used to be logged
+      // and swallowed after the purge had committed, so the hub never learned of it. Every cancelled
+      // document gets its own unit (before the party's), so the hub can replay the whole cascade.
+      const purgeSyncEnabled = Boolean(syncOutboxRepo && isSyncEnqueueEnabled());
+      const runPurge = async () => {
+        const purged = await purgePartyCascadeUseCase({
+          partyId: id,
+          ctx: c,
+          expectedVersion,
+          partyRepo,
+          invoiceRepo,
+          voucherRepo,
+        });
+        if (!purged.ok || !syncOutboxRepo || !purgeSyncEnabled) return purged;
+        const device = syncDeviceIdFromRequest(req);
+        for (const inv of purged.cancelled.invoices) {
+          await enqueueInvoiceCancel(syncOutboxRepo, inv, c, device, undefined, inv.version);
+        }
+        for (const v of purged.cancelled.vouchers) {
+          await enqueueVoucherCancel(syncOutboxRepo, v, c, device, undefined, v.version);
+        }
+        await enqueueMasterDelete(syncOutboxRepo, "party", id, c, device, opIdFromRequest(req), {
+          version: expectedVersion,
+        });
+        return purged;
+      };
+      let purged: Awaited<ReturnType<typeof runPurge>>;
+      try {
+        purged = purgeSyncEnabled ? await withTenantTx(c.tenantId, runPurge) : await runPurge();
+      } catch (err) {
+        logger.error({ err }, "transaction rolled back — party purge dropped (H-10)");
+        return respondTransactionFailure(
+          res,
+          err,
+          "party",
+          "تعذّر حذف الطرف مع وحدة المزامنة — لم يُحذف أي سجل. أعد المحاولة.",
+        );
+      }
       if (!purged.ok) {
         return res.status(422).json({ code: "VALIDATION", message: purged.error });
-      }
-      if (syncOutboxRepo && isSyncEnqueueEnabled()) {
-        try {
-          await withTenantTx(c.tenantId, async () => {
-            await enqueueMasterDelete(
-              syncOutboxRepo,
-              "party",
-              id,
-              c,
-              syncDeviceIdFromRequest(req),
-              opIdFromRequest(req),
-              { version: expectedVersion },
-            );
-          });
-        } catch (err) {
-          logger.error({ err }, "party purge succeeded locally but sync enqueue failed");
-        }
       }
       return res.status(204).end();
     }

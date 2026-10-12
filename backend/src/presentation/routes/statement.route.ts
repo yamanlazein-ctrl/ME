@@ -24,7 +24,11 @@ import {
   syncDeviceIdFromRequest,
 } from "../../application/use-cases/sync/syncEnqueue.js";
 import { capturePartySyncDependencies } from "../../application/use-cases/sync/syncDependencySnapshots.js";
-import { statementQuerySchema, settlePartySchema, settleInvoicesSchema } from "./statement.schema.js";
+import {
+  statementQuerySchema,
+  settlePartySchema,
+  settleInvoicesSchema,
+} from "./statement.schema.js";
 import { settleInvoicesUseCase } from "../../application/use-cases/statements/settleInvoicesUseCase.js";
 import { BusinessRuleError } from "../../domain/errors/index.js";
 
@@ -97,13 +101,19 @@ export function registerStatementRoutes(
         }
         const currency = typeof req.query.currency === "string" ? req.query.currency : "";
         if (!/^(SYP|USD|EUR)$/.test(currency)) {
-          return res.status(400).json({ code: "BAD_REQUEST", message: "العملة مطلوبة (SYP / USD / EUR)" });
+          return res
+            .status(400)
+            .json({ code: "BAD_REQUEST", message: "العملة مطلوبة (SYP / USD / EUR)" });
         }
         const party = await partyRepo.findById(req.params.id as string, ctx(req));
         if (!party || party.kind !== kind) {
           return res.status(404).json({ code: "NOT_FOUND", message: partyLabel });
         }
-        const position = await statementRepo.creditPosition(req.params.id as string, currency, ctx(req));
+        const position = await statementRepo.creditPosition(
+          req.params.id as string,
+          currency,
+          ctx(req),
+        );
         res.json(position);
       });
     }
@@ -154,7 +164,11 @@ export function registerStatementRoutes(
             throw new BusinessRuleError(result.error);
           }
           if (syncOutboxRepo && isSyncEnqueueEnabled()) {
-            const deps = await capturePartySyncDependencies(partyRepo, [req.params.id as string], c);
+            const deps = await capturePartySyncDependencies(
+              partyRepo,
+              [req.params.id as string],
+              c,
+            );
             // ONE request creates N vouchers: each needs its own opId. Reusing
             // the request's Idempotency-Key for all of them made the outbox
             // (deduplicated on opId) keep only the first — a 15-invoice payment

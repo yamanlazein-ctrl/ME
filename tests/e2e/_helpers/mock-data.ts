@@ -30,6 +30,8 @@ function authHeaders(token: string) {
   return {
     Authorization: `Bearer ${token}`,
     "Content-Type": "application/json",
+    // Document POSTs (invoices, orders) answer 428 without one (REPAIR-008, hermes F-010).
+    "Idempotency-Key": crypto.randomUUID(),
   };
 }
 

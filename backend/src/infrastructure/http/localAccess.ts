@@ -13,10 +13,7 @@ export function isLoopbackAddress(ip: string | undefined): boolean {
   if (!ip) return false;
   const host = ip.replace(/^::ffff:/, "").split("%")[0];
   return (
-    host === "127.0.0.1" ||
-    host === "::1" ||
-    host === "localhost" ||
-    host === "0:0:0:0:0:0:0:1"
+    host === "127.0.0.1" || host === "::1" || host === "localhost" || host === "0:0:0:0:0:0:0:1"
   );
 }
 
@@ -33,7 +30,10 @@ export function isLoopbackAddress(ip: string | undefined): boolean {
  * machine: accepting it opened the pre-auth wizard restore and the
  * DEVICE_PROOF bypass to anyone on the office network.
  */
-export function resolveDesktopLocalCaller(pipeBound: boolean, address: string | undefined): boolean {
+export function resolveDesktopLocalCaller(
+  pipeBound: boolean,
+  address: string | undefined,
+): boolean {
   if (pipeBound) return true;
   return isLoopbackAddress(address);
 }

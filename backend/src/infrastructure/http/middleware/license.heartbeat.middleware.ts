@@ -26,14 +26,7 @@ import type { ILicenseTokenSigner } from "../../../application/ports/ILicenseTok
  *  - Vendor SoT `suspended`/`revoked` wins over a still-valid offline token.
  */
 export interface RequestLicenseStatus {
-  status:
-    | "active"
-    | "expired"
-    | "trial"
-    | "suspended"
-    | "revoked"
-    | "no_license"
-    | "missing";
+  status: "active" | "expired" | "trial" | "suspended" | "revoked" | "no_license" | "missing";
   graceRemainingDays?: number;
   licenseId?: string;
 }

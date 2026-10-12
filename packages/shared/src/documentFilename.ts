@@ -39,7 +39,10 @@ export function documentPdfStem(opts: {
   const typeLabel = DOCUMENT_TYPE_AR[opts.docType] ?? sanitizeFilenamePart(opts.docType, "مستند");
   const party = sanitizeFilenamePart(opts.partyName ?? "", "بدون_اسم");
   const number = sanitizeFilenamePart(opts.number ?? "", "بدون_رقم");
-  const datePart = (opts.date ?? new Date().toISOString().slice(0, 10)).replace(/[<>:"/\\|?*]/g, "-");
+  const datePart = (opts.date ?? new Date().toISOString().slice(0, 10)).replace(
+    /[<>:"/\\|?*]/g,
+    "-",
+  );
   const stem = `${typeLabel}_${party}_${number}_${datePart}`;
   return stem.length > MAX_STEM ? stem.slice(0, MAX_STEM) : stem;
 }

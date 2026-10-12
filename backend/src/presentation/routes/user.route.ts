@@ -1,6 +1,9 @@
 import type { Router, Request, Response, RequestHandler } from "express";
 import { z } from "zod";
-import { validateBody, validateQuery } from "../../infrastructure/http/middleware/validate.middleware.js";
+import {
+  validateBody,
+  validateQuery,
+} from "../../infrastructure/http/middleware/validate.middleware.js";
 import { validateUuidParam } from "../../infrastructure/http/middleware/validate-params.middleware.js";
 import type { IUserRepository } from "../../application/ports/IUserRepository.js";
 import type { ISyncOutboxRepository } from "../../application/ports/ISyncOutboxRepository.js";
@@ -21,17 +24,22 @@ const listUsersSchema = z.object({
   limit: z.coerce.number().min(1).max(100).default(20),
 });
 
-const updateUserSchema = z.object({
-  name: z.string().min(1).max(255).optional(),
-  email: z.string().email().optional(),
-  role: z.enum(["admin", "accountant", "warehouse", "viewer"]).optional(),
-  active: z.boolean().optional(),
-}).refine((data) => Object.keys(data).length > 0, {
-  message: "At least one field must be provided",
-});
+const updateUserSchema = z
+  .object({
+    name: z.string().min(1).max(255).optional(),
+    email: z.string().email().optional(),
+    role: z.enum(["admin", "accountant", "warehouse", "viewer"]).optional(),
+    active: z.boolean().optional(),
+  })
+  .refine((data) => Object.keys(data).length > 0, {
+    message: "At least one field must be provided",
+  });
 
+// hermes F-012: the same floor as the setup wizard's account password (setupUseCases.ts, min 8) — an
+// admin reset was the one door that accepted 6. (This sets the PASSWORD; PINs have their own
+// 4-digit isWeakPin rule on SetPinSchema.)
 const resetPasswordSchema = z.object({
-  password: z.string().min(6).max(128),
+  password: z.string().min(8).max(128),
 });
 
 export function registerUserRoutes(
@@ -45,6 +53,16 @@ export function registerUserRoutes(
   const ctxFn = (req: Request): TenantContext => req.tenantContext!;
   const body = <T>(req: Request): T => (req as unknown as { validatedBody: T }).validatedBody;
   const paramId = (req: Request): string => req.params.id as string;
+
+  // Owner decision (2026-10-12): the accountant manages users like an admin, but only an admin may
+  // grant the admin role or touch an admin account (role, deactivation, password); and nobody
+  // changes their own role (that also keeps the last admin from demoting themselves).
+  const adminRoleDenied = (res: Response): void => {
+    res.status(403).json({
+      code: "ADMIN_ROLE_RESERVED",
+      message: "منح دور مدير النظام أو تعديل حساب مدير متاح لمدير النظام فقط",
+    });
+  };
 
   // GET /users — List all users for the current tenant
   router.get(
@@ -108,6 +126,27 @@ export function registerUserRoutes(
         }
 
         const updateData = body<z.infer<typeof updateUserSchema>>(req);
+        const target = await userRepo.findById(id, adminCtx);
+        if (!target) {
+          res.status(404).json({ code: "NOT_FOUND", message: "المستخدم غير موجود" });
+          return;
+        }
+        if (updateData.role !== undefined && updateData.role !== target.role) {
+          if (id === adminCtx.userId) {
+            res
+              .status(400)
+              .json({ code: "SELF_ROLE_CHANGE", message: "لا يمكنك تغيير دورك بنفسك" });
+            return;
+          }
+          if (adminCtx.userRole !== "admin" && updateData.role === "admin") {
+            adminRoleDenied(res);
+            return;
+          }
+        }
+        if (adminCtx.userRole !== "admin" && target.role === "admin" && id !== adminCtx.userId) {
+          adminRoleDenied(res);
+          return;
+        }
         const result = await userRepo.update(id, updateData, adminCtx);
         if (isSyncEnqueueEnabled()) {
           const snapshot = await userRepo.findSyncSnapshot(id, adminCtx);
@@ -158,6 +197,10 @@ export function registerUserRoutes(
           res.status(404).json({ code: "NOT_FOUND", message: "المستخدم غير موجود" });
           return;
         }
+        if (adminCtx.userRole !== "admin" && user.role === "admin") {
+          adminRoleDenied(res);
+          return;
+        }
 
         await userRepo.delete(id, adminCtx);
         if (isSyncEnqueueEnabled()) {
@@ -192,6 +235,13 @@ export function registerUserRoutes(
         const id = paramId(req);
         const adminCtx = ctxFn(req);
         const { password } = body<{ password: string }>(req);
+        if (adminCtx.userRole !== "admin" && id !== adminCtx.userId) {
+          const target = await userRepo.findById(id, adminCtx);
+          if (target?.role === "admin") {
+            adminRoleDenied(res);
+            return;
+          }
+        }
 
         const passwordHash = await passwordHasher.hash(password);
         const result = await userRepo.update(id, { password: passwordHash }, adminCtx);

@@ -159,9 +159,7 @@ export async function refreshOfflineEntitlement(input: {
       licenseId: license.id,
       tenantId: license.tenantId,
       features: license.features,
-      expiresAt: Math.floor(
-        (license.expiresAt?.getTime() ?? Date.now() + 30 * 86400000) / 1000,
-      ),
+      expiresAt: Math.floor((license.expiresAt?.getTime() ?? Date.now() + 30 * 86400000) / 1000),
       serverFingerprint: fingerprint,
       edition: license.edition ?? "",
       plan: license.plan ?? "",

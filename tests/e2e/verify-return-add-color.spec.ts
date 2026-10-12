@@ -16,7 +16,9 @@ test.describe("return add-color button (conditional)", () => {
     await page.fill('input[type="password"]', __e2eAdmin.password);
     await page.click('button[type="submit"]');
     await page.waitForURL((url) => !url.pathname.startsWith("/login"), { timeout: 20000 });
-    await page.waitForSelector('nav[aria-label="القائمة الجانبية"]', { timeout: 15000 }).catch(() => {});
+    await page
+      .waitForSelector('nav[aria-label="القائمة الجانبية"]', { timeout: 15000 })
+      .catch(() => {});
 
     await page.goto(`${BASE}/returns/entry/new`, { waitUntil: "networkidle" });
     await page.waitForTimeout(1500);
@@ -36,7 +38,7 @@ test.describe("return add-color button (conditional)", () => {
 
     // Now palette/add-color button (aria-label "إضافة لون آخر لنفس القماش") should appear
     const addColorBtn = await page.locator('button[aria-label*="إضافة لون آخر"]').count();
-    const paletteBtn = await page.locator('button:has(.lucide-palette)').count();
+    const paletteBtn = await page.locator("button:has(.lucide-palette)").count();
     console.log("return add-color (aria):", addColorBtn, " (palette icon):", paletteBtn);
 
     await page.screenshot({ path: "test-results/return-after-roll.png", fullPage: false });

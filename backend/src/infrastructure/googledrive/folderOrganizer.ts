@@ -30,17 +30,37 @@ export class FolderOrganizer {
       .from(motardDriveFolders)
       .where(
         parent === null
-          ? and(eq(motardDriveFolders.kind, kind), eq(motardDriveFolders.label, label), isNull(motardDriveFolders.parentDriveId))
-          : and(eq(motardDriveFolders.kind, kind), eq(motardDriveFolders.label, label), eq(motardDriveFolders.parentDriveId, parent)),
+          ? and(
+              eq(motardDriveFolders.kind, kind),
+              eq(motardDriveFolders.label, label),
+              isNull(motardDriveFolders.parentDriveId),
+            )
+          : and(
+              eq(motardDriveFolders.kind, kind),
+              eq(motardDriveFolders.label, label),
+              eq(motardDriveFolders.parentDriveId, parent),
+            ),
       )
       .limit(1);
     return rows[0]?.driveFileId ?? null;
   }
 
-  private async remember(kind: string, parent: string | null, label: string, driveFileId: string): Promise<void> {
+  private async remember(
+    kind: string,
+    parent: string | null,
+    label: string,
+    driveFileId: string,
+  ): Promise<void> {
     await this.db
       .insert(motardDriveFolders)
-      .values({ kind, parentDriveId: parent, label, driveFileId, verifiedAt: nowIso(), createdAt: nowIso() })
+      .values({
+        kind,
+        parentDriveId: parent,
+        label,
+        driveFileId,
+        verifiedAt: nowIso(),
+        createdAt: nowIso(),
+      })
       .onConflictDoNothing();
   }
 

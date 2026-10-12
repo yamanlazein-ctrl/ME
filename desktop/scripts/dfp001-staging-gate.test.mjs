@@ -22,18 +22,35 @@ test("DFP-001 before-build stages node, the SPA and the bundled server, then val
 });
 
 test("DFP-001 tauri resources declare exactly node, server and the license key (no postgres)", () => {
-  assert.deepEqual(Object.values(conf.bundle?.resources ?? {}).sort(), ["license-public.pem", "node.exe", "server"]);
+  assert.deepEqual(Object.values(conf.bundle?.resources ?? {}).sort(), [
+    "license-public.pem",
+    "node.exe",
+    "server",
+  ]);
 });
 
 test("before-build never builds, prunes or verifies a PostgreSQL template any more", () => {
-  for (const gone of ["build-pgdata-template", "verify-pgdata-template", "prune-postgres", "pgdump-staging"]) {
+  for (const gone of [
+    "build-pgdata-template",
+    "verify-pgdata-template",
+    "prune-postgres",
+    "pgdump-staging",
+  ]) {
     assert.ok(!before.includes(gone), `${gone} must not run`);
   }
 });
 
 test("order: bundle → desktop seed → server-bundle e2e → manifest gate → no-postgres gate → freshness", () => {
   const at = (s) => before.indexOf(s);
-  const steps = ["bundle-server.mjs", "build-desktop-seed.mjs", "server-bundle.test.mjs", "validate-resource-manifest.mjs", "verify-no-postgres.mjs", "verify-build-freshness.mjs"];
+  const steps = [
+    "bundle-server.mjs",
+    "build-desktop-seed.mjs",
+    "server-bundle.test.mjs",
+    "validate-resource-manifest.mjs",
+    "verify-no-postgres.mjs",
+    "verify-build-freshness.mjs",
+  ];
   for (const s of steps) assert.ok(at(s) > 0, `${s} must run`);
-  for (let i = 1; i < steps.length; i++) assert.ok(at(steps[i - 1]) < at(steps[i]), `${steps[i - 1]} before ${steps[i]}`);
+  for (let i = 1; i < steps.length; i++)
+    assert.ok(at(steps[i - 1]) < at(steps[i]), `${steps[i - 1]} before ${steps[i]}`);
 });

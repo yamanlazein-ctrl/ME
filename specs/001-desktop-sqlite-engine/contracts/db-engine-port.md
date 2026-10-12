@@ -5,11 +5,11 @@
 
 ## Selection
 
-| Input | Values | Default | Set by |
-|---|---|---|---|
-| `DB_ENGINE` env | `postgres` \| `sqlite` | `postgres` | Desktop runtime sets `sqlite`. Cloud sets nothing. |
-| `DATABASE_URL` | PostgreSQL URL | required when `postgres` | cloud only |
-| `SQLITE_PATH` | absolute path to `motard.db` | required when `sqlite` | desktop runtime, after the lock is granted |
+| Input           | Values                       | Default                  | Set by                                             |
+| --------------- | ---------------------------- | ------------------------ | -------------------------------------------------- |
+| `DB_ENGINE` env | `postgres` \| `sqlite`       | `postgres`               | Desktop runtime sets `sqlite`. Cloud sets nothing. |
+| `DATABASE_URL`  | PostgreSQL URL               | required when `postgres` | cloud only                                         |
+| `SQLITE_PATH`   | absolute path to `motard.db` | required when `sqlite`   | desktop runtime, after the lock is granted         |
 
 - `infrastructure/di/container.ts` instantiates exactly one family of repositories.
 - Each engine's driver module is loaded lazily, so the `postgres` path never loads `better-sqlite3` and the
@@ -28,6 +28,7 @@
    - roll back fully on throw.
 
    SQLite: `BEGIN IMMEDIATE` behind the single write gate (research R3).
+
 3. **Tenant scoping.** Every read and write is limited to the context tenant. PostgreSQL enforces it with RLS plus predicates,
    SQLite with predicates. The isolation suite seeds two tenants and must observe zero leakage.
 4. **Errors.** Constraint violations surface as the same `persistenceErrorMessage` codes

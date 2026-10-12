@@ -68,53 +68,102 @@ let reachable = false;
 async function createParty(kind: "customer" | "supplier") {
   const id = randomUUID();
   await db.insert(parties).values({
-    id, tenantId, name: `Party-${kind}-${randomUUID().slice(0, 8)}`, kind, currency: "SYP",
+    id,
+    tenantId,
+    name: `Party-${kind}-${randomUUID().slice(0, 8)}`,
+    kind,
+    currency: "SYP",
   });
   return id;
 }
 async function createSale(party: string) {
   const rollId = randomUUID();
   await db.insert(rolls).values({
-    id: rollId, tenantId, colorId, rollNo: `R-${randomUUID().slice(0, 6)}`,
-    initialKg: 100, remainingKg: 100, pieces: 1, remainingPieces: 1,
-    pricePerKg: 1000, currency: "SYP", entryDate: "2026-03-01",
+    id: rollId,
+    tenantId,
+    colorId,
+    rollNo: `R-${randomUUID().slice(0, 6)}`,
+    initialKg: 100,
+    remainingKg: 100,
+    pieces: 1,
+    remainingPieces: 1,
+    pricePerKg: 1000,
+    currency: "SYP",
+    entryDate: "2026-03-01",
     supplierId: party,
   });
   const id = randomUUID();
   const number = `SALE-${randomUUID().slice(0, 8)}`;
   await db.insert(invoices).values({
-    id, tenantId, number, type: "sale", partyId: party, partyType: "customer",
-    status: "active", currency: "SYP", date: "2026-03-01", total: 50_000, paid: 0,
+    id,
+    tenantId,
+    number,
+    type: "sale",
+    partyId: party,
+    partyType: "customer",
+    status: "active",
+    currency: "SYP",
+    date: "2026-03-01",
+    total: 50_000,
+    paid: 0,
   });
   await db.insert(invoiceLines).values({
-    id: randomUUID(), tenantId, invoiceId: id, rollId, colorId, fabricId,
-    quantityKg: 10, pricePerKg: 5000, lineTotal: 50_000,
+    id: randomUUID(),
+    tenantId,
+    invoiceId: id,
+    rollId,
+    colorId,
+    fabricId,
+    quantityKg: 10,
+    pricePerKg: 5000,
+    lineTotal: 50_000,
   });
   // The financial leg a cancel must reverse.
   await db.insert(ledgerEntries).values({
-    id: randomUUID(), tenantId, partyId: party, date: "2026-03-01", type: "sales_invoice",
-    debit: 50_000, credit: 0, currency: "SYP", referenceType: "invoice",
-    referenceId: id, status: "active",
+    id: randomUUID(),
+    tenantId,
+    partyId: party,
+    date: "2026-03-01",
+    type: "sales_invoice",
+    debit: 50_000,
+    credit: 0,
+    currency: "SYP",
+    referenceType: "invoice",
+    referenceId: id,
+    status: "active",
   });
   return { id, number };
 }
 
 const invStatus = (id: string) =>
-  db.select({ status: invoices.status }).from(invoices).where(eq(invoices.id, id)).then((r) => r[0]?.status);
+  db
+    .select({ status: invoices.status })
+    .from(invoices)
+    .where(eq(invoices.id, id))
+    .then((r) => r[0]?.status);
 const partyRow = (id: string) =>
-  db.select({ status: parties.status, version: parties.version })
-    .from(parties).where(eq(parties.id, id)).then((r) => r[0]);
+  db
+    .select({ status: parties.status, version: parties.version })
+    .from(parties)
+    .where(eq(parties.id, id))
+    .then((r) => r[0]);
 const activeLegs = (party: string) =>
-  db.select({ id: ledgerEntries.id }).from(ledgerEntries)
+  db
+    .select({ id: ledgerEntries.id })
+    .from(ledgerEntries)
     .where(and(eq(ledgerEntries.partyId, party), eq(ledgerEntries.status, "active")));
 
 beforeAll(async () => {
   reachable = await databaseReachable();
   if (!reachable) return;
-  await db.insert(tenants).values({ id: tenantId, name: "Purge Atomicity", slug: `pa-${tenantId.slice(0, 8)}` });
+  await db
+    .insert(tenants)
+    .values({ id: tenantId, name: "Purge Atomicity", slug: `pa-${tenantId.slice(0, 8)}` });
   await db.insert(fabrics).values({ id: fabricId, tenantId, name: "F" });
   await db.insert(colors).values({ id: colorId, tenantId, fabricId, name: "C" });
-  await db.insert(parties).values({ id: partyId, tenantId, name: "Seed", kind: "customer", currency: "SYP" });
+  await db
+    .insert(parties)
+    .values({ id: partyId, tenantId, name: "Seed", kind: "customer", currency: "SYP" });
 });
 
 describe("party deletion atomicity (bugs #6 / #7)", () => {
@@ -124,8 +173,12 @@ describe("party deletion atomicity (bugs #6 / #7)", () => {
     const { partyRepo, invoiceRepo, voucherRepo } = repos();
     const before = await partyRow(id);
     const r = await purgePartyCascadeUseCase({
-      partyId: id, ctx, expectedVersion: before!.version,
-      partyRepo, invoiceRepo, voucherRepo,
+      partyId: id,
+      ctx,
+      expectedVersion: before!.version,
+      partyRepo,
+      invoiceRepo,
+      voucherRepo,
     });
     expect(r.ok).toBe(true);
     const after = await partyRow(id);
@@ -140,8 +193,12 @@ describe("party deletion atomicity (bugs #6 / #7)", () => {
     const { partyRepo, invoiceRepo, voucherRepo } = repos();
     const before = await partyRow(id);
     const r = await purgePartyCascadeUseCase({
-      partyId: id, ctx, expectedVersion: before!.version,
-      partyRepo, invoiceRepo, voucherRepo,
+      partyId: id,
+      ctx,
+      expectedVersion: before!.version,
+      partyRepo,
+      invoiceRepo,
+      voucherRepo,
     });
     expect(r.ok).toBe(true);
     expect(await invStatus(a.id)).toBe("cancelled");
@@ -177,8 +234,12 @@ describe("party deletion atomicity (bugs #6 / #7)", () => {
 
     const before = await partyRow(id);
     const r = await purgePartyCascadeUseCase({
-      partyId: id, ctx, expectedVersion: before!.version,
-      partyRepo, invoiceRepo, voucherRepo,
+      partyId: id,
+      ctx,
+      expectedVersion: before!.version,
+      partyRepo,
+      invoiceRepo,
+      voucherRepo,
     });
 
     expect(r.ok).toBe(false);
@@ -201,8 +262,12 @@ describe("party deletion atomicity (bugs #6 / #7)", () => {
     const before = await partyRow(id);
     const { partyRepo, invoiceRepo, voucherRepo } = repos();
     const r = await purgePartyCascadeUseCase({
-      partyId: id, ctx, expectedVersion: before!.version + 99, // deliberately stale
-      partyRepo, invoiceRepo, voucherRepo,
+      partyId: id,
+      ctx,
+      expectedVersion: before!.version + 99, // deliberately stale
+      partyRepo,
+      invoiceRepo,
+      voucherRepo,
     });
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.error).toMatch(/تعديل|حدّث الصفحة/);
@@ -218,8 +283,12 @@ describe("party deletion atomicity (bugs #6 / #7)", () => {
     const { partyRepo, invoiceRepo, voucherRepo } = repos();
     const before = await partyRow(id);
     const r = await purgePartyCascadeUseCase({
-      partyId: id, ctx, expectedVersion: before!.version,
-      partyRepo, invoiceRepo, voucherRepo,
+      partyId: id,
+      ctx,
+      expectedVersion: before!.version,
+      partyRepo,
+      invoiceRepo,
+      voucherRepo,
     });
     expect(r.ok).toBe(true);
     expect(await invStatus(s.id)).toBe("cancelled");

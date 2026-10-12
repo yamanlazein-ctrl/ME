@@ -171,8 +171,8 @@ function NewExpense() {
               className="md:col-span-3 rounded-md border border-warning/40 bg-warning/10 px-3 py-2 text-[12px] text-foreground"
             >
               تنبيه: سيصبح رصيد الصندوق ({currency}) سالباً بعد هذا المصروف (المتاح{" "}
-              {(cashBalance ?? 0).toLocaleString("en-US")}، المطلوب {Number(amount).toLocaleString("en-US")}).
-              يمكن المتابعة والحفظ.
+              {(cashBalance ?? 0).toLocaleString("en-US")}، المطلوب{" "}
+              {Number(amount).toLocaleString("en-US")}). يمكن المتابعة والحفظ.
             </div>
           ) : null}
           <div className="md:col-span-3">

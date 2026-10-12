@@ -66,7 +66,10 @@ export async function settleInvoicesUseCase(
   try {
     const party = await partyRepo.findById(partyId, ctx);
     if (!party || party.kind !== partyKind) {
-      return { ok: false, error: partyKind === "customer" ? "العميل غير موجود" : "المورد غير موجود" };
+      return {
+        ok: false,
+        error: partyKind === "customer" ? "العميل غير موجود" : "المورد غير موجود",
+      };
     }
 
     const ids = [...new Set(input.invoiceIds.filter(Boolean))];
@@ -197,7 +200,10 @@ export async function settleInvoicesUseCase(
           notesPrint,
         },
         // One request → N vouchers: each needs its own durable operation id.
-        { ...ctx, clientOperationId: deriveOperationId(ctx.clientOperationId, `inv:${line.invoiceId}`) },
+        {
+          ...ctx,
+          clientOperationId: deriveOperationId(ctx.clientOperationId, `inv:${line.invoiceId}`),
+        },
       );
       if (!created.ok) {
         // Throw so an outer withTenantTx rolls back every prior voucher in the batch.

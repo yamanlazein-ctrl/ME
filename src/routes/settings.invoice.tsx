@@ -5,8 +5,8 @@ import { PageCard } from "@/components/layout/PageCard";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { useSettings, settings, updatePrinting } from "@/presentation/hooks/useSettings";
+import { FormField } from "@/components/common/FormField";
+import { useSettings, useSettingsDraft, updatePrinting } from "@/presentation/hooks/useSettings";
 import { toast } from "sonner";
 import {
   INVOICE_KIND_LABELS,
@@ -30,7 +30,8 @@ const KIND_ICONS: Record<InvoiceKind, React.ComponentType<{ className?: string }
 
 function InvoiceSettingsPage() {
   useSettings();
-  const [p, setP] = usePrintingLocal();
+  // F-018: seeded from the server's data, not the built-in defaults; save waits for it.
+  const [p, setP, ready] = useSettingsDraft("printing");
   const [vis, setVis] = useState(() => getAllVisibility());
 
   const handleToggle = (kind: InvoiceKind, field: FieldKey, next: boolean) => {
@@ -74,9 +75,13 @@ function InvoiceSettingsPage() {
         description="تنطبق على كل أنواع الفواتير. الإعدادات التفصيلية لكل نوع في الأسفل."
       >
         <div className="grid gap-3 md:grid-cols-2">
-          <div>
-            <Label className="text-[11px] text-muted-foreground">حجم الورق</Label>
+          <FormField
+            labelClassName="text-[11px] text-muted-foreground"
+            label="حجم الورق"
+            htmlFor="inv-print-paper"
+          >
             <select
+              id="inv-print-paper"
               value={p.paperSize}
               onChange={(e) => setP({ ...p, paperSize: e.target.value as typeof p.paperSize })}
               className="h-10 w-full rounded-md border border-border bg-background px-3 text-sm"
@@ -85,15 +90,14 @@ function InvoiceSettingsPage() {
               <option value="A5">A5</option>
               <option value="80mm">80mm (حراري)</option>
             </select>
-          </div>
-          <div>
-            <Label className="text-[11px] text-muted-foreground">عدد النسخ</Label>
+          </FormField>
+          <FormField labelClassName="text-[11px] text-muted-foreground" label="عدد النسخ">
             <Input
               type="number"
               value={p.copies}
               onChange={(e) => setP({ ...p, copies: Number(e.target.value) })}
             />
-          </div>
+          </FormField>
           <div className="md:col-span-2 flex items-center gap-2">
             <Checkbox
               id="logo"
@@ -104,20 +108,24 @@ function InvoiceSettingsPage() {
               إظهار شعار الشركة
             </label>
           </div>
-          <div className="md:col-span-2">
-            <Label className="text-[11px] text-muted-foreground">ملاحظة أسفل الفاتورة</Label>
+          <FormField
+            className="md:col-span-2"
+            labelClassName="text-[11px] text-muted-foreground"
+            label="ملاحظة أسفل الفاتورة"
+          >
             <Input
               value={p.footerNote}
               onChange={(e) => setP({ ...p, footerNote: e.target.value })}
               placeholder="مثلاً: شكراً لتعاملكم معنا"
             />
-          </div>
+          </FormField>
         </div>
         <div className="mt-4 flex justify-end">
           <Button
             onClick={() => {
               updatePrinting(p);
             }}
+            disabled={!ready}
             className="bg-primary text-primary-foreground"
           >
             حفظ إعدادات الطباعة
@@ -172,11 +180,6 @@ function InvoiceSettingsPage() {
       </div>
     </div>
   );
-}
-
-function usePrintingLocal() {
-  const [p, setP] = useState({ ...settings.printing });
-  return [p, setP] as const;
 }
 
 function QuickLink({ title, desc, to }: { title: string; desc: string; to: string }) {

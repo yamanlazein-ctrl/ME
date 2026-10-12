@@ -23,7 +23,10 @@ let syncConflictStore: Promise<ISyncConflictStore> | null = null;
 export function getSyncConflictStore(): Promise<ISyncConflictStore> {
   syncConflictStore ??= (async () => {
     if (getEngine() === "sqlite") {
-      const [{ SqliteSyncConflictStore }, h] = await Promise.all([import("./sqlite/SqliteSyncConflictStore.js"), sqliteHandles()]);
+      const [{ SqliteSyncConflictStore }, h] = await Promise.all([
+        import("./sqlite/SqliteSyncConflictStore.js"),
+        sqliteHandles(),
+      ]);
       return new SqliteSyncConflictStore(h.independent);
     }
     const [{ pool }, { PostgresSyncConflictStore }] = await Promise.all([
@@ -40,7 +43,10 @@ let syncMaterializeStore: Promise<ISyncMaterializeStore> | null = null;
 export function getSyncMaterializeStore(): Promise<ISyncMaterializeStore> {
   syncMaterializeStore ??= (async () => {
     if (getEngine() === "sqlite") {
-      const [{ SqliteSyncMaterializeStore }, h] = await Promise.all([import("./sqlite/SqliteSyncMaterializeStore.js"), sqliteHandles()]);
+      const [{ SqliteSyncMaterializeStore }, h] = await Promise.all([
+        import("./sqlite/SqliteSyncMaterializeStore.js"),
+        sqliteHandles(),
+      ]);
       return new SqliteSyncMaterializeStore(h.independent, h.ambient);
     }
     const [{ pool, txDb }, { PostgresSyncMaterializeStore }] = await Promise.all([
@@ -57,7 +63,10 @@ let syncStateStore: Promise<ISyncStateStore> | null = null;
 export function getSyncStateStore(): Promise<ISyncStateStore> {
   syncStateStore ??= (async () => {
     if (getEngine() === "sqlite") {
-      const [{ SqliteSyncStateStore }, h] = await Promise.all([import("./sqlite/SqliteSyncStateStore.js"), sqliteHandles()]);
+      const [{ SqliteSyncStateStore }, h] = await Promise.all([
+        import("./sqlite/SqliteSyncStateStore.js"),
+        sqliteHandles(),
+      ]);
       return new SqliteSyncStateStore(h.ambient);
     }
     const [{ db }, { PostgresSyncStateStore }] = await Promise.all([
@@ -73,7 +82,8 @@ import type { INumberCollisionSql } from "../../application/ports/INumberCollisi
 let numberCollisionSql: Promise<INumberCollisionSql> | null = null;
 export function getNumberCollisionSql(): Promise<INumberCollisionSql> {
   numberCollisionSql ??= (async () => {
-    if (getEngine() === "sqlite") return (await import("./sqlite/SqliteNumberCollisionSql.js")).sqliteNumberCollisionSql;
+    if (getEngine() === "sqlite")
+      return (await import("./sqlite/SqliteNumberCollisionSql.js")).sqliteNumberCollisionSql;
     return (await import("./PostgresNumberCollisionSql.js")).postgresNumberCollisionSql;
   })();
   return numberCollisionSql;
@@ -84,7 +94,10 @@ let numberBlockStore: Promise<INumberBlockStore> | null = null;
 export function getNumberBlockStore(): Promise<INumberBlockStore> {
   numberBlockStore ??= (async () => {
     if (getEngine() === "sqlite") {
-      const [{ SqliteNumberBlockStore }, h] = await Promise.all([import("./sqlite/SqliteNumberBlockStore.js"), sqliteHandles()]);
+      const [{ SqliteNumberBlockStore }, h] = await Promise.all([
+        import("./sqlite/SqliteNumberBlockStore.js"),
+        sqliteHandles(),
+      ]);
       return new SqliteNumberBlockStore(h.ambient);
     }
     const [{ db }, { PostgresNumberBlockStore }] = await Promise.all([
@@ -100,7 +113,8 @@ import type { ISyncDependencyStore } from "../../application/ports/ISyncDependen
 let syncDependencyStore: Promise<ISyncDependencyStore> | null = null;
 export function getSyncDependencyStore(): Promise<ISyncDependencyStore> {
   syncDependencyStore ??= (async () => {
-    if (getEngine() === "sqlite") return (await import("./sqlite/SqliteSyncDependencyStore.js")).sqliteSyncDependencyStore;
+    if (getEngine() === "sqlite")
+      return (await import("./sqlite/SqliteSyncDependencyStore.js")).sqliteSyncDependencyStore;
     return (await import("./PostgresSyncDependencyStore.js")).postgresSyncDependencyStore;
   })();
   return syncDependencyStore;
@@ -111,7 +125,10 @@ let desktopActivationStore: Promise<IDesktopActivationStore> | null = null;
 export function getDesktopActivationStore(): Promise<IDesktopActivationStore> {
   desktopActivationStore ??= (async () => {
     if (getEngine() === "sqlite") {
-      const [{ SqliteDesktopActivationStore }, h] = await Promise.all([import("./sqlite/SqliteDesktopActivationStore.js"), sqliteHandles()]);
+      const [{ SqliteDesktopActivationStore }, h] = await Promise.all([
+        import("./sqlite/SqliteDesktopActivationStore.js"),
+        sqliteHandles(),
+      ]);
       return new SqliteDesktopActivationStore(h.ambient);
     }
     const [{ db }, { PostgresDesktopActivationStore }] = await Promise.all([
@@ -131,7 +148,8 @@ let syncRestoreStateStore: Promise<ISyncRestoreStateStore> | null = null;
 export function getSyncRestoreStateStore(): Promise<ISyncRestoreStateStore> {
   syncRestoreStateStore ??= (async () => {
     if (getEngine() === "sqlite") {
-      const { SqliteSyncRestoreStateStore } = await import("./sqlite/SqliteSyncRestoreStateStore.js");
+      const { SqliteSyncRestoreStateStore } =
+        await import("./sqlite/SqliteSyncRestoreStateStore.js");
       return new SqliteSyncRestoreStateStore();
     }
     const none: ISyncRestoreStateStore = {

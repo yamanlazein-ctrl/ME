@@ -31,7 +31,12 @@ const customerId = randomUUID();
 const supplierId = randomUUID();
 const fabricId = randomUUID();
 const colorId = randomUUID();
-const ctx: TenantContext = { tenantId, userId: randomUUID(), userRole: "admin", userName: "chain-tester" };
+const ctx: TenantContext = {
+  tenantId,
+  userId: randomUUID(),
+  userRole: "admin",
+  userName: "chain-tester",
+};
 const DAY = "2026-09-16";
 
 const invoiceRepo = new PostgresInvoiceRepository(db);
@@ -88,7 +93,9 @@ const receipt = (invoiceId: string, amount: number) =>
 async function partyLedgerUsd(): Promise<number> {
   const [row] = await db
     .select({
-      net: sql<number>`COALESCE(SUM(${ledgerEntries.debit} - ${ledgerEntries.credit}), 0)`.mapWith(ledgerEntries.debit),
+      net: sql<number>`COALESCE(SUM(${ledgerEntries.debit} - ${ledgerEntries.credit}), 0)`.mapWith(
+        ledgerEntries.debit,
+      ),
     })
     .from(ledgerEntries)
     .where(
@@ -107,18 +114,39 @@ const invoicePaid = async (id: string) => {
     .select({ paid: invoices.paid, total: invoices.total, status: invoices.status })
     .from(invoices)
     .where(eq(invoices.id, id));
-  return { paid: round2dp(Number(row.paid)), total: round2dp(Number(row.total)), status: row.status };
+  return {
+    paid: round2dp(Number(row.paid)),
+    total: round2dp(Number(row.total)),
+    status: row.status,
+  };
 };
 
-const cashUsd = async () => round2dp(await db.transaction((tx) => getCashboxBalanceAsOf(tx, ctx, "USD", DAY)));
+const cashUsd = async () =>
+  round2dp(await db.transaction((tx) => getCashboxBalanceAsOf(tx, ctx, "USD", DAY)));
 
 describe("money chain integrity", () => {
   beforeAll(async () => {
     await db.execute(sql`select 1`);
-    await db.insert(tenants).values({ id: tenantId, name: "Money Chain Tenant", slug: `chain-${tenantId.slice(0, 8)}` });
+    await db
+      .insert(tenants)
+      .values({ id: tenantId, name: "Money Chain Tenant", slug: `chain-${tenantId.slice(0, 8)}` });
     await db.insert(parties).values([
-      { id: customerId, tenantId, name: "Chain Customer", code: "CHAIN-C", kind: "customer", currency: "USD" },
-      { id: supplierId, tenantId, name: "Chain Supplier", code: "CHAIN-S", kind: "supplier", currency: "USD" },
+      {
+        id: customerId,
+        tenantId,
+        name: "Chain Customer",
+        code: "CHAIN-C",
+        kind: "customer",
+        currency: "USD",
+      },
+      {
+        id: supplierId,
+        tenantId,
+        name: "Chain Supplier",
+        code: "CHAIN-S",
+        kind: "supplier",
+        currency: "USD",
+      },
     ]);
     await db.insert(fabrics).values({ id: fabricId, tenantId, name: "Cotton", minStockKg: "0" });
     await db.insert(colors).values({ id: colorId, tenantId, fabricId, name: "White" });
@@ -140,7 +168,10 @@ describe("money chain integrity", () => {
     const remaining = round2dp(inv.total - inv.paid);
     expect(remaining).toBe(37.5);
     expect(await partyLedgerUsd()).toBe(remaining);
-    const stmt = await statements.getStatement({ partyId: customerId, kind: "customer", currency: "USD" }, ctx);
+    const stmt = await statements.getStatement(
+      { partyId: customerId, kind: "customer", currency: "USD" },
+      ctx,
+    );
     expect(round2dp(stmt.finalBalance)).toBe(remaining);
     expect(round2dp((await cashUsd()) - cashBefore)).toBe(62.5);
   });
@@ -151,9 +182,20 @@ describe("money chain integrity", () => {
     expect(Number((await rollRepo.findById(roll.id, ctx))?.remainingKg)).toBe(42.5);
 
     const legs = await db
-      .select({ d: ledgerEntries.baseDebit, c: ledgerEntries.baseCredit, partyId: ledgerEntries.partyId, debit: ledgerEntries.debit })
+      .select({
+        d: ledgerEntries.baseDebit,
+        c: ledgerEntries.baseCredit,
+        partyId: ledgerEntries.partyId,
+        debit: ledgerEntries.debit,
+      })
       .from(ledgerEntries)
-      .where(and(eq(ledgerEntries.tenantId, tenantId), eq(ledgerEntries.referenceId, invoice.id), eq(ledgerEntries.status, "active")));
+      .where(
+        and(
+          eq(ledgerEntries.tenantId, tenantId),
+          eq(ledgerEntries.referenceId, invoice.id),
+          eq(ledgerEntries.status, "active"),
+        ),
+      );
     expect(legs.length).toBeGreaterThan(1);
     const baseDebit = round2dp(legs.reduce((s, l) => s + Number(l.d ?? 0), 0));
     const baseCredit = round2dp(legs.reduce((s, l) => s + Number(l.c ?? 0), 0));

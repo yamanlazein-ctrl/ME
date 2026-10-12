@@ -20,6 +20,10 @@ test("DFP-026 CSP has no Google Fonts / wildcard connect / fixed ports", () => {
 
 test("DFP-026 the only bundled window is the local splash page", () => {
   const labels = (conf.app?.windows ?? []).map((w) => w.label);
-  assert.deepEqual(labels, ["splash"], "the main window is created at runtime, once the server port is known");
+  assert.deepEqual(
+    labels,
+    ["splash"],
+    "the main window is created at runtime, once the server port is known",
+  );
   assert.match(csp, /default-src 'self'/);
 });

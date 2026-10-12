@@ -90,7 +90,8 @@ export function syncSoonInterceptor(schedule: () => void): HttpInterceptor {
   return {
     onRequest: (config: HttpRequestConfig): HttpRequestConfig => {
       const method = (config.method ?? "GET").toUpperCase();
-      if (method !== "GET" && !/^\/?(api\/)?(sync|auth|health)(\/|$)/.test(config.path ?? "")) schedule();
+      if (method !== "GET" && !/^\/?(api\/)?(sync|auth|health)(\/|$)/.test(config.path ?? ""))
+        schedule();
       return config;
     },
   };

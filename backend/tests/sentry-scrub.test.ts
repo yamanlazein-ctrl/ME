@@ -8,7 +8,12 @@ describe("scrubSentryEvent (Sentry beforeSend privacy filter)", () => {
       request: {
         url: "https://hub.example/api/invoices",
         method: "POST",
-        headers: { Authorization: "Bearer eyJ.secret", Cookie: "sid=1", "x-setup-token": "t", "user-agent": "UA" },
+        headers: {
+          Authorization: "Bearer eyJ.secret",
+          Cookie: "sid=1",
+          "x-setup-token": "t",
+          "user-agent": "UA",
+        },
         cookies: { sid: "1" },
         data: { partyName: "Customer", amount: 100 },
         query_string: "search=Customer",

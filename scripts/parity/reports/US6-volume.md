@@ -13,17 +13,17 @@ The harness:
 
 ## Gate run (after T112): **18/18 PASS**
 
-| Check | Result | PG baseline / target |
-|---|---|---|
-| customers / suppliers / invoices / ledger rows / cash-box days | 8000 / 2000 / 100000 / 200000 / 1462 | identical |
-| statements: parties / lines / deepest | 8000 / 200000 / 40,020 lines | identical |
-| sha256 over every statement's ordered ledger ids | `439d33d2…be3c` | **identical** |
-| cash-box closing balance | 149695750.00 | identical |
-| customers first page / full walk | 43 ms / 8000 rows in 9 pages | < 2 s / all |
-| suppliers first page / full walk | 22 ms / 2000 rows in 3 pages | < 2 s / all |
-| invoices first page / full walk | 36 ms / 100000 rows in 101 pages | < 2 s / all |
-| statement first page (deepest party) | 72 ms | < 2 s |
-| full single-party statement (40,020 lines, 81 pages of 500, as `fetchFullStatement` does) | **8.2 s** | < 10 s |
+| Check                                                                                     | Result                               | PG baseline / target |
+| ----------------------------------------------------------------------------------------- | ------------------------------------ | -------------------- |
+| customers / suppliers / invoices / ledger rows / cash-box days                            | 8000 / 2000 / 100000 / 200000 / 1462 | identical            |
+| statements: parties / lines / deepest                                                     | 8000 / 200000 / 40,020 lines         | identical            |
+| sha256 over every statement's ordered ledger ids                                          | `439d33d2…be3c`                      | **identical**        |
+| cash-box closing balance                                                                  | 149695750.00                         | identical            |
+| customers first page / full walk                                                          | 43 ms / 8000 rows in 9 pages         | < 2 s / all          |
+| suppliers first page / full walk                                                          | 22 ms / 2000 rows in 3 pages         | < 2 s / all          |
+| invoices first page / full walk                                                           | 36 ms / 100000 rows in 101 pages     | < 2 s / all          |
+| statement first page (deepest party)                                                      | 72 ms                                | < 2 s                |
+| full single-party statement (40,020 lines, 81 pages of 500, as `fetchFullStatement` does) | **8.2 s**                            | < 10 s               |
 
 No limit was added anywhere.
 
@@ -69,14 +69,14 @@ fail-closed contract. Result: 4/4 on each engine.
 1074 s. Completeness is reported, not compared, because the PG baseline is the 100k gate. Output:
 `scripts/parity/out/volume-soak-1m.json`.
 
-| Measure | Result |
-|---|---|
+| Measure                                                                 | Result                                                       |
+| ----------------------------------------------------------------------- | ------------------------------------------------------------ |
 | every customer / supplier / invoice reachable through its keyset cursor | **100%**: 80,000 / 20,000 / 1,000,000 (81 / 21 / 1001 pages) |
-| full statement of the deepest party: every line present | **100%**: 400,020 / 400,020 lines (801 pages) |
-| customers / suppliers first page | 133 ms / 77 ms |
-| invoices first page | **2,239 ms** (the gate target is 2 s at 100k; this is 10×) |
-| statement first page | 1,569 ms |
-| full single-party statement, 400,020 lines | **623 s** (~0.78 s per 500-line page) |
+| full statement of the deepest party: every line present                 | **100%**: 400,020 / 400,020 lines (801 pages)                |
+| customers / suppliers first page                                        | 133 ms / 77 ms                                               |
+| invoices first page                                                     | **2,239 ms** (the gate target is 2 s at 100k; this is 10×)   |
+| statement first page                                                    | 1,569 ms                                                     |
+| full single-party statement, 400,020 lines                              | **623 s** (~0.78 s per 500-line page)                        |
 
 Reading: history stays complete at 10× the gate; nothing is truncated or lost. The giant statement is slow because each
 page re-computes the full-window totals and the party balance over all of the party's rows. The cost per page therefore

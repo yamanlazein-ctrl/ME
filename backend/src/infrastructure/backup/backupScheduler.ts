@@ -9,10 +9,7 @@ import { join, dirname, basename } from "node:path";
 import { tmpdir, homedir } from "os";
 import { logger } from "../config/logger.js";
 import { config } from "../config/env.js";
-import {
-  readManifest,
-  writeManifestAtomic,
-} from "../integrity/dataIntegrityManifest.js";
+import { readManifest, writeManifestAtomic } from "../integrity/dataIntegrityManifest.js";
 import { pgDb } from "../orm/pgLazy.js";
 import { sql } from "drizzle-orm";
 
@@ -63,7 +60,8 @@ export async function pruneOldZips(dir: string, keep = KEEP_BACKUPS): Promise<vo
 async function removeStalePartials(dir: string): Promise<void> {
   const files = await readdir(dir).catch(() => [] as string[]);
   for (const f of files) {
-    if (f.startsWith("auto-") && f.endsWith(".partial")) await rm(join(dir, f), { force: true }).catch(() => {});
+    if (f.startsWith("auto-") && f.endsWith(".partial"))
+      await rm(join(dir, f), { force: true }).catch(() => {});
   }
 }
 
@@ -96,9 +94,9 @@ async function lastBackupAgeMs(): Promise<number | null> {
 async function resolveDefaultTenantId(): Promise<string | null> {
   if (process.env.DEFAULT_TENANT_ID) return process.env.DEFAULT_TENANT_ID;
   try {
-    const r = await (await pgDb()).execute(
-      sql`SELECT id::text AS id FROM tenants WHERE slug = 'default' LIMIT 1`,
-    );
+    const r = await (
+      await pgDb()
+    ).execute(sql`SELECT id::text AS id FROM tenants WHERE slug = 'default' LIMIT 1`);
     const rows = (r as unknown as { rows: Array<{ id: string }> }).rows ?? [];
     return rows[0]?.id ?? null;
   } catch {

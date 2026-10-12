@@ -11,7 +11,10 @@ import { readFileSync, writeFileSync, mkdirSync, existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import Database from "better-sqlite3";
-import { readSqliteFingerprint, loadSqliteJournal } from "../src/infrastructure/orm/sqlite/schemaFingerprint.js";
+import {
+  readSqliteFingerprint,
+  loadSqliteJournal,
+} from "../src/infrastructure/orm/sqlite/schemaFingerprint.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const MIG = join(here, "../src/infrastructure/orm/sqlite/migrations");
@@ -24,7 +27,8 @@ const journal = loadSqliteJournal(MIG);
 const dbPath = arg("--db");
 const db = new Database(dbPath ?? ":memory:", { readonly: Boolean(dbPath) });
 db.pragma("trusted_schema = OFF"); // as in production: the schema must not need app functions
-if (!dbPath) for (const e of journal.entries) db.exec(readFileSync(join(MIG, `${e.tag}.sql`), "utf8"));
+if (!dbPath)
+  for (const e of journal.entries) db.exec(readFileSync(join(MIG, `${e.tag}.sql`), "utf8"));
 const fp = readSqliteFingerprint(db, journal.entries.at(-1)!.idx);
 db.close();
 

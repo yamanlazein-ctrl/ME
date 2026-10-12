@@ -25,7 +25,9 @@ export class SqliteSyncStateStore implements ISyncStateStore {
       }>;
       // PG opening_balance::float8 → JS number; the scaled integer decodes to the same value.
       const row = rows[0];
-      return row ? { ...row, amount: row.amount == null ? null : Number(scaledText(row.amount, 2)) } : row;
+      return row
+        ? { ...row, amount: row.amount == null ? null : Number(scaledText(row.amount, 2)) }
+        : row;
     });
   }
 

@@ -18,12 +18,27 @@ const pick = <T>(sqlite: () => Promise<unknown>, pg: () => Promise<unknown>): Pr
   (getEngine() === "sqlite" ? sqlite() : pg()) as Promise<T>;
 
 export const financialYearHelpers = () =>
-  pick<FinancialYear>(() => import("./sqlite/helpers/financialYearRepository.js"), () => import("./financialYearRepository.js"));
+  pick<FinancialYear>(
+    () => import("./sqlite/helpers/financialYearRepository.js"),
+    () => import("./financialYearRepository.js"),
+  );
 export const inventoryCountHelpers = () =>
-  pick<InventoryCount>(() => import("./sqlite/helpers/inventoryCountRepository.js"), () => import("./inventoryCountRepository.js"));
+  pick<InventoryCount>(
+    () => import("./sqlite/helpers/inventoryCountRepository.js"),
+    () => import("./inventoryCountRepository.js"),
+  );
 export const dyePurgeHelpers = () =>
-  pick<DyePurge>(() => import("./sqlite/helpers/dyePurgeRepository.js"), () => import("./dyePurgeRepository.js"));
+  pick<DyePurge>(
+    () => import("./sqlite/helpers/dyePurgeRepository.js"),
+    () => import("./dyePurgeRepository.js"),
+  );
 export const partyDeletionHelpers = () =>
-  pick<PartyDeletion>(() => import("./sqlite/helpers/partyDeletionImpact.js"), () => import("./partyDeletionImpact.js"));
+  pick<PartyDeletion>(
+    () => import("./sqlite/helpers/partyDeletionImpact.js"),
+    () => import("./partyDeletionImpact.js"),
+  );
 export const rollDeletionHelpers = () =>
-  pick<RollDeletion>(() => import("./sqlite/helpers/rollDeletionHelper.js"), () => import("./rollDeletionHelper.js"));
+  pick<RollDeletion>(
+    () => import("./sqlite/helpers/rollDeletionHelper.js"),
+    () => import("./rollDeletionHelper.js"),
+  );

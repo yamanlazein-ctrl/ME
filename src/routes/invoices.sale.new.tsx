@@ -745,7 +745,8 @@ function SaleInvoicePage() {
           {dataLines.length > 0 && (
             <div className="flex items-center justify-between gap-3 border-t border-border bg-secondary/40 px-4 py-2 text-xs font-semibold">
               <span className="text-muted-foreground">
-                {dataLines.length} بند • {formatNumber(totalQty)} كغ • {formatNumber(totalPieces)} ثوب
+                {dataLines.length} بند • {formatNumber(totalQty)} كغ • {formatNumber(totalPieces)}{" "}
+                ثوب
               </span>
               <span className={cn("text-sm font-bold tabular-nums", moneyClass)}>
                 {formatMoney(subtotal)} {currencySymbol(currency)}
@@ -761,10 +762,11 @@ function SaleInvoicePage() {
             </span>
           </div>
           <div className="grid gap-x-4 gap-y-3 p-4 md:grid-cols-[minmax(0,2fr)_minmax(0,1.2fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)]">
-            <HeaderField label="العميل *">
+            <HeaderField label="العميل *" htmlFor="sale-customer">
               <div className="flex gap-1">
                 <div className="min-w-0 flex-1">
                   <PartyCombobox
+                    id="sale-customer"
                     kind="customer"
                     value={customerId}
                     valueLabel={customerLabel}
@@ -803,9 +805,12 @@ function SaleInvoicePage() {
                 onChange={(e) => setDate(e.target.value)}
               />
             </HeaderField>
-            <HeaderField label="العملة *">
+            <HeaderField label="العملة *" htmlFor="sale-currency">
               <Select value={currency} onValueChange={(v) => setCurrency(v as Currency)}>
-                <SelectTrigger className={cn("!h-9", isUSD && "text-success font-bold")}>
+                <SelectTrigger
+                  id="sale-currency"
+                  className={cn("!h-9", isUSD && "text-success font-bold")}
+                >
                   <SelectValue placeholder="اختر العملة" />
                 </SelectTrigger>
                 <SelectContent>
@@ -840,8 +845,9 @@ function SaleInvoicePage() {
                 </div>
               )}
             </HeaderField>
-            <HeaderField label="الدفع">
+            <HeaderField label="الدفع" htmlFor="sale-payment">
               <PaymentMethodSelect
+                id="sale-payment"
                 value={paymentMethod}
                 onChange={setPaymentMethod}
                 methods={enabledPaymentMethods}
@@ -849,9 +855,9 @@ function SaleInvoicePage() {
             </HeaderField>
           </div>
           <div className="grid gap-x-4 gap-y-3 border-t border-border/70 bg-secondary/20 p-4 md:grid-cols-[minmax(0,0.4fr)_minmax(0,1.6fr)]">
-            <HeaderField label="المستودع">
+            <HeaderField label="المستودع" htmlFor="sale-warehouse">
               <Select value={warehouse} onValueChange={setWarehouse}>
-                <SelectTrigger className="!h-9">
+                <SelectTrigger id="sale-warehouse" className="!h-9">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>

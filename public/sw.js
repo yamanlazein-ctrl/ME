@@ -24,7 +24,12 @@ self.addEventListener("activate", (event) => {
 self.addEventListener("fetch", (event) => {
   const req = event.request;
   const url = new URL(req.url);
-  if (req.method !== "GET" || url.origin !== self.location.origin || url.pathname.startsWith("/api/")) return;
+  if (
+    req.method !== "GET" ||
+    url.origin !== self.location.origin ||
+    url.pathname.startsWith("/api/")
+  )
+    return;
 
   if (url.pathname.startsWith("/assets/")) {
     event.respondWith(

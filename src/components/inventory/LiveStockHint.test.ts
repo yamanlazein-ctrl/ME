@@ -3,7 +3,9 @@ import { QueryClient, QueryObserver } from "@tanstack/react-query";
 
 const findRollById = vi.fn();
 vi.mock("@/infrastructure/container", () => ({
-  container: { inventory: { repository: { findRollById: (...a: unknown[]) => findRollById(...a) } } },
+  container: {
+    inventory: { repository: { findRollById: (...a: unknown[]) => findRollById(...a) } },
+  },
 }));
 vi.mock("@/infrastructure/di/auth-context", () => ({
   buildTenantContext: () => ({ tenantId: "t-1", userId: "u-1", userRole: "admin", userName: "x" }),
@@ -15,15 +17,31 @@ const { Roll } = await import("@/domain/entities/Roll");
 
 const roll = (remainingPieces: number, remainingKg: number, version: number) =>
   Roll.reconstitute({
-    id: "roll-A", tenantId: "t-1", colorId: "c-1", rollNo: "A", dyeBatch: "", initialKg: 500, remainingKg,
-    pieces: 100, remainingPieces, pricePerKg: 3, currency: "USD", supplierId: "s-1", entryDate: "2026-03-01",
-    version, createdAt: "2026-03-01T00:00:00Z",
+    id: "roll-A",
+    tenantId: "t-1",
+    colorId: "c-1",
+    rollNo: "A",
+    dyeBatch: "",
+    initialKg: 500,
+    remainingKg,
+    pieces: 100,
+    remainingPieces,
+    pricePerKg: 3,
+    currency: "USD",
+    supplierId: "s-1",
+    entryDate: "2026-03-01",
+    version,
+    createdAt: "2026-03-01T00:00:00Z",
   });
 
 describe("live stock text", () => {
   it("says the real number, or nothing — never a default", () => {
-    expect(liveStockText({ kind: "ready", pieces: 90, kg: 450 })).toBe("الموجود بالمخزون الآن: 90 ثوب — 450 كغ");
-    expect(liveStockText({ kind: "ready", pieces: null, kg: 12.5 })).toBe("الموجود بالمخزون الآن: 12.5 كغ");
+    expect(liveStockText({ kind: "ready", pieces: 90, kg: 450 })).toBe(
+      "الموجود بالمخزون الآن: 90 ثوب — 450 كغ",
+    );
+    expect(liveStockText({ kind: "ready", pieces: null, kg: 12.5 })).toBe(
+      "الموجود بالمخزون الآن: 12.5 كغ",
+    );
     expect(liveStockText({ kind: "unavailable" })).toBe("تعذّرت قراءة المخزون الآن");
     expect(liveStockText({ kind: "loading" })).not.toMatch(/\d/);
     expect(liveStockText({ kind: "none" })).toBeNull();

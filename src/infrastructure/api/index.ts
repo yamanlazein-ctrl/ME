@@ -10,6 +10,7 @@ export { ProfitApiService } from "./ProfitApiService";
 export { ExpenseApiService } from "./ExpenseApiService";
 export { DashboardApiService } from "./DashboardApiService";
 export { SettingsApiService } from "./SettingsApiService";
+export { UsersApiService } from "./UsersApiService";
 export type { SettingsData, SettingsSection } from "./SettingsApiService";
 export { NotificationApiService } from "./NotificationApiService";
 export { PrintJobApiService } from "./PrintJobApiService";

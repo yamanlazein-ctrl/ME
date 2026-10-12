@@ -51,13 +51,12 @@ npm run tauri:release
 > `verify-build-freshness.mjs post` التي تثبت: تطابق `target\release` مع `resources` بايت-ببايت، وأن
 > الملف التنفيذي **يضمّن** أصول الواجهة الحالية، وأن المثبّت موجود وأحدث من الملف التنفيذي.
 
-
 `before-build.cmd` ينفّذ بالترتيب، وأي فشل يوقف البناء:
 
 1. `stage-node-runtime.mjs` — node.exe المحمول (مثبّت الإصدار).
 2. `build-frontend.cmd` — واجهة SPA (`VITE_DESKTOP_DEPLOY=true`) ← `resources/server/web`.
 3. `bundle-server.mjs` — الباك-إند كملف واحد بـesbuild + عمّال pino + argon2 الأصلي + **better-sqlite3 (win32-x64)**
-   + هجرات SQLite ← `resources/server` (حوالي 230 ملفاً).
+   - هجرات SQLite ← `resources/server` (حوالي 230 ملفاً).
 4. `build-desktop-seed.mjs` — محتوى أول تشغيل `resources/server/desktop-seed.json`: **المستأجر الافتراضي + الترخيص الموقّع
    فقط (بلا مستخدمين)**؛ يتحقق أن `license-public.pem` المرفق هو زوج مفتاح التوقيع.
 5. `server-bundle.test.mjs` — تشغيل حقيقي للخادم المُحزَّم بـnode.exe المرفق على SQLite من مجلد فارغ (FRESH)، ثم REUSE،

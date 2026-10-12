@@ -111,7 +111,13 @@ pub fn dpapi_decrypt(cipher: &[u8]) -> windows::core::Result<Vec<u8>> {
 // fails closed — we preserve the original as secrets.dat.corrupt-<ts> and
 // refuse to silently rotate JWT/APP keys (would invalidate sessions / crypto).
 pub fn load_or_generate() -> Result<SecretStore, String> {
-    let path = secrets_path()?;
+    load_or_generate_at(&secrets_path()?, explicit_secrets_reset_allowed())
+}
+
+/// `load_or_generate` on an explicit path (tests use a scratch directory; the operator's store is
+/// never touched). `reset_allowed` = the operator's explicit MOTARD_RESET_SECRETS consent.
+fn load_or_generate_at(path: &std::path::Path, reset_allowed: bool) -> Result<SecretStore, String> {
+    let path = path.to_path_buf();
     if path.exists() {
         match fs::read(&path) {
             Ok(raw) => match dpapi_decrypt(&raw) {
@@ -125,7 +131,7 @@ pub fn load_or_generate() -> Result<SecretStore, String> {
                         if s.db_password.is_empty() {
                             let mut upgraded = s.clone();
                             upgraded.db_password = generate_db_password();
-                            persist(&upgraded)?;
+                            persist_at(&path, &upgraded)?;
                             return Ok(upgraded);
                         }
                         return Ok(s);
@@ -135,7 +141,7 @@ pub fn load_or_generate() -> Result<SecretStore, String> {
                             &path,
                             "secrets.dat decrypted but JWT/APP keys are empty",
                         );
-                        if !explicit_secrets_reset_allowed() {
+                        if !reset_allowed {
                             return Err(msg);
                         }
                     }
@@ -144,7 +150,7 @@ pub fn load_or_generate() -> Result<SecretStore, String> {
                             &path,
                             &format!("secrets.dat JSON parse failed: {e}"),
                         );
-                        if !explicit_secrets_reset_allowed() {
+                        if !reset_allowed {
                             return Err(msg);
                         }
                     }
@@ -154,7 +160,7 @@ pub fn load_or_generate() -> Result<SecretStore, String> {
                         &path,
                         &format!("secrets.dat DPAPI decrypt failed: {e}"),
                     );
-                    if !explicit_secrets_reset_allowed() {
+                    if !reset_allowed {
                         return Err(msg);
                     }
                 }
@@ -167,6 +173,26 @@ pub fn load_or_generate() -> Result<SecretStore, String> {
             }
         }
     }
+    // DFP-011 (second launch): a failed load preserved the old store as secrets.dat.corrupt-<ts>, so
+    // `secrets.dat` is now ABSENT. Treating that as a first install silently rotated JWT_SECRET and
+    // APP_MASTER_KEY on the very next start — making everything encrypted with the old master key
+    // (hub credentials, the `secrets` table) unreadable, and dropping the Google token — exactly the
+    // rotation the first refusal exists to prevent. A transient DPAPI failure (profile not loaded yet)
+    // must stay recoverable by renaming the preserved file back.
+    if !reset_allowed {
+        if let Some(prev) = preserved_corrupt_store(&path) {
+            return Err(format!(
+                concat!(
+                    "رفض إنشاء مفاتيح جديدة: يوجد ملف أسرار محفوظ من محاولة سابقة فشل تحميلها.\n",
+                    "الملف المحفوظ: {}\n",
+                    "للاستعادة: أعد تسميته إلى secrets.dat بعد إصلاح DPAPI/المستخدم ثم أعد التشغيل، ",
+                    "أو اضبط MOTARD_RESET_SECRETS=1 بعد موافقة صريحة لإعادة توليد المفاتيح ",
+                    "(سيُبطل الجلسات والبيانات المشفّرة بالمفتاح القديم)."
+                ),
+                prev.display()
+            ));
+        }
+    }
     let store = SecretStore {
         jwt_secret: base64_encode(&random_bytes(32)),
         app_master_key: base64_encode(&random_bytes(32)),
@@ -175,8 +201,23 @@ pub fn load_or_generate() -> Result<SecretStore, String> {
         google_client_id: String::new(),
         google_account_email: String::new(),
     };
-    persist(&store)?;
+    persist_at(&path, &store)?;
     Ok(store)
+}
+
+/// A `secrets.dat.corrupt-<ts>` left next to `path` by `preserve_corrupt_and_fail`, if any.
+fn preserved_corrupt_store(path: &std::path::Path) -> Option<PathBuf> {
+    let dir = path.parent()?;
+    let prefix = format!("{}.corrupt-", path.file_name()?.to_string_lossy());
+    fs::read_dir(dir)
+        .ok()?
+        .filter_map(|e| e.ok())
+        .map(|e| e.path())
+        .find(|p| {
+            p.file_name()
+                .map(|n| n.to_string_lossy().starts_with(&prefix))
+                .unwrap_or(false)
+        })
 }
 
 /// P2-5: the password for the bundled PostgreSQL superuser role.
@@ -221,12 +262,19 @@ fn explicit_secrets_reset_allowed() -> bool {
 
 // Persist (encrypt + write) via temp file + rename (DFP-011 atomic write).
 pub fn persist(store: &SecretStore) -> Result<(), String> {
+    persist_at(&secrets_path()?, store)
+}
+
+fn persist_at(sp: &std::path::Path, store: &SecretStore) -> Result<(), String> {
     let json = serde_json::to_vec(store).map_err(|e| format!("serialize secrets: {}", e))?;
     let enc = dpapi_encrypt(&json)?;
-    let dir = crate::app_data_dir()?;
+    let dir = sp
+        .parent()
+        .ok_or_else(|| format!("no parent directory for '{}'", sp.display()))?
+        .to_path_buf();
     fs::create_dir_all(&dir)
         .map_err(|e| format!("create data directory '{}': {}", dir.display(), e))?;
-    let sp = secrets_path()?;
+    let sp = sp.to_path_buf();
     let tmp = sp.with_extension("dat.tmp");
     fs::write(&tmp, &enc).map_err(|e| {
         format!(
@@ -375,5 +423,36 @@ mod tests {
             "db_password must need no URL encoding: {}",
             store.db_password
         );
+    }
+
+    /// DFP-011: after a failed load preserved the store, the NEXT launch must refuse to mint new keys
+    /// (it used to see "no secrets.dat" and rotate them silently); explicit consent still resets.
+    #[test]
+    fn second_launch_after_preserved_corrupt_store_refuses_new_keys() {
+        let dir = std::env::temp_dir().join(format!(
+            "motard-secrets-second-launch-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("secrets.dat");
+        fs::write(&path, b"not-a-dpapi-blob").unwrap();
+
+        assert!(load_or_generate_at(&path, false).is_err(), "first launch: corrupt store refused");
+        assert!(!path.exists(), "the corrupt store was preserved aside");
+        // (No Debug on SecretStore on purpose — secrets must never reach a log — hence the match.)
+        match load_or_generate_at(&path, false) {
+            Ok(_) => panic!("second launch must not generate new keys"),
+            Err(e) => assert!(e.contains("corrupt-"), "points at the preserved file: {e}"),
+        }
+        assert!(!path.exists(), "no new secrets.dat written without consent");
+
+        let reset = load_or_generate_at(&path, true).expect("explicit reset generates");
+        assert!(!reset.app_master_key.is_empty() && path.exists());
+        let again = load_or_generate_at(&path, false).expect("the new store now loads normally");
+        assert_eq!(again.app_master_key, reset.app_master_key);
+        let _ = fs::remove_dir_all(&dir);
     }
 }

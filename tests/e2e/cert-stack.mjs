@@ -42,7 +42,8 @@ const arg = (n, d) => {
   return i > 0 && process.argv[i + 1] ? process.argv[i + 1] : d;
 };
 const DB = arg("db", "erp_cert");
-if (!/^erp_cert[a-z0-9_]*$/.test(DB)) throw new Error(`refusing database "${DB}": disposable erp_cert* databases only`);
+if (!/^erp_cert[a-z0-9_]*$/.test(DB))
+  throw new Error(`refusing database "${DB}": disposable erp_cert* databases only`);
 const email = process.env.E2E_ADMIN_EMAIL ?? "admin@erp.local";
 const password = process.env.E2E_ADMIN_PASSWORD;
 if (!password) throw new Error("E2E_ADMIN_PASSWORD is required (DFP-029: no embedded passwords)");
@@ -50,7 +51,9 @@ if (!password) throw new Error("E2E_ADMIN_PASSWORD is required (DFP-029: no embe
 function adminUrl() {
   const explicit = arg("pg", process.env.CERT_PG_URL);
   if (explicit) return explicit;
-  const line = readFileSync(join(BACKEND, ".env.test"), "utf8").split(/\r?\n/).find((l) => l.startsWith("DATABASE_URL="));
+  const line = readFileSync(join(BACKEND, ".env.test"), "utf8")
+    .split(/\r?\n/)
+    .find((l) => l.startsWith("DATABASE_URL="));
   if (!line) throw new Error("no --pg/CERT_PG_URL and backend/.env.test has no DATABASE_URL");
   const u = new URL(line.slice("DATABASE_URL=".length).trim().replace(/^"|"$/g, ""));
   u.port = process.env.CERT_PG_PORT ?? "55432";
@@ -78,19 +81,33 @@ async function withClient(url, fn) {
 const hasTemplate = await withClient(admin, async (c) => {
   await c.query(`DROP DATABASE IF EXISTS "${DB}" WITH (FORCE)`);
   const t = (await c.query("SELECT 1 FROM pg_database WHERE datname = 'ac8_tpl'")).rowCount > 0;
-  await c.query(t ? `CREATE DATABASE "${DB}" TEMPLATE "ac8_tpl"` : `CREATE DATABASE "${DB}" TEMPLATE template0 ENCODING 'UTF8'`);
+  await c.query(
+    t
+      ? `CREATE DATABASE "${DB}" TEMPLATE "ac8_tpl"`
+      : `CREATE DATABASE "${DB}" TEMPLATE template0 ENCODING 'UTF8'`,
+  );
   return t;
 });
 if (!hasTemplate) {
   console.log("[cert-stack] migrating (no ac8_tpl template yet, ~2 min)…");
-  const r = spawnSync(process.execPath, ["node_modules/drizzle-kit/bin.cjs", "migrate"], { cwd: BACKEND, env: { ...process.env, DATABASE_URL: dbUrl, NODE_ENV: "test" }, encoding: "utf8" });
-  if (r.status !== 0) throw new Error(`migrate failed:\n${(r.stdout ?? "") + (r.stderr ?? "")}`.slice(-3000));
+  const r = spawnSync(process.execPath, ["node_modules/drizzle-kit/bin.cjs", "migrate"], {
+    cwd: BACKEND,
+    env: { ...process.env, DATABASE_URL: dbUrl, NODE_ENV: "test" },
+    encoding: "utf8",
+  });
+  if (r.status !== 0)
+    throw new Error(`migrate failed:\n${(r.stdout ?? "") + (r.stderr ?? "")}`.slice(-3000));
 }
 
 // ── 2. seed ──
 const tenantId = randomUUID();
 const userId = randomUUID();
-const passwordHash = await hash(password, { memoryCost: 65536, timeCost: 3, parallelism: 4, algorithm: 2 });
+const passwordHash = await hash(password, {
+  memoryCost: 65536,
+  timeCost: 3,
+  parallelism: 4,
+  algorithm: 2,
+});
 await withClient(dbUrl, async (c) => {
   await c.query(
     `INSERT INTO tenants (id, name, slug, status, license_status, license_type) VALUES ($1, 'Cert Co', 'default', 'active', 'active', 'perpetual')`,
@@ -109,7 +126,19 @@ await withClient(dbUrl, async (c) => {
 // suites at it with PLAYWRIGHT_BACKEND_URL / PLAYWRIGHT_BASE_URL.
 const BACKEND_PORT = process.env.CERT_BACKEND_PORT ?? "8080";
 const UI_PORT = process.env.CERT_UI_PORT ?? "8081";
-writeFileSync(join(here, ".cert-stack.json"), JSON.stringify({ tenantId, email, backend: `http://localhost:${BACKEND_PORT}`, ui: `http://localhost:${UI_PORT}` }, null, 2));
+writeFileSync(
+  join(here, ".cert-stack.json"),
+  JSON.stringify(
+    {
+      tenantId,
+      email,
+      backend: `http://localhost:${BACKEND_PORT}`,
+      ui: `http://localhost:${UI_PORT}`,
+    },
+    null,
+    2,
+  ),
+);
 console.log(`[cert-stack] ${DB} ready (tenant ${tenantId})`);
 
 // ── 3. servers ──
@@ -121,16 +150,61 @@ const start = (name, cmd, args, cwd, env, log) => {
   children.push(child);
   return child;
 };
-const backendEnv = { ...process.env, NODE_ENV: "test", DB_ENGINE: "postgres", DATABASE_URL: dbUrl, TEST_DB_URL: dbUrl, PORT: BACKEND_PORT, HOST: "127.0.0.1",
-  JWT_SECRET: process.env.JWT_SECRET ?? "cert-stack-jwt-secret-32-chars-minimum!!", APP_MASTER_KEY: process.env.APP_MASTER_KEY ?? "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa=",
-  CORS_ORIGIN: `http://localhost:${UI_PORT}`, RATE_LIMIT_RPS: "100000", RATE_LIMIT_WINDOW_MS: "60000", LOG_LEVEL: "warn", DEFAULT_TENANT_ID: tenantId };
-for (const k of ["DESKTOP_DEPLOY", "DESKTOP_PIPE", "CENTRAL_SYNC_URL", "SQLITE_PATH", "MOTARD_STARTUP_STATE"]) delete backendEnv[k];
-start("backend", process.execPath, [join(BACKEND, "node_modules/tsx/dist/cli.mjs"), "src/presentation/server.ts"], join(SERVE, "backend"), backendEnv, ".cert-backend.log");
+const backendEnv = {
+  ...process.env,
+  NODE_ENV: "test",
+  DB_ENGINE: "postgres",
+  DATABASE_URL: dbUrl,
+  TEST_DB_URL: dbUrl,
+  PORT: BACKEND_PORT,
+  HOST: "127.0.0.1",
+  JWT_SECRET: process.env.JWT_SECRET ?? "cert-stack-jwt-secret-32-chars-minimum!!",
+  APP_MASTER_KEY: process.env.APP_MASTER_KEY ?? "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa=",
+  CORS_ORIGIN: `http://localhost:${UI_PORT}`,
+  RATE_LIMIT_RPS: "100000",
+  RATE_LIMIT_WINDOW_MS: "60000",
+  LOG_LEVEL: "warn",
+  DEFAULT_TENANT_ID: tenantId,
+};
+for (const k of [
+  "DESKTOP_DEPLOY",
+  "DESKTOP_PIPE",
+  "CENTRAL_SYNC_URL",
+  "SQLITE_PATH",
+  "MOTARD_STARTUP_STATE",
+])
+  delete backendEnv[k];
+start(
+  "backend",
+  process.execPath,
+  [join(BACKEND, "node_modules/tsx/dist/cli.mjs"), "src/presentation/server.ts"],
+  join(SERVE, "backend"),
+  backendEnv,
+  ".cert-backend.log",
+);
 // VITE_ACTIVATION_BYPASS: the UI's existing dev/test switch for the local device-activation marker
 // (ActivationGate). The suites test the ERP screens, not licence activation.
-const uiEnv = { ...process.env, VITE_API_BASE_URL: `http://localhost:${BACKEND_PORT}`, VITE_ACTIVATION_BYPASS: "1" };
+const uiEnv = {
+  ...process.env,
+  VITE_API_BASE_URL: `http://localhost:${BACKEND_PORT}`,
+  VITE_ACTIVATION_BYPASS: "1",
+};
 delete uiEnv.VITE_DESKTOP_DEPLOY;
-start("ui", process.execPath, [join(REPO, "node_modules/vite/bin/vite.js"), "--port", UI_PORT, "--strictPort", "--host", "localhost"], SERVE, uiEnv, ".cert-ui.log");
+start(
+  "ui",
+  process.execPath,
+  [
+    join(REPO, "node_modules/vite/bin/vite.js"),
+    "--port",
+    UI_PORT,
+    "--strictPort",
+    "--host",
+    "localhost",
+  ],
+  SERVE,
+  uiEnv,
+  ".cert-ui.log",
+);
 
 const wait = async (url, label) => {
   for (let i = 0; i < 240; i++) {
@@ -150,12 +224,18 @@ console.log(`[cert-stack] backend :${BACKEND_PORT} and ui :${UI_PORT} up — Ctr
 const stop = () => {
   for (const c of children) {
     if (c.exitCode !== null) continue;
-    if (process.platform === "win32") spawnSync("taskkill", ["/pid", String(c.pid), "/T", "/F"], { stdio: "ignore" });
+    if (process.platform === "win32")
+      spawnSync("taskkill", ["/pid", String(c.pid), "/T", "/F"], { stdio: "ignore" });
     else c.kill("SIGKILL");
   }
   process.exit(0);
 };
 process.on("SIGINT", stop);
 process.on("SIGTERM", stop);
-for (const c of children) c.on("exit", (code) => { if (!existsSync(join(here, ".cert-stack.json"))) return; console.error(`[cert-stack] ${c.__name} exited (${code})`); stop(); });
+for (const c of children)
+  c.on("exit", (code) => {
+    if (!existsSync(join(here, ".cert-stack.json"))) return;
+    console.error(`[cert-stack] ${c.__name} exited (${code})`);
+    stop();
+  });
 setInterval(() => {}, 60_000);

@@ -45,7 +45,8 @@ beforeAll(async () => {
       };
       if (req.url === "/api/health/live") return json(200, { ok: true });
       if (req.url === "/api/setup/status") return json(200, { isCompleted: true });
-      if (req.url === "/api/license/status") return json(200, { license: { key: "LIC-1", status: "active" } });
+      if (req.url === "/api/license/status")
+        return json(200, { license: { key: "LIC-1", status: "active" } });
       if (req.url === "/api/sync/enroll") {
         if (body.code !== "ABCD-EFGH-JKLM") return json(401, { message: "رمز التسجيل غير صحيح" });
         return json(201, {
@@ -59,11 +60,17 @@ beforeAll(async () => {
         });
       }
       if (req.url === "/api/auth/login") {
-        return json(200, { accessToken: "h.eyJ0ZW5hbnRJZCI6IjExMTExMTExLTExMTEtNDExMS04MTExLTExMTExMTExMTExMSJ9.s", refreshToken: "r", user: { id: "u1", role: "admin", email: body.email } });
+        return json(200, {
+          accessToken: "h.eyJ0ZW5hbnRJZCI6IjExMTExMTExLTExMTEtNDExMS04MTExLTExMTExMTExMTExMSJ9.s",
+          refreshToken: "r",
+          user: { id: "u1", role: "admin", email: body.email },
+        });
       }
       if (req.url === "/api/auth/sync-device") return json(200, { id: body.deviceId });
       if (req.url === "/api/sync/devices/self/credential") {
-        return oldHub ? json(404, {}) : json(201, { deviceSecret: "minted-for-account-pairing-0000000000000" });
+        return oldHub
+          ? json(404, {})
+          : json(201, { deviceSecret: "minted-for-account-pairing-0000000000000" });
       }
       if (req.url === "/api/sync/device-token") {
         tokenCalls.push(body);
@@ -91,7 +98,12 @@ const fresh = async () => {
 describe("device enrollment (device side)", () => {
   it("a wrong code changes nothing", async () => {
     const hub = await fresh();
-    const r = await hub.enrollHub({ url, code: "WRONG-CODE", device: DEVICE, local: { tenantId: "t-local", userId: "u-local" } });
+    const r = await hub.enrollHub({
+      url,
+      code: "WRONG-CODE",
+      device: DEVICE,
+      local: { tenantId: "t-local", userId: "u-local" },
+    });
     expect(r).toMatchObject({ ok: false, stage: "login" });
     expect(existsSync(process.env.HUB_SESSION_PATH!)).toBe(false);
     expect(hub.getCentralSyncUrl()).toBeNull();
@@ -99,20 +111,39 @@ describe("device enrollment (device side)", () => {
 
   it("links once with the code and keeps the device credential, not a password", async () => {
     const hub = await fresh();
-    const r = await hub.enrollHub({ url, code: "ABCD-EFGH-JKLM", device: DEVICE, local: { tenantId: "t-local", userId: "u-local" } });
+    const r = await hub.enrollHub({
+      url,
+      code: "ABCD-EFGH-JKLM",
+      device: DEVICE,
+      local: { tenantId: "t-local", userId: "u-local" },
+    });
     expect(r.ok).toBe(true);
     const session = JSON.parse(readFileSync(process.env.HUB_SESSION_PATH!, "utf8"));
-    expect(session).toMatchObject({ hubDeviceId: DEVICE.id, hubTenantId: HUB_TENANT, hubLicenseKey: "LIC-1", localTenantId: "t-local" });
+    expect(session).toMatchObject({
+      hubDeviceId: DEVICE.id,
+      hubTenantId: HUB_TENANT,
+      hubLicenseKey: "LIC-1",
+      localTenantId: "t-local",
+    });
     const credFile = readFileSync(join(dir, "hub-credentials.dat"), "utf8");
     expect(credFile).not.toContain(SECRET); // encrypted at rest
-    expect(hub.loadHubCredentials()).toMatchObject({ url, tenantId: HUB_TENANT, deviceId: DEVICE.id, deviceSecret: SECRET });
+    expect(hub.loadHubCredentials()).toMatchObject({
+      url,
+      tenantId: HUB_TENANT,
+      deviceId: DEVICE.id,
+      deviceSecret: SECRET,
+    });
     expect(hub.loadHubCredentials()?.password).toBeUndefined();
   });
 
   it("after a restart the link and the background-sync identity are still there", async () => {
     const hub = await fresh();
     expect(hub.getCentralSyncUrl()).toBe(url);
-    expect(hub.backgroundSyncIdentity()).toEqual({ tenantId: "t-local", userId: "u-local", deviceId: DEVICE.id });
+    expect(hub.backgroundSyncIdentity()).toEqual({
+      tenantId: "t-local",
+      userId: "u-local",
+      deviceId: DEVICE.id,
+    });
     expect(await hub.resolveHubAuthHeader()).toBe("Bearer access-enrolled-xxxx");
   });
 
@@ -137,9 +168,19 @@ describe("device enrollment (device side)", () => {
 
   it("pairing with the admin account keeps a device credential, not the password", async () => {
     const hub = await fresh();
-    const r = await hub.connectHub({ url, email: "admin@hub.test", password: "pw-123", device: DEVICE, local: { tenantId: "t-local", userId: "u-local" } });
+    const r = await hub.connectHub({
+      url,
+      email: "admin@hub.test",
+      password: "pw-123",
+      device: DEVICE,
+      local: { tenantId: "t-local", userId: "u-local" },
+    });
     expect(r.ok).toBe(true);
-    expect(hub.loadHubCredentials()).toMatchObject({ deviceId: DEVICE.id, deviceSecret: "minted-for-account-pairing-0000000000000", tenantId: HUB_TENANT });
+    expect(hub.loadHubCredentials()).toMatchObject({
+      deviceId: DEVICE.id,
+      deviceSecret: "minted-for-account-pairing-0000000000000",
+      tenantId: HUB_TENANT,
+    });
     expect(hub.loadHubCredentials()?.password).toBeUndefined();
     expect(hub.backgroundSyncIdentity()?.deviceId).toBe(DEVICE.id);
   });
@@ -147,7 +188,12 @@ describe("device enrollment (device side)", () => {
   it("a hub without device credentials falls back to the stored account (as before)", async () => {
     oldHub = true;
     const hub = await fresh();
-    const r = await hub.connectHub({ url, email: "admin@hub.test", password: "pw-123", device: DEVICE });
+    const r = await hub.connectHub({
+      url,
+      email: "admin@hub.test",
+      password: "pw-123",
+      device: DEVICE,
+    });
     oldHub = false;
     expect(r.ok).toBe(true);
     expect(hub.loadHubCredentials()).toMatchObject({ email: "admin@hub.test", password: "pw-123" });

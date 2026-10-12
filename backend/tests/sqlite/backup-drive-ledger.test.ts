@@ -35,14 +35,20 @@ beforeAll(async () => {
   restore = await import("@/infrastructure/backup/sqliteRestore.js");
   await runtime.ensureSqliteRuntime();
   const w = writer();
-  w.prepare(`INSERT INTO tenants (id, name, slug) VALUES (?, 'درايف', 'bk-drive')`).run(randomUUID());
-  w.prepare(`INSERT INTO motard_drive_folders (kind, drive_file_id, label, created_at) VALUES ('root', 'root-A', 'Motard', ?)`).run(now);
+  w.prepare(`INSERT INTO tenants (id, name, slug) VALUES (?, 'درايف', 'bk-drive')`).run(
+    randomUUID(),
+  );
+  w.prepare(
+    `INSERT INTO motard_drive_folders (kind, drive_file_id, label, created_at) VALUES ('root', 'root-A', 'Motard', ?)`,
+  ).run(now);
   w.prepare(
     `INSERT INTO motard_drive_uploads (id, stable_key, entity_type, entity_id, period_key, section, file_name, mime_type,
        content_sha256, content_bytes, status, drive_file_id, created_at, updated_at)
      VALUES ('up-A', 'k-A', 'invoice', 'f.csv', '2026-10', 'salesInvoices', 'f.csv', 'text/csv', 'h', 1, 'done', 'drive-A', ?, ?)`,
   ).run(now, now);
-  w.prepare(`INSERT INTO motard_drive_runs (id, kind, state, started_at) VALUES ('run-A', 'catchup', 'done', ?)`).run(now);
+  w.prepare(
+    `INSERT INTO motard_drive_runs (id, kind, state, started_at) VALUES ('run-A', 'catchup', 'done', ?)`,
+  ).run(now);
 });
 
 afterAll(() => {
@@ -55,14 +61,18 @@ describe("backup excludes the per-device Drive ledger (DB-08)", () => {
     const created = await backup.createAndVerifyBackup({ kind: "manual", appVersion: "test" });
     const opened = backup.openAndVerifyBackupV3Sync(created.path, { keep: true });
     const db = new Database(opened.databasePath, { readonly: true });
-    const counts = Object.fromEntries(DRIVE_TABLES.map((t) => [t, db.prepare(`SELECT count(*) FROM "${t}"`).pluck().get()]));
+    const counts = Object.fromEntries(
+      DRIVE_TABLES.map((t) => [t, db.prepare(`SELECT count(*) FROM "${t}"`).pluck().get()]),
+    );
     db.close();
     rmSync(opened.workDir, { recursive: true, force: true });
     expect(counts).toEqual(Object.fromEntries(DRIVE_TABLES.map((t) => [t, 0])));
 
     await restore.restoreBackupV3(created.path);
     const w = writer();
-    expect(w.prepare(`SELECT drive_file_id FROM motard_drive_uploads WHERE id = 'up-A'`).pluck().get()).toBe("drive-A");
+    expect(
+      w.prepare(`SELECT drive_file_id FROM motard_drive_uploads WHERE id = 'up-A'`).pluck().get(),
+    ).toBe("drive-A");
     expect(w.prepare(`SELECT count(*) FROM motard_drive_folders`).pluck().get()).toBe(1);
   });
 });

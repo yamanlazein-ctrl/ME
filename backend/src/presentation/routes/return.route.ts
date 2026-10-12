@@ -146,13 +146,25 @@ export function registerReturnRoutes(
       const c = ctx(req);
       const expectedVersion = req.body?.expectedVersion;
       if (typeof expectedVersion !== "number") {
-        return res.status(400).json({ code: "EXPECTED_VERSION_REQUIRED", message: "الإصدار المتوقع (expectedVersion) مطلوب للتحديث/الإلغاء" });
+        return res
+          .status(400)
+          .json({
+            code: "EXPECTED_VERSION_REQUIRED",
+            message: "الإصدار المتوقع (expectedVersion) مطلوب للتحديث/الإلغاء",
+          });
       }
       const syncEnabled = Boolean(syncOutboxRepo && isSyncEnqueueEnabled());
 
       // F-07: the return cancel and its outbox unit share ONE transaction.
       const runCancel = async () => {
-        const cancelled = await uc.cancelReturnUseCase(returnRepo, auditRepo, pid(req), c.userId, c, expectedVersion);
+        const cancelled = await uc.cancelReturnUseCase(
+          returnRepo,
+          auditRepo,
+          pid(req),
+          c.userId,
+          c,
+          expectedVersion,
+        );
         if (!cancelled.ok) return cancelled;
         if (syncOutboxRepo && isSyncEnqueueEnabled()) {
           await enqueueReturnCancel(

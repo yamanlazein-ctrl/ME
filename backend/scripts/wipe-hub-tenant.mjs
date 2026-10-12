@@ -53,7 +53,9 @@ const tenantArg = process.argv[2];
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 if (!ALL_TENANTS && (!tenantArg || !UUID_RE.test(tenantArg))) {
-  console.error("usage: node scripts/wipe-hub-tenant.mjs <tenantId> [--execute]  |  --all-tenants <tenantId...>");
+  console.error(
+    "usage: node scripts/wipe-hub-tenant.mjs <tenantId> [--execute]  |  --all-tenants <tenantId...>",
+  );
   process.exit(1);
 }
 if (EXECUTE && !process.env.DATABASE_URL) {
@@ -119,7 +121,10 @@ if (!url) {
 const client = new pg.Client({ connectionString: url, connectionTimeoutMillis: 15000 });
 
 async function count(table, tenants) {
-  const r = await client.query(`SELECT count(*)::bigint AS n FROM "${table}" ${tenants ? "WHERE tenant_id = ANY($1)" : ""}`, tenants ?? []);
+  const r = await client.query(
+    `SELECT count(*)::bigint AS n FROM "${table}" ${tenants ? "WHERE tenant_id = ANY($1)" : ""}`,
+    tenants ?? [],
+  );
   return Number(r.rows[0].n);
 }
 
@@ -177,7 +182,9 @@ async function main() {
           throw new Error(`${table}: ${e.message.split("\n")[0]}`);
         }
       }
-      await client.query("CREATE TRIGGER trg_ledger_entries_append_only BEFORE UPDATE OR DELETE ON ledger_entries FOR EACH ROW EXECUTE FUNCTION fn_ledger_entries_append_only()");
+      await client.query(
+        "CREATE TRIGGER trg_ledger_entries_append_only BEFORE UPDATE OR DELETE ON ledger_entries FOR EACH ROW EXECUTE FUNCTION fn_ledger_entries_append_only()",
+      );
       for (const [table, col] of SEQUENCES) {
         // setval past the old maximum only matters for the wiped rows' id space.
         await client.query(
@@ -197,13 +204,21 @@ async function main() {
     try {
       let left = 0;
       for (const t of [...BUSINESS_TABLES, ...SYNC_TABLES]) {
-        try { left += await count(t, tenantIds); } catch { /* table missing */ }
+        try {
+          left += await count(t, tenantIds);
+        } catch {
+          /* table missing */
+        }
       }
       console.log(`[verify] remaining rows in scope: ${left}`);
       const admin = await client.query("SELECT count(*)::bigint AS n FROM system_admins");
       const tenants = await client.query("SELECT count(*)::bigint AS n FROM tenants");
-      console.log(`[verify] system_admins=${admin.rows[0].n} tenants=${tenants.rows[0].n} (infrastructure intact)`);
-    } catch { /* best-effort verification */ }
+      console.log(
+        `[verify] system_admins=${admin.rows[0].n} tenants=${tenants.rows[0].n} (infrastructure intact)`,
+      );
+    } catch {
+      /* best-effort verification */
+    }
     await client.end().catch(() => {});
   }
 }

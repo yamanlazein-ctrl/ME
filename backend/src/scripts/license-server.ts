@@ -28,7 +28,12 @@ import { PostgresLicenseRepository } from "../infrastructure/repositories/Postgr
 import { PostgresAuditRepository } from "../infrastructure/repositories/PostgresAuditRepository.js";
 import { PostgresSystemAdminRepository } from "../infrastructure/repositories/PostgresSystemAdminRepository.js";
 import { Argon2PasswordHasher } from "../infrastructure/auth/PasswordHasher.js";
-import { DbTokenDenylist, RedisTokenDenylist, CompositeTokenDenylist, redis } from "../infrastructure/auth/TokenDenylist.js";
+import {
+  DbTokenDenylist,
+  RedisTokenDenylist,
+  CompositeTokenDenylist,
+  redis,
+} from "../infrastructure/auth/TokenDenylist.js";
 import { SelfHostedLicenseProvider } from "../infrastructure/license/SelfHostedLicenseProvider.js";
 import { LicenseTokenSigner } from "../infrastructure/auth/LicenseTokenSigner.js";
 import { AesGcmSecretStore, decodeMasterKey } from "../infrastructure/secrets/AesGcmSecretStore.js";
@@ -62,7 +67,10 @@ function buildLicenseTokenSignerForServer(): LicenseTokenSigner {
   // restarts reuse the same key.
   const { privateKey, publicKey } = generateKeyPairSync("ed25519");
   const privPem = privateKey.export({ type: "pkcs8", format: "pem" }).toString().trim();
-  const pubPem = createPublicKey(privateKey).export({ type: "spki", format: "pem" }).toString().trim();
+  const pubPem = createPublicKey(privateKey)
+    .export({ type: "spki", format: "pem" })
+    .toString()
+    .trim();
   const oneLine = (pem: string) => pem.replace(/\n/g, "\\n");
 
   const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -77,7 +85,10 @@ function buildLicenseTokenSignerForServer(): LicenseTokenSigner {
   ].join("\n");
 
   try {
-    if (!existsSync(envPath) || !/^\s*LICENSE_SIGNING_KEY\s*=/m.test(readFileSync(envPath, "utf8"))) {
+    if (
+      !existsSync(envPath) ||
+      !/^\s*LICENSE_SIGNING_KEY\s*=/m.test(readFileSync(envPath, "utf8"))
+    ) {
       appendFileSync(envPath, envBlock, "utf8");
       logger.info(
         { envPath },
@@ -85,7 +96,10 @@ function buildLicenseTokenSignerForServer(): LicenseTokenSigner {
       );
     }
   } catch (err) {
-    logger.warn({ err, envPath }, "Failed to persist LICENSE_SIGNING_KEY to .env — using in-memory key only");
+    logger.warn(
+      { err, envPath },
+      "Failed to persist LICENSE_SIGNING_KEY to .env — using in-memory key only",
+    );
   }
 
   process.env.LICENSE_SIGNING_KEY = privPem.replace(/\n/g, "\\n");
@@ -173,8 +187,7 @@ async function main(): Promise<void> {
   // Production stays closed unless explicitly set to "1".
   const openLoopbackEnv = process.env.LICENSE_ADMIN_OPEN_LOOPBACK;
   const openLoopback =
-    openLoopbackEnv === "1" ||
-    (openLoopbackEnv !== "0" && process.env.NODE_ENV !== "production");
+    openLoopbackEnv === "1" || (openLoopbackEnv !== "0" && process.env.NODE_ENV !== "production");
 
   // DFP-030: open loopback privilege must never be reachable on a LAN/WAN bind.
   const requestedHost = (process.env.HOST ?? process.env.LICENSE_SERVER_HOST ?? "0.0.0.0").trim();

@@ -25,14 +25,21 @@ let runtime: typeof import("@/infrastructure/orm/sqlite/runtime.js");
 let en: typeof import("@/application/use-cases/sync/syncEnrollment.js");
 let deps: import("@/application/use-cases/sync/syncEnrollment.js").EnrollmentDeps;
 
-const device = (fp: string) => ({ id: randomUUID(), fingerprint: `fp-${fp}-0123456789`, platform: "windows", hostname: fp });
+const device = (fp: string) => ({
+  id: randomUUID(),
+  fingerprint: `fp-${fp}-0123456789`,
+  platform: "windows",
+  hostname: fp,
+});
 
 beforeAll(async () => {
   runtime = await import("@/infrastructure/orm/sqlite/runtime.js");
   tx = await import("@/infrastructure/orm/sqlite/transaction.js");
   await runtime.ensureSqliteRuntime();
   await tx.runInTransaction(async (t) => {
-    await t.execute(sql`INSERT INTO tenants (id, name, slug) VALUES (${tenantId}, 'Hub Co', 'hubco')`);
+    await t.execute(
+      sql`INSERT INTO tenants (id, name, slug) VALUES (${tenantId}, 'Hub Co', 'hubco')`,
+    );
     await t.execute(sql`INSERT INTO users (id, tenant_id, name, email, password_hash, role)
                         VALUES (${adminId}, ${tenantId}, 'مدير المركز', 'admin@hub.test', 'x', 'admin')`);
     await t.execute(sql`INSERT INTO licenses (id, key, type, status, plan, edition, tenant_id, customer_name, max_devices, limits)
@@ -40,11 +47,16 @@ beforeAll(async () => {
   });
   en = await import("@/application/use-cases/sync/syncEnrollment.js");
   const db = tx.sqliteIndependentDb() as never;
-  const { AesGcmSecretStore, decodeMasterKey } = await import("@/infrastructure/secrets/AesGcmSecretStore.js");
-  const { SqliteSecretsRepository } = await import("@/infrastructure/repositories/sqlite/SqliteSecretsRepository.js");
-  const { SqliteSyncDeviceRepository } = await import("@/infrastructure/repositories/sqlite/SqliteSyncDeviceRepository.js");
-  const { SqliteLicenseRepository } = await import("@/infrastructure/repositories/sqlite/SqliteLicenseRepository.js");
-  const { SqliteTenantRepository } = await import("@/infrastructure/repositories/sqlite/SqliteTenantRepository.js");
+  const { AesGcmSecretStore, decodeMasterKey } =
+    await import("@/infrastructure/secrets/AesGcmSecretStore.js");
+  const { SqliteSecretsRepository } =
+    await import("@/infrastructure/repositories/sqlite/SqliteSecretsRepository.js");
+  const { SqliteSyncDeviceRepository } =
+    await import("@/infrastructure/repositories/sqlite/SqliteSyncDeviceRepository.js");
+  const { SqliteLicenseRepository } =
+    await import("@/infrastructure/repositories/sqlite/SqliteLicenseRepository.js");
+  const { SqliteTenantRepository } =
+    await import("@/infrastructure/repositories/sqlite/SqliteTenantRepository.js");
   const { JwtSigner } = await import("@/infrastructure/auth/JwtSigner.js");
   const cipher = new AesGcmSecretStore(decodeMasterKey(process.env.APP_MASTER_KEY!)!);
   deps = {
@@ -68,7 +80,12 @@ describe("hub device enrollment", () => {
     expect(issued.code).toMatch(/^[A-Z2-9]{4}-[A-Z2-9]{4}-[A-Z2-9]{4}$/);
 
     const a = device("a");
-    const ra = await en.redeemEnrollmentCode(deps, tenantId, issued.code.toLowerCase().replace(/-/g, " "), a);
+    const ra = await en.redeemEnrollmentCode(
+      deps,
+      tenantId,
+      issued.code.toLowerCase().replace(/-/g, " "),
+      a,
+    );
     expect(ra.ok).toBe(true);
     if (!ra.ok) return;
     expect(ra.deviceId).toBe(a.id); // pushes carry the LOCAL id, so the hub must use it
@@ -90,19 +107,33 @@ describe("hub device enrollment", () => {
   it("the device credential yields tokens until the device is disabled, and again after re-enable", async () => {
     const { code } = await en.createEnrollmentCode(deps, tenantId, adminId);
     const d = device("cred");
-    await deps.syncDeviceRepo.setRevoked(tenantId as never, (await deps.syncDeviceRepo.listForTenant(tenantId as never))[0].id, true, "free a seat");
+    await deps.syncDeviceRepo.setRevoked(
+      tenantId as never,
+      (await deps.syncDeviceRepo.listForTenant(tenantId as never))[0].id,
+      true,
+      "free a seat",
+    );
     const r = await en.redeemEnrollmentCode(deps, tenantId, code, d);
     expect(r.ok).toBe(true);
     if (!r.ok) return;
 
     const ok = await en.exchangeDeviceToken(deps, tenantId, d.id, r.deviceSecret);
     expect(ok.ok).toBe(true);
-    expect(await en.exchangeDeviceToken(deps, tenantId, d.id, "x".repeat(43))).toMatchObject({ ok: false, status: 401 });
+    expect(await en.exchangeDeviceToken(deps, tenantId, d.id, "x".repeat(43))).toMatchObject({
+      ok: false,
+      status: 401,
+    });
 
     await deps.syncDeviceRepo.setRevoked(tenantId as never, d.id as never, true, "lost laptop");
-    expect(await en.exchangeDeviceToken(deps, tenantId, d.id, r.deviceSecret)).toMatchObject({ ok: false, code: "SYNC_DEVICE_REVOKED" });
+    expect(await en.exchangeDeviceToken(deps, tenantId, d.id, r.deviceSecret)).toMatchObject({
+      ok: false,
+      code: "SYNC_DEVICE_REVOKED",
+    });
     // a disabled device cannot sneak back in with the code either
-    expect(await en.redeemEnrollmentCode(deps, tenantId, code, d)).toMatchObject({ ok: false, code: "SYNC_DEVICE_REVOKED" });
+    expect(await en.redeemEnrollmentCode(deps, tenantId, code, d)).toMatchObject({
+      ok: false,
+      code: "SYNC_DEVICE_REVOKED",
+    });
 
     await deps.syncDeviceRepo.setRevoked(tenantId as never, d.id as never, false, null);
     expect((await en.exchangeDeviceToken(deps, tenantId, d.id, r.deviceSecret)).ok).toBe(true);
@@ -110,17 +141,24 @@ describe("hub device enrollment", () => {
 
   it("the same PC under a new id (reinstall/restore) re-enrolls only after disable + a NEW code", async () => {
     for (const d of await deps.syncDeviceRepo.listForTenant(tenantId as never)) {
-      if (!d.revokedAt) await deps.syncDeviceRepo.setRevoked(tenantId as never, d.id as never, true, "free seats");
+      if (!d.revokedAt)
+        await deps.syncDeviceRepo.setRevoked(tenantId as never, d.id as never, true, "free seats");
     }
     const old = device("same-pc");
     const first = await en.createEnrollmentCode(deps, tenantId, adminId);
     expect((await en.redeemEnrollmentCode(deps, tenantId, first.code, old)).ok).toBe(true);
     const fresh = { ...old, id: randomUUID() };
     // old row still active: the admin must disable it first
-    expect(await en.redeemEnrollmentCode(deps, tenantId, first.code, fresh)).toMatchObject({ ok: false, code: "SYNC_DEVICE_ID_CONFLICT" });
+    expect(await en.redeemEnrollmentCode(deps, tenantId, first.code, fresh)).toMatchObject({
+      ok: false,
+      code: "SYNC_DEVICE_ID_CONFLICT",
+    });
     await deps.syncDeviceRepo.setRevoked(tenantId as never, old.id as never, true, "reinstalled");
     // a code the machine already knew does not let it back in
-    expect(await en.redeemEnrollmentCode(deps, tenantId, first.code, fresh)).toMatchObject({ ok: false, code: "SYNC_DEVICE_REVOKED" });
+    expect(await en.redeemEnrollmentCode(deps, tenantId, first.code, fresh)).toMatchObject({
+      ok: false,
+      code: "SYNC_DEVICE_REVOKED",
+    });
     await new Promise((r) => setTimeout(r, 5));
     const second = await en.createEnrollmentCode(deps, tenantId, adminId);
     const r = await en.redeemEnrollmentCode(deps, tenantId, second.code, fresh);
@@ -133,33 +171,54 @@ describe("hub device enrollment", () => {
   it("a wrong, replaced, cancelled, used-up or expired code is refused", async () => {
     const first = await en.createEnrollmentCode(deps, tenantId, adminId);
     await en.createEnrollmentCode(deps, tenantId, adminId); // replaces the first
-    expect(await en.redeemEnrollmentCode(deps, tenantId, first.code, device("x"))).toMatchObject({ ok: false, code: "ENROLL_CODE_INVALID" });
+    expect(await en.redeemEnrollmentCode(deps, tenantId, first.code, device("x"))).toMatchObject({
+      ok: false,
+      code: "ENROLL_CODE_INVALID",
+    });
 
     const one = await en.createEnrollmentCode(deps, tenantId, adminId, { maxUses: 1 });
-    const known = (await deps.syncDeviceRepo.listForTenant(tenantId as never)).find((r) => !r.revokedAt)!;
+    const known = (await deps.syncDeviceRepo.listForTenant(tenantId as never)).find(
+      (r) => !r.revokedAt,
+    )!;
     const again = { id: known.id, fingerprint: known.deviceFingerprint, platform: "windows" };
     expect((await en.redeemEnrollmentCode(deps, tenantId, one.code, again)).ok).toBe(true);
-    expect(await en.redeemEnrollmentCode(deps, tenantId, one.code, again)).toMatchObject({ ok: false, code: "ENROLL_CODE_USED_UP" });
+    expect(await en.redeemEnrollmentCode(deps, tenantId, one.code, again)).toMatchObject({
+      ok: false,
+      code: "ENROLL_CODE_USED_UP",
+    });
 
     const gone = await en.createEnrollmentCode(deps, tenantId, adminId);
     await en.revokeEnrollmentCode(deps, tenantId);
-    expect(await en.redeemEnrollmentCode(deps, tenantId, gone.code, again)).toMatchObject({ ok: false, code: "ENROLL_CODE_INVALID" });
+    expect(await en.redeemEnrollmentCode(deps, tenantId, gone.code, again)).toMatchObject({
+      ok: false,
+      code: "ENROLL_CODE_INVALID",
+    });
 
     const old = await en.createEnrollmentCode(deps, tenantId, adminId, { ttlHours: -1 });
-    expect(await en.redeemEnrollmentCode(deps, tenantId, old.code, again)).toMatchObject({ ok: false, code: "ENROLL_CODE_EXPIRED" });
+    expect(await en.redeemEnrollmentCode(deps, tenantId, old.code, again)).toMatchObject({
+      ok: false,
+      code: "ENROLL_CODE_EXPIRED",
+    });
   });
 
   // S-06: count-then-insert (device limit) and read-modify-write (`uses`) let simultaneous redeems of
   // a ONE-use code all pass — enrolling several devices, past the license's device limit.
   it("simultaneous redeems of a one-use code enroll exactly one device (S-06)", async () => {
     for (const d of await deps.syncDeviceRepo.listForTenant(tenantId as never)) {
-      if (!d.revokedAt) await deps.syncDeviceRepo.setRevoked(tenantId as never, d.id as never, true, "free seats");
+      if (!d.revokedAt)
+        await deps.syncDeviceRepo.setRevoked(tenantId as never, d.id as never, true, "free seats");
     }
     const one = await en.createEnrollmentCode(deps, tenantId, adminId, { maxUses: 1 });
-    const results = await Promise.all(["p1", "p2", "p3"].map((n) => en.redeemEnrollmentCode(deps, tenantId, one.code, device(n))));
+    const results = await Promise.all(
+      ["p1", "p2", "p3"].map((n) => en.redeemEnrollmentCode(deps, tenantId, one.code, device(n))),
+    );
     expect(results.filter((r) => r.ok)).toHaveLength(1);
-    expect(results.filter((r) => !r.ok).every((r) => !r.ok && r.code === "ENROLL_CODE_USED_UP")).toBe(true);
-    expect((await deps.syncDeviceRepo.listForTenant(tenantId as never)).filter((d) => !d.revokedAt)).toHaveLength(1);
+    expect(
+      results.filter((r) => !r.ok).every((r) => !r.ok && r.code === "ENROLL_CODE_USED_UP"),
+    ).toBe(true);
+    expect(
+      (await deps.syncDeviceRepo.listForTenant(tenantId as never)).filter((d) => !d.revokedAt),
+    ).toHaveLength(1);
     expect((await en.getEnrollmentCode(deps, tenantId))?.uses).toBe(1);
   });
 });

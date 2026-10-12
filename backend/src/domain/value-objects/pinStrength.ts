@@ -6,9 +6,7 @@
  * lock out anyone who already has a weak PIN instead of prompting them to
  * change it.
  */
-const ALL_SAME_DIGIT = new Set(
-  Array.from({ length: 10 }, (_, d) => String(d).repeat(4)),
-);
+const ALL_SAME_DIGIT = new Set(Array.from({ length: 10 }, (_, d) => String(d).repeat(4)));
 
 const SEQUENTIAL = new Set([
   "0123",

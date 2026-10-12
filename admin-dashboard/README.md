@@ -6,11 +6,11 @@ Built with React 19, Vite, React Router and Tailwind CSS 4.
 
 ## Local wiring (ME-main)
 
-| Service | URL |
-|---------|-----|
-| Admin dashboard | http://127.0.0.1:5174 |
-| License Server | http://127.0.0.1:8081 (`LICENSE_SERVER_MODE=server`) |
-| ERP API | http://127.0.0.1:8080 |
+| Service         | URL                                                  |
+| --------------- | ---------------------------------------------------- |
+| Admin dashboard | http://127.0.0.1:5174                                |
+| License Server  | http://127.0.0.1:8081 (`LICENSE_SERVER_MODE=server`) |
+| ERP API         | http://127.0.0.1:8080                                |
 
 Dev dashboard leaves `VITE_LICENSE_SERVER_URL` empty; Vite proxies `/license-admin` and `/v1` → License Server (see `.env.local`).
 

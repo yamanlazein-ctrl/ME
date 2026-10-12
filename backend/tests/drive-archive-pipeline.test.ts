@@ -69,13 +69,22 @@ function fakeDrive() {
 function deps(drive: ReturnType<typeof fakeDrive> | null, localDeviceId: string | null) {
   const folders = new m.f.FolderOrganizer(db, drive as never);
   const queue = new m.q.UploadQueue(db, drive as never, folders);
-  return { db, queue, folders, exporters: new m.e.Exporters(db), drive: drive as never, localDeviceId };
+  return {
+    db,
+    queue,
+    folders,
+    exporters: new m.e.Exporters(db),
+    drive: drive as never,
+    localDeviceId,
+  };
 }
 
 const status = (id: string) =>
-  (raw.prepare(`SELECT status, lease_token AS lease, next_attempt_at AS next FROM motard_drive_uploads WHERE id = ?`).get(id) ?? null) as
-    | { status: string; lease: string | null; next: string | null }
-    | null;
+  (raw
+    .prepare(
+      `SELECT status, lease_token AS lease, next_attempt_at AS next FROM motard_drive_uploads WHERE id = ?`,
+    )
+    .get(id) ?? null) as { status: string; lease: string | null; next: string | null } | null;
 
 beforeAll(async () => {
   const rtm = await import("../src/infrastructure/orm/sqlite/runtime.js");
@@ -91,26 +100,38 @@ beforeAll(async () => {
   };
   const tenantId = randomUUID();
   raw.prepare(`INSERT INTO tenants (id, name, slug) VALUES (?, 't', 'pipe')`).run(tenantId);
-  raw.prepare(`INSERT INTO settings (id, tenant_id, drive) VALUES (?, ?, ?)`).run(
-    randomUUID(),
-    tenantId,
-    JSON.stringify({ archiveEnabled: true, coordinatorDeviceId: "dev-primary" }),
-  );
+  raw
+    .prepare(`INSERT INTO settings (id, tenant_id, drive) VALUES (?, ?, ?)`)
+    .run(
+      randomUUID(),
+      tenantId,
+      JSON.stringify({ archiveEnabled: true, coordinatorDeviceId: "dev-primary" }),
+    );
   const pid = randomUUID();
-  raw.prepare(`INSERT INTO parties (id, tenant_id, kind, name, currency) VALUES (?, ?, 'customer', 'زبون', 'SYP')`).run(pid, tenantId);
+  raw
+    .prepare(
+      `INSERT INTO parties (id, tenant_id, kind, name, currency) VALUES (?, ?, 'customer', 'زبون', 'SYP')`,
+    )
+    .run(pid, tenantId);
   const now = new Date();
   const thisMonth = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}-02`;
-  raw.prepare(
-    `INSERT INTO invoices (id, tenant_id, number, type, date, party_id, party_type, subtotal, total, paid, status)
+  raw
+    .prepare(
+      `INSERT INTO invoices (id, tenant_id, number, type, date, party_id, party_type, subtotal, total, paid, status)
      VALUES (?, ?, 'PIPE-77', 'sale', ?, ?, 'customer', 100, 100, 0, 'active')`,
-  ).run(randomUUID(), tenantId, thisMonth, pid);
+    )
+    .run(randomUUID(), tenantId, thisMonth, pid);
 });
 
 describe("settings.drive column (DB-07)", () => {
   it("refuses non-JSON like every sibling settings column (a bad value would throw on every settings read)", () => {
-    expect(() => raw.prepare(`UPDATE settings SET drive = 'not json'`).run()).toThrow(/CHECK constraint failed/);
+    expect(() => raw.prepare(`UPDATE settings SET drive = 'not json'`).run()).toThrow(
+      /CHECK constraint failed/,
+    );
     expect(() => raw.prepare(`UPDATE settings SET drive = NULL`).run()).not.toThrow();
-    raw.prepare(`UPDATE settings SET drive = ?`).run(JSON.stringify({ archiveEnabled: true, coordinatorDeviceId: "dev-primary" }));
+    raw
+      .prepare(`UPDATE settings SET drive = ?`)
+      .run(JSON.stringify({ archiveEnabled: true, coordinatorDeviceId: "dev-primary" }));
   });
 });
 
@@ -120,7 +141,9 @@ describe("Drive archive pipeline", () => {
     const r = await m.job.runArchivePass(deps(drive, "dev-secondary"), "manual");
     expect(r.skipped).toBe("NOT_COORDINATOR");
     expect(r.enqueued).toBe(0);
-    expect((raw.prepare(`SELECT count(*) AS n FROM motard_drive_uploads`).get() as { n: number }).n).toBe(0);
+    expect(
+      (raw.prepare(`SELECT count(*) AS n FROM motard_drive_uploads`).get() as { n: number }).n,
+    ).toBe(0);
   });
 
   it("D-03: the uploaded invoice file carries the exporter's bytes, not an empty body", async () => {
@@ -155,7 +178,11 @@ describe("Drive archive pipeline", () => {
     const up = drive.uploads.find((u) => u.name === "auto-1.zip");
     expect(up).toBeDefined();
     expect(new TextDecoder().decode(up!.bytes)).toBe("backup-bytes-123");
-    const row = raw.prepare(`SELECT status, lease_token AS lease FROM motard_drive_uploads WHERE entity_type = 'db_backup'`).get() as {
+    const row = raw
+      .prepare(
+        `SELECT status, lease_token AS lease FROM motard_drive_uploads WHERE entity_type = 'db_backup'`,
+      )
+      .get() as {
       status: string;
       lease: string | null;
     };
@@ -214,12 +241,16 @@ describe("Drive archive pipeline", () => {
     };
     const perm = await mk("perm.csv");
     drive.failWith(new m.d.DriveError(400, "badRequest", "bad", false));
-    await expect(d.queue.process(perm, "2026-03-05", new TextEncoder().encode("perm.csv"))).rejects.toThrow();
+    await expect(
+      d.queue.process(perm, "2026-03-05", new TextEncoder().encode("perm.csv")),
+    ).rejects.toThrow();
     expect(status(perm.id)?.status).toBe("blocked");
 
     const temp = await mk("temp.csv");
     drive.failWith(new m.d.DriveError(503, "backendError", "later", true));
-    await expect(d.queue.process(temp, "2026-03-05", new TextEncoder().encode("temp.csv"))).rejects.toThrow();
+    await expect(
+      d.queue.process(temp, "2026-03-05", new TextEncoder().encode("temp.csv")),
+    ).rejects.toThrow();
     expect(status(temp.id)?.status).toBe("failed");
     expect(status(temp.id)?.next).not.toBeNull();
   });

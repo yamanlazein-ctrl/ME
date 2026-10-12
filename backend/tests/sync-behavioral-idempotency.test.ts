@@ -8,10 +8,16 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { db } from "@/infrastructure/orm/drizzle.js";
-import { runWithTenantContext, runWithPlatformContext } from "@/infrastructure/orm/tenant-context.js";
+import {
+  runWithTenantContext,
+  runWithPlatformContext,
+} from "@/infrastructure/orm/tenant-context.js";
 import { PostgresSyncInboxRepository } from "@/infrastructure/repositories/PostgresSyncInboxRepository.js";
 import { PostgresSyncOutboxRepository } from "@/infrastructure/repositories/PostgresSyncOutboxRepository.js";
-import { recordSyncConflict, listSyncConflicts } from "@/application/use-cases/sync/syncConflicts.js";
+import {
+  recordSyncConflict,
+  listSyncConflicts,
+} from "@/application/use-cases/sync/syncConflicts.js";
 import { databaseReachable, skipUnlessDatabase } from "./_helpers/requireDatabase.js";
 
 let reachable = false;

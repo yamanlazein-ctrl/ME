@@ -8,8 +8,7 @@ import { logger } from "../../../infrastructure/config/logger.js";
 
 type Result<T> = { ok: true; data: T } | { ok: false; error: string };
 
-const CLIENT_SAFE_FALLBACK =
-  "حدث خطأ، يرجى المحاولة مرة أخرى أو التواصل مع الدعم";
+const CLIENT_SAFE_FALLBACK = "حدث خطأ، يرجى المحاولة مرة أخرى أو التواصل مع الدعم";
 
 type Collected = { code?: string; message?: string };
 

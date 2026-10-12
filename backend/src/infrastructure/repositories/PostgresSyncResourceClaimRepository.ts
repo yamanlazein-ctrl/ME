@@ -375,13 +375,9 @@ export class PostgresSyncResourceClaimRepository implements ISyncResourceClaimRe
                 isNull(syncResourceClaims.quantityPieces),
               ),
             );
-          const removable = staleIdentity
-            .filter((h) => h.opId !== input.opId)
-            .map((h) => h.id);
+          const removable = staleIdentity.filter((h) => h.opId !== input.opId).map((h) => h.id);
           if (removable.length > 0) {
-            await tx
-              .delete(syncResourceClaims)
-              .where(inArray(syncResourceClaims.id, removable));
+            await tx.delete(syncResourceClaims).where(inArray(syncResourceClaims.id, removable));
           }
         }
 

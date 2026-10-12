@@ -7,7 +7,12 @@ import { LOG_REDACT_PATHS } from "@/infrastructure/config/logger";
 describe("logger redaction (SEC-02)", () => {
   it("masks tokens, passwords and Authorization headers at the common depths", () => {
     const lines: string[] = [];
-    const sink = new Writable({ write(chunk, _e, cb) { lines.push(String(chunk)); cb(); } });
+    const sink = new Writable({
+      write(chunk, _e, cb) {
+        lines.push(String(chunk));
+        cb();
+      },
+    });
     const log = pino({ redact: { paths: LOG_REDACT_PATHS, censor: "***" } }, sink);
     log.error(
       {
@@ -19,7 +24,8 @@ describe("logger redaction (SEC-02)", () => {
       "failure",
     );
     const out = lines.join("");
-    for (const secret of ["hunter2", "rt-SECRET", "ya29.LIVE", "ya29.ERR"]) expect(out).not.toContain(secret);
+    for (const secret of ["hunter2", "rt-SECRET", "ya29.LIVE", "ya29.ERR"])
+      expect(out).not.toContain(secret);
     expect(out).toContain("a@b.c"); // non-secret fields survive
     expect(out).toContain('"host":"x"');
   });

@@ -550,8 +550,10 @@ if (config.DESKTOP_DEPLOY && getEngine() === "sqlite") {
       const { UploadQueue } = await import("../infrastructure/googledrive/uploadQueue.js");
       const { FolderOrganizer } = await import("../infrastructure/googledrive/folderOrganizer.js");
       const { Exporters } = await import("../infrastructure/googledrive/exporters.js");
-      const { DriveClient, liveDriveToken, liveDriveTokenAvailable, onLiveDriveConnected } = await import("../infrastructure/googledrive/driveClient.js");
-      const { startDriveArchiveWorker, runArchivePass } = await import("../infrastructure/googledrive/monthlyArchiveJob.js");
+      const { DriveClient, liveDriveToken, liveDriveTokenAvailable, onLiveDriveConnected } =
+        await import("../infrastructure/googledrive/driveClient.js");
+      const { startDriveArchiveWorker, runArchivePass } =
+        await import("../infrastructure/googledrive/monthlyArchiveJob.js");
       const { sqliteDb } = await import("../infrastructure/orm/sqlite/transaction.js");
       // The gated handle, not the raw writer: a raw write issued while a business transaction holds
       // the writer would land INSIDE that transaction and roll back with it.
@@ -585,7 +587,9 @@ if (config.DESKTOP_DEPLOY && getEngine() === "sqlite") {
       startDriveArchiveWorker(deps);
       // Upload as soon as the shell's first token arrives, not at the next 6-hour tick.
       onLiveDriveConnected(() => {
-        void runArchivePass(deps, "connect").catch((err) => logger.error({ err }, "DRIVE_ARCHIVE_CONNECT_PASS_FAILED"));
+        void runArchivePass(deps, "connect").catch((err) =>
+          logger.error({ err }, "DRIVE_ARCHIVE_CONNECT_PASS_FAILED"),
+        );
       });
       logger.info("DRIVE_ARCHIVE_WORKER_STARTED");
     } catch (err) {
@@ -689,8 +693,7 @@ async function prepareDesktopDatabase(): Promise<void> {
       }
     }
   } catch (err) {
-    const { enterSafeMode } =
-      await import("../infrastructure/integrity/dataIntegrityManifest.js");
+    const { enterSafeMode } = await import("../infrastructure/integrity/dataIntegrityManifest.js");
     enterSafeMode("INTEGRITY_CHECK_FAILED");
     logger.fatal({ err, bootId: process.env.MOTARD_BOOT_ID }, "DATA_INTEGRITY_CHECK_FAILED");
   }
@@ -737,7 +740,9 @@ void prepareHubDatabase()
           markServing();
           const address = server?.address();
           const bound = typeof address === "object" && address ? address.port : config.PORT;
-          logger.info(`ERP API server listening on ${config.HOST}:${bound} in ${config.NODE_ENV} mode`);
+          logger.info(
+            `ERP API server listening on ${config.HOST}:${bound} in ${config.NODE_ENV} mode`,
+          );
           afterListen();
         });
 
@@ -765,7 +770,9 @@ void prepareHubDatabase()
         void import("../infrastructure/backup/sqliteBackupScheduler.js").then((m) =>
           m.startSqliteBackupScheduler(),
         );
-        void import("../infrastructure/integrity/retentionJobs.js").then((m) => m.startSqliteRetentionJobs());
+        void import("../infrastructure/integrity/retentionJobs.js").then((m) =>
+          m.startSqliteRetentionJobs(),
+        );
       } else if (config.DESKTOP_DEPLOY) {
         void import("../infrastructure/backup/backupScheduler.js").then((m) =>
           m.startBackupScheduler(),

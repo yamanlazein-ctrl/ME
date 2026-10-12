@@ -2,7 +2,11 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { mkdtempSync, rmSync, existsSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { NodeFingerprintProvider, TauriDesktopFingerprintProvider, TauriMobileFingerprintProvider } from "@/infrastructure/fingerprint/NodeFingerprintProvider";
+import {
+  NodeFingerprintProvider,
+  TauriDesktopFingerprintProvider,
+  TauriMobileFingerprintProvider,
+} from "@/infrastructure/fingerprint/NodeFingerprintProvider";
 import { InstallationIdStorage } from "@/infrastructure/installation/InstallationIdStorage";
 
 describe("NodeFingerprintProvider", () => {

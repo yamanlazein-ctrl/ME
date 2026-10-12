@@ -20,13 +20,26 @@ delete process.env.DATABASE_URL;
 delete process.env.DESKTOP_SEED_PATH;
 
 const tenantId = randomUUID();
-const ctx = { tenantId, userId: randomUUID(), userRole: "admin", userName: "tester" } as TenantContext;
+const ctx = {
+  tenantId,
+  userId: randomUUID(),
+  userRole: "admin",
+  userName: "tester",
+} as TenantContext;
 let tx: typeof import("@/infrastructure/orm/sqlite/transaction.js");
 let runtime: typeof import("@/infrastructure/orm/sqlite/runtime.js");
 let uc: typeof import("@/application/use-cases/parties/partyUseCases.js");
 let repo: import("@/application/ports/IPartyRepository.js").IPartyRepository;
 
-type Row = { type: string; debit: number; credit: number; currency: string; date: string; status: string; description: string };
+type Row = {
+  type: string;
+  debit: number;
+  credit: number;
+  currency: string;
+  date: string;
+  status: string;
+  description: string;
+};
 const journal = async (partyId: string) =>
   (
     await tx.sqliteDb().execute(sql`
@@ -37,17 +50,23 @@ const journal = async (partyId: string) =>
   ).rows as Row[];
 const active = async (id: string) => (await journal(id)).filter((r) => r.status === "active");
 const balanced = (rows: Row[]) =>
-  expect(rows.reduce((s, r) => s + r.debit, 0)).toBeCloseTo(rows.reduce((s, r) => s + r.credit, 0), 2);
+  expect(rows.reduce((s, r) => s + r.debit, 0)).toBeCloseTo(
+    rows.reduce((s, r) => s + r.credit, 0),
+    2,
+  );
 
 beforeAll(async () => {
   runtime = await import("@/infrastructure/orm/sqlite/runtime.js");
   tx = await import("@/infrastructure/orm/sqlite/transaction.js");
   await runtime.ensureSqliteRuntime();
   await tx.runInTransaction(async (t) => {
-    await t.execute(sql`INSERT INTO tenants (id, name, slug) VALUES (${tenantId}, 'Opening', 'opening')`);
+    await t.execute(
+      sql`INSERT INTO tenants (id, name, slug) VALUES (${tenantId}, 'Opening', 'opening')`,
+    );
   });
   uc = await import("@/application/use-cases/parties/partyUseCases.js");
-  const { SqlitePartyRepository } = await import("@/infrastructure/repositories/sqlite/SqlitePartyRepository.js");
+  const { SqlitePartyRepository } =
+    await import("@/infrastructure/repositories/sqlite/SqlitePartyRepository.js");
   repo = new SqlitePartyRepository(tx.sqliteDb() as never);
 }, 60_000);
 
@@ -95,11 +114,23 @@ describe("party opening balance", () => {
   });
 
   it("edit cancels the old journal, posts the new one, bumps the version and audits", async () => {
-    const p = await createCustomer({ openingAmount: 100, openingDirection: "they_owe_us", openingDate: "2026-02-01" });
+    const p = await createCustomer({
+      openingAmount: 100,
+      openingDirection: "they_owe_us",
+      openingDate: "2026-02-01",
+    });
     const r = await uc.updatePartyUseCase(
       repo,
       p.id,
-      { opening: { amount: 40, direction: "we_owe_them", currency: "USD", date: "2026-03-01", note: "تصحيح" } } as never,
+      {
+        opening: {
+          amount: 40,
+          direction: "we_owe_them",
+          currency: "USD",
+          date: "2026-03-01",
+          note: "تصحيح",
+        },
+      } as never,
       ctx,
       p.version,
     );
@@ -114,7 +145,12 @@ describe("party opening balance", () => {
     const now = all.filter((x) => x.status === "active");
     expect(now).toHaveLength(2);
     balanced(now);
-    expect(now.find((x) => x.type === "opening")).toMatchObject({ debit: 0, credit: 40, currency: "USD", date: "2026-03-01" });
+    expect(now.find((x) => x.type === "opening")).toMatchObject({
+      debit: 0,
+      credit: 40,
+      currency: "USD",
+      date: "2026-03-01",
+    });
 
     const audit = (
       await tx.sqliteDb().execute(sql`SELECT action FROM audit_logs WHERE entity_id = ${p.id}`)
@@ -127,7 +163,9 @@ describe("party opening balance", () => {
     const r = await uc.updatePartyUseCase(
       repo,
       p.id,
-      { opening: { amount: 0, direction: "they_owe_us", currency: "SYP", date: "2026-02-01" } } as never,
+      {
+        opening: { amount: 0, direction: "they_owe_us", currency: "SYP", date: "2026-02-01" },
+      } as never,
       ctx,
       p.version,
     );
@@ -141,7 +179,9 @@ describe("party opening balance", () => {
     const r = await uc.updatePartyUseCase(
       repo,
       p.id,
-      { opening: { amount: 99, direction: "they_owe_us", currency: "SYP", date: "2026-02-01" } } as never,
+      {
+        opening: { amount: 99, direction: "they_owe_us", currency: "SYP", date: "2026-02-01" },
+      } as never,
       ctx,
       p.version + 5,
     );
@@ -157,16 +197,28 @@ describe("party opening balance", () => {
     });
     const refusedCreate = await uc.createPartyUseCase(
       repo,
-      { kind: "customer", name: "closed-year", openingAmount: 5, openingDirection: "they_owe_us", openingDate: "2024-06-01" } as never,
+      {
+        kind: "customer",
+        name: "closed-year",
+        openingAmount: 5,
+        openingDirection: "they_owe_us",
+        openingDate: "2024-06-01",
+      } as never,
       ctx,
     );
     expect(refusedCreate.ok).toBe(false);
 
-    const p = await createCustomer({ openingAmount: 30, openingDirection: "they_owe_us", openingDate: "2026-01-01" });
+    const p = await createCustomer({
+      openingAmount: 30,
+      openingDirection: "they_owe_us",
+      openingDate: "2026-01-01",
+    });
     const intoClosed = await uc.updatePartyUseCase(
       repo,
       p.id,
-      { opening: { amount: 30, direction: "they_owe_us", currency: "SYP", date: "2024-05-05" } } as never,
+      {
+        opening: { amount: 30, direction: "they_owe_us", currency: "SYP", date: "2024-05-05" },
+      } as never,
       ctx,
       p.version,
     );

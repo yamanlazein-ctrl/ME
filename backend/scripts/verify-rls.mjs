@@ -118,10 +118,12 @@ try {
   }
   for (const r of business) {
     if (!r.rls) violations.push(`RLS not enabled on table: ${r.table_name}`);
-    if (r.rls && !r.has_policy) violations.push(`RLS enabled but NO policy on table: ${r.table_name}`);
+    if (r.rls && !r.has_policy)
+      violations.push(`RLS enabled but NO policy on table: ${r.table_name}`);
   }
   const unprotectedExempt = tableRows.filter((r) => EXEMPT.has(r.table_name) && r.rls);
-  for (const r of unprotectedExempt) violations.push(`exempt table unexpectedly RLS-enabled: ${r.table_name}`);
+  for (const r of unprotectedExempt)
+    violations.push(`exempt table unexpectedly RLS-enabled: ${r.table_name}`);
 
   // 3: canonical policy families and their counts.
   const { rows: policyRows } = await client.query(`
@@ -139,7 +141,8 @@ try {
     }
   }
   const unknown = policyRows.filter((r) => !(r.policyname in EXPECTED_POLICIES));
-  for (const r of unknown) violations.push(`unexpected policy in public schema: ${r.policyname} (${r.tables} tables)`);
+  for (const r of unknown)
+    violations.push(`unexpected policy in public schema: ${r.policyname} (${r.tables} tables)`);
 
   // 4: runtime role must not bypass RLS.
   const { rows: roleRows } = await client.query(

@@ -80,7 +80,11 @@ import {
   LEDGER_TYPE_LABEL,
   type LedgerType,
 } from "@/presentation/hooks/useLedger";
-import { clampStatementPageIndex, loadFullStatement, useStatementPage } from "@/presentation/hooks/useStatement";
+import {
+  clampStatementPageIndex,
+  loadFullStatement,
+  useStatementPage,
+} from "@/presentation/hooks/useStatement";
 import { toast } from "sonner";
 import { ClientPager, useClientPage } from "@/components/common/ClientPager";
 import { loadInvoice } from "@/presentation/hooks/useInvoices";
@@ -215,7 +219,13 @@ function StatementPager({
       data-testid="statement-pager"
     >
       <div className="flex items-center gap-2">
-        <Button type="button" size="sm" variant="outline" disabled={page === 0 || loading} onClick={() => onPage(page - 1)}>
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          disabled={page === 0 || loading}
+          onClick={() => onPage(page - 1)}
+        >
           الصفحة السابقة
         </Button>
         <span className="tabular-nums font-semibold" data-testid="statement-page-label">
@@ -339,13 +349,15 @@ export function PartyDetailsPage({ kind, id }: { kind: PartyKind; id: string }) 
   // not page 1 of an unscoped global list. Both endpoints accept partyId +
   // limit (server caps at 1000), so the totals below are truly cumulative.
   const { data: invoicesData } = useInvoicesList(
-    p ? { partyId: p.id, type: isSup ? "entry" : "sale" } : undefined, { all: true },
+    p ? { partyId: p.id, type: isSup ? "entry" : "sale" } : undefined,
+    { all: true },
   );
   const allInvoices = invoicesData?.data ?? [];
   const { data: vouchersData } = useVouchersList(p ? { partyId: p.id } : undefined, { all: true });
   const allVouchers = vouchersData?.data ?? [];
   const { data: returnsData } = useReturnsList(
-    p ? { partyId: p.id, status: "active" } : undefined, { all: true },
+    p ? { partyId: p.id, status: "active" } : undefined,
+    { all: true },
   );
   const allReturns = (returnsData?.data ?? []).map((r) => ({
     originalInvoiceId: r.originalInvoiceId,
@@ -642,11 +654,7 @@ function OverviewTab({ p, kind }: { p: Party; kind: PartyKind }) {
           <Info label="خصم افتراضي" value={p.defaultDiscount ? String(p.defaultDiscount) : "—"} />
           <Info
             label="ضريبة القيمة المضافة"
-            value={
-              p.vat
-                ? `${p.vat > 1 ? p.vat : Math.round(p.vat * 10000) / 100}%`
-                : "—"
-            }
+            value={p.vat ? `${p.vat > 1 ? p.vat : Math.round(p.vat * 10000) / 100}%` : "—"}
           />
         </dl>
       </PageCard>
@@ -668,11 +676,14 @@ function InvoicesTab({ p, kind }: { p: Party; kind: PartyKind }) {
   // Issue 16(a): date-range filter on the party invoices view
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
-  const { data: invData } = useInvoicesList({
-    partyId: p.id,
-    fromDate: from || undefined,
-    toDate: to || undefined,
-  }, { all: true });
+  const { data: invData } = useInvoicesList(
+    {
+      partyId: p.id,
+      fromDate: from || undefined,
+      toDate: to || undefined,
+    },
+    { all: true },
+  );
   const invs = (invData?.data ?? [])
     .filter((i) => i.partyId === p.id && i.status !== "cancelled")
     .sort((a, b) => {
@@ -796,7 +807,14 @@ function InvoicesTab({ p, kind }: { p: Party; kind: PartyKind }) {
             })}
           </tbody>
         </table>
-        <ClientPager page={ipg.page} totalPages={ipg.totalPages} total={ipg.total} pageSize={ipg.pageSize} onPage={ipg.setPage} onPageSize={ipg.setPageSize} />
+        <ClientPager
+          page={ipg.page}
+          totalPages={ipg.totalPages}
+          total={ipg.total}
+          pageSize={ipg.pageSize}
+          onPage={ipg.setPage}
+          onPageSize={ipg.setPageSize}
+        />
       </div>
     </PageCard>
   );
@@ -909,7 +927,14 @@ function PaymentsTab({ p, kind }: { p: Party; kind: PartyKind }) {
               ))}
             </tbody>
           </table>
-        <ClientPager page={ppg.page} totalPages={ppg.totalPages} total={ppg.total} pageSize={ppg.pageSize} onPage={ppg.setPage} onPageSize={ppg.setPageSize} />
+          <ClientPager
+            page={ppg.page}
+            totalPages={ppg.totalPages}
+            total={ppg.total}
+            pageSize={ppg.pageSize}
+            onPage={ppg.setPage}
+            onPageSize={ppg.setPageSize}
+          />
         </div>
       </PageCard>
     </div>
@@ -968,11 +993,17 @@ function StatementTab({ p, kind }: { p: Party; kind: PartyKind }) {
   // only when it is opened (a customer with thousands of invoices made the
   // statement screen fetch all of them just to show the page).
   const { data: invData } = useInvoicesList({ partyId: p.id }, { all: true, enabled: settleOpen });
-  const { data: vDataForSettle } = useVouchersList({ partyId: p.id }, { all: true, enabled: settleOpen });
-  const { data: returnsForSettle } = useReturnsList({
-    partyId: p.id,
-    status: "active",
-  }, { all: true, enabled: settleOpen });
+  const { data: vDataForSettle } = useVouchersList(
+    { partyId: p.id },
+    { all: true, enabled: settleOpen },
+  );
+  const { data: returnsForSettle } = useReturnsList(
+    {
+      partyId: p.id,
+      status: "active",
+    },
+    { all: true, enabled: settleOpen },
+  );
   const outstandingForSettle = buildOutstanding(
     p.id,
     invData?.data ?? [],
@@ -999,7 +1030,11 @@ function StatementTab({ p, kind }: { p: Party; kind: PartyKind }) {
     printDataChanged(printFilterKey);
   }, [printFilterKey]);
 
-  const { data: statement, isLoading, isFetching } = useStatementPage(p.id, kind, filter, page, pageSize);
+  const {
+    data: statement,
+    isLoading,
+    isFetching,
+  } = useStatementPage(p.id, kind, filter, page, pageSize);
   const totalPages = statement?.page?.totalPages ?? 1;
   const totalRows = statement?.page?.totalRows ?? 0;
   // Bug #8: a stale client page (e.g. 100 left over from a long statement)
@@ -1269,15 +1304,17 @@ function StatementTab({ p, kind }: { p: Party; kind: PartyKind }) {
             className="h-9 gap-2"
             disabled={exporting}
             onClick={() =>
-              void withFull((full) => printDocument(
-                printDoc(full.entries),
-                printFilterKey,
-                archiveMeta("statement", {
-                  date: to || localToday(),
-                  typeLabel: "STATEMENT",
-                  number: p.code || p.id,
-                }),
-              ))
+              void withFull((full) =>
+                printDocument(
+                  printDoc(full.entries),
+                  printFilterKey,
+                  archiveMeta("statement", {
+                    date: to || localToday(),
+                    typeLabel: "STATEMENT",
+                    number: p.code || p.id,
+                  }),
+                ),
+              )
             }
           >
             <Printer className="h-4 w-4" /> طباعة / PDF
@@ -1466,7 +1503,8 @@ function StatementTab({ p, kind }: { p: Party; kind: PartyKind }) {
                         <td className="tabular-nums text-muted-foreground">—</td>
                         <td className="text-xs font-semibold">رصيد منقول</td>
                         <td colSpan={multiCcy ? 8 : 7} className="text-muted-foreground">
-                          من نهاية الصفحة السابقة{multiCcy ? ` — ${currencySymbol(c as Currency)}` : ""}
+                          من نهاية الصفحة السابقة
+                          {multiCcy ? ` — ${currencySymbol(c as Currency)}` : ""}
                         </td>
                         <td className="text-left tabular-nums" />
                         <td className="text-left tabular-nums" />
@@ -1819,10 +1857,13 @@ function OutstandingTab({ p }: { p: Party }) {
   const invs = invData?.data ?? [];
   const { data: vData } = useVouchersList({ partyId: p.id }, { all: true });
   const vchs = vData?.data ?? [];
-  const { data: returnsData } = useReturnsList({
-    partyId: p.id,
-    status: "active",
-  }, { all: true });
+  const { data: returnsData } = useReturnsList(
+    {
+      partyId: p.id,
+      status: "active",
+    },
+    { all: true },
+  );
   const rows = buildOutstanding(
     p.id,
     invs,
@@ -1970,7 +2011,14 @@ function OutstandingTab({ p }: { p: Party }) {
                   ))}
                 </tbody>
               </table>
-        <ClientPager page={opg.page} totalPages={opg.totalPages} total={opg.total} pageSize={opg.pageSize} onPage={opg.setPage} onPageSize={opg.setPageSize} />
+              <ClientPager
+                page={opg.page}
+                totalPages={opg.totalPages}
+                total={opg.total}
+                pageSize={opg.pageSize}
+                onPage={opg.setPage}
+                onPageSize={opg.setPageSize}
+              />
             </div>
           </PageCard>
         </>
@@ -1986,10 +2034,13 @@ function StatsTab({ p, kind }: { p: Party; kind: PartyKind }) {
   const invs = invData?.data ?? [];
   const { data: vData } = useVouchersList({ partyId: p.id }, { all: true });
   const vchs = vData?.data ?? [];
-  const { data: returnsData } = useReturnsList({
-    partyId: p.id,
-    status: "active",
-  }, { all: true });
+  const { data: returnsData } = useReturnsList(
+    {
+      partyId: p.id,
+      status: "active",
+    },
+    { all: true },
+  );
   const colorNames = Object.fromEntries(colors.map((c) => [c.id, c.name]));
   const colorCodes = Object.fromEntries(colors.map((c) => [c.id, c.code ?? ""]));
   const fabricNames = Object.fromEntries(fabrics.map((f) => [f.id, f.name]));
@@ -2210,8 +2261,9 @@ function AttachmentsTab({ p }: { p: Party }) {
 function NotesTab({ p, kind }: { p: Party; kind: PartyKind }) {
   const [text, setText] = useState(p.notes ?? "");
   const save = () => {
-    if (kind === "supplier") updateSupplier(p.id, { notes: text });
-    else updateCustomer(p.id, { notes: text });
+    // The version the notes were loaded with — a concurrent edit is refused, not overwritten.
+    if (kind === "supplier") updateSupplier(p.id, { notes: text, version: p.version });
+    else updateCustomer(p.id, { notes: text, version: p.version });
   };
   return (
     <PageCard title="ملاحظات الحساب" description="ملاحظات داخلية لفريق العمل.">
@@ -2331,7 +2383,14 @@ function ActivityTab({ p, kind }: { p: Party; kind: PartyKind }) {
           </div>
         ))}
       </div>
-        <ClientPager page={apg.page} totalPages={apg.totalPages} total={apg.total} pageSize={apg.pageSize} onPage={apg.setPage} onPageSize={apg.setPageSize} />
+      <ClientPager
+        page={apg.page}
+        totalPages={apg.totalPages}
+        total={apg.total}
+        pageSize={apg.pageSize}
+        onPage={apg.setPage}
+        onPageSize={apg.setPageSize}
+      />
     </PageCard>
   );
 }

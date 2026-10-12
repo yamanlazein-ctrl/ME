@@ -17,7 +17,15 @@ import Database from "better-sqlite3";
 
 const BACKEND_ROOT = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const TOOL = join(BACKEND_ROOT, "scripts", "reconcile-integrity-sqlite.mjs");
-const BASELINE = join(BACKEND_ROOT, "src", "infrastructure", "orm", "sqlite", "migrations", "0000_baseline.sql");
+const BASELINE = join(
+  BACKEND_ROOT,
+  "src",
+  "infrastructure",
+  "orm",
+  "sqlite",
+  "migrations",
+  "0000_baseline.sql",
+);
 
 const root = mkdtempSync(join(tmpdir(), "motard-recon-"));
 const dbPath = join(root, "motard.db");
@@ -44,7 +52,7 @@ beforeAll(() => {
   // Apply the project's own baseline schema, then seed a consistent tenant.
   const baseline = mkdtempSync(join(tmpdir(), "motard-recon-sql-"));
   rmSync(baseline, { recursive: true, force: true });
-  db.exec('BEGIN');
+  db.exec("BEGIN");
   db.exec("PRAGMA defer_foreign_keys = ON");
   const sql = readBaseline();
   db.exec(sql);
@@ -76,7 +84,9 @@ describe("reconcile-integrity-sqlite (N-01)", () => {
   it("detects a roll whose remaining_kg diverges from its last movement", () => {
     const partyId = randomUUID();
     const rollId = randomUUID();
-    db.prepare(`INSERT INTO parties (id, tenant_id, kind, name, code, version) VALUES (?, ?, 'customer', 'عميل', 'C1', 1)`).run(partyId, TENANT);
+    db.prepare(
+      `INSERT INTO parties (id, tenant_id, kind, name, code, version) VALUES (?, ?, 'customer', 'عميل', 'C1', 1)`,
+    ).run(partyId, TENANT);
     // rolls.color_id has a real FK to colors — seed the chain fabrics → colors.
     const fabricId = randomUUID();
     const colorId = randomUUID();

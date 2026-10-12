@@ -34,7 +34,8 @@ function diffValues(a, b, path, out) {
   }
   if (ta === "array") {
     if (a.length !== b.length) out.push(`${path}: length ${a.length} ≠ ${b.length}`);
-    for (let i = 0; i < Math.min(a.length, b.length); i++) diffValues(a[i], b[i], `${path}[${i}]`, out);
+    for (let i = 0; i < Math.min(a.length, b.length); i++)
+      diffValues(a[i], b[i], `${path}[${i}]`, out);
     return;
   }
   if (ta === "object") {
@@ -66,10 +67,21 @@ const problems = [];
 for (const f of files) {
   const ra = join(refDir, f);
   const sb = join(sutDir, f);
-  if (!existsSync(ra)) { problems.push(`${f}: missing in ref`); continue; }
-  if (!existsSync(sb)) { problems.push(`${f}: missing in sut`); continue; }
+  if (!existsSync(ra)) {
+    problems.push(`${f}: missing in ref`);
+    continue;
+  }
+  if (!existsSync(sb)) {
+    problems.push(`${f}: missing in sut`);
+    continue;
+  }
   const diffs = [];
-  diffValues(JSON.parse(readFileSync(ra, "utf8")), JSON.parse(readFileSync(sb, "utf8")), "$", diffs);
+  diffValues(
+    JSON.parse(readFileSync(ra, "utf8")),
+    JSON.parse(readFileSync(sb, "utf8")),
+    "$",
+    diffs,
+  );
   for (const d of diffs) problems.push(`${f} ${d}`);
 }
 
@@ -80,7 +92,9 @@ if (files.length === 0) {
 if (problems.length) {
   for (const p of problems.slice(0, 500)) console.log(p);
   if (problems.length > 500) console.log(`… and ${problems.length - 500} more`);
-  console.log(`[parity:diff] FAIL — ${problems.length} difference(s) across ${files.length} file(s)`);
+  console.log(
+    `[parity:diff] FAIL — ${problems.length} difference(s) across ${files.length} file(s)`,
+  );
   process.exit(1);
 }
 console.log(`[parity:diff] PASS — empty diff across ${files.length} file(s)`);

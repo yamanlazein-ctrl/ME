@@ -55,10 +55,32 @@ beforeAll(async () => {
     { id: linkedColorId, tenantId, fabricId, name: "Blue (linked)" },
   ]);
   await db.insert(rolls).values([
-    { id: freeRollId, tenantId, colorId: freeColorId, rollNo: "R-FREE", initialKg: 10,
-      remainingKg: 10, pieces: 1, remainingPieces: 1, pricePerKg: 1000, currency: "SYP", entryDate: "2026-02-01" },
-    { id: linkedRollId, tenantId, colorId: linkedColorId, rollNo: "R-LINKED", initialKg: 10,
-      remainingKg: 10, pieces: 1, remainingPieces: 1, pricePerKg: 1000, currency: "SYP", entryDate: "2026-02-01" },
+    {
+      id: freeRollId,
+      tenantId,
+      colorId: freeColorId,
+      rollNo: "R-FREE",
+      initialKg: 10,
+      remainingKg: 10,
+      pieces: 1,
+      remainingPieces: 1,
+      pricePerKg: 1000,
+      currency: "SYP",
+      entryDate: "2026-02-01",
+    },
+    {
+      id: linkedRollId,
+      tenantId,
+      colorId: linkedColorId,
+      rollNo: "R-LINKED",
+      initialKg: 10,
+      remainingKg: 10,
+      pieces: 1,
+      remainingPieces: 1,
+      pricePerKg: 1000,
+      currency: "SYP",
+      entryDate: "2026-02-01",
+    },
   ]);
   await db.insert(parties).values({
     id: partyId,
@@ -128,9 +150,7 @@ describe("color deletion impact (bug #4)", () => {
   it("an unknown color is a typed COLOR_NOT_FOUND, not a generic failure", async (t) => {
     skipUnlessDatabase(reachable, t.skip);
     await expect(
-      withTenantTx(tenantId, (tx) =>
-        computeColorDeletionImpact(tx, tenantId, randomUUID()),
-      ),
+      withTenantTx(tenantId, (tx) => computeColorDeletionImpact(tx, tenantId, randomUUID())),
     ).rejects.toMatchObject({ code: "COLOR_NOT_FOUND" });
   });
 
@@ -144,9 +164,7 @@ describe("color deletion impact (bug #4)", () => {
     });
     // The same color id queried under a different tenant must not resolve.
     await expect(
-      withTenantTx(otherTenant, (tx) =>
-        computeColorDeletionImpact(tx, otherTenant, freeColorId),
-      ),
+      withTenantTx(otherTenant, (tx) => computeColorDeletionImpact(tx, otherTenant, freeColorId)),
     ).rejects.toMatchObject({ code: "COLOR_NOT_FOUND" });
   });
 });

@@ -3,7 +3,7 @@ import type { DB } from "../orm/drizzle.js";
 import type { ICashboxRepository } from "../../application/ports/ICashboxRepository.js";
 import { cashboxSessions, manualMovements, dayCloses } from "../orm/schemas/cashbox.table.js";
 import { ledgerEntries } from "../orm/schemas/ledger-entry.table.js";
-import { assertDayUnlocked } from "./dayLockHelper.js";
+import { assertDayUnlocked, lockDay } from "./dayLockHelper.js";
 import { assertSufficientCashboxBalance } from "./cashboxBalanceHelper.js";
 import type {
   CashboxState,
@@ -76,7 +76,9 @@ export class PostgresCashboxRepository implements ICashboxRepository {
       const [existing] = await tx
         .select()
         .from(cashboxSessions)
-        .where(and(eq(cashboxSessions.tenantId, ctx.tenantId), eq(cashboxSessions.currency, currency)))
+        .where(
+          and(eq(cashboxSessions.tenantId, ctx.tenantId), eq(cashboxSessions.currency, currency)),
+        )
         .limit(1);
       if (existing) {
         const delta = amount - Number(existing.openingBalance);
@@ -167,6 +169,13 @@ export class PostgresCashboxRepository implements ICashboxRepository {
 
   async deleteManualMovement(id: UUID, ctx: TenantContext): Promise<void> {
     return this.db.transaction(async (tx) => {
+      // H-07: deleting a movement changes its day's cash — refused once that day (or year) is closed.
+      const [movement] = await tx
+        .select({ date: manualMovements.date })
+        .from(manualMovements)
+        .where(and(eq(manualMovements.id, id), eq(manualMovements.tenantId, ctx.tenantId)))
+        .limit(1);
+      if (movement) await assertDayUnlocked(tx, ctx.tenantId, movement.date);
       // Reverse the accounting trace: cancel the linked ledger row (append-only
       // trigger allows only status → 'cancelled').
       await tx
@@ -210,6 +219,8 @@ export class PostgresCashboxRepository implements ICashboxRepository {
 
   async closeDay(input: CloseDayRequestInput, ctx: TenantContext): Promise<DayCloseData> {
     return this.db.transaction(async (tx) => {
+      // H-08: wait for in-flight writers of this day; later ones re-read the close and are refused.
+      await lockDay(tx, ctx.tenantId, input.date);
       // Derive opening/in/out from the ledger, never from the client. A cashier
       // 500,000 short could previously post an inflated totalOut and store a
       // difference of 0 — a permanent, attacker-chosen control record.
@@ -221,7 +232,9 @@ export class PostgresCashboxRepository implements ICashboxRepository {
       const [session] = await tx
         .select()
         .from(cashboxSessions)
-        .where(and(eq(cashboxSessions.tenantId, ctx.tenantId), eq(cashboxSessions.currency, currency)))
+        .where(
+          and(eq(cashboxSessions.tenantId, ctx.tenantId), eq(cashboxSessions.currency, currency)),
+        )
         .limit(1);
       const opening = session?.openingBalance ?? 0;
       const from = session?.openingDate ?? "0001-01-01";

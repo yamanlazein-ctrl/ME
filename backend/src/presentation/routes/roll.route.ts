@@ -45,7 +45,9 @@ const AdjustRollSchema = z
     reason: z.string().trim().min(2, "اكتب سبب التعديل").max(200),
     expectedVersion: z.number().int(),
   })
-  .refine((b) => b.newKg !== undefined || b.newPieces !== undefined, { message: "أدخل الكمية أو عدد الأثواب الجديد" });
+  .refine((b) => b.newKg !== undefined || b.newPieces !== undefined, {
+    message: "أدخل الكمية أو عدد الأثواب الجديد",
+  });
 
 export function registerRollRoutes(
   router: Router,
@@ -214,7 +216,9 @@ export function registerRollRoutes(
             referenceNumber: `ADJ-${refId.slice(0, 8).toUpperCase()}`,
             expectedVersion: b.expectedVersion,
           };
-          const applied = await (await inventoryCountHelpers()).applyRollAdjustment(tx as never, c, adjustment);
+          const applied = await (
+            await inventoryCountHelpers()
+          ).applyRollAdjustment(tx as never, c, adjustment);
           if (syncOutboxRepo && isSyncEnqueueEnabled()) {
             await enqueueRollAdjustment(syncOutboxRepo, c, adjustment, req);
           }
@@ -226,7 +230,12 @@ export function registerRollRoutes(
           res.status(422).json({ code: "VALIDATION", message: err.message });
           return;
         }
-        respondTransactionFailure(res, err, "generic", "تعذّر تعديل الكمية — لم يُحفظ أي تغيير. أعد المحاولة.");
+        respondTransactionFailure(
+          res,
+          err,
+          "generic",
+          "تعذّر تعديل الكمية — لم يُحفظ أي تغيير. أعد المحاولة.",
+        );
       }
     },
   );

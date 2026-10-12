@@ -11,7 +11,10 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { test } from "node:test";
 
-const cmd = readFileSync(resolve(dirname(fileURLToPath(import.meta.url)), "..", "build-frontend.cmd"), "utf8");
+const cmd = readFileSync(
+  resolve(dirname(fileURLToPath(import.meta.url)), "..", "build-frontend.cmd"),
+  "utf8",
+);
 // Compare with forward slashes so the assertions need no backslash escaping.
 const lines = cmd
   .split(/\r?\n/)
@@ -22,7 +25,10 @@ test("source-map stripping never touches anything outside resources/server/web",
   const mapLines = lines.filter((l) => /\*\.map/i.test(l));
   assert.ok(mapLines.length > 0, "expected source-map handling in build-frontend.cmd");
   for (const l of mapLines) {
-    assert.ok(l.includes("src-tauri/resources/server/web"), `map handling must be scoped to resources/server/web: ${l.trim()}`);
+    assert.ok(
+      l.includes("src-tauri/resources/server/web"),
+      `map handling must be scoped to resources/server/web: ${l.trim()}`,
+    );
     assert.ok(!l.includes("resources/*.map"), `unscoped resources/*.map glob: ${l.trim()}`);
   }
 });
@@ -30,7 +36,10 @@ test("source-map stripping never touches anything outside resources/server/web",
 test("build-frontend.cmd does not delete or move the postgres tree", () => {
   for (const l of lines) {
     if (/\b(del|rmdir|rd|move|robocopy)\b/i.test(l)) {
-      assert.ok(!l.includes("resources/postgres"), `must not touch resources/postgres: ${l.trim()}`);
+      assert.ok(
+        !l.includes("resources/postgres"),
+        `must not touch resources/postgres: ${l.trim()}`,
+      );
     }
   }
 });

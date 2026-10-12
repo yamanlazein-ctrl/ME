@@ -192,10 +192,7 @@
     "status": 200
   },
   {
-    "body": [
-      "كهرباء",
-      "نقل"
-    ],
+    "body": ["كهرباء", "نقل"],
     "label": "expense.names",
     "method": "GET",
     "path": "/api/expenses/names",

@@ -94,7 +94,9 @@ export class SqliteDocumentTrackRepository {
       if (f.partyId) c.push(cols.party ? sql`${cols.party} = ${f.partyId.toLowerCase()}` : sql`0`);
       if (status !== "all") c.push(cols.status ? sql`${cols.status} = ${status}` : sql`0`);
       if (like)
-        c.push(sql`(${cols.number} LIKE ${like} ESCAPE '\\' OR coalesce(${cols.name}, '') LIKE ${like} ESCAPE '\\')`);
+        c.push(
+          sql`(${cols.number} LIKE ${like} ESCAPE '\\' OR coalesce(${cols.name}, '') LIKE ${like} ESCAPE '\\')`,
+        );
       return c.length ? sql` AND ${sql.join(c, sql` AND `)}` : sql``;
     };
 

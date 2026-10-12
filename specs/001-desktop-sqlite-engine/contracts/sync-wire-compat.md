@@ -12,6 +12,7 @@ indistinguishable from the PostgreSQL desktop as seen by the hub.
    - timestamps compared as instants
 
    The comparison covers the unit kinds, payload fields and types, monetary values (exact), document numbers and block usage.
+
 2. **Pull application**: applying the same pulled units yields identical business tables on both desktop engines.
 3. **Monetary values**: serialized from the boundary `number` exactly as today. No string or integer representation
    leaks from SQLite storage (research R5).
@@ -29,5 +30,5 @@ indistinguishable from the PostgreSQL desktop as seen by the hub.
 A golden test runs the AC-8 A/B scenario twice: PostgreSQL desktops versus the hub, then SQLite desktops versus a fresh hub. The captured traffic
 and the final hub state are compared under the canonicalization above, and they must be equal.
 
-**INVESTIGATE (research I-5)**: whether any hub or desktop code hashes jsonb *text*. PostgreSQL jsonb normalizes key
+**INVESTIGATE (research I-5)**: whether any hub or desktop code hashes jsonb _text_. PostgreSQL jsonb normalizes key
 order, while SQLite TEXT preserves insertion order.

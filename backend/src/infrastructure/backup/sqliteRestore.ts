@@ -8,15 +8,35 @@
  * The archive is only ever read. Until SWAP the live database is not touched at all, so a failure
  * at any earlier step leaves it byte-identical. A failure while reopening puts the previous file back.
  */
-import { copyFileSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import {
+  copyFileSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  renameSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { dirname, join } from "node:path";
 import Database from "better-sqlite3";
 import { createHash } from "node:crypto";
 import { logger } from "../config/logger.js";
-import { ensureSqliteRuntime, migrateFileForward, reopenSqliteRuntime, sqliteRuntimeMigrationsDir } from "../orm/sqlite/runtime.js";
+import {
+  ensureSqliteRuntime,
+  migrateFileForward,
+  reopenSqliteRuntime,
+  sqliteRuntimeMigrationsDir,
+} from "../orm/sqlite/runtime.js";
 import { withWriteGateHeld } from "../orm/sqlite/transaction.js";
 import { loadSqliteJournal } from "../orm/sqlite/schemaFingerprint.js";
-import { createAndVerifyBackup, openAndVerifyBackupV3Sync, EXCLUDED_TABLES, NULLED_COLUMNS, BackupV3Error, type BackupManifestV3 } from "./sqliteBackup.js";
+import {
+  createAndVerifyBackup,
+  openAndVerifyBackupV3Sync,
+  EXCLUDED_TABLES,
+  NULLED_COLUMNS,
+  BackupV3Error,
+  type BackupManifestV3,
+} from "./sqliteBackup.js";
 import { rs5Figures, rs5Diff } from "./rs5.js";
 
 export type RestoreStep =
@@ -71,12 +91,18 @@ function carryOverDeviceState(stagingPath: string, livePath: string): Record<str
     db.pragma("foreign_keys = OFF");
     db.prepare("ATTACH DATABASE ? AS live").run(livePath);
     const triggers = db
-      .prepare("SELECT name, sql FROM main.sqlite_schema WHERE type = 'trigger' AND tbl_name = 'license_audit_events'")
+      .prepare(
+        "SELECT name, sql FROM main.sqlite_schema WHERE type = 'trigger' AND tbl_name = 'license_audit_events'",
+      )
       .all() as Array<{ name: string; sql: string }>;
     db.exec("BEGIN");
     for (const t of triggers) db.exec(`DROP TRIGGER main."${t.name}"`);
     for (const table of EXCLUDED_TABLES) {
-      const cols = (db.prepare(`SELECT name FROM pragma_table_info(?)`).pluck().all(table) as string[]).map((c) => `"${c}"`).join(", ");
+      const cols = (
+        db.prepare(`SELECT name FROM pragma_table_info(?)`).pluck().all(table) as string[]
+      )
+        .map((c) => `"${c}"`)
+        .join(", ");
       db.exec(`INSERT INTO main."${table}" (${cols}) SELECT ${cols} FROM live."${table}"`);
     }
     // nulled device-bound columns: copied back where the same row (same id) exists in both
@@ -92,16 +118,26 @@ function carryOverDeviceState(stagingPath: string, livePath: string): Record<str
       WHERE id IN (SELECT id FROM live.sync_devices)`);
     // drop whatever does not fit the restored company: repeat until no FK violation remains
     for (let round = 0; round < 20; round++) {
-      const bad = db.pragma("foreign_key_check") as Array<{ table: string; rowid: number; parent: string; fkid: number }>;
+      const bad = db.pragma("foreign_key_check") as Array<{
+        table: string;
+        rowid: number;
+        parent: string;
+        fkid: number;
+      }>;
       if (!bad.length) break;
       for (const v of bad) {
         if ((EXCLUDED_TABLES as readonly string[]).includes(v.table)) {
           db.prepare(`DELETE FROM main."${v.table}" WHERE rowid = ?`).run(v.rowid);
         } else if (v.table in NULLED_COLUMNS) {
-          const fk = db.prepare(`SELECT "from" FROM pragma_foreign_key_list(?) WHERE id = ?`).pluck().all(v.table, v.fkid) as string[];
+          const fk = db
+            .prepare(`SELECT "from" FROM pragma_foreign_key_list(?) WHERE id = ?`)
+            .pluck()
+            .all(v.table, v.fkid) as string[];
           const nullable = fk.filter((c) => NULLED_COLUMNS[v.table].includes(c));
           if (!nullable.length) throw new Error(`carry-over left an FK violation in ${v.table}`);
-          db.prepare(`UPDATE main."${v.table}" SET ${nullable.map((c) => `"${c}" = NULL`).join(", ")} WHERE rowid = ?`).run(v.rowid);
+          db.prepare(
+            `UPDATE main."${v.table}" SET ${nullable.map((c) => `"${c}" = NULL`).join(", ")} WHERE rowid = ?`,
+          ).run(v.rowid);
         } else {
           throw new Error(`carry-over left an FK violation in ${v.table}`);
         }
@@ -109,12 +145,14 @@ function carryOverDeviceState(stagingPath: string, livePath: string): Record<str
     }
     for (const t of triggers) db.exec(t.sql);
     db.exec("COMMIT");
-    for (const table of EXCLUDED_TABLES) carried[table] = db.prepare(`SELECT count(*) FROM main."${table}"`).pluck().get() as number;
+    for (const table of EXCLUDED_TABLES)
+      carried[table] = db.prepare(`SELECT count(*) FROM main."${table}"`).pluck().get() as number;
     db.exec("DETACH DATABASE live");
     db.pragma("foreign_keys = ON");
     const fk = db.pragma("foreign_key_check") as unknown[];
     if (fk.length) throw new Error(`staging has ${fk.length} FK violation(s) after carry-over`);
-    if (db.pragma("integrity_check", { simple: true }) !== "ok") throw new Error("staging integrity_check failed after carry-over");
+    if (db.pragma("integrity_check", { simple: true }) !== "ok")
+      throw new Error("staging integrity_check failed after carry-over");
     db.pragma("journal_mode = WAL");
     return carried;
   } catch (e) {
@@ -132,20 +170,24 @@ function carryOverDeviceState(stagingPath: string, livePath: string): Record<str
  * atomic swap as the data. A database that never synchronized is left alone.
  */
 function markRestoredSyncSnapshot(staging: Database.Database, live: Database.Database): void {
-  const one = (db: Database.Database, q: string) => db.prepare(q).pluck().get() as number | string | null | undefined;
+  const one = (db: Database.Database, q: string) =>
+    db.prepare(q).pluck().get() as number | string | null | undefined;
   const synced =
     Number(one(staging, "SELECT count(*) FROM sync_state WHERE last_pull_seq IS NOT NULL")) > 0 ||
     Number(one(staging, "SELECT count(*) FROM sync_outbox WHERE status = 'synced'")) > 0 ||
     Number(one(staging, "SELECT count(*) FROM sync_inbox")) > 0;
   if (!synced) return;
   const previous = new Set(
-    (staging.prepare("SELECT DISTINCT sync_device_id FROM sync_outbox WHERE sync_device_id IS NOT NULL").pluck().all() as string[]),
+    staging
+      .prepare("SELECT DISTINCT sync_device_id FROM sync_outbox WHERE sync_device_id IS NOT NULL")
+      .pluck()
+      .all() as string[],
   );
   let generation = 0;
   for (const db of [staging, live]) {
-    const row = db.prepare("SELECT generation, new_device_id FROM motard_sync_restore WHERE id = 1").get() as
-      | { generation: number; new_device_id: string | null }
-      | undefined;
+    const row = db
+      .prepare("SELECT generation, new_device_id FROM motard_sync_restore WHERE id = 1")
+      .get() as { generation: number; new_device_id: string | null } | undefined;
     if (!row) continue;
     generation = Math.max(generation, Number(row.generation));
     if (row.new_device_id) previous.add(row.new_device_id);
@@ -160,7 +202,10 @@ function markRestoredSyncSnapshot(staging: Database.Database, live: Database.Dat
     .run(now, generation + 1, JSON.stringify([...previous]), now);
 }
 
-export async function restoreBackupV3(file: string, opts: RestoreOptions = {}): Promise<RestoreReport> {
+export async function restoreBackupV3(
+  file: string,
+  opts: RestoreOptions = {},
+): Promise<RestoreReport> {
   const step = (s: RestoreStep) => {
     if (opts.failAt === s) throw new RestoreError(s, "forced failure (test)");
   };
@@ -227,7 +272,11 @@ export async function restoreBackupV3(file: string, opts: RestoreOptions = {}): 
       carriedOver = carryOverDeviceState(staging, livePath);
     } catch (e) {
       if (e instanceof RestoreError) throw e;
-      throw new RestoreError("CARRY_OVER_DEVICE_STATE", e instanceof Error ? e.message : String(e), e);
+      throw new RestoreError(
+        "CARRY_OVER_DEVICE_STATE",
+        e instanceof Error ? e.message : String(e),
+        e,
+      );
     }
     // identity of the restored file + provenance (SY-6)
     const dataId = opened.manifest.data.dataId;
@@ -235,10 +284,14 @@ export async function restoreBackupV3(file: string, opts: RestoreOptions = {}): 
       const db = new Database(staging);
       try {
         const installation = process.env.MOTARD_INSTALLATION_ID ?? null;
-        const meta = db.prepare("SELECT adopted_installation_ids FROM motard_meta WHERE id = 1").get() as { adopted_installation_ids: string };
+        const meta = db
+          .prepare("SELECT adopted_installation_ids FROM motard_meta WHERE id = 1")
+          .get() as { adopted_installation_ids: string };
         const adopted = new Set<string>(JSON.parse(meta.adopted_installation_ids) as string[]);
         if (installation) adopted.add(installation);
-        db.prepare("UPDATE motard_meta SET restored_from = ?, adopted_installation_ids = ?, install_instance_id = ? WHERE id = 1").run(
+        db.prepare(
+          "UPDATE motard_meta SET restored_from = ?, adopted_installation_ids = ?, install_instance_id = ? WHERE id = 1",
+        ).run(
           JSON.stringify({ dataId, manifestSha256: sha256(readFileSync(file)) }),
           JSON.stringify([...adopted]),
           process.env.MOTARD_INSTALL_INSTANCE_ID ?? null,
@@ -265,7 +318,8 @@ export async function restoreBackupV3(file: string, opts: RestoreOptions = {}): 
         }
         renameSync(staging, livePath);
       } catch (e) {
-        for (const suffix of moved) renameSync(join(setAsideDir, `motard.db${suffix}`), `${livePath}${suffix}`);
+        for (const suffix of moved)
+          renameSync(join(setAsideDir, `motard.db${suffix}`), `${livePath}${suffix}`);
         reopenSqliteRuntime();
         throw new RestoreError("SWAP", e instanceof Error ? e.message : String(e), e);
       }
@@ -277,10 +331,13 @@ export async function restoreBackupV3(file: string, opts: RestoreOptions = {}): 
         // put the previous database back exactly as it was
         rmSync(livePath, { force: true });
         for (const suffix of ["", "-wal", "-shm"]) {
-          if (existsSync(join(setAsideDir, `motard.db${suffix}`))) renameSync(join(setAsideDir, `motard.db${suffix}`), `${livePath}${suffix}`);
+          if (existsSync(join(setAsideDir, `motard.db${suffix}`)))
+            renameSync(join(setAsideDir, `motard.db${suffix}`), `${livePath}${suffix}`);
         }
         reopenSqliteRuntime();
-        throw e instanceof RestoreError ? e : new RestoreError("REOPEN", e instanceof Error ? e.message : String(e), e);
+        throw e instanceof RestoreError
+          ? e
+          : new RestoreError("REOPEN", e instanceof Error ? e.message : String(e), e);
       }
     });
     // mirror the new identity for the runtime's next start
@@ -297,10 +354,18 @@ export async function restoreBackupV3(file: string, opts: RestoreOptions = {}): 
     }
     (await import("../sync/restoredIdentity.js")).invalidateRestoredIdentity();
     logger.info({ file, migrated, carriedOver, setAsideDir }, "RESTORE_OK");
-    return { manifest: opened.manifest, safetyBackup: safety, setAside: setAsideDir, migrated, carriedOver, dataId };
+    return {
+      manifest: opened.manifest,
+      safetyBackup: safety,
+      setAside: setAsideDir,
+      migrated,
+      carriedOver,
+      dataId,
+    };
   } finally {
     rmSync(opened.workDir, { recursive: true, force: true });
-    for (const f of [staging, `${staging}-wal`, `${staging}-shm`]) if (existsSync(f)) rmSync(f, { force: true });
+    for (const f of [staging, `${staging}-wal`, `${staging}-shm`])
+      if (existsSync(f)) rmSync(f, { force: true });
   }
 }
 
@@ -325,7 +390,10 @@ export function restoreTest(file: string, tempDir: string): { ok: boolean; detai
     const migrated = migrateFileForward(staging, migrationsDir).applied;
     const diff = rs5Diff(expected, rs5Figures(staging));
     if (diff.length) return { ok: false, detail: `RS-5: ${diff.slice(0, 5).join("; ")}` };
-    return { ok: true, detail: `RS-5 identical${migrated.length ? ` after ${migrated.join(", ")}` : ""}` };
+    return {
+      ok: true,
+      detail: `RS-5 identical${migrated.length ? ` after ${migrated.join(", ")}` : ""}`,
+    };
   } catch (e) {
     return { ok: false, detail: e instanceof Error ? e.message : String(e) };
   } finally {

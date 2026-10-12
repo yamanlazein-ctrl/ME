@@ -26,7 +26,9 @@ export function DataRootCard() {
         setInfo(r);
         setError(r ? null : "تعذّر قراءة مجلد البيانات");
       })
-      .catch((e: unknown) => setError(e instanceof Error ? e.message : "تعذّر قراءة مجلد البيانات"));
+      .catch((e: unknown) =>
+        setError(e instanceof Error ? e.message : "تعذّر قراءة مجلد البيانات"),
+      );
   }, []);
 
   if (!IS_DESKTOP) return null;

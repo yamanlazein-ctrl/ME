@@ -23,9 +23,7 @@ export async function recomputeCashboxBalanceAsOf(
   const [session] = await tx
     .select()
     .from(cashboxSessions)
-    .where(
-      and(eq(cashboxSessions.tenantId, ctx.tenantId), eq(cashboxSessions.currency, currency)),
-    )
+    .where(and(eq(cashboxSessions.tenantId, ctx.tenantId), eq(cashboxSessions.currency, currency)))
     .limit(1);
   const opening = session?.openingBalance ?? 0;
   const from = session?.openingDate ?? "0001-01-01";

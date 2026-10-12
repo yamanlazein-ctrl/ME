@@ -1,6 +1,13 @@
 import { RefreshCw, Wifi, WifiOff } from "lucide-react";
 import { useSyncStatus, SYNC_HUB_KEY } from "@/presentation/hooks/useSyncStatus";
-import { describeSyncProblem, useSyncRunState, refreshAllData, hubSync, ORDERED_WAITING, type PendingUnit } from "@/lib/sync-engine";
+import {
+  describeSyncProblem,
+  useSyncRunState,
+  refreshAllData,
+  hubSync,
+  ORDERED_WAITING,
+  type PendingUnit,
+} from "@/lib/sync-engine";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -37,7 +44,11 @@ export function SyncStatusBar() {
     >
       {offline ? <WifiOff className="h-3.5 w-3.5" /> : <Wifi className="h-3.5 w-3.5" />}
       {pending > 0 ? (
-        <button type="button" className="underline underline-offset-2" onClick={() => setShowPending(true)}>
+        <button
+          type="button"
+          className="underline underline-offset-2"
+          onClick={() => setShowPending(true)}
+        >
           {pending} بانتظار الإرسال
         </button>
       ) : (
@@ -60,10 +71,15 @@ export function SyncStatusBar() {
           void refreshAllData()
             .then((r) => {
               if (!r) return;
-              if (r.failed > 0) toast.warning(`${r.failed} عمليات لم تُرسل بعد — ستُعاد المحاولة تلقائياً.`);
+              if (r.failed > 0)
+                toast.warning(`${r.failed} عمليات لم تُرسل بعد — ستُعاد المحاولة تلقائياً.`);
               else toast.success("تمت المزامنة");
             })
-            .catch((e: Error) => toast.error(describeSyncProblem(e.message) ?? "تعذّرت المزامنة — ستُعاد المحاولة تلقائياً."))
+            .catch((e: Error) =>
+              toast.error(
+                describeSyncProblem(e.message) ?? "تعذّرت المزامنة — ستُعاد المحاولة تلقائياً.",
+              ),
+            )
             .finally(() => qc.invalidateQueries({ queryKey: SYNC_HUB_KEY }));
         }}
         className="ms-auto inline-flex items-center gap-1 rounded-md border border-border px-2 py-1 font-medium text-foreground transition hover:border-primary/40 hover:text-primary disabled:opacity-60"
@@ -88,18 +104,49 @@ function formatWhen(iso: string | null | undefined): string {
 }
 
 const ENTITY: Record<string, string> = {
-  invoice: "فاتورة", voucher: "سند", return: "مرتجع", expense: "مصروف", order: "طلب",
-  party: "عميل/مورد", fabric: "قماش", color: "لون", roll: "صبغة", ledger: "قيد",
-  settlement: "تسوية", cashbox: "صندوق", settings: "إعدادات", company: "بيانات الشركة", print: "مطبعة",
+  invoice: "فاتورة",
+  voucher: "سند",
+  return: "مرتجع",
+  expense: "مصروف",
+  order: "طلب",
+  party: "عميل/مورد",
+  fabric: "قماش",
+  color: "لون",
+  roll: "صبغة",
+  ledger: "قيد",
+  settlement: "تسوية",
+  cashbox: "صندوق",
+  settings: "إعدادات",
+  company: "بيانات الشركة",
+  print: "مطبعة",
 };
 const OPERATION: Record<string, string> = {
-  create: "إنشاء", update: "تعديل", delete: "حذف", cancel: "إلغاء", adjust: "تعديل كمية",
-  opening: "رصيد افتتاحي", close: "إقفال", movement: "حركة", send: "إرسال", receive: "استلام",
+  create: "إنشاء",
+  update: "تعديل",
+  delete: "حذف",
+  cancel: "إلغاء",
+  adjust: "تعديل كمية",
+  opening: "رصيد افتتاحي",
+  close: "إقفال",
+  movement: "حركة",
+  send: "إرسال",
+  receive: "استلام",
 };
 
 /** Each waiting operation in the operator's words: what, which document, since when, why. */
-function PendingDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (v: boolean) => void }) {
-  const q = useQuery({ queryKey: ["sync", "pending"], queryFn: () => hubSync.pending(), enabled: open, staleTime: 0 });
+function PendingDialog({
+  open,
+  onOpenChange,
+}: {
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+}) {
+  const q = useQuery({
+    queryKey: ["sync", "pending"],
+    queryFn: () => hubSync.pending(),
+    enabled: open,
+    staleTime: 0,
+  });
   const items = q.data?.items ?? [];
   const blocker = items.find((u) => u.errorDetail && u.errorDetail !== ORDERED_WAITING);
   return (
@@ -109,7 +156,9 @@ function PendingDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (v
           <DialogTitle>العمليات بانتظار الإرسال</DialogTitle>
         </DialogHeader>
         {q.isPending && <p className="text-sm text-muted-foreground">جارٍ التحميل…</p>}
-        {!q.isPending && items.length === 0 && <p className="text-sm text-muted-foreground">لا شيء بانتظار الإرسال.</p>}
+        {!q.isPending && items.length === 0 && (
+          <p className="text-sm text-muted-foreground">لا شيء بانتظار الإرسال.</p>
+        )}
         <ul className="max-h-[60vh] divide-y divide-border overflow-y-auto text-sm">
           {items.map((u: PendingUnit) => (
             <li key={u.id} className="flex flex-col gap-0.5 py-2">
@@ -118,16 +167,22 @@ function PendingDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (v
                 {u.ref ? `: ${u.ref}` : ""}
               </span>
               <span className="text-xs text-muted-foreground">
-                {new Date(u.createdAt).toLocaleString("ar", { dateStyle: "short", timeStyle: "short" })}
+                {new Date(u.createdAt).toLocaleString("ar", {
+                  dateStyle: "short",
+                  timeStyle: "short",
+                })}
                 {u.beforePairing ? " · سُجّلت قبل ربط الجهاز" : ""}
               </span>
               {u.errorDetail === ORDERED_WAITING && blocker ? (
                 <span className="text-xs text-amber-700">
-                  تنتظر: {OPERATION[blocker.operation] ?? blocker.operation} {ENTITY[blocker.entityType] ?? blocker.entityType}
+                  تنتظر: {OPERATION[blocker.operation] ?? blocker.operation}{" "}
+                  {ENTITY[blocker.entityType] ?? blocker.entityType}
                   {blocker.ref ? ` ${blocker.ref}` : ""}
                 </span>
               ) : u.errorDetail ? (
-                <span className="text-xs text-destructive">{describeSyncProblem(u.errorDetail)}</span>
+                <span className="text-xs text-destructive">
+                  {describeSyncProblem(u.errorDetail)}
+                </span>
               ) : null}
             </li>
           ))}

@@ -21,5 +21,10 @@ export interface IExpenseRepository {
     autoNumber: string | undefined,
     ctx: TenantContext,
   ): Promise<ExpenseData>;
-  cancel(id: string, cancelledBy: string, ctx: TenantContext, expectedVersion: number): Promise<ExpenseData>;
+  cancel(
+    id: string,
+    cancelledBy: string,
+    ctx: TenantContext,
+    expectedVersion: number,
+  ): Promise<ExpenseData>;
 }

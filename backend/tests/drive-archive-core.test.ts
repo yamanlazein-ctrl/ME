@@ -23,7 +23,12 @@ describe("month folder names", () => {
 
   it("sorts chronologically by the numeric prefix", () => {
     const names = ["2026-11", "2025-03", "2026-01", "2026-02"].map(monthFolderName);
-    expect([...names].sort()).toEqual(["2025-03 — مارس", "2026-01 — يناير", "2026-02 — فبراير", "2026-11 — نوفمبر"]);
+    expect([...names].sort()).toEqual([
+      "2025-03 — مارس",
+      "2026-01 — يناير",
+      "2026-02 — فبراير",
+      "2026-11 — نوفمبر",
+    ]);
   });
 
   it("crosses the December→January year boundary", () => {
@@ -75,8 +80,14 @@ describe("sanitizeSegment", () => {
 
 describe("archiveFileName", () => {
   it("is deterministic and sortable by business date", () => {
-    const a = archiveFileName({ businessDate: "2026-10-05", documentId: "INV-1012", partyName: "مؤسسة النور" }, "csv");
-    const b = archiveFileName({ businessDate: "2026-10-05", documentId: "INV-1012", partyName: "مؤسسة النور" }, "csv");
+    const a = archiveFileName(
+      { businessDate: "2026-10-05", documentId: "INV-1012", partyName: "مؤسسة النور" },
+      "csv",
+    );
+    const b = archiveFileName(
+      { businessDate: "2026-10-05", documentId: "INV-1012", partyName: "مؤسسة النور" },
+      "csv",
+    );
     expect(a).toBe(b);
     expect(a).toBe("2026-10-05_INV-1012_مؤسسة النور.csv");
   });
@@ -91,13 +102,20 @@ describe("archiveFileName", () => {
   });
 
   it("omits empty party names and sanitizes hostile ones", () => {
-    expect(archiveFileName({ businessDate: "2026-10-05", documentId: "X" }, "csv")).toBe("2026-10-05_X.csv");
-    const hostile = archiveFileName({ businessDate: "2026-10-05", documentId: "X", partyName: "a/b|c" }, "csv");
+    expect(archiveFileName({ businessDate: "2026-10-05", documentId: "X" }, "csv")).toBe(
+      "2026-10-05_X.csv",
+    );
+    const hostile = archiveFileName(
+      { businessDate: "2026-10-05", documentId: "X", partyName: "a/b|c" },
+      "csv",
+    );
     expect(hostile).not.toMatch(/[/|]/);
   });
 
   it("normalizes the extension dot", () => {
-    expect(archiveFileName({ businessDate: "2026-10-05", documentId: "X" }, ".pdf")).toBe("2026-10-05_X.pdf");
+    expect(archiveFileName({ businessDate: "2026-10-05", documentId: "X" }, ".pdf")).toBe(
+      "2026-10-05_X.pdf",
+    );
   });
 });
 

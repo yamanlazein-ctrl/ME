@@ -355,13 +355,19 @@ describe("sync invariants — Transactional Outbox (F-07)", () => {
     // The container is wired per engine (di/postgresContainer.ts, di/sqliteContainer.ts); both
     // must build the business repositories on the ambient handle, and the outbox on it too.
     const pg = read("src", "infrastructure", "di", "postgresContainer.ts");
-    expect(pg.includes("ambientDb(db)"), "postgres container must build repositories with ambientDb(db)").toBe(true);
+    expect(
+      pg.includes("ambientDb(db)"),
+      "postgres container must build repositories with ambientDb(db)",
+    ).toBe(true);
     expect(
       /new PostgresSyncOutboxRepository\(dbx\)/.test(pg),
       "the outbox repository must be ambient-aware — it is half of the atomic pair",
     ).toBe(true);
     const sq = read("src", "infrastructure", "di", "sqliteContainer.ts");
-    expect(/const dbx = sqliteDb\(\)/.test(sq), "sqlite container must build repositories on the ambient sqliteDb()").toBe(true);
+    expect(
+      /const dbx = sqliteDb\(\)/.test(sq),
+      "sqlite container must build repositories on the ambient sqliteDb()",
+    ).toBe(true);
     expect(
       /new SqliteSyncOutboxRepository\(dbx\)/.test(sq),
       "the SQLite outbox repository must be ambient-aware — it is half of the atomic pair",
@@ -994,8 +1000,9 @@ describe("sync invariants — run-result honesty (P7)", () => {
     ).toBe(true);
     // The cycle (shared with the background timer) returns the result; the route sends it as is.
     expect(
-      /return \{ \.\.\.push, deviceTrust, pull, pullError, blocksError(, [a-zA-Z]+)* \}/.test(ROUTE) &&
-        /res\.json\(\{ \.\.\.\(await runSyncCycle\(/.test(ROUTE),
+      /return \{ \.\.\.push, deviceTrust, pull, pullError, blocksError(, [a-zA-Z]+)* \}/.test(
+        ROUTE,
+      ) && /res\.json\(\{ \.\.\.\(await runSyncCycle\(/.test(ROUTE),
       "fields must reach the client",
     ).toBe(true);
   });
@@ -1298,16 +1305,15 @@ describe("sync invariants — conflict tracking (plan §4/§11)", () => {
 
   it("resolution is explicit, never a blind LWW overwrite", () => {
     expect(
-      CONFLICTS.includes('"keep-server"') && CONFLICTS.includes('"rebase"') &&
+      CONFLICTS.includes('"keep-server"') &&
+        CONFLICTS.includes('"rebase"') &&
         CONFLICTS.includes('"withdraw"'),
       "operator chooses the outcome; nothing auto-applies the loser's intent",
     ).toBe(true);
   });
 
   it("stale-base update materialization records the concurrent-edit loss", () => {
-    expect(MAT.includes("recordStaleConflict"), "materializers must record stale-base").toBe(
-      true,
-    );
+    expect(MAT.includes("recordStaleConflict"), "materializers must record stale-base").toBe(true);
     expect(MAT.includes('"invoice"') && MAT.includes('"order"')).toBe(true);
     expect(MAT.includes("recordSyncConflict")).toBe(true);
   });
@@ -1546,7 +1552,13 @@ describe("sync invariants — number-block tip reconciliation", () => {
 
 describe("P3 consolidation contracts", () => {
   const NUMBERS = read("src", "infrastructure", "utils", "documentNumbers.ts");
-  const HTTP_IDEMPOTENCY = read("src", "infrastructure", "http", "middleware", "idempotency.middleware.ts");
+  const HTTP_IDEMPOTENCY = read(
+    "src",
+    "infrastructure",
+    "http",
+    "middleware",
+    "idempotency.middleware.ts",
+  );
   const RUNBOOK = readFileSync(join(BACKEND_ROOT, "..", "docs", "SYNC-OPERATIONS.md"), "utf8");
 
   it("documents block authority and explicit global fallback", () => {

@@ -28,7 +28,13 @@ export function liveStockText(s: LiveStockState): string | null {
  * Read-only reference: the real current stock of the exact selected roll (fabric + color + dye),
  * read live from the server. Not an input — the user cannot change it.
  */
-export function LiveStockHint({ rollId, className }: { rollId: string | undefined; className?: string }) {
+export function LiveStockHint({
+  rollId,
+  className,
+}: {
+  rollId: string | undefined;
+  className?: string;
+}) {
   const q = useLiveRollStock(rollId);
   const enabled = Boolean(rollId) && !rollId!.startsWith("fabric:");
   const state: LiveStockState = !enabled

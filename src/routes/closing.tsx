@@ -12,6 +12,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
+import { invalidateFinancialViews } from "@/presentation/hooks/invalidateFinancialViews";
 import { formatNumber } from "@/shared/utils/formatNumber";
 import {
   closeYear,
@@ -72,6 +73,8 @@ function YearClosingPage() {
   });
 
   const refreshAll = () => {
+    // hermes F-019: a close/reopen freezes or unfreezes the books — every financial view refreshes.
+    invalidateFinancialViews(qc);
     void qc.invalidateQueries({ queryKey: ["closing-preview"] });
     void qc.invalidateQueries({ queryKey: ["count-sheet"] });
     void qc.invalidateQueries({ queryKey: ["inventory"] });
@@ -182,7 +185,8 @@ function YearClosingPage() {
           <div className="me-auto text-sm">
             <p className="font-semibold">الجرد الفعلي (قبل الإقفال)</p>
             <p className="text-muted-foreground">
-              عُدّ {formatNumber(p?.counts.counted ?? 0)} من {formatNumber(p?.counts.rolls ?? 0)} صبغة · فروقات غير مرحّلة:{" "}
+              عُدّ {formatNumber(p?.counts.counted ?? 0)} من {formatNumber(p?.counts.rolls ?? 0)}{" "}
+              صبغة · فروقات غير مرحّلة:{" "}
               {formatNumber(Math.max(0, (p?.counts.withVariance ?? 0) - (p?.counts.posted ?? 0)))}
             </p>
           </div>
@@ -299,8 +303,7 @@ function CloseDialogs({
           </DialogHeader>
           <div className="space-y-2 text-sm">
             <p>
-              إعادة الفتح عملية إدارية حساسة تُسجَّل في سجل النشاط باسمك وبالوقت. لن يُحذف أي
-              تاريخ.
+              إعادة الفتح عملية إدارية حساسة تُسجَّل في سجل النشاط باسمك وبالوقت. لن يُحذف أي تاريخ.
             </p>
             <Input
               value={reopenReason}
@@ -325,4 +328,3 @@ function CloseDialogs({
     </>
   );
 }
-

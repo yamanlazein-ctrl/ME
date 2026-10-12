@@ -19,7 +19,12 @@ function collectErrors(e: unknown): Collected[] {
     }
     // Drizzle / node-pg sometimes nest a plain object (not Error) with SQLSTATE.
     if (typeof cur === "object") {
-      const ext = cur as { code?: unknown; message?: unknown; constraint?: unknown; cause?: unknown };
+      const ext = cur as {
+        code?: unknown;
+        message?: unknown;
+        constraint?: unknown;
+        cause?: unknown;
+      };
       out.push({
         code: typeof ext.code === "string" ? ext.code : undefined,
         message: typeof ext.message === "string" ? ext.message : undefined,
@@ -61,7 +66,10 @@ const CONTEXT_LABEL: Record<PersistenceContext, string> = {
  * Map a raw persistence / transaction error to a clear Arabic message.
  * Known business rules pass through verbatim; SQL details stay server-side.
  */
-export function persistenceErrorMessage(e: unknown, context: PersistenceContext = "generic"): string {
+export function persistenceErrorMessage(
+  e: unknown,
+  context: PersistenceContext = "generic",
+): string {
   if (e instanceof BusinessRuleError) return e.message;
   if (e instanceof DayLockedError) return e.message;
 
@@ -73,7 +81,11 @@ export function persistenceErrorMessage(e: unknown, context: PersistenceContext 
   const errs = collectErrors(e);
   const combined = errorsCombined(errs);
 
-  if (hasCode(errs, "23505") || combined.includes("duplicate") || combined.includes("idx_invoices_tenant_type_number")) {
+  if (
+    hasCode(errs, "23505") ||
+    combined.includes("duplicate") ||
+    combined.includes("idx_invoices_tenant_type_number")
+  ) {
     if (context === "invoice") {
       return "رقم الفاتورة مكرر — فاتورة بهذا الرقم موجودة بالفعل. استخدم رقماً جديداً ثم أعد الحفظ.";
     }
@@ -101,10 +113,7 @@ export function persistenceErrorMessage(e: unknown, context: PersistenceContext 
   if (hasCode(errs, "23514") || /ledger_entries_type_check/i.test(combined)) {
     return "نوع الحركة المحاسبية غير مسموح به — راجع الإعدادات أو تواصل مع الدعم.";
   }
-  if (
-    hasCode(errs, "42703") ||
-    /column ["']?discount["']?.*does not exist/i.test(combined)
-  ) {
+  if (hasCode(errs, "42703") || /column ["']?discount["']?.*does not exist/i.test(combined)) {
     return "قاعدة البيانات تحتاج ترقية (عمود خصم السندات / أنواع القيود) — شغّل ترحيلات قاعدة البيانات ثم أعد المحاولة.";
   }
   if (hasCode(errs, "23502")) {

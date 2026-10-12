@@ -3,7 +3,14 @@
 import { desc } from "./helpers/pgOrder.js";
 import { ilikeEscaped } from "./helpers/likeContains.js";
 import { eq, and, sql, inArray, getTableColumns } from "drizzle-orm";
-import { afterCursor, cursorColumns, decodeCursor, keysetOrder, nextCursorOf, type KeysetSpec } from "./helpers/keysetPage.js";
+import {
+  afterCursor,
+  cursorColumns,
+  decodeCursor,
+  keysetOrder,
+  nextCursorOf,
+  type KeysetSpec,
+} from "./helpers/keysetPage.js";
 import { likeContains } from "../../utils/likeEscape.js";
 import type { DB } from "../../orm/sqlite/drizzleCompat.js";
 import type {
@@ -92,7 +99,12 @@ export class SqliteColorRepository implements IColorRepository {
     return this.toDomain(row);
   }
 
-  async update(id: string, data: Partial<CreateColorData>, ctx: TenantContext, expectedVersion: number): Promise<ColorData> {
+  async update(
+    id: string,
+    data: Partial<CreateColorData>,
+    ctx: TenantContext,
+    expectedVersion: number,
+  ): Promise<ColorData> {
     const values: Record<string, unknown> = { updatedAt: new Date() };
     if (data.name !== undefined) values.name = data.name;
     if (data.code !== undefined) values.code = data.code ?? null;
@@ -101,7 +113,11 @@ export class SqliteColorRepository implements IColorRepository {
     // P0-001: version increment for optimistic concurrency
     values.version = sql`${colors.version} + 1`;
     // P0-001: atomic version enforcement — WHERE includes expectedVersion
-    const whereConditions = [eq(colors.id, id), eq(colors.tenantId, ctx.tenantId), eq(colors.version, expectedVersion)];
+    const whereConditions = [
+      eq(colors.id, id),
+      eq(colors.tenantId, ctx.tenantId),
+      eq(colors.version, expectedVersion),
+    ];
     const [row] = await this.db
       .update(colors)
       .set(values)
@@ -109,9 +125,16 @@ export class SqliteColorRepository implements IColorRepository {
       .returning();
     if (!row) {
       // P0-001: distinguish "not found" from "stale version"
-      const existing = await this.db.select({ version: colors.version }).from(colors).where(and(eq(colors.id, id), eq(colors.tenantId, ctx.tenantId))).limit(1);
+      const existing = await this.db
+        .select({ version: colors.version })
+        .from(colors)
+        .where(and(eq(colors.id, id), eq(colors.tenantId, ctx.tenantId)))
+        .limit(1);
       if (existing.length > 0) {
-        throw Object.assign(new Error(`Stale version: expected ${expectedVersion}, current ${existing[0].version}`), { code: "STALE_VERSION" as const });
+        throw Object.assign(
+          new Error(`Stale version: expected ${expectedVersion}, current ${existing[0].version}`),
+          { code: "STALE_VERSION" as const },
+        );
       }
       throw new Error("Color not found");
     }

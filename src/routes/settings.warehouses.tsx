@@ -5,6 +5,7 @@ import { PageCard } from "@/components/layout/PageCard";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { FormField } from "@/components/common/FormField";
 import {
   Dialog,
   DialogContent,
@@ -106,23 +107,22 @@ function WarehousesPage() {
           </DialogHeader>
           {editing && (
             <div className="grid gap-3">
-              <div className="grid gap-1.5">
-                <Label>الاسم</Label>
+              <FormField className="grid gap-1.5" labelClassName="" label="الاسم">
                 <Input
                   value={editing.name}
                   onChange={(e) => setEditing({ ...editing, name: e.target.value })}
                 />
-              </div>
-              <div className="grid gap-1.5">
-                <Label>الموقع</Label>
+              </FormField>
+              <FormField className="grid gap-1.5" labelClassName="" label="الموقع">
                 <Input
                   value={editing.location}
                   onChange={(e) => setEditing({ ...editing, location: e.target.value })}
                 />
-              </div>
+              </FormField>
               <div className="flex items-center justify-between rounded border p-2">
-                <Label>افتراضي</Label>
+                <Label htmlFor="wh-default">افتراضي</Label>
                 <Switch
+                  id="wh-default"
                   checked={editing.isDefault}
                   onCheckedChange={(v) => setEditing({ ...editing, isDefault: v })}
                 />

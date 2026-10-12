@@ -40,6 +40,11 @@ export const listPartyLinkedDocs: typeof import("../../../infrastructure/reposit
  * impact's version before any write, and the party itself is cancelled with a
  * version freshly re-read inside the same transaction.
  */
+export type PurgeCancelled = {
+  invoices: { id: string; number: string; type: string; version: number }[];
+  vouchers: { id: string; number: string; version: number }[];
+};
+
 export async function purgePartyCascadeUseCase(opts: {
   partyId: string;
   ctx: TenantContext;
@@ -47,7 +52,10 @@ export async function purgePartyCascadeUseCase(opts: {
   partyRepo: IPartyRepository;
   invoiceRepo: IInvoiceRepository;
   voucherRepo: IVoucherRepository;
-}): Promise<{ ok: true; impact: PartyDeletionImpact } | { ok: false; error: string }> {
+}): Promise<
+  | { ok: true; impact: PartyDeletionImpact; cancelled: PurgeCancelled }
+  | { ok: false; error: string }
+> {
   const { partyId, ctx, partyRepo, invoiceRepo, voucherRepo } = opts;
 
   // The single commit/rollback boundary for the entire cascade. Nested
@@ -88,11 +96,18 @@ export async function purgePartyCascadeUseCase(opts: {
       // transaction must not proceed on a picture the operator never saw.
       const invoices = await listActiveLinkedIds(tx, ctx.tenantId, partyId, impact.kind, "invoice");
       const vouchers = await listActiveLinkedIds(tx, ctx.tenantId, partyId, impact.kind, "voucher");
-      if (invoices.length !== impact.counts.invoices || vouchers.length !== impact.counts.vouchers) {
+      if (
+        invoices.length !== impact.counts.invoices ||
+        vouchers.length !== impact.counts.vouchers
+      ) {
         throw new Error(
           `تغيّرت الارتباطات أثناء الحذف (المتوقع ${impact.counts.invoices} فاتورة و${impact.counts.vouchers} سند، الموجود ${invoices.length} و${vouchers.length}). حدّث الصفحة ثم أعد المحاولة.`,
         );
       }
+
+      // What this cascade cancelled, with the version each cancel was checked against — the route
+      // enqueues one sync unit per document so the hub replays the whole cascade (H-10).
+      const cancelled: PurgeCancelled = { invoices: [], vouchers: [] };
 
       // Cancel invoices first (existing accounting: stock + ledger + cashbox reverse).
       for (const inv of invoices) {
@@ -100,6 +115,12 @@ export async function purgePartyCascadeUseCase(opts: {
         if (!current || current.status === "cancelled") continue;
         try {
           await invoiceRepo.cancel(inv.id, ctx.userId, ctx, current.version);
+          cancelled.invoices.push({
+            id: current.id,
+            number: current.number,
+            type: current.type,
+            version: current.version,
+          });
         } catch (e) {
           throw new Error(
             `تعذّر إلغاء ${inv.label}: ${e instanceof Error ? e.message : "خطأ"}. لم يُحذف أي سجل — تم التراجع عن العملية كاملة.`,
@@ -113,6 +134,11 @@ export async function purgePartyCascadeUseCase(opts: {
         if (!current || current.status === "cancelled") continue;
         try {
           await voucherRepo.cancel(v.id, ctx.userId, ctx, current.version);
+          cancelled.vouchers.push({
+            id: current.id,
+            number: current.number,
+            version: current.version,
+          });
         } catch (e) {
           throw new Error(
             `تعذّر إلغاء ${v.label}: ${e instanceof Error ? e.message : "خطأ"}. لم يُحذف أي سجل — تم التراجع عن العملية كاملة.`,
@@ -137,7 +163,7 @@ export async function purgePartyCascadeUseCase(opts: {
         }
       }
 
-      return { ok: true as const, impact };
+      return { ok: true as const, impact, cancelled };
     });
   } catch (e) {
     // Every write above already rolled back with the transaction. Nothing was

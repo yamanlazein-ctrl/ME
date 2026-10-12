@@ -4,7 +4,14 @@ import { desc } from "./helpers/pgOrder.js";
 import { moneyParam } from "./helpers/likeContains.js";
 import { ilikeEscaped } from "./helpers/likeContains.js";
 import { eq, and, or, sql, inArray, gte, lte, getTableColumns } from "drizzle-orm";
-import { afterCursor, cursorColumns, decodeCursor, keysetOrder, nextCursorOf, type KeysetSpec } from "./helpers/keysetPage.js";
+import {
+  afterCursor,
+  cursorColumns,
+  decodeCursor,
+  keysetOrder,
+  nextCursorOf,
+  type KeysetSpec,
+} from "./helpers/keysetPage.js";
 import { likeContains } from "../../utils/likeEscape.js";
 import { allocateDocumentNumber, peekNextDocumentNumber } from "./helpers/documentNumbers.js";
 import type { DB } from "../../orm/sqlite/drizzleCompat.js";
@@ -116,7 +123,11 @@ export class SqliteInvoiceRepository implements IInvoiceRepository {
     const offset = page * limit;
     // Keyset mode for "load every row" callers: seek after the cursor instead
     // of OFFSET (constant cost per page, strict total order). keysetPage.ts.
-    const keyset: KeysetSpec = { date: invoices.date, createdAt: invoices.createdAt, id: invoices.id };
+    const keyset: KeysetSpec = {
+      date: invoices.date,
+      createdAt: invoices.createdAt,
+      id: invoices.id,
+    };
     const cursor = true ? decodeCursor(filter.cursor) : null;
     const pageWhere = cursor ? and(where, afterCursor(keyset, cursor)) : where;
 
@@ -167,10 +178,7 @@ export class SqliteInvoiceRepository implements IInvoiceRepository {
     };
   }
 
-  async create(
-    input: CreateInvoiceInput,
-    ctx: TenantContext,
-  ): Promise<InvoiceData> {
+  async create(input: CreateInvoiceInput, ctx: TenantContext): Promise<InvoiceData> {
     const isSale = input.type === "sale";
     // Entity-type key is derived from input.type so the same repository method
     // can serve both entry and sale without the caller having to know which
@@ -376,10 +384,10 @@ export class SqliteInvoiceRepository implements IInvoiceRepository {
         .values({
           ...(input.preAllocatedId ? { id: input.preAllocatedId } : {}),
           tenantId: ctx.tenantId,
-         number: autoNumber,
-         // Reference = user-supplied value or the server-generated number.
-         // Screen, API and print all read this single structured field.
-         reference: input.reference?.trim() || autoNumber,
+          number: autoNumber,
+          // Reference = user-supplied value or the server-generated number.
+          // Screen, API and print all read this single structured field.
+          reference: input.reference?.trim() || autoNumber,
           type: input.type,
           date: input.date,
           partyId: input.partyId,
@@ -711,20 +719,16 @@ export class SqliteInvoiceRepository implements IInvoiceRepository {
       // total − paid (= invoice.amountDue).
       if (!isSale && paid > 0) {
         if (paid > inv.total) {
-          throw new BusinessRuleError(`المبلغ المدفوع (${paid}) أكبر من إجمالي الفاتورة (${inv.total})`);
+          throw new BusinessRuleError(
+            `المبلغ المدفوع (${paid}) أكبر من إجمالي الفاتورة (${inv.total})`,
+          );
         }
         const method = input.paymentMethod ?? "cash";
         // F06 gap: a cash-paid purchase invoice removes cash from the cashbox
         // exactly like a payment voucher — it must be guarded the same way
         // (comment above claimed this already happened; it never did).
         if (method === "cash") {
-          await assertSufficientCashboxBalance(
-            tx,
-            ctx,
-            input.currency ?? "SYP",
-            input.date,
-            paid,
-          );
+          await assertSufficientCashboxBalance(tx, ctx, input.currency ?? "SYP", input.date, paid);
         }
         const paymentNumber = `PAY-${autoNumber}`;
         linkedVoucherId = input.linkedVoucherId ?? randomUUID();
@@ -800,7 +804,12 @@ export class SqliteInvoiceRepository implements IInvoiceRepository {
     });
   }
 
-  async update(id: string, input: UpdateInvoiceInput, ctx: TenantContext, expectedVersion: number): Promise<InvoiceData> {
+  async update(
+    id: string,
+    input: UpdateInvoiceInput,
+    ctx: TenantContext,
+    expectedVersion: number,
+  ): Promise<InvoiceData> {
     const lines = input.lines.map((l) => ({
       fabricId: l.fabricId,
       colorId: l.colorId,
@@ -831,10 +840,17 @@ export class SqliteInvoiceRepository implements IInvoiceRepository {
         });
       // P0-001: optimistic concurrency — fail fast if version mismatch
       if (inv.version !== expectedVersion) {
-        throw Object.assign(new Error(`Stale version: expected ${expectedVersion}, current ${inv.version}`), {
-          code: "STALE_VERSION" as const,
-        });
+        throw Object.assign(
+          new Error(`Stale version: expected ${expectedVersion}, current ${inv.version}`),
+          {
+            code: "STALE_VERSION" as const,
+          },
+        );
       }
+      // H-07: an edit rewrites the invoice's ledger legs, so both its current and its new date must
+      // lie in an open financial year.
+      await assertYearOpen(tx, ctx.tenantId, inv.date);
+      await assertYearOpen(tx, ctx.tenantId, input.date);
 
       // Audit F-003: return documents are immutable records of what was
       // sold (quantity, price, roll). Editing the invoice underneath them made
@@ -871,10 +887,7 @@ export class SqliteInvoiceRepository implements IInvoiceRepository {
       const isSale = inv.type === "sale";
       const invoiceType = isSale ? "sales_invoice" : "purchase_invoice";
 
-      const oldLines = await tx
-        .select()
-        .from(invoiceLines)
-        .where(eq(invoiceLines.invoiceId, id));
+      const oldLines = await tx.select().from(invoiceLines).where(eq(invoiceLines.invoiceId, id));
 
       // Aggregate both old and new quantities per roll so a roll moved across
       // lines (or duplicated) nets out to one delta instead of double-counting.
@@ -890,7 +903,10 @@ export class SqliteInvoiceRepository implements IInvoiceRepository {
           if (Number.isFinite(n)) oldCostByRoll.set(l.rollId, n);
         }
       }
-      const newByRoll = new Map<string, { kg: number; pieces: number; fabricId: string; colorId: string }>();
+      const newByRoll = new Map<
+        string,
+        { kg: number; pieces: number; fabricId: string; colorId: string }
+      >();
       for (const l of lines) {
         const e = newByRoll.get(l.rollId) ?? {
           kg: 0,
@@ -929,10 +945,14 @@ export class SqliteInvoiceRepository implements IInvoiceRepository {
         const next = newByRoll.get(rollId);
         if (next) {
           if (next.colorId !== r.colorId) {
-            throw new BusinessRuleError(`لا يمكن تغيير لون الصبغة #${r.rollNo} بعد حفظها — لون البند المختار لا يطابق لون الصبغة المحفوظة. احذف البند وأضف صبغة جديدة باللون الصحيح.`);
+            throw new BusinessRuleError(
+              `لا يمكن تغيير لون الصبغة #${r.rollNo} بعد حفظها — لون البند المختار لا يطابق لون الصبغة المحفوظة. احذف البند وأضف صبغة جديدة باللون الصحيح.`,
+            );
           }
           if (next.fabricId !== r.fabricId) {
-            throw new BusinessRuleError(`القماش المحدد للبند لا يطابق قماش لون اللفافة ${r.rollNo} الفعلي`);
+            throw new BusinessRuleError(
+              `القماش المحدد للبند لا يطابق قماش لون اللفافة ${r.rollNo} الفعلي`,
+            );
           }
         }
 
@@ -1049,9 +1069,7 @@ export class SqliteInvoiceRepository implements IInvoiceRepository {
       // stock priced in another currency), so forcing 1 for every USD invoice
       // BEFORE consulting the stored rate silently destroyed that frozen rate
       // on any edit. Fall back to 1 only when no valid rate was ever stored.
-      const storedFx = isValidFxRate(inv.exchangeRate)
-        ? Number(inv.exchangeRate)
-        : null;
+      const storedFx = isValidFxRate(inv.exchangeRate) ? Number(inv.exchangeRate) : null;
       const frozenFx = storedFx ?? (inv.currency === BASE_CURRENCY ? 1 : null);
       if (inv.currency !== BASE_CURRENCY && !isValidFxRate(frozenFx)) {
         throw new BusinessRuleError(FX_REQUIRED_MESSAGE);
@@ -1292,7 +1310,12 @@ export class SqliteInvoiceRepository implements IInvoiceRepository {
     return legs;
   }
 
-  async cancel(id: string, cancelledBy: string, ctx: TenantContext, expectedVersion: number): Promise<InvoiceData> {
+  async cancel(
+    id: string,
+    cancelledBy: string,
+    ctx: TenantContext,
+    expectedVersion: number,
+  ): Promise<InvoiceData> {
     return this.db.transaction(async (tx) => {
       const [inv] = await tx
         .select()
@@ -1306,10 +1329,15 @@ export class SqliteInvoiceRepository implements IInvoiceRepository {
         });
       // P0-001: optimistic concurrency — fail fast if version mismatch
       if (inv.version !== expectedVersion) {
-        throw Object.assign(new Error(`Stale version: expected ${expectedVersion}, current ${inv.version}`), {
-          code: "STALE_VERSION" as const,
-        });
+        throw Object.assign(
+          new Error(`Stale version: expected ${expectedVersion}, current ${inv.version}`),
+          {
+            code: "STALE_VERSION" as const,
+          },
+        );
       }
+      // H-07: cancelling writes reversals dated in the invoice's year — refused once that year is closed.
+      await assertYearOpen(tx, ctx.tenantId, inv.date);
 
       const activeReturns = await tx
         .select({ id: returns.id, number: returns.number })

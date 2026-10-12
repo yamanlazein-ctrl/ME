@@ -24,15 +24,23 @@ let tenantId: string;
 let customerId: string;
 
 beforeAll(async () => {
-  await import("../src/infrastructure/orm/sqlite/runtime.js").then((m) => m.ensureSqliteRuntime({}));
+  await import("../src/infrastructure/orm/sqlite/runtime.js").then((m) =>
+    m.ensureSqliteRuntime({}),
+  );
   const rt = (await import("../src/infrastructure/orm/sqlite/runtime.js")).getSqliteRuntime()!;
   raw = rt.conns.writer;
   (globalThis as Record<string, unknown>).__writerDb = rt.conns.writerDb;
   ({ Exporters } = await import("../src/infrastructure/googledrive/exporters.js"));
   tenantId = randomUUID();
-  raw.prepare(`INSERT INTO tenants (id, name, slug) VALUES (?, 'شركة التصدير', 'exp-test')`).run(tenantId);
+  raw
+    .prepare(`INSERT INTO tenants (id, name, slug) VALUES (?, 'شركة التصدير', 'exp-test')`)
+    .run(tenantId);
   customerId = randomUUID();
-  raw.prepare(`INSERT INTO parties (id, tenant_id, kind, name, currency) VALUES (?, ?, 'customer', 'مؤسسة الفاتورة', 'SYP')`).run(customerId, tenantId);
+  raw
+    .prepare(
+      `INSERT INTO parties (id, tenant_id, kind, name, currency) VALUES (?, ?, 'customer', 'مؤسسة الفاتورة', 'SYP')`,
+    )
+    .run(customerId, tenantId);
   // Two sale invoices in 2026-10, one in 2026-09, one cancelled in 2026-10.
   const stmt = raw.prepare(
     `INSERT INTO invoices (id, tenant_id, number, type, date, party_id, party_type, subtotal, total, paid, status)

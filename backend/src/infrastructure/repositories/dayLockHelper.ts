@@ -18,11 +18,14 @@ import { DayLockedError } from "../../domain/errors/index.js";
  * single call site. A closed financial year rejects writes exactly like a
  * closed day does, and the operator sees the same clear message.
  */
-export async function assertDayUnlocked(
-  tx: Tx,
-  tenantId: string,
-  date: string,
-): Promise<void> {
+export async function assertDayUnlocked(tx: Tx, tenantId: string, date: string): Promise<void> {
+  // H-08: a plain READ COMMITTED read is not atomic with a concurrent close — the writer could pass,
+  // the close commit, then the write commit after the close snapshot. Writers hold this key SHARED
+  // (they never block each other); closeDay holds it EXCLUSIVE, so a close waits for in-flight
+  // writers and a writer that waited re-reads the committed close below.
+  await tx.execute(
+    sql`select pg_advisory_xact_lock_shared(hashtextextended(${`${tenantId}:day:${date}`}, 0))`,
+  );
   const [row] = await tx
     .select({ id: dayCloses.id })
     .from(dayCloses)
@@ -46,12 +49,16 @@ export async function assertDayUnlocked(
  *
  * The lookup is a single indexed read on `financial_years(tenant_id, year)`,
  * and callers already run inside the write transaction, so the check and the
- * write are atomic against a concurrent close (which takes the same advisory
- * lock this path does).
+ * write are atomic against a concurrent close: this path holds the close's
+ * advisory key in SHARED mode (H-08 — it used to only read, so it was not).
  */
 export async function assertYearOpen(tx: Tx, tenantId: string, date: string): Promise<void> {
   const year = Number(date.slice(0, 4));
   if (!Number.isInteger(year)) return;
+  // H-08: shared side of `lockYear` (exclusive, taken by close/reopen) — see assertDayUnlocked.
+  await tx.execute(
+    sql`select pg_advisory_xact_lock_shared(hashtextextended(${`${tenantId}:year:${year}`}, 0))`,
+  );
 
   const [row] = await tx
     .select({ year: financialYears.year })
@@ -76,5 +83,12 @@ export async function assertYearOpen(tx: Tx, tenantId: string, date: string): Pr
 export async function lockYear(tx: Tx, tenantId: string, year: number): Promise<void> {
   await tx.execute(
     sql`select pg_advisory_xact_lock(hashtextextended(${`${tenantId}:year:${year}`}, 0))`,
+  );
+}
+
+/** Exclusive side of the day key `assertDayUnlocked` holds shared: serializes a day close against writers. */
+export async function lockDay(tx: Tx, tenantId: string, date: string): Promise<void> {
+  await tx.execute(
+    sql`select pg_advisory_xact_lock(hashtextextended(${`${tenantId}:day:${date}`}, 0))`,
   );
 }

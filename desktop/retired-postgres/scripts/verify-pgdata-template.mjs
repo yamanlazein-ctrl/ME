@@ -37,7 +37,8 @@ process.on("uncaughtException", (e) => {
   process.exit(1);
 });
 
-if (!existsSync(join(TEMPLATE_DIR, "PG_VERSION"))) fail(`no template at ${TEMPLATE_DIR} — run build-pgdata-template.mjs`);
+if (!existsSync(join(TEMPLATE_DIR, "PG_VERSION")))
+  fail(`no template at ${TEMPLATE_DIR} — run build-pgdata-template.mjs`);
 if (!existsSync(TEMPLATE_MANIFEST)) fail("pgdata-template.manifest.json is missing");
 const manifest = JSON.parse(readFileSync(TEMPLATE_MANIFEST, "utf8"));
 
@@ -57,13 +58,21 @@ try {
   // Clean-shutdown proof: opening a cleanly stopped cluster logs "shut down at ..."; a cluster left
   // by a crash / `-m immediate` logs "not properly shut down; automatic recovery in progress".
   const serverLog = readFileSync(pgLog, "utf8");
-  if (!/database system was shut down at/.test(serverLog) || /automatic recovery|was interrupted|not properly shut down/.test(serverLog)) {
-    fail(`template was NOT shut down cleanly (server needed crash recovery on first open):\n${serverLog}`);
+  if (
+    !/database system was shut down at/.test(serverLog) ||
+    /automatic recovery|was interrupted|not properly shut down/.test(serverLog)
+  ) {
+    fail(
+      `template was NOT shut down cleanly (server needed crash recovery on first open):\n${serverLog}`,
+    );
   }
   const summary = await assertCleanSeed(databaseUrl(port), { expectTenantId: manifest.tenantId });
-  const seq = await withClient(databaseUrl(port), (c) => c.query("SELECT count(*)::int AS n FROM document_sequences"));
+  const seq = await withClient(databaseUrl(port), (c) =>
+    c.query("SELECT count(*)::int AS n FROM document_sequences"),
+  );
   if (seq.rows[0].n !== 0) fail("document_sequences is not empty");
-  if (summary.migrationsApplied !== manifest.migrations.applied) fail("migration count differs from manifest");
+  if (summary.migrationsApplied !== manifest.migrations.applied)
+    fail("migration count differs from manifest");
   if (summary.licenseKey !== manifest.license.key) fail("license key differs from manifest");
   log(
     `PASS — ${summary.migrationsApplied}/${summary.journalEntries} migrations, ${summary.tableCount} tables, non-empty: ${JSON.stringify(summary.nonEmpty)}, document_sequences=0`,

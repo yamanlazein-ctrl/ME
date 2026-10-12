@@ -21,7 +21,8 @@ const BASE = process.env.ERP_API_BASE_URL || "http://127.0.0.1:8080";
 const TENANT_ID = process.env.ERP_TENANT_ID;
 const EMAIL = process.env.ERP_ADMIN_EMAIL;
 const PASSWORD = process.env.ERP_ADMIN_PASSWORD;
-if (!TENANT_ID || !EMAIL || !PASSWORD) throw new Error("ERP_TENANT_ID, ERP_ADMIN_EMAIL, and ERP_ADMIN_PASSWORD are required");
+if (!TENANT_ID || !EMAIL || !PASSWORD)
+  throw new Error("ERP_TENANT_ID, ERP_ADMIN_EMAIL, and ERP_ADMIN_PASSWORD are required");
 
 let token = "";
 let passed = 0;
@@ -39,8 +40,13 @@ function dOff(days) {
 const uniq = () => `${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
 
 async function api(method, endpoint, body) {
-  const auth = { "Content-Type": "application/json", Authorization: token ? `Bearer ${token}` : undefined };
-  const adapted = await adaptRequest(`${BASE}${endpoint}`, method, body, async (u) => (await fetch(u, { headers: auth })).json());
+  const auth = {
+    "Content-Type": "application/json",
+    Authorization: token ? `Bearer ${token}` : undefined,
+  };
+  const adapted = await adaptRequest(`${BASE}${endpoint}`, method, body, async (u) =>
+    (await fetch(u, { headers: auth })).json(),
+  );
   body = adapted.body;
   const opts = {
     method,
@@ -148,7 +154,12 @@ await test("Problem 1a — every transaction is double-entry balanced", async ()
   // DIAG-أ: an entry invoice stocks a FRESH, EMPTY roll (as entry.new.tsx creates one).
   const freshRoll = (
     await api("POST", "/api/inventory/rolls", {
-      colorId: col.id, rollNo: `R-${u}-E`, initialKg: 5, remainingKg: 0, pricePerKg: 800, entryDate: today(),
+      colorId: col.id,
+      rollNo: `R-${u}-E`,
+      initialKg: 5,
+      remainingKg: 0,
+      pricePerKg: 800,
+      entryDate: today(),
     })
   ).data;
   const purchase = (

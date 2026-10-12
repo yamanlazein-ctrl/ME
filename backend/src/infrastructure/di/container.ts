@@ -102,7 +102,9 @@ export interface Container {
 }
 
 const wiring =
-  getEngine() === "sqlite" ? await import("./sqliteContainer.js") : await import("./postgresContainer.js");
+  getEngine() === "sqlite"
+    ? await import("./sqliteContainer.js")
+    : await import("./postgresContainer.js");
 
 export function buildContainer(): Container {
   return wiring.buildContainer();

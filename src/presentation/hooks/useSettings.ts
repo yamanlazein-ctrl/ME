@@ -1,4 +1,4 @@
-import { useEffect, useSyncExternalStore } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import { toast } from "sonner";
 import { container } from "@/infrastructure/container";
 import type { SettingsSection } from "@/infrastructure/api";
@@ -34,6 +34,8 @@ export type PrintingSettings = {
   showLogo: boolean;
   footerNote: string;
   copies: number;
+  /** hermes F-017: per-invoice-kind print field visibility (was localStorage-only). */
+  invoiceVisibility?: Record<string, Record<string, boolean>>;
 };
 export type CompanySettings = {
   name: string;
@@ -47,20 +49,8 @@ export type CompanySettings = {
 };
 
 export type UserRole = "admin" | "accountant" | "warehouse" | "viewer";
-export type SystemUser = {
-  id: string;
-  name: string;
-  email: string;
-  role: UserRole;
-  active: boolean;
-  createdAt: string;
-  password?: string;
-  /** @deprecated OI-14 — fake MF keys removed; kept optional for legacy localStorage only */
-  licenseKey?: string;
-};
-
 export const ROLE_LABEL: Record<UserRole, string> = {
-  admin: "مدير الظام",
+  admin: "مدير النظام",
   accountant: "محاسب",
   warehouse: "مسؤول مستودع",
   viewer: "مشاهد",
@@ -68,32 +58,14 @@ export const ROLE_LABEL: Record<UserRole, string> = {
 
 export const ROLE_PERMISSIONS: Record<UserRole, string[]> = {
   admin: ["كل الصلاحيات"],
-  accountant: ["الفواتير", "المرتجعات", "الصندوق", "التقارير"],
+  accountant: ["كل الصلاحيات عدا منح دور مدير النظام"],
   warehouse: ["المخزون", "فاتورة دخول", "مرتجع دخول"],
   viewer: ["عرض فقط"],
 };
 
 export const ROLE_ALLOWED_PATHS: Record<UserRole, string[]> = {
   admin: ["*"],
-  accountant: [
-    "/",
-    "/invoices",
-    "/returns",
-    "/orders",
-    "/receipts",
-    "/payments",
-    "/expenses",
-    "/ledger",
-    "/cashbox",
-    "/closing",
-    "/inventory/count",
-    "/reports/",
-    "/reports",
-    "/print-center",
-    "/customers",
-    "/suppliers",
-    "/sync/conflicts",
-  ],
+  accountant: ["*"],
   warehouse: [
     "/",
     "/inventory",
@@ -104,6 +76,12 @@ export const ROLE_ALLOWED_PATHS: Record<UserRole, string[]> = {
   ],
   viewer: ["/", "/inventory", "/customers", "/suppliers", "/reports", "/reports/"],
 };
+
+// Owner decision (2026-10-12): the accountant holds every admin privilege except granting or
+// removing the admin role (enforced on the server in user.route.ts / invitation.route.ts).
+export function hasAdminPrivileges(role: string | undefined | null): boolean {
+  return role === "admin" || role === "accountant";
+}
 
 export function roleCanAccess(role: UserRole, path: string): boolean {
   const list = ROLE_ALLOWED_PATHS[role];
@@ -181,20 +159,6 @@ export const settings = {
     footerNote: "شكراً لتعاملكم معنا",
     copies: 1,
   } as PrintingSettings,
-  users: [
-    {
-      id: "usr-1",
-      name: "مدير النظام",
-      email: "admin",
-      role: "admin" as UserRole,
-      active: true,
-      createdAt: localToday(),
-      password:
-        typeof process !== "undefined"
-          ? process.env.VITE_MOCK_ADMIN_PASSWORD || "NOT_SET"
-          : "NOT_SET",
-    },
-  ] as SystemUser[],
   activity: [] as ActivityEntry[],
 };
 
@@ -208,7 +172,7 @@ export function logActivity(module: string, action: string, detail?: string) {
   settings.activity.unshift({
     id: nextId("act"),
     at: new Date().toISOString().replace("T", " ").slice(0, 19),
-    user: settings.users[0]?.name ?? "النظام",
+    user: "هذا الجهاز",
     module,
     action,
     detail,
@@ -231,6 +195,8 @@ function ensureCompanyContactDefaults(): boolean {
 }
 
 let loadStarted = false;
+/** True once the server's settings have been merged (F-018: a form must not save before this). */
+let loaded = false;
 const dirty = new Set<string>();
 
 function persistSection(section: SettingsSection) {
@@ -252,7 +218,11 @@ export async function loadSettings(): Promise<void> {
   loadStarted = true;
   try {
     const data = await container.settings.api.getSettings();
-    if (!data || typeof data !== "object") return;
+    loaded = true;
+    if (!data || typeof data !== "object") {
+      notify();
+      return;
+    }
     const merged: Record<string, unknown> = {};
     if (data.company && typeof data.company === "object" && Object.keys(data.company).length) {
       merged.company = data.company;
@@ -269,7 +239,7 @@ export async function loadSettings(): Promise<void> {
     if (data.printing && typeof data.printing === "object" && Object.keys(data.printing).length) {
       merged.printing = data.printing;
     }
-    let changed = false;
+    let changed = true; // `loaded` flipped — subscribers re-render even when nothing was merged
     for (const key of Object.keys(merged)) {
       if (dirty.has(key)) continue;
       (settings as Record<string, unknown>)[key] = merged[key];
@@ -292,6 +262,8 @@ export async function loadSettings(): Promise<void> {
       }
     }
   } catch (e) {
+    // A later mount retries; until then forms built on useSettingsDraft cannot save defaults over data.
+    loadStarted = false;
     console.warn("[useSettings] فشل جلب الإعدادات من الخادم، تم استخدام القيم الافتراضية", e);
   }
 }
@@ -412,34 +384,9 @@ export function deletePaymentMethod(id: string) {
   persistSection("paymentMethods");
 }
 
-/* ── Users CRUD ────────────────────────────────────────────────────── */
-
-export function addUser(v: Omit<SystemUser, "id" | "createdAt">): SystemUser {
-  const u: SystemUser = {
-    ...v,
-    id: nextId("usr"),
-    createdAt: localToday(),
-  };
-  settings.users.push(u);
-  logActivity("المستخدمون", "إضافة مستخدم", `${u.name} — ${ROLE_LABEL[u.role]}`);
-  notify();
-  return u;
-}
-
-export function updateUser(id: string, patch: Partial<SystemUser>) {
-  const u = settings.users.find((x) => x.id === id);
-  if (!u) return;
-  Object.assign(u, patch);
-  logActivity("المستخدمون", "تعديل مستخدم", u.name);
-  notify();
-}
-
-export function deleteUser(id: string) {
-  const u = settings.users.find((x) => x.id === id);
-  settings.users = settings.users.filter((x) => x.id !== id);
-  if (u) logActivity("المستخدمون", "حذف مستخدم", u.name);
-  notify();
-}
+/* ── Users ───────────────────────────────────────────────────────── */
+// hermes F-015: users are NOT a settings section. /settings/users reads and edits the real `users`
+// table through container.users.api; accounts are created by accepting an invitation.
 
 /* ── Company & printing ────────────────────────────────────────────── */
 
@@ -451,8 +398,18 @@ export function updateCompany(v: CompanySettings) {
 }
 
 export function updatePrinting(v: PrintingSettings) {
-  settings.printing = { ...v };
+  // Only the form's own fields: a printing form's copy must not overwrite invoiceVisibility saved
+  // meanwhile from the same screen (F-017 / C1-20).
+  const { paperSize, showLogo, footerNote, copies } = v;
+  settings.printing = { ...settings.printing, paperSize, showLogo, footerNote, copies };
   logActivity("الإعدادات", "تحديث إعدادات الطباعة");
+  notify();
+  persistSection("printing");
+}
+
+/** hermes F-017: print visibility is part of the replicated `printing` section. */
+export function updatePrintVisibility(v: Record<string, Record<string, boolean>>) {
+  settings.printing = { ...settings.printing, invoiceVisibility: v };
   notify();
   persistSection("printing");
 }
@@ -466,6 +423,56 @@ export function updateCurrencyRate(code: string, rate: number) {
   logActivity("الإعدادات", "تعديل سعر صرف", `${code}: ${rate}`);
   notify();
   persistSection("currencies");
+}
+
+/* ── Settings file export / import (/settings/backup) ─────────────── */
+
+/** The sections the server stores (PUT /api/settings/:section) — all a settings file carries. */
+export const PERSISTED_SETTING_SECTIONS = [
+  "company",
+  "currencies",
+  "paymentMethods",
+  "taxes",
+  "units",
+  "warehouses",
+  "printing",
+] as const satisfies readonly SettingsSection[];
+
+/** C1-17: only the persisted sections — no user records, no device-local activity. */
+export function exportableSettings(): Record<string, unknown> {
+  return Object.fromEntries(
+    PERSISTED_SETTING_SECTIONS.map((k) => [k, (settings as Record<string, unknown>)[k]]),
+  );
+}
+
+/**
+ * C1-16: an imported settings file used to change memory only — the page said "restored" while
+ * nothing reached the server and a reload brought the old values back. Each imported section is now
+ * saved like an edit on its own screen. Returns the sections applied.
+ */
+export function applyImportedSettings(src: Record<string, unknown>): string[] {
+  const applied: string[] = [];
+  for (const key of PERSISTED_SETTING_SECTIONS) {
+    const v = src[key];
+    const ok =
+      key === "company" || key === "printing"
+        ? v && typeof v === "object" && !Array.isArray(v)
+        : Array.isArray(v);
+    if (!ok) continue;
+    (settings as Record<string, unknown>)[key] = v;
+    applied.push(key);
+  }
+  for (const c of settings.currencies) {
+    if (c && typeof c.code === "string" && typeof c.rate === "number" && c.rate > 0) {
+      setExchangeRate(c.code as Currency, c.rate);
+    }
+  }
+  if (applied.length) {
+    logActivity("النسخ الاحتياطي", "استعادة إعدادات", applied.join("، "));
+    notify();
+    for (const key of applied) persistSection(key as SettingsSection);
+  }
+  return applied;
 }
 
 /* ── Activity log ──────────────────────────────────────────────────── */
@@ -483,4 +490,25 @@ export function useSettings() {
     void loadSettings();
   }, []);
   return settings;
+}
+
+/** Whether the server's settings have been merged yet. */
+export function settingsLoaded(): boolean {
+  return loaded;
+}
+
+/**
+ * hermes F-018: an editable copy of one settings object. Forms used to copy the BUILT-IN defaults
+ * into their state before the server GET resolved, so an early «حفظ» PUT the defaults over the saved
+ * company/printing data. The copy is re-seeded when the server data arrives, and `ready` stays false
+ * (save disabled) until then.
+ */
+export function useSettingsDraft<K extends "company" | "printing">(key: K) {
+  useSettings(); // re-renders when the load completes
+  const ready = settingsLoaded();
+  const [draft, setDraft] = useState<(typeof settings)[K]>(() => ({ ...settings[key] }));
+  useEffect(() => {
+    if (ready) setDraft({ ...settings[key] });
+  }, [key, ready]);
+  return [draft, setDraft, ready] as const;
 }

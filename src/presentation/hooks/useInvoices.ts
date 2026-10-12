@@ -36,7 +36,10 @@ const KEYS = {
  * EVERY matching row — for screens that compute balances/totals and must not
  * work on a truncated first page.
  */
-export function useInvoicesList(filter?: InvoiceFilter, opts?: { all?: boolean; enabled?: boolean }) {
+export function useInvoicesList(
+  filter?: InvoiceFilter,
+  opts?: { all?: boolean; enabled?: boolean },
+) {
   const all = Boolean(opts?.all);
   return useQuery({
     enabled: opts?.enabled ?? true,

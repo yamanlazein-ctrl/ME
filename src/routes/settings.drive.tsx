@@ -1,7 +1,17 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { CloudCog, Loader2, PlugZap, RefreshCw, ShieldAlert, Unplug, CheckCircle2, AlertCircle, ExternalLink } from "lucide-react";
+import {
+  CloudCog,
+  Loader2,
+  PlugZap,
+  RefreshCw,
+  ShieldAlert,
+  Unplug,
+  CheckCircle2,
+  AlertCircle,
+  ExternalLink,
+} from "lucide-react";
 import { toast } from "sonner";
 import { PageCard } from "@/components/layout/PageCard";
 import { Button } from "@/components/ui/button";
@@ -38,10 +48,26 @@ function DriveSettingsPage() {
   const [confirmDisconnect, setConfirmDisconnect] = useState(false);
   const [connecting, setConnecting] = useState(false);
 
-  const shell = useQuery({ queryKey: ["drive", "shell"], queryFn: googleShellStatus, enabled: isTauri() });
-  const status = useQuery({ queryKey: DRIVE_KEY, queryFn: driveApi_.status, refetchInterval: 15_000 });
-  const failed = useQuery({ queryKey: ["drive", "failed"], queryFn: () => driveApi_.queue("failed"), refetchInterval: 30_000 });
-  const blocked = useQuery({ queryKey: ["drive", "blocked"], queryFn: () => driveApi_.queue("blocked"), refetchInterval: 30_000 });
+  const shell = useQuery({
+    queryKey: ["drive", "shell"],
+    queryFn: googleShellStatus,
+    enabled: isTauri(),
+  });
+  const status = useQuery({
+    queryKey: DRIVE_KEY,
+    queryFn: driveApi_.status,
+    refetchInterval: 15_000,
+  });
+  const failed = useQuery({
+    queryKey: ["drive", "failed"],
+    queryFn: () => driveApi_.queue("failed"),
+    refetchInterval: 30_000,
+  });
+  const blocked = useQuery({
+    queryKey: ["drive", "blocked"],
+    queryFn: () => driveApi_.queue("blocked"),
+    refetchInterval: 30_000,
+  });
 
   const invalidate = () => {
     void qc.invalidateQueries({ queryKey: DRIVE_KEY });
@@ -108,7 +134,8 @@ function DriveSettingsPage() {
         coordinatorDeviceId: enable ? cur!.localDeviceId : (cur?.coordinatorDeviceId ?? null),
       });
     },
-    onSuccess: (_r, enable) => toast.success(enable ? "تم تفعيل الأرشفة على هذا الجهاز" : "تم إيقاف الأرشفة"),
+    onSuccess: (_r, enable) =>
+      toast.success(enable ? "تم تفعيل الأرشفة على هذا الجهاز" : "تم إيقاف الأرشفة"),
     onError: (e: Error) => toast.error(e.message),
     onSettled: invalidate,
   });
@@ -164,7 +191,10 @@ function DriveSettingsPage() {
                   placeholder="1234567890-abc.apps.googleusercontent.com"
                   dir="ltr"
                 />
-                <Button onClick={() => configure.mutate()} disabled={!clientId.trim() || configure.isPending}>
+                <Button
+                  onClick={() => configure.mutate()}
+                  disabled={!clientId.trim() || configure.isPending}
+                >
                   {configure.isPending ? <Loader2 className="size-4 animate-spin" /> : "حفظ"}
                 </Button>
               </div>
@@ -175,7 +205,11 @@ function DriveSettingsPage() {
             {shellData?.connected ? (
               <>
                 <Button variant="outline" onClick={() => test.mutate()} disabled={test.isPending}>
-                  {test.isPending ? <Loader2 className="size-4 animate-spin" /> : <PlugZap className="size-4" />}
+                  {test.isPending ? (
+                    <Loader2 className="size-4 animate-spin" />
+                  ) : (
+                    <PlugZap className="size-4" />
+                  )}
                   اختبار الاتصال
                 </Button>
                 <Button variant="destructive" onClick={() => setConfirmDisconnect(true)}>
@@ -183,7 +217,10 @@ function DriveSettingsPage() {
                 </Button>
               </>
             ) : (
-              <Button onClick={() => connect.mutate()} disabled={!shellData?.configured || connect.isPending || connecting}>
+              <Button
+                onClick={() => connect.mutate()}
+                disabled={!shellData?.configured || connect.isPending || connecting}
+              >
                 {connecting || connect.isPending ? (
                   <Loader2 className="size-4 animate-spin" />
                 ) : (
@@ -195,8 +232,8 @@ function DriveSettingsPage() {
           </div>
           {connecting && (
             <p className="text-sm text-muted-foreground">
-              أكمل التفويض في نافذة المتصفح التي فُتحت. تُحفظ بيانات الاعتماد مشفّرة على هذا الجهاز فقط، ولا نطلب كلمة مرور
-              Google أبدًا.
+              أكمل التفويض في نافذة المتصفح التي فُتحت. تُحفظ بيانات الاعتماد مشفّرة على هذا الجهاز
+              فقط، ولا نطلب كلمة مرور Google أبدًا.
             </p>
           )}
         </section>
@@ -218,21 +255,39 @@ function DriveSettingsPage() {
                 )}
               </li>
               <li>
-                آخر رفع ناجح: {st.lastUpload ? `${st.lastUpload.fileName} — ${fmtDate(st.lastUpload.uploadedAt)}` : "لا شيء بعد"}
+                آخر رفع ناجح:{" "}
+                {st.lastUpload
+                  ? `${st.lastUpload.fileName} — ${fmtDate(st.lastUpload.uploadedAt)}`
+                  : "لا شيء بعد"}
               </li>
               <li>
-                قائمة الرفع: {st.queue.pending} بانتظار، {st.queue.done} مكتمل، {st.queue.failed} فاشل، {st.queue.blocked} معطّل
+                قائمة الرفع: {st.queue.pending} بانتظار، {st.queue.done} مكتمل، {st.queue.failed}{" "}
+                فاشل، {st.queue.blocked} معطّل
               </li>
-              <li>آخر دورة: {st.lastRun ? `${st.lastRun.kind} — ${st.lastRun.state} — ${fmtDate(st.lastRun.startedAt)}` : "—"}</li>
+              <li>
+                آخر دورة:{" "}
+                {st.lastRun
+                  ? `${st.lastRun.kind} — ${st.lastRun.state} — ${fmtDate(st.lastRun.startedAt)}`
+                  : "—"}
+              </li>
             </ul>
             {st.isPrimaryDevice && shellData?.connected && (
               <Button onClick={() => syncNow.mutate()} disabled={syncNow.isPending} size="sm">
-                {syncNow.isPending ? <Loader2 className="size-4 animate-spin" /> : <RefreshCw className="size-4" />}
+                {syncNow.isPending ? (
+                  <Loader2 className="size-4 animate-spin" />
+                ) : (
+                  <RefreshCw className="size-4" />
+                )}
                 مزامنة الآن
               </Button>
             )}
             {st.archiveEnabled && st.isPrimaryDevice ? (
-              <Button variant="outline" size="sm" onClick={() => designate.mutate(false)} disabled={designate.isPending}>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => designate.mutate(false)}
+                disabled={designate.isPending}
+              >
                 إيقاف الأرشفة
               </Button>
             ) : (
@@ -242,7 +297,11 @@ function DriveSettingsPage() {
                     ? "الأرشفة مسندة إلى جهاز آخر؛ هذا الجهاز يتابع الحالة فقط. إسنادها إلى هذا الجهاز يوقف الرفع من الجهاز الآخر."
                     : "الأرشفة غير مفعّلة. فعّلها على جهاز واحد فقط — الجهاز الذي يرفع الأرشيف."}
                 </p>
-                <Button size="sm" onClick={() => designate.mutate(true)} disabled={designate.isPending || !st.localDeviceId}>
+                <Button
+                  size="sm"
+                  onClick={() => designate.mutate(true)}
+                  disabled={designate.isPending || !st.localDeviceId}
+                >
                   تفعيل الأرشفة من هذا الجهاز
                 </Button>
               </div>
@@ -259,7 +318,10 @@ function DriveSettingsPage() {
             </div>
             <ul className="space-y-1">
               {failedJobs.map((j) => (
-                <li key={j.id} className="flex items-center justify-between rounded-md border p-2 text-sm">
+                <li
+                  key={j.id}
+                  className="flex items-center justify-between rounded-md border p-2 text-sm"
+                >
                   <span dir="ltr" className="truncate font-mono text-xs">
                     {j.fileName}
                   </span>
@@ -272,7 +334,12 @@ function DriveSettingsPage() {
                         : `محاولات: ${j.retryCount}`}
                     </span>
                     {(j.status === "failed" || j.status === "blocked") && (
-                      <Button size="sm" variant="outline" onClick={() => retry.mutate(j.id)} disabled={retry.isPending}>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => retry.mutate(j.id)}
+                        disabled={retry.isPending}
+                      >
                         إعادة
                       </Button>
                     )}

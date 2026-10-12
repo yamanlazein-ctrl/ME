@@ -21,7 +21,9 @@ function lock(id, desc, cond) {
 }
 
 // ── BUG-01 lock: the ledger INSERT must exist in the returns repository ──
-const returnRepo = repoSrc(path.join("infrastructure", "repositories", "PostgresReturnRepository.ts"));
+const returnRepo = repoSrc(
+  path.join("infrastructure", "repositories", "PostgresReturnRepository.ts"),
+);
 lock(
   "01a",
   "BUG-01: PostgresReturnRepository still CALLS tx.insert(ledgerEntries) — returns must journal",
@@ -51,20 +53,35 @@ lock(
 );
 
 // ── BUG-03 lock: invoices freeze FX at creation ──
-const invoiceRepo = repoSrc(path.join("infrastructure", "repositories", "PostgresInvoiceRepository.ts"));
+const invoiceRepo = repoSrc(
+  path.join("infrastructure", "repositories", "PostgresInvoiceRepository.ts"),
+);
 lock(
   "03a",
   "BUG-03: invoice create persists exchangeRate/baseTotal/basePaid",
-  /exchangeRate:\s*fxRate/.test(invoiceRepo) && /baseTotal:\s*computeBaseEquivalent/.test(invoiceRepo),
+  /exchangeRate:\s*fxRate/.test(invoiceRepo) &&
+    /baseTotal:\s*computeBaseEquivalent/.test(invoiceRepo),
 );
 
 // ── BUG-04 lock: profit report adjusts for returns ──
-const profitRepo = repoSrc(path.join("infrastructure", "repositories", "PostgresProfitRepository.ts"));
-lock("04a", "BUG-04: profit rows subtract active-return adjustments", profitRepo.includes("getReturnAdjustments"));
+const profitRepo = repoSrc(
+  path.join("infrastructure", "repositories", "PostgresProfitRepository.ts"),
+);
+lock(
+  "04a",
+  "BUG-04: profit rows subtract active-return adjustments",
+  profitRepo.includes("getReturnAdjustments"),
+);
 
 // ── BUG-05/06 locks: printing chain ──
-const printRepo = repoSrc(path.join("infrastructure", "repositories", "PostgresPrintJobRepository.ts"));
-lock("05a", "BUG-05: printed result roll carries remainingPieces (sellable)", /remainingPieces:\s*resultPieces/.test(printRepo));
+const printRepo = repoSrc(
+  path.join("infrastructure", "repositories", "PostgresPrintJobRepository.ts"),
+);
+lock(
+  "05a",
+  "BUG-05: printed result roll carries remainingPieces (sellable)",
+  /remainingPieces:\s*resultPieces/.test(printRepo),
+);
 lock(
   "06a",
   "BUG-06: no separate printing EXPENSE row; cost capitalized as inventory_asset",

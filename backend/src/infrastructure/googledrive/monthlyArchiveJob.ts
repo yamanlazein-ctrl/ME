@@ -66,14 +66,23 @@ function recentMonthStarts(monthsBack: number): Date[] {
   return out;
 }
 
-type SourceFile = { section: SectionKey; entityType: string; fileName: string; mimeType: string; content: Uint8Array };
+type SourceFile = {
+  section: SectionKey;
+  entityType: string;
+  fileName: string;
+  mimeType: string;
+  content: Uint8Array;
+};
 
 /** Every archive file the source records produce for one month (deterministic names = identity). */
 async function monthFiles(exporters: Exporters, periodKey: string): Promise<SourceFile[]> {
   const out: SourceFile[] = [];
-  for (const r of await exporters.invoicesForPeriod(periodKey, "sale")) out.push({ section: "salesInvoices", entityType: "invoice", ...r });
-  for (const r of await exporters.invoicesForPeriod(periodKey, "entry")) out.push({ section: "purchaseInvoices", entityType: "invoice", ...r });
-  for (const r of await exporters.expensesForPeriod(periodKey)) out.push({ section: "cashboxExpenses", entityType: "expenses", ...r });
+  for (const r of await exporters.invoicesForPeriod(periodKey, "sale"))
+    out.push({ section: "salesInvoices", entityType: "invoice", ...r });
+  for (const r of await exporters.invoicesForPeriod(periodKey, "entry"))
+    out.push({ section: "purchaseInvoices", entityType: "invoice", ...r });
+  for (const r of await exporters.expensesForPeriod(periodKey))
+    out.push({ section: "cashboxExpenses", entityType: "expenses", ...r });
   return out;
 }
 
@@ -87,7 +96,9 @@ async function regenerate(exporters: Exporters, job: ClaimedJob): Promise<Uint8A
   if (job.entityType === "db_backup") {
     content = existsSync(job.entityId) ? readFileSync(job.entityId) : null;
   } else {
-    const match = (await monthFiles(exporters, job.periodKey)).find((f) => f.section === job.section && f.fileName === job.fileName);
+    const match = (await monthFiles(exporters, job.periodKey)).find(
+      (f) => f.section === job.section && f.fileName === job.fileName,
+    );
     content = match?.content ?? null;
   }
   if (!content) return null;
@@ -102,7 +113,10 @@ let passInFlight = false;
  * (no point exporting 24 months every tick on a secondary device). One pass at a time per process —
  * the timer and "sync now" share this guard, so a lease is never raced by our own second pass.
  */
-export async function runArchivePass(deps: DriveWorkerDeps, trigger: "startup" | "timer" | "manual" | "connect"): Promise<{ enqueued: number; processed: number; uploaded: number; skipped: string | null }> {
+export async function runArchivePass(
+  deps: DriveWorkerDeps,
+  trigger: "startup" | "timer" | "manual" | "connect",
+): Promise<{ enqueued: number; processed: number; uploaded: number; skipped: string | null }> {
   const { db, queue, exporters } = deps;
   const drive = deps.drive; // read once: the live client can disappear (disconnect) mid-pass
   const report = { enqueued: 0, processed: 0, uploaded: 0, skipped: null as string | null };
@@ -177,7 +191,9 @@ export async function runArchivePass(deps: DriveWorkerDeps, trigger: "startup" |
 }
 
 /** Enqueue the newest VERIFIED automatic backup (idempotent by content hash). */
-export async function enqueueVerifiedBackupUpload(deps: DriveWorkerDeps): Promise<{ enqueued: boolean; fileName: string | null }> {
+export async function enqueueVerifiedBackupUpload(
+  deps: DriveWorkerDeps,
+): Promise<{ enqueued: boolean; fileName: string | null }> {
   const newest = verifiedBackups("automatic")[0];
   if (!newest) return { enqueued: false, fileName: null };
   const r = await deps.queue.enqueue({
@@ -195,9 +211,13 @@ export async function enqueueVerifiedBackupUpload(deps: DriveWorkerDeps): Promis
 
 export function startDriveArchiveWorker(deps: DriveWorkerDeps): void {
   if (timer) return;
-  void runArchivePass(deps, "startup").catch((err) => logger.error({ err }, "DRIVE_ARCHIVE_STARTUP_PASS_FAILED"));
+  void runArchivePass(deps, "startup").catch((err) =>
+    logger.error({ err }, "DRIVE_ARCHIVE_STARTUP_PASS_FAILED"),
+  );
   timer = setInterval(() => {
-    void runArchivePass(deps, "timer").catch((err) => logger.error({ err }, "DRIVE_ARCHIVE_TICK_FAILED"));
+    void runArchivePass(deps, "timer").catch((err) =>
+      logger.error({ err }, "DRIVE_ARCHIVE_TICK_FAILED"),
+    );
   }, TICK_MS);
   timer.unref?.();
 }

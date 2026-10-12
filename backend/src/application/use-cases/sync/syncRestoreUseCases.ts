@@ -19,7 +19,10 @@
  *                conflict review (keep-server / rebase / withdraw).
  */
 import { randomUUID } from "node:crypto";
-import type { ISyncRestoreStateStore, SyncRestorePhase } from "../../ports/ISyncRestoreStateStore.js";
+import type {
+  ISyncRestoreStateStore,
+  SyncRestorePhase,
+} from "../../ports/ISyncRestoreStateStore.js";
 import type { ISyncOutboxRepository } from "../../ports/ISyncOutboxRepository.js";
 import type { ISyncDeviceRepository } from "../../ports/ISyncDeviceRepository.js";
 import type { TenantContext } from "../../../domain/types/index.js";
@@ -39,12 +42,19 @@ export type RestoreReconcileDeps = {
   outbox: ISyncOutboxRepository;
   devices: ISyncDeviceRepository;
   /** Registers the identity on the hub (hubConfig.registerDeviceOnHub). */
-  registerOnHub: (device: RestoreDeviceRegistration) => Promise<{ ok: true; id: string } | { ok: false; error: string }>;
+  registerOnHub: (
+    device: RestoreDeviceRegistration,
+  ) => Promise<{ ok: true; id: string } | { ok: false; error: string }>;
   /** One pull page under `syncDeviceId` (runLocalSyncPull with the own-unit hook). */
   pullPage: (
     syncDeviceId: string,
     isOwnRestoredUnit: (unit: PulledUnit) => Promise<boolean>,
-  ) => Promise<{ pulled: number; failed: number; acknowledged?: number; deviceTrust?: { code: string; message: string } | null }>;
+  ) => Promise<{
+    pulled: number;
+    failed: number;
+    acknowledged?: number;
+    deviceTrust?: { code: string; message: string } | null;
+  }>;
   /**
    * Number blocks: the restored copies of the previous identities' blocks are stale (those
    * identities kept numbering after the backup, and their documents come back in the pull), so they
@@ -115,7 +125,9 @@ export async function reconcileRestoredSnapshot(
       userId: ctx.userId,
       deviceFingerprint: device.fingerprint,
       deviceFingerprintVersion: device.fingerprintVersion,
-      platform: device.platform as Parameters<ISyncDeviceRepository["registerOrTouch"]>[0]["platform"],
+      platform: device.platform as Parameters<
+        ISyncDeviceRepository["registerOrTouch"]
+      >[0]["platform"],
       hostname: device.hostname ?? undefined,
       label: device.label ?? undefined,
       deviceId: reg.id,

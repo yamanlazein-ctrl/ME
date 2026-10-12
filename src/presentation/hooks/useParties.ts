@@ -4,7 +4,11 @@ import { toast } from "sonner";
 import { container } from "@/infrastructure/container";
 import { buildTenantContext } from "@/infrastructure/di/auth-context";
 import { isOk } from "@/core/result";
-import { getAccessToken, SESSION_STARTED_EVENT } from "@/infrastructure/auth/TokenProvider";
+import {
+  getAccessToken,
+  SESSION_ENDED_EVENT,
+  SESSION_STARTED_EVENT,
+} from "@/infrastructure/auth/TokenProvider";
 import { PartyFilter } from "@/core/dtos/PartyDTO";
 import type { Party, PartyKind } from "@/domain/entities/Party";
 import type { CreatePartyInput } from "@/core/dtos/PartyDTO";
@@ -77,6 +81,9 @@ function getVersion() {
 let loadPromise: Promise<void> | null = null;
 let loaded = false;
 let retryAttempts = 0;
+// S-01: bumped when a session ends. A load started under an older session is dropped when it lands,
+// so a previous user's (or tenant's) parties never fill the next session's cache.
+let session = 0;
 
 /**
  * D-3 / FR-068: a failed load must never look like "no customers". The list
@@ -84,8 +91,7 @@ let retryAttempts = 0;
  * instead of an empty table.
  */
 export type PartiesLoadState =
-  | { status: "idle" | "loading" | "ready" }
-  | { status: "error"; message: string };
+  { status: "idle" | "loading" | "ready" } | { status: "error"; message: string };
 let loadState: PartiesLoadState = { status: "idle" };
 
 function setLoadState(next: PartiesLoadState) {
@@ -104,6 +110,7 @@ function isPaginated<T>(x: unknown): x is { data: T[] } {
 async function loadAll(force = false): Promise<void> {
   if ((loaded && !force) || loadPromise) return loadPromise ?? Promise.resolve();
   loadPromise = (async () => {
+    const gen = session;
     if (!loaded) setLoadState({ status: "loading" });
     try {
       const ctx = buildTenantContext();
@@ -124,7 +131,9 @@ async function loadAll(force = false): Promise<void> {
         fetchAllPaged<Party>(
           async (page, limit, cursor) => {
             const res = await container.parties.list.execute(
-              { kind, limit, page, cursor, status: "cancelled" } as Parameters<typeof container.parties.list.execute>[0],
+              { kind, limit, page, cursor, status: "cancelled" } as Parameters<
+                typeof container.parties.list.execute
+              >[0],
               ctx,
             );
             return isPaginated<Party>(res) ? res : (res as Party[]);
@@ -137,6 +146,7 @@ async function loadAll(force = false): Promise<void> {
         loadCancelled("customer"),
         loadCancelled("supplier"),
       ]);
+      if (gen !== session) return;
       const operational = (p: Party) => p.status !== "cancelled";
       const cData = (isPaginated<Party>(cRes) ? cRes.data : (cRes as Party[])).filter(operational);
       const sData = (isPaginated<Party>(sRes) ? sRes.data : (sRes as Party[])).filter(operational);
@@ -150,18 +160,20 @@ async function loadAll(force = false): Promise<void> {
       retryAttempts = 0;
       setLoadState({ status: "ready" });
     } catch (e) {
+      if (gen !== session) return;
       console.error("[useParties] load failed", e);
       // D-3: surface the failure; the screen offers Retry (retryPartiesLoad).
       setLoadState({
         status: "error",
-        message: e instanceof Error && e.message ? e.message : "تعذّر تحميل قائمة العملاء والموردين",
+        message:
+          e instanceof Error && e.message ? e.message : "تعذّر تحميل قائمة العملاء والموردين",
       });
       if (getAccessToken() && retryAttempts < 3) {
         retryAttempts += 1;
         setTimeout(() => void loadAll(true), 1_000);
       }
     } finally {
-      loadPromise = null;
+      if (gen === session) loadPromise = null;
     }
   })();
   return loadPromise;
@@ -185,6 +197,15 @@ if (typeof window !== "undefined") {
   window.addEventListener(SESSION_STARTED_EVENT, () => {
     retryAttempts = 0;
     void loadAll(true);
+  });
+  // S-01: logout / rejected refresh — forget this session's parties at once.
+  window.addEventListener(SESSION_ENDED_EVENT, () => {
+    session++;
+    loadPromise = null;
+    loaded = false;
+    retryAttempts = 0;
+    for (const list of [_allParties, _cancelledParties, _customers, _suppliers]) list.splice(0);
+    setLoadState({ status: "idle" });
   });
 }
 

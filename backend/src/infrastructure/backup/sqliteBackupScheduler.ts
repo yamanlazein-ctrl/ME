@@ -17,7 +17,12 @@ import { tmpdir } from "node:os";
 import { logger } from "../config/logger.js";
 import { backupMirrorRoot } from "./backupScheduler.js";
 import { createAndVerifyBackup } from "./sqliteBackup.js";
-import { removeBackupEntry, updateBackup, verifiedBackups, readRegistry } from "./backupRegistry.js";
+import {
+  removeBackupEntry,
+  updateBackup,
+  verifiedBackups,
+  readRegistry,
+} from "./backupRegistry.js";
 import { restoreTest } from "./sqliteRestore.js";
 
 export const KEEP_AUTOMATIC = 7;
@@ -79,7 +84,11 @@ export async function runAutomaticBackupNow(): Promise<string | null> {
   }
 }
 
-export function runWeeklyRestoreTestIfDue(now = Date.now()): { ran: boolean; ok?: boolean; detail?: string } {
+export function runWeeklyRestoreTestIfDue(now = Date.now()): {
+  ran: boolean;
+  ok?: boolean;
+  detail?: string;
+} {
   const autos = verifiedBackups("automatic");
   if (!autos.length) return { ran: false };
   const lastTest = readRegistry()
@@ -92,8 +101,14 @@ export function runWeeklyRestoreTestIfDue(now = Date.now()): { ran: boolean; ok?
   const temp = join(tmpdir(), `motard-restore-test-${randomUUID()}`);
   try {
     const r = restoreTest(newest.path, temp);
-    updateBackup(newest.path, { lastRestoreTest: { at: new Date(now).toISOString(), ok: r.ok, detail: r.detail } });
-    (r.ok ? logger.info : logger.error).call(logger, { path: newest.path, detail: r.detail }, r.ok ? "RESTORE_TEST_OK" : "RESTORE_TEST_FAILED");
+    updateBackup(newest.path, {
+      lastRestoreTest: { at: new Date(now).toISOString(), ok: r.ok, detail: r.detail },
+    });
+    (r.ok ? logger.info : logger.error).call(
+      logger,
+      { path: newest.path, detail: r.detail },
+      r.ok ? "RESTORE_TEST_OK" : "RESTORE_TEST_FAILED",
+    );
     return { ran: true, ...r };
   } finally {
     rmSync(temp, { recursive: true, force: true });
@@ -121,4 +136,3 @@ export function stopSqliteBackupScheduler(): void {
   if (timer) clearInterval(timer);
   timer = null;
 }
-

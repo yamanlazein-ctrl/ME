@@ -18,6 +18,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { useCurrentUser } from "@/presentation/hooks/useAuth";
+import { hasAdminPrivileges } from "@/presentation/hooks/useSettings";
 import {
   describeSyncProblem,
   hubSync,
@@ -72,9 +73,12 @@ function fmt(iso: string | null | undefined): string {
 
 function SyncSettingsPage() {
   const { data: me } = useCurrentUser();
-  if (!me || me.role !== "admin") {
+  if (!me || !hasAdminPrivileges(me.role)) {
     return (
-      <PageCard title="الوصول مرفوض" description="إعدادات المزامنة متاحة لمدير النظام فقط.">
+      <PageCard
+        title="الوصول مرفوض"
+        description="إعدادات المزامنة متاحة لمدير النظام والمحاسب فقط."
+      >
         <div className="flex items-center gap-3 rounded-lg border border-destructive/40 bg-destructive/5 p-4 text-sm text-destructive">
           <ShieldAlert className="h-5 w-5" />
           <span>ليس لديك صلاحية لإدارة ربط الجهاز بالمركز.</span>
@@ -184,11 +188,16 @@ function SyncSettingsAdmin() {
         return;
       }
       if (r.deviceGate) {
-        toast.error(describeSyncProblem(r.deviceTrust?.code ?? r.deviceTrust?.message) ?? "المركز رفض هذا الجهاز");
+        toast.error(
+          describeSyncProblem(r.deviceTrust?.code ?? r.deviceTrust?.message) ??
+            "المركز رفض هذا الجهاز",
+        );
       } else if (r.pullError) {
         toast.error(describeSyncProblem(r.pullError));
       } else if ((r.failed ?? 0) > 0) {
-        toast.error(`لم تُرسل ${r.failed} عملية — ستُعاد المحاولة تلقائياً. أُرسل ${r.pushed} · سُحب ${r.pull?.applied ?? 0}`);
+        toast.error(
+          `لم تُرسل ${r.failed} عملية — ستُعاد المحاولة تلقائياً. أُرسل ${r.pushed} · سُحب ${r.pull?.applied ?? 0}`,
+        );
       } else {
         toast.success(
           `مزامنة: أُرسل ${r.pushed} · سُحب ${r.pull?.applied ?? 0}${r.rejected ? ` · رُفض ${r.rejected}` : ""}`,
@@ -289,7 +298,11 @@ function SyncSettingsAdmin() {
               />
             )}
             {state?.lastPushError && (
-              <Row label="حالة الإرسال" value={describeSyncProblem(state.lastPushError) ?? ""} danger />
+              <Row
+                label="حالة الإرسال"
+                value={describeSyncProblem(state.lastPushError) ?? ""}
+                danger
+              />
             )}
             {run.lastError && <Row label="آخر خطأ" value={run.lastError} danger />}
           </dl>
@@ -464,7 +477,7 @@ function SyncSettingsAdmin() {
         </form>
       </PageCard>
 
-      {state?.url && session?.hubUserRole === "admin" && <HubDevicesCard />}
+      {state?.url && hasAdminPrivileges(session?.hubUserRole) && <HubDevicesCard />}
 
       {isTauri() && <FactoryResetCard />}
 

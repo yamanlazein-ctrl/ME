@@ -48,7 +48,8 @@ export function useCashBalance(date?: string, currency?: string) {
 export function useCashBalancesOn(date?: string) {
   return useQuery({
     queryKey: [...KEYS.state, "balances", date ?? "today"],
-    queryFn: () => container.cashbox.state.cashBalancesOn(date ?? localToday(), buildTenantContext()),
+    queryFn: () =>
+      container.cashbox.state.cashBalancesOn(date ?? localToday(), buildTenantContext()),
     staleTime: 15_000,
   });
 }

@@ -186,13 +186,7 @@ export async function allocateDocumentNumber(
   }
 
   if (opts?.syncDeviceId && shouldUseNumberBlocks()) {
-    const fromBlock = await consumeNextInTx(
-      tx,
-      tenantId,
-      opts.syncDeviceId,
-      entityType,
-      yearNum,
-    );
+    const fromBlock = await consumeNextInTx(tx, tenantId, opts.syncDeviceId, entityType, yearNum);
     if (fromBlock) {
       return `${prefix}-${year}-${String(fromBlock.numberValue).padStart(width, "0")}`;
     }
@@ -478,7 +472,9 @@ async function applyPreAllocatedNumber(
   // restore). Refusing it parked the document as dead forever. The counter
   // is not per-year (document_sequences has no year), so accepting it is safe.
   if (parsed.year > fmt.yearNum) {
-    throw new BusinessRuleError("لا يمكن قبول رقم محجوز من سنة لاحقة للسنة الحالية — تحقق من تاريخ الجهاز");
+    throw new BusinessRuleError(
+      "لا يمكن قبول رقم محجوز من سنة لاحقة للسنة الحالية — تحقق من تاريخ الجهاز",
+    );
   }
 
   // Raise global floor so future claims/allocations cannot collide.
@@ -534,7 +530,10 @@ export async function peekNextDocumentNumber(
 
   if (syncDeviceId && shouldUseNumberBlocks()) {
     const [block] = await db
-      .select({ nextNumber: documentNumberBlocks.nextNumber, endNumber: documentNumberBlocks.endNumber })
+      .select({
+        nextNumber: documentNumberBlocks.nextNumber,
+        endNumber: documentNumberBlocks.endNumber,
+      })
       .from(documentNumberBlocks)
       .where(
         and(

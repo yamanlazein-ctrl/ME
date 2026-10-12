@@ -15,16 +15,8 @@
     {
       "name": "5a PRIOR_DATA_FOUND offers exactly Open existing / Restore / Start new",
       "pass": true,
-      "options": [
-        "open_existing",
-        "restore_backup",
-        "start_new"
-      ],
-      "buttons": [
-        "فتح البيانات الموجودة",
-        "استعادة نسخة احتياطية",
-        "بدء مشروع جديد"
-      ]
+      "options": ["open_existing", "restore_backup", "start_new"],
+      "buttons": ["فتح البيانات الموجودة", "استعادة نسخة احتياطية", "بدء مشروع جديد"]
     },
     {
       "name": "5b no corruption wording outside CORRUPT",

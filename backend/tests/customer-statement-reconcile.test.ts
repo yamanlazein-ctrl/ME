@@ -45,8 +45,22 @@ const statements = new PostgresStatementRepository(db);
 const returnRepo = new PostgresReturnRepository(db);
 
 type Expected = {
-  syp: { total: number; paid: number; returns: number; remaining: number; ledger: number; statement: number };
-  usd: { total: number; paid: number; returns: number; remaining: number; ledger: number; statement: number };
+  syp: {
+    total: number;
+    paid: number;
+    returns: number;
+    remaining: number;
+    ledger: number;
+    statement: number;
+  };
+  usd: {
+    total: number;
+    paid: number;
+    returns: number;
+    remaining: number;
+    ledger: number;
+    statement: number;
+  };
   cashUsd: number;
   cashSyp: number;
 };
@@ -74,15 +88,11 @@ async function independentExpected(): Promise<Expected> {
     .from(returns)
     .innerJoin(returnLines, eq(returnLines.returnId, returns.id))
     .where(
-      and(
-        eq(returns.tenantId, tenantId),
-        eq(returns.status, "active"),
-        eq(returns.kind, "sale"),
-      ),
-    )
-    ;
+      and(eq(returns.tenantId, tenantId), eq(returns.status, "active"), eq(returns.kind, "sale")),
+    );
   const retByInv = new Map<string | null, number>();
-  for (const r of retLines) retByInv.set(r.invoiceId, (retByInv.get(r.invoiceId) ?? 0) + Number(r.qty) * Number(r.price));
+  for (const r of retLines)
+    retByInv.set(r.invoiceId, (retByInv.get(r.invoiceId) ?? 0) + Number(r.qty) * Number(r.price));
 
   const bucket = (ccy: string) => {
     let total = 0;
@@ -94,13 +104,20 @@ async function independentExpected(): Promise<Expected> {
       paid += Number(inv.paid);
       ret += retByInv.get(inv.id) ?? 0;
     }
-    return { total: round2dp(total), paid: round2dp(paid), returns: round2dp(ret), remaining: round2dp(total - paid - ret) };
+    return {
+      total: round2dp(total),
+      paid: round2dp(paid),
+      returns: round2dp(ret),
+      remaining: round2dp(total - paid - ret),
+    };
   };
 
   const ledgerOf = async (ccy: string) => {
     const [row] = await db
       .select({
-        net: sql<number>`COALESCE(SUM(${ledgerEntries.debit} - ${ledgerEntries.credit}), 0)`.mapWith(ledgerEntries.debit),
+        net: sql<number>`COALESCE(SUM(${ledgerEntries.debit} - ${ledgerEntries.credit}), 0)`.mapWith(
+          ledgerEntries.debit,
+        ),
       })
       .from(ledgerEntries)
       .where(
@@ -313,11 +330,56 @@ describe("customer statement reconciliation (10 invoices)", () => {
     );
 
     snap = await independentExpected();
-    expect(Number((await db.select({ paid: invoices.paid }).from(invoices).where(eq(invoices.id, created[0].id)))[0].paid)).toBe(200_000);
-    expect(Number((await db.select({ paid: invoices.paid }).from(invoices).where(eq(invoices.id, created[1].id)))[0].paid)).toBe(50_000);
-    expect(Number((await db.select({ paid: invoices.paid }).from(invoices).where(eq(invoices.id, created[6].id)))[0].paid)).toBe(100);
-    expect(Number((await db.select({ paid: invoices.paid }).from(invoices).where(eq(invoices.id, created[7].id)))[0].paid)).toBe(50);
-    expect(Number((await db.select({ paid: invoices.paid }).from(invoices).where(eq(invoices.id, created[9].id)))[0].paid)).toBe(1_000_000);
+    expect(
+      Number(
+        (
+          await db
+            .select({ paid: invoices.paid })
+            .from(invoices)
+            .where(eq(invoices.id, created[0].id))
+        )[0].paid,
+      ),
+    ).toBe(200_000);
+    expect(
+      Number(
+        (
+          await db
+            .select({ paid: invoices.paid })
+            .from(invoices)
+            .where(eq(invoices.id, created[1].id))
+        )[0].paid,
+      ),
+    ).toBe(50_000);
+    expect(
+      Number(
+        (
+          await db
+            .select({ paid: invoices.paid })
+            .from(invoices)
+            .where(eq(invoices.id, created[6].id))
+        )[0].paid,
+      ),
+    ).toBe(100);
+    expect(
+      Number(
+        (
+          await db
+            .select({ paid: invoices.paid })
+            .from(invoices)
+            .where(eq(invoices.id, created[7].id))
+        )[0].paid,
+      ),
+    ).toBe(50);
+    expect(
+      Number(
+        (
+          await db
+            .select({ paid: invoices.paid })
+            .from(invoices)
+            .where(eq(invoices.id, created[9].id))
+        )[0].paid,
+      ),
+    ).toBe(1_000_000);
     expectReconciled(snap);
     expect(snap.cashUsd).toBe(200);
     expect(snap.cashSyp).toBe(850_000);

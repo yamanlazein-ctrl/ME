@@ -9,15 +9,37 @@ import { drizzle } from "drizzle-orm/better-sqlite3";
 import { sqliteTable, text, integer } from "drizzle-orm/sqlite-core";
 import { ilikeContains } from "@/infrastructure/repositories/sqlite/helpers/likeContains.js";
 
-const names = ["100%_pure", "100 pure", "a\\b", "ab", "Ahmad", "AHMAD trade", "أحمد للأقمشة", "محمد", "x_y", "xay", "Éclair", "éclair"];
+const names = [
+  "100%_pure",
+  "100 pure",
+  "a\\b",
+  "ab",
+  "Ahmad",
+  "AHMAD trade",
+  "أحمد للأقمشة",
+  "محمد",
+  "x_y",
+  "xay",
+  "Éclair",
+  "éclair",
+];
 
 describe("ilikeContains (T052)", () => {
   const raw = new Database(":memory:");
   raw.exec("CREATE TABLE t (id INTEGER PRIMARY KEY, name TEXT NOT NULL)");
   const t = sqliteTable("t", { id: integer("id").primaryKey(), name: text("name").notNull() });
   const db = drizzle(raw);
-  db.insert(t).values(names.map((name, i) => ({ id: i, name }))).run();
-  const find = (q: string) => db.select({ name: t.name }).from(t).where(ilikeContains(t.name, q)).all().map((r) => r.name).sort();
+  db.insert(t)
+    .values(names.map((name, i) => ({ id: i, name })))
+    .run();
+  const find = (q: string) =>
+    db
+      .select({ name: t.name })
+      .from(t)
+      .where(ilikeContains(t.name, q))
+      .all()
+      .map((r) => r.name)
+      .sort();
 
   it("treats %, _ and \\ in the input literally", () => {
     expect(find("%")).toEqual(["100%_pure"]);

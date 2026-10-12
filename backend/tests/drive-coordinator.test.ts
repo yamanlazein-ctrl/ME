@@ -22,13 +22,19 @@ let tenantId: string;
 let coord: typeof import("../src/infrastructure/googledrive/coordinator.js");
 
 beforeAll(async () => {
-  await import("../src/infrastructure/orm/sqlite/runtime.js").then((m) => m.ensureSqliteRuntime({}));
+  await import("../src/infrastructure/orm/sqlite/runtime.js").then((m) =>
+    m.ensureSqliteRuntime({}),
+  );
   const rt = (await import("../src/infrastructure/orm/sqlite/runtime.js")).getSqliteRuntime()!;
   writerDb = rt.conns.writerDb;
   coord = await import("../src/infrastructure/googledrive/coordinator.js");
   tenantId = randomUUID();
-  rt.conns.writer.prepare(`INSERT INTO tenants (id, name, slug) VALUES (?, 'c', 'coord')`).run(tenantId);
-  rt.conns.writer.prepare(`INSERT INTO settings (id, tenant_id) VALUES (?, ?)`).run(randomUUID(), tenantId);
+  rt.conns.writer
+    .prepare(`INSERT INTO tenants (id, name, slug) VALUES (?, 'c', 'coord')`)
+    .run(tenantId);
+  rt.conns.writer
+    .prepare(`INSERT INTO settings (id, tenant_id) VALUES (?, ?)`)
+    .run(randomUUID(), tenantId);
 });
 
 describe("primary archive device (fail-closed)", () => {
@@ -44,16 +50,31 @@ describe("primary archive device (fail-closed)", () => {
   });
 
   it("allows only the designated coordinator", async () => {
-    await coord.writeDriveSettings(writerDb as never, { archiveEnabled: true, coordinatorDeviceId: "device-a" }, tenantId);
-    expect(await coord.authorizeUploadDevice(writerDb as never, "device-a")).toEqual({ allowed: true });
+    await coord.writeDriveSettings(
+      writerDb as never,
+      { archiveEnabled: true, coordinatorDeviceId: "device-a" },
+      tenantId,
+    );
+    expect(await coord.authorizeUploadDevice(writerDb as never, "device-a")).toEqual({
+      allowed: true,
+    });
     const d = await coord.authorizeUploadDevice(writerDb as never, "device-b");
     expect(d).toEqual({ allowed: false, reason: "NOT_COORDINATOR" });
   });
 
   it("re-designation transfers the role: the old primary is refused", async () => {
-    await coord.writeDriveSettings(writerDb as never, { coordinatorDeviceId: "device-b" }, tenantId);
-    expect(await coord.authorizeUploadDevice(writerDb as never, "device-a")).toEqual({ allowed: false, reason: "NOT_COORDINATOR" });
-    expect(await coord.authorizeUploadDevice(writerDb as never, "device-b")).toEqual({ allowed: true });
+    await coord.writeDriveSettings(
+      writerDb as never,
+      { coordinatorDeviceId: "device-b" },
+      tenantId,
+    );
+    expect(await coord.authorizeUploadDevice(writerDb as never, "device-a")).toEqual({
+      allowed: false,
+      reason: "NOT_COORDINATOR",
+    });
+    expect(await coord.authorizeUploadDevice(writerDb as never, "device-b")).toEqual({
+      allowed: true,
+    });
   });
 
   it("disabling the feature fails closed even for the coordinator", async () => {

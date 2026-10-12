@@ -26,7 +26,9 @@ export class SqliteUserRepository implements IUserRepository {
     await this.db.transaction(async (tx) => {
       const removed = await tx.execute<{ device_id: string }>(sql`
         SELECT device_id FROM sync_device_authorized_users WHERE tenant_id = ${tenantId} AND user_id = ${userId}`);
-      await tx.execute(sql`DELETE FROM sync_device_authorized_users WHERE tenant_id = ${tenantId} AND user_id = ${userId}`);
+      await tx.execute(
+        sql`DELETE FROM sync_device_authorized_users WHERE tenant_id = ${tenantId} AND user_id = ${userId}`,
+      );
       const now = transactionTimestamp();
       for (const deviceId of [...new Set(removed.rows.map((r) => r.device_id))]) {
         await tx.execute(sql`
@@ -108,12 +110,7 @@ export class SqliteUserRepository implements IUserRepository {
 
       if (filter.search) {
         const searchTerm = `%${filter.search}%`;
-        conditions.push(
-          or(
-            likeCs(users.name, searchTerm),
-            likeCs(users.email, searchTerm),
-          )!,
-        );
+        conditions.push(or(likeCs(users.name, searchTerm), likeCs(users.email, searchTerm))!);
       }
 
       if (filter.role) {

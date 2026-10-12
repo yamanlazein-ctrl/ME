@@ -64,6 +64,7 @@ export async function deleteManualMovementUseCase(
     await repo.deleteManualMovement(id, ctx);
     return { ok: true };
   } catch (e) {
+    if (e instanceof DayLockedError) return { ok: false, error: e.message };
     return { ok: false, error: "فشل حذف الحركة" };
   }
 }

@@ -34,14 +34,9 @@ export function mapActivationError(
   fallbackMessage = "فشل التفعيل",
 ): ActivationHttpMapping {
   const msg =
-    typeof error === "string"
-      ? error
-      : error instanceof Error
-        ? error.message
-        : fallbackMessage;
+    typeof error === "string" ? error : error instanceof Error ? error.message : fallbackMessage;
   const code = msg.trim() || "ACTIVATION_FAILED";
-  const status =
-    ACTIVATION_HTTP_STATUS[code] ?? (code.startsWith("INVALID") ? 400 : 500);
+  const status = ACTIVATION_HTTP_STATUS[code] ?? (code.startsWith("INVALID") ? 400 : 500);
   return {
     status,
     code,

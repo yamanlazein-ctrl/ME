@@ -34,7 +34,13 @@ export type DriveStatus = {
   connected: boolean;
   queue: { pending: number; uploading: number; done: number; failed: number; blocked: number };
   lastUpload: { uploadedAt: string | null; fileName: string; section: string } | null;
-  lastRun: { id: string; kind: string; state: string; startedAt: string; finishedAt: string | null } | null;
+  lastRun: {
+    id: string;
+    kind: string;
+    state: string;
+    startedAt: string;
+    finishedAt: string | null;
+  } | null;
 };
 
 export type DriveQueueJob = {
@@ -53,15 +59,26 @@ export type DriveQueueJob = {
 export const driveApi_ = {
   status: () => driveApi<DriveStatus>("/drive/status"),
   test: () => driveApi<{ ok: boolean; email: string | null }>("/drive/test", { method: "POST" }),
-  syncNow: () => driveApi<{ ok: boolean; queued: number; started: boolean }>("/drive/sync-now", { method: "POST" }),
+  syncNow: () =>
+    driveApi<{ ok: boolean; queued: number; started: boolean }>("/drive/sync-now", {
+      method: "POST",
+    }),
   queue: (status?: string) =>
-    driveApi<{ jobs: DriveQueueJob[] }>(`/drive/queue${status ? `?status=${encodeURIComponent(status)}` : ""}`),
-  retry: (id: string) => driveApi<{ ok: boolean }>(`/drive/queue/${encodeURIComponent(id)}/retry`, { method: "POST" }),
+    driveApi<{ jobs: DriveQueueJob[] }>(
+      `/drive/queue${status ? `?status=${encodeURIComponent(status)}` : ""}`,
+    ),
+  retry: (id: string) =>
+    driveApi<{ ok: boolean }>(`/drive/queue/${encodeURIComponent(id)}/retry`, { method: "POST" }),
 };
 
 // ── Tauri shell IPC (OAuth lifecycle lives in Rust) ─────────────────────────
 
-export type GoogleShellStatus = { connected: boolean; configured: boolean; email: string | null; scopes: string };
+export type GoogleShellStatus = {
+  connected: boolean;
+  configured: boolean;
+  email: string | null;
+  scopes: string;
+};
 
 export async function googleConfigure(clientId: string): Promise<GoogleShellStatus> {
   if (!isTauri()) throw new Error("متاح في تطبيق سطح المكتب فقط");

@@ -34,7 +34,9 @@ export function registerHealthRoutes(
    * Returns: database latency, memory, uptime, version.
    * Used by: monitoring dashboards, alerting systems, deployment validation.
    */
-  const deepGuards: RequestHandler[] = auth ? [auth, rbac(["admin"]) as RequestHandler] : [rbac(["admin"]) as RequestHandler];
+  const deepGuards: RequestHandler[] = auth
+    ? [auth, rbac(["admin"]) as RequestHandler]
+    : [rbac(["admin"]) as RequestHandler];
   router.get("/api/health/deep", ...deepGuards, async (_req: Request, res: Response) => {
     const start = Date.now();
     const checks: Record<string, { status: string; details?: string; ms?: number }> = {};

@@ -26,7 +26,12 @@ export function useExpensesList(filter?: ExpenseFilter, opts?: { all?: boolean }
       if (all) {
         const data = await fetchAllPaged(
           (page, limit, cursor) =>
-            container.expenses.list.page({ ...(filter ?? {}), page, limit, cursor } as ExpenseFilter),
+            container.expenses.list.page({
+              ...(filter ?? {}),
+              page,
+              limit,
+              cursor,
+            } as ExpenseFilter),
           { pageSize: 1000, label: "expenses" },
         );
         return { data, total: data.length, hasNext: false };

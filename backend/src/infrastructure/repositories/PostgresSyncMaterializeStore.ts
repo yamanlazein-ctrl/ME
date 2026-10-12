@@ -1,8 +1,16 @@
 /** PostgreSQL SQL for sync materialization — moved verbatim from syncMaterialize.ts (S1). */
 /** The shared pool from drizzle.ts (structural type: only drizzle.ts may import pg — rls-guard). */
-type QueryPool = { query: (text: string, params?: unknown[]) => Promise<{ rowCount: number | null; rows: Array<Record<string, unknown>> }> };
+type QueryPool = {
+  query: (
+    text: string,
+    params?: unknown[],
+  ) => Promise<{ rowCount: number | null; rows: Array<Record<string, unknown>> }>;
+};
 import { sql, type SQL } from "drizzle-orm";
-import type { ISyncMaterializeStore, SyncUserSnapshotRow } from "../../application/ports/ISyncMaterializeStore.js";
+import type {
+  ISyncMaterializeStore,
+  SyncUserSnapshotRow,
+} from "../../application/ports/ISyncMaterializeStore.js";
 
 export class PostgresSyncMaterializeStore implements ISyncMaterializeStore {
   /**

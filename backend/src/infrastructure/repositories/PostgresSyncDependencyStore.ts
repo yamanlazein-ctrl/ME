@@ -26,7 +26,13 @@ import type { TenantContext } from "../../domain/types/index.js";
 type Tx = Parameters<Parameters<DB["transaction"]>[0]>[0];
 
 export const postgresSyncDependencyStore: ISyncDependencyStore = {
-  async applyPartyOpening(executor: unknown, snap: ReplayPartySnapshot, ctx: TenantContext, amount: number, date: string): Promise<void> {
+  async applyPartyOpening(
+    executor: unknown,
+    snap: ReplayPartySnapshot,
+    ctx: TenantContext,
+    amount: number,
+    date: string,
+  ): Promise<void> {
     const database = executor as DB;
     await runWithTenantContext({ tenantId: ctx.tenantId }, async () => {
       await database.transaction(async (tx) => {
@@ -43,7 +49,12 @@ export const postgresSyncDependencyStore: ISyncDependencyStore = {
           .limit(1);
         if (existing.length > 0) return;
         const [party] = await tx
-          .select({ id: parties.id, code: parties.code, kind: parties.kind, currency: parties.currency })
+          .select({
+            id: parties.id,
+            code: parties.code,
+            kind: parties.kind,
+            currency: parties.currency,
+          })
           .from(parties)
           .where(and(eq(parties.tenantId, ctx.tenantId), eq(parties.id, snap.id)))
           .limit(1);
@@ -74,7 +85,12 @@ export const postgresSyncDependencyStore: ISyncDependencyStore = {
     });
   },
 
-  async ensureDependenciesInTx(executor: unknown, deps: ReplayDependencies, ctx: TenantContext, hooks: DependencyReplayHooks): Promise<void> {
+  async ensureDependenciesInTx(
+    executor: unknown,
+    deps: ReplayDependencies,
+    ctx: TenantContext,
+    hooks: DependencyReplayHooks,
+  ): Promise<void> {
     const tx = executor as Tx;
 
     for (const p of deps.parties ?? []) {
@@ -90,38 +106,41 @@ export const postgresSyncDependencyStore: ISyncDependencyStore = {
       // sync): deterministic suffix, never an endless refusal.
       await hooks.resolveMaster(tx, "party", p as unknown as Record<string, unknown>, ctx.tenantId);
       try {
-        await tx.insert(parties).values({
-          id: p.id,
-          tenantId: ctx.tenantId,
-          kind: p.kind,
-          code: p.code ?? null,
-          name: p.name,
-          companyName: p.companyName ?? null,
-          commercialReg: p.commercialReg ?? null,
-          category: p.category ?? null,
-          salesRep: p.salesRep ?? null,
-          phone: p.phone ?? null,
-          mobile: p.mobile ?? null,
-          whatsapp: p.whatsapp ?? null,
-          altPhone: p.altPhone ?? null,
-          email: p.email ?? null,
-          website: p.website ?? null,
-          address: p.address ?? null,
-          city: p.city ?? null,
-          country: p.country ?? null,
-          taxNumber: p.taxNumber ?? null,
-          // Opening balance is not re-journaled here — invoice ledger legs carry AR/AP.
-          openingBalance: 0,
-          creditLimit: 0,
-          currency: p.currency || "SYP",
-          paymentTerms: p.paymentTerms ?? null,
-          paymentMethod: p.paymentMethod ?? null,
-          defaultDiscount: p.defaultDiscount ?? 0,
-          vat: p.vat != null ? String(p.vat) : "0",
-          status: p.status || "active",
-          notes: p.notes ?? null,
-          createdBy: ctx.userId,
-        }).onConflictDoNothing({ target: parties.id });
+        await tx
+          .insert(parties)
+          .values({
+            id: p.id,
+            tenantId: ctx.tenantId,
+            kind: p.kind,
+            code: p.code ?? null,
+            name: p.name,
+            companyName: p.companyName ?? null,
+            commercialReg: p.commercialReg ?? null,
+            category: p.category ?? null,
+            salesRep: p.salesRep ?? null,
+            phone: p.phone ?? null,
+            mobile: p.mobile ?? null,
+            whatsapp: p.whatsapp ?? null,
+            altPhone: p.altPhone ?? null,
+            email: p.email ?? null,
+            website: p.website ?? null,
+            address: p.address ?? null,
+            city: p.city ?? null,
+            country: p.country ?? null,
+            taxNumber: p.taxNumber ?? null,
+            // Opening balance is not re-journaled here — invoice ledger legs carry AR/AP.
+            openingBalance: 0,
+            creditLimit: 0,
+            currency: p.currency || "SYP",
+            paymentTerms: p.paymentTerms ?? null,
+            paymentMethod: p.paymentMethod ?? null,
+            defaultDiscount: p.defaultDiscount ?? 0,
+            vat: p.vat != null ? String(p.vat) : "0",
+            status: p.status || "active",
+            notes: p.notes ?? null,
+            createdBy: ctx.userId,
+          })
+          .onConflictDoNothing({ target: parties.id });
       } catch (err) {
         logger.warn(
           { err, partyId: p.id },
@@ -139,18 +158,26 @@ export const postgresSyncDependencyStore: ISyncDependencyStore = {
         .limit(1);
       if (existing) continue;
       if (await hooks.tombstoneBlocks(ctx.tenantId, "fabric", f.id)) continue;
-      await hooks.resolveMaster(tx, "fabric", f as unknown as Record<string, unknown>, ctx.tenantId);
-      await tx.insert(fabrics).values({
-        id: f.id,
-        tenantId: ctx.tenantId,
-        name: f.name,
-        category: f.category ?? null,
-        minStockKg: f.minStockKg != null ? String(f.minStockKg) : "0",
-        unit: f.unit ?? null,
-        notes: f.notes ?? null,
-        imageUrl: f.imageUrl ?? null,
-        createdBy: ctx.userId,
-      }).onConflictDoNothing({ target: fabrics.id });
+      await hooks.resolveMaster(
+        tx,
+        "fabric",
+        f as unknown as Record<string, unknown>,
+        ctx.tenantId,
+      );
+      await tx
+        .insert(fabrics)
+        .values({
+          id: f.id,
+          tenantId: ctx.tenantId,
+          name: f.name,
+          category: f.category ?? null,
+          minStockKg: f.minStockKg != null ? String(f.minStockKg) : "0",
+          unit: f.unit ?? null,
+          notes: f.notes ?? null,
+          imageUrl: f.imageUrl ?? null,
+          createdBy: ctx.userId,
+        })
+        .onConflictDoNothing({ target: fabrics.id });
     }
 
     for (const c of deps.colors ?? []) {
@@ -162,15 +189,18 @@ export const postgresSyncDependencyStore: ISyncDependencyStore = {
       if (existing) continue;
       if (await hooks.tombstoneBlocks(ctx.tenantId, "color", c.id)) continue;
       await hooks.resolveMaster(tx, "color", c as unknown as Record<string, unknown>, ctx.tenantId);
-      await tx.insert(colors).values({
-        id: c.id,
-        tenantId: ctx.tenantId,
-        fabricId: c.fabricId,
-        name: c.name,
-        code: c.code ?? null,
-        hex: c.hex ?? null,
-        imageUrl: c.imageUrl ?? null,
-      }).onConflictDoNothing({ target: colors.id });
+      await tx
+        .insert(colors)
+        .values({
+          id: c.id,
+          tenantId: ctx.tenantId,
+          fabricId: c.fabricId,
+          name: c.name,
+          code: c.code ?? null,
+          hex: c.hex ?? null,
+          imageUrl: c.imageUrl ?? null,
+        })
+        .onConflictDoNothing({ target: colors.id });
     }
 
     for (const r of deps.rolls ?? []) {
@@ -182,31 +212,35 @@ export const postgresSyncDependencyStore: ISyncDependencyStore = {
       if (existing) continue;
       if (await hooks.tombstoneBlocks(ctx.tenantId, "roll", r.id)) continue;
       await hooks.resolveMaster(tx, "roll", r as unknown as Record<string, unknown>, ctx.tenantId);
-      const inserted = await tx.insert(rolls).values({
-        id: r.id,
-        tenantId: ctx.tenantId,
-        colorId: r.colorId,
-        rollNo: r.rollNo,
-        dyeBatch: r.dyeBatch ?? null,
-        initialKg: String(r.initialKg),
-        remainingKg: String(r.remainingKg),
-        pieces: r.pieces,
-        remainingPieces: r.remainingPieces,
-        pricePerKg: String(r.pricePerKg),
-        salePricePerKg: r.salePricePerKg != null ? String(r.salePricePerKg) : null,
-        currency: r.currency || "SYP",
-        // Same entry price as on the origin device; older snapshots carry none → the roll's own price.
-        entryPricePerKg: String(r.entryPricePerKg ?? r.pricePerKg),
-        entryCurrency: r.entryCurrency ?? (r.currency || "SYP"),
-        entrySource: r.entrySource ?? "stock_in",
-        entryReference: r.entryReference ?? null,
-        supplierId: r.supplierId ?? null,
-        entryDate: r.entryDate,
-        widthCm: r.widthCm != null ? String(r.widthCm) : null,
-        weightGsm: r.weightGsm != null ? String(r.weightGsm) : null,
-        status: r.status || "in_stock",
-        version: 1,
-      }).onConflictDoNothing({ target: rolls.id }).returning({ id: rolls.id });
+      const inserted = await tx
+        .insert(rolls)
+        .values({
+          id: r.id,
+          tenantId: ctx.tenantId,
+          colorId: r.colorId,
+          rollNo: r.rollNo,
+          dyeBatch: r.dyeBatch ?? null,
+          initialKg: String(r.initialKg),
+          remainingKg: String(r.remainingKg),
+          pieces: r.pieces,
+          remainingPieces: r.remainingPieces,
+          pricePerKg: String(r.pricePerKg),
+          salePricePerKg: r.salePricePerKg != null ? String(r.salePricePerKg) : null,
+          currency: r.currency || "SYP",
+          // Same entry price as on the origin device; older snapshots carry none → the roll's own price.
+          entryPricePerKg: String(r.entryPricePerKg ?? r.pricePerKg),
+          entryCurrency: r.entryCurrency ?? (r.currency || "SYP"),
+          entrySource: r.entrySource ?? "stock_in",
+          entryReference: r.entryReference ?? null,
+          supplierId: r.supplierId ?? null,
+          entryDate: r.entryDate,
+          widthCm: r.widthCm != null ? String(r.widthCm) : null,
+          weightGsm: r.weightGsm != null ? String(r.weightGsm) : null,
+          status: r.status || "in_stock",
+          version: 1,
+        })
+        .onConflictDoNothing({ target: rolls.id })
+        .returning({ id: rolls.id });
       // The origin device wrote the roll and its 'initial' stock movement together
       // (RollRepository.create); a replayed roll gets the same movement, so every node's
       // stock card starts the same way. Only when THIS call inserted it (a parallel lane may have).

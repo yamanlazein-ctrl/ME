@@ -4,17 +4,17 @@ Arabic-language ERP for fabric & roll trading. Monorepo: React frontend, Express
 
 ## Monorepo Layout
 
-| Directory | Purpose |
-|-----------|---------|
-| `src/` | Web frontend — TanStack Start + React 19 (Arabic UI, RTL) |
-| `backend/` | REST API — Express, Drizzle ORM, PostgreSQL 16+, Redis, Zod |
+| Directory          | Purpose                                                                |
+| ------------------ | ---------------------------------------------------------------------- |
+| `src/`             | Web frontend — TanStack Start + React 19 (Arabic UI, RTL)              |
+| `backend/`         | REST API — Express, Drizzle ORM, PostgreSQL 16+, Redis, Zod            |
 | `packages/shared/` | Single source of truth — Zod schemas, entities, `is2dp`, money helpers |
-| `public/` | Static assets |
-| `tests/e2e/` | Playwright + API E2E |
-| `scripts/` | Ops helpers (backup/restore, ledger integrity) |
-| `docs/` | Delivery docs (decisions, sync ops, disaster recovery) |
-| `desktop/` | Tauri Windows desktop shell |
-| `admin-dashboard/` | License / activation admin panel |
+| `public/`          | Static assets                                                          |
+| `tests/e2e/`       | Playwright + API E2E                                                   |
+| `scripts/`         | Ops helpers (backup/restore, ledger integrity)                         |
+| `docs/`            | Delivery docs (decisions, sync ops, disaster recovery)                 |
+| `desktop/`         | Tauri Windows desktop shell                                            |
+| `admin-dashboard/` | License / activation admin panel                                       |
 
 ## Features
 
@@ -63,37 +63,37 @@ First run: open `http://localhost:5173`, complete one-time device activation, th
 
 ## Scripts
 
-| Script | Description |
-|--------|-------------|
-| `npm run dev` | Vite dev |
-| `npm run build` | Production build |
-| `npm run typecheck` | Frontend `tsc` |
-| `npm run typecheck:backend` | Backend `tsc` |
-| `npm run test` / `test:logic` | Vitest `110/110` |
-| `npm run test:e2e` | Playwright `verify-all-fixes` `16/16` |
-| `node tests/e2e/verify-fixes-api.mjs` | API `19/19` fresh (no cache) |
-| `npm run check:all` | `typecheck` + `typecheck:backend` + `test:logic` |
-| `cd backend && npm run db:migrate` | Apply migrations `0023`→`0033` |
-| `cd backend && npm run db:studio` | Drizzle Studio |
+| Script                                | Description                                      |
+| ------------------------------------- | ------------------------------------------------ |
+| `npm run dev`                         | Vite dev                                         |
+| `npm run build`                       | Production build                                 |
+| `npm run typecheck`                   | Frontend `tsc`                                   |
+| `npm run typecheck:backend`           | Backend `tsc`                                    |
+| `npm run test` / `test:logic`         | Vitest `110/110`                                 |
+| `npm run test:e2e`                    | Playwright `verify-all-fixes` `16/16`            |
+| `node tests/e2e/verify-fixes-api.mjs` | API `19/19` fresh (no cache)                     |
+| `npm run check:all`                   | `typecheck` + `typecheck:backend` + `test:logic` |
+| `cd backend && npm run db:migrate`    | Apply migrations `0023`→`0033`                   |
+| `cd backend && npm run db:studio`     | Drizzle Studio                                   |
 
 ## Environment
 
 **Root `.env` (`.env.example`):**
 
-| Variable | Default | Description |
-|----------|---------|-------------|
+| Variable            | Default                 | Description                            |
+| ------------------- | ----------------------- | -------------------------------------- |
 | `VITE_API_BASE_URL` | `http://localhost:8080` | Backend URL (single `getApiBaseUrl()`) |
-| `VITE_REPO_MODE` | `api` | `api` only |
+| `VITE_REPO_MODE`    | `api`                   | `api` only                             |
 
 **Backend `backend/.env.example`:**
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `DATABASE_URL` | *(required — local example in `.env.example`)* | PG connection string |
-| `REDIS_URL` | `redis://localhost:6379` | Required in `production` |
-| `JWT_SECRET` | — | ≥32 chars |
-| `CORS_ORIGIN` | `http://localhost:5173` | Refuses `*` in `production` |
-| `APP_MASTER_KEY` | — | Base64 32 bytes |
+| Variable         | Default                                        | Description                 |
+| ---------------- | ---------------------------------------------- | --------------------------- |
+| `DATABASE_URL`   | _(required — local example in `.env.example`)_ | PG connection string        |
+| `REDIS_URL`      | `redis://localhost:6379`                       | Required in `production`    |
+| `JWT_SECRET`     | —                                              | ≥32 chars                   |
+| `CORS_ORIGIN`    | `http://localhost:5173`                        | Refuses `*` in `production` |
+| `APP_MASTER_KEY` | —                                              | Base64 32 bytes             |
 
 ## Architecture
 

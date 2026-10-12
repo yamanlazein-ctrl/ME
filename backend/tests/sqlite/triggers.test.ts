@@ -15,10 +15,17 @@ import { randomUUID } from "node:crypto";
 import pg from "pg";
 import Database from "better-sqlite3";
 import { toScaledInteger, formatScaled } from "@/infrastructure/orm/sqlite/types.js";
-import { formatMicrosUtc, nextMonotonicMicros, transactionTimestamp } from "@/infrastructure/orm/sqlite/clock.js";
+import {
+  formatMicrosUtc,
+  nextMonotonicMicros,
+  transactionTimestamp,
+} from "@/infrastructure/orm/sqlite/clock.js";
 
 const PG_URL = process.env.TEST_DB_URL ?? process.env.DATABASE_URL;
-const BASELINE = join(__dirname, "../../src/infrastructure/orm/sqlite/migrations/0000_baseline.sql");
+const BASELINE = join(
+  __dirname,
+  "../../src/infrastructure/orm/sqlite/migrations/0000_baseline.sql",
+);
 
 /** Minimal two-engine adapter: SQL uses `?` placeholders; money values are passed as decimal text. */
 interface Engine {
@@ -103,17 +110,40 @@ function mulberry32(seed: number) {
 }
 
 type Op =
-  | { k: "ledger"; id: string; date: string; currency: string; impact: string; debit: string; credit: string; status: string }
+  | {
+      k: "ledger";
+      id: string;
+      date: string;
+      currency: string;
+      impact: string;
+      debit: string;
+      credit: string;
+      status: string;
+    }
   | { k: "cancel"; id: string }
   | { k: "reactivate"; id: string }
-  | { k: "mm_insert"; id: string; date: string; currency: string; direction: string; amount: string }
-  | { k: "mm_update"; id: string; date: string; currency: string; direction: string; amount: string }
+  | {
+      k: "mm_insert";
+      id: string;
+      date: string;
+      currency: string;
+      direction: string;
+      amount: string;
+    }
+  | {
+      k: "mm_update";
+      id: string;
+      date: string;
+      currency: string;
+      direction: string;
+      amount: string;
+    }
   | { k: "mm_delete"; id: string };
 
 /** One seeded scenario shared by both engines. */
 function scenario(seed: number, n: number): Op[] {
   const rnd = mulberry32(seed);
-  const pick = <T,>(xs: T[]) => xs[Math.floor(rnd() * xs.length)];
+  const pick = <T>(xs: T[]) => xs[Math.floor(rnd() * xs.length)];
   const day = () => `2026-03-${String(1 + Math.floor(rnd() * 20)).padStart(2, "0")}`;
   const amount = () => (Math.floor(rnd() * 10_000_000) / 100).toFixed(2);
   const ledger: string[] = [];
@@ -127,8 +157,14 @@ function scenario(seed: number, n: number): Op[] {
       const a = amount();
       const debitSide = rnd() < 0.5;
       ops.push({
-        k: "ledger", id, date: day(), currency: pick(["SYP", "SYP", "USD"]), impact: pick(["in", "out", "none"]),
-        debit: debitSide ? a : "0", credit: debitSide ? "0" : a, status: rnd() < 0.1 ? "cancelled" : "active",
+        k: "ledger",
+        id,
+        date: day(),
+        currency: pick(["SYP", "SYP", "USD"]),
+        impact: pick(["in", "out", "none"]),
+        debit: debitSide ? a : "0",
+        credit: debitSide ? "0" : a,
+        status: rnd() < 0.1 ? "cancelled" : "active",
       });
       ledger.push(id);
     } else if (r < 0.6) {
@@ -139,10 +175,24 @@ function scenario(seed: number, n: number): Op[] {
       ops.push({ k: "reactivate", id: pick(cancelled) });
     } else if (r < 0.82 || mm.length === 0) {
       const id = randomUUID();
-      ops.push({ k: "mm_insert", id, date: day(), currency: pick(["SYP", "USD"]), direction: pick(["in", "out"]), amount: amount() });
+      ops.push({
+        k: "mm_insert",
+        id,
+        date: day(),
+        currency: pick(["SYP", "USD"]),
+        direction: pick(["in", "out"]),
+        amount: amount(),
+      });
       mm.push(id);
     } else if (r < 0.94) {
-      ops.push({ k: "mm_update", id: pick(mm), date: day(), currency: pick(["SYP", "USD"]), direction: pick(["in", "out"]), amount: amount() });
+      ops.push({
+        k: "mm_update",
+        id: pick(mm),
+        date: day(),
+        currency: pick(["SYP", "USD"]),
+        direction: pick(["in", "out"]),
+        amount: amount(),
+      });
     } else {
       const id = mm.splice(Math.floor(rnd() * mm.length), 1)[0];
       ops.push({ k: "mm_delete", id });
@@ -157,29 +207,48 @@ async function play(e: Engine, tenant: string, ops: Op[]): Promise<Array<string 
   for (const op of ops) {
     switch (op.k) {
       case "ledger":
-        out.push(await e.attempt(
-          `INSERT INTO ledger_entries (id, tenant_id, date, type, currency, cash_impact, debit, credit, status)
+        out.push(
+          await e.attempt(
+            `INSERT INTO ledger_entries (id, tenant_id, date, type, currency, cash_impact, debit, credit, status)
            VALUES (?, ?, ?, 'cash', ?, ?, ?, ?, ?)`,
-          [op.id, tenant, op.date, op.currency, op.impact, e.money(op.debit), e.money(op.credit), op.status],
-        ));
+            [
+              op.id,
+              tenant,
+              op.date,
+              op.currency,
+              op.impact,
+              e.money(op.debit),
+              e.money(op.credit),
+              op.status,
+            ],
+          ),
+        );
         break;
       case "cancel":
-        out.push(await e.attempt(`UPDATE ledger_entries SET status = 'cancelled' WHERE id = ?`, [op.id]));
+        out.push(
+          await e.attempt(`UPDATE ledger_entries SET status = 'cancelled' WHERE id = ?`, [op.id]),
+        );
         break;
       case "reactivate":
-        out.push(await e.attempt(`UPDATE ledger_entries SET status = 'active' WHERE id = ?`, [op.id]));
+        out.push(
+          await e.attempt(`UPDATE ledger_entries SET status = 'active' WHERE id = ?`, [op.id]),
+        );
         break;
       case "mm_insert":
-        out.push(await e.attempt(
-          `INSERT INTO manual_movements (id, tenant_id, date, type, direction, amount, currency) VALUES (?, ?, ?, 'adjustment', ?, ?, ?)`,
-          [op.id, tenant, op.date, op.direction, e.money(op.amount), op.currency],
-        ));
+        out.push(
+          await e.attempt(
+            `INSERT INTO manual_movements (id, tenant_id, date, type, direction, amount, currency) VALUES (?, ?, ?, 'adjustment', ?, ?, ?)`,
+            [op.id, tenant, op.date, op.direction, e.money(op.amount), op.currency],
+          ),
+        );
         break;
       case "mm_update":
-        out.push(await e.attempt(
-          `UPDATE manual_movements SET date = ?, currency = ?, direction = ?, amount = ? WHERE id = ?`,
-          [op.date, op.currency, op.direction, e.money(op.amount), op.id],
-        ));
+        out.push(
+          await e.attempt(
+            `UPDATE manual_movements SET date = ?, currency = ?, direction = ?, amount = ? WHERE id = ?`,
+            [op.date, op.currency, op.direction, e.money(op.amount), op.id],
+          ),
+        );
         break;
       case "mm_delete":
         out.push(await e.attempt(`DELETE FROM manual_movements WHERE id = ?`, [op.id]));
@@ -190,11 +259,15 @@ async function play(e: Engine, tenant: string, ops: Op[]): Promise<Array<string 
 }
 
 async function setupTenant(e: Engine, tenant: string, slug: string) {
-  await e.run(`INSERT INTO tenants (id, name, slug) VALUES (?, 'Trigger parity', ?)`, [tenant, slug]);
-  // Opening balance for SYP only: the first SYP day seeds from it, USD from 0.
-  await e.run(`INSERT INTO cashbox_sessions (id, tenant_id, opening_balance, opening_date, currency) VALUES (?, ?, ?, '2026-03-01', 'SYP')`, [
-    randomUUID(), tenant, e.money("1000.00"),
+  await e.run(`INSERT INTO tenants (id, name, slug) VALUES (?, 'Trigger parity', ?)`, [
+    tenant,
+    slug,
   ]);
+  // Opening balance for SYP only: the first SYP day seeds from it, USD from 0.
+  await e.run(
+    `INSERT INTO cashbox_sessions (id, tenant_id, opening_balance, opening_date, currency) VALUES (?, ?, ?, '2026-03-01', 'SYP')`,
+    [randomUUID(), tenant, e.money("1000.00")],
+  );
 }
 
 describe.skipIf(!PG_URL)("SQLite trigger equivalents match PostgreSQL (T040)", () => {
@@ -226,10 +299,12 @@ describe.skipIf(!PG_URL)("SQLite trigger equivalents match PostgreSQL (T040)", (
       `SELECT currency, balance_date::text AS d, closing_balance::text AS b FROM cashbox_daily_balances WHERE tenant_id = ? ORDER BY currency, balance_date`,
       [tenant],
     );
-    const sqRows = (await sqE.all<{ currency: string; d: string; b: number }>(
-      `SELECT currency, balance_date AS d, closing_balance AS b FROM cashbox_daily_balances WHERE tenant_id = ? ORDER BY currency, balance_date`,
-      [tenant],
-    )).map((r) => ({ ...r, b: formatScaled(BigInt(r.b), 2) }));
+    const sqRows = (
+      await sqE.all<{ currency: string; d: string; b: number }>(
+        `SELECT currency, balance_date AS d, closing_balance AS b FROM cashbox_daily_balances WHERE tenant_id = ? ORDER BY currency, balance_date`,
+        [tenant],
+      )
+    ).map((r) => ({ ...r, b: formatScaled(BigInt(r.b), 2) }));
     expect(pgRows.length).toBeGreaterThan(10);
     expect(sqRows).toEqual(pgRows);
     sqE.db.close();
@@ -244,10 +319,16 @@ describe.skipIf(!PG_URL)("SQLite trigger equivalents match PostgreSQL (T040)", (
     const id = randomUUID();
     const cancelledId = randomUUID();
     const results: Record<string, Array<string | null>> = {};
-    for (const [label, e] of [["pg", pgE], ["sq", sqE]] as const) {
+    for (const [label, e] of [
+      ["pg", pgE],
+      ["sq", sqE],
+    ] as const) {
       await setupTenant(e, tenant, `forbid-${label}-${tenant.slice(0, 8)}`);
       for (const p of [party, party2]) {
-        await e.run(`INSERT INTO parties (id, tenant_id, kind, name) VALUES (?, ?, 'customer', ?)`, [p, tenant, `P ${p.slice(0, 6)}`]);
+        await e.run(
+          `INSERT INTO parties (id, tenant_id, kind, name) VALUES (?, ?, 'customer', ?)`,
+          [p, tenant, `P ${p.slice(0, 6)}`],
+        );
       }
       await e.run(
         `INSERT INTO ledger_entries (id, tenant_id, party_id, date, type, currency, cash_impact, debit, credit, reference_id, reference_type)
@@ -260,23 +341,55 @@ describe.skipIf(!PG_URL)("SQLite trigger equivalents match PostgreSQL (T040)", (
       );
       const r: Array<string | null> = [];
       r.push(await e.attempt(`DELETE FROM ledger_entries WHERE id = ?`, [id]));
-      r.push(await e.attempt(`UPDATE ledger_entries SET debit = ? WHERE id = ?`, [e.money("151.00"), id]));
-      r.push(await e.attempt(`UPDATE ledger_entries SET debit = ?, status = 'cancelled' WHERE id = ?`, [e.money("151.00"), id]));
+      r.push(
+        await e.attempt(`UPDATE ledger_entries SET debit = ? WHERE id = ?`, [
+          e.money("151.00"),
+          id,
+        ]),
+      );
+      r.push(
+        await e.attempt(`UPDATE ledger_entries SET debit = ?, status = 'cancelled' WHERE id = ?`, [
+          e.money("151.00"),
+          id,
+        ]),
+      );
       r.push(await e.attempt(`UPDATE ledger_entries SET party_id = ? WHERE id = ?`, [party2, id]));
-      r.push(await e.attempt(`UPDATE ledger_entries SET status = 'active' WHERE id = ?`, [cancelledId]));
-      r.push(await e.attempt(`UPDATE ledger_entries SET reference_type = 'voucher', status = 'cancelled' WHERE id = ?`, [id]));
+      r.push(
+        await e.attempt(`UPDATE ledger_entries SET status = 'active' WHERE id = ?`, [cancelledId]),
+      );
+      r.push(
+        await e.attempt(
+          `UPDATE ledger_entries SET reference_type = 'voucher', status = 'cancelled' WHERE id = ?`,
+          [id],
+        ),
+      );
       // Controlled remap (merge): party_id only, with the flag.
       await e.setFlag("allow_party_remap", true);
       r.push(await e.attempt(`UPDATE ledger_entries SET party_id = ? WHERE id = ?`, [party2, id]));
-      r.push(await e.attempt(`UPDATE ledger_entries SET party_id = ?, debit = ? WHERE id = ?`, [party, e.money("1.00"), id]));
+      r.push(
+        await e.attempt(`UPDATE ledger_entries SET party_id = ?, debit = ? WHERE id = ?`, [
+          party,
+          e.money("1.00"),
+          id,
+        ]),
+      );
       await e.setFlag("allow_party_remap", false);
       r.push(await e.attempt(`UPDATE ledger_entries SET status = 'cancelled' WHERE id = ?`, [id]));
       r.push(await e.attempt(`UPDATE ledger_entries SET description = 'x' WHERE id = ?`, [id]));
       // Licence audit events: append-only.
       const ev = randomUUID();
-      await e.run(`INSERT INTO license_audit_events (event_type, tenant_id, payload) VALUES (?, ?, ?)`, [`parity-${ev}`, tenant, JSON.stringify({ ev })]);
-      r.push(await e.attempt(`UPDATE license_audit_events SET event_type = 'x' WHERE event_type = ?`, [`parity-${ev}`]));
-      r.push(await e.attempt(`DELETE FROM license_audit_events WHERE event_type = ?`, [`parity-${ev}`]));
+      await e.run(
+        `INSERT INTO license_audit_events (event_type, tenant_id, payload) VALUES (?, ?, ?)`,
+        [`parity-${ev}`, tenant, JSON.stringify({ ev })],
+      );
+      r.push(
+        await e.attempt(`UPDATE license_audit_events SET event_type = 'x' WHERE event_type = ?`, [
+          `parity-${ev}`,
+        ]),
+      );
+      r.push(
+        await e.attempt(`DELETE FROM license_audit_events WHERE event_type = ?`, [`parity-${ev}`]),
+      );
       results[label] = r;
     }
     expect(results.sq).toEqual(results.pg);
@@ -296,9 +409,14 @@ describe("SQLite-only trigger behavior", () => {
     const tenant = randomUUID();
     await setupTenant(e, tenant, "dye");
     const id = randomUUID();
-    await e.run(`INSERT INTO ledger_entries (id, tenant_id, date, type, currency, cash_impact, debit, credit) VALUES (?, ?, '2026-03-02', 'cash', 'SYP', 'in', 500, 0)`, [id, tenant]);
+    await e.run(
+      `INSERT INTO ledger_entries (id, tenant_id, date, type, currency, cash_impact, debit, credit) VALUES (?, ?, '2026-03-02', 'cash', 'SYP', 'in', 500, 0)`,
+      [id, tenant],
+    );
     await e.setFlag("allow_dye_purge", true);
-    expect(await e.attempt(`UPDATE ledger_entries SET debit = 600 WHERE id = ?`, [id])).toBe("ledger_entries: UPDATE only allowed for cancellation (status→cancelled)");
+    expect(await e.attempt(`UPDATE ledger_entries SET debit = 600 WHERE id = ?`, [id])).toBe(
+      "ledger_entries: UPDATE only allowed for cancellation (status→cancelled)",
+    );
     expect(await e.attempt(`DELETE FROM ledger_entries WHERE id = ?`, [id])).toBeNull();
     await e.setFlag("allow_dye_purge", false);
     e.db.close();
@@ -306,9 +424,15 @@ describe("SQLite-only trigger behavior", () => {
 
   it("the guard fails closed when motard_tx_state is missing its row (e.g. a foreign tool)", () => {
     const e = sqliteEngine();
-    e.db.prepare(`INSERT INTO ledger_entries (id, tenant_id, date, type, currency, cash_impact, debit, credit) VALUES (?, ?, '2026-03-02', 'cash', 'SYP', 'none', 1, 0)`).run(randomUUID(), randomUUID());
+    e.db
+      .prepare(
+        `INSERT INTO ledger_entries (id, tenant_id, date, type, currency, cash_impact, debit, credit) VALUES (?, ?, '2026-03-02', 'cash', 'SYP', 'none', 1, 0)`,
+      )
+      .run(randomUUID(), randomUUID());
     e.db.prepare("DELETE FROM motard_tx_state").run();
-    expect(() => e.db.prepare("DELETE FROM ledger_entries").run()).toThrow("ledger_entries is append-only: DELETE not allowed");
+    expect(() => e.db.prepare("DELETE FROM ledger_entries").run()).toThrow(
+      "ledger_entries is append-only: DELETE not allowed",
+    );
     e.db.close();
   });
 
@@ -318,8 +442,16 @@ describe("SQLite-only trigger behavior", () => {
     await setupTenant(e, tenant, "clock");
     const ts = formatMicrosUtc(nextMonotonicMicros());
     e.db.prepare("UPDATE motard_tx_state SET ts = ?").run(ts);
-    await e.run(`INSERT INTO ledger_entries (id, tenant_id, date, type, currency, cash_impact, debit, credit) VALUES (?, ?, '2026-03-02', 'cash', 'SYP', 'in', 500, 0)`, [randomUUID(), tenant]);
-    expect(e.db.prepare("SELECT updated_at FROM cashbox_daily_balances WHERE tenant_id = ?").pluck().get(tenant)).toBe(ts);
+    await e.run(
+      `INSERT INTO ledger_entries (id, tenant_id, date, type, currency, cash_impact, debit, credit) VALUES (?, ?, '2026-03-02', 'cash', 'SYP', 'in', 500, 0)`,
+      [randomUUID(), tenant],
+    );
+    expect(
+      e.db
+        .prepare("SELECT updated_at FROM cashbox_daily_balances WHERE tenant_id = ?")
+        .pluck()
+        .get(tenant),
+    ).toBe(ts);
     e.db.close();
   });
 
@@ -331,21 +463,38 @@ describe("SQLite-only trigger behavior", () => {
     for (let i = 0; i < 20; i++) {
       const id = randomUUID();
       ids.push(id);
-      e.db.prepare(
-        `INSERT INTO sync_inbox (id, tenant_id, op_id, entity_type, entity_id, operation, payload, status, received_seq)
+      e.db
+        .prepare(
+          `INSERT INTO sync_inbox (id, tenant_id, op_id, entity_type, entity_id, operation, payload, status, received_seq)
          VALUES (?, ?, ?, 'invoice', ?, 'create', '{}', ?, ?)`,
-      ).run(id, tenant, randomUUID(), randomUUID(), i % 4 === 0 ? "applied" : "received", i + 1);
+        )
+        .run(id, tenant, randomUUID(), randomUUID(), i % 4 === 0 ? "applied" : "received", i + 1);
     }
     // Apply the rest in a shuffled order, one commit each.
     const order = ids.filter((_, i) => i % 4 !== 0).sort(() => 0.5 - Math.random());
-    for (const id of order) e.db.transaction(() => e.db.prepare(`UPDATE sync_inbox SET status = 'applied' WHERE id = ?`).run(id))();
+    for (const id of order)
+      e.db.transaction(() =>
+        e.db.prepare(`UPDATE sync_inbox SET status = 'applied' WHERE id = ?`).run(id),
+      )();
     // Re-applying an already-applied row must not restamp it.
-    const before = e.db.prepare(`SELECT applied_seq FROM sync_inbox WHERE id = ?`).pluck().get(order[0]);
+    const before = e.db
+      .prepare(`SELECT applied_seq FROM sync_inbox WHERE id = ?`)
+      .pluck()
+      .get(order[0]);
     e.db.prepare(`UPDATE sync_inbox SET status = 'applied' WHERE id = ?`).run(order[0]);
-    expect(e.db.prepare(`SELECT applied_seq FROM sync_inbox WHERE id = ?`).pluck().get(order[0])).toBe(before);
+    expect(
+      e.db.prepare(`SELECT applied_seq FROM sync_inbox WHERE id = ?`).pluck().get(order[0]),
+    ).toBe(before);
     const commitOrder = [...ids.filter((_, i) => i % 4 === 0), ...order];
-    const seqs = commitOrder.map((id) => e.db.prepare(`SELECT applied_seq, applied_at FROM sync_inbox WHERE id = ?`).get(id) as { applied_seq: number; applied_at: string });
-    for (let i = 1; i < seqs.length; i++) expect(seqs[i].applied_seq).toBeGreaterThan(seqs[i - 1].applied_seq);
+    const seqs = commitOrder.map(
+      (id) =>
+        e.db.prepare(`SELECT applied_seq, applied_at FROM sync_inbox WHERE id = ?`).get(id) as {
+          applied_seq: number;
+          applied_at: string;
+        },
+    );
+    for (let i = 1; i < seqs.length; i++)
+      expect(seqs[i].applied_seq).toBeGreaterThan(seqs[i - 1].applied_seq);
     expect(seqs.every((s) => /Z$/.test(s.applied_at))).toBe(true);
     e.db.close();
   });

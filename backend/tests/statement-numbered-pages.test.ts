@@ -31,7 +31,13 @@ function movements(partyId: string, kind: "customer" | "supplier", n: number) {
       partyId,
       // several rows per day and identical created_at: ties broken by id
       date: `2025-0${1 + (i % 9)}-${String(1 + (i % 27)).padStart(2, "0")}`,
-      type: (big ? (kind === "customer" ? "sales_invoice" : "purchase_invoice") : kind === "customer" ? "receipt_in" : "payment_out") as never,
+      type: (big
+        ? kind === "customer"
+          ? "sales_invoice"
+          : "purchase_invoice"
+        : kind === "customer"
+          ? "receipt_in"
+          : "payment_out") as never,
       debit: big === (kind === "customer") ? amount : 0,
       credit: big === (kind === "customer") ? 0 : amount,
       currency: ccy,
@@ -44,10 +50,26 @@ function movements(partyId: string, kind: "customer" | "supplier", n: number) {
 describe("statement numbered pages", () => {
   beforeAll(async () => {
     await db.execute(sql`select 1`);
-    await db.insert(tenants).values({ id: tenantId, name: "Pages", slug: `pg-${tenantId.slice(0, 8)}` });
+    await db
+      .insert(tenants)
+      .values({ id: tenantId, name: "Pages", slug: `pg-${tenantId.slice(0, 8)}` });
     await db.insert(parties).values([
-      { id: customerId, tenantId, name: "Pages C", code: "PG-C", kind: "customer", currency: "SYP" },
-      { id: supplierId, tenantId, name: "Pages S", code: "PG-S", kind: "supplier", currency: "SYP" },
+      {
+        id: customerId,
+        tenantId,
+        name: "Pages C",
+        code: "PG-C",
+        kind: "customer",
+        currency: "SYP",
+      },
+      {
+        id: supplierId,
+        tenantId,
+        name: "Pages S",
+        code: "PG-S",
+        kind: "supplier",
+        currency: "SYP",
+      },
     ]);
     await db.insert(ledgerEntries).values(movements(customerId, "customer", 137));
     await db.insert(ledgerEntries).values(movements(supplierId, "supplier", 64));
@@ -81,7 +103,9 @@ describe("statement numbered pages", () => {
             const r = await repo.getStatement({ partyId, kind, currency, limit, page: pg }, ctx);
             expect(r.page!.page).toBe(pg);
             // Carried balance per currency == what the previous page closed on.
-            for (const [ccy, carried] of Object.entries(r.page!.balanceBeforePageByCurrency ?? {})) {
+            for (const [ccy, carried] of Object.entries(
+              r.page!.balanceBeforePageByCurrency ?? {},
+            )) {
               expect(carried).toBeCloseTo(closing.get(ccy) ?? 0, 2);
             }
             for (const e of r.entries) {
@@ -101,7 +125,10 @@ describe("statement numbered pages", () => {
 
   it("a page past the end is empty, not an error, and keeps the full-window totals", async () => {
     const repo = new PostgresStatementRepository(db);
-    const r = await repo.getStatement({ partyId: customerId, kind: "customer", currency: "SYP", limit: 100, page: 99 }, ctx);
+    const r = await repo.getStatement(
+      { partyId: customerId, kind: "customer", currency: "SYP", limit: 100, page: 99 },
+      ctx,
+    );
     expect(r.entries).toHaveLength(0);
     expect(r.page!.totalPages).toBeGreaterThan(0);
   });

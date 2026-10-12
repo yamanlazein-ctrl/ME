@@ -32,8 +32,7 @@ export type LockRollsOptions = {
   requireColor?: boolean;
 };
 
-const DEFAULT_NOT_FOUND =
-  "الصبغة المحددة لأحد البنود غير موجودة (ربما حُذفت) — أعد اختيار الصبغة";
+const DEFAULT_NOT_FOUND = "الصبغة المحددة لأحد البنود غير موجودة (ربما حُذفت) — أعد اختيار الصبغة";
 
 /**
  * SELECT … FOR UPDATE OF rolls ORDER BY id.

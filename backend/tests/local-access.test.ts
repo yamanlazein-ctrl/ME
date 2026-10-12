@@ -1,8 +1,5 @@
 import { describe, it, expect } from "vitest";
-import {
-  isLoopbackAddress,
-  resolveDesktopLocalCaller,
-} from "@/infrastructure/http/localAccess.js";
+import { isLoopbackAddress, resolveDesktopLocalCaller } from "@/infrastructure/http/localAccess.js";
 
 describe("desktop local access", () => {
   it("accepts loopback", () => {

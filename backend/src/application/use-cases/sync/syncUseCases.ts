@@ -64,7 +64,12 @@ export async function enqueueInvoiceCreate(
     number: string;
     partyId?: string;
     linkedVoucherId?: string | null;
-    lines?: Array<{ rollId: string; quantityKg: number; pieces?: number; costPerKg?: number | null }>;
+    lines?: Array<{
+      rollId: string;
+      quantityKg: number;
+      pieces?: number;
+      costPerKg?: number | null;
+    }>;
   },
   createInput: CreateInvoiceInput,
   ctx: TenantContext,
@@ -86,8 +91,7 @@ export async function enqueueInvoiceCreate(
   }
   const pinnedCreateInput: CreateInvoiceInput = {
     ...createInput,
-    linkedVoucherId:
-      createInput.linkedVoucherId ?? invoice.linkedVoucherId ?? undefined,
+    linkedVoucherId: createInput.linkedVoucherId ?? invoice.linkedVoucherId ?? undefined,
     lines: createInput.lines.map((l) => ({
       ...l,
       costPerKg: l.costPerKg ?? costByRoll.get(l.rollId),
@@ -342,7 +346,15 @@ export async function runLocalSyncPush(
     const leaseToken = unit.leaseToken;
     if (!leaseToken) {
       logger.error({ opId: unit.opId }, "SYNC_LEASE_MISSING");
-      return { pushed: 0, failed: 1, rejected: 0, hubDead: 0, hubDeadOps: [], deviceGate: false, deviceTrust: null };
+      return {
+        pushed: 0,
+        failed: 1,
+        rejected: 0,
+        hubDead: 0,
+        hubDeadOps: [],
+        deviceGate: false,
+        deviceTrust: null,
+      };
     }
     const delta = {
       pushed: 0,
@@ -430,17 +442,24 @@ export async function runLocalSyncPush(
           await outbox.markRejected(unit.id, ctx.tenantId, detail, leaseToken);
           delta.rejected += 1;
           // The loser of an edit conflict must see it here, not only in the hub's log.
-          if (unit.operation === "update" || unit.operation === "cancel" || unit.operation === "delete") {
+          if (
+            unit.operation === "update" ||
+            unit.operation === "cancel" ||
+            unit.operation === "delete"
+          ) {
             await recordSyncConflict({
               tenantId: ctx.tenantId,
               opId: unit.opId,
               entityType: unit.entityType,
               entityId: unit.entityId,
               operation: unit.operation === "update" ? "update" : "cancel",
-              baseVersion: typeof unit.payload.baseVersion === "number" ? unit.payload.baseVersion : null,
+              baseVersion:
+                typeof unit.payload.baseVersion === "number" ? unit.payload.baseVersion : null,
               serverVersion: null,
               localIntent: unit.payload,
-            }).catch((err) => logger.warn({ err, opId: unit.opId }, "local conflict record failed"));
+            }).catch((err) =>
+              logger.warn({ err, opId: unit.opId }, "local conflict record failed"),
+            );
           }
           await rollbackRejectedUnitLocally(
             invoiceRepo,
@@ -590,7 +609,8 @@ export async function runLocalSyncPush(
         deviceGate: false,
         deviceTrust: null as SyncDeviceTrustFailure,
       };
-      const ordered = laneUnits.length > 0 && laneOf(laneUnits[0]!.entityType, laneUnits[0]!.entityId) === 0;
+      const ordered =
+        laneUnits.length > 0 && laneOf(laneUnits[0]!.entityType, laneUnits[0]!.entityId) === 0;
       for (let i = 0; i < laneUnits.length; i++) {
         const unit = laneUnits[i]!;
         const d = await pushOne(unit);
@@ -704,7 +724,12 @@ export type PulledUnit = {
  * Exported for tests.
  */
 export async function withPartyOpening(
-  unit: { entityType: string; operation: string; entityId: string; payload: Record<string, unknown> },
+  unit: {
+    entityType: string;
+    operation: string;
+    entityId: string;
+    payload: Record<string, unknown>;
+  },
   tenantId: string,
 ): Promise<Record<string, unknown>> {
   if (unit.entityType !== "party" || unit.operation !== "create") return unit.payload;
@@ -716,7 +741,11 @@ export async function withPartyOpening(
   if (!amount) return unit.payload;
   return {
     ...unit.payload,
-    snapshot: { ...snap, openingBalance: amount, ...(rows[0]?.date ? { openingDate: rows[0].date } : {}) },
+    snapshot: {
+      ...snap,
+      openingBalance: amount,
+      ...(rows[0]?.date ? { openingDate: rows[0].date } : {}),
+    },
   };
 }
 
@@ -782,7 +811,9 @@ export async function runLocalSyncPull(
   // device header (the query parameter is deliberately ignored there), so the
   // local device id must travel as X-Sync-Device-Id. Without it every device
   // pulled back — and re-applied — everything it had just pushed.
-  const deviceHeader: Record<string, string> = syncDeviceId ? { "X-Sync-Device-Id": syncDeviceId } : {};
+  const deviceHeader: Record<string, string> = syncDeviceId
+    ? { "X-Sync-Device-Id": syncDeviceId }
+    : {};
   let res = await fetch(`${hub}/api/sync/pull?${qs.toString()}`, {
     method: "GET",
     headers: { Authorization: hubAuth, ...deviceHeader },
@@ -869,27 +900,19 @@ export async function runLocalSyncPull(
   const deferred: DeferredUnit[] = [];
   const processed: Processed[] = [];
 
-  const materializeOne = async (
-    unit: (typeof body.items)[number],
-  ): Promise<MaterializeResult> => {
+  const materializeOne = async (unit: (typeof body.items)[number]): Promise<MaterializeResult> => {
     try {
-      return await materializeSyncUnit(
-        database,
-        repos,
-        unit,
-        ctx,
-        {
-          opId: unit.opId,
-          syncDeviceId: unit.syncDeviceId,
-          hubCanonical: true,
-          // Display-only origin actor for the audit row (SYNC-06): the name is
-          // passed at this display context, never read inside materialize.
-          originActorName:
-            typeof unit.payload.actorUserName === "string" && unit.payload.actorUserName.trim()
-              ? unit.payload.actorUserName.trim().slice(0, 255)
-              : null,
-        },
-      );
+      return await materializeSyncUnit(database, repos, unit, ctx, {
+        opId: unit.opId,
+        syncDeviceId: unit.syncDeviceId,
+        hubCanonical: true,
+        // Display-only origin actor for the audit row (SYNC-06): the name is
+        // passed at this display context, never read inside materialize.
+        originActorName:
+          typeof unit.payload.actorUserName === "string" && unit.payload.actorUserName.trim()
+            ? unit.payload.actorUserName.trim().slice(0, 255)
+            : null,
+      });
     } catch (err) {
       logger.warn({ err, opId: unit.opId }, "pull unit apply failed");
       return {
@@ -1042,7 +1065,10 @@ export async function runLocalSyncPull(
     }
     if (inbox && attempts >= MATERIALIZE_MAX_ATTEMPTS) {
       skipped += 1;
-      logger.error({ opId: d.unit.opId, attempts }, "pull unit exhausted its attempt budget — parked as dead");
+      logger.error(
+        { opId: d.unit.opId, attempts },
+        "pull unit exhausted its attempt budget — parked as dead",
+      );
       try {
         await inbox.markDead(
           ctx.tenantId,
@@ -1080,7 +1106,15 @@ export async function runLocalSyncPull(
     await setPullCursor(ctx.tenantId, newSeq, newAt);
   }
 
-  return { pulled: body.items?.length ?? 0, applied, changed, skipped, failed, acknowledged, deviceTrust: null };
+  return {
+    pulled: body.items?.length ?? 0,
+    applied,
+    changed,
+    skipped,
+    failed,
+    acknowledged,
+    deviceTrust: null,
+  };
 }
 
 /**
@@ -1469,7 +1503,8 @@ async function releaseDeadUnitClaims(
 ): Promise<void> {
   try {
     const n = await claims.releaseByOp(input.tenantId, input.opId);
-    if (n > 0) logger.info({ opId: input.opId, released: n }, "released resource claims of dead sync unit");
+    if (n > 0)
+      logger.info({ opId: input.opId, released: n }, "released resource claims of dead sync unit");
   } catch (err) {
     logger.warn({ err, opId: input.opId }, "releasing claims of dead unit failed");
   }
@@ -1811,7 +1846,12 @@ async function cancelRejectedCreateLocally(
         // P0-001: expectedVersion is REQUIRED - fetch current version
         const currentOrder = await rollbackRepos.orderRepo.findById(unit.entityId, ctx);
         const expectedVersionOrder = currentOrder ? currentOrder.version : 1;
-        const r = await cancelOrderUseCase(rollbackRepos.orderRepo, unit.entityId, ctx, expectedVersionOrder);
+        const r = await cancelOrderUseCase(
+          rollbackRepos.orderRepo,
+          unit.entityId,
+          ctx,
+          expectedVersionOrder,
+        );
         if (!r.ok) {
           logger.warn({ entityId: unit.entityId, error: r.error }, "local rollback cancel refused");
           return "rollback-failed";
@@ -2032,7 +2072,11 @@ export function extractConflictResources(
   // Sending to the press consumes stock from the SAME roll pool as sales, so
   // a press job and a sale on another PC cannot both take the same kilos.
   if (entityType === "print" && operation === "send") {
-    const inp = (payload.sendInput ?? {}) as { sourceRollId?: unknown; quantityKg?: unknown; pieces?: unknown };
+    const inp = (payload.sendInput ?? {}) as {
+      sourceRollId?: unknown;
+      quantityKg?: unknown;
+      pieces?: unknown;
+    };
     if (typeof inp.sourceRollId === "string" && isUuid(inp.sourceRollId)) {
       return [
         {
@@ -2234,7 +2278,9 @@ function buildConflictMessage(
     // (kg and/or pieces) so the operator resizes the sale instead of retrying
     // blindly — a "requested 0 pieces" figure only confuses.
     const shortKg =
-      winner.availableKg != null && winner.requestedKg != null && winner.requestedKg > winner.availableKg;
+      winner.availableKg != null &&
+      winner.requestedKg != null &&
+      winner.requestedKg > winner.availableKg;
     const shortPc =
       winner.availablePieces != null &&
       winner.requestedPieces != null &&

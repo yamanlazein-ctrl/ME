@@ -82,9 +82,7 @@ export function ColorDeleteDialog({
           </DialogDescription>
         </DialogHeader>
 
-        {impact.isLoading && (
-          <p className="text-sm text-muted-foreground">جاري فحص الارتباطات…</p>
-        )}
+        {impact.isLoading && <p className="text-sm text-muted-foreground">جاري فحص الارتباطات…</p>}
         {impact.isError && (
           <p className="text-sm text-destructive">
             {impact.error instanceof Error ? impact.error.message : "تعذّر فحص الارتباطات"}

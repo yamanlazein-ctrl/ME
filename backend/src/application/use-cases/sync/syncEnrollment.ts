@@ -46,7 +46,12 @@ type CodeRecord = EnrollmentCodeInfo & { codeHash: string; createdBy: string; cr
 type CredRecord = { hash: string; userId: string };
 
 export type Failure = { ok: false; status: number; code: string; error: string };
-const fail = (status: number, code: string, error: string): Failure => ({ ok: false, status, code, error });
+const fail = (status: number, code: string, error: string): Failure => ({
+  ok: false,
+  status,
+  code,
+  error,
+});
 
 export type HubTokens = {
   tenantId: string;
@@ -61,7 +66,8 @@ const credKey = (deviceId: string) => `sync.device.cred.${deviceId}`;
 const ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 
 const sha256 = (s: string) => createHash("sha256").update(s).digest("hex");
-export const normalizeEnrollmentCode = (code: string) => code.toUpperCase().replace(/[^A-Z0-9]/g, "");
+export const normalizeEnrollmentCode = (code: string) =>
+  code.toUpperCase().replace(/[^A-Z0-9]/g, "");
 
 function sameHash(a: string, b: string): boolean {
   const x = Buffer.from(a, "hex");
@@ -104,20 +110,35 @@ export async function createEnrollmentCode(
   return { code, expiresAt: rec.expiresAt, maxUses: rec.maxUses, uses: 0 };
 }
 
-export async function getEnrollmentCode(deps: EnrollmentDeps, tenantId: string): Promise<EnrollmentCodeInfo | null> {
+export async function getEnrollmentCode(
+  deps: EnrollmentDeps,
+  tenantId: string,
+): Promise<EnrollmentCodeInfo | null> {
   const rec = await readJson<CodeRecord>(deps, tenantId, CURRENT_KEY);
-  return rec ? { code: rec.code, expiresAt: rec.expiresAt, maxUses: rec.maxUses, uses: rec.uses } : null;
+  return rec
+    ? { code: rec.code, expiresAt: rec.expiresAt, maxUses: rec.maxUses, uses: rec.uses }
+    : null;
 }
 
 export const revokeEnrollmentCode = (deps: EnrollmentDeps, tenantId: string) =>
   deps.secretsRepo.delete(tenantId, CURRENT_KEY);
 
 async function activeUser(tenantId: string, userId: string) {
-  const ident = await runWithTenantContext({ tenantId }, () => resolveSessionIdentity(userId, userId));
-  return ident.known && ident.active && ident.role ? { name: ident.name ?? userId, role: ident.role } : null;
+  const ident = await runWithTenantContext({ tenantId }, () =>
+    resolveSessionIdentity(userId, userId),
+  );
+  return ident.known && ident.active && ident.role
+    ? { name: ident.name ?? userId, role: ident.role }
+    : null;
 }
 
-async function issueTokens(deps: EnrollmentDeps, tenantId: string, userId: string, name: string, role: string): Promise<HubTokens> {
+async function issueTokens(
+  deps: EnrollmentDeps,
+  tenantId: string,
+  userId: string,
+  name: string,
+  role: string,
+): Promise<HubTokens> {
   const payload = { sub: userId, tenantId, role, jti: randomUUID() };
   return {
     tenantId,
@@ -128,9 +149,17 @@ async function issueTokens(deps: EnrollmentDeps, tenantId: string, userId: strin
 }
 
 /** New random secret for a device; only its hash is kept. */
-async function mintCredential(deps: EnrollmentDeps, tenantId: string, deviceId: string, userId: string): Promise<string> {
+async function mintCredential(
+  deps: EnrollmentDeps,
+  tenantId: string,
+  deviceId: string,
+  userId: string,
+): Promise<string> {
   const secret = randomBytes(32).toString("base64url");
-  await putJson(deps, tenantId, credKey(deviceId), { hash: sha256(secret), userId } satisfies CredRecord);
+  await putJson(deps, tenantId, credKey(deviceId), {
+    hash: sha256(secret),
+    userId,
+  } satisfies CredRecord);
   return secret;
 }
 
@@ -149,7 +178,9 @@ export async function redeemEnrollmentCode(
   code: string,
   device: EnrollingDevice,
 ): Promise<({ ok: true; deviceId: string; deviceSecret: string } & HubTokens) | Failure> {
-  const run = (redeeming.get(tenantId) ?? Promise.resolve()).then(() => redeemUnlocked(deps, tenantId, code, device));
+  const run = (redeeming.get(tenantId) ?? Promise.resolve()).then(() =>
+    redeemUnlocked(deps, tenantId, code, device),
+  );
   const tail = run.catch(() => undefined);
   redeeming.set(tenantId, tail);
   try {
@@ -169,32 +200,63 @@ async function redeemUnlocked(
   if (!rec || !sameHash(sha256(normalizeEnrollmentCode(code)), rec.codeHash)) {
     return fail(401, "ENROLL_CODE_INVALID", "رمز التسجيل غير صحيح");
   }
-  if (Date.parse(rec.expiresAt) <= Date.now()) return fail(410, "ENROLL_CODE_EXPIRED", "انتهت صلاحية رمز التسجيل — اطلب رمزاً جديداً من المسؤول");
-  if (rec.uses >= rec.maxUses) return fail(410, "ENROLL_CODE_USED_UP", "استُنفد عدد مرات استخدام رمز التسجيل — اطلب رمزاً جديداً");
+  if (Date.parse(rec.expiresAt) <= Date.now())
+    return fail(
+      410,
+      "ENROLL_CODE_EXPIRED",
+      "انتهت صلاحية رمز التسجيل — اطلب رمزاً جديداً من المسؤول",
+    );
+  if (rec.uses >= rec.maxUses)
+    return fail(
+      410,
+      "ENROLL_CODE_USED_UP",
+      "استُنفد عدد مرات استخدام رمز التسجيل — اطلب رمزاً جديداً",
+    );
 
   try {
-    await assertTenantLicenseAllowsAccess({ licenseRepo: deps.licenseRepo, tenantRepo: deps.tenantRepo, tenantId });
+    await assertTenantLicenseAllowsAccess({
+      licenseRepo: deps.licenseRepo,
+      tenantRepo: deps.tenantRepo,
+      tenantId,
+    });
   } catch (e) {
-    return fail(403, "LICENSE_BLOCKED", e instanceof Error ? e.message : "ترخيص المركز لا يسمح بالتسجيل");
+    return fail(
+      403,
+      "LICENSE_BLOCKED",
+      e instanceof Error ? e.message : "ترخيص المركز لا يسمح بالتسجيل",
+    );
   }
   const lic = await deps.licenseRepo.findActiveForTenant(tenantId as never);
   if (!lic) return fail(403, "NO_LICENSE", "لا يوجد ترخيص نشط في المركز");
 
   const existing = await deps.syncDeviceRepo.findById(tenantId as never, device.id as never);
-  if (existing?.revokedAt) return fail(403, "SYNC_DEVICE_REVOKED", "هذا الجهاز معطَّل في المركز — يجب أن يعيد المسؤول تفعيله");
+  if (existing?.revokedAt)
+    return fail(
+      403,
+      "SYNC_DEVICE_REVOKED",
+      "هذا الجهاز معطَّل في المركز — يجب أن يعيد المسؤول تفعيله",
+    );
   // Same PC under an older id (reinstall, factory reset, restore = new sync identity).
   let retiredTwin: string | null = null;
   if (!existing) {
     const all = await deps.syncDeviceRepo.listForTenant(tenantId as never, 500);
     const twin = all.find((d) => d.id !== device.id && d.deviceFingerprint === device.fingerprint);
     if (twin && !twin.revokedAt) {
-      return fail(409, "SYNC_DEVICE_ID_CONFLICT", "المركز يعرف هذا الجهاز بمعرّف آخر — عطّل الجهاز القديم من قائمة الأجهزة، ثم أصدر رمز تسجيل جديداً وأعد التسجيل");
+      return fail(
+        409,
+        "SYNC_DEVICE_ID_CONFLICT",
+        "المركز يعرف هذا الجهاز بمعرّف آخر — عطّل الجهاز القديم من قائمة الأجهزة، ثم أصدر رمز تسجيل جديداً وأعد التسجيل",
+      );
     }
     if (twin) {
       // Only a code issued AFTER the old row was disabled frees the machine, so a
       // disabled laptop cannot wipe itself and rejoin with a code it already knew.
       if (!rec.createdAt || Date.parse(rec.createdAt) <= twin.revokedAt!.getTime()) {
-        return fail(403, "SYNC_DEVICE_REVOKED", "هذا الجهاز معطَّل في المركز — اطلب من المسؤول رمز تسجيل جديداً");
+        return fail(
+          403,
+          "SYNC_DEVICE_REVOKED",
+          "هذا الجهاز معطَّل في المركز — اطلب من المسؤول رمز تسجيل جديداً",
+        );
       }
       retiredTwin = twin.id;
     }
@@ -206,11 +268,17 @@ async function redeemUnlocked(
   }
 
   const issuer = await activeUser(tenantId, rec.createdBy);
-  if (!issuer) return fail(403, "ENROLL_ISSUER_INACTIVE", "حساب المسؤول الذي أصدر الرمز لم يعد فعّالاً — اطلب رمزاً جديداً");
+  if (!issuer)
+    return fail(
+      403,
+      "ENROLL_ISSUER_INACTIVE",
+      "حساب المسؤول الذي أصدر الرمز لم يعد فعّالاً — اطلب رمزاً جديداً",
+    );
 
   // The admin disabled the old row and issued this code: free the machine's
   // fingerprint so the new id can register. The old row stays, revoked, for history.
-  if (retiredTwin) await deps.syncDeviceRepo.retireFingerprint(tenantId as never, retiredTwin as never);
+  if (retiredTwin)
+    await deps.syncDeviceRepo.retireFingerprint(tenantId as never, retiredTwin as never);
 
   let row;
   try {
@@ -229,7 +297,11 @@ async function redeemUnlocked(
   }
   // Pushes carry the LOCAL id; a hub row under another id would refuse them all.
   if (row.id !== device.id) {
-    return fail(409, "SYNC_DEVICE_ID_CONFLICT", "المركز يعرف هذا الجهاز بمعرّف آخر — عطّل الجهاز القديم من قائمة الأجهزة، ثم أصدر رمز تسجيل جديداً وأعد التسجيل");
+    return fail(
+      409,
+      "SYNC_DEVICE_ID_CONFLICT",
+      "المركز يعرف هذا الجهاز بمعرّف آخر — عطّل الجهاز القديم من قائمة الأجهزة، ثم أصدر رمز تسجيل جديداً وأعد التسجيل",
+    );
   }
 
   const deviceSecret = await mintCredential(deps, tenantId, row.id, rec.createdBy);
@@ -248,7 +320,8 @@ export async function mintCredentialForBoundDevice(
   const device = await deps.syncDeviceRepo.findById(tenantId as never, deviceId as never);
   if (!device) return fail(404, "SYNC_UNKNOWN_DEVICE", "الجهاز غير مسجّل في المركز");
   if (device.revokedAt) return fail(403, "SYNC_DEVICE_REVOKED", "الجهاز معطَّل في المركز");
-  if (!device.authorizedUserIds.includes(userId)) return fail(403, "SYNC_DEVICE_NOT_BOUND", "الجهاز غير مرتبط بهذا الحساب");
+  if (!device.authorizedUserIds.includes(userId))
+    return fail(403, "SYNC_DEVICE_NOT_BOUND", "الجهاز غير مرتبط بهذا الحساب");
   return { ok: true, deviceSecret: await mintCredential(deps, tenantId, deviceId, userId) };
 }
 
@@ -260,16 +333,35 @@ export async function exchangeDeviceToken(
   secret: string,
 ): Promise<({ ok: true } & HubTokens) | Failure> {
   const cred = await readJson<CredRecord>(deps, tenantId, credKey(deviceId)).catch(() => null);
-  if (!cred || !sameHash(sha256(secret), cred.hash)) return fail(401, "DEVICE_CREDENTIAL_INVALID", "بيانات اعتماد الجهاز غير صالحة — أعد تسجيل الجهاز");
+  if (!cred || !sameHash(sha256(secret), cred.hash))
+    return fail(
+      401,
+      "DEVICE_CREDENTIAL_INVALID",
+      "بيانات اعتماد الجهاز غير صالحة — أعد تسجيل الجهاز",
+    );
   const device = await deps.syncDeviceRepo.findById(tenantId as never, deviceId as never);
   if (!device) return fail(401, "SYNC_UNKNOWN_DEVICE", "الجهاز غير مسجّل في المركز");
-  if (device.revokedAt) return fail(403, "SYNC_DEVICE_REVOKED", "الجهاز معطَّل في المركز — راجع المسؤول");
+  if (device.revokedAt)
+    return fail(403, "SYNC_DEVICE_REVOKED", "الجهاز معطَّل في المركز — راجع المسؤول");
   try {
-    await assertTenantLicenseAllowsAccess({ licenseRepo: deps.licenseRepo, tenantRepo: deps.tenantRepo, tenantId });
+    await assertTenantLicenseAllowsAccess({
+      licenseRepo: deps.licenseRepo,
+      tenantRepo: deps.tenantRepo,
+      tenantId,
+    });
   } catch (e) {
-    return fail(403, "LICENSE_BLOCKED", e instanceof Error ? e.message : "ترخيص المركز لا يسمح بالمزامنة");
+    return fail(
+      403,
+      "LICENSE_BLOCKED",
+      e instanceof Error ? e.message : "ترخيص المركز لا يسمح بالمزامنة",
+    );
   }
   const user = await activeUser(tenantId, cred.userId);
-  if (!user) return fail(403, "ENROLL_ISSUER_INACTIVE", "الحساب المرتبط بالجهاز لم يعد فعّالاً — أعد تسجيل الجهاز");
+  if (!user)
+    return fail(
+      403,
+      "ENROLL_ISSUER_INACTIVE",
+      "الحساب المرتبط بالجهاز لم يعد فعّالاً — أعد تسجيل الجهاز",
+    );
   return { ok: true, ...(await issueTokens(deps, tenantId, cred.userId, user.name, user.role)) };
 }

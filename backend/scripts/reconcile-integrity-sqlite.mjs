@@ -28,14 +28,7 @@ const tenantIdx = args.indexOf("--tenant");
 
 const DEFAULT_DB =
   process.platform === "win32"
-    ? join(
-        homedir(),
-        "AppData",
-        "Local",
-        "motard-erp",
-        "data",
-        "motard.db",
-      )
+    ? join(homedir(), "AppData", "Local", "motard-erp", "data", "motard.db")
     : join(homedir(), ".local", "share", "motard-erp", "data", "motard.db");
 
 const dbPath = (dbIdx !== -1 ? args[dbIdx + 1] : undefined) ?? DEFAULT_DB;
@@ -124,10 +117,9 @@ if ((orphanLedger?.n ?? 0) > 0) {
 }
 
 // 4) Dead sync backlog (units parked dead never silently disappear).
-const dead = one(
-  `SELECT count(*) AS n FROM sync_outbox WHERE tenant_id = ? AND status = 'dead'`,
-  [tenantId],
-);
+const dead = one(`SELECT count(*) AS n FROM sync_outbox WHERE tenant_id = ? AND status = 'dead'`, [
+  tenantId,
+]);
 if ((dead?.n ?? 0) > 0) {
   failures.push({ check: "sync_dead", count: dead.n });
 }

@@ -13,12 +13,12 @@ and checked, and the backend restarts on it (REUSE) for the next round.
 
 **Result: 25/25 rounds PASS.**
 
-| Check (every round) | Result |
-|---|---|
-| `PRAGMA integrity_check` | `ok` 25/25 |
-| `PRAGMA foreign_key_check` | empty 25/25 |
-| every save confirmed to the client (HTTP 201) present | 737/737 confirmed saves present |
-| every invoice in the file complete (same row shape as the reference sale) or absent | 0 incomplete of 755 |
+| Check (every round)                                                                 | Result                          |
+| ----------------------------------------------------------------------------------- | ------------------------------- |
+| `PRAGMA integrity_check`                                                            | `ok` 25/25                      |
+| `PRAGMA foreign_key_check`                                                          | empty 25/25                     |
+| every save confirmed to the client (HTTP 201) present                               | 737/737 confirmed saves present |
+| every invoice in the file complete (same row shape as the reference sale) or absent | 0 incomplete of 755             |
 
 The file holds 18 more invoices than the client saw confirmed, about one per round. Each is a save that committed
 just before the kill, whose response was lost with the process. All 18 are complete, which is exactly the

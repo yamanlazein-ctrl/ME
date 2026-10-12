@@ -31,14 +31,19 @@ import { createRequire } from "module";
 const require = createRequire(import.meta.url);
 const { Pool } = require("../../backend/node_modules/pg");
 const pool = new Pool({
-  connectionString: process.env.DATABASE_URL ?? (() => { throw new Error("DATABASE_URL is required"); })(),
+  connectionString:
+    process.env.DATABASE_URL ??
+    (() => {
+      throw new Error("DATABASE_URL is required");
+    })(),
 });
 
 const BACKEND = process.env.ERP_BACKEND_URL ?? "http://127.0.0.1:8080";
 const TENANT_ID = process.env.ERP_TENANT_ID;
 const EMAIL = process.env.ERP_ADMIN_EMAIL;
 const PASSWORD = process.env.ERP_ADMIN_PASSWORD;
-if (!TENANT_ID || !EMAIL || !PASSWORD) throw new Error("ERP_TENANT_ID, ERP_ADMIN_EMAIL, and ERP_ADMIN_PASSWORD are required");
+if (!TENANT_ID || !EMAIL || !PASSWORD)
+  throw new Error("ERP_TENANT_ID, ERP_ADMIN_EMAIL, and ERP_ADMIN_PASSWORD are required");
 
 const DEVICE_CAP = 2; // حصة الأجهزة التي يفرضها الاختبار
 const EMP_EMAIL = "licguard-emp@erp.local";
@@ -127,7 +132,9 @@ test.beforeAll(async () => {
   await pool.query(`DELETE FROM device_registrations WHERE tenant_id=$1`, [TENANT_ID]);
   await pool.query(`DELETE FROM invitation_codes WHERE tenant_id=$1`, [TENANT_ID]);
   await pool.query(`DELETE FROM users WHERE tenant_id=$1 AND email LIKE 'licguard-%'`, [TENANT_ID]);
-  await pool.query(`UPDATE license_activations SET deactivated_at=NOW() WHERE deactivated_at IS NULL`);
+  await pool.query(
+    `UPDATE license_activations SET deactivated_at=NOW() WHERE deactivated_at IS NULL`,
+  );
   console.log(`[setup] license=${state.licenseKey} cap=${DEVICE_CAP}`);
 });
 
@@ -144,7 +151,12 @@ test("T1 — تفعيل الأدمن يسجّل جهاز الخادم (جهاز 
   const r = await api(
     "POST",
     "/api/license/activate",
-    { key: state.licenseKey, hostname: "LICGUARD-SERVER", appVersion: "1.0.0", platform: "windows" },
+    {
+      key: state.licenseKey,
+      hostname: "LICGUARD-SERVER",
+      appVersion: "1.0.0",
+      platform: "windows",
+    },
     state.token,
   );
   console.log(`   activate -> ${r.status} | devices ${before} -> ${await countLiveDevices()}`);
@@ -171,17 +183,29 @@ test("T2 — حد الأجهزة عند التفعيل: جهاز إضافي بع
   const r = await api(
     "POST",
     "/api/license/activate",
-    { key: state.licenseKey, hostname: "LICGUARD-OVER-LIMIT", appVersion: "1.0.0", platform: "windows" },
+    {
+      key: state.licenseKey,
+      hostname: "LICGUARD-OVER-LIMIT",
+      appVersion: "1.0.0",
+      platform: "windows",
+    },
     state.token,
   );
   console.log(`   activate(over cap) -> ${r.status} | ${r.json.message ?? ""}`);
   expect(r.status, "device beyond cap refused").toBe(409);
   // Restore: clear fake devices and re-register the server device for later steps.
-  await pool.query(`DELETE FROM device_registrations WHERE tenant_id=$1 AND name='LICGUARD-FAKE'`, [TENANT_ID]);
+  await pool.query(`DELETE FROM device_registrations WHERE tenant_id=$1 AND name='LICGUARD-FAKE'`, [
+    TENANT_ID,
+  ]);
   const re = await api(
     "POST",
     "/api/license/activate",
-    { key: state.licenseKey, hostname: "LICGUARD-SERVER", appVersion: "1.0.0", platform: "windows" },
+    {
+      key: state.licenseKey,
+      hostname: "LICGUARD-SERVER",
+      appVersion: "1.0.0",
+      platform: "windows",
+    },
     state.token,
   );
   expect(re.status, "server re-activation after cleanup").toBe(200);
@@ -197,7 +221,13 @@ test("T4 — دعوة مستخدم: generate → validate → consume (ينشئ 
   const g = await api(
     "POST",
     "/api/invitations/generate",
-    { type: "user", ttlMinutes: 60, targetName: "حارس الترخيص", targetEmail: EMP_EMAIL, targetRole: "accountant" },
+    {
+      type: "user",
+      ttlMinutes: 60,
+      targetName: "حارس الترخيص",
+      targetEmail: EMP_EMAIL,
+      targetRole: "accountant",
+    },
     state.token,
   );
   expect(g.status, "generate invitation").toBe(200);
@@ -237,7 +267,13 @@ test("T6 — حد الأجهزة عند قبول الدعوة: جهاز موظف
   const g = await api(
     "POST",
     "/api/invitations/generate",
-    { type: "user", ttlMinutes: 60, targetName: "موظف إضافي", targetEmail: "licguard-emp2@erp.local", targetRole: "warehouse" },
+    {
+      type: "user",
+      ttlMinutes: 60,
+      targetName: "موظف إضافي",
+      targetEmail: "licguard-emp2@erp.local",
+      targetRole: "warehouse",
+    },
     state.token,
   );
   expect(g.status).toBe(200);
@@ -259,13 +295,17 @@ test("T7 — الحارس: ترخيص ملغي (revoked) → 403", async () => {
 
 test("T8 — الحارس: منتهٍ+استُنفدت السماح → 403؛ منتهٍ+داخل السماح → 200 + X-License-Grace", async () => {
   // Expired long ago, grace exhausted.
-  await pool.query(`UPDATE licenses SET status='expired', expires_at=NOW() - INTERVAL '60 days', grace_days=7`);
+  await pool.query(
+    `UPDATE licenses SET status='expired', expires_at=NOW() - INTERVAL '60 days', grace_days=7`,
+  );
   let r = await api("GET", "/api/customers", undefined, state.token);
   console.log(`   expired(no grace) -> ${r.status}`);
   expect(r.status, "expired with exhausted grace blocks").toBe(403);
 
   // Expired yesterday, still within 7-day grace.
-  await pool.query(`UPDATE licenses SET status='expired', expires_at=NOW() - INTERVAL '1 day', grace_days=7`);
+  await pool.query(
+    `UPDATE licenses SET status='expired', expires_at=NOW() - INTERVAL '1 day', grace_days=7`,
+  );
   r = await api("GET", "/api/customers", undefined, state.token);
   const grace = r.headers.get("x-license-grace");
   console.log(`   expired(within grace) -> ${r.status} | X-License-Grace=${grace}`);

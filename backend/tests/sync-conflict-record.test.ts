@@ -19,7 +19,9 @@ describe("sync conflict rows with unknown versions", () => {
     try {
       await db.execute(sql`select 1`);
       reachable = true;
-      await db.insert(tenants).values({ id: tenantId, name: "Conflict Tenant", slug: `sc-${tenantId.slice(0, 8)}` });
+      await db
+        .insert(tenants)
+        .values({ id: tenantId, name: "Conflict Tenant", slug: `sc-${tenantId.slice(0, 8)}` });
     } catch {
       reachable = false;
     }
@@ -41,7 +43,12 @@ describe("sync conflict rows with unknown versions", () => {
       }),
     );
     expect(wrote).toBe(true);
-    const rows = await db.execute(sql`SELECT base_version, server_version FROM sync_conflicts WHERE op_id = ${opId}`);
-    expect((rows as unknown as { rows: Array<{ base_version: number | null }> }).rows?.[0]?.base_version ?? null).toBeNull();
+    const rows = await db.execute(
+      sql`SELECT base_version, server_version FROM sync_conflicts WHERE op_id = ${opId}`,
+    );
+    expect(
+      (rows as unknown as { rows: Array<{ base_version: number | null }> }).rows?.[0]
+        ?.base_version ?? null,
+    ).toBeNull();
   });
 });

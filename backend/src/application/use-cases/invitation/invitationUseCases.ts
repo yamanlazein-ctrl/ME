@@ -213,7 +213,10 @@ export async function consumeInvitationCodeUseCase(
         const userCount = await repoExtended.countUsersInTenant(row.tenantId);
         const deviceCount = await repoExtended.countDevicesInTenant(row.tenantId);
         if (row.type === "user" && !isWithinLimit(effectiveLimits, "users", userCount)) {
-          return { ok: false, error: "تم الوصول إلى الحد الأقصى للمستخدمين المسموح بهم في الترخيص" };
+          return {
+            ok: false,
+            error: "تم الوصول إلى الحد الأقصى للمستخدمين المسموح بهم في الترخيص",
+          };
         }
         if (acceptsDevice && !isWithinLimit(effectiveLimits, "devices", deviceCount)) {
           return { ok: false, error: "تم الوصول إلى الحد الأقصى للأجهزة المسموح بها في الترخيص" };
@@ -274,7 +277,6 @@ export async function consumeInvitationCodeUseCase(
     return { ok: false, error: "فشل استهلاك رمز الدعوة" };
   }
 }
-
 
 function generateCode(): string {
   const bytes = randomBytes(6);

@@ -5,31 +5,31 @@ SQLite build, across 67 canonical files (14 API transcripts + 53 business tables
 
 ## Oracle and system under test
 
-| | Build | How it ran |
-|---|---|---|
+|                    | Build                                                                                                                                                       | How it ran                                                                                                                                                                                          |
+| ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Reference (oracle) | T026 build, `server.mjs` sha256 `12057be8…bf930`, bundled 2026-10-03 18:46 and packaged into `reference-pg-1.2.0-setup.exe` (sha256 `4e9fb793…549f`, 18:50) | `node scripts/parity/run.mjs --engine postgres --reference <copy of target/release/server/server.mjs> --out scripts/parity/baseline/ref` on a fresh PostgreSQL 17 database (locale C), desktop mode |
-| SUT | current working tree, `DB_ENGINE=sqlite` | `node scripts/parity/run.mjs --engine sqlite --out scripts/parity/out/sut` on a FRESH SQLite file + the build-time desktop seed |
+| SUT                | current working tree, `DB_ENGINE=sqlite`                                                                                                                    | `node scripts/parity/run.mjs --engine sqlite --out scripts/parity/out/sut` on a FRESH SQLite file + the build-time desktop seed                                                                     |
 
 Both start from the same clean state: the desktop seed (default tenant + pre-signed licence),
 then the real onboarding API (init → activate → company → admin → review → complete → login).
 
 ## Scenario set (T050 — HTTP API only)
 
-| File | Covers (T050 name) |
-|---|---|
-| 01-master-data | parties.mjs, inventory.mjs (fabrics → colours → rolls) |
-| 02-invoices | invoices.mjs (sale/entry, SYP/USD, discounts, tax, shipping, partial pay, over-sell rejection, next number) |
-| 03-vouchers | vouchers.mjs (linked receipt with discount, USD receipt, payment, cancel + double-cancel rejection) |
-| 04-returns | returns.mjs (sale + entry returns, over-return rejection) |
-| 05-statements | settlements.mjs (statements, multi-invoice settlement with discount, credit, ledger balance/party/at-date) |
-| 06-cashbox-expenses | cashbox.mjs (opening, manual in/out, expenses incl. cancel, day close, locked day) |
-| 07-cancel-and-delete | cancellations.mjs (invoice/voucher/return cancel, stale version, D-4 list absence + by-id history presence) |
-| 08-reports-search | dashboard, every report slug, party balances, profit, Arabic/Latin/`%`/`_` search, keyset paging, document graph |
-| 09-inventory-counts | inventory.mjs part 2 (begin counting, full count sheet, variance, post adjustment) |
-| 10-currency-rounding | invoices.mjs EUR + fractional quantities; rounding.mjs (x.xx5 products, line discounts, tax/shipping) |
-| 11-purge-merge | purge-merge.mjs (party purge cascade, dye purge cascade incl. wrong confirmation, party merge*) |
-| 13-financial-years | financial-years.mjs (count completion, preview, close with typed confirmation, write refused in closed year, reopen) |
-| 14-concurrency | concurrency.mjs (5 parallel sales on one roll → 3 succeed, stock never negative; 6 parallel sales → unique, gapless numbers) |
+| File                 | Covers (T050 name)                                                                                                           |
+| -------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| 01-master-data       | parties.mjs, inventory.mjs (fabrics → colours → rolls)                                                                       |
+| 02-invoices          | invoices.mjs (sale/entry, SYP/USD, discounts, tax, shipping, partial pay, over-sell rejection, next number)                  |
+| 03-vouchers          | vouchers.mjs (linked receipt with discount, USD receipt, payment, cancel + double-cancel rejection)                          |
+| 04-returns           | returns.mjs (sale + entry returns, over-return rejection)                                                                    |
+| 05-statements        | settlements.mjs (statements, multi-invoice settlement with discount, credit, ledger balance/party/at-date)                   |
+| 06-cashbox-expenses  | cashbox.mjs (opening, manual in/out, expenses incl. cancel, day close, locked day)                                           |
+| 07-cancel-and-delete | cancellations.mjs (invoice/voucher/return cancel, stale version, D-4 list absence + by-id history presence)                  |
+| 08-reports-search    | dashboard, every report slug, party balances, profit, Arabic/Latin/`%`/`_` search, keyset paging, document graph             |
+| 09-inventory-counts  | inventory.mjs part 2 (begin counting, full count sheet, variance, post adjustment)                                           |
+| 10-currency-rounding | invoices.mjs EUR + fractional quantities; rounding.mjs (x.xx5 products, line discounts, tax/shipping)                        |
+| 11-purge-merge       | purge-merge.mjs (party purge cascade, dye purge cascade incl. wrong confirmation, party merge*)                              |
+| 13-financial-years   | financial-years.mjs (count completion, preview, close with typed confirmation, write refused in closed year, reopen)         |
+| 14-concurrency       | concurrency.mjs (5 parallel sales on one roll → 3 succeed, stock never negative; 6 parallel sales → unique, gapless numbers) |
 
 \* Party merge is refused over HTTP whenever sync enqueue is on (`isSyncEnqueueEnabled()` is
 always true): `MERGE_UNAVAILABLE_WITH_SYNC` on both builds. The merge logic itself is covered by

@@ -1,9 +1,14 @@
 ﻿# ERP Project Genome & Architecture Blueprint
+
 **تاريخ الاستخراج:** 2026-10-03 12:49:18
 **مسار المشروع:** C:\Users\Taw\Downloads\Compressed\q\ME-main
+
 > **توجيه للوكيل:** هذا الملف يمثل خريطة وهيكل النظام فقط. التزم بقراءته دون طلب فحص الملفات الأصلية إلا للضرورة القصوى.
+
 ---
+
 ## 1. شجرة مجلدات المشروع (Directory Structure)
+
 ```text
   |-- .agents/
   |-- .husky/
@@ -200,7 +205,9 @@
       |-- cert-ui/
       |-- _helpers/
 ```
+
 ---
+
 ## 2. مخطط قاعدة البيانات والعلاقات (ER Diagram)
 
 > **ملاحظة المخطط (specs/001-desktop-sqlite-engine، data-model.md §1.0):** المخطط الحي — الناتج عن تطبيق كل
@@ -209,6 +216,7 @@
 > المخطط أدناه للتوضيح فقط. نسخة سطح المكتب (SQLite) تعيد إنتاج الجداول الـ53 والمفاتيح الـ73 نفسها، وتضيف
 > جداول تشغيل خاصة بها لا تُرى في السحابة (`motard_meta`، `motard_sequences`، `motard_tx_state`،
 > `motard_sync_restore`).
+
 ```mermaid
 erDiagram
     attachments { string id }
@@ -352,9 +360,12 @@ erDiagram
     users||--o{ notifications : references
     users||--o{ sync_devices : references
 ```
+
 **عدد الجداول:** 54 | **عدد العلاقات:** 86
 ---
+
 ## 3. خريطة ترابط الخدمات والـ Imports (علاقات داخلية فقط)
+
 ```mermaid
 graph TD
     cashboxUseCases --> ICashboxRepository
@@ -439,80 +450,110 @@ graph TD
     verify_fx --> FxRateService
     %% تم إيقاف الاعتماديات عند 80 رابطا لتوفير السياق
 ```
+
 ---
+
 ## 4. هياكل وتواقيع الكود الحساس (Services & Controllers Signatures)
+
 ### ملف: `\backend\src\application\ports\IAuditRepository.ts`
+
 ```typescript
 export interface AuditLogEntry {
 export interface AuditLogFilter {
 export interface IAuditRepository {
 ```
+
 ### ملف: `\backend\src\application\ports\IAuthRepository.ts`
+
 ```typescript
 export interface AuthUserRow {
 export interface IAuthRepository {
 ```
+
 ### ملف: `\backend\src\application\ports\ICashboxRepository.ts`
+
 ```typescript
 export interface ICashboxRepository {
 ```
+
 ### ملف: `\backend\src\application\ports\IColorRepository.ts`
+
 ```typescript
 export interface ColorFilter {
 export interface CreateColorData {
 export interface IColorRepository {
 ```
+
 ### ملف: `\backend\src\application\ports\ICompanyRepository.ts`
+
 ```typescript
 export interface CompanyProfileRow {
 export interface UpsertCompanyProfileInput {
 export interface ICompanyRepository {
 ```
+
 ### ملف: `\backend\src\application\ports\IDashboardRepository.ts`
+
 ```typescript
 export interface IDashboardRepository {
 ```
+
 ### ملف: `\backend\src\application\ports\IDocumentNumberBlockRepository.ts`
+
 ```typescript
 export type DocumentNumberBlockStatus = "active" | "exhausted" | "reclaimed";
 export interface DocumentNumberBlockRow {
 export interface ClaimDocumentNumberBlockInput {
 export interface IDocumentNumberBlockRepository {
 ```
+
 ### ملف: `\backend\src\application\ports\IExpenseRepository.ts`
+
 ```typescript
 export interface ExpenseFilter {
 export interface IExpenseRepository {
 ```
+
 ### ملف: `\backend\src\application\ports\IFabricRepository.ts`
+
 ```typescript
 export interface FabricFilter {
 export interface CreateFabricData {
 export interface IFabricRepository {
 ```
+
 ### ملف: `\backend\src\application\ports\IInstallationStateRepository.ts`
+
 ```typescript
 export type WizardStepName =
 export interface InstallationStateRow {
 export interface IInstallationStateRepository {
 ```
+
 ### ملف: `\backend\src\application\ports\IInvitationRepository.ts`
+
 ```typescript
 export interface InvitationRow {
 export interface IInvitationRepository {
 ```
+
 ### ملف: `\backend\src\application\ports\IInvoiceRepository.ts`
+
 ```typescript
 export interface InvoiceFilter {
 export interface IInvoiceRepository {
 ```
+
 ### ملف: `\backend\src\application\ports\ILedgerRepository.ts`
+
 ```typescript
 export interface LedgerFilter {
 export interface WriteLedgerEntry {
 export interface ILedgerRepository {
 ```
+
 ### ملف: `\backend\src\application\ports\ILicenseRepository.ts`
+
 ```typescript
 export interface LicenseRow {
 export interface ActivationRow {
@@ -520,11 +561,15 @@ export interface DeviceRow {
 export interface LicenseEventRow {
 export interface ILicenseRepository {
 ```
+
 ### ملف: `\backend\src\application\ports\INotificationRepository.ts`
+
 ```typescript
 export interface INotificationRepository {
 ```
+
 ### ملف: `\backend\src\application\ports\IOrderRepository.ts`
+
 ```typescript
 export interface OrderFilter {
 export interface PendingConflictLine {
@@ -532,46 +577,64 @@ export interface PendingConflictItem {
 export interface PendingConflict {
 export interface IOrderRepository {
 ```
+
 ### ملف: `\backend\src\application\ports\IPartyRepository.ts`
+
 ```typescript
 export interface PartyFilter {
 export interface CreatePartyData {
 export interface IPartyRepository {
 ```
+
 ### ملف: `\backend\src\application\ports\IPrintJobRepository.ts`
+
 ```typescript
 export interface IPrintJobRepository {
 ```
+
 ### ملف: `\backend\src\application\ports\IProfitRepository.ts`
+
 ```typescript
 export interface IProfitRepository {
 ```
+
 ### ملف: `\backend\src\application\ports\IReturnRepository.ts`
+
 ```typescript
 export interface ReturnFilter {
 export interface IReturnRepository {
 ```
+
 ### ملف: `\backend\src\application\ports\IRollRepository.ts`
+
 ```typescript
 export interface RollFilter {
 export interface CreateRollData {
 export interface IRollRepository {
 ```
+
 ### ملف: `\backend\src\application\ports\ISecretsRepository.ts`
+
 ```typescript
 export interface SecretRecord {
 export interface ISecretsRepository {
 ```
+
 ### ملف: `\backend\src\application\ports\ISettingsRepository.ts`
+
 ```typescript
 export interface ISettingsRepository {
 ```
+
 ### ملف: `\backend\src\application\ports\IStatementRepository.ts`
+
 ```typescript
 export interface SettlePartyInput {
 export interface IStatementRepository {
 ```
+
 ### ملف: `\backend\src\application\ports\IStockMovementRepository.ts`
+
 ```typescript
 export type StockMovementDirection = "in" | "out";
 export type StockMovementType =
@@ -580,7 +643,9 @@ export interface RecordStockMovementInput {
 export interface StockMovementFilter {
 export interface IStockMovementRepository {
 ```
+
 ### ملف: `\backend\src\application\ports\ISyncDeviceRepository.ts`
+
 ```typescript
 export interface SyncDeviceRow {
 export interface IRegisterSyncDeviceInput {
@@ -588,64 +653,84 @@ export class SyncDeviceFingerprintMismatchError extends Error {
 export class SyncDeviceRevokedError extends Error {
 export interface ISyncDeviceRepository {
 ```
+
 ### ملف: `\backend\src\application\ports\ISyncInboxRepository.ts`
+
 ```typescript
 export type SyncInboxStatus = "received" | "applied" | "rejected" | "dead";
 export interface SyncInboxRow {
 export interface ReceiveSyncUnitInput {
 export interface ISyncInboxRepository {
 ```
+
 ### ملف: `\backend\src\application\ports\ISyncOutboxRepository.ts`
+
 ```typescript
 export type SyncOutboxStatus = "pending" | "pushing" | "synced" | "rejected";
 export interface SyncOutboxRow {
 export interface EnqueueSyncOutboxInput {
 export interface ISyncOutboxRepository {
 ```
+
 ### ملف: `\backend\src\application\ports\ISyncResourceClaimRepository.ts`
+
 ```typescript
 export interface SyncResourceClaimRow {
 export interface TryClaimResourcesInput {
 export type TryClaimResourcesResult =
 export interface ISyncResourceClaimRepository {
 ```
+
 ### ملف: `\backend\src\application\ports\ITenantRepository.ts`
+
 ```typescript
 export interface TenantRow {
 export interface CreateTenantInput {
 export interface ITenantRepository {
 ```
+
 ### ملف: `\backend\src\application\ports\IUserRepository.ts`
+
 ```typescript
 export interface UserFilter {
 export interface CreateUserData {
 export interface UserSyncSnapshot {
 export interface IUserRepository {
 ```
+
 ### ملف: `\backend\src\application\ports\IVoucherRepository.ts`
+
 ```typescript
 export interface VoucherFilter {
 export interface IVoucherRepository {
 ```
+
 ### ملف: `\backend\src\application\use-cases\parties\mergePartiesUseCase.ts`
+
 ```typescript
 export type MergePartiesResult = {
 export async function mergePartiesUseCase(
 ```
+
 ### ملف: `\backend\src\application\use-cases\parties\purgePartyCascadeUseCase.ts`
+
 ```typescript
   type PartyDeletionImpact,
 export async function purgePartyCascadeUseCase(opts: {
 export async function getPartyDeletionImpactUseCase(
 ```
+
 ### ملف: `\backend\src\application\use-cases\statements\settleInvoicesUseCase.ts`
+
 ```typescript
 export type SettleInvoicesInput = {
 export type SettleInvoicesResult = {
 type Result<T> = { ok: true; data: T } | { ok: false; error: string };
 export async function settleInvoicesUseCase(
 ```
+
 ### ملف: `\backend\src\infrastructure\fx\FxRateService.ts`
+
 ```typescript
 function pickUsdRate(
 export type FxRateSnapshot = {
@@ -664,7 +749,9 @@ export class FxRateService {
   private timer?: NodeJS.Timeout;
   private async doRefresh(): Promise<boolean> {
 ```
+
 ### ملف: `\backend\src\infrastructure\repositories\dyePurgeRepository.ts`
+
 ```typescript
 function refTypeList(types: readonly string[]): SQL {
 export type AffectedInvoice = {
@@ -688,7 +775,9 @@ async function survivingCash(
 export async function purgeDyeCascade(
 export async function dyeExists(tx: Tx, tenantId: string, fabricId: string): Promise<boolean> {
 ```
+
 ### ملف: `\backend\src\infrastructure\repositories\financialYearRepository.ts`
+
 ```typescript
 export type YearClosingSnapshot = {
 export type YearClosingPreview = Awaited<ReturnType<typeof getYearClosingPreview>>;
@@ -701,7 +790,9 @@ export async function reopenFinancialYear(
 export async function beginYearCounting(
 export async function listFinancialYears(
 ```
+
 ### ملف: `\backend\src\infrastructure\repositories\inventoryCountRepository.ts`
+
 ```typescript
 export type CountLine = {
 export async function getCountSheet(
@@ -709,7 +800,9 @@ async function assertYearNotClosed(tx: Tx, tenantId: string, year: number): Prom
 export async function recordCount(
 export async function postCountVariance(
 ```
+
 ### ملف: `\src\application\ports\IAuthRepository.ts`
+
 ```typescript
 export interface LoginInput {
 export interface LoginResult {
@@ -717,7 +810,9 @@ export interface RefreshTokenInput {
 export interface RefreshTokenResult {
 export interface IAuthRepository {
 ```
+
 ### ملف: `\src\application\ports\ICashboxRepository.ts`
+
 ```typescript
 export type ManualMovementType =
 export type MovementDirection = "in" | "out";
@@ -729,7 +824,9 @@ export interface CloseDayInput {
 export interface DayCashFlowDTO {
 export interface ICashboxRepository {
 ```
+
 ### ملف: `\src\application\ports\IDashboardRepository.ts`
+
 ```typescript
 export interface StoreInfoDTO {
 export interface UserSessionDTO {
@@ -747,45 +844,61 @@ export interface SalesTrendPointDTO {
 export interface DashboardDataDTO {
 export interface IDashboardRepository {
 ```
+
 ### ملف: `\src\application\ports\IExpenseRepository.ts`
+
 ```typescript
 export interface IExpenseRepository {
 export interface IExpenseNamesRepository {
 ```
+
 ### ملف: `\src\application\ports\IInventoryRepository.ts`
+
 ```typescript
 export interface IInventoryRepository {
 export interface InventoryFilter {
 ```
+
 ### ملف: `\src\application\ports\IInvoiceRepository.ts`
+
 ```typescript
 export interface IInvoiceRepository {
 export interface InvoiceFilter extends PaginationParams {
 ```
+
 ### ملف: `\src\application\ports\ILedgerRepository.ts`
+
 ```typescript
 export interface ILedgerRepository {
 export interface LedgerFilter extends PaginationParams {
 ```
+
 ### ملف: `\src\application\ports\INotificationRepository.ts`
+
 ```typescript
 export type NotificationKind = "credit" | "aging" | "stock" | "unpaid" | "cash" | "order" | "sync";
 export type NotificationSeverity = "info" | "warning" | "critical";
 export interface AppNotificationDTO {
 export interface INotificationRepository {
 ```
+
 ### ملف: `\src\application\ports\IOrderRepository.ts`
+
 ```typescript
 export interface PendingConflictLine {
 export interface PendingConflictItem {
 export interface PendingConflict {
 export interface IOrderRepository {
 ```
+
 ### ملف: `\src\application\ports\IPartyRepository.ts`
+
 ```typescript
 export interface IPartyRepository {
 ```
+
 ### ملف: `\src\application\ports\IPrintJobRepository.ts`
+
 ```typescript
 export type PrintJobStatus = "sent" | "received";
 export interface PrintJobDTO {
@@ -793,7 +906,9 @@ export interface CreatePrintSendInput {
 export interface ReceivePrintInput {
 export interface IPrintJobRepository {
 ```
+
 ### ملف: `\src\application\ports\IReturnRepository.ts`
+
 ```typescript
 export type ReturnKind = "entry" | "sale";
 export type ReturnReason = "defect" | "wrong_quantity" | "wrong_order" | "other";
@@ -804,7 +919,9 @@ export interface CreateReturnInput {
 export interface ReturnFilter {
 export interface IReturnRepository {
 ```
+
 ### ملف: `\src\application\ports\ISettingsRepository.ts`
+
 ```typescript
 export type UserRole = "admin" | "accountant" | "warehouse" | "viewer";
 export interface UnitDTO {
@@ -817,199 +934,287 @@ export interface SystemUserDTO {
 export interface ActivityEntryDTO {
 export interface ISettingsRepository {
 ```
+
 ### ملف: `\src\application\ports\IVoucherRepository.ts`
+
 ```typescript
 export interface IVoucherRepository {
 ```
+
 ### ملف: `\src\application\use-cases\cashbox\AddManualMovementUseCase.ts`
+
 ```typescript
 export class AddManualMovementUseCase {
 ```
+
 ### ملف: `\src\application\use-cases\cashbox\CashboxStateUseCase.ts`
+
 ```typescript
 export class CashboxStateUseCase {
 ```
+
 ### ملف: `\src\application\use-cases\cashbox\CloseDayUseCase.ts`
+
 ```typescript
 export class CloseDayUseCase {
 ```
+
 ### ملف: `\src\application\use-cases\cashbox\ListMovementsUseCase.ts`
+
 ```typescript
 export class ListMovementsUseCase {
 ```
+
 ### ملف: `\src\application\use-cases\dashboard\GetDashboardUseCase.ts`
+
 ```typescript
 export class GetDashboardUseCase {
 ```
+
 ### ملف: `\src\application\use-cases\notifications\ListNotificationsUseCase.ts`
+
 ```typescript
 export class ListNotificationsUseCase {
 ```
+
 ### ملف: `\src\application\use-cases\orders\CancelOrderUseCase.ts`
+
 ```typescript
 export class CancelOrderUseCase {
 ```
+
 ### ملف: `\src\application\use-cases\orders\CreateOrderUseCase.ts`
+
 ```typescript
 export class CreateOrderUseCase {
 ```
+
 ### ملف: `\src\application\use-cases\orders\FulfillOrderUseCase.ts`
+
 ```typescript
 export class FulfillOrderUseCase {
 ```
+
 ### ملف: `\src\application\use-cases\orders\ListOrdersUseCase.ts`
+
 ```typescript
 export class ListOrdersUseCase {
 ```
+
 ### ملف: `\src\application\use-cases\parties\CreatePartyUseCase.ts`
+
 ```typescript
 export class CreatePartyUseCase {
 ```
+
 ### ملف: `\src\application\use-cases\parties\GetPartyBalanceUseCase.ts`
+
 ```typescript
 export class GetPartyBalanceUseCase {
 ```
+
 ### ملف: `\src\application\use-cases\parties\ListPartiesUseCase.ts`
+
 ```typescript
 export class ListPartiesUseCase {
 ```
+
 ### ملف: `\src\application\use-cases\print-jobs\CreatePrintSendUseCase.ts`
+
 ```typescript
 export class CreatePrintSendUseCase {
 ```
+
 ### ملف: `\src\application\use-cases\print-jobs\ReceivePrintUseCase.ts`
+
 ```typescript
 export class ReceivePrintUseCase {
 ```
+
 ### ملف: `\src\application\use-cases\returns\CancelReturnUseCase.ts`
+
 ```typescript
 export class CancelReturnUseCase {
     private readonly returns: IReturnRepository,
     private readonly ledger: ILedgerRepository,
 ```
+
 ### ملف: `\src\application\use-cases\returns\CreateReturnUseCase.ts`
+
 ```typescript
 export class CreateReturnUseCase {
 ```
+
 ### ملف: `\src\application\use-cases\returns\ListReturnsUseCase.ts`
+
 ```typescript
 export class ListReturnsUseCase {
 ```
+
 ### ملف: `\src\application\use-cases\vouchers\CancelVoucherUseCase.ts`
+
 ```typescript
 export class CancelVoucherUseCase {
     private readonly vouchers: IVoucherRepository,
     private readonly ledger: ILedgerRepository,
 ```
+
 ### ملف: `\src\application\use-cases\vouchers\CreatePaymentVoucherUseCase.ts`
+
 ```typescript
 export class CreatePaymentVoucherUseCase {
     private readonly vouchers: IVoucherRepository,
     private readonly ledger: ILedgerRepository,
 ```
+
 ### ملف: `\src\application\use-cases\vouchers\CreateReceiptVoucherUseCase.ts`
+
 ```typescript
 export class CreateReceiptVoucherUseCase {
     private readonly vouchers: IVoucherRepository,
     private readonly ledger: ILedgerRepository,
 ```
+
 ### ملف: `\src\infrastructure\api\AuditApiService.ts`
+
 ```typescript
 export type AuditLogDTO = {
 export class AuditApiService {
 ```
+
 ### ملف: `\src\infrastructure\api\AuthApiService.ts`
+
 ```typescript
 export class AuthApiService {
 ```
+
 ### ملف: `\src\infrastructure\api\CashboxApiService.ts`
+
 ```typescript
 export class CashboxApiService {
 ```
+
 ### ملف: `\src\infrastructure\api\DashboardApiService.ts`
+
 ```typescript
 export interface BackendDashboardTransaction {
 export interface BackendDashboardResponse {
 export class DashboardApiService {
 ```
+
 ### ملف: `\src\infrastructure\api\ExpenseApiService.ts`
+
 ```typescript
 export class ExpenseApiService {
 ```
+
 ### ملف: `\src\infrastructure\api\FxApiService.ts`
+
 ```typescript
 export interface FxReferenceRateResponse {
 export class FxApiService {
 ```
+
 ### ملف: `\src\infrastructure\api\InventoryApiService.ts`
+
 ```typescript
 export class InventoryApiService {
 ```
+
 ### ملف: `\src\infrastructure\api\InvoiceApiService.ts`
+
 ```typescript
 export class InvoiceApiService {
 ```
+
 ### ملف: `\src\infrastructure\api\LedgerApiService.ts`
+
 ```typescript
 export class LedgerApiService {
 ```
+
 ### ملف: `\src\infrastructure\api\NotificationApiService.ts`
+
 ```typescript
 export class NotificationApiService {
 ```
+
 ### ملف: `\src\infrastructure\api\OrderApiService.ts`
+
 ```typescript
 export class OrderApiService {
 ```
+
 ### ملف: `\src\infrastructure\api\PartyApiService.ts`
+
 ```typescript
 export class PartyApiService {
   private path(kind: "customer" | "supplier") {
 ```
+
 ### ملف: `\src\infrastructure\api\PrintJobApiService.ts`
+
 ```typescript
 export class PrintJobApiService {
 ```
+
 ### ملف: `\src\infrastructure\api\ProfitApiService.ts`
+
 ```typescript
 export class ProfitApiService {
   private toParams(q?: ProfitQueryParams): Record<string, string> {
 ```
+
 ### ملف: `\src\infrastructure\api\ReturnApiService.ts`
+
 ```typescript
 export class ReturnApiService {
 ```
+
 ### ملف: `\src\infrastructure\api\SettingsApiService.ts`
+
 ```typescript
 export type SettingsSection =
 export interface SettingsData {
 export class SettingsApiService {
 ```
+
 ### ملف: `\src\infrastructure\api\StatementApiService.ts`
+
 ```typescript
 export class StatementApiService {
 ```
+
 ### ملف: `\src\infrastructure\api\SyncConflictsApiService.ts`
+
 ```typescript
 export type SyncConflictDecision = "keep-server" | "rebase" | "withdraw";
 export type SyncConflictRow = {
 export class SyncConflictsApiService {
 ```
+
 ### ملف: `\src\infrastructure\api\VoucherApiService.ts`
+
 ```typescript
 export class VoucherApiService {
 ```
+
 ### ملف: `\src\infrastructure\repositories\api\ApiAuthRepository.ts`
+
 ```typescript
 export class ApiAuthRepository implements IAuthRepository {
 ```
+
 ### ملف: `\src\infrastructure\repositories\api\ApiCashboxRepository.ts`
+
 ```typescript
 function toPortMovement(dto: ContractManualMovementDTO): ManualMovementDTO {
 function toPortClosing(dto: ContractDailyClosingDTO): DailyClosingDTO {
 export class ApiCashboxRepository implements ICashboxRepository {
 ```
+
 ### ملف: `\src\infrastructure\repositories\api\ApiDashboardRepository.ts`
+
 ```typescript
 export function mapDashboardResponse(raw: BackendDashboardResponse): DashboardDataDTO {
 function legacyRecentTransactions(raw: BackendDashboardResponse): TransactionDTO[] {
@@ -1017,52 +1222,73 @@ function activityType(module: string, detail: string): TransactionDTO["type"] {
 function extractInvoiceNumber(detail: string): string | null {
 export class ApiDashboardRepository implements IDashboardRepository {
 ```
+
 ### ملف: `\src\infrastructure\repositories\api\ApiExpenseNamesRepository.ts`
+
 ```typescript
 export class ApiExpenseNamesRepository implements IExpenseNamesRepository {
 ```
+
 ### ملف: `\src\infrastructure\repositories\api\ApiExpenseRepository.ts`
+
 ```typescript
 export class ApiExpenseRepository implements IExpenseRepository {
 ```
+
 ### ملف: `\src\infrastructure\repositories\api\ApiInventoryRepository.ts`
+
 ```typescript
 export class ApiInventoryRepository implements IInventoryRepository {
 ```
+
 ### ملف: `\src\infrastructure\repositories\api\ApiInvoiceRepository.ts`
+
 ```typescript
 export class ApiInvoiceRepository implements IInvoiceRepository {
 ```
+
 ### ملف: `\src\infrastructure\repositories\api\ApiLedgerRepository.ts`
+
 ```typescript
 export class ApiLedgerRepository implements ILedgerRepository {
 ```
+
 ### ملف: `\src\infrastructure\repositories\api\ApiNotificationRepository.ts`
+
 ```typescript
 export class ApiNotificationRepository implements INotificationRepository {
 ```
+
 ### ملف: `\src\infrastructure\repositories\api\ApiOrderRepository.ts`
+
 ```typescript
 export class ApiOrderRepository implements IOrderRepository {
 ```
+
 ### ملف: `\src\infrastructure\repositories\api\ApiPartyRepository.ts`
+
 ```typescript
 export class ApiPartyRepository implements IPartyRepository {
 ```
+
 ### ملف: `\src\infrastructure\repositories\api\ApiPrintJobRepository.ts`
+
 ```typescript
 function adaptPrintJob(raw: Record<string, unknown>): PrintJobDTO {
 export class ApiPrintJobRepository implements IPrintJobRepository {
 ```
+
 ### ملف: `\src\infrastructure\repositories\api\ApiReturnRepository.ts`
+
 ```typescript
 function toPortReturn(dto: ContractReturnDTO): ReturnDTO {
 export class ApiReturnRepository implements IReturnRepository {
 ```
+
 ### ملف: `\src\infrastructure\repositories\api\ApiVoucherRepository.ts`
+
 ```typescript
 function paymentToVoucher(dto: PaymentDTO): Voucher {
 function receiptToVoucher(dto: ReceiptDTO): Voucher {
 export class ApiVoucherRepository implements IVoucherRepository {
 ```
-

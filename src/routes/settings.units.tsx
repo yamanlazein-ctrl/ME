@@ -5,6 +5,7 @@ import { PageCard } from "@/components/layout/PageCard";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { FormField } from "@/components/common/FormField";
 import {
   Dialog,
   DialogContent,
@@ -106,23 +107,22 @@ function UnitsPage() {
           </DialogHeader>
           {editing && (
             <div className="grid gap-3">
-              <div className="grid gap-1.5">
-                <Label>الاسم</Label>
+              <FormField className="grid gap-1.5" labelClassName="" label="الاسم">
                 <Input
                   value={editing.name}
                   onChange={(e) => setEditing({ ...editing, name: e.target.value })}
                 />
-              </div>
-              <div className="grid gap-1.5">
-                <Label>الرمز</Label>
+              </FormField>
+              <FormField className="grid gap-1.5" labelClassName="" label="الرمز">
                 <Input
                   value={editing.symbol}
                   onChange={(e) => setEditing({ ...editing, symbol: e.target.value })}
                 />
-              </div>
+              </FormField>
               <div className="flex items-center justify-between rounded border p-2">
-                <Label>افتراضية</Label>
+                <Label htmlFor="unit-default">افتراضية</Label>
                 <Switch
+                  id="unit-default"
                   checked={editing.isDefault}
                   onCheckedChange={(v) => setEditing({ ...editing, isDefault: v })}
                 />

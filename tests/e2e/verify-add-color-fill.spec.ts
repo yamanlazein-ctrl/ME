@@ -40,7 +40,7 @@ test.describe("add-color-per-fabric functional", () => {
 
     // Now the row should be non-empty → palette button appears (title "إضافة لون لنفس القماش")
     const entryPalette = await page.locator('button[title*="إضافة لون"]').count();
-    const entryPaletteByIcon = await page.locator('button:has(.lucide-palette)').count();
+    const entryPaletteByIcon = await page.locator("button:has(.lucide-palette)").count();
     console.log("entry palette (title):", entryPalette, " (icon):", entryPaletteByIcon);
 
     await page.screenshot({ path: "test-results/entry-invoice-filled.png", fullPage: false });

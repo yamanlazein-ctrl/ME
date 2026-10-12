@@ -12,18 +12,38 @@ export interface IReportsRepository {
     type: "sale" | "entry",
     from: string | null,
   ): Promise<{ total: ByCurrency; paid: ByCurrency; remaining: ByCurrency; count: number }>;
-  returnTotalsByCurrency(tenantId: string, kind: "sale" | "entry", from: string | null): Promise<{ total: ByCurrency; count: number }>;
-  expenseTotalsByCurrency(tenantId: string, from: string | null): Promise<{ total: ByCurrency; count: number }>;
-  inventoryValue(tenantId: string): Promise<{ value: ByCurrency; totalKg: number; rollCount: number }>;
-  inventoryByFabric(tenantId: string): Promise<Array<{ fabricId: string; name: string; kg: number; rolls: number; value: ByCurrency }>>;
-  topFabrics(tenantId: string, from: string | null, limit: number): Promise<Array<{ fabricId: string; name: string; qty: number; revenueByCurrency: ByCurrency }>>;
+  returnTotalsByCurrency(
+    tenantId: string,
+    kind: "sale" | "entry",
+    from: string | null,
+  ): Promise<{ total: ByCurrency; count: number }>;
+  expenseTotalsByCurrency(
+    tenantId: string,
+    from: string | null,
+  ): Promise<{ total: ByCurrency; count: number }>;
+  inventoryValue(
+    tenantId: string,
+  ): Promise<{ value: ByCurrency; totalKg: number; rollCount: number }>;
+  inventoryByFabric(
+    tenantId: string,
+  ): Promise<
+    Array<{ fabricId: string; name: string; kg: number; rolls: number; value: ByCurrency }>
+  >;
+  topFabrics(
+    tenantId: string,
+    from: string | null,
+    limit: number,
+  ): Promise<Array<{ fabricId: string; name: string; qty: number; revenueByCurrency: ByCurrency }>>;
   topCustomers(
     tenantId: string,
     from: string | null,
     limit: number,
     order: "usdFirst" | "syp",
   ): Promise<Array<{ partyId: string; name: string; revenueByCurrency: ByCurrency }>>;
-  ledgerTotalsByCurrency(tenantId: string, from: string | null): Promise<{ debit: ByCurrency; credit: ByCurrency; count: number }>;
+  ledgerTotalsByCurrency(
+    tenantId: string,
+    from: string | null,
+  ): Promise<{ debit: ByCurrency; credit: ByCurrency; count: number }>;
   pagedRows(
     tenantId: string,
     slug: string,

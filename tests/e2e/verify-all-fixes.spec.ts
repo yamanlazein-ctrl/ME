@@ -36,7 +36,10 @@ test.describe("Phase 0 — Repository trustworthy (fresh clone)", () => {
   test("frontend loads without white screen and no console errors", async ({ page }) => {
     await page.goto(FRONTEND, { waitUntil: "networkidle" });
     // Clear storage to simulate fresh
-    await page.evaluate(() => { localStorage.clear(); sessionStorage.clear(); });
+    await page.evaluate(() => {
+      localStorage.clear();
+      sessionStorage.clear();
+    });
     await page.reload({ waitUntil: "networkidle" });
     const bodyText = await page.evaluate(() => document.body.innerText.trim().length);
     expect(bodyText).toBeGreaterThan(0);
@@ -47,7 +50,9 @@ test.describe("Phase 0 — Repository trustworthy (fresh clone)", () => {
     expect(errors.filter((e) => !e.includes("favicon"))).toEqual([]);
   });
 
-  test("invoice total semantics: total() = subtotal - discount + tax + shipping", async ({ page }) => {
+  test("invoice total semantics: total() = subtotal - discount + tax + shipping", async ({
+    page,
+  }) => {
     // This is verified via the unit test, but we also check the UI displays the same
     // We can't easily create an invoice without auth, so we verify the shared helper is used
     // by checking that the frontend's invoiceCalc is now shared (per-line rounding)
@@ -95,7 +100,9 @@ test.describe("Phase 2 — Money", () => {
 });
 
 test.describe("Phase 3 — Financial logic", () => {
-  test("3.1 parity: frontend and backend compute same total for 3x0.5kg@1 and 5x7.25kg@8750.50", async ({ request }) => {
+  test("3.1 parity: frontend and backend compute same total for 3x0.5kg@1 and 5x7.25kg@8750.50", async ({
+    request,
+  }) => {
     // These are the two cases from the brief that previously diverged 3 vs 2 and 317205 vs 317206
     // We verify via the shared Invoice helper (both trees now use Math.round per line)
     // For now, we just check that the API rejects discount > subtotal (3.6g) which proves parity logic is active
@@ -109,7 +116,16 @@ test.describe("Phase 3 — Financial logic", () => {
       date: "2026-01-15",
       partyId: "00000000-0000-0000-0000-000000000001",
       partyType: "customer",
-      lines: [{ fabricId: "00000000-0000-0000-0000-000000000002", colorId: "00000000-0000-0000-0000-000000000003", rollId: "00000000-0000-0000-0000-000000000004", quantityKg: 1, pricePerKg: 1000, discountAmount: 0 }],
+      lines: [
+        {
+          fabricId: "00000000-0000-0000-0000-000000000002",
+          colorId: "00000000-0000-0000-0000-000000000003",
+          rollId: "00000000-0000-0000-0000-000000000004",
+          quantityKg: 1,
+          pricePerKg: 1000,
+          discountAmount: 0,
+        },
+      ],
       discount: 100000, // > subtotal 1000
     };
     const res = await request.post(`${API}/invoices`, { data: badInvoice, headers });
@@ -117,7 +133,9 @@ test.describe("Phase 3 — Financial logic", () => {
     expect([422, 400, 401].includes(res.status())).toBeTruthy();
   });
 
-  test("3.2 returns: duplicate rollId lines, price spoof, currency mismatch are rejected", async ({ request }) => {
+  test("3.2 returns: duplicate rollId lines, price spoof, currency mismatch are rejected", async ({
+    request,
+  }) => {
     const login = await request.post(`${API}/auth/login`, { data: adminLoginBody() });
     if (login.status() !== 200) test.skip();
     const { accessToken } = await login.json();
@@ -129,7 +147,9 @@ test.describe("Phase 3 — Financial logic", () => {
     expect([422, 400, 401].includes(res.status())).toBeTruthy();
   });
 
-  test("3.3 paid is maintained: invoice list shows amountDue derived from vouchers", async ({ request }) => {
+  test("3.3 paid is maintained: invoice list shows amountDue derived from vouchers", async ({
+    request,
+  }) => {
     const login = await request.post(`${API}/auth/login`, { data: adminLoginBody() });
     if (login.status() !== 200) test.skip();
     const { accessToken } = await login.json();
@@ -147,12 +167,23 @@ test.describe("Phase 3 — Financial logic", () => {
     expect([200, 401, 429, 403].includes(list.status())).toBeTruthy();
   });
 
-  test("3.5 cash close: only date/counted/currency accepted, server derives rest", async ({ request }) => {
+  test("3.5 cash close: only date/counted/currency accepted, server derives rest", async ({
+    request,
+  }) => {
     const login = await request.post(`${API}/auth/login`, { data: adminLoginBody() });
     if (login.status() !== 200) test.skip();
     const { accessToken } = await login.json();
     const headers = { Authorization: `Bearer ${accessToken}` };
-    const res = await request.post(`${API}/cashbox/close-day`, { data: { date: "2026-01-15", counted: 1000, openingBalance: 999999, totalIn: 999999, totalOut: 0 }, headers });
+    const res = await request.post(`${API}/cashbox/close-day`, {
+      data: {
+        date: "2026-01-15",
+        counted: 1000,
+        openingBalance: 999999,
+        totalIn: 999999,
+        totalOut: 0,
+      },
+      headers,
+    });
     expect([200, 422, 400, 401, 409].includes(res.status())).toBeTruthy();
     if (res.status() === 422) {
       const body = await res.json().catch(() => ({}));
@@ -163,14 +194,18 @@ test.describe("Phase 3 — Financial logic", () => {
 });
 
 test.describe("Phase 4 — Security", () => {
-  test("4.2 backup requires auth: 401 without token, 403 for non-admin, tenant-scoped for admin", async ({ request }) => {
+  test("4.2 backup requires auth: 401 without token, 403 for non-admin, tenant-scoped for admin", async ({
+    request,
+  }) => {
     const noAuth = await request.post(`${API}/backup/full`);
     expect(noAuth.status()).toBe(401);
     // Try with non-admin if we had a viewer token, but we can at least check admin gets 200 or 429 or filtered
     const login = await request.post(`${API}/auth/login`, { data: adminLoginBody() });
     if (login.status() === 200) {
       const { accessToken } = await login.json();
-      const adminRes = await request.post(`${API}/backup/full`, { headers: { Authorization: `Bearer ${accessToken}` } });
+      const adminRes = await request.post(`${API}/backup/full`, {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
       // Admin should get 200 (zip) or 429 (in progress) or 403 if not admin, but not 401
       expect([200, 429, 403, 500].includes(adminRes.status())).toBeTruthy();
       expect(adminRes.status()).not.toBe(401);
@@ -194,7 +229,9 @@ test.describe("Phase 4 — Security", () => {
   });
 
   test("4.5a password policy: 3-char rejected, 8-char accepted", async ({ request }) => {
-    const res = await request.post(`${API}/invitations/consume`, { data: { code: "FAKE", password: "abc" } });
+    const res = await request.post(`${API}/invitations/consume`, {
+      data: { code: "FAKE", password: "abc" },
+    });
     // Should be 400 with message about 8 chars (was 3 before)
     const body = await res.json().catch(() => ({}));
     expect(res.status()).toBe(400);
@@ -231,7 +268,10 @@ test.describe("Phase 5 — Structural", () => {
     expect(errors.filter((e) => e.includes("@erp/shared"))).toEqual([]);
   });
 
-  test("5.3 createdBy is UUID, print shows raw id not Admin fallback", async ({ page, request }) => {
+  test("5.3 createdBy is UUID, print shows raw id not Admin fallback", async ({
+    page,
+    request,
+  }) => {
     // Login and check that an invoice's createdBy is a UUID, not a display name
     const login = await request.post(`${API}/auth/login`, { data: adminLoginBody() });
     if (login.status() !== 200) test.skip();
@@ -257,7 +297,9 @@ test.describe("Phase 5 — Structural", () => {
     }
   });
 
-  test("5.4 container: tenantId per-request, baseUrl single, adapters propagate 500", async ({ page }) => {
+  test("5.4 container: tenantId per-request, baseUrl single, adapters propagate 500", async ({
+    page,
+  }) => {
     // This is hard to test E2E without two tenants, but we can verify that the frontend's
     // localStorage keys are now correct (erp.auth.accessToken, not accessToken)
     await page.goto(FRONTEND);
@@ -265,7 +307,10 @@ test.describe("Phase 5 — Structural", () => {
     await page.reload();
     const hasCorrectKey = await page.evaluate(() => {
       // After login, the correct key should be used
-      return localStorage.getItem("erp.auth.accessToken") !== null || localStorage.getItem("accessToken") === null;
+      return (
+        localStorage.getItem("erp.auth.accessToken") !== null ||
+        localStorage.getItem("accessToken") === null
+      );
     });
     // Either no token yet (fresh) or correct key is used, not the old wrong key
     expect(hasCorrectKey).toBeTruthy();

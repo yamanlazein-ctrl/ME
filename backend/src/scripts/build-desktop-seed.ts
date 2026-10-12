@@ -40,10 +40,12 @@ const TENANT_ID = process.env.SEED_TENANT_ID?.trim();
 if (!TENANT_ID) throw new Error("SEED_TENANT_ID is required; refuse to seed an implicit tenant");
 const TENANT: string = TENANT_ID;
 const DEV_EPHEMERAL = process.argv.includes("--dev-ephemeral");
-const BAKED_KEY = process.env.BAKED_LICENSE_KEY ?? `LIC-DESKTOP-${randomBytes(8).toString("hex").toUpperCase()}`;
+const BAKED_KEY =
+  process.env.BAKED_LICENSE_KEY ?? `LIC-DESKTOP-${randomBytes(8).toString("hex").toUpperCase()}`;
 const EXPIRES_IN_SEC = 100 * 365 * 86400; // same validity as bake-desktop-license.ts
 const DEVICES = Number(process.env.BAKED_LICENSE_DEVICES ?? 1);
-if (!Number.isInteger(DEVICES) || DEVICES < 1) throw new Error("BAKED_LICENSE_DEVICES must be a positive integer");
+if (!Number.isInteger(DEVICES) || DEVICES < 1)
+  throw new Error("BAKED_LICENSE_DEVICES must be a positive integer");
 
 async function main() {
   let signer: LicenseTokenSigner;
@@ -57,18 +59,23 @@ async function main() {
     signer = await LicenseTokenSigner.fromJwk(kp.publicJwk, kp.privateJwk);
     publicJwk = kp.publicJwk;
   } else {
-    throw new Error("LICENSE_SIGNING_KEY and LICENSE_SIGNING_PUBLIC_KEY are required; use --dev-ephemeral only for local development");
+    throw new Error(
+      "LICENSE_SIGNING_KEY and LICENSE_SIGNING_PUBLIC_KEY are required; use --dev-ephemeral only for local development",
+    );
   }
 
   // Scratch database from the SQLite baseline: every default is the live schema's.
   const raw = new Database(":memory:");
   raw.pragma("foreign_keys = ON");
   const mig = resolveSqliteMigrationsFolder();
-  for (const e of loadSqliteJournal(mig).entries) raw.exec(readFileSync(join(mig, `${e.tag}.sql`), "utf8"));
+  for (const e of loadSqliteJournal(mig).entries)
+    raw.exec(readFileSync(join(mig, `${e.tag}.sql`), "utf8"));
   const db = drizzle(withExactIntegers(raw));
 
   // seed.ts (desktop: SKIP_ADMIN_SEED=true — no users)
-  db.insert(tenants).values({ id: TENANT, name: "Default Tenant", slug: "default", status: "active", maxUsers: 10 }).run();
+  db.insert(tenants)
+    .values({ id: TENANT, name: "Default Tenant", slug: "default", status: "active", maxUsers: 10 })
+    .run();
 
   // bake-desktop-license.ts, same values
   db.insert(licenses)
@@ -79,7 +86,13 @@ async function main() {
       expiresAt: null,
       graceDays: 7,
       maxDevices: DEVICES,
-      features: [FEATURES.INVENTORY, FEATURES.ACCOUNTING, FEATURES.REPORTS, FEATURES.SALES, FEATURES.PURCHASING],
+      features: [
+        FEATURES.INVENTORY,
+        FEATURES.ACCOUNTING,
+        FEATURES.REPORTS,
+        FEATURES.SALES,
+        FEATURES.PURCHASING,
+      ],
       customerName: "Desktop Baked License",
       edition: "enterprise",
       plan: "standard",
@@ -89,7 +102,14 @@ async function main() {
       bindingType: "none",
       bindingValue: null,
       tenantId: TENANT,
-      limits: { users: 999, devices: DEVICES, branches: 1, warehouses: 1, storage_gb: 0, api_calls: 0 },
+      limits: {
+        users: 999,
+        devices: DEVICES,
+        branches: 1,
+        warehouses: 1,
+        storage_gb: 0,
+        api_calls: 0,
+      },
     })
     .run();
   const row = db.select().from(licenses).where(eq(licenses.key, BAKED_KEY)).get()!;
@@ -111,13 +131,28 @@ async function main() {
       bindingType: (row.bindingType as never) ?? "none",
       bindingValue: (row.bindingValue as never) ?? "desktop-pre-baked",
       limits: (row.limits as never) ?? {},
-      transferPolicy: (row.transferPolicy as never) ?? { allowed: false, max_transfers: 0, requires_super_admin: true },
-      updatePolicy: (row.updatePolicy as never) ?? { channel: "stable", allow_updates: true, minimum_version: "1.0.0" },
-      backupPolicy: (row.backupPolicy as never) ?? { enabled: true, cloud_backup: false, max_backups: 30 },
+      transferPolicy: (row.transferPolicy as never) ?? {
+        allowed: false,
+        max_transfers: 0,
+        requires_super_admin: true,
+      },
+      updatePolicy: (row.updatePolicy as never) ?? {
+        channel: "stable",
+        allow_updates: true,
+        minimum_version: "1.0.0",
+      },
+      backupPolicy: (row.backupPolicy as never) ?? {
+        enabled: true,
+        cloud_backup: false,
+        max_backups: 30,
+      },
     },
     { expiresInSec: EXPIRES_IN_SEC, jti },
   );
-  db.update(licenses).set({ offlineToken: token, offlineTokenJti: jti, status: "active" }).where(eq(licenses.id, row.id)).run();
+  db.update(licenses)
+    .set({ offlineToken: token, offlineTokenJti: jti, status: "active" })
+    .where(eq(licenses.id, row.id))
+    .run();
   const v = await signer.verify(token);
   if (v.exp - v.iat !== EXPIRES_IN_SEC) throw new Error("token validity mismatch");
 
@@ -133,7 +168,9 @@ async function main() {
   raw.close();
   mkdirSync(dirname(OUT!), { recursive: true });
   writeFileSync(OUT!, JSON.stringify(seed, null, 2));
-  console.log(`[desktop-seed] tenant ${TENANT_ID}, licence ${BAKED_KEY} (offline token ${token.length} chars) → ${OUT}`);
+  console.log(
+    `[desktop-seed] tenant ${TENANT_ID}, licence ${BAKED_KEY} (offline token ${token.length} chars) → ${OUT}`,
+  );
 }
 
 await main();

@@ -53,7 +53,12 @@ export class PartyApiService {
     return res.data;
   }
 
-  async delete(kind: "customer" | "supplier", id: string, expectedVersion: number, confirmCascade = false): Promise<void> {
+  async delete(
+    kind: "customer" | "supplier",
+    id: string,
+    expectedVersion: number,
+    confirmCascade = false,
+  ): Promise<void> {
     // Query params duplicate the body so a transport that strips DELETE bodies
     // still carries the OCC token (desktop named-pipe + WebView2).
     await this.client.delete(`${this.path(kind)}/${id}`, {

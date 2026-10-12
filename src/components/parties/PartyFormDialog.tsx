@@ -68,6 +68,8 @@ export type SimpleParty = {
   vat?: number;
   notes?: string | null;
   status?: PartyStatus;
+  /** Edit only: the version the form was opened with (sent as expectedVersion). */
+  version?: number;
 };
 
 type OpeningDirection = PartyOpeningInput["direction"];
@@ -226,31 +228,37 @@ export const toPatch = (
   const vatPct = d.vat === "" ? 0 : Number(d.vat) || 0;
   // UI is always percent (16); DB stores fraction (0.16) in decimal(5,4).
   const vatFraction = Math.min(1, Math.max(0, vatPct / 100));
+  // Edit: a cleared field is sent as "" (the server stores NULL). `|| undefined` dropped it from the
+  // JSON, so the old phone/email/address silently stayed while the dialog said "saved".
+  const txt = (v: string) => (editing ? v.trim() : v.trim() || undefined);
   const patch: Omit<SimpleParty, "id"> = {
     code: d.code.trim() || undefined,
     name: d.name.trim(),
-    companyName: d.companyName.trim() || undefined,
-    commercialReg: d.commercialReg.trim() || undefined,
-    category: kind === "supplier" ? d.category.trim() || undefined : undefined,
-    salesRep: kind === "customer" ? d.salesRep.trim() || undefined : undefined,
-    taxNumber: d.taxNumber.trim() || undefined,
+    companyName: txt(d.companyName),
+    commercialReg: txt(d.commercialReg),
+    category: kind === "supplier" ? txt(d.category) : undefined,
+    salesRep: kind === "customer" ? txt(d.salesRep) : undefined,
+    taxNumber: txt(d.taxNumber),
     status: d.status,
-    phone: d.phone.trim() || undefined,
-    mobile: d.mobile.trim() || undefined,
-    whatsapp: d.whatsapp.trim() || undefined,
-    email: d.email.trim() || undefined,
-    website: d.website.trim() || undefined,
-    address: d.address.trim() || undefined,
-    city: d.city.trim() || undefined,
-    country: d.country.trim() || undefined,
+    phone: txt(d.phone),
+    mobile: txt(d.mobile),
+    whatsapp: txt(d.whatsapp),
+    email: txt(d.email),
+    website: txt(d.website),
+    address: txt(d.address),
+    city: txt(d.city),
+    country: txt(d.country),
     creditLimit: d.creditLimit === "" ? 0 : Number(d.creditLimit) || 0,
     currency: d.currency,
     paymentTerms: d.paymentTerms,
     paymentMethod: d.paymentMethod,
     defaultDiscount: d.defaultDiscount === "" ? 0 : Number(d.defaultDiscount) || 0,
     vat: vatFraction,
-    notes: d.notes.trim() || undefined,
+    notes: txt(d.notes),
   };
+  // Optimistic concurrency: the version this form was OPENED with. Without it the API client re-read
+  // the current version before saving, so an edit made meanwhile on another device was overwritten.
+  if (editing && typeof editing.version === "number") patch.version = editing.version;
   // Create: the opening journal is written with the party. Edit: a plain field
   // update refuses opening fields, so a changed balance travels as `opening`
   // (PUT …/:id/opening — old journal cancelled, new one posted).

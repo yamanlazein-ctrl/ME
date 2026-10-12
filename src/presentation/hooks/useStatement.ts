@@ -57,7 +57,9 @@ export async function fetchFullStatement<T extends StatementPage>(
   const seen = new Set<string>();
   while (page?.hasMore && page.nextCursor) {
     if (seen.has(page.nextCursor)) {
-      throw new Error("[fetchFullStatement] statement cursor did not advance — refusing to return a truncated statement");
+      throw new Error(
+        "[fetchFullStatement] statement cursor did not advance — refusing to return a truncated statement",
+      );
     }
     seen.add(page.nextCursor);
     const next = await getPage({ ...filter, limit: 500, cursor: page.nextCursor });
@@ -123,10 +125,11 @@ export { clampStatementPageIndex };
 
 /** The COMPLETE statement, fetched on demand (print / Excel export). */
 export function loadFullStatement(partyId: string, kind: PartyKind, filter: StatementFilter) {
-  return fetchFullStatement(
-    (f) => container.statement.api.getStatement(partyId, kind, f),
-    { ...normalizeFilter(filter), limit: 500, cursor: undefined },
-  );
+  return fetchFullStatement((f) => container.statement.api.getStatement(partyId, kind, f), {
+    ...normalizeFilter(filter),
+    limit: 500,
+    cursor: undefined,
+  });
 }
 
 function invalidateAfterSettlement(qc: ReturnType<typeof useQueryClient>) {

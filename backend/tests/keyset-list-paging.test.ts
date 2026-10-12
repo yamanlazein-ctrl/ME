@@ -18,7 +18,12 @@ import type { TenantContext } from "@/domain/types/index.js";
 
 const tenantId = randomUUID();
 const customerId = randomUUID();
-const ctx: TenantContext = { tenantId, userId: randomUUID(), userRole: "admin", userName: "keyset" };
+const ctx: TenantContext = {
+  tenantId,
+  userId: randomUUID(),
+  userRole: "admin",
+  userName: "keyset",
+};
 const N = 53;
 
 async function walk<T extends { id: string }>(
@@ -47,7 +52,9 @@ async function walk<T extends { id: string }>(
 describe("keyset list paging", () => {
   beforeAll(async () => {
     await db.execute(sql`select 1`);
-    await db.insert(tenants).values({ id: tenantId, name: "Keyset", slug: `ks-${tenantId.slice(0, 8)}` });
+    await db
+      .insert(tenants)
+      .values({ id: tenantId, name: "Keyset", slug: `ks-${tenantId.slice(0, 8)}` });
     await db.insert(parties).values({
       id: customerId,
       tenantId,

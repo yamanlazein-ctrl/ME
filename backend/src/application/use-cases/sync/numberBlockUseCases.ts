@@ -104,7 +104,11 @@ export async function ensureDeviceNumberBlocks(
   reason?: string;
 }> {
   if (!numberBlocksInUse()) {
-    return { ensured: [], skipped: true, reason: "number blocks disabled (single-counter numbering)" };
+    return {
+      ensured: [],
+      skipped: true,
+      reason: "number blocks disabled (single-counter numbering)",
+    };
   }
   await assertDeviceBelongsToTenant(input.tenantId, input.syncDeviceId);
   const year = new Date().getFullYear();
@@ -125,7 +129,9 @@ export async function ensureDeviceNumberBlocks(
     // Refill EARLY (below 25% of a block left across all active blocks), not
     // at exhaustion: a device that runs out while offline cannot save a
     // single document until it reconnects.
-    const remaining = await (await getNumberBlockStore()).remainingInActiveBlocks(input.tenantId, input.syncDeviceId, entityType, year);
+    const remaining = await (
+      await getNumberBlockStore()
+    ).remainingInActiveBlocks(input.tenantId, input.syncDeviceId, entityType, year);
     if (existing && remaining >= Math.ceil(defaultBlockSize(entityType) * 0.25)) {
       ensured.push({
         entityType,

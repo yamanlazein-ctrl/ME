@@ -84,8 +84,7 @@ export function VoucherForm({
   const createReceipt = useCreateReceiptVoucher();
   const createPayment = useCreatePaymentVoucher();
   const cancelVoucher = useCancelVoucher();
-  const saving =
-    createReceipt.isPending || createPayment.isPending || cancelVoucher.isPending;
+  const saving = createReceipt.isPending || createPayment.isPending || cancelVoucher.isPending;
   const { data: editing } = useVoucher(editId ?? "");
   const isReceipt = kind === "receipt";
   const [partyId, setPartyId] = useState(initialPartyId ?? "");
@@ -632,11 +631,7 @@ export function VoucherForm({
           <Button variant="ghost" onClick={() => history.back()}>
             <X className="h-4 w-4 ml-1" /> إلغاء
           </Button>
-          <Button
-            onClick={save}
-            disabled={saving}
-            className="bg-primary text-primary-foreground"
-          >
+          <Button onClick={save} disabled={saving} className="bg-primary text-primary-foreground">
             <Save className="h-4 w-4 ml-1" /> {saving ? "جاري الحفظ…" : "حفظ السند"}
           </Button>
         </div>

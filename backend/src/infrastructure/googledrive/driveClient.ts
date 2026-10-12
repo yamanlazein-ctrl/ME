@@ -13,7 +13,12 @@
  */
 
 export class DriveError extends Error {
-  constructor(readonly status: number, readonly code: string, message: string, readonly retryable: boolean) {
+  constructor(
+    readonly status: number,
+    readonly code: string,
+    message: string,
+    readonly retryable: boolean,
+  ) {
     super(`DRIVE_${code} (${status}): ${message}`);
     this.name = "DriveError";
   }
@@ -51,7 +56,8 @@ const MULTIPART_BOUNDARY = "motard-drive-upload";
 function isRetryable(status: number, reason?: string): boolean {
   if (status === 429) return true;
   if (status >= 500) return true;
-  if (status === 403 && (reason === "rateLimitExceeded" || reason === "userRateLimitExceeded")) return true;
+  if (status === 403 && (reason === "rateLimitExceeded" || reason === "userRateLimitExceeded"))
+    return true;
   return false;
 }
 
@@ -65,11 +71,16 @@ function reasonOf(body: unknown): string | undefined {
 
 /** Strip anything secret-looking from an error before it can reach a log. */
 export function redact(text: string): string {
-  return text
-    // The whole credential (Google tokens carry '.', '_', '-'), with or without the Bearer word.
-    .replace(/(Authorization:\s*)(?:Bearer\s+)?\S+/gi, "$1[REDACTED]")
-    .replace(/\bya29\.\S+/g, "[REDACTED]")
-    .replace(/"(access_token|refresh_token|id_token|code|client_secret)":\s*"[^"]*"/g, '"$1":"[REDACTED]"');
+  return (
+    text
+      // The whole credential (Google tokens carry '.', '_', '-'), with or without the Bearer word.
+      .replace(/(Authorization:\s*)(?:Bearer\s+)?\S+/gi, "$1[REDACTED]")
+      .replace(/\bya29\.\S+/g, "[REDACTED]")
+      .replace(
+        /"(access_token|refresh_token|id_token|code|client_secret)":\s*"[^"]*"/g,
+        '"$1":"[REDACTED]"',
+      )
+  );
 }
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -154,7 +165,12 @@ export class DriveClient {
         await sleep(500 * 2 ** attempt);
         continue;
       }
-      throw new DriveError(res.status, reason ?? "HTTP_ERROR", redact(text).slice(0, 300), isRetryable(res.status, reason));
+      throw new DriveError(
+        res.status,
+        reason ?? "HTTP_ERROR",
+        redact(text).slice(0, 300),
+        isRetryable(res.status, reason),
+      );
     }
     throw new DriveError(0, "UNREACHABLE", "exhausted retries", true); // not reached
   }
@@ -162,7 +178,10 @@ export class DriveClient {
   /** Find a child by exact name under `parentId` (folders and files; trashed excluded). */
   async findChild(parentId: string, name: string): Promise<DriveFileMeta | null> {
     const q = `'${parentId}' in parents and name = '${name.replace(/'/g, "\\'")}' and trashed = false`;
-    const { body } = await this.request("GET", `/drive/v3/files?q=${encodeURIComponent(q)}&fields=files(id,name,mimeType,md5Checksum)&pageSize=2`);
+    const { body } = await this.request(
+      "GET",
+      `/drive/v3/files?q=${encodeURIComponent(q)}&fields=files(id,name,mimeType,md5Checksum)&pageSize=2`,
+    );
     const files = (body as { files?: DriveFileMeta[] }).files ?? [];
     return files[0] ?? null;
   }
@@ -181,7 +200,12 @@ export class DriveClient {
   }
 
   /** multipart/related upload for small files; resumable is unnecessary below ~5 MB. */
-  async uploadSmall(parentId: string, name: string, mime: string, content: Uint8Array): Promise<DriveFileMeta> {
+  async uploadSmall(
+    parentId: string,
+    name: string,
+    mime: string,
+    content: Uint8Array,
+  ): Promise<DriveFileMeta> {
     const boundary = MULTIPART_BOUNDARY;
     const meta = JSON.stringify({ name, parents: [parentId] });
     const metaBytes = new TextEncoder().encode(
@@ -193,10 +217,14 @@ export class DriveClient {
     body.set(metaBytes, 0);
     body.set(content, metaBytes.length);
     body.set(tail, metaBytes.length + content.length);
-    const { body: uploaded } = await this.request("POST", "/upload/drive/v3/files?uploadType=multipart&fields=id,name,md5Checksum,size", {
-      headers: { "Content-Type": `multipart/related; boundary=${boundary}` },
-      body,
-    });
+    const { body: uploaded } = await this.request(
+      "POST",
+      "/upload/drive/v3/files?uploadType=multipart&fields=id,name,md5Checksum,size",
+      {
+        headers: { "Content-Type": `multipart/related; boundary=${boundary}` },
+        body,
+      },
+    );
     return uploaded as DriveFileMeta;
   }
 
@@ -205,22 +233,35 @@ export class DriveClient {
    * on completion. An interrupted session surfaces as DriveError(status=0) and
    * the queue's next attempt simply opens a fresh session.
    */
-  async uploadResumable(parentId: string, name: string, mime: string, content: Uint8Array): Promise<DriveFileMeta> {
+  async uploadResumable(
+    parentId: string,
+    name: string,
+    mime: string,
+    content: Uint8Array,
+  ): Promise<DriveFileMeta> {
     const token = await this.opts.token();
-    const init = await this.doFetch(`${this.base}/upload/drive/v3/files?uploadType=resumable&fields=id,name,md5Checksum,size`, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json; charset=UTF-8",
-        "X-Upload-Content-Type": mime,
-        "X-Upload-Content-Length": String(content.length),
+    const init = await this.doFetch(
+      `${this.base}/upload/drive/v3/files?uploadType=resumable&fields=id,name,md5Checksum,size`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json; charset=UTF-8",
+          "X-Upload-Content-Type": mime,
+          "X-Upload-Content-Length": String(content.length),
+        },
+        body: JSON.stringify({ name, parents: [parentId] }),
       },
-      body: JSON.stringify({ name, parents: [parentId] }),
-    });
+    );
     if (!init.ok) {
       const text = await init.text();
       if (init.status === 401) throw new DriveAuthError(redact(text).slice(0, 300));
-      throw new DriveError(init.status, "RESUMABLE_INIT", redact(text).slice(0, 300), init.status >= 500 || init.status === 429);
+      throw new DriveError(
+        init.status,
+        "RESUMABLE_INIT",
+        redact(text).slice(0, 300),
+        init.status >= 500 || init.status === 429,
+      );
     }
     const sessionUrl = init.headers.get("location");
     if (!sessionUrl) throw new DriveError(0, "RESUMABLE_NO_SESSION", "no Location header", true);
@@ -238,7 +279,8 @@ export class DriveClient {
           throw new DriveError(put.status, "RESUMABLE_UPLOAD", redact(text).slice(0, 300), false);
         }
       } catch (err) {
-        if (err instanceof DriveAuthError || (err instanceof DriveError && !err.retryable)) throw err;
+        if (err instanceof DriveAuthError || (err instanceof DriveError && !err.retryable))
+          throw err;
       }
       await sleep(500 * 2 ** attempt);
     }
@@ -248,7 +290,10 @@ export class DriveClient {
   /** Get metadata by id — used to verify a crashed upload's file actually landed. */
   async getFile(fileId: string): Promise<DriveFileMeta | null> {
     try {
-      const { body } = await this.request("GET", `/drive/v3/files/${fileId}?fields=id,name,mimeType,md5Checksum,size`);
+      const { body } = await this.request(
+        "GET",
+        `/drive/v3/files/${fileId}?fields=id,name,mimeType,md5Checksum,size`,
+      );
       return body as DriveFileMeta;
     } catch (err) {
       if (err instanceof DriveError && err.status === 404) return null;
@@ -258,7 +303,10 @@ export class DriveClient {
 
   /** Cheap connectivity/permission probe: list the (shared) drive root. */
   async ping(): Promise<{ ok: true; email: string | null }> {
-    const { body } = await this.request("GET", "/drive/v3/about?fields=user(displayName,emailAddress)");
+    const { body } = await this.request(
+      "GET",
+      "/drive/v3/about?fields=user(displayName,emailAddress)",
+    );
     const user = (body as { user?: { emailAddress?: string | null } }).user;
     return { ok: true, email: user?.emailAddress ?? null };
   }

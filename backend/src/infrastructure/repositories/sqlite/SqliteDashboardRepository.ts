@@ -1,7 +1,16 @@
 // PORTED-FROM: src/infrastructure/repositories/PostgresDashboardRepository.ts sha256=2e71368307d05ca07b4de772880cd9e9b60f75cbf1170a38a6494980f3841178
 // SQLite twin (specs/001-desktop-sqlite-engine S4). Keep behavior identical to the PG source.
 import { desc } from "./helpers/pgOrder.js";
-import { scaledNumber, scaledText, greatest, decText, pgDivText, decSumNumber, roundDiv, mulRound } from "./helpers/likeContains.js";
+import {
+  scaledNumber,
+  scaledText,
+  greatest,
+  decText,
+  pgDivText,
+  decSumNumber,
+  roundDiv,
+  mulRound,
+} from "./helpers/likeContains.js";
 import { eq, and, sql, gte, gt, inArray } from "drizzle-orm";
 import type { DB } from "../../orm/sqlite/drizzleCompat.js";
 import type { IDashboardRepository } from "../../../application/ports/IDashboardRepository.js";
@@ -11,7 +20,11 @@ import { returnLines } from "../../orm/sqlite/schemas/return-line.table.js";
 import { orders } from "../../orm/sqlite/schemas/order.table.js";
 import { fabrics } from "../../orm/sqlite/schemas/fabric.table.js";
 import { rolls } from "../../orm/sqlite/schemas/roll.table.js";
-import { cashboxSessions, dayCloses, manualMovements } from "../../orm/sqlite/schemas/cashbox.table.js";
+import {
+  cashboxSessions,
+  dayCloses,
+  manualMovements,
+} from "../../orm/sqlite/schemas/cashbox.table.js";
 import { vouchers } from "../../orm/sqlite/schemas/voucher.table.js";
 import { notifications } from "../../orm/sqlite/schemas/notification.table.js";
 import { auditLogs } from "../../orm/sqlite/schemas/audit-log.table.js";
@@ -161,7 +174,10 @@ export class SqliteDashboardRepository implements IDashboardRepository {
     // so it is safe to sum across currencies; revenue is not, so it is
     // grouped by (fabricId, currency) and kept as a per-currency breakdown.
     // scale 4: qty(2) × price(2), discount(2) up-scaled ×100; GREATEST keeps PG's NULL semantics.
-    const lineNet = greatest(sql`0`, sql`${invoiceLines.quantityKg} * ${invoiceLines.pricePerKg} - ${invoiceLines.discountAmount} * 100`);
+    const lineNet = greatest(
+      sql`0`,
+      sql`${invoiceLines.quantityKg} * ${invoiceLines.pricePerKg} - ${invoiceLines.discountAmount} * 100`,
+    );
     const topFabricRows = await this.db
       .select({
         fabricId: invoiceLines.fabricId,
@@ -249,8 +265,14 @@ export class SqliteDashboardRepository implements IDashboardRepository {
     const voucherStatsRows = await this.db
       .select({
         currency: vouchers.currency,
-        receipts: scaledNumber(sql`COALESCE(SUM(CASE WHEN ${vouchers.kind} = 'receipt' THEN ${vouchers.amount} ELSE 0 END), 0)`, 2),
-        payments: scaledNumber(sql`COALESCE(SUM(CASE WHEN ${vouchers.kind} = 'payment' THEN ${vouchers.amount} ELSE 0 END), 0)`, 2),
+        receipts: scaledNumber(
+          sql`COALESCE(SUM(CASE WHEN ${vouchers.kind} = 'receipt' THEN ${vouchers.amount} ELSE 0 END), 0)`,
+          2,
+        ),
+        payments: scaledNumber(
+          sql`COALESCE(SUM(CASE WHEN ${vouchers.kind} = 'payment' THEN ${vouchers.amount} ELSE 0 END), 0)`,
+          2,
+        ),
         count: sql<number>`COUNT(*)`,
       })
       .from(vouchers)
@@ -346,8 +368,14 @@ export class SqliteDashboardRepository implements IDashboardRepository {
       .select({
         currency: invoices.currency,
         // Revenue for profit = subtotal - discount (excludes tax+shipping, per P0-LOGIC-3.6d)
-        today: scaledNumber(sql`COALESCE(SUM(${invoices.subtotal} - ${invoices.discount}) FILTER (WHERE ${invoices.date} = ${today}), 0)`, 2),
-        yesterday: scaledNumber(sql`COALESCE(SUM(${invoices.subtotal} - ${invoices.discount}) FILTER (WHERE ${invoices.date} = ${yesterday}), 0)`, 2),
+        today: scaledNumber(
+          sql`COALESCE(SUM(${invoices.subtotal} - ${invoices.discount}) FILTER (WHERE ${invoices.date} = ${today}), 0)`,
+          2,
+        ),
+        yesterday: scaledNumber(
+          sql`COALESCE(SUM(${invoices.subtotal} - ${invoices.discount}) FILTER (WHERE ${invoices.date} = ${yesterday}), 0)`,
+          2,
+        ),
       })
       .from(invoices)
       .where(and(saleBase, gte(invoices.date, yesterday)))
@@ -357,9 +385,15 @@ export class SqliteDashboardRepository implements IDashboardRepository {
         currency: invoices.currency,
         // Use snapshot costPerKg, not live rolls.pricePerKg (mutates), fallback to roll price for pre-migration
         // ROUND(q(2) × cost(4)) to 0 dp, exactly: scale-6 product ÷ 10^6, half away from zero.
-        today: scaledNumber(sql`COALESCE(SUM(${roundDiv(sql`${invoiceLines.quantityKg} * COALESCE(${invoiceLines.costPerKg}, ${rolls.pricePerKg})`, 1000000)}) FILTER (WHERE ${invoices.date} = ${today}), 0)`, 0),
+        today: scaledNumber(
+          sql`COALESCE(SUM(${roundDiv(sql`${invoiceLines.quantityKg} * COALESCE(${invoiceLines.costPerKg}, ${rolls.pricePerKg})`, 1000000)}) FILTER (WHERE ${invoices.date} = ${today}), 0)`,
+          0,
+        ),
         // ROUND(q(2) × cost(4)) to 0 dp, exactly: scale-6 product ÷ 10^6, half away from zero.
-        yesterday: scaledNumber(sql`COALESCE(SUM(${roundDiv(sql`${invoiceLines.quantityKg} * COALESCE(${invoiceLines.costPerKg}, ${rolls.pricePerKg})`, 1000000)}) FILTER (WHERE ${invoices.date} = ${yesterday}), 0)`, 0),
+        yesterday: scaledNumber(
+          sql`COALESCE(SUM(${roundDiv(sql`${invoiceLines.quantityKg} * COALESCE(${invoiceLines.costPerKg}, ${rolls.pricePerKg})`, 1000000)}) FILTER (WHERE ${invoices.date} = ${yesterday}), 0)`,
+          0,
+        ),
       })
       .from(invoiceLines)
       .innerJoin(invoices, eq(invoices.id, invoiceLines.invoiceId))
@@ -606,7 +640,10 @@ export class SqliteDashboardRepository implements IDashboardRepository {
         partyId: returns.partyId,
         partyName: parties.name,
         originalInvoice: invoices.number,
-        amount: scaledNumber(sql`COALESCE(SUM(${mulRound(returnLines.quantityKg, 2, returnLines.pricePerKg, 4, 2)}), 0)`, 2),
+        amount: scaledNumber(
+          sql`COALESCE(SUM(${mulRound(returnLines.quantityKg, 2, returnLines.pricePerKg, 4, 2)}), 0)`,
+          2,
+        ),
       })
       .from(returns)
       .innerJoin(parties, eq(parties.id, returns.partyId))

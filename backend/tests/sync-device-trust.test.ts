@@ -179,11 +179,17 @@ describe("4B — sync device gate", () => {
     for (const { policy, req } of [
       {
         policy: { unknownDevice: "reject", unboundUser: "reject" } as const,
-        req: makeReq({ ctx: { tenantId: TENANT, userId: USER_A }, body: { syncDeviceId: DEVICE_1 } }),
+        req: makeReq({
+          ctx: { tenantId: TENANT, userId: USER_A },
+          body: { syncDeviceId: DEVICE_1 },
+        }),
       },
       {
         policy: { unknownDevice: "allow", unboundUser: "allow" } as const,
-        req: makeReq({ ctx: { tenantId: TENANT, userId: USER_A }, body: { syncDeviceId: DEVICE_1 } }),
+        req: makeReq({
+          ctx: { tenantId: TENANT, userId: USER_A },
+          body: { syncDeviceId: DEVICE_1 },
+        }),
       },
       {
         policy: { unknownDevice: "reject", unboundUser: "reject", assertFromQuery: true } as const,
@@ -231,7 +237,10 @@ describe("4B — sync device gate", () => {
     });
     const out = await runGate(
       withQuery,
-      makeReq({ ctx: { tenantId: TENANT, userId: USER_A }, query: { excludeSyncDeviceId: DEVICE_1 } }),
+      makeReq({
+        ctx: { tenantId: TENANT, userId: USER_A },
+        query: { excludeSyncDeviceId: DEVICE_1 },
+      }),
     );
     expect(out.next, "query-only device assertions must be ignored").toBe(true);
     expect(
@@ -349,10 +358,7 @@ describe("4D — master delete refuses a stale base", () => {
       expect(result.status).toBe("conflict");
       expect(result.error).toContain("تعارض حذف");
       expect(result.error).toContain("v3");
-      expect(
-        deleteFn,
-        "a stale delete must never reach the domain delete",
-      ).not.toHaveBeenCalled();
+      expect(deleteFn, "a stale delete must never reach the domain delete").not.toHaveBeenCalled();
     });
 
     it(`${kind}: a matching base is allowed through`, async () => {
@@ -422,7 +428,11 @@ describe("4D — master delete refuses a stale base", () => {
     const result = await materializeUnderTenant(
       database,
       repos,
-      { entityType: "color", operation: "delete", payload: { entityId: FABRIC_ID, baseVersion: 1 } },
+      {
+        entityType: "color",
+        operation: "delete",
+        payload: { entityId: FABRIC_ID, baseVersion: 1 },
+      },
       ctx,
       { opId: OP_ID, syncDeviceId: null },
     );

@@ -40,7 +40,12 @@ services:
     environment:
       NODE_ENV: development
       PORT: 8080
-      DATABASE_URL: postgresql://$${POSTGRES_USER}:$${POSTGRES_PASSWORD}@postgres:5432/$${POSTGRES_DB}
+      # M-10: Compose interpolation (single $). `$$` escaped it, so the container got the literal
+      # text "${POSTGRES_USER}" — env values are never shell-expanded. A password with URL-special
+      # characters must be percent-encoded in POSTGRES_PASSWORD for this URL.
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      # Required by env.ts; supplied from the caller's environment / .env, never committed.
+      APP_MASTER_KEY: ${APP_MASTER_KEY:?APP_MASTER_KEY is required}
       REDIS_URL: redis://redis:6379
       JWT_SECRET: ${JWT_SECRET:-change-me-in-production-min-32-chars-long}
       JWT_EXPIRY_MS: 1800000

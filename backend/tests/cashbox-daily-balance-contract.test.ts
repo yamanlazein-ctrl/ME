@@ -29,9 +29,8 @@ describe("cashbox daily balance migration contract", () => {
 
   it("assertSufficientCashboxBalance never queries the DB for a non-positive amount", async () => {
     // Zero/negative cash portion (pure discount settlement) must not touch the DB.
-    const { assertSufficientCashboxBalance } = await import(
-      "../src/infrastructure/repositories/cashboxBalanceHelper.js"
-    );
+    const { assertSufficientCashboxBalance } =
+      await import("../src/infrastructure/repositories/cashboxBalanceHelper.js");
     const poisonedTx = {
       execute: () => {
         throw new Error("must not touch the DB for a non-positive amount");

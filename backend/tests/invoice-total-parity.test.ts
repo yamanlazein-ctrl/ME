@@ -46,7 +46,9 @@ describe("invoice total parity (frontend vs backend)", () => {
     expect(computeSubtotal(lines as never)).toBe(backend);
     // Per-line behaviour is the actual fix: each line rounds independently at 2dp.
     for (const l of lines) {
-      expect(lineTotal(l)).toBe(Math.max(0, round2dp(l.quantityKg * l.pricePerKg - l.discountAmount)));
+      expect(lineTotal(l)).toBe(
+        Math.max(0, round2dp(l.quantityKg * l.pricePerKg - l.discountAmount)),
+      );
     }
   });
 });

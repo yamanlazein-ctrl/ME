@@ -9,14 +9,21 @@ const { execute } = vi.hoisted(() => ({
   execute: vi.fn(async (filter: { kind: string; status?: string }) => {
     if (state.fail) throw new Error("network down");
     const data =
-      filter.kind === "customer" && !filter.status ? [{ id: "c1", kind: "customer", status: "active", name: "A" }] : [];
+      filter.kind === "customer" && !filter.status
+        ? [{ id: "c1", kind: "customer", status: "active", name: "A" }]
+        : [];
     return { data, meta: { total: data.length, hasNext: false, nextCursor: null } };
   }),
 }));
 
 vi.mock("@/infrastructure/container", () => ({ container: { parties: { list: { execute } } } }));
-vi.mock("@/infrastructure/di/auth-context", () => ({ buildTenantContext: () => ({ tenantId: "t" }) }));
-vi.mock("@/infrastructure/auth/TokenProvider", () => ({ getAccessToken: () => null, SESSION_STARTED_EVENT: "x" }));
+vi.mock("@/infrastructure/di/auth-context", () => ({
+  buildTenantContext: () => ({ tenantId: "t" }),
+}));
+vi.mock("@/infrastructure/auth/TokenProvider", () => ({
+  getAccessToken: () => null,
+  SESSION_STARTED_EVENT: "x",
+}));
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 
 describe("useParties load state — D-3", () => {

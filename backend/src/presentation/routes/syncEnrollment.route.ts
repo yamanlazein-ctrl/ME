@@ -36,36 +36,49 @@ const send = (res: Response, r: Failure) =>
  * Mounted at the root router, `/api` prefix hard-coded like auth/invitations.
  */
 export function registerSyncEnrollmentPublicRoutes(router: Router, container: Container) {
-  router.post("/api/sync/enroll", validateBody(EnrollSchema), async (req: Request, res: Response, next) => {
-    try {
-      const body = (req as unknown as { validatedBody: z.infer<typeof EnrollSchema> }).validatedBody;
-      // A hub install is one company (same resolution as hub login).
-      const tenantId =
-        process.env.BOOTSTRAP_TENANT_ID ?? (await container.installationStateRepo.findAnyCompleted());
-      if (!tenantId) {
-        res.status(503).json({ code: "SETUP_REQUIRED", message: "المركز لم يُكمل الإعداد", statusCode: 503 });
-        return;
+  router.post(
+    "/api/sync/enroll",
+    validateBody(EnrollSchema),
+    async (req: Request, res: Response, next) => {
+      try {
+        const body = (req as unknown as { validatedBody: z.infer<typeof EnrollSchema> })
+          .validatedBody;
+        // A hub install is one company (same resolution as hub login).
+        const tenantId =
+          process.env.BOOTSTRAP_TENANT_ID ??
+          (await container.installationStateRepo.findAnyCompleted());
+        if (!tenantId) {
+          res
+            .status(503)
+            .json({ code: "SETUP_REQUIRED", message: "المركز لم يُكمل الإعداد", statusCode: 503 });
+          return;
+        }
+        const r = await redeemEnrollmentCode(container, tenantId, body.code, body.device);
+        if (!r.ok) {
+          logger.warn({ code: r.code, deviceId: body.device.id }, "device enrollment refused");
+          return send(res, r);
+        }
+        logger.info({ tenantId, deviceId: r.deviceId }, "device enrolled with company code");
+        res.status(201).json(r);
+      } catch (err) {
+        next(err);
       }
-      const r = await redeemEnrollmentCode(container, tenantId, body.code, body.device);
-      if (!r.ok) {
-        logger.warn({ code: r.code, deviceId: body.device.id }, "device enrollment refused");
-        return send(res, r);
-      }
-      logger.info({ tenantId, deviceId: r.deviceId }, "device enrolled with company code");
-      res.status(201).json(r);
-    } catch (err) {
-      next(err);
-    }
-  });
+    },
+  );
 
-  router.post("/api/sync/device-token", validateBody(DeviceTokenSchema), async (req: Request, res: Response, next) => {
-    try {
-      const body = (req as unknown as { validatedBody: z.infer<typeof DeviceTokenSchema> }).validatedBody;
-      const r = await exchangeDeviceToken(container, body.tenantId, body.deviceId, body.secret);
-      if (!r.ok) return send(res, r);
-      res.json(r);
-    } catch (err) {
-      next(err);
-    }
-  });
+  router.post(
+    "/api/sync/device-token",
+    validateBody(DeviceTokenSchema),
+    async (req: Request, res: Response, next) => {
+      try {
+        const body = (req as unknown as { validatedBody: z.infer<typeof DeviceTokenSchema> })
+          .validatedBody;
+        const r = await exchangeDeviceToken(container, body.tenantId, body.deviceId, body.secret);
+        if (!r.ok) return send(res, r);
+        res.json(r);
+      } catch (err) {
+        next(err);
+      }
+    },
+  );
 }

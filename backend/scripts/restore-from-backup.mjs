@@ -60,7 +60,15 @@
  *     `document_number_blocks` vs `document_sequences` (the script prints both).
  */
 import pg from "pg";
-import { readFileSync, existsSync, mkdirSync, readdirSync, cpSync, rmSync, mkdtempSync } from "node:fs";
+import {
+  readFileSync,
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  cpSync,
+  rmSync,
+  mkdtempSync,
+} from "node:fs";
 import { join, resolve, relative, sep } from "node:path";
 import { tmpdir } from "node:os";
 import { spawnSync } from "node:child_process";
@@ -87,7 +95,9 @@ const UPLOADS_DIR = resolve(
 const RESET_PULL_CURSOR = args.includes("--reset-pull-cursor");
 
 if (!sourceArg) {
-  console.error("Usage: node scripts/restore-from-backup.mjs <backup.zip|folder> [--url <DB_URL>] [--uploads-dir <dir>]");
+  console.error(
+    "Usage: node scripts/restore-from-backup.mjs <backup.zip|folder> [--url <DB_URL>] [--uploads-dir <dir>]",
+  );
   process.exit(1);
 }
 
@@ -165,7 +175,7 @@ const schemaCheck = await c.query(
   "SELECT count(*) AS n FROM information_schema.tables WHERE table_schema='public' AND table_name='tenants'",
 );
 if (Number(schemaCheck.rows[0].n) === 0) {
-  console.error('Schema not found. Run migrations first:  npm run db:migrate');
+  console.error("Schema not found. Run migrations first:  npm run db:migrate");
   process.exit(1);
 }
 
@@ -218,30 +228,82 @@ if (!bypassesRls) {
 // (outbox / inbox / claims / blocks / tombstones) must be deleted BEFORE it and
 // inserted AFTER it.
 const DELETE_ORDER = [
-  "stock_movements", "invoice_lines", "return_lines", "order_items", "print_jobs",
-  "vouchers", "returns", "orders", "invoices",
-  "ledger_entry_archive", "yearly_party_summaries", "ledger_entries",
-  "day_closes", "manual_movements", "cashbox_sessions", "expenses",
-  "notifications", "idempotency_keys", "attachments", "audit_logs",
-  "rolls", "colors", "fabrics", "parties", "document_sequences",
+  "stock_movements",
+  "invoice_lines",
+  "return_lines",
+  "order_items",
+  "print_jobs",
+  "vouchers",
+  "returns",
+  "orders",
+  "invoices",
+  "ledger_entry_archive",
+  "yearly_party_summaries",
+  "ledger_entries",
+  "day_closes",
+  "manual_movements",
+  "cashbox_sessions",
+  "expenses",
+  "notifications",
+  "idempotency_keys",
+  "attachments",
+  "audit_logs",
+  "rolls",
+  "colors",
+  "fabrics",
+  "parties",
+  "document_sequences",
   // ── sync state (children of sync_devices first) ──
-  "sync_conflicts", "sync_tombstones", "sync_resource_claims", "sync_inbox",
-  "sync_outbox", "document_number_blocks", "sync_state", "sync_devices",
+  "sync_conflicts",
+  "sync_tombstones",
+  "sync_resource_claims",
+  "sync_inbox",
+  "sync_outbox",
+  "document_number_blocks",
+  "sync_state",
+  "sync_devices",
 ];
 const INSERT_ORDER = [
   // tenants FIRST — every other table references it (critical on a clean machine)
   "tenants",
   // sync_devices references tenants + users, so it lands after both.
-  "company_profiles", "users", "sync_devices", "fabrics", "parties", "colors", "rolls",
-  "settings", "document_sequences",
+  "company_profiles",
+  "users",
+  "sync_devices",
+  "fabrics",
+  "parties",
+  "colors",
+  "rolls",
+  "settings",
+  "document_sequences",
   // document_number_blocks references sync_devices; outbox/inbox/claims do too.
-  "document_number_blocks", "sync_outbox", "sync_inbox", "sync_state",
-  "sync_resource_claims", "sync_tombstones", "sync_conflicts",
-  "orders", "order_items", "invoices", "invoice_lines", "vouchers",
-  "ledger_entries", "expenses", "returns", "return_lines", "print_jobs",
-  "notifications", "stock_movements", "attachments", "audit_logs",
-  "idempotency_keys", "ledger_entry_archive", "yearly_party_summaries",
-  "cashbox_sessions", "day_closes", "manual_movements",
+  "document_number_blocks",
+  "sync_outbox",
+  "sync_inbox",
+  "sync_state",
+  "sync_resource_claims",
+  "sync_tombstones",
+  "sync_conflicts",
+  "orders",
+  "order_items",
+  "invoices",
+  "invoice_lines",
+  "vouchers",
+  "ledger_entries",
+  "expenses",
+  "returns",
+  "return_lines",
+  "print_jobs",
+  "notifications",
+  "stock_movements",
+  "attachments",
+  "audit_logs",
+  "idempotency_keys",
+  "ledger_entry_archive",
+  "yearly_party_summaries",
+  "cashbox_sessions",
+  "day_closes",
+  "manual_movements",
 ];
 
 /**
@@ -317,9 +379,10 @@ for (const table of INSERT_ORDER) {
     }
     console.log(`restored ${table}: ${count} rows`);
     if (count !== attempted) {
-      throw new Error(`Restore skipped ${attempted - count} rows in ${table}; refusing partial restore`);
+      throw new Error(
+        `Restore skipped ${attempted - count} rows in ${table}; refusing partial restore`,
+      );
     }
-
   } catch (e) {
     await c.query("ROLLBACK");
     console.error(`FAILED on ${table}:`, e.message.split("\n")[0]);
@@ -339,9 +402,7 @@ for (const { table, column } of SERIAL_COLUMNS) {
   const seqRes = await c.query("SELECT pg_get_serial_sequence($1, $2) AS s", [table, column]);
   const seq = seqRes.rows[0]?.s;
   if (!seq) continue; // table/column absent in this schema version
-  const maxRes = await c.query(
-    `SELECT COALESCE(MAX("${column}"), 0)::bigint AS m FROM "${table}"`,
-  );
+  const maxRes = await c.query(`SELECT COALESCE(MAX("${column}"), 0)::bigint AS m FROM "${table}"`);
   const restoredMax = Number(maxRes.rows[0].m);
   const live = (await c.query(`SELECT last_value::bigint AS l, is_called FROM ${seq}`)).rows[0];
   const liveNext = live?.is_called ? Number(live.l) + 1 : Number(live?.l ?? 1);
@@ -469,15 +530,20 @@ if (tempExtract) rmSync(tempExtract, { recursive: true, force: true });
 // ── 6. summary ──
 const verify = {};
 for (const t of [
-  "parties", "invoices", "invoice_lines", "ledger_entries", "vouchers",
+  "parties",
+  "invoices",
+  "invoice_lines",
+  "ledger_entries",
+  "vouchers",
   // Sync state is verified like any other durable data.
-  "sync_outbox", "sync_inbox", "sync_state", "sync_devices",
-  "sync_resource_claims", "document_number_blocks",
+  "sync_outbox",
+  "sync_inbox",
+  "sync_state",
+  "sync_devices",
+  "sync_resource_claims",
+  "document_number_blocks",
 ]) {
-  const r = await c.query(
-    `SELECT count(*) AS n FROM "${t}" WHERE tenant_id = $1`,
-    [tenantId],
-  );
+  const r = await c.query(`SELECT count(*) AS n FROM "${t}" WHERE tenant_id = $1`, [tenantId]);
   verify[t] = Number(r.rows[0].n);
 }
 console.log("VERIFIED RESTORED COUNTS:", JSON.stringify(verify));

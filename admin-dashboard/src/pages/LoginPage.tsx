@@ -38,10 +38,14 @@ export function LoginPage({ onLogin }: LoginPageProps) {
           className="bg-zinc-900 border border-zinc-800 rounded-xl p-6 space-y-4"
         >
           <div>
-            <label className="block text-sm font-medium text-zinc-300 mb-1">
+            <label
+              htmlFor="admin-login-email"
+              className="block text-sm font-medium text-zinc-300 mb-1"
+            >
               البريد الإلكتروني
             </label>
             <input
+              id="admin-login-email"
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
@@ -51,8 +55,14 @@ export function LoginPage({ onLogin }: LoginPageProps) {
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-zinc-300 mb-1">كلمة المرور</label>
+            <label
+              htmlFor="admin-login-password"
+              className="block text-sm font-medium text-zinc-300 mb-1"
+            >
+              كلمة المرور
+            </label>
             <input
+              id="admin-login-password"
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}

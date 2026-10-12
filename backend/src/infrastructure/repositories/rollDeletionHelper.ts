@@ -140,11 +140,7 @@ export async function computeColorDeletionImpact(
     .from(invoiceLines)
     .innerJoin(invoices, eq(invoices.id, invoiceLines.invoiceId))
     .where(
-      and(
-        eq(invoiceLines.tenantId, tenantId),
-        eq(invoices.status, "active"),
-        or(...invoiceConds),
-      ),
+      and(eq(invoiceLines.tenantId, tenantId), eq(invoices.status, "active"), or(...invoiceConds)),
     )
     .orderBy(desc(invoices.number))
     .limit(50);
@@ -192,7 +188,10 @@ export async function computeColorDeletionImpact(
           .where(
             and(
               eq(printJobs.tenantId, tenantId),
-              or(inArray(printJobs.sourceRollId, rollIds), inArray(printJobs.resultRollId, rollIds)),
+              or(
+                inArray(printJobs.sourceRollId, rollIds),
+                inArray(printJobs.resultRollId, rollIds),
+              ),
             ),
           )
           .limit(50);
@@ -203,7 +202,9 @@ export async function computeColorDeletionImpact(
       : await tx
           .select({ n: sql<number>`count(*)::int` })
           .from(stockMovements)
-          .where(and(eq(stockMovements.tenantId, tenantId), inArray(stockMovements.rollId, rollIds)));
+          .where(
+            and(eq(stockMovements.tenantId, tenantId), inArray(stockMovements.rollId, rollIds)),
+          );
 
   const invoiceRefs: ColorDeletionRef[] = invoiceRows.map((r) => ({
     kind: "invoice",

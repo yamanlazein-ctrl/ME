@@ -235,7 +235,12 @@ export function registerInvoiceRoutes(
       const updateInput = body<Parameters<typeof uc.updateInvoiceUseCase>[3]>(req);
       const expectedVersion = req.body?.expectedVersion;
       if (typeof expectedVersion !== "number") {
-        return res.status(400).json({ code: "EXPECTED_VERSION_REQUIRED", message: "الإصدار المتوقع (expectedVersion) مطلوب للتحديث/الإلغاء" });
+        return res
+          .status(400)
+          .json({
+            code: "EXPECTED_VERSION_REQUIRED",
+            message: "الإصدار المتوقع (expectedVersion) مطلوب للتحديث/الإلغاء",
+          });
       }
       const syncEnabled = Boolean(syncOutboxRepo && isSyncEnqueueEnabled());
 
@@ -322,7 +327,12 @@ export function registerInvoiceRoutes(
       const c = ctx(req);
       const expectedVersion = req.body?.expectedVersion;
       if (typeof expectedVersion !== "number") {
-        return res.status(400).json({ code: "EXPECTED_VERSION_REQUIRED", message: "الإصدار المتوقع (expectedVersion) مطلوب للتحديث/الإلغاء" });
+        return res
+          .status(400)
+          .json({
+            code: "EXPECTED_VERSION_REQUIRED",
+            message: "الإصدار المتوقع (expectedVersion) مطلوب للتحديث/الإلغاء",
+          });
       }
       const syncEnabled = Boolean(syncOutboxRepo && isSyncEnqueueEnabled());
 

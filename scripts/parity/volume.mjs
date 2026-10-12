@@ -23,7 +23,15 @@
  */
 import { createHash } from "node:crypto";
 import { spawn, spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, openSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  openSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -35,7 +43,12 @@ const BACKEND = join(REPO, "backend");
 const requireBackend = createRequire(join(BACKEND, "package.json"));
 const Database = requireBackend("better-sqlite3");
 const { SignJWT } = requireBackend("jose");
-const FP = JSON.parse(readFileSync(join(BACKEND, "src/infrastructure/orm/migrations/meta/schema-fingerprint.json"), "utf8"));
+const FP = JSON.parse(
+  readFileSync(
+    join(BACKEND, "src/infrastructure/orm/migrations/meta/schema-fingerprint.json"),
+    "utf8",
+  ),
+);
 
 const arg = (f, d) => {
   const i = process.argv.indexOf(f);
@@ -54,7 +67,9 @@ const JWT_SECRET = "volume-harness-jwt-secret-32-chars-minimum!!";
 const TARGET = { listMs: 2000, statementFirstMs: 2000, statementFullMs: 10000 };
 
 if (INVOICES !== baseline.params.invoices || PARTIES !== baseline.params.parties) {
-  console.warn(`[volume] params ${INVOICES}/${PARTIES} differ from the baseline's — completeness is reported, not compared`);
+  console.warn(
+    `[volume] params ${INVOICES}/${PARTIES} differ from the baseline's — completeness is reported, not compared`,
+  );
 }
 
 // ── helpers identical to PG expressions in seed-volume.mjs ──────────────────
@@ -78,12 +93,17 @@ const work = mkdtempSync(join(tmpdir(), "motard-volume-"));
 const dbPath = join(work, "data", "motard.db");
 mkdirSync(dirname(dbPath), { recursive: true });
 {
-  const r = spawnSync(process.execPath, [join(BACKEND, "node_modules/tsx/dist/cli.mjs"), join(here, "lib/sqliteFresh.mts"), dbPath], {
-    cwd: BACKEND,
-    env: { ...process.env, DB_ENGINE: "sqlite", SQLITE_PATH: dbPath },
-    encoding: "utf8",
-  });
-  if (r.status !== 0) throw new Error(`sqliteFresh failed:\n${(r.stdout ?? "") + (r.stderr ?? "")}`);
+  const r = spawnSync(
+    process.execPath,
+    [join(BACKEND, "node_modules/tsx/dist/cli.mjs"), join(here, "lib/sqliteFresh.mts"), dbPath],
+    {
+      cwd: BACKEND,
+      env: { ...process.env, DB_ENGINE: "sqlite", SQLITE_PATH: dbPath },
+      encoding: "utf8",
+    },
+  );
+  if (r.status !== 0)
+    throw new Error(`sqliteFresh failed:\n${(r.stdout ?? "") + (r.stderr ?? "")}`);
 }
 
 // ── 2. seed (same rows as seed-volume.mjs) ─────────────────────────────────
@@ -98,14 +118,29 @@ const deepShare = Math.round(INVOICES * 0.2);
   // supplies created_at from that clock; the DDL default is wall time, so it is passed explicitly here).
   const ts = new Date().toISOString().replace("Z", "000Z");
   db.prepare(`UPDATE motard_tx_state SET ts = ? WHERE id = 1`).run(ts);
-  db.prepare(`INSERT INTO tenants (id, name, slug) VALUES (?, 'Volume Co', ?)`).run(tenantId, `vol-${tenantId.slice(0, 8)}`);
-  db.prepare(`INSERT INTO users (id, tenant_id, name, email, password_hash, role, active) VALUES (?, ?, 'Volume Admin', 'volume@local', 'not-used', 'admin', 1)`).run(USER_ID, tenantId);
-  db.prepare(`INSERT INTO setup_wizard_state (tenant_id, current_step, completed_steps, is_completed, completed_at) VALUES (?, 'done', '["welcome"]', 1, ?)`).run(tenantId, ts);
+  db.prepare(`INSERT INTO tenants (id, name, slug) VALUES (?, 'Volume Co', ?)`).run(
+    tenantId,
+    `vol-${tenantId.slice(0, 8)}`,
+  );
+  db.prepare(
+    `INSERT INTO users (id, tenant_id, name, email, password_hash, role, active) VALUES (?, ?, 'Volume Admin', 'volume@local', 'not-used', 'admin', 1)`,
+  ).run(USER_ID, tenantId);
+  db.prepare(
+    `INSERT INTO setup_wizard_state (tenant_id, current_step, completed_steps, is_completed, completed_at) VALUES (?, 'done', '["welcome"]', 1, ?)`,
+  ).run(tenantId, ts);
   const party = db.prepare(
     `INSERT INTO parties (id, tenant_id, kind, code, name, currency, opening_balance, status, version, created_at, updated_at) VALUES (?, ?, ?, ?, ?, 'SYP', 0, 'active', 1, ?, ?)`,
   );
   for (let g = 1; g <= PARTIES; g++) {
-    party.run(md5uuid(`${tenantId}:p:${g}`), tenantId, g <= customers ? "customer" : "supplier", `P-${String(g).padStart(6, "0")}`, `Party ${g}`, ts, ts);
+    party.run(
+      md5uuid(`${tenantId}:p:${g}`),
+      tenantId,
+      g <= customers ? "customer" : "supplier",
+      `P-${String(g).padStart(6, "0")}`,
+      `Party ${g}`,
+      ts,
+      ts,
+    );
   }
   const inv = db.prepare(
     `INSERT INTO invoices (id, tenant_id, number, type, date, party_id, party_type, currency, subtotal, discount, tax, shipping, total, paid, status, version, created_at, updated_at)
@@ -128,31 +163,73 @@ const deepShare = Math.round(INVOICES * 0.2);
   };
   for (let g = 1; g <= INVOICES; g++) {
     const r = rowOf(g);
-    inv.run(r.id, tenantId, r.number, r.date, r.partyId, scaled("invoices", "subtotal", r.total), scaled("invoices", "total", r.total), ts, ts);
+    inv.run(
+      r.id,
+      tenantId,
+      r.number,
+      r.date,
+      r.partyId,
+      scaled("invoices", "subtotal", r.total),
+      scaled("invoices", "total", r.total),
+      ts,
+      ts,
+    );
   }
   // Same statement order as PG: all debit legs, then all receipt legs (the two INSERT…SELECTs).
   for (let g = 1; g <= INVOICES; g++) {
     const r = rowOf(g);
-    led.run(md5uuid(`${r.id}:d`), tenantId, r.partyId, r.date, "sales_invoice", scaled("ledger_entries", "debit", r.total), 0n, "none", "sales_invoice", r.id, r.number, ts);
+    led.run(
+      md5uuid(`${r.id}:d`),
+      tenantId,
+      r.partyId,
+      r.date,
+      "sales_invoice",
+      scaled("ledger_entries", "debit", r.total),
+      0n,
+      "none",
+      "sales_invoice",
+      r.id,
+      r.number,
+      ts,
+    );
   }
   for (let g = 1; g <= INVOICES; g++) {
     const r = rowOf(g);
-    led.run(md5uuid(`${r.id}:c`), tenantId, r.partyId, r.date, "receipt_in", 0n, scaled("ledger_entries", "credit", r.total), "in", "receipt_in", r.id, r.number, ts);
+    led.run(
+      md5uuid(`${r.id}:c`),
+      tenantId,
+      r.partyId,
+      r.date,
+      "receipt_in",
+      0n,
+      scaled("ledger_entries", "credit", r.total),
+      "in",
+      "receipt_in",
+      r.id,
+      r.number,
+      ts,
+    );
   }
   db.prepare(`UPDATE motard_tx_state SET ts = NULL WHERE id = 1`).run();
   db.exec("COMMIT");
   db.close();
 }
 const seedSeconds = (Date.now() - t0) / 1000;
-console.log(`[volume] seeded ${INVOICES} invoices / ${INVOICES * 2} ledger rows / ${PARTIES} parties in ${seedSeconds.toFixed(1)}s`);
+console.log(
+  `[volume] seeded ${INVOICES} invoices / ${INVOICES * 2} ledger rows / ${PARTIES} parties in ${seedSeconds.toFixed(1)}s`,
+);
 
 // ── 3. completeness (same predicates as seed-volume.mjs) ───────────────────
 const completeness = (() => {
   const db = new Database(dbPath, { readonly: true });
   const n = (q) => Number(db.prepare(q).pluck().get(tenantId));
   const counts = {
-    customersList: n(`SELECT count(*) FROM parties WHERE tenant_id = ? AND kind = 'customer' AND status <> 'cancelled'`),
-    suppliersList: n(`SELECT count(*) FROM parties WHERE tenant_id = ? AND kind = 'supplier' AND status <> 'cancelled'`),
+    customersList: n(
+      `SELECT count(*) FROM parties WHERE tenant_id = ? AND kind = 'customer' AND status <> 'cancelled'`,
+    ),
+    suppliersList: n(
+      `SELECT count(*) FROM parties WHERE tenant_id = ? AND kind = 'supplier' AND status <> 'cancelled'`,
+    ),
     invoices: n(`SELECT count(*) FROM invoices WHERE tenant_id = ?`),
     ledgerRows: n(`SELECT count(*) FROM ledger_entries WHERE tenant_id = ?`),
     cashboxDailyRows: n(`SELECT count(*) FROM cashbox_daily_balances WHERE tenant_id = ?`),
@@ -172,13 +249,22 @@ const completeness = (() => {
     if (Number(r.n) > deepest.lines) deepest = { party: r.p, lines: Number(r.n) };
   }
   const closing = db
-    .prepare(`SELECT closing_balance FROM cashbox_daily_balances WHERE tenant_id = ? AND currency = 'SYP' ORDER BY balance_date DESC LIMIT 1`)
+    .prepare(
+      `SELECT closing_balance FROM cashbox_daily_balances WHERE tenant_id = ? AND currency = 'SYP' ORDER BY balance_date DESC LIMIT 1`,
+    )
     .pluck()
     .get(tenantId);
   db.close();
   const scale = scaleOf("cashbox_daily_balances", "closing_balance");
-  const closingText = closing == null ? null : `${BigInt(closing) / scale}.${String(BigInt(closing) % scale).padStart(String(scale).length - 1, "0")}`;
-  return { counts, statements: { parties: per.length, totalLines, deepest, sha256: h.digest("hex") }, cashboxClosingSYP: closingText };
+  const closingText =
+    closing == null
+      ? null
+      : `${BigInt(closing) / scale}.${String(BigInt(closing) % scale).padStart(String(scale).length - 1, "0")}`;
+  return {
+    counts,
+    statements: { parties: per.length, totalLines, deepest, sha256: h.digest("hex") },
+    cashboxClosingSYP: closingText,
+  };
 })();
 
 const checks = [];
@@ -188,24 +274,73 @@ const check = (name, pass, detail = "") => {
 };
 const comparable = INVOICES === baseline.params.invoices && PARTIES === baseline.params.parties;
 if (comparable) {
-  for (const k of Object.keys(baseline.counts)) check(`completeness: ${k} = PG baseline`, completeness.counts[k] === baseline.counts[k], `${completeness.counts[k]} vs ${baseline.counts[k]}`);
-  check("completeness: statement parties/lines = PG baseline", completeness.statements.parties === baseline.statements.parties && completeness.statements.totalLines === baseline.statements.totalLines, `${completeness.statements.parties}/${completeness.statements.totalLines}`);
-  check("completeness: deepest statement = PG baseline", JSON.stringify(completeness.statements.deepest) === JSON.stringify(baseline.statements.deepest), JSON.stringify(completeness.statements.deepest));
-  check("completeness: sha256 over every statement's ordered ledger ids = PG baseline", completeness.statements.sha256 === baseline.statements.sha256);
-  check("cash box closing balance = PG baseline", completeness.cashboxClosingSYP === baseline.cashboxClosingSYP, `${completeness.cashboxClosingSYP} vs ${baseline.cashboxClosingSYP}`);
+  for (const k of Object.keys(baseline.counts))
+    check(
+      `completeness: ${k} = PG baseline`,
+      completeness.counts[k] === baseline.counts[k],
+      `${completeness.counts[k]} vs ${baseline.counts[k]}`,
+    );
+  check(
+    "completeness: statement parties/lines = PG baseline",
+    completeness.statements.parties === baseline.statements.parties &&
+      completeness.statements.totalLines === baseline.statements.totalLines,
+    `${completeness.statements.parties}/${completeness.statements.totalLines}`,
+  );
+  check(
+    "completeness: deepest statement = PG baseline",
+    JSON.stringify(completeness.statements.deepest) === JSON.stringify(baseline.statements.deepest),
+    JSON.stringify(completeness.statements.deepest),
+  );
+  check(
+    "completeness: sha256 over every statement's ordered ledger ids = PG baseline",
+    completeness.statements.sha256 === baseline.statements.sha256,
+  );
+  check(
+    "cash box closing balance = PG baseline",
+    completeness.cashboxClosingSYP === baseline.cashboxClosingSYP,
+    `${completeness.cashboxClosingSYP} vs ${baseline.cashboxClosingSYP}`,
+  );
 }
 
 // ── 4. real endpoints on the real backend ──────────────────────────────────
 const log = join(work, "backend.log");
-const env = { ...process.env, NODE_ENV: "test", DB_ENGINE: "sqlite", SQLITE_PATH: dbPath, MOTARD_STARTUP_STATE: "OPEN_EXISTING", PORT: String(PORT), HOST: "127.0.0.1", JWT_SECRET, APP_MASTER_KEY: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa=", LOG_LEVEL: "warn", RATE_LIMIT_RPS: "100000", RATE_LIMIT_WINDOW_MS: "60000" };
-for (const k of ["DATABASE_URL", "TEST_DB_URL", "DESKTOP_DEPLOY", "DESKTOP_PIPE", "CENTRAL_SYNC_URL"]) delete env[k];
+const env = {
+  ...process.env,
+  NODE_ENV: "test",
+  DB_ENGINE: "sqlite",
+  SQLITE_PATH: dbPath,
+  MOTARD_STARTUP_STATE: "OPEN_EXISTING",
+  PORT: String(PORT),
+  HOST: "127.0.0.1",
+  JWT_SECRET,
+  APP_MASTER_KEY: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa=",
+  LOG_LEVEL: "warn",
+  RATE_LIMIT_RPS: "100000",
+  RATE_LIMIT_WINDOW_MS: "60000",
+};
+for (const k of [
+  "DATABASE_URL",
+  "TEST_DB_URL",
+  "DESKTOP_DEPLOY",
+  "DESKTOP_PIPE",
+  "CENTRAL_SYNC_URL",
+])
+  delete env[k];
 // --server <server.mjs>: measure a packaged build (T119) with its own bundled migrations.
 const packaged = arg("--server", null);
-if (packaged) env.DESKTOP_SQLITE_MIGRATIONS_FOLDER = join(dirname(resolve(packaged)), "sqlite-migrations");
-const server = spawn(process.execPath, packaged ? [resolve(packaged)] : [join(BACKEND, "node_modules/tsx/dist/cli.mjs"), "src/presentation/server.ts"], { cwd: BACKEND, env, stdio: ["ignore", openSync(log, "w"), openSync(log, "a")] });
+if (packaged)
+  env.DESKTOP_SQLITE_MIGRATIONS_FOLDER = join(dirname(resolve(packaged)), "sqlite-migrations");
+const server = spawn(
+  process.execPath,
+  packaged
+    ? [resolve(packaged)]
+    : [join(BACKEND, "node_modules/tsx/dist/cli.mjs"), "src/presentation/server.ts"],
+  { cwd: BACKEND, env, stdio: ["ignore", openSync(log, "w"), openSync(log, "a")] },
+);
 const kill = () => {
   if (server.exitCode !== null) return;
-  if (process.platform === "win32") spawnSync("taskkill", ["/pid", String(server.pid), "/T", "/F"], { stdio: "ignore" });
+  if (process.platform === "win32")
+    spawnSync("taskkill", ["/pid", String(server.pid), "/T", "/F"], { stdio: "ignore" });
   else server.kill("SIGKILL");
 };
 const timings = {};
@@ -217,7 +352,10 @@ try {
     } catch {
       /* not up yet */
     }
-    if (Date.now() > deadline || server.exitCode !== null) throw new Error(`backend did not start:\n${existsSync(log) ? readFileSync(log, "utf8").slice(-3000) : ""}`);
+    if (Date.now() > deadline || server.exitCode !== null)
+      throw new Error(
+        `backend did not start:\n${existsSync(log) ? readFileSync(log, "utf8").slice(-3000) : ""}`,
+      );
     await new Promise((r) => setTimeout(r, 500));
   }
   const token = await new SignJWT({ sub: USER_ID, tenantId, role: "admin", type: "access" })
@@ -227,14 +365,22 @@ try {
     .sign(new TextEncoder().encode(JWT_SECRET));
   const get = async (path) => {
     const s = performance.now();
-    const r = await fetch(`http://127.0.0.1:${PORT}${path}`, { headers: { Authorization: `Bearer ${token}` } });
+    const r = await fetch(`http://127.0.0.1:${PORT}${path}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
     const body = await r.json().catch(() => null);
     const ms = performance.now() - s;
-    if (r.status !== 200) throw new Error(`GET ${path}: HTTP ${r.status} ${JSON.stringify(body).slice(0, 300)}`);
+    if (r.status !== 200)
+      throw new Error(`GET ${path}: HTTP ${r.status} ${JSON.stringify(body).slice(0, 300)}`);
     return { body, ms };
   };
   const rowsOf = (b) => b?.data ?? b?.items ?? b?.entries ?? (Array.isArray(b) ? b : []);
-  const nextOf = (b) => b?.nextCursor ?? b?.meta?.nextCursor ?? b?.pagination?.nextCursor ?? b?.page?.nextCursor ?? null;
+  const nextOf = (b) =>
+    b?.nextCursor ??
+    b?.meta?.nextCursor ??
+    b?.pagination?.nextCursor ??
+    b?.page?.nextCursor ??
+    null;
   // warm-up (first request compiles routes, opens statements)
   await get(`/api/customers?limit=50`);
 
@@ -242,14 +388,20 @@ try {
   const walk = async (label, base, sep, expected) => {
     const first = await get(`${base}${sep}limit=50`);
     timings[`${label}.firstPageMs`] = Math.round(first.ms);
-    check(`${label}: first page < ${TARGET.listMs} ms`, first.ms < TARGET.listMs, `${Math.round(first.ms)} ms`);
+    check(
+      `${label}: first page < ${TARGET.listMs} ms`,
+      first.ms < TARGET.listMs,
+      `${Math.round(first.ms)} ms`,
+    );
     let total = 0;
     let cursor = null;
     let pages = 0;
     const s = performance.now();
     const seen = new Set();
     do {
-      const r = await get(`${base}${sep}limit=1000${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""}`);
+      const r = await get(
+        `${base}${sep}limit=1000${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""}`,
+      );
       total += rowsOf(r.body).length;
       cursor = nextOf(r.body);
       pages++;
@@ -257,7 +409,12 @@ try {
       if (cursor) seen.add(cursor);
     } while (cursor);
     timings[`${label}.fullWalkMs`] = Math.round(performance.now() - s);
-    if (expected !== undefined) check(`${label}: every row reachable (${pages} pages)`, total === expected, `${total} vs ${expected}`);
+    if (expected !== undefined)
+      check(
+        `${label}: every row reachable (${pages} pages)`,
+        total === expected,
+        `${total} vs ${expected}`,
+      );
     return total;
   };
   await walk("customers", "/api/customers", "?", completeness.counts.customersList);
@@ -267,7 +424,11 @@ try {
   const deep = completeness.statements.deepest.party;
   const first = await get(`/api/customers/${deep}/statement?limit=200`);
   timings["statement.firstPageMs"] = Math.round(first.ms);
-  check(`statement first page < ${TARGET.statementFirstMs} ms`, first.ms < TARGET.statementFirstMs, `${Math.round(first.ms)} ms`);
+  check(
+    `statement first page < ${TARGET.statementFirstMs} ms`,
+    first.ms < TARGET.statementFirstMs,
+    `${Math.round(first.ms)} ms`,
+  );
   // Full single-party statement exactly as the UI loads it (useStatement → fetchFullStatement: limit 500, follow nextCursor).
   const s = performance.now();
   let lines = rowsOf(first.body).length;
@@ -277,7 +438,9 @@ try {
   while (page?.hasMore && page.nextCursor) {
     if (seen.has(page.nextCursor)) throw new Error("statement cursor did not advance");
     seen.add(page.nextCursor);
-    const r = await get(`/api/customers/${deep}/statement?limit=500&cursor=${encodeURIComponent(page.nextCursor)}`);
+    const r = await get(
+      `/api/customers/${deep}/statement?limit=500&cursor=${encodeURIComponent(page.nextCursor)}`,
+    );
     lines += rowsOf(r.body).length;
     page = r.body?.page;
     pages++;
@@ -285,14 +448,32 @@ try {
   const fullMs = performance.now() - s + first.ms;
   timings["statement.fullMs"] = Math.round(fullMs);
   timings["statement.pages"] = pages;
-  check(`full single-party statement < ${TARGET.statementFullMs} ms`, fullMs < TARGET.statementFullMs, `${Math.round(fullMs)} ms, ${pages} pages`);
-  check("full statement line count = deepest party's ledger rows", lines === completeness.statements.deepest.lines, `${lines} vs ${completeness.statements.deepest.lines}`);
+  check(
+    `full single-party statement < ${TARGET.statementFullMs} ms`,
+    fullMs < TARGET.statementFullMs,
+    `${Math.round(fullMs)} ms, ${pages} pages`,
+  );
+  check(
+    "full statement line count = deepest party's ledger rows",
+    lines === completeness.statements.deepest.lines,
+    `${lines} vs ${completeness.statements.deepest.lines}`,
+  );
 } finally {
   kill();
 }
 
 const failed = checks.filter((c) => !c.pass);
-const report = { generatedAt: new Date().toISOString(), engine: "sqlite", params: { invoices: INVOICES, parties: PARTIES }, seedSeconds, completeness, timings, targets: TARGET, checks, pass: failed.length === 0 };
+const report = {
+  generatedAt: new Date().toISOString(),
+  engine: "sqlite",
+  params: { invoices: INVOICES, parties: PARTIES },
+  seedSeconds,
+  completeness,
+  timings,
+  targets: TARGET,
+  checks,
+  pass: failed.length === 0,
+};
 mkdirSync(dirname(OUT), { recursive: true });
 writeFileSync(OUT, JSON.stringify(report, null, 2) + "\n");
 console.log(`[volume] ${checks.length - failed.length}/${checks.length} checks passed → ${OUT}`);

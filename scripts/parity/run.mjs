@@ -13,7 +13,14 @@
 import { readdirSync, existsSync, mkdirSync, writeFileSync, readFileSync, rmSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { startEngine, apiClient, provisionCompany, readTables, ensureSeed, BACKEND } from "./lib/engine.mjs";
+import {
+  startEngine,
+  apiClient,
+  provisionCompany,
+  readTables,
+  ensureSeed,
+  BACKEND,
+} from "./lib/engine.mjs";
 import { canonicalize } from "./lib/canonical.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -25,13 +32,17 @@ const engine = arg("engine");
 const out = arg("out");
 const port = Number(arg("port") ?? 18080);
 if (!["postgres", "sqlite"].includes(engine ?? "") || !out) {
-  console.error("usage: node scripts/parity/run.mjs --engine postgres|sqlite --out <dir> [--port N]");
+  console.error(
+    "usage: node scripts/parity/run.mjs --engine postgres|sqlite --out <dir> [--port N]",
+  );
   process.exit(2);
 }
 
 function pgAdminUrl() {
   if (process.env.PARITY_PG_URL) return process.env.PARITY_PG_URL;
-  const line = readFileSync(join(BACKEND, ".env.test"), "utf8").split(/\r?\n/).find((l) => l.startsWith("DATABASE_URL="));
+  const line = readFileSync(join(BACKEND, ".env.test"), "utf8")
+    .split(/\r?\n/)
+    .find((l) => l.startsWith("DATABASE_URL="));
   if (!line) throw new Error("PARITY_PG_URL unset and backend/.env.test has no DATABASE_URL");
   const u = new URL(line.slice("DATABASE_URL=".length).trim().replace(/^"|"$/g, ""));
   u.port = process.env.PARITY_PG_PORT ?? "55432";
@@ -40,7 +51,11 @@ function pgAdminUrl() {
 }
 
 const scenarioDir = join(here, "scenarios");
-const scenarios = existsSync(scenarioDir) ? readdirSync(scenarioDir).filter((f) => f.endsWith(".mjs")).sort() : [];
+const scenarios = existsSync(scenarioDir)
+  ? readdirSync(scenarioDir)
+      .filter((f) => f.endsWith(".mjs"))
+      .sort()
+  : [];
 if (scenarios.length === 0) {
   console.error("[parity:run] no scenarios — refusing to produce an empty export");
   process.exit(1);
@@ -54,7 +69,12 @@ if (reference && engine !== "postgres") throw new Error("--reference is the Post
 const packaged = arg("server");
 if (packaged && engine !== "sqlite") throw new Error("--server runs a packaged SQLite build");
 const serverEntry = reference ?? packaged;
-const handle = await startEngine(engine, { port, seedPath, serverEntry, pgAdminUrl: engine === "postgres" ? pgAdminUrl() : undefined });
+const handle = await startEngine(engine, {
+  port,
+  seedPath,
+  serverEntry,
+  pgAdminUrl: engine === "postgres" ? pgAdminUrl() : undefined,
+});
 const transcript = {};
 let failed = null;
 try {
@@ -83,13 +103,18 @@ try {
   try {
     const tables = await readTables(handle);
     mkdirSync(join(here, "out", "raw"), { recursive: true });
-    writeFileSync(join(here, "out", "raw", `${engine}.raw`), JSON.stringify({ transcript, tables }));
+    writeFileSync(
+      join(here, "out", "raw", `${engine}.raw`),
+      JSON.stringify({ transcript, tables }),
+    );
     const canon = canonicalize({ transcript, tables });
     rmSync(out, { recursive: true, force: true });
     mkdirSync(join(out, "api"), { recursive: true });
     mkdirSync(join(out, "tables"), { recursive: true });
-    for (const [k, v] of Object.entries(canon.transcript)) writeFileSync(join(out, "api", `${k}.json`), JSON.stringify(v, null, 2));
-    for (const [k, v] of Object.entries(canon.tables)) writeFileSync(join(out, "tables", `${k}.json`), JSON.stringify(v, null, 2));
+    for (const [k, v] of Object.entries(canon.transcript))
+      writeFileSync(join(out, "api", `${k}.json`), JSON.stringify(v, null, 2));
+    for (const [k, v] of Object.entries(canon.tables))
+      writeFileSync(join(out, "tables", `${k}.json`), JSON.stringify(v, null, 2));
     writeFileSync(join(out, "backend.log"), handle.log());
   } finally {
     await handle.stop();
@@ -104,7 +129,19 @@ function scrub(v) {
   if (v && typeof v === "object") {
     const o = {};
     for (const [k, x] of Object.entries(v)) {
-      if (["requestId", "accessToken", "refreshToken", "token", "durationMs", "elapsedMs", "generatedAt", "serverTime"].includes(k)) o[k] = x == null ? x : "<volatile>";
+      if (
+        [
+          "requestId",
+          "accessToken",
+          "refreshToken",
+          "token",
+          "durationMs",
+          "elapsedMs",
+          "generatedAt",
+          "serverTime",
+        ].includes(k)
+      )
+        o[k] = x == null ? x : "<volatile>";
       else if (/cursor$/i.test(k)) o[k] = x == null ? x : "<cursor>";
       else o[k] = scrub(x);
     }

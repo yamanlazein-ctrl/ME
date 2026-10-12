@@ -30,7 +30,10 @@ describe("historical sale cost pinning", () => {
   // PostgreSQL-only check with no SQLite counterpart (the SQLite engine's cost pinning is covered
   // by tests/sqlite/roll-adjustment.test.ts). FIN-09 policy: skip visibly, never fail vacuously.
   it("live: stored invoice FX/COGS stay put after roll price change and create-replay", async (ctx) => {
-    if (isSqliteRun) ctx.skip("live-PostgreSQL suite — skipped under DB_ENGINE=sqlite (cost pinning covered by tests/sqlite/roll-adjustment.test.ts)");
+    if (isSqliteRun)
+      ctx.skip(
+        "live-PostgreSQL suite — skipped under DB_ENGINE=sqlite (cost pinning covered by tests/sqlite/roll-adjustment.test.ts)",
+      );
     const row = await pool.query<{
       tenant_id: string;
       invoice_id: string;
@@ -62,8 +65,14 @@ describe("historical sale cost pinning", () => {
     const oldPrice = rollBefore.rows[0]?.p;
     if (oldPrice == null) throw new Error("roll missing");
     try {
-      await db.update(rolls).set({ pricePerKg: bump4(oldPrice) } as never).where(eq(rolls.id, inv.roll_id));
-      const afterBump = await pool.query<{ exchange_rate: string | null; cost_per_kg: string | null }>(
+      await db
+        .update(rolls)
+        .set({ pricePerKg: bump4(oldPrice) } as never)
+        .where(eq(rolls.id, inv.roll_id));
+      const afterBump = await pool.query<{
+        exchange_rate: string | null;
+        cost_per_kg: string | null;
+      }>(
         `SELECT i.exchange_rate::text, il.cost_per_kg::text
            FROM invoices i JOIN invoice_lines il ON il.invoice_id = i.id
           WHERE i.id = $1 AND il.roll_id = $2 LIMIT 1`,
@@ -98,7 +107,10 @@ describe("historical sale cost pinning", () => {
         ),
       );
       expect(result.status).toBe("exists");
-      const afterReplay = await pool.query<{ exchange_rate: string | null; cost_per_kg: string | null }>(
+      const afterReplay = await pool.query<{
+        exchange_rate: string | null;
+        cost_per_kg: string | null;
+      }>(
         `SELECT i.exchange_rate::text, il.cost_per_kg::text
            FROM invoices i JOIN invoice_lines il ON il.invoice_id = i.id
           WHERE i.id = $1 AND il.roll_id = $2 LIMIT 1`,
@@ -107,7 +119,10 @@ describe("historical sale cost pinning", () => {
       expect(afterReplay.rows[0]?.exchange_rate).toBe(before.rate);
       expect(afterReplay.rows[0]?.cost_per_kg).toBe(before.cost);
     } finally {
-      await db.update(rolls).set({ pricePerKg: oldPrice } as never).where(eq(rolls.id, inv.roll_id));
+      await db
+        .update(rolls)
+        .set({ pricePerKg: oldPrice } as never)
+        .where(eq(rolls.id, inv.roll_id));
     }
   });
 });

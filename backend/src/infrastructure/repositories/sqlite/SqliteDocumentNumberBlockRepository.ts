@@ -158,7 +158,8 @@ export class SqliteDocumentNumberBlockRepository implements IDocumentNumberBlock
         .update(documentNumberBlocks)
         .set({
           endNumber: Math.max(newEnd, row.startNumber - 1),
-          status: row.nextNumber > row.endNumber || newEnd < row.startNumber ? "exhausted" : "reclaimed",
+          status:
+            row.nextNumber > row.endNumber || newEnd < row.startNumber ? "exhausted" : "reclaimed",
           reclaimedAt: new Date(),
           updatedAt: new Date(),
         })
@@ -209,6 +210,12 @@ export async function consumeNextInTx(
 
   return {
     numberValue,
-    block: mapRow(updated ?? { ...row, nextNumber: numberValue + 1, status: exhausted ? "exhausted" : "active" }),
+    block: mapRow(
+      updated ?? {
+        ...row,
+        nextNumber: numberValue + 1,
+        status: exhausted ? "exhausted" : "active",
+      },
+    ),
   };
 }

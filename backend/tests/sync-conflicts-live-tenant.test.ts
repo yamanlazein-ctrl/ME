@@ -11,7 +11,10 @@ import {
   listSyncConflicts,
   recordSyncConflict,
 } from "@/application/use-cases/sync/syncConflicts.js";
-import { runWithTenantContext, runWithPlatformContext } from "@/infrastructure/orm/tenant-context.js";
+import {
+  runWithTenantContext,
+  runWithPlatformContext,
+} from "@/infrastructure/orm/tenant-context.js";
 
 const LIVE = Boolean(process.env.DATABASE_URL || process.env.TEST_DB_URL);
 

@@ -8,7 +8,10 @@ import { licenses } from "../src/infrastructure/orm/schemas/license.table.js";
 import { revokedTokens } from "../src/infrastructure/orm/schemas/revoked-token.table.js";
 import { LicenseTokenSigner } from "../src/infrastructure/auth/LicenseTokenSigner.js";
 import { DbTokenDenylist } from "../src/infrastructure/auth/TokenDenylist.js";
-import { AesGcmSecretStore, decodeMasterKey } from "../src/infrastructure/secrets/AesGcmSecretStore.js";
+import {
+  AesGcmSecretStore,
+  decodeMasterKey,
+} from "../src/infrastructure/secrets/AesGcmSecretStore.js";
 import { PostgresSecretsRepository } from "../src/infrastructure/repositories/PostgresSecretsRepository.js";
 import { PostgresLicenseRepository } from "../src/infrastructure/repositories/PostgresLicenseRepository.js";
 import { createLicenseHeartbeatMiddleware } from "../src/infrastructure/http/middleware/license.heartbeat.middleware.js";
@@ -212,7 +215,11 @@ describe("Phase 8 — entitlement enforcement (live postgres)", () => {
     });
 
     const [licRow] = await runWithPlatformContext(async () =>
-      db.select().from(licenses).where(eq(licenses.id, licenseId as never)).limit(1),
+      db
+        .select()
+        .from(licenses)
+        .where(eq(licenses.id, licenseId as never))
+        .limit(1),
     );
     expect(licRow).toBeTruthy();
 
@@ -235,7 +242,11 @@ describe("Phase 8 — entitlement enforcement (live postgres)", () => {
     expect(await denylist.has(jtiInSoT)).toBe(true);
 
     const [after] = await runWithPlatformContext(async () =>
-      db.select().from(licenses).where(eq(licenses.id, licenseId as never)).limit(1),
+      db
+        .select()
+        .from(licenses)
+        .where(eq(licenses.id, licenseId as never))
+        .limit(1),
     );
     expect(after?.offlineToken).toBeNull();
     expect(after?.offlineTokenJti).toBeNull();
@@ -250,12 +261,7 @@ describe("Phase 8 — entitlement enforcement (live postgres)", () => {
       licenseStatus: "suspended",
     });
 
-    const heartbeat = createLicenseHeartbeatMiddleware(
-      licenseRepo,
-      secretsRepo,
-      cipher,
-      signer,
-    );
+    const heartbeat = createLicenseHeartbeatMiddleware(licenseRepo, secretsRepo, cipher, signer);
 
     const req = {
       tenantContext: { tenantId, userId: randomUUID(), role: "admin" },
@@ -275,12 +281,7 @@ describe("Phase 8 — entitlement enforcement (live postgres)", () => {
       licenseStatus: "suspended",
     });
 
-    const heartbeat = createLicenseHeartbeatMiddleware(
-      licenseRepo,
-      secretsRepo,
-      cipher,
-      signer,
-    );
+    const heartbeat = createLicenseHeartbeatMiddleware(licenseRepo, secretsRepo, cipher, signer);
     const guard = createLicenseGuard({
       licenseRepo,
       secretsRepo,
@@ -347,12 +348,7 @@ describe("Phase 8 — entitlement enforcement (live postgres)", () => {
     });
     await denylist.add(jti, 30 * 24 * 60 * 60);
 
-    const heartbeat = createLicenseHeartbeatMiddleware(
-      licenseRepo,
-      secretsRepo,
-      cipher,
-      signer,
-    );
+    const heartbeat = createLicenseHeartbeatMiddleware(licenseRepo, secretsRepo, cipher, signer);
     const guard = createLicenseGuard({
       licenseRepo,
       secretsRepo,

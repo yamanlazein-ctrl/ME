@@ -60,40 +60,107 @@ beforeAll(async () => {
     fabrics: (await import("@/infrastructure/orm/sqlite/schemas/fabric.table.js")).fabrics,
     colors: (await import("@/infrastructure/orm/sqlite/schemas/color.table.js")).colors,
   };
-  const { SqliteRollRepository } = await import("@/infrastructure/repositories/sqlite/SqliteRollRepository.js");
-  const { SqliteInvoiceRepository } = await import("@/infrastructure/repositories/sqlite/SqliteInvoiceRepository.js");
-  const { SqliteReturnRepository } = await import("@/infrastructure/repositories/sqlite/SqliteReturnRepository.js");
-  const { SqliteVoucherRepository } = await import("@/infrastructure/repositories/sqlite/SqliteVoucherRepository.js");
-  const { SqliteCashboxRepository } = await import("@/infrastructure/repositories/sqlite/SqliteCashboxRepository.js");
+  const { SqliteRollRepository } =
+    await import("@/infrastructure/repositories/sqlite/SqliteRollRepository.js");
+  const { SqliteInvoiceRepository } =
+    await import("@/infrastructure/repositories/sqlite/SqliteInvoiceRepository.js");
+  const { SqliteReturnRepository } =
+    await import("@/infrastructure/repositories/sqlite/SqliteReturnRepository.js");
+  const { SqliteVoucherRepository } =
+    await import("@/infrastructure/repositories/sqlite/SqliteVoucherRepository.js");
+  const { SqliteCashboxRepository } =
+    await import("@/infrastructure/repositories/sqlite/SqliteCashboxRepository.js");
 
   await runInTransaction(async (tx) => {
     await tx.insert(s.tenants).values({ id: tenantId, name: "RS5 Co", slug: "rs5" });
     await tx.insert(s.parties).values([
-      { id: customerId, tenantId, name: "RS5 Customer", code: "R-C", kind: "customer", currency: "USD" },
-      { id: supplierId, tenantId, name: "RS5 Supplier", code: "R-S", kind: "supplier", currency: "USD" },
+      {
+        id: customerId,
+        tenantId,
+        name: "RS5 Customer",
+        code: "R-C",
+        kind: "customer",
+        currency: "USD",
+      },
+      {
+        id: supplierId,
+        tenantId,
+        name: "RS5 Supplier",
+        code: "R-S",
+        kind: "supplier",
+        currency: "USD",
+      },
     ] as never);
-    await tx.insert(s.fabrics).values({ id: fabricId, tenantId, name: "RS5 Cotton", minStockKg: "0" } as never);
-    await tx.insert(s.colors).values({ id: colorId, tenantId, fabricId, name: "RS5 White" } as never);
+    await tx
+      .insert(s.fabrics)
+      .values({ id: fabricId, tenantId, name: "RS5 Cotton", minStockKg: "0" } as never);
+    await tx
+      .insert(s.colors)
+      .values({ id: colorId, tenantId, fabricId, name: "RS5 White" } as never);
   });
   await runWithTenantContext({ tenantId }, async () => {
     const roll = await new SqliteRollRepository(db).create(
-      { colorId, rollNo: "RS5-1", initialKg: 50, remainingKg: 50, pieces: 10, pricePerKg: 4.25, currency: "USD", supplierId, entryDate: "2026-09-01" } as never,
+      {
+        colorId,
+        rollNo: "RS5-1",
+        initialKg: 50,
+        remainingKg: 50,
+        pieces: 10,
+        pricePerKg: 4.25,
+        currency: "USD",
+        supplierId,
+        entryDate: "2026-09-01",
+      } as never,
       ctx as never,
     );
     const inv = await new SqliteInvoiceRepository(db).create(
-      { type: "sale", date: "2026-09-10", partyId: customerId, partyType: "customer", currency: "USD", lines: [{ fabricId, colorId, rollId: roll.id, quantityKg: 12.5, pieces: 2, pricePerKg: 9.99 }], paid: 20, paymentMethod: "cash" } as never,
+      {
+        type: "sale",
+        date: "2026-09-10",
+        partyId: customerId,
+        partyType: "customer",
+        currency: "USD",
+        lines: [
+          { fabricId, colorId, rollId: roll.id, quantityKg: 12.5, pieces: 2, pricePerKg: 9.99 },
+        ],
+        paid: 20,
+        paymentMethod: "cash",
+      } as never,
       ctx as never,
     );
     await new SqliteReturnRepository(db).create(
-      { kind: "sale", date: "2026-09-12", partyId: customerId, originalInvoiceId: inv.id, reason: "defect", currency: "USD", lines: [{ rollId: roll.id, quantityKg: 1.5, pieces: 1, pricePerKg: 9.99 }] } as never,
+      {
+        kind: "sale",
+        date: "2026-09-12",
+        partyId: customerId,
+        originalInvoiceId: inv.id,
+        reason: "defect",
+        currency: "USD",
+        lines: [{ rollId: roll.id, quantityKg: 1.5, pieces: 1, pricePerKg: 9.99 }],
+      } as never,
       ctx as never,
     );
     await new SqliteVoucherRepository(db).create(
-      { kind: "receipt", date: "2026-09-14", partyId: customerId, partyKind: "customer", amount: 30.5, discount: 0, currency: "USD", method: "cash" } as never,
+      {
+        kind: "receipt",
+        date: "2026-09-14",
+        partyId: customerId,
+        partyKind: "customer",
+        amount: 30.5,
+        discount: 0,
+        currency: "USD",
+        method: "cash",
+      } as never,
       ctx as never,
     );
     await new SqliteCashboxRepository(db).addManualMovement(
-      { date: "2026-09-15", type: "capital", direction: "in", amount: 1000, currency: "USD" } as never,
+      {
+        date: "2026-09-15",
+        type: "capital",
+        direction: "in",
+        amount: 1000,
+        currency: "USD",
+      } as never,
       ctx as never,
     );
   });
@@ -107,7 +174,13 @@ beforeAll(async () => {
   // change the live company after the backup
   await runWithTenantContext({ tenantId }, () =>
     new SqliteCashboxRepository(db).addManualMovement(
-      { date: "2026-09-20", type: "withdrawal", direction: "out", amount: 75.25, currency: "USD" } as never,
+      {
+        date: "2026-09-20",
+        type: "withdrawal",
+        direction: "out",
+        amount: 75.25,
+        currency: "USD",
+      } as never,
       ctx as never,
     ),
   );
@@ -121,14 +194,26 @@ afterAll(() => {
 
 describe("restore — staged, verified, atomic (RS-5)", () => {
   it("the archive carries real business figures (non-trivial RS-5 set)", () => {
-    expect(Object.keys(archiveFigures).filter((k) => !k.startsWith("rows:")).length).toBeGreaterThanOrEqual(8);
+    expect(
+      Object.keys(archiveFigures).filter((k) => !k.startsWith("rows:")).length,
+    ).toBeGreaterThanOrEqual(8);
     expect(rs5.rs5Diff(archiveFigures, rs5.rs5Figures(livePath()))).not.toEqual([]); // live changed since
   });
 
-  for (const step of ["VERIFY_ARCHIVE", "SAFETY_BACKUP", "EXTRACT_STAGING", "MIGRATE_STAGING", "VERIFY_STAGING", "CARRY_OVER_DEVICE_STATE", "SWAP"] as const) {
+  for (const step of [
+    "VERIFY_ARCHIVE",
+    "SAFETY_BACKUP",
+    "EXTRACT_STAGING",
+    "MIGRATE_STAGING",
+    "VERIFY_STAGING",
+    "CARRY_OVER_DEVICE_STATE",
+    "SWAP",
+  ] as const) {
     it(`a forced failure at ${step} leaves the live database byte-identical`, async () => {
       const before = liveImage();
-      await expect(restore.restoreBackupV3(archive, { failAt: step })).rejects.toThrow(new RegExp(`RESTORE_FAILED at ${step}`));
+      await expect(restore.restoreBackupV3(archive, { failAt: step })).rejects.toThrow(
+        new RegExp(`RESTORE_FAILED at ${step}`),
+      );
       expect(runtime.getSqliteRuntime(), "the live database stays open").toBeTruthy();
       expect(liveImage()).toBe(before);
       expect(existsSync(`${livePath()}.restore-staging`)).toBe(false);
@@ -144,19 +229,26 @@ describe("restore — staged, verified, atomic (RS-5)", () => {
   it("an archive one migration behind is migrated on staging, then swapped in", async () => {
     // a binary one migration ahead of the archive (same mechanism as tests/sqlite/connection.test.ts)
     const { resolveSqliteMigrationsFolder } = runtime;
-    const { readSqliteFingerprint } = await import("@/infrastructure/orm/sqlite/schemaFingerprint.js");
+    const { readSqliteFingerprint } =
+      await import("@/infrastructure/orm/sqlite/schemaFingerprint.js");
     const mig2 = join(root, "mig2");
     cpSync(resolveSqliteMigrationsFolder(), mig2, { recursive: true });
     const journal = JSON.parse(readFileSync(join(mig2, "meta", "_journal.json"), "utf8"));
     const next = journal.entries.at(-1).idx + 1;
     const tag = `${String(next).padStart(4, "0")}_rs5_probe`;
-    writeFileSync(join(mig2, `${tag}.sql`), `CREATE TABLE "motard_rs5_probe" ("id" INTEGER NOT NULL, CONSTRAINT "motard_rs5_probe_pkey" PRIMARY KEY ("id")) STRICT;`);
+    writeFileSync(
+      join(mig2, `${tag}.sql`),
+      `CREATE TABLE "motard_rs5_probe" ("id" INTEGER NOT NULL, CONSTRAINT "motard_rs5_probe_pkey" PRIMARY KEY ("id")) STRICT;`,
+    );
     journal.entries.push({ idx: next, tag });
     writeFileSync(join(mig2, "meta", "_journal.json"), JSON.stringify(journal));
     const scratch = new Database(":memory:");
     scratch.pragma("trusted_schema = OFF");
     for (const e of journal.entries) scratch.exec(readFileSync(join(mig2, `${e.tag}.sql`), "utf8"));
-    writeFileSync(join(mig2, "meta", "schema-fingerprint.json"), JSON.stringify(readSqliteFingerprint(scratch, next)));
+    writeFileSync(
+      join(mig2, "meta", "schema-fingerprint.json"),
+      JSON.stringify(readSqliteFingerprint(scratch, next)),
+    );
     scratch.close();
 
     // the app is updated: it restarts on the newer binary (its migrations apply to the live file)
@@ -170,8 +262,15 @@ describe("restore — staged, verified, atomic (RS-5)", () => {
     const report = await restore.restoreBackupV3(archive);
     expect(report.migrated).toEqual([tag]);
     const live = new Database(livePath(), { readonly: true });
-    expect(live.prepare(`SELECT schema_journal_idx FROM motard_meta WHERE id = 1`).pluck().get()).toBe(next);
-    expect(live.prepare(`SELECT count(*) FROM sqlite_master WHERE name = 'motard_rs5_probe'`).pluck().get()).toBe(1);
+    expect(
+      live.prepare(`SELECT schema_journal_idx FROM motard_meta WHERE id = 1`).pluck().get(),
+    ).toBe(next);
+    expect(
+      live
+        .prepare(`SELECT count(*) FROM sqlite_master WHERE name = 'motard_rs5_probe'`)
+        .pluck()
+        .get(),
+    ).toBe(1);
     live.close();
     // RS-5 after the migration: the business figures are the archive's
     expect(rs5.rs5Diff(archiveFigures, rs5.rs5Figures(livePath()))).toEqual([]);

@@ -85,8 +85,17 @@ beforeAll(async () => {
   await db.insert(fabrics).values({ id: fab, tenantId, name: "قماش RT" } as never);
   await db.insert(colors).values({ id: col, tenantId, fabricId: fab, name: "أزرق" } as never);
   await db.insert(rolls).values({
-    id: roll, tenantId, colorId: col, rollNo: `RT-${tenantId.slice(0, 6)}`, initialKg: "100",
-    remainingKg: "71.5", pricePerKg: "2.5", currency: "USD", entryDate: "2026-07-01", pieces: 3, remainingPieces: 2,
+    id: roll,
+    tenantId,
+    colorId: col,
+    rollNo: `RT-${tenantId.slice(0, 6)}`,
+    initialKg: "100",
+    remainingKg: "71.5",
+    pricePerKg: "2.5",
+    currency: "USD",
+    entryDate: "2026-07-01",
+    pieces: 3,
+    remainingPieces: 2,
   } as never);
   const docs = [
     { id: inv[0]!, type: "entry", party: supp, total: 250, paid: 100, qty: 100, price: 2.5 },
@@ -95,39 +104,153 @@ beforeAll(async () => {
   ];
   for (const [n, d] of docs.entries()) {
     await db.insert(invoices).values({
-      id: d.id, tenantId, number: `RT-${n}-${tenantId.slice(0, 4)}`, type: d.type, date: "2026-07-0" + (n + 1),
-      partyId: d.party, partyType: d.type === "sale" ? "customer" : "supplier", currency: "USD", exchangeRate: 1,
-      subtotal: d.total, total: d.total, paid: d.paid, status: "active",
+      id: d.id,
+      tenantId,
+      number: `RT-${n}-${tenantId.slice(0, 4)}`,
+      type: d.type,
+      date: "2026-07-0" + (n + 1),
+      partyId: d.party,
+      partyType: d.type === "sale" ? "customer" : "supplier",
+      currency: "USD",
+      exchangeRate: 1,
+      subtotal: d.total,
+      total: d.total,
+      paid: d.paid,
+      status: "active",
     } as never);
     await db.insert(invoiceLines).values({
-      id: randomUUID(), tenantId, invoiceId: d.id, fabricId: fab, colorId: col, rollId: roll,
-      quantityKg: String(d.qty), pricePerKg: String(d.price), discountAmount: "0",
+      id: randomUUID(),
+      tenantId,
+      invoiceId: d.id,
+      fabricId: fab,
+      colorId: col,
+      rollId: roll,
+      quantityKg: String(d.qty),
+      pricePerKg: String(d.price),
+      discountAmount: "0",
       lineTotal: String(round2dp(d.qty * d.price)),
     } as never);
   }
   const ret = randomUUID();
   await db.insert(returns).values({
-    id: ret, tenantId, number: `RT-R-${tenantId.slice(0, 4)}`, kind: "sale", date: "2026-07-05",
-    partyId: cust, originalInvoiceId: inv[2]!, reason: "defect", currency: "USD",
+    id: ret,
+    tenantId,
+    number: `RT-R-${tenantId.slice(0, 4)}`,
+    kind: "sale",
+    date: "2026-07-05",
+    partyId: cust,
+    originalInvoiceId: inv[2]!,
+    reason: "defect",
+    currency: "USD",
   } as never);
-  await db.insert(returnLines).values({ id: randomUUID(), tenantId, returnId: ret, rollId: roll, quantityKg: "1.5", pricePerKg: "10.5" } as never);
+  await db
+    .insert(returnLines)
+    .values({
+      id: randomUUID(),
+      tenantId,
+      returnId: ret,
+      rollId: roll,
+      quantityKg: "1.5",
+      pricePerKg: "10.5",
+    } as never);
   await db.insert(vouchers).values([
-    { tenantId, kind: "receipt", number: `RT-V1-${tenantId.slice(0, 4)}`, date: "2026-07-02", partyId: cust, partyKind: "customer", invoiceId: inv[1]!, amount: 95, currency: "USD", method: "cash", appliedAmount: 95 },
-    { tenantId, kind: "receipt", number: `RT-V2-${tenantId.slice(0, 4)}`, date: "2026-07-03", partyId: cust, partyKind: "customer", invoiceId: inv[2]!, amount: 70, currency: "USD", method: "cash", appliedAmount: 50 },
-    { tenantId, kind: "payment", number: `RT-V3-${tenantId.slice(0, 4)}`, date: "2026-07-01", partyId: supp, partyKind: "supplier", invoiceId: inv[0]!, amount: 100, currency: "USD", method: "cash" },
+    {
+      tenantId,
+      kind: "receipt",
+      number: `RT-V1-${tenantId.slice(0, 4)}`,
+      date: "2026-07-02",
+      partyId: cust,
+      partyKind: "customer",
+      invoiceId: inv[1]!,
+      amount: 95,
+      currency: "USD",
+      method: "cash",
+      appliedAmount: 95,
+    },
+    {
+      tenantId,
+      kind: "receipt",
+      number: `RT-V2-${tenantId.slice(0, 4)}`,
+      date: "2026-07-03",
+      partyId: cust,
+      partyKind: "customer",
+      invoiceId: inv[2]!,
+      amount: 70,
+      currency: "USD",
+      method: "cash",
+      appliedAmount: 50,
+    },
+    {
+      tenantId,
+      kind: "payment",
+      number: `RT-V3-${tenantId.slice(0, 4)}`,
+      date: "2026-07-01",
+      partyId: supp,
+      partyKind: "supplier",
+      invoiceId: inv[0]!,
+      amount: 100,
+      currency: "USD",
+      method: "cash",
+    },
   ] as never);
   await db.insert(ledgerEntries).values([
-    { tenantId, partyId: cust, date: "2026-07-02", type: "sales_invoice", debit: 95, credit: 0, currency: "USD" },
-    { tenantId, partyId: cust, date: "2026-07-03", type: "receipt_in", debit: 0, credit: 70, currency: "USD", cashImpact: "in" },
-    { tenantId, partyId: supp, date: "2026-07-01", type: "purchase_invoice", debit: 0, credit: 250, currency: "USD" },
-    { tenantId, partyId: null, date: "2026-07-04", type: "expense", debit: 12.75, credit: 0, currency: "SYP" },
+    {
+      tenantId,
+      partyId: cust,
+      date: "2026-07-02",
+      type: "sales_invoice",
+      debit: 95,
+      credit: 0,
+      currency: "USD",
+    },
+    {
+      tenantId,
+      partyId: cust,
+      date: "2026-07-03",
+      type: "receipt_in",
+      debit: 0,
+      credit: 70,
+      currency: "USD",
+      cashImpact: "in",
+    },
+    {
+      tenantId,
+      partyId: supp,
+      date: "2026-07-01",
+      type: "purchase_invoice",
+      debit: 0,
+      credit: 250,
+      currency: "USD",
+    },
+    {
+      tenantId,
+      partyId: null,
+      date: "2026-07-04",
+      type: "expense",
+      debit: 12.75,
+      credit: 0,
+      currency: "SYP",
+    },
   ] as never);
   await db.insert(expenses).values({
-    id: randomUUID(), tenantId, number: `RT-E-${tenantId.slice(0, 4)}`, category: "نقل", description: "شحن",
-    amount: 12.75, currency: "SYP", date: "2026-07-04", method: "cash",
+    id: randomUUID(),
+    tenantId,
+    number: `RT-E-${tenantId.slice(0, 4)}`,
+    category: "نقل",
+    description: "شحن",
+    amount: 12.75,
+    currency: "SYP",
+    date: "2026-07-04",
+    method: "cash",
   } as never);
   await db.insert(manualMovements).values({
-    tenantId, date: "2026-07-04", type: "capital", direction: "in", amount: 500, currency: "USD", description: "إيداع",
+    tenantId,
+    date: "2026-07-04",
+    type: "capital",
+    direction: "in",
+    amount: 500,
+    currency: "USD",
+    description: "إيداع",
   } as never);
   await pool.query(
     `INSERT INTO sync_outbox (tenant_id, op_id, entity_type, entity_id, operation, payload, status)
@@ -170,8 +293,15 @@ describe("backup → restore round trip", () => {
     if (!backup.ok) return;
     const names = backup.manifest.tables.map((t) => t.name);
     for (const t of [
-      "invoices", "ledger_entries", "cashbox_daily_balances", "financial_operations",
-      "setup_wizard_state", "sync_outbox", "sync_inbox", "sync_state", "sync_devices",
+      "invoices",
+      "ledger_entries",
+      "cashbox_daily_balances",
+      "financial_operations",
+      "setup_wizard_state",
+      "sync_outbox",
+      "sync_inbox",
+      "sync_state",
+      "sync_devices",
     ]) {
       expect(names, `backup must include ${t}`).toContain(t);
     }
@@ -181,7 +311,9 @@ describe("backup → restore round trip", () => {
 
   it("rejects a tampered archive before touching any database", async () => {
     const e = unzipSync(new Uint8Array(readFileSync(zip)));
-    e["data/invoices.ndjson"] = strToU8(strFromU8(e["data/invoices.ndjson"]!).replace("187.25", "187.26"));
+    e["data/invoices.ndjson"] = strToU8(
+      strFromU8(e["data/invoices.ndjson"]!).replace("187.25", "187.26"),
+    );
     const bad = join(work, "tampered.zip");
     writeFileSync(bad, zipSync(e));
     await expect(openAndVerifyBackup(bad)).rejects.toMatchObject({ code: "BACKUP_CORRUPT" });
@@ -203,9 +335,10 @@ describe("backup → restore round trip", () => {
     // 1. row counts per backed-up table
     const { manifest } = await openAndVerifyBackup(zip);
     for (const t of manifest.tables) {
-      const q = await restored.query(`SELECT count(*)::int AS n FROM "${t.name}" WHERE tenant_id = $1`, [
-        targetTenantId,
-      ]);
+      const q = await restored.query(
+        `SELECT count(*)::int AS n FROM "${t.name}" WHERE tenant_id = $1`,
+        [targetTenantId],
+      );
       expect({ table: t.name, n: q.rows[0].n }).toEqual({ table: t.name, n: t.rows });
     }
 
@@ -219,7 +352,8 @@ describe("backup → restore round trip", () => {
     expect(src.pending).toBe(1);
 
     // 4. sequences were advanced: a new outbox unit sorts AFTER the restored one
-    const maxSeq = (await restored.query(`SELECT max(seq)::bigint AS m FROM sync_outbox`)).rows[0].m;
+    const maxSeq = (await restored.query(`SELECT max(seq)::bigint AS m FROM sync_outbox`)).rows[0]
+      .m;
     const ins = await restored.query(
       `INSERT INTO sync_outbox (tenant_id, op_id, entity_type, entity_id, operation, payload, status)
        VALUES ($1, $2, 'invoice', $3, 'create', '{}'::jsonb, 'pending') RETURNING seq`,

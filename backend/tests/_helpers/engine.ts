@@ -16,7 +16,9 @@ export async function liveColumns(
   table: string,
 ): Promise<string[]> {
   const res = isSqliteRun
-    ? await execute(sqlTag`select name as column_name from pragma_table_info(${table}) order by name`)
+    ? await execute(
+        sqlTag`select name as column_name from pragma_table_info(${table}) order by name`,
+      )
     : await execute(
         sqlTag`select column_name from information_schema.columns where table_schema = 'public' and table_name = ${table} order by column_name`,
       );

@@ -24,7 +24,7 @@ if (config.DB_ENGINE === "sqlite") {
  * checkout re-stamps it from the next request's context — so there is never a
  * window where a stale tenant leaks across requests.
  */
-class TenantScopedPool extends Pool {
+export class TenantScopedPool extends Pool {
   override connect(): Promise<PoolClient>;
   override connect(
     callback: (
@@ -59,7 +59,15 @@ class TenantScopedPool extends Pool {
           "SELECT set_config('app.current_tenant_id', $1, false), set_config('app.platform_mode', $2, false)",
           [ctx?.tenantId ?? null, ctx?.platformMode ? "on" : null],
         )
-        .then(() => client);
+        .then(
+          () => client,
+          (e: unknown) => {
+            // M-05: the caller never receives this client, so nobody else can release it — destroy it
+            // here (its session GUCs are in an unknown state) or every stamping failure leaks one.
+            client.release(e instanceof Error ? e : true);
+            throw e;
+          },
+        );
     };
 
     if (callback) {
@@ -70,7 +78,8 @@ class TenantScopedPool extends Pool {
         }
         stamp(client!).then(
           (c) => callback(undefined, c, done),
-          (e) => callback(e, undefined, done),
+          // Already destroyed by stamp(): a caller calling done() must not release it twice.
+          (e) => callback(e, undefined, () => {}),
         );
       });
       return;

@@ -1,5 +1,12 @@
 import { eq, and, desc, ilike, or, ne, sql, inArray, gte, lte, getTableColumns } from "drizzle-orm";
-import { afterCursor, cursorColumns, decodeCursor, keysetOrder, nextCursorOf, type KeysetSpec } from "./keysetPage.js";
+import {
+  afterCursor,
+  cursorColumns,
+  decodeCursor,
+  keysetOrder,
+  nextCursorOf,
+  type KeysetSpec,
+} from "./keysetPage.js";
 import { likeContains } from "../utils/likeEscape.js";
 import type { DB } from "../orm/drizzle.js";
 import { allocateDocumentNumber } from "../utils/documentNumbers.js";
@@ -11,6 +18,7 @@ import { ledgerEntries } from "../orm/schemas/ledger-entry.table.js";
 import { invoiceLines } from "../orm/schemas/invoice-line.table.js";
 import { invoices } from "../orm/schemas/invoice.table.js";
 import { recordStockMovement } from "./stockMovementHelper.js";
+import { assertYearOpen } from "./dayLockHelper.js";
 import { round2dp, BASE_CURRENCY, computeBaseEquivalent } from "@erp/shared";
 import {
   ReturnDoc,
@@ -83,7 +91,9 @@ export class PostgresReturnRepository implements IReturnRepository {
 
     // Original invoice numbers for the page (list screens used to download
     // every invoice just to show this column).
-    const origIds = [...new Set(dataRows.map((r) => r.originalInvoiceId).filter(Boolean))] as string[];
+    const origIds = [
+      ...new Set(dataRows.map((r) => r.originalInvoiceId).filter(Boolean)),
+    ] as string[];
     const origNumbers = new Map<string, string>();
     if (origIds.length > 0) {
       const inv = await this.db
@@ -97,7 +107,9 @@ export class PostgresReturnRepository implements IReturnRepository {
     return {
       data: dataRows.map((r) => ({
         ...this.toDomain(r, byId.get(r.id) ?? []),
-        originalInvoiceNumber: r.originalInvoiceId ? origNumbers.get(r.originalInvoiceId) : undefined,
+        originalInvoiceNumber: r.originalInvoiceId
+          ? origNumbers.get(r.originalInvoiceId)
+          : undefined,
       })),
       meta: {
         total: Number(countRows[0]?.count ?? 0),
@@ -111,11 +123,10 @@ export class PostgresReturnRepository implements IReturnRepository {
     };
   }
 
-  async create(
-    input: CreateReturnInput,
-    ctx: TenantContext,
-  ): Promise<ReturnData> {
+  async create(input: CreateReturnInput, ctx: TenantContext): Promise<ReturnData> {
     return this.db.transaction(async (tx) => {
+      // H-07: a return posts stock and ledger rows on its date — never into a closed financial year.
+      await assertYearOpen(tx, ctx.tenantId, input.date);
       // H-NEW (forensic audit 2026-08-25, return numbering): allocate the
       // document number INSIDE this transaction. The conservation guards
       // below (BUG-01/H-1 quantity-vs-history, currency mismatch, invoice
@@ -183,7 +194,13 @@ export class PostgresReturnRepository implements IReturnRepository {
       // sums invoice duplicates via GROUP BY (fixes .set() overwrite).
       const invoiceLineQtys = new Map<
         string,
-        { original: number; returned: number; pricePerKg: number; costPerKg: number; currency: string }
+        {
+          original: number;
+          returned: number;
+          pricePerKg: number;
+          costPerKg: number;
+          currency: string;
+        }
       >();
       // costPerKg is snapshot from invoice_lines.cost_per_kg (sale cost), falls back to price if null (pre-migration rows)
       const expectedInvoiceType = input.kind === "sale" ? "sale" : "entry";
@@ -199,7 +216,9 @@ export class PostgresReturnRepository implements IReturnRepository {
       // so no deadlock). The later lockRollsOrdered call re-locks harmlessly.
       const lockReturnRollsEarly = async () => {
         const { lockRollsOrdered: lockEarly } = await import("./rollLocking.js");
-        await lockEarly(tx, ctx.tenantId, [...new Set(input.lines.map((l) => l.rollId))], { skipMissing: true });
+        await lockEarly(tx, ctx.tenantId, [...new Set(input.lines.map((l) => l.rollId))], {
+          skipMissing: true,
+        });
       };
 
       if (input.originalInvoiceId) {
@@ -221,12 +240,16 @@ export class PostgresReturnRepository implements IReturnRepository {
         if (!origInv) throw new Error("الفاتورة الأصلية غير موجودة");
         await lockReturnRollsEarly();
         if (origInv.type !== expectedInvoiceType)
-          throw new Error(`نوع الفاتورة الأصلية (${origInv.type}) لا يطابق نوع المرتجع (${input.kind})`);
+          throw new Error(
+            `نوع الفاتورة الأصلية (${origInv.type}) لا يطابق نوع المرتجع (${input.kind})`,
+          );
         if (origInv.status !== "active") throw new Error("لا يمكن الإرجاع على فاتورة ملغاة");
         if (origInv.partyId !== input.partyId) throw new Error("الفاتورة الأصلية لا تخص هذا الطرف");
         invoiceCurrency = origInv.currency;
         if (invoiceCurrency !== inputCurrency)
-          throw new Error(`عملة المرتجع (${inputCurrency}) لا تطابق عملة الفاتورة الأصلية (${invoiceCurrency})`);
+          throw new Error(
+            `عملة المرتجع (${inputCurrency}) لا تطابق عملة الفاتورة الأصلية (${invoiceCurrency})`,
+          );
         // The return MUST reuse the ORIGINAL invoice's frozen rate — never a
         // current rate and never a client-supplied value.
         linkedInvoiceFx = origInv.exchangeRate == null ? null : Number(origInv.exchangeRate);
@@ -236,11 +259,17 @@ export class PostgresReturnRepository implements IReturnRepository {
             rollId: invoiceLines.rollId,
             qty: sql<number>`COALESCE(SUM(${invoiceLines.quantityKg}),0)`,
             // Audit F-004: quantity-WEIGHTED (10 kg @5 + 1 kg @9 → 5.36, not 7).
-            price: sql<number>`SUM(${invoiceLines.quantityKg} * ${invoiceLines.pricePerKg}) / NULLIF(SUM(${invoiceLines.quantityKg}), 0)`,
+            // H-04: NET of the line discount (lineTotal = q×p − discount), or a full return over-credits.
+            price: sql<number>`SUM(GREATEST(0, ${invoiceLines.quantityKg} * ${invoiceLines.pricePerKg} - COALESCE(${invoiceLines.discountAmount}, 0))) / NULLIF(SUM(${invoiceLines.quantityKg}), 0)`,
             cost: sql<number>`SUM(${invoiceLines.quantityKg} * COALESCE(${invoiceLines.costPerKg}, ${invoiceLines.pricePerKg})) / NULLIF(SUM(${invoiceLines.quantityKg}), 0)`,
           })
           .from(invoiceLines)
-          .where(and(eq(invoiceLines.invoiceId, input.originalInvoiceId), eq(invoiceLines.tenantId, ctx.tenantId)))
+          .where(
+            and(
+              eq(invoiceLines.invoiceId, input.originalInvoiceId),
+              eq(invoiceLines.tenantId, ctx.tenantId),
+            ),
+          )
           .groupBy(invoiceLines.rollId);
         for (const ol of origLines) {
           invoiceLineQtys.set(ol.rollId, {
@@ -283,7 +312,10 @@ export class PostgresReturnRepository implements IReturnRepository {
           .where(inArray(returnLines.rollId, rollIds))
           .groupBy(returnLines.rollId);
         const soldToParty = await tx
-          .select({ rollId: invoiceLines.rollId, total: sql<number>`COALESCE(SUM(${invoiceLines.quantityKg}),0)` })
+          .select({
+            rollId: invoiceLines.rollId,
+            total: sql<number>`COALESCE(SUM(${invoiceLines.quantityKg}),0)`,
+          })
           .from(invoiceLines)
           .innerJoin(
             invoices,
@@ -295,7 +327,9 @@ export class PostgresReturnRepository implements IReturnRepository {
               eq(invoices.status, "active"),
             ),
           )
-          .where(and(eq(invoiceLines.tenantId, ctx.tenantId), inArray(invoiceLines.rollId, rollIds)))
+          .where(
+            and(eq(invoiceLines.tenantId, ctx.tenantId), inArray(invoiceLines.rollId, rollIds)),
+          )
           .groupBy(invoiceLines.rollId);
         const round = (n: unknown) => Math.round(Number(n) * 100) / 100;
         for (const [rollId, entry] of invoiceLineQtys) {
@@ -316,7 +350,8 @@ export class PostgresReturnRepository implements IReturnRepository {
             rollId: invoiceLines.rollId,
             total: sql<number>`COALESCE(SUM(${invoiceLines.quantityKg}),0)`,
             // Audit F-004: quantity-WEIGHTED (10 kg @5 + 1 kg @9 → 5.36, not 7).
-            price: sql<number>`SUM(${invoiceLines.quantityKg} * ${invoiceLines.pricePerKg}) / NULLIF(SUM(${invoiceLines.quantityKg}), 0)`,
+            // H-04: NET of the line discount (lineTotal = q×p − discount), or a full return over-credits.
+            price: sql<number>`SUM(GREATEST(0, ${invoiceLines.quantityKg} * ${invoiceLines.pricePerKg} - COALESCE(${invoiceLines.discountAmount}, 0))) / NULLIF(SUM(${invoiceLines.quantityKg}), 0)`,
             cost: sql<number>`SUM(${invoiceLines.quantityKg} * COALESCE(${invoiceLines.costPerKg}, ${invoiceLines.pricePerKg})) / NULLIF(SUM(${invoiceLines.quantityKg}), 0)`,
             currency: sql<string>`MAX(${invoices.currency})`,
             minRate: sql<number | null>`MIN(${invoices.exchangeRate})`,
@@ -333,13 +368,17 @@ export class PostgresReturnRepository implements IReturnRepository {
               eq(invoices.status, "active"),
             ),
           )
-          .where(and(eq(invoiceLines.tenantId, ctx.tenantId), inArray(invoiceLines.rollId, rollIds)))
+          .where(
+            and(eq(invoiceLines.tenantId, ctx.tenantId), inArray(invoiceLines.rollId, rollIds)),
+          )
           .groupBy(invoiceLines.rollId);
         let rateMin: number | null = null;
         let rateMax: number | null = null;
         for (const h of historical) {
           if (String(h.currency) !== inputCurrency)
-            throw new Error(`عملة المرتجع (${inputCurrency}) لا تطابق عملة الفواتير الأصلية (${h.currency})`);
+            throw new Error(
+              `عملة المرتجع (${inputCurrency}) لا تطابق عملة الفواتير الأصلية (${h.currency})`,
+            );
           // BUG-03 fix: unlinked returns may only reuse a frozen rate when EVERY
           // candidate historical invoice shares the same non-null rate.
           const lo = h.minRate == null ? null : Number(h.minRate);
@@ -356,7 +395,10 @@ export class PostgresReturnRepository implements IReturnRepository {
         }
         if (rateMin != null && rateMin === rateMax) unlinkedInvoiceFx = rateMin;
         const prevReturns = await tx
-          .select({ rollId: returnLines.rollId, total: sql<number>`COALESCE(SUM(${returnLines.quantityKg}),0)` })
+          .select({
+            rollId: returnLines.rollId,
+            total: sql<number>`COALESCE(SUM(${returnLines.quantityKg}),0)`,
+          })
           .from(returnLines)
           .innerJoin(
             returns,
@@ -403,7 +445,63 @@ export class PostgresReturnRepository implements IReturnRepository {
       // Insert aggregated return lines with server-derived price (fix 3.2b+3.2c)
       // One row per rollId, price from invoice_lines, not client.
       const piecesByRoll = new Map<string, number>();
-      for (const l of input.lines) piecesByRoll.set(l.rollId, (piecesByRoll.get(l.rollId) ?? 0) + (l.pieces ?? 1));
+      for (const l of input.lines)
+        piecesByRoll.set(l.rollId, (piecesByRoll.get(l.rollId) ?? 0) + (l.pieces ?? 1));
+      // H-05: a sale return's pieces are bounded like its kg — never more than were sold to this party
+      // from the roll, less its earlier returns — or a return adds pieces that never left the shop. A
+      // remnant sale (0 pieces, which the invoice schema allows) leaves no room, so its return is
+      // weight-only (0 pieces) instead of fabricating one.
+      if (input.kind === "sale") {
+        const pieceRolls = [...piecesByRoll.keys()];
+        const soldPieces = await tx
+          .select({
+            rollId: invoiceLines.rollId,
+            n: sql<number>`COALESCE(SUM(${invoiceLines.pieces}),0)`,
+          })
+          .from(invoiceLines)
+          .innerJoin(
+            invoices,
+            and(
+              eq(invoices.id, invoiceLines.invoiceId),
+              eq(invoices.tenantId, ctx.tenantId),
+              eq(invoices.partyId, input.partyId),
+              eq(invoices.type, expectedInvoiceType),
+              eq(invoices.status, "active"),
+            ),
+          )
+          .where(
+            and(eq(invoiceLines.tenantId, ctx.tenantId), inArray(invoiceLines.rollId, pieceRolls)),
+          )
+          .groupBy(invoiceLines.rollId);
+        const returnedPieces = await tx
+          .select({
+            rollId: returnLines.rollId,
+            n: sql<number>`COALESCE(SUM(${returnLines.pieces}),0)`,
+          })
+          .from(returnLines)
+          .innerJoin(
+            returns,
+            and(
+              eq(returns.id, returnLines.returnId),
+              ne(returns.id, row.id),
+              eq(returns.status, "active"),
+              eq(returns.kind, input.kind),
+              eq(returns.partyId, input.partyId),
+              eq(returns.tenantId, ctx.tenantId),
+            ),
+          )
+          .where(inArray(returnLines.rollId, pieceRolls))
+          .groupBy(returnLines.rollId);
+        for (const [rollId, requested] of piecesByRoll) {
+          const sold = Number(soldPieces.find((s) => s.rollId === rollId)?.n ?? 0);
+          const room = sold - Number(returnedPieces.find((p) => p.rollId === rollId)?.n ?? 0);
+          if (room <= 0) piecesByRoll.set(rollId, 0);
+          else if (requested > room)
+            throw new Error(
+              `الأثواب المرتجعة (${requested}) تتجاوز الأثواب المباعة (${sold}) بعد خصم المرتجعات السابقة`,
+            );
+        }
+      }
       await tx.insert(returnLines).values(
         Array.from(inputByRoll.entries()).map(([rollId, totalQty]) => {
           const entry = invoiceLineQtys.get(rollId)!;
@@ -433,10 +531,14 @@ export class PostgresReturnRepository implements IReturnRepository {
           const delta = input.kind === "entry" ? -totalQty : totalQty;
           const piecesDelta = input.kind === "entry" ? -totalPieces : totalPieces;
           if (input.kind === "entry" && currentKg < totalQty) {
-            throw new Error(`الكمية المرتجعة (${totalQty} كغ) تتجاوز المتاح في الصبغة (${currentKg} كغ)`);
+            throw new Error(
+              `الكمية المرتجعة (${totalQty} كغ) تتجاوز المتاح في الصبغة (${currentKg} كغ)`,
+            );
           }
           if (input.kind === "entry" && currentPieces < totalPieces) {
-            throw new Error(`الأثواب المرتجعة (${totalPieces}) تتجاوز المتاح في الصبغة (${currentPieces} أثواب)`);
+            throw new Error(
+              `الأثواب المرتجعة (${totalPieces}) تتجاوز المتاح في الصبغة (${currentPieces} أثواب)`,
+            );
           }
           // Checked above for the only direction that removes stock — no clamp.
           const newKg = Math.round((currentKg + delta) * 100) / 100;
@@ -459,7 +561,9 @@ export class PostgresReturnRepository implements IReturnRepository {
             )
             .returning({ id: rolls.id });
           if (updated.length === 0) {
-            throw new Error(`تعارض على اللفافة ${r.rollNo} — تم تعديلها من جهاز آخر. حدّث الصفحة وأعد المحاولة.`);
+            throw new Error(
+              `تعارض على اللفافة ${r.rollNo} — تم تعديلها من جهاز آخر. حدّث الصفحة وأعد المحاولة.`,
+            );
           }
           await recordStockMovement(
             tx,
@@ -647,16 +751,17 @@ export class PostgresReturnRepository implements IReturnRepository {
       // BUG-02 fix: the tx.update(...) above persists exchange_rate/base_total in
       // PG, but the in-memory `row` captured before the update still holds NULL —
       // re-read the committed row so the API response carries the real frozen FX.
-      const [updatedRow] = await tx
-        .select()
-        .from(returns)
-        .where(eq(returns.id, row.id))
-        .limit(1);
+      const [updatedRow] = await tx.select().from(returns).where(eq(returns.id, row.id)).limit(1);
       return this.toDomain(updatedRow ?? row, lines);
     });
   }
 
-  async cancel(id: string, cancelledBy: string, ctx: TenantContext, expectedVersion: number): Promise<ReturnData> {
+  async cancel(
+    id: string,
+    cancelledBy: string,
+    ctx: TenantContext,
+    expectedVersion: number,
+  ): Promise<ReturnData> {
     return this.db.transaction(async (tx) => {
       const [r] = await tx
         .select()
@@ -669,10 +774,15 @@ export class PostgresReturnRepository implements IReturnRepository {
       if (!r) throw new Error("المرتجع غير موجود أو ملغى مسبقاً");
       // P0-001: optimistic concurrency — fail fast if version mismatch
       if (r.version !== expectedVersion) {
-        throw Object.assign(new Error(`Stale version: expected ${expectedVersion}, current ${r.version}`), {
-          code: "STALE_VERSION" as const,
-        });
+        throw Object.assign(
+          new Error(`Stale version: expected ${expectedVersion}, current ${r.version}`),
+          {
+            code: "STALE_VERSION" as const,
+          },
+        );
       }
+      // H-07: same freeze for the cancel's reversals.
+      await assertYearOpen(tx, ctx.tenantId, r.date);
 
       const lines = await tx.select().from(returnLines).where(eq(returnLines.returnId, id));
 
@@ -684,7 +794,9 @@ export class PostgresReturnRepository implements IReturnRepository {
         lines.map((l) => l.rollId),
         { skipMissing: true },
       );
-      const linesSorted = [...lines].sort((a, b) => (a.rollId < b.rollId ? -1 : a.rollId > b.rollId ? 1 : 0));
+      const linesSorted = [...lines].sort((a, b) =>
+        a.rollId < b.rollId ? -1 : a.rollId > b.rollId ? 1 : 0,
+      );
       for (const l of linesSorted) {
         const roll = lockedCancel.get(l.rollId);
         if (roll) {
@@ -725,7 +837,9 @@ export class PostgresReturnRepository implements IReturnRepository {
             )
             .returning({ id: rolls.id });
           if (updated.length === 0) {
-            throw new Error(`تعارض على اللفافة ${roll.rollNo} — تم تعديلها من جهاز آخر. حدّث الصفحة وأعد المحاولة.`);
+            throw new Error(
+              `تعارض على اللفافة ${roll.rollNo} — تم تعديلها من جهاز آخر. حدّث الصفحة وأعد المحاولة.`,
+            );
           }
           await recordStockMovement(
             tx,

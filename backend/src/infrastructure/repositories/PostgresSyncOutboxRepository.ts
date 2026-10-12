@@ -165,7 +165,8 @@ export class PostgresSyncOutboxRepository implements ISyncOutboxRepository {
                    o.lease_owner AS "leaseOwner", o.lease_token AS "leaseToken",
                    o.lease_until AS "leaseUntil", o.claimed_at AS "claimedAt"
       `);
-      const rows = (result as unknown as { rows: Array<typeof syncOutbox.$inferSelect> }).rows ?? [];
+      const rows =
+        (result as unknown as { rows: Array<typeof syncOutbox.$inferSelect> }).rows ?? [];
       return rows.map(mapRow).sort((a, b) => a.seq - b.seq);
     });
   }
@@ -183,18 +184,22 @@ export class PostgresSyncOutboxRepository implements ISyncOutboxRepository {
           leaseToken: null,
           leaseUntil: null,
         })
-        .where(and(
-          eq(syncOutbox.id, id),
-          eq(syncOutbox.tenantId, tenantId),
-          eq(syncOutbox.status, "pushing"),
-          eq(syncOutbox.leaseToken, leaseToken),
-        ));
+        .where(
+          and(
+            eq(syncOutbox.id, id),
+            eq(syncOutbox.tenantId, tenantId),
+            eq(syncOutbox.status, "pushing"),
+            eq(syncOutbox.leaseToken, leaseToken),
+          ),
+        );
       return result.rowCount ?? 0;
     });
   }
 
-
-  async acknowledgeByOpId(tenantId: string, opId: string): Promise<"acknowledged" | "settled" | "unknown"> {
+  async acknowledgeByOpId(
+    tenantId: string,
+    opId: string,
+  ): Promise<"acknowledged" | "settled" | "unknown"> {
     return runWithTenantContext({ tenantId }, async () => {
       const result = await this.db
         .update(syncOutbox)
@@ -207,11 +212,13 @@ export class PostgresSyncOutboxRepository implements ISyncOutboxRepository {
           leaseToken: null,
           leaseUntil: null,
         })
-        .where(and(
-          eq(syncOutbox.tenantId, tenantId),
-          eq(syncOutbox.opId, opId),
-          inArray(syncOutbox.status, ["pending", "pushing", "rejected"]),
-        ));
+        .where(
+          and(
+            eq(syncOutbox.tenantId, tenantId),
+            eq(syncOutbox.opId, opId),
+            inArray(syncOutbox.status, ["pending", "pushing", "rejected"]),
+          ),
+        );
       if ((result.rowCount ?? 0) > 0) return "acknowledged";
       const [held] = await this.db
         .select({ id: syncOutbox.id })
@@ -239,12 +246,14 @@ export class PostgresSyncOutboxRepository implements ISyncOutboxRepository {
           leaseToken: null,
           leaseUntil: null,
         })
-        .where(and(
-          eq(syncOutbox.id, id),
-          eq(syncOutbox.tenantId, tenantId),
-          eq(syncOutbox.status, "pushing"),
-          eq(syncOutbox.leaseToken, leaseToken),
-        ));
+        .where(
+          and(
+            eq(syncOutbox.id, id),
+            eq(syncOutbox.tenantId, tenantId),
+            eq(syncOutbox.status, "pushing"),
+            eq(syncOutbox.leaseToken, leaseToken),
+          ),
+        );
       return result.rowCount ?? 0;
     });
   }
@@ -266,12 +275,14 @@ export class PostgresSyncOutboxRepository implements ISyncOutboxRepository {
           leaseToken: null,
           leaseUntil: null,
         })
-        .where(and(
-          eq(syncOutbox.id, id),
-          eq(syncOutbox.tenantId, tenantId),
-          eq(syncOutbox.status, "pushing"),
-          eq(syncOutbox.leaseToken, leaseToken),
-        ));
+        .where(
+          and(
+            eq(syncOutbox.id, id),
+            eq(syncOutbox.tenantId, tenantId),
+            eq(syncOutbox.status, "pushing"),
+            eq(syncOutbox.leaseToken, leaseToken),
+          ),
+        );
       return result.rowCount ?? 0;
     });
   }

@@ -16,24 +16,48 @@ import { databaseReachable, skipUnlessDatabase } from "./_helpers/requireDatabas
 import type { TenantContext } from "@/domain/types/index.js";
 
 const tenantId = randomUUID();
-const ctx: TenantContext = { tenantId, userId: randomUUID(), userRole: "admin", userName: "d4-check" };
-const ids = { activeCustomer: randomUUID(), cancelledCustomer: randomUUID(), inactiveCustomer: randomUUID(), cancelledSupplier: randomUUID() };
+const ctx: TenantContext = {
+  tenantId,
+  userId: randomUUID(),
+  userRole: "admin",
+  userName: "d4-check",
+};
+const ids = {
+  activeCustomer: randomUUID(),
+  cancelledCustomer: randomUUID(),
+  inactiveCustomer: randomUUID(),
+  cancelledSupplier: randomUUID(),
+};
 let reachable = false;
 
 describe("D-4 — cancelled parties hidden from operational lists", () => {
   beforeAll(async () => {
     reachable = await databaseReachable();
     if (!reachable) return;
-    await db.insert(tenants).values({ id: tenantId, name: "D4 tenant", slug: `d4-${tenantId.slice(0, 8)}` });
-    const row = (id: string, kind: "customer" | "supplier", status: "active" | "inactive" | "cancelled", name: string) => ({
-      id, tenantId, kind, status, name: `${name}-${id.slice(0, 6)}`, currency: "SYP",
+    await db
+      .insert(tenants)
+      .values({ id: tenantId, name: "D4 tenant", slug: `d4-${tenantId.slice(0, 8)}` });
+    const row = (
+      id: string,
+      kind: "customer" | "supplier",
+      status: "active" | "inactive" | "cancelled",
+      name: string,
+    ) => ({
+      id,
+      tenantId,
+      kind,
+      status,
+      name: `${name}-${id.slice(0, 6)}`,
+      currency: "SYP",
     });
-    await db.insert(parties).values([
-      row(ids.activeCustomer, "customer", "active", "Active"),
-      row(ids.cancelledCustomer, "customer", "cancelled", "Cancelled"),
-      row(ids.inactiveCustomer, "customer", "inactive", "Inactive"),
-      row(ids.cancelledSupplier, "supplier", "cancelled", "CancelledSup"),
-    ]);
+    await db
+      .insert(parties)
+      .values([
+        row(ids.activeCustomer, "customer", "active", "Active"),
+        row(ids.cancelledCustomer, "customer", "cancelled", "Cancelled"),
+        row(ids.inactiveCustomer, "customer", "inactive", "Inactive"),
+        row(ids.cancelledSupplier, "supplier", "cancelled", "CancelledSup"),
+      ]);
   });
 
   const repo = () => new PostgresPartyRepository(ambientDb(db));

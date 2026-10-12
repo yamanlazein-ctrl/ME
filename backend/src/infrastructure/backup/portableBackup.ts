@@ -38,7 +38,17 @@
  *   7. staging database dropped
  */
 import { createHash, randomUUID } from "node:crypto";
-import { createWriteStream, existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync, cpSync, rmSync } from "node:fs";
+import {
+  createWriteStream,
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  statSync,
+  writeFileSync,
+  cpSync,
+  rmSync,
+} from "node:fs";
 import { readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -82,7 +92,11 @@ export type BackupManifest = {
   createdAt: string;
   app: { version: string };
   postgres: { version: string };
-  schema: { migrationsApplied: number; migrationHashes: string[]; lastMigrationHash: string | null };
+  schema: {
+    migrationsApplied: number;
+    migrationHashes: string[];
+    lastMigrationHash: string | null;
+  };
   tenant: { id: string; name: string | null; ownerUserId: string | null; row: string };
   snapshot: "repeatable-read";
   tables: BackupTableEntry[];
@@ -95,10 +109,13 @@ import { BackupError } from "./backupError.js";
 
 const q = (ident: string) => `"${ident.replace(/"/g, '""')}"`;
 /** Row text must not depend on the machine: pin the session formatting. */
-const PIN_FORMAT = "SET TimeZone TO 'UTC'; SET DateStyle TO 'ISO, YMD'; SET IntervalStyle TO 'postgres'; SET extra_float_digits TO 1";
+const PIN_FORMAT =
+  "SET TimeZone TO 'UTC'; SET DateStyle TO 'ISO, YMD'; SET IntervalStyle TO 'postgres'; SET extra_float_digits TO 1";
 const sha = () => createHash("sha256");
 
-type Queryable = { query: (text: string, values?: unknown[]) => Promise<{ rows: any[]; rowCount: number | null }> };
+type Queryable = {
+  query: (text: string, values?: unknown[]) => Promise<{ rows: any[]; rowCount: number | null }>;
+};
 
 async function tenantTables(c: Queryable): Promise<string[]> {
   const { rows } = await c.query(
@@ -112,7 +129,10 @@ async function tenantTables(c: Queryable): Promise<string[]> {
   return rows.map((r) => r.name as string).filter((n) => !DEVICE_BOUND_TABLES.has(n));
 }
 
-async function tableColumns(c: Queryable, table: string): Promise<{ all: string[]; insertable: string[] }> {
+async function tableColumns(
+  c: Queryable,
+  table: string,
+): Promise<{ all: string[]; insertable: string[] }> {
   const { rows } = await c.query(
     `SELECT a.attname AS name, a.attgenerated AS gen
        FROM pg_attribute a
@@ -144,11 +164,20 @@ async function migrationState(c: Queryable): Promise<BackupManifest["schema"]> {
     `SELECT hash FROM drizzle.__drizzle_migrations ORDER BY created_at, id`,
   );
   const hashes = rows.map((r) => r.hash as string);
-  return { migrationsApplied: hashes.length, migrationHashes: hashes, lastMigrationHash: hashes.at(-1) ?? null };
+  return {
+    migrationsApplied: hashes.length,
+    migrationHashes: hashes,
+    lastMigrationHash: hashes.at(-1) ?? null,
+  };
 }
 
 /** Stream `row_to_json` lines of one table for one tenant through a server-side cursor. */
-async function* streamRows(c: Queryable, table: string, tenantId: string, cursorName: string): AsyncGenerator<string[]> {
+async function* streamRows(
+  c: Queryable,
+  table: string,
+  tenantId: string,
+  cursorName: string,
+): AsyncGenerator<string[]> {
   if (!UUID_RE.test(tenantId)) throw new Error("invalid tenant id");
   const order = await orderBy(c, table);
   await c.query(
@@ -295,7 +324,10 @@ export async function openAndVerifyBackup(file: string): Promise<OpenedBackup> {
   try {
     entries = unzipSync(new Uint8Array(await readFile(file)));
   } catch (err) {
-    throw new BackupError("BACKUP_CORRUPT", `ملف النسخة الاحتياطية تالف أو ليس ملف ZIP صالحاً (${(err as Error).message})`);
+    throw new BackupError(
+      "BACKUP_CORRUPT",
+      `ملف النسخة الاحتياطية تالف أو ليس ملف ZIP صالحاً (${(err as Error).message})`,
+    );
   }
   if (entries["database.json"] && !entries["manifest.json"]) {
     throw new BackupError(
@@ -305,7 +337,8 @@ export async function openAndVerifyBackup(file: string): Promise<OpenedBackup> {
   }
   const mBytes = entries["manifest.json"];
   const mSha = entries["manifest.sha256"];
-  if (!mBytes || !mSha) throw new BackupError("BACKUP_CORRUPT", "النسخة ناقصة: ملف manifest.json مفقود");
+  if (!mBytes || !mSha)
+    throw new BackupError("BACKUP_CORRUPT", "النسخة ناقصة: ملف manifest.json مفقود");
   const mText = strFromU8(mBytes);
   if (sha().update(mText).digest("hex") !== strFromU8(mSha).trim()) {
     throw new BackupError("BACKUP_CORRUPT", "بصمة manifest.json غير مطابقة — الملف معدّل أو تالف");
@@ -316,19 +349,28 @@ export async function openAndVerifyBackup(file: string): Promise<OpenedBackup> {
   } catch {
     throw new BackupError("BACKUP_CORRUPT", "manifest.json غير قابل للقراءة");
   }
-  if (manifest.format !== BACKUP_FORMAT) throw new BackupError("BACKUP_UNSUPPORTED_FORMAT", "الملف ليس نسخة احتياطية من هذا البرنامج");
+  if (manifest.format !== BACKUP_FORMAT)
+    throw new BackupError("BACKUP_UNSUPPORTED_FORMAT", "الملف ليس نسخة احتياطية من هذا البرنامج");
   if (manifest.formatVersion > BACKUP_FORMAT_VERSION) {
-    throw new BackupError("BACKUP_NEWER_THAN_APP", `صيغة النسخة (${manifest.formatVersion}) أحدث من هذا البرنامج — حدّث البرنامج أولاً`);
+    throw new BackupError(
+      "BACKUP_NEWER_THAN_APP",
+      `صيغة النسخة (${manifest.formatVersion}) أحدث من هذا البرنامج — حدّث البرنامج أولاً`,
+    );
   }
-  if (!UUID_RE.test(manifest.tenant?.id ?? "")) throw new BackupError("BACKUP_CORRUPT", "معرّف الشركة في النسخة غير صالح");
+  if (!UUID_RE.test(manifest.tenant?.id ?? ""))
+    throw new BackupError("BACKUP_CORRUPT", "معرّف الشركة في النسخة غير صالح");
   for (const t of manifest.tables) {
     const data = entries[t.file];
     if (!data) throw new BackupError("BACKUP_CORRUPT", `النسخة ناقصة: ${t.file} مفقود`);
     if (sha().update(data).digest("hex") !== t.sha256) {
-      throw new BackupError("BACKUP_CORRUPT", `بصمة ${t.file} غير مطابقة — البيانات تالفة أو معدّلة`);
+      throw new BackupError(
+        "BACKUP_CORRUPT",
+        `بصمة ${t.file} غير مطابقة — البيانات تالفة أو معدّلة`,
+      );
     }
     const lines = countLines(data);
-    if (lines !== t.rows) throw new BackupError("BACKUP_CORRUPT", `${t.file}: عدد السجلات ${lines} لا يطابق ${t.rows}`);
+    if (lines !== t.rows)
+      throw new BackupError("BACKUP_CORRUPT", `${t.file}: عدد السجلات ${lines} لا يطابق ${t.rows}`);
   }
   for (const f of manifest.files ?? []) {
     const data = entries[f.path];
@@ -377,7 +419,12 @@ export type RestoreReport = {
   durationMs: number;
 };
 
-async function insertLines(c: Queryable, table: string, cols: string[], lines: string[]): Promise<void> {
+async function insertLines(
+  c: Queryable,
+  table: string,
+  cols: string[],
+  lines: string[],
+): Promise<void> {
   const list = cols.map(q).join(", ");
   await c.query(
     `INSERT INTO public.${q(table)} (${list}) OVERRIDING SYSTEM VALUE
@@ -386,7 +433,12 @@ async function insertLines(c: Queryable, table: string, cols: string[], lines: s
   );
 }
 
-async function tableHash(c: Queryable, table: string, tenantId: string, tag: string): Promise<{ rows: number; sha256: string }> {
+async function tableHash(
+  c: Queryable,
+  table: string,
+  tenantId: string,
+  tag: string,
+): Promise<{ rows: number; sha256: string }> {
   const h = sha();
   let rows = 0;
   for await (const batch of streamRows(c, table, tenantId, `vh_${tag}`)) {
@@ -468,7 +520,10 @@ export async function restorePortableBackup(opts: {
   }
   for (let i = 0; i < bHashes.length; i++) {
     if (bHashes[i] !== appHashes[i]) {
-      throw new BackupError("BACKUP_SCHEMA_MISMATCH", `مخطط النسخة لا ينتمي لهذا البرنامج (اختلاف عند الترحيل رقم ${i + 1}).`);
+      throw new BackupError(
+        "BACKUP_SCHEMA_MISMATCH",
+        `مخطط النسخة لا ينتمي لهذا البرنامج (اختلاف عند الترحيل رقم ${i + 1}).`,
+      );
     }
   }
 
@@ -484,7 +539,8 @@ export async function restorePortableBackup(opts: {
     const stale = await live.query(
       `SELECT datname FROM pg_database WHERE datname ~ '^erp_restore_[0-9]{13}$' AND datname <> current_database()`,
     );
-    for (const r of stale.rows) await live.query(`DROP DATABASE IF EXISTS ${q(r.datname)} WITH (FORCE)`);
+    for (const r of stale.rows)
+      await live.query(`DROP DATABASE IF EXISTS ${q(r.datname)} WITH (FORCE)`);
     const liveTables = await tenantTables(live);
     const biz = await live.query(
       `SELECT (SELECT count(*) FROM invoices WHERE tenant_id = $1)
@@ -532,11 +588,14 @@ export async function restorePortableBackup(opts: {
         }
         // Device-bound rows of THIS machine stay, but may point at users that
         // were just replaced.
-        await live.query(`UPDATE device_registrations SET user_id = NULL WHERE tenant_id = $1`, [dst]);
+        await live.query(`UPDATE device_registrations SET user_id = NULL WHERE tenant_id = $1`, [
+          dst,
+        ]);
         await live.query(`DELETE FROM invitation_codes WHERE tenant_id = $1`, [dst]);
         let k = 0;
         for (const t of tables) {
-          if (!liveTables.includes(t)) throw new BackupError("RESTORE_FAILED", `الجدول ${t} غير موجود في هذا البرنامج`);
+          if (!liveTables.includes(t))
+            throw new BackupError("RESTORE_FAILED", `الجدول ${t} غير موجود في هذا البرنامج`);
           const cols = await tableColumns(live, t);
           const h = sha();
           let rows = 0;
@@ -551,15 +610,21 @@ export async function restorePortableBackup(opts: {
           const expected = expectSha(t) ?? h.digest("hex");
           const got = await tableHash(live, t, dst, `lv${k++}`);
           if (got.rows !== rows || got.sha256 !== expected) {
-            throw new BackupError("RESTORE_VERIFY_FAILED", `التحقق النهائي فشل في ${t}: ${got.rows}/${rows} سجل`);
+            throw new BackupError(
+              "RESTORE_VERIFY_FAILED",
+              `التحقق النهائي فشل في ${t}: ${got.rows}/${rows} سجل`,
+            );
           }
           out.push({ name: t, rows, verified });
         }
         // sync_devices restored from another machine keep their identity but
         // not a link to this machine's license registration.
-        await live.query(`UPDATE sync_devices SET device_registration_id = NULL WHERE tenant_id = $1
+        await live.query(
+          `UPDATE sync_devices SET device_registration_id = NULL WHERE tenant_id = $1
                             AND device_registration_id IS NOT NULL
-                            AND NOT EXISTS (SELECT 1 FROM device_registrations d WHERE d.id = sync_devices.device_registration_id)`, [dst]);
+                            AND NOT EXISTS (SELECT 1 FROM device_registrations d WHERE d.id = sync_devices.device_registration_id)`,
+          [dst],
+        );
         await live.query(
           `UPDATE tenants SET owner_user_id = (SELECT id FROM users WHERE id = $2 AND tenant_id = $1),
                               name = COALESCE($3, name)
@@ -567,7 +632,11 @@ export async function restorePortableBackup(opts: {
           [dst, manifest.tenant.ownerUserId, manifest.tenant.name],
         );
         const liveOrphans = await fkOrphans(live);
-        if (liveOrphans.length) throw new BackupError("RESTORE_VERIFY_FAILED", `علاقات مكسورة بعد الاستعادة: ${liveOrphans.join("; ")}`);
+        if (liveOrphans.length)
+          throw new BackupError(
+            "RESTORE_VERIFY_FAILED",
+            `علاقات مكسورة بعد الاستعادة: ${liveOrphans.join("; ")}`,
+          );
         // serial/identity sequences: never lower a shared sequence
         const seqs = await live.query(
           `SELECT s.relname AS seq, t.relname AS tbl, a.attname AS col
@@ -634,14 +703,19 @@ export async function restorePortableBackup(opts: {
         // Parent tenant row (device links cleared; owner re-linked after users load).
         const tCols = await tableColumns(staging, "tenants");
         await insertLines(staging, "tenants", tCols.insertable, [manifest.tenant.row]);
-        await staging.query(`UPDATE tenants SET activation_id = NULL, owner_user_id = NULL WHERE id = $1`, [src]);
+        await staging.query(
+          `UPDATE tenants SET activation_id = NULL, owner_user_id = NULL WHERE id = $1`,
+          [src],
+        );
         for (const t of manifest.tables) {
           const cols = await tableColumns(staging, t.name).catch(() => null);
-          if (!cols) throw new BackupError("RESTORE_FAILED", `الجدول ${t.name} غير موجود في مخطط النسخة`);
+          if (!cols)
+            throw new BackupError("RESTORE_FAILED", `الجدول ${t.name} غير موجود في مخطط النسخة`);
           if (cols.all.join() !== t.columns.join()) {
             throw new BackupError("RESTORE_FAILED", `أعمدة ${t.name} لا تطابق مخطط النسخة`);
           }
-          for (const batch of lineBatches(entries[t.file]!, INSERT_ROWS)) await insertLines(staging, t.name, cols.insertable, batch);
+          for (const batch of lineBatches(entries[t.file]!, INSERT_ROWS))
+            await insertLines(staging, t.name, cols.insertable, batch);
         }
         await staging.query(
           `UPDATE tenants SET owner_user_id = (SELECT id FROM users WHERE id = $2) WHERE id = $1`,
@@ -655,7 +729,10 @@ export async function restorePortableBackup(opts: {
           const got = await tableHash(staging, t.name, src, `s${k++}`);
           if (got.rows !== t.rows || got.sha256 !== t.sha256) {
             await staging.query("ROLLBACK");
-            throw new BackupError("RESTORE_VERIFY_FAILED", `التحقق فشل في ${t.name}: ${got.rows}/${t.rows} سجل`);
+            throw new BackupError(
+              "RESTORE_VERIFY_FAILED",
+              `التحقق فشل في ${t.name}: ${got.rows}/${t.rows} سجل`,
+            );
           }
         }
         await staging.query("COMMIT");
@@ -668,13 +745,22 @@ export async function restorePortableBackup(opts: {
         }
         // ── 5. referential integrity of the restored company ───────────────
         const orphans = await fkOrphans(staging);
-        if (orphans.length) throw new BackupError("RESTORE_VERIFY_FAILED", `علاقات مكسورة في النسخة: ${orphans.join("; ")}`);
+        if (orphans.length)
+          throw new BackupError(
+            "RESTORE_VERIFY_FAILED",
+            `علاقات مكسورة في النسخة: ${orphans.join("; ")}`,
+          );
 
         // ── 6. one atomic swap into the live database ───────────────────────
         const stagingTables = await tenantTables(staging);
         await staging.query("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY");
         try {
-          await swapIntoLive(stagingTables, (table, tag) => streamRows(staging, table, src, tag), () => null, "count");
+          await swapIntoLive(
+            stagingTables,
+            (table, tag) => streamRows(staging, table, src, tag),
+            () => null,
+            "count",
+          );
           await staging.query("COMMIT");
         } catch (err) {
           await staging.query("ROLLBACK").catch(() => {});
@@ -698,16 +784,24 @@ export async function restorePortableBackup(opts: {
       tenantId: dst,
       sourceTenantId: src,
       backupCreatedAt: manifest.createdAt,
-      schema: { backup: bHashes.length, app: appHashes.length, migratedDuringRestore: pendingMigrations },
+      schema: {
+        backup: bHashes.length,
+        app: appHashes.length,
+        migratedDuringRestore: pendingMigrations,
+      },
       tables: report,
       safetyBackup: safety,
       durationMs: Date.now() - t0,
     };
   } catch (err) {
     if (err instanceof BackupError) throw err;
-    throw new BackupError("RESTORE_FAILED", `فشلت الاستعادة ولم تتغير البيانات الحالية: ${(err as Error).message}`);
+    throw new BackupError(
+      "RESTORE_FAILED",
+      `فشلت الاستعادة ولم تتغير البيانات الحالية: ${(err as Error).message}`,
+    );
   } finally {
-    if (stagingCreated) await live.query(`DROP DATABASE IF EXISTS ${q(stagingName)} WITH (FORCE)`).catch(() => {});
+    if (stagingCreated)
+      await live.query(`DROP DATABASE IF EXISTS ${q(stagingName)} WITH (FORCE)`).catch(() => {});
     await live.end().catch(() => {});
     if (migDir) rmSync(migDir, { recursive: true, force: true });
   }

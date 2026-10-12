@@ -21,8 +21,19 @@ export interface ISearchRepository {
   /** Returns up to `limit + 1` rows (the extra row signals another page). */
   searchParties(input: PartySearchInput): Promise<SearchRow[]>;
   searchFabrics(tenantId: string, q: string, pattern: string, limit: number): Promise<SearchRow[]>;
-  searchColors(tenantId: string, fabricId: string, pattern: string, limit: number): Promise<SearchRow[]>;
-  searchRolls(tenantId: string, colorId: string, status: string, pattern: string, limit: number): Promise<SearchRow[]>;
+  searchColors(
+    tenantId: string,
+    fabricId: string,
+    pattern: string,
+    limit: number,
+  ): Promise<SearchRow[]>;
+  searchRolls(
+    tenantId: string,
+    colorId: string,
+    status: string,
+    pattern: string,
+    limit: number,
+  ): Promise<SearchRow[]>;
   partiesByIds(tenantId: string, ids: string[]): Promise<SearchRow[]>;
   rollsByIds(tenantId: string, ids: string[]): Promise<SearchRow[]>;
 }

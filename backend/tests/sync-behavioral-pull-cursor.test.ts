@@ -8,7 +8,10 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { db } from "@/infrastructure/orm/drizzle.js";
-import { runWithTenantContext, runWithPlatformContext } from "@/infrastructure/orm/tenant-context.js";
+import {
+  runWithTenantContext,
+  runWithPlatformContext,
+} from "@/infrastructure/orm/tenant-context.js";
 import { PostgresSyncInboxRepository } from "@/infrastructure/repositories/PostgresSyncInboxRepository.js";
 import { databaseReachable, skipUnlessDatabase } from "./_helpers/requireDatabase.js";
 
@@ -45,10 +48,20 @@ describe("sync behavioral — pull cursor / out-of-order arrival", () => {
     const lateOp = randomUUID();
 
     const early = await inbox.receive({
-      tenantId, opId: earlyOp, entityType: "party", entityId: randomUUID(), operation: "create", payload: { order: "early" },
+      tenantId,
+      opId: earlyOp,
+      entityType: "party",
+      entityId: randomUUID(),
+      operation: "create",
+      payload: { order: "early" },
     });
     const late = await inbox.receive({
-      tenantId, opId: lateOp, entityType: "party", entityId: randomUUID(), operation: "create", payload: { order: "late" },
+      tenantId,
+      opId: lateOp,
+      entityType: "party",
+      entityId: randomUUID(),
+      operation: "create",
+      payload: { order: "late" },
     });
     expect(late.row.receivedSeq).toBeGreaterThan(early.row.receivedSeq);
 
@@ -77,13 +90,20 @@ describe("sync behavioral — pull cursor / out-of-order arrival", () => {
     const inbox = new PostgresSyncInboxRepository(db);
     const ops = Array.from({ length: 6 }, () => randomUUID());
     for (const op of ops) {
-      await inbox.receive({ tenantId, opId: op, entityType: "party", entityId: randomUUID(), operation: "create", payload: {} });
+      await inbox.receive({
+        tenantId,
+        opId: op,
+        entityType: "party",
+        entityId: randomUUID(),
+        operation: "create",
+        payload: {},
+      });
     }
     for (const op of [...ops].reverse()) await inbox.markApplied(tenantId, op);
     const seen: string[] = [];
     let cursor: number | null = null;
     for (let g = 0; g < 10; g++) {
-      const page = (await inbox.listAppliedSince(tenantId, cursor, { limit: 2 }));
+      const page = await inbox.listAppliedSince(tenantId, cursor, { limit: 2 });
       if (page.length === 0) break;
       for (const r of page) if (ops.includes(r.opId)) seen.push(r.opId);
       cursor = page[page.length - 1]!.appliedSeq!;

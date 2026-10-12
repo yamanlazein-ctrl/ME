@@ -132,7 +132,9 @@ async function createTemplate() {
   await c.end();
   const mig = migrate(TPL.db);
   if (!mig.ok) throw new Error(`migrations failed on template:\n${mig.out}`);
-  info(`template ${TPL.db} migrated (${(mig.out.match(/\[✓\]|applied/gi) ?? []).length || "n/a"} markers)`);
+  info(
+    `template ${TPL.db} migrated (${(mig.out.match(/\[✓\]|applied/gi) ?? []).length || "n/a"} markers)`,
+  );
 }
 
 async function cloneFromTemplate({ db }) {
@@ -434,7 +436,9 @@ async function syncSnapshot(db) {
       [TENANT_ID],
     ),
     cursor: (
-      await q(db, `SELECT last_pull_seq::bigint AS s FROM sync_state WHERE tenant_id = $1`, [TENANT_ID])
+      await q(db, `SELECT last_pull_seq::bigint AS s FROM sync_state WHERE tenant_id = $1`, [
+        TENANT_ID,
+      ])
     )[0]?.s,
   };
 }
@@ -700,9 +704,7 @@ async function main() {
     [TENANT_ID, DEV_A, newOp],
   );
   const newSeq = Number(
-    (
-      await q(DEV.db, `SELECT seq::bigint AS s FROM sync_outbox WHERE op_id = $1`, [newOp])
-    )[0].s,
+    (await q(DEV.db, `SELECT seq::bigint AS s FROM sync_outbox WHERE op_id = $1`, [newOp]))[0].s,
   );
   check(
     "a unit enqueued after the restore sorts AFTER every restored unit",
@@ -939,7 +941,9 @@ try {
     }
     if (workRoot) fs.rmSync(workRoot, { recursive: true, force: true });
   } else {
-    console.log(`\n--keep: databases ${TPL.db}, ${HUB.db}, ${DEV.db} and ${workRoot} left in place.`);
+    console.log(
+      `\n--keep: databases ${TPL.db}, ${HUB.db}, ${DEV.db} and ${workRoot} left in place.`,
+    );
   }
 }
 process.exit(exitCode);

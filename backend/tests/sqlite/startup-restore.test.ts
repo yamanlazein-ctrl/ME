@@ -54,9 +54,12 @@ beforeAll(async () => {
   await m.runtime.ensureSqliteRuntime();
   const db = writer();
   db.prepare(`INSERT INTO tenants (id, name, slug) VALUES (?, 'شركة الاستعادة', 'sr')`).run(TENANT);
-  db.prepare(`INSERT INTO parties (id, tenant_id, kind, name) VALUES (?, ?, 'customer', 'زبون الاستعادة')`).run(PARTY, TENANT);
+  db.prepare(
+    `INSERT INTO parties (id, tenant_id, kind, name) VALUES (?, ?, 'customer', 'زبون الاستعادة')`,
+  ).run(PARTY, TENANT);
   sourceDataId = String(db.prepare(`SELECT data_id FROM motard_meta WHERE id = 1`).pluck().get());
-  sourceMetaTenant = db.prepare(`SELECT tenant_id FROM motard_meta WHERE id = 1`).pluck().get() as string | null;
+  sourceMetaTenant = db.prepare(`SELECT tenant_id FROM motard_meta WHERE id = 1`).pluck().get() as
+    string | null;
   archive = (await m.backup.createAndVerifyBackup({ kind: "manual", appVersion: "test" })).path;
 }, 120_000);
 
@@ -71,12 +74,20 @@ describe("startup restore (MOTARD_RESTORE_ARCHIVE)", () => {
   it("restores the chosen archive before serving and stamps the restored identity", async () => {
     await bootFreshOn(target, archive);
     const db = writer();
-    expect(db.prepare(`SELECT name FROM parties WHERE id = ?`).pluck().get(PARTY)).toBe("زبون الاستعادة");
+    expect(db.prepare(`SELECT name FROM parties WHERE id = ?`).pluck().get(PARTY)).toBe(
+      "زبون الاستعادة",
+    );
     const dataId = db.prepare(`SELECT data_id FROM motard_meta WHERE id = 1`).pluck().get();
     expect(dataId).toBe(sourceDataId);
-    expect(db.prepare(`SELECT restored_from FROM motard_meta WHERE id = 1`).pluck().get()).toBeTruthy();
+    expect(
+      db.prepare(`SELECT restored_from FROM motard_meta WHERE id = 1`).pluck().get(),
+    ).toBeTruthy();
     const meta = JSON.parse(readFileSync(join(target, "db-meta.json"), "utf8"));
-    expect(meta).toMatchObject({ engine: "sqlite", data_id: sourceDataId, tenant_id: sourceMetaTenant });
+    expect(meta).toMatchObject({
+      engine: "sqlite",
+      data_id: sourceDataId,
+      tenant_id: sourceMetaTenant,
+    });
   }, 120_000);
 
   it("a rejected archive fails the boot — nothing is served from a half-restored database", async () => {

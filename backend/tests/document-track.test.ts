@@ -30,20 +30,53 @@ const repo = new PostgresDocumentTrackRepository(db);
 describe("document tracking feed", () => {
   beforeAll(async () => {
     await db.execute(sql`select 1`);
-    await db.insert(tenants).values({ id: tenantId, name: "Track", slug: `tr-${tenantId.slice(0, 8)}` });
+    await db
+      .insert(tenants)
+      .values({ id: tenantId, name: "Track", slug: `tr-${tenantId.slice(0, 8)}` });
     await db.insert(parties).values([
-      { id: cust, tenantId, name: "Track Customer", code: "TR-C", kind: "customer", currency: "USD" },
-      { id: other, tenantId, name: "Other Customer", code: "TR-O", kind: "customer", currency: "USD" },
-      { id: supp, tenantId, name: "Track Supplier", code: "TR-S", kind: "supplier", currency: "USD" },
+      {
+        id: cust,
+        tenantId,
+        name: "Track Customer",
+        code: "TR-C",
+        kind: "customer",
+        currency: "USD",
+      },
+      {
+        id: other,
+        tenantId,
+        name: "Other Customer",
+        code: "TR-O",
+        kind: "customer",
+        currency: "USD",
+      },
+      {
+        id: supp,
+        tenantId,
+        name: "Track Supplier",
+        code: "TR-S",
+        kind: "supplier",
+        currency: "USD",
+      },
     ]);
     // 30 sales for `cust` over 2022..2026, 5 for `other`, 3 purchases
     const inv = (n: number, type: string, party: string, date: string, status = "active") =>
       pool.query(
         `INSERT INTO invoices (id, tenant_id, number, type, date, party_id, party_type, currency, subtotal, total, paid, status)
          VALUES ($1, $2, $3, $4, $5, $6, $7, 'USD', 10, 10, 0, $8)`,
-        [randomUUID(), tenantId, `TR-${type}-${n}`, type, date, party, type === "sale" ? "customer" : "supplier", status],
+        [
+          randomUUID(),
+          tenantId,
+          `TR-${type}-${n}`,
+          type,
+          date,
+          party,
+          type === "sale" ? "customer" : "supplier",
+          status,
+        ],
       );
-    for (let i = 0; i < 30; i++) await inv(i, "sale", cust, `20${22 + (i % 5)}-0${1 + (i % 9)}-1${i % 9}`);
+    for (let i = 0; i < 30; i++)
+      await inv(i, "sale", cust, `20${22 + (i % 5)}-0${1 + (i % 9)}-1${i % 9}`);
     for (let i = 0; i < 5; i++) await inv(100 + i, "sale", other, `2023-03-0${1 + i}`);
     for (let i = 0; i < 3; i++) await inv(200 + i, "entry", supp, `2021-12-0${1 + i}`);
     await inv(300, "sale", cust, "2020-01-01", "cancelled");
@@ -58,8 +91,17 @@ describe("document tracking feed", () => {
     await db.insert(fabrics).values({ id: fab, tenantId, name: "TR fabric" } as never);
     await db.insert(colors).values({ id: col, tenantId, fabricId: fab, name: "TR color" } as never);
     await db.insert(rolls).values({
-      id: roll, tenantId, colorId: col, rollNo: `TR-${tenantId.slice(0, 6)}`, initialKg: "50",
-      remainingKg: "37.5", pricePerKg: "2", currency: "USD", entryDate: "2024-12-01", pieces: 1, remainingPieces: 1,
+      id: roll,
+      tenantId,
+      colorId: col,
+      rollNo: `TR-${tenantId.slice(0, 6)}`,
+      initialKg: "50",
+      remainingKg: "37.5",
+      pricePerKg: "2",
+      currency: "USD",
+      entryDate: "2024-12-01",
+      pieces: 1,
+      remainingPieces: 1,
     } as never);
     await pool.query(
       `INSERT INTO print_jobs (id, tenant_id, date, number, status, source_roll_id, quantity_kg, press_name, currency)
@@ -103,21 +145,33 @@ describe("document tracking feed", () => {
   it("groups a settlement batch into one row with the live total", async () => {
     const p = await repo.list({ type: "settlement" }, ctx);
     expect(p.total).toBe(1);
-    expect(p.data[0]).toMatchObject({ number: "SET-2025-0007", status: "active", total: 20, partyId: cust });
+    expect(p.data[0]).toMatchObject({
+      number: "SET-2025-0007",
+      status: "active",
+      total: 20,
+      partyId: cust,
+    });
   });
 
   it("applies party / date / status / search filters on the server", async () => {
     expect((await repo.list({ partyId: cust }, ctx)).total).toBe(31 + 2 + 1); // incl. cancelled invoice
     expect((await repo.list({ partyId: cust, status: "active" }, ctx)).total).toBe(30 + 2 + 1);
-    expect((await repo.list({ type: "sale", fromDate: "2023-03-01", toDate: "2023-03-31" }, ctx)).total).toBe(
-      5 + (await pool.query(
-        `SELECT count(*)::int n FROM invoices WHERE tenant_id=$1 AND party_id=$2 AND date BETWEEN '2023-03-01' AND '2023-03-31'`,
-        [tenantId, cust],
-      )).rows[0].n,
+    expect(
+      (await repo.list({ type: "sale", fromDate: "2023-03-01", toDate: "2023-03-31" }, ctx)).total,
+    ).toBe(
+      5 +
+        (
+          await pool.query(
+            `SELECT count(*)::int n FROM invoices WHERE tenant_id=$1 AND party_id=$2 AND date BETWEEN '2023-03-01' AND '2023-03-31'`,
+            [tenantId, cust],
+          )
+        ).rows[0].n,
     );
     const s = await repo.list({ search: "Other Customer" }, ctx);
     expect(s.total).toBe(5);
-    expect((await repo.list({ search: "TR-sale-7" }, ctx)).data.map((r) => r.number)).toContain("TR-sale-7");
+    expect((await repo.list({ search: "TR-sale-7" }, ctx)).data.map((r) => r.number)).toContain(
+      "TR-sale-7",
+    );
   });
 
   it("print jobs have no party: a party filter excludes them", async () => {

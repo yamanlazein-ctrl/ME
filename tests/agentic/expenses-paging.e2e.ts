@@ -7,7 +7,10 @@ import { randomUUID } from "node:crypto";
 // the PIN user picker), and the session is handed to the page exactly as the app stores it.
 const BACKEND = `http://localhost:${process.env.CERT_BACKEND_PORT ?? "18080"}`;
 const stack = () =>
-  JSON.parse(readFileSync("tests/e2e/.cert-stack.json", "utf8")) as { tenantId: string; email: string };
+  JSON.parse(readFileSync("tests/e2e/.cert-stack.json", "utf8")) as {
+    tenantId: string;
+    email: string;
+  };
 
 async function apiLogin() {
   const { tenantId, email } = stack();
@@ -47,7 +50,9 @@ describe("expenses list", () => {
       [s.access, s.refresh, s.tenantId],
     );
     await app.open("/");
-    await expect(screen.getByText("لوحة التحكم", { exact: false }).first()).toBeVisible({ timeout: 30_000 });
+    await expect(screen.getByText("لوحة التحكم", { exact: false }).first()).toBeVisible({
+      timeout: 30_000,
+    });
   });
 
   // FE-03 regression: the screen used to fetch one 20-row page and show the truncated length as the
@@ -69,7 +74,10 @@ describe("expenses list", () => {
           paidFromCashbox: false,
         }),
       });
-      expect(r.status, `create expense ${i}: ${r.status === 201 ? "" : await r.text()}`).toBeLessThan(300);
+      expect(
+        r.status,
+        `create expense ${i}: ${r.status === 201 ? "" : await r.text()}`,
+      ).toBeLessThan(300);
     }
     const list = await (await api(s, "/expenses?limit=1")).json();
     const total = Number((list as { meta: { total: number } }).meta.total);

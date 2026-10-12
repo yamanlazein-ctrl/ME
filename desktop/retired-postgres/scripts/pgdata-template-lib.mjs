@@ -67,18 +67,22 @@ export function freePort() {
 export function startPostgres(pgdata, port, logFile) {
   // stdio MUST be "ignore": the postmaster inherits pg_ctl's handles, so a piped stdout/stderr
   // would keep spawnSync waiting forever even after the server is up. Diagnostics go to `logFile`.
-  const r = spawnSync(pgTool("pg_ctl"), [
-    "start",
-    "-D",
-    pgdata,
-    "-l",
-    logFile,
-    "-w",
-    "-t",
-    "120",
-    "-o",
-    `-p ${port} -c listen_addresses=127.0.0.1 -c unix_socket_directories=`,
-  ], { stdio: "ignore", windowsHide: true });
+  const r = spawnSync(
+    pgTool("pg_ctl"),
+    [
+      "start",
+      "-D",
+      pgdata,
+      "-l",
+      logFile,
+      "-w",
+      "-t",
+      "120",
+      "-o",
+      `-p ${port} -c listen_addresses=127.0.0.1 -c unix_socket_directories=`,
+    ],
+    { stdio: "ignore", windowsHide: true },
+  );
   if (r.error) throw r.error;
   if (r.status !== 0) {
     const tail = existsSync(logFile)

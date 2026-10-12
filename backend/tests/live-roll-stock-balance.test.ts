@@ -23,7 +23,12 @@ const supplierId = randomUUID();
 const customerId = randomUUID();
 const fabricId = randomUUID();
 const colorId = randomUUID();
-const ctx: TenantContext = { tenantId, userId: randomUUID(), userRole: "admin", userName: "live-stock-tester" };
+const ctx: TenantContext = {
+  tenantId,
+  userId: randomUUID(),
+  userRole: "admin",
+  userName: "live-stock-tester",
+};
 const rollRepo = new PostgresRollRepository(db);
 const invoiceRepo = new PostgresInvoiceRepository(db);
 const returnRepo = new PostgresReturnRepository(db);
@@ -36,12 +41,30 @@ const liveStock = async (id: string) => {
 };
 const newRoll = (kg: number, pieces: number) =>
   rollRepo.create(
-    { colorId, rollNo: `LS-${randomUUID().slice(0, 8)}`, initialKg: kg, remainingKg: kg, pieces, pricePerKg: 3, currency: "USD", supplierId, entryDate: "2026-03-01" },
+    {
+      colorId,
+      rollNo: `LS-${randomUUID().slice(0, 8)}`,
+      initialKg: kg,
+      remainingKg: kg,
+      pieces,
+      pricePerKg: 3,
+      currency: "USD",
+      supplierId,
+      entryDate: "2026-03-01",
+    },
     ctx,
   );
 const sell = (rollId: string, kg: number, pieces: number) =>
   invoiceRepo.create(
-    { type: "sale", date: "2026-03-02", partyId: customerId, partyType: "customer", currency: "USD", exchangeRate: 1, lines: [{ fabricId, colorId, rollId, quantityKg: kg, pieces, pricePerKg: 6 }] },
+    {
+      type: "sale",
+      date: "2026-03-02",
+      partyId: customerId,
+      partyType: "customer",
+      currency: "USD",
+      exchangeRate: 1,
+      lines: [{ fabricId, colorId, rollId, quantityKg: kg, pieces, pricePerKg: 6 }],
+    },
     ctx,
   );
 
@@ -52,7 +75,9 @@ beforeAll(async () => {
   } catch {
     return;
   }
-  await db.insert(tenants).values({ id: tenantId, name: "Live stock", slug: `ls-${tenantId.slice(0, 8)}` });
+  await db
+    .insert(tenants)
+    .values({ id: tenantId, name: "Live stock", slug: `ls-${tenantId.slice(0, 8)}` });
   await db.insert(parties).values([
     { id: supplierId, tenantId, name: "Sup LS", code: "SLS", kind: "supplier", currency: "USD" },
     { id: customerId, tenantId, name: "Cust LS", code: "CLS", kind: "customer", currency: "USD" },
@@ -78,14 +103,30 @@ describe("live stock of the exact selected roll", () => {
 
     // customer returns 2 pieces of the first sale
     await returnRepo.create(
-      { kind: "sale", date: "2026-03-03", partyId: customerId, originalInvoiceId: s1.id, reason: "defect", currency: "USD", lines: [{ rollId: a.id, quantityKg: 10, pieces: 2, pricePerKg: 6 }] },
+      {
+        kind: "sale",
+        date: "2026-03-03",
+        partyId: customerId,
+        originalInvoiceId: s1.id,
+        reason: "defect",
+        currency: "USD",
+        lines: [{ rollId: a.id, quantityKg: 10, pieces: 2, pricePerKg: 6 }],
+      },
       ctx,
     );
     expect(await liveStock(a.id)).toEqual({ pieces: 87, kg: 435 });
 
     // send 7 pieces to the printing factory
     await printRepo.create(
-      { date: "2026-03-04", sourceRollId: a.id, quantityKg: 35, pieces: 7, pressName: "مطبعة", printCostPerKg: 1, currency: "USD" } as never,
+      {
+        date: "2026-03-04",
+        sourceRollId: a.id,
+        quantityKg: 35,
+        pieces: 7,
+        pressName: "مطبعة",
+        printCostPerKg: 1,
+        currency: "USD",
+      } as never,
       null,
       ctx,
     );
@@ -96,12 +137,30 @@ describe("live stock of the exact selected roll", () => {
   it("counts goods received by a purchase invoice", async () => {
     if (!reachable) return;
     const r = await rollRepo.create(
-      { colorId, rollNo: `LS-${randomUUID().slice(0, 8)}`, initialKg: 60, remainingKg: 0, pieces: 12, pricePerKg: 3, currency: "USD", supplierId, entryDate: "2026-03-01" },
+      {
+        colorId,
+        rollNo: `LS-${randomUUID().slice(0, 8)}`,
+        initialKg: 60,
+        remainingKg: 0,
+        pieces: 12,
+        pricePerKg: 3,
+        currency: "USD",
+        supplierId,
+        entryDate: "2026-03-01",
+      },
       ctx,
     );
     expect((await liveStock(r.id)).kg).toBe(0);
     await invoiceRepo.create(
-      { type: "entry", date: "2026-03-05", partyId: supplierId, partyType: "supplier", currency: "USD", exchangeRate: 1, lines: [{ fabricId, colorId, rollId: r.id, quantityKg: 60, pieces: 12, pricePerKg: 3 }] },
+      {
+        type: "entry",
+        date: "2026-03-05",
+        partyId: supplierId,
+        partyType: "supplier",
+        currency: "USD",
+        exchangeRate: 1,
+        lines: [{ fabricId, colorId, rollId: r.id, quantityKg: 60, pieces: 12, pricePerKg: 3 }],
+      },
       ctx,
     );
     expect(await liveStock(r.id)).toEqual({ pieces: 12, kg: 60 });

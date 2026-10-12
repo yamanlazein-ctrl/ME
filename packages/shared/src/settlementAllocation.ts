@@ -7,7 +7,12 @@
  * FX rates are never consulted here — they stay frozen on the invoice.
  */
 
-import { convertForSettlement, FX_REQUIRED_MESSAGE, isValidFxRate, saneSypRateError } from "./fx.js";
+import {
+  convertForSettlement,
+  FX_REQUIRED_MESSAGE,
+  isValidFxRate,
+  saneSypRateError,
+} from "./fx.js";
 import { round2dp } from "./precision.js";
 
 export type SettlementInvoiceInput = {

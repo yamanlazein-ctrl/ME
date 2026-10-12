@@ -1,10 +1,19 @@
 import { Router, type Request, type Response, type RequestHandler } from "express";
 import { z } from "zod";
-import { validateBody, validateQuery } from "../../infrastructure/http/middleware/validate.middleware.js";
+import {
+  validateBody,
+  validateQuery,
+} from "../../infrastructure/http/middleware/validate.middleware.js";
 import { withTenantTx } from "../../infrastructure/orm/engine.js";
-import { financialYearHelpers, inventoryCountHelpers } from "../../infrastructure/repositories/engineHelpers.js";
+import {
+  financialYearHelpers,
+  inventoryCountHelpers,
+} from "../../infrastructure/repositories/engineHelpers.js";
 import type { ISyncOutboxRepository } from "../../application/ports/ISyncOutboxRepository.js";
-import { enqueueRollAdjustment, isSyncEnqueueEnabled } from "../../application/use-cases/sync/syncEnqueue.js";
+import {
+  enqueueRollAdjustment,
+  isSyncEnqueueEnabled,
+} from "../../application/use-cases/sync/syncEnqueue.js";
 import { respondTransactionFailure } from "../../infrastructure/http/transactionRouteError.js";
 import { BusinessRuleError, DayLockedError } from "../../domain/errors/index.js";
 import type { TenantContext } from "../../domain/types/index.js";
@@ -18,7 +27,12 @@ import { adoptYearStatus } from "../../infrastructure/repositories/yearStatusSyn
  * data and owns the tenant-wide freeze), then adopted locally. Returns true when it
  * answered the request.
  */
-async function viaHub(req: Request, res: Response, path: string, status: "open" | "closed"): Promise<boolean> {
+async function viaHub(
+  req: Request,
+  res: Response,
+  path: string,
+  status: "open" | "closed",
+): Promise<boolean> {
   if (!getCentralSyncUrl()) return false;
   const r = await hubProxy("POST", path, req.body ?? {});
   if (r.status >= 300) {
@@ -74,7 +88,10 @@ const countQuerySchema = z.object({
   cursor: z.string().uuid().optional(),
   q: z.string().max(100).optional(),
   status: z.enum(["uncounted", "counted", "variance", "posted"]).optional(),
-  since: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  since: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .optional(),
   includeEmpty: z.enum(["1", "0", "true", "false"]).optional(),
 });
 
@@ -102,21 +119,16 @@ export function registerYearClosingRoutes(
 ): void {
   const ctxOf = (req: Request): TenantContext => req.tenantContext!;
 
-  router.get(
-    "/financial-years",
-    auth,
-    readGuard,
-    async (req: Request, res: Response) => {
-      try {
-        const years = await withTenantTx(ctxOf(req).tenantId, async (tx) =>
-          (await financialYearHelpers()).listFinancialYears(tx, ctxOf(req)),
-        );
-        return res.json(years);
-      } catch (err) {
-        return fail(res, err, "تعذّر تحميل السنوات المالية.");
-      }
-    },
-  );
+  router.get("/financial-years", auth, readGuard, async (req: Request, res: Response) => {
+    try {
+      const years = await withTenantTx(ctxOf(req).tenantId, async (tx) =>
+        (await financialYearHelpers()).listFinancialYears(tx, ctxOf(req)),
+      );
+      return res.json(years);
+    } catch (err) {
+      return fail(res, err, "تعذّر تحميل السنوات المالية.");
+    }
+  });
 
   /** Read-only dry run: the checklist + the numbers the close dialog shows. */
   router.get(
@@ -215,14 +227,20 @@ export function registerYearClosingRoutes(
       const { countId } = parsed<z.infer<typeof postBodySchema>>(req);
       try {
         const result = await withTenantTx(ctxOf(req).tenantId, async (tx) => {
-          const posted = await (await inventoryCountHelpers()).postCountVariance(tx, ctxOf(req), countId);
+          const posted = await (
+            await inventoryCountHelpers()
+          ).postCountVariance(tx, ctxOf(req), countId);
           // The shelf changed: every device must apply the same correction.
           if (posted.adjustment && syncOutboxRepo && isSyncEnqueueEnabled()) {
             await enqueueRollAdjustment(syncOutboxRepo, ctxOf(req), posted.adjustment, req);
           }
           return posted;
         });
-        return res.json({ rollId: result.rollId, diffKg: result.diffKg, movementId: result.movementId });
+        return res.json({
+          rollId: result.rollId,
+          diffKg: result.diffKg,
+          movementId: result.movementId,
+        });
       } catch (err) {
         return fail(res, err, "تعذّر ترحيل تسوية الجرد.");
       }
@@ -243,10 +261,7 @@ export function registerYearClosingRoutes(
         const result = await withTenantTx(ctxOf(req).tenantId, async (tx) =>
           (await financialYearHelpers()).closeFinancialYear(tx, ctxOf(req), body.year, body.reason),
         );
-        logger.info(
-          { tenantId: ctxOf(req).tenantId, year: body.year },
-          "FINANCIAL_YEAR_CLOSED",
-        );
+        logger.info({ tenantId: ctxOf(req).tenantId, year: body.year }, "FINANCIAL_YEAR_CLOSED");
         return res.json(result);
       } catch (err) {
         logger.error({ err, year: body.year }, "FINANCIAL_YEAR_CLOSE_FAILED");
@@ -267,7 +282,12 @@ export function registerYearClosingRoutes(
       if (await viaHub(req, res, "/api/financial-years/reopen", "open")) return;
       try {
         const result = await withTenantTx(ctxOf(req).tenantId, async (tx) =>
-          (await financialYearHelpers()).reopenFinancialYear(tx, ctxOf(req), body.year, body.reason),
+          (await financialYearHelpers()).reopenFinancialYear(
+            tx,
+            ctxOf(req),
+            body.year,
+            body.reason,
+          ),
         );
         logger.warn(
           { tenantId: ctxOf(req).tenantId, year: body.year, by: ctxOf(req).userName },

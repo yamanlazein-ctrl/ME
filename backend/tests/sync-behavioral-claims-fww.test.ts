@@ -8,7 +8,10 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { db } from "@/infrastructure/orm/drizzle.js";
-import { runWithTenantContext, runWithPlatformContext } from "@/infrastructure/orm/tenant-context.js";
+import {
+  runWithTenantContext,
+  runWithPlatformContext,
+} from "@/infrastructure/orm/tenant-context.js";
 import { PostgresSyncResourceClaimRepository } from "@/infrastructure/repositories/PostgresSyncResourceClaimRepository.js";
 import { databaseReachable, skipUnlessDatabase } from "./_helpers/requireDatabase.js";
 

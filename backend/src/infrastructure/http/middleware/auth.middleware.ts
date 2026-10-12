@@ -43,7 +43,15 @@ export function createAuthMiddleware(jwtSigner: JwtSigner, tokenDenylist: TokenD
         try {
           identity = await resolveSessionIdentity(payload.sub, payload.sub);
         } catch (err) {
+          // H-09: fail closed. Falling through used the JWT's role, so an inactive or demoted user kept
+          // their privileges whenever the users lookup failed. Retryable, not a sign-out.
           logger.warn({ err, userId: payload.sub }, "auth identity lookup failed (DB error)");
+          res.status(503).json({
+            code: "SERVICE_UNAVAILABLE",
+            message: "تعذّر التحقق من الجلسة مؤقتاً — أعد المحاولة",
+            statusCode: 503,
+          });
+          return;
         }
 
         if (identity && (!identity.known || !identity.active)) {
@@ -81,7 +89,9 @@ export function createAuthMiddleware(jwtSigner: JwtSigner, tokenDenylist: TokenD
           userRole: (identity?.role ?? payload.role) as TenantContext["userRole"],
           userName: identity?.name ?? payload.sub,
           // T109: after a restore on a synced device, a previous identity maps to the new one.
-          syncDeviceId: await mapRestoredSyncDeviceId(syncDeviceId && isUuid(syncDeviceId) ? syncDeviceId : null),
+          syncDeviceId: await mapRestoredSyncDeviceId(
+            syncDeviceId && isUuid(syncDeviceId) ? syncDeviceId : null,
+          ),
         };
 
         next();

@@ -387,11 +387,7 @@ export async function activateAndPersistUseCase(
       // otherwise the onboarding wizard must collect name + PIN.
       let isCompleted = false;
       if (
-        await tenantAlreadyProvisioned(
-          deps.installationStateRepo,
-          deps.authRepo,
-          effectiveTenantId,
-        )
+        await tenantAlreadyProvisioned(deps.installationStateRepo, deps.authRepo, effectiveTenantId)
       ) {
         const completed = await deps.installationStateRepo.markCompleted(
           effectiveTenantId as never,
@@ -430,11 +426,7 @@ export async function activateAndPersistUseCase(
       };
     }
 
-    const effectiveTenantId = await resolveActivationTenantId(
-      deps,
-      tenantId,
-      parsed.data.key,
-    );
+    const effectiveTenantId = await resolveActivationTenantId(deps, tenantId, parsed.data.key);
 
     const result = await deps.licenseProvider.activate({
       key: parsed.data.key ?? "",
@@ -492,15 +484,9 @@ export async function activateAndPersistUseCase(
     // after the one-time license activation, same as desktop pre-baked SKU.
     let isCompleted = false;
     if (
-      await tenantAlreadyProvisioned(
-        deps.installationStateRepo,
-        deps.authRepo,
-        effectiveTenantId,
-      )
+      await tenantAlreadyProvisioned(deps.installationStateRepo, deps.authRepo, effectiveTenantId)
     ) {
-      const completed = await deps.installationStateRepo.markCompleted(
-        effectiveTenantId as never,
-      );
+      const completed = await deps.installationStateRepo.markCompleted(effectiveTenantId as never);
       isCompleted = completed.isCompleted;
     }
 
@@ -601,7 +587,10 @@ const adminStepInput = z
     name: z.string().min(1),
     email: z.string().email().optional(),
     password: z.string().min(8).optional(),
-    pin: z.string().regex(/^\d{4}$/).optional(),
+    pin: z
+      .string()
+      .regex(/^\d{4}$/)
+      .optional(),
   })
   .refine((d) => Boolean(d.password || d.pin), {
     message: "password_or_pin_required",
@@ -629,12 +618,8 @@ export async function saveAdminStepUseCase(
     const email = (parsed.data.email?.trim() || "admin@erp.local").toLowerCase();
     // Desktop onboarding may send only a 4-digit PIN; web still sends password.
     // PIN login uses pinHash; passwordHash must still exist on the user row.
-    const passwordHash = await deps.passwordHasher.hash(
-      parsed.data.password ?? parsed.data.pin!,
-    );
-    const pinHash = parsed.data.pin
-      ? await deps.passwordHasher.hash(parsed.data.pin)
-      : undefined;
+    const passwordHash = await deps.passwordHasher.hash(parsed.data.password ?? parsed.data.pin!);
+    const pinHash = parsed.data.pin ? await deps.passwordHasher.hash(parsed.data.pin) : undefined;
     await deps.installationStateRepo.saveStep(tenantId as never, "admin", {
       name: parsed.data.name,
       email,

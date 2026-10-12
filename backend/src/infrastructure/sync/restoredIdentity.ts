@@ -20,7 +20,10 @@ async function load(): Promise<Mapping> {
   const { getSyncRestoreStateStore } = await import("../repositories/engineStores.js");
   const state = await (await getSyncRestoreStateStore()).get();
   if (!state?.newDeviceId) return null;
-  return { previous: new Set(state.previousDeviceIds.map((id) => id.toLowerCase())), current: state.newDeviceId };
+  return {
+    previous: new Set(state.previousDeviceIds.map((id) => id.toLowerCase())),
+    current: state.newDeviceId,
+  };
 }
 
 export async function mapRestoredSyncDeviceId(id: string | null): Promise<string | null> {

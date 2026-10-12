@@ -23,12 +23,16 @@ import { colors } from "../orm/schemas/color.table.js";
 import { rolls } from "../orm/schemas/roll.table.js";
 import { invoices } from "../orm/schemas/invoice.table.js";
 import { vouchers } from "../orm/schemas/voucher.table.js";
-import { allocateDocumentNumber, allocateDocumentNumberForDevice } from "../utils/documentNumbers.js";
+import {
+  allocateDocumentNumber,
+  allocateDocumentNumberForDevice,
+} from "../utils/documentNumbers.js";
 import { round2dp } from "@erp/shared";
 import { BusinessRuleError } from "../../domain/errors/index.js";
 import { customerCreditPosition } from "./customerCredit.js";
 
 import { localToday } from "../utils/localDate.js";
+import { assertYearOpen } from "./dayLockHelper.js";
 const INVOICE_TYPES = ["sales_invoice", "purchase_invoice"];
 const VOUCHER_REF_TYPES = ["receipt_in", "payment_out"];
 /** Tie-break inside one (date, created_at): documents (0) before the payments booked with them (1). */
@@ -165,7 +169,8 @@ export class PostgresStatementRepository implements IStatementRepository {
         .from(ledgerEntries)
         .where(eq(ledgerEntries.id, cursor.id))
         .limit(1);
-      cursorRank = row && (STATEMENT_DOCUMENT_TYPES as readonly string[]).includes(row.type) ? 0 : 1;
+      cursorRank =
+        row && (STATEMENT_DOCUMENT_TYPES as readonly string[]).includes(row.type) ? 0 : 1;
     }
 
     const pageConditions = [...winConditions];
@@ -236,7 +241,12 @@ export class PostgresStatementRepository implements IStatementRepository {
         })
         .from(ledgerEntries)
         .where(and(...winConditions))
-        .orderBy(asc(ledgerEntries.date), asc(ledgerEntries.createdAt), asc(docRank), asc(ledgerEntries.id))
+        .orderBy(
+          asc(ledgerEntries.date),
+          asc(ledgerEntries.createdAt),
+          asc(docRank),
+          asc(ledgerEntries.id),
+        )
         .limit(pageOffset)
         .as("head");
       const headRows = await this.db
@@ -295,7 +305,12 @@ export class PostgresStatementRepository implements IStatementRepository {
       })
       .from(ledgerEntries)
       .where(and(...pageConditions))
-      .orderBy(asc(ledgerEntries.date), asc(ledgerEntries.createdAt), asc(docRank), asc(ledgerEntries.id))
+      .orderBy(
+        asc(ledgerEntries.date),
+        asc(ledgerEntries.createdAt),
+        asc(docRank),
+        asc(ledgerEntries.id),
+      )
       .limit(fetchLimit)
       .offset(pageOffset);
 
@@ -343,7 +358,9 @@ export class PostgresStatementRepository implements IStatementRepository {
         runningBalance: round2dp(running),
       };
 
-      const doc = row.referenceId ? documentsByRef.get(`${row.type}:${row.referenceId}`) : undefined;
+      const doc = row.referenceId
+        ? documentsByRef.get(`${row.type}:${row.referenceId}`)
+        : undefined;
       if (doc) {
         entry.document =
           doc.info.kind === "voucher"
@@ -357,7 +374,7 @@ export class PostgresStatementRepository implements IStatementRepository {
           const qty = lines.reduce((s, l) => s + l.quantityKg, 0);
           const amount = debit > 0 ? debit : lines.reduce((s, l) => s + l.amount, 0);
           entry.quantityKg = Math.round(qty * 100) / 100;
-          entry.pricePerKg = qty > 0 ? Math.round((amount / qty) * 100) / 100 : 0;
+          entry.pricePerKg = qty > 0 ? round2dp(amount / qty) : 0;
           entry.lines = lines;
         }
       }
@@ -380,7 +397,7 @@ export class PostgresStatementRepository implements IStatementRepository {
       const side: "debit" | "credit" | "zero" =
         Math.abs(finalBalance) < 0.01
           ? "zero"
-          : (finalBalance > 0) === (p.kind === "customer")
+          : finalBalance > 0 === (p.kind === "customer")
             ? "debit"
             : "credit";
       totalsByCurrency[ccy] = {
@@ -414,15 +431,11 @@ export class PostgresStatementRepository implements IStatementRepository {
         });
 
     const last = pageRows[pageRows.length - 1];
-    const nextCursor =
-      hasMore && last
-        ? `${last.date}|${last.createdAtUs}|${last.id}`
-        : null;
+    const nextCursor = hasMore && last ? `${last.date}|${last.createdAtUs}|${last.id}` : null;
 
-    const primaryBefore =
-      !allCurrencies
-        ? round2dp(beforePageByCurrency.get(currency) ?? prevByCurrency.get(currency) ?? 0)
-        : 0;
+    const primaryBefore = !allCurrencies
+      ? round2dp(beforePageByCurrency.get(currency) ?? prevByCurrency.get(currency) ?? 0)
+      : 0;
 
     return {
       partyId: query.partyId,
@@ -445,19 +458,15 @@ export class PostgresStatementRepository implements IStatementRepository {
         nextCursor,
         balanceBeforePage: primaryBefore,
         balanceBeforePageByCurrency: Object.fromEntries(
-          [...new Set([...beforePageByCurrency.keys(), ...(allCurrencies ? [] : [currency])])].map((c) => [
-            c,
-            round2dp(beforePageByCurrency.get(c) ?? 0),
-          ]),
+          [...new Set([...beforePageByCurrency.keys(), ...(allCurrencies ? [] : [currency])])].map(
+            (c) => [c, round2dp(beforePageByCurrency.get(c) ?? 0)],
+          ),
         ),
         ...(pageNo != null
           ? {
               page: pageNo,
               totalRows: totalRowsInWindow ?? 0,
-              totalPages: Math.max(
-                1,
-                Math.ceil((totalRowsInWindow ?? 0) / pageLimit) || 1,
-              ),
+              totalPages: Math.max(1, Math.ceil((totalRowsInWindow ?? 0) / pageLimit) || 1),
             }
           : {}),
       },
@@ -495,6 +504,8 @@ export class PostgresStatementRepository implements IStatementRepository {
         .for("update")
         .limit(1);
       if (party.length === 0) throw new Error("الطرف غير موجود");
+      // H-07: a settlement is a ledger write on its date — refused inside a closed financial year.
+      await assertYearOpen(tx, ctx.tenantId, input.date ?? localToday());
       const currency = input.currency ?? party[0].currency ?? "SYP";
 
       const rows = await tx
@@ -729,7 +740,7 @@ export class PostgresStatementRepository implements IStatementRepository {
         rollId: r.rollId,
         rollNo: r.rollNo ?? null,
         quantityKg: Math.round(qty * 100) / 100,
-        pricePerKg: Math.round(price * 100) / 100,
+        pricePerKg: round2dp(price),
         amount: round2dp(qty * price),
       };
       const list = map.get(r.invoiceId) ?? [];

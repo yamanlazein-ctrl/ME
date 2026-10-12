@@ -54,7 +54,11 @@ async function seedAll(): Promise<void> {
   // `slug` is NOT NULL + unique on tenants, so the seed must supply it.
   await db
     .insert(tenants)
-    .values({ id: tenantId, name: `purge-${tenantId.slice(0, 8)}`, slug: `purge-${tenantId.slice(0, 8)}` } as never)
+    .values({
+      id: tenantId,
+      name: `purge-${tenantId.slice(0, 8)}`,
+      slug: `purge-${tenantId.slice(0, 8)}`,
+    } as never)
     .onConflictDoNothing();
   await db
     .insert(parties)
@@ -197,9 +201,7 @@ async function cleanup(): Promise<void> {
   // `ledger_entries` is append-only: the trigger RAISEs on DELETE. The teardown
   // lifts it and restores it in a `finally`, so a mid-teardown failure can never
   // leave the database without its append-only guarantee.
-  await db.execute(
-    sql`DROP TRIGGER IF EXISTS trg_ledger_entries_append_only ON ledger_entries`,
-  );
+  await db.execute(sql`DROP TRIGGER IF EXISTS trg_ledger_entries_append_only ON ledger_entries`);
   try {
     for (const stmt of [
       sql`DELETE FROM ledger_entries WHERE tenant_id = ${tenantId}::uuid`,
@@ -316,4 +318,3 @@ describe("dye cascade purge — voucher-keyed cash legs", () => {
     });
   });
 });
-

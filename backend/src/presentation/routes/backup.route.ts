@@ -1,6 +1,6 @@
 import { Router, type Request, type Response } from "express";
 import { createReadStream, createWriteStream, existsSync, readFileSync, statSync } from "fs";
-import { join } from "path";
+import { extname, isAbsolute, join } from "path";
 import { tmpdir } from "os";
 import { mkdir, rm } from "fs/promises";
 import { createHash, randomUUID } from "crypto";
@@ -15,6 +15,7 @@ import type { IStatementRepository } from "../../application/ports/IStatementRep
 import type { BackupManifest } from "../../infrastructure/backup/portableBackup.js";
 import { BackupError } from "../../infrastructure/backup/backupError.js";
 import { getEngine } from "../../infrastructure/orm/engine.js";
+import { hasAdminPrivileges } from "../../infrastructure/http/middleware/rbac.middleware.js";
 
 /**
  * Desktop SQLite (specs/001-desktop-sqlite-engine T095/T098): every backup goes through the v3
@@ -31,7 +32,12 @@ async function asBackupError(err: unknown): Promise<unknown> {
   const { RestoreError } = await import("../../infrastructure/backup/sqliteRestore.js");
   // restoreBackupV3 wraps an archive refusal (PostgreSQL-era, newer, corrupt) in a RestoreError at
   // VERIFY_ARCHIVE: map the underlying refusal, so the user gets its specific message and code.
-  if (err instanceof RestoreError && err.step === "VERIFY_ARCHIVE" && err.cause instanceof BackupV3Error) err = err.cause;
+  if (
+    err instanceof RestoreError &&
+    err.step === "VERIFY_ARCHIVE" &&
+    err.cause instanceof BackupV3Error
+  )
+    err = err.cause;
   if (err instanceof BackupV3Error) {
     // Preserve the SPECIFIC refusal code. Collapsing every archive refusal into BACKUP_CORRUPT is what
     // made the UI show one generic "ملف غير صالح" for genuinely different situations: an unsupported
@@ -85,7 +91,10 @@ async function asBackupError(err: unknown): Promise<unknown> {
     return new BackupError(code, msg);
   }
   if (err instanceof RestoreError) {
-    return new BackupError(err.step === "VERIFY_ARCHIVE" ? "RESTORE_VERIFY_FAILED" : "RESTORE_FAILED", `فشلت الاستعادة ولم تتغير البيانات الحالية: ${err.message}`);
+    return new BackupError(
+      err.step === "VERIFY_ARCHIVE" ? "RESTORE_VERIFY_FAILED" : "RESTORE_FAILED",
+      `فشلت الاستعادة ولم تتغير البيانات الحالية: ${err.message}`,
+    );
   }
   // Already a BackupError (the hand-off refusals above): pass it through with its own code and message
   // so the UI can tell "no file arrived" from "the archive is damaged".
@@ -171,23 +180,44 @@ async function receiveUpload(req: Request): Promise<string> {
  * reported, and the archive then goes through the same `openAndVerifyBackupV3` / `restoreBackupV3` the
  * upload path uses. A tampered, truncated or substituted file is refused before anything is swapped.
  */
-async function receiveShellPath(req: Request): Promise<{ path: string; reportedSha256: string | null; reportedSize: number | null }> {
+export async function receiveShellPath(
+  req: Request,
+): Promise<{ path: string; reportedSha256: string | null; reportedSize: number | null }> {
   const body = (req.body ?? {}) as { path?: unknown; sha256?: unknown; sizeBytes?: unknown };
   const path = typeof body.path === "string" ? body.path.trim() : "";
   if (!path) throw new BackupError("BACKUP_CORRUPT", "لم يُحدَّد مسار ملف النسخة الاحتياطية");
-  const reportedSha256 = typeof body.sha256 === "string" && /^[0-9a-f]{64}$/i.test(body.sha256) ? body.sha256 : null;
-  const reportedSize = typeof body.sizeBytes === "number" && Number.isFinite(body.sizeBytes) && body.sizeBytes > 0 ? body.sizeBytes : null;
+  // hermes F-014: only what the shell's picker can hand over — an absolute path to a `.zip` (its
+  // filter, main.rs `add_filter("Motard backup", &["zip"])`) — is opened at all. Any other path the
+  // caller names (a key file, another database) is refused before it is touched or hashed.
+  if (!isAbsolute(path) || extname(path).toLowerCase() !== ".zip") {
+    throw new BackupError(
+      "BACKUP_CORRUPT",
+      "يُقبل فقط ملف نسخة احتياطية بامتداد ‎.zip‎ يُختار من التطبيق",
+    );
+  }
+  const reportedSha256 =
+    typeof body.sha256 === "string" && /^[0-9a-f]{64}$/i.test(body.sha256) ? body.sha256 : null;
+  const reportedSize =
+    typeof body.sizeBytes === "number" && Number.isFinite(body.sizeBytes) && body.sizeBytes > 0
+      ? body.sizeBytes
+      : null;
   if (!existsSync(path)) throw new BackupError("BACKUP_FILE_MISSING", `الملف غير موجود: ${path}`);
   const st = statSync(path);
   if (!st.isFile()) throw new BackupError("BACKUP_FILE_MISSING", `المسار ليس ملفًا: ${path}`);
   if (st.size === 0) throw new BackupError("BACKUP_CORRUPT", "الملف المحدد فارغ");
   if (reportedSize !== null && st.size !== reportedSize) {
-    throw new BackupError("BACKUP_FILE_HASH_MISMATCH", `حجم الملف لا يطابق النسخة المختارة (${st.size} مقابل ${reportedSize} بايت)`);
+    throw new BackupError(
+      "BACKUP_FILE_HASH_MISMATCH",
+      `حجم الملف لا يطابق النسخة المختارة (${st.size} مقابل ${reportedSize} بايت)`,
+    );
   }
   if (reportedSha256 !== null) {
     const actual = createHash("sha256").update(readFileSync(path)).digest("hex");
     if (actual !== reportedSha256.toLowerCase()) {
-      throw new BackupError("BACKUP_FILE_HASH_MISMATCH", "بصمة الملف لا تطابق النسخة المختارة — قد يكون الملف تغيّر بعد اختياره");
+      throw new BackupError(
+        "BACKUP_FILE_HASH_MISMATCH",
+        "بصمة الملف لا تطابق النسخة المختارة — قد يكون الملف تغيّر بعد اختياره",
+      );
     }
   }
   return { path, reportedSha256, reportedSize };
@@ -203,8 +233,10 @@ async function receiveShellPath(req: Request): Promise<{ path: string; reportedS
  */
 async function appMaxJournalIdx(): Promise<number | undefined> {
   try {
-    const { sqliteRuntimeMigrationsDir } = await import("../../infrastructure/orm/sqlite/runtime.js");
-    const { loadSqliteJournal } = await import("../../infrastructure/orm/sqlite/schemaFingerprint.js");
+    const { sqliteRuntimeMigrationsDir } =
+      await import("../../infrastructure/orm/sqlite/runtime.js");
+    const { loadSqliteJournal } =
+      await import("../../infrastructure/orm/sqlite/schemaFingerprint.js");
     return loadSqliteJournal(sqliteRuntimeMigrationsDir()).entries.at(-1)!.idx;
   } catch {
     return undefined; // not a SQLite build (cloud/v2) — the gate does not apply
@@ -264,12 +296,19 @@ export async function runTenantFullBackup(
       rowCounts: Object.fromEntries(manifest.tables.map((t) => [t.name, t.rows])),
     };
   } catch (err) {
-    return { ok: false, warnings: [{ table: "*", message: err instanceof Error ? err.message : String(err) }] };
+    return {
+      ok: false,
+      warnings: [{ table: "*", message: err instanceof Error ? err.message : String(err) }],
+    };
   }
 }
 
 /** Restore into `targetTenantId`. Used by the admin endpoint and the first-run wizard. */
-export async function restoreUploadedBackup(file: string, targetTenantId: string, confirmReplace: boolean) {
+export async function restoreUploadedBackup(
+  file: string,
+  targetTenantId: string,
+  confirmReplace: boolean,
+) {
   if (restoreInProgress) throw new BackupError("RESTORE_FAILED", "استعادة أخرى قيد التنفيذ");
   restoreInProgress = true;
   try {
@@ -281,7 +320,10 @@ export async function restoreUploadedBackup(file: string, targetTenantId: string
         sql`SELECT (SELECT count(*) FROM invoices WHERE tenant_id = ${targetTenantId}) + (SELECT count(*) FROM parties WHERE tenant_id = ${targetTenantId}) AS n`,
       );
       if (!confirmReplace && Number(has.rows[0]?.n ?? 0) > 0) {
-        throw new BackupError("RESTORE_CONFIRM_REQUIRED", "توجد بيانات حالية — أكّد الاستبدال للمتابعة (ستُحفظ نسخة أمان أولاً)");
+        throw new BackupError(
+          "RESTORE_CONFIRM_REQUIRED",
+          "توجد بيانات حالية — أكّد الاستبدال للمتابعة (ستُحفظ نسخة أمان أولاً)",
+        );
       }
       const { restoreBackupV3 } = await import("../../infrastructure/backup/sqliteRestore.js");
       try {
@@ -291,7 +333,8 @@ export async function restoreUploadedBackup(file: string, targetTenantId: string
       }
     }
     const { restorePortableBackup } = await v2();
-    const { resolveMigrationsFolder } = await import("../../infrastructure/orm/runDesktopMigrations.js");
+    const { resolveMigrationsFolder } =
+      await import("../../infrastructure/orm/runDesktopMigrations.js");
     return await restorePortableBackup({
       databaseUrl: config.DATABASE_URL,
       migrationsFolder: resolveMigrationsFolder(),
@@ -304,7 +347,11 @@ export async function restoreUploadedBackup(file: string, targetTenantId: string
         await mkdir(dir, { recursive: true });
         const out = join(dir, `before-restore-${stampNow()}.zip`);
         const r = await runTenantFullBackup(targetTenantId, out);
-        if (!r.ok) throw new BackupError("RESTORE_FAILED", `تعذّر أخذ نسخة أمان قبل الاستعادة: ${r.warnings[0]?.message}`);
+        if (!r.ok)
+          throw new BackupError(
+            "RESTORE_FAILED",
+            `تعذّر أخذ نسخة أمان قبل الاستعادة: ${r.warnings[0]?.message}`,
+          );
         return out;
       },
       log: (m) => logger.info({ targetTenantId }, `[restore] ${m}`),
@@ -325,7 +372,7 @@ export function createBackupRouter(_deps: BackupRouteDeps): Router {
       res.status(401).json({ code: "UNAUTHORIZED", message: "غير مصرح" });
       return;
     }
-    if (ctx.userRole !== "admin") {
+    if (!hasAdminPrivileges(ctx.userRole)) {
       res.status(403).json({ code: "FORBIDDEN", message: "غير مصرح" });
       return;
     }
@@ -339,7 +386,8 @@ export function createBackupRouter(_deps: BackupRouteDeps): Router {
     if (isSqlite()) {
       try {
         // A manual v3 backup: created, VERIFIED and registered in <root>\backups, then streamed.
-        const { createAndVerifyBackup } = await import("../../infrastructure/backup/sqliteBackup.js");
+        const { createAndVerifyBackup } =
+          await import("../../infrastructure/backup/sqliteBackup.js");
         const created = await createAndVerifyBackup({ kind: "manual", appVersion: appVersion() });
         if (req.query.deliver === "metadata") {
           // T100 (I-11): the desktop bridge carries text only, so the desktop window never receives the
@@ -353,17 +401,26 @@ export function createBackupRouter(_deps: BackupRouteDeps): Router {
             sha256: created.sha256,
             rows: created.manifest.tables.reduce((a, t) => a + t.rows, 0),
           });
-          logger.info({ tenantId, path: created.path, durationMs: Date.now() - startTime }, "Backup completed (v3, VERIFIED, metadata)");
+          logger.info(
+            { tenantId, path: created.path, durationMs: Date.now() - startTime },
+            "Backup completed (v3, VERIFIED, metadata)",
+          );
           return;
         }
         res.setHeader("Content-Type", "application/zip");
         res.setHeader("Content-Length", created.sizeBytes);
         res.setHeader("Content-Disposition", `attachment; filename="MotardERP-Backup-${date}.zip"`);
-        res.setHeader("X-Backup-Rows", String(created.manifest.tables.reduce((a, t) => a + t.rows, 0)));
+        res.setHeader(
+          "X-Backup-Rows",
+          String(created.manifest.tables.reduce((a, t) => a + t.rows, 0)),
+        );
         res.setHeader("X-Backup-Sha256", created.sha256);
         res.setHeader("X-Backup-Path", encodeURIComponent(created.path));
         createReadStream(created.path).pipe(res);
-        logger.info({ tenantId, path: created.path, durationMs: Date.now() - startTime }, "Backup completed (v3, VERIFIED)");
+        logger.info(
+          { tenantId, path: created.path, durationMs: Date.now() - startTime },
+          "Backup completed (v3, VERIFIED)",
+        );
       } catch (error) {
         sendBackupError(res, await asBackupError(error));
       } finally {
@@ -394,15 +451,19 @@ export function createBackupRouter(_deps: BackupRouteDeps): Router {
       stream.on("close", () => void rm(zipFile, { force: true }).catch(() => {}));
       stream.pipe(res);
       logger.info(
-        { tenantId, sizeMB: (stats.size / 1024 / 1024).toFixed(1), durationMs: Date.now() - startTime },
+        {
+          tenantId,
+          sizeMB: (stats.size / 1024 / 1024).toFixed(1),
+          durationMs: Date.now() - startTime,
+        },
         "Backup completed",
       );
       try {
-        const { readManifest, writeManifestAtomic } = await import(
-          "../../infrastructure/integrity/dataIntegrityManifest.js"
-        );
+        const { readManifest, writeManifestAtomic } =
+          await import("../../infrastructure/integrity/dataIntegrityManifest.js");
         const m = await readManifest();
-        if (m) await writeManifestAtomic({ ...m, lastSuccessfulBackupAt: new Date().toISOString() });
+        if (m)
+          await writeManifestAtomic({ ...m, lastSuccessfulBackupAt: new Date().toISOString() });
       } catch (err) {
         logger.warn({ err }, "failed to stamp lastSuccessfulBackupAt");
       }
@@ -423,7 +484,7 @@ export function createBackupRouter(_deps: BackupRouteDeps): Router {
       res.status(401).json({ code: "UNAUTHORIZED", message: "غير مصرح" });
       return;
     }
-    if (ctx.userRole !== "admin") {
+    if (!hasAdminPrivileges(ctx.userRole)) {
       res.status(403).json({ code: "FORBIDDEN", message: "غير مصرح" });
       return;
     }
@@ -461,12 +522,23 @@ export function createBackupRouter(_deps: BackupRouteDeps): Router {
    * exact same `openAndVerifyBackupV3` the upload path uses.
    */
   backupRouter.post("/backup/verify-path", async (req: Request, res: Response) => {
+    // The path hand-off exists only for the desktop shell; on a server the path would name the
+    // server's own disk (same rule as /backup/restore-path).
+    if (!config.DESKTOP_DEPLOY) {
+      res
+        .status(400)
+        .json({ code: "NOT_SUPPORTED", message: "التحقق من مسار ملف متاح في نسخة سطح المكتب فقط" });
+      return;
+    }
     try {
       const { path } = await receiveShellPath(req); // size/sha256 re-checked from the file's own bytes
       if (isSqlite()) {
-        const { openAndVerifyBackupV3 } = await import("../../infrastructure/backup/sqliteBackup.js");
+        const { openAndVerifyBackupV3 } =
+          await import("../../infrastructure/backup/sqliteBackup.js");
         try {
-          const { manifest } = await openAndVerifyBackupV3(path, { maxJournalIdx: await appMaxJournalIdx() });
+          const { manifest } = await openAndVerifyBackupV3(path, {
+            maxJournalIdx: await appMaxJournalIdx(),
+          });
           res.json({
             ok: true,
             createdAt: manifest.createdAt,
@@ -495,9 +567,12 @@ export function createBackupRouter(_deps: BackupRouteDeps): Router {
     try {
       file = await receiveUpload(req);
       if (isSqlite()) {
-        const { openAndVerifyBackupV3 } = await import("../../infrastructure/backup/sqliteBackup.js");
+        const { openAndVerifyBackupV3 } =
+          await import("../../infrastructure/backup/sqliteBackup.js");
         try {
-          const { manifest } = await openAndVerifyBackupV3(file, { maxJournalIdx: await appMaxJournalIdx() });
+          const { manifest } = await openAndVerifyBackupV3(file, {
+            maxJournalIdx: await appMaxJournalIdx(),
+          });
           res.json({
             ok: true,
             createdAt: manifest.createdAt,
@@ -523,57 +598,28 @@ export function createBackupRouter(_deps: BackupRouteDeps): Router {
     }
   });
 
-  /**
-   * POST /api/backup/verify-path — the desktop verify, by path instead of by upload.
-   * The SPA's `File` cannot cross the text-only IPC bridge, so the shell picks the archive, reports its
-   * size + sha256, and this route re-verifies both before opening the archive. Same verification
-   * (`openAndVerifyBackupV3`) and the same response shape as `/backup/verify`.
-   */
-  backupRouter.post("/backup/verify-path", async (req: Request, res: Response) => {
-    try {
-      const { path } = await receiveShellPath(req); // size/sha256 re-checked from the file's own bytes
-      if (isSqlite()) {
-        const { openAndVerifyBackupV3 } = await import("../../infrastructure/backup/sqliteBackup.js");
-        try {
-          const { manifest } = await openAndVerifyBackupV3(path, { maxJournalIdx: await appMaxJournalIdx() });
-          res.json({
-            ok: true,
-            createdAt: manifest.createdAt,
-            appVersion: manifest.app.version,
-            schemaMigrations: manifest.schema.journalIdx,
-            company: manifest.tenant.name,
-            tables: manifest.tables.length,
-            rows: manifest.tables.reduce((a, t) => a + t.rows, 0),
-            rowsByTable: Object.fromEntries(manifest.tables.map((t) => [t.name, t.rows])),
-            formatVersion: manifest.formatVersion,
-          });
-        } catch (err) {
-          throw await asBackupError(err);
-        }
-        return;
-      }
-      const { manifest } = await (await v2()).openAndVerifyBackup(path);
-      res.json({ ok: true, ...manifestSummary(manifest) });
-    } catch (err) {
-      sendBackupError(res, err);
-    }
-  });
-
   // POST /api/backup/restore?confirm=replace — replace this company's data
   backupRouter.post("/backup/restore", async (req: Request, res: Response) => {
     const ctx = (req as unknown as { tenantContext?: TenantContext }).tenantContext;
-    if (!ctx?.tenantId || ctx.userRole !== "admin") {
+    if (!ctx?.tenantId || !hasAdminPrivileges(ctx.userRole)) {
       res.status(403).json({ code: "FORBIDDEN", message: "غير مصرح" });
       return;
     }
     if (!config.DESKTOP_DEPLOY) {
-      res.status(400).json({ code: "NOT_SUPPORTED", message: "الاستعادة من الواجهة متاحة في نسخة سطح المكتب فقط" });
+      res.status(400).json({
+        code: "NOT_SUPPORTED",
+        message: "الاستعادة من الواجهة متاحة في نسخة سطح المكتب فقط",
+      });
       return;
     }
     let file: string | null = null;
     try {
       file = await receiveUpload(req);
-      const report = await restoreUploadedBackup(file, ctx.tenantId, req.query.confirm === "replace");
+      const report = await restoreUploadedBackup(
+        file,
+        ctx.tenantId,
+        req.query.confirm === "replace",
+      );
       res.json(report);
     } catch (err) {
       sendBackupError(res, err);
@@ -590,17 +636,24 @@ export function createBackupRouter(_deps: BackupRouteDeps): Router {
    */
   backupRouter.post("/backup/restore-path", async (req: Request, res: Response) => {
     const ctx = (req as unknown as { tenantContext?: TenantContext }).tenantContext;
-    if (!ctx?.tenantId || ctx.userRole !== "admin") {
+    if (!ctx?.tenantId || !hasAdminPrivileges(ctx.userRole)) {
       res.status(403).json({ code: "FORBIDDEN", message: "غير مصرح" });
       return;
     }
     if (!config.DESKTOP_DEPLOY) {
-      res.status(400).json({ code: "NOT_SUPPORTED", message: "الاستعادة من الواجهة متاحة في نسخة سطح المكتب فقط" });
+      res.status(400).json({
+        code: "NOT_SUPPORTED",
+        message: "الاستعادة من الواجهة متاحة في نسخة سطح المكتب فقط",
+      });
       return;
     }
     try {
       const { path } = await receiveShellPath(req);
-      const report = await restoreUploadedBackup(path, ctx.tenantId, req.query.confirm === "replace");
+      const report = await restoreUploadedBackup(
+        path,
+        ctx.tenantId,
+        req.query.confirm === "replace",
+      );
       res.json(report);
     } catch (err) {
       sendBackupError(res, err);

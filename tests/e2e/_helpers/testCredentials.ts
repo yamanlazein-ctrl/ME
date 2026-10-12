@@ -46,14 +46,14 @@ export function e2eAdminPasswordOrThrow(): string {
  * Role fixture passwords for cert-route suites.
  * Prefer E2E_<ROLE>_PASSWORD; admin falls back to E2E_ADMIN_PASSWORD.
  */
-export function e2eRoleAuth(
-  role: "admin" | "warehouse" | "accountant" | "viewer",
-): { username: string; password: string } {
+export function e2eRoleAuth(role: "admin" | "warehouse" | "accountant" | "viewer"): {
+  username: string;
+  password: string;
+} {
   requireTestMode("e2eRoleAuth");
   const envKey = `E2E_${role.toUpperCase()}_PASSWORD`;
   const password =
-    process.env[envKey] ??
-    (role === "admin" ? process.env.E2E_ADMIN_PASSWORD : undefined);
+    process.env[envKey] ?? (role === "admin" ? process.env.E2E_ADMIN_PASSWORD : undefined);
   if (!password) {
     throw new Error(
       `${envKey} is required for cert-route role fixtures (DFP-029). Admin may use E2E_ADMIN_PASSWORD.`,
@@ -71,7 +71,9 @@ export function testDatabaseUrl(fallbackDb = "erp_test"): string {
     process.env.TEST_DB_URL ??
     process.env.DATABASE_URL ??
     (() => {
-      throw new Error(`TEST_DB_URL or DATABASE_URL is required; refusing implicit database credentials (requested ${fallbackDb})`);
+      throw new Error(
+        `TEST_DB_URL or DATABASE_URL is required; refusing implicit database credentials (requested ${fallbackDb})`,
+      );
     })()
   );
 }

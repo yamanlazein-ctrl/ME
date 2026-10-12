@@ -55,7 +55,10 @@ const draft = {
 describe("sale draft", () => {
   beforeEach(() => {
     vi.stubGlobal("localStorage", new MemStorage());
-    vi.stubGlobal("window", Object.assign(new EventTarget(), { localStorage: globalThis.localStorage }));
+    vi.stubGlobal(
+      "window",
+      Object.assign(new EventTarget(), { localStorage: globalThis.localStorage }),
+    );
   });
 
   it("round-trips the operator's work", () => {

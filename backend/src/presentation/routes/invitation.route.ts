@@ -25,8 +25,19 @@ export function registerInvitationAdminRoutes(
 ): void {
   router.post("/api/invitations/generate", authMiddleware, adminGuard, async (req, res, next) => {
     try {
-      const ctx = (req as unknown as { tenantContext?: { tenantId?: string; userId?: string } })
-        .tenantContext;
+      const ctx = (
+        req as unknown as {
+          tenantContext?: { tenantId?: string; userId?: string; userRole?: string };
+        }
+      ).tenantContext;
+      // Owner decision (2026-10-12): the accountant may invite, but never into the admin role.
+      if (ctx?.userRole !== "admin" && req.body.targetRole === "admin") {
+        res.status(403).json({
+          code: "ADMIN_ROLE_RESERVED",
+          message: "دعوة مستخدم بدور مدير النظام متاحة لمدير النظام فقط",
+        });
+        return;
+      }
       const tenantId = ctx?.tenantId ?? "bootstrap";
       const createdBy = ctx?.userId ?? "system";
       const r = await generateInvitationCodeUseCase(

@@ -29,7 +29,14 @@ const BACKEND_ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const MIGRATIONS_DIR = join(BACKEND_ROOT, "src", "infrastructure", "orm", "migrations");
 // DB-06: the desktop (production) engine has its own journal; `sqlite/runtime.ts` applies only the
 // entries it lists, by idx, so an orphaned SQLite .sql is skipped just as silently as a PG one.
-const SQLITE_MIGRATIONS_DIR = join(BACKEND_ROOT, "src", "infrastructure", "orm", "sqlite", "migrations");
+const SQLITE_MIGRATIONS_DIR = join(
+  BACKEND_ROOT,
+  "src",
+  "infrastructure",
+  "orm",
+  "sqlite",
+  "migrations",
+);
 
 interface JournalEntry {
   idx: number;
@@ -39,7 +46,11 @@ interface JournalEntry {
   breakpoints: boolean;
 }
 
-function readJournal(dir = MIGRATIONS_DIR): { version: number; dialect: string; entries: JournalEntry[] } {
+function readJournal(dir = MIGRATIONS_DIR): {
+  version: number;
+  dialect: string;
+  entries: JournalEntry[];
+} {
   return JSON.parse(readFileSync(join(dir, "meta", "_journal.json"), "utf8"));
 }
 
@@ -89,7 +100,8 @@ describe.each([
     for (let i = 1; i < entries.length; i++) {
       const prev = entries[i - 1];
       const cur = entries[i];
-      if (!(cur.when > prev.when)) badWhen.push(`${prev.tag} (${prev.when}) -> ${cur.tag} (${cur.when})`);
+      if (!(cur.when > prev.when))
+        badWhen.push(`${prev.tag} (${prev.when}) -> ${cur.tag} (${cur.when})`);
     }
     expect(
       badWhen,
@@ -127,7 +139,9 @@ describe("migration journal ↔ disk parity guards (P0-001)", () => {
     const i = entries.findIndex((e) => e.tag === "0046_user_pin_hash");
     expect(migrations[i].sql.join("\n")).toMatch(/ADD COLUMN IF NOT EXISTS pin_hash/i);
     // and it must land before the sync tables that followed it
-    expect(appliedTags.indexOf("0046_user_pin_hash")).toBeLessThan(appliedTags.indexOf("0047_sync_devices"));
+    expect(appliedTags.indexOf("0046_user_pin_hash")).toBeLessThan(
+      appliedTags.indexOf("0047_sync_devices"),
+    );
   });
   it("a FRESH database applies 0058_sync_tombstones before the migration that references it (regression: orphaned journal entry)", () => {
     const { entries } = readJournal();
@@ -177,10 +191,7 @@ describe("migration journal ↔ disk parity guards (P0-001)", () => {
       .filter(([prefix, tags]) => tags.length > 1 && !ALLOWED_HISTORICAL_DUPLICATES.has(prefix))
       .map(([prefix, tags]) => `${prefix}: ${tags.join(", ")}`);
 
-    expect(
-      duplicates,
-      `duplicate migration prefixes:\n${duplicates.join("\n")}`,
-    ).toEqual([]);
+    expect(duplicates, `duplicate migration prefixes:\n${duplicates.join("\n")}`).toEqual([]);
   });
 
   /**

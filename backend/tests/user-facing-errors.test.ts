@@ -5,7 +5,10 @@ import { userFacingErrors } from "@/infrastructure/http/middleware/userFacingErr
 /** Runs the middleware on a fake response and returns what `res.json` finally sends. */
 function send(status: number, body: unknown): unknown {
   let sent: unknown;
-  const res = { statusCode: status, json: (b: unknown) => ((sent = b), res) } as unknown as Response;
+  const res = {
+    statusCode: status,
+    json: (b: unknown) => ((sent = b), res),
+  } as unknown as Response;
   userFacingErrors({ path: "/x", method: "POST" } as Request, res, () => {});
   res.json(body);
   return sent;
@@ -17,7 +20,9 @@ describe("userFacingErrors — SQL never reaches the user", () => {
   it("replaces technical text by kind of failure", () => {
     expect(send(500, { code: "X", message: sqlText })).toMatchObject({ code: "DATABASE_ERROR" });
     expect(send(409, { code: "X", message: sqlText })).toMatchObject({ code: "SYNC_CONFLICT" });
-    expect(send(503, { code: "X", message: sqlText })).toMatchObject({ code: "SERVER_UNAVAILABLE" });
+    expect(send(503, { code: "X", message: sqlText })).toMatchObject({
+      code: "SERVER_UNAVAILABLE",
+    });
     expect(JSON.stringify(send(500, { message: sqlText }))).not.toMatch(/parties|Failed query/);
   });
 

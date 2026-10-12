@@ -12,7 +12,10 @@ import { randomUUID } from "node:crypto";
 // text with XPath until the invoice form's labels are tied too.
 const BACKEND = `http://localhost:${process.env.CERT_BACKEND_PORT ?? "18080"}`;
 const stack = () =>
-  JSON.parse(readFileSync("tests/e2e/.cert-stack.json", "utf8")) as { tenantId: string; email: string };
+  JSON.parse(readFileSync("tests/e2e/.cert-stack.json", "utf8")) as {
+    tenantId: string;
+    email: string;
+  };
 
 async function apiLogin() {
   const { tenantId, email } = stack();
@@ -48,13 +51,29 @@ const fieldAfter = (label: string) =>
   `xpath=//*[normalize-space(text())='${label}']/following::input[1]`;
 
 describe("sales journey", () => {
-  test("customer → invoice with partial payment → receipt → statement", async ({ app, browser, screen }) => {
+  test("customer → invoice with partial payment → receipt → statement", async ({
+    app,
+    browser,
+    screen,
+  }) => {
     const s = await apiLogin();
     const run = Date.now().toString(36);
     const fabricId = idOf(await api(s, "POST", "/inventory/fabrics", { name: `قطن ${run}` }));
-    const colorId = idOf(await api(s, "POST", "/inventory/colors", { fabricId, name: `أبيض ${run}`, code: `W-${run}` }));
+    const colorId = idOf(
+      await api(s, "POST", "/inventory/colors", {
+        fabricId,
+        name: `أبيض ${run}`,
+        code: `W-${run}`,
+      }),
+    );
     await api(s, "POST", "/inventory/rolls", {
-      colorId, rollNo: `R-${run}`, initialKg: 50, pieces: 2, pricePerKg: 4, currency: "USD", entryDate: "2026-10-01",
+      colorId,
+      rollNo: `R-${run}`,
+      initialKg: 50,
+      pieces: 2,
+      pricePerKg: 4,
+      currency: "USD",
+      entryDate: "2026-10-01",
     });
 
     await browser.addInitScript(
@@ -81,7 +100,12 @@ describe("sales journey", () => {
     await app.open("/invoices/sale/new");
     await screen.getByRole("button", "ابحث عن عميل...").tap();
     await screen.getByRole("textbox", "ابحث عن عميل بالاسم أو الرمز...").fill(customer);
-    await screen.getByRole("dialog").getByRole("button").filter({ hasText: customer }).first().tap();
+    await screen
+      .getByRole("dialog")
+      .getByRole("button")
+      .filter({ hasText: customer })
+      .first()
+      .tap();
 
     await screen.getByRole("combobox").filter({ hasText: "اختر العملة" }).tap();
     await screen.getByRole("option", "$ USD").tap();
@@ -91,9 +115,17 @@ describe("sales journey", () => {
     await line.getByRole("textbox", "القماش").pressSequentially(`قطن ${run}`);
     await line.getByRole("button", `قطن ${run}`).tap();
     await line.getByRole("textbox", "اسم اللون").pressSequentially(`أبيض ${run}`);
-    await line.getByRole("button").filter({ hasText: `أبيض ${run}` }).first().tap();
+    await line
+      .getByRole("button")
+      .filter({ hasText: `أبيض ${run}` })
+      .first()
+      .tap();
     await line.getByRole("combobox").first().tap();
-    await screen.getByRole("option").filter({ hasText: `R-${run}` }).first().tap();
+    await screen
+      .getByRole("option")
+      .filter({ hasText: `R-${run}` })
+      .first()
+      .tap();
     await line.getByRole("textbox", "الكمية").fill("10");
     await line.getByRole("textbox", "سعر الوحدة").fill("10");
     await browser.locator(fieldAfter("المدفوع")).fill("40");
@@ -105,24 +137,38 @@ describe("sales journey", () => {
 
     // Persisted, not just shown: the server holds one active invoice of 100 with 40 paid.
     const party = await api<{ data: Array<{ id: string; name: string }> }>(
-      s, "GET", `/parties?kind=customer&search=${encodeURIComponent(customer)}`,
+      s,
+      "GET",
+      `/parties?kind=customer&search=${encodeURIComponent(customer)}`,
     );
     const partyId = party.data.find((p) => p.name === customer)?.id ?? "";
     expect(partyId).not.toBe("");
     await expect
-      .poll(async () => {
-        const inv = await api<{ data: Array<{ total: number; paid: number; status: string }> }>(
-          s, "GET", `/invoices?partyId=${partyId}`,
-        );
-        return inv.data.filter((i) => i.status === "active").map((i) => [Number(i.total), Number(i.paid)]);
-      }, { timeout: 10_000 })
+      .poll(
+        async () => {
+          const inv = await api<{ data: Array<{ total: number; paid: number; status: string }> }>(
+            s,
+            "GET",
+            `/invoices?partyId=${partyId}`,
+          );
+          return inv.data
+            .filter((i) => i.status === "active")
+            .map((i) => [Number(i.total), Number(i.paid)]);
+        },
+        { timeout: 10_000 },
+      )
       .toEqual([[100, 40]]);
 
     // 3. Receipt of $25 against that invoice: the form offers it with its exact $60 rest.
     await app.open("/receipts/new");
     await screen.getByRole("button", "اختر العميل").tap();
     await screen.getByRole("textbox", "ابحث عن عميل بالاسم أو الرمز...").fill(customer);
-    await screen.getByRole("dialog").getByRole("button").filter({ hasText: customer }).first().tap();
+    await screen
+      .getByRole("dialog")
+      .getByRole("button")
+      .filter({ hasText: customer })
+      .first()
+      .tap();
     await screen.getByLabel("الفاتورة المرتبطة (اختياري)").tap();
     const invoiceOption = screen.getByRole("option").filter({ hasText: "INV-" });
     await expect(invoiceOption).toContainText("60");
@@ -137,16 +183,28 @@ describe("sales journey", () => {
     await screen.getByRole("button", "حفظ السند").tap();
 
     await expect
-      .poll(async () => {
-        const inv = await api<{ data: Array<{ paid: number; status: string }> }>(s, "GET", `/invoices?partyId=${partyId}`);
-        return inv.data.filter((i) => i.status === "active").map((i) => Number(i.paid));
-      }, { timeout: 10_000 })
+      .poll(
+        async () => {
+          const inv = await api<{ data: Array<{ paid: number; status: string }> }>(
+            s,
+            "GET",
+            `/invoices?partyId=${partyId}`,
+          );
+          return inv.data.filter((i) => i.status === "active").map((i) => Number(i.paid));
+        },
+        { timeout: 10_000 },
+      )
       .toEqual([65]);
     // The statement the operator prints must say the customer owes exactly $35.
     const stmt = await api<{ data?: { finalBalance: number }; finalBalance?: number }>(
-      s, "GET", `/customers/${partyId}/statement?currency=USD`,
+      s,
+      "GET",
+      `/customers/${partyId}/statement?currency=USD`,
     );
-    expect(Number(stmt.data?.finalBalance ?? stmt.finalBalance), JSON.stringify(stmt).slice(0, 400)).toBe(35);
+    expect(
+      Number(stmt.data?.finalBalance ?? stmt.finalBalance),
+      JSON.stringify(stmt).slice(0, 400),
+    ).toBe(35);
 
     // 4. The statement screen the operator prints shows the same: $35 owed, totals 100 / 65.
     await app.open(`/customers/${partyId}`);

@@ -109,14 +109,9 @@ describe.skipIf(!LIVE)("DFP-005/006 invitation live PG", () => {
       throw new Error("INJECTED_AFTER_DEVICE");
     };
 
-    const result = await consumeInvitationCodeUseCase(
-      repo,
-      repo,
-      licenseRepo,
-      hasher,
-      code,
-      { deviceFingerprint: `fp-rb-${randomUUID()}` },
-    );
+    const result = await consumeInvitationCodeUseCase(repo, repo, licenseRepo, hasher, code, {
+      deviceFingerprint: `fp-rb-${randomUUID()}`,
+    });
 
     expect(result.ok).toBe(false);
     expect(await countDevices(tenantId)).toBe(0);
@@ -174,10 +169,7 @@ describe.skipIf(!LIVE)("DFP-005/006 invitation live PG", () => {
         .select({ code: invitationCodes.code, useCount: invitationCodes.useCount })
         .from(invitationCodes)
         .where(
-          and(
-            eq(invitationCodes.tenantId, tenantId),
-            inArray(invitationCodes.code, [code, code2]),
-          ),
+          and(eq(invitationCodes.tenantId, tenantId), inArray(invitationCodes.code, [code, code2])),
         );
     });
     const consumed = used.filter((r) => r.useCount === 1).length;

@@ -1,6 +1,12 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { fetchLicenses, fetchActivations, deactivateActivation, suspendLicense, patchLicense } from "@/lib/api";
+import {
+  fetchLicenses,
+  fetchActivations,
+  deactivateActivation,
+  suspendLicense,
+  patchLicense,
+} from "@/lib/api";
 import { CreateLicensePage } from "./CreateLicensePage";
 import {
   Key,
@@ -42,7 +48,13 @@ export function LicenseListPage({ onLogout }: { onLogout?: () => void }) {
   const [showCreate, setShowCreate] = useState(false);
   const [selectedLicense, setSelectedLicense] = useState<string | null>(null);
 
-  const { data: licenses, isLoading, isError, error, refetch } = useQuery({
+  const {
+    data: licenses,
+    isLoading,
+    isError,
+    error,
+    refetch,
+  } = useQuery({
     queryKey: ["licenses"],
     queryFn: fetchLicenses,
     refetchInterval: 30_000,
@@ -357,9 +369,7 @@ function LicenseDetail({
             <button
               onClick={() => {
                 if (
-                  window.confirm(
-                    "تعليق الترخيص يوقف حقوق الاستخدام عند المورد. هل تريد المتابعة؟",
-                  )
+                  window.confirm("تعليق الترخيص يوقف حقوق الاستخدام عند المورد. هل تريد المتابعة؟")
                 ) {
                   suspendMut.mutate();
                 }
@@ -412,8 +422,8 @@ function LicenseDetail({
               حفظ سياسة التحديث
             </button>
             <p className="text-[11px] text-zinc-500 leading-relaxed">
-              نشر ملفات التثبيت (latest.json) يبقى على CDN التحديثات. هذه السياسة تتحكم هل
-              العميل مسموح له بالتحقق من التحديثات وما هو الحد الأدنى للإصدار.
+              نشر ملفات التثبيت (latest.json) يبقى على CDN التحديثات. هذه السياسة تتحكم هل العميل
+              مسموح له بالتحقق من التحديثات وما هو الحد الأدنى للإصدار.
             </p>
           </div>
         </div>

@@ -5,7 +5,10 @@ import { AesGcmSecretStore } from "../src/infrastructure/secrets/AesGcmSecretSto
 import { LicenseTokenSigner } from "../src/infrastructure/auth/LicenseTokenSigner.js";
 import { createLicenseGuard } from "../src/infrastructure/http/middleware/license.guard.middleware.js";
 import { deactivateLicenseUseCase } from "../src/application/use-cases/license/licenseUseCases.js";
-import type { ISecretsRepository, SecretRecord } from "../src/application/ports/ISecretsRepository.js";
+import type {
+  ISecretsRepository,
+  SecretRecord,
+} from "../src/application/ports/ISecretsRepository.js";
 import type { LicenseRow, ActivationRow } from "../src/application/ports/ILicenseRepository.js";
 
 /**

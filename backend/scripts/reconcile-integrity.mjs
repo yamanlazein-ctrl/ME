@@ -52,7 +52,11 @@ async function main() {
       [tenantId],
     );
     if (stock.rows.length) {
-      failures.push({ check: "stock_vs_movements", count: stock.rows.length, sample: stock.rows.slice(0, 5) });
+      failures.push({
+        check: "stock_vs_movements",
+        count: stock.rows.length,
+        sample: stock.rows.slice(0, 5),
+      });
     }
 
     // 2) Invoice lines without cost_per_kg on active sales

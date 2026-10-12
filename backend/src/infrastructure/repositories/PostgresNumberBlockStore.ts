@@ -3,7 +3,11 @@ import { and, eq, sql } from "drizzle-orm";
 import type { DB } from "../orm/drizzle.js";
 import { syncDevices } from "../orm/schemas/sync-device.table.js";
 import { documentSequences } from "../orm/schemas/document-sequence.table.js";
-import { claimNumberBlockInTx, reclaimNumberBlockTailInTx, resolveNumberFormat } from "../utils/documentNumbers.js";
+import {
+  claimNumberBlockInTx,
+  reclaimNumberBlockTailInTx,
+  resolveNumberFormat,
+} from "../utils/documentNumbers.js";
 import type { INumberBlockStore } from "../../application/ports/INumberBlockStore.js";
 import type { UUID } from "../../domain/types/index.js";
 
@@ -56,7 +60,12 @@ export class PostgresNumberBlockStore implements INumberBlockStore {
     });
   }
 
-  async remainingInActiveBlocks(tenantId: UUID, syncDeviceId: UUID, entityType: string, year: number): Promise<number> {
+  async remainingInActiveBlocks(
+    tenantId: UUID,
+    syncDeviceId: UUID,
+    entityType: string,
+    year: number,
+  ): Promise<number> {
     const remainingRes = await this.db.execute(sql`
       SELECT COALESCE(SUM(end_number - next_number + 1), 0)::int AS remaining
         FROM document_number_blocks
@@ -64,7 +73,8 @@ export class PostgresNumberBlockStore implements INumberBlockStore {
          AND entity_type = ${entityType} AND year = ${year}
          AND status = 'active' AND next_number <= end_number`);
     return Number(
-      ((remainingRes as unknown as { rows?: Array<{ remaining: number }> }).rows ?? [])[0]?.remaining ?? 0,
+      ((remainingRes as unknown as { rows?: Array<{ remaining: number }> }).rows ?? [])[0]
+        ?.remaining ?? 0,
     );
   }
 
@@ -83,7 +93,12 @@ export class PostgresNumberBlockStore implements INumberBlockStore {
     return row?.lastNumber ?? 0;
   }
 
-  async advanceSequenceTip(tenantId: UUID, entityType: string, prefix: string, target: number): Promise<void> {
+  async advanceSequenceTip(
+    tenantId: UUID,
+    entityType: string,
+    prefix: string,
+    target: number,
+  ): Promise<void> {
     await this.db
       .insert(documentSequences)
       .values({ tenantId, entityType, prefix, lastNumber: target })

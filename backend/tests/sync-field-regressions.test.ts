@@ -28,10 +28,19 @@ import { db } from "@/infrastructure/orm/drizzle.js";
 import { tenants } from "@/infrastructure/orm/schemas/tenant.table.js";
 import { parties } from "@/infrastructure/orm/schemas/party.table.js";
 import { syncDevices } from "@/infrastructure/orm/schemas/sync-device.table.js";
-import { applyPartyOpeningForReplay, ensureInvoiceSyncDependencies } from "@/application/use-cases/sync/syncDependencySnapshots.js";
+import {
+  applyPartyOpeningForReplay,
+  ensureInvoiceSyncDependencies,
+} from "@/application/use-cases/sync/syncDependencySnapshots.js";
 import { PostgresSyncOutboxRepository } from "@/infrastructure/repositories/PostgresSyncOutboxRepository.js";
-import { resolveCollision, numberSuffix } from "@/application/use-cases/sync/syncNumberCollision.js";
-import { allocateDocumentNumber, claimNumberBlockInTx } from "@/infrastructure/utils/documentNumbers.js";
+import {
+  resolveCollision,
+  numberSuffix,
+} from "@/application/use-cases/sync/syncNumberCollision.js";
+import {
+  allocateDocumentNumber,
+  claimNumberBlockInTx,
+} from "@/infrastructure/utils/documentNumbers.js";
 import { documentSequences } from "@/infrastructure/orm/schemas/document-sequence.table.js";
 import {
   disconnectHub,
@@ -41,11 +50,18 @@ import {
   saveHubCredentials,
   setRuntimeCentralSyncUrl,
 } from "@/application/use-cases/sync/hubConfig.js";
-import { extractConflictResources, runLocalSyncPull, runLocalSyncPush, withPartyOpening } from "@/application/use-cases/sync/syncUseCases.js";
+import {
+  extractConflictResources,
+  runLocalSyncPull,
+  runLocalSyncPush,
+  withPartyOpening,
+} from "@/application/use-cases/sync/syncUseCases.js";
 import type { TenantContext } from "@/domain/types/index.js";
 
 const rows = (r: unknown) =>
-  (Array.isArray(r) ? r : ((r as { rows?: unknown[] }).rows ?? [])) as Array<Record<string, unknown>>;
+  (Array.isArray(r) ? r : ((r as { rows?: unknown[] }).rows ?? [])) as Array<
+    Record<string, unknown>
+  >;
 
 async function newTenant(label: string) {
   const id = randomUUID();
@@ -84,7 +100,14 @@ describe("sync field regressions", () => {
     for (let i = 0; i < 3; i++) {
       const opId = randomUUID();
       ops.push(opId);
-      await repo.enqueue({ tenantId, opId, entityType: "party", entityId: randomUUID(), operation: "create", payload: { i } });
+      await repo.enqueue({
+        tenantId,
+        opId,
+        entityType: "party",
+        entityId: randomUUID(),
+        operation: "create",
+        payload: { i },
+      });
     }
     for (const u of await repo.claimBatch(tenantId, 10, 60_000, "old-hub")) {
       await repo.markSynced(u.id, tenantId, u.leaseToken!);
@@ -92,10 +115,20 @@ describe("sync field regressions", () => {
     expect(await repo.countOutstanding(tenantId)).toBe(0);
     // A hub-parked (hubDead) unit is live locally → re-sent; a conflict loser
     // was rolled back locally → stays rejected.
-    for (const [reason, n] of [["hubDead: roll missing", 1], ["SYNC_CONFLICT lost", 1]] as const) {
+    for (const [reason, n] of [
+      ["hubDead: roll missing", 1],
+      ["SYNC_CONFLICT lost", 1],
+    ] as const) {
       for (let i = 0; i < n; i++) {
         const opId = randomUUID();
-        await repo.enqueue({ tenantId, opId, entityType: "invoice", entityId: randomUUID(), operation: "create", payload: {} });
+        await repo.enqueue({
+          tenantId,
+          opId,
+          entityType: "invoice",
+          entityId: randomUUID(),
+          operation: "create",
+          payload: {},
+        });
         const [u] = await repo.claimBatch(tenantId, 1, 60_000, "old-hub");
         await repo.markRejected(u!.id, tenantId, reason, u!.leaseToken!);
         if (reason.startsWith("hubDead")) ops.push(opId);
@@ -108,18 +141,21 @@ describe("sync field regressions", () => {
 
   // PG functions + RLS only: SQLite runs the cashbox maintenance as schema triggers T2–T7 with no RLS
   // (allowed delta); tests/sqlite/triggers.test.ts covers them.
-  it.skipIf(pgOnly)("2. cashbox functions no longer force row_security (works for a NOBYPASSRLS hub role)", async () => {
-    const r = rows(
-      await db.execute(sql`
+  it.skipIf(pgOnly)(
+    "2. cashbox functions no longer force row_security (works for a NOBYPASSRLS hub role)",
+    async () => {
+      const r = rows(
+        await db.execute(sql`
         SELECT p.proname, array_to_string(p.proconfig, ',') AS cfg
           FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
          WHERE n.nspname = 'public'
            AND p.proname IN ('cashbox_daily_apply_delta', 'cashbox_daily_shift_all',
                              'trg_cashbox_daily_from_ledger', 'trg_cashbox_daily_from_manual')`),
-    );
-    expect(r.length).toBe(4);
-    for (const f of r) expect(String(f.cfg ?? "")).not.toMatch(/row_security/);
-  });
+      );
+      expect(r.length).toBe(4);
+      for (const f of r) expect(String(f.cfg ?? "")).not.toMatch(/row_security/);
+    },
+  );
 
   describe("3. number collisions converge whatever the arrival order", () => {
     // Ids are global primary keys, so each simulated node gets its own pair;
@@ -134,13 +170,27 @@ describe("sync field regressions", () => {
       const [first, second] = xFirst ? [ids.x, ids.y] : [ids.y, ids.x];
       const tenantId = await newTenant("coll");
       await db.insert(parties).values({
-        id: first, tenantId, name: `P-${first.slice(0, 4)}`, code: "C-0001", kind: "customer", currency: "USD",
+        id: first,
+        tenantId,
+        name: `P-${first.slice(0, 4)}`,
+        code: "C-0001",
+        kind: "customer",
+        currency: "USD",
       });
       const code = await resolveCollision(db, tenantId, spec, second, "C-0001");
       await db.insert(parties).values({
-        id: second, tenantId, name: `P-${second.slice(0, 4)}`, code, kind: "customer", currency: "USD",
+        id: second,
+        tenantId,
+        name: `P-${second.slice(0, 4)}`,
+        code,
+        kind: "customer",
+        currency: "USD",
       });
-      const out = rows(await db.execute(sql`SELECT id::text AS id, code FROM parties WHERE tenant_id = ${tenantId} ORDER BY id`));
+      const out = rows(
+        await db.execute(
+          sql`SELECT id::text AS id, code FROM parties WHERE tenant_id = ${tenantId} ORDER BY id`,
+        ),
+      );
       const codeOf = (id: string) => String(out.find((r) => r.id === id)?.code);
       return { x: codeOf(ids.x), y: codeOf(ids.y), yTag: ids.y.slice(0, 4) };
     }
@@ -160,7 +210,9 @@ describe("sync field regressions", () => {
       const tenantId = await newTenant("prealloc");
       const year = new Date().getFullYear();
       const got = await db.transaction((tx) =>
-        allocateDocumentNumber(tx as never, "invoice", tenantId, { preAllocatedNumber: `INV-${year - 1}-0042-3f8d` }),
+        allocateDocumentNumber(tx as never, "invoice", tenantId, {
+          preAllocatedNumber: `INV-${year - 1}-0042-3f8d`,
+        }),
       );
       expect(got).toBe(`INV-${year - 1}-0042-3f8d`);
     });
@@ -168,10 +220,19 @@ describe("sync field regressions", () => {
     it("a company past 9,999 documents in total still gets number blocks (width is padding, not a cap)", async () => {
       const tenantId = await newTenant("bigco");
       const device = randomUUID();
-      await db.insert(syncDevices).values({ id: device, tenantId, deviceFingerprint: "big", platform: "windows" });
-      await db.insert(documentSequences).values({ tenantId, entityType: "invoice", prefix: "INV", lastNumber: 10_936 });
+      await db
+        .insert(syncDevices)
+        .values({ id: device, tenantId, deviceFingerprint: "big", platform: "windows" });
+      await db
+        .insert(documentSequences)
+        .values({ tenantId, entityType: "invoice", prefix: "INV", lastNumber: 10_936 });
       const block = await db.transaction((tx) =>
-        claimNumberBlockInTx(tx as never, { tenantId, syncDeviceId: device, entityType: "invoice", size: 100 }),
+        claimNumberBlockInTx(tx as never, {
+          tenantId,
+          syncDeviceId: device,
+          entityType: "invoice",
+          size: 100,
+        }),
       );
       expect(block.startNumber).toBe(10_937);
       expect(block.endNumber).toBe(11_036);
@@ -182,7 +243,9 @@ describe("sync field regressions", () => {
       const year = new Date().getFullYear();
       await expect(
         db.transaction((tx) =>
-          allocateDocumentNumber(tx as never, "invoice", tenantId, { preAllocatedNumber: `INV-${year + 1}-0001` }),
+          allocateDocumentNumber(tx as never, "invoice", tenantId, {
+            preAllocatedNumber: `INV-${year + 1}-0001`,
+          }),
         ),
       ).rejects.toThrow(/سنة لاحقة/);
     });
@@ -216,7 +279,10 @@ describe("sync field regressions", () => {
       const blob = JSON.parse(raw) as { ct: string };
       const ct = Buffer.from(blob.ct, "base64");
       ct[0] = ct[0]! ^ 0xff;
-      fs.writeFileSync(process.env.HUB_CREDENTIALS_PATH!, JSON.stringify({ ...blob, ct: ct.toString("base64") }));
+      fs.writeFileSync(
+        process.env.HUB_CREDENTIALS_PATH!,
+        JSON.stringify({ ...blob, ct: ct.toString("base64") }),
+      );
       expect(loadHubCredentials()).toBeNull();
 
       saveHubCredentials(creds);
@@ -228,9 +294,18 @@ describe("sync field regressions", () => {
       expect(resolveConnectCredentials({})).toEqual({ email: undefined, password: undefined });
       saveHubCredentials({ url: "https://old.trycloudflare.com", email: "a@b.c", password: "pw" });
       expect(resolveConnectCredentials({})).toEqual({ email: "a@b.c", password: "pw" });
-      expect(resolveConnectCredentials({ email: "a@b.c" })).toEqual({ email: "a@b.c", password: "pw" });
-      expect(resolveConnectCredentials({ email: "other@b.c" })).toEqual({ email: "other@b.c", password: undefined });
-      expect(resolveConnectCredentials({ password: "new" })).toEqual({ email: "a@b.c", password: "new" });
+      expect(resolveConnectCredentials({ email: "a@b.c" })).toEqual({
+        email: "a@b.c",
+        password: "pw",
+      });
+      expect(resolveConnectCredentials({ email: "other@b.c" })).toEqual({
+        email: "other@b.c",
+        password: undefined,
+      });
+      expect(resolveConnectCredentials({ password: "new" })).toEqual({
+        email: "a@b.c",
+        password: "new",
+      });
     });
 
     it("a lost session signs in again from the stored credentials (no re-pairing)", async () => {
@@ -255,7 +330,10 @@ describe("sync field regressions", () => {
       const tenantId = await newTenant("pull");
       const deviceId = randomUUID();
       setRuntimeCentralSyncUrl("https://hub.example.test");
-      fs.writeFileSync(process.env.HUB_SESSION_PATH!, JSON.stringify({ accessToken: "hub-access-token" }));
+      fs.writeFileSync(
+        process.env.HUB_SESSION_PATH!,
+        JSON.stringify({ accessToken: "hub-access-token" }),
+      );
       const seen: Array<Record<string, string>> = [];
       vi.stubGlobal(
         "fetch",
@@ -267,7 +345,12 @@ describe("sync field regressions", () => {
           });
         }),
       );
-      const ctx: TenantContext = { tenantId, userId: randomUUID(), userRole: "admin", userName: "pull" };
+      const ctx: TenantContext = {
+        tenantId,
+        userId: randomUUID(),
+        userRole: "admin",
+        userName: "pull",
+      };
       await runLocalSyncPull(db, {} as never, ctx, undefined, deviceId);
       expect(seen.length).toBeGreaterThan(0);
       expect(seen[0]!["X-Sync-Device-Id"]).toBe(deviceId);
@@ -299,7 +382,10 @@ describe("sync field regressions", () => {
       // A restored database brings the OLD machine's device row with it.
       const otherMachine = randomUUID();
       await db.insert(syncDevices).values({
-        id: otherMachine, tenantId, deviceFingerprint: "old-machine", platform: "windows",
+        id: otherMachine,
+        tenantId,
+        deviceFingerprint: "old-machine",
+        platform: "windows",
       });
       for (const syncDeviceId of [null, otherMachine]) {
         await repo.enqueue({
@@ -313,7 +399,10 @@ describe("sync field regressions", () => {
         });
       }
       setRuntimeCentralSyncUrl("https://hub.example.test");
-      fs.writeFileSync(process.env.HUB_SESSION_PATH!, JSON.stringify({ accessToken: "hub-access-token" }));
+      fs.writeFileSync(
+        process.env.HUB_SESSION_PATH!,
+        JSON.stringify({ accessToken: "hub-access-token" }),
+      );
       const sent: Array<{ header?: string; body: { syncDeviceId: string | null } }> = [];
       vi.stubGlobal(
         "fetch",
@@ -326,7 +415,13 @@ describe("sync field regressions", () => {
           });
         }),
       );
-      const ctx: TenantContext = { tenantId, userId: randomUUID(), userRole: "admin", userName: "p", syncDeviceId: here };
+      const ctx: TenantContext = {
+        tenantId,
+        userId: randomUUID(),
+        userRole: "admin",
+        userName: "p",
+        syncDeviceId: here,
+      };
       const r = await runLocalSyncPush(repo, {} as never, {} as never, {} as never, ctx, undefined);
       expect(sent).toHaveLength(2);
       for (const u of sent) {
@@ -340,34 +435,78 @@ describe("sync field regressions", () => {
   describe("9. opening balances travel with the party", () => {
     it("the receiving node writes the same balanced opening journal, once", async () => {
       const tenantId = await newTenant("opening");
-      const ctx: TenantContext = { tenantId, userId: randomUUID(), userRole: "admin", userName: "o" };
+      const ctx: TenantContext = {
+        tenantId,
+        userId: randomUUID(),
+        userRole: "admin",
+        userName: "o",
+      };
       const id = randomUUID();
       const snap = {
-        id, kind: "customer", code: "CUS-9", name: `Opening ${id.slice(0, 4)}`, currency: "USD", status: "active",
-        openingBalance: 922.53, openingDate: "2026-01-15",
+        id,
+        kind: "customer",
+        code: "CUS-9",
+        name: `Opening ${id.slice(0, 4)}`,
+        currency: "USD",
+        status: "active",
+        openingBalance: 922.53,
+        openingDate: "2026-01-15",
       };
-      await ensureInvoiceSyncDependencies(db, { parties: [snap as never], fabrics: [], colors: [], rolls: [] }, ctx);
+      await ensureInvoiceSyncDependencies(
+        db,
+        { parties: [snap as never], fabrics: [], colors: [], rolls: [] },
+        ctx,
+      );
       await applyPartyOpeningForReplay(db, snap as never, ctx);
       await applyPartyOpeningForReplay(db, snap as never, ctx); // duplicate delivery
-      const legs = rows(await db.execute(sql`
+      const legs = rows(
+        await db.execute(sql`
         SELECT type, debit::float8 d, credit::float8 c, date::text dt FROM ledger_entries
-         WHERE tenant_id = ${tenantId} AND reference_type = 'opening' ORDER BY type`));
+         WHERE tenant_id = ${tenantId} AND reference_type = 'opening' ORDER BY type`),
+      );
       expect(legs).toEqual([
         { type: "opening", d: 922.53, c: 0, dt: "2026-01-15" },
         { type: "opening_equity", d: 0, c: 922.53, dt: "2026-01-15" },
       ]);
-      const [p] = rows(await db.execute(sql`SELECT opening_balance::float8 ob FROM parties WHERE id = ${id}::uuid`));
+      const [p] = rows(
+        await db.execute(
+          sql`SELECT opening_balance::float8 ob FROM parties WHERE id = ${id}::uuid`,
+        ),
+      );
       expect(p!.ob).toBe(922.53);
     });
 
     it("an old party unit without the opening balance is filled from the local record at push", async () => {
       const tenantId = await newTenant("opening-old");
-      const ctx: TenantContext = { tenantId, userId: randomUUID(), userRole: "admin", userName: "o" };
+      const ctx: TenantContext = {
+        tenantId,
+        userId: randomUUID(),
+        userRole: "admin",
+        userName: "o",
+      };
       const id = randomUUID();
-      const snap = { id, kind: "supplier", code: "SUP-9", name: `Old ${id.slice(0, 4)}`, currency: "USD", status: "active" };
-      await ensureInvoiceSyncDependencies(db, { parties: [snap as never], fabrics: [], colors: [], rolls: [] }, ctx);
-      await applyPartyOpeningForReplay(db, { ...snap, openingBalance: 300, openingDate: "2025-03-01" } as never, ctx);
-      const out = await withPartyOpening({ entityType: "party", operation: "create", entityId: id, payload: { snapshot: snap } }, tenantId);
+      const snap = {
+        id,
+        kind: "supplier",
+        code: "SUP-9",
+        name: `Old ${id.slice(0, 4)}`,
+        currency: "USD",
+        status: "active",
+      };
+      await ensureInvoiceSyncDependencies(
+        db,
+        { parties: [snap as never], fabrics: [], colors: [], rolls: [] },
+        ctx,
+      );
+      await applyPartyOpeningForReplay(
+        db,
+        { ...snap, openingBalance: 300, openingDate: "2025-03-01" } as never,
+        ctx,
+      );
+      const out = await withPartyOpening(
+        { entityType: "party", operation: "create", entityId: id, payload: { snapshot: snap } },
+        tenantId,
+      );
       expect((out.snapshot as Record<string, unknown>).openingBalance).toBe(300);
       expect((out.snapshot as Record<string, unknown>).openingDate).toBe("2025-03-01");
     });
@@ -382,7 +521,9 @@ describe("sync field regressions", () => {
         lines: [{ rollId: roll, quantityKg: 2 }],
         createInput: { type: "sale", lines: [{ rollId: roll, quantityKg: 2, pieces: 0 }] },
       });
-      expect(r).toEqual([{ resourceType: "roll", resourceId: roll, quantityKg: 2, quantityPieces: 0 }]);
+      expect(r).toEqual([
+        { resourceType: "roll", resourceId: roll, quantityKg: 2, quantityPieces: 0 },
+      ]);
     });
 
     it("a purchase (entry) invoice claims entry_roll — it adds stock, it cannot oversell", () => {

@@ -22,7 +22,12 @@ export default defineConfig({
     tanstackStart({
       server: { entry: "server" },
       ...(desktop
-        ? { spa: { enabled: true, prerender: { enabled: true, outputPath: "/_shell.html", crawlLinks: false } } }
+        ? {
+            spa: {
+              enabled: true,
+              prerender: { enabled: true, outputPath: "/_shell.html", crawlLinks: false },
+            },
+          }
         : {}),
     }),
     react(),

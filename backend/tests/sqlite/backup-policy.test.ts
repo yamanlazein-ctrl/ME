@@ -5,7 +5,15 @@
  *   - weekly restore-test: runs once per 7 days, records RS-5 in backups.json, leaves no temp dir
  */
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
-import { mkdtempSync, rmSync, existsSync, readFileSync, writeFileSync, readdirSync, renameSync } from "node:fs";
+import {
+  mkdtempSync,
+  rmSync,
+  existsSync,
+  readFileSync,
+  writeFileSync,
+  readdirSync,
+  renameSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createHash, randomUUID } from "node:crypto";
@@ -50,7 +58,9 @@ beforeAll(async () => {
   const w = m.runtime.getSqliteRuntime()!.conns.writer as unknown as Database.Database;
   const tenant = randomUUID();
   w.prepare(`INSERT INTO tenants (id, name, slug) VALUES (?, 'شركة السياسة', 'pol')`).run(tenant);
-  w.prepare(`INSERT INTO parties (id, tenant_id, kind, name) VALUES (?, ?, 'customer', 'زبون')`).run(randomUUID(), tenant);
+  w.prepare(
+    `INSERT INTO parties (id, tenant_id, kind, name) VALUES (?, ?, 'customer', 'زبون')`,
+  ).run(randomUUID(), tenant);
 }, 120_000);
 
 afterAll(() => {
@@ -64,8 +74,14 @@ afterAll(() => {
 function fakeRes() {
   const out: { status?: number; body?: unknown } = {};
   const res = {
-    status(c: number) { out.status = c; return res; },
-    json(b: unknown) { out.body = b; return res; },
+    status(c: number) {
+      out.status = c;
+      return res;
+    },
+    json(b: unknown) {
+      out.body = b;
+      return res;
+    },
   };
   return { res: res as never, out };
 }
@@ -100,7 +116,9 @@ describe("pre-operation backups (BK-4, T097)", () => {
   }, 60_000);
 
   it("is a no-op off SQLite (PostgreSQL / cloud unchanged)", async () => {
-    const { config } = (await import("@/infrastructure/config/env.js")) as { config: { DB_ENGINE: string } };
+    const { config } = (await import("@/infrastructure/config/env.js")) as {
+      config: { DB_ENGINE: string };
+    };
     const prev = config.DB_ENGINE;
     config.DB_ENGINE = "postgres";
     try {
@@ -148,7 +166,9 @@ describe("weekly restore-test (OQ-6, T099)", () => {
     expect(r.detail).toMatch(/RS-5 identical/);
     const newest = m.registry.verifiedBackups("automatic")[0];
     expect(newest.lastRestoreTest).toMatchObject({ ok: true });
-    expect(readdirSync(tmpdir()).filter((d) => d.startsWith("motard-restore-test-")).length).toBe(before);
+    expect(readdirSync(tmpdir()).filter((d) => d.startsWith("motard-restore-test-")).length).toBe(
+      before,
+    );
   }, 120_000);
 
   it("runs at most once per 7 days", () => {

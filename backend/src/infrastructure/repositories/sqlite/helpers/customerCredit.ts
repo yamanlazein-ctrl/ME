@@ -48,7 +48,10 @@ export async function customerCreditPosition(
 ): Promise<CustomerCreditPosition> {
   const [bal] = await db
     .select({
-      balance: scaledNumber(sql`COALESCE(SUM(${ledgerEntries.debit} - ${ledgerEntries.credit}), 0)`, 2),
+      balance: scaledNumber(
+        sql`COALESCE(SUM(${ledgerEntries.debit} - ${ledgerEntries.credit}), 0)`,
+        2,
+      ),
     })
     .from(ledgerEntries)
     .where(
@@ -68,7 +71,10 @@ export async function customerCreditPosition(
     .select({
       invoiceId: returns.originalInvoiceId,
       // ROUND(qty(…,2) × price(…,4), 2) exactly, kept scaled at 2 for the outer arithmetic.
-      total: sql<number>`SUM(${mulRound(returnLines.quantityKg, 2, returnLines.pricePerKg, 4, 2)})`.as("rtotal"),
+      total:
+        sql<number>`SUM(${mulRound(returnLines.quantityKg, 2, returnLines.pricePerKg, 4, 2)})`.as(
+          "rtotal",
+        ),
     })
     .from(returnLines)
     .innerJoin(returns, eq(returnLines.returnId, returns.id))
@@ -78,7 +84,10 @@ export async function customerCreditPosition(
 
   const [open] = await db
     .select({
-      remaining: scaledNumber(sql`COALESCE(SUM(max(0, ${invoices.total} - ${invoices.paid} - COALESCE(${returnsPerInvoice.total}, 0))), 0)`, 2),
+      remaining: scaledNumber(
+        sql`COALESCE(SUM(max(0, ${invoices.total} - ${invoices.paid} - COALESCE(${returnsPerInvoice.total}, 0))), 0)`,
+        2,
+      ),
     })
     .from(invoices)
     .leftJoin(returnsPerInvoice, eq(returnsPerInvoice.invoiceId, invoices.id))

@@ -123,7 +123,9 @@ export async function allocateDocumentNumberForDevice(
   tenantId: string,
   syncDeviceId: string | null | undefined,
 ): Promise<string> {
-  return (await pgDb()).transaction((tx) => allocateDocumentNumber(tx, entityType, tenantId, { syncDeviceId }));
+  return (await pgDb()).transaction((tx) =>
+    allocateDocumentNumber(tx, entityType, tenantId, { syncDeviceId }),
+  );
 }
 
 export async function nextDocumentNumber(entityType: string, tenantId: string): Promise<string> {
@@ -131,7 +133,9 @@ export async function nextDocumentNumber(entityType: string, tenantId: string): 
   const width = WIDTHS[entityType] ?? 4;
   const year = new Date().getFullYear().toString();
 
-  const [row] = await (await pgDb())
+  const [row] = await (
+    await pgDb()
+  )
     .insert(documentSequences)
     .values({ tenantId, entityType, prefix, lastNumber: 1 })
     .onConflictDoUpdate({
@@ -181,13 +185,7 @@ export async function allocateDocumentNumber(
   }
 
   if (opts?.syncDeviceId && shouldUseNumberBlocks()) {
-    const fromBlock = await consumeNextInTx(
-      tx,
-      tenantId,
-      opts.syncDeviceId,
-      entityType,
-      yearNum,
-    );
+    const fromBlock = await consumeNextInTx(tx, tenantId, opts.syncDeviceId, entityType, yearNum);
     if (fromBlock) {
       return `${prefix}-${year}-${String(fromBlock.numberValue).padStart(width, "0")}`;
     }
@@ -475,7 +473,9 @@ async function applyPreAllocatedNumber(
   // restore). Refusing it parked the document as dead forever. The counter
   // is not per-year (document_sequences has no year), so accepting it is safe.
   if (parsed.year > fmt.yearNum) {
-    throw new BusinessRuleError("لا يمكن قبول رقم محجوز من سنة لاحقة للسنة الحالية — تحقق من تاريخ الجهاز");
+    throw new BusinessRuleError(
+      "لا يمكن قبول رقم محجوز من سنة لاحقة للسنة الحالية — تحقق من تاريخ الجهاز",
+    );
   }
 
   // Raise global floor so future claims/allocations cannot collide.
@@ -529,8 +529,13 @@ export async function peekNextDocumentNumber(
   const year = yearNum.toString();
 
   if (syncDeviceId && shouldUseNumberBlocks()) {
-    const [block] = await (await pgDb())
-      .select({ nextNumber: documentNumberBlocks.nextNumber, endNumber: documentNumberBlocks.endNumber })
+    const [block] = await (
+      await pgDb()
+    )
+      .select({
+        nextNumber: documentNumberBlocks.nextNumber,
+        endNumber: documentNumberBlocks.endNumber,
+      })
       .from(documentNumberBlocks)
       .where(
         and(
@@ -547,7 +552,9 @@ export async function peekNextDocumentNumber(
     }
   }
 
-  const [row] = await (await pgDb())
+  const [row] = await (
+    await pgDb()
+  )
     .select({ lastNumber: documentSequences.lastNumber })
     .from(documentSequences)
     .where(

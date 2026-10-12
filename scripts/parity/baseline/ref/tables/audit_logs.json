@@ -678,9 +678,7 @@
         "usd": 0
       },
       "colors": 1,
-      "currenciesRebuilt": [
-        "SYP"
-      ],
+      "currenciesRebuilt": ["SYP"],
       "fabricName": "صبغة للحذف",
       "invoiceLines": 4,
       "invoices": 4,

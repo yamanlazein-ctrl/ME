@@ -77,7 +77,12 @@ const fmtMoney = (m: PartyMoney) =>
   `${m.amount.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${m.currency}`;
 
 type LinkedKind = "invoice" | "voucher" | "return" | "order";
-type LinkedPage = { kind: LinkedKind; items: PartyLinkedDoc[]; total: number; nextCursor: string | null };
+type LinkedPage = {
+  kind: LinkedKind;
+  items: PartyLinkedDoc[];
+  total: number;
+  nextCursor: string | null;
+};
 
 const PAGE_SIZE = 25;
 
@@ -88,7 +93,10 @@ const TABS: { kind: LinkedKind; label: string; countKey: keyof PartyLinkedCounts
   { kind: "order", label: "الطلبيات", countKey: "orders" },
 ];
 
-async function fetchImpact(kind: "customer" | "supplier", id: string): Promise<PartyDeletionImpact> {
+async function fetchImpact(
+  kind: "customer" | "supplier",
+  id: string,
+): Promise<PartyDeletionImpact> {
   const path = kind === "customer" ? "customers" : "suppliers";
   const res = await container.http.get<PartyDeletionImpact>(`/api/${path}/${id}/deletion-impact`);
   return res.data;
@@ -162,13 +170,19 @@ export function PartyDeleteDialog({
   }, [partyId, open]);
 
   const counts = impact.data?.counts;
-  const linkedTotal = counts ? counts.invoices + counts.vouchers + counts.returns + counts.orders : 0;
+  const linkedTotal = counts
+    ? counts.invoices + counts.vouchers + counts.returns + counts.orders
+    : 0;
   const canBrowse = linkedTotal > 0;
 
   const docs = useQuery({
     queryKey: ["party-linked-docs", kind, partyId, tab, search, pageIndex],
     queryFn: () =>
-      fetchLinkedDocs(kind, partyId!, { kind: tab, cursor: cursors[pageIndex], q: search || undefined }),
+      fetchLinkedDocs(kind, partyId!, {
+        kind: tab,
+        cursor: cursors[pageIndex],
+        q: search || undefined,
+      }),
     enabled: open && Boolean(partyId) && canBrowse,
     staleTime: 0,
     retry: false,
@@ -177,7 +191,8 @@ export function PartyDeleteDialog({
   const del = useMutation({
     mutationFn: async () => {
       if (!partyId) throw new Error("السجل غير محدد");
-      if (!isPartyDeleteConfirmed(confirmText)) throw new Error(`اكتب «${PARTY_DELETE_CONFIRM_PHRASE}» للتأكيد`);
+      if (!isPartyDeleteConfirmed(confirmText))
+        throw new Error(`اكتب «${PARTY_DELETE_CONFIRM_PHRASE}» للتأكيد`);
       const sheet = impact.data;
       if (!sheet || typeof sheet.version !== "number") {
         throw new Error("حدّث معاينة الحذف ثم أعد المحاولة");
@@ -226,9 +241,7 @@ export function PartyDeleteDialog({
           </DialogDescription>
         </DialogHeader>
 
-        {impact.isLoading && (
-          <p className="text-sm text-muted-foreground">جاري فحص الارتباطات…</p>
-        )}
+        {impact.isLoading && <p className="text-sm text-muted-foreground">جاري فحص الارتباطات…</p>}
         {impact.isError && (
           <p className="text-sm text-destructive">
             {impact.error instanceof Error ? impact.error.message : "تعذّر فحص الارتباطات"}
@@ -285,7 +298,10 @@ export function PartyDeleteDialog({
                       <li className="p-3 text-muted-foreground">لا توجد نتائج مطابقة.</li>
                     )}
                     {page?.items.map((d) => (
-                      <li key={d.id} className="flex items-center justify-between gap-2 px-3 py-1.5">
+                      <li
+                        key={d.id}
+                        className="flex items-center justify-between gap-2 px-3 py-1.5"
+                      >
                         <span className="truncate">
                           {d.kind === "return" || d.kind === "order" ? (
                             <span className="text-destructive">{d.label} — يجب إلغاؤه أولاً</span>
@@ -373,7 +389,8 @@ export function PartyDeleteDialog({
                 </p>
                 {acct.cashboxChange.map((m) => (
                   <p key={`cash-${m.currency}`}>
-                    الصندوق ({m.currency}): {m.amount < 0 ? "ينقص" : "يزيد"} بمقدار {fmtMoney({ ...m, amount: Math.abs(m.amount) })}
+                    الصندوق ({m.currency}): {m.amount < 0 ? "ينقص" : "يزيد"} بمقدار{" "}
+                    {fmtMoney({ ...m, amount: Math.abs(m.amount) })}
                   </p>
                 ))}
                 <p className="font-semibold">
@@ -384,7 +401,9 @@ export function PartyDeleteDialog({
                 {acct.balanceNow.map((m, i) => (
                   <p key={`bal-${m.currency}`}>
                     رصيد {label} ({m.currency}): {fmtMoney(m)}
-                    {acct.affectsBalance ? ` ← بعد الحذف: ${fmtMoney(acct.balanceAfter[i] ?? m)}` : ""}
+                    {acct.affectsBalance
+                      ? ` ← بعد الحذف: ${fmtMoney(acct.balanceAfter[i] ?? m)}`
+                      : ""}
                   </p>
                 ))}
               </div>

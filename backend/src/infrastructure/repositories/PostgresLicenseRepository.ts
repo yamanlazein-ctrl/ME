@@ -267,12 +267,7 @@ export class PostgresLicenseRepository implements ILicenseRepository {
         const [row] = await this.db
           .select()
           .from(licenses)
-          .where(
-            and(
-              eq(licenses.key, tenant.licenseKey),
-              isNotNull(licenses.offlineToken),
-            ),
-          )
+          .where(and(eq(licenses.key, tenant.licenseKey), isNotNull(licenses.offlineToken)))
           .limit(1);
         return row ? toLicense(row) : null;
       }
@@ -287,9 +282,7 @@ export class PostgresLicenseRepository implements ILicenseRepository {
           const [row] = await this.db
             .select()
             .from(licenses)
-            .where(
-              and(eq(licenses.id, act.licenseId), isNotNull(licenses.offlineToken)),
-            )
+            .where(and(eq(licenses.id, act.licenseId), isNotNull(licenses.offlineToken)))
             .limit(1);
           return row ? toLicense(row) : null;
         }

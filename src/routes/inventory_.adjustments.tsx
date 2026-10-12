@@ -1,7 +1,14 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { AppShell } from "@/components/layout/AppShell";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { container } from "@/infrastructure/container";
 import { formatNumber } from "@/shared/utils/formatNumber";
 import { useMemo, useState } from "react";
@@ -9,13 +16,31 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { RollAdjustDialog } from "@/components/inventory/InventoryDialogs";
-import { colorById, fabricById, rollById, rolls, useInventory, type Roll } from "@/presentation/hooks/useInventory";
+import {
+  colorById,
+  fabricById,
+  rollById,
+  rolls,
+  useInventory,
+  type Roll,
+} from "@/presentation/hooks/useInventory";
 
-export const Route = createFileRoute("/inventory_/adjustments")({ component: InventoryAdjustmentsPage });
+export const Route = createFileRoute("/inventory_/adjustments")({
+  component: InventoryAdjustmentsPage,
+});
 
-type Snap = { rollNo?: string; remainingKg?: number; remainingPieces?: number; deltaKg?: number; deltaPieces?: number; reference?: string; syncedFrom?: string };
+type Snap = {
+  rollNo?: string;
+  remainingKg?: number;
+  remainingPieces?: number;
+  deltaKg?: number;
+  deltaPieces?: number;
+  reference?: string;
+  syncedFrom?: string;
+};
 
-const signed = (n: number | undefined) => (n == null ? "—" : `${n > 0 ? "+" : ""}${formatNumber(n)}`);
+const signed = (n: number | undefined) =>
+  n == null ? "—" : `${n > 0 ? "+" : ""}${formatNumber(n)}`;
 
 /**
  * «تعديلات المخزون»: every quantity / pieces change made outside a document —
@@ -38,7 +63,11 @@ function InventoryAdjustmentsPage() {
     if (kind === "manual" && r.action === "post_count_variance") return false;
     if (!term) return true;
     const a = (r.afterSnapshot ?? {}) as Snap;
-    return [a.rollNo, r.actorName, r.detail].some((v) => String(v ?? "").toLowerCase().includes(term));
+    return [a.rollNo, r.actorName, r.detail].some((v) =>
+      String(v ?? "")
+        .toLowerCase()
+        .includes(term),
+    );
   });
   return (
     <AppShell>
@@ -64,8 +93,12 @@ function InventoryAdjustmentsPage() {
             تعديل جديد
           </Button>
         </div>
-        {q.isPending && <p className="p-4 text-center text-sm text-muted-foreground">جارٍ التحميل…</p>}
-        {q.isError && <p className="p-4 text-center text-sm text-destructive">تعذّر تحميل تعديلات المخزون.</p>}
+        {q.isPending && (
+          <p className="p-4 text-center text-sm text-muted-foreground">جارٍ التحميل…</p>
+        )}
+        {q.isError && (
+          <p className="p-4 text-center text-sm text-destructive">تعذّر تحميل تعديلات المخزون.</p>
+        )}
         {!q.isPending && !q.isError && rows.length === 0 && (
           <p className="p-4 text-center text-sm text-muted-foreground">لا توجد تعديلات بعد.</p>
         )}
@@ -91,14 +124,23 @@ function InventoryAdjustmentsPage() {
                 return (
                   <TableRow key={r.id}>
                     <TableCell className="whitespace-nowrap">
-                      {new Date(r.createdAt).toLocaleString("ar", { dateStyle: "short", timeStyle: "short" })}
+                      {new Date(r.createdAt).toLocaleString("ar", {
+                        dateStyle: "short",
+                        timeStyle: "short",
+                      })}
                     </TableCell>
                     <TableCell>
                       {r.actorName ?? "—"}
-                      {a.syncedFrom && <span className="ms-1 text-[11px] text-muted-foreground">(من جهاز آخر)</span>}
+                      {a.syncedFrom && (
+                        <span className="ms-1 text-[11px] text-muted-foreground">
+                          (من جهاز آخر)
+                        </span>
+                      )}
                     </TableCell>
                     <TableCell className="tabular-nums">#{a.rollNo ?? b.rollNo ?? "—"}</TableCell>
-                    <TableCell>{r.action === "post_count_variance" ? "تسوية جرد" : "تعديل يدوي"}</TableCell>
+                    <TableCell>
+                      {r.action === "post_count_variance" ? "تسوية جرد" : "تعديل يدوي"}
+                    </TableCell>
                     <TableCell className="tabular-nums">
                       {formatNumber(b.remainingKg ?? 0)} → {formatNumber(a.remainingKg ?? 0)}
                     </TableCell>
@@ -139,7 +181,15 @@ function InventoryAdjustmentsPage() {
 }
 
 /** Find the roll to adjust by roll number, fabric or colour. */
-function RollPicker({ open, onClose, onPick }: { open: boolean; onClose: () => void; onPick: (r: Roll) => void }) {
+function RollPicker({
+  open,
+  onClose,
+  onPick,
+}: {
+  open: boolean;
+  onClose: () => void;
+  onPick: (r: Roll) => void;
+}) {
   const invVersion = useInventory();
   const [term, setTerm] = useState("");
   const matches = useMemo(() => {
@@ -156,13 +206,22 @@ function RollPicker({ open, onClose, onPick }: { open: boolean; onClose: () => v
         <DialogHeader>
           <DialogTitle>اختر الصبغة</DialogTitle>
         </DialogHeader>
-        <Input autoFocus placeholder="رقم الصبغة، القماش، اللون…" value={term} onChange={(e) => setTerm(e.target.value)} />
+        <Input
+          autoFocus
+          placeholder="رقم الصبغة، القماش، اللون…"
+          value={term}
+          onChange={(e) => setTerm(e.target.value)}
+        />
         <ul className="max-h-[50vh] divide-y divide-border overflow-y-auto text-sm">
           {matches.map((r) => {
             const c = colorById(r.colorId);
             return (
               <li key={r.id}>
-                <button type="button" className="flex w-full justify-between gap-2 px-2 py-2 text-start hover:bg-secondary" onClick={() => onPick(r)}>
+                <button
+                  type="button"
+                  className="flex w-full justify-between gap-2 px-2 py-2 text-start hover:bg-secondary"
+                  onClick={() => onPick(r)}
+                >
                   <span>
                     #{r.rollNo} — {fabricById(c?.fabricId ?? "")?.name ?? "—"} / {c?.name ?? "—"}
                   </span>
@@ -173,7 +232,9 @@ function RollPicker({ open, onClose, onPick }: { open: boolean; onClose: () => v
               </li>
             );
           })}
-          {matches.length === 0 && <li className="p-3 text-center text-muted-foreground">لا نتائج.</li>}
+          {matches.length === 0 && (
+            <li className="p-3 text-center text-muted-foreground">لا نتائج.</li>
+          )}
         </ul>
       </DialogContent>
     </Dialog>

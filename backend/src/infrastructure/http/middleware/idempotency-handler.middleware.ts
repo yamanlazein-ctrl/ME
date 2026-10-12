@@ -1,5 +1,11 @@
 import type { Request, Response, NextFunction, RequestHandler } from "express";
-import { getIdempotencyKey, readCached, writeCached, tryClaim } from "./idempotency.middleware.js";
+import {
+  getIdempotencyKey,
+  readCached,
+  writeCached,
+  tryClaim,
+  releaseClaim,
+} from "./idempotency.middleware.js";
 import { NotFoundError } from "../../../domain/errors/index.js";
 
 /**
@@ -56,9 +62,7 @@ export function idempotency(
       // REPAIR-008 B: expose Idempotency-Key as durable client_operation_id.
       // Only UUID-shaped keys are persisted (partial unique indexes are uuid).
       const uuidLike =
-        /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
-          key,
-        );
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(key);
       if (uuidLike && req.tenantContext) {
         req.tenantContext.clientOperationId = key;
       }
@@ -120,6 +124,10 @@ export function idempotency(
             capturedContentType,
           ).catch(() => {
             // best-effort cache write
+          });
+        } else if (res.statusCode >= 500) {
+          void releaseClaim(tenantId, req.method, req.path, key).catch(() => {
+            // best-effort: the claim still expires with its TTL
           });
         }
       });

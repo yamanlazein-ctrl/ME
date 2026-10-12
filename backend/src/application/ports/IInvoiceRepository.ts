@@ -33,6 +33,16 @@ export interface IInvoiceRepository {
    * P0-001: expectedVersion is REQUIRED for optimistic concurrency control.
    * If the current version does not match, the update fails with STALE_VERSION code.
    */
-  update(id: string, input: UpdateInvoiceInput, ctx: TenantContext, expectedVersion: number): Promise<InvoiceData>;
-  cancel(id: string, cancelledBy: string, ctx: TenantContext, expectedVersion: number): Promise<InvoiceData>;
+  update(
+    id: string,
+    input: UpdateInvoiceInput,
+    ctx: TenantContext,
+    expectedVersion: number,
+  ): Promise<InvoiceData>;
+  cancel(
+    id: string,
+    cancelledBy: string,
+    ctx: TenantContext,
+    expectedVersion: number,
+  ): Promise<InvoiceData>;
 }

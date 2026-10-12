@@ -1,5 +1,12 @@
 import { eq, and, desc, ilike, or, sql, inArray, getTableColumns } from "drizzle-orm";
-import { afterCursor, cursorColumns, decodeCursor, keysetOrder, nextCursorOf, type KeysetSpec } from "./keysetPage.js";
+import {
+  afterCursor,
+  cursorColumns,
+  decodeCursor,
+  keysetOrder,
+  nextCursorOf,
+  type KeysetSpec,
+} from "./keysetPage.js";
 import { likeContains } from "../utils/likeEscape.js";
 import type { DB } from "../orm/drizzle.js";
 import type {
@@ -108,7 +115,11 @@ export class PostgresFabricRepository implements IFabricRepository {
     // P0-001: version increment for optimistic concurrency
     values.version = sql`${fabrics.version} + 1`;
     // P0-001: atomic version enforcement — WHERE includes expectedVersion
-    const whereConditions = [eq(fabrics.id, id), eq(fabrics.tenantId, ctx.tenantId), eq(fabrics.version, expectedVersion)];
+    const whereConditions = [
+      eq(fabrics.id, id),
+      eq(fabrics.tenantId, ctx.tenantId),
+      eq(fabrics.version, expectedVersion),
+    ];
     const [row] = await this.db
       .update(fabrics)
       .set(values)
@@ -116,9 +127,16 @@ export class PostgresFabricRepository implements IFabricRepository {
       .returning();
     if (!row) {
       // P0-001: distinguish "not found" from "stale version"
-      const existing = await this.db.select({ version: fabrics.version }).from(fabrics).where(and(eq(fabrics.id, id), eq(fabrics.tenantId, ctx.tenantId))).limit(1);
+      const existing = await this.db
+        .select({ version: fabrics.version })
+        .from(fabrics)
+        .where(and(eq(fabrics.id, id), eq(fabrics.tenantId, ctx.tenantId)))
+        .limit(1);
       if (existing.length > 0) {
-        throw Object.assign(new Error(`Stale version: expected ${expectedVersion}, current ${existing[0].version}`), { code: "STALE_VERSION" as const });
+        throw Object.assign(
+          new Error(`Stale version: expected ${expectedVersion}, current ${existing[0].version}`),
+          { code: "STALE_VERSION" as const },
+        );
       }
       throw new Error("Fabric not found");
     }

@@ -45,7 +45,13 @@ function contentOf(c: Uint8Array | string): Uint8Array {
   return typeof c === "string" ? new TextEncoder().encode(c) : c;
 }
 
-export function stableKeyOfParts(entityType: string, entityId: string, periodKey: string, section: string, contentSha256: string): string {
+export function stableKeyOfParts(
+  entityType: string,
+  entityId: string,
+  periodKey: string,
+  section: string,
+  contentSha256: string,
+): string {
   return [entityType, entityId, periodKey, section, contentSha256].join("|");
 }
 
@@ -66,7 +72,13 @@ export class UploadQueue {
     const content = contentOf(input.content);
     const sha = createHash("sha256").update(content).digest("hex");
     const periodKey = input.businessDate.slice(0, 7);
-    const stableKey = stableKeyOfParts(input.entityType, input.entityId, periodKey, input.section, sha);
+    const stableKey = stableKeyOfParts(
+      input.entityType,
+      input.entityId,
+      periodKey,
+      input.section,
+      sha,
+    );
 
     const [existing] = await this.db
       .select()
@@ -128,7 +140,13 @@ export class UploadQueue {
     // leased it (status → uploading, lease in the future) or finished it (done) makes this a no-op.
     const updated = await this.db
       .update(motardDriveUploads)
-      .set({ status: "uploading", leaseOwner: deviceId, leaseToken, leaseUntil: until, updatedAt: now })
+      .set({
+        status: "uploading",
+        leaseOwner: deviceId,
+        leaseToken,
+        leaseUntil: until,
+        updatedAt: now,
+      })
       .where(and(eq(motardDriveUploads.id, row.id), due))
       .returning();
     const claimed = updated[0];
@@ -155,15 +173,30 @@ export class UploadQueue {
     // The queue carries only metadata + hash; the worker regenerates the bytes from the source records
     // (D-03) and hands them in per call — never a shared mutable hook a concurrent pass could swap.
     try {
-      const chain = await this.folders.ensureChain(businessDate, job.section as never);
-      const meta =
-        content.length > SMALL_UPLOAD_MAX
-          ? await this.drive.uploadResumable(chain.sectionId, job.fileName, job.mimeType, content)
-          : await this.drive.uploadSmall(chain.sectionId, job.fileName, job.mimeType, content);
-      const verified = await this.drive.getFile(meta.id);
-      if (!verified) throw new Error("post-upload verification failed: file id not found");
-      await this.markDone(job, meta, verified);
-      return meta.id;
+      // H-12: a previous attempt that Drive already accepted left its file id on the row; verify THAT
+      // file instead of creating a second one (a failed verification used to re-upload on retry).
+      const [prior] = await this.db
+        .select({ driveFileId: motardDriveUploads.driveFileId })
+        .from(motardDriveUploads)
+        .where(this.owned(job))
+        .limit(1);
+      let verified = prior?.driveFileId ? await this.drive.getFile(prior.driveFileId) : null;
+      if (!verified) {
+        const chain = await this.folders.ensureChain(businessDate, job.section as never);
+        const meta =
+          content.length > SMALL_UPLOAD_MAX
+            ? await this.drive.uploadResumable(chain.sectionId, job.fileName, job.mimeType, content)
+            : await this.drive.uploadSmall(chain.sectionId, job.fileName, job.mimeType, content);
+        // Persist the accepted id before verifying, so a failure from here on retries by id.
+        await this.db
+          .update(motardDriveUploads)
+          .set({ driveFileId: meta.id, updatedAt: nowIso() })
+          .where(this.owned(job));
+        verified = await this.drive.getFile(meta.id);
+        if (!verified) throw new Error("post-upload verification failed: file id not found");
+      }
+      await this.markDone(job, verified);
+      return verified.id;
     } catch (err) {
       await this.fail(job, err);
       throw err;
@@ -174,10 +207,20 @@ export class UploadQueue {
   async drop(job: ClaimedJob): Promise<void> {
     await this.db
       .delete(motardDriveUploads)
-      .where(and(eq(motardDriveUploads.id, job.id), eq(motardDriveUploads.leaseToken, job.leaseToken)));
+      .where(
+        and(eq(motardDriveUploads.id, job.id), eq(motardDriveUploads.leaseToken, job.leaseToken)),
+      );
   }
 
-  private async markDone(job: ClaimedJob, meta: DriveFileMeta, verified: DriveFileMeta): Promise<void> {
+  /** The row as long as this job still holds its lease (H-13: a stale worker's writes are no-ops). */
+  private owned(job: ClaimedJob) {
+    return and(
+      eq(motardDriveUploads.id, job.id),
+      eq(motardDriveUploads.leaseToken, job.leaseToken),
+    );
+  }
+
+  private async markDone(job: ClaimedJob, verified: DriveFileMeta): Promise<void> {
     await this.db
       .update(motardDriveUploads)
       .set({
@@ -189,20 +232,27 @@ export class UploadQueue {
         lastError: null,
         updatedAt: nowIso(),
       })
-      .where(and(eq(motardDriveUploads.id, job.id), eq(motardDriveUploads.leaseToken, job.leaseToken)));
-    void meta;
+      .where(this.owned(job));
   }
 
   private async fail(job: ClaimedJob, err: unknown): Promise<void> {
-    const [row] = await this.db.select().from(motardDriveUploads).where(eq(motardDriveUploads.id, job.id)).limit(1);
+    // H-13: only while this job still holds the lease — an expired worker failing late used to
+    // overwrite the newer worker's `done` with `failed`.
+    const [row] = await this.db.select().from(motardDriveUploads).where(this.owned(job)).limit(1);
     if (!row) return;
     const retryCount = row.retryCount + 1;
     // Authorization failure: blocked, not retried — needs the user to reconnect.
     if (err instanceof DriveAuthError) {
       await this.db
         .update(motardDriveUploads)
-        .set({ status: "blocked", lastError: "AUTH", leaseToken: null, leaseUntil: null, updatedAt: nowIso() })
-        .where(eq(motardDriveUploads.id, job.id));
+        .set({
+          status: "blocked",
+          lastError: "AUTH",
+          leaseToken: null,
+          leaseUntil: null,
+          updatedAt: nowIso(),
+        })
+        .where(this.owned(job));
       return;
     }
     // D-09: a permanent or exhausted failure needs the operator (retry action) → blocked; a
@@ -213,25 +263,44 @@ export class UploadQueue {
       .set({
         status: stop ? "blocked" : "failed",
         retryCount,
-        nextAttemptAt: stop ? null : toIso(new Date(Date.now() + Math.min(60000 * 2 ** retryCount, 6 * 3600000))),
+        nextAttemptAt: stop
+          ? null
+          : toIso(new Date(Date.now() + Math.min(60000 * 2 ** retryCount, 6 * 3600000))),
         lastError: String(err).slice(0, 500),
         leaseToken: null,
         leaseUntil: null,
         updatedAt: nowIso(),
       })
-      .where(eq(motardDriveUploads.id, job.id));
+      .where(this.owned(job));
   }
 
   /** Requeue a failed/blocked job on user request (retry action). */
   async retry(jobId: string): Promise<void> {
     await this.db
       .update(motardDriveUploads)
-      .set({ status: "pending", nextAttemptAt: null, retryCount: 0, lastError: null, updatedAt: nowIso() })
-      .where(and(eq(motardDriveUploads.id, jobId), or(eq(motardDriveUploads.status, "failed"), eq(motardDriveUploads.status, "blocked"))));
+      .set({
+        status: "pending",
+        nextAttemptAt: null,
+        retryCount: 0,
+        lastError: null,
+        updatedAt: nowIso(),
+      })
+      .where(
+        and(
+          eq(motardDriveUploads.id, jobId),
+          or(eq(motardDriveUploads.status, "failed"), eq(motardDriveUploads.status, "blocked")),
+        ),
+      );
   }
 
   /** Queue snapshot for the settings screen. */
-  async stats(): Promise<{ pending: number; uploading: number; done: number; failed: number; blocked: number }> {
+  async stats(): Promise<{
+    pending: number;
+    uploading: number;
+    done: number;
+    failed: number;
+    blocked: number;
+  }> {
     const rows = await this.db
       .select({ status: motardDriveUploads.status, n: sql<number>`count(*)` })
       .from(motardDriveUploads)

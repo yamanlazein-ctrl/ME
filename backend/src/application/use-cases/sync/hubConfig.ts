@@ -197,7 +197,12 @@ export function saveHubCredentials(creds: StoredCredentials | null): void {
     const iv = randomBytes(12);
     const cipher = createCipheriv("aes-256-gcm", credentialsKey(), iv);
     const ct = Buffer.concat([cipher.update(JSON.stringify(creds), "utf8"), cipher.final()]);
-    const blob = { v: 1, iv: iv.toString("base64"), tag: cipher.getAuthTag().toString("base64"), ct: ct.toString("base64") };
+    const blob = {
+      v: 1,
+      iv: iv.toString("base64"),
+      tag: cipher.getAuthTag().toString("base64"),
+      ct: ct.toString("base64"),
+    };
     fs.mkdirSync(path.dirname(file), { recursive: true });
     fs.writeFileSync(file, JSON.stringify(blob), { encoding: "utf8", mode: 0o600 });
   } catch (err) {
@@ -209,12 +214,25 @@ export function loadHubCredentials(): StoredCredentials | null {
   const file = credentialsPath();
   if (!file || !fs.existsSync(file)) return null;
   try {
-    const blob = JSON.parse(fs.readFileSync(file, "utf8")) as { iv: string; tag: string; ct: string };
-    const decipher = createDecipheriv("aes-256-gcm", credentialsKey(), Buffer.from(blob.iv, "base64"));
+    const blob = JSON.parse(fs.readFileSync(file, "utf8")) as {
+      iv: string;
+      tag: string;
+      ct: string;
+    };
+    const decipher = createDecipheriv(
+      "aes-256-gcm",
+      credentialsKey(),
+      Buffer.from(blob.iv, "base64"),
+    );
     decipher.setAuthTag(Buffer.from(blob.tag, "base64"));
-    const plain = Buffer.concat([decipher.update(Buffer.from(blob.ct, "base64")), decipher.final()]);
+    const plain = Buffer.concat([
+      decipher.update(Buffer.from(blob.ct, "base64")),
+      decipher.final(),
+    ]);
     const parsed = JSON.parse(plain.toString("utf8")) as StoredCredentials;
-    const usable = (parsed.email && parsed.password) || (parsed.tenantId && parsed.deviceId && parsed.deviceSecret);
+    const usable =
+      (parsed.email && parsed.password) ||
+      (parsed.tenantId && parsed.deviceId && parsed.deviceSecret);
     return parsed.url && usable ? parsed : null;
   } catch (err) {
     logger.warn({ err }, "stored hub credentials unreadable");
@@ -234,7 +252,8 @@ export function resolveConnectCredentials(input: { email?: string; password?: st
   const stored = loadHubCredentials();
   const email = input.email ?? stored?.email;
   const password =
-    input.password ?? (stored && (!input.email || input.email === stored.email) ? stored.password : undefined);
+    input.password ??
+    (stored && (!input.email || input.email === stored.email) ? stored.password : undefined);
   return { email, password };
 }
 
@@ -247,7 +266,11 @@ async function reloginWithStoredCredentials(): Promise<boolean> {
       ? await fetch(`${creds.url}/api/sync/device-token`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ tenantId: creds.tenantId, deviceId: creds.deviceId, secret: creds.deviceSecret }),
+          body: JSON.stringify({
+            tenantId: creds.tenantId,
+            deviceId: creds.deviceId,
+            secret: creds.deviceSecret,
+          }),
           signal: AbortSignal.timeout(20_000),
         })
       : await fetch(`${creds.url}/api/auth/login`, {
@@ -256,7 +279,10 @@ async function reloginWithStoredCredentials(): Promise<boolean> {
           body: JSON.stringify({ email: creds.email, password: creds.password }),
           signal: AbortSignal.timeout(20_000),
         });
-    const body = (await res.json().catch(() => ({}))) as { accessToken?: string; refreshToken?: string };
+    const body = (await res.json().catch(() => ({}))) as {
+      accessToken?: string;
+      refreshToken?: string;
+    };
     if (!res.ok || !body.accessToken) {
       logger.warn({ status: res.status }, "hub re-login with stored credentials refused");
       return false;
@@ -512,7 +538,9 @@ async function postHubDeviceRegistration(
   url: string,
   auth: string,
   device: HubDeviceRegistration,
-): Promise<{ ok: true; id: string } | { ok: false; status: number; code: string | null; error: string }> {
+): Promise<
+  { ok: true; id: string } | { ok: false; status: number; code: string | null; error: string }
+> {
   try {
     const dr = await fetch(`${url}/api/auth/sync-device`, {
       method: "POST",
@@ -527,11 +555,25 @@ async function postHubDeviceRegistration(
       }),
       signal: AbortSignal.timeout(15_000),
     });
-    const body = (await dr.json().catch(() => ({}))) as { id?: string; code?: string; message?: string };
+    const body = (await dr.json().catch(() => ({}))) as {
+      id?: string;
+      code?: string;
+      message?: string;
+    };
     if (dr.ok && body.id) return { ok: true, id: body.id };
-    return { ok: false, status: dr.status, code: body.code ?? null, error: body.message || `تعذّر تسجيل الجهاز في المركز (${dr.status})` };
+    return {
+      ok: false,
+      status: dr.status,
+      code: body.code ?? null,
+      error: body.message || `تعذّر تسجيل الجهاز في المركز (${dr.status})`,
+    };
   } catch (err) {
-    return { ok: false, status: 0, code: null, error: err instanceof Error ? err.message : "تعذّر تسجيل الجهاز في المركز" };
+    return {
+      ok: false,
+      status: 0,
+      code: null,
+      error: err instanceof Error ? err.message : "تعذّر تسجيل الجهاز في المركز",
+    };
   }
 }
 
@@ -542,7 +584,9 @@ async function postHubDeviceRegistration(
 export async function registerDeviceOnHub(
   device: HubDeviceRegistration,
   localAuthHeader?: string,
-): Promise<{ ok: true; id: string } | { ok: false; status: number; code: string | null; error: string }> {
+): Promise<
+  { ok: true; id: string } | { ok: false; status: number; code: string | null; error: string }
+> {
   const url = getCentralSyncUrl();
   if (!url) return { ok: false, status: 0, code: null, error: "CENTRAL_SYNC_URL غير مضبوط" };
   let auth = await resolveHubAuthHeader(localAuthHeader);
@@ -696,7 +740,10 @@ export async function connectHub(input: ConnectHubInput): Promise<ConnectHubResu
   return { ok: true, info, hubChanged, deviceWarning };
 }
 
-async function fetchHubLicense(url: string, auth: string): Promise<{ key: string | null; status: string | null }> {
+async function fetchHubLicense(
+  url: string,
+  auth: string,
+): Promise<{ key: string | null; status: string | null }> {
   try {
     const lr = await fetch(`${url}/api/license/status`, {
       headers: { Authorization: auth },
@@ -713,11 +760,19 @@ async function fetchHubLicense(url: string, auth: string): Promise<{ key: string
 }
 
 /** Ask the hub for this (already bound) device's own credential. Null when the hub cannot. */
-async function mintHubDeviceCredential(url: string, auth: string, deviceId: string): Promise<string | null> {
+async function mintHubDeviceCredential(
+  url: string,
+  auth: string,
+  deviceId: string,
+): Promise<string | null> {
   try {
     const res = await fetch(`${url}/api/sync/devices/self/credential`, {
       method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: auth, "X-Sync-Device-Id": deviceId },
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: auth,
+        "X-Sync-Device-Id": deviceId,
+      },
       body: JSON.stringify({ deviceId }),
       signal: AbortSignal.timeout(15_000),
     });
@@ -745,7 +800,8 @@ export async function enrollHub(input: EnrollHubInput): Promise<ConnectHubResult
   if (!url) return { ok: false, stage: "url", error: "رابط الخادم المركزي غير صالح" };
   const previous = loadSession();
   const test = await testHubConnection(url);
-  if (!test.reachable) return { ok: false, stage: "reach", error: test.error ?? "الخادم المركزي لا يستجيب" };
+  if (!test.reachable)
+    return { ok: false, stage: "reach", error: test.error ?? "الخادم المركزي لا يستجيب" };
 
   let res: Response;
   try {
@@ -766,7 +822,11 @@ export async function enrollHub(input: EnrollHubInput): Promise<ConnectHubResult
       signal: AbortSignal.timeout(20_000),
     });
   } catch (err) {
-    return { ok: false, stage: "reach", error: err instanceof Error ? err.message : "تعذّر الاتصال" };
+    return {
+      ok: false,
+      stage: "reach",
+      error: err instanceof Error ? err.message : "تعذّر الاتصال",
+    };
   }
   const body = (await res.json().catch(() => ({}))) as {
     message?: string;
@@ -778,7 +838,11 @@ export async function enrollHub(input: EnrollHubInput): Promise<ConnectHubResult
     user?: { id?: string; name?: string; role?: string };
   };
   if (!res.ok || !body.accessToken || !body.deviceSecret || !body.deviceId || !body.tenantId) {
-    return { ok: false, stage: "login", error: body.message || `رفض المركز التسجيل (${res.status})` };
+    return {
+      ok: false,
+      stage: "login",
+      error: body.message || `رفض المركز التسجيل (${res.status})`,
+    };
   }
 
   const license = await fetchHubLicense(url, `Bearer ${body.accessToken}`);
@@ -798,7 +862,12 @@ export async function enrollHub(input: EnrollHubInput): Promise<ConnectHubResult
   persistHubSession(null);
   setRuntimeCentralSyncUrl(url);
   persistHubSession({ accessToken: body.accessToken, refreshToken: body.refreshToken, ...info });
-  saveHubCredentials({ url, tenantId: body.tenantId, deviceId: body.deviceId, deviceSecret: body.deviceSecret });
+  saveHubCredentials({
+    url,
+    tenantId: body.tenantId,
+    deviceId: body.deviceId,
+    deviceSecret: body.deviceSecret,
+  });
   hubReachable = true;
   lastProbeAt = Date.now();
   localActivityCursor = null;
@@ -818,7 +887,11 @@ export function rememberLocalSyncIdentity(tenantId: string, userId: string): voi
 }
 
 /** Who the background sync runs as, or null when this device is not set up for it yet. */
-export function backgroundSyncIdentity(): { tenantId: string; userId: string; deviceId: string } | null {
+export function backgroundSyncIdentity(): {
+  tenantId: string;
+  userId: string;
+  deviceId: string;
+} | null {
   if (!getCentralSyncUrl()) return null;
   const session = loadSession();
   const deviceId = session?.hubDeviceId ?? loadHubCredentials()?.deviceId;
@@ -927,7 +1000,15 @@ export async function hubProxy(
     method,
     ...(body === undefined ? {} : { body: JSON.stringify(body) }),
   }).catch(() => undefined);
-  if (res === undefined) return { status: 503, body: { code: "HUB_UNREACHABLE", message: "المركز لا يستجيب الآن — حاول لاحقاً" } };
-  if (!res) return { status: 409, body: { code: "HUB_NOT_PAIRED", message: "هذا الجهاز غير مربوط بالمركز" } };
+  if (res === undefined)
+    return {
+      status: 503,
+      body: { code: "HUB_UNREACHABLE", message: "المركز لا يستجيب الآن — حاول لاحقاً" },
+    };
+  if (!res)
+    return {
+      status: 409,
+      body: { code: "HUB_NOT_PAIRED", message: "هذا الجهاز غير مربوط بالمركز" },
+    };
   return { status: res.status, body: await res.json().catch(() => ({})) };
 }

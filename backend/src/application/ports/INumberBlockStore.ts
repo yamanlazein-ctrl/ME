@@ -21,11 +21,24 @@ export interface INumberBlockStore {
     year: number;
     knownUsed?: number | null;
   }): Promise<ClaimedNumberBlock>;
-  reclaimBlockTail(input: { tenantId: UUID; blockId: UUID }): Promise<{ reclaimed: number; newGlobalLast: number | null }>;
+  reclaimBlockTail(input: {
+    tenantId: UUID;
+    blockId: UUID;
+  }): Promise<{ reclaimed: number; newGlobalLast: number | null }>;
   /** Numbers still unused across this device's active blocks for the entity/year. */
-  remainingInActiveBlocks(tenantId: UUID, syncDeviceId: UUID, entityType: string, year: number): Promise<number>;
+  remainingInActiveBlocks(
+    tenantId: UUID,
+    syncDeviceId: UUID,
+    entityType: string,
+    year: number,
+  ): Promise<number>;
   readSequenceTip(tenantId: UUID, entityType: string, prefix: string): Promise<number>;
   /** Monotonic: lastNumber = GREATEST(lastNumber, target). */
-  advanceSequenceTip(tenantId: UUID, entityType: string, prefix: string, target: number): Promise<void>;
+  advanceSequenceTip(
+    tenantId: UUID,
+    entityType: string,
+    prefix: string,
+    target: number,
+  ): Promise<void>;
   deviceBelongsToTenant(tenantId: string, syncDeviceId: string): Promise<boolean>;
 }

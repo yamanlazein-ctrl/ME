@@ -36,7 +36,11 @@ async function api(method: string, p: string, body?: unknown) {
   });
   const text = await res.text();
   let json: unknown = null;
-  try { json = text ? JSON.parse(text) : null; } catch { json = text; }
+  try {
+    json = text ? JSON.parse(text) : null;
+  } catch {
+    json = text;
+  }
   return { status: res.status, json } as { status: number; json: any };
 }
 const q = (frag: ReturnType<typeof sql>) => db.execute(frag);
@@ -70,7 +74,11 @@ beforeAll(async () => {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       email: "admin@erp.local",
-      password: process.env.E2E_ADMIN_PASSWORD ?? (() => { throw new Error("E2E_ADMIN_PASSWORD required (DFP-029)"); })(),
+      password:
+        process.env.E2E_ADMIN_PASSWORD ??
+        (() => {
+          throw new Error("E2E_ADMIN_PASSWORD required (DFP-029)");
+        })(),
       tenantId,
     }),
   });
@@ -80,23 +88,39 @@ beforeAll(async () => {
   // fixtures
   await findOrCreateParty("customer", CUSTOMER_NAME);
   await findOrCreateParty("supplier", SUPPLIER_NAME);
-  const fabrics: any[] = (await api("GET", `/api/inventory/fabrics?search=${encodeURIComponent(FABRIC_NAME)}`)).json?.data ?? [];
+  const fabrics: any[] =
+    (await api("GET", `/api/inventory/fabrics?search=${encodeURIComponent(FABRIC_NAME)}`)).json
+      ?.data ?? [];
   let fabric = fabrics.find((f) => f.name === FABRIC_NAME);
   if (!fabric) {
     const r = await api("POST", "/api/inventory/fabrics", { name: FABRIC_NAME });
     fabric = r.json.data ?? r.json;
   }
-  const colors: any[] = (await api("GET", `/api/inventory/colors?fabricId=${fabric.id}`)).json?.data ?? [];
+  const colors: any[] =
+    (await api("GET", `/api/inventory/colors?fabricId=${fabric.id}`)).json?.data ?? [];
   let color = colors.find((c) => c.name === COLOR_NAME);
   if (!color) {
-    const r = await api("POST", "/api/inventory/colors", { fabricId: fabric.id, name: COLOR_NAME, code: "AUDREG" });
+    const r = await api("POST", "/api/inventory/colors", {
+      fabricId: fabric.id,
+      name: COLOR_NAME,
+      code: "AUDREG",
+    });
     color = r.json.data ?? r.json;
   }
   const rolls: any[] = (await api("GET", "/api/inventory/rolls?limit=1000")).json?.data ?? [];
-  for (const [rollNo, price, currency] of [[ROLL_SYP_NO, 30000, "SYP"], [ROLL_USD_NO, 10, "USD"]] as const) {
+  for (const [rollNo, price, currency] of [
+    [ROLL_SYP_NO, 30000, "SYP"],
+    [ROLL_USD_NO, 10, "USD"],
+  ] as const) {
     if (!rolls.find((r) => r.rollNo === rollNo)) {
       const r = await api("POST", "/api/inventory/rolls", {
-        colorId: color.id, rollNo, initialKg: 100, pricePerKg: price, currency, entryDate: today(), pieces: 10,
+        colorId: color.id,
+        rollNo,
+        initialKg: 100,
+        pricePerKg: price,
+        currency,
+        entryDate: today(),
+        pieces: 10,
       });
       expect([200, 201]).toContain(r.status);
     }
@@ -107,12 +131,17 @@ afterAll(async () => {
   for (const id of createdInvoiceIds) {
     const cur = (await api("GET", `/api/invoices/${id}`)).json;
     const version = (cur?.data ?? cur)?.version;
-    if (typeof version === "number") await api("POST", `/api/invoices/${id}/cancel`, { expectedVersion: version });
+    if (typeof version === "number")
+      await api("POST", `/api/invoices/${id}/cancel`, { expectedVersion: version });
   }
 });
 
 async function createSaleInvoice(opts: {
-  partyId: string; rollNo: string; currency: "SYP" | "USD"; qty: number; price: number;
+  partyId: string;
+  rollNo: string;
+  currency: "SYP" | "USD";
+  qty: number;
+  price: number;
 }) {
   const rolls: any[] = (await api("GET", `/api/inventory/rolls?limit=1000`)).json?.data ?? [];
   const roll = rolls.find((r) => r.rollNo === opts.rollNo);
@@ -121,10 +150,23 @@ async function createSaleInvoice(opts: {
   const color = colors.find((c) => c.id === roll.colorId);
   expect(color).toBeTruthy();
   const res = await api("POST", "/api/invoices", {
-    type: "sale", date: today(), partyId: opts.partyId, partyType: "customer", currency: opts.currency,
+    type: "sale",
+    date: today(),
+    partyId: opts.partyId,
+    partyType: "customer",
+    currency: opts.currency,
     // bf340593: every non-USD document carries its exchange rate (units per 1 USD).
     ...(opts.currency !== "USD" ? { exchangeRate: 15000 } : {}),
-    lines: [{ fabricId: color.fabricId, colorId: color.id, rollId: roll.id, quantityKg: opts.qty, pieces: 1, pricePerKg: opts.price }],
+    lines: [
+      {
+        fabricId: color.fabricId,
+        colorId: color.id,
+        rollId: roll.id,
+        quantityKg: opts.qty,
+        pieces: 1,
+        pricePerKg: opts.price,
+      },
+    ],
   });
   if ([200, 201].includes(res.status)) createdInvoiceIds.push((res.json.data ?? res.json).id);
   return res;
@@ -141,8 +183,21 @@ describe("H3 — invoice create must validate party kind", () => {
     const colors: any[] = (await api("GET", `/api/inventory/colors?limit=1000`)).json?.data ?? [];
     const color = colors.find((c) => c.id === roll.colorId);
     const res = await api("POST", "/api/invoices", {
-      type: "entry", date: today(), partyId: cust.id, partyType: "supplier", currency: "SYP", exchangeRate: 15000,
-      lines: [{ fabricId: color.fabricId, colorId: color.id, rollId: roll.id, quantityKg: 0.01, pricePerKg: 1000 }],
+      type: "entry",
+      date: today(),
+      partyId: cust.id,
+      partyType: "supplier",
+      currency: "SYP",
+      exchangeRate: 15000,
+      lines: [
+        {
+          fabricId: color.fabricId,
+          colorId: color.id,
+          rollId: roll.id,
+          quantityKg: 0.01,
+          pricePerKg: 1000,
+        },
+      ],
     });
     if ([200, 201].includes(res.status)) createdInvoiceIds.push((res.json.data ?? res.json).id);
     // Correct contract: kind mismatch must be rejected client/server-side.
@@ -156,7 +211,13 @@ describe("H1 — COGS must not import another currency's cost numbers", () => {
   // unless a manual FX rate converts the cost (USD invoice here carries none).
   it("rejects a USD sale of an SYP-costed roll", async () => {
     const cust = await findOrCreateParty("customer", CUSTOMER_NAME);
-    const res = await createSaleInvoice({ partyId: cust.id, rollNo: ROLL_SYP_NO, currency: "USD", qty: 1, price: 12.5 });
+    const res = await createSaleInvoice({
+      partyId: cust.id,
+      rollNo: ROLL_SYP_NO,
+      currency: "USD",
+      qty: 1,
+      price: 12.5,
+    });
     expect(res.status).toBe(422);
   });
 
@@ -165,10 +226,20 @@ describe("H1 — COGS must not import another currency's cost numbers", () => {
   // frozen rate, never booked as raw USD numbers in an SYP ledger.
   it("converts a USD-costed roll's COGS into SYP at the frozen rate", async () => {
     const cust = await findOrCreateParty("customer", CUSTOMER_NAME);
-    const res = await createSaleInvoice({ partyId: cust.id, rollNo: ROLL_USD_NO, currency: "SYP", qty: 0.01, price: 200000 });
+    const res = await createSaleInvoice({
+      partyId: cust.id,
+      rollNo: ROLL_USD_NO,
+      currency: "SYP",
+      qty: 0.01,
+      price: 200000,
+    });
     expect([200, 201]).toContain(res.status);
     const inv = res.json.data ?? res.json;
-    const legs = (await q(sql`select type, debit, currency from ledger_entries where reference_number = ${inv.number} and tenant_id = ${tenantId}`)).rows as any[];
+    const legs = (
+      await q(
+        sql`select type, debit, currency from ledger_entries where reference_number = ${inv.number} and tenant_id = ${tenantId}`,
+      )
+    ).rows as any[];
     const cogs = legs.find((l) => l.type === "cogs_expense");
     expect(cogs.currency).toBe("SYP");
     expect(Number(cogs.debit)).toBeCloseTo(0.01 * 10 * 15000, 2); // 0.01kg × 10 USD/kg × 15000
@@ -176,10 +247,20 @@ describe("H1 — COGS must not import another currency's cost numbers", () => {
 
   it("same-currency sales keep working (control)", async () => {
     const cust = await findOrCreateParty("customer", CUSTOMER_NAME);
-    const res = await createSaleInvoice({ partyId: cust.id, rollNo: ROLL_SYP_NO, currency: "SYP", qty: 0.01, price: 30000 });
+    const res = await createSaleInvoice({
+      partyId: cust.id,
+      rollNo: ROLL_SYP_NO,
+      currency: "SYP",
+      qty: 0.01,
+      price: 30000,
+    });
     expect([200, 201]).toContain(res.status);
     const inv = res.json.data ?? res.json;
-    const legs = (await q(sql`select type, debit, credit, currency from ledger_entries where reference_number = ${inv.number} and tenant_id = ${tenantId}`)).rows as any[];
+    const legs = (
+      await q(
+        sql`select type, debit, credit, currency from ledger_entries where reference_number = ${inv.number} and tenant_id = ${tenantId}`,
+      )
+    ).rows as any[];
     const cogs = legs.find((l) => l.type === "cogs_expense");
     expect(cogs).toBeTruthy();
     expect(cogs.currency).toBe("SYP");
@@ -193,11 +274,23 @@ describe("M4 — statement entry list must exclude cancelled documents", () => {
   // but do NOT affect balances. Visibility is intentional (Statement.ts).
   it("lists cancelled invoice legs with status=cancelled", async () => {
     const cust = await findOrCreateParty("customer", CUSTOMER_NAME);
-    const res = await createSaleInvoice({ partyId: cust.id, rollNo: ROLL_SYP_NO, currency: "SYP", qty: 0.01, price: 30000 });
+    const res = await createSaleInvoice({
+      partyId: cust.id,
+      rollNo: ROLL_SYP_NO,
+      currency: "SYP",
+      qty: 0.01,
+      price: 30000,
+    });
     expect([200, 201]).toContain(res.status);
     const inv = res.json.data ?? res.json;
-    const legIds = (await q(sql`select id from ledger_entries where reference_number = ${inv.number} and tenant_id = ${tenantId}`)).rows.map((r: any) => r.id);
-    const cancel = await api("POST", `/api/invoices/${inv.id}/cancel`, { expectedVersion: inv.version });
+    const legIds = (
+      await q(
+        sql`select id from ledger_entries where reference_number = ${inv.number} and tenant_id = ${tenantId}`,
+      )
+    ).rows.map((r: any) => r.id);
+    const cancel = await api("POST", `/api/invoices/${inv.id}/cancel`, {
+      expectedVersion: inv.version,
+    });
     expect([200, 201]).toContain(cancel.status);
     const stmt = await api("GET", `/api/customers/${cust.id}/statement?currency=SYP`);
     expect(stmt.status).toBe(200);
@@ -213,7 +306,9 @@ describe("M5 — cashbox API must expose every currency in the ledger", () => {
   it("balance endpoint returns a per-currency breakdown including USD", async () => {
     const res = await api("GET", `/api/cashbox/balance/${today()}`);
     expect(res.status).toBe(200);
-    expect(res.json).toEqual(expect.objectContaining({ SYP: expect.anything(), USD: expect.anything() }));
+    expect(res.json).toEqual(
+      expect.objectContaining({ SYP: expect.anything(), USD: expect.anything() }),
+    );
   });
 });
 
@@ -229,16 +324,34 @@ describe("M8 — settlement legs must reference a resolvable source document", (
   it("settlement leg carries a non-null reference_id", async () => {
     const cust = await findOrCreateParty("customer", CUSTOMER_NAME);
     // ensure non-zero balance
-    const bal = (await q(sql`select coalesce(sum(debit - credit), 0) as b from ledger_entries where party_id = ${cust.id} and currency = 'SYP' and status = 'active'`)).rows[0] as any;
+    const bal = (
+      await q(
+        sql`select coalesce(sum(debit - credit), 0) as b from ledger_entries where party_id = ${cust.id} and currency = 'SYP' and status = 'active'`,
+      )
+    ).rows[0] as any;
     if (Number(bal.b) === 0) {
-      const res = await createSaleInvoice({ partyId: cust.id, rollNo: ROLL_SYP_NO, currency: "SYP", qty: 0.01, price: 30000 });
+      const res = await createSaleInvoice({
+        partyId: cust.id,
+        rollNo: ROLL_SYP_NO,
+        currency: "SYP",
+        qty: 0.01,
+        price: 30000,
+      });
       expect([200, 201]).toContain(res.status);
     }
-    const settle = await api("POST", `/api/customers/${cust.id}/statement/settle`, { date: today(), currency: "SYP", notesInternal: "audit-regression" });
+    const settle = await api("POST", `/api/customers/${cust.id}/statement/settle`, {
+      date: today(),
+      currency: "SYP",
+      notesInternal: "audit-regression",
+    });
     if (settle.status === 422) return; // zero balance — nothing to settle
     expect(settle.status).toBe(201);
     const refNum = settle.json.referenceNumber;
-    const legs = (await q(sql`select reference_id from ledger_entries where reference_number = ${refNum} and tenant_id = ${tenantId}`)).rows as any[];
+    const legs = (
+      await q(
+        sql`select reference_id from ledger_entries where reference_number = ${refNum} and tenant_id = ${tenantId}`,
+      )
+    ).rows as any[];
     expect(legs.length).toBeGreaterThan(0);
     for (const leg of legs) expect(leg.reference_id).not.toBeNull();
   });
@@ -248,30 +361,57 @@ describe("M8 — settlement legs must reference a resolvable source document", (
 describe("guards — correct behaviors that must survive the fixes", () => {
   it("invoice batches stay balanced", async () => {
     const cust = await findOrCreateParty("customer", CUSTOMER_NAME);
-    const res = await createSaleInvoice({ partyId: cust.id, rollNo: ROLL_SYP_NO, currency: "SYP", qty: 0.01, price: 30000 });
+    const res = await createSaleInvoice({
+      partyId: cust.id,
+      rollNo: ROLL_SYP_NO,
+      currency: "SYP",
+      qty: 0.01,
+      price: 30000,
+    });
     const inv = res.json.data ?? res.json;
-    const legs = (await q(sql`select debit, credit from ledger_entries where reference_number = ${inv.number} and tenant_id = ${tenantId} and status = 'active'`)).rows as any[];
+    const legs = (
+      await q(
+        sql`select debit, credit from ledger_entries where reference_number = ${inv.number} and tenant_id = ${tenantId} and status = 'active'`,
+      )
+    ).rows as any[];
     const sum = legs.reduce((a, l) => a + Number(l.debit) - Number(l.credit), 0);
     expect(sum).toBe(0);
   });
 
   it("cancelling an invoice soft-cancels all of its legs", async () => {
     const cust = await findOrCreateParty("customer", CUSTOMER_NAME);
-    const res = await createSaleInvoice({ partyId: cust.id, rollNo: ROLL_SYP_NO, currency: "SYP", qty: 0.01, price: 30000 });
+    const res = await createSaleInvoice({
+      partyId: cust.id,
+      rollNo: ROLL_SYP_NO,
+      currency: "SYP",
+      qty: 0.01,
+      price: 30000,
+    });
     expect([200, 201], JSON.stringify(res.json)).toContain(res.status);
     const inv = res.json.data ?? res.json;
     await api("POST", `/api/invoices/${inv.id}/cancel`, { expectedVersion: inv.version });
-    const legs = (await q(sql`select status from ledger_entries where reference_number = ${inv.number} and tenant_id = ${tenantId}`)).rows as any[];
+    const legs = (
+      await q(
+        sql`select status from ledger_entries where reference_number = ${inv.number} and tenant_id = ${tenantId}`,
+      )
+    ).rows as any[];
     expect(legs.length).toBeGreaterThan(0);
     expect(legs.every((l) => l.status === "cancelled")).toBe(true);
   });
 
   it("statement date-window previousBalance equals movements strictly before `from`", async () => {
     const cust = await findOrCreateParty("customer", CUSTOMER_NAME);
-    const stmt = await api("GET", `/api/customers/${cust.id}/statement?currency=SYP&from=2030-01-01&to=2030-01-31`);
+    const stmt = await api(
+      "GET",
+      `/api/customers/${cust.id}/statement?currency=SYP&from=2030-01-01&to=2030-01-31`,
+    );
     expect(stmt.status).toBe(200);
     expect(stmt.json.entries).toHaveLength(0);
-    const expected = (await q(sql`select coalesce(sum(debit - credit), 0) as b from ledger_entries where party_id = ${cust.id} and currency = 'SYP' and status = 'active' and date < '2030-01-01'`)).rows[0] as any;
+    const expected = (
+      await q(
+        sql`select coalesce(sum(debit - credit), 0) as b from ledger_entries where party_id = ${cust.id} and currency = 'SYP' and status = 'active' and date < '2030-01-01'`,
+      )
+    ).rows[0] as any;
     expect(stmt.json.previousBalance).toBe(Number(expected.b));
   });
 });

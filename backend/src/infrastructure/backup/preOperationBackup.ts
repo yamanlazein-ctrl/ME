@@ -13,7 +13,8 @@ import type { Response } from "express";
 import { getEngine } from "../orm/engine.js";
 import { logger } from "../config/logger.js";
 
-export type PreOperation = "year-close" | "year-reopen" | "party-purge" | "dye-purge" | "party-merge";
+export type PreOperation =
+  "year-close" | "year-reopen" | "party-purge" | "dye-purge" | "party-merge";
 
 export class PreOperationBackupError extends Error {
   readonly code = "PRE_OPERATION_BACKUP_FAILED";
@@ -21,7 +22,9 @@ export class PreOperationBackupError extends Error {
     readonly operation: PreOperation,
     readonly cause: unknown,
   ) {
-    super(`pre-operation backup before ${operation} failed: ${cause instanceof Error ? cause.message : String(cause)}`);
+    super(
+      `pre-operation backup before ${operation} failed: ${cause instanceof Error ? cause.message : String(cause)}`,
+    );
   }
 }
 
@@ -45,10 +48,14 @@ export async function preOperationBackup(operation: PreOperation): Promise<strin
 }
 
 /** The answer when the backup failed: the operation was not run and nothing changed. */
-export function sendPreOperationBackupFailure(res: Response, err: PreOperationBackupError): Response {
+export function sendPreOperationBackupFailure(
+  res: Response,
+  err: PreOperationBackupError,
+): Response {
   return res.status(503).json({
     code: err.code,
-    message: "تعذّر إنشاء نسخة احتياطية موثَّقة قبل هذه العملية، لذلك لم تُنفَّذ. لم يتغيّر أي شيء. تحقّق من المساحة الحرّة على القرص ثم أعد المحاولة.",
+    message:
+      "تعذّر إنشاء نسخة احتياطية موثَّقة قبل هذه العملية، لذلك لم تُنفَّذ. لم يتغيّر أي شيء. تحقّق من المساحة الحرّة على القرص ثم أعد المحاولة.",
   });
 }
 
@@ -56,7 +63,10 @@ export function sendPreOperationBackupFailure(res: Response, err: PreOperationBa
  * Run the backup and answer the failure in one step: returns true when the caller may proceed,
  * false when the response has already been sent.
  */
-export async function guardWithPreOperationBackup(res: Response, operation: PreOperation): Promise<boolean> {
+export async function guardWithPreOperationBackup(
+  res: Response,
+  operation: PreOperation,
+): Promise<boolean> {
   try {
     await preOperationBackup(operation);
     return true;

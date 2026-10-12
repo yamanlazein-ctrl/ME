@@ -64,7 +64,9 @@ export async function customerCreditPosition(
   const returnsPerInvoice = db
     .select({
       invoiceId: returns.originalInvoiceId,
-      total: sql<number>`SUM(ROUND(${returnLines.quantityKg} * ${returnLines.pricePerKg}, 2))`.as("rtotal"),
+      total: sql<number>`SUM(ROUND(${returnLines.quantityKg} * ${returnLines.pricePerKg}, 2))`.as(
+        "rtotal",
+      ),
     })
     .from(returnLines)
     .innerJoin(returns, eq(returnLines.returnId, returns.id))

@@ -29,10 +29,19 @@ const RESOURCES = resolve(dirname(fileURLToPath(import.meta.url)), "..", "src-ta
 const SERVER_DIR = join(RESOURCES, "server");
 const NODE_EXE = join(RESOURCES, "node.exe");
 const SEED = join(SERVER_DIR, "desktop-seed.json");
-const ready = [join(SERVER_DIR, "server.mjs"), join(SERVER_DIR, "web"), NODE_EXE, SEED].every(existsSync);
-const Database = ready ? createRequire(join(SERVER_DIR, "server.mjs"))(join(SERVER_DIR, "node_modules", "better-sqlite3")) : null;
+const ready = [join(SERVER_DIR, "server.mjs"), join(SERVER_DIR, "web"), NODE_EXE, SEED].every(
+  existsSync,
+);
+const Database = ready
+  ? createRequire(join(SERVER_DIR, "server.mjs"))(
+      join(SERVER_DIR, "node_modules", "better-sqlite3"),
+    )
+  : null;
 
-let work, child, pipePath, decoys = [];
+let work,
+  child,
+  pipePath,
+  decoys = [];
 const DATA_ID = randomUUID();
 const INSTANCE = randomUUID();
 
@@ -82,7 +91,11 @@ async function waitForPipe(proc, limitMs = 120_000) {
 /** The environment stack.rs spawn_server gives the server. */
 function serverEnv(state, instance) {
   return {
-    ...Object.fromEntries(Object.entries(process.env).filter(([k]) => !["DATABASE_URL", "TEST_DB_URL", "PGPASSWORD"].includes(k))),
+    ...Object.fromEntries(
+      Object.entries(process.env).filter(
+        ([k]) => !["DATABASE_URL", "TEST_DB_URL", "PGPASSWORD"].includes(k),
+      ),
+    ),
     NODE_ENV: "production",
     DESKTOP_DEPLOY: "true",
     DESKTOP_PIPE: pipePath,
@@ -136,7 +149,13 @@ before(async () => {
   for (const p of [8080, 4173]) {
     await new Promise((res, rej) => {
       const s = createHttpServer((_req, res) => res.end(`decoy:${p}`));
-      s.once("error", (err) => rej(new Error(`cannot bind decoy on 127.0.0.1:${p} (${err.code ?? err.message}). Stop leftover node from a prior packaging run and retry.`)));
+      s.once("error", (err) =>
+        rej(
+          new Error(
+            `cannot bind decoy on 127.0.0.1:${p} (${err.code ?? err.message}). Stop leftover node from a prior packaging run and retry.`,
+          ),
+        ),
+      );
       s.listen(p, "127.0.0.1", () => {
         decoys.push(s);
         res();
@@ -169,45 +188,78 @@ after(async () => {
   }
 });
 
-const t = (name, fn) => test(name, { skip: !ready && "run bundle-server.mjs, stage web/ and build-desktop-seed.mjs first" }, fn);
+const t = (name, fn) =>
+  test(
+    name,
+    { skip: !ready && "run bundle-server.mjs, stage web/ and build-desktop-seed.mjs first" },
+    fn,
+  );
 
-t("serves the API on the named pipe and takes no TCP port, even with 8080 and 4173 busy", async () => {
-  for (const p of [8080, 4173]) {
-    const r = await new Promise((resolve, reject) => {
-      const req = request({ host: "127.0.0.1", port: p, path: "/", method: "GET", timeout: 5_000 }, (res) => {
-        const chunks = [];
-        res.on("data", (d) => chunks.push(d));
-        res.on("end", () => resolve(Buffer.concat(chunks).toString("utf8")));
+t(
+  "serves the API on the named pipe and takes no TCP port, even with 8080 and 4173 busy",
+  async () => {
+    for (const p of [8080, 4173]) {
+      const r = await new Promise((resolve, reject) => {
+        const req = request(
+          { host: "127.0.0.1", port: p, path: "/", method: "GET", timeout: 5_000 },
+          (res) => {
+            const chunks = [];
+            res.on("data", (d) => chunks.push(d));
+            res.on("end", () => resolve(Buffer.concat(chunks).toString("utf8")));
+          },
+        );
+        req.on("timeout", () => {
+          req.destroy();
+          reject(new Error(`decoy check on :${p} timed out — another process may own the port`));
+        });
+        req.on("error", reject);
+        req.end();
       });
-      req.on("timeout", () => {
-        req.destroy();
-        reject(new Error(`decoy check on :${p} timed out — another process may own the port`));
-      });
-      req.on("error", reject);
-      req.end();
-    });
-    assert.equal(r, `decoy:${p}`, `port ${p} must still belong to the decoy, not the ERP`);
-  }
-  assert.equal((await pipeFetch("/api/health/live")).status, 200);
-});
+      assert.equal(r, `decoy:${p}`, `port ${p} must still belong to the decoy, not the ERP`);
+    }
+    assert.equal((await pipeFetch("/api/health/live")).status, 200);
+  },
+);
 
-t("FRESH created the SQLite database with the runtime's identity, the sidecar, and only the seed", async () => {
-  const db = new Database(join(work, "data", "motard.db"), { readonly: true });
-  try {
-    const meta = db.prepare("SELECT data_id, install_instance_id, created_by_installation_id FROM motard_meta WHERE id = 1").get();
-    assert.deepEqual(meta, { data_id: DATA_ID, install_instance_id: INSTANCE, created_by_installation_id: "server-bundle-test" });
-    const seed = JSON.parse(readFileSync(SEED, "utf8"));
-    assert.deepEqual(db.prepare("SELECT id FROM tenants").all(), [{ id: seed.tenant.id }]);
-    assert.equal(db.prepare("SELECT count(*) n FROM licenses WHERE tenant_id = ? AND offline_token IS NOT NULL").get(seed.tenant.id).n, 1);
-    assert.equal(db.prepare("SELECT count(*) n FROM users").get().n, 0, "no users: the owner is created by onboarding");
-  } finally {
-    db.close();
-  }
-  const sidecar = JSON.parse(readFileSync(join(work, "db-meta.json"), "utf8"));
-  assert.equal(sidecar.engine, "sqlite");
-  assert.equal(sidecar.data_id, DATA_ID);
-  assert.equal(sidecar.install_instance_id, INSTANCE);
-});
+t(
+  "FRESH created the SQLite database with the runtime's identity, the sidecar, and only the seed",
+  async () => {
+    const db = new Database(join(work, "data", "motard.db"), { readonly: true });
+    try {
+      const meta = db
+        .prepare(
+          "SELECT data_id, install_instance_id, created_by_installation_id FROM motard_meta WHERE id = 1",
+        )
+        .get();
+      assert.deepEqual(meta, {
+        data_id: DATA_ID,
+        install_instance_id: INSTANCE,
+        created_by_installation_id: "server-bundle-test",
+      });
+      const seed = JSON.parse(readFileSync(SEED, "utf8"));
+      assert.deepEqual(db.prepare("SELECT id FROM tenants").all(), [{ id: seed.tenant.id }]);
+      assert.equal(
+        db
+          .prepare(
+            "SELECT count(*) n FROM licenses WHERE tenant_id = ? AND offline_token IS NOT NULL",
+          )
+          .get(seed.tenant.id).n,
+        1,
+      );
+      assert.equal(
+        db.prepare("SELECT count(*) n FROM users").get().n,
+        0,
+        "no users: the owner is created by onboarding",
+      );
+    } finally {
+      db.close();
+    }
+    const sidecar = JSON.parse(readFileSync(join(work, "db-meta.json"), "utf8"));
+    assert.equal(sidecar.engine, "sqlite");
+    assert.equal(sidecar.data_id, DATA_ID);
+    assert.equal(sidecar.install_instance_id, INSTANCE);
+  },
+);
 
 t("API is live on the same origin and onboarding has not run", async () => {
   const r = await pipeFetch("/api/health/live");
@@ -243,24 +295,31 @@ t("hashed assets are cached immutably", async () => {
   assert.match(r.headers["cache-control"] ?? "", /immutable/);
 });
 
-t("a restart reopens the same database (REUSE); a new installation instance is refused, file untouched", async () => {
-  await stopServer(child);
-  child = startServer("REUSE");
-  await waitForPipe(child);
-  assert.equal((await (await pipeFetch("/api/setup/status")).json()).isCompleted, false);
-  await stopServer(child);
+t(
+  "a restart reopens the same database (REUSE); a new installation instance is refused, file untouched",
+  async () => {
+    await stopServer(child);
+    child = startServer("REUSE");
+    await waitForPipe(child);
+    assert.equal((await (await pipeFetch("/api/setup/status")).json()).isCompleted, false);
+    await stopServer(child);
 
-  const file = join(work, "data", "motard.db");
-  const db = new Database(file);
-  db.pragma("wal_checkpoint(TRUNCATE)");
-  db.close();
-  const before = createHash("sha256").update(readFileSync(file)).digest("hex");
-  const refused = startServer("REUSE", randomUUID());
-  const code = await new Promise((r) => refused.once("exit", r));
-  assert.notEqual(code, 0, "a new installation must not serve the existing company");
-  assert.match(refused.output, /INSTALL_INSTANCE_MISMATCH/);
-  assert.equal(createHash("sha256").update(readFileSync(file)).digest("hex"), before, "the refused boot changed nothing");
+    const file = join(work, "data", "motard.db");
+    const db = new Database(file);
+    db.pragma("wal_checkpoint(TRUNCATE)");
+    db.close();
+    const before = createHash("sha256").update(readFileSync(file)).digest("hex");
+    const refused = startServer("REUSE", randomUUID());
+    const code = await new Promise((r) => refused.once("exit", r));
+    assert.notEqual(code, 0, "a new installation must not serve the existing company");
+    assert.match(refused.output, /INSTALL_INSTANCE_MISMATCH/);
+    assert.equal(
+      createHash("sha256").update(readFileSync(file)).digest("hex"),
+      before,
+      "the refused boot changed nothing",
+    );
 
-  child = startServer("REUSE");
-  await waitForPipe(child);
-});
+    child = startServer("REUSE");
+    await waitForPipe(child);
+  },
+);

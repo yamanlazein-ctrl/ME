@@ -54,19 +54,31 @@ function seedCompany(db: Database.Database): void {
      VALUES (?, 'LIC-BK3-0001', 'full', 'active', 'standard', 'enterprise', ?, 'Backup Co', 3, '{"users":5}',
              'fingerprint', 'fp-device-a', 'signed.offline.token', 'jti-0001')`,
   ).run(LICENSE, TENANT);
-  db.prepare(`INSERT INTO license_activations (id, license_id, tenant_id, server_fingerprint) VALUES (?, ?, ?, 'fp-device-a')`).run(ACTIVATION, LICENSE, TENANT);
+  db.prepare(
+    `INSERT INTO license_activations (id, license_id, tenant_id, server_fingerprint) VALUES (?, ?, ?, 'fp-device-a')`,
+  ).run(ACTIVATION, LICENSE, TENANT);
   db.prepare(`UPDATE tenants SET activation_id = ? WHERE id = ?`).run(ACTIVATION, TENANT);
   db.prepare(
     `INSERT INTO device_registrations (id, license_id, tenant_id, device_id, device_fingerprint, platform) VALUES (?, ?, ?, ?, 'fp-device-a', 'windows')`,
   ).run(randomUUID(), LICENSE, TENANT, randomUUID());
-  db.prepare(`INSERT INTO secrets (id, tenant_id, key, ciphertext, iv) VALUES (?, ?, 'license.token.current', 'c1', 'i1')`).run(randomUUID(), TENANT);
-  db.prepare(`INSERT INTO license_audit_events (event_type, tenant_id, license_id) VALUES ('activated', ?, ?)`).run(TENANT, LICENSE);
+  db.prepare(
+    `INSERT INTO secrets (id, tenant_id, key, ciphertext, iv) VALUES (?, ?, 'license.token.current', 'c1', 'i1')`,
+  ).run(randomUUID(), TENANT);
+  db.prepare(
+    `INSERT INTO license_audit_events (event_type, tenant_id, license_id) VALUES ('activated', ?, ?)`,
+  ).run(TENANT, LICENSE);
   const party = randomUUID();
-  db.prepare(`INSERT INTO parties (id, tenant_id, kind, name) VALUES (?, ?, 'customer', 'زبون أ')`).run(party, TENANT);
+  db.prepare(
+    `INSERT INTO parties (id, tenant_id, kind, name) VALUES (?, ?, 'customer', 'زبون أ')`,
+  ).run(party, TENANT);
 }
 
 /** Rewrite one archive member (and optionally keep manifest.sha256 consistent). */
-function rewriteArchive(src: string, dst: string, edit: (e: Record<string, Uint8Array>) => void): string {
+function rewriteArchive(
+  src: string,
+  dst: string,
+  edit: (e: Record<string, Uint8Array>) => void,
+): string {
   const entries = unzipSync(new Uint8Array(readFileSync(src)));
   edit(entries);
   writeFileSync(dst, zipSync(entries));
@@ -119,12 +131,26 @@ describe("backup v3 — creation", () => {
         expect(db.prepare(`SELECT count(*) FROM "${t}"`).pluck().get(), t).toBe(0);
       }
       // the licence row is KEPT with its company identity; only device-bound columns are NULL
-      const lic = db.prepare(`SELECT * FROM licenses WHERE id = ?`).get(LICENSE) as Record<string, unknown>;
+      const lic = db.prepare(`SELECT * FROM licenses WHERE id = ?`).get(LICENSE) as Record<
+        string,
+        unknown
+      >;
       expect(lic).toBeTruthy();
-      expect(lic).toMatchObject({ key: "LIC-BK3-0001", type: "full", status: "active", plan: "standard", edition: "enterprise", tenant_id: TENANT, customer_name: "Backup Co" });
+      expect(lic).toMatchObject({
+        key: "LIC-BK3-0001",
+        type: "full",
+        status: "active",
+        plan: "standard",
+        edition: "enterprise",
+        tenant_id: TENANT,
+        customer_name: "Backup Co",
+      });
       expect(JSON.parse(String(lic.limits))).toEqual({ users: 5 });
-      for (const c of ["binding_type", "binding_value", "offline_token", "offline_token_jti"]) expect(lic[c], c).toBeNull();
-      expect(db.prepare(`SELECT activation_id FROM tenants WHERE id = ?`).pluck().get(TENANT)).toBeNull();
+      for (const c of ["binding_type", "binding_value", "offline_token", "offline_token_jti"])
+        expect(lic[c], c).toBeNull();
+      expect(
+        db.prepare(`SELECT activation_id FROM tenants WHERE id = ?`).pluck().get(TENANT),
+      ).toBeNull();
       db.close();
       expect(opened.manifest.excludedTables).toEqual([...m.backup.EXCLUDED_TABLES]);
     } finally {
@@ -145,7 +171,12 @@ describe("backup v3 — rejection codes", () => {
       bad[at + name.length + 8] ^= 0xff;
       const f = join(root, `flip-${name.replace(/[^\w]/g, "_")}.zip`);
       writeFileSync(f, bad);
-      expect(code(() => m.backup.openAndVerifyBackupV3Sync(f)), name).toMatch(/^BACKUP_(NOT_A_ZIP|MANIFEST_HASH_MISMATCH|FILE_HASH_MISMATCH|INTEGRITY_FAILED|TABLE_MISMATCH|MANIFEST_MISSING)$/);
+      expect(
+        code(() => m.backup.openAndVerifyBackupV3Sync(f)),
+        name,
+      ).toMatch(
+        /^BACKUP_(NOT_A_ZIP|MANIFEST_HASH_MISMATCH|FILE_HASH_MISMATCH|INTEGRITY_FAILED|TABLE_MISMATCH|MANIFEST_MISSING)$/,
+      );
     }
   });
 
@@ -197,18 +228,42 @@ describe("backup v3 — restore and device-bound state", () => {
   it("same-device restore keeps the live activation, device, secrets, binding, offline token and audit rows; the archive is unchanged", async () => {
     const before = sha(readFileSync(created.path));
     // business change after the backup: restore must bring the backup's data back
-    writer().prepare(`INSERT INTO parties (id, tenant_id, kind, name) VALUES (?, ?, 'supplier', 'بعد النسخة')`).run(randomUUID(), TENANT);
+    writer()
+      .prepare(
+        `INSERT INTO parties (id, tenant_id, kind, name) VALUES (?, ?, 'supplier', 'بعد النسخة')`,
+      )
+      .run(randomUUID(), TENANT);
     const report = await m.restore.restoreBackupV3(created.path);
     expect(report.carriedOver.license_activations).toBe(1);
     const db = writer();
-    expect(db.prepare(`SELECT count(*) FROM parties WHERE tenant_id = ?`).pluck().get(TENANT)).toBe(1);
-    expect(db.prepare(`SELECT activation_id FROM tenants WHERE id = ?`).pluck().get(TENANT)).toBe(ACTIVATION);
-    const lic = db.prepare(`SELECT binding_type, binding_value, offline_token, offline_token_jti FROM licenses WHERE id = ?`).get(LICENSE);
-    expect(lic).toEqual({ binding_type: "fingerprint", binding_value: "fp-device-a", offline_token: "signed.offline.token", offline_token_jti: "jti-0001" });
-    for (const t of ["license_activations", "device_registrations", "secrets", "license_audit_events"]) {
+    expect(db.prepare(`SELECT count(*) FROM parties WHERE tenant_id = ?`).pluck().get(TENANT)).toBe(
+      1,
+    );
+    expect(db.prepare(`SELECT activation_id FROM tenants WHERE id = ?`).pluck().get(TENANT)).toBe(
+      ACTIVATION,
+    );
+    const lic = db
+      .prepare(
+        `SELECT binding_type, binding_value, offline_token, offline_token_jti FROM licenses WHERE id = ?`,
+      )
+      .get(LICENSE);
+    expect(lic).toEqual({
+      binding_type: "fingerprint",
+      binding_value: "fp-device-a",
+      offline_token: "signed.offline.token",
+      offline_token_jti: "jti-0001",
+    });
+    for (const t of [
+      "license_activations",
+      "device_registrations",
+      "secrets",
+      "license_audit_events",
+    ]) {
       expect(db.prepare(`SELECT count(*) FROM "${t}"`).pluck().get(), t).toBe(1);
     }
-    expect(db.prepare(`SELECT restored_from FROM motard_meta WHERE id = 1`).pluck().get()).toBeTruthy();
+    expect(
+      db.prepare(`SELECT restored_from FROM motard_meta WHERE id = 1`).pluck().get(),
+    ).toBeTruthy();
     expect(sha(readFileSync(created.path))).toBe(before);
   });
 
@@ -220,10 +275,16 @@ describe("backup v3 — restore and device-bound state", () => {
     await m.runtime.ensureSqliteRuntime();
     await m.restore.restoreBackupV3(created.path);
     const db = writer();
-    expect(db.prepare(`SELECT name FROM tenants WHERE id = ?`).pluck().get(TENANT)).toBe("شركة النسخ");
-    expect(db.prepare(`SELECT activation_id FROM tenants WHERE id = ?`).pluck().get(TENANT)).toBeNull();
+    expect(db.prepare(`SELECT name FROM tenants WHERE id = ?`).pluck().get(TENANT)).toBe(
+      "شركة النسخ",
+    );
+    expect(
+      db.prepare(`SELECT activation_id FROM tenants WHERE id = ?`).pluck().get(TENANT),
+    ).toBeNull();
     expect(db.prepare(`SELECT count(*) FROM license_activations`).pluck().get()).toBe(0);
-    const lic = db.prepare(`SELECT key, binding_type, offline_token FROM licenses WHERE id = ?`).get(LICENSE);
+    const lic = db
+      .prepare(`SELECT key, binding_type, offline_token FROM licenses WHERE id = ?`)
+      .get(LICENSE);
     expect(lic).toEqual({ key: "LIC-BK3-0001", binding_type: null, offline_token: null });
   });
 });

@@ -49,33 +49,50 @@ function readSigningKeys() {
     priv ||= pick("LICENSE_SIGNING_KEY");
     pub ||= pick("LICENSE_SIGNING_PUBLIC_KEY");
   }
-  if (!priv || !pub) fail("LICENSE_SIGNING_KEY / LICENSE_SIGNING_PUBLIC_KEY not found (env or backend/.env)");
+  if (!priv || !pub)
+    fail("LICENSE_SIGNING_KEY / LICENSE_SIGNING_PUBLIC_KEY not found (env or backend/.env)");
   const nl = (s) => s.replace(/\\n/g, "\n");
   return { priv: nl(priv), pub: nl(pub) };
 }
 const keys = readSigningKeys();
 
-const shippedPem = readFileSync(join(REPO_ROOT, "desktop", "src-tauri", "resources", "license-public.pem"), "utf8");
+const shippedPem = readFileSync(
+  join(REPO_ROOT, "desktop", "src-tauri", "resources", "license-public.pem"),
+  "utf8",
+);
 const strip = (s) => s.replace(/-----[^-]+-----|\s+/g, "");
 if (strip(shippedPem) !== strip(keys.pub)) {
-  fail("resources/license-public.pem does not match LICENSE_SIGNING_PUBLIC_KEY — the baked licence would not verify on the customer machine");
+  fail(
+    "resources/license-public.pem does not match LICENSE_SIGNING_PUBLIC_KEY — the baked licence would not verify on the customer machine",
+  );
 }
 if (!existsSync(join(REPO_ROOT, "desktop", "src-tauri", "resources", "server", "server.mjs"))) {
   fail("resources/server is not built — run bundle-server.mjs first");
 }
 
 log(`tenant ${tenantId}; signing with the configured key (never printed)`);
-execFileSync(process.execPath, [join(BACKEND_ROOT, "node_modules", "tsx", "dist", "cli.mjs"), "src/scripts/build-desktop-seed.ts", "--out", OUT], {
-  cwd: BACKEND_ROOT,
-  stdio: ["ignore", "inherit", "inherit"],
-  env: {
-    ...process.env,
-    SEED_TENANT_ID: tenantId,
-    LICENSE_SIGNING_KEY: keys.priv,
-    LICENSE_SIGNING_PUBLIC_KEY: keys.pub,
-    ...(process.env.DESKTOP_LICENSE_KEY ? { BAKED_LICENSE_KEY: process.env.DESKTOP_LICENSE_KEY } : {}),
+execFileSync(
+  process.execPath,
+  [
+    join(BACKEND_ROOT, "node_modules", "tsx", "dist", "cli.mjs"),
+    "src/scripts/build-desktop-seed.ts",
+    "--out",
+    OUT,
+  ],
+  {
+    cwd: BACKEND_ROOT,
+    stdio: ["ignore", "inherit", "inherit"],
+    env: {
+      ...process.env,
+      SEED_TENANT_ID: tenantId,
+      LICENSE_SIGNING_KEY: keys.priv,
+      LICENSE_SIGNING_PUBLIC_KEY: keys.pub,
+      ...(process.env.DESKTOP_LICENSE_KEY
+        ? { BAKED_LICENSE_KEY: process.env.DESKTOP_LICENSE_KEY }
+        : {}),
+    },
   },
-});
+);
 
 // Independent gate on the file that will really be packaged.
 const seed = JSON.parse(readFileSync(OUT, "utf8"));
@@ -83,8 +100,10 @@ const keysOf = (o) => Object.keys(o).sort().join(",");
 if (seed.format !== "motard-desktop-seed" || seed.version !== 1) fail("unexpected seed format");
 if (seed.tenant?.id !== tenantId) fail(`seed tenant ${seed.tenant?.id} ≠ ${tenantId}`);
 if (seed.license?.tenant_id !== tenantId) fail("the licence is not bound to the default tenant");
-if (!seed.license?.offline_token || !seed.license?.offline_token_jti) fail("the licence has no signed offline token");
+if (!seed.license?.offline_token || !seed.license?.offline_token_jti)
+  fail("the licence has no signed offline token");
 if (seed.license.status !== "active") fail("the licence is not active");
 if (seed.devPublicJwk) fail("an ephemeral development key was used — never ship it");
-if (keysOf(seed) !== keysOf({ format: 1, version: 1, builtAt: 1, tenant: 1, license: 1 })) fail(`unexpected seed sections: ${keysOf(seed)}`);
+if (keysOf(seed) !== keysOf({ format: 1, version: 1, builtAt: 1, tenant: 1, license: 1 }))
+  fail(`unexpected seed sections: ${keysOf(seed)}`);
 log(`OK → ${OUT} (tenant + licence ${seed.license.key}, no users)`);

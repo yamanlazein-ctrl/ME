@@ -15,21 +15,21 @@ files/attachments/…  attachment files referenced by `attachments` rows
 
 ## `manifest.json`
 
-| Field | Type | Rule |
-|---|---|---|
-| `format` | `"motard-erp-backup"` | must match |
-| `formatVersion` | `3` | `> 3` → reject "newer than app". `2` (PostgreSQL era) → reject (OQ-3, DB-8). |
-| `createdAt` | ISO UTC | — |
-| `app.version` | string | — |
-| `schema.journalIdx`, `schema.fingerprintSha256` | int, hex | `journalIdx` newer than the app → reject. Older → migrate a staging copy. |
-| `data.dataId` | UUID | equals the source `motard_meta.data_id` |
-| `tenant.id`, `tenant.name` | UUID, string | — |
-| `tables[]` | `{name, rows, sha256}` | `sha256` over the canonical row dump (sorted by PK, canonical JSON per row) |
-| `files[]` | `{path, bytes, sha256}` | every file under `files/` |
-| `excludedTables` | string[] | device-bound tables (BK-2, FR-042), **not** v2's `DEVICE_BOUND_TABLES`, which also excludes `licenses`: `license_activations`, `device_registrations`, `secrets`, `server_installations`, `revoked_tokens`, `idempotency_keys`, `invitation_codes`, `license_audit_events` |
-| `nulledColumns` | `{table: string[]}` | `{"licenses": ["binding_type","binding_value","offline_token","offline_token_jti"], "tenants": ["activation_id"], "sync_devices": ["device_registration_id"]}` (the last one added by research I-18, 2026-10-03; both FK columns are nullable) |
-| `licence` | `{licenseId, key, type, edition, plan, status}` | copy identification (BK-2). Read from the kept `licenses` row. |
-| `sync` | `{deviceId, lastPushedSeq, lastPulledCursor}` or null | used by SY-6 reconciliation |
+| Field                                           | Type                                                  | Rule                                                                                                                                                                                                                                                                       |
+| ----------------------------------------------- | ----------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `format`                                        | `"motard-erp-backup"`                                 | must match                                                                                                                                                                                                                                                                 |
+| `formatVersion`                                 | `3`                                                   | `> 3` → reject "newer than app". `2` (PostgreSQL era) → reject (OQ-3, DB-8).                                                                                                                                                                                               |
+| `createdAt`                                     | ISO UTC                                               | —                                                                                                                                                                                                                                                                          |
+| `app.version`                                   | string                                                | —                                                                                                                                                                                                                                                                          |
+| `schema.journalIdx`, `schema.fingerprintSha256` | int, hex                                              | `journalIdx` newer than the app → reject. Older → migrate a staging copy.                                                                                                                                                                                                  |
+| `data.dataId`                                   | UUID                                                  | equals the source `motard_meta.data_id`                                                                                                                                                                                                                                    |
+| `tenant.id`, `tenant.name`                      | UUID, string                                          | —                                                                                                                                                                                                                                                                          |
+| `tables[]`                                      | `{name, rows, sha256}`                                | `sha256` over the canonical row dump (sorted by PK, canonical JSON per row)                                                                                                                                                                                                |
+| `files[]`                                       | `{path, bytes, sha256}`                               | every file under `files/`                                                                                                                                                                                                                                                  |
+| `excludedTables`                                | string[]                                              | device-bound tables (BK-2, FR-042), **not** v2's `DEVICE_BOUND_TABLES`, which also excludes `licenses`: `license_activations`, `device_registrations`, `secrets`, `server_installations`, `revoked_tokens`, `idempotency_keys`, `invitation_codes`, `license_audit_events` |
+| `nulledColumns`                                 | `{table: string[]}`                                   | `{"licenses": ["binding_type","binding_value","offline_token","offline_token_jti"], "tenants": ["activation_id"], "sync_devices": ["device_registration_id"]}` (the last one added by research I-18, 2026-10-03; both FK columns are nullable)                             |
+| `licence`                                       | `{licenseId, key, type, edition, plan, status}`       | copy identification (BK-2). Read from the kept `licenses` row.                                                                                                                                                                                                             |
+| `sync`                                          | `{deviceId, lastPushedSeq, lastPulledCursor}` or null | used by SY-6 reconciliation                                                                                                                                                                                                                                                |
 
 ## Licence and device-bound state (BK-2, FR-042; decided from code evidence 2026-10-03)
 

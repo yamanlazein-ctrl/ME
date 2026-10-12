@@ -106,7 +106,6 @@ beforeAll(() => {
   defineGlobal("fetch", desktopFetch());
 });
 
-
 describe("desktop transport — null-body statuses", () => {
   it("resolves a 204 instead of throwing (a null-body status needs a null body)", async () => {
     const sidecar = fakeSidecar();
@@ -168,7 +167,9 @@ describe("party delete over the desktop transport", () => {
       params: { expectedVersion: "3", confirmCascade: "true" },
     });
 
-    expect(sidecar.requests[0].path).toBe("/api/customers/abc?expectedVersion=3&confirmCascade=true");
+    expect(sidecar.requests[0].path).toBe(
+      "/api/customers/abc?expectedVersion=3&confirmCascade=true",
+    );
     expect(JSON.parse(sidecar.requests[0].body ?? "{}")).toEqual({
       expectedVersion: 3,
       confirmCascade: true,
@@ -186,7 +187,9 @@ describe("network-error replay safety", () => {
       throw new TypeError("Response constructor: Invalid response status code 204");
     });
 
-    await expect(client.delete("/api/customers/abc", { body: { expectedVersion: 1 } })).rejects.toThrow();
+    await expect(
+      client.delete("/api/customers/abc", { body: { expectedVersion: 1 } }),
+    ).rejects.toThrow();
     expect(calls).toBe(1);
   });
 

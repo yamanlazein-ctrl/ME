@@ -31,6 +31,10 @@ jobs:
       - name: Typecheck backend
         run: npm run typecheck:backend
 
+      # M-09: the root lint config ignores backend/**; this runs the backend's pg-import boundary.
+      - name: Lint backend (pg import boundary, D-006)
+        run: cd backend && npm run lint
+
       # DB-09: the desktop (production) engine's schema gate — tsc over the SQLite
       # test project, Drizzle schema regeneration check, and the committed
       # fingerprint. Drift used to be caught only locally or at boot.
@@ -52,7 +56,8 @@ jobs:
       # FND-1/FND-2: Drizzle migrations are the sole schema authority and the
       # journal must resolve every on-disk migration exactly once.
       - name: Migration and schema authority guards
-        run: npx vitest run backend/tests/migrations-journal-guard.test.ts backend/tests/schema-migration-parity.test.ts
+        # Backend tests run under backend/vitest.config.ts — the root config only includes src/** (M-07).
+        run: cd backend && npx vitest run tests/migrations-journal-guard.test.ts tests/schema-migration-parity.test.ts
 
       # Also collects packages/shared/src/**/*.test.ts (T-01: the shared
       # money-math suites were outside every include and had never run).
@@ -94,7 +99,7 @@ jobs:
 
       - name: SyncConflicts tenant guard + report contracts (DFP-019 / DFP-015)
         run: |
-          cd backend && npx vitest run tests/sync-conflicts-tenant-guard.test.ts
+          (cd backend && npx vitest run tests/sync-conflicts-tenant-guard.test.ts)
           npx vitest run src/contracts/reports.dfp015.test.ts
 
       - name: Setup Python (Semgrep DFP-008)
@@ -112,10 +117,18 @@ jobs:
         run: npm run build
 
       - name: Provision Postgres + Redis for backend integration tests
+        # The compose file requires these (`${VAR:?…}`) for every service it interpolates — test-only
+        # values, the same ones the steps below use.
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+          APP_MASTER_KEY: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa=
         run: |
           docker compose -f backend/docker-compose.yml up -d postgres redis
-          # Create a dedicated test database
-          docker exec erp-postgres psql -U postgres -c "CREATE DATABASE erp_test;"
+          # Dedicated test database. Locale C is the search-parity tests' contract (SQLite LIKE folds
+          # ASCII only); the image default en_US.utf8 also folds ü/Ü (L-02).
+          docker exec erp-postgres psql -U postgres -c "CREATE DATABASE erp_test TEMPLATE template0 LC_COLLATE 'C' LC_CTYPE 'C';"
           # Migrations apply against the test DB
           cd backend && DATABASE_URL=postgresql://postgres:postgres@localhost:5432/erp_test npm run db:migrate
 

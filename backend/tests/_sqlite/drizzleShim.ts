@@ -24,12 +24,19 @@ import {
 import { sqliteDb } from "@/infrastructure/orm/sqlite/transaction.js";
 import { toTimestamptzText } from "@/infrastructure/orm/sqlite/types.js";
 
-
 export type { DB, Tx } from "@/infrastructure/orm/sqlite/drizzleCompat.js";
 export { allowLedgerPartyRemap, ambientDb };
 
 const FP = JSON.parse(
-  readFileSync(fileURLToPath(new URL("../../src/infrastructure/orm/migrations/meta/schema-fingerprint.json", import.meta.url)), "utf8"),
+  readFileSync(
+    fileURLToPath(
+      new URL(
+        "../../src/infrastructure/orm/migrations/meta/schema-fingerprint.json",
+        import.meta.url,
+      ),
+    ),
+    "utf8",
+  ),
 ) as { tables: Record<string, { columns: Record<string, { type: string }> }> };
 
 /** column name → its PG type, when every table that has the column agrees on the type. */
@@ -43,7 +50,9 @@ for (const t of Object.values(FP.tables)) {
 
 /** The tables a statement reads (FROM / JOIN / UPDATE / INTO), in order — to type ambiguous names. */
 function tablesOf(text: string): string[] {
-  return [...text.matchAll(/\b(?:from|join|update|into)\s+"?(\w+)"?/gi)].map((m) => m[1]).filter((t) => t in FP.tables);
+  return [...text.matchAll(/\b(?:from|join|update|into)\s+"?(\w+)"?/gi)]
+    .map((m) => m[1])
+    .filter((t) => t in FP.tables);
 }
 
 /** PG type of `col` in this statement: its own tables first, then the global (unambiguous) map. */
@@ -77,12 +86,17 @@ function pgShape(row: Record<string, unknown>, tables: string[] = []): Record<st
       continue;
     }
     const num = /^numeric\((\d+),(\d+)\)$/.exec(type);
-    if (num && (typeof v === "number" || typeof v === "bigint")) out[k] = formatScaled(BigInt(v), Number(num[2]));
-    else if (type === "boolean" && (v === 0 || v === 1 || v === 0n || v === 1n)) out[k] = Number(v) === 1;
+    if (num && (typeof v === "number" || typeof v === "bigint"))
+      out[k] = formatScaled(BigInt(v), Number(num[2]));
+    else if (type === "boolean" && (v === 0 || v === 1 || v === 0n || v === 1n))
+      out[k] = Number(v) === 1;
     else if (type === "timestamp with time zone" && typeof v === "string") out[k] = new Date(v);
-    else if ((type === "jsonb" || type.endsWith("[]")) && typeof v === "string") out[k] = JSON.parse(v);
-    else if ((type === "integer" || type === "smallint") && typeof v === "bigint") out[k] = Number(v);
-    else if (type === "bigint" && (typeof v === "number" || typeof v === "bigint")) out[k] = String(v);
+    else if ((type === "jsonb" || type.endsWith("[]")) && typeof v === "string")
+      out[k] = JSON.parse(v);
+    else if ((type === "integer" || type === "smallint") && typeof v === "bigint")
+      out[k] = Number(v);
+    else if (type === "bigint" && (typeof v === "number" || typeof v === "bigint"))
+      out[k] = String(v);
     else out[k] = v;
   }
   return out;
@@ -96,8 +110,14 @@ function translate(text: string): string | null {
   // `::numeric` → the decimal number). Production SQLite SQL has no `::`, so only test SQL changes.
   // PG fills these from a sequence default; the SQLite build fills them in its insert path
   // ($defaultFn → motard_sequences). A test's raw single-row INSERT that omits them gets the next value.
-  for (const [table, col] of [["sync_inbox", "received_seq"], ["sync_outbox", "seq"]] as const) {
-    const m = new RegExp(`(insert\\s+into\\s+"?${table}"?\\s*)\\(([^)]*)\\)(\\s*values\\s*)`, "i").exec(text);
+  for (const [table, col] of [
+    ["sync_inbox", "received_seq"],
+    ["sync_outbox", "seq"],
+  ] as const) {
+    const m = new RegExp(
+      `(insert\\s+into\\s+"?${table}"?\\s*)\\(([^)]*)\\)(\\s*values\\s*)`,
+      "i",
+    ).exec(text);
     if (!m || new RegExp(`\\b${col}\\b`).test(m[2])) continue;
     // Every top-level VALUES tuple gets the next value (row k of the statement → MAX + k).
     const start = m.index + m[0].length;
@@ -123,7 +143,8 @@ function translate(text: string): string | null {
     const s = scaleOf(typeIn(col, tables));
     if (s === null) return null;
     if (/^text$/i.test(cast)) return `motard_dectext(${ref}, ${s})`;
-    if (/^(float8?|double precision|real|numeric(\(\d+,\s*\d+\))?)$/i.test(cast)) return `(${ref} * 1.0 / ${10 ** s})`;
+    if (/^(float8?|double precision|real|numeric(\(\d+,\s*\d+\))?)$/i.test(cast))
+      return `(${ref} * 1.0 / ${10 ** s})`;
     return null;
   };
   // `sum(col)::float8`, `round(a * b, 2)::float8`: every money column inside the call reads as its
@@ -141,7 +162,10 @@ function translate(text: string): string | null {
     (all, ref: string, col: string, cast: string) => moneyCast(ref, col, cast) ?? all,
   );
   return text
-    .replace(/::(uuid|int|integer|int4|int8|bigint|text|numeric(\(\d+,\s*\d+\))?|date|timestamptz|timestamp|jsonb|json|boolean|bool|float8?|double precision|real|varchar)(\[\])?/gi, "")
+    .replace(
+      /::(uuid|int|integer|int4|int8|bigint|text|numeric(\(\d+,\s*\d+\))?|date|timestamptz|timestamp|jsonb|json|boolean|bool|float8?|double precision|real|varchar)(\[\])?/gi,
+      "",
+    )
     .replace(/\bnow\(\)/gi, "(strftime('%Y-%m-%dT%H:%M:%f','now')||'000Z')")
     .replace(/\bILIKE\b/gi, "LIKE");
 }
@@ -208,7 +232,8 @@ function scaleMoneyParams(text: string, values: unknown[]): unknown[] {
     if (!ref || s === null) return;
     const k = Number(ref[1]) - 1;
     const v = out[k];
-    if (typeof v === "number" || (typeof v === "string" && /^-?\d+(\.\d+)?$/.test(v))) out[k] = BigInt(scaleLiteral(String(v), s));
+    if (typeof v === "number" || (typeof v === "string" && /^-?\d+(\.\d+)?$/.test(v)))
+      out[k] = BigInt(scaleLiteral(String(v), s));
   });
   return out;
 }
@@ -233,7 +258,10 @@ function toSql(text: string, values: unknown[]): SQL {
   return sql.join(chunks, sql.raw(""));
 }
 
-async function query<R = Record<string, unknown>>(textOrConfig: string | { text: string; values?: unknown[] }, values: unknown[] = []) {
+async function query<R = Record<string, unknown>>(
+  textOrConfig: string | { text: string; values?: unknown[] },
+  values: unknown[] = [],
+) {
   const text = typeof textOrConfig === "string" ? textOrConfig : textOrConfig.text;
   const vals = typeof textOrConfig === "string" ? values : (textOrConfig.values ?? values);
   const translated = translate(scaleMoneyLiterals(text));
@@ -268,17 +296,24 @@ export async function checkDatabase(): Promise<boolean> {
 // ─── db / tx: drizzle `sql` objects get the same PG → SQLite rewrite as pool.query ───────────
 
 const BASELINE = readFileSync(
-  fileURLToPath(new URL("../../src/infrastructure/orm/sqlite/migrations/0000_baseline.sql", import.meta.url)),
+  fileURLToPath(
+    new URL("../../src/infrastructure/orm/sqlite/migrations/0000_baseline.sql", import.meta.url),
+  ),
   "utf8",
 );
 /** The SQLite statements of the append-only guard (PG: one trigger, trg_ledger_entries_append_only). */
-const APPEND_ONLY_DDL = [...BASELINE.matchAll(/CREATE TRIGGER "trg_ledger_entries_append_only_b[du]"[\s\S]*?\nEND;/g)].map((m) => m[0]);
+const APPEND_ONLY_DDL = [
+  ...BASELINE.matchAll(/CREATE TRIGGER "trg_ledger_entries_append_only_b[du]"[\s\S]*?\nEND;/g),
+].map((m) => m[0]);
 
 /** Test DDL that has a different spelling on SQLite; null = not special. */
 function specialStatement(text: string): string[] | null {
   if (/^\s*select\s+set_config\s*\(/i.test(text)) return []; // RLS GUCs: no RLS on SQLite
   if (/^\s*DROP TRIGGER IF EXISTS trg_ledger_entries_append_only ON ledger_entries\s*$/i.test(text))
-    return ["DROP TRIGGER IF EXISTS trg_ledger_entries_append_only_bd", "DROP TRIGGER IF EXISTS trg_ledger_entries_append_only_bu"];
+    return [
+      "DROP TRIGGER IF EXISTS trg_ledger_entries_append_only_bd",
+      "DROP TRIGGER IF EXISTS trg_ledger_entries_append_only_bu",
+    ];
   if (/^\s*CREATE OR REPLACE TRIGGER trg_ledger_entries_append_only\b/i.test(text))
     return [
       "DROP TRIGGER IF EXISTS trg_ledger_entries_append_only_bd",
@@ -291,7 +326,8 @@ function specialStatement(text: string): string[] | null {
 function rewrite(q: SQL): SQL {
   return new SQL(
     q.queryChunks.map((c) => {
-      if (c instanceof StringChunk) return new StringChunk(translate(c.value.join("")) ?? "SELECT 1 WHERE 0");
+      if (c instanceof StringChunk)
+        return new StringChunk(translate(c.value.join("")) ?? "SELECT 1 WHERE 0");
       if (c instanceof SQL) return rewrite(c);
       return c;
     }),
@@ -299,7 +335,9 @@ function rewrite(q: SQL): SQL {
 }
 
 function rawText(q: SQL): string {
-  return q.queryChunks.map((c) => (c instanceof StringChunk ? c.value.join("") : c instanceof SQL ? rawText(c) : "?")).join("");
+  return q.queryChunks
+    .map((c) => (c instanceof StringChunk ? c.value.join("") : c instanceof SQL ? rawText(c) : "?"))
+    .join("");
 }
 
 /** `?` placeholders (outside string literals) → `$1 … $n`. */
@@ -318,7 +356,8 @@ function toDollarParams(text: string): string {
 function calledFromTest(stack: string): boolean {
   for (const line of stack.split("\n").slice(1)) {
     const f = line.replace(/\\/g, "/");
-    if (f.includes("/tests/_sqlite/") || f.includes("node_modules") || !/\/(tests|src)\//.test(f)) continue;
+    if (f.includes("/tests/_sqlite/") || f.includes("node_modules") || !/\/(tests|src)\//.test(f))
+      continue;
     return f.includes("/tests/");
   }
   return false;
@@ -342,7 +381,11 @@ function wrap(base: Handle): Handle {
             // The test's own statement: rendered to `$n` text + params and run like pool.query (money
             // literals/params scaled, rows shaped). Production code handed this db runs untouched.
             if (calledFromTest(new Error().stack ?? "")) {
-              const rendered = (target as unknown as { dialect: { sqlToQuery(q: SQL): { sql: string; params: unknown[] } } }).dialect.sqlToQuery(q);
+              const rendered = (
+                target as unknown as {
+                  dialect: { sqlToQuery(q: SQL): { sql: string; params: unknown[] } };
+                }
+              ).dialect.sqlToQuery(q);
               return query(toDollarParams(rendered.sql), rendered.params);
             }
             return target.execute(rewrite(q));
@@ -352,7 +395,10 @@ function wrap(base: Handle): Handle {
       }
       if (prop === "transaction") {
         return (fn: (tx: Handle) => Promise<unknown>, ...rest: unknown[]) =>
-          (target.transaction as (...a: unknown[]) => Promise<unknown>)((tx: Handle) => fn(wrap(tx)), ...rest);
+          (target.transaction as (...a: unknown[]) => Promise<unknown>)(
+            (tx: Handle) => fn(wrap(tx)),
+            ...rest,
+          );
       }
       const v = (target as unknown as Record<PropertyKey, unknown>)[prop];
       return typeof v === "function" ? (v as (...a: unknown[]) => unknown).bind(target) : v;
@@ -362,15 +408,20 @@ function wrap(base: Handle): Handle {
 
 export const db = wrap(compatDb);
 export const txDb = db;
-export const withTenantTx: typeof compatWithTenantTx = (tenantId, fn) => compatWithTenantTx(tenantId, (tx) => fn(wrap(tx)));
-export const runInTransaction: typeof compatRunInTransaction = (fn) => compatRunInTransaction((tx) => fn(wrap(tx)));
+export const withTenantTx: typeof compatWithTenantTx = (tenantId, fn) =>
+  compatWithTenantTx(tenantId, (tx) => fn(wrap(tx)));
+export const runInTransaction: typeof compatRunInTransaction = (fn) =>
+  compatRunInTransaction((tx) => fn(wrap(tx)));
 
 // Every statement — raw, \`sql\` fragments inside query builders, production twins — is prepared
 // here. Rewriting at this one point covers the suites' PG spellings wherever they appear; the
 // SQLite build's own SQL contains none of them, so for it this is the identity.
 {
   const Database = (await import("better-sqlite3")).default;
-  const proto = Database.prototype as unknown as { prepare: (src: string) => unknown; __motardPatched?: boolean };
+  const proto = Database.prototype as unknown as {
+    prepare: (src: string) => unknown;
+    __motardPatched?: boolean;
+  };
   if (!proto.__motardPatched) {
     const prepare = proto.prepare;
     proto.prepare = function (this: unknown, src: string) {

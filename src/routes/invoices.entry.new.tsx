@@ -991,8 +991,12 @@ function EntryInvoicePage() {
             </span>
           </div>
           <div className="grid gap-x-4 gap-y-3 p-4 md:grid-cols-[minmax(0,2fr)_minmax(0,1.2fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)]">
-            <HeaderField label="المورد *">
-              <SupplierInlineCombobox value={supplierId} onChange={setSupplierId} />
+            <HeaderField label="المورد *" htmlFor="entry-supplier">
+              <SupplierInlineCombobox
+                id="entry-supplier"
+                value={supplierId}
+                onChange={setSupplierId}
+              />
             </HeaderField>
             <HeaderField label="رقم الفاتورة">
               <Input
@@ -1010,9 +1014,12 @@ function EntryInvoicePage() {
                 onChange={(e) => setDate(e.target.value)}
               />
             </HeaderField>
-            <HeaderField label="العملة">
+            <HeaderField label="العملة" htmlFor="entry-currency">
               <Select value={currency} onValueChange={(v) => setCurrency(v as Currency)}>
-                <SelectTrigger className={cn("!h-9", isUSD && "text-success font-bold")}>
+                <SelectTrigger
+                  id="entry-currency"
+                  className={cn("!h-9", isUSD && "text-success font-bold")}
+                >
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -1047,8 +1054,9 @@ function EntryInvoicePage() {
                 </div>
               )}
             </HeaderField>
-            <HeaderField label="الدفع">
+            <HeaderField label="الدفع" htmlFor="entry-payment">
               <PaymentMethodSelect
+                id="entry-payment"
                 value={paymentMethod}
                 onChange={setPaymentMethod}
                 methods={enabledPaymentMethods}

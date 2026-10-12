@@ -97,7 +97,9 @@ export class DesktopInstallationIdStorage extends InstallationIdStorage {
     if (existing) {
       if (binding && existing !== binding) {
         throw Object.assign(
-          new Error(`INSTALLATION_ID_MISMATCH: stored install-id ${existing} ≠ device binding ${binding} — not overwritten`),
+          new Error(
+            `INSTALLATION_ID_MISMATCH: stored install-id ${existing} ≠ device binding ${binding} — not overwritten`,
+          ),
           { code: "INSTALLATION_ID_MISMATCH" },
         );
       }

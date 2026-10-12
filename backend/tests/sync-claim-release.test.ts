@@ -17,7 +17,10 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { db } from "@/infrastructure/orm/drizzle.js";
-import { runWithTenantContext, runWithPlatformContext } from "@/infrastructure/orm/tenant-context.js";
+import {
+  runWithTenantContext,
+  runWithPlatformContext,
+} from "@/infrastructure/orm/tenant-context.js";
 import { PostgresSyncResourceClaimRepository } from "@/infrastructure/repositories/PostgresSyncResourceClaimRepository.js";
 import { databaseReachable } from "./_helpers/requireDatabase.js";
 
@@ -81,10 +84,25 @@ describe("F-08 — releasing resource claims when a document is cancelled", () =
     tenantId = randomUUID();
     await seedTenant();
     // The cancelled invoice holds two rolls.
-    await insertClaim({ resourceType: "roll", resourceId: rollA, entityType: "invoice", entityId: cancelledInvoice });
-    await insertClaim({ resourceType: "roll", resourceId: rollB, entityType: "invoice", entityId: cancelledInvoice });
+    await insertClaim({
+      resourceType: "roll",
+      resourceId: rollA,
+      entityType: "invoice",
+      entityId: cancelledInvoice,
+    });
+    await insertClaim({
+      resourceType: "roll",
+      resourceId: rollB,
+      entityType: "invoice",
+      entityId: cancelledInvoice,
+    });
     // An unrelated invoice holds a third roll and must NOT be touched.
-    await insertClaim({ resourceType: "roll", resourceId: rollC, entityType: "invoice", entityId: otherInvoice });
+    await insertClaim({
+      resourceType: "roll",
+      resourceId: rollC,
+      entityType: "invoice",
+      entityId: otherInvoice,
+    });
   });
 
   afterAll(async () => {
@@ -121,8 +139,18 @@ describe("F-08 — releasing resource claims when a document is cancelled", () =
 
     const invoiceId = randomUUID();
     const rollId = randomUUID();
-    await insertClaim({ resourceType: "roll", resourceId: rollId, entityType: "invoice", entityId: invoiceId });
-    await insertClaim({ resourceType: "invoice_cancel", resourceId: invoiceId, entityType: "invoice", entityId: invoiceId });
+    await insertClaim({
+      resourceType: "roll",
+      resourceId: rollId,
+      entityType: "invoice",
+      entityId: invoiceId,
+    });
+    await insertClaim({
+      resourceType: "invoice_cancel",
+      resourceId: invoiceId,
+      entityType: "invoice",
+      entityId: invoiceId,
+    });
 
     const repo = new PostgresSyncResourceClaimRepository(db);
     const released = await repo.releaseByEntity(tenantId, "invoice", invoiceId, ["roll"]);

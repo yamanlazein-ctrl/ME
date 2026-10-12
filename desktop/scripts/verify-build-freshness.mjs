@@ -92,7 +92,9 @@ function pre() {
       `server/server.mjs is OLDER than ${relative(REPO, backend.newestFile)} — the packaged backend is stale`,
     );
   } else {
-    ok(`server/server.mjs is newer than every backend source (${relative(REPO, backend.newestFile)})`);
+    ok(
+      `server/server.mjs is newer than every backend source (${relative(REPO, backend.newestFile)})`,
+    );
   }
 
   const frontend = newestMtime(join(REPO, "src"), SKIP_DIRS);
@@ -117,7 +119,9 @@ function pre() {
       const p = join(d, entry.name);
       if (entry.isDirectory()) scan(p);
       else if (/\.(js|css|html)$/.test(entry.name)) {
-        for (const m of readFileSync(p, "latin1").matchAll(/[A-Za-z0-9._-]+-[A-Za-z0-9_-]{8}\.(js|css)/g)) {
+        for (const m of readFileSync(p, "latin1").matchAll(
+          /[A-Za-z0-9._-]+-[A-Za-z0-9_-]{8}\.(js|css)/g,
+        )) {
           referencedByAnything.add(m[0]);
         }
       }
@@ -139,9 +143,12 @@ function pre() {
     const p = join(RESOURCES, rel);
     if (!existsSync(p)) fail(`resources/${rel} is missing`);
   }
-  const manifest = JSON.parse(readFileSync(join(RESOURCES, "server", ".bundle-manifest.json"), "utf8"));
+  const manifest = JSON.parse(
+    readFileSync(join(RESOURCES, "server", ".bundle-manifest.json"), "utf8"),
+  );
   const actual = readdirSync(join(RESOURCES, "server", "node_modules")).length;
-  if (actual === 0) fail("resources/server/node_modules is empty — @node-rs/argon2 would be missing at runtime");
+  if (actual === 0)
+    fail("resources/server/node_modules is empty — @node-rs/argon2 would be missing at runtime");
   else ok(`server bundle manifest built at ${manifest.builtAt} (${manifest.files} files)`);
 }
 

@@ -14,7 +14,10 @@
  * SQLite desktop (specs/001 T114): `--engine sqlite [--rounds N]` runs the hard-kill loop in
  * durability-sqlite-crash.mjs instead (multi-record saves + taskkill /F, SC-004).
  */
-if (process.argv[process.argv.indexOf("--engine") + 1] === "sqlite" && process.argv.includes("--engine")) {
+if (
+  process.argv[process.argv.indexOf("--engine") + 1] === "sqlite" &&
+  process.argv.includes("--engine")
+) {
   await import("./durability-sqlite-crash.mjs");
   process.exit(process.exitCode ?? 0);
 }
@@ -45,8 +48,7 @@ function argValue(flag, fallback) {
 const TARGET = Math.max(1, Number(argValue("--target", "1000")) || 1000);
 const OUT_DIR = path.resolve(repoRoot, argValue("--out", "docs/durability-proof"));
 const DATABASE_URL =
-  process.env.DATABASE_URL ||
-  "postgresql://postgres@127.0.0.1:55432/erp_durability";
+  process.env.DATABASE_URL || "postgresql://postgres@127.0.0.1:55432/erp_durability";
 const MIGRATIONS = path.join(backendRoot, "src/infrastructure/orm/migrations");
 const RESULTS_MD = path.join(repoRoot, "docs/DURABILITY-PROOF-RESULTS.md");
 const USESTATEMENT_SILENT_MAX_PAGES = 1000; // mirrors src/presentation/hooks/useStatement.ts:53
@@ -174,9 +176,10 @@ async function wipeTenantBusiness(client, tenantId) {
     if (left.rows[0].n !== 0) {
       throw new Error(`wipe failed: parties remaining=${left.rows[0].n}`);
     }
-    const leftInv = await client.query(`SELECT count(*)::int AS n FROM invoices WHERE tenant_id = $1`, [
-      tenantId,
-    ]);
+    const leftInv = await client.query(
+      `SELECT count(*)::int AS n FROM invoices WHERE tenant_id = $1`,
+      [tenantId],
+    );
     if (leftInv.rows[0].n !== 0) {
       throw new Error(`wipe failed: invoices remaining=${leftInv.rows[0].n}`);
     }
@@ -388,10 +391,10 @@ async function runQueryProofs(client, golden, invoiceCount) {
     dataLossRisk: "high if FAIL",
   });
 
-  const exact = await client.query(
-    `SELECT id FROM invoices WHERE tenant_id = $1 AND number = $2`,
-    [golden.tenantId, golden.day1Number],
-  );
+  const exact = await client.query(`SELECT id FROM invoices WHERE tenant_id = $1 AND number = $2`, [
+    golden.tenantId,
+    golden.day1Number,
+  ]);
   assertEq("SEARCH-DAY1-AT-N", invoiceCount, 1, exact.rowCount, {
     command: `SELECT ... WHERE number = 'INV-DAY1'`,
     codePath: "search.route.ts / PostgresInvoiceRepository list filters",
@@ -629,7 +632,9 @@ async function runQueryProofs(client, golden, invoiceCount) {
     `SELECT id FROM invoices WHERE tenant_id = $1 AND status = 'active' AND id = $2`,
     [golden.tenantId, golden.invoiceId],
   );
-  const stillThere = await client.query(`SELECT id FROM invoices WHERE id = $1`, [golden.invoiceId]);
+  const stillThere = await client.query(`SELECT id FROM invoices WHERE id = $1`, [
+    golden.invoiceId,
+  ]);
   assertEq("FILTER-ACTIVE-HIDES", 1, 0, activeOnly.rowCount, {
     command: `status='active' filter after cancel`,
     codePath: "UI filters / list status=active",
@@ -705,9 +710,10 @@ async function backupRestoreProof(golden, invoiceCount) {
   const admin = new pg.Client({ connectionString: u.toString() });
   await admin.connect();
   try {
-    await admin.query(`SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = $1 AND pid <> pg_backend_pid()`, [
-      srcDb,
-    ]);
+    await admin.query(
+      `SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = $1 AND pid <> pg_backend_pid()`,
+      [srcDb],
+    );
     await admin.query(`DROP DATABASE IF EXISTS ${cloneDb}`);
     await admin.query(`CREATE DATABASE ${cloneDb} TEMPLATE ${srcDb}`);
   } finally {
@@ -724,14 +730,14 @@ async function backupRestoreProof(golden, invoiceCount) {
       golden.tenantId,
     ]);
     const day1 = await clone.query(`SELECT id FROM invoices WHERE id = $1`, [golden.invoiceId]);
-  assertEq("RESTORE-CLONE-CREATED", invoiceCount, 1, 1, {
-    command: `CREATE DATABASE ${cloneDb} TEMPLATE ${srcDb}`,
-    codePath: "PostgreSQL TEMPLATE clone",
-    rootCauseClass: "backup/restore",
-    dataLossRisk: "none",
-    notes: "Clone path proves independent restored copy without wiping source",
-  });
-  assertEq("RESTORE-CLEAN-COUNT", invoiceCount, invoiceCount, n.rows[0].n, {
+    assertEq("RESTORE-CLONE-CREATED", invoiceCount, 1, 1, {
+      command: `CREATE DATABASE ${cloneDb} TEMPLATE ${srcDb}`,
+      codePath: "PostgreSQL TEMPLATE clone",
+      rootCauseClass: "backup/restore",
+      dataLossRisk: "none",
+      notes: "Clone path proves independent restored copy without wiping source",
+    });
+    assertEq("RESTORE-CLEAN-COUNT", invoiceCount, invoiceCount, n.rows[0].n, {
       command: `COUNT invoices on clone DB`,
       codePath: "harness restore clone",
       rootCauseClass: "backup/restore",
@@ -752,9 +758,10 @@ async function backupRestoreProof(golden, invoiceCount) {
   const admin2 = new pg.Client({ connectionString: adminUrl.toString() });
   await admin2.connect();
   try {
-    await admin2.query(`SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = $1 AND pid <> pg_backend_pid()`, [
-      cloneDb,
-    ]);
+    await admin2.query(
+      `SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = $1 AND pid <> pg_backend_pid()`,
+      [cloneDb],
+    );
     await admin2.query(`DROP DATABASE IF EXISTS ${cloneDb}`);
   } finally {
     await admin2.end();
@@ -842,13 +849,39 @@ async function pgCrashProxy(golden) {
   const { spawnSync } = await import("node:child_process");
   const pgCtl = path.join(pgBin, "pg_ctl.exe");
   const run = (args) =>
-    spawnSync(pgCtl, args, { encoding: "utf8", env: { ...process.env, PATH: `${pgBin};${process.env.PATH}` } });
+    spawnSync(pgCtl, args, {
+      encoding: "utf8",
+      env: { ...process.env, PATH: `${pgBin};${process.env.PATH}` },
+    });
 
   // immediate = crash-like
   let r = run(["-D", pgData, "-m", "immediate", "stop"]);
-  logEvidence({ type: "pg_ctl", mode: "immediate-stop", status: r.status, out: r.stdout, err: r.stderr });
-  r = run(["-D", pgData, "-l", path.join(path.dirname(pgData), "pg.log"), "-o", `-p ${port} -c listen_addresses=127.0.0.1`, "-w", "-t", "90", "start"]);
-  logEvidence({ type: "pg_ctl", mode: "start-after-immediate", status: r.status, out: r.stdout, err: r.stderr });
+  logEvidence({
+    type: "pg_ctl",
+    mode: "immediate-stop",
+    status: r.status,
+    out: r.stdout,
+    err: r.stderr,
+  });
+  r = run([
+    "-D",
+    pgData,
+    "-l",
+    path.join(path.dirname(pgData), "pg.log"),
+    "-o",
+    `-p ${port} -c listen_addresses=127.0.0.1`,
+    "-w",
+    "-t",
+    "90",
+    "start",
+  ]);
+  logEvidence({
+    type: "pg_ctl",
+    mode: "start-after-immediate",
+    status: r.status,
+    out: r.stdout,
+    err: r.stderr,
+  });
   const afterImm = await reconnectVerify(golden);
   assertEq("D1-PG-IMMEDIATE", TARGET, 1, afterImm, {
     command: `pg_ctl stop -m immediate; pg_ctl start; SELECT Day1`,
@@ -859,7 +892,18 @@ async function pgCrashProxy(golden) {
 
   r = run(["-D", pgData, "-m", "fast", "stop"]);
   logEvidence({ type: "pg_ctl", mode: "fast-stop", status: r.status });
-  r = run(["-D", pgData, "-l", path.join(path.dirname(pgData), "pg.log"), "-o", `-p ${port} -c listen_addresses=127.0.0.1`, "-w", "-t", "90", "start"]);
+  r = run([
+    "-D",
+    pgData,
+    "-l",
+    path.join(path.dirname(pgData), "pg.log"),
+    "-o",
+    `-p ${port} -c listen_addresses=127.0.0.1`,
+    "-w",
+    "-t",
+    "90",
+    "start",
+  ]);
   logEvidence({ type: "pg_ctl", mode: "start-after-fast", status: r.status });
   const afterFast = await reconnectVerify(golden);
   assertEq("D1-PG-FAST", TARGET, 1, afterFast, {
@@ -891,7 +935,9 @@ function writeResultsMd() {
   const anyFail = results.some((r) => r.result === "FAIL");
   const exportStrict = results.find((r) => r.id === "STMT-EXPORT-STRICT");
   const overall =
-    critPass && exportStrict?.result === "PASS" && !results.some((r) => r.id.startsWith("RESTORE") && r.result === "FAIL")
+    critPass &&
+    exportStrict?.result === "PASS" &&
+    !results.some((r) => r.id.startsWith("RESTORE") && r.result === "FAIL")
       ? "PROVEN"
       : "NOT PROVEN";
 
@@ -916,7 +962,9 @@ function writeResultsMd() {
   lines.push("");
   lines.push(`### Scope notes`);
   lines.push("");
-  lines.push(`- Critical path (create/reconnect/scale/find/search/statement/ledger/stock/backup/restore/migrate): ${critPass ? "ALL PASS" : "HAS FAIL/MISSING"}`);
+  lines.push(
+    `- Critical path (create/reconnect/scale/find/search/statement/ledger/stock/backup/restore/migrate): ${critPass ? "ALL PASS" : "HAS FAIL/MISSING"}`,
+  );
   lines.push(`- Desktop GUI crash/shutdown/NSIS live: NOT_RUN (see table)`);
   lines.push(`- PG immediate/fast stop: NOT_RUN in this environment`);
   lines.push(`- Seed: Day-1 SQL mirror of business tables; scale via bulk_sql`);
@@ -927,7 +975,9 @@ function writeResultsMd() {
   lines.push(`| TEST | RESULT | EVIDENCE | ROOT CAUSE | DATA LOSS RISK |`);
   lines.push(`|------|--------|----------|------------|----------------|`);
   for (const r of results) {
-    const ev = String(r.evidence || r.command || "").replace(/\|/g, "/").slice(0, 120);
+    const ev = String(r.evidence || r.command || "")
+      .replace(/\|/g, "/")
+      .slice(0, 120);
     lines.push(
       `| ${r.id} | ${r.result} | ${ev} | ${r.rootCauseClass || "-"} | ${r.dataLossRisk || "-"} |`,
     );
@@ -955,7 +1005,11 @@ function writeResultsMd() {
 async function main() {
   console.log(`Durability proof TARGET=${TARGET}`);
   console.log(`DATABASE_URL=${DATABASE_URL.replace(/:[^:@/]+@/, ":***@")}`);
-  logEvidence({ type: "start", target: TARGET, databaseUrl: DATABASE_URL.replace(/:[^:@/]+@/, ":***@") });
+  logEvidence({
+    type: "start",
+    target: TARGET,
+    databaseUrl: DATABASE_URL.replace(/:[^:@/]+@/, ":***@"),
+  });
 
   const tableCount = await ensureMigrated();
   assertTrue("SCHEMA-MIGRATED", 0, tableCount > 40, {

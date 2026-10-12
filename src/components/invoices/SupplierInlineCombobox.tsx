@@ -18,10 +18,13 @@ export function SupplierInlineCombobox({
   value,
   onChange,
   className,
+  id,
 }: {
   value: string;
   onChange: (id: string) => void;
   className?: string;
+  /** Put on the trigger button, for a field label's `htmlFor`. */
+  id?: string;
 }) {
   const partiesVersion = useParties();
   const [open, setOpen] = useState(false);
@@ -30,9 +33,11 @@ export function SupplierInlineCombobox({
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [notes, setNotes] = useState("");
-  const [dupHint, setDupHint] = useState<{ id: string; name: string; phone?: string | null } | null>(
-    null,
-  );
+  const [dupHint, setDupHint] = useState<{
+    id: string;
+    name: string;
+    phone?: string | null;
+  } | null>(null);
 
   const selected = value ? supplierById(value) : undefined;
   const q = query.trim().toLowerCase();
@@ -120,6 +125,7 @@ export function SupplierInlineCombobox({
     >
       <PopoverTrigger asChild>
         <button
+          id={id}
           type="button"
           className={cn(
             "flex h-9 w-full items-center justify-between rounded-md border border-input bg-background px-3 text-right text-sm font-medium hover:border-primary/50 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary",

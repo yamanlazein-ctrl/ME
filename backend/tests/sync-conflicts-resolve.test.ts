@@ -11,7 +11,10 @@ import { describe, expect, it, beforeAll, afterAll } from "vitest";
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { db, pool } from "@/infrastructure/orm/drizzle.js";
-import { runWithTenantContext, runWithPlatformContext } from "@/infrastructure/orm/tenant-context.js";
+import {
+  runWithTenantContext,
+  runWithPlatformContext,
+} from "@/infrastructure/orm/tenant-context.js";
 import {
   listSyncConflicts,
   recordSyncConflict,

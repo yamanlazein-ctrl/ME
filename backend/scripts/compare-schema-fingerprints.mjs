@@ -32,10 +32,14 @@ import { fileURLToPath } from "node:url";
 const here = dirname(fileURLToPath(import.meta.url));
 const [sqPath, pgArg] = process.argv.slice(2);
 if (!sqPath) {
-  console.error("usage: node scripts/compare-schema-fingerprints.mjs <sqlite-fingerprint.json> [<pg-fingerprint.json>]");
+  console.error(
+    "usage: node scripts/compare-schema-fingerprints.mjs <sqlite-fingerprint.json> [<pg-fingerprint.json>]",
+  );
   process.exit(2);
 }
-const pgPath = pgArg ?? join(here, "..", "src", "infrastructure", "orm", "migrations", "meta", "schema-fingerprint.json");
+const pgPath =
+  pgArg ??
+  join(here, "..", "src", "infrastructure", "orm", "migrations", "meta", "schema-fingerprint.json");
 const pg = JSON.parse(readFileSync(pgPath, "utf8"));
 const sq = JSON.parse(readFileSync(sqPath, "utf8"));
 
@@ -51,8 +55,18 @@ function expectedSqliteType(pgType) {
   if (t.endsWith("[]")) return "TEXT"; // arrays stored as JSON text
   if (t.startsWith("numeric")) return "INTEGER"; // scaled exact decimal
   if (["integer", "bigint", "smallint", "boolean"].includes(t)) return "INTEGER";
-  if (t === "uuid" || t === "text" || t.startsWith("character varying") || t.startsWith("character(")
-    || t.startsWith("timestamp") || t === "date" || t === "jsonb" || t === "json" || t === "inet") return "TEXT";
+  if (
+    t === "uuid" ||
+    t === "text" ||
+    t.startsWith("character varying") ||
+    t.startsWith("character(") ||
+    t.startsWith("timestamp") ||
+    t === "date" ||
+    t === "jsonb" ||
+    t === "json" ||
+    t === "inet"
+  )
+    return "TEXT";
   return null;
 }
 
@@ -66,7 +80,13 @@ function parsePgConstraint(c) {
     const m = d.match(/foreign key \(([^)]+)\) references ([a-z_0-9."]+)\(([^)]+)\)(.*)$/);
     if (!m) return { ...c, columns: [] };
     const del = m[4].match(/on delete (set null|cascade|restrict|set default|no action)/);
-    return { ...c, columns: cols(m[1]), refTable: strip(m[2].replace(/"/g, "")), refColumns: cols(m[3]), onDelete: del ? del[1] : "no action" };
+    return {
+      ...c,
+      columns: cols(m[1]),
+      refTable: strip(m[2].replace(/"/g, "")),
+      refColumns: cols(m[3]),
+      onDelete: del ? del[1] : "no action",
+    };
   }
   return c;
 }
@@ -74,9 +94,11 @@ function parsePgConstraint(c) {
 // ── tables ──────────────────────────────────────────────────────────────────
 const pgTables = new Set(Object.keys(pg.tables).map(strip));
 const sqTables = new Set(Object.keys(sq.tables));
-if (sqTables.has("party_balances")) fail("table party_balances exists — it was dropped by migration 0038");
+if (sqTables.has("party_balances"))
+  fail("table party_balances exists — it was dropped by migration 0038");
 for (const t of pgTables) if (!sqTables.has(t)) fail(`table ${t}: missing in SQLite`);
-for (const t of sqTables) if (!pgTables.has(t) && !SQLITE_ONLY_TABLES.has(t)) fail(`table ${t}: not in the live PG schema`);
+for (const t of sqTables)
+  if (!pgTables.has(t) && !SQLITE_ONLY_TABLES.has(t)) fail(`table ${t}: not in the live PG schema`);
 
 // ── columns ─────────────────────────────────────────────────────────────────
 for (const t of pgTables) {
@@ -85,35 +107,59 @@ for (const t of pgTables) {
   if (!sc) continue;
   for (const [name, def] of Object.entries(pc)) {
     const s = sc[name];
-    if (!s) { fail(`${t}.${name}: column missing in SQLite`); continue; }
-    if (Boolean(s.nullable) !== Boolean(def.nullable)) fail(`${t}.${name}: nullable ${def.nullable} → ${s.nullable}`);
+    if (!s) {
+      fail(`${t}.${name}: column missing in SQLite`);
+      continue;
+    }
+    if (Boolean(s.nullable) !== Boolean(def.nullable))
+      fail(`${t}.${name}: nullable ${def.nullable} → ${s.nullable}`);
     const want = expectedSqliteType(def.type);
     if (!want) fail(`${t}.${name}: no SQLite mapping for PG type ${def.type}`);
-    else if (String(s.type).toUpperCase() !== want) fail(`${t}.${name}: PG ${def.type} expects SQLite ${want}, got ${s.type}`);
+    else if (String(s.type).toUpperCase() !== want)
+      fail(`${t}.${name}: PG ${def.type} expects SQLite ${want}, got ${s.type}`);
   }
-  for (const name of Object.keys(sc)) if (!(name in pc)) fail(`${t}.${name}: extra column in SQLite`);
+  for (const name of Object.keys(sc))
+    if (!(name in pc)) fail(`${t}.${name}: extra column in SQLite`);
 }
 
 // ── constraints ─────────────────────────────────────────────────────────────
-const pgCons = Object.entries(pg.constraints).map(([name, c]) => [name, parsePgConstraint({ ...c, table: strip(c.table) })]);
+const pgCons = Object.entries(pg.constraints).map(([name, c]) => [
+  name,
+  parsePgConstraint({ ...c, table: strip(c.table) }),
+]);
 const sqCons = sq.constraints ?? {};
 const same = (a = [], b = []) => a.length === b.length && a.every((x, i) => x === b[i]);
 for (const [name, c] of pgCons) {
   const s = sqCons[name];
-  if (!s) { fail(`constraint ${name} (${c.type} on ${c.table}): missing in SQLite`); continue; }
-  if (s.table !== c.table || s.type !== c.type) { fail(`constraint ${name}: ${c.type}@${c.table} → ${s.type}@${s.table}`); continue; }
-  if ((c.type === "p" || c.type === "u" || c.type === "f") && !same(c.columns, s.columns)) fail(`constraint ${name}: columns (${c.columns}) → (${s.columns})`);
+  if (!s) {
+    fail(`constraint ${name} (${c.type} on ${c.table}): missing in SQLite`);
+    continue;
+  }
+  if (s.table !== c.table || s.type !== c.type) {
+    fail(`constraint ${name}: ${c.type}@${c.table} → ${s.type}@${s.table}`);
+    continue;
+  }
+  if ((c.type === "p" || c.type === "u" || c.type === "f") && !same(c.columns, s.columns))
+    fail(`constraint ${name}: columns (${c.columns}) → (${s.columns})`);
   if (c.type === "f") {
-    if (s.refTable !== c.refTable || !same(c.refColumns, s.refColumns)) fail(`constraint ${name}: references ${c.refTable}(${c.refColumns}) → ${s.refTable}(${s.refColumns})`);
-    if ((s.onDelete ?? "no action") !== c.onDelete) fail(`constraint ${name}: on delete ${c.onDelete} → ${s.onDelete}`);
+    if (s.refTable !== c.refTable || !same(c.refColumns, s.refColumns))
+      fail(
+        `constraint ${name}: references ${c.refTable}(${c.refColumns}) → ${s.refTable}(${s.refColumns})`,
+      );
+    if ((s.onDelete ?? "no action") !== c.onDelete)
+      fail(`constraint ${name}: on delete ${c.onDelete} → ${s.onDelete}`);
   }
 }
 const pgConNames = new Set(pgCons.map(([n]) => n));
 for (const [name, s] of Object.entries(sqCons)) {
   if (pgConNames.has(name)) continue;
   if (SQLITE_ONLY_TABLES.has(s.table) && s.type !== "f") continue; // runtime tables' own PK/CHECKs
-  if (s.type === "f") fail(`constraint ${name}: FK ${s.table}(${s.columns}) → ${s.refTable} not in the live PG schema${s.refTable === "tenants" ? " (non-enforced tenant reference must stay non-enforced)" : ""}`);
-  if (s.type === "p" || s.type === "u") fail(`constraint ${name}: extra ${s.type === "p" ? "PRIMARY KEY" : "UNIQUE"} on ${s.table}`);
+  if (s.type === "f")
+    fail(
+      `constraint ${name}: FK ${s.table}(${s.columns}) → ${s.refTable} not in the live PG schema${s.refTable === "tenants" ? " (non-enforced tenant reference must stay non-enforced)" : ""}`,
+    );
+  if (s.type === "p" || s.type === "u")
+    fail(`constraint ${name}: extra ${s.type === "p" ? "PRIMARY KEY" : "UNIQUE"} on ${s.table}`);
   // extra CHECKs (length / json_valid / boolean) are allowed
 }
 
@@ -129,7 +175,8 @@ for (const [name, ix] of Object.entries(pg.indexes)) {
 // ── triggers ────────────────────────────────────────────────────────────────
 const sqTrg = Object.keys(sq.triggers ?? {});
 for (const name of Object.keys(pg.triggers)) {
-  if (!sqTrg.some((s) => s === name || s.startsWith(`${name}_`))) fail(`trigger ${name}: no SQLite equivalent`);
+  if (!sqTrg.some((s) => s === name || s.startsWith(`${name}_`)))
+    fail(`trigger ${name}: no SQLite equivalent`);
 }
 
 const summary = `PG ${pgTables.size} tables / ${pgCons.filter(([, c]) => c.type === "f").length} FKs  ↔  SQLite ${sqTables.size} tables / ${Object.values(sqCons).filter((c) => c.type === "f").length} FKs`;

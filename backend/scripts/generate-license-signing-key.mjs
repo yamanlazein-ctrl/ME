@@ -32,7 +32,10 @@ const envPath = join(here, "..", ".env");
 
 const { privateKey } = generateKeyPairSync("ed25519");
 const privPem = privateKey.export({ type: "pkcs8", format: "pem" }).toString().trim();
-const pubPem = createPublicKey(privateKey).export({ type: "spki", format: "pem" }).toString().trim();
+const pubPem = createPublicKey(privateKey)
+  .export({ type: "spki", format: "pem" })
+  .toString()
+  .trim();
 
 const oneLine = (pem) => pem.replace(/\n/g, "\\n");
 

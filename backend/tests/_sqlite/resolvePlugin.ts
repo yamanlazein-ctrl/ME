@@ -38,14 +38,21 @@ export function sqliteTwinResolver(backendRoot: string): Plugin {
       const resolved = await this.resolve(source, importer, { skipSelf: true });
       if (!resolved) return null;
       const id = strip(normalize(resolved.id.split("?")[0]));
-      const rel = id.startsWith(src + sep) ? id.slice(src.length + 1).split(sep).join("/") : null;
+      const rel = id.startsWith(src + sep)
+        ? id
+            .slice(src.length + 1)
+            .split(sep)
+            .join("/")
+        : null;
       if (!rel) return null;
 
       if (rel === "infrastructure/orm/drizzle") return join(tests, "_sqlite", "drizzleShim.ts");
       let m = /^infrastructure\/orm\/schemas\/(.+)$/.exec(rel);
       if (m) return ts(join(src, "infrastructure", "orm", "sqlite", "schemas", m[1])) ?? null;
-      if (rel === "infrastructure/orm/schemas") return ts(join(src, "infrastructure", "orm", "sqlite", "schemas", "index"));
-      if (rel === "infrastructure/utils/documentNumbers") return ts(join(sqliteRepoDir, "helpers", "documentNumbers"));
+      if (rel === "infrastructure/orm/schemas")
+        return ts(join(src, "infrastructure", "orm", "sqlite", "schemas", "index"));
+      if (rel === "infrastructure/utils/documentNumbers")
+        return ts(join(sqliteRepoDir, "helpers", "documentNumbers"));
       m = /^infrastructure\/repositories\/Postgres(\w+)$/.exec(rel);
       if (m && ts(join(sqliteRepoDir, `Sqlite${m[1]}`))) return `${VIRTUAL}${m[1]}`;
       m = /^infrastructure\/repositories\/(\w+)$/.exec(rel);
@@ -58,13 +65,21 @@ export function sqliteTwinResolver(backendRoot: string): Plugin {
       const twin = join(sqliteRepoDir, `Sqlite${name}.ts`);
       const text = readFileSync(twin, "utf8");
       const aliases = new Set<string>();
-      for (const [, n] of text.matchAll(/^export\s+(?:class|const|function|async function)\s+(\w+)/gm)) {
+      for (const [, n] of text.matchAll(
+        /^export\s+(?:class|const|function|async function)\s+(\w+)/gm,
+      )) {
         const pg = n.replace(/^Sqlite/, "Postgres").replace(/^sqlite/, "postgres");
         if (pg !== n) aliases.add(`export { ${n} as ${pg} };`);
       }
       const spec = twin.split(sep).join("/");
-      const names = [...text.matchAll(/^export\s+(?:class|const|function|async function)\s+(\w+)/gm)].map((x) => x[1]);
-      return [`export * from ${JSON.stringify(spec)};`, `import { ${names.join(", ")} } from ${JSON.stringify(spec)};`, ...aliases].join("\n");
+      const names = [
+        ...text.matchAll(/^export\s+(?:class|const|function|async function)\s+(\w+)/gm),
+      ].map((x) => x[1]);
+      return [
+        `export * from ${JSON.stringify(spec)};`,
+        `import { ${names.join(", ")} } from ${JSON.stringify(spec)};`,
+        ...aliases,
+      ].join("\n");
     },
   };
 }

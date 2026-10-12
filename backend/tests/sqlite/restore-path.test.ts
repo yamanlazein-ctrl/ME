@@ -17,7 +17,14 @@
  * restore leaving the existing database byte-identical.
  */
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
-import { mkdtempSync, rmSync, readFileSync, writeFileSync, copyFileSync, existsSync } from "node:fs";
+import {
+  mkdtempSync,
+  rmSync,
+  readFileSync,
+  writeFileSync,
+  copyFileSync,
+  existsSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createHash, randomUUID } from "node:crypto";
@@ -82,7 +89,10 @@ async function verifyPath(path: string, extra: { sha256?: string; sizeBytes?: nu
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ path, ...extra }),
   });
-  return { status: r.status, body: (await r.json().catch(() => ({}))) as ErrBody & Record<string, unknown> };
+  return {
+    status: r.status,
+    body: (await r.json().catch(() => ({}))) as ErrBody & Record<string, unknown>,
+  };
 }
 
 async function restorePath(path: string, extra: { sha256?: string; sizeBytes?: number } = {}) {
@@ -91,7 +101,10 @@ async function restorePath(path: string, extra: { sha256?: string; sizeBytes?: n
     headers: { "Content-Type": "application/json", Authorization: "Bearer test" },
     body: JSON.stringify({ path, ...extra }),
   });
-  return { status: r.status, body: (await r.json().catch(() => ({}))) as ErrBody & Record<string, unknown> };
+  return {
+    status: r.status,
+    body: (await r.json().catch(() => ({}))) as ErrBody & Record<string, unknown>,
+  };
 }
 
 /** An octet-stream upload with NO body — exactly what the buggy bridge produced. */
@@ -107,12 +120,18 @@ beforeAll(async () => {
   runtime = await import("@/infrastructure/orm/sqlite/runtime.js");
   backup = await import("@/infrastructure/backup/sqliteBackup.js");
   await runtime.ensureSqliteRuntime();
-  writer().prepare(`INSERT INTO tenants (id, name, slug) VALUES (?, 'شركة الاستعادة', 'rsr')`).run(TENANT);
+  writer()
+    .prepare(`INSERT INTO tenants (id, name, slug) VALUES (?, 'شركة الاستعادة', 'rsr')`)
+    .run(TENANT);
   const { createBackupRouter } = await import("@/presentation/routes/backup.route.js");
   const app = express();
   app.use(express.json());
   app.use((req, _res, next) => {
-    (req as unknown as { tenantContext: unknown }).tenantContext = { tenantId: TENANT, userRole: role, userId: randomUUID() };
+    (req as unknown as { tenantContext: unknown }).tenantContext = {
+      tenantId: TENANT,
+      userRole: role,
+      userId: randomUUID(),
+    };
     next();
   });
   app.use("/api", createBackupRouter({} as never));
@@ -136,7 +155,11 @@ describe("the archive layout the desktop restore accepts", () => {
   it("has manifest.json + manifest.sha256 + database.sqlite at the archive ROOT, format v3", async () => {
     const e = entries(original);
     expect(Object.keys(e).sort()).toEqual(["database.sqlite", "manifest.json", "manifest.sha256"]);
-    const man = JSON.parse(strFromU8(e["manifest.json"])) as { format: string; formatVersion: number; app: { version: string } };
+    const man = JSON.parse(strFromU8(e["manifest.json"])) as {
+      format: string;
+      formatVersion: number;
+      app: { version: string };
+    };
     expect(man.format).toBe("motard-erp-backup");
     expect(man.formatVersion).toBe(3);
     expect(man.app.version).toBe("2.0.2");
@@ -164,7 +187,10 @@ describe("a valid v3 archive restores through the by-path endpoint", () => {
     const r = await restorePath(original);
     expect(r.status, JSON.stringify(r.body)).toBe(200);
     expect(r.body.manifest).toBeTruthy();
-    expect(r.body.safetyBackup, "a VERIFIED safety backup of the replaced data is taken first").toBeTruthy();
+    expect(
+      r.body.safetyBackup,
+      "a VERIFIED safety backup of the replaced data is taken first",
+    ).toBeTruthy();
     // The restored company is now the live one.
     const live = writer().prepare("SELECT name FROM tenants WHERE id = ?").pluck().get(TENANT);
     expect(live).toBe("شركة الاستعادة");
@@ -198,6 +224,20 @@ describe("a missing file or a failed transfer is reported as such, not as a corr
     const b = (await res.json()) as ErrBody;
     expect(b.code).toBe("BACKUP_CORRUPT");
     expect(b.message).toMatch(/لم يُحدَّد مسار/);
+  });
+
+  // hermes F-014: the path endpoints opened ANY file the caller named (a key file, another database).
+  it("refuses an existing file that is not a .zip archive, before reading it", async () => {
+    const r = await verifyPath(process.env.SQLITE_PATH!); // the live database file — exists, not a backup
+    expect(r.status).toBe(422);
+    expect(r.body.code).toBe("BACKUP_CORRUPT");
+    expect(r.body.message).toMatch(/zip/);
+  });
+
+  it("refuses a relative path", async () => {
+    const r = await verifyPath("MotardERP-Backup-2026-10-07.zip");
+    expect(r.status).toBe(422);
+    expect(r.body.code).toBe("BACKUP_CORRUPT");
   });
 
   it("refuses a shell-reported sha256 that does not match the file (substituted after picking)", async () => {
@@ -277,7 +317,9 @@ describe("malformed and genuinely corrupt archives are each named distinctly", (
     e["database.sqlite"] = db;
     const r = await verifyPath(writeZip("corrupt-db.zip", e));
     expect(r.status).toBe(422);
-    expect(["BACKUP_TABLE_MISMATCH", "BACKUP_INTEGRITY_FAILED", "BACKUP_NOT_A_ZIP"]).toContain(r.body.code);
+    expect(["BACKUP_TABLE_MISMATCH", "BACKUP_INTEGRITY_FAILED", "BACKUP_NOT_A_ZIP"]).toContain(
+      r.body.code,
+    );
     expect(r.body.message).not.toBe("ملف غير صالح");
   });
 });

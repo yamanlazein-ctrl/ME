@@ -24,7 +24,10 @@ export function PartyCombobox({
   placeholder,
   /** Optional label when the selected party was just created and search cache is cold. */
   valueLabel,
+  id,
 }: {
+  /** Put on the trigger button, for a field label's `htmlFor`. */
+  id?: string;
   kind: "customer" | "supplier";
   value: string;
   onChange: (id: string) => void;
@@ -37,6 +40,8 @@ export function PartyCombobox({
   const [hits, setHits] = useState<PartyHit[]>([]);
   const [selected, setSelected] = useState<PartyHit | null>(null);
   const [loading, setLoading] = useState(false);
+  // A failed search is NOT "no such customer": showing «الاسم غير موجود» there invited a duplicate.
+  const [searchFailed, setSearchFailed] = useState(false);
   const entity = kind === "customer" ? "عميل" : "مورد";
 
   useEffect(() => {
@@ -78,9 +83,15 @@ export function PartyCombobox({
           const res = await client.get<{ data: PartyHit[] }>(`/api/parties/search`, {
             params: { q: query.trim(), kind, limit: "30", status: "active" },
           });
-          if (!cancelled) setHits(res.data?.data ?? []);
+          if (!cancelled) {
+            setHits(res.data?.data ?? []);
+            setSearchFailed(false);
+          }
         } catch {
-          if (!cancelled) setHits([]);
+          if (!cancelled) {
+            setHits([]);
+            setSearchFailed(true);
+          }
         } finally {
           if (!cancelled) setLoading(false);
         }
@@ -93,12 +104,13 @@ export function PartyCombobox({
   }, [open, query, kind]);
 
   const filtered = useMemo(() => hits, [hits]);
-  const noMatch = query.trim().length > 0 && !loading && filtered.length === 0;
+  const noMatch = query.trim().length > 0 && !loading && !searchFailed && filtered.length === 0;
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <button
+          id={id}
           type="button"
           className={cn(
             "flex h-9 w-full items-center justify-between rounded-md border border-input bg-background px-3 text-right text-sm font-medium hover:border-primary/50 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary",
@@ -123,13 +135,14 @@ export function PartyCombobox({
           />
         </div>
         <div className="max-h-56 overflow-y-auto py-1">
-          {loading && (
-            <div className="px-3 py-3 text-xs text-muted-foreground">جاري البحث…</div>
-          )}
-          {!loading && filtered.length === 0 && !noMatch && (
-            <div className="px-3 py-3 text-xs text-muted-foreground">
-              اكتب للبحث عن {entity}.
+          {loading && <div className="px-3 py-3 text-xs text-muted-foreground">جاري البحث…</div>}
+          {!loading && searchFailed && (
+            <div className="px-3 py-3 text-xs text-destructive" role="alert">
+              تعذّر البحث — تحقق من الاتصال ثم أعد الكتابة.
             </div>
+          )}
+          {!loading && !searchFailed && filtered.length === 0 && !noMatch && (
+            <div className="px-3 py-3 text-xs text-muted-foreground">اكتب للبحث عن {entity}.</div>
           )}
           {noMatch && (
             <div className="px-3 py-3 text-xs text-muted-foreground">

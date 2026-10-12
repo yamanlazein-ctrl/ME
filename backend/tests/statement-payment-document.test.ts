@@ -88,8 +88,22 @@ describe("statement shows invoice AND payment with their own currency / rate", (
       slug: `sd-${tenantId.slice(0, 8)}`,
     });
     await db.insert(parties).values([
-      { id: customerId, tenantId, name: "Doc Customer", code: "DC-1", kind: "customer", currency: "SYP" },
-      { id: supplierId, tenantId, name: "Doc Supplier", code: "DS-1", kind: "supplier", currency: "SYP" },
+      {
+        id: customerId,
+        tenantId,
+        name: "Doc Customer",
+        code: "DC-1",
+        kind: "customer",
+        currency: "SYP",
+      },
+      {
+        id: supplierId,
+        tenantId,
+        name: "Doc Supplier",
+        code: "DS-1",
+        kind: "supplier",
+        currency: "SYP",
+      },
     ]);
   });
 

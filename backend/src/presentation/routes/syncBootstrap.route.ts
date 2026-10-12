@@ -4,10 +4,7 @@
  */
 import type { Router, Request, Response, RequestHandler } from "express";
 
-export function registerSyncBootstrapRoutes(
-  router: Router,
-  auth: RequestHandler,
-): void {
+export function registerSyncBootstrapRoutes(router: Router, auth: RequestHandler): void {
   /** Returns 501 until hub snapshot pipeline is enabled post-Q22. */
   router.get("/sync/bootstrap", auth, (_req: Request, res: Response) => {
     res.status(501).json({

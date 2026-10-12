@@ -10,7 +10,11 @@ export interface IPrintJobRepository {
   list(ctx: TenantContext): Promise<PrintJobData[]>;
   listOpen(ctx: TenantContext): Promise<PrintJobData[]>;
   /** `number` null → the repository allocates the PRT number inside its save transaction. */
-  create(input: CreatePrintJobInput, number: string | null, ctx: TenantContext): Promise<PrintJobData>;
+  create(
+    input: CreatePrintJobInput,
+    number: string | null,
+    ctx: TenantContext,
+  ): Promise<PrintJobData>;
   receive(input: ReceivePrintJobInput, ctx: TenantContext): Promise<PrintJobData>;
   /**
    * Roll number of a (possibly uncommitted) result roll, read inside the caller's

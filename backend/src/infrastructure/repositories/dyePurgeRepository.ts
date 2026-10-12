@@ -55,7 +55,10 @@ const VOUCHER_LEDGER_REF_TYPES = ["receipt_in", "payment_out"] as const;
 
 /** `IN (...)` list for a drizzle `sql` fragment. */
 function refTypeList(types: readonly string[]): SQL {
-  return sql`(${sql.join(types.map((t) => sql`${t}`), sql`, `)})`;
+  return sql`(${sql.join(
+    types.map((t) => sql`${t}`),
+    sql`, `,
+  )})`;
 }
 
 export type AffectedInvoice = {
@@ -157,21 +160,26 @@ async function collectScope(tx: Tx, tenantId: string, fabricId: string): Promise
   // its colors, or one of its rolls.
   const clauses = [sql`${invoiceLines.fabricId} = ${fabricId}::uuid`];
   if (colorIds.length) {
-    clauses.push(sql`${invoiceLines.colorId} IN (${sql.join(colorIds.map((id) => sql`${id}::uuid`), sql`, `)})`);
+    clauses.push(
+      sql`${invoiceLines.colorId} IN (${sql.join(
+        colorIds.map((id) => sql`${id}::uuid`),
+        sql`, `,
+      )})`,
+    );
   }
   if (rollIds.length) {
-    clauses.push(sql`${invoiceLines.rollId} IN (${sql.join(rollIds.map((id) => sql`${id}::uuid`), sql`, `)})`);
+    clauses.push(
+      sql`${invoiceLines.rollId} IN (${sql.join(
+        rollIds.map((id) => sql`${id}::uuid`),
+        sql`, `,
+      )})`,
+    );
   }
   const lines = await tx
     .select({ invoiceId: invoiceLines.invoiceId, currency: invoices.currency, date: invoices.date })
     .from(invoiceLines)
     .innerJoin(invoices, eq(invoices.id, invoiceLines.invoiceId))
-    .where(
-      and(
-        eq(invoiceLines.tenantId, tenantId),
-        sql`(${sql.join(clauses, sql` OR `)})`,
-      ),
-    );
+    .where(and(eq(invoiceLines.tenantId, tenantId), sql`(${sql.join(clauses, sql` OR `)})`));
 
   const invoiceIds = [...new Set(lines.map((l) => l.invoiceId))];
   const currencies = [...new Set(lines.map((l) => l.currency))].sort();
@@ -254,10 +262,7 @@ async function countPrintJobs(tx: Tx, tenantId: string, fabricIds: string[]): Pr
  * is meant to eliminate. Returns null when nothing is in scope, so the caller can
  * skip the query entirely instead of issuing a match-nothing statement.
  */
-function scopedLedgerPredicate(
-  invoiceIds: string[],
-  voucherIds: string[],
-): SQL | null {
+function scopedLedgerPredicate(invoiceIds: string[], voucherIds: string[]): SQL | null {
   const conds = [
     ...invoiceIds.map(
       (id) =>
@@ -387,7 +392,10 @@ async function rebuildCashboxSeries(tx: Tx, tenantId: string, currencies: string
   // `= ANY(...)` raised `malformed array literal: "SYP"`. Build a proper IN list
   // instead — the list is server-generated, never user input, so there is no
   // injection surface.
-  const inList = sql`(${sql.join(currencies.map((c) => sql`${c}`), sql`, `)})`;
+  const inList = sql`(${sql.join(
+    currencies.map((c) => sql`${c}`),
+    sql`, `,
+  )})`;
   await tx.execute(
     sql`DELETE FROM cashbox_daily_balances
         WHERE tenant_id = ${tenantId}::uuid
@@ -481,7 +489,9 @@ export async function purgeDyeCascade(
     const deletedVouchers = scope.invoiceIds.length
       ? await tx
           .delete(vouchers)
-          .where(and(eq(vouchers.tenantId, tenantId), inArray(vouchers.invoiceId, scope.invoiceIds)))
+          .where(
+            and(eq(vouchers.tenantId, tenantId), inArray(vouchers.invoiceId, scope.invoiceIds)),
+          )
           .returning({ id: vouchers.id })
       : [];
 
@@ -500,7 +510,12 @@ export async function purgeDyeCascade(
     const deletedLines = scope.invoiceIds.length
       ? await tx
           .delete(invoiceLines)
-          .where(and(eq(invoiceLines.tenantId, tenantId), inArray(invoiceLines.invoiceId, scope.invoiceIds)))
+          .where(
+            and(
+              eq(invoiceLines.tenantId, tenantId),
+              inArray(invoiceLines.invoiceId, scope.invoiceIds),
+            ),
+          )
           .returning({ id: invoiceLines.id })
       : [];
 
@@ -522,7 +537,12 @@ export async function purgeDyeCascade(
     const deletedMoves = scope.rollIds.length
       ? await tx
           .delete(stockMovements)
-          .where(and(eq(stockMovements.tenantId, tenantId), inArray(stockMovements.rollId, scope.rollIds)))
+          .where(
+            and(
+              eq(stockMovements.tenantId, tenantId),
+              inArray(stockMovements.rollId, scope.rollIds),
+            ),
+          )
           .returning({ id: stockMovements.id })
       : [];
 
@@ -541,9 +561,7 @@ export async function purgeDyeCascade(
           .returning({ id: colors.id })
       : [];
 
-    await tx
-      .delete(fabrics)
-      .where(and(eq(fabrics.tenantId, tenantId), eq(fabrics.id, fabricId)));
+    await tx.delete(fabrics).where(and(eq(fabrics.tenantId, tenantId), eq(fabrics.id, fabricId)));
 
     // 7. the drawer — no trigger fires on DELETE, so rebuild it.
     if (scope.currencies.length) {

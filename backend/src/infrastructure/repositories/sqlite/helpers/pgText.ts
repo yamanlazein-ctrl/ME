@@ -23,7 +23,8 @@ export function pgRawRows<R extends Record<string, unknown>>(
 ): R[] {
   return rows.map((r) => {
     const o: Record<string, unknown> = { ...r };
-    for (const [k, scale] of Object.entries(spec.money ?? {})) if (k in o && o[k] !== null) o[k] = scaledText(o[k], scale);
+    for (const [k, scale] of Object.entries(spec.money ?? {}))
+      if (k in o && o[k] !== null) o[k] = scaledText(o[k], scale);
     for (const k of spec.timestamps ?? []) if (k in o) o[k] = pgTimestamptzText(o[k]);
     return o as R;
   });

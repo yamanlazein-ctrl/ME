@@ -36,14 +36,10 @@ export function assertSyncConflictTenantContext(tenantId: string): void {
   const als = tenantContext.getStore()?.tenantId;
   const effective = ambient ?? als;
   if (!effective) {
-    throw new Error(
-      `syncConflicts: refusing query without tenant context (arg=${tenantId})`,
-    );
+    throw new Error(`syncConflicts: refusing query without tenant context (arg=${tenantId})`);
   }
   if (effective !== tenantId) {
-    throw new Error(
-      `syncConflicts: tenant mismatch context=${effective} arg=${tenantId}`,
-    );
+    throw new Error(`syncConflicts: tenant mismatch context=${effective} arg=${tenantId}`);
   }
 }
 
@@ -107,7 +103,9 @@ export async function recordSyncConflict(input: RecordSyncConflictInput): Promis
   // Phase 2: never swallow insert failures — a rejected sync unit without a
   // conflict row leaves operators blind. Callers must handle thrown errors
   // (and preferably share a transaction with markRejected).
-  const inserted = await (await getSyncConflictStore()).insertOpen({
+  const inserted = await (
+    await getSyncConflictStore()
+  ).insertOpen({
     tenantId: input.tenantId,
     opId: input.opId,
     entityType: input.entityType,
@@ -157,7 +155,9 @@ export async function resolveSyncConflict(
 ): Promise<SyncConflictRow | null> {
   assertSyncConflictTenantContext(tenantId);
   try {
-    const row = await (await getSyncConflictStore()).resolve(tenantId, conflictId, decision, byUserId, note ?? null);
+    const row = await (
+      await getSyncConflictStore()
+    ).resolve(tenantId, conflictId, decision, byUserId, note ?? null);
     return row ? mapConflict(row) : null;
   } catch (err) {
     logger.warn({ err, conflictId }, "resolveSyncConflict failed");

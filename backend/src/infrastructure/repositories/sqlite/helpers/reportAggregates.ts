@@ -77,7 +77,12 @@ export async function invoiceTotalsByCurrency(
            ${fromCond(sql`date`, from)}
          GROUP BY currency`,
   );
-  const rr = r.map((x): Row => ({ ...x, total: t2(x.total), paid: t2(x.paid), remaining: t2(x.remaining) }));
+  const rr = r.map((x): Row => ({
+    ...x,
+    total: t2(x.total),
+    paid: t2(x.paid),
+    remaining: t2(x.remaining),
+  }));
   return {
     total: toByCurrency(rr, "total"),
     paid: toByCurrency(rr, "paid"),
@@ -103,7 +108,10 @@ export async function returnTotalsByCurrency(
            ${fromCond(sql`r.date`, from)}
          GROUP BY COALESCE(r.currency, 'SYP')`,
   );
-  return { total: toByCurrency(r.map((x): Row => ({ ...x, amount: t2(x.amount) }))), count: r.reduce((s, x) => s + Number(x.n ?? 0), 0) };
+  return {
+    total: toByCurrency(r.map((x): Row => ({ ...x, amount: t2(x.amount) }))),
+    count: r.reduce((s, x) => s + Number(x.n ?? 0), 0),
+  };
 }
 
 export async function expenseTotalsByCurrency(
@@ -119,7 +127,10 @@ export async function expenseTotalsByCurrency(
            ${fromCond(sql`date`, from)}
          GROUP BY currency`,
   );
-  return { total: toByCurrency(r.map((x): Row => ({ ...x, amount: t2(x.amount) }))), count: r.reduce((s, x) => s + Number(x.n ?? 0), 0) };
+  return {
+    total: toByCurrency(r.map((x): Row => ({ ...x, amount: t2(x.amount) }))),
+    count: r.reduce((s, x) => s + Number(x.n ?? 0), 0),
+  };
 }
 
 export async function inventoryValue(
@@ -146,7 +157,9 @@ export async function inventoryValue(
 export async function inventoryByFabric(
   db: DB,
   tenantId: string,
-): Promise<Array<{ fabricId: string; name: string; kg: number; rolls: number; value: ByCurrency }>> {
+): Promise<
+  Array<{ fabricId: string; name: string; kg: number; rolls: number; value: ByCurrency }>
+> {
   const r = await rows(
     db,
     sql`SELECT f.id AS "fabricId", f.name, r.currency,
@@ -166,7 +179,13 @@ export async function inventoryByFabric(
   >();
   for (const x of r.map((y): Row => ({ ...y, kg: t2(y.kg), amount: scaledText(y.amount, 6) }))) {
     const id = String(x.fabricId);
-    const cur = byFabric.get(id) ?? { fabricId: id, name: String(x.name ?? ""), kg: 0, rolls: 0, value: {} };
+    const cur = byFabric.get(id) ?? {
+      fabricId: id,
+      name: String(x.name ?? ""),
+      kg: 0,
+      rolls: 0,
+      value: {},
+    };
     cur.kg = round2dp(cur.kg + Number(x.kg ?? 0));
     cur.rolls += Number(x.n ?? 0);
     if (x.currency != null) {
@@ -206,13 +225,27 @@ export async function topFabrics(
           LEFT JOIN fabrics f ON f.id = per.fabric_id
          ORDER BY ranked.total_qty DESC, per.fabric_id`,
   );
-  const out = new Map<string, { fabricId: string; name: string; qty: number; revenueByCurrency: ByCurrency }>();
-  for (const x of r.map((y): Row => ({ ...y, qty: t2(y.qty), revenue: scaledText(y.revenue, 4) }))) {
+  const out = new Map<
+    string,
+    { fabricId: string; name: string; qty: number; revenueByCurrency: ByCurrency }
+  >();
+  for (const x of r.map((y): Row => ({
+    ...y,
+    qty: t2(y.qty),
+    revenue: scaledText(y.revenue, 4),
+  }))) {
     const id = String(x.fabricId);
-    const cur = out.get(id) ?? { fabricId: id, name: String(x.name ?? ""), qty: 0, revenueByCurrency: {} };
+    const cur = out.get(id) ?? {
+      fabricId: id,
+      name: String(x.name ?? ""),
+      qty: 0,
+      revenueByCurrency: {},
+    };
     cur.qty = round2dp(cur.qty + Number(x.qty ?? 0));
     const ccy = String(x.currency ?? "SYP");
-    cur.revenueByCurrency[ccy] = round2dp((cur.revenueByCurrency[ccy] ?? 0) + Number(x.revenue ?? 0));
+    cur.revenueByCurrency[ccy] = round2dp(
+      (cur.revenueByCurrency[ccy] ?? 0) + Number(x.revenue ?? 0),
+    );
     out.set(id, cur);
   }
   return [...out.values()];
@@ -244,7 +277,16 @@ export async function topCustomers(
     const id = String(x.partyId);
     const v = BigInt(String(x.total ?? 0));
     const ccy = String(x.currency);
-    const add = order === "usdFirst" ? (ccy === "USD" ? v * 1_000_000_000n : ccy === "SYP" || ccy === "EUR" ? v : 0n) : ccy === "SYP" ? v : 0n;
+    const add =
+      order === "usdFirst"
+        ? ccy === "USD"
+          ? v * 1_000_000_000n
+          : ccy === "SYP" || ccy === "EUR"
+            ? v
+            : 0n
+        : ccy === "SYP"
+          ? v
+          : 0n;
     score.set(id, (score.get(id) ?? 0n) + add);
   }
   // ORDER BY score DESC, party_id (uuid order = lower-case text order) LIMIT n
@@ -255,11 +297,18 @@ export async function topCustomers(
   const names = new Map<string, string>();
   if (top.size) {
     const ids = [...top];
-    const nameRows = await rows(db, sql`SELECT id, name FROM parties WHERE id IN (${sql.join(ids.map((i) => sql`${i}`), sql`, `)})`);
+    const nameRows = await rows(
+      db,
+      sql`SELECT id, name FROM parties WHERE id IN (${sql.join(
+        ids.map((i) => sql`${i}`),
+        sql`, `,
+      )})`,
+    );
     for (const n of nameRows) names.set(String(n.id), String(n.name ?? ""));
   }
   const out = new Map<string, { partyId: string; name: string; revenueByCurrency: ByCurrency }>();
-  for (const [id] of ranked) out.set(id, { partyId: id, name: names.get(id) ?? "", revenueByCurrency: {} });
+  for (const [id] of ranked)
+    out.set(id, { partyId: id, name: names.get(id) ?? "", revenueByCurrency: {} });
   for (const x of per) {
     const id = String(x.partyId);
     const cur = out.get(id);
@@ -285,8 +334,14 @@ export async function ledgerTotalsByCurrency(
          GROUP BY currency`,
   );
   return {
-    debit: toByCurrency(r.map((x): Row => ({ ...x, debit: t2(x.debit) })), "debit"),
-    credit: toByCurrency(r.map((x): Row => ({ ...x, credit: t2(x.credit) })), "credit"),
+    debit: toByCurrency(
+      r.map((x): Row => ({ ...x, debit: t2(x.debit) })),
+      "debit",
+    ),
+    credit: toByCurrency(
+      r.map((x): Row => ({ ...x, credit: t2(x.credit) })),
+      "credit",
+    ),
     count: r.reduce((s, x) => s + Number(x.n ?? 0), 0),
   };
 }
@@ -321,10 +376,13 @@ export async function pagedRows(
                  ${fromCond(sql`i.date`, from)}`;
       order = sql`ORDER BY i.date DESC, i.created_at DESC, i.id`;
       const [data, cnt] = await Promise.all([
-        rows(db, sql`SELECT i.id, i.number, i.date, i.created_at AS "createdAt", i.currency,
+        rows(
+          db,
+          sql`SELECT i.id, i.number, i.date, i.created_at AS "createdAt", i.currency,
                             i.party_id AS "partyId", p.name AS "partyName",
                             i.total, i.paid, max(0, i.total - i.paid) AS remaining
-                     ${base} ${order} LIMIT ${limit} OFFSET ${off}`),
+                     ${base} ${order} LIMIT ${limit} OFFSET ${off}`,
+        ),
         rows(db, sql`SELECT count(*) AS n ${base}`),
       ]);
       return { rows: pgRawRows(data, PAGED_SHAPE), total: Number(cnt[0]?.n ?? 0) };
@@ -334,13 +392,16 @@ export async function pagedRows(
                  WHERE r.tenant_id = ${t} AND r.status <> 'cancelled' AND r.kind = 'sale'
                  ${fromCond(sql`r.date`, from)}`;
       const [data, cnt] = await Promise.all([
-        rows(db, sql`SELECT r.id, r.number, r.kind, r.date, r.created_at AS "createdAt",
+        rows(
+          db,
+          sql`SELECT r.id, r.number, r.kind, r.date, r.created_at AS "createdAt",
                             COALESCE(r.currency, 'SYP') AS currency,
                             r.party_id AS "partyId", p.name AS "partyName",
                             COALESCE((SELECT sum(${mulRound(sql`rl.quantity_kg`, 2, sql`rl.price_per_kg`, 4, 2)})
                                         FROM return_lines rl WHERE rl.return_id = r.id), 0) AS amount
                      ${base} ORDER BY r.date DESC, r.created_at DESC, r.id
-                     LIMIT ${limit} OFFSET ${off}`),
+                     LIMIT ${limit} OFFSET ${off}`,
+        ),
         rows(db, sql`SELECT count(*) AS n ${base}`),
       ]);
       return { rows: pgRawRows(data, PAGED_SHAPE), total: Number(cnt[0]?.n ?? 0) };
@@ -349,10 +410,13 @@ export async function pagedRows(
       base = sql`FROM expenses e WHERE e.tenant_id = ${t} AND e.status <> 'cancelled'
                  ${fromCond(sql`e.date`, from)}`;
       const [data, cnt] = await Promise.all([
-        rows(db, sql`SELECT e.id, e.date, e.created_at AS "createdAt", e.category,
+        rows(
+          db,
+          sql`SELECT e.id, e.date, e.created_at AS "createdAt", e.category,
                             e.description, e.amount, e.currency
                      ${base} ORDER BY e.date DESC, e.created_at DESC, e.id
-                     LIMIT ${limit} OFFSET ${off}`),
+                     LIMIT ${limit} OFFSET ${off}`,
+        ),
         rows(db, sql`SELECT count(*) AS n ${base}`),
       ]);
       return { rows: pgRawRows(data, PAGED_SHAPE), total: Number(cnt[0]?.n ?? 0) };
@@ -361,11 +425,14 @@ export async function pagedRows(
       base = sql`FROM ledger_entries le WHERE le.tenant_id = ${t} AND le.status <> 'cancelled'
                  ${fromCond(sql`le.date`, from)}`;
       const [data, cnt] = await Promise.all([
-        rows(db, sql`SELECT le.id, le.date, le.type, le.description,
+        rows(
+          db,
+          sql`SELECT le.id, le.date, le.type, le.description,
                             le.reference_number AS "referenceNumber",
                             le.debit, le.credit, le.currency
                      ${base} ORDER BY le.date DESC, le.created_at DESC, le.id
-                     LIMIT ${limit} OFFSET ${off}`),
+                     LIMIT ${limit} OFFSET ${off}`,
+        ),
         rows(db, sql`SELECT count(*) AS n ${base}`),
       ]);
       return { rows: pgRawRows(data, PAGED_SHAPE), total: Number(cnt[0]?.n ?? 0) };
@@ -374,10 +441,13 @@ export async function pagedRows(
       base = sql`FROM manual_movements m WHERE m.tenant_id = ${t}
                  ${fromCond(sql`m.date`, from)}`;
       const [data, cnt] = await Promise.all([
-        rows(db, sql`SELECT m.id, m.date, m.created_at AS "createdAt", m.type, m.direction,
+        rows(
+          db,
+          sql`SELECT m.id, m.date, m.created_at AS "createdAt", m.type, m.direction,
                             m.description, m.amount, m.currency
                      ${base} ORDER BY m.created_at ASC, m.id
-                     LIMIT ${limit} OFFSET ${off}`),
+                     LIMIT ${limit} OFFSET ${off}`,
+        ),
         rows(db, sql`SELECT count(*) AS n ${base}`),
       ]);
       return { rows: pgRawRows(data, PAGED_SHAPE), total: Number(cnt[0]?.n ?? 0) };

@@ -180,7 +180,12 @@ export function registerVoucherRoutes(
       const c = ctx(req);
       const expectedVersion = req.body?.expectedVersion;
       if (typeof expectedVersion !== "number") {
-        return res.status(400).json({ code: "EXPECTED_VERSION_REQUIRED", message: "الإصدار المتوقع (expectedVersion) مطلوب للتحديث/الإلغاء" });
+        return res
+          .status(400)
+          .json({
+            code: "EXPECTED_VERSION_REQUIRED",
+            message: "الإصدار المتوقع (expectedVersion) مطلوب للتحديث/الإلغاء",
+          });
       }
       const syncEnabled = Boolean(syncOutboxRepo && isSyncEnqueueEnabled());
 
@@ -238,7 +243,12 @@ export function registerVoucherRoutes(
       const c = ctx(req);
       const expectedVersion = req.body?.expectedVersion;
       if (typeof expectedVersion !== "number") {
-        return res.status(400).json({ code: "EXPECTED_VERSION_REQUIRED", message: "الإصدار المتوقع (expectedVersion) مطلوب للتحديث/الإلغاء" });
+        return res
+          .status(400)
+          .json({
+            code: "EXPECTED_VERSION_REQUIRED",
+            message: "الإصدار المتوقع (expectedVersion) مطلوب للتحديث/الإلغاء",
+          });
       }
       const syncEnabled = Boolean(syncOutboxRepo && isSyncEnqueueEnabled());
 

@@ -23,13 +23,21 @@ delete process.env.DESKTOP_SEED_PATH;
 
 const tenantId = randomUUID();
 const colorId = randomUUID();
-const ctx = { tenantId, userId: randomUUID(), userRole: "admin", userName: "tester" } as TenantContext;
+const ctx = {
+  tenantId,
+  userId: randomUUID(),
+  userRole: "admin",
+  userName: "tester",
+} as TenantContext;
 let tx: typeof import("@/infrastructure/orm/sqlite/transaction.js");
 let runtime: typeof import("@/infrastructure/orm/sqlite/runtime.js");
-let h: Awaited<ReturnType<typeof import("@/infrastructure/repositories/engineHelpers.js").inventoryCountHelpers>>;
+let h: Awaited<
+  ReturnType<typeof import("@/infrastructure/repositories/engineHelpers.js").inventoryCountHelpers>
+>;
 
 const run = <T>(fn: (t: never) => Promise<T>) => tx.runInTransaction((t) => fn(t as never));
-const q = async <T>(query: ReturnType<typeof sql>) => (await tx.sqliteDb().execute(query)).rows as T[];
+const q = async <T>(query: ReturnType<typeof sql>) =>
+  (await tx.sqliteDb().execute(query)).rows as T[];
 
 /** 100 kg / 10 pieces at 5 per kg. */
 async function newRoll(): Promise<string> {
@@ -54,11 +62,19 @@ beforeAll(async () => {
   await runtime.ensureSqliteRuntime();
   const fabricId = randomUUID();
   await tx.runInTransaction(async (t) => {
-    await t.execute(sql`INSERT INTO tenants (id, name, slug) VALUES (${tenantId}, 'Adjust', 'adjust')`);
-    await t.execute(sql`INSERT INTO fabrics (id, tenant_id, name) VALUES (${fabricId}, ${tenantId}, 'F')`);
-    await t.execute(sql`INSERT INTO colors (id, tenant_id, fabric_id, name) VALUES (${colorId}, ${tenantId}, ${fabricId}, 'C')`);
+    await t.execute(
+      sql`INSERT INTO tenants (id, name, slug) VALUES (${tenantId}, 'Adjust', 'adjust')`,
+    );
+    await t.execute(
+      sql`INSERT INTO fabrics (id, tenant_id, name) VALUES (${fabricId}, ${tenantId}, 'F')`,
+    );
+    await t.execute(
+      sql`INSERT INTO colors (id, tenant_id, fabric_id, name) VALUES (${colorId}, ${tenantId}, ${fabricId}, 'C')`,
+    );
   });
-  h = await (await import("@/infrastructure/repositories/engineHelpers.js")).inventoryCountHelpers();
+  h = await (
+    await import("@/infrastructure/repositories/engineHelpers.js")
+  ).inventoryCountHelpers();
 }, 60_000);
 
 afterAll(() => {
@@ -67,9 +83,11 @@ afterAll(() => {
 });
 
 const countId = async (rollId: string) =>
-  (await q<{ id: string; book: number; diff: number }>(
-    sql`SELECT id, CAST(book_kg AS REAL) / 100 AS book, CAST(diff_kg AS REAL) / 100 AS diff FROM inventory_counts WHERE roll_id = ${rollId}`,
-  ))[0];
+  (
+    await q<{ id: string; book: number; diff: number }>(
+      sql`SELECT id, CAST(book_kg AS REAL) / 100 AS book, CAST(diff_kg AS REAL) / 100 AS diff FROM inventory_counts WHERE roll_id = ${rollId}`,
+    )
+  )[0];
 
 describe("inventory count → posted variance", () => {
   it("difference is counted − book, applied with movement, P&L leg and audit (kg + pieces)", async () => {
@@ -79,23 +97,42 @@ describe("inventory count → posted variance", () => {
     const c = await countId(id);
     const posted = await run((t) => h.postCountVariance(t, ctx, c.id));
     expect(posted.diffKg).toBe(-8);
-    expect(posted.adjustment).toMatchObject({ deltaKg: -8, deltaPieces: -1, referenceType: "inventory_count" });
+    expect(posted.adjustment).toMatchObject({
+      deltaKg: -8,
+      deltaPieces: -1,
+      referenceType: "inventory_count",
+    });
     expect(await roll(id)).toMatchObject({ kg: 92, pieces: 9, version: 2 });
 
     const mv = await q<{ type: string; dir: string; kg: number; after: number }>(
       sql`SELECT movement_type AS type, direction AS dir, CAST(quantity_kg AS REAL) / 100 AS kg, CAST(balance_after_kg AS REAL) / 100 AS after FROM stock_movements WHERE roll_id = ${id}`,
     );
     expect(mv).toEqual([{ type: "adjustment", dir: "out", kg: 8, after: 92 }]);
-    const led = await q<{ debit: number; cash: string; currency: string }>(
-      sql`SELECT CAST(debit AS REAL) / 100 AS debit, cash_impact AS cash, currency FROM ledger_entries WHERE reference_id = ${c.id}`,
+    // Balanced (H-06): Dr inventory loss / Cr inventory asset.
+    const led = await q<{
+      type: string;
+      debit: number;
+      credit: number;
+      cash: string;
+      currency: string;
+    }>(
+      sql`SELECT type, CAST(debit AS REAL) / 100 AS debit, CAST(credit AS REAL) / 100 AS credit, cash_impact AS cash, currency FROM ledger_entries WHERE reference_id = ${c.id} ORDER BY type`,
     );
-    expect(led).toEqual([{ debit: 40, cash: "none", currency: "USD" }]);
+    expect(led).toEqual([
+      { type: "expense", debit: 40, credit: 0, cash: "none", currency: "USD" },
+      { type: "inventory_asset", debit: 0, credit: 40, cash: "none", currency: "USD" },
+    ]);
     const audit = await q<{ action: string; after: string }>(
       sql`SELECT action, after_snapshot AS after FROM audit_logs WHERE module = 'inventory_adjustments' AND entity_id = ${id}`,
     );
     expect(audit).toHaveLength(1);
     expect(audit[0].action).toBe("post_count_variance");
-    expect(JSON.parse(audit[0].after)).toMatchObject({ remainingKg: 92, remainingPieces: 9, deltaKg: -8, deltaPieces: -1 });
+    expect(JSON.parse(audit[0].after)).toMatchObject({
+      remainingKg: 92,
+      remainingPieces: 9,
+      deltaKg: -8,
+      deltaPieces: -1,
+    });
 
     await expect(run((t) => h.postCountVariance(t, ctx, c.id))).rejects.toThrow(/مسبقاً/);
   });
@@ -104,15 +141,29 @@ describe("inventory count → posted variance", () => {
     const id = await newRoll();
     await run((t) => h.recordCount(t, ctx, 2026, id, 95, null, undefined));
     // A sale moves the shelf after the count.
-    await run((t) => h.applyRollAdjustment(t, ctx, {
-      rollId: id, deltaKg: -10, deltaPieces: -1, reason: "بيع", date: "2026-02-01",
-      referenceType: "inventory_adjustment", referenceId: randomUUID(), referenceNumber: "ADJ-T", expectedVersion: null,
-    }));
+    await run((t) =>
+      h.applyRollAdjustment(t, ctx, {
+        rollId: id,
+        deltaKg: -10,
+        deltaPieces: -1,
+        reason: "بيع",
+        date: "2026-02-01",
+        referenceType: "inventory_adjustment",
+        referenceId: randomUUID(),
+        referenceNumber: "ADJ-T",
+        expectedVersion: null,
+      }),
+    );
     const stale = await countId(id);
     const sheet = await run((t) => h.getCountSheet(t, ctx, 2026, { limit: 500 }));
     // One basis: the line shows the book AT COUNT and flags the movement since,
     // instead of a live difference that posting would never apply.
-    expect(sheet.lines.find((l) => l.rollId === id)).toMatchObject({ bookKg: 100, countedKg: 95, diffKg: -5, movedKg: -10 });
+    expect(sheet.lines.find((l) => l.rollId === id)).toMatchObject({
+      bookKg: 100,
+      countedKg: 95,
+      diffKg: -5,
+      movedKg: -10,
+    });
     await expect(run((t) => h.postCountVariance(t, ctx, stale.id))).rejects.toThrow(/أعد عدّ/);
     expect(await roll(id)).toMatchObject({ kg: 90, pieces: 9 });
 
@@ -141,7 +192,11 @@ describe("count posting — date and pieces (corrective plan step 8)", () => {
       await run((t) => h.postCountVariance(t, ctx, cid));
     }
     const dates = async (rollId: string) =>
-      (await q<{ d: string }>(sql`SELECT movement_date AS d FROM stock_movements WHERE roll_id = ${rollId}`))[0].d;
+      (
+        await q<{ d: string }>(
+          sql`SELECT movement_date AS d FROM stock_movements WHERE roll_id = ${rollId}`,
+        )
+      )[0].d;
     expect(await dates(id)).toBe(localToday());
     expect(await dates(old)).toBe(`${thisYear - 1}-12-31`);
   });
@@ -172,7 +227,9 @@ describe("count sheet — rounds, re-count, filters (corrective plan steps 11–
     await run((t) => h.postCountVariance(t, ctx, first));
     expect((await roll(id)).kg).toBe(97);
     // Both corrections stay in the stock ledger.
-    const mv = await q<{ n: number }>(sql`SELECT count(*) AS n FROM stock_movements WHERE roll_id = ${id}`);
+    const mv = await q<{ n: number }>(
+      sql`SELECT count(*) AS n FROM stock_movements WHERE roll_id = ${id}`,
+    );
     expect(mv[0].n).toBe(2);
   });
 
@@ -180,12 +237,16 @@ describe("count sheet — rounds, re-count, filters (corrective plan steps 11–
     const a = await newRoll();
     const b = await newRoll();
     await run((t) => h.recordCount(t, ctx, 2026, a, 99, null, undefined));
-    const rollNo = (await q<{ n: string }>(sql`SELECT roll_no AS n FROM rolls WHERE id = ${b}`))[0].n;
+    const rollNo = (await q<{ n: string }>(sql`SELECT roll_no AS n FROM rolls WHERE id = ${b}`))[0]
+      .n;
     expect((await sheet({ q: rollNo })).lines.map((l) => l.rollId)).toEqual([b]);
     expect((await sheet({ status: "variance" })).lines.some((l) => l.rollId === a)).toBe(true);
     expect((await sheet({ status: "uncounted" })).lines.some((l) => l.rollId === a)).toBe(false);
     // A new round from tomorrow: today's count no longer counts as done.
-    expect(await line(a, { since: "2999-01-01" })).toMatchObject({ status: "uncounted", countedKg: null });
+    expect(await line(a, { since: "2999-01-01" })).toMatchObject({
+      status: "uncounted",
+      countedKg: null,
+    });
     await q(sql`UPDATE rolls SET remaining_kg = 0, remaining_pieces = 0 WHERE id = ${b}`);
     expect(await line(b)).toBeUndefined();
     expect(await line(b, { includeEmpty: true })).toMatchObject({ bookKg: 0 });
@@ -205,19 +266,23 @@ describe("count sheet — rounds, re-count, filters (corrective plan steps 11–
 
   it("a received quantity is not edited from the roll card", async () => {
     const { updateRollUseCase } = await import("@/application/use-cases/inventory/rollUseCases.js");
-    const { SqliteRollRepository } = await import("@/infrastructure/repositories/sqlite/SqliteRollRepository.js");
+    const { SqliteRollRepository } =
+      await import("@/infrastructure/repositories/sqlite/SqliteRollRepository.js");
     const repo = new SqliteRollRepository(tx.sqliteIndependentDb() as never);
     const id = await newRoll();
     const r = await updateRollUseCase(repo, id, { initialKg: 120 }, ctx);
     expect(r).toMatchObject({ ok: false });
-    expect((await updateRollUseCase(repo, id, { initialKg: 100, dyeBatch: "B2" }, ctx)).ok).toBe(true);
+    expect((await updateRollUseCase(repo, id, { initialKg: 100, dyeBatch: "B2" }, ctx)).ok).toBe(
+      true,
+    );
   });
 
   it("a year closed on the hub is adopted (and a reopen too)", async () => {
     const { adoptYearStatus } = await import("@/infrastructure/repositories/yearStatusSync.js");
     expect(await run((t) => adoptYearStatus(t, tenantId, 2024, "closed", new Date()))).toBe(true);
     expect(await run((t) => adoptYearStatus(t, tenantId, 2024, "closed", new Date()))).toBe(false);
-    const st = async () => (await q<{ s: string }>(sql`SELECT status AS s FROM financial_years WHERE year = 2024`))[0].s;
+    const st = async () =>
+      (await q<{ s: string }>(sql`SELECT status AS s FROM financial_years WHERE year = 2024`))[0].s;
     expect(await st()).toBe("closed");
     await run((t) => adoptYearStatus(t, tenantId, 2024, "open", null));
     expect(await st()).toBe("open");
@@ -225,16 +290,34 @@ describe("count sheet — rounds, re-count, filters (corrective plan steps 11–
 });
 
 describe("manual roll adjustment", () => {
-  const input = (rollId: string, deltaKg: number, deltaPieces: number, expectedVersion: number | null) => ({
-    rollId, deltaKg, deltaPieces, reason: "تصحيح", date: "2026-03-01",
-    referenceType: "inventory_adjustment" as const, referenceId: randomUUID(), referenceNumber: "ADJ-1", expectedVersion,
+  const input = (
+    rollId: string,
+    deltaKg: number,
+    deltaPieces: number,
+    expectedVersion: number | null,
+  ) => ({
+    rollId,
+    deltaKg,
+    deltaPieces,
+    reason: "تصحيح",
+    date: "2026-03-01",
+    referenceType: "inventory_adjustment" as const,
+    referenceId: randomUUID(),
+    referenceNumber: "ADJ-1",
+    expectedVersion,
   });
 
   it("refuses a stale version, a no-op and a negative result without touching the roll", async () => {
     const id = await newRoll();
-    await expect(run((t) => h.applyRollAdjustment(t, ctx, input(id, 1, 0, 99)))).rejects.toThrow(/جهاز آخر/);
-    await expect(run((t) => h.applyRollAdjustment(t, ctx, input(id, 0, 0, 1)))).rejects.toThrow(/لا يوجد تغيير/);
-    await expect(run((t) => h.applyRollAdjustment(t, ctx, input(id, -101, 0, 1)))).rejects.toThrow(/سالبة/);
+    await expect(run((t) => h.applyRollAdjustment(t, ctx, input(id, 1, 0, 99)))).rejects.toThrow(
+      /جهاز آخر/,
+    );
+    await expect(run((t) => h.applyRollAdjustment(t, ctx, input(id, 0, 0, 1)))).rejects.toThrow(
+      /لا يوجد تغيير/,
+    );
+    await expect(run((t) => h.applyRollAdjustment(t, ctx, input(id, -101, 0, 1)))).rejects.toThrow(
+      /سالبة/,
+    );
     expect(await roll(id)).toMatchObject({ kg: 100, pieces: 10, version: 1 });
   });
 
@@ -243,7 +326,9 @@ describe("manual roll adjustment", () => {
     const r = await run((t) => h.applyRollAdjustment(t, ctx, input(id, 0, 2, 1)));
     expect(r.movementId).toBeNull();
     expect(await roll(id)).toMatchObject({ kg: 100, pieces: 12, version: 2 });
-    const audit = await q<{ action: string }>(sql`SELECT action FROM audit_logs WHERE entity_id = ${id}`);
+    const audit = await q<{ action: string }>(
+      sql`SELECT action FROM audit_logs WHERE entity_id = ${id}`,
+    );
     expect(audit.map((a) => a.action)).toEqual(["roll_adjust"]);
   });
 
@@ -263,17 +348,32 @@ describe("manual roll adjustment", () => {
       entityType: "roll",
       operation: "adjust",
       payload: {
-        rollId: id, deltaKg: -4, deltaPieces: 1, reason: "عجز", date: "2026-03-02",
-        referenceType: "inventory_adjustment", referenceId: randomUUID(), referenceNumber: "ADJ-DUP",
+        rollId: id,
+        deltaKg: -4,
+        deltaPieces: 1,
+        reason: "عجز",
+        date: "2026-03-02",
+        referenceType: "inventory_adjustment",
+        referenceId: randomUUID(),
+        referenceNumber: "ADJ-DUP",
       },
     };
     const meta = { opId: randomUUID() };
-    expect((await materializeSyncUnit({} as never, {} as never, unit, ctx, meta)).status).toBe("created");
-    expect((await materializeSyncUnit({} as never, {} as never, unit, ctx, meta)).status).toBe("exists");
+    expect((await materializeSyncUnit({} as never, {} as never, unit, ctx, meta)).status).toBe(
+      "created",
+    );
+    expect((await materializeSyncUnit({} as never, {} as never, unit, ctx, meta)).status).toBe(
+      "exists",
+    );
     expect(await roll(id)).toMatchObject({ kg: 96, pieces: 11, version: 2 });
     const ref = unit.payload.referenceId;
-    expect((await q(sql`SELECT id FROM stock_movements WHERE reference_id = ${ref}`)).length).toBe(1);
-    expect((await q(sql`SELECT id FROM ledger_entries WHERE reference_id = ${ref}`)).length).toBe(1);
+    expect((await q(sql`SELECT id FROM stock_movements WHERE reference_id = ${ref}`)).length).toBe(
+      1,
+    );
+    // One balanced P&L/asset pair, applied once.
+    expect((await q(sql`SELECT id FROM ledger_entries WHERE reference_id = ${ref}`)).length).toBe(
+      2,
+    );
   });
 
   it("a pieces-only adjustment delivered twice applies once (S-01: no movement row to key on)", async () => {

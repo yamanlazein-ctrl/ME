@@ -31,6 +31,7 @@
 
 import pg from "pg";
 import { spawn } from "node:child_process";
+import { TREE_SPAWN, killTree, waitPortFree } from "./processTree.mjs";
 import { randomUUID } from "node:crypto";
 import { SignJWT } from "jose";
 import fs from "node:fs";
@@ -87,7 +88,12 @@ function loadEnv() {
   // variables. Without this the harness minted a JWT with `undefined` as the
   // key and died before running a single scenario, so it could never be used
   // as a gate.
-  for (const key of ["JWT_SECRET", "APP_MASTER_KEY", "LICENSE_SIGNING_KEY", "LICENSE_SIGNING_PUBLIC_KEY"]) {
+  for (const key of [
+    "JWT_SECRET",
+    "APP_MASTER_KEY",
+    "LICENSE_SIGNING_KEY",
+    "LICENSE_SIGNING_PUBLIC_KEY",
+  ]) {
     if (!env[key] && process.env[key]) env[key] = process.env[key];
   }
   return env;
@@ -194,15 +200,11 @@ async function cloneDatabases() {
 
 function migrate(db) {
   return new Promise((resolve, reject) => {
-    const child = spawn(
-      process.execPath,
-      ["node_modules/drizzle-kit/bin.cjs", "migrate"],
-      {
-        cwd: BACKEND,
-        env: { ...process.env, ...BASE_ENV, DATABASE_URL: dbUrl(db), NODE_ENV: "test" },
-        stdio: ["ignore", "pipe", "pipe"],
-      },
-    );
+    const child = spawn(process.execPath, ["node_modules/drizzle-kit/bin.cjs", "migrate"], {
+      cwd: BACKEND,
+      env: { ...process.env, ...BASE_ENV, DATABASE_URL: dbUrl(db), NODE_ENV: "test" },
+      stdio: ["ignore", "pipe", "pipe"],
+    });
     let out = "";
     child.stdout.on("data", (d) => (out += d));
     child.stderr.on("data", (d) => (out += d));
@@ -273,8 +275,7 @@ const JWT_HUB =
     : "hub-sync-jwt-secret-key-min-32-chars!!";
 const JWT_A = "device-a-offline-sync-jwt-secret-key!!";
 const JWT_B = "device-b-offline-sync-jwt-secret-key!!";
-const APP_MASTER_KEY =
-  BASE_ENV.APP_MASTER_KEY || "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa=";
+const APP_MASTER_KEY = BASE_ENV.APP_MASTER_KEY || "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa=";
 
 function startServer(name, db, port, centralUrl, logFile, extraEnv = {}) {
   const out = fs.openSync(path.join(BACKEND, logFile), "w");
@@ -306,7 +307,7 @@ function startServer(name, db, port, centralUrl, logFile, extraEnv = {}) {
   const child = spawn(
     process.execPath,
     ["node_modules/tsx/dist/cli.mjs", "src/presentation/server.ts"],
-    { cwd: BACKEND, env, stdio: ["ignore", out, out] },
+    { cwd: BACKEND, env, stdio: ["ignore", out, out], ...TREE_SPAWN },
   );
   child.__name = name;
   servers.push(child);
@@ -331,7 +332,13 @@ async function waitForHealth(port, label, timeoutMs = 240_000) {
   // Surface whatever the server managed to print — a silent non-listening
   // process is otherwise impossible to diagnose.
   let tail = "";
-  for (const f of ["sync-test-hub.log", "sync-test-a.log", "sync-test-b.log", "sync-test-b401.log", "sync-test-b2.log"]) {
+  for (const f of [
+    "sync-test-hub.log",
+    "sync-test-a.log",
+    "sync-test-b.log",
+    "sync-test-b401.log",
+    "sync-test-b2.log",
+  ]) {
     const p = path.join(BACKEND, f);
     if (fs.existsSync(p) && fs.statSync(p).size > 0) {
       tail += `\n----- ${f} -----\n${fs.readFileSync(p, "utf8").slice(-2000)}`;
@@ -347,8 +354,10 @@ async function stopServer(port) {
   if (idx === -1) return;
   const child = servers[idx];
   servers.splice(idx, 1);
-  child.kill("SIGKILL");
-  await new Promise((r) => setTimeout(r, 800));
+  // M-11: the tsx wrapper's child is the real server — kill the tree and wait for the port, or the
+  // replacement dies with EADDRINUSE while health checks hit the orphan.
+  killTree(child);
+  await waitPortFree(port);
 }
 
 async function stopAllServers() {
@@ -358,7 +367,7 @@ async function stopAllServers() {
   }
   for (const s of [...servers]) {
     try {
-      s.kill("SIGKILL");
+      killTree(s);
     } catch {
       /* ignore */
     }
@@ -412,10 +421,14 @@ async function resetTopology({ provision = false } = {}) {
     const provA = await provisionNumberBlocks(A.port, DEV_A, BLOCK_TYPES);
     const provB = await provisionNumberBlocks(B.port, DEV_B, BLOCK_TYPES);
     if (provA.status !== 200 || (provA.json?.ensured?.length ?? 0) !== BLOCK_TYPES.length) {
-      throw new Error(`resetTopology provision A failed: HTTP ${provA.status} ${provA.text.slice(0, 200)}`);
+      throw new Error(
+        `resetTopology provision A failed: HTTP ${provA.status} ${provA.text.slice(0, 200)}`,
+      );
     }
     if (provB.status !== 200 || (provB.json?.ensured?.length ?? 0) !== BLOCK_TYPES.length) {
-      throw new Error(`resetTopology provision B failed: HTTP ${provB.status} ${provB.text.slice(0, 200)}`);
+      throw new Error(
+        `resetTopology provision B failed: HTTP ${provB.status} ${provB.text.slice(0, 200)}`,
+      );
     }
   }
 }
@@ -424,20 +437,22 @@ async function resetTopology({ provision = false } = {}) {
 
 async function mintToken(secret = JWT_HUB) {
   const key = new TextEncoder().encode(secret);
-  return new SignJWT({
-    sub: USER_ID,
-    tenantId: TENANT_ID,
-    role: "admin",
-    jti: randomUUID(),
-    type: "access",
-  })
-    .setProtectedHeader({ alg: "HS256" })
-    .setIssuedAt()
-    .setExpirationTime(Math.floor(Date.now() / 1000) + 7200)
-    // jose requires a key object / Uint8Array, never a raw string: passing the
-    // string threw "Key for the HS256 algorithm must be one of type ..." and
-    // aborted the whole drill.
-    .sign(key);
+  return (
+    new SignJWT({
+      sub: USER_ID,
+      tenantId: TENANT_ID,
+      role: "admin",
+      jti: randomUUID(),
+      type: "access",
+    })
+      .setProtectedHeader({ alg: "HS256" })
+      .setIssuedAt()
+      .setExpirationTime(Math.floor(Date.now() / 1000) + 7200)
+      // jose requires a key object / Uint8Array, never a raw string: passing the
+      // string threw "Key for the HS256 algorithm must be one of type ..." and
+      // aborted the whole drill.
+      .sign(key)
+  );
 }
 
 const tokens = new Map();
@@ -469,17 +484,18 @@ async function api(port, method, urlPath, { body, deviceId, idempotencyKey } = {
 
 async function countParties(db) {
   const c = await dbClient(db);
-  const r = await c.query(`SELECT count(*)::int AS c FROM parties WHERE tenant_id = $1`, [TENANT_ID]);
+  const r = await c.query(`SELECT count(*)::int AS c FROM parties WHERE tenant_id = $1`, [
+    TENANT_ID,
+  ]);
   await c.end();
   return r.rows[0].c;
 }
 
 async function partyNames(db) {
   const c = await dbClient(db);
-  const r = await c.query(
-    `SELECT name FROM parties WHERE tenant_id = $1 ORDER BY name`,
-    [TENANT_ID],
-  );
+  const r = await c.query(`SELECT name FROM parties WHERE tenant_id = $1 ORDER BY name`, [
+    TENANT_ID,
+  ]);
   await c.end();
   return r.rows.map((x) => x.name);
 }
@@ -551,7 +567,16 @@ async function createSaleInvoice(port, deviceId, { customerId, date, kg, pricePe
       partyId: customerId,
       partyType: "customer",
       currency: "USD",
-      lines: [{ fabricId: fabric.json.id, colorId: color.json.id, rollId: roll.json.id, quantityKg: kg, pieces: 1, pricePerKg }],
+      lines: [
+        {
+          fabricId: fabric.json.id,
+          colorId: color.json.id,
+          rollId: roll.json.id,
+          quantityKg: kg,
+          pieces: 1,
+          pricePerKg,
+        },
+      ],
       paid,
     },
   });
@@ -620,10 +645,9 @@ async function numberBlocks(db) {
 
 async function partyCodes(db) {
   const c = await dbClient(db);
-  const r = await c.query(
-    `SELECT code, name FROM parties WHERE tenant_id = $1 ORDER BY name`,
-    [TENANT_ID],
-  );
+  const r = await c.query(`SELECT code, name FROM parties WHERE tenant_id = $1 ORDER BY name`, [
+    TENANT_ID,
+  ]);
   await c.end();
   return r.rows.map((x) => `${x.name}=${x.code}`);
 }
@@ -708,8 +732,8 @@ async function main() {
       "the two devices hold disjoint customer number ranges (no code collision possible)",
       Boolean(
         custA &&
-          custB &&
-          (custA.endNumber < custB.startNumber || custB.endNumber < custA.startNumber),
+        custB &&
+        (custA.endNumber < custB.startNumber || custB.endNumber < custA.startNumber),
       ),
       `A=${custA ? `${custA.startNumber}..${custA.endNumber}` : "none"} ` +
         `B=${custB ? `${custB.startNumber}..${custB.endNumber}` : "none"}`,
@@ -745,12 +769,18 @@ async function main() {
     bLocal1.length === 1 && bLocal1.includes(bNames[0]),
     bLocal1.join(", "),
   );
-  check("hub has received nothing yet (true offline isolation)", hubLocal1.length === 0, `hub=${hubLocal1.length}`);
+  check(
+    "hub has received nothing yet (true offline isolation)",
+    hubLocal1.length === 0,
+    `hub=${hubLocal1.length}`,
+  );
 
   const aOutbox1 = await outboxRows(A.db);
   check(
     "each offline write was queued in the outbox with a monotonic seq",
-    aOutbox1.length === 2 && aOutbox1[0].seq < aOutbox1[1].seq && aOutbox1.every((r) => r.status === "pending"),
+    aOutbox1.length === 2 &&
+      aOutbox1[0].seq < aOutbox1[1].seq &&
+      aOutbox1.every((r) => r.status === "pending"),
     aOutbox1.map((r) => `${r.status}@${r.seq}`).join(" "),
   );
 
@@ -1045,14 +1075,8 @@ async function main() {
     // Same timestamp on all three. A strict `>` cursor on received_at returned
     // nothing after the first row — a permanent loss. The seq cursor must
     // return the remaining two.
-    const pulled = await api(
-      HUB.port,
-      "GET",
-      `/api/sync/pull?afterSeq=${ids[0]}&limit=50`,
-    );
-    const got = (pulled.json?.items ?? []).filter((i) =>
-      ids.slice(1).includes(i.receivedSeq),
-    );
+    const pulled = await api(HUB.port, "GET", `/api/sync/pull?afterSeq=${ids[0]}&limit=50`);
+    const got = (pulled.json?.items ?? []).filter((i) => ids.slice(1).includes(i.receivedSeq));
     check(
       "units sharing one received_at are all reachable by the cursor",
       got.length === 2,
@@ -1209,11 +1233,18 @@ async function main() {
     await createParty(B.port, DEV_B, "B-Retry-2");
     await stopServer(B.port);
     const hubToken = tokens.get("hub");
-    const b2 = startServer("B401", B.db, B.port, `http://127.0.0.1:${STUB_PORT}`, "sync-test-b401.log", {
-      JWT_SECRET: JWT_B,
-      HUB_SYNC_ACCESS_TOKEN: hubToken,
-      APP_MASTER_KEY,
-    });
+    const b2 = startServer(
+      "B401",
+      B.db,
+      B.port,
+      `http://127.0.0.1:${STUB_PORT}`,
+      "sync-test-b401.log",
+      {
+        JWT_SECRET: JWT_B,
+        HUB_SYNC_ACCESS_TOKEN: hubToken,
+        APP_MASTER_KEY,
+      },
+    );
     b2.__port = B.port;
     await waitForHealth(B.port, "device B (stub hub)");
 
@@ -1240,8 +1271,7 @@ async function main() {
     await syncUntilDrained(A.port);
 
     const namesHub = await partyNames(HUB.db);
-    const bRetrySynced =
-      namesHub.includes("B-Retry-1") && namesHub.includes("B-Retry-2");
+    const bRetrySynced = namesHub.includes("B-Retry-1") && namesHub.includes("B-Retry-2");
     check(
       "retained units sync successfully once the hub is healthy again",
       bRetrySynced,
@@ -1270,7 +1300,7 @@ async function main() {
 async function cleanup() {
   for (const s of servers) {
     try {
-      s.kill("SIGKILL");
+      killTree(s);
     } catch {
       /* ignore */
     }
@@ -1296,7 +1326,8 @@ async function cleanup() {
 async function ac8Main() {
   const flag = process.argv.indexOf("--device-engine");
   const engine = flag === -1 ? "sqlite" : process.argv[flag + 1];
-  if (!["sqlite", "postgres"].includes(engine)) throw new Error(`--device-engine must be sqlite or postgres, got ${engine}`);
+  if (!["sqlite", "postgres"].includes(engine))
+    throw new Error(`--device-engine must be sqlite or postgres, got ${engine}`);
   const { runAc8, businessState, diffStates } = await import(
     new URL("../../scripts/parity/lib/syncAc8.mjs", import.meta.url).href
   );
@@ -1305,15 +1336,31 @@ async function ac8Main() {
   // --device-server <server.mjs>: desktops run a packaged build (T119 re-runs this on the release candidate).
   const ds = process.argv.indexOf("--device-server");
   const deviceServer = ds === -1 ? undefined : process.argv[ds + 1];
-  const r = await runAc8({ deviceEngine: engine, refreshTemplate: process.argv.includes("--refresh-template"), keep: KEEP, restoreScenario: withRestore, deviceServer });
+  const r = await runAc8({
+    deviceEngine: engine,
+    refreshTemplate: process.argv.includes("--refresh-template"),
+    keep: KEEP,
+    restoreScenario: withRestore,
+    deviceServer,
+  });
   if (withRestore) {
     // T110 / quickstart §6 — restore on synced device B (owner decision 2026-10-05: option b).
     section("Restore on synced device B");
     const rr = r.restoreReport;
     const status = r.log.find((l) => l.label === "restore.B.status")?.data;
     const runs = r.log.find((l) => l.label === "restore.B.runs")?.data ?? [];
-    check("sync paused after the restore (first run reconciles, pushes nothing)", runs[0]?.restore != null && runs[0].pushed === 0, JSON.stringify(runs[0]?.restore ?? runs[0]));
-    check("reconcile finished: phase done under a NEW sync identity", status?.phase === "done" && Boolean(status?.newDeviceId) && status.newDeviceId !== "44444444-4444-4444-8444-444444444444", JSON.stringify(status));
+    check(
+      "sync paused after the restore (first run reconciles, pushes nothing)",
+      runs[0]?.restore != null && runs[0].pushed === 0,
+      JSON.stringify(runs[0]?.restore ?? runs[0]),
+    );
+    check(
+      "reconcile finished: phase done under a NEW sync identity",
+      status?.phase === "done" &&
+        Boolean(status?.newDeviceId) &&
+        status.newDeviceId !== "44444444-4444-4444-8444-444444444444",
+      JSON.stringify(status),
+    );
     const hubNew = r.tables.hub.sync_devices.find((d) => d.id === status?.newDeviceId);
     const hubOthers = r.tables.hub.sync_devices.filter((d) => d.id !== status?.newDeviceId);
     check(
@@ -1322,45 +1369,104 @@ async function ac8Main() {
       `${r.tables.hub.sync_devices.length} hub devices`,
     );
     const pushedIds = new Set(rr.pushedAfter.map((p) => p.entityId));
-    check("units the hub already held were NOT pushed again (SY-7)", rr.pendingAtBackup.every((id) => !pushedIds.has(id)), `pushed after restore: ${rr.pushedAfter.length}`);
-    check("units pushed after the restore carry the new identity", rr.pushedAfter.every((p) => p.syncDeviceId === status?.newDeviceId), JSON.stringify(rr.pushedAfter.map((p) => p.syncDeviceId)));
+    check(
+      "units the hub already held were NOT pushed again (SY-7)",
+      rr.pendingAtBackup.every((id) => !pushedIds.has(id)),
+      `pushed after restore: ${rr.pushedAfter.length}`,
+    );
+    check(
+      "units pushed after the restore carry the new identity",
+      rr.pushedAfter.every((p) => p.syncDeviceId === status?.newDeviceId),
+      JSON.stringify(rr.pushedAfter.map((p) => p.syncDeviceId)),
+    );
     const bOutbox = new Map(r.tables.b.sync_outbox.map((u) => [u.entity_id, u.status]));
-    check("restored pending units acknowledged as synced locally", rr.pendingAtBackup.every((id) => bOutbox.get(id) === "synced"), rr.pendingAtBackup.map((id) => bOutbox.get(id)).join(","));
+    check(
+      "restored pending units acknowledged as synced locally",
+      rr.pendingAtBackup.every((id) => bOutbox.get(id) === "synced"),
+      rr.pendingAtBackup.map((id) => bOutbox.get(id)).join(","),
+    );
     const bInvoices = new Set(r.tables.b.invoices.map((i) => i.id));
-    check("B got its own post-backup work back from the hub", rr.postBackup.every((id) => bInvoices.has(id)), `${rr.postBackup.filter((id) => bInvoices.has(id)).length}/${rr.postBackup.length}`);
-    check("B got the peer's newer data", rr.peerNewer.every((id) => bInvoices.has(id)));
-    const idsOf = (t) => r.tables[t].invoices.map((i) => i.id).sort().join(",");
-    check("A, B and the hub hold the same invoices (61, no duplicate)", idsOf("a") === idsOf("hub") && idsOf("b") === idsOf("hub") && r.tables.hub.invoices.length === 61, `hub=${r.tables.hub.invoices.length} a=${r.tables.a.invoices.length} b=${r.tables.b.invoices.length}`);
+    check(
+      "B got its own post-backup work back from the hub",
+      rr.postBackup.every((id) => bInvoices.has(id)),
+      `${rr.postBackup.filter((id) => bInvoices.has(id)).length}/${rr.postBackup.length}`,
+    );
+    check(
+      "B got the peer's newer data",
+      rr.peerNewer.every((id) => bInvoices.has(id)),
+    );
+    const idsOf = (t) =>
+      r.tables[t].invoices
+        .map((i) => i.id)
+        .sort()
+        .join(",");
+    check(
+      "A, B and the hub hold the same invoices (61, no duplicate)",
+      idsOf("a") === idsOf("hub") &&
+        idsOf("b") === idsOf("hub") &&
+        r.tables.hub.invoices.length === 61,
+      `hub=${r.tables.hub.invoices.length} a=${r.tables.a.invoices.length} b=${r.tables.b.invoices.length}`,
+    );
     const numbers = r.tables.hub.invoices.map((i) => i.number);
     check("no duplicate document number on the hub", new Set(numbers).size === numbers.length);
   }
-  const state = { hub: businessState(r.tables.hub), A: businessState(r.tables.a), B: businessState(r.tables.b) };
+  const state = {
+    hub: businessState(r.tables.hub),
+    A: businessState(r.tables.a),
+    B: businessState(r.tables.b),
+  };
   const numbers = (t) => t.invoices.map((row) => JSON.parse(row).number).sort();
   const expectedInvoices = withRestore ? 61 : 50;
-  for (const node of ["hub", "A", "B"]) check(`${node} holds ${expectedInvoices} invoices`, state[node].invoices.length === expectedInvoices, `${state[node].invoices.length}`);
+  for (const node of ["hub", "A", "B"])
+    check(
+      `${node} holds ${expectedInvoices} invoices`,
+      state[node].invoices.length === expectedInvoices,
+      `${state[node].invoices.length}`,
+    );
   check(
     "A, B and the hub hold the same invoice numbers",
-    JSON.stringify(numbers(state.A)) === JSON.stringify(numbers(state.hub)) && JSON.stringify(numbers(state.B)) === JSON.stringify(numbers(state.hub)),
+    JSON.stringify(numbers(state.A)) === JSON.stringify(numbers(state.hub)) &&
+      JSON.stringify(numbers(state.B)) === JSON.stringify(numbers(state.hub)),
   );
   const status = r.log.find((l) => l.label === "final.sync-status")?.data ?? {};
-  for (const node of ["A", "B"]) check(`${node} outbox drained`, status[node]?.pendingCount === 0, JSON.stringify(status[node]?.statusCounts ?? null));
+  for (const node of ["A", "B"])
+    check(
+      `${node} outbox drained`,
+      status[node]?.pendingCount === 0,
+      JSON.stringify(status[node]?.statusCounts ?? null),
+    );
   const resolved = r.log.find((l) => l.label === "resolve.keep-server")?.data ?? [];
-  check("the same-record edit opened exactly one hub conflict, resolved keep-server", resolved.length === 1 && resolved[0].status === 200, JSON.stringify(resolved));
+  check(
+    "the same-record edit opened exactly one hub conflict, resolved keep-server",
+    resolved.length === 1 && resolved[0].status === 200,
+    JSON.stringify(resolved),
+  );
   // Editing a customer after losing a conflict still syncs, and every node agrees on the version.
   const c0 = (tables) => tables.parties.find((p) => p.id === r.ids.customers[0]);
   const edits = ["hub", "a", "b"].map((n) => c0(r.tables[n]));
   check(
     "an edit made after losing a conflict reaches the hub and the other device (same name, phone, version)",
-    edits.every((p) => p?.name === "AC8 Customer 0 (renamed on B)" && p?.phone === "0933-000-B" && p?.version === edits[0]?.version),
+    edits.every(
+      (p) =>
+        p?.name === "AC8 Customer 0 (renamed on B)" &&
+        p?.phone === "0933-000-B" &&
+        p?.version === edits[0]?.version,
+    ),
     JSON.stringify(edits.map((p) => ({ name: p?.name, phone: p?.phone, version: p?.version }))),
   );
   for (const node of ["A", "B"]) {
     const d = diffStates(state[node], state.hub, node, "hub");
-    check(`${node} business state identical to the hub (every business table)`, d.length === 0, d.length ? `\n      ${d.join("\n      ")}` : "");
+    check(
+      `${node} business state identical to the hub (every business table)`,
+      d.length === 0,
+      d.length ? `\n      ${d.join("\n      ")}` : "",
+    );
   }
   section("Summary");
   const failed = results.filter((x) => !x.pass);
-  console.log(`  ${results.length - failed.length}/${results.length} checks passed (${r.wire.length} device↔hub exchanges)`);
+  console.log(
+    `  ${results.length - failed.length}/${results.length} checks passed (${r.wire.length} device↔hub exchanges)`,
+  );
   return failed.length === 0;
 }
 

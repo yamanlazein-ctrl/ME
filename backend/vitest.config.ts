@@ -21,7 +21,14 @@ if (preservedTestDbUrl) process.env.TEST_DB_URL = preservedTestDbUrl;
 if (process.env.DB_ENGINE === "sqlite") {
   delete process.env.DATABASE_URL;
   delete process.env.TEST_DB_URL;
-  process.env.SQLITE_PATH ??= path.join(os.tmpdir(), `motard-test-${process.pid}-${Date.now()}.db`);
+  // The runtime's layout is <root>/data/motard.db (backups go to <root>/backups). A bare file in the
+  // temp dir made the backup root its PARENT — "/" on Linux, so pre-operation backups hit EACCES (L-01).
+  process.env.SQLITE_PATH ??= path.join(
+    os.tmpdir(),
+    `motard-test-${process.pid}-${Date.now()}`,
+    "data",
+    "motard.db",
+  );
 }
 
 export default defineConfig({

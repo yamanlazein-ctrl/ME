@@ -335,7 +335,10 @@ function RollRow({
             </div>
           </div>
           {/* Remaining pieces, like the colour/fabric totals (was the count at purchase). */}
-          <div className="whitespace-nowrap text-sm font-bold text-primary tabular-nums" title={`من ${roll.pieces ?? 1}`}>
+          <div
+            className="whitespace-nowrap text-sm font-bold text-primary tabular-nums"
+            title={`من ${roll.pieces ?? 1}`}
+          >
             {roll.remainingPieces ?? 0}
           </div>
           <div className="truncate text-sm text-foreground tabular-nums">{roll.dyeBatch}</div>

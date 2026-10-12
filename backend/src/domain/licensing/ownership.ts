@@ -35,13 +35,7 @@ export type ControlPlane = "vendor" | "customer_org" | "local_erp";
  * and `secrets.license.token.*` are caches (see `licenseAuthority.ts`).
  */
 export type CanonicalIdentity =
-  | "License"
-  | "Installation"
-  | "DeviceSeat"
-  | "SyncDevice"
-  | "Tenant"
-  | "User"
-  | "Invitation";
+  "License" | "Installation" | "DeviceSeat" | "SyncDevice" | "Tenant" | "User" | "Invitation";
 
 /** Mutations that only the Vendor Control Plane may perform. */
 export const VENDOR_ONLY_ACTIONS = [

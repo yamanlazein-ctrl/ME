@@ -19,7 +19,12 @@ delete process.env.DATABASE_URL;
 delete process.env.DESKTOP_SEED_PATH;
 
 const tenantId = randomUUID();
-const ctx = { tenantId, userId: randomUUID(), userRole: "admin", userName: "tester" } as TenantContext;
+const ctx = {
+  tenantId,
+  userId: randomUUID(),
+  userRole: "admin",
+  userName: "tester",
+} as TenantContext;
 let runtime: typeof import("@/infrastructure/orm/sqlite/runtime.js");
 let repo: import("@/infrastructure/repositories/sqlite/SqliteExpenseRepository.js").SqliteExpenseRepository;
 
@@ -28,7 +33,9 @@ beforeAll(async () => {
   const tx = await import("@/infrastructure/orm/sqlite/transaction.js");
   await runtime.ensureSqliteRuntime();
   await tx.runInTransaction(async (t) => {
-    await t.execute(sql`INSERT INTO tenants (id, name, slug) VALUES (${tenantId}, 'Expenses', 'expenses')`);
+    await t.execute(
+      sql`INSERT INTO tenants (id, name, slug) VALUES (${tenantId}, 'Expenses', 'expenses')`,
+    );
     for (let i = 1; i <= 25; i++) {
       const day = String(i).padStart(2, "0");
       const category = i === 7 ? "كهرباء" : "إيجار";
@@ -37,7 +44,8 @@ beforeAll(async () => {
         VALUES (${tenantId}, ${`EXP-${day}`}, ${category}, ${`دفعة ${day}`}, 1000, 'SYP', ${`2026-03-${day}`}, 'cash')`);
     }
   });
-  const { SqliteExpenseRepository } = await import("@/infrastructure/repositories/sqlite/SqliteExpenseRepository.js");
+  const { SqliteExpenseRepository } =
+    await import("@/infrastructure/repositories/sqlite/SqliteExpenseRepository.js");
   repo = new SqliteExpenseRepository(tx.sqliteDb() as never);
 }, 60_000);
 
@@ -63,8 +71,14 @@ describe("expense list (SQLite)", () => {
   });
 
   it("search matches number, description and the expense name (category)", async () => {
-    expect((await repo.list({ search: "EXP-03" }, ctx)).data.map((e) => e.number)).toEqual(["EXP-03"]);
-    expect((await repo.list({ search: "دفعة 04" }, ctx)).data.map((e) => e.number)).toEqual(["EXP-04"]);
-    expect((await repo.list({ search: "كهرباء" }, ctx)).data.map((e) => e.number)).toEqual(["EXP-07"]);
+    expect((await repo.list({ search: "EXP-03" }, ctx)).data.map((e) => e.number)).toEqual([
+      "EXP-03",
+    ]);
+    expect((await repo.list({ search: "دفعة 04" }, ctx)).data.map((e) => e.number)).toEqual([
+      "EXP-04",
+    ]);
+    expect((await repo.list({ search: "كهرباء" }, ctx)).data.map((e) => e.number)).toEqual([
+      "EXP-07",
+    ]);
   });
 });

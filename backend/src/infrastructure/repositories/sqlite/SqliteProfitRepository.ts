@@ -93,10 +93,14 @@ export class SqliteProfitRepository implements IProfitRepository {
         currency: invoices.currency,
         revenue: invoices.subtotal,
         discount: invoices.discount,
-        lineCogs: scaledNumber(sql`COALESCE(SUM(
+        lineCogs: scaledNumber(
+          sql`COALESCE(SUM(
           ${mulRound(invoiceLines.quantityKg, 2, sql`COALESCE(${invoiceLines.costPerKg}, 0)`, 4, 2)}
-        ), 0)`, 2),
-        ledgerCogs: scaledNumber(sql`COALESCE((
+        ), 0)`,
+          2,
+        ),
+        ledgerCogs: scaledNumber(
+          sql`COALESCE((
           SELECT SUM(${ledgerEntries.debit} - ${ledgerEntries.credit})
           FROM ${ledgerEntries}
           WHERE ${ledgerEntries.tenantId} = ${invoices.tenantId}
@@ -104,7 +108,9 @@ export class SqliteProfitRepository implements IProfitRepository {
             AND ${ledgerEntries.type} = 'cogs_expense'
             AND ${ledgerEntries.referenceType} = 'sales_invoice'
             AND ${ledgerEntries.referenceId} = ${invoices.id}
-        ), 0)`, 2),
+        ), 0)`,
+          2,
+        ),
       })
       .from(invoices)
       .innerJoin(invoiceLines, eq(invoiceLines.invoiceId, invoices.id))
@@ -173,15 +179,21 @@ export class SqliteProfitRepository implements IProfitRepository {
         date: returns.date,
         originalInvoiceId: returns.originalInvoiceId,
         currency: returns.currency,
-        revenue: scaledNumber(sql`COALESCE(SUM(${mulRound(returnLines.quantityKg, 2, returnLines.pricePerKg, 4, 2)}), 0)`, 2),
-        cogs: scaledNumber(sql`COALESCE((
+        revenue: scaledNumber(
+          sql`COALESCE(SUM(${mulRound(returnLines.quantityKg, 2, returnLines.pricePerKg, 4, 2)}), 0)`,
+          2,
+        ),
+        cogs: scaledNumber(
+          sql`COALESCE((
           SELECT SUM(${ledgerEntries.credit} - ${ledgerEntries.debit})
           FROM ${ledgerEntries}
           WHERE ${ledgerEntries.tenantId} = ${returns.tenantId}
             AND ${ledgerEntries.status} = 'active'
             AND ${ledgerEntries.type} = 'cogs_expense'
             AND ${ledgerEntries.referenceId} = ${returns.id}
-        ), 0)`, 2),
+        ), 0)`,
+          2,
+        ),
       })
       .from(returns)
       .leftJoin(returnLines, eq(returnLines.returnId, returns.id))
@@ -376,14 +388,17 @@ export class SqliteProfitRepository implements IProfitRepository {
       ...(query.currency ? [eq(invoices.currency, query.currency)] : []),
     );
 
-    const returnTotalSql = scaledNumber(sql`COALESCE((
+    const returnTotalSql = scaledNumber(
+      sql`COALESCE((
       SELECT SUM(${mulRound(returnLines.quantityKg, 2, returnLines.pricePerKg, 4, 2)})
       FROM ${returnLines}
       INNER JOIN ${returns} ON ${returns.id} = ${returnLines.returnId}
       WHERE ${returns.originalInvoiceId} = ${invoices.id}
         AND ${returns.tenantId} = ${invoices.tenantId}
         AND ${returns.status} = 'active'
-    ), 0)`, 2);
+    ), 0)`,
+      2,
+    );
 
     const rows = await this.db
       .select({

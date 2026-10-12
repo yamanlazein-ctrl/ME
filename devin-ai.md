@@ -15,22 +15,24 @@
 الأمان للعمليات المالية والمخزنية: مقبول مع تحفُّظ — الثوابت المحاسبية مفروضة في قاعدة البيانات لا في الواجهة فقط، وهذا هو الدليل الأقوى على الجاهزية.
 
 ب. بطاقة التقييم الهندسية (Scorecard 0–5)
-#	الفئة	الدرجة	الثقة	ما يمنع درجة أعلى
-1	Architecture & modularity	4	High	ازدواج منطق الإبطال (invalidation) في الواجهة
-2	Dependency management	3	Medium	عدم تطابق مقصود drizzle-orm/drizzle-kit؛ drizzle-kit كتبعية prod في جذر المشروع
-3	Code correctness	4	Medium	مسارات as never/as any عند حدود المزامنة
-4	ERP business logic	4	High	قواعد FX/تقييم المرتجع معقّدة وموثّقة لكن قليلة التغطية السلوكية
-5	Database integrity	4	High	ازدواجية db:push مقابل db:migrate
-6	Sync & offline reliability	3	Medium	تطبيق الوحدة على الـ hub غير ملفوف في معاملة واحدة (tombstone+delete)
-7	Frontend state & API	3	Medium	قوائم invalidation مكرّرة يدوياً بدل الدالة المركزية
-8	Security	4	Medium	openLoopback يمنح super-admin بلا مصادقة على loopback
-9	Test quality	2	High	اعتماد واسع على اختبارات نصّية-بنيوية هشّة
-10	Performance & scale	NOT ASSESSED	—	لا توجد قياسات حمل؛ لم أُنفّذ شيئاً
-11	Build & deployment	3	Medium	مسار الهجرة المزدوج + عدم تنفيذ البناء هنا
-12	Backup & recovery	4	Medium	توجد استعادة ذرّية مُختبَرة؛ لم أتحقّق تشغيلياً
-13	Observability	4	Medium	Sentry + pino + boot_log + safe-mode؛ جيّد
-14	Documentation	4	High	PROJECT-STATUS.md وdecisions.md صريحة ونزيهة
-15	Long-term change safety	3	Medium	حاجز الانحدار الحقيقي ضعيف بسبب جودة الاختبارات
+
+# الفئة الدرجة الثقة ما يمنع درجة أعلى
+
+1 Architecture & modularity 4 High ازدواج منطق الإبطال (invalidation) في الواجهة
+2 Dependency management 3 Medium عدم تطابق مقصود drizzle-orm/drizzle-kit؛ drizzle-kit كتبعية prod في جذر المشروع
+3 Code correctness 4 Medium مسارات as never/as any عند حدود المزامنة
+4 ERP business logic 4 High قواعد FX/تقييم المرتجع معقّدة وموثّقة لكن قليلة التغطية السلوكية
+5 Database integrity 4 High ازدواجية db:push مقابل db:migrate
+6 Sync & offline reliability 3 Medium تطبيق الوحدة على الـ hub غير ملفوف في معاملة واحدة (tombstone+delete)
+7 Frontend state & API 3 Medium قوائم invalidation مكرّرة يدوياً بدل الدالة المركزية
+8 Security 4 Medium openLoopback يمنح super-admin بلا مصادقة على loopback
+9 Test quality 2 High اعتماد واسع على اختبارات نصّية-بنيوية هشّة
+10 Performance & scale NOT ASSESSED — لا توجد قياسات حمل؛ لم أُنفّذ شيئاً
+11 Build & deployment 3 Medium مسار الهجرة المزدوج + عدم تنفيذ البناء هنا
+12 Backup & recovery 4 Medium توجد استعادة ذرّية مُختبَرة؛ لم أتحقّق تشغيلياً
+13 Observability 4 Medium Sentry + pino + boot_log + safe-mode؛ جيّد
+14 Documentation 4 High PROJECT-STATUS.md وdecisions.md صريحة ونزيهة
+15 Long-term change safety 3 Medium حاجز الانحدار الحقيقي ضعيف بسبب جودة الاختبارات
 الدرجات تقدير منظّم لا ضمان احتمالي للفشل.
 
 ج. سجل النتائج (Findings Register)
@@ -125,14 +127,14 @@ PostgresInvoiceRepository.ts:1152-1196 sync-invariants.test.ts:315-323
 اقتران خفي/مشبوه: مسار تطبيق المزامنة غير الذرّي (F-03)؛ قوائم invalidation المكرّرة (F-05).
 
 هـ. تغطية الملفات (Coverage Register)
-المجال	المسؤولية	العمق	ملاحظات
-backend/src/infrastructure/repositories	المستودعات (invoice/voucher/return/party/cashbox/ledger)	Deep	محور المنطق المالي
-backend/src/application/use-cases/sync	محرّك المزامنة (enqueue/materialize)	Deep	أعلى مخاطر التغيير
-backend/src/infrastructure/orm (schemas/migrations/rls/drizzle)	المخطط وRLS والهجرات	Deep/Partial	0002_snapshot.json ضخم — فحص جزئي
-backend/tests + scripts/verify-*	الاختبارات	Deep (قراءة) / NOT RUN (تنفيذ)	انظر F-02
-src/ (الواجهة)	hooks/api/http	Partial	عيّنات تمثيلية
-desktop/src-tauri	إقلاع Rust	Partial	stack.rs فحص جزئي
-admin-dashboard/, packages/shared/	لوحة الترخيص / المشترك	Not inspected / Partial	لم يُفحص admin-dashboard
+المجال المسؤولية العمق ملاحظات
+backend/src/infrastructure/repositories المستودعات (invoice/voucher/return/party/cashbox/ledger) Deep محور المنطق المالي
+backend/src/application/use-cases/sync محرّك المزامنة (enqueue/materialize) Deep أعلى مخاطر التغيير
+backend/src/infrastructure/orm (schemas/migrations/rls/drizzle) المخطط وRLS والهجرات Deep/Partial 0002_snapshot.json ضخم — فحص جزئي
+backend/tests + scripts/verify-* الاختبارات Deep (قراءة) / NOT RUN (تنفيذ) انظر F-02
+src/ (الواجهة) hooks/api/http Partial عيّنات تمثيلية
+desktop/src-tauri إقلاع Rust Partial stack.rs فحص جزئي
+admin-dashboard/, packages/shared/ لوحة الترخيص / المشترك Not inspected / Partial لم يُفحص admin-dashboard
 ملفات لا تُعدَّل باستهتار (أعلى blast radius): backend/src/infrastructure/orm/drizzle.ts (مُحتكِر GUC/pool)، packages/shared (سلطة الحساب المالي الوحيدة)، syncMaterialize.ts، rls/enable-rls.sql.
 
 و. تقرير كفاية الاختبارات (مختصر)
@@ -148,4 +150,3 @@ admin-dashboard/, packages/shared/	لوحة الترخيص / المشترك	Not 
 هندسة سليمة؟ نعم إجمالاً (فصل طبقات حقيقي + مصدر حساب واحد). 2. بنية المجلدات مناسبة؟ نعم. 3. حدود الوحدات حقيقية أم شكلية؟ حقيقية ومفروضة باختبارات بنيوية (مثل حصر pg/GUC في drizzle.ts). 4. التبعيات صحّية؟ غالباً، مع F-07. 5. المكتبات الخارجية مُستخدمة جيداً؟ نعم. 6. المرافق المشتركة موثوقة؟ نعم (@erp/shared سلطة واحدة للحساب). 7. ازدواج/تناقض في منطق العمل؟ محدود (F-05, F-08). 8. عيوب صحّة حرجة؟ لا عيب مالي مؤكّد؛ المخاطر في الترقية والذرّية. 9. عيوب أصغر؟ نعم (F-06, F-07). 10. هل تغيير صغير قد يكسر شيئاً بعيداً؟ نعم في المزامنة والواجهة بسبب ضعف الاختبارات السلوكية. 11. دليل الهشاشة؟ F-02 (حاجز انحدار نصّي) + حادثة فقدان البيانات الموثّقة. 12. هل تحمي الاختبارات أهم القواعد؟ جزئياً (قاعدة البيانات نعم، المزامنة نصّياً). 13. اعتماد مفرط على mocks؟ لا؛ الأسوأ هو مطابقة النص لا الـ mocks. 14. قاعدة البيانات آمنة تحت الفشل/التزامن؟ نعم غالباً (معاملات + FOR UPDATE SKIP LOCKED + قيود توازن). 15. المزامنة آمنة تحت الانقطاع/الإعادة؟ غالباً نعم (outbox + lease + idempotency + stale-base)، مع تحفّظ F-03. 16. تطوّر المخطط بأمان؟ مخاطر (F-01). 17. التخويل في الحدّ الصحيح؟ نعم (RLS في قاعدة البيانات)، مع تحفّظ F-04. 18. قابل للتشخيص؟ نعم (Sentry/pino/boot_log/safe-mode). 19. الإقلاع/الحزم/الترقية/النسخ مُختبَرة؟ موثّقة وادُّعي تشغيلها، لكن NOT RUN هنا. 20. صيانة عشر سنوات؟ مُحتملة إن عولجت جودة الاختبارات ومسار الهجرة. 21. أخطر نتيجة = F-01. 22. أول ما يُصلَح = F-01 ثم F-02. 23. لا يُعاد هيكلته قبل التغطية = محرّك المزامنة والمستودعات المالية. 24. الدليل الناقص = تنفيذ فعلي للاختبارات + قياس أداء على حجم واقعي.
 ملاحظة ختامية
 لم تُعدَّل أي ملفات أو قواعد بيانات، ولم تُكشف أي أسرار، ولم يُدَّعَ أي «ضمان عشر سنوات». الفصل بين «المُثبَت بالكود» و«المُدَّعى في الوثائق» و«غير المُتحقَّق منه (NOT RUN)» حُفظ طوال التقرير. لتحويل الحالة من AMBER إلى GREEN يلزم: إصلاح مسار الهجرة الموحّد، وتحويل الثوابت المالية/المزامنة الحرجة إلى اختبارات سلوكية على قاعدة حقيقية، وتشغيل فعلي موثّق لمجموعة الاختبارات مع تقرير تغطية فروع.
-

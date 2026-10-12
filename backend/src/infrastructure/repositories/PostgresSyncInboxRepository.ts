@@ -141,10 +141,7 @@ export class PostgresSyncInboxRepository implements ISyncInboxRepository {
       if (opts?.excludeSyncDeviceId) {
         // Keep units whose device is unknown (NULL) — only exclude our own.
         conditions.push(
-          or(
-            isNull(syncInbox.syncDeviceId),
-            ne(syncInbox.syncDeviceId, opts.excludeSyncDeviceId),
-          )!,
+          or(isNull(syncInbox.syncDeviceId), ne(syncInbox.syncDeviceId, opts.excludeSyncDeviceId))!,
         );
       }
 

@@ -36,10 +36,7 @@ export interface IDocumentNumberBlockRepository {
     year: number,
   ): Promise<DocumentNumberBlockRow | null>;
 
-  listForDevice(
-    tenantId: UUID,
-    syncDeviceId: UUID,
-  ): Promise<DocumentNumberBlockRow[]>;
+  listForDevice(tenantId: UUID, syncDeviceId: UUID): Promise<DocumentNumberBlockRow[]>;
 
   insertClaimed(input: ClaimDocumentNumberBlockInput): Promise<DocumentNumberBlockRow>;
 

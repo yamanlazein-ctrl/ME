@@ -23,12 +23,14 @@ describe("entryPriceReference", () => {
   });
 
   it("labels a printing-factory receive and a direct stock-in", () => {
-    expect(entryPriceReference({ ...purchased, entrySource: "press", entryReference: "PJ-7" }, "USD", 0)?.sourceLabel).toBe(
-      "استلام من المطبعة PJ-7",
-    );
-    expect(entryPriceReference({ ...purchased, entrySource: "stock_in", entryReference: null }, "USD", 0)?.sourceLabel).toBe(
-      "إدخال مباشر للمخزون",
-    );
+    expect(
+      entryPriceReference({ ...purchased, entrySource: "press", entryReference: "PJ-7" }, "USD", 0)
+        ?.sourceLabel,
+    ).toBe("استلام من المطبعة PJ-7");
+    expect(
+      entryPriceReference({ ...purchased, entrySource: "stock_in", entryReference: null }, "USD", 0)
+        ?.sourceLabel,
+    ).toBe("إدخال مباشر للمخزون");
   });
 
   it("flags a sale price below the entry price (same currency only)", () => {

@@ -26,9 +26,9 @@ export interface IAuthRepository {
 
   findUserByIdForAuth(id: string, tenantId: string): Promise<AuthUserRow | null>;
 
-  listActiveUsersForTenant(tenantId: string): Promise<
-    { id: UUID; name: string; email: string; role: string; hasPin: boolean }[]
-  >;
+  listActiveUsersForTenant(
+    tenantId: string,
+  ): Promise<{ id: UUID; name: string; email: string; role: string; hasPin: boolean }[]>;
 
   setPinHash(userId: string, tenantId: string, pinHash: string): Promise<void>;
 

@@ -63,12 +63,13 @@ async function main() {
         `SELECT id FROM invoices WHERE tenant_id = $1 ORDER BY date DESC LIMIT 1`,
         [tenantId],
       );
-      const num = r.rows[0] ? (
-        await client.query(
-          `SELECT id FROM invoices WHERE tenant_id = $1 AND number = $2`,
-          [tenantId, (await client.query(`SELECT number FROM invoices WHERE id = $1`, [r.rows[0].id])).rows[0]?.number],
-        )
-      ) : { rowCount: 0 };
+      const num = r.rows[0]
+        ? await client.query(`SELECT id FROM invoices WHERE tenant_id = $1 AND number = $2`, [
+            tenantId,
+            (await client.query(`SELECT number FROM invoices WHERE id = $1`, [r.rows[0].id]))
+              .rows[0]?.number,
+          ])
+        : { rowCount: 0 };
       return { rows: num.rowCount };
     });
 

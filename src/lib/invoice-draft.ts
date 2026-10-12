@@ -22,7 +22,10 @@ export interface SaleDraft {
 export function saveSaleDraft(draft: Omit<SaleDraft, "savedAt">): void {
   if (typeof window === "undefined") return;
   try {
-    localStorage.setItem(SALE_DRAFT_KEY, JSON.stringify({ ...draft, savedAt: new Date().toISOString() }));
+    localStorage.setItem(
+      SALE_DRAFT_KEY,
+      JSON.stringify({ ...draft, savedAt: new Date().toISOString() }),
+    );
   } catch {
     // Storage full or blocked — losing the draft must never break the form.
   }

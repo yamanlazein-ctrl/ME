@@ -43,7 +43,10 @@ try {
     liveIndexes[row.indexname] = normalizeDef(row.indexdef);
   }
   if (!existsSync(META)) {
-    console.log("No committed fingerprint yet — listing live index count:", Object.keys(liveIndexes).length);
+    console.log(
+      "No committed fingerprint yet — listing live index count:",
+      Object.keys(liveIndexes).length,
+    );
     process.exit(0);
   }
   const expected = JSON.parse(readFileSync(META, "utf8"));
