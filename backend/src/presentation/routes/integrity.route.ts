@@ -8,11 +8,38 @@ import {
 } from "../../infrastructure/integrity/dataIntegrityManifest.js";
 import type { TenantContext } from "../../domain/types/index.js";
 import { hasAdminPrivileges } from "../../infrastructure/http/middleware/rbac.middleware.js";
+import { takeHubFingerprint } from "../../infrastructure/integrity/hubFingerprint.js";
+import { cutoverPreflight } from "../../infrastructure/integrity/cutoverPreflight.js";
 
 export function createIntegrityRouter(
   auth: (req: Request, res: Response, next: () => void) => void,
+  deps?: Parameters<typeof cutoverPreflight>[0],
 ): Router {
   const router = Router();
+
+  // MIG-04: data fingerprint of this company (compare old vs new server before switching DNS).
+  router.get("/integrity/fingerprint", auth, async (req: Request, res: Response) => {
+    const ctx = (req as unknown as { tenantContext?: TenantContext }).tenantContext;
+    if (!ctx || !hasAdminPrivileges(ctx.userRole)) {
+      res.status(403).json({ code: "FORBIDDEN", message: "غير مصرح" });
+      return;
+    }
+    res.json(await takeHubFingerprint(ctx.tenantId));
+  });
+
+  // MIG-08: secrets / licence / CORS / device-credential readiness of THIS host.
+  router.get("/integrity/cutover-preflight", auth, async (req: Request, res: Response) => {
+    const ctx = (req as unknown as { tenantContext?: TenantContext }).tenantContext;
+    if (!ctx || !hasAdminPrivileges(ctx.userRole)) {
+      res.status(403).json({ code: "FORBIDDEN", message: "غير مصرح" });
+      return;
+    }
+    if (!deps) {
+      res.status(501).json({ code: "NOT_AVAILABLE", message: "غير متاح" });
+      return;
+    }
+    res.json(await cutoverPreflight(deps, ctx.tenantId));
+  });
 
   router.get("/integrity/status", auth, async (_req: Request, res: Response) => {
     const status = getSafeModeStatus();

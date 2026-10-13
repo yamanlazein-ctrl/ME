@@ -69,24 +69,11 @@ jobs:
       - name: Backend suite on SQLite (T-09)
         run: cd backend && npm run test:sqlite
 
-      - name: Desktop resource-manifest unit gate (DFP-001 / DFP-008)
-        run: node --test desktop/scripts/validate-resource-manifest.test.mjs
-
-      # DT-06: every command registered in main.rs `invoke_handler` must appear in build.rs
-      # APP_COMMANDS (the app manifest that grants ACL permissions) — otherwise the command is
-      # registered but ACL-dead and the shipped build silently breaks that feature
-      # (pick_backup_file = desktop restore-from-file; google_*_cmd = the Drive screen).
-      - name: Tauri IPC ACL wiring gate (DT-06)
-        run: node --test desktop/scripts/ipc-acl-wiring.test.mjs
-
       - name: Print blank-first-page contract (DFP-002)
         run: npx vitest run src/components/print/blankFirstPage.test.ts src/components/print/PrintDocument.header.test.tsx
 
       - name: Invitation atomic redeem unit gate (DFP-005 / DFP-006)
         run: cd backend && npx vitest run tests/invitation-atomic-redeem.test.ts tests/invitation-license-link.test.ts
-
-      - name: Desktop symbols + CSP + backup + docs + staging + CI gates (DFP-036 / 026 / 028 / 025 / 001 / 008)
-        run: node --test desktop/scripts/dfp036-symbols.test.mjs desktop/scripts/dfp026-csp.test.mjs desktop/scripts/dfp028-backup.test.mjs desktop/scripts/dfp025-doc-targets.test.mjs desktop/scripts/dfp001-staging-gate.test.mjs desktop/scripts/dfp008-ci-gates.test.mjs
 
       - name: Credential / lockfile / audit / backup fixture (DFP-029 / 032 / 031 / 028)
         run: npx vitest run src/dfp029-credentials.test.ts src/dfp032-lockfile.test.ts src/dfp031-audit-hygiene.test.ts src/dfp028-verify-fixture.test.ts
@@ -194,13 +181,14 @@ jobs:
           npm run test:api
           kill "$(cat /tmp/erp-api.pid)" || true
 
-      - name: DFP-008 CI gate contract
-        run: node --test desktop/scripts/dfp008-ci-gates.test.mjs
-
       # DFP-031: M4/M5 flipped to `it(...)` — AUDIT_STRICT optional for audit-findings
       # when run via test:integration against a live API.
       - name: Lint
         run: npm run lint
+
+      # TEMP-STAT-01: root lint ignores backend/**, so formatting drift there was never caught.
+      - name: Formatting (prettier --check, whole repo)
+        run: npx prettier --check .
 
       - name: Dependency audit (advisory)
         run: npm run clean:code || echo "Knip advisory only"
@@ -247,65 +235,25 @@ jobs:
         working-directory: backend
         run: npm run test:sync-multidevice
 
-  # DFP-008: Windows packaging gates that cannot run on ubuntu-latest.
+  # Windows desktop shell (desktop-app/, ADR-001): keys, startup decision, pre-update copy,
+  # pipe parser, env contract. The full installer lifecycle is tested by hand (see the
+  # release readiness report); `tauri build` needs the licence signing key, which CI does not hold.
   desktop-windows:
     runs-on: windows-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: "22"
-          cache: "npm"
-
-      - name: Install root dependencies
-        run: npm ci
-
-      - name: Stage portable Node runtime (DFP-001)
-        run: node desktop/scripts/stage-node-runtime.mjs
-
-      - name: Resource manifest unit tests
-        run: node --test desktop/scripts/validate-resource-manifest.test.mjs
-
-      # DT-06: the ACL wiring guard runs here too — this is the job that actually builds the
-      # Windows bundle, so a registered-but-ACL-dead command is caught at packaging time.
-      - name: Tauri IPC ACL wiring gate (DT-06)
-        run: node --test desktop/scripts/ipc-acl-wiring.test.mjs
-
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
 
-      - name: Desktop Rust boot-cleanup unit tests (DFP-003)
-        working-directory: desktop/src-tauri
-        run: cargo test boot_lifecycle -- --nocapture
+      - name: Minimal frontendDist for the compile (pages only)
+        shell: bash
+        run: |
+          mkdir -p desktop-app/build/web desktop-app/build/resources
+          cp desktop-app/src-tauri/pages/* desktop-app/build/web/
+          cp desktop-app/src-tauri/resources/license-public.pem desktop-app/build/resources/
 
-      - name: Desktop Rust kill_and_wait process-tree (DFP-003 / DFP-022)
-        working-directory: desktop/src-tauri
-        run: cargo test kill_and_wait_terminates -- --nocapture
-
-      - name: Desktop Rust env allowlist live dump (DFP-012)
-        working-directory: desktop/src-tauri
-        run: cargo test live_child_env_dump_omits_parent_secret_sentinels -- --nocapture
-
-      - name: Desktop Rust backend port discovery (DFP-009 / Phase 4)
-        working-directory: desktop/src-tauri
-        run: cargo test backend_port -- --nocapture
-
-      - name: Desktop Rust erp database gate (DFP-010)
-        working-directory: desktop/src-tauri
-        run: cargo test ensure_erp_database_fails_when_postgres_unreachable -- --nocapture
-
-      - name: Desktop Rust secret-store fail-closed (DFP-011)
-        working-directory: desktop/src-tauri
-        run: cargo test corrupt_fail_message_documents_explicit_reset_env -- --nocapture
-
-      # T-08: the named filters above are spot checks; this runs every lib + bin
-      # test (111 locally on 2026-10-11).
-      - name: Desktop Rust full test suite (T-08)
-        working-directory: desktop/src-tauri
+      - name: Desktop shell unit tests
+        working-directory: desktop-app/src-tauri
         run: cargo test
-
-      # Full MSI/NSIS build + clean-machine lifecycle remain DFP-004 (manual/VM).
-      # This job fails the PR when Node staging or Rust cleanup regressions land.

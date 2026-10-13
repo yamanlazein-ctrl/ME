@@ -16,7 +16,7 @@
     "**/*.spec.{ts,tsx}",
     "backend/**",
     "admin-dashboard/**",
-    "desktop/**",
+    "desktop-app/**",
     "docs/**",
     "tools/**",
     "src/components/ui/**"

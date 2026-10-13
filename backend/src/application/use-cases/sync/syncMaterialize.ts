@@ -1,4 +1,5 @@
 import { getSyncMaterializeStore } from "../../../infrastructure/repositories/engineStores.js";
+import { invalidateIdentityCache } from "../../../infrastructure/auth/sessionCutoff.js";
 import { resolveDocumentNumberForReplay } from "./syncNumberCollision.js";
 import type { DB } from "../../../infrastructure/orm/drizzle.js";
 import { and, eq } from "drizzle-orm";
@@ -361,16 +362,16 @@ export async function materializeSyncUnit(
     return materializeAdminSnapshot(repos, entityType, payload, ctx);
   }
   if (entityType === "user" && operation === "create") {
-    return materializeUser(payload, ctx);
+    return materializeUser(payload, ctx, meta);
   }
   if (entityType === "user" && operation === "update") {
-    return materializeUser(payload, ctx);
+    return materializeUser(payload, ctx, meta);
   }
   if (entityType === "user" && operation === "deactivate") {
-    return materializeUser(payload, ctx);
+    return materializeUser(payload, ctx, meta);
   }
   if (entityType === "user" && operation === "set-pin") {
-    return materializeUser(payload, ctx);
+    return materializeUser(payload, ctx, meta);
   }
   return { status: "invalid", error: `unsupported sync unit ${entityType}/${operation}` };
 }
@@ -2115,6 +2116,7 @@ async function materializeAdminSnapshot(
 async function materializeUser(
   payload: Record<string, unknown>,
   ctx: TenantContext,
+  meta?: SyncMaterializeMeta,
 ): Promise<MaterializeResult> {
   const snap = payload.snapshot;
   if (!snap || typeof snap !== "object")
@@ -2136,9 +2138,21 @@ async function materializeUser(
       ? s.updatedAt
       : new Date().toISOString();
   try {
-    await (
-      await getSyncMaterializeStore()
-    ).upsertUserSnapshot({
+    const store = await getSyncMaterializeStore();
+    // NEW-01: on the hub (a unit pushed by a device, not canonical hub data) only an admin session may
+    // grant the admin role or change an admin account — the same rule user.route.ts enforces on HTTP.
+    // The transport also admits accountants, so without this a pushed snapshot could escalate.
+    if (!meta?.hubCanonical && ctx.userRole !== "admin") {
+      const currentRole = await store.findUserRole(tenantId, id);
+      if (role === "admin" || currentRole === "admin") {
+        return {
+          status: "invalid",
+          error:
+            "ADMIN_ROLE_RESERVED: only an admin may grant the admin role or change an admin account",
+        };
+      }
+    }
+    await store.upsertUserSnapshot({
       id,
       tenantId,
       name,
@@ -2149,6 +2163,7 @@ async function materializeUser(
       active,
       updatedAt,
     });
+    invalidateIdentityCache(id); // ERP-001: a synced role/active change applies at once
     return { status: "created" };
   } catch (err) {
     return {

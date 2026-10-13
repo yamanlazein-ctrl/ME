@@ -3,7 +3,6 @@ import logoUrl from "@/assets/logo-motard-icon.png";
 import { persistTokens } from "@/infrastructure/auth/TokenProvider";
 import { getApiBaseUrl } from "@/lib/api-base-url";
 import {
-  getInstallTenantId,
   setInstallTenantId,
   getDecryptedActivationId,
   getServerFingerprint,
@@ -18,9 +17,10 @@ import { consumeInvitation, validateInvitation } from "@/lib/invitations";
 import {
   FACTORY_RESET_PHRASE,
   canConfirmFactoryReset,
-} from "@/components/settings/FactoryResetCard";
+} from "@/components/settings/factoryResetConfirm";
 import { applyFactoryResetNow, isTauri } from "@/infrastructure/tauri-bridge";
 import { clearTokens } from "@/infrastructure/auth/TokenProvider";
+import { resolveTenantId } from "./resolveTenantId";
 
 type RosterUser = {
   id: string;
@@ -29,12 +29,6 @@ type RosterUser = {
   role: string;
   hasPin: boolean;
 };
-
-export function resolveTenantId(): string {
-  return (
-    getInstallTenantId() ?? (import.meta.env.VITE_DEFAULT_TENANT_ID as string | undefined) ?? ""
-  );
-}
 
 type RosterResponse = {
   ok: boolean;

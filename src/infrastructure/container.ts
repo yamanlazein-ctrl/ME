@@ -238,7 +238,7 @@ export const container = {
       return new CreatePaymentVoucherUseCase(voucherRepo, ledgerRepo);
     },
     get cancel() {
-      return new CancelVoucherUseCase(voucherRepo, ledgerRepo);
+      return new CancelVoucherUseCase(voucherRepo);
     },
     repository: voucherRepo,
   },
@@ -267,7 +267,7 @@ export const container = {
       return new CreateReturnUseCase(returnRepo);
     },
     get cancel() {
-      return new CancelReturnUseCase(returnRepo, ledgerRepo);
+      return new CancelReturnUseCase(returnRepo);
     },
   },
 

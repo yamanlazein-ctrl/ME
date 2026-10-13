@@ -14,7 +14,7 @@ export default tseslint.config(
       // Playwright / packaging / backend scripts are not the app lint surface.
       "tests/**",
       "backend/**",
-      "desktop/**",
+      "desktop-app/**",
       "admin-dashboard/**",
       "packages/**",
       "scripts/**",

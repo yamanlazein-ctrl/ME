@@ -50,6 +50,14 @@ export class PostgresSyncMaterializeStore implements ISyncMaterializeStore {
        ON CONFLICT (tenant_id, entity_type, entity_id) DO NOTHING`);
   }
 
+  async findUserRole(tenantId: string, userId: string): Promise<string | null> {
+    const r = await this.pool.query(
+      `SELECT role FROM users WHERE tenant_id = $1 AND id = $2 LIMIT 1`,
+      [tenantId, userId],
+    );
+    return (r.rows[0] as { role?: string } | undefined)?.role ?? null;
+  }
+
   async upsertUserSnapshot(u: SyncUserSnapshotRow): Promise<void> {
     await this.pool.query(
       `INSERT INTO users (id, tenant_id, name, email, password_hash, pin_hash, role, active, updated_at, tokens_revoked_before)

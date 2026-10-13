@@ -103,7 +103,6 @@ const GROUPS: NavGroup[] = [
   },
 ];
 
-const STORAGE_KEY = "erp.sidebar.openGroup";
 const COLLAPSE_KEY = "erp.sidebar.collapsed";
 
 function groupForPath(path: string): string {
@@ -141,19 +140,16 @@ export function AppShell({
   const [open, setOpen] = useState<string>(activeGroup);
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
-  const [hydrated, setHydrated] = useState(false);
 
+  // The open group follows the current page (effect below). A saved open group used to be restored
+  // here, but that effect ran right after in the same commit and always replaced it — dead code that
+  // also needed an eslint-disable. Only the collapsed state is restored.
   useEffect(() => {
-    setHydrated(true);
     try {
-      const savedOpen = localStorage.getItem(STORAGE_KEY);
-      if (savedOpen && GROUPS.some((g) => g.key === savedOpen)) setOpen(savedOpen);
-      else setOpen(activeGroup);
       setCollapsed(localStorage.getItem(COLLAPSE_KEY) === "1");
     } catch {
       /* ignore */
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -176,15 +172,7 @@ export function AppShell({
   }, [mobileOpen]);
 
   const toggleGroup = (key: string) => {
-    const next = open === key ? "" : key;
-    setOpen(next);
-    if (hydrated && next) {
-      try {
-        localStorage.setItem(STORAGE_KEY, next);
-      } catch {
-        /* ignore */
-      }
-    }
+    setOpen(open === key ? "" : key);
   };
 
   const toggleCollapsed = () => {

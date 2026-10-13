@@ -1,4 +1,4 @@
-// PORTED-FROM: src/infrastructure/repositories/PostgresReportsRepository.ts sha256=4ab58fcd1ad3524d7b7732ff444948f6f168f28facfd6778c1f5c59da4a11e22
+// PORTED-FROM: src/infrastructure/repositories/PostgresReportsRepository.ts sha256=99d9af613264f7e0f93332b91c5cb2fa2a05ccc4c1d3ed343b4618bb23a8eec4
 // SQLite twin (specs/001-desktop-sqlite-engine S4). Keep behavior identical to the PG source.
 import { scaledText } from "./helpers/likeContains.js";
 /**

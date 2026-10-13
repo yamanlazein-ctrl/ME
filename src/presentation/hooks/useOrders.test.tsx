@@ -49,14 +49,20 @@ vi.mock("@tanstack/react-query", async (importOriginal) => {
 });
 
 import type { QueryFunctionContext } from "@tanstack/react-query";
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
 import { useOrdersList } from "./useOrders";
+
+/** A real component calling the hook (rendered once on the server renderer — useQuery is mocked). */
+function OrdersListProbe({ filter }: { filter: Parameters<typeof useOrdersList>[0] }) {
+  useOrdersList(filter);
+  return null;
+}
 
 /** Invoke the hook, then run the queryFn it handed to useQuery. */
 async function runListQueryFn(filter: Parameters<typeof useOrdersList>[0]) {
   capturedOptions = undefined;
-  // useQuery is mocked to capture its options: the hook is called as a plain function on purpose.
-  // eslint-disable-next-line react-hooks/rules-of-hooks
-  useOrdersList(filter);
+  renderToStaticMarkup(createElement(OrdersListProbe, { filter }));
   const captured = capturedOptions as
     | {
         queryKey: readonly unknown[];

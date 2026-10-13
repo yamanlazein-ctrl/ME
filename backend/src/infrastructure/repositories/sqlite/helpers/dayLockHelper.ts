@@ -1,4 +1,4 @@
-// PORTED-FROM: src/infrastructure/repositories/dayLockHelper.ts sha256=9900b5bc6e8f7811e6c198d116aae37a60b9ad950c23a951151a2c9ab9dedc41
+// PORTED-FROM: src/infrastructure/repositories/dayLockHelper.ts sha256=dbbf26d2507fb83385be41492cff34a8298d9221ac103adb2a1b31cbd7ff600b
 // SQLite twin (specs/001-desktop-sqlite-engine S4). Keep behavior identical to the PG source.
 import { and, eq, sql } from "drizzle-orm";
 import type { Tx } from "../../../orm/sqlite/drizzleCompat.js";

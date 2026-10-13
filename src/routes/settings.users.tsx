@@ -213,7 +213,8 @@ function UsersPage() {
         </div>
       </PageCard>
 
-      <InvitationManager />
+      {/* Only the admin creates invitation codes (server-enforced: ADMIN_ONLY). */}
+      {!adminReserved && <InvitationManager />}
 
       <ConfirmDialog
         open={removing !== null}

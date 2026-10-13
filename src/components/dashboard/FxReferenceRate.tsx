@@ -56,6 +56,9 @@ export function FxReferenceRate() {
   const [nowMs, setNowMs] = useState(() => Date.now());
   const inFlight = useRef(false);
   const alive = useRef(true);
+  // Time of the last successful load, read by the visibility handler: the effect below registers
+  // that handler once, so a `nowMs` captured there would stay the mount time forever.
+  const lastLoadAt = useRef(Date.now());
 
   const load = useCallback(async () => {
     if (inFlight.current) return;
@@ -65,7 +68,8 @@ export function FxReferenceRate() {
       if (alive.current) {
         setSnapshot(data);
         setFirstLoadDone(true);
-        setNowMs(Date.now());
+        lastLoadAt.current = Date.now();
+        setNowMs(lastLoadAt.current);
       }
     } catch {
       // Graceful: keep whatever we last had; the badge falls back to a calm
@@ -83,7 +87,7 @@ export function FxReferenceRate() {
     const onVisibility = () => {
       if (
         document.visibilityState === "visible" &&
-        Date.now() - nowMs > REFETCH_ON_VISIBLE_AFTER_MS
+        Date.now() - lastLoadAt.current > REFETCH_ON_VISIBLE_AFTER_MS
       ) {
         void load();
       }
@@ -94,7 +98,6 @@ export function FxReferenceRate() {
       clearInterval(interval);
       document.removeEventListener("visibilitychange", onVisibility);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [load]);
 
   // ── First load: subtle placeholder, zero layout pressure, never blocks ──

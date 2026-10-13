@@ -1,4 +1,4 @@
-// PORTED-FROM: src/infrastructure/repositories/cashboxBalanceHelper.ts sha256=8a7776f531ac4cea583d9080d093650f8a354116748e32b6458e7ddc7f6862e8
+// PORTED-FROM: src/infrastructure/repositories/cashboxBalanceHelper.ts sha256=fa3d52bba6e32d99d8df5e7ed085182360fd77b789485f128099b1d064530d2c
 // SQLite twin (specs/001-desktop-sqlite-engine S4). Keep behavior identical to the PG source.
 import { desc } from "./pgOrder.js";
 import { moneyParam, scaledNumber } from "./likeContains.js";

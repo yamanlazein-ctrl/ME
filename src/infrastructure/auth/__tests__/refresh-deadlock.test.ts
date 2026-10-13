@@ -37,8 +37,8 @@ function stubGlobals(store: Store, fetchImpl: typeof fetch) {
 
 /** The field server state: deleted user ⇒ 401 UNAUTHORIZED on every call. */
 function server401Fetch(log: string[]) {
-  return (async (input: any, init?: any) => {
-    const url = typeof input === "string" ? input : input.url;
+  return (async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
     log.push(`${init?.method ?? "GET"} ${url}`);
     return new Response(
       JSON.stringify({ code: "UNAUTHORIZED", message: "المستخدم غير موجود", statusCode: 401 }),

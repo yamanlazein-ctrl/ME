@@ -27,6 +27,7 @@ import {
 
 import { localToday } from "@/lib/localDate";
 import { useCashBalance } from "@/presentation/hooks/useCashbox";
+import { resultErrorMessage } from "@/lib/resultErrorMessage";
 export const Route = createFileRoute("/expenses/new")({ component: NewExpense });
 
 function NewExpense() {
@@ -81,11 +82,7 @@ function NewExpense() {
       {
         onSuccess: (res) => {
           if (res.ok) navigate({ to: "/expenses" });
-          else
-            setErr(
-              (res.error as any)?.message ??
-                (typeof res.error === "string" ? res.error : "فشل إنشاء المصروف"),
-            );
+          else setErr(resultErrorMessage(res.error, "فشل إنشاء المصروف"));
         },
       },
     );

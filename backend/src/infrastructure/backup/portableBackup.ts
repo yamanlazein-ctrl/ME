@@ -61,18 +61,15 @@ import { readMigrationFiles } from "drizzle-orm/migrator";
 export const BACKUP_FORMAT = "motard-erp-backup";
 export const BACKUP_FORMAT_VERSION = 2;
 
-/** Machine / installation / license-activation state — never copied to another install. */
-export const DEVICE_BOUND_TABLES = new Set([
-  "licenses",
-  "license_activations",
-  "license_audit_events",
-  "device_registrations",
-  "secrets", // encrypted with this machine's APP_MASTER_KEY — unreadable elsewhere
-  "server_installations",
-  "revoked_tokens",
-  "idempotency_keys", // per-device HTTP replay cache
-  "invitation_codes", // device-local
-]);
+export { DEVICE_BOUND_TABLES } from "./deviceBoundTables.js";
+import { DEVICE_BOUND_TABLES } from "./deviceBoundTables.js";
+
+/** MIG-02: standalone sequences (no owning column) the restore must advance explicitly. */
+const STANDALONE_SEQUENCES = [
+  { seq: "sync_inbox_applied_seq", tbl: "sync_inbox", col: "applied_seq" },
+] as const;
+/** = hubIdentity.ts HUB_EPOCH_KEY (kept literal: this module must not import the sync layer). */
+const HUB_EPOCH_SECRET_KEY = "sync.hub.epoch";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const FETCH_ROWS = 5000;
@@ -652,6 +649,28 @@ export async function restorePortableBackup(opts: {
                     COALESCE((SELECT max(${q(sq.col)}) FROM public.${q(sq.tbl)}), 1)))`,
           );
         }
+        // MIG-02: sequences that NO column owns are not in the loop above. `sync_inbox_applied_seq`
+        // numbers the pull stream (20261016 migration); left behind, every unit applied after the
+        // restore would get a number BELOW the restored ones and devices would skip it.
+        for (const sa of STANDALONE_SEQUENCES) {
+          const exists = await live.query(`SELECT to_regclass($1) AS r`, [`public.${sa.seq}`]);
+          if (!exists.rows[0]?.r) continue;
+          await live.query(
+            `SELECT setval('public.${q(sa.seq)}', GREATEST((SELECT last_value FROM public.${q(sa.seq)}),
+                    COALESCE((SELECT max(${q(sa.col)}) FROM public.${q(sa.tbl)}), 1)))`,
+          );
+        }
+        // MIG-01: the restored company is a NEW hub instance for its devices (they re-pull from the
+        // start and re-deliver their history, idempotently). The epoch lives in `secrets`.
+        await live.query(`DELETE FROM secrets WHERE tenant_id = $1 AND key = $2`, [
+          dst,
+          HUB_EPOCH_SECRET_KEY,
+        ]);
+        // MIG-07: token revocations recorded after this backup cannot be known here — end every
+        // session issued before the restore (devices sign in again with their stored credentials).
+        await live.query(`UPDATE users SET tokens_revoked_before = now() WHERE tenant_id = $1`, [
+          dst,
+        ]);
         await live.query("COMMIT");
       } catch (err) {
         await live.query("ROLLBACK").catch(() => {});

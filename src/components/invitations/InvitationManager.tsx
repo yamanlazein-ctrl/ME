@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useId, useState } from "react";
 import {
   Plus,
   Copy,
@@ -54,6 +54,9 @@ const ROLE_LABEL: Record<string, string> = {
 };
 
 export function InvitationManager() {
+  // ERP-003: every visible label is tied to its control (label click focuses it, screen readers
+  // announce it); useId keeps the ids unique if the manager is rendered twice.
+  const fid = useId();
   const [invitations, setInvitations] = useState<Invitation[]>([]);
   const [loading, setLoading] = useState(false);
 
@@ -137,9 +140,9 @@ export function InvitationManager() {
           </div>
 
           <div className="grid gap-1.5">
-            <Label>نوع الدعوة</Label>
+            <Label htmlFor={`${fid}-type`}>نوع الدعوة</Label>
             <Select value={type} onValueChange={(v) => setType(v as InvitationType)}>
-              <SelectTrigger>
+              <SelectTrigger id={`${fid}-type`}>
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -152,12 +155,17 @@ export function InvitationManager() {
           {type === "user" && (
             <>
               <div className="grid gap-1.5">
-                <Label>اسم المدعو</Label>
-                <Input value={targetName} onChange={(e) => setTargetName(e.target.value)} />
+                <Label htmlFor={`${fid}-name`}>اسم المدعو</Label>
+                <Input
+                  id={`${fid}-name`}
+                  value={targetName}
+                  onChange={(e) => setTargetName(e.target.value)}
+                />
               </div>
               <div className="grid gap-1.5">
-                <Label>بريد المدعو</Label>
+                <Label htmlFor={`${fid}-email`}>بريد المدعو</Label>
                 <Input
+                  id={`${fid}-email`}
                   type="email"
                   value={targetEmail}
                   onChange={(e) => setTargetEmail(e.target.value)}
@@ -165,9 +173,9 @@ export function InvitationManager() {
                 />
               </div>
               <div className="grid gap-1.5">
-                <Label>الدور</Label>
+                <Label htmlFor={`${fid}-role`}>الدور</Label>
                 <Select value={targetRole} onValueChange={setTargetRole}>
-                  <SelectTrigger>
+                  <SelectTrigger id={`${fid}-role`}>
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -183,8 +191,9 @@ export function InvitationManager() {
           )}
 
           <div className="grid gap-1.5">
-            <Label>مدة الصلاحية (دقائق)</Label>
+            <Label htmlFor={`${fid}-ttl`}>مدة الصلاحية (دقائق)</Label>
             <Input
+              id={`${fid}-ttl`}
               type="number"
               min={1}
               max={1440}

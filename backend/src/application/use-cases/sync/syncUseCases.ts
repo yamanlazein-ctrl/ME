@@ -36,8 +36,42 @@ import {
   getHubSessionInfo,
   markHubUnreachable,
   refreshHubSession,
+  rememberHubEpoch,
   resolveHubAuthHeader,
 } from "./hubConfig.js";
+
+/**
+ * MIG-01/02 — what a device must do with the hub identity a pull returned.
+ *   - `rebase`: the hub is another INSTANCE than the one this device synced with (its epoch
+ *     changed: moved / restored / rotated by the runbook), or its stream head is BELOW this
+ *     device's cursor (rewound sequence). Re-pull from the start and re-deliver everything this
+ *     device already delivered — both are idempotent (hub inbox unique op id, id-based replay).
+ *   - `adopt`: first epoch ever seen (pairing, or a hub that predates epochs on the device side).
+ *   - `none`: same instance.
+ */
+export function decideHubRebase(input: {
+  knownEpoch: string | null;
+  hubEpoch: string | null;
+  headSeq: number | null;
+  cursor: number | null;
+}):
+  | { kind: "rebase"; reason: "HUB_EPOCH_CHANGED" | "HUB_STREAM_REWOUND" }
+  | { kind: "adopt" | "none" } {
+  if (input.hubEpoch && input.knownEpoch && input.hubEpoch !== input.knownEpoch)
+    return { kind: "rebase", reason: "HUB_EPOCH_CHANGED" };
+  if (input.headSeq !== null && input.cursor !== null && input.headSeq < input.cursor)
+    return { kind: "rebase", reason: "HUB_STREAM_REWOUND" };
+  if (input.hubEpoch && !input.knownEpoch) return { kind: "adopt" };
+  return { kind: "none" };
+}
+
+/** Device-side actions for a hub rebase (supplied by the sync route; see runLocalSyncPull). */
+export type HubRebaseActions = {
+  /** Re-deliver every unit this device already delivered (`requeueSyncedForNewHub`). */
+  requeueSynced: (tenantId: string) => Promise<number>;
+  /** MIG-06: tell the new instance which document numbers this device already issued/holds. */
+  reassertNumberTips?: () => Promise<void>;
+};
 
 /**
  * How many times a retryable materialization failure may repeat before the unit
@@ -782,6 +816,13 @@ export async function runLocalSyncPull(
    * identity). Its effect is already in the restored data, so it is acknowledged, not re-applied.
    */
   isOwnRestoredUnit?: (unit: PulledUnit) => Promise<boolean>,
+  /**
+   * MIG-01/02: how to rebase when the hub instance changed. Without it a changed instance is only
+   * reported (`rebaseRequired`) and NOTHING is applied or advanced, so no unit can be skipped.
+   */
+  hubRebase?: HubRebaseActions,
+  /** Internal: 1 on the immediate re-pull after a rebase (never rebases twice in one run). */
+  rebaseDepth = 0,
 ): Promise<{
   pulled: number;
   applied: number;
@@ -793,6 +834,10 @@ export async function runLocalSyncPull(
   changed?: number;
   /** 4B: set when the hub refused the DEVICE (revoked / unknown / not bound). */
   deviceTrust?: SyncDeviceTrustFailure;
+  /** MIG-01/02: the hub instance changed; the cursor was reset and history re-queued. */
+  rebased?: { reason: string; requeued: number };
+  /** MIG-01/02: a rebase is needed but the caller supplied no actions — nothing was applied. */
+  rebaseRequired?: string;
 }> {
   const hub = getCentralSyncUrl();
   const hubAuth = await resolveHubAuthHeader(authHeader);
@@ -865,7 +910,65 @@ export async function runLocalSyncPull(
       receivedAt: string;
       appliedAt: string | null;
     }>;
+    hubEpoch?: unknown;
+    headSeq?: unknown;
   };
+
+  // MIG-01/02: is this the hub instance this device synced with?
+  const hubEpoch = typeof body.hubEpoch === "string" && body.hubEpoch ? body.hubEpoch : null;
+  const headSeq =
+    typeof body.headSeq === "number" && Number.isFinite(body.headSeq) ? body.headSeq : null;
+  const decision = decideHubRebase({
+    knownEpoch: getHubSessionInfo()?.hubEpoch ?? null,
+    hubEpoch,
+    headSeq,
+    cursor: afterSeq,
+  });
+  // On the re-pull right after a rebase the cursor is already reset (nothing can be skipped); if
+  // the epoch could not be remembered (no stored session), proceed instead of looping.
+  if (decision.kind === "rebase" && rebaseDepth === 0) {
+    if (!hubRebase) {
+      logger.warn({ reason: decision.reason }, "hub instance changed — pull held until rebase");
+      return {
+        pulled: 0,
+        applied: 0,
+        skipped: 0,
+        failed: 0,
+        deviceTrust: null,
+        rebaseRequired: decision.reason,
+      };
+    }
+    // Order matters for crash safety: the epoch is remembered LAST, so an interrupted rebase is
+    // simply redone on the next pull (every step is idempotent).
+    await resetPullCursor(ctx.tenantId);
+    const requeued = await hubRebase.requeueSynced(ctx.tenantId);
+    if (hubRebase.reassertNumberTips) {
+      await hubRebase
+        .reassertNumberTips()
+        .catch((err) =>
+          logger.warn({ err }, "number tips could not be re-reported to the new hub instance"),
+        );
+    }
+    if (hubEpoch) rememberHubEpoch(hubEpoch);
+    logger.warn(
+      { reason: decision.reason, requeued, hubEpoch },
+      "hub instance changed — pull cursor reset, delivered history re-queued",
+    );
+    const again = await runLocalSyncPull(
+      database,
+      repos,
+      ctx,
+      authHeader,
+      syncDeviceId,
+      inbox,
+      onApplied,
+      isOwnRestoredUnit,
+      hubRebase,
+      1,
+    );
+    return { ...again, rebased: { reason: decision.reason, requeued } };
+  }
+  if (decision.kind === "adopt" && hubEpoch) rememberHubEpoch(hubEpoch);
 
   let applied = 0;
   // Units this pull really created locally (re-pulled applied units only count in `applied`).

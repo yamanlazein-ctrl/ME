@@ -3,7 +3,7 @@
  * edit sends `opening` only when the balance section actually changed.
  */
 import { describe, it, expect } from "vitest";
-import { fromParty, toPatch, type SimpleParty } from "./PartyFormDialog";
+import { fromParty, toPatch, type SimpleParty } from "./partyFormModel";
 
 const party = (over: Partial<SimpleParty>): SimpleParty => ({
   id: "p1",

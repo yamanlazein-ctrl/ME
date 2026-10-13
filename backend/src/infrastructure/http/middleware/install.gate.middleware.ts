@@ -13,6 +13,10 @@ const ALLOW_LIST = [
   "/api/auth/device-roster",
   "/api/auth/pin-login",
   "/api/auth/set-pin",
+  // Desktop shell only (graceful shutdown, pre-update backup): each route checks the runtime token
+  // itself and answers 404 without it. A customer who closes the app before finishing setup must still
+  // get a clean WAL checkpoint.
+  "/api/desktop/runtime",
 ];
 
 function isAllowed(path: string): boolean {

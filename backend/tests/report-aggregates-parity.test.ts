@@ -275,18 +275,16 @@ beforeAll(async () => {
       currency: r.ccy,
       status: r.status,
     } as never);
-    await db
-      .insert(returnLines)
-      .values(
-        r.lines.map((l, k) => ({
-          id: randomUUID(),
-          tenantId,
-          returnId: id,
-          rollId: roll[k % 2]!,
-          quantityKg: String(l.qty),
-          pricePerKg: String(l.price),
-        })) as never,
-      );
+    await db.insert(returnLines).values(
+      r.lines.map((l, k) => ({
+        id: randomUUID(),
+        tenantId,
+        returnId: id,
+        rollId: roll[k % 2]!,
+        quantityKg: String(l.qty),
+        pricePerKg: String(l.price),
+      })) as never,
+    );
   }
   for (const [n, e] of EXPS.entries()) {
     await db.insert(expenses).values({

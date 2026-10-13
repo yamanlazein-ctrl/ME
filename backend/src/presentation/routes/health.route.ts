@@ -1,13 +1,13 @@
 import { Router, type Request, type Response, type RequestHandler } from "express";
 import type { IHealthRepository } from "../../application/ports/IHealthRepository.js";
+import type { Role } from "../../domain/types/index.js";
 import { getLicenseIdentityDegradedReason } from "../../infrastructure/license/licenseIdentityHealth.js";
 
 export function registerHealthRoutes(
   router: Router,
   checkDatabase: () => Promise<boolean>,
   checkRedis: () => Promise<boolean>,
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  rbac: any,
+  rbac: (allowedRoles: Role[]) => RequestHandler,
   auth: RequestHandler | undefined,
   healthRepo: IHealthRepository,
 ) {
@@ -34,9 +34,7 @@ export function registerHealthRoutes(
    * Returns: database latency, memory, uptime, version.
    * Used by: monitoring dashboards, alerting systems, deployment validation.
    */
-  const deepGuards: RequestHandler[] = auth
-    ? [auth, rbac(["admin"]) as RequestHandler]
-    : [rbac(["admin"]) as RequestHandler];
+  const deepGuards: RequestHandler[] = auth ? [auth, rbac(["admin"])] : [rbac(["admin"])];
   router.get("/api/health/deep", ...deepGuards, async (_req: Request, res: Response) => {
     const start = Date.now();
     const checks: Record<string, { status: string; details?: string; ms?: number }> = {};

@@ -1,4 +1,4 @@
-// PORTED-FROM: src/infrastructure/repositories/PostgresSyncConflictStore.ts sha256=71637d357960b539b7a685993b7d3d25aaa644a795f93f8a3546829bd6551aae
+// PORTED-FROM: src/infrastructure/repositories/PostgresSyncConflictStore.ts sha256=c57ac08edf6bfb2923a535e34cfabb3a61a9b1a67bf7bf3282a5f3b4ffaaac91
 // SQLite twin (specs/001-desktop-sqlite-engine S4). Keep behavior identical to the PG source.
 /**
  * `sync_conflicts` on SQLite.

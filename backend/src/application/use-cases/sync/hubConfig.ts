@@ -21,6 +21,12 @@ type HubSession = {
   hubLicenseStatus?: string | null;
   /** Local sync-device id registered on the hub under the SAME id (push attribution). */
   hubDeviceId?: string | null;
+  /**
+   * MIG-01: identity of the hub INSTANCE this device synced with (the hub's `sync.hub.epoch`,
+   * returned on every pull). A hub moved or restored behind the SAME address gets a new epoch;
+   * the device then re-pulls from the start and re-delivers its history (idempotent by op id).
+   */
+  hubEpoch?: string;
   pairedAt?: string;
   /** Local tenant/user the background sync runs as when nobody is logged in. */
   localTenantId?: string;
@@ -367,9 +373,12 @@ export async function pairHubSession(input: {
     if (!res.ok || !json.accessToken) {
       return { ok: false, error: json.message || `فشل تسجيل الدخول للمركز (${res.status})` };
     }
+    const before = loadSession();
     persistHubSession({
       accessToken: json.accessToken,
       refreshToken: json.refreshToken,
+      // MIG-01: a re-login to the same address is not a new hub instance — keep its epoch.
+      ...(before?.hubEpoch && before.hubUrl === url ? { hubEpoch: before.hubEpoch } : {}),
     });
     hubReachable = true;
     lastProbeAt = Date.now();
@@ -424,6 +433,16 @@ export function markHubUnreachable(): void {
 }
 
 // ── Settings → «المزامنة السحابية» (admin-only pairing surface) ──────────────
+
+/**
+ * MIG-01: record the hub instance this device now syncs with. Called only after the device has
+ * reset its pull cursor and re-queued its history for a new epoch (or on first sight of one).
+ */
+export function rememberHubEpoch(epoch: string): void {
+  const session = loadSession();
+  if (!session?.accessToken || session.hubEpoch === epoch) return;
+  persistHubSession({ ...session, hubEpoch: epoch });
+}
 
 export function getHubSessionInfo(): HubSessionInfo | null {
   const session = loadSession();
@@ -713,6 +732,9 @@ export async function connectHub(input: ConnectHubInput): Promise<ConnectHubResu
       ? await mintHubDeviceCredential(url, auth, hubDeviceId)
       : null;
 
+  const sameHub =
+    previous?.hubUrl === url &&
+    (previous.hubTenantId === undefined || previous.hubTenantId === info.hubTenantId);
   // Clean slate: drop the old session before writing the new one.
   persistHubSession(null);
   setRuntimeCentralSyncUrl(url);
@@ -722,6 +744,9 @@ export async function connectHub(input: ConnectHubInput): Promise<ConnectHubResu
     ...info,
     localTenantId: input.local?.tenantId,
     localUserId: input.local?.userId,
+    // MIG-01: re-pairing with the same hub keeps the instance identity it last synced with, so a
+    // move behind the same address is still detected on the next pull.
+    ...(sameHub && previous?.hubEpoch ? { hubEpoch: previous.hubEpoch } : {}),
   });
   // Kept (encrypted) until «فصل»: expired tokens / a restarted hub re-login silently.
   saveHubCredentials(
@@ -859,9 +884,18 @@ export async function enrollHub(input: EnrollHubInput): Promise<ConnectHubResult
     localTenantId: input.local.tenantId,
     localUserId: input.local.userId,
   };
+  const sameHub =
+    previous?.hubUrl === url &&
+    (previous.hubTenantId === undefined || previous.hubTenantId === info.hubTenantId);
   persistHubSession(null);
   setRuntimeCentralSyncUrl(url);
-  persistHubSession({ accessToken: body.accessToken, refreshToken: body.refreshToken, ...info });
+  persistHubSession({
+    accessToken: body.accessToken,
+    refreshToken: body.refreshToken,
+    ...info,
+    // MIG-01: see connectHub.
+    ...(sameHub && previous?.hubEpoch ? { hubEpoch: previous.hubEpoch } : {}),
+  });
   saveHubCredentials({
     url,
     tenantId: body.tenantId,

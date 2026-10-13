@@ -8,19 +8,7 @@ import { requestFactoryReset } from "@/infrastructure/tauri-bridge";
 import { clearTokens } from "@/infrastructure/auth/TokenProvider";
 import { clearLicense, clearRememberedEmail } from "@/lib/license-state";
 import { clearSyncDeviceState } from "@/lib/sync-device";
-
-/**
- * Field incident (2026-09): a one-click factory reset sat next to "فصل" on the
- * sync page; the next launch silently deleted pgdata — invoices and stock
- * vanished and only the part already pushed to the hub came back on pull.
- * A reset now needs the exact phrase typed, and the Rust side moves pgdata
- * aside (pgdata.reset-<time>) instead of deleting it.
- */
-export const FACTORY_RESET_PHRASE = "احذف كل البيانات";
-
-export function canConfirmFactoryReset(typed: string): boolean {
-  return typed.trim() === FACTORY_RESET_PHRASE;
-}
+import { canConfirmFactoryReset, FACTORY_RESET_PHRASE } from "./factoryResetConfirm";
 
 export function FactoryResetCard() {
   const [open, setOpen] = useState(false);

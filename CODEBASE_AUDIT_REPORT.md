@@ -84342,3 +84342,64 @@ The mission's Phase 2 requirement — "for EVERY page, inspect every relevant UI
 field, label, placeholder, default value, required rule, validation rule, and error state" — remains
 **substantially incomplete** for these 13 routes (~5,900 lines). §13 covers the six highest-yield
 systematic checks and nothing more.
+
+---
+
+# SESSION 2026-10-12 (Hermes) — ULTRA-DEEP RE-AUDIT (page/workflow/DB/security/sync/desktop/static)
+
+**Appended by the lead auditor. Prior findings in this report were treated as LEADS, not proof; each was re-verified against the current source (HEAD `a3882558`) before being marked holds/broken. The pre-existing `CODEBASE_AUDIT_FINDINGS_hermes.json` was left untouched; this session's machine-readable findings are in `CODEBASE_AUDIT_FINDINGS.json`; the checkpoint is `CODEBASE_AUDIT_PROGRESS.md`.**
+
+## S.0 How this session ran
+
+Seven parallel read-only subagents were dispatched (pages, API, DB, security, sync, desktop, static+tests). The model fair-share rate limit (HTTP 429) killed all seven (477–3999s each). Each dead subagent's live transcript was mined for its partial leads, and every area was then completed **directly by the lead auditor** with the same read-only discipline. Several would-be findings were caught and corrected by verification before publication — most importantly a **phantom Critical** (see S.2/DB-03).
+
+## S.1 Verdict: AMBER — sound and heavily verified, with 5 Medium items, none release-blocking today
+
+Evidence: 1,368 automated tests green (410 frontend + 958 backend-SQLite, zero failures), all three typecheck gates clean, lint at exactly the 50-warning limit, desktop gates 24/24, and every security/tenant/atomicity/backup/lifecycle invariant inspected. The five Medium findings are hygiene/maintainability (formatting drift, twin stamps, sync-loop backoff, drill determinism, pgRef bookkeeping) — none corrupts data. Two prior-audit items remain genuinely open from earlier sessions: the shipped installer lagging HEAD (Oct-10 finding, still true — the Oct-9 build does not contain the Oct-10→12 fixes; a rebuild resolves it) and the desktop's intentional "uninstall preserves data" design (documented, by design).
+
+## S.2 Findings (this session) — ranked
+
+| ID | Sev | Finding | Root cause (one line) |
+|---|---|---|---|
+| TEMP-STAT-02 / TEMP-BE-01 | Medium | 46 SQLite twins drifted from PG sources; parity tool-unverifiable for them | PG remediation applied without re-stamping; the drift check is advisory, not a CI gate (safety net = the dual-engine test suite, which is green) |
+| TEMP-STAT-01 | Medium | `prettier --check .` fails on 100 files (92 source) with no CI gate | The SQLite-engine/backup commits landed unformatted; CI has no prettier step; both eslint configs exclude the drifted files |
+| TEMP-SYNC-01 | Medium | Sync pull loop polls an unreachable/revoked hub every ~15-20s (Oct-10 live log) | Terminal 403 (SYNC_DEVICE_REVOKED) does not visibly stop the frontend loop; backoff unverified |
+| TEMP-SYNC-02 | Medium | Multi-device convergence drill non-deterministic (17-27/33) and advisory in CI | Template DB reuse leaks state between scenarios (documented; fix planned in the CI comment itself) |
+| TEMP-DB-01 | Low | SQLite journal pgRef 101 while 0005 mirrors PG 102 | Combined migration added without bumping pgReferenceJournalIdx — produces false drift signals (it misled this audit's first pass) |
+| TEMP-DB-02 | Info | Dead `schema_migrations` table in the desktop DB | Desktop runner tracks `motard_meta.schema_journal_idx`; drizzle's table is never written |
+| TEMP-DB-03 | Info | **Corrected finding — no defect** | Live DB lacks `settings.drive` because it was built Oct-9 (pre-`2b9b602c`); a fresh DB from current code HAS the column (0005:84 ALTER + SS-01 test 4/4 run this session). First pass nearly filed this as Critical; verification retracted it |
+| TEMP-SEC-01 | Info | Rate limiting only on auth routes | By design: financial POSTs are auth+idempotency protected; the brute-force vector (login) IS limited |
+| TEMP-STAT-03 | Info | server-bundle.test.mjs blocked by port 8080 (EADDRINUSE) | Environmental (unrelated PID 11332), not a defect; passes on CI |
+| TEMP-FE-01 | Info (positive) | PartyDeleteDialog fully rebuilt | Pagination+search+type-to-confirm+exact counts — the 2026-10-10 "1000 invoices" requirement is implemented |
+
+## S.3 Prior findings re-verified (28) — the important verdicts
+
+- **Oct-10 root causes #1/#2 (phantom OCC on delete): HOLD** — both halves verified in source AND in the shipped 2.0.4 bundle (`partyUseCases.ts` status-first idempotency + `server.mjs` contains it; `BaseHttpClient.ts` replaySafe + the minified web chunk contains `a=e.method===\`GET\`||!!r … if(...||!a||...)throw r`).
+- **Oct-10 root cause #3 (old data after reinstall): HOLD-BY-DESIGN** — hooks.nsh intentionally preserves AppData; db_meta adoption requires a valid token; the desktop is now SQLite-only (no pgdata path).
+- **Oct-10 root cause #4 (64MB build): RESOLVED** — PostgreSQL removed from the bundle (2.0.4 = 30.1MB measured); target/ still carries 4.2GB of stale artifacts (hygiene, not runtime).
+- **F-002 (lint 245 errors): FIXED** — now 0 errors / 50 warnings (at the gate limit).
+- **F-001 (CI steps that can't run tests): FIXED** — migration-guard step now `cd backend &&`; SyncConflicts step uses an isolated subshell; all referenced test files exist.
+- **F-004 (RLS nullable tenant_id): HOLDS on coverage** — 48 tables ENABLE RLS, zero tenant tables without it; `app_user` is `NOBYPASSRLS`; FORCE RLS sweep applied; SQLite baseline declares tenant_id NOT NULL everywhere.
+- **SS-01 (settings section allowlist): HOLDS** — allowlist enforced; `drive` accepted on both engines; test run this session: 4/4 pass on a fresh SQLite DB via the real runtime.
+- **Migration hygiene: CLEAN** — 103 PG entries ↔ files 1:1; no `DELETE FROM` without WHERE; the only DROP is documented dead-schema cleanup (0038).
+- **Money/ledger invariants: HOLDS** — round2dp half-away-from-zero on both engines; ledger append-only triggers on both (PG 0036b + SQLite baseline trg_*).
+
+## S.4 Coverage (real numbers)
+
+- Routes inventoried: 50/50; deep-inspected 8 + pattern-level across all (invalidation, toasts, submit guards, idempotency transport).
+- Backend route files: 53/53 (228 registrations); guard architecture verified per file.
+- Migrations: PG 103/103 + SQLite 6/6 read; triggers/constraints scanned programmatically.
+- Security surfaces: 14/14 (auth, rbac, tenancy, validation, injection, paths, secrets, license, rate-limit, local-caller).
+- Sync paths: 12/12 traced (guards, op_id, appliedSeq, enrollment, hubCanonical, restore, claims, conflicts, auto-sync, engine, bootstrap).
+- Desktop: 20/20 Rust files inventoried; lifecycle/backup/lock/kill/ACL verified.
+- Tests executed: root vitest 410/410; backend-SQLite 958/958 (+42 skipped); desktop gates 24/24; typecheck×3 clean.
+- Blocked: Playwright e2e, PG-engine suite, cargo test, server-bundle (port), live hub, 30 routes not individually read, Drive OAuth internals.
+
+## S.5 Remediation order (smallest safe fixes first)
+
+1. Rebuild the desktop installer from HEAD (closes the Oct-10 stale-build exposure; no code change).
+2. Review the 46 drifted twins for real behavioral divergence (prioritize invoice/party/cashbox/ledger/deletion-impact); then make `port-sqlite-repos --check` a CI gate.
+3. Add `prettier --check` to CI (scope it or .prettierignore the audit .md reports) + format the 92 source files in a dedicated commit.
+4. Verify/stop the sync loop on SYNC_DEVICE_REVOKED (surface the state in settings.sync); rebuild the multi-device template per run and promote the drill to blocking.
+5. Bump 0005's pgReferenceJournalIdx to 102 (metadata).
+6. Optional: per-user rate limit on financial POSTs; drop the dead schema_migrations table at the next baseline regeneration.

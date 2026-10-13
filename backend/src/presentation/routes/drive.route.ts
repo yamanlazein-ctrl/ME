@@ -55,12 +55,10 @@ export function createDriveRouter(deps: DriveRouterDeps): Router {
     const decision = await authorizeUploadDevice(db, localDeviceId);
     if (!decision.allowed) {
       logger.warn({ reason: decision.reason }, "drive action refused");
-      res
-        .status(403)
-        .json({
-          code: `NOT_PRIMARY_${decision.reason}`,
-          message: "هذا الجهاز ليس جهاز الأرشفة الأساسي",
-        });
+      res.status(403).json({
+        code: `NOT_PRIMARY_${decision.reason}`,
+        message: "هذا الجهاز ليس جهاز الأرشفة الأساسي",
+      });
       return true;
     }
     return false;

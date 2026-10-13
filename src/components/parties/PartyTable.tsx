@@ -81,8 +81,8 @@ export function PartyListPage({
 }) {
   useInventory();
   // The cache refreshes by replacing the objects INSIDE the same `customers`/`suppliers` array, so its
-  // length does not change on an edit or a balance update — `partiesVersion` does.
-  const partiesVersion = useParties();
+  // length does not change on an edit or a balance update — the store snapshot does.
+  const parties = useParties();
   const loadState = getPartiesLoadState();
   const navigate = useNavigate();
 
@@ -164,7 +164,8 @@ export function PartyListPage({
   const q = query.trim().toLowerCase();
   const filtered = useMemo(() => {
     const arCollator = new Intl.Collator("ar", { sensitivity: "base", numeric: true });
-    const result = list.filter((p) => {
+    const all = kind === "supplier" ? parties.suppliers : parties.customers;
+    const result = all.filter((p) => {
       if (status !== "all" && (p.status ?? "active") !== status) return false;
       if (credit !== "all") {
         // Credit limit is per-party (single currency) → server-side aggregate.
@@ -188,8 +189,7 @@ export function PartyListPage({
       if (byRecent !== 0) return byRecent;
       return arCollator.compare(a.name ?? "", b.name ?? "");
     });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [q, status, credit, list, partiesVersion]);
+  }, [q, status, credit, kind, parties]);
 
   const total = filtered.length;
   const pageCount = Math.max(1, Math.ceil(total / pageSize));

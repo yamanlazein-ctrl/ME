@@ -11,10 +11,11 @@ function paymentToVoucher(dto: PaymentDTO): Voucher {
     id: dto.id,
     tenantId: "" as UUID,
     number: dto.number,
-    kind: "payment",
+    // ERP-006: GET /payments/:id returns ANY voucher by id — the DTO's own kind is authoritative.
+    kind: dto.kind ?? "payment",
     date: dto.date,
     partyId: dto.partyId,
-    partyKind: "supplier",
+    partyKind: dto.partyKind ?? (dto.kind === "receipt" ? "customer" : "supplier"),
     invoiceId: dto.invoiceId ?? null,
     amount: dto.amount,
     discount: dto.discount ?? 0,
@@ -41,10 +42,10 @@ function receiptToVoucher(dto: ReceiptDTO): Voucher {
     id: dto.id,
     tenantId: "" as UUID,
     number: dto.number,
-    kind: "receipt",
+    kind: dto.kind ?? "receipt",
     date: dto.date,
     partyId: dto.partyId,
-    partyKind: "customer",
+    partyKind: dto.partyKind ?? (dto.kind === "payment" ? "supplier" : "customer"),
     invoiceId: dto.invoiceId ?? null,
     amount: dto.amount,
     discount: dto.discount ?? 0,
@@ -187,6 +188,16 @@ export class ApiVoucherRepository implements IVoucherRepository {
       }
       throw e;
     }
+  }
+
+  /** ERP-008: atomic amend (server-side cancel + create in one transaction). */
+  async replace(
+    id: UUID,
+    expectedVersion: number,
+    input: Parameters<VoucherApiService["replaceVoucher"]>[3] & { kind: VoucherKind },
+  ): Promise<void> {
+    const { kind, ...voucher } = input;
+    await this.api.replaceVoucher(kind, id, expectedVersion, voucher);
   }
 
   async vouchersOfInvoice(invoiceId: UUID, ctx: TenantContext): Promise<Voucher[]> {

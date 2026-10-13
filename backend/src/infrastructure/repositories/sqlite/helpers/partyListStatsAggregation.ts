@@ -1,4 +1,4 @@
-// PORTED-FROM: src/infrastructure/repositories/partyListStatsAggregation.ts sha256=98ca52b2a8ef07542965dbdf74f489b8f9a75b8529c99121782429a7f9901e35
+// PORTED-FROM: src/infrastructure/repositories/partyListStatsAggregation.ts sha256=50cef2c0c866793bb79df45f2654fa8ba5787d7589e0996c8b7b4d4ace0694d7
 // SQLite twin (specs/001-desktop-sqlite-engine S4). Keep behavior identical to the PG source.
 import type { PartyListStats } from "../../../../domain/entities/Party.js";
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { canConfirmFactoryReset, FACTORY_RESET_PHRASE } from "./FactoryResetCard";
+import { canConfirmFactoryReset, FACTORY_RESET_PHRASE } from "./factoryResetConfirm";
 
 describe("factory reset needs the typed phrase", () => {
   it("rejects empty / partial / other text", () => {

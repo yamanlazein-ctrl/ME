@@ -1,4 +1,4 @@
-// PORTED-FROM: src/infrastructure/repositories/PostgresNumberBlockStore.ts sha256=a261946b48fdd79b9caaf70c02136bac78f1b98c4b88bc7e5694a64082f585b8
+// PORTED-FROM: src/infrastructure/repositories/PostgresNumberBlockStore.ts sha256=e2f2d6613055cbbabc28587fc141475f1f1fbee7b660df8c66d918720dbe38a1
 // SQLite twin (specs/001-desktop-sqlite-engine S4). Keep behavior identical to the PG source.
 /** PostgreSQL SQL behind document-number blocks — moved verbatim from numberBlockUseCases.ts (S1). */
 import { and, eq, sql } from "drizzle-orm";
@@ -53,6 +53,37 @@ export class SqliteNumberBlockStore implements INumberBlockStore {
         size: input.size,
         year: input.year,
       });
+    });
+  }
+
+  raiseTip(input: { tenantId: UUID; entityType: string; knownUsed: number }) {
+    // Same bounded advance as claimBlock's tip reconciliation (never lowers, at most +2000 per call).
+    const known = Math.min(Math.floor(input.knownUsed), 999999);
+    const { prefix } = resolveNumberFormat(input.entityType);
+    return this.db.transaction(async (tx) => {
+      const [row] = await tx
+        .insert(documentSequences)
+        .values({
+          tenantId: input.tenantId,
+          entityType: input.entityType,
+          prefix,
+          lastNumber: known,
+        })
+        .onConflictDoUpdate({
+          target: [
+            documentSequences.tenantId,
+            documentSequences.entityType,
+            documentSequences.prefix,
+          ],
+          set: {
+            lastNumber: sql`min(
+              max(${documentSequences.lastNumber}, ${known}),
+              ${documentSequences.lastNumber} + 2000
+            )`,
+          },
+        })
+        .returning({ lastNumber: documentSequences.lastNumber });
+      return Number(row?.lastNumber ?? known);
     });
   }
 

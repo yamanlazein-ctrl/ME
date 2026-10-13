@@ -100,8 +100,7 @@ export function idempotency(
       let capturedBody: string | null = null;
       let capturedStatus = res.statusCode;
       let capturedContentType = "application/json; charset=utf-8";
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (res as any).json = (body: unknown) => {
+      res.json = (body: unknown) => {
         try {
           capturedBody = JSON.stringify(body);
           capturedContentType = "application/json; charset=utf-8";

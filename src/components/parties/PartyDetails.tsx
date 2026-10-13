@@ -86,7 +86,8 @@ import {
   useStatementPage,
 } from "@/presentation/hooks/useStatement";
 import { toast } from "sonner";
-import { ClientPager, useClientPage } from "@/components/common/ClientPager";
+import { ClientPager } from "@/components/common/ClientPager";
+import { useClientPage } from "@/components/common/useClientPage";
 import { loadInvoice } from "@/presentation/hooks/useInvoices";
 import { SettlementDialog } from "@/components/parties/SettlementDialog";
 import { formatNumber, formatMoney, formatQuantity } from "@/shared/utils/formatNumber";
@@ -1046,7 +1047,6 @@ function StatementTab({ p, kind }: { p: Party; kind: PartyKind }) {
     if (!statement) return;
     const clamped = clampStatementPageIndex(page, totalPages);
     if (clamped !== page) setPage(clamped);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- clamp on server totals only
   }, [statement, totalPages, page]);
   const carried = statement?.page?.balanceBeforePageByCurrency ?? {};
   const withFull = async (fn: (full: NonNullable<typeof statement>) => void) => {

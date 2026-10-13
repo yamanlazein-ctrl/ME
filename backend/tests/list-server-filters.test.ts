@@ -24,16 +24,14 @@ const ctx = { tenantId, userId: randomUUID(), userRole: "admin", userName: "t" }
 
 beforeAll(async () => {
   await db.insert(tenants).values({ id: tenantId, name: "LF", slug: `lf-${tenantId.slice(0, 8)}` });
-  await db
-    .insert(parties)
-    .values({
-      id: partyId,
-      tenantId,
-      name: "LF C",
-      code: "LFC",
-      kind: "customer",
-      currency: "USD",
-    } as never);
+  await db.insert(parties).values({
+    id: partyId,
+    tenantId,
+    name: "LF C",
+    code: "LFC",
+    kind: "customer",
+    currency: "USD",
+  } as never);
   await db.insert(invoices).values({
     id: invoiceId,
     tenantId,

@@ -40,7 +40,7 @@ describe("resolveTenantId (F08 regression — stale company picker)", () => {
     vi.stubEnv("VITE_DEFAULT_TENANT_ID", BAKED_BUILD_TIME_TENANT);
     getInstallTenantId = () => REAL_ACTIVATION_TENANT;
 
-    const { resolveTenantId } = await import("./UserPickerPage");
+    const { resolveTenantId } = await import("./resolveTenantId");
     expect(resolveTenantId()).toBe(REAL_ACTIVATION_TENANT);
   }, 30_000);
 
@@ -49,7 +49,7 @@ describe("resolveTenantId (F08 regression — stale company picker)", () => {
     vi.stubEnv("VITE_DEFAULT_TENANT_ID", BAKED_BUILD_TIME_TENANT);
     getInstallTenantId = () => null;
 
-    const { resolveTenantId } = await import("./UserPickerPage");
+    const { resolveTenantId } = await import("./resolveTenantId");
     expect(resolveTenantId()).toBe(BAKED_BUILD_TIME_TENANT);
   });
 
@@ -58,7 +58,7 @@ describe("resolveTenantId (F08 regression — stale company picker)", () => {
     vi.stubEnv("VITE_DEFAULT_TENANT_ID", BAKED_BUILD_TIME_TENANT);
     getInstallTenantId = () => REAL_ACTIVATION_TENANT;
 
-    const { resolveTenantId } = await import("./UserPickerPage");
+    const { resolveTenantId } = await import("./resolveTenantId");
     expect(resolveTenantId()).toBe(REAL_ACTIVATION_TENANT);
   });
 });

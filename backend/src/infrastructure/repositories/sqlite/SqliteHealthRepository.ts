@@ -1,4 +1,4 @@
-// PORTED-FROM: src/infrastructure/repositories/PostgresHealthRepository.ts sha256=f5f9b468f3635c5bfcfe378939a4aaccc630bb3f76dd8432bd85b4b5b046c53b
+// PORTED-FROM: src/infrastructure/repositories/PostgresHealthRepository.ts sha256=64007b2701811f9fd8c6c2747e1523ba022d99abd7a94f519928b520fedbc56c
 // SQLite twin (specs/001-desktop-sqlite-engine S4). Keep behavior identical to the PG source.
 /** PostgreSQL deep-health probes — moved verbatim from health.route.ts (S1). */
 import { sql } from "drizzle-orm";

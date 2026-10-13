@@ -48,6 +48,8 @@ import {
   type RestoreReconcileResult,
 } from "../../application/use-cases/sync/syncRestoreUseCases.js";
 import { withTenantTx } from "../../infrastructure/orm/engine.js";
+import { getHubEpoch, rotateHubEpoch } from "../../application/use-cases/sync/hubIdentity.js";
+import { isHubWriteFrozen } from "../../infrastructure/http/middleware/hubWriteFreeze.middleware.js";
 import { getSyncRestoreStateStore } from "../../infrastructure/repositories/engineStores.js";
 import {
   describeHubActivity,
@@ -825,6 +827,18 @@ export function registerSyncRoutes(
             if (n) await container.notificationRepo.create(n, ctx);
           },
           isOwnRestoredUnit,
+          // MIG-01/02/06: a changed hub instance → reset cursor, re-deliver, re-report number tips.
+          {
+            requeueSynced: (tenantId) => container.syncOutboxRepo.requeueSyncedForNewHub(tenantId),
+            reassertNumberTips: async () => {
+              if (!deviceId) return;
+              await numberBlocksUc.reassertNumberTipsOnHub({
+                tenantId: ctx.tenantId,
+                syncDeviceId: deviceId,
+                authHeader: authorization,
+              });
+            },
+          },
         );
 
       // T109 — restore on a synced device: the restored database runs under a NEW sync identity.
@@ -1282,7 +1296,46 @@ export function registerSyncRoutes(
           receivedAt: r.receivedAt.toISOString(),
           appliedAt: r.appliedAt?.toISOString() ?? null,
         })),
+        // MIG-01/02: which hub instance answered, and the head of its stream. A device compares
+        // both with what it last saw and re-pulls + re-delivers on a change (syncUseCases.ts).
+        hubEpoch: (await getHubEpoch(container, ctx.tenantId)).epoch,
+        headSeq: await container.syncInboxRepo.maxAppliedSeq(ctx.tenantId),
       });
+    },
+  );
+
+  /** MIG-01: this hub instance's identity (epoch), stream head and write-freeze state. */
+  router.get(
+    "/sync/hub/identity",
+    auth,
+    guards.operatorGuard,
+    async (req: Request, res: Response) => {
+      const ctx = req.tenantContext!;
+      const epoch = await getHubEpoch(container, ctx.tenantId);
+      res.json({
+        ...epoch,
+        headSeq: await container.syncInboxRepo.maxAppliedSeq(ctx.tenantId),
+        writeFrozen: isHubWriteFrozen(),
+      });
+    },
+  );
+
+  /**
+   * MIG-01/05: rotate the epoch — run on the server devices are switched TO (cutover) or BACK to
+   * (rollback). Every device then re-pulls from the start and re-delivers its history; the hub
+   * de-duplicates by op id, so nothing is applied twice.
+   */
+  router.post(
+    "/sync/hub/identity/rotate",
+    auth,
+    guards.operatorGuard,
+    validateBody(z.object({ reason: z.string().trim().min(3).max(200) })),
+    async (req: Request, res: Response) => {
+      const ctx = req.tenantContext!;
+      const { reason } = (req as unknown as { validatedBody: { reason: string } }).validatedBody;
+      const epoch = await rotateHubEpoch(container, ctx.tenantId, reason);
+      logger.warn({ tenantId: ctx.tenantId, epoch: epoch.epoch, reason }, "hub epoch rotated");
+      res.json(epoch);
     },
   );
 
@@ -1318,6 +1371,48 @@ export function registerSyncRoutes(
         res
           .status(500)
           .json({ code: "NUMBER_BLOCK_CLAIM_FAILED", message: "فشل حجز كتلة الترقيم" });
+      }
+    },
+  );
+
+  /**
+   * MIG-06: a device re-reports the highest number it already issued/holds for an entity type
+   * (after this hub instance changed). Advances the counter only — no block is carved.
+   */
+  router.post(
+    "/sync/number-blocks/tip",
+    auth,
+    guards.numberingGuard,
+    gate.attributed,
+    validateBody(
+      z.object({
+        syncDeviceId: z.string().uuid(),
+        entityType: z.string().min(1).max(30),
+        knownUsed: z.number().int().positive().max(999999),
+      }),
+    ),
+    async (req: Request, res: Response) => {
+      const ctx = req.tenantContext!;
+      const body = (
+        req as unknown as {
+          validatedBody: { syncDeviceId: string; entityType: string; knownUsed: number };
+        }
+      ).validatedBody;
+      try {
+        const tip = await numberBlocksUc.raiseNumberTip({
+          tenantId: ctx.tenantId,
+          syncDeviceId: body.syncDeviceId,
+          entityType: body.entityType,
+          knownUsed: body.knownUsed,
+        });
+        res.json({ entityType: body.entityType, tip });
+      } catch (err) {
+        if (err instanceof BusinessRuleError) {
+          res.status(422).json({ code: "BUSINESS_RULE", message: err.message });
+          return;
+        }
+        logger.error({ err }, "number tip raise failed");
+        res.status(500).json({ code: "NUMBER_TIP_FAILED", message: "فشل تحديث عدّاد الترقيم" });
       }
     },
   );

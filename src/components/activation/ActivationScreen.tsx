@@ -12,6 +12,7 @@ import {
 import { getApiBaseUrl } from "@/lib/api-base-url";
 import { validateInvitation, consumeInvitation } from "@/lib/invitations";
 import { cn } from "@/lib/utils";
+import { resultErrorMessage } from "@/lib/resultErrorMessage";
 
 /**
  * R3 — full Setup Wizard for the customer ERP frontend.
@@ -56,17 +57,29 @@ function headers(): Record<string, string> {
   return h;
 }
 
+/** Fields the setup endpoints answer with (all optional — a failed call may carry none). */
+type SetupApiBody = {
+  message?: unknown;
+  code?: string;
+  tenantId?: string;
+  id?: string;
+  activationId?: string;
+  isCompleted?: boolean;
+  companyName?: unknown;
+};
+
 async function apiPost(
   path: string,
   body: unknown,
-): Promise<{ ok: boolean; status: number; data: any }> {
+): Promise<{ ok: boolean; status: number; data: SetupApiBody }> {
   const url = `${API_BASE}${path}`;
   const r = await fetch(url, {
     method: "POST",
     headers: headers(),
     body: JSON.stringify(body),
   });
-  const data = await r.json().catch(() => ({}));
+  const parsed: unknown = await r.json().catch(() => ({}));
+  const data = (parsed && typeof parsed === "object" ? parsed : {}) as SetupApiBody;
   return { ok: r.ok, status: r.status, data };
 }
 
@@ -249,7 +262,7 @@ export function ActivationScreen({ onActivated }: { onActivated: () => void }) {
         name: fromLicense,
       });
       if (!co.ok && co.data?.code !== "ALREADY_COMPLETED") {
-        throw new Error(co.data?.message || "فشل تهيئة الشركة من الترخيص");
+        throw new Error(resultErrorMessage(co.data, "فشل تهيئة الشركة من الترخيص"));
       }
       await saveLicenseKey(key);
       await saveActivationId(activationId);
@@ -304,17 +317,21 @@ export function ActivationScreen({ onActivated }: { onActivated: () => void }) {
       const admin = await apiPost("/api/setup/wizard/admin", adminBody);
       if (!admin.ok) {
         throw new Error(
-          admin.data?.message ||
-            (isDesktopPreBaked
+          resultErrorMessage(
+            admin.data,
+            isDesktopPreBaked
               ? "فشل حفظ الرمز السري"
-              : "فشل حفظ كلمة المرور — تأكد أنها 8 أحرف على الأقل"),
+              : "فشل حفظ كلمة المرور — تأكد أنها 8 أحرف على الأقل",
+          ),
         );
       }
       const rv = await apiPost("/api/setup/wizard/review", { tenantId: tid, confirmed: true });
       const reviewAlreadyDone = rv.status === 409 || rv.data?.code === "ALREADY_COMPLETED";
-      if (!rv.ok && !reviewAlreadyDone) throw new Error(rv.data?.message || "فشل إكمال الإعداد");
+      if (!rv.ok && !reviewAlreadyDone)
+        throw new Error(resultErrorMessage(rv.data, "فشل إكمال الإعداد"));
       const cp = await apiPost("/api/setup/wizard/complete", { tenantId: tid });
-      if (!cp.ok && !reviewAlreadyDone) throw new Error(cp.data?.message || "فشل إكمال الإعداد");
+      if (!cp.ok && !reviewAlreadyDone)
+        throw new Error(resultErrorMessage(cp.data, "فشل إكمال الإعداد"));
       setInstallTenantId(tid);
       if (rememberYear) {
         try {

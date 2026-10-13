@@ -28,13 +28,11 @@ let reachable = false;
 beforeAll(async () => {
   reachable = await databaseReachable();
   if (!reachable) return;
-  await db
-    .insert(tenants)
-    .values({
-      id: tenantId,
-      name: "Delete impact",
-      slug: `dia-${tenantId.slice(0, 8)}`,
-    } as typeof tenants.$inferInsert);
+  await db.insert(tenants).values({
+    id: tenantId,
+    name: "Delete impact",
+    slug: `dia-${tenantId.slice(0, 8)}`,
+  } as typeof tenants.$inferInsert);
   await db.insert(parties).values([
     {
       id: customerId,
@@ -105,32 +103,30 @@ beforeAll(async () => {
       cashImpact: "none",
       ...o,
     }) as typeof ledgerEntries.$inferInsert;
-  await db
-    .insert(ledgerEntries)
-    .values([
-      leg({
-        date: "2026-01-01",
-        type: "opening",
-        debit: 25,
-        referenceType: "opening",
-        referenceId: customerId,
-      }),
-      leg({
-        date: "2026-05-10",
-        type: "sales_invoice",
-        debit: 100,
-        referenceType: "sales_invoice",
-        referenceId: activeInvoiceId,
-      }),
-      leg({
-        date: "2026-05-10",
-        type: "receipt_in",
-        credit: 40,
-        cashImpact: "in",
-        referenceType: "sales_invoice",
-        referenceId: activeInvoiceId,
-      }),
-    ]);
+  await db.insert(ledgerEntries).values([
+    leg({
+      date: "2026-01-01",
+      type: "opening",
+      debit: 25,
+      referenceType: "opening",
+      referenceId: customerId,
+    }),
+    leg({
+      date: "2026-05-10",
+      type: "sales_invoice",
+      debit: 100,
+      referenceType: "sales_invoice",
+      referenceId: activeInvoiceId,
+    }),
+    leg({
+      date: "2026-05-10",
+      type: "receipt_in",
+      credit: 40,
+      cashImpact: "in",
+      referenceType: "sales_invoice",
+      referenceId: activeInvoiceId,
+    }),
+  ]);
 });
 
 describe("party delete impact — recent activity and accounting effect", () => {

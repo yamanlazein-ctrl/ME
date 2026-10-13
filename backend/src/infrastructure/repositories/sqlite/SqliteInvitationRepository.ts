@@ -1,4 +1,4 @@
-// PORTED-FROM: src/infrastructure/repositories/PostgresInvitationRepository.ts sha256=a64a8f410c32c3881950690b2692b6a810afbbc6ee392e6e661dc4744a2b4193
+// PORTED-FROM: src/infrastructure/repositories/PostgresInvitationRepository.ts sha256=497d59026950812799c091efd1faf517cd865a84efe406cfeabff35290e14c95
 // SQLite twin (specs/001-desktop-sqlite-engine S4). Keep behavior identical to the PG source.
 import { eq, and, isNull, count } from "drizzle-orm";
 import { randomUUID } from "node:crypto";

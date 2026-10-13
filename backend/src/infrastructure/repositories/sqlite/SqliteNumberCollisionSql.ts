@@ -1,4 +1,4 @@
-// PORTED-FROM: src/infrastructure/repositories/PostgresNumberCollisionSql.ts sha256=5fc04d3689427beaa374cd92fefd0200dda8d66b2582300039e2624e11be510d
+// PORTED-FROM: src/infrastructure/repositories/PostgresNumberCollisionSql.ts sha256=8bf3f0871325212d5c91f1d7a381ad98da901c4c15c38a6465b82fb20d60702a
 // SQLite twin (specs/001-desktop-sqlite-engine S4). Keep behavior identical to the PG source.
 /** PostgreSQL statements of the sync number-collision rule — moved verbatim from syncNumberCollision.ts (S1). */
 import { sql } from "drizzle-orm";

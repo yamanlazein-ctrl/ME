@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "main-window",
+  "description": "The single application window: app commands only (no filesystem, shell or HTTP plugins are exposed).",
+  "windows": ["main"],
+  "permissions": ["core:default"]
+}

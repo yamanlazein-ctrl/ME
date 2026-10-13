@@ -47,7 +47,7 @@ export const Route = createFileRoute("/inventory")({
 });
 
 function InventoryPage() {
-  const invVersion = useInventory();
+  const inventory = useInventory();
   const inventoryLoad = getInventoryLoadState();
   const [query, setQuery] = useState("");
   const [expandedFabric, setExpandedFabric] = useState<string | null>(fabrics[0]?.id ?? null);
@@ -74,8 +74,9 @@ function InventoryPage() {
 
   const q = query.trim().toLowerCase();
   const filteredFabrics = useMemo(() => {
-    if (!q) return fabrics;
-    return fabrics.filter((f) => {
+    const all = inventory.fabrics;
+    if (!q) return all;
+    return all.filter((f) => {
       if ((f.name ?? "").toLowerCase().includes(q)) return true;
       return colorsOfFabric(f.id).some((c) => {
         if ((c.name ?? "").toLowerCase().includes(q) || (c.code ?? "").toLowerCase().includes(q))
@@ -87,7 +88,7 @@ function InventoryPage() {
         );
       });
     });
-  }, [q, invVersion]);
+  }, [q, inventory]);
 
   // Reset to the first page whenever the search term changes.
   useEffect(() => {

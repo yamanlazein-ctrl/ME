@@ -22,6 +22,14 @@ const RETRY_DELAYS_MS = [30_000, 120_000];
 // 5 s: a peer's invoice shows here within ~5–10 s instead of up to 40 s (two 20 s ticks).
 // A tick with nothing to do is one cheap pull on the hub.
 const PERIODIC_SYNC_MS = 5_000;
+// TEMP-SYNC-01: a refused device (revoked / unknown / not bound) or a failing run used to be
+// re-tried every 5 s forever (~17k hub calls a day). Back off exponentially up to 5 min; the first
+// clean run resets the cadence, so a reinstated device recovers within one capped interval.
+const BACKOFF_CAP_MS = 300_000;
+export function periodicBackoffMs(consecutiveFailures: number): number {
+  if (consecutiveFailures <= 0) return 0;
+  return Math.min(PERIODIC_SYNC_MS * 2 ** consecutiveFailures, BACKOFF_CAP_MS);
+}
 // The header remounts with every page: the "already online" kick runs once per app session.
 let mountKickDone = false;
 
@@ -103,7 +111,14 @@ export function useAutoSync() {
   // pulls a peer's invoice until the next network blip.
   useEffect(() => {
     if (status !== "online") return;
+    let failures = 0;
+    let pausedUntil = 0;
+    const backOff = () => {
+      failures += 1;
+      pausedUntil = Date.now() + periodicBackoffMs(failures);
+    };
     const tick = async () => {
+      if (Date.now() < pausedUntil) return;
       // No "window hidden" skip: the desktop app is usually minimized while
       // people work in other programs, and peers still need its documents
       // (background timers are only throttled by WebView2, not stopped).
@@ -113,10 +128,13 @@ export function useAutoSync() {
         if (!result || result.skipped) return;
         setDeviceGate(Boolean(result.deviceGate));
         setDeviceTrust(result.deviceGate ? (result.deviceTrust ?? null) : null);
+        if (result.deviceGate || result.pullError) backOff();
+        else failures = 0;
         if ((result.activity ?? 0) > 0 || (result.rejected ?? 0) > 0) {
           await qc.invalidateQueries({ queryKey: ["notifications"] });
         }
       } catch (err) {
+        backOff();
         console.warn("[sync] periodic run failed:", err);
       }
     };

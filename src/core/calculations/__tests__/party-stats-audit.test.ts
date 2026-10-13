@@ -26,7 +26,11 @@
 import { describe, it, expect } from "vitest";
 import { buildPartyStatsByCurrency } from "@/core/calculations/ledgerCalc";
 
-const party = { id: "p1" } as any;
+type Args = Parameters<typeof buildPartyStatsByCurrency>;
+// Fixtures carry only the fields the function reads; the casts name the real parameter types.
+const party = { id: "p1" } as unknown as Args[0];
+const asInvoices = (rows: unknown) => rows as Args[2];
+const asVouchers = (rows: unknown) => rows as Args[3];
 
 const inv = (n: number, currency: string, total: number, paid = 0) => ({
   id: `i${n}`,
@@ -49,7 +53,7 @@ describe("buildPartyStatsByCurrency — full-dataset contract (audit H2)", () =>
       ...Array.from({ length: 25 }, (_, i) => inv(i, "SYP", 1000)),
       ...Array.from({ length: 3 }, (_, i) => inv(100 + i, "USD", 5)),
     ];
-    const stats = buildPartyStatsByCurrency(party, "customer", invoices as any, []);
+    const stats = buildPartyStatsByCurrency(party, "customer", asInvoices(invoices), []);
     expect(stats["SYP"].invoicesCount).toBe(25);
     expect(stats["SYP"].totalAmount).toBe(25_000);
     expect(stats["USD"].invoicesCount).toBe(3);
@@ -62,7 +66,7 @@ describe("buildPartyStatsByCurrency — full-dataset contract (audit H2)", () =>
     // SYP amount into the invoice's own USD currency before writing `paid`
     // — this fixture mirrors that, not the voucher's raw currency/amount.
     const invoices = [inv(1, "SYP", 1000, 1200), inv(2, "USD", 5, 5)];
-    const stats = buildPartyStatsByCurrency(party, "customer", invoices as any, []);
+    const stats = buildPartyStatsByCurrency(party, "customer", asInvoices(invoices), []);
     expect(stats["SYP"].totalPaid).toBe(1200);
     // H2 fix: the old Math.max(0, …) clamp hid the 200 credit balance.
     expect(stats["SYP"].remaining).toBe(-200);
@@ -74,7 +78,7 @@ describe("buildPartyStatsByCurrency — full-dataset contract (audit H2)", () =>
     // INV total 17_015_000, paid 8_515_000, return 8_500_000 → remaining 0
     const invoices = [inv(1, "SYP", 17_015_000, 8_515_000)];
     const returns = [{ originalInvoiceId: "i1", status: "active", amount: 8_500_000 }];
-    const stats = buildPartyStatsByCurrency(party, "customer", invoices as any, [], returns);
+    const stats = buildPartyStatsByCurrency(party, "customer", asInvoices(invoices), [], returns);
     expect(stats["SYP"].totalPaid).toBe(8_515_000);
     expect(stats["SYP"].remaining).toBe(0);
     expect(stats["SYP"].lastDate).toBeTruthy();
@@ -85,7 +89,12 @@ describe("buildPartyStatsByCurrency — full-dataset contract (audit H2)", () =>
     const vouchers = [
       { partyId: "p1", kind: "receipt", status: "cancelled", amount: 100, currency: "SYP" },
     ];
-    const stats = buildPartyStatsByCurrency(party, "customer", invoices as any, vouchers as any);
+    const stats = buildPartyStatsByCurrency(
+      party,
+      "customer",
+      asInvoices(invoices),
+      asVouchers(vouchers),
+    );
     expect(stats["SYP"].invoicesCount).toBe(1);
     expect(stats["SYP"].totalAmount).toBe(500);
     expect(stats["SYP"].totalPaid).toBe(0);

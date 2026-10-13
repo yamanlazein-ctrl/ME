@@ -143,16 +143,14 @@ beforeAll(async () => {
     reason: "defect",
     currency: "USD",
   } as never);
-  await db
-    .insert(returnLines)
-    .values({
-      id: randomUUID(),
-      tenantId,
-      returnId: ret,
-      rollId: roll,
-      quantityKg: "1.5",
-      pricePerKg: "10.5",
-    } as never);
+  await db.insert(returnLines).values({
+    id: randomUUID(),
+    tenantId,
+    returnId: ret,
+    rollId: roll,
+    quantityKg: "1.5",
+    pricePerKg: "10.5",
+  } as never);
   await db.insert(vouchers).values([
     {
       tenantId,

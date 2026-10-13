@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { Palette, Plus, Printer, Save, Search, Trash2 } from "lucide-react";
 import { AppShell } from "@/components/layout/AppShell";
 import { PageCard } from "@/components/layout/PageCard";
@@ -159,7 +159,7 @@ export const Route = createFileRoute("/invoices/print-receive/new")({
 });
 
 function PrintReceivePage() {
-  useInventory();
+  const inventory = useInventory();
   const { data: allJobs = [] } = usePrintJobs();
   const { data: open = [] } = useOpenPrintJobs();
   const receivePrint = useReceivePrint();
@@ -173,7 +173,7 @@ function PrintReceivePage() {
   const [error, setError] = useState<string | null>(null);
   const [ok, setOk] = useState<string | null>(null);
 
-  const jobById = (id: string) => allJobs.find((j) => j.id === id);
+  const jobById = useCallback((id: string) => allJobs.find((j) => j.id === id), [allJobs]);
 
   const updateLine = (key: string, patch: Partial<ReceiveLine>) =>
     setLines((ls) => ls.map((l) => (l.key === key ? { ...l, ...patch } : l)));
@@ -231,11 +231,13 @@ function PrintReceivePage() {
     return lines.some((l) => {
       if (!l.jobId || l.jobId.startsWith("fabric:")) return false;
       const job = jobById(l.jobId);
-      const src = job ? rollById(job.sourceRollId) : undefined;
+      // From the store snapshot: when the rolls load after the jobs, the decision recomputes
+      // (it used to stay on the "no source roll → SYP" guess and could hide the FX field).
+      const src = job ? inventory.rolls.find((r) => r.id === job.sourceRollId) : undefined;
       const srcCur = src?.currency ?? "SYP";
       return srcCur !== currency;
     });
-  }, [currency, lines, allJobs]);
+  }, [currency, lines, jobById, inventory]);
 
   // FE-09: each click mints its own Idempotency-Key, so the server cannot dedupe a double click —
   // the buttons must be inert for the whole multi-document save.

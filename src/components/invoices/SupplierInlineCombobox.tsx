@@ -26,7 +26,7 @@ export function SupplierInlineCombobox({
   /** Put on the trigger button, for a field label's `htmlFor`. */
   id?: string;
 }) {
-  const partiesVersion = useParties();
+  const parties = useParties();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [addMode, setAddMode] = useState(false);
@@ -49,8 +49,8 @@ export function SupplierInlineCombobox({
   // Bug #1: the duplicate check is the shared domain rule (src/shared/utils/
   // supplierMatch.ts), so the combobox and its tests cannot drift apart.
   const exactExisting = useMemo(
-    () => findSupplierByExactName(suppliers, addMode ? name : query),
-    [addMode, name, query, partiesVersion],
+    () => findSupplierByExactName(parties.suppliers, addMode ? name : query),
+    [addMode, name, query, parties],
   );
 
   const openAdd = () => {

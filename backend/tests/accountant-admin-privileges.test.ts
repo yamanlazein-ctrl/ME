@@ -1,7 +1,8 @@
 /**
  * Owner decision 2026-10-12 — the accountant holds every admin privilege; the only things reserved
  * for the admin role are granting the admin role (directly or by invitation) and touching an admin
- * account. Nobody changes their own role.
+ * account. Nobody changes their own role. Release mission 2026-10-13: creating invitation codes is
+ * the admin's alone (the accountant cannot create any).
  */
 import { describe, it, expect, vi } from "vitest";
 import { randomUUID } from "node:crypto";
@@ -19,6 +20,7 @@ vi.mock("@/application/use-cases/invitation/invitationUseCases.js", () => ({
 import { rbac } from "@/infrastructure/http/middleware/rbac.middleware.js";
 import { registerUserRoutes } from "@/presentation/routes/user.route.js";
 import { registerInvitationAdminRoutes } from "@/presentation/routes/invitation.route.js";
+import { generateInvitationCodeUseCase } from "@/application/use-cases/invitation/invitationUseCases.js";
 
 type Role = "admin" | "accountant" | "warehouse" | "viewer";
 const ME = randomUUID();
@@ -38,6 +40,7 @@ async function call(role: Role, method: string, path: string, body?: unknown) {
     update,
     delete: del,
     findSyncSnapshot: async () => null,
+    list: async () => ({ data: Object.values(users), total: 3 }),
   };
   const auth: RequestHandler = (req, _res, next) => {
     (req as unknown as { tenantContext: unknown }).tenantContext = {
@@ -84,7 +87,7 @@ describe("accountant = admin, except the admin role itself", () => {
   it("passes every admin-only guard; other roles still do not", async () => {
     expect((await call("accountant", "PUT", "/settings/company", {})).status).toBe(200);
     expect((await call("accountant", "POST", "/rolls", {})).status).toBe(200);
-    expect((await call("accountant", "GET", "/users")).status).not.toBe(403);
+    expect((await call("accountant", "GET", "/users")).status).toBe(200); // ERP-004: exact success
     expect((await call("warehouse", "PUT", "/settings/company", {})).status).toBe(403);
     expect((await call("viewer", "GET", "/users")).status).toBe(403);
   });
@@ -124,7 +127,7 @@ describe("accountant = admin, except the admin role itself", () => {
     expect((await call("admin", "PATCH", `/users/${ADMIN}`, { role: "viewer" })).writes).toBe(1);
   });
 
-  it("invites: accountant yes, but never into the admin role", async () => {
+  it("invites: the admin only — the accountant cannot create any invitation code", async () => {
     const inv = (role: Role, targetRole: string) =>
       call(role, "POST", "/invitations/generate", {
         type: "user",
@@ -132,9 +135,16 @@ describe("accountant = admin, except the admin role itself", () => {
         targetEmail: "n@x.io",
         targetRole,
       });
-    expect((await inv("accountant", "viewer")).status).toBe(200);
+    const generate = vi.mocked(generateInvitationCodeUseCase);
+    generate.mockClear();
+    expect((await inv("accountant", "viewer")).status).toBe(403);
     expect((await inv("accountant", "admin")).status).toBe(403);
+    expect(
+      (await call("accountant", "POST", "/invitations/generate", { type: "device" })).status,
+    ).toBe(403);
+    expect(generate).not.toHaveBeenCalled();
     expect((await inv("admin", "admin")).status).toBe(200);
+    expect((await inv("admin", "viewer")).status).toBe(200);
     expect((await inv("warehouse", "viewer")).status).toBe(403);
   });
 });

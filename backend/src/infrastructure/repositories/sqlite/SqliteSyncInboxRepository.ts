@@ -1,4 +1,4 @@
-// PORTED-FROM: src/infrastructure/repositories/PostgresSyncInboxRepository.ts sha256=b69d14b2e424543597a26532614060c8f490deca4246d037b20d5586e26e4970
+// PORTED-FROM: src/infrastructure/repositories/PostgresSyncInboxRepository.ts sha256=fd86842453dc6f5e661e396d83a19c00d77b4fa6b9f060b7029a349483d3148c
 // SQLite twin (specs/001-desktop-sqlite-engine S4). Keep behavior identical to the PG source.
 import { asc } from "./helpers/pgOrder.js";
 import { and, eq, gt, inArray, isNotNull, isNull, ne, or, sql } from "drizzle-orm";
@@ -126,6 +126,18 @@ export class SqliteSyncInboxRepository implements ISyncInboxRepository {
    * the caller's own units fill the entire window, so a busy device could get
    * zero rows back forever and never advance its cursor.
    */
+  async maxAppliedSeq(tenantId: string): Promise<number | null> {
+    return runWithTenantContext({ tenantId }, async () => {
+      const [row] = await this.db
+        .select({ m: sql<number | string | null>`max(${syncInbox.appliedSeq})` })
+        .from(syncInbox)
+        // Every row that ever drew a number (not only rows still `applied`): a device cursor can
+        // never be above this on an intact stream, so "head < cursor" means a rewound stream.
+        .where(and(eq(syncInbox.tenantId, tenantId), isNotNull(syncInbox.appliedSeq)));
+      return row?.m == null ? null : Number(row.m);
+    });
+  }
+
   async listAppliedSince(
     tenantId: string,
     afterSeq: number | null,

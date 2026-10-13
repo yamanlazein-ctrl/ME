@@ -1,4 +1,4 @@
-// PORTED-FROM: src/infrastructure/repositories/rollLocking.ts sha256=ac7aae796e10ffc2f80c99566342a927a8ab9372603528ce8a90521ba4247949
+// PORTED-FROM: src/infrastructure/repositories/rollLocking.ts sha256=c7b06b4c8d2eb1fe542e6d3aa7d260c0164e019a1b1542ab89f7581e40b08bb6
 // SQLite twin (specs/001-desktop-sqlite-engine S4). Keep behavior identical to the PG source.
 import { asc } from "./pgOrder.js";
 /**

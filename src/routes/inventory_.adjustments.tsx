@@ -20,7 +20,6 @@ import {
   colorById,
   fabricById,
   rollById,
-  rolls,
   useInventory,
   type Roll,
 } from "@/presentation/hooks/useInventory";
@@ -190,7 +189,7 @@ function RollPicker({
   onClose: () => void;
   onPick: (r: Roll) => void;
 }) {
-  const invVersion = useInventory();
+  const inventory = useInventory();
   const [term, setTerm] = useState("");
   const matches = useMemo(() => {
     const t = term.trim().toLowerCase();
@@ -198,8 +197,9 @@ function RollPicker({
       const c = colorById(r.colorId);
       return `${r.rollNo} ${c?.name ?? ""} ${c?.code ?? ""} ${fabricById(c?.fabricId ?? "")?.name ?? ""} ${r.dyeBatch ?? ""}`.toLowerCase();
     };
-    return (t ? rolls.filter((r) => label(r).includes(t)) : rolls).slice(0, 30);
-  }, [term, invVersion]);
+    const all = inventory.rolls;
+    return (t ? all.filter((r) => label(r).includes(t)) : all).slice(0, 30);
+  }, [term, inventory]);
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
       <DialogContent dir="rtl" className="max-w-lg">

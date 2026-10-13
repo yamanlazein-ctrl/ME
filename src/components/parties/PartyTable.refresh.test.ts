@@ -1,6 +1,6 @@
 /**
  * Customers/Suppliers review — source contracts for list freshness and honest states.
- *  - The list memo keys on the parties cache VERSION: the cache refreshes by replacing objects inside
+ *  - The list memo keys on the parties store SNAPSHOT: the cache refreshes by replacing objects inside
  *    the same array, so keying on `list.length` kept showing a renamed party / old balance.
  *  - CSV money is exported with round2dp (Math.round dropped USD cents: 12.50 → 13).
  *  - The party picker reports a failed search instead of «الاسم غير موجود» (which invited a duplicate).
@@ -13,10 +13,14 @@ const table = readFileSync(join(__dirname, "PartyTable.tsx"), "utf8");
 const combo = readFileSync(join(__dirname, "../vouchers/PartyCombobox.tsx"), "utf8");
 
 describe("party list freshness", () => {
-  it("filtered list depends on the cache version", () => {
-    expect(table).toMatch(/const partiesVersion = useParties\(\);/);
-    expect(table).toMatch(/\}, \[q, status, credit, list, partiesVersion\]\);/);
+  it("filtered list depends on the store snapshot (changes on every store change)", () => {
+    // The snapshot's identity changes on every change (useParties.snapshot.test.ts proves it); the
+    // memo reads the rows through it, so the dependency is real — no version number, no disable.
+    expect(table).toMatch(/const parties = useParties\(\);/);
+    expect(table).toMatch(/kind === "supplier" \? parties\.suppliers : parties\.customers/);
+    expect(table).toMatch(/\}, \[q, status, credit, kind, parties\]\);/);
     expect(table).not.toMatch(/list\.length\]\);/);
+    expect(table).not.toMatch(/eslint-disable/);
   });
   it("CSV keeps cents", () => {
     expect(table).not.toMatch(/String\(Math\.round\(s\./);

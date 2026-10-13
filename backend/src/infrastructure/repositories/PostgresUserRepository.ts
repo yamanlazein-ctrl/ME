@@ -234,8 +234,10 @@ export class PostgresUserRepository implements IUserRepository {
 
       if (data.active === false) {
         await this.revokeSyncDeviceAuthorization(ctx.tenantId, id);
-        invalidateIdentityCache(id);
       }
+      // ERP-001: role/name/active all feed the cached session identity — drop it on every update
+      // so a demotion applies to the very next request, not up to 60 s later.
+      invalidateIdentityCache(id);
 
       return {
         id: u.id,

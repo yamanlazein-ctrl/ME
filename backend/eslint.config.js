@@ -4,13 +4,11 @@ import tseslint from "typescript-eslint";
 
 export default tseslint.config(
   { ignores: ["dist/**", "node_modules/**"] },
-  // The plugin is registered so existing `eslint-disable @typescript-eslint/...` comments resolve;
-  // those rules are not enabled here, so their directives are not reported as unused.
+  // TypeScript parser for the boundary rule below. No eslint-disable comments remain in the backend
+  // (2026-10-12), so unused-directive reporting stays at ESLint's default.
   {
     files: ["src/**/*.ts"],
     languageOptions: { parser: tseslint.parser },
-    plugins: { "@typescript-eslint": tseslint.plugin },
-    linterOptions: { reportUnusedDisableDirectives: "off" },
   },
   // Architecture boundary (Phase F — docs/decisions.md D-006): direct database access is allowed
   // ONLY in the RLS-stamping pool (drizzle.ts). Any other pg import would bypass the

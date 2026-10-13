@@ -21,6 +21,11 @@ export interface INumberBlockStore {
     year: number;
     knownUsed?: number | null;
   }): Promise<ClaimedNumberBlock>;
+  /**
+   * MIG-06: raise the sequence tip to knownUsed (same bound as claimBlock) WITHOUT carving a block.
+   * Returns the tip after the update.
+   */
+  raiseTip(input: { tenantId: UUID; entityType: string; knownUsed: number }): Promise<number>;
   reclaimBlockTail(input: {
     tenantId: UUID;
     blockId: UUID;

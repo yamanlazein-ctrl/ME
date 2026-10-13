@@ -123,6 +123,27 @@ export function useCreatePaymentVoucher() {
   });
 }
 
+/** ERP-008: amend a voucher atomically — the original stays active if the replacement is refused. */
+export function useReplaceVoucher() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (args: { id: string; expectedVersion: number; input: CreateVoucherInput }) =>
+      container.vouchers.repository.replace(
+        args.id as never,
+        args.expectedVersion,
+        args.input as never,
+      ),
+    onSuccess: () => {
+      toast.success("تم تعديل السند");
+      qc.invalidateQueries({ queryKey: KEYS.root });
+      invalidateFinancialViews(qc);
+    },
+    onError: (e: Error) => {
+      toast.error(`فشل تعديل السند — بقي السند الأصلي كما هو: ${e.message}`);
+    },
+  });
+}
+
 export function useCancelVoucher() {
   const qc = useQueryClient();
   return useMutation({

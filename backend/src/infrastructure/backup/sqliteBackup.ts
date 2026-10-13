@@ -239,9 +239,10 @@ function attachmentFiles(db: Database.Database): Array<{ path: string; data: Uin
   return out;
 }
 
-function readIdentity(
-  db: Database.Database,
-): Pick<BackupManifestV3, "data" | "tenant" | "licence" | "sync" | "schema"> & {
+function readIdentity(db: Database.Database): Pick<
+  BackupManifestV3,
+  "data" | "tenant" | "licence" | "sync" | "schema"
+> & {
   journalIdx: number;
 } {
   const meta = db.prepare("SELECT * FROM motard_meta WHERE id = 1").get() as {

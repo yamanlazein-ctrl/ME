@@ -112,7 +112,7 @@ export function buildContainer(): Container {
   const dashboardRepo = new SqliteDashboardRepository(db);
   const profitRepo = new SqliteProfitRepository(db);
   const documentTrackRepo = new SqliteDocumentTrackRepository(db);
-  const userRepo = new SqliteUserRepository(db);
+  const userRepo = new SqliteUserRepository(dbx); // ERP-002: joins the route transaction
   const companyRepo = new SqliteCompanyRepository(db);
   const invitationRepo = new SqliteInvitationRepository(db);
   const licenseRepo = new SqliteLicenseRepository(db);

@@ -9,6 +9,7 @@ import type { InvoiceData } from "@/domain/entities/Invoice";
 import type { InvoiceType } from "@/domain/types";
 import { refreshInventory } from "./useInventory";
 import { invalidateFinancialViews } from "./invalidateFinancialViews";
+import { resultErrorMessage } from "@/lib/resultErrorMessage";
 
 /**
  * Presentation-layer hooks for invoice CRUD.
@@ -126,13 +127,7 @@ export function useCreateInvoice() {
         void refreshInventory();
         qc.invalidateQueries({ queryKey: ["inventory"] });
       } else {
-        const rawErr = (res.error as any) ?? {};
-        const details = rawErr.details as Record<string, string[]> | undefined;
-        const firstDetail = details ? details[Object.keys(details)[0]]?.[0] : undefined;
-        const errMsg = firstDetail
-          ? `${rawErr.message} — ${firstDetail}`
-          : (rawErr.message ?? "فشل إنشاء الفاتورة");
-        toast.error(errMsg);
+        toast.error(resultErrorMessage(res.error, "فشل إنشاء الفاتورة"));
       }
     },
   });
@@ -164,9 +159,7 @@ export function useCancelInvoice() {
         void refreshInventory();
         qc.invalidateQueries({ queryKey: ["inventory"] });
       } else {
-        const errMsg =
-          (res.error as any)?.message ?? (res.error as any)?.toString?.() ?? "فشل إلغاء الفاتورة";
-        toast.error(errMsg);
+        toast.error(resultErrorMessage(res.error, "فشل إلغاء الفاتورة"));
       }
     },
   });
@@ -206,13 +199,7 @@ export function useUpdateInvoice(opts?: { silent?: boolean }) {
         void refreshInventory();
         qc.invalidateQueries({ queryKey: ["inventory"] });
       } else {
-        const rawErr = (res.error as any) ?? {};
-        const details = rawErr.details as Record<string, string[]> | undefined;
-        const firstDetail = details ? details[Object.keys(details)[0]]?.[0] : undefined;
-        const errMsg = firstDetail
-          ? `${rawErr.message} — ${firstDetail}`
-          : (rawErr.message ?? "فشل تحديث الفاتورة");
-        toast.error(errMsg);
+        toast.error(resultErrorMessage(res.error, "فشل تحديث الفاتورة"));
       }
     },
   });

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { shouldTrustLocalActivation } from "./ActivationGate";
+import { shouldTrustLocalActivation } from "./activationTrust";
 
 /**
  * 2026-09-22 hardening regression: a reused device (stale local activation

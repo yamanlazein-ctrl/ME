@@ -1,4 +1,4 @@
-// PORTED-FROM: src/infrastructure/repositories/PostgresSyncOutboxRepository.ts sha256=e1d20ad846c4088f5a71678abc9a07421472a326a5cd8a5a0197fd9e7a42615f
+// PORTED-FROM: src/infrastructure/repositories/PostgresSyncOutboxRepository.ts sha256=de55ef56a19febee24ca999293b643e46f477225f230cb49cefd9b740320e1ed
 // SQLite twin (specs/001-desktop-sqlite-engine S4). Keep behavior identical to the PG source.
 import { asc, likeCs } from "./helpers/pgOrder.js";
 import { transactionTimestamp, formatMicrosUtc, parseMicrosUtc } from "../../orm/sqlite/clock.js";

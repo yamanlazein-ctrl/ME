@@ -1,4 +1,4 @@
-// PORTED-FROM: src/infrastructure/repositories/PostgresSyncDeviceRepository.ts sha256=3515f3a8ec8f0e926a7da3ec1fce05ac65ffcc1dfaaf6bfcda105f77ca890cf0
+// PORTED-FROM: src/infrastructure/repositories/PostgresSyncDeviceRepository.ts sha256=be1250987ab5fef4f90c1c82bd2cfe00ee621cc3f31e129e76574e757f68947b
 // SQLite twin (specs/001-desktop-sqlite-engine S4). Keep behavior identical to the PG source.
 import { desc } from "./helpers/pgOrder.js";
 import { and, eq, isNotNull, isNull, sql } from "drizzle-orm";

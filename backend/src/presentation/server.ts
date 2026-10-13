@@ -1,4 +1,5 @@
 import express from "express";
+import { logFailedResponses } from "../infrastructure/http/middleware/failed-response-log.middleware.js";
 import cors from "cors";
 import helmet from "helmet";
 import compression from "compression";
@@ -49,10 +50,11 @@ import {
   registerInvitationPublicRoutes,
 } from "./routes/invitation.route.js";
 import { registerAuditRoutes } from "./routes/audit.route.js";
-import { createBackupRouter } from "./routes/backup.route.js";
+import { appVersion, createBackupRouter } from "./routes/backup.route.js";
 import { registerDocumentTrackRoutes } from "./routes/documentTrack.route.js";
 import { createIntegrityRouter } from "./routes/integrity.route.js";
 import { dataSafeModeGuard } from "../infrastructure/http/middleware/dataSafeMode.middleware.js";
+import { hubWriteFreezeGuard } from "../infrastructure/http/middleware/hubWriteFreeze.middleware.js";
 import { registerFxRoutes } from "./routes/fx.route.js";
 import { registerSyncRoutes } from "./routes/sync.route.js";
 import { registerSearchRoutes } from "./routes/search.route.js";
@@ -199,17 +201,51 @@ app.use(requestIdMiddleware);
 app.use(userFacingErrors);
 app.use(express.json({ limit: "10mb" }));
 
+/** MIG-03 wiring for the hub (PostgreSQL): portable v2 archives, verified before they are kept. */
+async function startHubBackups(): Promise<void> {
+  const [{ startHubBackupScheduler }, v2, { pgPool }, tc] = await Promise.all([
+    import("../infrastructure/backup/hubBackupScheduler.js"),
+    import("../infrastructure/backup/portableBackup.js"),
+    import("../infrastructure/orm/pgLazy.js"),
+    import("../infrastructure/orm/tenant-context.js"),
+  ]);
+  const pool = await pgPool();
+  startHubBackupScheduler({
+    listTenants: () =>
+      tc.runWithPlatformContext(async () => {
+        const r = await pool.query<{ id: string }>("SELECT id FROM tenants ORDER BY id");
+        return r.rows.map((row) => row.id);
+      }),
+    createBackup: (tenantId, outFile) =>
+      tc.runWithTenantContext({ tenantId }, async () => {
+        await v2.createPortableBackup({
+          connect: () => pool.connect(),
+          tenantId,
+          outFile,
+          appVersion: appVersion(),
+          logoDir: process.env.COMPANY_LOGO_DIR ?? null,
+        });
+      }),
+    verifyBackup: async (file) => {
+      await v2.openAndVerifyBackup(file);
+    },
+  });
+}
+
 // Request logging
-app.use((req, _res, next) => {
+app.use((req, res, next) => {
   logger.info({ requestId: req.id, method: req.method, path: req.path }, "Request started");
   next();
 });
+app.use(logFailedResponses);
 
 // Install gate — blocks business traffic with 503 SETUP_REQUIRED until the
 // setup wizard is completed. Health/setup/invitation-entry paths stay open so
 // a fresh install can always be provisioned (see ALLOW_LIST in the gate).
 app.use(createInstallGateMiddleware(container.installationStateRepo, container.tenantRepo));
 app.use(dataSafeModeGuard());
+// MIG-04/05: operator write freeze during a hub cutover / rollback (HUB_WRITE_FREEZE=1).
+app.use(hubWriteFreezeGuard());
 
 // ── Route registration ──────────────────────────────────────────────
 // health + auth already hard-code the `/api` prefix internally → mount at root.
@@ -540,7 +576,13 @@ apiRouter.use(
     statementRepo: container.statementRepo,
   }),
 );
-apiRouter.use(createIntegrityRouter(authMiddleware));
+apiRouter.use(
+  createIntegrityRouter(authMiddleware, {
+    secretsRepo: container.secretsRepo,
+    secretCipher: container.secretCipher,
+    licenseRepo: container.licenseRepo,
+  }),
+);
 // Google Drive archive — admin routes + fail-closed primary-device worker wiring.
 // Desktop-SQLite only: the drive tables exist only in the desktop engine.
 if (config.DESKTOP_DEPLOY && getEngine() === "sqlite") {
@@ -782,6 +824,9 @@ void prepareHubDatabase()
             m.startRetentionJobs(pool),
           ),
         );
+      } else if (getEngine() !== "sqlite" && process.env.HUB_BACKUP_DIR?.trim()) {
+        // MIG-03: the hub's own verified backups (opt-in; see hubBackupScheduler.ts).
+        void startHubBackups();
       }
     }
   })

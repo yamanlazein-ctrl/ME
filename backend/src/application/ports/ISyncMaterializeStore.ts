@@ -29,4 +29,6 @@ export interface ISyncMaterializeStore {
   ): Promise<void>;
   /** Upsert a synced user snapshot; newer local rows (`updated_at` greater) are kept. */
   upsertUserSnapshot(u: SyncUserSnapshotRow): Promise<void>;
+  /** Current role of a user of this tenant, or null when the user does not exist here. */
+  findUserRole(tenantId: string, userId: string): Promise<string | null>;
 }

@@ -1,4 +1,4 @@
-// PORTED-FROM: src/infrastructure/repositories/PostgresSearchRepository.ts sha256=9cda92eb6a4159d076232e434bc3e7f92ae43ce757db584c420d378cba432215
+// PORTED-FROM: src/infrastructure/repositories/PostgresSearchRepository.ts sha256=b94daae061ff86ef8b7d9b92743bf844afd11a0b7b8bd30423f4b31401767689
 // SQLite twin (specs/001-desktop-sqlite-engine S4). Keep behavior identical to the PG source.
 import { pgRawRows } from "./helpers/pgText.js";
 import { canonicalUuid } from "../../orm/sqlite/types.js";

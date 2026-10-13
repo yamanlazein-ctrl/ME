@@ -12,6 +12,9 @@ import type { VoucherMethod } from "@/domain/entities/Voucher";
 export interface PaymentDTO {
   id: UUID;
   number: string;
+  /** The server returns the voucher's own kind (ERP-006: lookups by id are not kind-filtered). */
+  kind?: "payment" | "receipt";
+  partyKind?: "customer" | "supplier";
   date: string;
   partyId: UUID;
   partyName: string;

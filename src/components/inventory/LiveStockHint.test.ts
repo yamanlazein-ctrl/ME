@@ -12,7 +12,7 @@ vi.mock("@/infrastructure/di/auth-context", () => ({
 }));
 
 const { liveRollStockQuery, rolls, rollById } = await import("@/presentation/hooks/useInventory");
-const { liveStockText } = await import("./LiveStockHint");
+const { liveStockText } = await import("./liveStockText");
 const { Roll } = await import("@/domain/entities/Roll");
 
 const roll = (remainingPieces: number, remainingKg: number, version: number) =>

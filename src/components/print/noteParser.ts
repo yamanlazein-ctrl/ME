@@ -135,3 +135,17 @@ export function parseInvoiceNotes(raw: string | null | undefined): ParsedInvoice
 
   return out;
 }
+
+/**
+ * The warehouse an edited invoice must be re-opened with, or null while it cannot be decided yet.
+ * Lint fix (react-hooks/exhaustive-deps) exposed a real defect: the edit prefill ran ONCE, and when
+ * the warehouse list had not loaded yet the stored warehouse was skipped for good, so re-saving the
+ * invoice silently moved it to the default warehouse. Null for an empty/unknown list = "wait".
+ */
+export function warehouseToRestore(
+  notes: string | null | undefined,
+  warehouses: ReadonlyArray<{ id: string }>,
+): string | null {
+  const stored = parseInvoiceNotes(notes).warehouse;
+  return stored && warehouses.some((w) => w.id === stored) ? stored : null;
+}

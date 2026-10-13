@@ -1,4 +1,5 @@
-import { ClientPager, useClientPage } from "@/components/common/ClientPager";
+import { ClientPager } from "@/components/common/ClientPager";
+import { useClientPage } from "@/components/common/useClientPage";
 import { useEffect, useMemo } from "react";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { Eye, MoreVertical, Pencil, Printer, Trash2 } from "lucide-react";
@@ -67,7 +68,7 @@ export function SalesInvoicesTable({ query }: { query: ProfitQueryParams }) {
     return m;
   }, [profitDetails]);
 
-  const invoices = data?.data ?? [];
+  const invoices = useMemo(() => data?.data ?? [], [data]);
   // Audit F-005: a long period (a year) no longer puts every invoice in the DOM.
   const spg = useClientPage(invoices, `${query.fromDate}|${query.toDate}|${query.currency ?? ""}`);
 

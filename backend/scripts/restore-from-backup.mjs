@@ -342,6 +342,18 @@ await c.query(
 );
 console.log("Existing tenant rows cleared in the pending restore transaction.");
 
+// MIG-02: the applied_seq trigger (20261016 migration) re-stamps every row inserted as
+// `applied` with a fresh nextval — a restore through it RENUMBERED the pull stream, and devices
+// holding cursors from the old numbering skipped units. Load with it disabled (transactional DDL:
+// a ROLLBACK re-enables it), then re-enable below.
+const appliedSeqTrigger = await c.query(
+  `SELECT 1 FROM pg_trigger WHERE tgname = 'trg_sync_inbox_applied_seq' AND NOT tgisinternal`,
+);
+const hasAppliedSeqTrigger = (appliedSeqTrigger.rowCount ?? 0) > 0;
+if (hasAppliedSeqTrigger) {
+  await c.query("ALTER TABLE sync_inbox DISABLE TRIGGER trg_sync_inbox_applied_seq");
+}
+
 // ── 4. insert in FK-safe order ──
 // Arrays must be passed AS-IS (node-pg converts JS arrays to Postgres
 // arrays, e.g. tenants.license_features text[]) — stringifying them would
@@ -390,6 +402,17 @@ for (const table of INSERT_ORDER) {
   }
 }
 
+if (hasAppliedSeqTrigger) {
+  // Rows from a backup older than applied_seq: same backfill as the migration (applied_seq =
+  // received_seq), so they stay in the pull stream instead of disappearing with a NULL.
+  await c.query(
+    `UPDATE sync_inbox SET applied_seq = received_seq
+      WHERE tenant_id = $1 AND status = 'applied' AND applied_seq IS NULL`,
+    [tenantId],
+  );
+  await c.query("ALTER TABLE sync_inbox ENABLE TRIGGER trg_sync_inbox_applied_seq");
+}
+
 // ── 4b. sync-state continuity ──
 // Restoring the rows is not enough: the ORDERING state must line up with them.
 
@@ -412,6 +435,28 @@ for (const { table, column } of SERIAL_COLUMNS) {
     `sequence ${seq}: next value = ${target} (highest restored ${column} = ${restoredMax})`,
   );
 }
+// MIG-02: `sync_inbox_applied_seq` is owned by no column, so pg_get_serial_sequence() above never
+// finds it — yet it numbers the pull stream devices read. Advance it past the restored maximum.
+{
+  const exists = await c.query(`SELECT to_regclass('public.sync_inbox_applied_seq') AS r`);
+  if (exists.rows[0]?.r) {
+    const maxRes = await c.query(
+      `SELECT COALESCE(MAX(applied_seq), 0)::bigint AS m FROM sync_inbox`,
+    );
+    const live = (
+      await c.query(`SELECT last_value::bigint AS l, is_called FROM sync_inbox_applied_seq`)
+    ).rows[0];
+    const liveNext = live?.is_called ? Number(live.l) + 1 : Number(live?.l ?? 1);
+    const target = Math.max(Number(maxRes.rows[0].m) + 1, liveNext, 1);
+    await c.query("SELECT setval('sync_inbox_applied_seq'::regclass, $1::bigint, false)", [target]);
+    console.log(`sequence sync_inbox_applied_seq: next value = ${target}`);
+  }
+}
+// MIG-01: the restored company is a new hub instance — drop its epoch (secrets row) so the next
+// pull hands devices a new one and they re-pull + re-deliver (idempotent by op id).
+await c.query(`DELETE FROM secrets WHERE tenant_id = $1 AND key = 'sync.hub.epoch'`, [tenantId]);
+// MIG-07: revocations made after the backup are unknowable — end every pre-restore session.
+await c.query(`UPDATE users SET tokens_revoked_before = now() WHERE tenant_id = $1`, [tenantId]);
 
 // (b) Pull-cursor rule. `sync_state.last_pull_seq` is a position in the HUB's
 // sequence space, and the pull stream only returns units ABOVE it.

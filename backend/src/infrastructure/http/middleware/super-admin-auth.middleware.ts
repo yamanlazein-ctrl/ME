@@ -19,6 +19,28 @@ function isLoopbackAddress(addr: string | undefined): boolean {
   return a === "127.0.0.1" || a === "::1" || a === "localhost";
 }
 
+/**
+ * ERP-005: the open-loopback console is for a caller ON this machine. A local reverse proxy (the
+ * admin-dashboard Vite dev server) also connects from loopback, so the socket alone proves nothing:
+ * every forwarded hop must be loopback too. The socket is checked, never `req.ip` alone (`req.ip`
+ * comes from X-Forwarded-For when `trust proxy` is set, i.e. it is caller-supplied).
+ */
+function isLocalCaller(req: Request): boolean {
+  if (!isLoopbackAddress(req.socket?.remoteAddress)) return false;
+  const xff = req.headers["x-forwarded-for"];
+  const hops = (Array.isArray(xff) ? xff.join(",") : (xff ?? ""))
+    .split(",")
+    .map((h) => h.trim())
+    .filter(Boolean);
+  if (hops.some((h) => !isLoopbackAddress(h))) return false;
+  const forwarded = req.headers.forwarded;
+  if (forwarded) {
+    const fors = [...String(forwarded).matchAll(/for="?\[?([^\]";,\s]+)/gi)].map((m) => m[1]);
+    if (fors.some((h) => !isLoopbackAddress(h))) return false;
+  }
+  return true;
+}
+
 export function createSuperAdminAuthMiddleware(
   jwtSigner: JwtSigner,
   denylist: TokenDenylist,
@@ -31,10 +53,7 @@ export function createSuperAdminAuthMiddleware(
   ): Promise<void> {
     // Owner-only local license console: when enabled, loopback callers need no
     // email/password. Remote clients still require JWT / static token.
-    if (
-      opts?.openLoopback &&
-      (isLoopbackAddress(req.ip) || isLoopbackAddress(req.socket?.remoteAddress))
-    ) {
+    if (opts?.openLoopback && isLocalCaller(req)) {
       req.systemAdmin = { id: "local-loopback", email: "local@loopback", role: "super_admin" };
       next();
       return;

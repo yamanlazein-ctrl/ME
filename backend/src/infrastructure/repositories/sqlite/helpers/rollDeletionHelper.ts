@@ -1,4 +1,4 @@
-// PORTED-FROM: src/infrastructure/repositories/rollDeletionHelper.ts sha256=ec2057923385fd074ec07fc0e55040c6ef303706e1e02846ffc65387ccf72e21
+// PORTED-FROM: src/infrastructure/repositories/rollDeletionHelper.ts sha256=2ef5a9cd912fa53d1ef6697b9789491348c2b9aaac399f1f084411f20a0bbaf7
 // SQLite twin (specs/001-desktop-sqlite-engine S4). Keep behavior identical to the PG source.
 import { desc } from "./pgOrder.js";
 import { and, eq, inArray, or, sql } from "drizzle-orm";

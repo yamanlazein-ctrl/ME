@@ -1,4 +1,4 @@
-// PORTED-FROM: src/infrastructure/repositories/PostgresSettingsRepository.ts sha256=249fece400d6876b3a0147a9f762fe2427ef1bbf02cbe9894b10b28e72c132c8
+// PORTED-FROM: src/infrastructure/repositories/PostgresSettingsRepository.ts sha256=911b004e36fc3bd2ed8aa28547cb5b56b8fdf3070811998131098b74e286f4b2
 // SQLite twin (specs/001-desktop-sqlite-engine S4). Keep behavior identical to the PG source.
 import { eq } from "drizzle-orm";
 import type { DB } from "../../orm/sqlite/drizzleCompat.js";

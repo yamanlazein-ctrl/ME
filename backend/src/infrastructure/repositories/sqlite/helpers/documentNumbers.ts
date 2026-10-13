@@ -1,4 +1,4 @@
-// PORTED-FROM: src/infrastructure/utils/documentNumbers.ts sha256=5dcbbda2efe459d8d70d41988100cb0b52737859d237462d7222b51578e8c17d
+// PORTED-FROM: src/infrastructure/utils/documentNumbers.ts sha256=c14a59b09eb0836ab3e0a83a66794da69aca84d5f4cb0fcc164ffeb998104a90
 // SQLite twin (specs/001-desktop-sqlite-engine S4). Keep behavior identical to the PG source.
 import { db, type Tx } from "../../../orm/sqlite/drizzleCompat.js";
 import { runAutonomous } from "../../../orm/sqlite/transaction.js";

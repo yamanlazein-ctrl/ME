@@ -10,13 +10,18 @@ import { join } from "node:path";
 const files = readdirSync(__dirname).filter(
   (f) => /^settings\..*\.tsx$/.test(f) && !f.includes(".test."),
 );
+// ERP-003: the invitation manager is rendered inside /settings/users.
+const extra = [join(__dirname, "../components/invitations/InvitationManager.tsx")];
 
 describe("settings pages: label ↔ control", () => {
-  it.each(files)("%s has no <Label> without htmlFor", (f) => {
-    const src = readFileSync(join(__dirname, f), "utf8");
-    const bare = [...src.matchAll(/<Label\b[^>]*>/g)]
-      .map((m) => m[0])
-      .filter((t) => !t.includes("htmlFor"));
-    expect(bare).toEqual([]);
-  });
+  it.each([...files.map((f) => join(__dirname, f)), ...extra])(
+    "%s has no <Label> without htmlFor",
+    (f) => {
+      const src = readFileSync(f, "utf8");
+      const bare = [...src.matchAll(/<Label\b[^>]*>/g)]
+        .map((m) => m[0])
+        .filter((t) => !t.includes("htmlFor"));
+      expect(bare).toEqual([]);
+    },
+  );
 });

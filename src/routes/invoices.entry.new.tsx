@@ -76,6 +76,7 @@ import { formatNumber, formatMoney, formatQuantity } from "@/shared/utils/format
 import { MAX_2DP_MSG, hasMoreThan2dp } from "@/shared/utils/precision";
 
 import { localToday } from "@/lib/localDate";
+import { resultErrorMessage } from "@/lib/resultErrorMessage";
 export const Route = createFileRoute("/invoices/entry/new")({
   validateSearch: (search: Record<string, unknown>): { edit?: string } => ({
     edit: typeof search.edit === "string" ? search.edit : undefined,
@@ -119,11 +120,11 @@ function detailsText(details?: Record<string, string[]>, fallback = ""): string 
 }
 
 function EntryInvoicePage() {
-  // Inventory cache reactivity: useInventory() returns the cache version which
-  // increments when the async fabrics/colors/rolls load completes. Captured so
+  // Inventory cache reactivity: useInventory() returns the store snapshot, which
+  // changes when the async fabrics/colors/rolls load completes. Captured so
   // the edit-prefill repair effect below can re-resolve names when the cache
   // arrives AFTER the invoice data (the async-load race).
-  const inventoryVersion = useInventory();
+  const inventory = useInventory();
   const navigate = useNavigate();
   const create = useCreateInvoice();
   const update = useUpdateInvoice({ silent: true });
@@ -214,7 +215,7 @@ function EntryInvoicePage() {
   //     must never clobber the operator's edits (same protection as
   //     invoices.sale.new.tsx:118-121).
   //   - The repair effect below re-resolves the identity fields once the
-  //     cache becomes available (inventoryVersion change).
+  //     cache becomes available (inventory snapshot change).
   const editRawLinesRef = useRef<{ rollId: string; fabricId: string; colorId: string }[] | null>(
     null,
   );
@@ -287,12 +288,12 @@ function EntryInvoicePage() {
   // Repair pass for the async-cache race: if the one-shot prefill above ran
   // while the inventory cache was still empty (fabricById/colorById returned
   // null → empty names), re-resolve ONLY the still-empty identity fields now
-  // that the cache has arrived (inventoryVersion changed). Lines are paired
+  // that the cache has arrived (inventory snapshot changed). Lines are paired
   // by rollId — stable per saved line, so user-added/removed rows can never
   // be mismatched — and anything the operator already typed or picked is
   // left untouched (an empty name/id pair is the only thing repaired).
   useEffect(() => {
-    if (!edit || !inventoryVersion) return;
+    if (!edit || !inventory.version) return;
     const rawLines = editRawLinesRef.current;
     if (!rawLines) return;
     setLines((prev) => {
@@ -331,7 +332,7 @@ function EntryInvoicePage() {
       });
       return changed ? next : prev;
     });
-  }, [edit, inventoryVersion]);
+  }, [edit, inventory]);
 
   const removeLine = (id: string) => {
     setLines((p) => {
@@ -868,12 +869,7 @@ function EntryInvoicePage() {
         },
       });
       if (!res.ok) {
-        const rawErr = (res as any).error ?? {};
-        const details = rawErr.details as Record<string, string[]> | undefined;
-        const firstDetail = details ? details[Object.keys(details)[0]]?.[0] : undefined;
-        const msg = firstDetail
-          ? `${rawErr.message ?? "فشل تحديث الفاتورة"} — ${firstDetail}`
-          : (rawErr.message ?? rawErr.toString?.() ?? "فشل تحديث الفاتورة");
+        const msg = resultErrorMessage(res.error, "فشل تحديث الفاتورة");
         setError(msg);
         showError(msg);
         return;
@@ -926,17 +922,13 @@ function EntryInvoicePage() {
     } as unknown as Parameters<typeof create.mutateAsync>[0]);
 
     if (!res.ok) {
-      const err = (res as any).error;
+      const err: unknown = res.error;
       const details =
-        typeof err === "object"
-          ? (err as { details?: Record<string, string[]> })?.details
+        err && typeof err === "object"
+          ? (err as { details?: Record<string, string[]> }).details
           : undefined;
-      const detailMsg = detailsText(details);
-      const msg = detailMsg
-        ? detailMsg
-        : typeof err === "string"
-          ? err
-          : (err?.message ?? "فشل إنشاء الفاتورة");
+      // A create shows EVERY field detail (detailsText), not only the first.
+      const msg = detailsText(details) || resultErrorMessage(err, "فشل إنشاء الفاتورة");
       setError(msg);
       showError(msg);
       return;

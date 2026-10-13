@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isPartyDeleteConfirmed, PARTY_DELETE_CONFIRM_PHRASE } from "./PartyDeleteDialog";
+import { isPartyDeleteConfirmed, PARTY_DELETE_CONFIRM_PHRASE } from "./partyDeleteConfirm";
 
 describe("party delete confirmation phrase", () => {
   it("is «نعم، متأكد»", () => {

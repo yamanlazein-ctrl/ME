@@ -1,4 +1,3 @@
-import { useMemo } from "react";
 import { TenantContext, UUID } from "@/domain/types";
 
 /**
@@ -56,12 +55,4 @@ function parseJwtPayload(token: string): Record<string, unknown> | null {
   } catch {
     return null;
   }
-}
-
-/** React hook wrapper so components can react to auth changes. */
-export function useTenantContext(): TenantContext {
-  return useMemo(
-    () => buildTenantContext(),
-    [typeof window !== "undefined" ? localStorage.getItem("erp.auth.accessToken") : null],
-  );
 }

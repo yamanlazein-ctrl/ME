@@ -100,6 +100,104 @@ export function registerVoucherRoutes(
     res.status(201).json(r.data);
   }
 
+  // ERP-008: amend = cancel the original + create the replacement as ONE transaction (both outbox
+  // units included). The replacement is validated by the schema before anything is written, and any
+  // refusal (stale version, closed period, over-settlement…) rolls the cancel back: the original
+  // keeps its financial effect. The form used to send two independent requests.
+  class ReplaceRefused extends Error {}
+  async function replaceAndEnqueue(req: Request, res: Response, kind: "payment" | "receipt") {
+    const { expectedVersion, voucher } = body<{
+      expectedVersion: number;
+      voucher: Record<string, unknown>;
+    }>(req);
+    const input = { ...voucher, kind } as CreateVoucherInput;
+    const c = ctx(req);
+    const syncOn = Boolean(syncOutboxRepo && isSyncEnqueueEnabled());
+    const original = await voucherRepo.findById(pid(req), c);
+    if (!original) return res.status(404).json({ code: "NOT_FOUND", message: "غير موجود" });
+    if (original.kind !== kind) {
+      return res.status(422).json({ code: "VALIDATION", message: "نوع السند لا يطابق المسار" });
+    }
+    let created: Awaited<ReturnType<typeof uc.createVoucherUseCase>>;
+    try {
+      created = await withTenantTx(c.tenantId, async () => {
+        const cancelled = await uc.cancelVoucherUseCase(
+          voucherRepo,
+          auditRepo,
+          pid(req),
+          c.userId,
+          c,
+          expectedVersion,
+        );
+        if (!cancelled.ok) throw new ReplaceRefused(cancelled.error);
+        if (syncOn) {
+          await enqueueVoucherCancel(
+            syncOutboxRepo!,
+            { id: cancelled.data.id, number: cancelled.data.number },
+            c,
+            syncDeviceIdFromRequest(req),
+            undefined, // its own op id; the create carries the request key
+            expectedVersion,
+          );
+        }
+        const made = await uc.createVoucherUseCase(voucherRepo, auditRepo, input, c);
+        if (!made.ok) throw new ReplaceRefused(made.error);
+        if (syncOn) {
+          await enqueueVoucherCreate(
+            syncOutboxRepo!,
+            {
+              id: made.data.id,
+              kind: made.data.kind,
+              number: made.data.number,
+              partyId: made.data.partyId,
+            },
+            input,
+            c,
+            syncDeviceIdFromRequest(req),
+            opIdFromRequest(req),
+            await partyDeps(made.data.partyId, c),
+          );
+        }
+        return made;
+      });
+    } catch (err) {
+      if (err instanceof ReplaceRefused) {
+        return res.status(422).json({ code: "VALIDATION", message: err.message });
+      }
+      logger.error({ err }, "transaction rolled back — voucher replace dropped (ERP-008)");
+      return respondTransactionFailure(
+        res,
+        err,
+        "voucher",
+        "تعذّر تعديل السند — لم يُحفظ أي تغيير وبقي السند الأصلي كما هو",
+      );
+    }
+    res.status(201).json(created.ok ? created.data : null);
+  }
+
+  const replaceSchema = z.object({
+    expectedVersion: z.number().int(),
+    voucher: createVoucherSchema,
+  });
+  router.post(
+    "/payments/:id/replace",
+    auth,
+    writeGuard,
+    validateUuidParam("id"),
+    idempotency("POST", { required: true }),
+    validateBody(replaceSchema),
+    async (req: Request, res: Response) => replaceAndEnqueue(req, res, "payment"),
+  );
+  router.post(
+    "/receipts/:id/replace",
+    auth,
+    writeGuard,
+    validateUuidParam("id"),
+    idempotency("POST", { required: true }),
+    validateBody(replaceSchema),
+    async (req: Request, res: Response) => replaceAndEnqueue(req, res, "receipt"),
+  );
+
   router.post(
     "/payments",
     auth,
@@ -180,12 +278,10 @@ export function registerVoucherRoutes(
       const c = ctx(req);
       const expectedVersion = req.body?.expectedVersion;
       if (typeof expectedVersion !== "number") {
-        return res
-          .status(400)
-          .json({
-            code: "EXPECTED_VERSION_REQUIRED",
-            message: "الإصدار المتوقع (expectedVersion) مطلوب للتحديث/الإلغاء",
-          });
+        return res.status(400).json({
+          code: "EXPECTED_VERSION_REQUIRED",
+          message: "الإصدار المتوقع (expectedVersion) مطلوب للتحديث/الإلغاء",
+        });
       }
       const syncEnabled = Boolean(syncOutboxRepo && isSyncEnqueueEnabled());
 
@@ -243,12 +339,10 @@ export function registerVoucherRoutes(
       const c = ctx(req);
       const expectedVersion = req.body?.expectedVersion;
       if (typeof expectedVersion !== "number") {
-        return res
-          .status(400)
-          .json({
-            code: "EXPECTED_VERSION_REQUIRED",
-            message: "الإصدار المتوقع (expectedVersion) مطلوب للتحديث/الإلغاء",
-          });
+        return res.status(400).json({
+          code: "EXPECTED_VERSION_REQUIRED",
+          message: "الإصدار المتوقع (expectedVersion) مطلوب للتحديث/الإلغاء",
+        });
       }
       const syncEnabled = Boolean(syncOutboxRepo && isSyncEnqueueEnabled());
 

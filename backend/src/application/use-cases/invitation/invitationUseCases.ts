@@ -128,6 +128,15 @@ export async function consumeInvitationCodeUseCase(
   options: {
     password?: string;
     deviceFingerprint?: string;
+    /**
+     * ERP-002: runs inside the redeem transaction once the user/device exists (the route enqueues
+     * the new user's sync unit here), so a failure rolls the whole redemption back.
+     */
+    afterRedeem?: (redeemed: {
+      tenantId: string;
+      createdUserId?: string;
+      registeredDeviceId?: string;
+    }) => Promise<void>;
   } = {},
 ): Promise<Result<InvitationRow & { createdUserId?: string; registeredDeviceId?: string }>> {
   const trimmed = code.trim().toUpperCase();
@@ -260,6 +269,7 @@ export async function consumeInvitationCodeUseCase(
       }
 
       const updated = await repo.consume(row.id, row.tenantId);
+      await options.afterRedeem?.({ tenantId: row.tenantId, createdUserId, registeredDeviceId });
       return { ok: true, data: { ...updated, createdUserId, registeredDeviceId } };
     };
 

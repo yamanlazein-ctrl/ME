@@ -7,7 +7,7 @@
  *  - create keeps "blank = not provided".
  */
 import { describe, it, expect } from "vitest";
-import { fromParty, toPatch, type SimpleParty } from "./PartyFormDialog";
+import { fromParty, toPatch, type SimpleParty } from "./partyFormModel";
 
 const party: SimpleParty = {
   id: "p1",

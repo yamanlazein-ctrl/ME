@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import { Scale } from "lucide-react";
-import { CASH_BOXES } from "@/components/cashbox/FinancialSummary";
+import { CASH_BOXES } from "@/components/cashbox/cashBoxes";
 import { useCashBalancesOn } from "@/presentation/hooks/useCashbox";
 import { useInvoicesList } from "@/presentation/hooks/useInvoices";
 import { useProfitDetails, useProfitSummary } from "@/presentation/hooks/useProfit";
@@ -10,20 +10,7 @@ import { localToday } from "@/lib/localDate";
 import { cn } from "@/lib/utils";
 import type { ProfitQueryParams } from "@/contracts/profit";
 import type { Currency } from "@/domain/types";
-
-/**
- * The cash actually in hand, expressed as profit.
- *
- * An invoice is only partly settled, so only the collected part carries the
- * margin: `min(paid, total) × (grossProfit / total)`. On the owner's own
- * figures — 490 invoiced, 120 paid, 52.50 gross — that is 12.86, not the 52.50
- * the books show. A zero-value invoice has no margin to apportion.
- */
-export function cashProfitCollected(total: number, paid: number, grossProfit: number): number {
-  if (!(total > 0)) return 0;
-  const cashCollected = Math.min(paid, total);
-  return cashCollected * (grossProfit / total);
-}
+import { cashProfitCollected } from "./cashProfit";
 
 /**
  * «الوضع النقدي الحقيقي» — the number the owner actually asks for: what is in

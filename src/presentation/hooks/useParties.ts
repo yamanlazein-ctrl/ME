@@ -72,9 +72,25 @@ function subscribe(cb: () => void) {
   };
 }
 
-function getVersion() {
-  return version;
+/**
+ * What a component reads from the party store: the arrays ARE the live caches (no copy), the object's
+ * identity changes on every change — a memo that reads `parties.suppliers` and depends on `parties`
+ * recomputes exactly when the store changes (edits replace objects in place, so lengths do not move).
+ */
+export type PartiesSnapshot = {
+  version: number;
+  customers: readonly Party[];
+  suppliers: readonly Party[];
+};
+let snapshot: PartiesSnapshot = { version, customers: _customers, suppliers: _suppliers };
+/** Current store snapshot (exported for tests; components use `useParties`). */
+export function getPartiesSnapshot(): PartiesSnapshot {
+  if (snapshot.version !== version) {
+    snapshot = { version, customers: _customers, suppliers: _suppliers };
+  }
+  return snapshot;
 }
+const SERVER_SNAPSHOT: PartiesSnapshot = { version: 0, customers: [], suppliers: [] };
 
 /* ── Loading ─────────────────────────────────────────────────────── */
 
@@ -211,9 +227,8 @@ if (typeof window !== "undefined") {
 
 /* ── Reactivity hook (re-renders on party changes) ───────────────── */
 
-export function useParties() {
-  useSyncExternalStore(subscribe, getVersion, () => 0);
-  return version;
+export function useParties(): PartiesSnapshot {
+  return useSyncExternalStore(subscribe, getPartiesSnapshot, () => SERVER_SNAPSHOT);
 }
 
 /* ── React Query hooks ────────────────────────────────────────────── */

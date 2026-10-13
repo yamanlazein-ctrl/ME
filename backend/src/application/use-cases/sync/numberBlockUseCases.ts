@@ -249,6 +249,62 @@ async function mirrorClaimedBlock(
  * shared-sequence fallback (0 when none). Sent to the hub on block claim so
  * the hub carves above it (tip reconciliation).
  */
+/**
+ * MIG-06 (hub side): a device re-reports the highest number it already issued or holds for an
+ * entity type (its local tip covers every range it mirrored). The hub advances its own counter
+ * past it, so a range carved later can never overlap numbers this device has.
+ */
+export async function raiseNumberTip(input: {
+  tenantId: UUID;
+  syncDeviceId: UUID;
+  entityType: string;
+  knownUsed: number;
+}): Promise<number> {
+  await assertDeviceBelongsToTenant(input.tenantId, input.syncDeviceId);
+  return (await getNumberBlockStore()).raiseTip({
+    tenantId: input.tenantId,
+    entityType: input.entityType,
+    knownUsed: input.knownUsed,
+  });
+}
+
+/**
+ * MIG-06 (device side): after the hub instance changed (moved / restored), tell it the highest
+ * number this device already issued or holds per entity type. A restored hub's counter can be
+ * older than the ranges devices received after the backup; without this it could hand one of
+ * those ranges to another device. Best effort per type; failures are reported, never thrown.
+ */
+export async function reassertNumberTipsOnHub(input: {
+  tenantId: UUID;
+  syncDeviceId: UUID;
+  authHeader?: string;
+}): Promise<{ entityType: string; knownUsed: number; ok: boolean }[]> {
+  const hub = getCentralSyncUrl();
+  const authHeader = await resolveHubAuthHeader(input.authHeader);
+  if (!hub || !authHeader) return [];
+  const out: { entityType: string; knownUsed: number; ok: boolean }[] = [];
+  for (const entityType of PRIMARY_ENTITY_TYPES) {
+    const knownUsed = await readLocalSequenceTip(input.tenantId, entityType);
+    if (!(knownUsed > 0)) continue;
+    try {
+      const res = await fetch(`${hub}/api/sync/number-blocks/tip`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: authHeader,
+          "X-Sync-Device-Id": input.syncDeviceId,
+        },
+        body: JSON.stringify({ syncDeviceId: input.syncDeviceId, entityType, knownUsed }),
+        signal: AbortSignal.timeout(15_000),
+      });
+      out.push({ entityType, knownUsed, ok: res.ok });
+    } catch {
+      out.push({ entityType, knownUsed, ok: false });
+    }
+  }
+  return out;
+}
+
 async function readLocalSequenceTip(tenantId: UUID, entityType: string): Promise<number> {
   try {
     const { prefix } = resolveNumberFormat(entityType);

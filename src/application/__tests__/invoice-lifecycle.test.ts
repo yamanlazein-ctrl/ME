@@ -4,8 +4,17 @@ import { TenantContext, UUID } from "@/domain/types";
 describe("Invoice Lifecycle Integration Test", () => {
   // Shared state simulating real use
   const rolls = new Map<string, { remainingKg: number; version: number }>();
-  const invoices = new Map<string, any>();
-  const ledgerEntries: any[] = [];
+  type TestInvoice = { id: string; status: string; [field: string]: unknown };
+  type TestLedgerEntry = {
+    type: string;
+    referenceId: string;
+    debit: number;
+    credit: number;
+    currency: string;
+    status: string;
+  };
+  const invoices = new Map<string, TestInvoice>();
+  const ledgerEntries: TestLedgerEntry[] = [];
 
   const ctx: TenantContext = {
     tenantId: "t1" as UUID,

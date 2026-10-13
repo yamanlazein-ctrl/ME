@@ -3,7 +3,7 @@
  * Bookkeeping shows the whole margin (52.50); only the collected part is cash.
  */
 import { describe, it, expect } from "vitest";
-import { cashProfitCollected } from "../CashPositionCard";
+import { cashProfitCollected } from "../cashProfit";
 
 describe("cashProfitCollected", () => {
   it("apportions the margin over the part actually collected", () => {

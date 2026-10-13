@@ -30,11 +30,12 @@ export function registerInvitationAdminRoutes(
           tenantContext?: { tenantId?: string; userId?: string; userRole?: string };
         }
       ).tenantContext;
-      // Owner decision (2026-10-12): the accountant may invite, but never into the admin role.
-      if (ctx?.userRole !== "admin" && req.body.targetRole === "admin") {
+      // Release mission (2026-10-13) supersedes the 2026-10-12 note: only the admin creates
+      // invitation codes. The accountant's admin privileges stop here (any type, any role).
+      if (ctx?.userRole !== "admin") {
         res.status(403).json({
-          code: "ADMIN_ROLE_RESERVED",
-          message: "دعوة مستخدم بدور مدير النظام متاحة لمدير النظام فقط",
+          code: "ADMIN_ONLY",
+          message: "إنشاء رموز الدعوة متاح لمدير النظام فقط",
         });
         return;
       }
@@ -127,23 +128,25 @@ export function registerInvitationPublicRoutes(router: Router, container: Contai
         {
           password: req.body.password as string | undefined,
           deviceFingerprint: req.body.deviceFingerprint as string | undefined,
+          // ERP-002: the new user's sync unit commits with the redemption (same transaction).
+          afterRedeem: async ({ tenantId, createdUserId }) => {
+            if (!isSyncEnqueueEnabled() || !createdUserId) return;
+            const ctx = {
+              tenantId,
+              userId: createdUserId,
+              userName: "invitation",
+              userRole: "admin" as const,
+            };
+            const snapshot = await container.userRepo.findSyncSnapshot(createdUserId, ctx);
+            if (snapshot) {
+              await enqueueUserMutation(container.syncOutboxRepo, snapshot, "create", ctx, null);
+            }
+          },
         },
       );
       if (!r.ok) {
         res.status(400).json({ message: r.error });
         return;
-      }
-      if (isSyncEnqueueEnabled() && r.data.createdUserId) {
-        const ctx = {
-          tenantId: r.data.tenantId,
-          userId: r.data.createdUserId,
-          userName: "invitation",
-          userRole: "admin" as const,
-        };
-        const snapshot = await container.userRepo.findSyncSnapshot(r.data.createdUserId, ctx);
-        if (snapshot) {
-          await enqueueUserMutation(container.syncOutboxRepo, snapshot, "create", ctx, null);
-        }
       }
       res.json({
         consumed: true,

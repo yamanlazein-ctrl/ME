@@ -3,7 +3,16 @@ import { TenantContext, UUID } from "@/domain/types";
 
 describe("Voucher Lifecycle Integration Test", () => {
   let cashboxBalance = 0;
-  const ledgerEntries: any[] = [];
+  type TestLedgerEntry = {
+    type: string;
+    referenceId: string;
+    debit: number;
+    credit: number;
+    currency: string;
+    cashImpact: "in" | "out" | "none";
+    status: "active" | "cancelled";
+  };
+  const ledgerEntries: TestLedgerEntry[] = [];
   const ctx: TenantContext = {
     tenantId: "t1" as UUID,
     userId: "u1" as UUID,
@@ -17,7 +26,7 @@ describe("Voucher Lifecycle Integration Test", () => {
     return currency === "USD" ? amount * SYP_TO_USD : amount;
   }
 
-  function writeLedger(entry: any) {
+  function writeLedger(entry: Omit<TestLedgerEntry, "status">) {
     ledgerEntries.push({ ...entry, status: "active" });
   }
 

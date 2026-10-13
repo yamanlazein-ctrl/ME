@@ -1,4 +1,5 @@
-import { ClientPager, useClientPage } from "@/components/common/ClientPager";
+import { ClientPager } from "@/components/common/ClientPager";
+import { useClientPage } from "@/components/common/useClientPage";
 import { useEffect } from "react";
 import { Link } from "@tanstack/react-router";
 import { Trash2 } from "lucide-react";

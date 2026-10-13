@@ -76,16 +76,14 @@ describe("F-008: JS-posted amounts equal their SQL re-computation", () => {
     await db
       .insert(tenants)
       .values({ id: tenantId, name: "Rounding", slug: `rnd-${tenantId.slice(0, 8)}` });
-    await db
-      .insert(parties)
-      .values({
-        id: customerId,
-        tenantId,
-        name: "C",
-        code: "RND-C",
-        kind: "customer",
-        currency: "USD",
-      });
+    await db.insert(parties).values({
+      id: customerId,
+      tenantId,
+      name: "C",
+      code: "RND-C",
+      kind: "customer",
+      currency: "USD",
+    });
     await db.insert(fabrics).values({ id: fabricId, tenantId, name: "Cotton", minStockKg: "0" });
     await db.insert(colors).values({ id: colorId, tenantId, fabricId, name: "White" });
     const invoiceRepo = new PostgresInvoiceRepository(db);
@@ -176,16 +174,14 @@ describe("F-008: JS-posted amounts equal their SQL re-computation", () => {
     await db
       .insert(tenants)
       .values({ id: tid, name: "Rounding 2", slug: `rnd2-${tid.slice(0, 8)}` });
-    await db
-      .insert(parties)
-      .values({
-        id: cust,
-        tenantId: tid,
-        name: "C2",
-        code: "RND2",
-        kind: "customer",
-        currency: "USD",
-      });
+    await db.insert(parties).values({
+      id: cust,
+      tenantId: tid,
+      name: "C2",
+      code: "RND2",
+      kind: "customer",
+      currency: "USD",
+    });
     const fab = randomUUID();
     const col = randomUUID();
     await db.insert(fabrics).values({ id: fab, tenantId: tid, name: "Linen", minStockKg: "0" });

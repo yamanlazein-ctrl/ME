@@ -6,3 +6,16 @@ pnpm-lock.yaml
 package-lock.json
 bun.lock
 routeTree.gen.ts
+# Generator inputs/outputs: the SQLite schema generator parses the PG schema sources with
+# single-line regexes, and the generated SQLite schema / migration meta are written by tools.
+backend/src/infrastructure/orm/
+# Audit evidence is preserved verbatim (never reformatted).
+CODEBASE_AUDIT_REPORT.md
+CODEBASE_AUDIT_REPORT_hermes.md
+CODEBASE_AUDIT_FINDINGS.json
+CODEBASE_AUDIT_FINDINGS_hermes.json
+CODEBASE_AUDIT_PROGRESS.md
+AUDIT_PROGRESS.md
+1/
+CODEBASE_REMEDIATION_LOG.md
+VERIFIED_REMEDIATION_PLAN.md

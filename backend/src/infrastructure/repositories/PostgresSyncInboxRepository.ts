@@ -123,6 +123,18 @@ export class PostgresSyncInboxRepository implements ISyncInboxRepository {
    * the caller's own units fill the entire window, so a busy device could get
    * zero rows back forever and never advance its cursor.
    */
+  async maxAppliedSeq(tenantId: string): Promise<number | null> {
+    return runWithTenantContext({ tenantId }, async () => {
+      const [row] = await this.db
+        .select({ m: sql<number | string | null>`max(${syncInbox.appliedSeq})` })
+        .from(syncInbox)
+        // Every row that ever drew a number (not only rows still `applied`): a device cursor can
+        // never be above this on an intact stream, so "head < cursor" means a rewound stream.
+        .where(and(eq(syncInbox.tenantId, tenantId), isNotNull(syncInbox.appliedSeq)));
+      return row?.m == null ? null : Number(row.m);
+    });
+  }
+
   async listAppliedSince(
     tenantId: string,
     afterSeq: number | null,

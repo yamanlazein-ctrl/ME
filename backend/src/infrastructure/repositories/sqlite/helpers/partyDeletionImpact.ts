@@ -1,4 +1,4 @@
-// PORTED-FROM: src/infrastructure/repositories/partyDeletionImpact.ts sha256=14c772c4c1852b5c41f85e98a7172bc4d5b7884041f64676eca79961252bf1c4
+// PORTED-FROM: src/infrastructure/repositories/partyDeletionImpact.ts sha256=d85aa305d4993ab0177639e66629af484b650f21d4d70d160e4a7ee2531cfc5d
 // SQLite twin (specs/001-desktop-sqlite-engine S4). Keep behavior identical to the PG source.
 import { desc } from "./pgOrder.js";
 import { ilikeEscaped, numericTextSql, scaledNumber } from "./likeContains.js";

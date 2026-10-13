@@ -73,6 +73,12 @@ export interface ISyncInboxRepository {
     afterSeq: number | null,
     opts?: { excludeSyncDeviceId?: UUID | null; limit?: number },
   ): Promise<SyncInboxRow[]>;
+  /**
+   * MIG-02: highest `applied_seq` of this tenant (null when nothing is applied). Sent with every
+   * pull as `headSeq`: a device whose cursor is ABOVE it is talking to a hub whose stream was
+   * rewound (restore / move) and must re-pull from the start instead of skipping silently.
+   */
+  maxAppliedSeq(tenantId: UUID): Promise<number | null>;
   /** Record a failed materialization attempt; returns the updated row. */
   setMaterializeError(
     tenantId: UUID,

@@ -39,7 +39,7 @@
     "report:vitest": "vitest run --reporter=html",
     "report:ui": "npx playwright show-report test-results/report",
     "report:all": "npm run report:vitest && npm run report:ui",
-    "lint": "eslint src --max-warnings 50",
+    "lint": "eslint src --max-warnings 0",
     "format": "prettier --write .",
     "check:deps": "node --input-type=module -e \"const pkgs=['drizzle-orm','pg','dotenv']; for(const p of pkgs){ try{ await import(p); console.log('OK',p); } catch(e){ console.error('MISSING',p); process.exit(1); } }\"",
     "test:agentic": "e2e run"

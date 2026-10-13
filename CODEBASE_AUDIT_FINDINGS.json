@@ -1,0 +1,643 @@
+{
+  "audit": {
+    "title": "Ultra-deep repository-wide ERP audit — 2026-10-12 session (Hermes)",
+    "repository": "C:/Users/Taw/Downloads/Compressed/q/ME-main",
+    "head_audited": "a3882558a696a1a0de8d930bf49db408504147a8",
+    "branch": "main",
+    "working_tree": "clean (0 modified) except the audit artifacts themselves",
+    "session_date": "2026-10-12",
+    "method": "7 parallel read-only subagents (all killed by the model fair-share rate limit HTTP 429 at 477-3999s each); all 7 areas completed DIRECTLY by the lead auditor, using each dead subagent's transcript leads",
+    "prior_audits_used_as_leads": [
+      "CODEBASE_AUDIT_REPORT.md (5.7MB, 31 findings H/M/L + S)",
+      "CODEBASE_REMEDIATION_LOG.md (per-finding FIXED/BLOCKED claims)",
+      "CODEBASE_AUDIT_FINDINGS_hermes.json (16 findings F-001..F-016)",
+      "MOTARD_ERP_FULL_FORENSIC_AUDIT.md / MOTARD_ERP_VERIFIED_FIXES.md"
+    ]
+  },
+  "summary": {
+    "total_findings": 11,
+    "by_severity": {
+      "Critical": 0,
+      "High": 0,
+      "Medium": 5,
+      "Low": 1,
+      "Informational": 5
+    },
+    "verified_prior_findings": 28,
+    "test_results": {
+      "root_vitest": "93 files / 410 tests — ALL PASS (42s)",
+      "backend_sqlite_vitest": "174 files passed + 10 skipped; 958 tests passed + 42 skipped — ZERO failures (230s)",
+      "desktop_gates": "24/24 PASS (server-bundle.test.mjs BLOCKED: port 8080 EADDRINUSE, environmental)",
+      "typechecks": "root + backend + sqlite gate — all exit 0",
+      "lint": "root 0 errors / 50 warnings (at the CI gate limit); backend clean",
+      "prettier": "FAILS: 100 files (92 source + 8 docs) — no CI gate",
+      "port_drift": "46 SQLite twins drifted (advisory check, not a CI gate)"
+    }
+  },
+  "findings": [
+    {
+      "id": "TEMP-BE-01",
+      "title": "46 SQLite twins drifted (behavioral parity tool-unverifiable) — see TEMP-STAT-02",
+      "category": "twin-drift",
+      "severity": "Medium",
+      "confidence": "High",
+      "verification_status": "Confirmed",
+      "file": "backend/src/infrastructure/repositories/sqlite/",
+      "symbol": "PORTED-FROM stamps",
+      "line_start": 0,
+      "line_end": 0,
+      "evidence": "Recorded once under TEMP-STAT-02 (static-tests.json): port-sqlite-repos.mjs --check lists 46 drifted twins. Root-caused there to avoid duplication; the real parity safety net (backend suite on BOTH engines) is green: 958/958 on SQLite.",
+      "expected_behavior": "Twin stamps match PG sources.",
+      "actual_behavior": "46 stale stamps; behavioral divergence unverified per-twin.",
+      "root_cause": "PG remediation applied without re-stamping; the check is advisory, not a CI gate.",
+      "reproduction_steps": "node backend/scripts/port-sqlite-repos.mjs --check",
+      "affected_endpoints": [
+        "all endpoints with a twin repository"
+      ],
+      "affected_workflows": [
+        "all desktop-engine workflows"
+      ],
+      "potential_impact": "A PG fix may be missing in the desktop engine; the dual-engine test suite is the current (green) safety net.",
+      "related_tests": "backend suite on both engines",
+      "missing_tests": "CI gate for stamp drift.",
+      "recommended_fix": "See TEMP-STAT-02.",
+      "regression_risks": "See TEMP-STAT-02.",
+      "area": "be-api"
+    },
+    {
+      "id": "TEMP-SYNC-01",
+      "title": "Sync pull loop against an unreachable/revoked hub: no exponential backoff in the sync use-cases (observed storm in the Oct-10 live log)",
+      "category": "retry",
+      "severity": "Medium",
+      "confidence": "Medium",
+      "verification_status": "Strongly suspected",
+      "file": "src/presentation/hooks/useAutoSync.ts",
+      "symbol": "sync interval",
+      "line_start": 0,
+      "line_end": 0,
+      "evidence": "2026-10-10 live log (erp.1.log, 8.3MB): POST /api/sync/run every ~15-20s (5347 calls/day) while the hub answered 403 SYNC_DEVICE_REVOKED and undici timeouts — the loop kept polling a revoked/unreachable hub. Commit 15c66ab7 ('A successful pull clears the hub-unreachable mark') shows hub-unreachable state tracking exists; whether a REVOKED/403 state STOPS the loop (vs. just marking it) was not verified line-by-line in the frontend hook within this session's budget.",
+      "expected_behavior": "A revoked/unreachable hub backs off exponentially and surfaces a clear UI state instead of polling every ~15s indefinitely.",
+      "actual_behavior": "Observed: continuous ~15-20s polling with 403s (Oct-10 log). The unreachable MARK exists; the backoff/stop behavior on REVOKED is unverified.",
+      "root_cause": "Not established — either the hook lacks backoff on terminal states, or the Oct-09 build predates the fix.",
+      "reproduction_steps": "Revoke the device hub-side (or cut the hub), watch POST /api/sync/run cadence in logs over 10 minutes.",
+      "affected_endpoints": [
+        "POST /api/sync/run"
+      ],
+      "affected_workflows": [
+        "multi-device sync"
+      ],
+      "potential_impact": "Battery/network waste; log noise; a permanently revoked device never gives up. No data-integrity impact (idempotent, ordered).",
+      "related_tests": "verify-sync-multidevice.mjs (advisory CI, 17-27/33 non-deterministic per its own comment)",
+      "missing_tests": "No test for the revoked-hub backoff/stop behavior.",
+      "recommended_fix": "Verify useAutoSync's handling of SYNC_DEVICE_REVOKED/hub-unreachable; if it keeps polling, stop the loop on terminal 403 and show 'الجهاز مُبطَل من المركز' in the sync screen.",
+      "regression_risks": "Low (client-side loop only).",
+      "area": "sync"
+    },
+    {
+      "id": "TEMP-SYNC-02",
+      "title": "Multi-device convergence drill is non-deterministic (17-27 of 33 on identical code) and runs advisory in CI",
+      "category": "conflict",
+      "severity": "Medium",
+      "confidence": "High",
+      "verification_status": "Confirmed",
+      "file": "backend/scripts/verify-sync-multidevice.mjs",
+      "symbol": "convergence drill",
+      "line_start": 0,
+      "line_end": 0,
+      "evidence": "ci.yml comment: 'the multi-device drill reuses a template database and leaks state between scenarios, so its score varies run to run (observed 17–27 of 33 on identical code). Making a non-deterministic script a hard gate would fail honest PRs at random... promote it to a blocking gate once the template is rebuilt per run.' It is continue-on-error today.",
+      "expected_behavior": "A deterministic convergence proof that can gate releases.",
+      "actual_behavior": "Advisory only, with known state leakage between scenarios.",
+      "root_cause": "Template DB reuse across scenarios; documented as a known limitation with a planned fix.",
+      "reproduction_steps": "cd backend && node scripts/verify-sync-multidevice.mjs twice on identical code; compare scores.",
+      "affected_endpoints": [],
+      "affected_workflows": [
+        "sync convergence proof"
+      ],
+      "potential_impact": "Sync convergence regressions can escape CI (the drill is advisory); the unit/integration suites cover the pieces but not the end-to-end two-device drill deterministically.",
+      "related_tests": "verify-sync-multidevice.mjs (advisory)",
+      "missing_tests": "Deterministic per-run template rebuild for the drill.",
+      "recommended_fix": "Rebuild the template per run (the CI comment's own plan) and promote to a blocking gate.",
+      "regression_risks": "Low.",
+      "area": "sync"
+    },
+    {
+      "id": "TEMP-STAT-01",
+      "title": "prettier --check . fails on 100 files (92 source) and no CI gate prevents it",
+      "category": "formatting",
+      "severity": "Medium",
+      "confidence": "High",
+      "verification_status": "Confirmed",
+      "file": ".github/workflows/ci.yml",
+      "symbol": "missing prettier gate",
+      "line_start": 0,
+      "line_end": 0,
+      "evidence": "npx prettier --check . -> exit 1, 100 files (92 source + 8 docs). ci.yml contains NO prettier --check step. Root eslint ignores backend/** (M-09); backend eslint is the pg-import boundary only (D-006) — so neither lint config covers the drifted files. The failing source files are exactly those from the recent sync commits (2b9b602c/5ee79610/7eaabec1): backend/src/infrastructure/orm/**, backup/sqliteBackup.ts, schema-fingerprint.json.",
+      "expected_behavior": "Formatting is enforced somewhere so new code cannot land unformatted.",
+      "actual_behavior": "No enforcement: CI has no prettier step; both eslint configs exclude the drifted files; the repo's own npm run format (prettier --write .) is manual.",
+      "root_cause": "The SQLite-engine/backup work was synced via 'full working tree' commits without running the formatter; the gate that would have caught it doesn't exist in CI.",
+      "reproduction_steps": "npx prettier --check . (exit 1, 100 files); grep prettier .github/workflows/ci.yml (no match).",
+      "affected_endpoints": [],
+      "affected_workflows": [
+        "release/CI hygiene"
+      ],
+      "potential_impact": "Formatting drift in the newest engine code; 'npm run format' would rewrite 100 files in one commit — a large, review-hostile diff. No functional impact (typecheck+tests pass).",
+      "related_tests": "none",
+      "missing_tests": "No CI formatting gate.",
+      "recommended_fix": "Add a prettier --check step to CI (scoped to exclude the audit .md reports, or add them to .prettierignore) and format the drifted files in a dedicated commit.",
+      "regression_risks": "Low (formatting only); the diff will be large — do it as its own commit.",
+      "area": "static-tests"
+    },
+    {
+      "id": "TEMP-STAT-02",
+      "title": "46 SQLite twins drifted from their PostgreSQL sources — behavioral parity is tool-unverifiable for them",
+      "category": "drift",
+      "severity": "Medium",
+      "confidence": "High",
+      "verification_status": "Confirmed",
+      "file": "backend/src/infrastructure/repositories/sqlite/",
+      "symbol": "PORTED-FROM stamps",
+      "line_start": 0,
+      "line_end": 0,
+      "evidence": "node backend/scripts/port-sqlite-repos.mjs --check -> 46 'drift:' lines (PG source changed; twin stamp stale). Includes SqliteInvoiceRepository, SqlitePartyRepository, SqliteCashboxRepository, SqliteLedgerRepository, SqliteDashboardRepository, partyDeletionImpact.ts, keysetPage.ts, documentNumbers.ts, dayLockHelper.ts, rollLocking.ts, rollDeletionHelper.ts, inventoryCountRepository.ts, financialYearRepository.ts, dyePurgeRepository.ts, customerCredit.ts, cashboxBalanceHelper.ts, partyListStatsAggregation.ts, reportAggregates.ts + more.",
+      "expected_behavior": "Each twin carries a PORTED-FROM sha256 matching its PG source so drift is detectable.",
+      "actual_behavior": "46 twins' stamps no longer match; whether their BEHAVIOR still matches requires manual review (documented as known in CLAUDE.md — 'don't re-stamp without reviewing').",
+      "root_cause": "PG-side fixes (the 31-finding remediation, Oct 11) were applied without re-stamping every twin; the check is advisory, not a CI gate.",
+      "reproduction_steps": "node backend/scripts/port-sqlite-repos.mjs --check",
+      "affected_endpoints": [
+        "all endpoints whose repository has a twin"
+      ],
+      "affected_workflows": [
+        "every business workflow on the desktop engine"
+      ],
+      "potential_impact": "A PG fix may be missing (or divergent) in the desktop engine — the two engines can behave differently on the same input. UNVERIFIED which of the 46 have real behavioral divergence (stamp staleness ≠ behavior divergence — e.g. comment-only changes also stale the stamp).",
+      "related_tests": "backend suite runs on BOTH engines (the SQLite run passed 958/958) — this is the real parity safety net, and it is green.",
+      "missing_tests": "No per-twin behavioral diff; the stamp check is not a CI gate.",
+      "recommended_fix": "Make port-sqlite-repos --check a CI gate (advisory->blocking once the 46 are reviewed), and review each drifted twin for real behavioral divergence (prioritize invoice/party/cashbox/ledger/deletion-impact).",
+      "regression_risks": "Re-stamping without review would HIDE real divergence — the current advisory state is the safer default.",
+      "area": "static-tests"
+    },
+    {
+      "id": "TEMP-DB-01",
+      "title": "SQLite journal pgReference bookkeeping stale: 0005_drive_archive records pgRef 101 while its content mirrors PG journal 102",
+      "category": "migration-safety",
+      "severity": "Low",
+      "confidence": "High",
+      "verification_status": "Confirmed",
+      "file": "backend/src/infrastructure/orm/sqlite/migrations/meta/_journal.json",
+      "symbol": "journal entry 0005_drive_archive.pgReferenceJournalIdx",
+      "line_start": 0,
+      "line_end": 0,
+      "evidence": "sqlite journal: 0005_drive_archive -> pgRef 101; PG journal max idx = 102 (20261025_settings_drive_section). 0005_drive_archive.sql:80-84 contains '-- PG 20261025_settings_drive_section ...' + ALTER TABLE \"settings\" ADD COLUMN \"drive\" — i.e. the migration CONTENT mirrors PG 102 while its bookkeeping says 101.",
+      "expected_behavior": "pgReferenceJournalIdx reflects the highest PG journal index mirrored by the SQLite migration (102).",
+      "actual_behavior": "pgReferenceJournalIdx = 101 although the file mirrors PG 102.",
+      "root_cause": "The combined 0005 migration (motard_drive_* runtime tables + the settings.drive mirror) was added without bumping the pgReference field.",
+      "reproduction_steps": "Compare max(pgReferenceJournalIdx) in sqlite/migrations/meta/_journal.json (101) with PG journal max idx (102); then read 0005_drive_archive.sql lines 80-84.",
+      "affected_endpoints": [],
+      "affected_workflows": [
+        "drive-archive settings sync",
+        "migration drift review"
+      ],
+      "potential_impact": "Any automated drift check comparing 'last SQLite pgRef vs PG max idx' reports a FALSE drift — it misled this audit's DB subagent and this auditor's first pass (both nearly filed a phantom 'missing settings.drive migration' defect). No runtime impact; the schema is correct.",
+      "related_tests": "tests/desktop-pending-migrations.test.ts (checks pending migrations, not pgRef bookkeeping)",
+      "missing_tests": "No test asserts pgReferenceJournalIdx equals the highest mirrored PG index.",
+      "recommended_fix": "Bump 0005_drive_archive pgReferenceJournalIdx to 102 (content already matches), or add a comment documenting the intentional 101.",
+      "regression_risks": "None (metadata only).",
+      "area": "db-mig"
+    },
+    {
+      "id": "TEMP-FE-01",
+      "title": "PartyDeleteDialog rebuilt: pagination, search, type-to-confirm, exact counts — the 2026-10-10 '1000 invoices' requirement is implemented",
+      "category": "ui",
+      "severity": "Informational",
+      "confidence": "High",
+      "verification_status": "Confirmed",
+      "file": "src/components/parties/PartyDeleteDialog.tsx",
+      "symbol": "PartyDeleteDialog / fetchLinkedDocs",
+      "line_start": 105,
+      "line_end": 232,
+      "evidence": "fetchLinkedDocs calls GET /api/customers/:id/linked-docs with kind+limit+cursor+q (debounced 300ms search); cursor stack for exact back-navigation; tabs per document kind; hasNextPage from exact total; type-to-confirm phrase «نعم، متأكد» with whitespace/comma normalization; confirmBlocked from exact counts (returns/orders); cascade + version taken from the impact sheet (sheet.requiresCascade, sheet.version — 'never re-default to 1'); invalidateFinancialViews on success.",
+      "expected_behavior": "All linked documents reviewable via search+pagination; no delete without typed confirmation; OCC-safe version source.",
+      "actual_behavior": "Exactly that — the dialog description states 'كل المستندات متاحة للمراجعة: ابحث وتصفّح، ولا يُحذف شيء لم تقرأه'.",
+      "root_cause": "This is the completed implementation of the 2026-10-10 mission's pagination requirement (prior state: linkedDocs.slice(0,40) with no endpoint use).",
+      "reproduction_steps": "n/a — positive verification.",
+      "affected_endpoints": [
+        "GET /api/customers/:id/linked-docs",
+        "DELETE /api/customers/:id"
+      ],
+      "affected_workflows": [
+        "party delete (cascade + direct)"
+      ],
+      "potential_impact": "Positive — closes the prior partial finding.",
+      "related_tests": "party-delete dialog tests in the 410-test frontend suite",
+      "missing_tests": "",
+      "recommended_fix": "None.",
+      "regression_risks": "n/a",
+      "area": "fe-pages"
+    },
+    {
+      "id": "TEMP-DB-02",
+      "title": "Desktop migration tracking has two tables; the drizzle schema_migrations table is dead",
+      "category": "soft-delete",
+      "severity": "Informational",
+      "confidence": "High",
+      "verification_status": "Confirmed",
+      "file": "backend/src/infrastructure/orm/sqlite/runtime.ts",
+      "symbol": "applyMigration / motard_meta.schema_journal_idx",
+      "line_start": 132,
+      "line_end": 204,
+      "evidence": "Live desktop DB (read-only copy of %LOCALAPPDATA%\\motard-erp\\data\\motard.db) has an EMPTY schema_migrations table (columns version/applied_at/applied_by/description/checksum/success; rows: []). The desktop runtime applies migrations from the journal and records progress in motard_meta.schema_journal_idx (runtime.ts:153,163,204).",
+      "expected_behavior": "One source of truth for applied migrations.",
+      "actual_behavior": "Two tracking mechanisms; the drizzle schema_migrations table is never written by the desktop runner.",
+      "root_cause": "The SQLite baseline carries drizzle's bookkeeping table, but the desktop runtime uses its own journal+meta approach.",
+      "reproduction_steps": "SELECT * FROM schema_migrations on any live desktop DB -> 0 rows; read runtime.ts applyMigration/motard_meta flow.",
+      "affected_endpoints": [],
+      "affected_workflows": [
+        "desktop startup migration"
+      ],
+      "potential_impact": "Misleading for operators/support querying 'which migrations ran'; no functional impact.",
+      "related_tests": "tests/run-desktop-migrations.test.ts",
+      "missing_tests": "",
+      "recommended_fix": "Document that motard_meta.schema_journal_idx is the desktop source of truth; optionally drop the unused table from the baseline in a future regeneration.",
+      "regression_risks": "Low (bookkeeping table only).",
+      "area": "db-mig"
+    },
+    {
+      "id": "TEMP-DB-03",
+      "title": "settings.drive column exists in the live desktop DB? NO — explained by the stale Oct 9 build, not a missing migration",
+      "category": "engine-divergence",
+      "severity": "Informational",
+      "confidence": "High",
+      "verification_status": "Confirmed",
+      "file": "backend/src/infrastructure/orm/sqlite/migrations/0005_drive_archive.sql",
+      "symbol": "ALTER TABLE settings ADD COLUMN drive",
+      "line_start": 80,
+      "line_end": 84,
+      "evidence": "Live motard.db settings columns: [id, tenant_id, company, currencies, payment_methods, taxes, units, warehouses, printing, updated_at] — NO drive; SELECT drive -> 'no such column: drive'. BUT 0005_drive_archive.sql:84 DOES add it, and the SS-01 allowlist test (tests/sqlite/settings-section-allowlist.test.ts) PASSES 4/4 on a fresh SQLite DB built by the real runtime (I ran: DB_ENGINE=sqlite npx vitest run tests/sqlite/settings-section-allowlist.test.ts -> 4 passed, incl. upsertSection('drive', {})). The live DB was created by the shipped 2.0.4 build (Oct 9 20:50), which predates commit 2b9b602c (Oct 11) that introduced 0005 + the schema column.",
+      "expected_behavior": "A DB built by current code has settings.drive.",
+      "actual_behavior": "The live (old-build) DB lacks it; a fresh DB from current code has it (proven by the passing test).",
+      "root_cause": "Not a migration gap — the shipped installer lags HEAD (see F-NEW-01). First audit pass almost filed this as Critical; the live-DB check + the SS-01 test run corrected it.",
+      "reproduction_steps": "n/a — negative result documented to prevent a future false finding.",
+      "affected_endpoints": [
+        "GET /api/settings",
+        "PUT /settings/drive"
+      ],
+      "affected_workflows": [
+        "settings read/write on desktop"
+      ],
+      "potential_impact": "None once the app is rebuilt from current HEAD. (With the stale build, a settings read after upgrading code-in-place would fail with 'no such column: drive' — the desktop must be REBUILT, not just the code updated.)",
+      "related_tests": "tests/sqlite/settings-section-allowlist.test.ts (4/4 pass, run this session)",
+      "missing_tests": "",
+      "recommended_fix": "No code fix. Rebuild the desktop installer from HEAD (ties to F-NEW-01).",
+      "regression_risks": "n/a",
+      "area": "db-mig"
+    },
+    {
+      "id": "TEMP-SEC-01",
+      "title": "Rate limiting exists only on the auth routes; financial POSTs have none",
+      "category": "rate-limit",
+      "severity": "Informational",
+      "confidence": "High",
+      "verification_status": "Confirmed",
+      "file": "backend/src/presentation/routes/auth.route.ts",
+      "symbol": "express-rate-limit",
+      "line_start": 0,
+      "line_end": 0,
+      "evidence": "grep -rln 'rateLimit|express-rate-limit' backend/src/presentation/routes/ -> only auth.route.ts. All other routes (invoice, voucher, cashbox, expense, ledger, party, return, order, print, roll, statement) enforce idempotency-key instead (13 route files, required:true on financial POSTs).",
+      "expected_behavior": "Brute-force protection on credential endpoints; authenticated financial endpoints protected by auth + idempotency.",
+      "actual_behavior": "Exactly that. No rate limit on authenticated financial POSTs.",
+      "root_cause": "Design choice: the abuse vector for financial endpoints is an authenticated session; unauthenticated flooding is blocked at the auth gate which IS rate-limited.",
+      "reproduction_steps": "grep the routes dir for rate-limit imports; observe only auth.route.ts matches.",
+      "affected_endpoints": [
+        "all authenticated financial POSTs"
+      ],
+      "affected_workflows": [
+        "invoice create",
+        "voucher create",
+        "cashbox close"
+      ],
+      "potential_impact": "An authenticated insider can fire unlimited requests; bounded by UI usage patterns. No unauthenticated exposure.",
+      "related_tests": "",
+      "missing_tests": "No load/abuse test on authenticated endpoints.",
+      "recommended_fix": "Optional: add a per-user rate limit on financial POSTs if abuse becomes a concern.",
+      "regression_risks": "Low.",
+      "area": "sec"
+    },
+    {
+      "id": "TEMP-STAT-03",
+      "title": "server-bundle.test.mjs cannot run in this environment (port 8080 occupied)",
+      "category": "gate",
+      "severity": "Informational",
+      "confidence": "High",
+      "verification_status": "Blocked (environmental)",
+      "file": "desktop/scripts/server-bundle.test.mjs",
+      "symbol": "decoy bind",
+      "line_start": 154,
+      "line_end": 154,
+      "evidence": "'Error: cannot bind decoy on 127.0.0.1:8080 (EADDRINUSE). Stop leftover node from a prior packaging run and retry.' — PID 11332 holds 8080; it is not an audit-owned process (tasklist could not resolve it; do not kill another agent's work). The test itself documents the remedy.",
+      "expected_behavior": "The gate binds its decoy ports and runs.",
+      "actual_behavior": "Blocked by an unrelated listener; the other 9 desktop gates pass 24/24.",
+      "root_cause": "Environmental (leftover listener on 8080), not a code defect.",
+      "reproduction_steps": "node --test desktop/scripts/server-bundle.test.mjs with 8080 free.",
+      "affected_endpoints": [],
+      "affected_workflows": [
+        "packaging e2e gate"
+      ],
+      "potential_impact": "One packaging gate unverified in THIS environment; it passes in CI (fresh runners).",
+      "related_tests": "server-bundle.test.mjs (blocked here)",
+      "missing_tests": "",
+      "recommended_fix": "Re-run when 8080 is free (or on CI).",
+      "regression_risks": "n/a",
+      "area": "static-tests"
+    }
+  ],
+  "verified_prior_findings": [
+    {
+      "id": "Oct 10 root cause #1/#2 (phantom OCC on delete)",
+      "claim": "Dialog must send the impact sheet's version and the cascade flag; BaseHttpClient must not replay DELETE",
+      "verdict": "holds (UI side)",
+      "evidence": "PartyDeleteDialog.tsx:197-204 — sheet.version + sheet.requiresCascade wired; the backend/server halves were verified in the 2026-10-12 static pass (server.mjs contains the idempotency fix; web chunk contains the minified replaySafe guard).",
+      "area": "fe-pages"
+    },
+    {
+      "id": "financial cache invalidation rule",
+      "claim": "Every money mutation calls invalidateFinancialViews",
+      "verdict": "holds",
+      "evidence": "All 10 financial hooks (useCashbox, useExpenses, useInvoices, useOrders, useParties, useReturns, useStatement, useVouchers) import invalidateFinancialViews; the 6 mutation-carrying files without it (inventory dialogs, settings.*) invalidate their own relevant queries ([inventory], [cashbox], USERS_KEY, SYNC_HUB_KEY) — settings.drive additionally polls at 15-30s.",
+      "area": "fe-pages"
+    },
+    {
+      "id": "toast semantics rule",
+      "claim": "Success messages use toast.success, never toast.error (a test enforces it)",
+      "verdict": "holds",
+      "evidence": "58 toast.success call sites; toast.error appears only in error paths (useLiveNotificationToasts error branch); toast-semantics.test.ts enforces the rule and passes in the suite.",
+      "area": "fe-pages"
+    },
+    {
+      "id": "duplicate-submission guard",
+      "claim": "Financial submits are guarded while pending",
+      "verdict": "holds (sampled)",
+      "evidence": "invoices.sale.new.tsx:1029 — isSaving={create.isPending || update.isPending || fulfillOrder.isPending} disables the save control; credit guard disabled={availableCredit <= 0}; mutations are React Query useMutation (single-flight by default).",
+      "area": "fe-pages"
+    },
+    {
+      "id": "auth coverage per route (mission Phase 6)",
+      "claim": "Every sensitive endpoint is authenticated; pre-auth endpoints are intentional",
+      "verdict": "holds",
+      "evidence": "228 route registrations; 180 files-with-mentions aside, per-file inspection: auth.route (login/refresh — pre-auth by design, rate-limited), health.route (pre-auth by design), setup.route (first-run wizard — pre-auth by design), desktopRuntime.route (X-Motard-Runtime-Token = sha256(APP_MASTER_KEY)), syncEnrollment.route (enrollment token), invitation.route (generate/list/revoke = auth+adminGuard; validate/consume = pre-auth by design — the invitee has no account yet; line 33-34 enforces 'accountant may invite, never into the admin role'), license.route (status/devices/activate/revoke = auth+rbac(['admin']); features/updates = auth read-only), company.route (all 3 = auth+readGuard/writeGuard), drive.route (all 5 = adminGuard).",
+      "area": "be-api"
+    },
+    {
+      "id": "OCC enforcement (mission Phase 4/6)",
+      "claim": "Update/cancel paths require expectedVersion",
+      "verdict": "holds",
+      "evidence": "10 use-case files enforce expectedVersion (expense, color, fabric, invoice, order, party, purgePartyCascade, return, syncMaterialize, syncUseCases). invoiceUseCases.ts:105-113: 'expectedVersion is REQUIRED... تعارض في الإصدار' with STALE_VERSION code. Party cancel: idempotency-first (status==='cancelled' => ok) verified Oct-10 and again in the shipped 2.0.4 server.mjs this session.",
+      "area": "be-api"
+    },
+    {
+      "id": "F-07 transaction atomicity (mission Phase 4)",
+      "claim": "Multi-write operations are atomic (party+outbox, invoice+stock+ledger, cascade)",
+      "verdict": "holds",
+      "evidence": "withTenantTx used in 21 route/use-case files; purgePartyCascadeUseCase wraps the whole cascade in one withTenantTx with savepoints for nested repo transactions (documented Oct-10); party create/update/delete enqueue sync units inside the same transaction (party.route.ts runCreate/runUpdate/runDelete with respondTransactionFailure).",
+      "area": "be-api"
+    },
+    {
+      "id": "SQL-leak prevention (mission Phase 6)",
+      "claim": "SQL text never reaches the client",
+      "verdict": "holds",
+      "evidence": "persistenceErrorMessage used in 8 route/use-case locations; cancelPartyUseCase surfaces business-level messages verbatim ('SQL text never leaves' — the fix comment in partyUseCases.ts).",
+      "area": "be-api"
+    },
+    {
+      "id": "F-004 (hermes)",
+      "claim": "FORCE-RLS sweep exempts only revoked_tokens by name; six other tables have a NULLABLE tenant_id",
+      "verdict": "partial (holds on coverage)",
+      "evidence": "Programmatic scan of orm/migrations/*.sql: 48 tables have ENABLE ROW LEVEL SECURITY; ZERO tenant tables lack it. Dedicated RLS migrations exist for sync canonical policies (20260914), revoked_tokens opt-out (20260927), nullif guard (20260929), cashbox daily (20261014), financial operations (20261018). The nullable-tenant_id NOT NULL aspect needs the SEC subagent's per-table verification (not re-done here).",
+      "area": "db-mig"
+    },
+    {
+      "id": "ledger append-only invariant",
+      "claim": "Ledger is append-only enforced by DB triggers on both engines",
+      "verdict": "holds",
+      "evidence": "PG: migrations/0036b_ledger_append_only.sql. SQLite: 0000_baseline.sql triggers trg_ledger_entries_append_only_bd/bu + cashbox_daily_ledger_ai/au + manual_movements triggers. Both engines covered.",
+      "area": "db-mig"
+    },
+    {
+      "id": "migration hygiene",
+      "claim": "No destructive migrations without safeguards",
+      "verdict": "holds",
+      "evidence": "PG journal 103 entries, tags<->files 1:1 (no orphan files/tags). Only DROP-containing migration is 0038_drop_party_balances.sql (documented dead-schema cleanup, idempotent DROP IF EXISTS ... CASCADE). No DELETE FROM without WHERE anywhere.",
+      "area": "db-mig"
+    },
+    {
+      "id": "F-004 (hermes)",
+      "claim": "FORCE-RLS sweep exempts only revoked_tokens by name; six other tables have a NULLABLE tenant_id",
+      "verdict": "holds (coverage complete)",
+      "evidence": "rls/enable-rls.sql creates app_user WITH LOGIN NOBYPASSRLS; migrations/20260923_force_rls_all_tenant_tables.sql applies FORCE RLS; programmatic scan: 48 tables ENABLE RLS, zero tenant tables without it. SQLite baseline declares tenant_id TEXT NOT NULL on every table. The nullable-tenant_id aspect is addressed by 20260929_rls_nullif_guard_license_platform.sql (license/platform control-plane tables, not tenant business tables).",
+      "area": "sec"
+    },
+    {
+      "id": "SEC-01 / localAccess (prior audit)",
+      "claim": "Desktop local-caller trust must be pipe or loopback only; a private-LAN peer must never count as local",
+      "verdict": "holds",
+      "evidence": "infrastructure/http/localAccess.ts: resolveDesktopLocalCaller(pipeBound, address) — pipeBound => true (the named pipe is local-only by construction); TCP => isLoopbackAddress only. The comment documents the SEC-01 fix (private-LAN peer used to open the pre-auth wizard restore + DEVICE_PROOF bypass).",
+      "area": "sec"
+    },
+    {
+      "id": "REPAIR-006 / LIKE escaping",
+      "claim": "User input in LIKE/ILIKE must be escaped so metacharacters cannot widen matches",
+      "verdict": "holds",
+      "evidence": "infrastructure/utils/likeEscape.ts escapes backslash/%/_ ; repositories use likeContains() for search.",
+      "area": "sec"
+    },
+    {
+      "id": "hermes F-014 / backup path",
+      "claim": "Restore-from-file must accept only what the shell picker can hand over",
+      "verdict": "holds",
+      "evidence": "backup.route.ts receiveShellPath: refuses non-absolute or non-.zip paths before touching/hashing; verifies existsSync + isFile + non-zero size + reported size + reported sha256 (actual hash compared).",
+      "area": "sec"
+    },
+    {
+      "id": "RBAC owner decision (2026-10-12)",
+      "claim": "Accountant holds every admin privilege; only admin-role grant/remove is reserved for admin",
+      "verdict": "holds",
+      "evidence": "rbac.middleware.ts hasAdminPrivileges; user.route.ts enforces ADMIN_ROLE_RESERVED (line 62) and SELF_ROLE_CHANGE (line 138); remediation log round-4 correction (self-demotion now refused).",
+      "area": "sec"
+    },
+    {
+      "id": "sync route guards",
+      "claim": "Sync routes are guarded (transport, numbering, conflict)",
+      "verdict": "holds",
+      "evidence": "sync.route.ts: transportGuard (1084, 1147), numberingGuard (1293, 1329), conflictGuard (730) wired into the route registrations.",
+      "area": "sync"
+    },
+    {
+      "id": "op_id idempotency",
+      "claim": "Sync application is idempotent per op_id",
+      "verdict": "holds",
+      "evidence": "syncMaterialize.ts: 'Idempotent per op_id; the loser's full local intent' preserved; syncConflicts.ts:170 documents conflict records not sitting open forever when converged on retry.",
+      "area": "sync"
+    },
+    {
+      "id": "inbox cursor persistence",
+      "claim": "The inbox cursor (applied_seq) is durable and paginated",
+      "verdict": "holds",
+      "evidence": "SqliteSyncInboxRepository: appliedSeq persisted (line 35), keyset gt(appliedSeq, afterSeq) (142), per-tenant lock shared with the PG applied_seq trigger (151-156); migration 20261016_sync_inbox_applied_seq.sql.",
+      "area": "sync"
+    },
+    {
+      "id": "enrollment revocation",
+      "claim": "A revoked device is refused with a clear error",
+      "verdict": "holds",
+      "evidence": "syncEnrollment.ts: 403 SYNC_DEVICE_REVOKED ('الجهاز مُلغى من المركز — راجع المسؤول لإعادة تفعيله'), NO_LICENSE 403 — the exact error observed in the Oct-10 log.",
+      "area": "sync"
+    },
+    {
+      "id": "hubCanonical stale-base rejection (Oct-10 session)",
+      "claim": "The hub refuses stale-base replays; alignVersion keeps local versions in step",
+      "verdict": "holds",
+      "evidence": "syncMaterialize.ts: baseVersion vs hub.version comparison -> recordStaleConflict -> 'conflict: stale base'; alignMasterVersion/alignVersion(entityId, baseVersion+1) after hub-canonical application (verified in the Oct-10 session; hubCanonical greps re-run this session).",
+      "area": "sync"
+    },
+    {
+      "id": "desktop backup atomicity (prior audit)",
+      "claim": "Backups are written atomically (.partial then rename) with verification",
+      "verdict": "holds",
+      "evidence": "backend/src/infrastructure/backup/sqliteBackup.ts: manifest of per-table row counts+hashes -> .partial -> fsync -> rename -> fsync(dir) -> full verification -> registry VERIFIED; any failure removes the .partial. Consistency snapshot via VACUUM INTO (line 497) + BEGIN (202) + integrity/FK check; device-bound state stripped via EXCLUDED_TABLES (license_activations, device_registrations, secrets).",
+      "area": "desktop"
+    },
+    {
+      "id": "desktop restore safety (prior audit)",
+      "claim": "Restore refuses archives the app cannot apply",
+      "verdict": "holds",
+      "evidence": "sqliteRestore.ts: openAndVerifyBackupV3Sync(file, { keep: true, maxJournalIdx }) on both verify and restore paths — an archive whose schema_journal_idx exceeds the bundled journal is refused (the green-check bug where verify passed what restore would reject is fixed — the comment at sqliteRestore.ts documents it).",
+      "area": "desktop"
+    },
+    {
+      "id": "uninstall preserves business data (prior audit / Oct 10 root cause #3)",
+      "claim": "Uninstall must not delete %LOCALAPPDATA%\\motard-erp",
+      "verdict": "holds (by design)",
+      "evidence": "desktop/src-tauri/windows/hooks.nsh:16-40 — 'Uninstall != Delete User Data... Intentionally no RMDir / Delete of $LOCALAPPDATA\\motard-erp'. Only the defensive autostart Run value + InstallInstanceId are removed. NOTE: this is the documented cause of 'old data after reinstall' from the 2026-10-10 session — it is intentional (business data must survive reinstall), and the factory-reset/restore paths are the sanctioned way to start clean.",
+      "area": "desktop"
+    },
+    {
+      "id": "db_meta SQLite adoption (Oct 10 session)",
+      "claim": "The desktop must refuse a foreign data root but adopt a legitimate install-instance change",
+      "verdict": "holds",
+      "evidence": "db_meta.rs: meta carries {data_id, tenant_id, schema_journal_idx, installation_id, install_instance_id, adopted_installation_ids}; the adopt path requires a valid token ('the install instance changed legitimately (application update with a valid token)'); bundled_schema_journal_idx reads the bundled journal. The legacy PostgreSQL pgdata adoption path is gone — the desktop is SQLite-only (stack.rs: 'there is no database server, no database port and no port file').",
+      "area": "desktop"
+    },
+    {
+      "id": "single-instance + process-tree kill (prior audit)",
+      "claim": "One instance owns the data root; force-close reaps the whole process tree",
+      "verdict": "holds",
+      "evidence": "data_lock.rs: <root>\\motard.lock opened with share mode 0 (exclusive) + readable motard.lock.owner; held for the process lifetime. hidden_process.rs: Job Object process-tree kill guarantee (PR-1) — 'a force-close... terminates every member, releasing the lock/port/pipe instantly'; reactive reapers in runtime::stack remain as a second layer.",
+      "area": "desktop"
+    },
+    {
+      "id": "IPC ACL wiring (DT-06)",
+      "claim": "Every command in main.rs invoke_handler must appear in build.rs APP_COMMANDS + a capability",
+      "verdict": "holds",
+      "evidence": "build.rs registers each command as an app manifest (allow-<command>); capabilities/main-window.json grants only `api` (the named-pipe bridge) + recovery-window grants recovery/startup commands; the ipc-acl-wiring.test.mjs gate PASSES (24/24 desktop gates ran green this session — see static-tests.json).",
+      "area": "desktop"
+    },
+    {
+      "id": "readiness gating (prior audit)",
+      "claim": "Startup must gate on liveness, not a fixed deadline",
+      "verdict": "holds",
+      "evidence": "runtime/health.rs: 'LIVENESS-based, not deadline-based... a cold start on a slow disk with real-time antivirus scanning legitimately takes minutes'; supervisor.rs keeps the stack serving for the session with the recovery window as the application-level replacement for WebView2's navigation-failure page.",
+      "area": "desktop"
+    }
+  ],
+  "coverage": {
+    "fe-pages": {
+      "coverage": {
+        "routes_total": 50,
+        "routes_deep": 8,
+        "routes_partial": 12,
+        "routes_not_inspected": 30,
+        "notes": "Deep: PartyDeleteDialog (full), invoices.sale.new (submit guards), invoices.print-receive.new + print-send.new (via subagent transcript), settings.users (admin ops), ColorDeleteDialog + DyePurgeDialog (invalidation), settings.sync/drive/users (mutation invalidation). Pattern-level across ALL 50 routes: financial-cache invalidation, toast semantics, mutation duplicate-submit guards, Idempotency-Key transport. The 30 not-individually-read routes are covered by the cross-cutting pattern greps + the 410 passing frontend tests (93 files), not by individual source reads — stated honestly."
+      },
+      "findings_count": 1,
+      "verified_prior_count": 4,
+      "blocked": []
+    },
+    "be-api": {
+      "coverage": {
+        "route_files_total": 53,
+        "route_files_inspected": 53,
+        "endpoints_traced": 228,
+        "notes": "All 53 route files inspected for guard architecture (228 total route registrations). Deep-traced: invitation (mint vs redeem separation), license (customer-admin vs license rights), company, drive, auth (pre-auth by design), desktopRuntime (token), party delete cascade (Oct-10 root causes), invoice cancel OCC. Use-case OCC coverage counted across the tree; withTenantTx atomicity counted."
+      },
+      "findings_count": 1,
+      "verified_prior_count": 4,
+      "blocked": []
+    },
+    "db-mig": {
+      "coverage": {
+        "pg_migrations_total": 103,
+        "pg_migrations_inspected": 103,
+        "sqlite_migrations_total": 6,
+        "sqlite_migrations_inspected": 6,
+        "tables_total": 58,
+        "notes": "PG journal (103 entries) fully read via journal + targeted SQL reads; SQLite baseline (58 tables incl. triggers/constraints) + 0001-0005 read in full. Engine parity verified for settings.drive (PG 102 <-> SQLite 0005:84). RLS coverage scanned programmatically. Live desktop DB (motard.db, read-only copy) inspected for the settings.drive question."
+      },
+      "findings_count": 3,
+      "verified_prior_count": 3,
+      "blocked": []
+    },
+    "sec": {
+      "coverage": {
+        "surfaces_total": 14,
+        "surfaces_inspected": 14,
+        "notes": "Auth (JWT/PIN/rate-limit), rbac middleware, tenant isolation (SQLite filters + PG RLS), zod validation, SQL parameterization, path traversal (backup/restore), secrets handling, license/runtime tokens, local-caller trust. Frontend auth-storage and full zod-per-route enumeration were partially covered (sampled); RLS NOT NULL per-table verification is shared with DB-MIG."
+      },
+      "findings_count": 1,
+      "verified_prior_count": 5,
+      "blocked": []
+    },
+    "sync": {
+      "coverage": {
+        "sync_paths_total": 12,
+        "sync_paths_traced": 12,
+        "notes": "Traced: route guards (transport/numbering/conflict), op_id idempotency, inbox appliedSeq cursor + per-tenant lock, enrollment (REVOKED 403), hubCanonical stale-base rejection, syncRestore, resource claims, conflict store, auto-sync frontend, sync-engine client, bootstrap route. Deep line-level review of syncMaterialize's conflict logic was performed by the subagent (transcript) and spot-verified."
+      },
+      "findings_count": 2,
+      "verified_prior_count": 5,
+      "blocked": []
+    },
+    "desktop": {
+      "coverage": {
+        "rust_files_total": 20,
+        "rust_files_inspected": 20,
+        "scripts_inspected": 8,
+        "scripts_total": 8,
+        "notes": "All 20 Rust files inventoried (data_lock 281, db_meta 773, device_binding 180, document_archive 272, fingerprint 195, google_ipc 390, google_oauth 270, hidden_process 698, identity 34, lib 140, main 1301, secret_store 458, session_end 64, runtime/{boot_log 466, error 76, health 161, mod, pipe, ports, stack, stages, supervisor}). Core files read via subagent transcript + direct verification of the security/lifecycle-critical paths (backup atomicity, data lock, process kill, db_meta adoption, tauri.conf)."
+      },
+      "findings_count": 0,
+      "verified_prior_count": 7,
+      "blocked": []
+    },
+    "static-tests": {
+      "coverage": {},
+      "findings_count": 3,
+      "verified_prior_count": 0,
+      "blocked": [
+        "server-bundle.test.mjs (port 8080 EADDRINUSE — environmental)",
+        "Playwright e2e (needs disposable PostgreSQL + E2E_ADMIN_PASSWORD — not run)",
+        "PostgreSQL-engine backend suite (needs disposable erp_test DB — not run; SQLite engine used instead)",
+        "cargo test (Rust; compile-heavy, no test-profile cache — not attempted)"
+      ]
+    }
+  },
+  "environmental_limitations": [
+    "Playwright e2e not run (needs disposable PostgreSQL + E2E_ADMIN_PASSWORD)",
+    "PostgreSQL-engine backend suite not run (needs disposable erp_test DB; SQLite engine used instead)",
+    "cargo test not attempted (compile-heavy; no test-profile cache)",
+    "server-bundle.test.mjs blocked (port 8080 occupied by an unrelated PID)",
+    "Live hub (Render) unavailable — no real two-device sync test",
+    "Owner live DB (%LOCALAPPDATA%\\motard-erp) — READ-ONLY by rule; never a test target",
+    "30 of 50 frontend routes not individually source-read (pattern-level + test-suite coverage instead)",
+    "google_ipc.rs / google_oauth.rs OAuth token internals not deeply reviewed",
+    "Field-by-field input enumeration on every page not exhaustively performed"
+  ]
+}

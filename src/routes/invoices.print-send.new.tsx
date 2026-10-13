@@ -8,13 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
-import {
-  colorById,
-  fabricById,
-  rollById,
-  rolls,
-  useInventory,
-} from "@/presentation/hooks/useInventory";
+import { colorById, fabricById, rollById, useInventory } from "@/presentation/hooks/useInventory";
 import { usePrintJobs, useCreatePrintSend } from "@/presentation/hooks/usePrintJobs";
 import { useNextInvoiceNumber } from "@/presentation/hooks/useInvoices";
 import { printOrArchive } from "@/components/print/printPortal";
@@ -130,7 +124,7 @@ export const Route = createFileRoute("/invoices/print-send/new")({
 });
 
 function PrintSendPage() {
-  const invVersion = useInventory();
+  const inventory = useInventory();
   const { data: jobs = [] } = usePrintJobs();
   const createPrintSend = useCreatePrintSend();
   // Server-side read-only preview of the next PRT number (estimate; the real
@@ -157,7 +151,7 @@ function PrintSendPage() {
 
   const sendOptions = useMemo(
     () =>
-      rolls
+      inventory.rolls
         .filter((r) => r.remainingKg > 0)
         .map((r) => ({
           id: r.id,
@@ -166,7 +160,7 @@ function PrintSendPage() {
           }`,
           subtitle: `صبغة ${r.rollNo} — متبقّي ${formatQuantity(r.remainingKg)} كغ — ${r.remainingPieces ?? r.pieces} أثواب`,
         })),
-    [invVersion],
+    [inventory],
   );
 
   const updateLine = (key: string, patch: Partial<SendLine>) =>

@@ -47,12 +47,10 @@ export function registerDesktopRuntimeRoutes(router: Router): void {
       });
     } catch (err) {
       logger.error({ err }, "PRE_UPDATE_BACKUP_FAILED");
-      return res
-        .status(500)
-        .json({
-          code: "PRE_UPDATE_BACKUP_FAILED",
-          message: err instanceof Error ? err.message : String(err),
-        });
+      return res.status(500).json({
+        code: "PRE_UPDATE_BACKUP_FAILED",
+        message: err instanceof Error ? err.message : String(err),
+      });
     }
   });
 
@@ -96,12 +94,10 @@ export function registerDesktopRuntimeRoutes(router: Router): void {
       res.on("finish", () => setTimeout(() => process.exit(0), 50));
     } catch (err) {
       logger.error({ err }, "DESKTOP_SHUTDOWN_FAILED");
-      res
-        .status(500)
-        .json({
-          code: "SHUTDOWN_FAILED",
-          message: err instanceof Error ? err.message : String(err),
-        });
+      res.status(500).json({
+        code: "SHUTDOWN_FAILED",
+        message: err instanceof Error ? err.message : String(err),
+      });
     }
   });
 }

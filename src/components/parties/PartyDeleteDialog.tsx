@@ -14,6 +14,7 @@ import { container } from "@/infrastructure/container";
 import { deleteCustomer, deleteSupplier } from "@/presentation/hooks/useParties";
 import { invalidateFinancialViews } from "@/presentation/hooks/invalidateFinancialViews";
 import { toast } from "sonner";
+import { isPartyDeleteConfirmed, PARTY_DELETE_CONFIRM_PHRASE } from "./partyDeleteConfirm";
 
 export type PartyLinkedCounts = {
   invoices: number;
@@ -64,14 +65,6 @@ export type PartyDeletionImpact = {
 };
 
 export type PartyMoney = { currency: string; amount: number };
-
-/** The phrase the operator must type before the delete button enables. */
-export const PARTY_DELETE_CONFIRM_PHRASE = "نعم، متأكد";
-
-/** Accepts the phrase with either comma (، or ,) and surrounding spaces. */
-export function isPartyDeleteConfirmed(typed: string): boolean {
-  return typed.trim().replace(/\s+/g, " ").replace(/,/g, "،") === PARTY_DELETE_CONFIRM_PHRASE;
-}
 
 const fmtMoney = (m: PartyMoney) =>
   `${m.amount.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${m.currency}`;

@@ -177,4 +177,44 @@ describe.skipIf(!LIVE)("DFP-005/006 invitation live PG", () => {
     expect(consumed).toBe(1);
     expect(leftover).toBe(1);
   });
+
+  it("ERP-002: a failing sync enqueue (afterRedeem) leaves no user and the code unused", async () => {
+    const { tenantId, code } = await seedTenantLicense({ maxDevices: 5, codeSuffix: "ub" });
+    await runWithPlatformContext(() =>
+      db
+        .update(invitationCodes)
+        .set({
+          type: "user",
+          metadata: {
+            targetName: "New",
+            targetEmail: `new-${tenantId.slice(0, 8)}@t.local`,
+            targetRole: "viewer",
+          },
+        })
+        .where(eq(invitationCodes.code, code)),
+    );
+    const repo = new PostgresInvitationRepository();
+    const result = await consumeInvitationCodeUseCase(
+      repo,
+      repo,
+      new PostgresLicenseRepository(),
+      new Argon2PasswordHasher(),
+      code,
+      {
+        password: "4321",
+        afterRedeem: async () => {
+          throw new Error("outbox down");
+        },
+      },
+    );
+    expect(result.ok).toBe(false);
+    expect(await invitationUseCount(code)).toBe(0);
+    const [{ c }] = await runWithPlatformContext(() =>
+      db
+        .select({ c: count() })
+        .from(users)
+        .where(and(eq(users.tenantId, tenantId), eq(users.role, "viewer"))),
+    );
+    expect(Number(c)).toBe(0);
+  });
 });

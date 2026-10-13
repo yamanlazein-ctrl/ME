@@ -73,7 +73,7 @@ import {
   lineTotal,
 } from "@/components/invoices/sale-types";
 import { formatNumber, formatMoney, formatQuantity } from "@/shared/utils/formatNumber";
-import { parseInvoiceNotes } from "@/components/print/noteParser";
+import { parseInvoiceNotes, warehouseToRestore } from "@/components/print/noteParser";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { planSaleSettlement, useCustomerCredit } from "@/presentation/hooks/useCustomerCredit";
 
@@ -192,11 +192,6 @@ function SaleInvoicePage() {
     if (editInvoice.exchangeRate && Number(editInvoice.exchangeRate) > 0)
       setExchangeRate(Number(editInvoice.exchangeRate));
     const parsedHeader = parseInvoiceNotes(editInvoice.notes);
-    // #1: restore the warehouse stored in the notes so re-saving does not
-    // append a second المستودع fragment under a different default.
-    if (parsedHeader.warehouse && warehousesList.some((w) => w.id === parsedHeader.warehouse)) {
-      setWarehouse(parsedHeader.warehouse);
-    }
     setReference(editInvoice.reference || parsedHeader.reference || "");
     setNotes(parsedHeader.freeText);
     setDiscount(editInvoice.discount ?? "");
@@ -222,6 +217,17 @@ function SaleInvoicePage() {
     });
     setLines(mapped.length > 0 ? mapped : [emptyLine()]);
   }, [edit, editInvoice]);
+
+  // #1: restore the warehouse stored in the notes — in its own effect, so it still happens when the
+  // settings (warehouse list) arrive after the invoice; the one-shot prefill above used to miss it.
+  const editWarehouseRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!edit || !editInvoice || editWarehouseRef.current === edit) return;
+    const stored = warehouseToRestore(editInvoice.notes, warehousesList);
+    if (!stored) return;
+    editWarehouseRef.current = edit;
+    setWarehouse(stored);
+  }, [edit, editInvoice, warehousesList]);
 
   useEffect(() => {
     if (!fromOrderId || !fromOrder.data || prefilledRef.current === fromOrderId) return;

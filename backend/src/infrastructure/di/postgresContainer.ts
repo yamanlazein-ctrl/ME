@@ -150,7 +150,7 @@ export function buildContainer(): Container {
   const dashboardRepo = new PostgresDashboardRepository(db);
   const profitRepo = new PostgresProfitRepository(db);
   const documentTrackRepo = new PostgresDocumentTrackRepository(db);
-  const userRepo = new PostgresUserRepository(db);
+  const userRepo = new PostgresUserRepository(dbx); // ERP-002: joins the route transaction
 
   // ── Phase 0 sub-batch extensions ──
   // The company profile is enqueued as a sync unit by PUT /api/company/profile.

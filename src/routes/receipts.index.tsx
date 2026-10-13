@@ -37,7 +37,7 @@ function ReceiptsList() {
     page,
     limit: LIST_PAGE_SIZE,
   } as VoucherFilter);
-  const list = listData?.data ?? [];
+  const list = useMemo(() => listData?.data ?? [], [listData]);
   const totalCount = listData?.total ?? list.length;
   const cancelVoucherMut = useCancelVoucher();
 

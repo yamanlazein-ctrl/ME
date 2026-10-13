@@ -1,4 +1,4 @@
-// PORTED-FROM: src/infrastructure/repositories/PostgresOrderRepository.ts sha256=07b1489ad11a1a5ba808cb4c1eb9c5e12266a9b4b4fa9d72a61d0ab91c31dea3
+// PORTED-FROM: src/infrastructure/repositories/PostgresOrderRepository.ts sha256=2fd437d71bfb3c613e2b91f58539cae9ac5989609c3ca59f01ba5acf1ea48ffa
 // SQLite twin (specs/001-desktop-sqlite-engine S4). Keep behavior identical to the PG source.
 import { desc } from "./helpers/pgOrder.js";
 import { ilikeEscaped } from "./helpers/likeContains.js";

@@ -1,4 +1,4 @@
-// PORTED-FROM: src/infrastructure/repositories/PostgresUserRepository.ts sha256=44d4f8beb0382e7c7ca702f35cf9ed3a3dee0fbc7209b46257fbed2644ff7b15
+// PORTED-FROM: src/infrastructure/repositories/PostgresUserRepository.ts sha256=7ab8e62311d1227e737f2e7a3c8032b0848c48ecc1af49d57e03ed99540f065b
 // SQLite twin (specs/001-desktop-sqlite-engine S4). Keep behavior identical to the PG source.
 import { likeCs } from "./helpers/pgOrder.js";
 import { transactionTimestamp } from "../../orm/sqlite/clock.js";
@@ -236,8 +236,10 @@ export class SqliteUserRepository implements IUserRepository {
 
       if (data.active === false) {
         await this.revokeSyncDeviceAuthorization(ctx.tenantId, id);
-        invalidateIdentityCache(id);
       }
+      // ERP-001: role/name/active all feed the cached session identity — drop it on every update
+      // so a demotion applies to the very next request, not up to 60 s later.
+      invalidateIdentityCache(id);
 
       return {
         id: u.id,

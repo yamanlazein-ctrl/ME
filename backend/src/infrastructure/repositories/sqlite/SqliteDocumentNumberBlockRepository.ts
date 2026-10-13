@@ -1,4 +1,4 @@
-// PORTED-FROM: src/infrastructure/repositories/PostgresDocumentNumberBlockRepository.ts sha256=a0436309a365c792d8dbb09467962c65572fe24feb7f1f424bb5d1728ba2904c
+// PORTED-FROM: src/infrastructure/repositories/PostgresDocumentNumberBlockRepository.ts sha256=12aa607fa2fd65c8d9da8bc40fbc7c264c379e2a59e316dbb98030ae88321790
 // SQLite twin (specs/001-desktop-sqlite-engine S4). Keep behavior identical to the PG source.
 import { asc } from "./helpers/pgOrder.js";
 import { and, eq, sql } from "drizzle-orm";

@@ -54,6 +54,37 @@ export class PostgresNumberBlockStore implements INumberBlockStore {
     });
   }
 
+  raiseTip(input: { tenantId: UUID; entityType: string; knownUsed: number }) {
+    // Same bounded advance as claimBlock's tip reconciliation (never lowers, at most +2000 per call).
+    const known = Math.min(Math.floor(input.knownUsed), 999999);
+    const { prefix } = resolveNumberFormat(input.entityType);
+    return this.db.transaction(async (tx) => {
+      const [row] = await tx
+        .insert(documentSequences)
+        .values({
+          tenantId: input.tenantId,
+          entityType: input.entityType,
+          prefix,
+          lastNumber: known,
+        })
+        .onConflictDoUpdate({
+          target: [
+            documentSequences.tenantId,
+            documentSequences.entityType,
+            documentSequences.prefix,
+          ],
+          set: {
+            lastNumber: sql`LEAST(
+              GREATEST(${documentSequences.lastNumber}, ${known}),
+              ${documentSequences.lastNumber} + 2000
+            )`,
+          },
+        })
+        .returning({ lastNumber: documentSequences.lastNumber });
+      return Number(row?.lastNumber ?? known);
+    });
+  }
+
   reclaimBlockTail(input: { tenantId: UUID; blockId: UUID }) {
     return this.db.transaction(async (tx) => {
       return reclaimNumberBlockTailInTx(tx, input);

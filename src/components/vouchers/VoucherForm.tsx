@@ -21,7 +21,7 @@ import { CURRENCIES, currencySymbol, formatAmount } from "@/presentation/hooks/u
 import {
   useCreateReceiptVoucher,
   useCreatePaymentVoucher,
-  useCancelVoucher,
+  useReplaceVoucher,
   useVoucher,
   type VoucherKind,
   type VoucherMethod,
@@ -83,8 +83,8 @@ export function VoucherForm({
   const navigate = useNavigate();
   const createReceipt = useCreateReceiptVoucher();
   const createPayment = useCreatePaymentVoucher();
-  const cancelVoucher = useCancelVoucher();
-  const saving = createReceipt.isPending || createPayment.isPending || cancelVoucher.isPending;
+  const replaceVoucher = useReplaceVoucher();
+  const saving = createReceipt.isPending || createPayment.isPending || replaceVoucher.isPending;
   const { data: editing } = useVoucher(editId ?? "");
   const isReceipt = kind === "receipt";
   const [partyId, setPartyId] = useState(initialPartyId ?? "");
@@ -134,7 +134,7 @@ export function VoucherForm({
     // Remaining-balance math needs every invoice of the selected party.
     { all: Boolean(partyId) },
   );
-  const allInvoices = invoicesData?.data ?? [];
+  const allInvoices = useMemo(() => invoicesData?.data ?? [], [invoicesData]);
   // Returns are needed to compute the true remaining: backend does total - paid - activeReturns
   // (sale return credits the customer). Without this, the UI shows 44 while the backend correctly sees -72.
   const { data: returnsData } = useReturnsList(
@@ -330,11 +330,17 @@ export function VoucherForm({
       notesInternal: notesInternal || undefined,
     };
     try {
-      // Amend = cancel the old voucher first (frees remaining), then create.
+      // ERP-008: amend = ONE server transaction (cancel the original + create the replacement); if the
+      // replacement is refused the original stays active.
       if (editId && editing?.status === "active") {
-        await cancelVoucher.mutateAsync(editId);
+        await replaceVoucher.mutateAsync({
+          id: editId,
+          expectedVersion: editing.version,
+          input,
+        });
+      } else {
+        await (isReceipt ? createReceipt : createPayment).mutateAsync(input);
       }
-      await (isReceipt ? createReceipt : createPayment).mutateAsync(input);
       navigate({ to: isReceipt ? "/receipts" : "/payments" });
     } catch {
       // mutation hooks surface errors via their own toast; keep err unset

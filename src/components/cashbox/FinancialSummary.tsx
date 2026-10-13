@@ -1,10 +1,11 @@
-import { Banknote, DollarSign, Euro, ArrowDownLeft, ArrowUpRight, Activity } from "lucide-react";
+import { ArrowDownLeft, ArrowUpRight, Activity } from "lucide-react";
 import type { ReactNode } from "react";
 import { CURRENCIES, currencySymbol } from "@/presentation/hooks/useCurrency";
 import { formatMoney } from "@/shared/utils/formatNumber";
 import { useHydrated } from "@/hooks/use-hydrated";
 import { cn } from "@/lib/utils";
 import type { Currency } from "@/domain/types";
+import { CASH_BOXES } from "./cashBoxes";
 
 /** Symbol on the left, amount on the right — flex so Arabic ل.س cannot bidi-flip. */
 function CashAmount({ n, code, className }: { n: number; code: Currency; className?: string }) {
@@ -15,33 +16,6 @@ function CashAmount({ n, code, className }: { n: number; code: Currency; classNa
     </span>
   );
 }
-
-/** Three independent cash boxes — never mixed or FX-converted. */
-export const CASH_BOXES: {
-  code: Currency;
-  Icon: typeof Banknote;
-  accent: string;
-  chip: string;
-}[] = [
-  {
-    code: "SYP",
-    Icon: Banknote,
-    accent: "from-emerald-500/15 via-transparent to-transparent",
-    chip: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300",
-  },
-  {
-    code: "USD",
-    Icon: DollarSign,
-    accent: "from-sky-500/15 via-transparent to-transparent",
-    chip: "bg-sky-500/15 text-sky-700 dark:text-sky-300",
-  },
-  {
-    code: "EUR",
-    Icon: Euro,
-    accent: "from-violet-500/15 via-transparent to-transparent",
-    chip: "bg-violet-500/15 text-violet-700 dark:text-violet-300",
-  },
-];
 
 function StatCell({
   label,

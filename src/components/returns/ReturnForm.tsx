@@ -64,7 +64,7 @@ export function ReturnForm({ kind }: { kind: ReturnKind }) {
   const [err, setErr] = useState<string | null>(null);
 
   const { data: invoicesData } = useInvoicesList();
-  const allInvoices = invoicesData?.data ?? [];
+  const allInvoices = useMemo(() => invoicesData?.data ?? [], [invoicesData]);
 
   const { data: originalInvoice } = useInvoice(invoiceId);
   const invoiceRollIds = useMemo(() => {

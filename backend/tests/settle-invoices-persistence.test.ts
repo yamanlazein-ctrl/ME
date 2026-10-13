@@ -58,13 +58,11 @@ describe("settle-invoices route path — commit survives past the response", () 
     try {
       await db.execute(sql`select 1`);
       reachable = true;
-      await db
-        .insert(tenants)
-        .values({
-          id: tenantId,
-          name: "Settle Persist Tenant",
-          slug: `sp-${tenantId.slice(0, 8)}`,
-        });
+      await db.insert(tenants).values({
+        id: tenantId,
+        name: "Settle Persist Tenant",
+        slug: `sp-${tenantId.slice(0, 8)}`,
+      });
       await db.insert(parties).values({
         id: customerId,
         tenantId,

@@ -1,4 +1,4 @@
-// PORTED-FROM: src/infrastructure/repositories/PostgresSyncMaterializeStore.ts sha256=34e7a873742ea11b32c40218f5b5ce68c354345c2943e496d7ce9bda36845d74
+// PORTED-FROM: src/infrastructure/repositories/PostgresSyncMaterializeStore.ts sha256=907f8718727c6337b23dcaeece83e42fcc3b9abff7edb186974a65f7a237ddda
 // SQLite twin (specs/001-desktop-sqlite-engine S4). Keep behavior identical to the PG source.
 /**
  * Sync materialization writes on SQLite (tombstones, user snapshots).
@@ -47,6 +47,12 @@ export class SqliteSyncMaterializeStore implements ISyncMaterializeStore {
             FROM sync_tombstones
            WHERE tenant_id = ${tenantId}
          ON CONFLICT (tenant_id, entity_type, entity_id) DO NOTHING`);
+  }
+
+  async findUserRole(tenantId: string, userId: string): Promise<string | null> {
+    const r = await this.db.execute(sql`
+      SELECT role FROM users WHERE tenant_id = ${tenantId} AND id = ${userId} LIMIT 1`);
+    return (r.rows[0] as { role?: string } | undefined)?.role ?? null;
   }
 
   async upsertUserSnapshot(u: SyncUserSnapshotRow): Promise<void> {

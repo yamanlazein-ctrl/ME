@@ -4,13 +4,14 @@ import { Voucher } from "@/domain/entities/Voucher";
 import { VoucherCancelled } from "@/domain/events";
 import { TenantContext, UUID } from "@/domain/types";
 import { IVoucherRepository } from "@/application/ports/IVoucherRepository";
-import { ILedgerRepository } from "@/application/ports/ILedgerRepository";
 
+/**
+ * ERP-007: the server's cancel endpoint reverses the ledger, the invoice's paid amount and enqueues
+ * the sync unit in one transaction. The client must not try a second ledger cancellation — the API
+ * ledger adapter refuses it by design, which used to fail every cancel AFTER it had succeeded.
+ */
 export class CancelVoucherUseCase {
-  constructor(
-    private readonly vouchers: IVoucherRepository,
-    private readonly ledger: ILedgerRepository,
-  ) {}
+  constructor(private readonly vouchers: IVoucherRepository) {}
 
   async execute(
     id: UUID,
@@ -26,8 +27,6 @@ export class CancelVoucherUseCase {
     }
 
     await this.vouchers.cancel(id, ctx, voucher.version);
-
-    await this.ledger.cancelByReference(id, ctx);
 
     const event = VoucherCancelled(ctx.tenantId, {
       voucherId: voucher.id,

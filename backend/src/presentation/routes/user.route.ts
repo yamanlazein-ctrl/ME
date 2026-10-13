@@ -14,7 +14,11 @@ import {
   opIdFromRequest,
   syncDeviceIdFromRequest,
 } from "../../application/use-cases/sync/syncEnqueue.js";
-import { revokeSubjectSessions } from "../../infrastructure/auth/sessionCutoff.js";
+import {
+  invalidateIdentityCache,
+  revokeSubjectSessions,
+} from "../../infrastructure/auth/sessionCutoff.js";
+import { withTenantTx } from "../../infrastructure/orm/engine.js";
 
 const listUsersSchema = z.object({
   search: z.string().optional(),
@@ -53,6 +57,38 @@ export function registerUserRoutes(
   const ctxFn = (req: Request): TenantContext => req.tenantContext!;
   const body = <T>(req: Request): T => (req as unknown as { validatedBody: T }).validatedBody;
   const paramId = (req: Request): string => req.params.id as string;
+
+  // ERP-002 (F-07): a user write and its outbox unit commit together — a failed enqueue rolls the
+  // write back instead of leaving a change the hub and peers never receive. The repository runs on
+  // the ambient connection (container `dbx`), so it joins this transaction.
+  const writeAndEnqueue = async <T>(
+    req: Request,
+    id: string,
+    op: "update" | "deactivate",
+    ctx: TenantContext,
+    write: () => Promise<T>,
+  ): Promise<T> => {
+    if (!isSyncEnqueueEnabled()) return write();
+    const result = await withTenantTx(ctx.tenantId, async () => {
+      const written = await write();
+      const snapshot = await userRepo.findSyncSnapshot(id, ctx);
+      if (snapshot) {
+        await enqueueUserMutation(
+          syncOutboxRepo,
+          snapshot,
+          op,
+          ctx,
+          syncDeviceIdFromRequest(req),
+          opIdFromRequest(req),
+        );
+      }
+      return written;
+    });
+    // Again after commit: a request between the in-transaction invalidation and the commit could
+    // have re-cached the old identity.
+    invalidateIdentityCache(id);
+    return result;
+  };
 
   // Owner decision (2026-10-12): the accountant manages users like an admin, but only an admin may
   // grant the admin role or touch an admin account (role, deactivation, password); and nobody
@@ -147,20 +183,9 @@ export function registerUserRoutes(
           adminRoleDenied(res);
           return;
         }
-        const result = await userRepo.update(id, updateData, adminCtx);
-        if (isSyncEnqueueEnabled()) {
-          const snapshot = await userRepo.findSyncSnapshot(id, adminCtx);
-          if (snapshot) {
-            await enqueueUserMutation(
-              syncOutboxRepo,
-              snapshot,
-              "update",
-              adminCtx,
-              syncDeviceIdFromRequest(req),
-              opIdFromRequest(req),
-            );
-          }
-        }
+        const result = await writeAndEnqueue(req, id, "update", adminCtx, () =>
+          userRepo.update(id, updateData, adminCtx),
+        );
         res.json(result);
       } catch (err) {
         if (err instanceof Error && err.message === "User not found") {
@@ -202,20 +227,7 @@ export function registerUserRoutes(
           return;
         }
 
-        await userRepo.delete(id, adminCtx);
-        if (isSyncEnqueueEnabled()) {
-          const snapshot = await userRepo.findSyncSnapshot(id, adminCtx);
-          if (snapshot) {
-            await enqueueUserMutation(
-              syncOutboxRepo,
-              snapshot,
-              "deactivate",
-              adminCtx,
-              syncDeviceIdFromRequest(req),
-              opIdFromRequest(req),
-            );
-          }
-        }
+        await writeAndEnqueue(req, id, "deactivate", adminCtx, () => userRepo.delete(id, adminCtx));
         res.json({ ok: true, message: "تم تعطيل المستخدم بنجاح" });
       } catch (err) {
         res.status(500).json({ code: "INTERNAL", message: "خطأ في حذف المستخدم" });
@@ -244,21 +256,12 @@ export function registerUserRoutes(
         }
 
         const passwordHash = await passwordHasher.hash(password);
-        const result = await userRepo.update(id, { password: passwordHash }, adminCtx);
+        const result = await writeAndEnqueue(req, id, "update", adminCtx, () =>
+          userRepo.update(id, { password: passwordHash }, adminCtx),
+        );
+        // After the commit: on PostgreSQL the session cutoff writes the same row on another pooled
+        // connection, which would wait on this transaction's row lock.
         await revokeSubjectSessions(id, adminCtx.tenantId);
-        if (isSyncEnqueueEnabled()) {
-          const snapshot = await userRepo.findSyncSnapshot(id, adminCtx);
-          if (snapshot) {
-            await enqueueUserMutation(
-              syncOutboxRepo,
-              snapshot,
-              "update",
-              adminCtx,
-              syncDeviceIdFromRequest(req),
-              opIdFromRequest(req),
-            );
-          }
-        }
         res.json({ ok: true, message: "تم إعادة تعيين كلمة المرور بنجاح", userId: result.id });
       } catch (err) {
         if (err instanceof Error && err.message === "User not found") {

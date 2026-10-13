@@ -59,4 +59,18 @@ export class VoucherApiService {
   async cancelReceipt(id: UUID, expectedVersion: number): Promise<void> {
     await this.client.post(`/api/receipts/${id}/cancel`, { expectedVersion });
   }
+
+  /** ERP-008: amend in ONE server transaction — cancel `id` (at `expectedVersion`) + create `voucher`. */
+  async replaceVoucher(
+    kind: "payment" | "receipt",
+    id: UUID,
+    expectedVersion: number,
+    voucher: CreatePaymentRequest | CreateReceiptRequest,
+  ): Promise<PaymentDTO | ReceiptDTO> {
+    const res = await this.client.post<PaymentDTO | ReceiptDTO>(`/api/${kind}s/${id}/replace`, {
+      expectedVersion,
+      voucher,
+    });
+    return res.data;
+  }
 }

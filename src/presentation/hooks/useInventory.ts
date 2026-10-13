@@ -58,10 +58,6 @@ function subscribe(cb: () => void) {
   };
 }
 
-function getVersion() {
-  return version;
-}
-
 /* ── Loading ─────────────────────────────────────────────────────── */
 
 let loadPromise: Promise<void> | null = null;
@@ -360,12 +356,21 @@ export function totalPiecesOfFabric(fabricId: string): number {
   return colorsOfFabric(fabricId).reduce((s, c) => s + totalPiecesOfColor(c.id), 0);
 }
 
-export function searchColors(term: string, limit = 12, fabricId?: string): Color[] {
-  return filterColorsByQuery(colorsCache, term, limit, fabricId);
+export function searchColors(
+  term: string,
+  limit = 12,
+  fabricId?: string,
+  from: readonly Color[] = colorsCache,
+): Color[] {
+  return filterColorsByQuery(from, term, limit, fabricId);
 }
 
-export function colorByName(name: string, fabricId: string | undefined): Color | undefined {
-  return colorOnFabric(colorsCache, fabricId, { name });
+export function colorByName(
+  name: string,
+  fabricId: string | undefined,
+  from: readonly Color[] = colorsCache,
+): Color | undefined {
+  return colorOnFabric(from, fabricId, { name });
 }
 
 /**
@@ -386,19 +391,49 @@ export function colorByName(name: string, fabricId: string | undefined): Color |
  * caller passes undefined/empty and gets undefined back), never as
  * "search everywhere and hope".
  */
-export function colorByCode(code: string, fabricId: string | undefined): Color | undefined {
+export function colorByCode(
+  code: string,
+  fabricId: string | undefined,
+  from: readonly Color[] = colorsCache,
+): Color | undefined {
   const q = normalizeInventoryName(code);
   if (!q || !fabricId) return undefined;
-  return colorsCache.find(
-    (c) => c.fabricId === fabricId && normalizeInventoryName(c.code ?? "") === q,
-  );
+  return from.find((c) => c.fabricId === fabricId && normalizeInventoryName(c.code ?? "") === q);
 }
 
 /* ── Reactivity hook (re-renders on inventory changes) ────────────── */
 
-export function useInventory() {
-  useSyncExternalStore(subscribe, getVersion, () => 0);
-  return version;
+/**
+ * What a component reads from the inventory store. The arrays ARE the live module caches (no copy);
+ * the object's identity changes on every store change, so a `useMemo`/`useEffect` that reads
+ * `inventory.rolls` (etc.) and lists `inventory` as a dependency recomputes exactly when the store
+ * changes — a real, lint-visible dependency instead of an unused version number.
+ */
+export type InventorySnapshot = {
+  /** 0 until the first load/change — "nothing loaded yet". */
+  version: number;
+  fabrics: readonly Fabric[];
+  colors: readonly Color[];
+  rolls: readonly Roll[];
+};
+
+let snapshot: InventorySnapshot = {
+  version,
+  fabrics: fabricsCache,
+  colors: colorsCache,
+  rolls: rollsCache,
+};
+/** Current store snapshot (exported for tests; components use `useInventory`). */
+export function getInventorySnapshot(): InventorySnapshot {
+  if (snapshot.version !== version) {
+    snapshot = { version, fabrics: fabricsCache, colors: colorsCache, rolls: rollsCache };
+  }
+  return snapshot;
+}
+const SERVER_SNAPSHOT: InventorySnapshot = { version: 0, fabrics: [], colors: [], rolls: [] };
+
+export function useInventory(): InventorySnapshot {
+  return useSyncExternalStore(subscribe, getInventorySnapshot, () => SERVER_SNAPSHOT);
 }
 
 /* ── Mutations (real API calls, optimistic local cache) ───────────── */

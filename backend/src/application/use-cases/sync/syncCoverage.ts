@@ -27,6 +27,9 @@ export const SYNC_COVERAGE: Record<string, CoverageEntry> = {
   "POST /receipts": { sync: { entityType: "voucher", operation: "create" } },
   "POST /payments/:id/cancel": { sync: { entityType: "voucher", operation: "cancel" } },
   "POST /receipts/:id/cancel": { sync: { entityType: "voucher", operation: "cancel" } },
+  // ERP-008: amend enqueues the original's cancel AND the replacement's create (one transaction).
+  "POST /payments/:id/replace": { sync: { entityType: "voucher", operation: "create" } },
+  "POST /receipts/:id/replace": { sync: { entityType: "voucher", operation: "create" } },
   // ---- returns ----
   "POST /returns": { sync: { entityType: "return", operation: "create" } },
   "POST /returns/:id/cancel": { sync: { entityType: "return", operation: "cancel" } },
@@ -156,6 +159,8 @@ export const SYNC_COVERAGE: Record<string, CoverageEntry> = {
     exempt: "numbering transport (blocks sync via pull snapshots)",
   },
   "POST /sync/number-blocks/ensure": { exempt: "numbering transport" },
+  "POST /sync/number-blocks/tip": { exempt: "numbering transport (MIG-06 tip re-report)" },
+  "POST /sync/hub/identity/rotate": { exempt: "hub instance identity (MIG-01 runbook)" },
   "POST /sync/number-blocks/reclaim": { exempt: "numbering transport" },
   // ---- identity / sessions (hub-authoritative per device, not business docs) ----
   "POST /api/auth/login": { exempt: "session issuance, per-device" },

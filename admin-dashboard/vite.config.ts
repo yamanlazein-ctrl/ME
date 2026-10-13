@@ -17,17 +17,22 @@ export default defineConfig({
   },
   server: {
     port: 5174,
-    // Listen on 0.0.0.0 so both 127.0.0.1 and localhost work on Windows
-    // (default can bind [::1] only → 127.0.0.1:5174 connection refused).
-    host: true,
+    // ERP-005: loopback only. The proxy below reaches the license server from loopback, which
+    // opens the passwordless owner console — a LAN-reachable dev server would hand that to any
+    // remote caller. 127.0.0.1 (not the default, which can bind [::1] only on Windows).
+    // Set ADMIN_DASHBOARD_HOST to expose it deliberately; the backend still refuses the open
+    // console for a forwarded non-loopback client (xfwd below).
+    host: process.env.ADMIN_DASHBOARD_HOST || "127.0.0.1",
     proxy: {
       "/license-admin": {
         target: licenseProxyTarget,
         changeOrigin: true,
+        xfwd: true,
       },
       "/v1": {
         target: licenseProxyTarget,
         changeOrigin: true,
+        xfwd: true,
       },
     },
   },

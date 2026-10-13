@@ -46,16 +46,14 @@ describe("statement order: a document precedes the payment booked with it", () =
     await db
       .insert(tenants)
       .values({ id: tenantId, name: "Order Tenant", slug: `order-${tenantId.slice(0, 8)}` });
-    await db
-      .insert(parties)
-      .values({
-        id: customerId,
-        tenantId,
-        name: "Order Customer",
-        code: "ORD-C",
-        kind: "customer",
-        currency: "USD",
-      });
+    await db.insert(parties).values({
+      id: customerId,
+      tenantId,
+      name: "Order Customer",
+      code: "ORD-C",
+      kind: "customer",
+      currency: "USD",
+    });
     await db.insert(fabrics).values({ id: fabricId, tenantId, name: "Cotton", minStockKg: "0" });
     await db.insert(colors).values({ id: colorId, tenantId, fabricId, name: "White" });
     for (let i = 0; i < SALES; i++) {

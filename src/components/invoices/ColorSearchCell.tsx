@@ -5,7 +5,6 @@ import { cn } from "@/lib/utils";
 import {
   colorByCode,
   colorByName,
-  colors,
   fabricById,
   searchColors,
   type Color,
@@ -56,18 +55,23 @@ export function ColorSearchCell({
   const fileRef = useRef<HTMLInputElement>(null);
 
   const query = activeField === "code" ? code : name;
-  // Store version, not `colors.length`: an edit synced from another device keeps the length.
-  const invVersion = useInventory();
-  const matches = useMemo(
-    () =>
-      query.trim()
-        ? searchColors(query, 12, fabricId)
-        : recentSuggestions(fabricId ? colors.filter((c) => c.fabricId === fabricId) : colors),
-    // `colors` is a mutable module cache; its length changes when the list loads/grows.
-    [query, fabricId, invVersion],
+  // The store snapshot changes on every inventory change (also an edit synced from another
+  // device that keeps the list length), so these recompute exactly then.
+  const inventory = useInventory();
+  const matches = useMemo(() => {
+    const all = inventory.colors;
+    return query.trim()
+      ? searchColors(query, 12, fabricId, all)
+      : recentSuggestions(fabricId ? all.filter((c) => c.fabricId === fabricId) : all);
+  }, [query, fabricId, inventory]);
+  const localByCode = useMemo(
+    () => colorByCode(code, fabricId, inventory.colors),
+    [code, fabricId, inventory],
   );
-  const localByCode = useMemo(() => colorByCode(code, fabricId), [code, fabricId, invVersion]);
-  const localByName = useMemo(() => colorByName(name, fabricId), [name, fabricId, invVersion]);
+  const localByName = useMemo(
+    () => colorByName(name, fabricId, inventory.colors),
+    [name, fabricId, inventory],
+  );
   const local = localByCode ?? localByName;
   const matched = Boolean(existingColorId || local);
   const typed = code.trim().length > 0 || name.trim().length > 0;
