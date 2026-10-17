@@ -1,3 +1,4 @@
+import { DecimalInput } from "@/components/common/DecimalInput";
 import { useState, type ReactNode } from "react";
 import { ImageIcon, Plus } from "lucide-react";
 import {
@@ -277,8 +278,7 @@ export function AddFabricModal({
                 />
               </Field>
               <Field label="العرض (سم)">
-                <Input
-                  type="number"
+                <DecimalInput
                   step="0.01"
                   value={widthCm}
                   onChange={(e) => setWidthCm(e.target.value === "" ? "" : Number(e.target.value))}
@@ -286,8 +286,7 @@ export function AddFabricModal({
                 />
               </Field>
               <Field label="الوزن / الكثافة (غ/م²)">
-                <Input
-                  type="number"
+                <DecimalInput
                   step="0.01"
                   value={weightGsm}
                   onChange={(e) =>
@@ -297,8 +296,7 @@ export function AddFabricModal({
                 />
               </Field>
               <Field label="الكمية *">
-                <Input
-                  type="number"
+                <DecimalInput
                   step="0.01"
                   value={quantity}
                   onChange={(e) => setQuantity(e.target.value === "" ? "" : Number(e.target.value))}
@@ -306,8 +304,7 @@ export function AddFabricModal({
                 />
               </Field>
               <Field label="سعر الشراء *">
-                <Input
-                  type="number"
+                <DecimalInput
                   step="0.01"
                   value={purchasePrice}
                   onChange={(e) =>
@@ -317,8 +314,7 @@ export function AddFabricModal({
                 />
               </Field>
               <Field label="سعر البيع">
-                <Input
-                  type="number"
+                <DecimalInput
                   step="0.01"
                   value={salePrice}
                   onChange={(e) =>

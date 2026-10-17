@@ -58,8 +58,8 @@ export class ApiCashboxRepository implements ICashboxRepository {
     return this.api.cashMovementsOn(date);
   }
 
-  async isDayLocked(date: string, ctx: TenantContext): Promise<boolean> {
-    return this.api.isDayLocked(date);
+  async isDayLocked(date: string, currency: string, ctx: TenantContext): Promise<boolean> {
+    return this.api.isDayLocked(date, currency);
   }
 
   async listManualMovements(ctx: TenantContext): Promise<ManualMovementDTO[]> {

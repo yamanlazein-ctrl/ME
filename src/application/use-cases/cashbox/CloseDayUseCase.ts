@@ -21,7 +21,11 @@ export class CloseDayUseCase {
       return Err(new ValidationError(first.message, first.path.join(".")));
     }
 
-    const locked = await this.cashbox.isDayLocked(parsed.data.date, ctx);
+    const locked = await this.cashbox.isDayLocked(
+      parsed.data.date,
+      parsed.data.currency ?? "SYP",
+      ctx,
+    );
     if (locked) {
       return Err(new ConflictError(`تم إقفال يوم ${input.date} مسبقاً.`));
     }

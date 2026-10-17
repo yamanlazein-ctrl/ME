@@ -705,7 +705,7 @@ export function UserPickerPage() {
                     clearLicense();
                     clearRememberedEmail();
                     clearSyncDeviceState();
-                    applyFactoryResetNow()
+                    applyFactoryResetNow(wipeTyped)
                       .then(() => setWipeDone(true))
                       .catch((e: Error) => setWipeError(e.message || "تعذّر بدء التصفير"))
                       .finally(() => setWipeBusy(false));

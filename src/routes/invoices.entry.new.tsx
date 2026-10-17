@@ -1022,6 +1022,7 @@ function EntryInvoicePage() {
             </HeaderField>
             <HeaderField label="سعر الصرف (ل.س / $)">
               <FormattedAmountInput
+                maxDecimals={4}
                 value={exchangeRate}
                 onChange={setExchangeRate}
                 placeholder={isUSD ? "اختياري للدولار (سعر مرجعي)" : "أدخل سعر الصرف يدوياً"}
@@ -1238,6 +1239,7 @@ function EntryInvoicePage() {
                       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
                         <CardField label="الأثواب">
                           <FormattedAmountInput
+                            maxDecimals={0}
                             value={l.pieces || ""}
                             onChange={(v) =>
                               updateLine(l.id, {
@@ -1350,6 +1352,10 @@ function EntryInvoicePage() {
                           />
                         </CardField>
                       </div>
+                      <p className="mt-2 text-xs text-muted-foreground">
+                        يُحسب إجمالي البند من الوزن الصافي × السعر / كغ. الوزن القائم للمعلومة فقط
+                        ولا يغيّر الوزن الصافي تلقائياً.
+                      </p>
                     </GroupSection>
 
                     {/* ── بيانات الصباغة ── */}

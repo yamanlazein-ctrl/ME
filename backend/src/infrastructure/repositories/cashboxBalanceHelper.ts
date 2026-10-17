@@ -131,5 +131,19 @@ export async function lockAndReadCashboxBalance(
   return { available, wouldGoNegative: available < amount };
 }
 
-/** @deprecated Use lockAndReadCashboxBalance — name was misleading (never asserted). */
-export const assertSufficientCashboxBalance = lockAndReadCashboxBalance;
+/**
+ * Serialize concurrent cashbox writes per (tenant, currency): takes the advisory
+ * lock and returns the balance snapshot. Negative cash is allowed by design —
+ * this does NOT assert sufficiency; callers use the returned snapshot to surface
+ * a UI warning. Kept as a named wrapper so the call site reads as a lock, not a
+ * balance check.
+ */
+export async function serializeCashboxWrites(
+  tx: Tx,
+  ctx: TenantContext,
+  currency: string,
+  asOfDate: string,
+  amount: number,
+): Promise<{ available: number; wouldGoNegative: boolean }> {
+  return lockAndReadCashboxBalance(tx, ctx, currency, asOfDate, amount);
+}

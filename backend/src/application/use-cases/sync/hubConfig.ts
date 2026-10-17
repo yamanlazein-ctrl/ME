@@ -616,10 +616,30 @@ export async function registerDeviceOnHub(
     reg = await postHubDeviceRegistration(url, auth, device);
   }
   if (reg.ok) {
+    // DESK-030: the durable credential must follow the identity. Re-login (expired session, a
+    // restarted hub) uses the stored credential; left on the previous device id it fails as soon
+    // as the admin disables that old device. Store the new one first, then switch the session.
+    await adoptDeviceCredential(url, auth, reg.id);
     const session = loadSession();
     if (session?.accessToken) persistHubSession({ ...session, hubDeviceId: reg.id });
   }
   return reg;
+}
+
+/** Mint and store this device's own hub credential for `deviceId` (keeps the old one on failure). */
+async function adoptDeviceCredential(url: string, auth: string, deviceId: string): Promise<void> {
+  const stored = loadHubCredentials();
+  if (stored?.deviceId === deviceId && stored.deviceSecret) return;
+  const tenantId = stored?.tenantId ?? loadSession()?.hubTenantId;
+  const deviceSecret = tenantId ? await mintHubDeviceCredential(url, auth, deviceId) : null;
+  if (!deviceSecret || !tenantId) {
+    logger.warn(
+      { deviceId },
+      "new sync identity has no device credential yet; the previous one is kept",
+    );
+    return;
+  }
+  saveHubCredentials({ url, tenantId, deviceId, deviceSecret });
 }
 
 export type ConnectHubResult =

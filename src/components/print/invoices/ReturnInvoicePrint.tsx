@@ -144,18 +144,18 @@ export function ReturnInvoicePrint({
     },
     {
       key: "roll",
-      cfg: { key: "roll", label: "رقم الصبغة", width: "14%" },
+      cfg: { key: "roll", label: "رقم الصبغة", nowrap: true, width: "14%" },
       on: vis.showRollNumber,
     },
     { key: "fabric", cfg: { key: "fabric", label: "القماش", width: "20%" }, on: vis.showFabric },
     {
       key: "color",
-      cfg: { key: "color", label: "اللون", width: "22%" },
+      cfg: { key: "color", label: "اللون", width: "21%" },
       on: vis.showColorCode || vis.showColorName,
     },
     {
       key: "pieces",
-      cfg: { key: "pieces", label: "الأنواع", align: "center", width: "7%" },
+      cfg: { key: "pieces", label: "الأنواع", nowrap: true, align: "center", width: "7%" },
       on: vis.showQuantity,
     },
     {
@@ -164,6 +164,7 @@ export function ReturnInvoicePrint({
         key: "qty",
         label: "الكمية (كغ)",
         align: "center",
+        nowrap: true,
         width: "11%",
         dividerAfter: vis.showUnitPrice,
       },

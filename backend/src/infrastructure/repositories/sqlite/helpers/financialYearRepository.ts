@@ -1,4 +1,4 @@
-// PORTED-FROM: src/infrastructure/repositories/financialYearRepository.ts sha256=05d6b6ef0c5eafbb594716e08c956b2c5ae3743427d59ec4044f71c30dd36550
+// PORTED-FROM: src/infrastructure/repositories/financialYearRepository.ts sha256=766baf875da8e131b6b405a40c6022bddd1abdea93f202d9f861b4cc815fc337
 // SQLite twin (specs/001-desktop-sqlite-engine S4). Keep behavior identical to the PG source.
 import { scaledTextSql, greatest, least } from "./likeContains.js";
 import { and, eq, isNotNull, sql } from "drizzle-orm";

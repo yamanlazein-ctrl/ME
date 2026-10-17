@@ -135,9 +135,11 @@ async function savepoint<T>(fn: (tx: SqliteDb) => Promise<T>): Promise<T> {
 }
 
 async function topLevel<T>(tenantId: string, fn: (tx: SqliteDb) => Promise<T>): Promise<T> {
-  const c = connections();
   if (inSqliteTransaction()) throw new SqliteGateReentryError("a new top-level write transaction was requested");
   const release = await gate.acquire();
+  // Read the connections only once the gate is ours: a restore swaps them while holding the gate,
+  // and a transaction that captured them before waiting would BEGIN on a closed connection.
+  const c = connections();
   const state: TxState = { owner: Symbol("tx"), tenantId, flagsSet: false, savepoints: 0, compensations: [], active: true };
   let rolledBack = false;
   try {
@@ -407,8 +409,22 @@ export function sqliteDb(): SqliteDb {
  */
 export function sqliteIndependentDb(): SqliteDb {
   if (!independent) connections();
-  return independent!;
+  return independentStable;
 }
+
+/**
+ * Repositories keep the handle they were built with for the life of the process, so it must not
+ * capture a connection set: after `reopenSqliteRuntime` (restore) the old one is closed. This
+ * forwards every access to the CURRENT independent handle (as `ambient` does for tx/outside).
+ */
+const independentStable = new Proxy({} as SqliteDb, {
+  get(_t, prop) {
+    if (!independent) connections();
+    const target = independent as unknown as Record<PropertyKey, unknown>;
+    const value = target[prop];
+    return typeof value === "function" ? (value as (...a: unknown[]) => unknown).bind(target) : value;
+  },
+});
 
 /** Queue depth of the write gate (diagnostics/tests). */
 export function writeGateQueueLength(): number {

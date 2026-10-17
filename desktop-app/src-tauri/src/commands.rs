@@ -177,13 +177,17 @@ pub fn archive_document_pdf(
 // ── Factory reset ────────────────────────────────────────────────────────────────────────────────
 
 #[tauri::command]
-pub fn request_factory_reset(sh: Sh<'_>) -> Result<(), String> {
+pub fn request_factory_reset(sh: Sh<'_>, confirm: Option<String>) -> Result<(), String> {
+    // Reachable without an ERP session (DESK-006): the typed phrase is enforced here, not in the page.
+    if confirm.as_deref().map(str::trim) != Some(boot::CONFIRM_FACTORY_RESET) {
+        return Err(format!("اكتب «{}» للتأكيد", boot::CONFIRM_FACTORY_RESET));
+    }
     fsutil::atomic_write(&sh.paths.reset_request, fsutil::stamp().as_bytes()).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
-pub fn apply_factory_reset_now(app: AppHandle, sh: Sh<'_>) -> Result<(), String> {
-    boot::factory_reset_now(&app, &sh)
+pub fn apply_factory_reset_now(app: AppHandle, sh: Sh<'_>, confirm: Option<String>) -> Result<(), String> {
+    boot::factory_reset_now(&app, &sh, confirm.as_deref().unwrap_or(""))
 }
 
 // ── Backup files (the shell owns file I/O; the IPC body is text only) ───────────────────────────
@@ -239,44 +243,68 @@ pub async fn pick_backup_file() -> Result<Option<Value>, String> {
     file_info(f.path()).map(Some)
 }
 
-// ── Not in v3.0 (ADR-001 "Updates", "Not in v3.0") ───────────────────────────────────────────────
+/// Desktop-only: save arbitrary text content (e.g. CSV export) to a user-chosen path.
+/// Opens a native save dialog, writes the bytes, and returns the saved file info.
+#[tauri::command]
+pub async fn save_csv_file(
+    content: String,
+    suggested_name: String,
+) -> Result<Option<Value>, String> {
+    let Some(dst) = rfd::AsyncFileDialog::new()
+        .set_title("حفظ ملف CSV")
+        .set_file_name(safe_name(&suggested_name, "motard-export.csv"))
+        .add_filter("ملف CSV", &["csv"])
+        .save_file()
+        .await
+    else {
+        return Ok(None);
+    };
+    let dst = dst.path().to_path_buf();
+    std::fs::write(&dst, content.as_bytes()).map_err(|e| e.to_string())?;
+    let size = std::fs::metadata(&dst).map_err(|e| e.to_string())?.len();
+    Ok(Some(json!({ "path": dst.display().to_string(), "sizeBytes": size, "sha256": "" })))
+}
+
+// ── Google Drive link (google.rs). The WebView only ever sees the status below. ─────────────────
 
 #[tauri::command]
-pub fn check_desktop_update() -> Value {
-    json!({ "available": false, "version": null, "body": "التحديث يتم بتشغيل برنامج التثبيت الأحدث؛ بياناتك تبقى كما هي.", "date": null })
+pub fn google_status_cmd(sh: Sh<'_>) -> Value {
+    sh.google.status()
 }
 
 #[tauri::command]
-pub fn install_desktop_update() -> Result<(), String> {
-    Err("لا يوجد تحديث عبر الإنترنت في هذا الإصدار. شغّل برنامج التثبيت الأحدث؛ بياناتك تبقى كما هي.".into())
-}
-
-const DRIVE_NA: &str = "ربط Google Drive غير متاح في هذا الإصدار. النسخ المحلية ومجلد المستندات تعمل.";
-
-#[tauri::command]
-pub fn google_status_cmd() -> Value {
-    json!({ "connected": false, "configured": false, "email": null, "scopes": "" })
+pub fn google_configure_cmd(sh: Sh<'_>, client_id: String, client_secret: Option<String>) -> Result<Value, String> {
+    sh.google.configure(&client_id, client_secret.as_deref())
 }
 
 #[tauri::command]
-pub fn google_configure_cmd(client_id: Option<String>) -> Result<Value, String> {
-    let _ = client_id;
-    Err(DRIVE_NA.into())
+pub fn google_connect_start_cmd(sh: Sh<'_>) -> Result<Value, String> {
+    sh.google.connect_start(&crate::google::Google::open_default)
+}
+
+/// Waits (up to 5 min) for the browser's redirect; runs off the async runtime (blocking I/O).
+#[tauri::command]
+pub async fn google_connect_finish_cmd(sh: Sh<'_>) -> Result<Value, String> {
+    let shared = sh.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let status = shared.google.connect_finish(crate::google::CONSENT_TIMEOUT)?;
+        boot::push_drive_token(&shared); // uploads can start now, not at the next tick
+        Ok(status)
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
-pub fn google_connect_start_cmd() -> Result<Value, String> {
-    Err(DRIVE_NA.into())
-}
-
-#[tauri::command]
-pub fn google_connect_finish_cmd() -> Result<Value, String> {
-    Err(DRIVE_NA.into())
-}
-
-#[tauri::command]
-pub fn google_disconnect_cmd() -> Result<Value, String> {
-    Err(DRIVE_NA.into())
+pub async fn google_disconnect_cmd(sh: Sh<'_>) -> Result<Value, String> {
+    let shared = sh.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let status = shared.google.disconnect()?;
+        boot::push_drive_token(&shared); // the backend drops its token now
+        Ok(status)
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 #[cfg(test)]

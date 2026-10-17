@@ -1,3 +1,4 @@
+import { DecimalInput } from "@/components/common/DecimalInput";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { Palette, Plus, Send, Printer, Save, Search, Trash2 } from "lucide-react";
@@ -412,8 +413,7 @@ function PrintSendPage() {
                       </div>
 
                       <Field label="الكمية المرسلة (كغ) *">
-                        <Input
-                          type="number"
+                        <DecimalInput
                           inputMode="decimal"
                           min={0}
                           step={0.01}

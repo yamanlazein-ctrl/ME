@@ -1,4 +1,4 @@
-// PORTED-FROM: src/infrastructure/repositories/PostgresStatementRepository.ts sha256=5c903aeed6bb3a49f6dd3b79b0e9d150b78edb699100da3af7804351d04a10ff
+// PORTED-FROM: src/infrastructure/repositories/PostgresStatementRepository.ts sha256=116c231110ec11789b4f465a3b68d578dbf75a45e13b152a2893e07ff05ec388
 // SQLite twin (specs/001-desktop-sqlite-engine S4). Keep behavior identical to the PG source.
 import { asc } from "./helpers/pgOrder.js";
 import { scaledNumber } from "./helpers/likeContains.js";
@@ -39,6 +39,8 @@ import { localToday } from "../../utils/localDate.js";
 import { assertYearOpen } from "./helpers/dayLockHelper.js";
 const INVOICE_TYPES = ["sales_invoice", "purchase_invoice"];
 const VOUCHER_REF_TYPES = ["receipt_in", "payment_out"];
+// Re-entering an opening must not put its baseline after same-date vouchers.
+const openingRank = sql`CASE WHEN ${ledgerEntries.type} = 'opening' THEN 0 ELSE 1 END`;
 /** Tie-break inside one (date, created_at): documents (0) before the payments booked with them (1). */
 const docRank = sql`CASE WHEN ${ledgerEntries.type} IN (${sql.join(
   STATEMENT_DOCUMENT_TYPES.map((t) => sql`${t}`),
@@ -167,12 +169,14 @@ export class SqliteStatementRepository implements IStatementRepository {
     // The cursor row's rank, read from the row itself: the cursor format (date|createdAt|id) — and any
     // cursor a client still holds — stays valid.
     let cursorRank = 1;
+    let cursorOpeningRank = 1;
     if (cursor) {
       const [row] = await this.db
         .select({ type: ledgerEntries.type })
         .from(ledgerEntries)
         .where(eq(ledgerEntries.id, cursor.id.toLowerCase()))
         .limit(1);
+      cursorOpeningRank = row?.type === "opening" ? 0 : 1;
       cursorRank =
         row && (STATEMENT_DOCUMENT_TYPES as readonly string[]).includes(row.type) ? 0 : 1;
     }
@@ -182,9 +186,12 @@ export class SqliteStatementRepository implements IStatementRepository {
       pageConditions.push(
         sql`(
           ${ledgerEntries.date} > ${cursor.date}
-          OR (${ledgerEntries.date} = ${cursor.date} AND ${ledgerEntries.createdAt} > ${cursor.createdAt})
-          OR (${ledgerEntries.date} = ${cursor.date} AND ${ledgerEntries.createdAt} = ${cursor.createdAt} AND ${docRank} > ${cursorRank})
-          OR (${ledgerEntries.date} = ${cursor.date} AND ${ledgerEntries.createdAt} = ${cursor.createdAt} AND ${docRank} = ${cursorRank} AND ${ledgerEntries.id} > ${cursor.id.toLowerCase()})
+          OR (${ledgerEntries.date} = ${cursor.date} AND ${openingRank} > ${cursorOpeningRank})
+          OR (${ledgerEntries.date} = ${cursor.date} AND ${openingRank} = ${cursorOpeningRank} AND (
+            ${ledgerEntries.createdAt} > ${cursor.createdAt}
+            OR (${ledgerEntries.createdAt} = ${cursor.createdAt} AND ${docRank} > ${cursorRank})
+            OR (${ledgerEntries.createdAt} = ${cursor.createdAt} AND ${docRank} = ${cursorRank} AND ${ledgerEntries.id} > ${cursor.id.toLowerCase()})
+          ))
         )`,
       );
     }
@@ -253,6 +260,7 @@ export class SqliteStatementRepository implements IStatementRepository {
         .where(and(...winConditions))
         .orderBy(
           asc(ledgerEntries.date),
+          asc(openingRank),
           asc(ledgerEntries.createdAt),
           asc(docRank),
           asc(ledgerEntries.id),
@@ -286,9 +294,12 @@ export class SqliteStatementRepository implements IStatementRepository {
         ...winConditions,
         sql`(
           ${ledgerEntries.date} < ${cursor.date}
-          OR (${ledgerEntries.date} = ${cursor.date} AND ${ledgerEntries.createdAt} < ${cursor.createdAt})
-          OR (${ledgerEntries.date} = ${cursor.date} AND ${ledgerEntries.createdAt} = ${cursor.createdAt} AND ${docRank} < ${cursorRank})
-          OR (${ledgerEntries.date} = ${cursor.date} AND ${ledgerEntries.createdAt} = ${cursor.createdAt} AND ${docRank} = ${cursorRank} AND ${ledgerEntries.id} <= ${cursor.id.toLowerCase()})
+          OR (${ledgerEntries.date} = ${cursor.date} AND ${openingRank} < ${cursorOpeningRank})
+          OR (${ledgerEntries.date} = ${cursor.date} AND ${openingRank} = ${cursorOpeningRank} AND (
+            ${ledgerEntries.createdAt} < ${cursor.createdAt}
+            OR (${ledgerEntries.createdAt} = ${cursor.createdAt} AND ${docRank} < ${cursorRank})
+            OR (${ledgerEntries.createdAt} = ${cursor.createdAt} AND ${docRank} = ${cursorRank} AND ${ledgerEntries.id} <= ${cursor.id.toLowerCase()})
+          ))
         )`,
       ];
       const beforeRows = await this.db
@@ -330,6 +341,7 @@ export class SqliteStatementRepository implements IStatementRepository {
       .where(and(...pageConditions))
       .orderBy(
         asc(ledgerEntries.date),
+        asc(openingRank),
         asc(ledgerEntries.createdAt),
         asc(docRank),
         asc(ledgerEntries.id),

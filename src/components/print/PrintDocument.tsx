@@ -16,7 +16,8 @@ export type PrintParty = {
   extra?: string;
 };
 
-export type PrintTotal = { label: string; value: string; grand?: boolean };
+/** `value` may be a <Money> unit, so an amount and its symbol keep one order whatever the currency. */
+export type PrintTotal = { label: string; value: ReactNode; grand?: boolean };
 
 /** Small label that identifies the document kind in the header. */
 export type PrintTypeBadge =
@@ -72,6 +73,7 @@ export function PrintDocument({
   totalPages,
   hideFooter,
   extraMeta,
+  orientation = "portrait",
 }: {
   title: string;
   subtitle?: string;
@@ -88,6 +90,8 @@ export function PrintDocument({
   totalPages?: number;
   hideFooter?: boolean;
   extraMeta?: PrintMetaItem[];
+  /** Wide tables (statements, party lists) print on landscape A4/A5 so no column is squeezed. */
+  orientation?: "portrait" | "landscape";
 }) {
   const s = useSettings();
   const p = s.printing;
@@ -109,7 +113,7 @@ export function PrintDocument({
   }, [paper]);
 
   return (
-    <div className="print-doc" data-paper={paper}>
+    <div className="print-doc" data-paper={paper} data-orientation={orientation}>
       {/* ── Brand bar: logo LEFT | company name CENTER | contact RIGHT. ── */}
       <div className={`print-brand-bar${isFirstPage ? "" : " print-brand-bar--compact"}`}>
         {showLogo ? (
@@ -177,8 +181,9 @@ export function PrintDocument({
 
       {totals && totals.length > 0 && (
         <div className="print-totals print-avoid-break">
-          {totals.map((t) => (
-            <div key={t.label} className={`print-total-row ${t.grand ? "print-grand-total" : ""}`}>
+          {totals.map((t, i) => (
+            // index key: a multi-currency summary repeats its labels once per currency
+            <div key={i} className={`print-total-row ${t.grand ? "print-grand-total" : ""}`}>
               <span>{t.label}</span>
               <span className="pd-amount pd-money" dir="ltr">
                 {t.value}
@@ -236,6 +241,10 @@ export type PrintColumn = {
   align?: "right" | "center" | "left";
   amount?: boolean;
   width?: string;
+  /** Never wrap this column (dates, references, codes, phones, quantities). Amounts never wrap. */
+  nowrap?: boolean;
+  /** The text column that takes the remaining width and wraps — between words only. */
+  wrap?: boolean;
   /** Draw a vertical rule on the physical LEFT edge of this column (table is RTL, so it separates it from the next column). */
   dividerAfter?: boolean;
 };
@@ -260,6 +269,7 @@ export function PrintTable({
             const cls = [
               c.align === "center" ? "pd-center" : "",
               c.amount ? "pd-amount amount-col" : "",
+              c.wrap ? "pd-wrap" : "",
               c.dividerAfter ? "pd-divider-after" : "",
             ]
               .filter(Boolean)
@@ -291,6 +301,8 @@ export function PrintTable({
                 const cls = [
                   c?.align === "center" ? "pd-center" : "",
                   c?.amount ? "pd-amount amount-col" : "",
+                  c?.nowrap ? "pd-nowrap" : "",
+                  c?.wrap ? "pd-wrap" : "",
                   c?.dividerAfter ? "pd-divider-after" : "",
                 ]
                   .filter(Boolean)

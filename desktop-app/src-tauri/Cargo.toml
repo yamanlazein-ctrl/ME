@@ -1,6 +1,6 @@
 [package]
 name = "motard-erp"
-version = "3.0.0"
+version = "3.0.6"
 description = "Motard Fabrics Group ERP — Windows desktop application"
 edition = "2021"
 publish = false
@@ -23,6 +23,11 @@ base64 = "0.22"
 uuid = { version = "1", features = ["v4"] }
 getrandom = "0.3"
 rfd = "0.15"
+# Google Drive link (google.rs): HTTPS to Google's OAuth endpoints over the OS TLS stack (Schannel),
+# so the system certificate store and proxies apply; no bundled crypto library.
+ureq = { version = "=2.12.1", default-features = false, features = ["native-tls"] }
+native-tls = "=0.2.12"
+url = "2"
 
 [target.'cfg(windows)'.dependencies]
 windows = { version = "0.61", features = [

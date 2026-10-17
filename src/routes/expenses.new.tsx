@@ -1,3 +1,4 @@
+import { DecimalInput } from "@/components/common/DecimalInput";
 import { AppShell } from "@/components/layout/AppShell";
 import { PageCard } from "@/components/layout/PageCard";
 import { Button } from "@/components/ui/button";
@@ -116,8 +117,7 @@ function NewExpense() {
             />
           </FormField>
           <FormField label="المبلغ *" error={amtError ?? undefined}>
-            <Input
-              type="number"
+            <DecimalInput
               value={amount}
               onChange={(e) => {
                 setAmount(e.target.value === "" ? "" : Number(e.target.value));

@@ -150,18 +150,28 @@ fn reason_from_line(line: &str, current: Option<&str>) -> Option<String> {
     }
 }
 
-fn tee(stream: impl Read + Send + 'static, log: PathBuf, fatal: Arc<Mutex<Option<String>>>) {
+fn tee(
+    stream: impl Read + Send + 'static,
+    log: PathBuf,
+    fatal: Arc<Mutex<Option<String>>>,
+) -> std::thread::JoinHandle<()> {
     std::thread::spawn(move || {
         for line in BufReader::new(stream).split(b'\n').map_while(Result::ok) {
             let text = String::from_utf8_lossy(&line).trim_end().to_string();
-            if let Some(reason) = reason_from_line(&text, fatal.lock().unwrap().as_deref()) {
-                *fatal.lock().unwrap() = Some(reason);
+            {
+                // One guard: a second `fatal.lock()` while the first is alive (e.g. one taken in an
+                // `if let` condition, which lives through the body) deadlocks this thread and then
+                // `wait_healthy`, so a failed boot would never reach the recovery screen.
+                let mut reason = fatal.lock().unwrap();
+                if let Some(next) = reason_from_line(&text, reason.as_deref()) {
+                    *reason = Some(next);
+                }
             }
             if let Ok(mut f) = OpenOptions::new().create(true).append(true).open(&log) {
                 let _ = writeln!(f, "{text}");
             }
         }
-    });
+    })
 }
 
 #[cfg(windows)]
@@ -233,6 +243,22 @@ mod tests {
         assert_eq!(r, "MIGRATION_FAILED: SqliteError: table \"motard_drive_folders\" already exists");
         assert_eq!(classify(&r), "MIGRATION_FAILED");
         assert_eq!(reason_from_line("[FATAL] Server startup failed: DATA_ID_MISMATCH: x", Some(&r)).as_deref(), Some("DATA_ID_MISMATCH: x"));
+    }
+
+    #[test]
+    fn tee_records_a_fatal_reason_without_deadlocking() {
+        let dir = std::env::temp_dir().join(format!("motard-tee-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let fatal = Arc::new(Mutex::new(None));
+        let input = "starting\nSqliteError: table \"x\" already exists\n    at applyMigration (s.mjs:1:1)\n\
+                     [FATAL] Server startup failed: DATA_ID_MISMATCH: a ≠ b\n";
+        let handle = tee(std::io::Cursor::new(input.as_bytes().to_vec()), dir.join("server.log"), fatal.clone());
+        let (tx, rx) = std::sync::mpsc::channel();
+        std::thread::spawn(move || tx.send(handle.join().is_ok()).unwrap());
+        assert_eq!(rx.recv_timeout(std::time::Duration::from_secs(5)), Ok(true), "tee thread hung");
+        assert_eq!(fatal.lock().unwrap().as_deref(), Some("DATA_ID_MISMATCH: a ≠ b"));
+        assert!(std::fs::read_to_string(dir.join("server.log")).unwrap().contains("already exists"));
+        std::fs::remove_dir_all(dir).ok();
     }
 
     #[test]

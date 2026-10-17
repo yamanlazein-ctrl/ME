@@ -9,7 +9,8 @@ routeTree.gen.ts
 # Generator inputs/outputs: the SQLite schema generator parses the PG schema sources with
 # single-line regexes, and the generated SQLite schema / migration meta are written by tools.
 backend/src/infrastructure/orm/
-# Audit evidence is preserved verbatim (never reformatted).
+# Audit evidence and remediation working docs are preserved verbatim (never reformatted).
+.remediation-v3.0.6/
 CODEBASE_AUDIT_REPORT.md
 CODEBASE_AUDIT_REPORT_hermes.md
 CODEBASE_AUDIT_FINDINGS.json
@@ -19,3 +20,10 @@ AUDIT_PROGRESS.md
 1/
 CODEBASE_REMEDIATION_LOG.md
 VERIFIED_REMEDIATION_PLAN.md
+
+# Desktop shell build output and generated files (desktop-app/.gitignore)
+desktop-app/node_modules
+desktop-app/build
+desktop-app/.cache
+desktop-app/src-tauri/target
+desktop-app/src-tauri/gen

@@ -1,4 +1,4 @@
-// PORTED-FROM: src/infrastructure/repositories/PostgresVoucherRepository.ts sha256=d153ec3bcc4d09e4223ec56ccdff2e095ff147f5eefc6d20543d52359ff8677a
+// PORTED-FROM: src/infrastructure/repositories/PostgresVoucherRepository.ts sha256=132d1d8a2a93f776da5e1391ad5bc5c07ab69f238c03010328b5565f620b1da2
 // SQLite twin (specs/001-desktop-sqlite-engine S4). Keep behavior identical to the PG source.
 import { desc } from "./helpers/pgOrder.js";
 import { moneyParam, scaledNumber, mulRound } from "./helpers/likeContains.js";
@@ -31,7 +31,7 @@ import { ledgerEntries } from "../../orm/sqlite/schemas/ledger-entry.table.js";
 import { returns } from "../../orm/sqlite/schemas/return.table.js";
 import { returnLines } from "../../orm/sqlite/schemas/return-line.table.js";
 import { assertDayUnlocked } from "./helpers/dayLockHelper.js";
-import { assertSufficientCashboxBalance } from "./helpers/cashboxBalanceHelper.js";
+import { serializeCashboxWrites } from "./helpers/cashboxBalanceHelper.js";
 import {
   assertCreditNotOverdrawn,
   customerCreditPosition,
@@ -201,7 +201,8 @@ export class SqliteVoucherRepository implements IVoucherRepository {
 
   async create(input: CreateVoucherInput, ctx: TenantContext): Promise<VoucherData> {
     return this.db.transaction(async (tx) => {
-      await assertDayUnlocked(tx, ctx.tenantId, input.date);
+      // Day lock is per currency: a USD voucher must not be rejected because the SYP day is closed.
+      await assertDayUnlocked(tx, ctx.tenantId, input.date, input.currency ?? "SYP");
       // The party must be this tenant's and of the stated kind: RLS scopes the voucher row, not the
       // party UUID it references, so a foreign tenant's party id would otherwise persist.
       const [party] = await tx
@@ -255,7 +256,7 @@ export class SqliteVoucherRepository implements IVoucherRepository {
       // Negative cash balances are allowed (business rule). The helper only
       // serializes concurrent cash-outs; it no longer hard-blocks the write.
       if (input.method === "cash" && input.kind === "payment") {
-        await assertSufficientCashboxBalance(tx, ctx, voucherCurrency, input.date, netCash);
+        await serializeCashboxWrites(tx, ctx, voucherCurrency, input.date, netCash);
       }
 
       // What this voucher actually settles on the linked invoice, restated in the
@@ -656,7 +657,7 @@ export class SqliteVoucherRepository implements IVoucherRepository {
       // financial write surface a closed day protects against. Without this,
       // a receipt/payment/transfer dated on an already-closed day could still
       // be cancelled, silently altering a reconciled day after the fact.
-      await assertDayUnlocked(tx, ctx.tenantId, currentRow.date);
+      await assertDayUnlocked(tx, ctx.tenantId, currentRow.date, currentRow.currency ?? "SYP");
 
       const [row] = await tx
         .update(vouchers)

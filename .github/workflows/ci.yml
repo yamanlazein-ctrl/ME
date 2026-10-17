@@ -254,6 +254,10 @@ jobs:
           cp desktop-app/src-tauri/pages/* desktop-app/build/web/
           cp desktop-app/src-tauri/resources/license-public.pem desktop-app/build/resources/
 
+      # C-01: every command the UI invokes is registered, in build.rs APP_COMMANDS and granted.
+      - name: Desktop IPC ACL parity
+        run: node --test desktop-app/scripts/ipc-acl.test.mjs
+
       - name: Desktop shell unit tests
         working-directory: desktop-app/src-tauri
         run: cargo test

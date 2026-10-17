@@ -722,6 +722,13 @@
       "when": 1791644250532,
       "tag": "20261025_settings_drive_section",
       "breakpoints": true
+    },
+    {
+      "idx": 103,
+      "version": 7,
+      "when": 1791644250533,
+      "tag": "20261026_day_closes_per_currency",
+      "breakpoints": true
     }
   ]
 }

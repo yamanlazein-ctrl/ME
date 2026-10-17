@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   aggregatePartyListStats,
+  applyLedgerRemainingToPartyStats,
   type PartyInvoiceStatsRow,
 } from "@/infrastructure/repositories/partyListStatsAggregation";
 
@@ -73,7 +74,7 @@ describe("aggregatePartyListStats (F09 regression)", () => {
     });
   });
 
-  it("falls back to the sole foreign currency's totals when the party has NO default-currency invoices", () => {
+  it("keeps foreign-only totals in their currency bucket, not the default-currency scalars", () => {
     const foreignOnly: PartyInvoiceStatsRow[] = [
       {
         partyId: party,
@@ -87,9 +88,10 @@ describe("aggregatePartyListStats (F09 regression)", () => {
     ];
     const stats = aggregatePartyListStats(foreignOnly).get(party)!;
     expect(stats.invoicesCount).toBe(3);
-    expect(stats.totalAmount).toBe(300);
-    expect(stats.totalPaid).toBe(100);
-    expect(stats.remaining).toBe(200);
+    expect(stats.totalAmount).toBe(0);
+    expect(stats.totalPaid).toBe(0);
+    expect(stats.remaining).toBe(0);
+    expect(stats.byCurrency?.USD.remaining).toBe(200);
   });
 
   it("does not fall back to a foreign currency when a real default-currency invoice sums to zero", () => {
@@ -120,6 +122,30 @@ describe("aggregatePartyListStats (F09 regression)", () => {
     expect(stats.totalAmount).toBe(0);
     expect(stats.totalPaid).toBe(0);
     expect(stats.invoicesCount).toBe(2);
+  });
+
+  it("replaces invoice remainder with the ledger, even when debt falls or clears", () => {
+    const invoice = { ...rows[0]!, currency: "USD", partyCurrency: "USD", total: 100_000, paid: 0 };
+    const defaults = new Map([[party, "USD"]]);
+    for (const remaining of [80_000, 0, -20_000]) {
+      const stats = applyLedgerRemainingToPartyStats(
+        aggregatePartyListStats([invoice]),
+        [{ partyId: party, currency: "USD", debit: 100_000, credit: 100_000 - remaining }],
+        "customer",
+        defaults,
+      ).get(party)!;
+      expect(stats.remaining).toBe(remaining);
+      expect(stats.byCurrency?.USD.remaining).toBe(remaining);
+      expect(stats.totalAmount).toBe(100_000);
+    }
+    const noLedger = applyLedgerRemainingToPartyStats(
+      aggregatePartyListStats([invoice]),
+      [],
+      "customer",
+      defaults,
+    ).get(party)!;
+    expect(noLedger.remaining).toBe(0);
+    expect(noLedger.byCurrency?.USD.remaining).toBe(0);
   });
 
   it("tracks the most recent invoice date across every currency", () => {

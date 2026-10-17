@@ -22,16 +22,27 @@ export class SqliteSyncRestoreStateStore implements ISyncRestoreStateStore {
     return runAutonomous(async (tx) => {
       const [row] = rowsOf(await tx.execute(sql`SELECT * FROM motard_sync_restore WHERE id = 1`));
       if (!row) return null;
+      // While registering, new_device_id holds the PROPOSED id (not yet usable as an identity).
+      const phase = String(row.phase) as SyncRestorePhase;
+      const stored = row.new_device_id == null ? null : String(row.new_device_id);
       return {
         restoredAt: String(row.restored_at),
         generation: Number(row.generation),
         previousDeviceIds: JSON.parse(String(row.previous_device_ids)) as string[],
-        newDeviceId: row.new_device_id == null ? null : String(row.new_device_id),
-        phase: String(row.phase) as SyncRestorePhase,
+        newDeviceId: phase === "register" ? null : stored,
+        proposedDeviceId: phase === "register" ? stored : null,
+        phase,
         pulled: Number(row.pulled),
         acknowledged: Number(row.acknowledged),
         lastError: row.last_error == null ? null : String(row.last_error),
       };
+    });
+  }
+
+  async setProposed(deviceId: string): Promise<void> {
+    await runAutonomous(async (tx) => {
+      await tx.execute(sql`UPDATE motard_sync_restore SET new_device_id = ${deviceId}, updated_at = ${nowText()}
+        WHERE id = 1 AND phase = 'register' AND new_device_id IS NULL`);
     });
   }
 

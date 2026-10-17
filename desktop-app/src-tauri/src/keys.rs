@@ -131,7 +131,7 @@ pub fn reset(paths: &Paths) -> Result<Secrets, String> {
 }
 
 #[cfg(windows)]
-mod dpapi {
+pub(crate) mod dpapi {
     use super::ENTROPY;
     use windows::Win32::Foundation::{LocalFree, HLOCAL};
     use windows::Win32::Security::Cryptography::{
@@ -149,8 +149,18 @@ mod dpapi {
     }
 
     pub fn protect(plain: &[u8]) -> Result<Vec<u8>, String> {
+        protect_with(plain, ENTROPY)
+    }
+
+    pub fn unprotect(sealed: &[u8]) -> Result<Vec<u8>, String> {
+        unprotect_with(sealed, ENTROPY)
+    }
+
+    /// DPAPI (current Windows user) with a purpose-specific entropy, so one sealed file can never be
+    /// read as another (e.g. the Google link vs the installation keys).
+    pub fn protect_with(plain: &[u8], purpose: &[u8]) -> Result<Vec<u8>, String> {
         let input = blob(plain);
-        let entropy = blob(ENTROPY);
+        let entropy = blob(purpose);
         let mut out = CRYPT_INTEGER_BLOB::default();
         unsafe {
             CryptProtectData(&input, None, Some(&entropy), None, None, CRYPTPROTECT_UI_FORBIDDEN, &mut out)
@@ -159,9 +169,9 @@ mod dpapi {
         }
     }
 
-    pub fn unprotect(sealed: &[u8]) -> Result<Vec<u8>, String> {
+    pub fn unprotect_with(sealed: &[u8], purpose: &[u8]) -> Result<Vec<u8>, String> {
         let input = blob(sealed);
-        let entropy = blob(ENTROPY);
+        let entropy = blob(purpose);
         let mut out = CRYPT_INTEGER_BLOB::default();
         unsafe {
             CryptUnprotectData(&input, None, Some(&entropy), None, None, CRYPTPROTECT_UI_FORBIDDEN, &mut out)

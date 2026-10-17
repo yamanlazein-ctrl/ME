@@ -1,4 +1,4 @@
-// PORTED-FROM: src/infrastructure/repositories/PostgresExpenseRepository.ts sha256=6e3a51de29185597932df4e1ea129d2f1c86fa54038700d4586d486095e290b3
+// PORTED-FROM: src/infrastructure/repositories/PostgresExpenseRepository.ts sha256=b0cfe02b23c17ccce7647a7d18ef53ca91849c912343c173434453f646d47ca6
 // SQLite twin (specs/001-desktop-sqlite-engine S4). Keep behavior identical to the PG source.
 import { desc } from "./helpers/pgOrder.js";
 import { ilikeEscaped } from "./helpers/likeContains.js";
@@ -20,7 +20,7 @@ import type {
 import { expenses } from "../../orm/sqlite/schemas/expense.table.js";
 import { ledgerEntries } from "../../orm/sqlite/schemas/ledger-entry.table.js";
 import { assertDayUnlocked } from "./helpers/dayLockHelper.js";
-import { assertSufficientCashboxBalance } from "./helpers/cashboxBalanceHelper.js";
+import { serializeCashboxWrites } from "./helpers/cashboxBalanceHelper.js";
 import {
   Expense,
   type ExpenseData,
@@ -110,7 +110,7 @@ export class SqliteExpenseRepository implements IExpenseRepository {
     ctx: TenantContext,
   ): Promise<ExpenseData> {
     return this.db.transaction(async (tx) => {
-      await assertDayUnlocked(tx, ctx.tenantId, input.date);
+      await assertDayUnlocked(tx, ctx.tenantId, input.date, input.currency ?? "SYP");
       // P4: mint the number INSIDE this transaction from the device's reserved
       // block (fail-loud when unprovisioned) so two offline devices can never
       // mint the same number and a guard failure below never burns one. A
@@ -136,7 +136,7 @@ export class SqliteExpenseRepository implements IExpenseRepository {
       // balance and both pass. Reuse the same guard vouchers/manual
       // movements use — race-safe and always per-currency.
       if (isCash) {
-        await assertSufficientCashboxBalance(tx, ctx, currency, input.date, input.amount);
+        await serializeCashboxWrites(tx, ctx, currency, input.date, input.amount);
       }
       const [row] = await tx
         .insert(expenses)
@@ -227,7 +227,7 @@ export class SqliteExpenseRepository implements IExpenseRepository {
         );
       }
       // H-07: mirrors create() — a cancel reverses the expense (and its cash) on the expense's own date.
-      await assertDayUnlocked(tx, ctx.tenantId, currentRow.date);
+      await assertDayUnlocked(tx, ctx.tenantId, currentRow.date, currentRow.currency ?? "SYP");
 
       const [row] = await tx
         .update(expenses)

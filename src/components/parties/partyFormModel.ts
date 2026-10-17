@@ -1,3 +1,4 @@
+import { is2dp } from "@/shared/utils/precision";
 import type { PartyOpeningInput } from "@erp/shared";
 import { localToday } from "@/lib/localDate";
 import type { Currency } from "@/domain/types";
@@ -112,6 +113,24 @@ export const emptyDraft = (kind: PartyKind): Draft => ({
   notes: "",
 });
 
+/**
+ * One field change. Choosing the party's default currency also moves the opening balance's
+ * currency — they were independent, so a USD customer's opening balance was recorded in ل.س unless
+ * the user also changed the second selector — until the user picks the opening currency itself.
+ */
+export function applyDraftChange<K extends keyof Draft>(
+  d: Draft,
+  key: K,
+  value: Draft[K],
+  openingCurrencyChosen: boolean,
+): Draft {
+  const next = { ...d, [key]: value };
+  if (key === "currency" && !openingCurrencyChosen && (value === "USD" || value === "SYP")) {
+    next.openingCurrency = value as OpeningCurrency;
+  }
+  return next;
+}
+
 export const fromParty = (p: SimpleParty, kind: PartyKind): Draft => ({
   code: p.code ?? "",
   name: p.name ?? "",
@@ -153,6 +172,17 @@ export const fromParty = (p: SimpleParty, kind: PartyKind): Draft => ({
 
 export const openingAmountOf = (d: Draft): number =>
   d.openingAmount === "" ? 0 : Number(d.openingAmount);
+
+/**
+ * Save-time check of the opening balance. `is2dp` tolerates binary float error: the exact test it
+ * replaces (Math.round(a * 100) !== a * 100) rejected ordinary amounts like 32,900.13 or 19.99.
+ */
+export const openingAmountError = (d: Draft): string | null => {
+  const amount = openingAmountOf(d);
+  return !Number.isFinite(amount) || amount < 0 || !is2dp(amount)
+    ? "مبلغ الرصيد السابق يجب أن يكون رقماً موجباً بخانتين عشريتين على الأكثر."
+    : null;
+};
 
 /** True when the opening section differs from what the party has now. */
 export const openingChanged = (d: Draft, before: Draft): boolean => {

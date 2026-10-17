@@ -1,4 +1,4 @@
-// PORTED-FROM: src/infrastructure/repositories/PostgresInvoiceRepository.ts sha256=44c6f8e371f0a3d5aba68cb20127a8c2eaae714259dc30c8d43c6820422e56f0
+// PORTED-FROM: src/infrastructure/repositories/PostgresInvoiceRepository.ts sha256=eb4719f19921a2b6e513c802bbb47d507af4477d9e119c89b4b205900ddfe89f
 // SQLite twin (specs/001-desktop-sqlite-engine S4). Keep behavior identical to the PG source.
 import { desc } from "./helpers/pgOrder.js";
 import { moneyParam } from "./helpers/likeContains.js";
@@ -31,7 +31,7 @@ import { vouchers } from "../../orm/sqlite/schemas/voucher.table.js";
 import { recordStockMovement } from "./helpers/stockMovementHelper.js";
 import { notifyOrderAvailability } from "./helpers/orderAvailabilityNotifier.js";
 import { assertDayUnlocked } from "./helpers/dayLockHelper.js";
-import { assertSufficientCashboxBalance } from "./helpers/cashboxBalanceHelper.js";
+import { serializeCashboxWrites } from "./helpers/cashboxBalanceHelper.js";
 import { assertYearOpen } from "./helpers/dayLockHelper.js";
 import { assertCreditNotOverdrawn, customerCreditPosition } from "./helpers/customerCredit.js";
 import { returns } from "../../orm/sqlite/schemas/return.table.js";
@@ -638,7 +638,7 @@ export class SqliteInvoiceRepository implements IInvoiceRepository {
       // leg (cashImpact in/out) and moves the cashbox — reject it on a closed
       // day, using the same atomic guard as vouchers/expenses/manual movements.
       if (paid > 0 && (input.paymentMethod ?? "cash") === "cash") {
-        await assertDayUnlocked(tx, ctx.tenantId, input.date);
+        await assertDayUnlocked(tx, ctx.tenantId, input.date, input.currency ?? "SYP");
       }
       let linkedVoucherId: string | null = null;
       if (isSale && paid > 0) {
@@ -728,7 +728,7 @@ export class SqliteInvoiceRepository implements IInvoiceRepository {
         // exactly like a payment voucher — it must be guarded the same way
         // (comment above claimed this already happened; it never did).
         if (method === "cash") {
-          await assertSufficientCashboxBalance(tx, ctx, input.currency ?? "SYP", input.date, paid);
+          await serializeCashboxWrites(tx, ctx, input.currency ?? "SYP", input.date, paid);
         }
         const paymentNumber = `PAY-${autoNumber}`;
         linkedVoucherId = input.linkedVoucherId ?? randomUUID();

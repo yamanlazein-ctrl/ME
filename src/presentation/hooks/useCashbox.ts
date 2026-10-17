@@ -149,12 +149,12 @@ export function useCloseDay() {
   });
 }
 
-export function useDayLock(date: string) {
+export function useDayLock(date: string, currency: string) {
   return useQuery({
-    queryKey: [...KEYS.state, "lock", date],
+    queryKey: [...KEYS.state, "lock", date, currency],
     queryFn: ({ signal }) => {
       void signal;
-      return container.cashbox.state.isDayLocked(date, buildTenantContext());
+      return container.cashbox.state.isDayLocked(date, currency, buildTenantContext());
     },
   });
 }

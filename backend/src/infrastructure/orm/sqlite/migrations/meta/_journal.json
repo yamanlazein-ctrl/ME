@@ -49,6 +49,14 @@
       "tag": "0005_drive_archive",
       "breakpoints": false,
       "pgReferenceJournalIdx": 102
+    },
+    {
+      "idx": 6,
+      "version": 7,
+      "when": 1791643046823,
+      "tag": "0006_day_closes_per_currency",
+      "breakpoints": false,
+      "pgReferenceJournalIdx": 103
     }
   ]
 }

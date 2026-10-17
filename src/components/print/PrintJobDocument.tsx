@@ -28,7 +28,7 @@ export function PrintJobDocument({ job }: { job: PrintJobDTO }) {
   const headers: Partial<PrintColumn>[] = [
     { key: "fabric", label: "القماش" },
     { key: "color", label: "اللون" },
-    { key: "roll", label: "الصبغة المصدر" },
+    { key: "roll", label: "الصبغة المصدر", nowrap: true },
     { key: "sentKg", label: "الكمية المرسلة (كغ)", align: "center" },
   ];
 

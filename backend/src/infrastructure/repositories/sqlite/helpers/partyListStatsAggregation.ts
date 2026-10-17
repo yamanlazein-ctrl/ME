@@ -1,4 +1,4 @@
-// PORTED-FROM: src/infrastructure/repositories/partyListStatsAggregation.ts sha256=50cef2c0c866793bb79df45f2654fa8ba5787d7589e0996c8b7b4d4ace0694d7
+// PORTED-FROM: src/infrastructure/repositories/partyListStatsAggregation.ts sha256=3be88b218a154cef0170b7bcd46babb28da804d33b0077e1bc8c1ab55f70cf35
 // SQLite twin (specs/001-desktop-sqlite-engine S4). Keep behavior identical to the PG source.
 import type { PartyListStats } from "../../../../domain/entities/Party.js";
 
@@ -51,8 +51,6 @@ export function aggregatePartyListStats(rows: PartyInvoiceStatsRow[]): Map<strin
     return s;
   };
 
-  const hasDefaultCurrencyRow = new Set<string>();
-
   for (const r of rows) {
     const s = get(r.partyId);
     const total = r.total;
@@ -74,20 +72,6 @@ export function aggregatePartyListStats(rows: PartyInvoiceStatsRow[]): Map<strin
       s.totalAmount = total;
       s.totalPaid = paid;
       s.remaining = remaining;
-      hasDefaultCurrencyRow.add(r.partyId);
-    }
-  }
-
-  // Parties with only non-default-currency invoices: surface that currency
-  // in the money scalar fields so the list chip is not stuck at 0.
-  for (const [partyId, s] of map) {
-    if (!hasDefaultCurrencyRow.has(partyId) && s.byCurrency) {
-      const first = Object.values(s.byCurrency)[0];
-      if (first) {
-        s.totalAmount = first.totalAmount;
-        s.totalPaid = first.totalPaid;
-        s.remaining = first.remaining;
-      }
     }
   }
 
@@ -111,7 +95,14 @@ export function applyLedgerRemainingToPartyStats(
   stats: Map<string, PartyListStats>,
   ledgerRows: PartyLedgerBalanceRow[],
   kind: "customer" | "supplier",
+  partyCurrencies: ReadonlyMap<string, string>,
 ): Map<string, PartyListStats> {
+  // Invoice remainders are not balances. Reset even currencies with no active
+  // ledger rows (for example, an opening replaced with zero).
+  for (const s of stats.values()) {
+    s.remaining = 0;
+    for (const bucket of Object.values(s.byCurrency ?? {})) bucket.remaining = 0;
+  }
   const sign = kind === "customer" ? 1 : -1;
   for (const r of ledgerRows) {
     const partyId = r.partyId;
@@ -136,24 +127,10 @@ export function applyLedgerRemainingToPartyStats(
     existing.byCurrency[ccy] = { ...prev, remaining };
   }
 
-  // Scalar `remaining` used to stay on the invoice-default-currency slice,
-  // which showed "0 ل.س" while USD lived only inside byCurrency and some
-  // older list UIs ignored byCurrency. Prefer the largest absolute
-  // ledger-backed remaining as the scalar so a single-currency chip is never
-  // stuck at zero when another currency has a real balance. Multi-currency
-  // UIs still read byCurrency and must never blend the numbers.
-  for (const s of stats.values()) {
-    if (!s.byCurrency) continue;
-    let best = s.remaining;
-    let bestAbs = Math.abs(best);
-    for (const b of Object.values(s.byCurrency)) {
-      const abs = Math.abs(b.remaining);
-      if (abs > bestAbs) {
-        bestAbs = abs;
-        best = b.remaining;
-      }
-    }
-    s.remaining = best;
+  // A scalar has no currency tag of its own: it must stay in the party's
+  // default currency. Foreign balances are exposed only through byCurrency.
+  for (const [partyId, s] of stats) {
+    s.remaining = s.byCurrency?.[partyCurrencies.get(partyId) ?? "SYP"]?.remaining ?? 0;
   }
   return stats;
 }

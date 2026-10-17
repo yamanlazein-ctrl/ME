@@ -131,6 +131,14 @@ function BackupPage() {
     logActivity("النسخ الاحتياطي", "تصدير إعدادات");
   };
   const importSettings = async (file: File) => {
+    // A .zip chosen here is a full backup archive, not a settings JSON. Point the operator at
+    // the full restore card instead of showing the generic "ملف غير صالح".
+    if (file.name.toLowerCase().endsWith(".zip")) {
+      alert(
+        "هذا ملف نسخة احتياطية كاملة (.zip) — استعدّه من بطاقة «استعادة نسخة احتياطية كاملة» أدناه، وليس عبر استيراد الإعدادات.",
+      );
+      return;
+    }
     try {
       const data = JSON.parse(await file.text());
       if (!validateBackup(data)) {

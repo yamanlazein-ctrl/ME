@@ -1,3 +1,4 @@
+import { DecimalInput } from "@/components/common/DecimalInput";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { Plus, Trash2, UserPlus, ClipboardList } from "lucide-react";
@@ -308,8 +309,7 @@ function NewOrderPage() {
                       </div>
                     </Field>
                     <Field label="الكمية المطلوبة (كغ) *">
-                      <Input
-                        type="number"
+                      <DecimalInput
                         className="h-9 tabular-nums"
                         value={l.requestedKg || ""}
                         onChange={(e) =>
@@ -349,8 +349,7 @@ function NewOrderPage() {
                       />
                     </Field>
                     <Field label="العرض (سم)">
-                      <Input
-                        type="number"
+                      <DecimalInput
                         className="h-9 tabular-nums"
                         value={l.widthCm ?? ""}
                         onChange={(e) =>
@@ -361,8 +360,7 @@ function NewOrderPage() {
                       />
                     </Field>
                     <Field label="الغراماج (غ/م²)">
-                      <Input
-                        type="number"
+                      <DecimalInput
                         className="h-9 tabular-nums"
                         value={l.weightGsm ?? ""}
                         onChange={(e) =>

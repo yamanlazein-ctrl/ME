@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-save-csv-file"
+description = "Enables the save_csv_file command without any pre-configured scope."
+commands.allow = ["save_csv_file"]
+
+[[permission]]
+identifier = "deny-save-csv-file"
+description = "Denies the save_csv_file command without any pre-configured scope."
+commands.deny = ["save_csv_file"]

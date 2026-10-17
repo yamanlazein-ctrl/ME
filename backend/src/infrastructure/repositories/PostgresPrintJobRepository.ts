@@ -528,7 +528,12 @@ export class PostgresPrintJobRepository implements IPrintJobRepository {
         const printCostTotal = round2dp(receivedKgNum * costPerKg);
         if (printCostTotal > 0) {
           // OI-7: printing cost paid now moves cash out — reject on a closed day.
-          await assertDayUnlocked(tx, ctx.tenantId, effectiveDate2);
+          await assertDayUnlocked(
+            tx,
+            ctx.tenantId,
+            effectiveDate2,
+            input.currency ?? job.currency ?? "SYP",
+          );
           await tx.insert(ledgerEntries).values([
             {
               tenantId: ctx.tenantId,

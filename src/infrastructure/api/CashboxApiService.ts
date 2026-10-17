@@ -55,8 +55,10 @@ export class CashboxApiService {
     return res.data;
   }
 
-  async isDayLocked(date: string): Promise<boolean> {
-    const res = await this.client.get<boolean>(`/api/cashbox/locked/${date}`);
+  async isDayLocked(date: string, currency: string): Promise<boolean> {
+    const res = await this.client.get<boolean>(
+      `/api/cashbox/locked/${date}?currency=${encodeURIComponent(currency)}`,
+    );
     return res.data;
   }
 

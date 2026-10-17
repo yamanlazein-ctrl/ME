@@ -22,6 +22,19 @@ import {
 import { customers, suppliers } from "@/presentation/hooks/useParties";
 import { formatAmount } from "@/presentation/hooks/useCurrency";
 import { formatDateTime } from "@/lib/utils";
+import { printDocument } from "@/components/print/printPortal";
+import { LedgerPrintDocument, type LedgerPrintRow } from "@/components/print/LedgerPrintDocument";
+import { ledgerExportCsv } from "@/components/ledger/ledgerExport";
+import { isTauri, saveCsvFile } from "@/infrastructure/tauri-bridge";
+import { localToday } from "@/lib/localDate";
+import { toast } from "sonner";
+import { container } from "@/infrastructure/container";
+import { fetchAllPaged } from "@/lib/fetchAllPaged";
+import { buildTenantContext } from "@/infrastructure/di/auth-context";
+import type { LedgerFilter } from "@/application/ports";
+
+/** The same tenant context the ledger hooks use (see useLedger.ts). */
+const ledgerCtx = () => buildTenantContext();
 
 export const Route = createFileRoute("/ledger")({
   component: LedgerPage,
@@ -56,6 +69,110 @@ function LedgerPage() {
   useEffect(() => setPage(0), [filterKey]);
 
   const allParties = [...customers, ...suppliers];
+
+  // Print and Excel act on EVERY row matching the filters, not only the visible page. The full set
+  // is fetched on click (the page itself never downloads the whole history).
+  const [exporting, setExporting] = useState<null | "print" | "excel">(null);
+
+  function toPrintRows(data: typeof filtered): LedgerPrintRow[] {
+    return data.map((r) => ({
+      id: r.id,
+      createdAt: r.createdAt,
+      type: r.type,
+      description: r.description,
+      referenceNumber: r.referenceNumber ?? null,
+      partyName: allParties.find((p) => p.id === r.partyId)?.name ?? "—",
+      debit: r.debit,
+      credit: r.credit,
+      currency: r.currency,
+      cashImpact: r.cashImpact,
+      status: r.status,
+    }));
+  }
+
+  function filterSummary(): string {
+    const parts = [
+      from || to ? `الفترة: ${from || "…"} — ${to || "…"}` : "كل الفترات",
+      type !== "all" ? `النوع: ${LEDGER_TYPE_LABEL[type]}` : null,
+      partyId !== "all" ? `الطرف: ${allParties.find((p) => p.id === partyId)?.name ?? ""}` : null,
+      status !== "all" ? `الحالة: ${status === "active" ? "نشطة" : "ملغاة"}` : null,
+      q.trim() ? `بحث: ${q.trim()}` : null,
+    ].filter(Boolean);
+    return parts.join(" · ");
+  }
+
+  async function loadAllRows(): Promise<LedgerPrintRow[]> {
+    // Every page of the SAME filter, as the on-screen query builds it (without the page window).
+    const { page: _page, limit: _limit, ...matchFilter } = filter;
+    void _page;
+    void _limit;
+    const all = await fetchAllPaged(
+      (p, limit, cursor) =>
+        container.invoices.ledger.entries(
+          { ...matchFilter, page: p, limit, cursor } as LedgerFilter,
+          ledgerCtx(),
+        ),
+      { pageSize: 1000, label: "ledger-export" },
+    );
+    return toPrintRows(all);
+  }
+
+  async function handlePrint() {
+    setExporting("print");
+    try {
+      const rows = await loadAllRows();
+      printDocument(
+        <LedgerPrintDocument
+          rows={rows}
+          filterSummary={filterSummary()}
+          dateLabel={localToday()}
+        />,
+        `ledger:${filterKey}:${rows.length}`,
+      );
+    } catch (e) {
+      toast.error(`تعذّر تحميل الحركات للطباعة: ${e instanceof Error ? e.message : "خطأ"}`);
+    } finally {
+      setExporting(null);
+    }
+  }
+
+  async function handleExcel() {
+    setExporting("excel");
+    try {
+      const rows = await loadAllRows();
+      // Zero rows still downloads the header line: no error, no empty response.
+      const csv = ledgerExportCsv(rows);
+      if (isTauri()) {
+        const saved = await saveCsvFile({
+          content: csv,
+          suggestedName: `ledger-${localToday()}.csv`,
+        });
+        if (saved) {
+          toast.success(
+            rows.length
+              ? `تم تصدير ${rows.length} حركة — محفوظ في: ${saved.path.split(/[\\/]/).pop() ?? saved.path}`
+              : "تم تصدير الملف (لا توجد حركات مطابقة)",
+          );
+        }
+        // User cancelled the save dialog — no toast, no error.
+        return;
+      }
+      const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `ledger-${localToday()}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast.success(
+        rows.length ? `تم تصدير ${rows.length} حركة` : "تم تصدير الملف (لا توجد حركات مطابقة)",
+      );
+    } catch (e) {
+      toast.error(`تعذّر التصدير: ${e instanceof Error ? e.message : "خطأ"}`);
+    } finally {
+      setExporting(null);
+    }
+  }
 
   return (
     <AppShell
@@ -206,8 +323,22 @@ function LedgerPage() {
       </PageCard>
 
       <div className="flex justify-end gap-2">
-        <Button variant="outline">طباعة</Button>
-        <Button variant="outline">تصدير Excel</Button>
+        <Button
+          variant="outline"
+          onClick={() => void handlePrint()}
+          disabled={exporting !== null}
+          data-testid="ledger-print"
+        >
+          {exporting === "print" ? "جارٍ التحضير…" : "طباعة"}
+        </Button>
+        <Button
+          variant="outline"
+          onClick={() => void handleExcel()}
+          disabled={exporting !== null}
+          data-testid="ledger-excel"
+        >
+          {exporting === "excel" ? "جارٍ التصدير…" : "تصدير Excel"}
+        </Button>
       </div>
     </AppShell>
   );

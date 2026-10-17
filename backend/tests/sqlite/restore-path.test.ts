@@ -83,7 +83,22 @@ function writeZip(name: string, e: Record<string, Uint8Array>): string {
 
 type ErrBody = { code?: string; message?: string };
 
-async function verifyPath(path: string, extra: { sha256?: string; sizeBytes?: number } = {}) {
+/** What the shell sends: the file's own sha256 (pass `sha256: null` to send none). */
+function withShellHash(path: string, extra: { sha256?: string | null; sizeBytes?: number }) {
+  if (extra.sha256 === null) {
+    const { sha256: _omit, ...rest } = extra;
+    return rest;
+  }
+  if (extra.sha256 === undefined && existsSync(path))
+    return { ...extra, sha256: sha(readFileSync(path)) };
+  return extra;
+}
+
+async function verifyPath(
+  path: string,
+  extra: { sha256?: string | null; sizeBytes?: number } = {},
+) {
+  extra = withShellHash(path, extra);
   const r = await fetch(`${base}/api/backup/verify-path`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -95,7 +110,11 @@ async function verifyPath(path: string, extra: { sha256?: string; sizeBytes?: nu
   };
 }
 
-async function restorePath(path: string, extra: { sha256?: string; sizeBytes?: number } = {}) {
+async function restorePath(
+  path: string,
+  extra: { sha256?: string | null; sizeBytes?: number } = {},
+) {
+  extra = withShellHash(path, extra);
   const r = await fetch(`${base}/api/backup/restore-path?confirm=replace`, {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: "Bearer test" },
@@ -238,6 +257,14 @@ describe("a missing file or a failed transfer is reported as such, not as a corr
     const r = await verifyPath("MotardERP-Backup-2026-10-07.zip");
     expect(r.status).toBe(422);
     expect(r.body.code).toBe("BACKUP_CORRUPT");
+  });
+
+  it("refuses a path without the shell's sha256 (C-02: only what the shell picked is opened)", async () => {
+    for (const call of [verifyPath, restorePath]) {
+      const r = await call(original, { sha256: null });
+      expect(r.status).not.toBe(200);
+      expect(r.body.code).toBe("BACKUP_FILE_HASH_MISMATCH");
+    }
   });
 
   it("refuses a shell-reported sha256 that does not match the file (substituted after picking)", async () => {

@@ -6,7 +6,12 @@ import type {
 } from "../../../application/ports/IInstallationStateRepository.js";
 import type { ILicenseProvider } from "../../../application/ports/ILicenseProvider.js";
 import type { IMachineFingerprintProvider } from "../../../application/ports/IMachineFingerprintProvider.js";
-import type { ISecretsRepository } from "../../../application/ports/ISecretsRepository.js";
+import type {
+  ISecretsRepository,
+  SecretRecord,
+} from "../../../application/ports/ISecretsRepository.js";
+import type { ISecretCipher } from "../../../application/ports/ISecretCipher.js";
+import { logger } from "../../../infrastructure/config/logger.js";
 import type { ICompanyRepository } from "../../../application/ports/ICompanyRepository.js";
 import type { IAuthRepository } from "../../../application/ports/IAuthRepository.js";
 import type { ILicenseRepository } from "../../../application/ports/ILicenseRepository.js";
@@ -221,10 +226,22 @@ export async function bootstrapDesktopLicenseUseCase(
     licenseRepo: ILicenseRepository;
     secretsRepo: ISecretsRepository;
     tokenSigner: ILicenseTokenSigner;
+    /** With it, a stored token this install can no longer decrypt is replaced (DESK-005). */
+    cipher?: ISecretCipher;
   },
   tenantId: string,
+  opts: { repairOnly?: boolean } = {},
 ): Promise<Result<{ migrated: boolean }>> {
   if (!config.DESKTOP_DEPLOY) return { ok: true, data: { migrated: false } };
+
+  // An explicit key reset (shell recovery) gives the install a new APP_MASTER_KEY: the token row
+  // encrypted with the old one stays, and the heartbeat reads it as an expired licence. The baked
+  // token is signed and verified below, so it can safely be promoted again.
+  const existing = await deps.secretsRepo.get(tenantId, "license.token.current");
+  const unreadable = Boolean(existing && deps.cipher && !(await canDecrypt(deps.cipher, existing)));
+  if (existing && !unreadable) return { ok: true, data: { migrated: false } };
+  // Repair mode (every desktop start) never promotes a licence before activation did.
+  if (opts.repairOnly && !unreadable) return { ok: true, data: { migrated: false } };
 
   // Pre-JWT bootstrap flow: no ALS context exists yet, so stamp the tenant
   // GUC from the explicit tenantId (RLS category-2 licenses: own-tenant rows).
@@ -245,15 +262,31 @@ export async function bootstrapDesktopLicenseUseCase(
     return { ok: false, error: "الرمز المخبوز غير صالح أو مُعطَّب", code: "BAD_BAKED_TOKEN" };
   }
 
-  // Idempotent: skip if already migrated.
-  const existing = await deps.secretsRepo.get(tenantId, "license.token.current");
-  if (existing) return { ok: true, data: { migrated: false } };
-
+  if (unreadable) {
+    logger.warn(
+      { tenantId },
+      "stored licence token unreadable with the current key — re-promoting the signed baked token",
+    );
+  }
   await deps.secretsRepo.put(tenantId, "license.token.current", baked.offlineToken);
   if (baked.offlineTokenJti) {
     await deps.secretsRepo.put(tenantId, "license.token.jti", baked.offlineTokenJti);
   }
   return { ok: true, data: { migrated: true } };
+}
+
+async function canDecrypt(cipher: ISecretCipher, row: SecretRecord): Promise<boolean> {
+  try {
+    await cipher.decrypt({
+      ciphertext: row.ciphertext,
+      iv: row.iv,
+      authTag: row.authTag,
+      algorithm: row.algorithm,
+    });
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 export async function activateAndPersistUseCase(

@@ -9,7 +9,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { formatThousands, parseAmount } from "@/presentation/hooks/useCurrency";
+import { formatThousands } from "@/presentation/hooks/useCurrency";
+import {
+  groupThousands,
+  isPartialDecimal,
+  normalizeDecimalText,
+} from "@/components/common/decimalText";
 
 /**
  * Money/amount input that ACCEPTS thousand separators and decimal points
@@ -28,6 +33,7 @@ export function FormattedAmountInput({
   onKeyDown,
   showZero,
   id,
+  maxDecimals = 2,
 }: {
   /** Forwarded to the input so a field label can name it (hermes F-011). */
   id?: string;
@@ -39,34 +45,41 @@ export function FormattedAmountInput({
   onKeyDown?: (e: React.KeyboardEvent<HTMLInputElement>) => void;
   /** Render an explicit 0 instead of an empty box (e.g. a genuine 0-piece count). */
   showZero?: boolean;
+  /** Digits allowed after the point: 2 for money and kg (default), 4 for rates, 0 for pieces. */
+  maxDecimals?: number;
 }) {
   const [raw, setRaw] = useState<string | null>(null);
-  const endsWithSeparator = (s: string) => /[.,]\s*$/.test(s);
-  const display =
-    raw !== null
-      ? raw.trim() === ""
-        ? raw
-        : endsWithSeparator(raw)
-          ? raw
-          : Number.isNaN(parseAmount(raw))
-            ? raw
-            : formatThousands(parseAmount(raw))
-      : value === "" || (value === 0 && !showZero)
-        ? ""
+  // While typing, show exactly what was typed with thousands grouped: re-formatting through a number
+  // dropped "100.0" to "100", so the next "5" made 1005 and cents like .05 could not be entered.
+  // Preserve partial decimal typing only while it still represents the controlled value.
+  // A modal apply/reset or a refreshed invoice must replace the previous local text immediately.
+  const typed = raw === null ? null : normalizeDecimalText(raw);
+  const rawCurrent =
+    typed !== null &&
+    (typed === String(value) ||
+      (typed === "." && (value === "" || value === 0)) ||
+      (typed !== "" && value !== "" && Number(typed) === value));
+  const display = rawCurrent
+    ? groupThousands(typed ?? "")
+    : value === "" || (value === 0 && !showZero)
+      ? ""
+      : maxDecimals > 2
+        ? groupThousands(String(value))
         : formatThousands(value);
   return (
     <Input
       id={id}
       type="text"
-      inputMode="decimal"
+      inputMode={maxDecimals === 0 ? "numeric" : "decimal"}
       dir="ltr"
       value={display}
       onChange={(e) => {
         const v = e.target.value;
+        const n = normalizeDecimalText(v);
+        if (!isPartialDecimal(n, false, maxDecimals)) return;
         setRaw(v);
-        if (v.trim() === "") return onChange("");
-        const n = parseAmount(v);
-        if (!Number.isNaN(n)) onChange(n);
+        if (n === "") return onChange("");
+        if (n !== ".") onChange(Number(n));
       }}
       onBlur={() => setRaw(null)}
       onFocus={(e) =>

@@ -15,8 +15,20 @@ import {
 import { FormField } from "@/components/common/FormField";
 import { FormattedAmountInput } from "@/components/invoices/InvoiceFormLayout";
 import { PartyCombobox } from "@/components/vouchers/PartyCombobox";
+import {
+  SelectedPartyBalanceBadge,
+  VoucherPartyBalance,
+} from "@/components/vouchers/VoucherPartyBalance";
 import { PartyFormDialog } from "@/components/parties/PartyFormDialog";
-import { addCustomer, addSupplier, type Currency } from "@/presentation/hooks/useParties";
+import {
+  addCustomer,
+  addSupplier,
+  customerById,
+  refreshParties,
+  supplierById,
+  type Currency,
+} from "@/presentation/hooks/useParties";
+import { currencyForParty } from "@/components/vouchers/voucherCurrency";
 import { CURRENCIES, currencySymbol, formatAmount } from "@/presentation/hooks/useCurrency";
 import {
   useCreateReceiptVoucher,
@@ -87,6 +99,25 @@ export function VoucherForm({
   const saving = createReceipt.isPending || createPayment.isPending || replaceVoucher.isPending;
   const { data: editing } = useVoucher(editId ?? "");
   const isReceipt = kind === "receipt";
+
+  /**
+   * Open a NEW voucher in the currency the chosen party actually holds a balance in (e.g. a USD
+   * opening). The party comes from the store; if the store is cold, it is refreshed once. An edit
+   * keeps the currency it was saved in, so this is never called for an edit.
+   */
+  async function chooseCurrencyFor(partyId: string) {
+    const lookup = () => (isReceipt ? customerById(partyId) : supplierById(partyId));
+    let party = lookup();
+    if (!party) {
+      try {
+        await refreshParties();
+        party = lookup();
+      } catch {
+        // Keep the current currency rather than guess; the cashier can still pick one.
+      }
+    }
+    if (party) setCurrency(currencyForParty(party, currency) as Currency);
+  }
   const [partyId, setPartyId] = useState(initialPartyId ?? "");
   // Ties each Select / notes label to its control (plain inputs are wired by FormField itself).
   const fid = useId();
@@ -382,6 +413,16 @@ export function VoucherForm({
         </div>
       )}
       <PageCard title="بيانات السند" description="اختر الطرف والمبلغ وطريقة الاستلام / الدفع.">
+        {/* The party's balance is shown the moment a party is chosen, before any amount is typed. */}
+        {partyId && (
+          <SelectedPartyBalanceBadge
+            partyId={partyId}
+            kind={kind}
+            currency={currency}
+            settlementAmount={previewGross}
+            previewOnAccount={!invoiceId && !editId}
+          />
+        )}
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           <FormField label={isReceipt ? "العميل *" : "المورد *"} error={partyError ?? undefined}>
             <PartyCombobox
@@ -391,6 +432,9 @@ export function VoucherForm({
                 setPartyId(v);
                 setInvoiceId("");
                 setPartyError(null);
+                // A new voucher opens in the currency the party actually holds a balance in.
+                // An edit keeps the currency it was saved in (hydration owns that).
+                if (!editId) void chooseCurrencyFor(v);
               }}
               onCreateNew={() => setAddPartyOpen(true)}
               placeholder={isReceipt ? "اختر العميل" : "اختر المورد"}
@@ -484,15 +528,16 @@ export function VoucherForm({
             ) : null}
             {isReceipt && partyId && !invoiceId && Number(amount) > 0 ? (
               <p className="mt-1 text-[11px] leading-snug text-muted-foreground">
-                دفعة مقدمة / على الحساب — تُضاف لرصيد العميل الدائن وتُخصم تلقائياً من فواتيره
-                القادمة عند اختيار «خصم من الرصيد».
+                دفعة على الحساب — تخفض ذمة العميل بعملة السند، بما فيها الرصيد الافتتاحي. إذا تجاوزت
+                الذمة يصبح الفائض رصيداً دائناً للعميل.
               </p>
             ) : null}
           </FormField>
           {!isReceipt &&
           method === "cash" &&
           Number(amount) > 0 &&
-          (cashBalance ?? 0) < Number(amount) ? (
+          cashBalance !== undefined &&
+          cashBalance < Number(amount) ? (
             <div
               role="alert"
               data-testid="cashbox-negative-warning"
@@ -542,6 +587,7 @@ export function VoucherForm({
             <div className="min-w-0 sm:col-span-2 lg:col-span-1">
               <FormField label="سعر الصرف (ل.س / $) — يدوي لكل عملية" error={fxError ?? undefined}>
                 <FormattedAmountInput
+                  maxDecimals={4}
                   value={exchangeRate}
                   onChange={(v) => {
                     setExchangeRate(v);
@@ -591,6 +637,18 @@ export function VoucherForm({
           </Field>
         </div>
       </PageCard>
+
+      <VoucherPartyBalance
+        partyId={partyId}
+        kind={kind}
+        currency={currency}
+        onCurrencyChange={setCurrency}
+        settlementAmount={previewGross}
+        cashAmount={Number(amount) || 0}
+        cashBalance={cashBalance}
+        method={method}
+        previewOnAccount={!invoiceId && !editId}
+      />
 
       <PageCard
         title="الملاحظات"

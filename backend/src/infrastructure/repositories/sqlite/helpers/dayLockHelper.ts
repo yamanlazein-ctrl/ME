@@ -1,4 +1,4 @@
-// PORTED-FROM: src/infrastructure/repositories/dayLockHelper.ts sha256=dbbf26d2507fb83385be41492cff34a8298d9221ac103adb2a1b31cbd7ff600b
+// PORTED-FROM: src/infrastructure/repositories/dayLockHelper.ts sha256=cf903faf001a0bf2b6dab0b9f578d6ec5a6f6267e322b4921d2291f982ed404b
 // SQLite twin (specs/001-desktop-sqlite-engine S4). Keep behavior identical to the PG source.
 import { and, eq, sql } from "drizzle-orm";
 import type { Tx } from "../../../orm/sqlite/drizzleCompat.js";
@@ -8,8 +8,8 @@ import { DayLockedError } from "../../../../domain/errors/index.js";
 
 /**
  * Reject cashbox writes on a day that has been closed (a `day_closes` row for
- * that tenant+date exists). Must run INSIDE the caller's transaction so the
- * lock check and the write are atomic (no TOCTOU race with a concurrent
+ * that tenant+date+currency exists). Must run INSIDE the caller's transaction
+ * so the lock check and the write are atomic (no TOCTOU race with a concurrent
  * close-day).
  *
  * Enforced for manual cashbox movements, vouchers (receipts/payments) and cash
@@ -19,14 +19,28 @@ import { DayLockedError } from "../../../../domain/errors/index.js";
  * already calls this helper, so the year freeze covers them without touching a
  * single call site. A closed financial year rejects writes exactly like a
  * closed day does, and the operator sees the same clear message.
+ *
+ * Day closure is per currency: closing the SYP day does not lock the USD day
+ * and vice versa.
  */
-export async function assertDayUnlocked(tx: Tx, tenantId: string, date: string): Promise<void> {
+export async function assertDayUnlocked(
+  tx: Tx,
+  tenantId: string,
+  date: string,
+  currency: string,
+): Promise<void> {
   const [row] = await tx
     .select({ id: dayCloses.id })
     .from(dayCloses)
-    .where(and(eq(dayCloses.tenantId, tenantId), eq(dayCloses.date, date)))
+    .where(
+      and(
+        eq(dayCloses.tenantId, tenantId),
+        eq(dayCloses.date, date),
+        eq(dayCloses.currency, currency),
+      ),
+    )
     .limit(1);
-  if (row) throw new DayLockedError(date);
+  if (row) throw new DayLockedError(`${date} (${currency})`);
 
   await assertYearOpen(tx, tenantId, date);
 }
@@ -78,9 +92,15 @@ export async function lockYear(tx: Tx, tenantId: string, year: number): Promise<
   void year;
 }
 
-export async function lockDay(tx: Tx, tenantId: string, date: string): Promise<void> {
-  // PG: exclusive advisory lock on tenant:day. SQLite: the write gate already serializes every writer.
+export async function lockDay(
+  tx: Tx,
+  tenantId: string,
+  date: string,
+  currency: string,
+): Promise<void> {
+  // PG: exclusive advisory lock on tenant:day:currency. SQLite: the write gate already serializes every writer.
   void tx;
   void tenantId;
   void date;
+  void currency;
 }

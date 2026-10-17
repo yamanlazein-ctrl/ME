@@ -1,3 +1,4 @@
+import { FormField } from "@/components/common/FormField";
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -45,6 +46,7 @@ function fmtDate(iso: string | null | undefined): string {
 function DriveSettingsPage() {
   const qc = useQueryClient();
   const [clientId, setClientId] = useState("");
+  const [clientSecret, setClientSecret] = useState("");
   const [confirmDisconnect, setConfirmDisconnect] = useState(false);
   const [connecting, setConnecting] = useState(false);
 
@@ -75,10 +77,11 @@ function DriveSettingsPage() {
   };
 
   const configure = useMutation({
-    mutationFn: () => googleConfigure(clientId.trim()),
+    mutationFn: () => googleConfigure(clientId.trim(), clientSecret),
     onSuccess: () => {
       toast.success("تم حفظ معرّف العميل");
       setClientId("");
+      setClientSecret("");
       invalidate();
       void qc.invalidateQueries({ queryKey: ["drive", "shell"] });
     },
@@ -182,15 +185,29 @@ function DriveSettingsPage() {
           {!shellData?.configured && (
             <div className="space-y-2 rounded-md border p-3">
               <p className="text-sm text-muted-foreground">
-                أدخل معرّف عميل OAuth (Desktop) من Google Cloud Console. يُخزَّن محليًا مشفّرًا.
+                أدخل بيانات عميل OAuth من نوع «Desktop app» من Google Cloud Console. تُخزَّن على هذا
+                الجهاز مشفّرة ولا تُعرض مرة أخرى.
               </p>
-              <div className="flex gap-2">
-                <Input
-                  value={clientId}
-                  onChange={(e) => setClientId(e.target.value)}
-                  placeholder="1234567890-abc.apps.googleusercontent.com"
-                  dir="ltr"
-                />
+              <div className="grid gap-2 sm:grid-cols-[1fr_1fr_auto] sm:items-end">
+                <FormField label="معرّف العميل (Client ID)">
+                  <Input
+                    value={clientId}
+                    onChange={(e) => setClientId(e.target.value)}
+                    placeholder="1234567890-abc.apps.googleusercontent.com"
+                    dir="ltr"
+                    autoComplete="off"
+                  />
+                </FormField>
+                <FormField label="سر العميل (Client secret) — إن وُجد">
+                  <Input
+                    type="password"
+                    value={clientSecret}
+                    onChange={(e) => setClientSecret(e.target.value)}
+                    placeholder="GOCSPX-…"
+                    dir="ltr"
+                    autoComplete="off"
+                  />
+                </FormField>
                 <Button
                   onClick={() => configure.mutate()}
                   disabled={!clientId.trim() || configure.isPending}

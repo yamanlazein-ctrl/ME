@@ -85,7 +85,7 @@ export async function closeDayUseCase(
   input: CloseDayRequestInput,
   ctx: TenantContext,
 ): Promise<Result<DayCloseData>> {
-  const locked = await repo.isDayLocked(input.date, ctx);
+  const locked = await repo.isDayLocked(input.date, input.currency ?? "SYP", ctx);
   if (locked) return { ok: false, error: "اليوم مقفل بالفعل" };
   try {
     return { ok: true, data: await repo.closeDay(input, ctx) };
@@ -119,10 +119,11 @@ export async function getClosingsUseCase(
 export async function isDayLockedUseCase(
   repo: ICashboxRepository,
   date: string,
+  currency: string,
   ctx: TenantContext,
 ): Promise<Result<boolean>> {
   try {
-    return { ok: true, data: await repo.isDayLocked(date, ctx) };
+    return { ok: true, data: await repo.isDayLocked(date, currency, ctx) };
   } catch (e) {
     return { ok: false, error: "فشل فحص قفل اليوم" };
   }

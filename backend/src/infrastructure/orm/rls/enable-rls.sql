@@ -29,7 +29,10 @@ DO $$
 BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'app_user') THEN
     CREATE ROLE app_user WITH LOGIN NOBYPASSRLS;
-  ELSE
+  -- Only a superuser may change BYPASSRLS (even to remove it). A managed database's owner (Render)
+  -- is not one, so the unconditional ALTER failed there and the whole layer was never applied.
+  -- Alter only when the role really bypasses RLS (verify-rls reports it if that still fails).
+  ELSIF (SELECT rolbypassrls FROM pg_roles WHERE rolname = 'app_user') THEN
     ALTER ROLE app_user WITH NOBYPASSRLS;
   END IF;
 END $$;

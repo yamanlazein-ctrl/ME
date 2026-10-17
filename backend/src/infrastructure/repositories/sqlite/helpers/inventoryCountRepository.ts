@@ -1,4 +1,4 @@
-// PORTED-FROM: src/infrastructure/repositories/inventoryCountRepository.ts sha256=10a9b680d43bcd359b1f55fd1371210978064c54dd66acc04d1d990618abf51f
+// PORTED-FROM: src/infrastructure/repositories/inventoryCountRepository.ts sha256=7d1a121b261fdc6e99aad7258b774fa7dbcdf4c1f3077dbf63236c787e860972
 // SQLite twin (specs/001-desktop-sqlite-engine S4). Keep behavior identical to the PG source.
 import { and, eq, sql } from "drizzle-orm";
 import type { Tx } from "../../../orm/sqlite/drizzleCompat.js";

@@ -1,3 +1,4 @@
+import { DecimalInput } from "@/components/common/DecimalInput";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { round2dp } from "@erp/shared";
 import { useMemo, useState, type ComponentType } from "react";
@@ -436,26 +437,24 @@ function ReportsPage() {
 
             <div className="space-y-2">
               <Label>سعر الدولار بالليرة (كم ل.س = 1 $)</Label>
-              <Input
-                inputMode="decimal"
-                dir="ltr"
+              <DecimalInput
+                maxDecimals={4}
                 className="tabular-nums"
                 placeholder="مثال: 1200"
                 value={draftSypRate}
-                onChange={(e) => setDraftSypRate(e.target.value.replace(/[^\d.]/g, ""))}
+                onChange={(e) => setDraftSypRate(e.target.value)}
               />
             </div>
 
             {hasEur && (
               <div className="space-y-2">
                 <Label>سعر اليورو مقابل الدولار (كم € = 1 $)</Label>
-                <Input
-                  inputMode="decimal"
-                  dir="ltr"
+                <DecimalInput
+                  maxDecimals={4}
                   className="tabular-nums"
                   placeholder="مثال: 0.92"
                   value={draftEurRate}
-                  onChange={(e) => setDraftEurRate(e.target.value.replace(/[^\d.]/g, ""))}
+                  onChange={(e) => setDraftEurRate(e.target.value)}
                 />
               </div>
             )}

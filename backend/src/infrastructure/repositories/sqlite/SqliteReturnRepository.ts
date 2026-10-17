@@ -1,4 +1,4 @@
-// PORTED-FROM: src/infrastructure/repositories/PostgresReturnRepository.ts sha256=7759751249c9d324c4509b9b77046c7d0f21730ea0adabdf9385b3f6ec23d773
+// PORTED-FROM: src/infrastructure/repositories/PostgresReturnRepository.ts sha256=4bde880d6fe2dc6cdc2079151ca5733412dd71bb172e52427c04eda7206ea26f
 // SQLite twin (specs/001-desktop-sqlite-engine S4). Keep behavior identical to the PG source.
 import { desc } from "./helpers/pgOrder.js";
 import { scaledNumber } from "./helpers/likeContains.js";

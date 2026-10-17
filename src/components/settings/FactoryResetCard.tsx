@@ -63,7 +63,7 @@ export function FactoryResetCard() {
                 clearLicense();
                 clearRememberedEmail();
                 clearSyncDeviceState();
-                requestFactoryReset()
+                requestFactoryReset(typed)
                   .then(() => {
                     toast.success("طُلبت إعادة الضبط. ستُنفَّذ عند إعادة تشغيل البرنامج.");
                     setOpen(false);

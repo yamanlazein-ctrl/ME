@@ -1,3 +1,4 @@
+import { DecimalInput } from "@/components/common/DecimalInput";
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import {
@@ -327,8 +328,7 @@ function CountRow({ line, year, onSaved }: { line: CountLine; year: number; onSa
         ) : null}
       </TableCell>
       <TableCell>
-        <Input
-          type="number"
+        <DecimalInput
           step="0.01"
           min="0"
           className="h-8 w-24"

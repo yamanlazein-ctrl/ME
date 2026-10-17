@@ -102,7 +102,13 @@ export async function reconcileRestoredSnapshot(
 
   if (state.phase === "register") {
     const previous = await firstKnownDevice(deps.devices, ctx.tenantId, state.previousDeviceIds);
-    const id = (deps.newId ?? randomUUID)();
+    // DESK-029: one identity per restore, decided once and persisted before the hub sees it.
+    let id = state.proposedDeviceId ?? null;
+    if (!id) {
+      id = (deps.newId ?? randomUUID)();
+      await deps.store.setProposed(id);
+      id = (await deps.store.get())?.proposedDeviceId ?? id;
+    }
     const base = previous?.deviceFingerprint ?? `restored-device-${ctx.tenantId}`;
     const suffix = `#r${state.generation}-${id.slice(0, 8)}`;
     const device: RestoreDeviceRegistration = {

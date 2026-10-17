@@ -31,9 +31,19 @@ function memoryStore(
   const s = {
     state: initial,
     get: async () => (s.state ? { ...s.state } : null),
+    setProposed: async (id: string) => {
+      if (s.state?.phase === "register" && !s.state.proposedDeviceId)
+        s.state = { ...s.state, proposedDeviceId: id };
+    },
     setRegistered: async (id: string) => {
       if (s.state?.phase === "register")
-        s.state = { ...s.state, newDeviceId: id, phase: "pull", lastError: null };
+        s.state = {
+          ...s.state,
+          newDeviceId: id,
+          proposedDeviceId: null,
+          phase: "pull",
+          lastError: null,
+        };
     },
     addProgress: async (p: number, a: number) => {
       if (s.state)
@@ -230,6 +240,41 @@ describe("restore on a synced device (T109, option b)", () => {
       error: "hub unreachable",
     });
     expect(store.state?.phase).toBe("register");
+  });
+
+  it("a retry after the hub accepted the registration registers the SAME device again (DESK-029)", async () => {
+    const store = memoryStore(restored());
+    const hubIds: string[] = [];
+    let ids = 0;
+    let failLocal = true;
+    const d = deps({
+      store,
+      outboxStatus: new Map(),
+      applied: [],
+      registered: [],
+      pages: [[]],
+      newId: () => `${NEW.slice(0, -1)}${++ids}`, // a different id per call, as randomUUID
+      registerOnHub: async (device) => {
+        hubIds.push(`${device.id}|${device.fingerprint}`);
+        return { ok: true, id: device.id };
+      },
+      devices: {
+        findById: async () => null,
+        registerOrTouch: async () => {
+          if (failLocal) {
+            failLocal = false;
+            throw new Error("disk full"); // the hub has the device, this database does not
+          }
+          return {} as never;
+        },
+      } as never,
+    });
+    await expect(reconcileRestoredSnapshot(d, ctx)).rejects.toThrow("disk full");
+    await reconcileRestoredSnapshot(d, ctx);
+    expect(hubIds).toHaveLength(2);
+    expect(new Set(hubIds).size).toBe(1); // same id AND same fingerprint: one device on the hub
+    expect(store.state?.phase).not.toBe("register");
+    expect(store.state?.newDeviceId).toBe(hubIds[0].split("|")[0]);
   });
 
   it("stays paused while a pulled unit waits for a dependency (cursor held)", async () => {

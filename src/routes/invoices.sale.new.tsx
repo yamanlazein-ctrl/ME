@@ -827,6 +827,7 @@ function SaleInvoicePage() {
             </HeaderField>
             <HeaderField label="سعر الصرف (ل.س / $)">
               <FormattedAmountInput
+                maxDecimals={4}
                 value={exchangeRate}
                 onChange={setExchangeRate}
                 placeholder="أدخل سعر الصرف يدوياً"

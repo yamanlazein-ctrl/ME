@@ -168,9 +168,7 @@ async function main() {
   raw.close();
   mkdirSync(dirname(OUT!), { recursive: true });
   writeFileSync(OUT!, JSON.stringify(seed, null, 2));
-  console.log(
-    `[desktop-seed] tenant ${TENANT_ID}, licence ${BAKED_KEY} (offline token ${token.length} chars) → ${OUT}`,
-  );
+  console.log(`[desktop-seed] signed first-run seed verified and written → ${OUT}`);
 }
 
 await main();

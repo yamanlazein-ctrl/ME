@@ -22,9 +22,12 @@ describe("party list freshness", () => {
     expect(table).not.toMatch(/list\.length\]\);/);
     expect(table).not.toMatch(/eslint-disable/);
   });
-  it("CSV keeps cents", () => {
-    expect(table).not.toMatch(/String\(Math\.round\(s\./);
-    expect(table).toMatch(/String\(round2dp\(s\.remaining\)\)/);
+  it("export keeps cents (no Math.round on money; amounts are two-decimal)", () => {
+    expect(table).not.toMatch(/Math\.round\(/);
+    const model = readFileSync(join(__dirname, "partyExportModel.ts"), "utf8");
+    expect(model).not.toMatch(/Math\.round\(/);
+    expect(model).toMatch(/maximumFractionDigits: 2/);
+    expect(model).toMatch(/minimumFractionDigits: 2/);
   });
   it("picker: a failed search is not 'no match'", () => {
     expect(combo).toContain("setSearchFailed(true)");

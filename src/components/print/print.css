@@ -36,6 +36,26 @@
 @page {
   size: A4 portrait;
   margin: 0;
+  /* Empty page-margin boxes: no browser-generated URL, date/time, or "1/1" page marker is drawn
+     at the top or bottom of an official printout. The printable inset is the .print-doc padding. */
+  @top-left {
+    content: none;
+  }
+  @top-center {
+    content: none;
+  }
+  @top-right {
+    content: none;
+  }
+  @bottom-left {
+    content: none;
+  }
+  @bottom-center {
+    content: none;
+  }
+  @bottom-right {
+    content: none;
+  }
 }
 
 .print-doc {
@@ -102,6 +122,9 @@
 }
 
 @media print {
+  /* The browser prints its header/footer (URL, date, page number) in the page MARGIN area. The
+     page margin is 0 (@page above), so that area is empty; the printable inset is applied here,
+     on the body, instead. */
   html,
   body {
     margin: 0 !important;
@@ -110,6 +133,22 @@
     width: 100% !important;
     overflow: visible !important;
     background: #fff !important;
+  }
+
+  [data-print-root] {
+    padding: 0 !important;
+  }
+
+  body > [data-print-root] > .print-doc {
+    padding: 12mm 15mm !important;
+  }
+
+  body > [data-print-root] > .print-doc[data-paper="A5"] {
+    padding: 8mm 10mm !important;
+  }
+
+  body > [data-print-root] > .print-doc[data-paper="80mm"] {
+    padding: 3mm !important;
   }
 
   body > *:not([data-print-root]) {
@@ -261,25 +300,31 @@
   text-align: center;
 }
 
+/* Document title block: centred on the page, identical for every invoice type, list and statement.
+   Title first (large, bold, centred), then the transaction badge, then the sub-description. */
 .print-masthead {
   padding: 14pt 0 4pt;
+  text-align: center;
 }
 
 .print-header-title-area {
-  text-align: right;
+  text-align: center;
   padding: 0;
+  width: 100%;
 }
 
 .print-title-row {
   display: flex;
-  align-items: baseline;
-  justify-content: flex-start;
-  gap: 8pt;
-  flex-wrap: wrap;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4pt;
+  width: 100%;
 }
 
 .print-type-badge {
-  display: inline-block;
+  display: block;
+  text-align: center;
   font-size: 7pt;
   font-weight: 700;
   letter-spacing: 0.16em;
@@ -293,17 +338,21 @@
 }
 
 .print-doc-title {
-  font-size: 20pt;
-  font-weight: 700;
+  font-size: 22pt;
+  font-weight: 800;
   color: var(--mf-black);
-  letter-spacing: -0.02em;
-  line-height: 1.1;
+  letter-spacing: 0;
+  line-height: 1.15;
+  text-align: center;
+  width: 100%;
 }
 
 .print-doc-subtitle {
-  font-size: 8.5pt;
+  font-size: 9pt;
   color: var(--mf-gray);
-  margin-top: 3pt;
+  margin-top: 2pt;
+  text-align: center;
+  width: 100%;
 }
 
 .print-page-marker {
@@ -432,14 +481,20 @@
   width: 100%;
 }
 
+/* Fixed layout with explicit column widths (<col>). Earlier auto layout let the name column take most
+   of the page, and break-anywhere wrapping split Arabic words mid-word
+   ("الكمي" / "ة"). Now headers, numbers, dates and references never wrap; only text columns wrap,
+   and only between words. */
 .print-table {
   width: 100%;
   max-width: 100%;
+  /* Fixed layout: the column widths from <col> are honoured, so no single text column can take the
+     page. Invoice/statement tables set their own proportions the same way (see PrintTable). */
   table-layout: fixed;
   border-collapse: collapse;
   margin: 0 0 14pt;
-  word-wrap: break-word;
-  overflow-wrap: break-word;
+  word-break: keep-all;
+  overflow-wrap: normal;
   font-size: 9pt;
   direction: rtl;
 }
@@ -451,16 +506,21 @@
 
 .print-table th {
   font-size: 7.5pt;
-  font-weight: 600;
+  font-weight: 700;
   color: var(--mf-ink);
   border: none;
+  border-top: 0.8pt solid var(--mf-line-strong);
   border-bottom: 1.25pt solid var(--mf-gold);
-  padding: 7pt 6pt;
+  padding: 6pt 5pt;
   text-align: right;
   vertical-align: middle;
   background: var(--mf-bg);
-  white-space: normal;
+  white-space: nowrap;
+  word-break: keep-all;
+  overflow-wrap: normal;
   line-height: 1.25;
+  print-color-adjust: exact;
+  -webkit-print-color-adjust: exact;
 }
 
 .print-table th.pd-center,
@@ -479,10 +539,10 @@
   border-bottom: 0.6pt solid var(--mf-rule);
   font-size: 8.5pt;
   color: var(--mf-black);
-  padding: 7pt 6pt;
+  padding: 5pt 5pt;
   vertical-align: middle;
-  word-wrap: break-word;
-  overflow-wrap: break-word;
+  word-break: keep-all;
+  overflow-wrap: normal;
   white-space: normal;
   background: #ffffff;
   break-inside: avoid;
@@ -527,9 +587,38 @@
 }
 
 .print-table th.pd-amount {
-  white-space: normal;
-  font-weight: 600;
+  white-space: nowrap;
+  font-weight: 700;
   font-size: 7.5pt;
+}
+
+/* Cells that must stay on one line: dates, references, codes, phone numbers, quantities. */
+.print-table td.pd-nowrap {
+  white-space: nowrap;
+}
+
+/* A text column wraps between words — never mid-word — INSIDE its fixed column width.
+   Never set a width here: the column width comes from <col>, and a cell width overrides it
+   in `table-layout: fixed`, letting one text column take the whole table (that is exactly
+   how the customers/suppliers list name column once swallowed the page). */
+.print-table td.pd-wrap,
+.print-table th.pd-wrap {
+  white-space: normal;
+}
+
+/* An amount and its currency symbol: one LTR unit, isolated from the RTL row around it. */
+.pd-money-unit {
+  direction: ltr;
+  unicode-bidi: isolate;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.pd-money-unit .pd-ccy {
+  font-weight: 600;
+  font-size: 0.85em;
+  color: var(--mf-ink);
+  margin-inline-start: 2pt;
 }
 
 .pd-money {

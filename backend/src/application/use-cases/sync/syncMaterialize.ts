@@ -2020,8 +2020,12 @@ async function materializeCashbox(
     if (operation === "close") {
       const date = typeof payload.closeDate === "string" ? payload.closeDate : null;
       if (!date) return { status: "invalid", error: "missing closeDate" };
-      if (await repos.cashboxRepo.isDayLocked(date, rctx)) return { status: "exists" };
       const input = payload.closeInput as Record<string, unknown>;
+      const currency =
+        input && typeof input === "object" && typeof input.currency === "string"
+          ? input.currency
+          : "SYP";
+      if (await repos.cashboxRepo.isDayLocked(date, currency, rctx)) return { status: "exists" };
       if (!input || typeof input !== "object")
         return { status: "invalid", error: "missing closeInput" };
       const r = await closeDayUseCase(

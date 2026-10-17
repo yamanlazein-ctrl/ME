@@ -270,7 +270,7 @@ export class PostgresPartyRepository implements IPartyRepository {
     // per kind); mixed `/parties` lists stay stats-free.
     if (filter.kind && domains.length > 0) {
       const statsMap = await this.computeListStats(
-        domains.map((d) => d.id),
+        new Map(domains.map((d) => [d.id, d.currency])),
         filter.kind,
         ctx.tenantId,
       );
@@ -307,10 +307,11 @@ export class PostgresPartyRepository implements IPartyRepository {
    * outstanding separately (never blended).
    */
   private async computeListStats(
-    partyIds: string[],
+    partyCurrencies: Map<string, string>,
     kind: "customer" | "supplier",
     tenantId: string,
   ): Promise<Map<string, PartyListStats>> {
+    const partyIds = [...partyCurrencies.keys()];
     const invoiceType = kind === "supplier" ? "entry" : "sale";
 
     const invRows = await this.db
@@ -379,6 +380,7 @@ export class PostgresPartyRepository implements IPartyRepository {
           credit: Number(r.credit),
         })),
       kind,
+      partyCurrencies,
     );
   }
 

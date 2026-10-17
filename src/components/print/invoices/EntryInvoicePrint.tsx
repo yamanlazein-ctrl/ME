@@ -16,6 +16,7 @@
  * All fields are shown by default. Users can hide specific fields via
  * /settings/invoice — hiding affects the print only, never the data.
  */
+import { keepTogether } from "@/components/print/printText";
 import { useMemo, type ReactNode } from "react";
 import {
   PrintDocument,
@@ -114,9 +115,16 @@ export function EntryInvoicePrint({
   const mainColumns: PrintColumn[] = [
     { key: "fabric", label: "الصنف", width: "20%" },
     { key: "color", label: "اللون", width: "20%" },
-    { key: "roll", label: "رقم الصبغة", width: "12%" },
-    { key: "pieces", label: "الأثواب", align: "center", width: "7%" },
-    { key: "qty", label: "الكمية (كغ)", align: "center", width: "11%", dividerAfter: true },
+    { key: "roll", label: "رقم الصبغة", nowrap: true, width: "12%" },
+    { key: "pieces", label: "الأثواب", nowrap: true, align: "center", width: "7%" },
+    {
+      key: "qty",
+      label: "الكمية (كغ)",
+      nowrap: true,
+      align: "center",
+      width: "11%",
+      dividerAfter: true,
+    },
     { key: "price", label: "السعر/كغ", align: "left", amount: true, width: "12%" },
     { key: "gross", label: "الإجمالي", align: "left", amount: true, width: "18%" },
   ];
@@ -253,7 +261,7 @@ export function EntryInvoicePrint({
           ? [
               {
                 label: "سعر الصرف",
-                value: `${formatNumber(Number(inv.exchangeRate))} (بتاريخ ${inv.date})`,
+                value: `${formatNumber(Number(inv.exchangeRate))} (بتاريخ ${keepTogether(inv.date)})`,
               },
               ...(inv.currency !== "USD"
                 ? [

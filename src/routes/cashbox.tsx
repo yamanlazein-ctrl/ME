@@ -1,3 +1,4 @@
+import { DecimalInput } from "@/components/common/DecimalInput";
 import { AppShell } from "@/components/layout/AppShell";
 import { PageCard } from "@/components/layout/PageCard";
 import { createFileRoute, Link } from "@tanstack/react-router";
@@ -328,8 +329,7 @@ function OpeningDialog({ open, onClose }: { open: boolean; onClose: () => void }
             </p>
           </div>
           <FormField label="المبلغ" error={balErr ?? undefined}>
-            <Input
-              type="number"
+            <DecimalInput
               value={v}
               onChange={(e) => {
                 setV(Number(e.target.value));
@@ -442,8 +442,7 @@ function ManualDialog({ open, onClose }: { open: boolean; onClose: () => void })
             </Select>
           </div>
           <FormField label="المبلغ" error={amtErr ?? undefined}>
-            <Input
-              type="number"
+            <DecimalInput
               value={amount}
               onChange={(e) => {
                 setAmount(e.target.value === "" ? "" : Number(e.target.value));
@@ -534,8 +533,7 @@ function ClosingDialog({
           <Row label="الرصيد المتوقع" value={formatAmount(expected, cs.currency)} bold />
           <div>
             <Label>المبلغ الفعلي المعدود</Label>
-            <Input
-              type="number"
+            <DecimalInput
               value={counted}
               onChange={(e) => setCounted(e.target.value === "" ? "" : Number(e.target.value))}
             />

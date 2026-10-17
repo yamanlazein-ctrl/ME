@@ -286,7 +286,11 @@ export function useUpdateParty() {
   });
 }
 
-export function usePartyBalance(partyId: string, currency: string) {
+export function usePartyBalance(
+  partyId: string,
+  currency: string,
+  options?: { staleTime?: number },
+) {
   return useQuery({
     queryKey: ["party", "balance", partyId, currency],
     queryFn: ({ signal }) => {
@@ -294,7 +298,7 @@ export function usePartyBalance(partyId: string, currency: string) {
       return container.parties.balance.execute(partyId, currency, ctx);
     },
     enabled: !!partyId,
-    staleTime: 60_000,
+    staleTime: options?.staleTime ?? 60_000,
   });
 }
 

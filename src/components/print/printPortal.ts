@@ -39,12 +39,14 @@ let previousDocumentTitle: string | null = null;
 /** True from click until the print job is torn down — blocks a second print. */
 let printing = false;
 let printingSafetyTimer: number | null = null;
+/** True once afterPrint() has fired for the current print job — prevents double cleanup. */
+let printCompleted = false;
 
 /** Upper bound on waiting for images/fonts — never block printing on them. */
 export const PRINT_ASSET_TIMEOUT_MS = 3000;
 /** If neither afterprint nor the print media query ever report back (WebView2
  *  edge cases, printer error), release the lock so the user can print again. */
-const PRINTING_LOCK_MAX_MS = 60_000;
+const PRINTING_LOCK_MAX_MS = 15_000;
 
 export type PrintArchiveMeta = {
   docType: ArchiveDocType;
@@ -54,15 +56,22 @@ export type PrintArchiveMeta = {
 
 const PRINT_PAGE_STYLE_ID = "me-print-page-size";
 
-function paperSizeCss(paper: string): string {
+export function paperSizeCss(paper: string, orientation = "portrait"): string {
+  const side = orientation === "landscape" ? "landscape" : "portrait";
   switch (paper) {
     case "A5":
-      return "A5 portrait";
+      return `A5 ${side}`;
     case "80mm":
-      return "80mm auto";
+      return "80mm auto"; // a receipt roll has no orientation
     default:
-      return "A4 portrait";
+      return `A4 ${side}`;
   }
+}
+
+/** The document's own orientation (`<PrintDocument orientation>`), portrait when unset. */
+function orientationOf(container: HTMLElement): string {
+  const docEl = container.querySelector(".print-doc");
+  return (docEl instanceof HTMLElement && docEl.dataset.orientation) || "portrait";
 }
 
 /**
@@ -83,7 +92,26 @@ function syncPrintPaper(container: HTMLElement): void {
     styleEl.id = PRINT_PAGE_STYLE_ID;
     document.head.appendChild(styleEl);
   }
-  styleEl.textContent = `@page { size: ${paperSizeCss(paper)}; margin: 0; }`;
+  styleEl.textContent = pageRuleCss(paper, orientationOf(container));
+}
+
+/**
+ * The unnamed `@page` rule for a print job. Margin is 0 and every page-margin box is empty, so the
+ * browser/WebView cannot print its URL, date/time or page number on the sheet (Issue 2).
+ * Paper size comes from `paperSizeCss` (A4/A5/80mm) so the printed sheet matches the chosen paper.
+ */
+export function pageRuleCss(paper: string, orientation = "portrait"): string {
+  const empty = [
+    "top-left",
+    "top-center",
+    "top-right",
+    "bottom-left",
+    "bottom-center",
+    "bottom-right",
+  ]
+    .map((box) => `@${box} { content: none; }`)
+    .join(" ");
+  return `@page { size: ${paperSizeCss(paper, orientation)}; margin: 0; ${empty} }`;
 }
 
 function clearPrintPaper(): void {
@@ -92,6 +120,7 @@ function clearPrintPaper(): void {
 }
 
 function cleanup() {
+  printCompleted = false;
   if (activeRoot) {
     try {
       activeRoot.unmount();
@@ -114,6 +143,7 @@ function cleanup() {
 }
 
 function afterPrint() {
+  printCompleted = true;
   if (previousDocumentTitle !== null) {
     document.title = previousDocumentTitle;
     previousDocumentTitle = null;
@@ -124,6 +154,7 @@ function afterPrint() {
 export function installPrintHandler() {
   if ((window as unknown as { __printHandlerInstalled?: boolean }).__printHandlerInstalled) return;
   (window as unknown as { __printHandlerInstalled?: boolean }).__printHandlerInstalled = true;
+  printCompleted = false;
   window.addEventListener("afterprint", afterPrint);
   // Fallback when afterprint never fires (cancel/printer error in WebView2):
   // the print media query flipping back to false means the job is over.
@@ -203,7 +234,7 @@ ${inline}
 </style>
 <style>
   /* Unnamed @page only (DFP-002) — size matches the printed paper setting. */
-  @page { size: ${paperSizeCss(paper)}; margin: 0; }
+  ${pageRuleCss(paper, orientationOf(container))}
   body { background: #fff; margin: 0; }
   [data-print-root] { display: block !important; position: static !important; left: auto !important; width: 100% !important; max-width: none !important; }
   ${ARCHIVE_ARABIC_FONT_CSS}
@@ -300,7 +331,19 @@ export function printDocument(
             previousDocumentTitle = document.title;
           }
           document.title = "\u00a0";
-          window.print();
+          try {
+            window.print();
+          } catch (e) {
+            console.error("[print] window.print() threw:", e);
+          } finally {
+            // WebView2 may not fire afterprint / matchMedia change after the
+            // print dialog closes (or is cancelled). Release the lock promptly
+            // so the operator can print again without restarting the app.
+            if (!printCompleted) {
+              printCompleted = true;
+              afterPrint();
+            }
+          }
         });
     }, 200);
   })();

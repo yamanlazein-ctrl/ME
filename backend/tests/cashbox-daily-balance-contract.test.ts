@@ -24,12 +24,12 @@ describe("cashbox daily balance migration contract", () => {
     expect(typeof mod.getCashboxBalanceAsOf).toBe("function");
     expect(typeof mod.recomputeCashboxBalanceAsOf).toBe("function");
     expect(typeof mod.applyCashboxDailyDelta).toBe("function");
-    expect(typeof mod.assertSufficientCashboxBalance).toBe("function");
+    expect(typeof mod.serializeCashboxWrites).toBe("function");
   }, 15_000);
 
-  it("assertSufficientCashboxBalance never queries the DB for a non-positive amount", async () => {
+  it("serializeCashboxWrites never queries the DB for a non-positive amount", async () => {
     // Zero/negative cash portion (pure discount settlement) must not touch the DB.
-    const { assertSufficientCashboxBalance } =
+    const { serializeCashboxWrites } =
       await import("../src/infrastructure/repositories/cashboxBalanceHelper.js");
     const poisonedTx = {
       execute: () => {
@@ -41,12 +41,13 @@ describe("cashbox daily balance migration contract", () => {
     } as never;
     const ctx = { tenantId: "t1", userId: "u1" } as never;
 
-    await expect(
-      assertSufficientCashboxBalance(poisonedTx, ctx, "USD", "2026-09-22", 0),
-    ).resolves.toEqual({ available: 0, wouldGoNegative: false });
-    await expect(
-      assertSufficientCashboxBalance(poisonedTx, ctx, "USD", "2026-09-22", -5),
-    ).resolves.toEqual({ available: 0, wouldGoNegative: false });
+    await expect(serializeCashboxWrites(poisonedTx, ctx, "USD", "2026-09-22", 0)).resolves.toEqual({
+      available: 0,
+      wouldGoNegative: false,
+    });
+    await expect(serializeCashboxWrites(poisonedTx, ctx, "USD", "2026-09-22", -5)).resolves.toEqual(
+      { available: 0, wouldGoNegative: false },
+    );
   });
 
   it("helper source no longer hard-blocks negative cash balances", async () => {

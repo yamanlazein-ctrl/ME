@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-archive-document-pdf"
+description = "Enables the archive_document_pdf command without any pre-configured scope."
+commands.allow = ["archive_document_pdf"]
+
+[[permission]]
+identifier = "deny-archive-document-pdf"
+description = "Denies the archive_document_pdf command without any pre-configured scope."
+commands.deny = ["archive_document_pdf"]

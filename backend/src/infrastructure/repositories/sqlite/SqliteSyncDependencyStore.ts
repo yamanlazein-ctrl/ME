@@ -1,4 +1,4 @@
-// PORTED-FROM: src/infrastructure/repositories/PostgresSyncDependencyStore.ts sha256=e78f30c7c67f51e169f5caf89378ad035afdd69a919079e8e40793069ce9db13
+// PORTED-FROM: src/infrastructure/repositories/PostgresSyncDependencyStore.ts sha256=6273d9400fd2ad2de663ae24940727430cf27643f2ad521ad906d9c33f21b310
 // SQLite twin (specs/001-desktop-sqlite-engine S4). Keep behavior identical to the PG source.
 /**
  * PostgreSQL SQL for sync dependency replay — moved verbatim from

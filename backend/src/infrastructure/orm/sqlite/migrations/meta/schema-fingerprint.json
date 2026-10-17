@@ -1,5 +1,5 @@
 {
-  "journalIdx": 5,
+  "journalIdx": 6,
   "engine": "sqlite",
   "tables": {
     "attachments": {
@@ -8317,6 +8317,10 @@
     "idx_company_profiles_tenant": {
       "table": "company_profiles",
       "definition": "CREATE UNIQUE INDEX \"idx_company_profiles_tenant\" ON \"company_profiles\" (\"tenant_id\")"
+    },
+    "idx_day_closes_tenant_date_currency": {
+      "table": "day_closes",
+      "definition": "CREATE UNIQUE INDEX idx_day_closes_tenant_date_currency\n  ON day_closes (tenant_id, date, currency)"
     },
     "idx_device_registrations_device_id": {
       "table": "device_registrations",

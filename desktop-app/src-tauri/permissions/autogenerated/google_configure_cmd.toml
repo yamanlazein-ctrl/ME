@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-google-configure-cmd"
+description = "Enables the google_configure_cmd command without any pre-configured scope."
+commands.allow = ["google_configure_cmd"]
+
+[[permission]]
+identifier = "deny-google-configure-cmd"
+description = "Denies the google_configure_cmd command without any pre-configured scope."
+commands.deny = ["google_configure_cmd"]

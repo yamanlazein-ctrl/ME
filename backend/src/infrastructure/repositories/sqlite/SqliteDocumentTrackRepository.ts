@@ -1,4 +1,4 @@
-// PORTED-FROM: src/infrastructure/repositories/PostgresDocumentTrackRepository.ts sha256=030e46793f30be083976449142003bccf649502a62ba73808dfc73aace71998b
+// PORTED-FROM: src/infrastructure/repositories/PostgresDocumentTrackRepository.ts sha256=1a6654344c37101bd9bb1ddaa96d4fd45d855d074dfb4de27a5f9a4e7d8be934
 // SQLite twin (specs/001-desktop-sqlite-engine S4). Keep behavior identical to the PG source.
 import { mulRound, scaledText } from "./helpers/likeContains.js";
 import { sql, type SQL } from "drizzle-orm";

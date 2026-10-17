@@ -635,16 +635,43 @@ export function registerAuthRoutes(router: Router, container: Container) {
           return res.status(401).json(SESSION_REVOKED_BODY);
         }
         const body = req.validatedBody as z.infer<typeof SyncDeviceRegisterSchema>;
-        const row = await container.syncDeviceRepo.registerOrTouch({
-          tenantId: payload.tenantId,
-          userId: payload.sub,
-          deviceFingerprint: body.deviceFingerprint,
-          deviceFingerprintVersion: body.deviceFingerprintVersion ?? 1,
-          platform: body.platform,
-          hostname: body.hostname,
-          label: body.label,
-          deviceId: body.deviceId,
-        });
+        const register = () =>
+          container.syncDeviceRepo.registerOrTouch({
+            tenantId: payload.tenantId,
+            userId: payload.sub,
+            deviceFingerprint: body.deviceFingerprint,
+            deviceFingerprintVersion: body.deviceFingerprintVersion ?? 1,
+            platform: body.platform,
+            hostname: body.hostname,
+            label: body.label,
+            deviceId: body.deviceId,
+          });
+        // DESK-028: on the hub this path adds a device exactly like enrollment does, so it obeys
+        // the same licence device limit, checked under the same per-tenant queue. The desktop's
+        // local registry (one machine) is not a licence seat.
+        let row: Awaited<ReturnType<typeof register>>;
+        if (config.DESKTOP_DEPLOY) {
+          row = await register();
+        } else {
+          const { deviceSlotRefusal, withTenantDeviceLock } =
+            await import("../../application/use-cases/sync/syncEnrollment.js");
+          const outcome = await withTenantDeviceLock(payload.tenantId, () =>
+            withJwtTenantContext(payload.tenantId, async () => {
+              const refusal = await deviceSlotRefusal(
+                { syncDeviceRepo: container.syncDeviceRepo, licenseRepo: container.licenseRepo },
+                payload.tenantId,
+                { id: body.deviceId, fingerprint: body.deviceFingerprint },
+              );
+              return refusal ?? { ok: true as const, row: await register() };
+            }),
+          );
+          if (!outcome.ok) {
+            return res
+              .status(outcome.status)
+              .json({ code: outcome.code, message: outcome.error, statusCode: outcome.status });
+          }
+          row = outcome.row;
+        }
         res.status(200).json({
           id: row.id,
           tenantId: row.tenantId,

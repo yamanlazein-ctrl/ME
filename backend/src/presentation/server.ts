@@ -588,51 +588,15 @@ apiRouter.use(
 if (config.DESKTOP_DEPLOY && getEngine() === "sqlite") {
   void (async () => {
     try {
-      const { createDriveRouter } = await import("./routes/drive.route.js");
-      const { UploadQueue } = await import("../infrastructure/googledrive/uploadQueue.js");
-      const { FolderOrganizer } = await import("../infrastructure/googledrive/folderOrganizer.js");
-      const { Exporters } = await import("../infrastructure/googledrive/exporters.js");
-      const { DriveClient, liveDriveToken, liveDriveTokenAvailable, onLiveDriveConnected } =
-        await import("../infrastructure/googledrive/driveClient.js");
-      const { startDriveArchiveWorker, runArchivePass } =
-        await import("../infrastructure/googledrive/monthlyArchiveJob.js");
+      const { wireDriveArchive } = await import("./driveArchiveWiring.js");
       const { sqliteDb } = await import("../infrastructure/orm/sqlite/transaction.js");
-      // The gated handle, not the raw writer: a raw write issued while a business transaction holds
-      // the writer would land INSIDE that transaction and roll back with it.
-      const db = sqliteDb();
-      // One client for the process; its token comes from the shell's push (D-01).
-      const client = new DriveClient({ token: liveDriveToken });
-      const folders = new FolderOrganizer(db, client);
-      const queue = new UploadQueue(db, client, folders);
-      const exporters = new Exporters(db);
-      // D-05: this installation's stable, device-bound id (identity.rs) is the archive device identity
-      // that the primary-device designation names.
-      const localDeviceId = config.MOTARD_INSTALLATION_ID || null;
-      const deps = {
-        db,
-        queue,
-        folders,
-        exporters,
-        localDeviceId,
-        get driveClient() {
-          return liveDriveTokenAvailable() ? client : null;
-        },
-        get drive() {
-          return liveDriveTokenAvailable() ? client : null;
-        },
-        syncNow: async () => {
-          const r = await runArchivePass(deps, "manual");
-          return { queued: r.enqueued, started: r.processed > 0 };
-        },
-      };
-      apiRouter.use(createDriveRouter(deps));
-      startDriveArchiveWorker(deps);
-      // Upload as soon as the shell's first token arrives, not at the next 6-hour tick.
-      onLiveDriveConnected(() => {
-        void runArchivePass(deps, "connect").catch((err) =>
-          logger.error({ err }, "DRIVE_ARCHIVE_CONNECT_PASS_FAILED"),
-        );
+      const drive = await wireDriveArchive({
+        db: sqliteDb(),
+        // D-05: this installation's stable, device-bound id is the archive device identity.
+        localDeviceId: config.MOTARD_INSTALLATION_ID || null,
       });
+      apiRouter.use(drive.router);
+      drive.start();
       logger.info("DRIVE_ARCHIVE_WORKER_STARTED");
     } catch (err) {
       logger.warn({ err }, "DRIVE_ARCHIVE_WORKER_START_FAILED (non-fatal)");
@@ -663,7 +627,8 @@ app.use(createErrorHandler(logger));
 
 /**
  * Cloud hub only, opt-in (HUB_PREPARE_ON_BOOT=1): run the project's own
- * `scripts/migrate.mjs` before serving, then — once, while no company exists —
+ * `scripts/migrate.mjs`, `apply-rls.mjs` and `verify-rls.mjs` before serving, then — once, while no
+ * company exists —
  * `bootstrap-hub.mjs` with HUB_BOOTSTRAP_COMPANY / _EMAIL / _PASSWORD. A host
  * with no shell (e.g. Render's free plan) has no other place to run them. A
  * failure is fatal (the catch below): an unmigrated hub must never serve.
@@ -676,6 +641,12 @@ async function prepareHubDatabase(): Promise<void> {
     if (r.status !== 0) throw new Error(`${args[0]} exited with ${r.status ?? r.signal}`);
   };
   run(["scripts/migrate.mjs"]);
+  // M-06 (audit, checked live): the canonical RLS layer (enable-rls.sql) is not a drizzle migration,
+  // so `migrate` never applied it and a hub served with an incomplete policy set (`tenants` and
+  // `system_admins` without RLS, six sync tables on non-canonical policies). Apply it (idempotent),
+  // then verify: a hub whose isolation contract fails must never serve, like an unmigrated one.
+  run(["scripts/apply-rls.mjs"]);
+  run(["scripts/verify-rls.mjs"]);
   const company = process.env.HUB_BOOTSTRAP_COMPANY;
   const email = process.env.HUB_BOOTSTRAP_EMAIL;
   const password = process.env.HUB_BOOTSTRAP_PASSWORD;
@@ -741,6 +712,30 @@ async function prepareDesktopDatabase(): Promise<void> {
   }
 }
 
+/**
+ * DESK-005: after an explicit key reset the stored licence token cannot be decrypted any more and
+ * the heartbeat would report the licence as expired. Re-promote the signed baked token (repair
+ * only: a licence that was never activated is not promoted here).
+ */
+async function repairDesktopLicenseSecret(): Promise<void> {
+  const tenant = await container.tenantRepo.findBySlug("default");
+  if (!tenant) return;
+  const { bootstrapDesktopLicenseUseCase } =
+    await import("../application/use-cases/setup/setupUseCases.js");
+  const r = await bootstrapDesktopLicenseUseCase(
+    {
+      licenseRepo: container.licenseRepo,
+      secretsRepo: container.secretsRepo,
+      tokenSigner: container.licenseTokenSigner,
+      cipher: container.secretCipher,
+    },
+    tenant.id,
+    { repairOnly: true },
+  );
+  if (r.ok && r.data?.migrated) logger.warn({ tenantId: tenant.id }, "LICENSE_SECRET_REPAIRED");
+  if (!r.ok) logger.error({ code: r.code, error: r.error }, "licence secret repair failed");
+}
+
 /** Detach stale baked Desktop licenses that are not the tenant entitlement. */
 async function prepareLicenseIdentity(): Promise<void> {
   try {
@@ -748,6 +743,7 @@ async function prepareLicenseIdentity(): Promise<void> {
     const { detachOrphanBakedLicenses } =
       await import("../infrastructure/license/detachOrphanBakedLicenses.js");
     await detachOrphanBakedLicenses(await engineDb());
+    if (config.DESKTOP_DEPLOY) await repairDesktopLicenseSecret();
     setLicenseIdentityDegraded(null);
   } catch (err) {
     // FIN-18: a desktop app must still start if this maintenance step fails,

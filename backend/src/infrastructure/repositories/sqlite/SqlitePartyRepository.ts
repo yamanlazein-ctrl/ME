@@ -1,4 +1,4 @@
-// PORTED-FROM: src/infrastructure/repositories/PostgresPartyRepository.ts sha256=999f8d236aa7f647d3eb9e478d31c8766fea4bc82472cc78d87eb31c4f8274c1
+// PORTED-FROM: src/infrastructure/repositories/PostgresPartyRepository.ts sha256=fe429ec9beb692c130fb198e17268018e86e83c11fd3926446c7e2d013b24a0b
 // SQLite twin (specs/001-desktop-sqlite-engine S4). Keep behavior identical to the PG source.
 import { desc } from "./helpers/pgOrder.js";
 import { ilikeEscaped, scaledTextSql } from "./helpers/likeContains.js";
@@ -260,7 +260,7 @@ export class SqlitePartyRepository implements IPartyRepository {
     // per kind); mixed `/parties` lists stay stats-free.
     if (filter.kind && domains.length > 0) {
       const statsMap = await this.computeListStats(
-        domains.map((d) => d.id),
+        new Map(domains.map((d) => [d.id, d.currency])),
         filter.kind,
         ctx.tenantId,
       );
@@ -297,10 +297,11 @@ export class SqlitePartyRepository implements IPartyRepository {
    * outstanding separately (never blended).
    */
   private async computeListStats(
-    partyIds: string[],
+    partyCurrencies: Map<string, string>,
     kind: "customer" | "supplier",
     tenantId: string,
   ): Promise<Map<string, PartyListStats>> {
+    const partyIds = [...partyCurrencies.keys()];
     const invoiceType = kind === "supplier" ? "entry" : "sale";
 
     const invRows = await this.db
@@ -369,6 +370,7 @@ export class SqlitePartyRepository implements IPartyRepository {
           credit: Number(r.credit),
         })),
       kind,
+      partyCurrencies,
     );
   }
 

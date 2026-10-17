@@ -1,4 +1,4 @@
-// PORTED-FROM: src/infrastructure/repositories/PostgresProfitRepository.ts sha256=403081edadd3cecc76f2b7a6b1df63ae3050fb23462d74fb6a9ef65e302232c7
+// PORTED-FROM: src/infrastructure/repositories/PostgresProfitRepository.ts sha256=caf4c2292a2a0e711fc1354372f49bb0fbd0c48edcc394db5079e5ffb4a8c2e2
 // SQLite twin (specs/001-desktop-sqlite-engine S4). Keep behavior identical to the PG source.
 import { scaledNumber, scaledTextSql, mulRound } from "./helpers/likeContains.js";
 import { eq, and, sql, gte, lte } from "drizzle-orm";

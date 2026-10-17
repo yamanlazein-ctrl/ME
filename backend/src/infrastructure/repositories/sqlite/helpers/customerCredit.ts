@@ -1,4 +1,4 @@
-// PORTED-FROM: src/infrastructure/repositories/customerCredit.ts sha256=a318a4097e1c57c4ce8de9c4f706d886e514972cf6c2a79d474ab4e6896e1e8e
+// PORTED-FROM: src/infrastructure/repositories/customerCredit.ts sha256=eca5868c65532dfffaea0722e92f149508d6df27f69e59f3edbbd62f716a52df
 // SQLite twin (specs/001-desktop-sqlite-engine S4). Keep behavior identical to the PG source.
 import { scaledNumber, mulRound } from "./likeContains.js";
 import { and, eq, isNotNull, sql } from "drizzle-orm";

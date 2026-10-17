@@ -1,5 +1,5 @@
 /**
- * Tauri desktop integration — IPC bridge for license validation and fingerprinting.
+ * Tauri desktop integration — the IPC bridge to the shell's commands (desktop-app/src-tauri).
  * Safe to import in web builds — all functions are guarded by `isTauri()` check.
  */
 
@@ -105,13 +105,6 @@ export function detectPlatform(osHint?: string): DevicePlatform {
   return isTauri() ? "windows" : "web";
 }
 
-export interface DesktopLicenseStatus {
-  valid: boolean;
-  status: string;
-  message: string;
-  graceRemainingDays: number | null;
-}
-
 /**
  * Collect machine fingerprint from the Tauri Rust backend.
  * Falls back to browser fingerprint on web.
@@ -130,25 +123,6 @@ export async function getDesktopFingerprint(): Promise<DesktopFingerprint> {
   }
   const invoke = await getInvoke();
   return invoke("get_fingerprint") as Promise<DesktopFingerprint>;
-}
-
-/**
- * Validate license against the backend API via Tauri IPC.
- */
-export async function validateDesktopLicense(
-  apiUrl: string,
-  licenseKey: string,
-  fingerprint: string,
-): Promise<DesktopLicenseStatus> {
-  if (!isTauri()) {
-    return { valid: true, status: "web", message: "وضع المتصفح", graceRemainingDays: null };
-  }
-  const invoke = await getInvoke();
-  return invoke("validate_license", {
-    apiUrl,
-    licenseKey,
-    fingerprint,
-  }) as Promise<DesktopLicenseStatus>;
 }
 
 /** Document types for the Desktop/<company> archive (Issue 12). */
@@ -171,24 +145,12 @@ export async function ensureDocumentFolders(companyName?: string): Promise<strin
   return (await invoke("ensure_document_folders", { companyName })) as string;
 }
 
-export async function getHubUrl(): Promise<string> {
-  if (!isTauri()) return "";
-  const invoke = await getInvoke();
-  return ((await invoke("get_hub_url")) as string) ?? "";
-}
-
-export async function setHubUrl(url: string): Promise<string> {
-  if (!isTauri()) return url.trim().replace(/\/+$/, "");
-  const invoke = await getInvoke();
-  return ((await invoke("set_hub_url", { url })) as string) ?? "";
-}
-
-export async function requestFactoryReset(): Promise<void> {
+export async function requestFactoryReset(confirm: string): Promise<void> {
   if (!isTauri()) {
     throw new Error("إعادة الضبط المصنعي متاحة في تطبيق سطح المكتب فقط");
   }
   const invoke = await getInvoke();
-  await invoke("request_factory_reset");
+  await invoke("request_factory_reset", { confirm });
 }
 
 /**
@@ -196,12 +158,12 @@ export async function requestFactoryReset(): Promise<void> {
  * operator having to close the app. Resolves only if the invoke is rejected —
  * a successful call restarts the process and never returns.
  */
-export async function applyFactoryResetNow(): Promise<void> {
+export async function applyFactoryResetNow(confirm: string): Promise<void> {
   if (!isTauri()) {
     throw new Error("البدء من الصفر متاح في تطبيق سطح المكتب فقط");
   }
   const invoke = await getInvoke();
-  await invoke("apply_factory_reset_now");
+  await invoke("apply_factory_reset_now", { confirm });
 }
 
 /** Archive a printed/saved document into the Desktop folder tree. */
@@ -222,7 +184,9 @@ export async function archiveDocumentPdf(
 }
 
 /** Desktop shell semver (`CARGO_PKG_VERSION`). Falls back for web builds. */
-export async function getDesktopAppVersion(fallback = "1.0.0"): Promise<string> {
+export async function getDesktopAppVersion(
+  fallback = import.meta.env.VITE_APP_VERSION || "1.0.0",
+): Promise<string> {
   if (!isTauri()) return fallback;
   const invoke = await getInvoke();
   const v = (await invoke("get_app_version")) as string;
@@ -296,27 +260,15 @@ export async function pickBackupFile(): Promise<SavedBackupFile | null> {
   return (await invoke("pick_backup_file")) as SavedBackupFile | null;
 }
 
-export type DesktopUpdateCheckResult = {
-  available: boolean;
-  version?: string | null;
-  body?: string | null;
-  date?: string | null;
-};
-
-/** CDN/latest.json probe — only after license update gate allows it. */
-export async function checkDesktopUpdate(): Promise<DesktopUpdateCheckResult> {
-  if (!isTauri()) {
-    throw new Error("التحقق من التحديثات متاح في تطبيق سطح المكتب فقط");
-  }
+/**
+ * Desktop only: save arbitrary text content (e.g. a CSV export) to a user-chosen path.
+ * Opens a native save dialog and writes the file to disk. Resolves null when the user cancels.
+ */
+export async function saveCsvFile(args: {
+  content: string;
+  suggestedName: string;
+}): Promise<{ path: string; sizeBytes: number } | null> {
+  if (!isTauri()) throw new Error("حفظ الملف عبر البرنامج متاح في تطبيق سطح المكتب فقط");
   const invoke = await getInvoke();
-  return (await invoke("check_desktop_update")) as DesktopUpdateCheckResult;
-}
-
-/** Download + install from CDN endpoint configured in tauri.conf.json. */
-export async function installDesktopUpdate(): Promise<void> {
-  if (!isTauri()) {
-    throw new Error("تثبيت التحديث متاح في تطبيق سطح المكتب فقط");
-  }
-  const invoke = await getInvoke();
-  await invoke("install_desktop_update");
+  return (await invoke("save_csv_file", args)) as { path: string; sizeBytes: number } | null;
 }

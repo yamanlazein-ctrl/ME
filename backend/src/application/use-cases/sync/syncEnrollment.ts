@@ -260,11 +260,12 @@ async function redeemUnlocked(
       }
       retiredTwin = twin.id;
     }
-    const live = all.filter((d) => !d.revokedAt);
-    const limit = resolveDeviceLimit({ limits: lic.limits, maxDevices: lic.maxDevices });
-    if (live.length >= limit) {
-      return fail(403, "DEVICE_LIMIT", `تم الوصول إلى الحد الأقصى للأجهزة في الترخيص (${limit})`);
-    }
+    // The one device-limit rule, shared with /api/auth/sync-device (DESK-028).
+    const refusal = await deviceSlotRefusal(deps, tenantId, {
+      id: device.id,
+      fingerprint: device.fingerprint,
+    });
+    if (refusal) return refusal;
   }
 
   const issuer = await activeUser(tenantId, rec.createdBy);
@@ -308,6 +309,51 @@ async function redeemUnlocked(
   await putJson(deps, tenantId, CURRENT_KEY, { ...rec, uses: rec.uses + 1 });
   const tokens = await issueTokens(deps, tenantId, rec.createdBy, issuer.name, issuer.role);
   return { ok: true, deviceId: row.id, deviceSecret, ...tokens };
+}
+
+/**
+ * Run `fn` under the same per-tenant queue as enrollment, so a slot check and the insert it guards
+ * are not interleaved with another registration of the same company (DESK-028).
+ * ponytail: in-process queue — enough for the single-instance hub; a multi-instance hub needs a
+ * DB-level lock (pg_advisory_xact_lock) around the check and the insert.
+ */
+export async function withTenantDeviceLock<T>(tenantId: string, fn: () => Promise<T>): Promise<T> {
+  const run = (redeeming.get(tenantId) ?? Promise.resolve()).then(fn);
+  const tail = run.then(
+    () => undefined,
+    () => undefined,
+  );
+  redeeming.set(tenantId, tail);
+  try {
+    return await run;
+  } finally {
+    if (redeeming.get(tenantId) === tail) redeeming.delete(tenantId);
+  }
+}
+
+/**
+ * The licence's device limit, for ANY path that may add a device (enrollment and the account
+ * path `/api/auth/sync-device`). Null when `device` is already known (same id, or a live row with
+ * the same fingerprint — that is a touch, not a new seat) or a seat is free.
+ */
+export async function deviceSlotRefusal(
+  deps: Pick<EnrollmentDeps, "syncDeviceRepo" | "licenseRepo">,
+  tenantId: string,
+  device: { id?: string | null; fingerprint: string },
+): Promise<Failure | null> {
+  if (device.id) {
+    const existing = await deps.syncDeviceRepo.findById(tenantId as never, device.id as never);
+    if (existing) return null;
+  }
+  const all = await deps.syncDeviceRepo.listForTenant(tenantId as never, 500);
+  const live = all.filter((d) => !d.revokedAt);
+  if (live.some((d) => d.deviceFingerprint === device.fingerprint)) return null;
+  const lic = await deps.licenseRepo.findActiveForTenant(tenantId as never);
+  if (!lic) return fail(403, "NO_LICENSE", "لا يوجد ترخيص نشط في المركز");
+  const limit = resolveDeviceLimit({ limits: lic.limits, maxDevices: lic.maxDevices });
+  return live.length >= limit
+    ? fail(403, "DEVICE_LIMIT", `تم الوصول إلى الحد الأقصى للأجهزة في الترخيص (${limit})`)
+    : null;
 }
 
 /** Authenticated: a device paired with an account converts that pairing into a device credential. */

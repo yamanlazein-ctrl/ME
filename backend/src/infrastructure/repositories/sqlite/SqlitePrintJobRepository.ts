@@ -1,4 +1,4 @@
-// PORTED-FROM: src/infrastructure/repositories/PostgresPrintJobRepository.ts sha256=445023fa9b22fe94ddf49bae3b7dcf72963a1ee4690d776e7caf25f8bde84b05
+// PORTED-FROM: src/infrastructure/repositories/PostgresPrintJobRepository.ts sha256=830ace7c6c4f12773809fde8bda8aa0090b704257dcfb08845d67398c5c19964
 // SQLite twin (specs/001-desktop-sqlite-engine S4). Keep behavior identical to the PG source.
 import { desc } from "./helpers/pgOrder.js";
 import { eq, and, sql } from "drizzle-orm";
@@ -529,7 +529,12 @@ export class SqlitePrintJobRepository implements IPrintJobRepository {
         const printCostTotal = round2dp(receivedKgNum * costPerKg);
         if (printCostTotal > 0) {
           // OI-7: printing cost paid now moves cash out — reject on a closed day.
-          await assertDayUnlocked(tx, ctx.tenantId, effectiveDate2);
+          await assertDayUnlocked(
+            tx,
+            ctx.tenantId,
+            effectiveDate2,
+            input.currency ?? job.currency ?? "SYP",
+          );
           await tx.insert(ledgerEntries).values([
             {
               tenantId: ctx.tenantId,

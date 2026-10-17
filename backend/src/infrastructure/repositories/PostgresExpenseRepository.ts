@@ -16,7 +16,7 @@ import type {
 import { expenses } from "../orm/schemas/expense.table.js";
 import { ledgerEntries } from "../orm/schemas/ledger-entry.table.js";
 import { assertDayUnlocked } from "./dayLockHelper.js";
-import { assertSufficientCashboxBalance } from "./cashboxBalanceHelper.js";
+import { serializeCashboxWrites } from "./cashboxBalanceHelper.js";
 import {
   Expense,
   type ExpenseData,
@@ -106,7 +106,7 @@ export class PostgresExpenseRepository implements IExpenseRepository {
     ctx: TenantContext,
   ): Promise<ExpenseData> {
     return this.db.transaction(async (tx) => {
-      await assertDayUnlocked(tx, ctx.tenantId, input.date);
+      await assertDayUnlocked(tx, ctx.tenantId, input.date, input.currency ?? "SYP");
       // P4: mint the number INSIDE this transaction from the device's reserved
       // block (fail-loud when unprovisioned) so two offline devices can never
       // mint the same number and a guard failure below never burns one. A
@@ -132,7 +132,7 @@ export class PostgresExpenseRepository implements IExpenseRepository {
       // balance and both pass. Reuse the same guard vouchers/manual
       // movements use — race-safe and always per-currency.
       if (isCash) {
-        await assertSufficientCashboxBalance(tx, ctx, currency, input.date, input.amount);
+        await serializeCashboxWrites(tx, ctx, currency, input.date, input.amount);
       }
       const [row] = await tx
         .insert(expenses)
@@ -224,7 +224,7 @@ export class PostgresExpenseRepository implements IExpenseRepository {
         );
       }
       // H-07: mirrors create() — a cancel reverses the expense (and its cash) on the expense's own date.
-      await assertDayUnlocked(tx, ctx.tenantId, currentRow.date);
+      await assertDayUnlocked(tx, ctx.tenantId, currentRow.date, currentRow.currency ?? "SYP");
 
       const [row] = await tx
         .update(expenses)

@@ -154,6 +154,7 @@ export function getSyncRestoreStateStore(): Promise<ISyncRestoreStateStore> {
     }
     const none: ISyncRestoreStateStore = {
       get: async () => null,
+      setProposed: async () => {},
       setRegistered: async () => {},
       addProgress: async () => {},
       setError: async () => {},

@@ -1,3 +1,4 @@
+import { DecimalInput } from "@/components/common/DecimalInput";
 import { useEffect, useMemo, useState } from "react";
 import {
   Dialog,
@@ -311,12 +312,12 @@ export function SettlementDialog({
               <Label className="mb-1 block text-[11px] font-semibold text-muted-foreground">
                 سعر صرف الدفعة (وقت الدفع) {needsRate ? "(مطلوب)" : "(اختياري)"}
               </Label>
-              <Input
-                type="number"
+              <DecimalInput
                 min={0}
                 step="0.01"
                 className="h-10 tabular-nums"
                 placeholder="وحدات العملة لكل 1 USD"
+                maxDecimals={4}
                 value={exchangeRate}
                 onChange={(e) =>
                   setExchangeRate(e.target.value === "" ? "" : Number(e.target.value))
@@ -379,8 +380,7 @@ export function SettlementDialog({
               دفعة جزئية
             </Button>
             {mode === "partial" && (
-              <Input
-                type="number"
+              <DecimalInput
                 min={0}
                 step="0.01"
                 className="h-9 w-40 tabular-nums"
@@ -389,8 +389,7 @@ export function SettlementDialog({
                 onChange={(e) => setAmountPaid(e.target.value === "" ? "" : Number(e.target.value))}
               />
             )}
-            <Input
-              type="number"
+            <DecimalInput
               min={0}
               step="0.01"
               className="h-9 w-40 tabular-nums"

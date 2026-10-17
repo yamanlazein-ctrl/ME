@@ -178,6 +178,34 @@ export function enterSafeMode(reason: string, comparison?: ReturnType<typeof eva
   logger.fatal({ reason, comparison, bootId: process.env.MOTARD_BOOT_ID }, "DATA_SAFE_MODE");
 }
 
+/**
+ * After a verified restore: the restored database's counts become the baseline the next start
+ * compares against (DESK-027). Desktop only, like the manifest itself.
+ */
+export async function rebaselineAfterRestore(
+  db: Queryable,
+  tenantId: string,
+  engine: "postgres" | "sqlite" = "postgres",
+): Promise<void> {
+  if (!config.DESKTOP_DEPLOY || !manifestPath()) return;
+  const previous = await readManifest();
+  const { counts, databaseSizeBytes } = await collectCounts(db, tenantId, engine);
+  await writeManifestAtomic({
+    version: 1,
+    installationId: previous?.installationId ?? process.env.MOTARD_INSTALLATION_ID ?? "",
+    tenantId,
+    schemaJournalIdx: previous?.schemaJournalIdx ?? 0,
+    lastKnownCounts: counts,
+    lastKnownDatabaseSizeBytes: databaseSizeBytes,
+    lastVerifiedAt: new Date().toISOString(),
+    lastSuccessfulBackupAt: previous?.lastSuccessfulBackupAt ?? null,
+    lastBootDecision: "RESTORE",
+    resetAuthorized: false,
+    restoreInProgress: null,
+  });
+  acceptBaseline();
+}
+
 export function acceptBaseline(): void {
   safeModeActive = false;
   safeModeReason = null;

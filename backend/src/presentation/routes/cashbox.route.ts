@@ -221,7 +221,12 @@ export function registerCashboxRoutes(
   );
 
   router.get("/cashbox/locked/:date", auth, readGuard, async (req: Request, res: Response) => {
-    const r = await uc.isDayLockedUseCase(cashboxRepo, req.params.date as string, ctx(req));
+    const r = await uc.isDayLockedUseCase(
+      cashboxRepo,
+      req.params.date as string,
+      (req.query.currency as string) ?? "SYP",
+      ctx(req),
+    );
     if (r.ok) {
       res.json(r.data);
     } else {

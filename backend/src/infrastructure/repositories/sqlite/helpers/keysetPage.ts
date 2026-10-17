@@ -1,4 +1,4 @@
-// PORTED-FROM: src/infrastructure/repositories/keysetPage.ts sha256=7ae806ac78e1530c95dc63da40ecff4b34f3e705194e25cddc772088b666091c
+// PORTED-FROM: src/infrastructure/repositories/keysetPage.ts sha256=f6434e6380ea600dee34a4511c78f7ce021e2723976f2c969d33cdfd63945703
 // SQLite twin (specs/001-desktop-sqlite-engine S4). Keep behavior identical to the PG source.
 import { desc } from "./pgOrder.js";
 import { sql, type AnyColumn, type SQL } from "drizzle-orm";

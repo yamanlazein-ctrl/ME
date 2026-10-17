@@ -21,7 +21,7 @@ export interface ICashboxRepository {
   ): Promise<ManualMovementData>;
   deleteManualMovement(id: UUID, ctx: TenantContext): Promise<void>;
   listManualMovements(ctx: TenantContext): Promise<ManualMovementData[]>;
-  isDayLocked(date: string, ctx: TenantContext): Promise<boolean>;
+  isDayLocked(date: string, currency: string, ctx: TenantContext): Promise<boolean>;
   closeDay(input: CloseDayRequestInput, ctx: TenantContext): Promise<DayCloseData>;
   getLastClosing(ctx: TenantContext): Promise<DayCloseData | null>;
   getClosings(ctx: TenantContext): Promise<DayCloseData[]>;

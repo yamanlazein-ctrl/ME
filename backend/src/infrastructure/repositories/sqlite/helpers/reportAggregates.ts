@@ -1,4 +1,4 @@
-// PORTED-FROM: src/infrastructure/repositories/reportAggregates.ts sha256=b0bce2ba7a2076098a3d2bf7a16ca3edb29093784bf7abaa51b1b22f2bd49c3b
+// PORTED-FROM: src/infrastructure/repositories/reportAggregates.ts sha256=f3d3f5db26c1c9f5c7661b1418b2fc970a41037d34e727146ecc891d724edb05
 // SQLite twin (specs/001-desktop-sqlite-engine S4). Keep behavior identical to the PG source.
 /**
  * Server-side report aggregates (100k-invoice scale).

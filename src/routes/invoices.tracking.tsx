@@ -104,7 +104,12 @@ function InvoicesTrackingPage() {
   const [partyId, setPartyId] = useState<string>("all");
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
-  const [preview, setPreview] = useState<Invoice | null>(null);
+  const [previewId, setPreviewId] = useState<string | null>(null);
+  const {
+    data: preview,
+    isFetching: previewFetching,
+    error: previewError,
+  } = useInvoice(previewId ?? "", { staleTime: 0 });
   const [historyInv, setHistoryInv] = useState<Invoice | null>(null);
   const [page, setPage] = useState(0);
   const [pageSize, setPageSize] = useState(20);
@@ -326,11 +331,7 @@ function InvoicesTrackingPage() {
                         </td>
                         <td className="px-3 py-2 text-left">
                           <div className="inline-flex flex-nowrap items-center justify-end gap-1 whitespace-nowrap">
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              onClick={() => void withInvoice(inv.id, setPreview)}
-                            >
+                            <Button size="sm" variant="ghost" onClick={() => setPreviewId(inv.id)}>
                               <Eye className="ml-1 h-4 w-4" /> عرض
                             </Button>
                             <Button
@@ -338,7 +339,7 @@ function InvoicesTrackingPage() {
                               variant="outline"
                               onClick={() =>
                                 void withInvoice(inv.id, (full) => {
-                                  setPreview(full);
+                                  setPreviewId(full.id);
                                   printInvoiceWithArchive(full);
                                 })
                               }
@@ -406,7 +407,7 @@ function InvoicesTrackingPage() {
       </div>
 
       {/* Preview dialog — printable with the same visual identity */}
-      <Dialog open={preview !== null} onOpenChange={(o) => !o && setPreview(null)}>
+      <Dialog open={previewId !== null} onOpenChange={(o) => !o && setPreviewId(null)}>
         <DialogContent
           dir="rtl"
           className="!max-w-3xl w-[calc(100vw-2rem)] overflow-y-auto max-h-[90vh]"
@@ -421,13 +422,25 @@ function InvoicesTrackingPage() {
             </DialogDescription>
           </DialogHeader>
           <div className="rounded-lg border border-border p-3">
-            {preview && <InvoicePrintView invoice={preview} />}
+            {previewFetching ? (
+              <p role="status">جاري تحميل الفاتورة…</p>
+            ) : previewError ? (
+              <p role="alert">تعذّر تحميل الفاتورة. أعد فتح المعاينة للمحاولة مجدداً.</p>
+            ) : preview ? (
+              <InvoicePrintView invoice={preview} />
+            ) : (
+              <p>الفاتورة غير متاحة.</p>
+            )}
           </div>
           <div className="flex items-center justify-end gap-2">
-            <Button variant="outline" onClick={() => setPreview(null)}>
+            <Button variant="outline" onClick={() => setPreviewId(null)}>
               إغلاق
             </Button>
-            <Button className="gap-2" onClick={() => preview && printInvoiceWithArchive(preview)}>
+            <Button
+              className="gap-2"
+              disabled={!preview || previewFetching || !!previewError}
+              onClick={() => preview && printInvoiceWithArchive(preview)}
+            >
               <Printer className="h-4 w-4" /> طباعة
             </Button>
           </div>

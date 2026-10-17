@@ -22,8 +22,8 @@ export class CashboxStateUseCase {
     return this.cashbox.cashBalanceOn(today, ctx, currency);
   }
 
-  isDayLocked(date: string, ctx: TenantContext) {
-    return this.cashbox.isDayLocked(date, ctx);
+  isDayLocked(date: string, currency: string, ctx: TenantContext) {
+    return this.cashbox.isDayLocked(date, currency, ctx);
   }
 
   listClosings(ctx: TenantContext) {

@@ -230,6 +230,7 @@ export function SaleLineCard({
             </CardField>
             <CardField label="الأثواب">
               <FormattedAmountInput
+                maxDecimals={0}
                 value={line.pieces === 0 ? 0 : line.pieces || ""}
                 showZero
                 onChange={(v) => onUpdate({ pieces: v === "" ? 1 : Math.max(0, Math.trunc(v)) })}

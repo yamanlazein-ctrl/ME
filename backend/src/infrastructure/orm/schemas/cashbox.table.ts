@@ -93,7 +93,7 @@ export const dayCloses = pgTable(
     closedBy: uuid("closed_by"),
   },
   (table) => ({
-    tenantDateIdx: uniqueIndex("idx_day_closes_tenant_date").on(table.tenantId, table.date),
+    tenantDateCurrencyIdx: uniqueIndex("idx_day_closes_tenant_date_currency").on(table.tenantId, table.date, table.currency),
   }),
 ).enableRLS();
 

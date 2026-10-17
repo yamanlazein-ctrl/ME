@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { QueryClient } from "@tanstack/react-query";
+import { QueryClient, QueryObserver } from "@tanstack/react-query";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { invalidateFinancialViews } from "./invalidateFinancialViews";
@@ -26,6 +26,7 @@ describe("invalidateFinancialViews (DFP-016/017)", () => {
       "party",
       "parties",
       "invoices",
+      "documents",
     ]);
     expect(refreshParties).toHaveBeenCalled();
     expect(refetchQueries).not.toHaveBeenCalled();
@@ -68,6 +69,53 @@ describe("invalidateFinancialViews (DFP-016/017)", () => {
       "invoices",
     ] as const) {
       expect(qc.getQueryState([key])?.isInvalidated, key).toBe(true);
+    }
+  });
+
+  it("invalidates every filtered tracking total and the invoice used by an open preview", () => {
+    const qc = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity } } });
+    const keys = [
+      ["documents", "track", { type: "entry", page: 0 }],
+      ["documents", "track", { type: "sale", page: 2 }],
+      ["invoices", "detail", "edited-invoice"],
+      ["statement", "customer"],
+    ];
+    for (const key of keys) qc.setQueryData(key, { total: 1000 });
+    qc.setQueryData(["documents", "unrelated"], { keep: true });
+    invalidateFinancialViews(qc);
+    for (const key of keys) expect(qc.getQueryState(key)?.isInvalidated).toBe(true);
+    expect(qc.getQueryState(["documents", "unrelated"])?.isInvalidated).toBe(false);
+    qc.clear();
+  });
+
+  it("refetches active tracking totals and replaces the open preview's invoice after a weight edit", async () => {
+    const qc = new QueryClient({
+      defaultOptions: { queries: { staleTime: Infinity, retry: false } },
+    });
+    let quantity = 100;
+    const detailKey = ["invoices", "detail", "edited-invoice"];
+    const trackKey = ["documents", "track", { type: "entry", page: 0 }];
+    const fetchDetail = async () => ({ id: "edited-invoice", quantity, total: quantity * 10 });
+    const fetchTrack = async () => ({ data: [{ id: "edited-invoice", total: quantity * 10 }] });
+    qc.setQueryData(detailKey, await fetchDetail());
+    qc.setQueryData(trackKey, await fetchTrack());
+    const detail = new QueryObserver(qc, { queryKey: detailKey, queryFn: fetchDetail });
+    const tracking = new QueryObserver(qc, { queryKey: trackKey, queryFn: fetchTrack });
+    const stopDetail = detail.subscribe(() => {});
+    const stopTracking = tracking.subscribe(() => {});
+    try {
+      expect(detail.getCurrentResult().data?.total).toBe(1000);
+      expect(tracking.getCurrentResult().data?.data[0].total).toBe(1000);
+      quantity = 40;
+      invalidateFinancialViews(qc);
+      await vi.waitFor(() => {
+        expect(detail.getCurrentResult().data).toMatchObject({ quantity: 40, total: 400 });
+        expect(tracking.getCurrentResult().data?.data[0].total).toBe(400);
+      });
+    } finally {
+      stopDetail();
+      stopTracking();
+      qc.clear();
     }
   });
 

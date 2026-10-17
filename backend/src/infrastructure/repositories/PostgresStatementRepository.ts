@@ -35,6 +35,8 @@ import { localToday } from "../utils/localDate.js";
 import { assertYearOpen } from "./dayLockHelper.js";
 const INVOICE_TYPES = ["sales_invoice", "purchase_invoice"];
 const VOUCHER_REF_TYPES = ["receipt_in", "payment_out"];
+// Re-entering an opening must not put its baseline after same-date vouchers.
+const openingRank = sql`CASE WHEN ${ledgerEntries.type} = 'opening' THEN 0 ELSE 1 END`;
 /** Tie-break inside one (date, created_at): documents (0) before the payments booked with them (1). */
 const docRank = sql`CASE WHEN ${ledgerEntries.type} IN (${sql.join(
   STATEMENT_DOCUMENT_TYPES.map((t) => sql`${t}`),
@@ -163,12 +165,14 @@ export class PostgresStatementRepository implements IStatementRepository {
     // The cursor row's rank, read from the row itself: the cursor format (date|createdAt|id) — and any
     // cursor a client still holds — stays valid.
     let cursorRank = 1;
+    let cursorOpeningRank = 1;
     if (cursor) {
       const [row] = await this.db
         .select({ type: ledgerEntries.type })
         .from(ledgerEntries)
         .where(eq(ledgerEntries.id, cursor.id))
         .limit(1);
+      cursorOpeningRank = row?.type === "opening" ? 0 : 1;
       cursorRank =
         row && (STATEMENT_DOCUMENT_TYPES as readonly string[]).includes(row.type) ? 0 : 1;
     }
@@ -178,9 +182,12 @@ export class PostgresStatementRepository implements IStatementRepository {
       pageConditions.push(
         sql`(
           ${ledgerEntries.date} > ${cursor.date}
-          OR (${ledgerEntries.date} = ${cursor.date} AND ${ledgerEntries.createdAt} > ${cursor.createdAt}::timestamptz)
-          OR (${ledgerEntries.date} = ${cursor.date} AND ${ledgerEntries.createdAt} = ${cursor.createdAt}::timestamptz AND ${docRank} > ${cursorRank})
-          OR (${ledgerEntries.date} = ${cursor.date} AND ${ledgerEntries.createdAt} = ${cursor.createdAt}::timestamptz AND ${docRank} = ${cursorRank} AND ${ledgerEntries.id} > ${cursor.id}::uuid)
+          OR (${ledgerEntries.date} = ${cursor.date} AND ${openingRank} > ${cursorOpeningRank})
+          OR (${ledgerEntries.date} = ${cursor.date} AND ${openingRank} = ${cursorOpeningRank} AND (
+            ${ledgerEntries.createdAt} > ${cursor.createdAt}::timestamptz
+            OR (${ledgerEntries.createdAt} = ${cursor.createdAt}::timestamptz AND ${docRank} > ${cursorRank})
+            OR (${ledgerEntries.createdAt} = ${cursor.createdAt}::timestamptz AND ${docRank} = ${cursorRank} AND ${ledgerEntries.id} > ${cursor.id}::uuid)
+          ))
         )`,
       );
     }
@@ -243,6 +250,7 @@ export class PostgresStatementRepository implements IStatementRepository {
         .where(and(...winConditions))
         .orderBy(
           asc(ledgerEntries.date),
+          asc(openingRank),
           asc(ledgerEntries.createdAt),
           asc(docRank),
           asc(ledgerEntries.id),
@@ -270,9 +278,12 @@ export class PostgresStatementRepository implements IStatementRepository {
         ...winConditions,
         sql`(
           ${ledgerEntries.date} < ${cursor.date}
-          OR (${ledgerEntries.date} = ${cursor.date} AND ${ledgerEntries.createdAt} < ${cursor.createdAt}::timestamptz)
-          OR (${ledgerEntries.date} = ${cursor.date} AND ${ledgerEntries.createdAt} = ${cursor.createdAt}::timestamptz AND ${docRank} < ${cursorRank})
-          OR (${ledgerEntries.date} = ${cursor.date} AND ${ledgerEntries.createdAt} = ${cursor.createdAt}::timestamptz AND ${docRank} = ${cursorRank} AND ${ledgerEntries.id} <= ${cursor.id}::uuid)
+          OR (${ledgerEntries.date} = ${cursor.date} AND ${openingRank} < ${cursorOpeningRank})
+          OR (${ledgerEntries.date} = ${cursor.date} AND ${openingRank} = ${cursorOpeningRank} AND (
+            ${ledgerEntries.createdAt} < ${cursor.createdAt}::timestamptz
+            OR (${ledgerEntries.createdAt} = ${cursor.createdAt}::timestamptz AND ${docRank} < ${cursorRank})
+            OR (${ledgerEntries.createdAt} = ${cursor.createdAt}::timestamptz AND ${docRank} = ${cursorRank} AND ${ledgerEntries.id} <= ${cursor.id}::uuid)
+          ))
         )`,
       ];
       const beforeRows = await this.db
@@ -307,6 +318,7 @@ export class PostgresStatementRepository implements IStatementRepository {
       .where(and(...pageConditions))
       .orderBy(
         asc(ledgerEntries.date),
+        asc(openingRank),
         asc(ledgerEntries.createdAt),
         asc(docRank),
         asc(ledgerEntries.id),

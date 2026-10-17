@@ -80,10 +80,21 @@ export type GoogleShellStatus = {
   scopes: string;
 };
 
-export async function googleConfigure(clientId: string): Promise<GoogleShellStatus> {
+/**
+ * The company's own Google OAuth client ("Desktop app" type). Google issues a client secret for that
+ * type, which its token endpoint expects; it is optional here for clients that have none. Both are
+ * sealed by the shell (DPAPI) and never come back to the page.
+ */
+export async function googleConfigure(
+  clientId: string,
+  clientSecret?: string,
+): Promise<GoogleShellStatus> {
   if (!isTauri()) throw new Error("متاح في تطبيق سطح المكتب فقط");
   const invoke = await getInvoke();
-  return (await invoke("google_configure_cmd", { clientId })) as GoogleShellStatus;
+  return (await invoke("google_configure_cmd", {
+    clientId,
+    clientSecret: clientSecret?.trim() ? clientSecret.trim() : null,
+  })) as GoogleShellStatus;
 }
 
 export async function googleShellStatus(): Promise<GoogleShellStatus> {

@@ -1,3 +1,4 @@
+import { DecimalInput } from "@/components/common/DecimalInput";
 import { useEffect, useId, useState } from "react";
 import {
   Dialog,
@@ -34,7 +35,8 @@ import type { PartyStatus, PaymentMethod, PaymentTerms } from "@/domain/entities
 import {
   emptyDraft,
   fromParty,
-  openingAmountOf,
+  openingAmountError,
+  applyDraftChange,
   toPatch,
   type Draft,
   type OpeningCurrency,
@@ -98,7 +100,16 @@ export function PartyFormDialog({
     }
   }, [open, editing, kind]);
 
-  const patch = <K extends keyof Draft>(k: K, v: Draft[K]) => setDraft((d) => ({ ...d, [k]: v }));
+  // An edited party already has its opening currency; a new one follows the default currency
+  // until the user picks the opening currency explicitly.
+  const [openingCcyChosen, setOpeningCcyChosen] = useState(false);
+  useEffect(() => {
+    if (open) setOpeningCcyChosen(Boolean(editing));
+  }, [open, editing]);
+  const patch = <K extends keyof Draft>(k: K, v: Draft[K]) => {
+    if (k === "openingCurrency") setOpeningCcyChosen(true);
+    setDraft((d) => applyDraftChange(d, k, v, openingCcyChosen || k === "openingCurrency"));
+  };
 
   const submit = (confirmed = false) => {
     if (!draft.name.trim()) {
@@ -118,9 +129,9 @@ export function PartyFormDialog({
       setTab("financial");
       return;
     }
-    const amount = openingAmountOf(draft);
-    if (!Number.isFinite(amount) || amount < 0 || Math.round(amount * 100) !== amount * 100) {
-      setErr("مبلغ الرصيد السابق يجب أن يكون رقماً موجباً بخانتين عشريتين على الأكثر.");
+    const openingErr = openingAmountError(draft);
+    if (openingErr) {
+      setErr(openingErr);
       setTab("financial");
       return;
     }
@@ -326,8 +337,7 @@ export function PartyFormDialog({
               <div className="grid gap-3 rounded-lg border border-border p-3 md:col-span-2 md:grid-cols-3">
                 <div className="text-xs font-bold md:col-span-3">الرصيد السابق</div>
                 <Field label="المبلغ">
-                  <Input
-                    type="number"
+                  <DecimalInput
                     min={0}
                     step="0.01"
                     className="h-10 tabular-nums"
@@ -381,8 +391,7 @@ export function PartyFormDialog({
                 </Field>
               </div>
               <Field label="حد الائتمان">
-                <Input
-                  type="number"
+                <DecimalInput
                   className="h-10 tabular-nums"
                   value={draft.creditLimit}
                   onChange={(e) => patch("creditLimit", e.target.value)}
@@ -436,16 +445,14 @@ export function PartyFormDialog({
                 </Select>
               </Field>
               <Field label="خصم افتراضي (مبلغ)">
-                <Input
-                  type="number"
+                <DecimalInput
                   className="h-10 tabular-nums"
                   value={draft.defaultDiscount}
                   onChange={(e) => patch("defaultDiscount", e.target.value)}
                 />
               </Field>
               <Field label="ضريبة القيمة المضافة (%)">
-                <Input
-                  type="number"
+                <DecimalInput
                   min={0}
                   max={100}
                   step="0.01"

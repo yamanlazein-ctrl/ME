@@ -71,7 +71,7 @@ export function useInvoicesList(
 }
 
 /** Fetch a single invoice by ID. */
-export function useInvoice(id: string) {
+export function useInvoice(id: string, options?: { staleTime?: number }) {
   return useQuery({
     queryKey: KEYS.detail(id),
     queryFn: ({ signal }) => {
@@ -79,7 +79,7 @@ export function useInvoice(id: string) {
       return container.invoices.repository.findById(id, ctx);
     },
     enabled: !!id,
-    staleTime: 30_000,
+    staleTime: options?.staleTime ?? 30_000,
   });
 }
 

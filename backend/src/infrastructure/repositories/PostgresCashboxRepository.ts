@@ -4,7 +4,7 @@ import type { ICashboxRepository } from "../../application/ports/ICashboxReposit
 import { cashboxSessions, manualMovements, dayCloses } from "../orm/schemas/cashbox.table.js";
 import { ledgerEntries } from "../orm/schemas/ledger-entry.table.js";
 import { assertDayUnlocked, lockDay } from "./dayLockHelper.js";
-import { assertSufficientCashboxBalance } from "./cashboxBalanceHelper.js";
+import { serializeCashboxWrites } from "./cashboxBalanceHelper.js";
 import type {
   CashboxState,
   DayCloseData,
@@ -104,11 +104,11 @@ export class PostgresCashboxRepository implements ICashboxRepository {
     ctx: TenantContext,
   ): Promise<ManualMovementData> {
     return this.db.transaction(async (tx) => {
-      await assertDayUnlocked(tx, ctx.tenantId, input.date);
       const currency = input.currency ?? "SYP";
+      await assertDayUnlocked(tx, ctx.tenantId, input.date, currency);
       if (input.direction === "out") {
         // Negative cash is allowed with a UI warning (REPAIR-021).
-        await assertSufficientCashboxBalance(tx, ctx, currency, input.date, input.amount);
+        await serializeCashboxWrites(tx, ctx, currency, input.date, input.amount);
       }
       const [row] = await tx
         .insert(manualMovements)
@@ -171,11 +171,11 @@ export class PostgresCashboxRepository implements ICashboxRepository {
     return this.db.transaction(async (tx) => {
       // H-07: deleting a movement changes its day's cash — refused once that day (or year) is closed.
       const [movement] = await tx
-        .select({ date: manualMovements.date })
+        .select({ date: manualMovements.date, currency: manualMovements.currency })
         .from(manualMovements)
         .where(and(eq(manualMovements.id, id), eq(manualMovements.tenantId, ctx.tenantId)))
         .limit(1);
-      if (movement) await assertDayUnlocked(tx, ctx.tenantId, movement.date);
+      if (movement) await assertDayUnlocked(tx, ctx.tenantId, movement.date, movement.currency);
       // Reverse the accounting trace: cancel the linked ledger row (append-only
       // trigger allows only status → 'cancelled').
       await tx
@@ -208,11 +208,17 @@ export class PostgresCashboxRepository implements ICashboxRepository {
     return rows.map((r) => this.toMovementDomain(r));
   }
 
-  async isDayLocked(date: string, ctx: TenantContext): Promise<boolean> {
+  async isDayLocked(date: string, currency: string, ctx: TenantContext): Promise<boolean> {
     const [row] = await this.db
       .select()
       .from(dayCloses)
-      .where(and(eq(dayCloses.tenantId, ctx.tenantId), eq(dayCloses.date, date)))
+      .where(
+        and(
+          eq(dayCloses.tenantId, ctx.tenantId),
+          eq(dayCloses.date, date),
+          eq(dayCloses.currency, currency),
+        ),
+      )
       .limit(1);
     return !!row;
   }
@@ -220,11 +226,11 @@ export class PostgresCashboxRepository implements ICashboxRepository {
   async closeDay(input: CloseDayRequestInput, ctx: TenantContext): Promise<DayCloseData> {
     return this.db.transaction(async (tx) => {
       // H-08: wait for in-flight writers of this day; later ones re-read the close and are refused.
-      await lockDay(tx, ctx.tenantId, input.date);
+      const currency = input.currency ?? "SYP";
+      await lockDay(tx, ctx.tenantId, input.date, currency);
       // Derive opening/in/out from the ledger, never from the client. A cashier
       // 500,000 short could previously post an inflated totalOut and store a
       // difference of 0 — a permanent, attacker-chosen control record.
-      const currency = input.currency ?? "SYP";
       // Each currency has its own session row (idx_cashbox_sessions_tenant_currency)
       // — look up THIS currency's opening directly instead of the old
       // "tenant's one session" lookup, which only ever returned the correct

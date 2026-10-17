@@ -16,6 +16,8 @@ pub struct Paths {
     pub keys_dir: PathBuf,
     pub secrets: PathBuf,
     pub secrets_bak: PathBuf,
+    /// The Google Drive link (OAuth client + refresh token), DPAPI-sealed (google.rs).
+    pub google: PathBuf,
     pub backups: PathBuf,
     pub pre_update: PathBuf,
     pub logs: PathBuf,
@@ -26,6 +28,10 @@ pub struct Paths {
     pub logos: PathBuf,
     pub set_aside: PathBuf,
     pub install_json: PathBuf,
+    /// The backend's device identity file (`DesktopInstallationIdStorage`); it outlives a company.
+    pub install_id: PathBuf,
+    /// Durable record of a restore in progress (`state::RestoreJournal`).
+    pub restore_journal: PathBuf,
     pub lock_file: PathBuf,
     pub reset_request: PathBuf,
 }
@@ -64,6 +70,7 @@ impl Paths {
             data_dir,
             secrets: keys_dir.join("secrets.dat"),
             secrets_bak: keys_dir.join("secrets.dat.bak"),
+            google: keys_dir.join("google.dat"),
             keys_dir,
             pre_update: backups.join("pre-update"),
             backups,
@@ -75,6 +82,8 @@ impl Paths {
             logos: r.join("logos"),
             set_aside: r.join("set-aside"),
             install_json: r.join("install.json"),
+            install_id: r.join("install-id"),
+            restore_journal: r.join("restore-pending.json"),
             lock_file: r.join("motard.lock"),
             reset_request: r.join("reset-requested.json"),
             root: r,

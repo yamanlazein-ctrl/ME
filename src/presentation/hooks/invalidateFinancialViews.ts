@@ -24,6 +24,8 @@ export function invalidateFinancialViews(
   void refreshParties();
   // Order fulfill / invoice-adjacent mutations.
   qc.invalidateQueries({ queryKey: ["invoices"] });
+  // Tracking has its own server-projected totals, outside the invoices query family.
+  qc.invalidateQueries({ queryKey: ["documents", "track"] });
   if (options.refetchDashboard) {
     qc.refetchQueries({ queryKey: ["dashboard"] });
   }

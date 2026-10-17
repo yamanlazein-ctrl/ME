@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-boot-action"
+description = "Enables the boot_action command without any pre-configured scope."
+commands.allow = ["boot_action"]
+
+[[permission]]
+identifier = "deny-boot-action"
+description = "Denies the boot_action command without any pre-configured scope."
+commands.deny = ["boot_action"]

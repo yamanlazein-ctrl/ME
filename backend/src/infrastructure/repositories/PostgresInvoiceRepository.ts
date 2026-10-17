@@ -26,7 +26,7 @@ import { vouchers } from "../orm/schemas/voucher.table.js";
 import { recordStockMovement } from "./stockMovementHelper.js";
 import { notifyOrderAvailability } from "./orderAvailabilityNotifier.js";
 import { assertDayUnlocked } from "./dayLockHelper.js";
-import { assertSufficientCashboxBalance } from "./cashboxBalanceHelper.js";
+import { serializeCashboxWrites } from "./cashboxBalanceHelper.js";
 import { assertYearOpen } from "./dayLockHelper.js";
 import { assertCreditNotOverdrawn, customerCreditPosition } from "./customerCredit.js";
 import { returns } from "../orm/schemas/return.table.js";
@@ -633,7 +633,7 @@ export class PostgresInvoiceRepository implements IInvoiceRepository {
       // leg (cashImpact in/out) and moves the cashbox — reject it on a closed
       // day, using the same atomic guard as vouchers/expenses/manual movements.
       if (paid > 0 && (input.paymentMethod ?? "cash") === "cash") {
-        await assertDayUnlocked(tx, ctx.tenantId, input.date);
+        await assertDayUnlocked(tx, ctx.tenantId, input.date, input.currency ?? "SYP");
       }
       let linkedVoucherId: string | null = null;
       if (isSale && paid > 0) {
@@ -723,7 +723,7 @@ export class PostgresInvoiceRepository implements IInvoiceRepository {
         // exactly like a payment voucher — it must be guarded the same way
         // (comment above claimed this already happened; it never did).
         if (method === "cash") {
-          await assertSufficientCashboxBalance(tx, ctx, input.currency ?? "SYP", input.date, paid);
+          await serializeCashboxWrites(tx, ctx, input.currency ?? "SYP", input.date, paid);
         }
         const paymentNumber = `PAY-${autoNumber}`;
         linkedVoucherId = input.linkedVoucherId ?? randomUUID();

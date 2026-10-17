@@ -1,7 +1,27 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "main-window",
-  "description": "The single application window: app commands only (no filesystem, shell or HTTP plugins are exposed).",
+  "description": "The single application window: core defaults plus exactly the shell's own commands (build.rs APP_COMMANDS). No filesystem, shell or HTTP plugins are exposed.",
   "windows": ["main"],
-  "permissions": ["core:default"]
+  "permissions": [
+    "core:default",
+    "allow-api",
+    "allow-get-app-version",
+    "allow-boot-status",
+    "allow-boot-action",
+    "allow-get-data-root",
+    "allow-get-fingerprint",
+    "allow-ensure-document-folders",
+    "allow-archive-document-pdf",
+    "allow-request-factory-reset",
+    "allow-apply-factory-reset-now",
+    "allow-save-backup-file",
+    "allow-pick-backup-file",
+    "allow-google-status-cmd",
+    "allow-google-configure-cmd",
+    "allow-google-connect-start-cmd",
+    "allow-google-connect-finish-cmd",
+    "allow-google-disconnect-cmd",
+    "allow-save-csv-file"
+  ]
 }

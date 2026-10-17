@@ -5,11 +5,12 @@ import { createPartyData as sharedCreatePartyData } from "@erp/shared";
  * Server-computed per-party summary for list views (قائمة العملاء/الموردين).
  *
  * `remaining` is the AUTHORITATIVE outstanding balance and is computed from the
- * ledger (SUM debit − SUM credit, same sign convention as the account statement
- * `getBalance`), NOT from invoices+vouchers alone — so settlements, returns and
+ * ledger (debit − credit for customers, credit − debit for suppliers), NOT
+ * from invoices+vouchers alone — so settlements, returns and
  * opening balances are reflected identically to the statement. The other
  * figures (`invoicesCount`, `totalAmount`, `totalPaid`, `lastDate`) are computed
- * directly from invoices + vouchers, scoped to the party's own currency.
+ * directly from invoices. Money scalars use the party's default currency;
+ * `byCurrency[currency].remaining` is the authoritative balance in that currency.
  */
 export interface PartyListStats {
   invoicesCount: number;

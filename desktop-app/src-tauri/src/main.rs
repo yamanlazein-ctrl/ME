@@ -5,6 +5,7 @@ mod backend;
 mod boot;
 mod commands;
 mod fsutil;
+mod google;
 mod keys;
 mod logger;
 mod paths;
@@ -48,31 +49,29 @@ fn main() {
             commands::apply_factory_reset_now,
             commands::save_backup_file,
             commands::pick_backup_file,
-            commands::check_desktop_update,
-            commands::install_desktop_update,
             commands::google_status_cmd,
             commands::google_configure_cmd,
             commands::google_connect_start_cmd,
             commands::google_connect_finish_cmd,
             commands::google_disconnect_cmd,
+            commands::save_csv_file,
         ])
         .setup(move |app| {
             let resources = app.path().resource_dir().unwrap_or_else(|_| PathBuf::from("."));
-            let shared = boot::Shared::new(paths, resources);
+            let locked = lock.as_ref().err().cloned();
+            // The lock lives in `Shared` for the rest of the process (released when it ends).
+            let shared = boot::Shared::new(paths, resources, lock.ok());
             app.manage(shared.clone());
+            boot::start_drive_token_loop(shared.clone());
             WebviewWindowBuilder::new(app, "main", WebviewUrl::App("boot.html".into()))
                 .title("موتارد للأقمشة — Motard ERP")
                 .inner_size(1366.0, 820.0)
                 .min_inner_size(1024.0, 640.0)
                 .maximized(true)
                 .build()?;
-            match lock {
-                Ok(file) => {
-                    // Leaked on purpose: the OS releases the lock when the process ends.
-                    std::mem::forget(file);
-                    boot::start(app.handle().clone(), shared);
-                }
-                Err(e) => {
+            match locked {
+                None => boot::start(app.handle().clone(), shared),
+                Some(e) => {
                     let mut st = shared.status.lock().unwrap();
                     st.phase = "recovery".into();
                     st.code = Some("LOCKED".into());

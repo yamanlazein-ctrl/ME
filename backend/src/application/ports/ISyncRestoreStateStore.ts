@@ -17,6 +17,12 @@ export interface SyncRestoreState {
   previousDeviceIds: string[];
   /** The identity registered on the hub after the restore (null until `register` succeeds). */
   newDeviceId: string | null;
+  /**
+   * The identity being registered (phase `register` only). Persisted BEFORE the hub call, so a
+   * retry after the hub accepted it — the local write failed, the process died — registers the
+   * same device again (idempotent) instead of a second one (DESK-029).
+   */
+  proposedDeviceId?: string | null;
   phase: SyncRestorePhase;
   /** Units pulled since the restore. */
   pulled: number;
@@ -27,6 +33,8 @@ export interface SyncRestoreState {
 
 export interface ISyncRestoreStateStore {
   get(): Promise<SyncRestoreState | null>;
+  /** Record the identity about to be registered (phase `register`; first proposal wins). */
+  setProposed(deviceId: string): Promise<void>;
   /** register → pull, with the identity now registered on the hub (and locally). */
   setRegistered(newDeviceId: string): Promise<void>;
   addProgress(pulled: number, acknowledged: number): Promise<void>;

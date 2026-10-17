@@ -12,6 +12,14 @@ import {
 } from "@/components/ui/select";
 import { PartyFormDialog, type PartyKind, type SimpleParty } from "./PartyFormDialog";
 import { PartyDeleteDialog } from "./PartyDeleteDialog";
+import { PartyExportDialog, type PartyExportFormat } from "./PartyExportDialog";
+import {
+  buildPartyExportModel,
+  partyExportCsvRows,
+  type PartyExportModel,
+} from "./partyExportModel";
+import { PartyListPrintDocument } from "@/components/print/PartyListPrintDocument";
+import { printDocument } from "@/components/print/printPortal";
 import {
   addCustomer,
   addSupplier,
@@ -27,6 +35,7 @@ import {
 } from "@/presentation/hooks/useParties";
 import { currencySymbol } from "@/presentation/hooks/useCurrency";
 import { useInventory } from "@/presentation/hooks/useInventory";
+import { isTauri, saveCsvFile } from "@/infrastructure/tauri-bridge";
 import { DataPagination } from "@/components/common/DataPagination";
 import { BulkSelectToolbar } from "@/components/common/BulkSelectToolbar";
 import { ConfirmBulkAction } from "@/components/common/ConfirmBulkAction";
@@ -68,6 +77,32 @@ function partySummary(p: Party) {
     creditLimit: p.creditLimit ?? 0,
     creditUsed: remaining,
   };
+}
+
+/** Writes the model to a UTF-8 (BOM) CSV: one line per (party, currency), then a total per currency. */
+async function downloadPartyCsv(model: PartyExportModel, filename: string) {
+  const csv = partyExportCsvRows(model)
+    .map((r) => r.map((c) => `"${String(c).replaceAll('"', '""')}"`).join(","))
+    .join("\r\n");
+  if (isTauri()) {
+    const saved = await saveCsvFile({ content: "\ufeff" + csv, suggestedName: filename });
+    if (saved) {
+      toast.success(
+        `تم تصدير ${model.partyCount} سجل — محفوظ في: ${saved.path.split(/[\\/]/).pop() ?? saved.path}`,
+      );
+      return;
+    }
+    // User cancelled the save dialog — no toast, no error.
+    return;
+  }
+  const blob = new Blob(["\ufeff" + csv], { type: "text/csv;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+  toast.success(`تم تصدير ${model.partyCount} سجل`);
 }
 
 export function PartyListPage({
@@ -203,48 +238,30 @@ export function PartyListPage({
     else navigate({ to: "/customers/$id", params: { id } });
   };
 
-  const exportCsv = () => {
-    const rows = [
-      [
-        "الكود",
-        "الاسم",
-        "الشركة",
-        "الهاتف",
-        "المدينة",
-        "عدد الفواتير",
-        isSup ? "إجمالي المشتريات" : "إجمالي المبيعات",
-        "المدفوع",
-        "الرصيد",
-        "حد الائتمان",
-        "آخر عملية",
-        "الحالة",
-      ],
-      ...filtered.map((p) => {
-        const s = partySummary(p);
-        return [
-          p.code ?? "",
-          p.name,
-          p.companyName ?? "",
-          p.phone ?? "",
-          p.city ?? "",
-          String(s.invoicesCount),
-          String(round2dp(s.totalAmount)),
-          String(round2dp(s.totalPaid)),
-          String(round2dp(s.remaining)),
-          String(round2dp(s.creditLimit)),
-          s.lastDate ?? "",
-          (p.status ?? "active") === "active" ? "نشط" : "موقوف",
-        ];
-      }),
-    ];
-    const csv = rows.map((r) => r.map((c) => `"${c.replaceAll('"', '""')}"`).join(",")).join("\n");
-    const blob = new Blob(["\ufeff" + csv], { type: "text/csv;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `${kind}s-${localToday()}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
+  // "طباعة / تصدير الكل": the FULL list (all pages of the cache, not the 20-row view), one row per
+  // party with per-currency balances. Cancelled (soft-deleted) parties are excluded in the model.
+  const [exportOpen, setExportOpen] = useState(false);
+  const allParties = isSup ? parties.suppliers : parties.customers;
+  const exportCount = useMemo(
+    () => allParties.filter((p) => p.status !== "cancelled").length,
+    [allParties],
+  );
+
+  const handleExport = async (format: PartyExportFormat) => {
+    const model: PartyExportModel = buildPartyExportModel(allParties, kind);
+    setExportOpen(false);
+    if (format === "excel") {
+      await downloadPartyCsv(model, `${kind}s-all-${localToday()}.csv`);
+      return;
+    }
+    printDocument(
+      <PartyListPrintDocument
+        model={model}
+        title={isSup ? "قائمة الموردين" : "قائمة العملاء"}
+        dateLabel={localToday()}
+      />,
+      `parties:${kind}:${model.partyCount}`,
+    );
   };
 
   return (
@@ -311,8 +328,13 @@ export function PartyListPage({
               </SelectContent>
             </Select>
           </div>
-          <Button variant="outline" onClick={exportCsv} className="h-10 gap-2">
-            <Download className="h-4 w-4" /> تصدير
+          <Button
+            variant="outline"
+            onClick={() => setExportOpen(true)}
+            className="h-10 gap-2"
+            data-testid="party-export-all"
+          >
+            <Download className="h-4 w-4" /> طباعة / تصدير الكل
           </Button>
         </div>
 
@@ -472,8 +494,21 @@ export function PartyListPage({
                         </div>
                       ) : (
                         <>
-                          {formatMoney(s.remaining)}{" "}
-                          <span className="text-[10px] opacity-70">{cur}</span>
+                          {/* Prefer the party's opening-balance currency when per-currency stats are
+                              unavailable (e.g. a supplier with a USD opening balance but SYP default). */}
+                          {p.openingCurrency && p.openingBalance !== 0 ? (
+                            <>
+                              {formatMoney(p.openingBalance)}{" "}
+                              <span className="text-[10px] opacity-70">
+                                {currencySymbol(p.openingCurrency)}
+                              </span>
+                            </>
+                          ) : (
+                            <>
+                              {formatMoney(s.remaining)}{" "}
+                              <span className="text-[10px] opacity-70">{cur}</span>
+                            </>
+                          )}
                         </>
                       )}
                     </td>
@@ -548,6 +583,14 @@ export function PartyListPage({
             }
           })();
         }}
+      />
+
+      <PartyExportDialog
+        open={exportOpen}
+        kind={kind}
+        count={exportCount}
+        onClose={() => setExportOpen(false)}
+        onChoose={handleExport}
       />
 
       <PartyDeleteDialog

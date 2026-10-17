@@ -1,4 +1,5 @@
 import { useSyncExternalStore } from "react";
+import { normalizeDecimalText } from "@/components/common/decimalText";
 import type { Currency } from "@/domain/types";
 import { formatNumber, formatMoney, formatQuantity } from "@/shared/utils/formatNumber";
 
@@ -122,10 +123,11 @@ export function formatThousands(n: number): string {
 
 /**
  * Parse a user-typed amount that may contain thousands separators
- * (e.g. "1,250,000") into a raw number. Returns NaN for invalid input.
+ * (e.g. "1,250,000", "٣٢٬٩٠٠٫٣٢") into a raw number. Returns NaN for invalid input.
  */
 export function parseAmount(raw: string): number {
-  const cleaned = raw.replace(/,/g, "").trim();
+  // Also Arabic digits and the Arabic decimal sign (٫) — see decimalText.ts.
+  const cleaned = normalizeDecimalText(raw);
   if (cleaned === "") return 0;
   const n = Number(cleaned);
   return Number.isFinite(n) ? n : NaN;

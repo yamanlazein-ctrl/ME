@@ -69,20 +69,79 @@ pub fn stamp() -> String {
     format!("utc-{secs}")
 }
 
-/// Move every existing path in `items` into `<set_aside>\<stamp>-<label>\`. Nothing is deleted.
-pub fn move_aside(set_aside: &Path, label: &str, items: &[PathBuf]) -> std::io::Result<PathBuf> {
+/// A new, unused `<set_aside>\<stamp>-<label>\` path (not created yet).
+pub fn new_aside_dir(set_aside: &Path, label: &str) -> PathBuf {
     let mut target = set_aside.join(format!("{}-{}", stamp(), label));
     while target.exists() {
         target = set_aside.join(format!("{}-{}-{}", stamp(), label, &uuid::Uuid::new_v4().to_string()[..8]));
     }
-    fs::create_dir_all(&target)?;
-    for item in items {
-        if item.exists() {
-            let name = item.file_name().ok_or_else(|| std::io::Error::other("no file name"))?;
-            fs::rename(item, target.join(name))?;
+    target
+}
+
+/// Journal of an unfinished move: written before the first rename, removed after the last.
+const MOVING: &str = ".moving.json";
+const ROLLED_BACK: &str = ".rolled-back.json";
+
+/// Move every existing path in `items` into `<set_aside>\<stamp>-<label>\`. Nothing is deleted.
+pub fn move_aside(set_aside: &Path, label: &str, items: &[PathBuf]) -> std::io::Result<PathBuf> {
+    let target = new_aside_dir(set_aside, label);
+    move_into(&target, items)?;
+    Ok(target)
+}
+
+/// Move `items` into `target`. A company is several files: if the process stops half way, the
+/// journal lets the next start put the moved ones back (`recover_unfinished_moves`), so the data
+/// is never left split between its folder and the set-aside folder.
+pub fn move_into(target: &Path, items: &[PathBuf]) -> std::io::Result<()> {
+    fs::create_dir_all(target)?;
+    let present: Vec<&PathBuf> = items.iter().filter(|i| i.exists()).collect();
+    let journal: Vec<String> = present.iter().map(|p| p.display().to_string()).collect();
+    atomic_write(&target.join(MOVING), &serde_json::to_vec(&journal).map_err(std::io::Error::other)?)?;
+    for item in present {
+        let moved = item
+            .file_name()
+            .ok_or_else(|| std::io::Error::other("no file name"))
+            .and_then(|name| fs::rename(item, target.join(name)));
+        if let Err(e) = moved {
+            rollback_move(target); // put back what already moved; the caller sees the error
+            return Err(e);
         }
     }
-    Ok(target)
+    fs::remove_file(target.join(MOVING))
+}
+
+/// Put every item of an unfinished move in `dir` back where it came from (only where nothing took
+/// its place). True when nothing was left behind.
+fn rollback_move(dir: &Path) -> bool {
+    let Ok(raw) = fs::read(dir.join(MOVING)) else { return false };
+    let Ok(originals) = serde_json::from_slice::<Vec<String>>(&raw) else { return false };
+    let mut complete = true;
+    for original in originals.iter().map(PathBuf::from) {
+        let Some(name) = original.file_name() else { continue };
+        let moved = dir.join(name);
+        if moved.exists() && (original.exists() || fs::rename(&moved, &original).is_err()) {
+            complete = false;
+        }
+    }
+    if complete {
+        let _ = fs::rename(dir.join(MOVING), dir.join(ROLLED_BACK));
+    }
+    complete
+}
+
+/// Undo every move that a crash interrupted (run at start). Returns the folders rolled back.
+pub fn recover_unfinished_moves(set_aside: &Path) -> Vec<PathBuf> {
+    let Ok(entries) = fs::read_dir(set_aside) else { return Vec::new() };
+    entries
+        .flatten()
+        .map(|e| e.path())
+        .filter(|dir| dir.join(MOVING).exists() && rollback_move(dir))
+        .collect()
+}
+
+/// True when `dir` holds a finished move (neither interrupted nor rolled back).
+pub fn move_completed(dir: &Path) -> bool {
+    dir.is_dir() && !dir.join(MOVING).exists() && !dir.join(ROLLED_BACK).exists()
 }
 
 #[cfg(test)]
@@ -115,6 +174,29 @@ mod tests {
         let target = move_aside(&d.join("set-aside"), "start-new", &[a.clone(), d.join("absent")]).unwrap();
         assert!(!a.exists());
         assert_eq!(fs::read(target.join("motard.db")).unwrap(), b"data");
+        assert!(move_completed(&target));
+        fs::remove_dir_all(d).ok();
+    }
+
+    #[test]
+    fn an_interrupted_move_is_rolled_back_on_the_next_start() {
+        let d = tmpdir("im");
+        let (db, meta) = (d.join("motard.db"), d.join("install.json"));
+        fs::write(&db, b"data").unwrap();
+        fs::write(&meta, b"{}").unwrap();
+        // Simulate a crash after the journal and the first rename, before the second.
+        let target = new_aside_dir(&d.join("set-aside"), "start-new");
+        fs::create_dir_all(&target).unwrap();
+        let journal = vec![db.display().to_string(), meta.display().to_string()];
+        fs::write(target.join(MOVING), serde_json::to_vec(&journal).unwrap()).unwrap();
+        fs::rename(&db, target.join("motard.db")).unwrap();
+
+        assert!(!move_completed(&target));
+        assert_eq!(recover_unfinished_moves(&d.join("set-aside")), vec![target.clone()]);
+        assert_eq!(fs::read(&db).unwrap(), b"data", "database put back");
+        assert!(meta.exists(), "the item never moved stays");
+        assert!(!move_completed(&target), "a rolled-back folder is not a finished move");
+        assert!(recover_unfinished_moves(&d.join("set-aside")).is_empty(), "idempotent");
         fs::remove_dir_all(d).ok();
     }
 }

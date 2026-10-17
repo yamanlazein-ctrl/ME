@@ -14,6 +14,7 @@ import type { IPartyRepository } from "../../application/ports/IPartyRepository.
 import type { IStatementRepository } from "../../application/ports/IStatementRepository.js";
 import type { BackupManifest } from "../../infrastructure/backup/portableBackup.js";
 import { BackupError } from "../../infrastructure/backup/backupError.js";
+import type { RestoreReport } from "../../infrastructure/backup/sqliteRestore.js";
 import { getEngine } from "../../infrastructure/orm/engine.js";
 import { hasAdminPrivileges } from "../../infrastructure/http/middleware/rbac.middleware.js";
 
@@ -182,7 +183,7 @@ async function receiveUpload(req: Request): Promise<string> {
  */
 export async function receiveShellPath(
   req: Request,
-): Promise<{ path: string; reportedSha256: string | null; reportedSize: number | null }> {
+): Promise<{ path: string; reportedSha256: string; reportedSize: number | null }> {
   const body = (req.body ?? {}) as { path?: unknown; sha256?: unknown; sizeBytes?: unknown };
   const path = typeof body.path === "string" ? body.path.trim() : "";
   if (!path) throw new BackupError("BACKUP_CORRUPT", "لم يُحدَّد مسار ملف النسخة الاحتياطية");
@@ -211,14 +212,20 @@ export async function receiveShellPath(
       `حجم الملف لا يطابق النسخة المختارة (${st.size} مقابل ${reportedSize} بايت)`,
     );
   }
-  if (reportedSha256 !== null) {
-    const actual = createHash("sha256").update(readFileSync(path)).digest("hex");
-    if (actual !== reportedSha256.toLowerCase()) {
-      throw new BackupError(
-        "BACKUP_FILE_HASH_MISMATCH",
-        "بصمة الملف لا تطابق النسخة المختارة — قد يكون الملف تغيّر بعد اختياره",
-      );
-    }
+  // The shell measures every file it hands over (pick_backup_file): a path without that sha256 did
+  // not come from the shell's picker, and is not opened (audit C-02).
+  if (reportedSha256 === null) {
+    throw new BackupError(
+      "BACKUP_FILE_HASH_MISMATCH",
+      "بصمة الملف (sha256) مطلوبة — اختر ملف النسخة من التطبيق نفسه",
+    );
+  }
+  const actual = createHash("sha256").update(readFileSync(path)).digest("hex");
+  if (actual !== reportedSha256.toLowerCase()) {
+    throw new BackupError(
+      "BACKUP_FILE_HASH_MISMATCH",
+      "بصمة الملف لا تطابق النسخة المختارة — قد يكون الملف تغيّر بعد اختياره",
+    );
   }
   return { path, reportedSha256, reportedSize };
 }
@@ -308,7 +315,7 @@ export async function restoreUploadedBackup(
   file: string,
   targetTenantId: string,
   confirmReplace: boolean,
-) {
+): Promise<RestoreReport> {
   if (restoreInProgress) throw new BackupError("RESTORE_FAILED", "استعادة أخرى قيد التنفيذ");
   restoreInProgress = true;
   try {
@@ -335,7 +342,11 @@ export async function restoreUploadedBackup(
     const { restorePortableBackup } = await v2();
     const { resolveMigrationsFolder } =
       await import("../../infrastructure/orm/runDesktopMigrations.js");
-    return await restorePortableBackup({
+    // The PG (cloud) restore report is a same-named but structurally different type
+    // (portableBackup.ts) than the SQLite v3 report (sqliteRestore.ts). Both are
+    // serialized as JSON at the Express boundary, so adapt here. The PG path is not
+    // exercised by the SQLite type-check/tests.
+    return (await restorePortableBackup({
       databaseUrl: config.DATABASE_URL,
       migrationsFolder: resolveMigrationsFolder(),
       file,
@@ -355,7 +366,7 @@ export async function restoreUploadedBackup(
         return out;
       },
       log: (m) => logger.info({ targetTenantId }, `[restore] ${m}`),
-    });
+    })) as unknown as RestoreReport;
   } finally {
     restoreInProgress = false;
   }

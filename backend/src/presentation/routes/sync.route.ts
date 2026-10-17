@@ -1,3 +1,8 @@
+import {
+  isSyncPaused,
+  releaseSyncRun,
+  tryAcquireSyncRun,
+} from "../../infrastructure/sync/syncRunGate.js";
 import { hostname as osHostname } from "node:os";
 import type { Router, Request, Response, RequestHandler } from "express";
 import { z } from "zod";
@@ -248,17 +253,15 @@ export function registerSyncRoutes(
   // The pre-auth pairing surface on the login screen is gone: pairing decides
   // where every document of this device is sent, so it needs an admin session.
 
-  const heldRunLocks = new Set<string>();
-  /** pool-client-shaped lock for SQLite: same try-lock / unlock / release calls as the PG path. */
+  /**
+   * pool-client-shaped lock for SQLite: same try-lock / unlock / release calls as the PG path. The
+   * keys live in syncRunGate, which a database restore also uses to pause sync (DESK-031).
+   */
   const inProcessRunLock = () => ({
     async query(text: string, params: unknown[]) {
       const key = String(params[0]);
-      if (text.includes("pg_try_advisory_lock")) {
-        const ok = !heldRunLocks.has(key);
-        if (ok) heldRunLocks.add(key);
-        return { rows: [{ ok }] };
-      }
-      heldRunLocks.delete(key);
+      if (text.includes("pg_try_advisory_lock")) return { rows: [{ ok: tryAcquireSyncRun(key) }] };
+      releaseSyncRun(key);
       return { rows: [{ ok: true }] };
     },
     release(_destroy?: boolean) {},
@@ -787,7 +790,10 @@ export function registerSyncRoutes(
       );
       lockHeld = Boolean(lockRes.rows[0]?.ok);
       if (!lockHeld) {
-        return { skipped: true, reason: "sync already running" };
+        return {
+          skipped: true,
+          reason: isSyncPaused() ? "database restore in progress" : "sync already running",
+        };
       }
 
       const materializeRepos = {

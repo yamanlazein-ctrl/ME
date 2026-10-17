@@ -1,3 +1,4 @@
+import { DecimalInput } from "@/components/common/DecimalInput";
 import { createFileRoute } from "@tanstack/react-router";
 import { useCallback, useMemo, useState } from "react";
 import { Palette, Plus, Printer, Save, Search, Trash2 } from "lucide-react";
@@ -408,10 +409,10 @@ function PrintReceivePage() {
                   className="bg-muted/40 text-muted-foreground"
                 />
               ) : (
-                <Input
-                  type="number"
+                <DecimalInput
                   min={1}
                   step="any"
+                  maxDecimals={4}
                   value={exchangeRate}
                   onChange={(e) =>
                     setExchangeRate(e.target.value === "" ? "" : Number(e.target.value))
@@ -537,8 +538,7 @@ function PrintReceivePage() {
                     <GroupSection title="الكمية والتكلفة">
                       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
                         <CardField label="الكمية المستلمة (كغ)" required>
-                          <Input
-                            type="number"
+                          <DecimalInput
                             inputMode="decimal"
                             min={0}
                             step="any"
@@ -554,8 +554,7 @@ function PrintReceivePage() {
                           />
                         </CardField>
                         <CardField label="تكلفة الطباعة / كغ" required>
-                          <Input
-                            type="number"
+                          <DecimalInput
                             inputMode="decimal"
                             min={0}
                             step="any"
@@ -570,8 +569,7 @@ function PrintReceivePage() {
                           />
                         </CardField>
                         <CardField label="سعر البيع / كغ (اختياري)">
-                          <Input
-                            type="number"
+                          <DecimalInput
                             inputMode="decimal"
                             min={0}
                             step="any"

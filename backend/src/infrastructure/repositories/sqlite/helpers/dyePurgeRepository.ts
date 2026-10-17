@@ -1,4 +1,4 @@
-// PORTED-FROM: src/infrastructure/repositories/dyePurgeRepository.ts sha256=b889181954c68004e6d2f6d851d0fe2f4e87ada7ad29ac5f017295cf78e7264a
+// PORTED-FROM: src/infrastructure/repositories/dyePurgeRepository.ts sha256=39ece1c3a8558207c738b9c027a1e8fa48b92d7734b608eab9e0cb111f932bf8
 // SQLite twin (specs/001-desktop-sqlite-engine S4). Keep behavior identical to the PG source.
 import { scaledTextSql } from "./likeContains.js";
 import { transactionTimestamp } from "../../../orm/sqlite/clock.js";

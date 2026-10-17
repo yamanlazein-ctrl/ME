@@ -31,7 +31,9 @@ export async function createVoucherUseCase(
     // collection, cross-currency, cancelled invoice — rolls back the
     // sequence increment too, so no number is burned.
     const voucher = await repo.create(input, ctx);
-    audit
+    // SQLite's independent audit path may join as a savepoint. Finish it before
+    // another mutation starts in the route's transaction; errors remain non-fatal.
+    await audit
       .create({
         tenantId: ctx.tenantId,
         actorId: ctx.userId,
@@ -91,7 +93,7 @@ export async function cancelVoucherUseCase(
       };
     }
     const voucher = await repo.cancel(id, cancelledBy, ctx, expectedVersion);
-    audit
+    await audit
       .create({
         tenantId: ctx.tenantId,
         actorId: ctx.userId,

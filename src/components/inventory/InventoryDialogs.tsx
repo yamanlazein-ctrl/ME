@@ -1,3 +1,4 @@
+import { DecimalInput } from "@/components/common/DecimalInput";
 import { useEffect, useRef, useState } from "react";
 import { Plus } from "lucide-react";
 import { ColorSwatch } from "@/components/common/ColorSwatch";
@@ -231,9 +232,8 @@ function FabricFormDialog({ state, onClose }: { state: FabricFormState; onClose:
               </Select>
             </Field>
             <Field label="الحد الأدنى للمخزون (كغ)">
-              <Input
+              <DecimalInput
                 className="h-10"
-                type="number"
                 value={minKg}
                 onChange={(e) => setMinKg(Number(e.target.value) || 0)}
               />
@@ -316,9 +316,8 @@ function FabricFormDialog({ state, onClose }: { state: FabricFormState; onClose:
                   />
                 </Field>
                 <Field label="العرض (سم)">
-                  <Input
+                  <DecimalInput
                     className="h-10"
-                    type="number"
                     inputMode="decimal"
                     step="0.01"
                     min="0"
@@ -327,9 +326,8 @@ function FabricFormDialog({ state, onClose }: { state: FabricFormState; onClose:
                   />
                 </Field>
                 <Field label="الكثافة / الوزن (غ/م²)">
-                  <Input
+                  <DecimalInput
                     className="h-10"
-                    type="number"
                     inputMode="decimal"
                     step="0.01"
                     min="0"
@@ -338,9 +336,8 @@ function FabricFormDialog({ state, onClose }: { state: FabricFormState; onClose:
                   />
                 </Field>
                 <Field label="الكمية (كغ)">
-                  <Input
+                  <DecimalInput
                     className="h-10"
-                    type="number"
                     inputMode="decimal"
                     step="0.01"
                     min="0"
@@ -361,12 +358,12 @@ function FabricFormDialog({ state, onClose }: { state: FabricFormState; onClose:
                 </Field>
                 <Field label="سعر الشراء / كغ">
                   <div className="flex gap-2">
-                    <Input
+                    <DecimalInput
                       className="h-10 flex-1"
-                      type="number"
                       inputMode="decimal"
                       step="0.01"
                       min="0"
+                      maxDecimals={4}
                       value={purchasePrice}
                       onChange={(e) => setPurchasePrice(e.target.value)}
                     />
@@ -382,12 +379,12 @@ function FabricFormDialog({ state, onClose }: { state: FabricFormState; onClose:
                   </div>
                 </Field>
                 <Field label="سعر البيع / كغ">
-                  <Input
+                  <DecimalInput
                     className="h-10"
-                    type="number"
                     inputMode="decimal"
                     step="0.01"
                     min="0"
+                    maxDecimals={4}
                     value={salePrice}
                     onChange={(e) => setSalePrice(e.target.value)}
                   />
@@ -703,8 +700,7 @@ export function RollAdjustDialog({ roll, onClose }: { roll: Roll | null; onClose
           <div className="grid grid-cols-2 gap-3">
             <div>
               <Label>{mode === "set" ? "الكمية الجديدة (كغ)" : "الكيلوغرام (+ أو −)"}</Label>
-              <Input
-                type="number"
+              <DecimalInput
                 step="0.01"
                 value={kg}
                 placeholder={mode === "set" ? String(curKg) : "مثال: -2.5"}
@@ -938,8 +934,7 @@ function RollFormDialog({ state, onClose }: { state: RollFormState; onClose: () 
             </div>
             <div>
               <Label>{editing ? "الكمية المستلمة (كغ)" : "الكمية (كغ) *"}</Label>
-              <Input
-                type="number"
+              <DecimalInput
                 inputMode="decimal"
                 step="0.01"
                 min="0"
@@ -993,11 +988,11 @@ function RollFormDialog({ state, onClose }: { state: RollFormState; onClose: () 
 
             <div>
               <Label>سعر الشراء للكغ</Label>
-              <Input
-                type="number"
+              <DecimalInput
                 inputMode="decimal"
                 step="any"
                 min="0"
+                maxDecimals={4}
                 value={price}
                 onChange={(e) => setPrice(e.target.value)}
               />

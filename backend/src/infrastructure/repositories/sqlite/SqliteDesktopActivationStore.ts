@@ -1,4 +1,4 @@
-// PORTED-FROM: src/infrastructure/repositories/PostgresDesktopActivationStore.ts sha256=cb0da0d47168300ddff9f7398a83c2c533581f11f596fbc44e1a7d541608cb24
+// PORTED-FROM: src/infrastructure/repositories/PostgresDesktopActivationStore.ts sha256=4ef9d99f1678c720039cf6b104b1de24ceaa4d7de9555a7e76eba4d1c9d26844
 // SQLite twin (specs/001-desktop-sqlite-engine S4). Keep behavior identical to the PG source.
 /**
  * PostgreSQL transaction for desktop verify-only activation — moved verbatim from

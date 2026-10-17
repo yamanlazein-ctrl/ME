@@ -1,4 +1,4 @@
-// PORTED-FROM: src/infrastructure/repositories/PostgresDashboardRepository.ts sha256=2e71368307d05ca07b4de772880cd9e9b60f75cbf1170a38a6494980f3841178
+// PORTED-FROM: src/infrastructure/repositories/PostgresDashboardRepository.ts sha256=7ed254b1b789049adae2dc69ecf10c228aa143157d78997522c4d7c52e49b14f
 // SQLite twin (specs/001-desktop-sqlite-engine S4). Keep behavior identical to the PG source.
 import { desc } from "./helpers/pgOrder.js";
 import {

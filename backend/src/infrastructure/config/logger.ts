@@ -69,23 +69,32 @@ transportStream.on("error", (err: unknown) => {
 // on an HTTP-client error (whose config carries the Authorization header) would write a live token to
 // logs/erp.log in cleartext. pino's built-in redaction masks these keys wherever they appear in the
 // first two levels of a log object.
-export const LOG_REDACT_PATHS = [
+// Audit H-07: also the desktop's own secrets — the device credential, the licence token, the
+// installation keys (when an env dump is logged), PINs and password changes.
+const SECRET_KEYS = [
   "password",
+  "newPassword",
+  "currentPassword",
+  "pin",
   "token",
   "accessToken",
   "refreshToken",
+  "access_token",
+  "refresh_token",
   "apiKey",
   "secret",
+  "deviceSecret",
+  "offlineToken",
+  "offline_token",
+  "APP_MASTER_KEY",
+  "JWT_SECRET",
+  "LICENSE_SIGNING_KEY",
   "authorization",
   "cookie",
-  "*.password",
-  "*.token",
-  "*.accessToken",
-  "*.refreshToken",
-  "*.apiKey",
-  "*.secret",
-  "*.authorization",
-  "*.cookie",
+];
+export const LOG_REDACT_PATHS = [
+  ...SECRET_KEYS,
+  ...SECRET_KEYS.map((k) => `*.${k}`),
   "*.headers.authorization",
   "*.headers.Authorization",
   "*.headers.cookie",

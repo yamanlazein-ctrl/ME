@@ -28,6 +28,7 @@ import {
   sqliteRuntimeMigrationsDir,
 } from "../orm/sqlite/runtime.js";
 import { withWriteGateHeld } from "../orm/sqlite/transaction.js";
+import { withSyncPaused } from "../sync/syncRunGate.js";
 import { loadSqliteJournal } from "../orm/sqlite/schemaFingerprint.js";
 import {
   createAndVerifyBackup,
@@ -67,6 +68,25 @@ export interface RestoreReport {
   migrated: string[];
   carriedOver: Record<string, number>;
   dataId: string;
+  /**
+   * Restored row counts per business table, read from the file the RS-5 check verified. The
+   * settings screen reports `sum(rows)`; without this field it showed 0 after a real restore.
+   */
+  tables: Array<{ table: string; rows: number }>;
+  /** Sum of `tables[].rows` — the figure shown to the user. */
+  restoredRows: number;
+}
+
+/** Per-table row counts from RS-5 figures (`rows:<table>` keys), largest tables first. */
+export function restoredTableCounts(figures: Record<string, string>): {
+  tables: Array<{ table: string; rows: number }>;
+  restoredRows: number;
+} {
+  const tables = Object.entries(figures)
+    .filter(([k]) => k.startsWith("rows:"))
+    .map(([k, v]) => ({ table: k.slice("rows:".length), rows: Number(v) }))
+    .sort((a, b) => b.rows - a.rows || a.table.localeCompare(b.table));
+  return { tables, restoredRows: tables.reduce((a, t) => a + t.rows, 0) };
 }
 
 /** Test hook: throw at a given step (T091 forced-failure checks). */
@@ -98,6 +118,10 @@ function carryOverDeviceState(stagingPath: string, livePath: string): Record<str
     db.exec("BEGIN");
     for (const t of triggers) db.exec(`DROP TRIGGER main."${t.name}"`);
     for (const table of EXCLUDED_TABLES) {
+      // DESK-025: cached responses describe the database they were made on. Carried into an
+      // older one, a retried request would get "201 created" for a document that no longer
+      // exists. The restored company starts with none; a retry then really runs.
+      if (table === "idempotency_keys") continue;
       const cols = (
         db.prepare(`SELECT name FROM pragma_table_info(?)`).pluck().all(table) as string[]
       )
@@ -265,81 +289,104 @@ export async function restoreBackupV3(
       if (e instanceof RestoreError) throw e;
       throw new RestoreError("VERIFY_STAGING", e instanceof Error ? e.message : String(e), e);
     }
-    // CARRY_OVER_DEVICE_STATE
-    let carriedOver: Record<string, number>;
-    try {
-      step("CARRY_OVER_DEVICE_STATE");
-      carriedOver = carryOverDeviceState(staging, livePath);
-    } catch (e) {
-      if (e instanceof RestoreError) throw e;
-      throw new RestoreError(
-        "CARRY_OVER_DEVICE_STATE",
-        e instanceof Error ? e.message : String(e),
-        e,
-      );
-    }
-    // identity of the restored file + provenance (SY-6)
-    const dataId = opened.manifest.data.dataId;
-    {
-      const db = new Database(staging);
+    // From here to the swap no sync cycle may run (DESK-031): the carry-over and the restored
+    // sync snapshot read the live sync state, and a cycle resuming after the swap would
+    // acknowledge or apply against a database it never read.
+    const { carriedOver, dataId, setAsideDir } = await withSyncPaused(async () => {
+      // CARRY_OVER_DEVICE_STATE
+      let carriedOver: Record<string, number>;
       try {
-        const installation = process.env.MOTARD_INSTALLATION_ID ?? null;
-        const meta = db
-          .prepare("SELECT adopted_installation_ids FROM motard_meta WHERE id = 1")
-          .get() as { adopted_installation_ids: string };
-        const adopted = new Set<string>(JSON.parse(meta.adopted_installation_ids) as string[]);
-        if (installation) adopted.add(installation);
-        db.prepare(
-          "UPDATE motard_meta SET restored_from = ?, adopted_installation_ids = ?, install_instance_id = ? WHERE id = 1",
-        ).run(
-          JSON.stringify({ dataId, manifestSha256: sha256(readFileSync(file)) }),
-          JSON.stringify([...adopted]),
-          process.env.MOTARD_INSTALL_INSTANCE_ID ?? null,
+        step("CARRY_OVER_DEVICE_STATE");
+        carriedOver = carryOverDeviceState(staging, livePath);
+      } catch (e) {
+        if (e instanceof RestoreError) throw e;
+        throw new RestoreError(
+          "CARRY_OVER_DEVICE_STATE",
+          e instanceof Error ? e.message : String(e),
+          e,
         );
-        markRestoredSyncSnapshot(db, rt.conns.writer);
-      } finally {
-        db.close();
       }
-    }
-    // SWAP + REOPEN, holding the write gate (no transaction can be in flight)
-    const setAsideDir = join(root, "set-aside", new Date().toISOString().replace(/[:.]/g, "-"));
-    await withWriteGateHeld(async () => {
-      step("SWAP");
-      const { closeSqlite } = await import("../orm/sqlite/connection.js");
-      closeSqlite(rt.conns); // checkpoint + close: the live file is complete on its own
-      mkdirSync(setAsideDir, { recursive: true });
-      const moved: string[] = [];
-      try {
-        for (const suffix of ["", "-wal", "-shm"]) {
-          if (existsSync(`${livePath}${suffix}`)) {
-            renameSync(`${livePath}${suffix}`, join(setAsideDir, `motard.db${suffix}`));
-            moved.push(suffix);
+      // identity of the restored file + provenance (SY-6)
+      const dataId = opened.manifest.data.dataId;
+      {
+        const db = new Database(staging);
+        try {
+          const installation = process.env.MOTARD_INSTALLATION_ID ?? null;
+          const meta = db
+            .prepare("SELECT adopted_installation_ids FROM motard_meta WHERE id = 1")
+            .get() as { adopted_installation_ids: string };
+          const adopted = new Set<string>(JSON.parse(meta.adopted_installation_ids) as string[]);
+          if (installation) adopted.add(installation);
+          db.prepare(
+            "UPDATE motard_meta SET restored_from = ?, adopted_installation_ids = ?, install_instance_id = ? WHERE id = 1",
+          ).run(
+            JSON.stringify({ dataId, manifestSha256: sha256(readFileSync(file)) }),
+            JSON.stringify([...adopted]),
+            process.env.MOTARD_INSTALL_INSTANCE_ID ?? null,
+          );
+          markRestoredSyncSnapshot(db, rt.conns.writer);
+        } finally {
+          db.close();
+        }
+      }
+      // SWAP + REOPEN, holding the write gate (no transaction can be in flight)
+      const setAsideDir = join(root, "set-aside", new Date().toISOString().replace(/[:.]/g, "-"));
+      await withWriteGateHeld(async () => {
+        step("SWAP");
+        const { closeSqlite } = await import("../orm/sqlite/connection.js");
+        closeSqlite(rt.conns); // checkpoint + close: the live file is complete on its own
+        mkdirSync(setAsideDir, { recursive: true });
+        const moved: string[] = [];
+        try {
+          for (const suffix of ["", "-wal", "-shm"]) {
+            if (existsSync(`${livePath}${suffix}`)) {
+              renameSync(`${livePath}${suffix}`, join(setAsideDir, `motard.db${suffix}`));
+              moved.push(suffix);
+            }
           }
-        }
-        renameSync(staging, livePath);
-      } catch (e) {
-        for (const suffix of moved)
-          renameSync(join(setAsideDir, `motard.db${suffix}`), `${livePath}${suffix}`);
-        reopenSqliteRuntime();
-        throw new RestoreError("SWAP", e instanceof Error ? e.message : String(e), e);
-      }
-      try {
-        step("REOPEN");
-        reopenSqliteRuntime({ expectedDataId: dataId });
-        process.env.MOTARD_DATA_ID = dataId;
-      } catch (e) {
-        // put the previous database back exactly as it was
-        rmSync(livePath, { force: true });
-        for (const suffix of ["", "-wal", "-shm"]) {
-          if (existsSync(join(setAsideDir, `motard.db${suffix}`)))
+          renameSync(staging, livePath);
+        } catch (e) {
+          for (const suffix of moved)
             renameSync(join(setAsideDir, `motard.db${suffix}`), `${livePath}${suffix}`);
+          reopenSqliteRuntime();
+          throw new RestoreError("SWAP", e instanceof Error ? e.message : String(e), e);
         }
-        reopenSqliteRuntime();
-        throw e instanceof RestoreError
-          ? e
-          : new RestoreError("REOPEN", e instanceof Error ? e.message : String(e), e);
-      }
+        try {
+          step("REOPEN");
+          reopenSqliteRuntime({ expectedDataId: dataId });
+          process.env.MOTARD_DATA_ID = dataId;
+        } catch (e) {
+          // put the previous database back exactly as it was
+          rmSync(livePath, { force: true });
+          for (const suffix of ["", "-wal", "-shm"]) {
+            if (existsSync(join(setAsideDir, `motard.db${suffix}`)))
+              renameSync(join(setAsideDir, `motard.db${suffix}`), `${livePath}${suffix}`);
+          }
+          reopenSqliteRuntime();
+          throw e instanceof RestoreError
+            ? e
+            : new RestoreError("REOPEN", e instanceof Error ? e.message : String(e), e);
+        }
+      });
+      return { carriedOver, dataId, setAsideDir };
     });
+    // DESK-026: user roles / active flags / session cutoffs come from the restored users now.
+    (await import("../auth/sessionCutoff.js")).invalidateIdentityCache();
+    // DESK-027: the restored counts are the new integrity baseline (an older backup has fewer rows
+    // by design; it must not read as a severe data drop on the next start).
+    try {
+      const { rebaselineAfterRestore } = await import("../integrity/dataIntegrityManifest.js");
+      const { sqliteReaderQueryable } = await import("../orm/sqlite/queryable.js");
+      const q = sqliteReaderQueryable();
+      // Same tenant the boot-time check compares (server.ts: slug 'default') when the archive has none.
+      const tenantId =
+        opened.manifest.tenant.id ??
+        (await q.query<{ id: string }>(`SELECT id FROM tenants WHERE slug = 'default' LIMIT 1`))
+          .rows[0]?.id;
+      if (tenantId) await rebaselineAfterRestore(q, tenantId, "sqlite");
+    } catch (err) {
+      logger.warn({ err }, "could not re-baseline the data integrity manifest after restore");
+    }
     // mirror the new identity for the runtime's next start
     const metaPath = process.env.DESKTOP_DB_META_PATH;
     if (metaPath && existsSync(metaPath)) {
@@ -353,7 +400,12 @@ export async function restoreBackupV3(
       }
     }
     (await import("../sync/restoredIdentity.js")).invalidateRestoredIdentity();
-    logger.info({ file, migrated, carriedOver, setAsideDir }, "RESTORE_OK");
+    // The counts describe the file the app now reads (the live one, after the swap).
+    const counts = restoredTableCounts(rs5Figures(livePath));
+    logger.info(
+      { file, migrated, carriedOver, setAsideDir, restoredRows: counts.restoredRows },
+      "RESTORE_OK",
+    );
     return {
       manifest: opened.manifest,
       safetyBackup: safety,
@@ -361,6 +413,7 @@ export async function restoreBackupV3(
       migrated,
       carriedOver,
       dataId,
+      ...counts,
     };
   } finally {
     rmSync(opened.workDir, { recursive: true, force: true });

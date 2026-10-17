@@ -26,7 +26,7 @@ import { ledgerEntries } from "../orm/schemas/ledger-entry.table.js";
 import { returns } from "../orm/schemas/return.table.js";
 import { returnLines } from "../orm/schemas/return-line.table.js";
 import { assertDayUnlocked } from "./dayLockHelper.js";
-import { assertSufficientCashboxBalance } from "./cashboxBalanceHelper.js";
+import { serializeCashboxWrites } from "./cashboxBalanceHelper.js";
 import {
   assertCreditNotOverdrawn,
   customerCreditPosition,
@@ -192,7 +192,8 @@ export class PostgresVoucherRepository implements IVoucherRepository {
 
   async create(input: CreateVoucherInput, ctx: TenantContext): Promise<VoucherData> {
     return this.db.transaction(async (tx) => {
-      await assertDayUnlocked(tx, ctx.tenantId, input.date);
+      // Day lock is per currency: a USD voucher must not be rejected because the SYP day is closed.
+      await assertDayUnlocked(tx, ctx.tenantId, input.date, input.currency ?? "SYP");
       // The party must be this tenant's and of the stated kind: RLS scopes the voucher row, not the
       // party UUID it references, so a foreign tenant's party id would otherwise persist.
       const [party] = await tx
@@ -246,7 +247,7 @@ export class PostgresVoucherRepository implements IVoucherRepository {
       // Negative cash balances are allowed (business rule). The helper only
       // serializes concurrent cash-outs; it no longer hard-blocks the write.
       if (input.method === "cash" && input.kind === "payment") {
-        await assertSufficientCashboxBalance(tx, ctx, voucherCurrency, input.date, netCash);
+        await serializeCashboxWrites(tx, ctx, voucherCurrency, input.date, netCash);
       }
 
       // What this voucher actually settles on the linked invoice, restated in the
@@ -646,7 +647,7 @@ export class PostgresVoucherRepository implements IVoucherRepository {
       // financial write surface a closed day protects against. Without this,
       // a receipt/payment/transfer dated on an already-closed day could still
       // be cancelled, silently altering a reconciled day after the fact.
-      await assertDayUnlocked(tx, ctx.tenantId, currentRow.date);
+      await assertDayUnlocked(tx, ctx.tenantId, currentRow.date, currentRow.currency ?? "SYP");
 
       const [row] = await tx
         .update(vouchers)

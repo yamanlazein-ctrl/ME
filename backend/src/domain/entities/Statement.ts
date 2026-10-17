@@ -54,8 +54,8 @@ export interface StatementDocumentInfo {
 }
 
 /**
- * One statement row. Entries are chronological (date ASC, createdAt ASC) and
- * each row carries its running balance so the UI never has to re-accumulate.
+ * One statement row. Entries sort by date, opening-first, createdAt, document-rank,
+ * then id. Each row carries its running balance; the UI need not re-accumulate.
  *
  * Cancelled movements (`status = "cancelled"`) are always present in the
  * register (they must never be dropped from the query) but they are excluded

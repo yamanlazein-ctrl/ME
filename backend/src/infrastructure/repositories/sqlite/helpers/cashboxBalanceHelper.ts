@@ -1,4 +1,4 @@
-// PORTED-FROM: src/infrastructure/repositories/cashboxBalanceHelper.ts sha256=fa3d52bba6e32d99d8df5e7ed085182360fd77b789485f128099b1d064530d2c
+// PORTED-FROM: src/infrastructure/repositories/cashboxBalanceHelper.ts sha256=91b08e958f11cbd3a231029f9f96a28a09836262ff5ff5a581c6e113d6ee7148
 // SQLite twin (specs/001-desktop-sqlite-engine S4). Keep behavior identical to the PG source.
 import { desc } from "./pgOrder.js";
 import { moneyParam, scaledNumber } from "./likeContains.js";
@@ -160,5 +160,18 @@ export async function lockAndReadCashboxBalance(
   return { available, wouldGoNegative: available < amount };
 }
 
-/** @deprecated Use lockAndReadCashboxBalance — name was misleading (never asserted). */
-export const assertSufficientCashboxBalance = lockAndReadCashboxBalance;
+/**
+ * Serialize concurrent cashbox writes per (tenant, currency): takes the advisory
+ * lock and returns the balance snapshot. Negative cash is allowed by design —
+ * this does NOT assert sufficiency; callers use the returned snapshot to surface
+ * a UI warning.
+ */
+export async function serializeCashboxWrites(
+  tx: Tx,
+  ctx: TenantContext,
+  currency: string,
+  asOfDate: string,
+  amount: number,
+): Promise<{ available: number; wouldGoNegative: boolean }> {
+  return lockAndReadCashboxBalance(tx, ctx, currency, asOfDate, amount);
+}
