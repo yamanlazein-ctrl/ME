@@ -22,8 +22,8 @@ evidence.
 ## 1. Money vectors (first code merged)
 
 1. `npx vitest run packages/shared/src/money-vectors.test.ts`. It must report every vector passing.
-2. On the phone (after S2), run the Hermes runner from the dev client test screen
-   (`mobile/test/money-vectors.hermes.test.ts`). It must report the same count, with 0 failures.
+2. On the phone (tasks.md T041), press "Money vectors (Hermes)" on the Spikes screen of the test APK.
+   It must report the same count, with 0 failures.
 
 ## 2. Build the Android dev client
 
@@ -32,7 +32,8 @@ Expo Go cannot load the native SQLCipher and Argon2 modules. A dev client build 
 Option C, GitHub Actions (the owner's path: no local Android SDK and no Expo account):
 
 1. Push to `feat/mobile`, or open Actions → "mobile-android" → Run workflow.
-2. When the run finishes, download the `motard-mobile-debug-apk` artifact from the run page.
+2. When the run finishes, download the `motard-mobile-test-apk` artifact from the run page. It is a release-variant APK with
+   the JavaScript bundled inside, signed with the Expo template debug key, so no computer is needed.
 3. Copy the APK to the phone and install it (allow installs from this source once).
 
 Option A, local (needs the Android SDK and JDK 17 on the machine):

@@ -24,6 +24,13 @@ lint rule (`mobile/eslint.config.js`).
     - `numericFunctions.ts`
   - Those members are `prepare(sql)` returning `run/get/all/iterate/raw/safeIntegers`, `pragma`,
     `exec`, `function`, `aggregate`, `transaction`, `close`.
+- `backend/src/infrastructure/config/logger.ts` (resolved file path) → `mobile/src/platform/logger.ts`.
+  - Same named exports as the real file; console only (NFR-12). 18 shared files import this file or
+    `config/env.ts` (checked 2026-10-25), and the real files use `node:path`, `node:url`, `pino` and
+    `dotenv`, so they are replaced, not bundled.
+- `backend/src/infrastructure/config/env.ts` (resolved file path) → `mobile/src/platform/envConfig.ts`.
+  - Exports `config` with every field the bundled files read (listed by tasks T045), holding phone
+    values. No `process.env` reads.
 - `drizzle-orm/better-sqlite3` → resolved normally. Drizzle receives the shim object, and the same
   drizzle-orm version as `backend/package.json` (0.45.2) is pinned in `mobile/package.json`.
 

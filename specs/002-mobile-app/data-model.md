@@ -83,6 +83,7 @@ Kept in one JSON file under the app's private documents directory (`expo-file-sy
 - `lastForegroundAt` (ISO timestamp)
 - `updateChannel` (`play` | `apk`)
 - `lastVersionCheckAt` (ISO timestamp)
+- `recentPartyIds` (array of party ids, most recent first, at most 50; tasks T087)
 
 Sync values the desktop keeps through its ports (hub credentials, pull cursor, hub epoch) are
 stored by the phone adapters behind the same ports that `sqliteContainer.ts` and

@@ -30,6 +30,10 @@ phone and no access to the owner's notes. Everything it needs is in this file an
    result says FAIL; otherwise skip them.
 9. Tick `- [x]` in this file when a task's check passes, in the same commit as the work.
 10. Never use `vitest --reporter=basic`; read the summary line ("Tests N passed").
+11. Traceability: a task without its own requirement IDs inherits the IDs and research items named in
+    its phase heading.
+12. Do not build these (out of v1 by decision): BC-6 (`packages/core` extraction), a fix for the
+    known gap E17 (hub web-UI writes are not in the pull stream), the dark theme, iOS builds.
 
 ## Standard checks (referenced by name)
 
@@ -80,10 +84,10 @@ E#, BC-#, UX-##, SC-###) trace to spec.md.
 
 **Purpose**: a working Linux test environment and the numbers GATE-D compares against.
 
-- [ ] T001 Install dependencies: run `npm ci` at the repository root and `cd backend && npm ci`.
+- [ ] T001 (constitution V, IX) Install dependencies: run `npm ci` at the repository root and `cd backend && npm ci`.
       Check: both exit 0, and `node --version` prints v22 or later. If it prints an older version, install
       Node 22 with `nvm install 22` and retry.
-- [ ] T002 Provision PostgreSQL for tests the way `.github/workflows/ci.yml` does.
+- [ ] T002 (constitution V) Provision PostgreSQL for tests the way `.github/workflows/ci.yml` does.
   - If `docker` exists: `docker compose -f backend/docker-compose.yml up -d postgres redis` with
     `POSTGRES_USER=postgres POSTGRES_PASSWORD=postgres POSTGRES_DB=postgres
 APP_MASTER_KEY=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa=`, then
@@ -207,12 +211,14 @@ APP_MASTER_KEY=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa=`, then
     - `userInterfaceStyle` "light"
     - `android.softwareKeyboardLayoutMode` "resize"
     - `experiments.typedRoutes` true
-    - `plugins` ["expo-router"]
+    - `plugins`: `"expo-router"`, `["expo-localization", { "supportsRTL": true, "forcesRTL": true }]`,
+      `["expo-build-properties", { "android": { "minSdkVersion": 26 } }]` (NFR-07: Android 8.0+)
+    - install the two plugins first: `npx expo install expo-localization expo-build-properties`
   - `mobile/tsconfig.json`: extends `expo/tsconfig.base`, with `"strict": true`, `"noUncheckedIndexedAccess": true`,
     and `paths` `"@backend/*": ["../backend/src/*"]`, `"@erp/shared": ["../packages/shared/src/index.ts"]`,
     `"@erp/shared/*": ["../packages/shared/src/*"]`.
 
-  UX-04, NFR-10. Check: `cd mobile && npx tsc --noEmit` exit 0.
+  UX-04, NFR-07, NFR-10. Check: `cd mobile && npx tsc --noEmit` exit 0, and `grep -c minSdkVersion mobile/app.json` prints 1.
 
 - [ ] T020 Create `mobile/metro.config.js` from `expo/metro-config`:
   - `watchFolders`: `../backend/src`, `../packages/shared/src`
@@ -221,11 +227,16 @@ APP_MASTER_KEY=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa=`, then
     - map `node:async_hooks` → `mobile/src/platform/asyncContext.ts`
     - map `node:crypto` → `mobile/src/platform/nodeCrypto.ts`
     - map `better-sqlite3` → `mobile/src/platform/sqlite/BetterSqliteShim.ts`
+    - map the resolved file `backend/src/infrastructure/config/logger.ts` (imported as
+      `../config/logger.js` and similar relative paths) → `mobile/src/platform/logger.ts`
+    - map the resolved file `backend/src/infrastructure/config/env.ts` (imported as `../config/env.js`)
+      → `mobile/src/platform/envConfig.ts`. 18 shared files import one of these two (checked
+      2026-10-25); both real files use `node:path`, `node:url`, `pino` or `dotenv`.
     - throw `Error("mobile import boundary: <name>")` for `node:fs`, `node:path`, `node:os`, `node:net`,
       `node:url`, `fs`, `path`, `os`, `net`, `child_process`, `http`, `https`, `express`, `pg`,
       `argon2`, `googleapis`, `pino`, and any module starting with `@sentry/`
 
-  Create empty placeholder modules for the three mapped files exporting nothing yet.
+  Create empty placeholder modules for the five mapped files exporting nothing yet.
   Check: `cd mobile && node -e "require('./metro.config.js')"` exit 0.
 
 - [ ] T021 Create `mobile/eslint.config.js` (flat config, typescript-eslint). Its `no-restricted-imports`
@@ -239,7 +250,9 @@ APP_MASTER_KEY=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa=`, then
       Check: `cd mobile && npx vitest run test/unit/boundary.test.ts` → passed.
 - [ ] T023 [P] Implement `mobile/src/platform/nodeCrypto.ts` per contracts/mobile-ports.md: `randomUUID`,
       `createHash("sha256")` with `update` and `digest("hex"|"base64")`, `randomBytes`, and constant-time
-      `timingSafeEqual`. Use `expo-crypto` on device. Behind the same functions, use the Web Crypto
+      `timingSafeEqual`. Also export `setUuidSequenceForSpike(prefix: string)`: after it is called,
+      `randomUUID` returns deterministic v4-shaped ids derived from the prefix and a counter. It is used
+      only by the S2 spike (T050). Use `expo-crypto` on device. Behind the same functions, use the Web Crypto
       `globalThis.crypto` path when running under Node tests. Add
       `mobile/test/unit/nodeCrypto.test.ts`, comparing the sha256 of "motard" and of the empty string with
       Node's `crypto`, and checking the UUID v4 format.
@@ -270,6 +283,10 @@ APP_MASTER_KEY=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa=`, then
   - It registers the five `motard_*` functions by calling the exported registration function from
     `backend/src/infrastructure/orm/sqlite/numericFunctions.ts` on the shim.
   - It refuses to open when the stored journal index is newer than the bundled one.
+  - It exports `ensureMeta(conn, { tenantId, installationId })`, which creates the single
+    `motard_meta` row (`id = 1`) when absent, with the same column values
+    `backend/src/infrastructure/orm/sqlite/runtime.ts` writes for a new database (read that file;
+    `created_by_installation_id` = the phone's installation id, `tenant_id` = the enrolled tenant).
 
   NFR-06, FR-01. Check: `cd mobile && npx tsc --noEmit` exit 0.
 
@@ -279,7 +296,7 @@ APP_MASTER_KEY=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa=`, then
       compute the schema fingerprint with the same function `backend/src/infrastructure/orm/sqlite/schemaFingerprint.ts`
       exports, and compare it to `backend/src/infrastructure/orm/sqlite/migrations/meta/schema-fingerprint.json`.
       Also run the cases of `backend/tests/sqlite/pg-numeric-div.test.ts` against `motard_pgdiv` through the
-      shim. Check: passes. This proves R2 criteria 2 and 4 on Node; the device run is T041.
+      shim. Also assert atomicity: a use-case transaction that throws after inserting an invoice header leaves 0 rows in `invoices`, `invoice_lines` and `ledger_entries` (E6, NFR-06). Check: passes. This proves R2 criteria 2 and 4 on Node; the device run is T041.
 - [ ] T029 Run GATE-M. Check: GATE-M rule.
 - [ ] T030 CHECKPOINT "feat(mobile): Expo skeleton, import boundary, platform adapters, runtime".
 
@@ -292,14 +309,19 @@ APP_MASTER_KEY=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa=`, then
     `cd mobile && npm ci`, then GATE-M's commands.
   - Job `apk` (needs `checks`, ubuntu-latest): Node 22, `actions/setup-java` Temurin 17,
     `cd mobile && npm ci && npm run prebuild:migrations && npx expo prebuild --platform android --no-install`,
-    `cd mobile/android && ./gradlew assembleDebug`, then `actions/upload-artifact` named
-    `motard-mobile-debug-apk` with `mobile/android/app/build/outputs/apk/debug/*.apk`, retention 14 days.
+    `cd mobile/android && ./gradlew assembleRelease` with the env `EXPO_PUBLIC_SPIKES=1`. The release
+    variant bundles the JavaScript inside the APK (a debug APK would need a Metro server on the
+    computer, which the owner does not have). The Expo template signs the release variant with its
+    debug keystore, which is acceptable for test installs. Then `actions/upload-artifact` named
+    `motard-mobile-test-apk` with `mobile/android/app/build/outputs/apk/release/*.apk`, retention 14
+    days.
 
   R15. Check: `npx prettier --check .github/workflows/mobile-android.yml` exit 0, and
   `node -e "require('yaml')"` parse of the file succeeds (install `yaml` temporarily with `npx -y`).
 
 - [ ] T032 Add the native modules:
-  - `npx expo install expo-secure-store expo-local-authentication expo-print expo-sharing expo-notifications expo-background-task expo-crypto expo-file-system expo-camera expo-splash-screen expo-font`
+  - `npx expo install expo-secure-store expo-local-authentication expo-print expo-sharing expo-notifications expo-background-task expo-crypto expo-file-system expo-camera expo-splash-screen expo-font @react-native-community/netinfo`
+  - `npm install --save-dev @testing-library/react-native` (exact version)
   - `npm install @op-engineering/op-sqlite react-native-argon2` (exact versions)
   - in `mobile/package.json` add `"op-sqlite": { "sqlcipher": true }`, per op-sqlite's SQLCipher
     documentation
@@ -341,15 +363,18 @@ APP_MASTER_KEY=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa=`, then
   invoice fixture and asserts that the HTML contains each formatted amount, the currency labels "USD"
   or "SYP" exactly as the desktop prints them, and `dir="rtl"`.
 
-- [ ] T037 Create `mobile/app/spikes.tsx`, a dev-only screen shown when `__DEV__` is true. It has buttons:
+- [ ] T037 Create `mobile/app/spikes.tsx`, a test-only screen, reachable only when `process.env.EXPO_PUBLIC_SPIKES === "1"` at build time (set by the workflow in T031; the M5 release build leaves it unset, so the screen is absent). It has buttons:
   - **S1 SQLite:** runs the six R2 criteria and prints PASS or FAIL with values; prints the
     `verifyPin` duration in milliseconds.
-  - **S2 Use-cases:** runs the receipt and 3-line sale use-cases through `mobile/src/core/container.ts`
-    (T050) on a fresh database. Then "Export for comparison" copies the decrypted database to the
-    Downloads folder via `expo-sharing`.
+  - **S2 Use-cases:** in this task, a disabled button labelled "متاح بعد المرحلة 6" (available after
+    phase 6). T050 enables it: it runs the receipt and 3-line sale use-cases through
+    `mobile/src/core/container.ts` on a fresh database, then "Export for comparison" copies the
+    decrypted database to the Downloads folder via `expo-sharing`.
   - **S3 PDF:** shares the invoice PDF and a 650-row statement PDF, and prints the render time.
-  - **S5 First download:** asks for the hub URL and an enrollment code, runs FR-07, kills itself at
-    40% when "kill at 40%" is ticked, and prints counts, balance differences and elapsed seconds.
+  - **S5 First download:** in this task, a disabled button labelled "متاح بعد المرحلة 7" (available
+    after phase 7). T063 enables it: it asks for the hub URL and an enrollment code, runs FR-07, kills
+    itself at 40% when "kill at 40%" is ticked, and prints counts, balance differences and elapsed
+    seconds.
   - **Money vectors (Hermes):** runs `packages/shared/src/money-vectors.json` through the real
     functions and prints passed/failed counts.
 
@@ -380,32 +405,50 @@ APP_MASTER_KEY=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa=`, then
       available) shows `completed success`. Otherwise write "APK run to be checked by owner" in
       evidence/T040.md.
 
-### OWNER-LOCAL M0 (the agent skips these and continues with Phase 6)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+STOP-POINT 1 — the first cloud session ENDS after T040 (the APK has been built and pushed).
+The agent does not start T041–T044 or Phase 6 in this session. Its last message to the owner is:
+"Session 1 done. Install the APK from Actions → mobile-android, then run T041 and T042 and commit
+evidence/T041.md and evidence/T042.md (T043)."
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-- [ ] T041 OWNER-LOCAL S1 + S2 + money vectors on Hermes. Steps for the owner:
+### OWNER-LOCAL M0 (done by the owner between session 1 and session 2)
+
+- [ ] T041 OWNER-LOCAL S1 + money vectors on Hermes. Steps for the owner:
   1. On github.com open the repository → Actions → "mobile-android" → the latest run on `feat/mobile`
-     → download the `motard-mobile-debug-apk` artifact (a zip), and unzip it.
+     → download the `motard-mobile-test-apk` artifact (a zip), and unzip it.
   2. Copy the `.apk` to the phone (USB or Google Drive), open it, and allow "install unknown apps" for
      that app once.
-  3. Open Motard ERP → the Spikes screen → press "S1 SQLite", then "Money vectors (Hermes)", then
-     "S2 Use-cases".
+  3. Open Motard ERP → the Spikes screen → press "S1 SQLite", then "Money vectors (Hermes)".
   4. Take screenshots of each result.
-  5. Press "Export for comparison" and save the file to the computer.
-  6. Write the results into `specs/002-mobile-app/evidence/T041.md` (PASS/FAIL for each line, plus
-     the Argon2 milliseconds) and commit it, or send them to the agent in the next session.
+  5. Write the results into `specs/002-mobile-app/evidence/T041.md` in exactly this form, one line
+     each:
+     - `S1-1 encrypted: PASS|FAIL`
+     - `S1-2 migrations+fingerprint: PASS|FAIL`
+     - `S1-3 sync calls in transaction: PASS|FAIL`
+     - `S1-4 motard functions: PASS|FAIL <message>`
+     - `S1-5 bigint round-trip: PASS|FAIL`
+     - `S1-6 pragmas: PASS|FAIL`
+     - `ARGON2-MS: <number>`
+     - `MONEY-VECTORS-HERMES: <passed>/<total>`
 - [ ] T042 OWNER-LOCAL S3 PDF. In the Spikes screen press "S3 PDF". Open both PDFs and compare them with
       the desktop prints of the same documents (amounts, currencies, Arabic shaping). Write PASS or FAIL
       and the render time into `specs/002-mobile-app/evidence/T042.md`.
-- [ ] T043 OWNER-LOCAL S5 first download. This needs a hub reachable from the phone: the test hub on
-      Render, or the cert stack on a computer on the same Wi-Fi.
-  1. Seed the hub with `node scripts/parity/seed-sync-volume.mjs --hub <url> --invoices 100000 --parties 10000 --out s5.json`.
-  2. Create an enrollment code on the desktop or the hub.
-  3. On the phone press "S5 First download" with "kill at 40%" ticked, reopen the app, and press it
-     again.
-  4. Write the counts, the balance differences (must be 0) and the elapsed time into
-     `specs/002-mobile-app/evidence/T043.md`.
-  5. Decide whether the time is acceptable (plan M0 exit criterion).
-- [ ] T044 CONDITIONAL (only if T041 reports S1 criterion 4 FAIL with `UDF_UNSUPPORTED`): fallback F1-a.
+- [ ] T043 OWNER-LOCAL Hand the results to session 2. On the computer, in the repository folder:
+  1. `git pull`
+  2. Create or update the two evidence files.
+  3. `git add specs/002-mobile-app/evidence/T041.md specs/002-mobile-app/evidence/T042.md`
+  4. `git commit -m "evidence(mobile): M0 device results"`
+  5. `git push`
+
+  Without git on the computer: on github.com open the repository, switch to branch `feat/mobile`, go
+  to `specs/002-mobile-app/evidence/`, choose Add file → Create new file, name it `T041.md` (then
+  `T042.md`), paste the results, and Commit changes.
+
+  Then start the second cloud session with the prompt: "Continue specs/002-mobile-app/tasks.md from
+  SESSION-2 START." (S2 and S5 need code from phases 6 and 7; they run on the phone in T086.)
+
+- [ ] T044 CONDITIONAL (run first in session 2, only if evidence/T041.md says `S1-4 motard functions: FAIL UDF_UNSUPPORTED`): fallback F1-a.
   - Write `mobile/native/motard_sqlite_ext.c` implementing `motard_pgdiv`, `motard_dectext`,
     `motard_decsum` (aggregate), `motard_re_substr` and `motard_re_match`, with the exact semantics of
     `backend/src/infrastructure/orm/sqlite/numericFunctions.ts`.
@@ -417,25 +460,46 @@ APP_MASTER_KEY=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa=`, then
   functions on every case of `backend/tests/sqlite/pg-numeric-div.test.ts` and
   `backend/tests/sqlite/like-contains.test.ts`.
 
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+SESSION-2 START — the second cloud session begins here, and follows these rules in order:
+
+1. If `specs/002-mobile-app/evidence/T041.md` does not exist, or lacks any `S1-` line: STOP. Reply
+   "Waiting for the owner's T041 results", and do nothing else.
+2. If `S1-1`, `S1-3`, `S1-5` or `S1-6` is FAIL: STOP (fallback F1-b, constitution VII: no
+   unencrypted or unsafe fallback). Reply with the failing lines and ask the owner for a decision.
+3. If `S1-4` is `FAIL UDF_UNSUPPORTED`: do T044 first, then T040's CHECKPOINT again, and tell the
+   owner to repeat T041 with the new APK. Continue with Phase 6 meanwhile: Phase 6 is verified on
+   Node, not on the phone.
+4. If `S1-2` is FAIL: fix `mobile/src/core/runtime.ts` (T027) until `test/unit/runtime-node.test.ts`
+   passes, push, and ask the owner to repeat T041. Continue with Phase 6.
+5. Otherwise (all PASS): skip T044 and continue with Phase 6.
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 ## Phase 6: Foundational core (blocks every story) [M1]
 
-- [ ] T045 Read `backend/src/infrastructure/di/sqliteContainer.ts` and list every port and repository it
+- [ ] T045 (R1) Read `backend/src/infrastructure/di/sqliteContainer.ts` and list every port and repository it
       wires that is needed by these use-case folders: `backend/src/application/use-cases/{cashbox,dashboard,expenses,inventory,invoices,ledger,orders,parties,profit,returns,settings,statements,sync,vouchers}`.
       Write the list, with each item's source file, to `specs/002-mobile-app/evidence/T045-ports.md`.
-      Mark which ports need phone adapters (secrets, logger, config, fingerprint, licence).
+      Mark which ports need phone adapters (secrets, logger, config, fingerprint, licence). Also list
+      every `config.<field>` read by the files the phone bundles (grep `config\.` in the files that
+      import `config/env`), and every named export of `backend/src/infrastructure/config/logger.ts`
+      they import.
       Check: the file exists and names every constructor argument used by those use-cases.
 - [ ] T046 [P] Implement `mobile/src/platform/logger.ts`: an object with `info`, `warn`, `error`, `debug`
-      and `child()` writing to `console` only (NFR-12). Map `pino` imports reached from shared code to it
-      only if T045 shows one is needed; otherwise leave `pino` banned.
-      Check: `mobile/test/unit/logger.test.ts` passes.
-- [ ] T047 [P] Implement `mobile/src/core/appState.ts`: it reads and writes `app-state.json` in
+      and `child()` writing to `console` only (NFR-12). It provides every named export of `backend/src/infrastructure/config/logger.ts` listed in T045, with the same shape (T020 maps that file here). `pino` stays banned.
+      Check: `mobile/test/unit/logger.test.ts` asserts every export listed in T045 exists, and passes.
+- [ ] T047 [P] (FR-04, FR-43) Implement `mobile/src/core/appState.ts`: it reads and writes `app-state.json` in
       `FileSystem.documentDirectory`, with fields `appLockEnabled` (boolean, default true),
       `lastForegroundAt` (ISO string or null), `updateChannel` ("play" | "apk"), and
       `lastVersionCheckAt` (ISO string or null). Writes are atomic: write a temp file, then move it.
       data-model.md. Check: `mobile/test/unit/appState.test.ts` (mocked FileSystem) passes.
 - [ ] T048 Implement `mobile/src/core/config.ts`: `buildConfig(enrollment)` returns a frozen object with
       `hubUrl`, `tenantId`, `syncDeviceId`, `deviceKind: "phone"` and `appVersion` (from
-      `expo-constants`). It has no `process.env` reads. Check: unit test passes.
+      `expo-constants`). It has no `process.env` reads. Also implement `mobile/src/platform/envConfig.ts`
+      (mapped by T020 in place of `backend/src/infrastructure/config/env.ts`): it exports `config`
+      with every field listed in T045, holding the phone values (hub URL and identity from
+      `buildConfig`, fixed values for the rest copied from the desktop SQLite defaults in `env.ts`).
+      FR-08, R1. Check: unit test asserts every T045 field exists.
 - [ ] T049 Implement `mobile/src/core/hubHttp.ts`: wraps `fetch` so that every request to `/api/sync/push`
       and `/api/sync/pull` carries `X-Motard-Money-Version: MONEY_RULES_VERSION`. It maps
       `426 SYNC_VERSION_MISMATCH` to the typed error `VersionMismatchError`, `403 SYNC_DEVICE_REVOKED` to
@@ -445,7 +509,15 @@ APP_MASTER_KEY=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa=`, then
       with the phone adapters and `deviceKind: "phone"` passed to the number-block path (BC-1). Every
       exported use-case function is wrapped in `runSerial` (T024). It must not import
       `backend/src/infrastructure/di/sqliteContainer.ts`. R1, R3.
-      Check: GATE-M (lint proves there are no banned imports).
+      Also:
+  - Create `mobile/src/core/spikeS2.ts`, exporting `runS2(container)`. It sets the deterministic UUID
+    sequence (T023 `setUuidSequenceForSpike("s2")`), then records one receipt of 500 USD at rate 14500
+    and one 3-line sale with fixed inputs and fixed document dates (2026-01-15).
+  - Enable the "S2 Use-cases" button in `mobile/app/spikes.tsx` (T037) to call `runS2`.
+  - Create `mobile/scripts/s2-reference.mjs`. It runs the same `runS2` under Node through the
+    container over better-sqlite3, and writes `specs/002-mobile-app/evidence/s2-reference.db`.
+    Commit that file.
+    Check: GATE-M (lint proves there are no banned imports).
 - [ ] T051 Create the parity harness `mobile/test/parity/harness.ts`.
   - Start the cert stack (`tests/e2e/cert-stack.mjs`).
   - Create a "phone": the mobile container over a temp better-sqlite3 database via the Node shim,
@@ -459,7 +531,7 @@ APP_MASTER_KEY=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa=`, then
   Check: `mobile/test/parity/smoke.test.ts` (start, enroll both, syncAll, compareAll → 0 differences
   on empty data) passes under GATE-P.
 
-- [ ] T052 Add parity scenarios in `mobile/test/parity/scenarios.test.ts`. They call use-cases directly,
+- [ ] T052 Add parity scenarios in `mobile/test/parity/scenarios.test.ts` (G2). They call use-cases directly,
       with no UI:
   - (a) a receipt on the phone
   - (b) a 3-line sale on the phone
@@ -476,11 +548,11 @@ APP_MASTER_KEY=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa=`, then
 - [ ] T053 Implement `mobile/src/core/syncLoop.ts` per FR-32. It runs on start, on foreground (AppState),
       on network regain (`@react-native-community/netinfo`, installed via `npx expo install`), 2 seconds
       after the last write, and every 20 s in the foreground. Retries come at 30 s and 120 s. Pull pages use
-      `limit=100`. It calls the shared sync client functions from
+      `limit=100`; pushes drain the outbox in batches of 50 with progress (E3). It reads the hub's HTTP `Date` header on each response and emits `clockSkew` when it differs from the phone clock by more than 5 minutes (E16). It calls the shared sync client functions from
       `backend/src/application/use-cases/sync/syncUseCases.ts`; it never writes outbox rows itself (FR-31,
       FR-33). On `VersionMismatchError` it stops and emits `versionMismatch`; on `DeviceRevokedError` it
       emits `revoked`. Check: `mobile/test/unit/syncLoop.test.ts` with fake timers asserts the schedule,
-      the retries and the event emission.
+      the retries, the 50-unit push batches, and the `versionMismatch`, `revoked` and `clockSkew` events.
 - [ ] T054 Register background sync in `mobile/src/core/backgroundSync.ts` with `expo-background-task`
       (minimum interval 15 minutes), calling one `syncLoop` run inside `runSerial`. NFR-13.
       Check: GATE-M.
@@ -488,8 +560,9 @@ APP_MASTER_KEY=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa=`, then
   - `mobile/src/ui/theme.ts`: copy the color, radius and font tokens from `src/styles.css` (light
     theme only, Clarification Q5).
   - Spacing scale 4/8/12/16/24/32. Body text 16 sp minimum. Touch target constant 48 dp.
-  - `mobile/src/ui/rtl.ts`: call `I18nManager.allowRTL(true)` and `I18nManager.forceRTL(true)` once,
-    reloading via `expo-updates`' `reloadAsync` only on first launch.
+  - RTL comes from the `expo-localization` plugin settings in T019 (`supportsRTL`, `forcesRTL`), so
+    no runtime reload is needed. `mobile/src/ui/rtl.ts` only asserts `I18nManager.isRTL === true` at
+    start-up and logs an error otherwise.
 
   UX-06, NFR-09, NFR-10. Check: `mobile/test/unit/theme.test.ts` asserts body ≥ 16 and touch ≥ 48.
 
@@ -516,7 +589,7 @@ APP_MASTER_KEY=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa=`, then
       (search with `git ls-files | grep -i logo`). Create `mobile/app/(tabs)/_layout.tsx`: bottom tabs in
       RTL order Home, Customers & suppliers, Add, Inventory, More, filtered by role (UX-04). Screens not
       built yet show an Arabic "قريباً" (coming soon) placeholder. Check: GATE-M.
-- [ ] T059 Create `mobile/src/hooks/queryKeys.ts` and `mobile/src/hooks/invalidate.ts`.
+- [ ] T059 (FR-09, FR-13) Create `mobile/src/hooks/queryKeys.ts` and `mobile/src/hooks/invalidate.ts`.
       `invalidateFinancialViews(qc)` invalidates the dashboard, parties, statements, cashbox and sync
       keys, the phone counterpart of the frontend rule. Check: unit test.
 - [ ] T060 Run GATE-M and GATE-P. Check: both rules.
@@ -525,7 +598,7 @@ APP_MASTER_KEY=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa=`, then
 ## Phase 7: US1 — Enroll a phone and download the company data (Must, P1) [FR-06, FR-07, FR-08, E15]
 
 **Independent test**: on the cert hub seeded with 1,000 invoices (T039), enroll a fresh phone and
-compare counts and balances with the hub (automated under Node by T066; on device by T043).
+compare counts and balances with the hub (automated under Node by T066; on device by T086 step 9).
 
 - [ ] T062 [US1] Implement `mobile/src/core/enrollment.ts`: `enroll(hubUrl, code)` calls
       `POST /api/sync/enroll`, then `POST /api/sync/device-token`. It stores the device credential and
@@ -538,7 +611,8 @@ compare counts and balances with the hub (automated under Node by T066; on devic
       cursor after each page, so it resumes (FR-07). Progress is reported as
       `{ percent: cursor / headSeq, applied }`. Before starting it estimates the size (headSeq × 2 KB)
       against `FileSystem.getFreeDiskStorageAsync()` and refuses with both numbers when space is short
-      (E15). Check: unit test with a mocked pull of 3 pages, plus a kill-after-page-2 resume case.
+      (E15). Also enable the "S5 First download" button in `mobile/app/spikes.tsx` (T037) with this
+      function. Check: unit test with a mocked pull of 3 pages, plus a kill-after-page-2 resume case.
 - [ ] T064 [US1] Create `mobile/app/enroll.tsx`.
   - Steps: QR scan (`expo-camera` barcode scanner, accepting the JSON `{hub, code}` from BC-4) or typed
     hub URL and code → progress screen (percent and count) → done.
@@ -568,10 +642,10 @@ in.
   - `refresh()`: only a 401 or 403 from `/api/auth/refresh` ends the session. Any other 403 does not
     (FR-03).
   - `offlineLogin(userId, pin)` verifies against the stored verifier (FR-05).
-  - `logout()` calls `POST /api/auth/logout` when online, then clears the tokens.
+  - `logout()` first counts pending outbox units; when the count is above 0 it returns `{ needsConfirm: true, pending }`, and the screen warns "<N> عمليات لم تُرسل بعد" ("<N> operations not sent yet") before confirming (E8). After confirmation it calls `POST /api/auth/logout` when online, then clears the tokens.
 
   Check: `mobile/test/unit/session.test.ts` covers refresh-401 ends the session, other-403 keeps it,
-  offline login success and failure, and a one-year token.
+  offline login success and failure, a one-year token, and the pending-units confirmation (E8).
 
 - [ ] T069 [US2] Create `mobile/app/login.tsx`: a PIN picker listing the users from
       `GET /api/auth/device-roster` (cached locally after first fetch, so it works offline). It has a
@@ -586,7 +660,7 @@ in.
 
 - [ ] T071 [US2] Implement role rules: `mobile/src/core/roles.ts` exports `canWriteOffline(role)` (admin
       and accountant true; warehouse and viewer false) and `isAdminLike(role)` (admin or accountant,
-      matching `hasAdminPrivileges`), plus a strict `isAdmin(role)` used only for device revoke. FR-05,
+      matching `hasAdminPrivileges`), plus a strict `isAdmin(role)` used only for device revoke. The role is read from the local users table on every check, never cached in memory, so a role change pulled from the hub applies at once (E18). FR-05,
       constitution VI. Check: unit test over the 4 roles.
 - [ ] T072 [US2] CHECKPOINT "feat(mobile): PIN sign-in, permanent session, app lock (US2)".
 
@@ -633,7 +707,7 @@ in.
 
 - [ ] T081 [US15] Implement `mobile/src/core/wipe.ts`: `wipeDevice()` closes the database, deletes the
       database file, every secure-store key with the prefix `motard.`, `app-state.json`, and the cached
-      PDFs folder, then navigates to `/enroll`. It is called when `syncLoop` emits `revoked` (T053).
+      PDFs folder, then navigates to `/enroll`. It is called when `syncLoop` emits `revoked` (T053), even when unsynced units exist (lost-device policy, E7).
       Check: unit test with mocked FileSystem and secure store asserts every deletion, in that order.
 - [ ] T082 [US15] Add a parity scenario (i): an admin revokes the phone's device on the cert hub, the next
       `syncAll` raises `DeviceRevokedError`, and `wipeDevice` removes the temp database file.
@@ -647,7 +721,7 @@ in.
 - [ ] T085 CHECKPOINT "chore(mobile): Tier A complete". Then confirm that the `mobile-android` workflow
       run for this commit succeeded (`gh run list --workflow mobile-android.yml --limit 1`), or note that
       the owner must check.
-- [ ] T086 OWNER-LOCAL Tier A acceptance on the phone:
+- [ ] T086 OWNER-LOCAL Tier A acceptance on the phone (G1, NFR-04, R3 S2, R5 S5):
   1. Download the newest APK artifact (as in T041) and install it over the old one.
   2. Enroll with a code created on the desktop (Settings → Sync → Devices).
   3. Wait for the first download to finish.
@@ -656,9 +730,18 @@ in.
      fingerprint.
   6. Check that Home shows USD and SYP separately and the sync chip shows "offline".
   7. Turn airplane mode off and check the chip turns "synced".
-  8. On the desktop, revoke the phone and check the phone returns to the enrollment screen.
+  8. S2 on the phone: Spikes → "S2 Use-cases" → "Export for comparison"; copy the file to the computer
+     and run `node mobile/scripts/compare-db.mjs <phone.db> <desktop-reference.db>` with the reference
+     file the agent wrote in `specs/002-mobile-app/evidence/s2-reference.db` (T050). It must print
+     `0 differences`.
+  9. S5 on the phone: seed a reachable hub (the test hub on Render, or the cert stack on a computer on
+     the same Wi-Fi) with `node scripts/parity/seed-sync-volume.mjs --hub <url> --invoices 100000 --parties 10000 --out s5.json`,
+     create an enrollment code, then Spikes → "S5 First download" with "kill at 40%" ticked; reopen and
+     press it again. Record counts, balance differences (must be 0) and elapsed time, and decide whether
+     the time is acceptable (research R5, F5).
+  10. On the desktop, revoke the phone and check the phone returns to the enrollment screen.
 
-  Write PASS or FAIL per step into `specs/002-mobile-app/evidence/T086.md`.
+  Write PASS or FAIL per step (and the S5 numbers) into `specs/002-mobile-app/evidence/T086.md`.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 CUT LINE A — Tier A ends here. Everything above must be done with the $100 credit.
@@ -714,9 +797,11 @@ CUT LINE A — Tier A ends here. Everything above must be done with the $100 cre
 
 ## Phase 14: US6 — Sell from the phone offline (Must, P1) [FR-15, FR-17, FR-19, FR-34, E1]
 
+### Sale invoice creation (T099–T102)
+
 - [ ] T099 [US6] Create `mobile/src/ui/RollPicker.tsx`, a bottom sheet fabric → colour → roll that shows
       the remaining kg. Rolls with 0 kg are not selectable. Check: render test.
-- [ ] T100 [US6] Create `mobile/app/(tabs)/add/sale/` with three steps: `customer.tsx`, `lines.tsx`
+- [ ] T100 [US6] Create `mobile/app/(tabs)/add/sale/` (FR-15, FR-19: the rate is pre-filled exactly as in T093) with three steps: `customer.tsx`, `lines.tsx`
       (add, edit and remove lines: kg, pieces with 0 allowed, price, fixed line discount) and `review.tsx`
       (fixed header discount, tax, shipping, optional payment, rate). Draft state lives in
       `mobile/src/hooks/useSaleDraft.ts` (memory only). Totals shown are computed by calling the shared
@@ -730,13 +815,16 @@ CUT LINE A — Tier A ends here. Everything above must be done with the $100 cre
 - [ ] T102 [US6] Create the invoice detail `mobile/app/invoices/[id].tsx` with a cancel action for
       admin and accountant. Cancel calls the cancel use-case (reversal entries). FR-17. Check: parity
       scenario (c) adapted to cancel on the phone passes.
+
+### Claim-loss handling (T103)
+
 - [ ] T103 [US6] Claim loss UX: when sync marks the phone's invoice rejected with a claim conflict, show
       an Arabic alert naming the invoice number and the roll, and fire the T074 notification. FR-34.
       Check: parity scenario (e) asserts that the local document is cancelled, and a unit test asserts the
       alert text contains both identifiers.
 - [ ] T104 [US6] Run GATE-M, GATE-P and GATE-D steps 6–7.
 - [ ] T105 [US6] CHECKPOINT "feat(mobile): sale invoice with claim-loss handling (US6)".
-- [ ] T106 OWNER-LOCAL Tier B acceptance:
+- [ ] T106 OWNER-LOCAL (FR-15, FR-20, SC-001) Tier B acceptance:
   1. Install the newest APK.
   2. Put the phone in airplane mode.
   3. Record a receipt of 500 USD and a 3-line sale.
@@ -753,10 +841,10 @@ CUT LINE B — Tier B ends here. Everything below is deferred to the next credit
 
 ## Phase 15: US10 — Inventory, roll adjust, stock count (Must, P2) [FR-24–FR-26]
 
-- [ ] T107 [US10] Create `mobile/app/(tabs)/inventory/index.tsx`, `[fabricId].tsx` and `roll/[rollId].tsx`:
+- [ ] T107 [US10] (FR-24, FR-25) Create `mobile/app/(tabs)/inventory/index.tsx`, `[fabricId].tsx` and `roll/[rollId].tsx`:
       browse and search, remaining kg, a low-stock badge when remaining < `minStockKg`, and roll movements.
       Check: render test of the badge (50 kg minimum, 32 kg remaining).
-- [ ] T108 [US10] Roll adjust form (allowed roles) calling the adjust use-case. A price edit is refused
+- [ ] T108 [US10] (FR-25) Roll adjust form (allowed roles) calling the adjust use-case. A price edit is refused
       after the first sale with the use-case message. Remaining kg must not go below 0. Check: unit tests
       for the refusal and the negative guard.
 - [ ] T109 [US10] Stock count screen `mobile/app/(tabs)/inventory/count.tsx`, using the count-sheet and
@@ -819,7 +907,7 @@ CUT LINE B — Tier B ends here. Everything below is deferred to the next credit
 - [ ] T123 Create `backend/src/presentation/routes/mobileVersion.route.ts`, registered in
       `backend/src/presentation/server.ts` beside the health routes, per contracts/backend-changes.md
       BC-5, plus `backend/tests/mobile-version-route.test.ts`. Check: the test passes, then GATE-D in full.
-- [ ] T124 Create `mobile/src/core/updateCheck.ts`: on the APK channel, at most once a day, call
+- [ ] T124 (FR-43) Create `mobile/src/core/updateCheck.ts`: on the APK channel, at most once a day, call
       `GET /api/mobile/version` and offer the download when `latestVersionCode` is greater than the app's.
       Check: unit test.
 - [ ] T125 CHECKPOINT "feat: mobile version manifest and update check (BC-5, FR-43)".
@@ -836,18 +924,18 @@ CUT LINE B — Tier B ends here. Everything below is deferred to the next credit
       `GET /api/sync/devices` when that endpoint exposes per-device pending; otherwise record "not
       available" in evidence and skip. Check: GATE-D steps 6–7.
 - [ ] T129 [US17] Could: today's-cash home widget, saved note templates, and a tablet two-pane parties
-      screen at ≥ 600 dp. Each item is a separate commit with its own render test.
+      screen at ≥ 600 dp. Each item is a separate commit with its own render test in `mobile/test/unit/`. Check: GATE-M after each item.
 
 ## Phase 23: Polish, performance and release [NFR-01–NFR-13, SC-003–SC-008, M5]
 
-- [ ] T130 Performance under Node: `mobile/test/perf/volume.test.ts` seeds 100,000 invoices into a temp
+- [ ] T130 (NFR-02, NFR-03) Performance under Node: `mobile/test/perf/volume.test.ts` seeds 100,000 invoices into a temp
       database (with `scripts/parity/seed-volume.mjs` logic adapted to SQLite), then measures party search,
       the first statement page and an invoice save. It records the numbers in `evidence/T130.md` against
       NFR-02. Check: the file exists with the three numbers.
-- [ ] T131 OWNER-LOCAL Performance on the reference phone with 100,000 documents: cold start (NFR-01),
+- [ ] T131 OWNER-LOCAL (NFR-01, NFR-03, NFR-08, NFR-13, SC-005) Performance on the reference phone with 100,000 documents: cold start (NFR-01),
       search, statement and save (NFR-02), APK size (NFR-08), battery after one day (NFR-13). Write the
       numbers into `evidence/T131.md`.
-- [ ] T132 Accessibility pass: every touchable in `mobile/app/**` has an accessibility label and
+- [ ] T132 (NFR-09, G4) Accessibility pass: every touchable in `mobile/app/**` has an accessibility label and
       ≥ 48 dp. Add an automated test walking the rendered screens and asserting the `minHeight` style.
       NFR-09. Check: the test passes.
 - [ ] T133 Release workflow: extend `.github/workflows/mobile-android.yml` with a manual job `release`
@@ -863,7 +951,7 @@ CUT LINE B — Tier B ends here. Everything below is deferred to the next credit
 
   Write the results into `evidence/T134.md`.
 
-- [ ] T135 OWNER-LOCAL Pilot (M5): at least 5 phones for 30 days. Collect SC-002 (hub inbox delivered
+- [ ] T135 OWNER-LOCAL (G3, NFR-11, SC-002, SC-004, SC-006, SC-007, SC-008) Pilot (M5): at least 5 phones for 30 days. Collect SC-002 (hub inbox delivered
       without manual action, 0 duplicates), SC-004 timings, SC-006 crash-free sessions, SC-007 phone
       share of receipts, and SC-008 support issues into `evidence/pilot.md`.
 - [ ] T136 Final CHECKPOINT "chore(mobile): v1 release candidate".

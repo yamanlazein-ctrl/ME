@@ -41,7 +41,9 @@ React Query, drizzle-orm 0.45.2 (same version as `backend/package.json`), the S1
 (`@op-engineering/op-sqlite` first candidate, `expo-sqlite` second), `expo-secure-store`,
 `expo-local-authentication`, `expo-print`, `expo-sharing`, `expo-notifications`,
 `expo-background-task`, `expo-crypto`, `expo-file-system`, `expo-camera` (QR scan for
-enrollment only), `react-native-argon2`, and `react-dom/server` (S3).
+enrollment only), `expo-localization` (RTL), `expo-build-properties` (minSdkVersion 26),
+`@react-native-community/netinfo`, `react-native-argon2`, `react-dom/server` (S3), and
+`@testing-library/react-native` (tests).
 
 **Storage**: SQLite encrypted with SQLCipher on the phone, with the existing desktop schema and
 migrations unchanged. Secrets live in Android Keystore-backed `expo-secure-store`. The hub is
@@ -50,7 +52,8 @@ PostgreSQL (unchanged).
 **Testing**:
 
 - Vitest for phone adapters, money vectors and the sync parity suite, under Node.
-- A Hermes test runner inside the dev client for the money vectors and S1–S5.
+- A test-only "Spikes" screen inside the test APK (enabled by `EXPO_PUBLIC_SPIKES=1`) that runs
+  the money vectors on Hermes and the spikes S1, S2, S3 and S5.
 - The existing backend suites on both engines for every BC change.
 - Device e2e in airplane mode on the reference phone for release.
 
@@ -114,8 +117,8 @@ _GATE: must pass before Phase 0 research. Re-checked after Phase 1 design._
 
 Re-check after Phase 1: still PASS. Two items are carried into tasks as gates:
 
-- S1 must pass, or F1-a must be chosen, before M1.
-- The S5 time must be accepted by the owner before M2.
+- S1 must pass, or F1-a must be chosen, before M1 (tasks.md STOP-POINT 1 and SESSION-2 START).
+- The S5 time must be accepted by the owner at the Tier A acceptance (tasks.md T086), before Tier B.
 
 ## Project Structure
 
@@ -161,20 +164,25 @@ mobile/
 │   │   ├── runtime.ts            # open DB, run bundled migrations, fingerprint check
 │   │   ├── serialExecutor.ts     # one use-case at a time (research R3)
 │   │   ├── syncLoop.ts           # schedule of FR-32 calling the shared sync client
-│   │   └── wipe.ts               # FR-40
+│   │   ├── wipe.ts               # FR-40
+│   │   └── spikeS2.ts            # deterministic S2 routine (tasks T050)
 │   ├── platform/
 │   │   ├── sqlite/BetterSqliteShim.ts
 │   │   ├── asyncContext.ts
 │   │   ├── nodeCrypto.ts
 │   │   ├── secureStore.ts
-│   │   └── pinVerifier.ts        # Argon2id, desktop parameters
+│   │   ├── pinVerifier.ts        # Argon2id, desktop parameters
+│   │   ├── logger.ts             # replaces backend config/logger.ts (Metro mapping)
+│   │   └── envConfig.ts          # replaces backend config/env.ts (Metro mapping)
 │   ├── print/                    # renderToStaticMarkup of src/components/print/* → expo-print
 │   ├── ui/                       # design tokens from src/styles.css, components (FormField-style)
 │   └── hooks/                    # React Query hooks calling core use-cases
 ├── native/motard_sqlite_ext.c    # only if fallback F1-a is chosen
 ├── scripts/compare-db.mjs        # S2/S5 table-by-table comparison
+├── scripts/bundle-migrations.mjs # SQL migrations → src/core/generated/migrations.ts
+├── scripts/s2-reference.mjs      # S2 reference database on Node
 └── test/
-    ├── money-vectors.hermes.test.ts
+        ├── helpers/nodeSqlite.ts      # Node-only test helper (better-sqlite3), never bundled
     ├── parity/                   # sync parity suite against the cert hub
     └── unit/
 packages/shared/src/
@@ -199,11 +207,14 @@ through `tsconfig` paths and Metro `watchFolders`. Two new shared files are adde
 2. S4 + BC-2 + BC-3 test + BC-1, all backend, proven on both suites. Only the cloud session is
    needed.
 3. Mobile skeleton: Expo app, strict tsconfig, lint boundary, Metro mapping, spike screen.
-4. S1 (driver, SQLCipher, shim, functions, Argon2 timing), then S2 (use-cases on Hermes), then S3
-   (PDF), then S5 (first download).
+4. The spike code for S1 (driver, SQLCipher, shim, functions, Argon2 timing) and S3 (PDF), plus the
+   APK workflow. The first cloud session stops here (tasks.md STOP-POINT 1) and the owner runs S1, S3
+   and the Hermes money vectors on the phone.
 
-Exit criteria: every spike PASS or its fallback chosen, the owner accepts the S5 time, and both
-desktop suites are green.
+Exit criteria: S1 PASS or fallback F1-a chosen, S3 PASS or fallback F3 chosen, and both desktop suites
+green. S2 (use-cases on Hermes) and S5 (first download) need the container (M1) and enrollment, so
+they run on the phone at the Tier A acceptance (tasks.md T086); S2 is also proven on Node by the
+parity suite from M1 on.
 
 **M1: Core.**
 
@@ -248,7 +259,7 @@ The estimate is in research R13. The build session uses Claude Sonnet 5.5 (owner
 2026-10-25). The $100 credit buys about 700 to 1,100 agent turns. All of v1 is about 1,400 to
 2,500 turns ($125 to $225 on Sonnet 5.5). The credit expires 2026-11-05 10:59 (GMT+3).
 
-A cloud session cannot hold the reference phone. Every on-device check (S1, S2 on Hermes, S3, S5,
+A cloud session cannot hold the reference phone. Every on-device check (S1 and S3 at STOP-POINT 1; S2 on Hermes and S5 at T086;
 device e2e) is run by the owner on the phone, with the APK built by GitHub Actions (research R15,
 quickstart §2). The cloud session writes the code and the Node-side tests.
 

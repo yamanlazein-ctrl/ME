@@ -131,9 +131,10 @@ S2 pass criteria:
 
 1. Metro bundles `mobile/` with the receipt, sale invoice and sync use-cases imported from
    `backend/src`, with 0 boundary errors.
-2. On Hermes, the receipt use-case and a 3-line sale invoice use-case run against the S1 database
-   and write the same rows as the desktop for the same inputs (compared row by row with the
-   desktop's SQLite file).
+2. On Hermes, the receipt use-case and a 3-line sale invoice use-case (`mobile/src/core/spikeS2.ts`,
+   deterministic ids) write the same rows as the same routine run on Node
+   (`specs/002-mobile-app/evidence/s2-reference.db`, compared with `mobile/scripts/compare-db.mjs`).
+   Desktop equality of the same use-cases is proven separately by the sync parity suite (R11).
 3. A nested `withTenantTx` inside a use-case becomes a SAVEPOINT, as on the desktop.
 4. Two use-cases started at the same time run one after the other, never interleaved (proven by
    ordered log markers).
@@ -278,8 +279,8 @@ formula, and the SYP/USD conversion. It is seeded from the five files above, plu
 Two runners read it:
 
 - `packages/shared/src/money-vectors.test.ts` (Vitest, Node)
-- `mobile/test/money-vectors.hermes.test.ts` (runs on Hermes through the Expo dev client test
-  harness)
+- the "Money vectors (Hermes)" button of the test-only Spikes screen
+  (`mobile/app/spikes.tsx`) in the test APK
 
 The vectors and the Node runner are merged before any mobile money code. The Hermes runner is part
 of S2.
@@ -375,7 +376,9 @@ Fact (owner, 2026-10-25): the owner has neither the Android SDK nor an Expo (EAS
 Decision: a GitHub Actions workflow, `.github/workflows/mobile-android.yml`, builds the dev-client
 APK (debug) on GitHub's Ubuntu runners, which include the Android SDK. It runs on push to
 `feat/mobile` when `mobile/**` changes, and on manual dispatch. Steps: Node 22, JDK 17,
-`npm ci` in `mobile/`, `npx expo prebuild --platform android`, `./gradlew assembleDebug`, upload
+`npm ci` in `mobile/`, `npx expo prebuild --platform android`, `./gradlew assembleRelease` (the
+release variant bundles the JavaScript, so the phone needs no Metro server; the Expo template signs
+it with its debug key, which is fine for test installs), upload
 the APK as a workflow artifact. The owner downloads the APK from the run page and installs it on
 the reference phone. Cost: about 15 to 25 runner minutes per build, from the account's Actions
 minutes. Release builds (M5) use the same workflow with the signing secrets stored as GitHub
