@@ -84,10 +84,10 @@ E#, BC-#, UX-##, SC-###) trace to spec.md.
 
 **Purpose**: a working Linux test environment and the numbers GATE-D compares against.
 
-- [ ] T001 (constitution V, IX) Install dependencies: run `npm ci` at the repository root and `cd backend && npm ci`.
+- [x] T001 (constitution V, IX) Install dependencies: run `npm ci` at the repository root and `cd backend && npm ci`.
       Check: both exit 0, and `node --version` prints v22 or later. If it prints an older version, install
       Node 22 with `nvm install 22` and retry.
-- [ ] T002 (constitution V) Provision PostgreSQL for tests the way `.github/workflows/ci.yml` does.
+- [x] T002 (constitution V) Provision PostgreSQL for tests the way `.github/workflows/ci.yml` does.
   - If `docker` exists: `docker compose -f backend/docker-compose.yml up -d postgres redis` with
     `POSTGRES_USER=postgres POSTGRES_PASSWORD=postgres POSTGRES_DB=postgres
 APP_MASTER_KEY=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa=`, then
@@ -98,12 +98,12 @@ APP_MASTER_KEY=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa=`, then
 
   Check: `psql postgresql://postgres:postgres@localhost:5432/erp_test -c "select 1"` prints 1.
 
-- [ ] T003 Record the desktop baseline. Run the 7 GATE-D commands once, before any change, with
+- [x] T003 Record the desktop baseline. Run the 7 GATE-D commands once, before any change, with
       `E2E_ADMIN_PASSWORD=CiTestAdmin!Pass9 ALLOW_TEST_SEED=1 NODE_ENV=test` exported for steps 4–5. Write
       each command's summary line (passed / failed / skipped counts) to
       `specs/002-mobile-app/evidence/baseline.md`.
       Check: the file has 7 entries. Failing tests are allowed here; they are recorded, not fixed.
-- [ ] T004 CHECKPOINT "chore(mobile): test environment notes and desktop baseline".
+- [x] T004 CHECKPOINT "chore(mobile): test environment notes and desktop baseline".
 
 ## Phase 2: Money vectors (before any mobile money code) [constitution IV, SC-001, NFR-05]
 
