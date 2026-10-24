@@ -107,7 +107,7 @@ APP_MASTER_KEY=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa=`, then
 
 ## Phase 2: Money vectors (before any mobile money code) [constitution IV, SC-001, NFR-05]
 
-- [ ] T005 Create `packages/shared/src/money-vectors.json`, a JSON array of cases
+- [x] T005 Create `packages/shared/src/money-vectors.json`, a JSON array of cases
       `{ "id": string, "op": "round2dp"|"round4dp"|"lineValue"|"invoiceTotal"|"usdToSyp"|"sypToUsd", "input": object, "expected": number|string }`.
   - Seed it from the assertions in:
     - `packages/shared/src/precision.test.ts`
@@ -127,11 +127,11 @@ APP_MASTER_KEY=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa=`, then
 
   At least 120 cases. Check: `node -e "JSON.parse(require('fs').readFileSync('packages/shared/src/money-vectors.json','utf8')).length"` prints ≥ 120.
 
-- [ ] T006 Create the Node runner `packages/shared/src/money-vectors.test.ts` (Vitest). It loads the JSON
+- [x] T006 Create the Node runner `packages/shared/src/money-vectors.test.ts` (Vitest). It loads the JSON
       and asserts each case through the real `round2dp` / `round4dp` and the line/total formulas built from
       them. Check: `npx vitest run packages/shared/src/money-vectors.test.ts` → all passed, 0 failed.
-- [ ] T007 Run GATE-D steps 6 and 7 (shared code changed). Check: GATE-D rule.
-- [ ] T008 CHECKPOINT "test(shared): cross-runtime money vectors (constitution IV)".
+- [x] T007 Run GATE-D steps 6 and 7 (shared code changed). Check: GATE-D rule.
+- [x] T008 CHECKPOINT "test(shared): cross-runtime money vectors (constitution IV)".
 
 ## Phase 3: Backend changes BC-2, BC-3, BC-1 [contracts/backend-changes.md]
 

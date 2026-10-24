@@ -1,0 +1,2389 @@
+[
+  {
+    "id": "round2dp-half-001",
+    "op": "round2dp",
+    "input": {
+      "value": "0.035"
+    },
+    "expected": 0.04
+  },
+  {
+    "id": "round2dp-half-002",
+    "op": "round2dp",
+    "input": {
+      "value": "1.005"
+    },
+    "expected": 1.01
+  },
+  {
+    "id": "round2dp-half-003",
+    "op": "round2dp",
+    "input": {
+      "value": "2.675"
+    },
+    "expected": 2.68
+  },
+  {
+    "id": "round2dp-half-004",
+    "op": "round2dp",
+    "input": {
+      "value": "10.075"
+    },
+    "expected": 10.08
+  },
+  {
+    "id": "round2dp-half-005",
+    "op": "round2dp",
+    "input": {
+      "value": "-0.225"
+    },
+    "expected": -0.23
+  },
+  {
+    "id": "round2dp-half-006",
+    "op": "round2dp",
+    "input": {
+      "value": "-1.005"
+    },
+    "expected": -1.01
+  },
+  {
+    "id": "round2dp-half-007",
+    "op": "round2dp",
+    "input": {
+      "value": "-0.0049"
+    },
+    "expected": 0
+  },
+  {
+    "id": "round2dp-half-008",
+    "op": "round2dp",
+    "input": {
+      "value": "-0.001"
+    },
+    "expected": 0
+  },
+  {
+    "id": "round2dp-half-009",
+    "op": "round2dp",
+    "input": {
+      "value": "999999999999.995"
+    },
+    "expected": 1000000000000
+  },
+  {
+    "id": "round2dp-half-010",
+    "op": "round2dp",
+    "input": {
+      "value": "59307000"
+    },
+    "expected": 59307000
+  },
+  {
+    "id": "round2dp-half-011",
+    "op": "round2dp",
+    "input": {
+      "value": "10000000.29"
+    },
+    "expected": 10000000.29
+  },
+  {
+    "id": "round2dp-half-012",
+    "op": "round2dp",
+    "input": {
+      "value": "123456789.005"
+    },
+    "expected": 123456789.01
+  },
+  {
+    "id": "round2dp-half-013",
+    "op": "round2dp",
+    "input": {
+      "value": "2323.423"
+    },
+    "expected": 2323.42
+  },
+  {
+    "id": "round2dp-half-014",
+    "op": "round2dp",
+    "input": {
+      "value": "32.999"
+    },
+    "expected": 33
+  },
+  {
+    "id": "round2dp-half-015",
+    "op": "round2dp",
+    "input": {
+      "value": "32.423"
+    },
+    "expected": 32.42
+  },
+  {
+    "id": "round2dp-half-016",
+    "op": "round2dp",
+    "input": {
+      "value": "0.001"
+    },
+    "expected": 0
+  },
+  {
+    "id": "round2dp-half-017",
+    "op": "round2dp",
+    "input": {
+      "value": "0"
+    },
+    "expected": 0
+  },
+  {
+    "id": "round2dp-half-018",
+    "op": "round2dp",
+    "input": {
+      "value": "0.01"
+    },
+    "expected": 0.01
+  },
+  {
+    "id": "round2dp-half-019",
+    "op": "round2dp",
+    "input": {
+      "value": "12.34"
+    },
+    "expected": 12.34
+  },
+  {
+    "id": "round2dp-half-020",
+    "op": "round2dp",
+    "input": {
+      "value": "-12.34"
+    },
+    "expected": -12.34
+  },
+  {
+    "id": "round2dp-half-021",
+    "op": "round2dp",
+    "input": {
+      "value": "100"
+    },
+    "expected": 100
+  },
+  {
+    "id": "round2dp-half-022",
+    "op": "round2dp",
+    "input": {
+      "value": "2323.42"
+    },
+    "expected": 2323.42
+  },
+  {
+    "id": "round2dp-half-023",
+    "op": "round2dp",
+    "input": {
+      "value": "0.005"
+    },
+    "expected": 0.01
+  },
+  {
+    "id": "round2dp-half-024",
+    "op": "round2dp",
+    "input": {
+      "value": "-0.005"
+    },
+    "expected": -0.01
+  },
+  {
+    "id": "round2dp-half-025",
+    "op": "round2dp",
+    "input": {
+      "value": "0.015"
+    },
+    "expected": 0.02
+  },
+  {
+    "id": "round2dp-half-026",
+    "op": "round2dp",
+    "input": {
+      "value": "-0.015"
+    },
+    "expected": -0.02
+  },
+  {
+    "id": "round2dp-half-027",
+    "op": "round2dp",
+    "input": {
+      "value": "0.995"
+    },
+    "expected": 1
+  },
+  {
+    "id": "round2dp-half-028",
+    "op": "round2dp",
+    "input": {
+      "value": "-0.995"
+    },
+    "expected": -1
+  },
+  {
+    "id": "round2dp-half-029",
+    "op": "round2dp",
+    "input": {
+      "value": "1.995"
+    },
+    "expected": 2
+  },
+  {
+    "id": "round2dp-half-030",
+    "op": "round2dp",
+    "input": {
+      "value": "-1.995"
+    },
+    "expected": -2
+  },
+  {
+    "id": "round2dp-half-031",
+    "op": "round2dp",
+    "input": {
+      "value": "12345.675"
+    },
+    "expected": 12345.68
+  },
+  {
+    "id": "round2dp-half-032",
+    "op": "round2dp",
+    "input": {
+      "value": "-12345.675"
+    },
+    "expected": -12345.68
+  },
+  {
+    "id": "round2dp-half-033",
+    "op": "round2dp",
+    "input": {
+      "value": "0.004"
+    },
+    "expected": 0
+  },
+  {
+    "id": "round2dp-half-034",
+    "op": "round2dp",
+    "input": {
+      "value": "-0.004"
+    },
+    "expected": 0
+  },
+  {
+    "id": "round2dp-half-035",
+    "op": "round2dp",
+    "input": {
+      "value": "0.0049"
+    },
+    "expected": 0
+  },
+  {
+    "id": "round2dp-half-036",
+    "op": "round2dp",
+    "input": {
+      "value": "0.0051"
+    },
+    "expected": 0.01
+  },
+  {
+    "id": "round2dp-half-037",
+    "op": "round2dp",
+    "input": {
+      "value": "-0.0051"
+    },
+    "expected": -0.01
+  },
+  {
+    "id": "round2dp-half-038",
+    "op": "round2dp",
+    "input": {
+      "value": "5.555"
+    },
+    "expected": 5.56
+  },
+  {
+    "id": "round2dp-half-039",
+    "op": "round2dp",
+    "input": {
+      "value": "-5.555"
+    },
+    "expected": -5.56
+  },
+  {
+    "id": "round2dp-half-040",
+    "op": "round2dp",
+    "input": {
+      "value": "1000000.005"
+    },
+    "expected": 1000000.01
+  },
+  {
+    "id": "round2dp-half-041",
+    "op": "round2dp",
+    "input": {
+      "value": "-1000000.005"
+    },
+    "expected": -1000000.01
+  },
+  {
+    "id": "round2dp-half-042",
+    "op": "round2dp",
+    "input": {
+      "value": "99999999.995"
+    },
+    "expected": 100000000
+  },
+  {
+    "id": "round2dp-half-043",
+    "op": "round2dp",
+    "input": {
+      "value": "-99999999.995"
+    },
+    "expected": -100000000
+  },
+  {
+    "id": "round2dp-half-044",
+    "op": "round2dp",
+    "input": {
+      "value": "0.045"
+    },
+    "expected": 0.05
+  },
+  {
+    "id": "round2dp-half-045",
+    "op": "round2dp",
+    "input": {
+      "value": "0.055"
+    },
+    "expected": 0.06
+  },
+  {
+    "id": "round2dp-half-046",
+    "op": "round2dp",
+    "input": {
+      "value": "0.065"
+    },
+    "expected": 0.07
+  },
+  {
+    "id": "round2dp-half-047",
+    "op": "round2dp",
+    "input": {
+      "value": "0.075"
+    },
+    "expected": 0.08
+  },
+  {
+    "id": "round2dp-half-048",
+    "op": "round2dp",
+    "input": {
+      "value": "0.085"
+    },
+    "expected": 0.09
+  },
+  {
+    "id": "round2dp-half-049",
+    "op": "round2dp",
+    "input": {
+      "value": "0.095"
+    },
+    "expected": 0.1
+  },
+  {
+    "id": "round2dp-half-050",
+    "op": "round2dp",
+    "input": {
+      "value": "8.345"
+    },
+    "expected": 8.35
+  },
+  {
+    "id": "round2dp-half-051",
+    "op": "round2dp",
+    "input": {
+      "value": "8.355"
+    },
+    "expected": 8.36
+  },
+  {
+    "id": "round2dp-half-052",
+    "op": "round2dp",
+    "input": {
+      "value": "-8.345"
+    },
+    "expected": -8.35
+  },
+  {
+    "id": "round2dp-half-053",
+    "op": "round2dp",
+    "input": {
+      "value": "-8.355"
+    },
+    "expected": -8.36
+  },
+  {
+    "id": "round2dp-negzero-054",
+    "op": "round2dp",
+    "input": {
+      "value": "-0.001"
+    },
+    "expected": 0
+  },
+  {
+    "id": "round2dp-negzero-055",
+    "op": "round2dp",
+    "input": {
+      "value": "-0.0049"
+    },
+    "expected": 0
+  },
+  {
+    "id": "round2dp-negzero-056",
+    "op": "round2dp",
+    "input": {
+      "value": "-0"
+    },
+    "expected": 0
+  },
+  {
+    "id": "round2dp-negzero-057",
+    "op": "round2dp",
+    "input": {
+      "value": "-0.00"
+    },
+    "expected": 0
+  },
+  {
+    "id": "round2dp-nonfinite-058",
+    "op": "round2dp",
+    "input": {
+      "value": "NaN"
+    },
+    "expected": 0
+  },
+  {
+    "id": "round2dp-nonfinite-059",
+    "op": "round2dp",
+    "input": {
+      "value": "Infinity"
+    },
+    "expected": 0
+  },
+  {
+    "id": "round2dp-nonfinite-060",
+    "op": "round2dp",
+    "input": {
+      "value": "-Infinity"
+    },
+    "expected": 0
+  },
+  {
+    "id": "round2dp-bigint-string-061",
+    "op": "round2dp",
+    "input": {
+      "value": "9007199254740993"
+    },
+    "expected": 9007199254740992
+  },
+  {
+    "id": "round2dp-bigint-string-062",
+    "op": "round2dp",
+    "input": {
+      "value": "9007199254740992"
+    },
+    "expected": 9007199254740992
+  },
+  {
+    "id": "round4dp-half-063",
+    "op": "round4dp",
+    "input": {
+      "value": "0.00125"
+    },
+    "expected": 0.0013
+  },
+  {
+    "id": "round4dp-half-064",
+    "op": "round4dp",
+    "input": {
+      "value": "26.66665"
+    },
+    "expected": 26.6667
+  },
+  {
+    "id": "round4dp-half-065",
+    "op": "round4dp",
+    "input": {
+      "value": "-0.00005"
+    },
+    "expected": -0.0001
+  },
+  {
+    "id": "round4dp-half-066",
+    "op": "round4dp",
+    "input": {
+      "value": "0.00005"
+    },
+    "expected": 0.0001
+  },
+  {
+    "id": "round4dp-half-067",
+    "op": "round4dp",
+    "input": {
+      "value": "0.00015"
+    },
+    "expected": 0.0002
+  },
+  {
+    "id": "round4dp-half-068",
+    "op": "round4dp",
+    "input": {
+      "value": "-0.00015"
+    },
+    "expected": -0.0002
+  },
+  {
+    "id": "round4dp-half-069",
+    "op": "round4dp",
+    "input": {
+      "value": "1.00005"
+    },
+    "expected": 1.0001
+  },
+  {
+    "id": "round4dp-half-070",
+    "op": "round4dp",
+    "input": {
+      "value": "-1.00005"
+    },
+    "expected": -1.0001
+  },
+  {
+    "id": "round4dp-half-071",
+    "op": "round4dp",
+    "input": {
+      "value": "26.6667"
+    },
+    "expected": 26.6667
+  },
+  {
+    "id": "round4dp-half-072",
+    "op": "round4dp",
+    "input": {
+      "value": "8.3333"
+    },
+    "expected": 8.3333
+  },
+  {
+    "id": "round4dp-half-073",
+    "op": "round4dp",
+    "input": {
+      "value": "12.345"
+    },
+    "expected": 12.345
+  },
+  {
+    "id": "round4dp-half-074",
+    "op": "round4dp",
+    "input": {
+      "value": "0.0125"
+    },
+    "expected": 0.0125
+  },
+  {
+    "id": "round4dp-half-075",
+    "op": "round4dp",
+    "input": {
+      "value": "7.14155"
+    },
+    "expected": 7.1416
+  },
+  {
+    "id": "round4dp-half-076",
+    "op": "round4dp",
+    "input": {
+      "value": "-7.14155"
+    },
+    "expected": -7.1416
+  },
+  {
+    "id": "round4dp-half-077",
+    "op": "round4dp",
+    "input": {
+      "value": "0"
+    },
+    "expected": 0
+  },
+  {
+    "id": "round4dp-half-078",
+    "op": "round4dp",
+    "input": {
+      "value": "0.0001"
+    },
+    "expected": 0.0001
+  },
+  {
+    "id": "round4dp-half-079",
+    "op": "round4dp",
+    "input": {
+      "value": "0.00004"
+    },
+    "expected": 0
+  },
+  {
+    "id": "round4dp-half-080",
+    "op": "round4dp",
+    "input": {
+      "value": "-0.00004"
+    },
+    "expected": 0
+  },
+  {
+    "id": "round4dp-half-081",
+    "op": "round4dp",
+    "input": {
+      "value": "123456.78905"
+    },
+    "expected": 123456.7891
+  },
+  {
+    "id": "round4dp-half-082",
+    "op": "round4dp",
+    "input": {
+      "value": "-123456.78905"
+    },
+    "expected": -123456.7891
+  },
+  {
+    "id": "round4dp-negzero-083",
+    "op": "round4dp",
+    "input": {
+      "value": "-0.00004"
+    },
+    "expected": 0
+  },
+  {
+    "id": "round4dp-nonfinite-084",
+    "op": "round4dp",
+    "input": {
+      "value": "NaN"
+    },
+    "expected": 0
+  },
+  {
+    "id": "lineValue-line-085",
+    "op": "lineValue",
+    "input": {
+      "qty": "0.5",
+      "price": "1",
+      "discountAmount": "0"
+    },
+    "expected": 0.5
+  },
+  {
+    "id": "lineValue-line-086",
+    "op": "lineValue",
+    "input": {
+      "qty": "7.25",
+      "price": "8750.50",
+      "discountAmount": "0"
+    },
+    "expected": 63441.13
+  },
+  {
+    "id": "lineValue-line-087",
+    "op": "lineValue",
+    "input": {
+      "qty": "12.5",
+      "price": "1.5",
+      "discountAmount": "0.5"
+    },
+    "expected": 18.25
+  },
+  {
+    "id": "lineValue-line-088",
+    "op": "lineValue",
+    "input": {
+      "qty": "100",
+      "price": "1.25",
+      "discountAmount": "0"
+    },
+    "expected": 125
+  },
+  {
+    "id": "lineValue-line-089",
+    "op": "lineValue",
+    "input": {
+      "qty": "0.18",
+      "price": "1.25",
+      "discountAmount": "0"
+    },
+    "expected": 0.23
+  },
+  {
+    "id": "lineValue-line-090",
+    "op": "lineValue",
+    "input": {
+      "qty": "3.333",
+      "price": "26.6667",
+      "discountAmount": "0"
+    },
+    "expected": 88.88
+  },
+  {
+    "id": "lineValue-line-091",
+    "op": "lineValue",
+    "input": {
+      "qty": "25.4",
+      "price": "4.45",
+      "discountAmount": "10"
+    },
+    "expected": 103.03
+  },
+  {
+    "id": "lineValue-line-092",
+    "op": "lineValue",
+    "input": {
+      "qty": "1",
+      "price": "0.05",
+      "discountAmount": "0"
+    },
+    "expected": 0.05
+  },
+  {
+    "id": "lineValue-line-093",
+    "op": "lineValue",
+    "input": {
+      "qty": "19.99",
+      "price": "0.15",
+      "discountAmount": "0.01"
+    },
+    "expected": 2.99
+  },
+  {
+    "id": "lineValue-line-094",
+    "op": "lineValue",
+    "input": {
+      "qty": "500",
+      "price": "13500",
+      "discountAmount": "1000"
+    },
+    "expected": 6749000
+  },
+  {
+    "id": "lineValue-line-095",
+    "op": "lineValue",
+    "input": {
+      "qty": "0.01",
+      "price": "0.01",
+      "discountAmount": "0"
+    },
+    "expected": 0
+  },
+  {
+    "id": "lineValue-line-096",
+    "op": "lineValue",
+    "input": {
+      "qty": "33.33",
+      "price": "12.55",
+      "discountAmount": "5"
+    },
+    "expected": 413.29
+  },
+  {
+    "id": "lineValue-line-097",
+    "op": "lineValue",
+    "input": {
+      "qty": "18.5",
+      "price": "14650.25",
+      "discountAmount": "0"
+    },
+    "expected": 271029.63
+  },
+  {
+    "id": "lineValue-line-098",
+    "op": "lineValue",
+    "input": {
+      "qty": "7.1",
+      "price": "10.05",
+      "discountAmount": "0.5"
+    },
+    "expected": 70.86
+  },
+  {
+    "id": "lineValue-line-099",
+    "op": "lineValue",
+    "input": {
+      "qty": "2.35",
+      "price": "2.35",
+      "discountAmount": "0"
+    },
+    "expected": 5.52
+  },
+  {
+    "id": "lineValue-line-100",
+    "op": "lineValue",
+    "input": {
+      "qty": "1234.56",
+      "price": "0.0125",
+      "discountAmount": "0"
+    },
+    "expected": 15.43
+  },
+  {
+    "id": "lineValue-line-101",
+    "op": "lineValue",
+    "input": {
+      "qty": "10",
+      "price": "8.3333",
+      "discountAmount": "0"
+    },
+    "expected": 83.33
+  },
+  {
+    "id": "lineValue-line-102",
+    "op": "lineValue",
+    "input": {
+      "qty": "10",
+      "price": "12.3450",
+      "discountAmount": "0"
+    },
+    "expected": 123.45
+  },
+  {
+    "id": "lineValue-line-103",
+    "op": "lineValue",
+    "input": {
+      "qty": "0.7",
+      "price": "0.05",
+      "discountAmount": "0"
+    },
+    "expected": 0.04
+  },
+  {
+    "id": "lineValue-line-104",
+    "op": "lineValue",
+    "input": {
+      "qty": "-1",
+      "price": "5",
+      "discountAmount": "0"
+    },
+    "expected": 0
+  },
+  {
+    "id": "lineValue-line-105",
+    "op": "lineValue",
+    "input": {
+      "qty": "1",
+      "price": "10",
+      "discountAmount": "50"
+    },
+    "expected": 0
+  },
+  {
+    "id": "lineValue-line-106",
+    "op": "lineValue",
+    "input": {
+      "qty": "2",
+      "price": "3",
+      "discountAmount": "6.01"
+    },
+    "expected": 0
+  },
+  {
+    "id": "lineValue-line-107",
+    "op": "lineValue",
+    "input": {
+      "qty": "0.5",
+      "price": "1",
+      "discountAmount": "0.51"
+    },
+    "expected": 0
+  },
+  {
+    "id": "lineValue-line-108",
+    "op": "lineValue",
+    "input": {
+      "qty": "10",
+      "price": "1",
+      "discountAmount": "10"
+    },
+    "expected": 0
+  },
+  {
+    "id": "lineValue-line-109",
+    "op": "lineValue",
+    "input": {
+      "qty": "0",
+      "price": "100",
+      "discountAmount": "5"
+    },
+    "expected": 0
+  },
+  {
+    "id": "lineValue-line-110",
+    "op": "lineValue",
+    "input": {
+      "qty": "12.34",
+      "price": "56.78",
+      "discountAmount": "100000"
+    },
+    "expected": 0
+  },
+  {
+    "id": "lineValue-line-half-111",
+    "op": "lineValue",
+    "input": {
+      "qty": "0.15",
+      "price": "1.5",
+      "discountAmount": "0"
+    },
+    "expected": 0.23
+  },
+  {
+    "id": "lineValue-line-half-112",
+    "op": "lineValue",
+    "input": {
+      "qty": "2.5",
+      "price": "0.35",
+      "discountAmount": "0"
+    },
+    "expected": 0.88
+  },
+  {
+    "id": "lineValue-line-half-113",
+    "op": "lineValue",
+    "input": {
+      "qty": "1.5",
+      "price": "0.15",
+      "discountAmount": "0"
+    },
+    "expected": 0.23
+  },
+  {
+    "id": "lineValue-line-half-114",
+    "op": "lineValue",
+    "input": {
+      "qty": "3",
+      "price": "0.335",
+      "discountAmount": "0"
+    },
+    "expected": 1.01
+  },
+  {
+    "id": "lineValue-line-half-115",
+    "op": "lineValue",
+    "input": {
+      "qty": "0.25",
+      "price": "0.18",
+      "discountAmount": "0"
+    },
+    "expected": 0.05
+  },
+  {
+    "id": "lineValue-line-half-116",
+    "op": "lineValue",
+    "input": {
+      "qty": "7.5",
+      "price": "0.1",
+      "discountAmount": "0"
+    },
+    "expected": 0.75
+  },
+  {
+    "id": "lineValue-line-half-117",
+    "op": "lineValue",
+    "input": {
+      "qty": "9.9",
+      "price": "9.9",
+      "discountAmount": "0"
+    },
+    "expected": 98.01
+  },
+  {
+    "id": "lineValue-line-half-118",
+    "op": "lineValue",
+    "input": {
+      "qty": "1.01",
+      "price": "1.01",
+      "discountAmount": "0"
+    },
+    "expected": 1.02
+  },
+  {
+    "id": "lineValue-line-half-119",
+    "op": "lineValue",
+    "input": {
+      "qty": "99999.99",
+      "price": "99999.99",
+      "discountAmount": "0"
+    },
+    "expected": 9999998000
+  },
+  {
+    "id": "lineValue-line-half-120",
+    "op": "lineValue",
+    "input": {
+      "qty": "0.03",
+      "price": "0.5",
+      "discountAmount": "0"
+    },
+    "expected": 0.02
+  },
+  {
+    "id": "invoiceTotal-parity-121",
+    "op": "invoiceTotal",
+    "input": {
+      "lines": [
+        {
+          "qty": "0.5",
+          "price": "1",
+          "discountAmount": "0"
+        },
+        {
+          "qty": "0.5",
+          "price": "1",
+          "discountAmount": "0"
+        },
+        {
+          "qty": "0.5",
+          "price": "1",
+          "discountAmount": "0"
+        }
+      ],
+      "discount": "0",
+      "tax": "0",
+      "shipping": "0"
+    },
+    "expected": 1.5
+  },
+  {
+    "id": "invoiceTotal-parity-122",
+    "op": "invoiceTotal",
+    "input": {
+      "lines": [
+        {
+          "qty": "7.25",
+          "price": "8750.50",
+          "discountAmount": "0"
+        },
+        {
+          "qty": "7.25",
+          "price": "8750.50",
+          "discountAmount": "0"
+        },
+        {
+          "qty": "7.25",
+          "price": "8750.50",
+          "discountAmount": "0"
+        },
+        {
+          "qty": "7.25",
+          "price": "8750.50",
+          "discountAmount": "0"
+        },
+        {
+          "qty": "7.25",
+          "price": "8750.50",
+          "discountAmount": "0"
+        }
+      ],
+      "discount": "0",
+      "tax": "0",
+      "shipping": "0"
+    },
+    "expected": 317205.65
+  },
+  {
+    "id": "invoiceTotal-parity-123",
+    "op": "invoiceTotal",
+    "input": {
+      "lines": [
+        {
+          "qty": "12.5",
+          "price": "1.5",
+          "discountAmount": "0.5"
+        }
+      ],
+      "discount": "0",
+      "tax": "0",
+      "shipping": "0"
+    },
+    "expected": 18.25
+  },
+  {
+    "id": "invoiceTotal-mixed-124",
+    "op": "invoiceTotal",
+    "input": {
+      "lines": [
+        {
+          "qty": "10",
+          "price": "25.5",
+          "discountAmount": "0"
+        },
+        {
+          "qty": "4.4",
+          "price": "18.75",
+          "discountAmount": "2.25"
+        },
+        {
+          "qty": "0.35",
+          "price": "100",
+          "discountAmount": "0"
+        }
+      ],
+      "discount": "10",
+      "tax": "5.5",
+      "shipping": "3"
+    },
+    "expected": 368.75
+  },
+  {
+    "id": "invoiceTotal-syp-125",
+    "op": "invoiceTotal",
+    "input": {
+      "lines": [
+        {
+          "qty": "20",
+          "price": "13500",
+          "discountAmount": "0"
+        },
+        {
+          "qty": "15.5",
+          "price": "14650.25",
+          "discountAmount": "100"
+        }
+      ],
+      "discount": "5000",
+      "tax": "0",
+      "shipping": "2500"
+    },
+    "expected": 494478.88
+  },
+  {
+    "id": "invoiceTotal-overdiscount-126",
+    "op": "invoiceTotal",
+    "input": {
+      "lines": [
+        {
+          "qty": "1",
+          "price": "10",
+          "discountAmount": "50"
+        }
+      ],
+      "discount": "0",
+      "tax": "0",
+      "shipping": "0"
+    },
+    "expected": 0
+  },
+  {
+    "id": "invoiceTotal-overdiscount-127",
+    "op": "invoiceTotal",
+    "input": {
+      "lines": [
+        {
+          "qty": "1",
+          "price": "10",
+          "discountAmount": "50"
+        },
+        {
+          "qty": "2",
+          "price": "3",
+          "discountAmount": "0"
+        }
+      ],
+      "discount": "1",
+      "tax": "0",
+      "shipping": "0"
+    },
+    "expected": 5
+  },
+  {
+    "id": "invoiceTotal-unitprice-128",
+    "op": "invoiceTotal",
+    "input": {
+      "lines": [
+        {
+          "qty": "3.333",
+          "price": "26.6667",
+          "discountAmount": "0"
+        },
+        {
+          "qty": "3.333",
+          "price": "26.6667",
+          "discountAmount": "0"
+        }
+      ],
+      "discount": "0.01",
+      "tax": "0.02",
+      "shipping": "0.03"
+    },
+    "expected": 177.8
+  },
+  {
+    "id": "invoiceTotal-halves-129",
+    "op": "invoiceTotal",
+    "input": {
+      "lines": [
+        {
+          "qty": "0.15",
+          "price": "1.5",
+          "discountAmount": "0"
+        },
+        {
+          "qty": "0.15",
+          "price": "1.5",
+          "discountAmount": "0"
+        },
+        {
+          "qty": "0.15",
+          "price": "1.5",
+          "discountAmount": "0"
+        },
+        {
+          "qty": "0.15",
+          "price": "1.5",
+          "discountAmount": "0"
+        }
+      ],
+      "discount": "0",
+      "tax": "0",
+      "shipping": "0"
+    },
+    "expected": 0.92
+  },
+  {
+    "id": "invoiceTotal-zero-total-130",
+    "op": "invoiceTotal",
+    "input": {
+      "lines": [
+        {
+          "qty": "100",
+          "price": "100",
+          "discountAmount": "0"
+        }
+      ],
+      "discount": "10000",
+      "tax": "0",
+      "shipping": "0"
+    },
+    "expected": 0
+  },
+  {
+    "id": "invoiceTotal-negative-total-131",
+    "op": "invoiceTotal",
+    "input": {
+      "lines": [
+        {
+          "qty": "100",
+          "price": "100",
+          "discountAmount": "0"
+        }
+      ],
+      "discount": "10000.01",
+      "tax": "0",
+      "shipping": "0"
+    },
+    "expected": -0.01
+  },
+  {
+    "id": "invoiceTotal-tax-half-132",
+    "op": "invoiceTotal",
+    "input": {
+      "lines": [
+        {
+          "qty": "5",
+          "price": "5",
+          "discountAmount": "0"
+        }
+      ],
+      "discount": "0",
+      "tax": "1.115",
+      "shipping": "0"
+    },
+    "expected": 26.12
+  },
+  {
+    "id": "invoiceTotal-large-133",
+    "op": "invoiceTotal",
+    "input": {
+      "lines": [
+        {
+          "qty": "999999",
+          "price": "999999",
+          "discountAmount": "0"
+        }
+      ],
+      "discount": "0.5",
+      "tax": "0.25",
+      "shipping": "0.25"
+    },
+    "expected": 999998000001
+  },
+  {
+    "id": "invoiceTotal-tiny-134",
+    "op": "invoiceTotal",
+    "input": {
+      "lines": [
+        {
+          "qty": "0.01",
+          "price": "0.01",
+          "discountAmount": "0"
+        }
+      ],
+      "discount": "0",
+      "tax": "0",
+      "shipping": "0"
+    },
+    "expected": 0
+  },
+  {
+    "id": "invoiceTotal-many-lines-135",
+    "op": "invoiceTotal",
+    "input": {
+      "lines": [
+        {
+          "qty": "1.25",
+          "price": "1.15",
+          "discountAmount": "0"
+        },
+        {
+          "qty": "2.25",
+          "price": "1.15",
+          "discountAmount": "0"
+        },
+        {
+          "qty": "3.25",
+          "price": "1.15",
+          "discountAmount": "0"
+        },
+        {
+          "qty": "4.25",
+          "price": "1.15",
+          "discountAmount": "0"
+        },
+        {
+          "qty": "5.25",
+          "price": "1.15",
+          "discountAmount": "0"
+        },
+        {
+          "qty": "6.25",
+          "price": "1.15",
+          "discountAmount": "0"
+        },
+        {
+          "qty": "7.25",
+          "price": "1.15",
+          "discountAmount": "0"
+        },
+        {
+          "qty": "8.25",
+          "price": "1.15",
+          "discountAmount": "0"
+        },
+        {
+          "qty": "9.25",
+          "price": "1.15",
+          "discountAmount": "0"
+        },
+        {
+          "qty": "10.25",
+          "price": "1.15",
+          "discountAmount": "0"
+        },
+        {
+          "qty": "11.25",
+          "price": "1.15",
+          "discountAmount": "0"
+        },
+        {
+          "qty": "12.25",
+          "price": "1.15",
+          "discountAmount": "0"
+        },
+        {
+          "qty": "13.25",
+          "price": "1.15",
+          "discountAmount": "0"
+        },
+        {
+          "qty": "14.25",
+          "price": "1.15",
+          "discountAmount": "0"
+        },
+        {
+          "qty": "15.25",
+          "price": "1.15",
+          "discountAmount": "0"
+        },
+        {
+          "qty": "16.25",
+          "price": "1.15",
+          "discountAmount": "0"
+        },
+        {
+          "qty": "17.25",
+          "price": "1.15",
+          "discountAmount": "0"
+        },
+        {
+          "qty": "18.25",
+          "price": "1.15",
+          "discountAmount": "0"
+        },
+        {
+          "qty": "19.25",
+          "price": "1.15",
+          "discountAmount": "0"
+        },
+        {
+          "qty": "20.25",
+          "price": "1.15",
+          "discountAmount": "0"
+        },
+        {
+          "qty": "21.25",
+          "price": "1.15",
+          "discountAmount": "0"
+        },
+        {
+          "qty": "22.25",
+          "price": "1.15",
+          "discountAmount": "0"
+        },
+        {
+          "qty": "23.25",
+          "price": "1.15",
+          "discountAmount": "0"
+        },
+        {
+          "qty": "24.25",
+          "price": "1.15",
+          "discountAmount": "0"
+        },
+        {
+          "qty": "25.25",
+          "price": "1.15",
+          "discountAmount": "0"
+        },
+        {
+          "qty": "26.25",
+          "price": "1.15",
+          "discountAmount": "0"
+        },
+        {
+          "qty": "27.25",
+          "price": "1.15",
+          "discountAmount": "0"
+        },
+        {
+          "qty": "28.25",
+          "price": "1.15",
+          "discountAmount": "0"
+        },
+        {
+          "qty": "29.25",
+          "price": "1.15",
+          "discountAmount": "0"
+        },
+        {
+          "qty": "30.25",
+          "price": "1.15",
+          "discountAmount": "0"
+        },
+        {
+          "qty": "31.25",
+          "price": "1.15",
+          "discountAmount": "0"
+        },
+        {
+          "qty": "32.25",
+          "price": "1.15",
+          "discountAmount": "0"
+        },
+        {
+          "qty": "33.25",
+          "price": "1.15",
+          "discountAmount": "0"
+        },
+        {
+          "qty": "34.25",
+          "price": "1.15",
+          "discountAmount": "0"
+        },
+        {
+          "qty": "35.25",
+          "price": "1.15",
+          "discountAmount": "0"
+        },
+        {
+          "qty": "36.25",
+          "price": "1.15",
+          "discountAmount": "0"
+        },
+        {
+          "qty": "37.25",
+          "price": "1.15",
+          "discountAmount": "0"
+        },
+        {
+          "qty": "38.25",
+          "price": "1.15",
+          "discountAmount": "0"
+        },
+        {
+          "qty": "39.25",
+          "price": "1.15",
+          "discountAmount": "0"
+        },
+        {
+          "qty": "40.25",
+          "price": "1.15",
+          "discountAmount": "0"
+        },
+        {
+          "qty": "41.25",
+          "price": "1.15",
+          "discountAmount": "0"
+        },
+        {
+          "qty": "42.25",
+          "price": "1.15",
+          "discountAmount": "0"
+        },
+        {
+          "qty": "43.25",
+          "price": "1.15",
+          "discountAmount": "0"
+        },
+        {
+          "qty": "44.25",
+          "price": "1.15",
+          "discountAmount": "0"
+        },
+        {
+          "qty": "45.25",
+          "price": "1.15",
+          "discountAmount": "0"
+        },
+        {
+          "qty": "46.25",
+          "price": "1.15",
+          "discountAmount": "0"
+        },
+        {
+          "qty": "47.25",
+          "price": "1.15",
+          "discountAmount": "0"
+        },
+        {
+          "qty": "48.25",
+          "price": "1.15",
+          "discountAmount": "0"
+        },
+        {
+          "qty": "49.25",
+          "price": "1.15",
+          "discountAmount": "0"
+        },
+        {
+          "qty": "50.25",
+          "price": "1.15",
+          "discountAmount": "0"
+        }
+      ],
+      "discount": "12.34",
+      "tax": "0",
+      "shipping": "7.77"
+    },
+    "expected": 1476.18
+  },
+  {
+    "id": "invoiceTotal-mixed2-136",
+    "op": "invoiceTotal",
+    "input": {
+      "lines": [
+        {
+          "qty": "33.33",
+          "price": "12.55",
+          "discountAmount": "5"
+        },
+        {
+          "qty": "18.5",
+          "price": "14650.25",
+          "discountAmount": "0"
+        },
+        {
+          "qty": "7.1",
+          "price": "10.05",
+          "discountAmount": "0.5"
+        }
+      ],
+      "discount": "1000",
+      "tax": "250",
+      "shipping": "100"
+    },
+    "expected": 270863.78
+  },
+  {
+    "id": "invoiceTotal-empty-137",
+    "op": "invoiceTotal",
+    "input": {
+      "lines": [],
+      "discount": "0",
+      "tax": "0",
+      "shipping": "0"
+    },
+    "expected": 0
+  },
+  {
+    "id": "invoiceTotal-price-half-138",
+    "op": "invoiceTotal",
+    "input": {
+      "lines": [
+        {
+          "qty": "2",
+          "price": "2.675",
+          "discountAmount": "0"
+        }
+      ],
+      "discount": "0",
+      "tax": "0",
+      "shipping": "0"
+    },
+    "expected": 5.35
+  },
+  {
+    "id": "invoiceTotal-price-half-139",
+    "op": "invoiceTotal",
+    "input": {
+      "lines": [
+        {
+          "qty": "4",
+          "price": "0.005",
+          "discountAmount": "0"
+        },
+        {
+          "qty": "4",
+          "price": "0.005",
+          "discountAmount": "0"
+        }
+      ],
+      "discount": "0",
+      "tax": "0",
+      "shipping": "0"
+    },
+    "expected": 0.04
+  },
+  {
+    "id": "usdToSyp-fx-140",
+    "op": "usdToSyp",
+    "input": {
+      "amount": "1",
+      "rate": "13500"
+    },
+    "expected": 13500
+  },
+  {
+    "id": "usdToSyp-fx-141",
+    "op": "usdToSyp",
+    "input": {
+      "amount": "0.01",
+      "rate": "12700.5"
+    },
+    "expected": 127.01
+  },
+  {
+    "id": "usdToSyp-fx-142",
+    "op": "usdToSyp",
+    "input": {
+      "amount": "100",
+      "rate": "14650.25"
+    },
+    "expected": 1465025
+  },
+  {
+    "id": "usdToSyp-fx-143",
+    "op": "usdToSyp",
+    "input": {
+      "amount": "123.45",
+      "rate": "14650.2500"
+    },
+    "expected": 1808573.36
+  },
+  {
+    "id": "usdToSyp-fx-144",
+    "op": "usdToSyp",
+    "input": {
+      "amount": "99999.99",
+      "rate": "12700.1234"
+    },
+    "expected": 1270012213
+  },
+  {
+    "id": "usdToSyp-fx-145",
+    "op": "usdToSyp",
+    "input": {
+      "amount": "0.5",
+      "rate": "13499.9999"
+    },
+    "expected": 6750
+  },
+  {
+    "id": "usdToSyp-fx-146",
+    "op": "usdToSyp",
+    "input": {
+      "amount": "7.77",
+      "rate": "9999.5001"
+    },
+    "expected": 77696.12
+  },
+  {
+    "id": "usdToSyp-fx-147",
+    "op": "usdToSyp",
+    "input": {
+      "amount": "250.25",
+      "rate": "15000.0001"
+    },
+    "expected": 3753750.03
+  },
+  {
+    "id": "usdToSyp-fx-148",
+    "op": "usdToSyp",
+    "input": {
+      "amount": "1000000",
+      "rate": "1"
+    },
+    "expected": 1000000
+  },
+  {
+    "id": "usdToSyp-fx-149",
+    "op": "usdToSyp",
+    "input": {
+      "amount": "0.07",
+      "rate": "11111.1111"
+    },
+    "expected": 777.78
+  },
+  {
+    "id": "usdToSyp-fx-150",
+    "op": "usdToSyp",
+    "input": {
+      "amount": "1.005",
+      "rate": "13500"
+    },
+    "expected": 13567.5
+  },
+  {
+    "id": "usdToSyp-fx-151",
+    "op": "usdToSyp",
+    "input": {
+      "amount": "33.33",
+      "rate": "12700.5"
+    },
+    "expected": 423307.67
+  },
+  {
+    "id": "sypToUsd-fx-152",
+    "op": "sypToUsd",
+    "input": {
+      "amount": "1",
+      "rate": "14650.25"
+    },
+    "expected": 0
+  },
+  {
+    "id": "sypToUsd-fx-153",
+    "op": "sypToUsd",
+    "input": {
+      "amount": "100",
+      "rate": "14650.2500"
+    },
+    "expected": 0.01
+  },
+  {
+    "id": "sypToUsd-fx-154",
+    "op": "sypToUsd",
+    "input": {
+      "amount": "13500",
+      "rate": "12700.1234"
+    },
+    "expected": 1.06
+  },
+  {
+    "id": "sypToUsd-fx-155",
+    "op": "sypToUsd",
+    "input": {
+      "amount": "1000000",
+      "rate": "13499.9999"
+    },
+    "expected": 74.07
+  },
+  {
+    "id": "sypToUsd-fx-156",
+    "op": "sypToUsd",
+    "input": {
+      "amount": "123456789.01",
+      "rate": "9999.5001"
+    },
+    "expected": 12346.3
+  },
+  {
+    "id": "sypToUsd-fx-157",
+    "op": "sypToUsd",
+    "input": {
+      "amount": "0.01",
+      "rate": "15000.0001"
+    },
+    "expected": 0
+  },
+  {
+    "id": "sypToUsd-fx-158",
+    "op": "sypToUsd",
+    "input": {
+      "amount": "50000",
+      "rate": "1"
+    },
+    "expected": 50000
+  },
+  {
+    "id": "sypToUsd-fx-159",
+    "op": "sypToUsd",
+    "input": {
+      "amount": "7777777",
+      "rate": "11111.1111"
+    },
+    "expected": 700
+  },
+  {
+    "id": "sypToUsd-fx-160",
+    "op": "sypToUsd",
+    "input": {
+      "amount": "999999999.99",
+      "rate": "13500"
+    },
+    "expected": 74074.07
+  },
+  {
+    "id": "sypToUsd-fx-161",
+    "op": "sypToUsd",
+    "input": {
+      "amount": "14650.25",
+      "rate": "12700.5"
+    },
+    "expected": 1.15
+  },
+  {
+    "id": "sypToUsd-fx-162",
+    "op": "sypToUsd",
+    "input": {
+      "amount": "1.5",
+      "rate": "14650.25"
+    },
+    "expected": 0
+  },
+  {
+    "id": "sypToUsd-fx-163",
+    "op": "sypToUsd",
+    "input": {
+      "amount": "250.25",
+      "rate": "14650.2500"
+    },
+    "expected": 0.02
+  },
+  {
+    "id": "usdToSyp-rate4dp-164",
+    "op": "usdToSyp",
+    "input": {
+      "amount": "100",
+      "rate": "14650.2500"
+    },
+    "expected": 1465025
+  },
+  {
+    "id": "usdToSyp-rate4dp-165",
+    "op": "usdToSyp",
+    "input": {
+      "amount": "12.34",
+      "rate": "12700.1234"
+    },
+    "expected": 156719.52
+  },
+  {
+    "id": "usdToSyp-rate4dp-166",
+    "op": "usdToSyp",
+    "input": {
+      "amount": "1000",
+      "rate": "13499.9999"
+    },
+    "expected": 13499999.9
+  },
+  {
+    "id": "usdToSyp-rate4dp-167",
+    "op": "usdToSyp",
+    "input": {
+      "amount": "0.01",
+      "rate": "15000.0001"
+    },
+    "expected": 150
+  },
+  {
+    "id": "usdToSyp-rate4dp-168",
+    "op": "usdToSyp",
+    "input": {
+      "amount": "250",
+      "rate": "9999.5001"
+    },
+    "expected": 2499875.03
+  },
+  {
+    "id": "usdToSyp-rate4dp-169",
+    "op": "usdToSyp",
+    "input": {
+      "amount": "77.77",
+      "rate": "11111.1111"
+    },
+    "expected": 864111.11
+  },
+  {
+    "id": "sypToUsd-rate4dp-170",
+    "op": "sypToUsd",
+    "input": {
+      "amount": "1000000",
+      "rate": "14650.2500"
+    },
+    "expected": 68.26
+  },
+  {
+    "id": "sypToUsd-rate4dp-171",
+    "op": "sypToUsd",
+    "input": {
+      "amount": "500000",
+      "rate": "12700.1234"
+    },
+    "expected": 39.37
+  },
+  {
+    "id": "sypToUsd-rate4dp-172",
+    "op": "sypToUsd",
+    "input": {
+      "amount": "13499.99",
+      "rate": "13499.9999"
+    },
+    "expected": 1
+  },
+  {
+    "id": "sypToUsd-rate4dp-173",
+    "op": "sypToUsd",
+    "input": {
+      "amount": "15000",
+      "rate": "15000.0001"
+    },
+    "expected": 1
+  },
+  {
+    "id": "sypToUsd-rate4dp-174",
+    "op": "sypToUsd",
+    "input": {
+      "amount": "5000000",
+      "rate": "9999.5001"
+    },
+    "expected": 500.02
+  },
+  {
+    "id": "sypToUsd-rate4dp-175",
+    "op": "sypToUsd",
+    "input": {
+      "amount": "123456",
+      "rate": "11111.1111"
+    },
+    "expected": 11.11
+  },
+  {
+    "id": "usdToSyp-fx-half-176",
+    "op": "usdToSyp",
+    "input": {
+      "amount": "0.01",
+      "rate": "0.5"
+    },
+    "expected": 0.01
+  },
+  {
+    "id": "usdToSyp-fx-half-177",
+    "op": "usdToSyp",
+    "input": {
+      "amount": "0.03",
+      "rate": "0.5"
+    },
+    "expected": 0.02
+  },
+  {
+    "id": "usdToSyp-fx-half-178",
+    "op": "usdToSyp",
+    "input": {
+      "amount": "1.01",
+      "rate": "1.5"
+    },
+    "expected": 1.52
+  },
+  {
+    "id": "usdToSyp-fx-half-179",
+    "op": "usdToSyp",
+    "input": {
+      "amount": "0.1",
+      "rate": "0.05"
+    },
+    "expected": 0.01
+  },
+  {
+    "id": "usdToSyp-fx-half-180",
+    "op": "usdToSyp",
+    "input": {
+      "amount": "4.5",
+      "rate": "0.01"
+    },
+    "expected": 0.05
+  },
+  {
+    "id": "usdToSyp-fx-half-181",
+    "op": "usdToSyp",
+    "input": {
+      "amount": "0.5",
+      "rate": "0.01"
+    },
+    "expected": 0.01
+  },
+  {
+    "id": "sypToUsd-fx-half-182",
+    "op": "sypToUsd",
+    "input": {
+      "amount": "1",
+      "rate": "8"
+    },
+    "expected": 0.13
+  },
+  {
+    "id": "sypToUsd-fx-half-183",
+    "op": "sypToUsd",
+    "input": {
+      "amount": "1",
+      "rate": "16"
+    },
+    "expected": 0.06
+  },
+  {
+    "id": "sypToUsd-fx-half-184",
+    "op": "sypToUsd",
+    "input": {
+      "amount": "3",
+      "rate": "8"
+    },
+    "expected": 0.38
+  },
+  {
+    "id": "sypToUsd-fx-half-185",
+    "op": "sypToUsd",
+    "input": {
+      "amount": "1",
+      "rate": "3"
+    },
+    "expected": 0.33
+  },
+  {
+    "id": "sypToUsd-fx-half-186",
+    "op": "sypToUsd",
+    "input": {
+      "amount": "2",
+      "rate": "3"
+    },
+    "expected": 0.67
+  },
+  {
+    "id": "sypToUsd-fx-half-187",
+    "op": "sypToUsd",
+    "input": {
+      "amount": "10.01",
+      "rate": "2"
+    },
+    "expected": 5.01
+  },
+  {
+    "id": "sypToUsd-fx-half-188",
+    "op": "sypToUsd",
+    "input": {
+      "amount": "0.05",
+      "rate": "10"
+    },
+    "expected": 0.01
+  },
+  {
+    "id": "sypToUsd-fx-half-189",
+    "op": "sypToUsd",
+    "input": {
+      "amount": "0.15",
+      "rate": "10"
+    },
+    "expected": 0.02
+  },
+  {
+    "id": "sypToUsd-fx-half-190",
+    "op": "sypToUsd",
+    "input": {
+      "amount": "-1",
+      "rate": "8"
+    },
+    "expected": -0.13
+  },
+  {
+    "id": "sypToUsd-fx-half-191",
+    "op": "sypToUsd",
+    "input": {
+      "amount": "-3",
+      "rate": "8"
+    },
+    "expected": -0.38
+  },
+  {
+    "id": "lineValue-grid-192",
+    "op": "lineValue",
+    "input": {
+      "qty": "0.38",
+      "price": "0.15",
+      "discountAmount": "0"
+    },
+    "expected": 0.06
+  },
+  {
+    "id": "lineValue-grid-193",
+    "op": "lineValue",
+    "input": {
+      "qty": "0.75",
+      "price": "1.25",
+      "discountAmount": "0"
+    },
+    "expected": 0.94
+  },
+  {
+    "id": "lineValue-grid-194",
+    "op": "lineValue",
+    "input": {
+      "qty": "1.12",
+      "price": "2.35",
+      "discountAmount": "0"
+    },
+    "expected": 2.63
+  },
+  {
+    "id": "lineValue-grid-195",
+    "op": "lineValue",
+    "input": {
+      "qty": "1.49",
+      "price": "10.05",
+      "discountAmount": "0"
+    },
+    "expected": 14.97
+  },
+  {
+    "id": "lineValue-grid-196",
+    "op": "lineValue",
+    "input": {
+      "qty": "1.86",
+      "price": "12.55",
+      "discountAmount": "0"
+    },
+    "expected": 23.34
+  },
+  {
+    "id": "lineValue-grid-197",
+    "op": "lineValue",
+    "input": {
+      "qty": "2.23",
+      "price": "4.45",
+      "discountAmount": "0"
+    },
+    "expected": 9.92
+  },
+  {
+    "id": "lineValue-grid-198",
+    "op": "lineValue",
+    "input": {
+      "qty": "2.60",
+      "price": "26.6667",
+      "discountAmount": "0"
+    },
+    "expected": 69.33
+  },
+  {
+    "id": "lineValue-grid-199",
+    "op": "lineValue",
+    "input": {
+      "qty": "2.97",
+      "price": "0.05",
+      "discountAmount": "0"
+    },
+    "expected": 0.15
+  },
+  {
+    "id": "lineValue-grid-200",
+    "op": "lineValue",
+    "input": {
+      "qty": "3.34",
+      "price": "0.15",
+      "discountAmount": "0"
+    },
+    "expected": 0.5
+  },
+  {
+    "id": "lineValue-grid-201",
+    "op": "lineValue",
+    "input": {
+      "qty": "3.71",
+      "price": "1.25",
+      "discountAmount": "0"
+    },
+    "expected": 4.64
+  },
+  {
+    "id": "lineValue-grid-202",
+    "op": "lineValue",
+    "input": {
+      "qty": "4.08",
+      "price": "2.35",
+      "discountAmount": "0"
+    },
+    "expected": 9.59
+  },
+  {
+    "id": "lineValue-grid-203",
+    "op": "lineValue",
+    "input": {
+      "qty": "4.45",
+      "price": "10.05",
+      "discountAmount": "0"
+    },
+    "expected": 44.72
+  },
+  {
+    "id": "lineValue-grid-204",
+    "op": "lineValue",
+    "input": {
+      "qty": "4.82",
+      "price": "12.55",
+      "discountAmount": "0"
+    },
+    "expected": 60.49
+  },
+  {
+    "id": "lineValue-grid-205",
+    "op": "lineValue",
+    "input": {
+      "qty": "5.19",
+      "price": "4.45",
+      "discountAmount": "0"
+    },
+    "expected": 23.1
+  },
+  {
+    "id": "lineValue-grid-206",
+    "op": "lineValue",
+    "input": {
+      "qty": "5.56",
+      "price": "26.6667",
+      "discountAmount": "0"
+    },
+    "expected": 148.27
+  },
+  {
+    "id": "lineValue-grid-207",
+    "op": "lineValue",
+    "input": {
+      "qty": "5.93",
+      "price": "0.05",
+      "discountAmount": "0"
+    },
+    "expected": 0.3
+  },
+  {
+    "id": "lineValue-grid-208",
+    "op": "lineValue",
+    "input": {
+      "qty": "6.30",
+      "price": "0.15",
+      "discountAmount": "0"
+    },
+    "expected": 0.95
+  },
+  {
+    "id": "lineValue-grid-209",
+    "op": "lineValue",
+    "input": {
+      "qty": "6.67",
+      "price": "1.25",
+      "discountAmount": "0"
+    },
+    "expected": 8.34
+  },
+  {
+    "id": "lineValue-grid-210",
+    "op": "lineValue",
+    "input": {
+      "qty": "7.04",
+      "price": "2.35",
+      "discountAmount": "0"
+    },
+    "expected": 16.54
+  },
+  {
+    "id": "lineValue-grid-211",
+    "op": "lineValue",
+    "input": {
+      "qty": "7.41",
+      "price": "10.05",
+      "discountAmount": "0"
+    },
+    "expected": 74.47
+  },
+  {
+    "id": "lineValue-grid-212",
+    "op": "lineValue",
+    "input": {
+      "qty": "7.78",
+      "price": "12.55",
+      "discountAmount": "0"
+    },
+    "expected": 97.64
+  },
+  {
+    "id": "lineValue-grid-213",
+    "op": "lineValue",
+    "input": {
+      "qty": "8.15",
+      "price": "4.45",
+      "discountAmount": "0"
+    },
+    "expected": 36.27
+  },
+  {
+    "id": "lineValue-grid-214",
+    "op": "lineValue",
+    "input": {
+      "qty": "8.52",
+      "price": "26.6667",
+      "discountAmount": "0"
+    },
+    "expected": 227.2
+  },
+  {
+    "id": "lineValue-grid-215",
+    "op": "lineValue",
+    "input": {
+      "qty": "8.89",
+      "price": "0.05",
+      "discountAmount": "0"
+    },
+    "expected": 0.44
+  }
+]
