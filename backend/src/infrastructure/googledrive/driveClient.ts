@@ -12,6 +12,9 @@
  * (auth failures as `DriveAuthError`, everything else as `DriveError`).
  */
 
+import { createReadStream } from "node:fs";
+import { Readable } from "node:stream";
+
 export class DriveError extends Error {
   constructor(
     readonly status: number,
@@ -37,6 +40,7 @@ export type DriveFileMeta = {
   mimeType: string;
   size?: string;
   md5Checksum?: string;
+  trashed?: boolean;
 };
 
 export type TokenProvider = () => Promise<string>;
@@ -46,12 +50,25 @@ export type DriveClientOptions = {
   /** Base URL override for tests; default is the real API. */
   baseUrl?: string;
   maxRetries?: number;
+  /**
+   * Per-request timeout. Without it a hung Google connection hung the archive pass forever, and
+   * with the run guard held every later trigger answered "busy" — the archive silently wedged.
+   */
+  timeoutMs?: number;
   /** Injected fetch for tests. */
   fetchImpl?: typeof fetch;
 };
 
 const DEFAULT_BASE = "https://www.googleapis.com";
 const MULTIPART_BOUNDARY = "motard-drive-upload";
+/** Generous enough for a slow connection, short enough that a hang is recovered from. */
+const DEFAULT_TIMEOUT_MS = 60_000;
+/**
+ * Floor throughput for a request that CARRIES a body. The abort signal bounds the whole transfer,
+ * not just the connect, so a flat 60 s cap aborted every upload slower than that — a 50 MB backup
+ * on a 1 Mbit/s line (~7 minutes) failed on every attempt and never reached Drive.
+ */
+const MIN_UPLOAD_BYTES_PER_SEC = 32 * 1024;
 
 function isRetryable(status: number, reason?: string): boolean {
   if (status === 429) return true;
@@ -119,20 +136,36 @@ export class DriveClient {
   private readonly base: string;
   private readonly maxRetries: number;
   private readonly doFetch: typeof fetch;
+  private readonly timeoutMs: number;
 
   constructor(private readonly opts: DriveClientOptions) {
     this.base = opts.baseUrl ?? DEFAULT_BASE;
     this.maxRetries = opts.maxRetries ?? 4;
     this.doFetch = opts.fetchImpl ?? fetch;
+    this.timeoutMs = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+  }
+
+  /** The time a body of `bytes` may take: the base timeout plus the transfer at the floor rate. */
+  private transferTimeoutMs(bytes: number): number {
+    return this.timeoutMs + Math.ceil((bytes / MIN_UPLOAD_BYTES_PER_SEC) * 1000);
   }
 
   private async request(
     method: string,
     path: string,
-    init?: { body?: string | Uint8Array; headers?: Record<string, string>; raw?: boolean },
-  ): Promise<{ status: number; body: unknown; text: string }> {
-    const token = await this.opts.token();
+    init?: {
+      body?: string | Uint8Array;
+      headers?: Record<string, string>;
+      raw?: boolean;
+      timeoutMs?: number;
+    },
+  ): Promise<{ status: number; body: unknown; text: string; headers: Headers }> {
     let lastError: Error | null = null;
+    // The token is read PER ATTEMPT, not once before the loop: the shell pushes a fresh access
+    // token every 20 seconds, so a 401 usually means the token was rotated underneath us. Re-reading
+    // it and retrying once turns that into a success instead of a "blocked" job.
+    let token = await this.opts.token();
+    let refreshed = false;
     for (let attempt = 0; attempt <= this.maxRetries; attempt++) {
       let res: Response;
       try {
@@ -140,6 +173,9 @@ export class DriveClient {
           method,
           headers: { Authorization: `Bearer ${token}`, ...(init?.headers ?? {}) },
           body: init?.body,
+          // A hung connection used to hang the pass forever, and with the run guard held the
+          // archive was wedged with no error and no timeout.
+          signal: AbortSignal.timeout(init?.timeoutMs ?? this.timeoutMs),
         });
       } catch (err) {
         lastError = err instanceof Error ? err : new Error(String(err));
@@ -151,7 +187,12 @@ export class DriveClient {
       }
       const text = await res.text();
       if (res.ok) {
-        return { status: res.status, body: init?.raw ? text : text ? JSON.parse(text) : {}, text };
+        return {
+          status: res.status,
+          body: init?.raw ? text : text ? JSON.parse(text) : {},
+          text,
+          headers: res.headers,
+        };
       }
       let body: unknown = undefined;
       try {
@@ -160,7 +201,15 @@ export class DriveClient {
         body = undefined;
       }
       const reason = reasonOf(body);
-      if (res.status === 401) throw new DriveAuthError(redact(text).slice(0, 300));
+      if (res.status === 401) {
+        // One retry with a freshly read token; after that the token really is refused.
+        if (!refreshed) {
+          refreshed = true;
+          token = await this.opts.token();
+          continue;
+        }
+        throw new DriveAuthError(redact(text).slice(0, 300));
+      }
       if (isRetryable(res.status, reason) && attempt < this.maxRetries) {
         await sleep(500 * 2 ** attempt);
         continue;
@@ -175,9 +224,91 @@ export class DriveClient {
     throw new DriveError(0, "UNREACHABLE", "exhausted retries", true); // not reached
   }
 
+  /**
+   * Phase 2 — find the file this app already uploaded for one document, by its stable `motardKey`
+   * (stored in Drive `appProperties`). Matching by key, not by name, so renaming a party or a
+   * document never creates a duplicate. Trashed files are excluded.
+   *
+   * The lookup is GLOBAL: the key is unique by construction, and a parent-scoped lookup missed the
+   * file whenever the month or category folder had been recreated — which silently produced a
+   * duplicate file. `parentId` is kept only as an optional narrowing hint.
+   */
+  async findByAppKey(appKey: string, parentId?: string): Promise<DriveFileMeta | null> {
+    const esc = (s: string) => s.replace(/\\/g, "\\\\").replace(/'/g, "\\'");
+    const escaped = esc(appKey);
+    const parentClause = parentId ? ` and '${esc(parentId)}' in parents` : "";
+    const q = `appProperties has { key='motardKey' and value='${escaped}' } and trashed = false${parentClause}`;
+    const { body } = await this.request(
+      "GET",
+      `/drive/v3/files?q=${encodeURIComponent(q)}&fields=files(id,name,mimeType,md5Checksum,size)&pageSize=2`,
+    );
+    const files = (body as { files?: DriveFileMeta[] }).files ?? [];
+    return files[0] ?? null;
+  }
+
+  /**
+   * Phase 2 — replace the bytes of an existing file (same file id, so Drive keeps one copy of the
+   * document). Used when an edited document is re-archived.
+   *
+   * `name` refreshes the Drive file name as well: the file name carries the party name and the
+   * cancelled marker, so an updated document must not keep the name it had before the edit.
+   */
+  async updateMedia(
+    fileId: string,
+    mime: string,
+    content: Uint8Array,
+    name?: string,
+  ): Promise<DriveFileMeta> {
+    const { body } = await this.request(
+      "PATCH",
+      `/upload/drive/v3/files/${encodeURIComponent(fileId)}?uploadType=media&fields=id,name,md5Checksum,size`,
+      {
+        headers: { "Content-Type": mime },
+        body: content,
+        timeoutMs: this.transferTimeoutMs(content.length),
+      },
+    );
+    if (!name) return body as DriveFileMeta;
+    // A metadata PATCH with only `name` leaves appProperties untouched.
+    return (await this.renameFile(fileId, name)) as DriveFileMeta;
+  }
+
+  /**
+   * Phase 2 — rewrite a file's `motardKey`. Used to adopt a file that was uploaded before the key
+   * was derived from the document's immutable id, so it is found by the new key from then on.
+   */
+  // Drive MERGES `appProperties` on update (a key it does not mention is kept), so this only sets
+  // `motardKey`; it would not drop another property if one were added later.
+  async updateAppProperties(fileId: string, appKey: string): Promise<DriveFileMeta> {
+    const { body } = await this.request(
+      "PATCH",
+      `/drive/v3/files/${encodeURIComponent(fileId)}?fields=id,name,mimeType`,
+      {
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ appProperties: { motardKey: appKey } }),
+      },
+    );
+    return body as DriveFileMeta;
+  }
+
+  /** Phase 2 — rename a folder (used when the company name changes, keeping the folder id). */
+  async renameFile(fileId: string, name: string): Promise<DriveFileMeta> {
+    const { body } = await this.request(
+      "PATCH",
+      `/drive/v3/files/${encodeURIComponent(fileId)}?fields=id,name,mimeType`,
+      {
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name }),
+      },
+    );
+    return body as DriveFileMeta;
+  }
+
   /** Find a child by exact name under `parentId` (folders and files; trashed excluded). */
   async findChild(parentId: string, name: string): Promise<DriveFileMeta | null> {
-    const q = `'${parentId}' in parents and name = '${name.replace(/'/g, "\\'")}' and trashed = false`;
+    // Drive query strings escape both the backslash and the quote (a company name may contain either).
+    const escaped = name.replace(/\\/g, "\\\\").replace(/'/g, "\\'");
+    const q = `'${parentId}' in parents and name = '${escaped}' and trashed = false`;
     const { body } = await this.request(
       "GET",
       `/drive/v3/files?q=${encodeURIComponent(q)}&fields=files(id,name,mimeType,md5Checksum)&pageSize=2`,
@@ -205,9 +336,14 @@ export class DriveClient {
     name: string,
     mime: string,
     content: Uint8Array,
+    appKey?: string,
   ): Promise<DriveFileMeta> {
     const boundary = MULTIPART_BOUNDARY;
-    const meta = JSON.stringify({ name, parents: [parentId] });
+    const meta = JSON.stringify({
+      name,
+      parents: [parentId],
+      ...(appKey ? { appProperties: { motardKey: appKey } } : {}),
+    });
     const metaBytes = new TextEncoder().encode(
       `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${meta}\r\n` +
         `--${boundary}\r\nContent-Type: ${mime}\r\n\r\n`,
@@ -223,9 +359,43 @@ export class DriveClient {
       {
         headers: { "Content-Type": `multipart/related; boundary=${boundary}` },
         body,
+        timeoutMs: this.transferTimeoutMs(body.length),
       },
     );
     return uploaded as DriveFileMeta;
+  }
+
+  /**
+   * Open a resumable upload session. It goes through `request()`, so it inherits the retry, the
+   * backoff, the timeout and the token re-read — the session init used to be a raw fetch with NO
+   * retry at all, so one transient blip failed the whole upload of a large backup.
+   */
+  private async initResumableSession(
+    parentId: string,
+    name: string,
+    mime: string,
+    sizeBytes: number,
+    appKey?: string,
+  ): Promise<string> {
+    const { headers } = await this.request(
+      "POST",
+      "/upload/drive/v3/files?uploadType=resumable&fields=id,name,md5Checksum,size",
+      {
+        headers: {
+          "Content-Type": "application/json; charset=UTF-8",
+          "X-Upload-Content-Type": mime,
+          "X-Upload-Content-Length": String(sizeBytes),
+        },
+        body: JSON.stringify({
+          name,
+          parents: [parentId],
+          ...(appKey ? { appProperties: { motardKey: appKey } } : {}),
+        }),
+      },
+    );
+    const sessionUrl = headers.get("location");
+    if (!sessionUrl) throw new DriveError(0, "RESUMABLE_NO_SESSION", "no Location header", true);
+    return sessionUrl;
   }
 
   /**
@@ -238,39 +408,22 @@ export class DriveClient {
     name: string,
     mime: string,
     content: Uint8Array,
+    appKey?: string,
   ): Promise<DriveFileMeta> {
-    const token = await this.opts.token();
-    const init = await this.doFetch(
-      `${this.base}/upload/drive/v3/files?uploadType=resumable&fields=id,name,md5Checksum,size`,
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json; charset=UTF-8",
-          "X-Upload-Content-Type": mime,
-          "X-Upload-Content-Length": String(content.length),
-        },
-        body: JSON.stringify({ name, parents: [parentId] }),
-      },
+    const sessionUrl = await this.initResumableSession(
+      parentId,
+      name,
+      mime,
+      content.length,
+      appKey,
     );
-    if (!init.ok) {
-      const text = await init.text();
-      if (init.status === 401) throw new DriveAuthError(redact(text).slice(0, 300));
-      throw new DriveError(
-        init.status,
-        "RESUMABLE_INIT",
-        redact(text).slice(0, 300),
-        init.status >= 500 || init.status === 429,
-      );
-    }
-    const sessionUrl = init.headers.get("location");
-    if (!sessionUrl) throw new DriveError(0, "RESUMABLE_NO_SESSION", "no Location header", true);
     for (let attempt = 0; attempt <= this.maxRetries; attempt++) {
       try {
         const put = await this.doFetch(sessionUrl, {
           method: "PUT",
           headers: { "Content-Length": String(content.length), "Content-Type": mime },
           body: content,
+          signal: AbortSignal.timeout(this.transferTimeoutMs(content.length)),
         });
         if (put.ok) return (await put.json()) as DriveFileMeta;
         const text = await put.text();
@@ -287,12 +440,142 @@ export class DriveClient {
     throw new DriveError(0, "RESUMABLE_INTERRUPTED", "upload session failed after retries", true);
   }
 
+  /**
+   * Phase 4 — resumable upload of a file ON DISK, streamed (never loaded into memory). Used for large
+   * archives such as the database backup ZIP. Each attempt opens the file again, because a streamed
+   * request body cannot be replayed after a failed attempt.
+   */
+  async uploadResumableFromFile(
+    parentId: string,
+    name: string,
+    mime: string,
+    filePath: string,
+    sizeBytes: number,
+    appKey?: string,
+  ): Promise<DriveFileMeta> {
+    const sessionUrl = await this.initResumableSession(parentId, name, mime, sizeBytes, appKey);
+    for (let attempt = 0; attempt <= this.maxRetries; attempt++) {
+      try {
+        const body = Readable.toWeb(createReadStream(filePath)) as unknown as ReadableStream;
+        const put = await this.doFetch(sessionUrl, {
+          method: "PUT",
+          headers: { "Content-Length": String(sizeBytes), "Content-Type": mime },
+          body,
+          duplex: "half",
+          signal: AbortSignal.timeout(this.transferTimeoutMs(sizeBytes)),
+        } as RequestInit);
+        if (put.ok) return (await put.json()) as DriveFileMeta;
+        const text = await put.text();
+        if (put.status === 401) throw new DriveAuthError(redact(text).slice(0, 300));
+        if (!(put.status >= 500 || put.status === 429)) {
+          throw new DriveError(put.status, "RESUMABLE_UPLOAD", redact(text).slice(0, 300), false);
+        }
+      } catch (err) {
+        if (err instanceof DriveAuthError || (err instanceof DriveError && !err.retryable))
+          throw err;
+      }
+      await sleep(500 * 2 ** attempt);
+    }
+    throw new DriveError(0, "RESUMABLE_INTERRUPTED", "upload session failed after retries", true);
+  }
+
+  /**
+   * Phase 4 — download a file from Drive to disk, STREAMED and hashed while it streams. The bytes
+   * are never held in memory (a backup ZIP can be hundreds of megabytes).
+   *
+   * The file is written to `outPath + ".partial"` and renamed only when the streamed SHA-256
+   * matches the expected hash — a truncated download never becomes the final file.
+   *
+   * This is the read half of the archive. Without it the Drive archive is a write-only sink: the
+   * database backup that is uploaded there could not be fetched back, so it could not be used to
+   * recover a lost installation (and it is a hard prerequisite for the Smart Merge restore).
+   */
+  async downloadToFile(
+    fileId: string,
+    outPath: string,
+    expectedSha256?: string,
+  ): Promise<{ path: string; sha256: string; size: number }> {
+    const { createWriteStream } = await import("node:fs");
+    const { rename, rm, mkdir } = await import("node:fs/promises");
+    const { dirname } = await import("node:path");
+    const { createHash } = await import("node:crypto");
+    const hash = createHash("sha256");
+    let size = 0;
+    const partial = `${outPath}.partial`;
+    await mkdir(dirname(outPath), { recursive: true });
+    const res = await this.doFetch(
+      `${this.base}/drive/v3/files/${encodeURIComponent(fileId)}?alt=media`,
+      {
+        method: "GET",
+        headers: { Authorization: `Bearer ${await this.opts.token()}` },
+        signal: AbortSignal.timeout(this.timeoutMs),
+      },
+    );
+    if (!res.ok || !res.body) {
+      const text = res.ok ? "" : await res.text().catch(() => "");
+      if (res.status === 401) throw new DriveAuthError(redact(text).slice(0, 300));
+      throw new DriveError(
+        res.status,
+        "DOWNLOAD",
+        redact(text).slice(0, 300),
+        res.status >= 500 || res.status === 429,
+      );
+    }
+    const out = createWriteStream(partial);
+    // Listen for a write error (disk full, file locked) from the FIRST byte: an 'error' event with no
+    // listener is an uncaught exception that takes the whole backend down.
+    let writeError: Error | null = null;
+    out.on("error", (e) => {
+      writeError = e;
+    });
+    try {
+      const reader = res.body.getReader();
+      for (;;) {
+        if (writeError) throw writeError;
+        const { done, value } = await reader.read();
+        if (done) break;
+        if (!value) continue;
+        size += value.byteLength;
+        hash.update(value);
+        if (!out.write(Buffer.from(value))) {
+          await new Promise<void>((resolve, reject) => {
+            out.once("drain", () => resolve());
+            out.once("error", reject);
+          });
+        }
+      }
+      await new Promise<void>((resolve, reject) => {
+        if (writeError) return reject(writeError);
+        out.once("error", reject);
+        out.end(() => resolve());
+      });
+    } catch (err) {
+      out.destroy();
+      await rm(partial, { force: true }).catch(() => {});
+      throw err instanceof Error ? err : new Error(String(err));
+    }
+    const sha256 = hash.digest("hex");
+    if (expectedSha256 && expectedSha256 !== sha256) {
+      // The download does not match what was expected: keep the partial file out of the way and
+      // refuse to produce the final one.
+      await rm(partial, { force: true }).catch(() => {});
+      throw new DriveError(
+        0,
+        "HASH_MISMATCH",
+        "the downloaded content does not match its hash",
+        false,
+      );
+    }
+    await rename(partial, outPath);
+    return { path: outPath, sha256, size };
+  }
+
   /** Get metadata by id — used to verify a crashed upload's file actually landed. */
   async getFile(fileId: string): Promise<DriveFileMeta | null> {
     try {
       const { body } = await this.request(
         "GET",
-        `/drive/v3/files/${fileId}?fields=id,name,mimeType,md5Checksum,size`,
+        `/drive/v3/files/${encodeURIComponent(fileId)}?fields=id,name,mimeType,md5Checksum,size,trashed`,
       );
       return body as DriveFileMeta;
     } catch (err) {

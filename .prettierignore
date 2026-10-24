@@ -20,6 +20,9 @@ AUDIT_PROGRESS.md
 1/
 CODEBASE_REMEDIATION_LOG.md
 VERIFIED_REMEDIATION_PLAN.md
+docs/REMEDIATION_AND_CORRECTION_PLAN.md
+# graphify knowledge-graph output (generated, local)
+graphify-out/
 
 # Desktop shell build output and generated files (desktop-app/.gitignore)
 desktop-app/node_modules

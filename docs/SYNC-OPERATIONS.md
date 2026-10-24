@@ -81,8 +81,9 @@ across runs is the healthy signal.
 
 1. `GET /api/sync/pending` — record the count.
 2. If online, `POST /api/sync/run` until `pendingCount` is 0.
-3. If offline, proceed: the outbox lives in local PostgreSQL and survives the
-   update. After update, compare the pending count — it must be identical.
+3. If offline, proceed: the outbox lives in the desktop's own database
+   (`%LOCALAPPDATA%\MotardERP\data\motard.db`, SQLite) and survives the update.
+   After update, compare the pending count — it must be identical.
 4. Never uninstall with data-wipe options while pending units exist.
 
 ## Backup / restore
@@ -130,8 +131,11 @@ un-pushed unit failed to come back.
 The canonical physical identity is the fingerprint-backed `device_registrations`
 row. `sync_devices.device_registration_id` links the transport identity to that
 license identity when activation exists; the hub migration backfills matching
-same-tenant fingerprints. An application update must preserve `%LOCALAPPDATA%\motard-erp`
-(including `secrets.dat`, `device-binding.dat`, `pgdata`, and sync state).
+same-tenant fingerprints. An application update must preserve the desktop data root
+`%LOCALAPPDATA%\MotardERP` — the database `data\motard.db` (business data, outbox, inbox and
+sync state), the DPAPI keys `keys\secrets.dat` (+ `.bak`), and `sync\`. The installer replaces
+only the program files in `%LOCALAPPDATA%\Motard ERP\` and never touches the data root
+(`desktop-app/ADR.md`).
 
 Before reinstall, export a full backup and copy the app-data directory while the
 app is stopped. Restore the app-data directory before first launch so the DPAPI

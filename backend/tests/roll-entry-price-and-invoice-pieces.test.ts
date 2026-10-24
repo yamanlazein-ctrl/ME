@@ -13,6 +13,7 @@ import { fabrics } from "@/infrastructure/orm/schemas/fabric.table.js";
 import { colors } from "@/infrastructure/orm/schemas/color.table.js";
 import { invoices } from "@/infrastructure/orm/schemas/invoice.table.js";
 import { PostgresInvoiceRepository } from "@/infrastructure/repositories/PostgresInvoiceRepository.js";
+import { PostgresLedgerRepository } from "@/infrastructure/repositories/PostgresLedgerRepository.js";
 import { PostgresRollRepository } from "@/infrastructure/repositories/PostgresRollRepository.js";
 import type { TenantContext } from "@/domain/types/index.js";
 
@@ -167,5 +168,118 @@ describe("sales invoice «عدد الأثواب»", () => {
       sale.version,
     );
     expect(edited.piecesCount).toBe(4);
+  });
+});
+
+describe("Issue 1: entry invoice edit propagates everywhere", () => {
+  it("editing a purchase invoice updates the roll's stored cost, the supplier ledger & balance", async () => {
+    if (!reachable) return;
+    const rollRepo = new PostgresRollRepository(db);
+    const invoiceRepo = new PostgresInvoiceRepository(db);
+    const ledgerRepo = new PostgresLedgerRepository(db);
+
+    const roll = await newRoll(rollRepo, { initialKg: 120, remainingKg: 0, pricePerKg: 4 });
+
+    const entry = await invoiceRepo.create(
+      {
+        type: "entry",
+        date: "2026-02-02",
+        partyId: supplierId,
+        partyType: "supplier",
+        currency: "USD",
+        exchangeRate: 1,
+        lines: [
+          {
+            fabricId,
+            colorId,
+            rollId: roll.id,
+            quantityKg: 120,
+            pieces: 4,
+            pricePerKg: 4.75,
+          },
+        ],
+      },
+      ctx,
+    );
+    expect(entry.total).toBe(570);
+
+    // (a) supplier statement/balance source: the roll's stored cost is the entry price.
+    let rollAfter = await rollRepo.findById(roll.id, ctx);
+    expect(rollAfter?.entryPricePerKg).toBe(4.75);
+    expect(rollAfter?.entrySource).toBe("purchase");
+    expect(rollAfter?.entryReference).toBe(entry.number);
+
+    // Edit the entry invoice, changing the line price to 6.50.
+    const edited = await invoiceRepo.update(
+      entry.id,
+      {
+        date: "2026-02-02",
+        lines: [
+          {
+            fabricId,
+            colorId,
+            rollId: roll.id,
+            quantityKg: 120,
+            pieces: 4,
+            pricePerKg: 6.5,
+          },
+        ],
+      },
+      ctx,
+      entry.version,
+    );
+    expect(edited.total).toBe(780);
+
+    // (b) roll's stored cost price now reflects the NEW edited entry price — a later
+    // sale invoice must show 6.50, never the stale 4.75.
+    rollAfter = await rollRepo.findById(roll.id, ctx);
+    expect(rollAfter?.entryPricePerKg).toBe(6.5);
+    expect(rollAfter?.entryCurrency).toBe("USD");
+    expect(rollAfter?.entryReference).toBe(entry.number);
+
+    // (c) linked ledger: the supplier's active ledger legs for this invoice reflect the new total.
+    const legs = await ledgerRepo.listByParty(supplierId, ctx);
+    const active = legs.filter((l) => l.status === "active" && l.referenceId === entry.id);
+    const supplierOwed = active.reduce((s, l) => s + (l.credit ?? 0) - (l.debit ?? 0), 0);
+    expect(supplierOwed).toBe(780);
+  });
+
+  it("removing a roll line from a purchase invoice still saves (the refresh only touches rolls on it)", async () => {
+    if (!reachable) return;
+    const rollRepo = new PostgresRollRepository(db);
+    const invoiceRepo = new PostgresInvoiceRepository(db);
+    const keep = await newRoll(rollRepo, { initialKg: 50, remainingKg: 0, pricePerKg: 4 });
+    const drop = await newRoll(rollRepo, { initialKg: 40, remainingKg: 0, pricePerKg: 4 });
+    const entry = await invoiceRepo.create(
+      {
+        type: "entry",
+        date: "2026-02-04",
+        partyId: supplierId,
+        partyType: "supplier",
+        currency: "USD",
+        exchangeRate: 1,
+        lines: [
+          { fabricId, colorId, rollId: keep.id, quantityKg: 50, pieces: 2, pricePerKg: 5 },
+          { fabricId, colorId, rollId: drop.id, quantityKg: 40, pieces: 2, pricePerKg: 5 },
+        ],
+      },
+      ctx,
+    );
+
+    // The second roll is taken off the invoice; the remaining line gets a new price. The edit used
+    // to crash on the removed roll (it is in the edit's roll set but no longer on any line).
+    const edited = await invoiceRepo.update(
+      entry.id,
+      {
+        date: "2026-02-04",
+        lines: [{ fabricId, colorId, rollId: keep.id, quantityKg: 50, pieces: 2, pricePerKg: 5.5 }],
+      },
+      ctx,
+      entry.version,
+    );
+    expect(edited.total).toBe(275);
+    expect((await rollRepo.findById(keep.id, ctx))?.entryPricePerKg).toBe(5.5);
+    const removed = await rollRepo.findById(drop.id, ctx);
+    expect(removed?.remainingKg).toBe(0); // its entered stock was taken back
   });
 });

@@ -238,4 +238,16 @@ export const SYNC_COVERAGE: Record<string, CoverageEntry> = {
     exempt:
       "device-local upload queue retry; the queue is per-device runtime state, not company data",
   },
+  "POST /drive/archive/runs": {
+    exempt:
+      "device-local archive run trigger; primary-device gated, writes only motard_drive_* runtime state and produces no sync units",
+  },
+  "POST /drive/archive/runs/:id/cancel": {
+    exempt:
+      "device-local archive run cancellation; the run row is per-device runtime state, not company data",
+  },
+  "POST /api/desktop/runtime/archive-artifact": {
+    exempt:
+      "the shell reporting a rendered document to the runtime; it touches only the device-local render queue",
+  },
 };

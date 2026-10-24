@@ -317,6 +317,7 @@ const HAND_WRITTEN = [
   "motard_drive_folders",
   "motard_drive_uploads",
   "motard_drive_runs",
+  "motard_drive_renders",
 ];
 const generated = new Set([...definedIn.keys(), ...Object.keys(RAW_ONLY)]);
 const live = Object.keys(FP.tables);

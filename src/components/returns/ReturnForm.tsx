@@ -332,11 +332,12 @@ export function ReturnForm({ kind }: { kind: ReturnKind }) {
                       <div>
                         <Input
                           type="number"
-                          min="1"
-                          value={l.pieces || ""}
+                          min="0"
+                          value={l.pieces}
                           onChange={(e) =>
                             update(l.id, {
-                              pieces: Math.max(1, Number(e.target.value) || 1),
+                              // 0 = by weight only (a remnant, or a roll with no piece count).
+                              pieces: Math.max(0, Math.trunc(Number(e.target.value) || 0)),
                             })
                           }
                           className="h-9 w-full text-center tabular-nums"

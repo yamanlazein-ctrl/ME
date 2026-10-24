@@ -12,6 +12,7 @@ const APP_COMMANDS: &[&str] = &[
     "get_fingerprint",
     "ensure_document_folders",
     "archive_document_pdf",
+    "archive_write_pdf",
     "request_factory_reset",
     "apply_factory_reset_now",
     "save_backup_file",

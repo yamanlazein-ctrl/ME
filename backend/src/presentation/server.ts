@@ -594,6 +594,15 @@ if (config.DESKTOP_DEPLOY && getEngine() === "sqlite") {
         db: sqliteDb(),
         // D-05: this installation's stable, device-bound id is the archive device identity.
         localDeviceId: config.MOTARD_INSTALLATION_ID || null,
+        // Phase 2: the company name for the Drive root folder, read per pass. The desktop holds exactly
+        // one completed tenant (findAnyCompleted fails loudly if there are more), so its profile name is
+        // the company's name. No profile yet → null → the product-name fallback.
+        companyName: async () => {
+          const tenantId = await container.installationStateRepo.findAnyCompleted();
+          if (!tenantId) return null;
+          const profile = await container.companyRepo.findByTenant(tenantId);
+          return profile?.name ?? null;
+        },
       });
       apiRouter.use(drive.router);
       drive.start();

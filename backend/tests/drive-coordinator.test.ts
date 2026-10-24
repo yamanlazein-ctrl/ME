@@ -57,6 +57,9 @@ describe("primary archive device (fail-closed)", () => {
     );
     expect(await coord.authorizeUploadDevice(writerDb as never, "device-a")).toEqual({
       allowed: true,
+      // The decision carries the tenant: the Drive upsert key embeds it, so two installations
+      // sharing one Google account cannot produce the same key for the same document.
+      tenantId,
     });
     const d = await coord.authorizeUploadDevice(writerDb as never, "device-b");
     expect(d).toEqual({ allowed: false, reason: "NOT_COORDINATOR" });
@@ -74,6 +77,7 @@ describe("primary archive device (fail-closed)", () => {
     });
     expect(await coord.authorizeUploadDevice(writerDb as never, "device-b")).toEqual({
       allowed: true,
+      tenantId,
     });
   });
 

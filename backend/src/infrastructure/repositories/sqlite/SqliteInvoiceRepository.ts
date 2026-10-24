@@ -1,4 +1,4 @@
-// PORTED-FROM: src/infrastructure/repositories/PostgresInvoiceRepository.ts sha256=eb4719f19921a2b6e513c802bbb47d507af4477d9e119c89b4b205900ddfe89f
+// PORTED-FROM: src/infrastructure/repositories/PostgresInvoiceRepository.ts sha256=53a0829f9042c4199893f8025116a12b9911da84baae0ce8fc27bebd5df3dd8f
 // SQLite twin (specs/001-desktop-sqlite-engine S4). Keep behavior identical to the PG source.
 import { desc } from "./helpers/pgOrder.js";
 import { moneyParam } from "./helpers/likeContains.js";
@@ -905,7 +905,7 @@ export class SqliteInvoiceRepository implements IInvoiceRepository {
       }
       const newByRoll = new Map<
         string,
-        { kg: number; pieces: number; fabricId: string; colorId: string }
+        { kg: number; pieces: number; fabricId: string; colorId: string; pricePerKg: number }
       >();
       for (const l of lines) {
         const e = newByRoll.get(l.rollId) ?? {
@@ -913,6 +913,8 @@ export class SqliteInvoiceRepository implements IInvoiceRepository {
           pieces: 0,
           fabricId: l.fabricId,
           colorId: l.colorId,
+          // First line's price wins when a roll appears on multiple lines (mirrors create path).
+          pricePerKg: l.pricePerKg,
         };
         e.kg += l.quantityKg;
         e.pieces += l.pieces;
@@ -1034,6 +1036,19 @@ export class SqliteInvoiceRepository implements IInvoiceRepository {
             remainingKg: String(newKg),
             remainingPieces: newPieces,
             status: newKg <= 0 ? "exhausted" : "in_stock",
+            // ISSUE 1: when editing an entry/purchase invoice, refresh the roll's stored cost
+            // reference so a later sale invoice shows the NEW edited entry price (not stale).
+            // Only for a roll still ON the invoice: a roll taken off it is in this loop too (its
+            // stock is reversed) but has no line — and so no price — any more.
+            ...(!isSale && newByRoll.has(rollId)
+              ? {
+                  entryPricePerKg: String(newByRoll.get(rollId)!.pricePerKg),
+                  entryCurrency: inv.currency,
+                  entrySource: "purchase",
+                  entryReference: inv.number,
+                  entryDate: input.date,
+                }
+              : {}),
             version: sql`${rolls.version} + 1`,
             updatedAt: new Date(),
           })

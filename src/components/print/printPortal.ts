@@ -7,6 +7,7 @@ import { getQueryClient } from "@/infrastructure/queryClient";
 import { refreshInventory } from "@/presentation/hooks/useInventory";
 import {
   archiveDocumentPdf,
+  archiveWritePdf,
   ensureDocumentFolders,
   isTauri,
   type ArchiveDocType,
@@ -52,21 +53,19 @@ export type PrintArchiveMeta = {
   docType: ArchiveDocType;
   /** Base filename without extension — e.g. company_date_SALE-2026-0001 */
   fileStem: string;
+  /** Business month `YYYY-MM` the document is filed under. Omitted → the current month. */
+  period?: string;
 };
 
 const PRINT_PAGE_STYLE_ID = "me-print-page-size";
 
-export function paperSizeCss(paper: string, orientation = "portrait"): string {
-  const side = orientation === "landscape" ? "landscape" : "portrait";
-  switch (paper) {
-    case "A5":
-      return `A5 ${side}`;
-    case "80mm":
-      return "80mm auto"; // a receipt roll has no orientation
-    default:
-      return `A4 ${side}`;
-  }
-}
+// Page-size and font rules live in archivePageCss.ts (pure, importable without the print portal).
+export {
+  paperSizeCss,
+  pageRuleCss,
+  ARCHIVE_ARABIC_FONT_CSS,
+} from "@/components/print/archivePageCss";
+import { ARCHIVE_ARABIC_FONT_CSS, pageRuleCss } from "@/components/print/archivePageCss";
 
 /** The document's own orientation (`<PrintDocument orientation>`), portrait when unset. */
 function orientationOf(container: HTMLElement): string {
@@ -93,25 +92,6 @@ function syncPrintPaper(container: HTMLElement): void {
     document.head.appendChild(styleEl);
   }
   styleEl.textContent = pageRuleCss(paper, orientationOf(container));
-}
-
-/**
- * The unnamed `@page` rule for a print job. Margin is 0 and every page-margin box is empty, so the
- * browser/WebView cannot print its URL, date/time or page number on the sheet (Issue 2).
- * Paper size comes from `paperSizeCss` (A4/A5/80mm) so the printed sheet matches the chosen paper.
- */
-export function pageRuleCss(paper: string, orientation = "portrait"): string {
-  const empty = [
-    "top-left",
-    "top-center",
-    "top-right",
-    "bottom-left",
-    "bottom-center",
-    "bottom-right",
-  ]
-    .map((box) => `@${box} { content: none; }`)
-    .join(" ");
-  return `@page { size: ${paperSizeCss(paper, orientation)}; margin: 0; ${empty} }`;
 }
 
 function clearPrintPaper(): void {
@@ -204,18 +184,6 @@ function collectInlineCss(): string {
   return chunks.join("\n");
 }
 
-const ARCHIVE_ARABIC_FONT_CSS = `
-  /* Issue 15 — headless PDF: system Arabic fonts (no Google Fonts dependency) */
-  [data-print-root],
-  [data-print-root] * {
-    font-family: "Segoe UI", "Tahoma", "Arial Unicode MS", "Arial", sans-serif !important;
-  }
-  .pd-amount, .print-total-row .pd-amount, .print-company-contact-line {
-    direction: ltr;
-    unicode-bidi: plaintext;
-  }
-`;
-
 /** Build a standalone HTML snapshot of the print root (RTL + inlined styles). */
 function buildArchiveHtml(container: HTMLElement, title?: string): string {
   const inline = collectInlineCss();
@@ -250,9 +218,28 @@ async function archiveIfDesktop(container: HTMLElement, meta?: PrintArchiveMeta)
   if (!isTauri() || !meta) return;
   try {
     const companyName = settings.company?.name;
-    await ensureDocumentFolders(companyName);
+    // The folders are prepared for the document's BUSINESS month, the same month the file is
+    // filed under — otherwise the current month got the folders and a historical month did not.
+    await ensureDocumentFolders(companyName, meta.period);
     const html = buildArchiveHtml(container, meta.fileStem);
-    const res = await archiveDocumentPdf(meta.docType, meta.fileStem, html, companyName);
+    // The document is rendered to a REAL PDF by the shell's WebView2 worker, and filed in the
+    // archive tree. The HTML command stays as the fallback for a build with no WebView2 runtime.
+    let res: { path: string; format: string } | null = null;
+    try {
+      res = await archiveWritePdf({
+        docType: meta.docType,
+        fileStem: meta.fileStem,
+        html,
+        companyName,
+        period: meta.period,
+        paper: "A4",
+      });
+    } catch (renderError) {
+      console.warn("[print-archive] the PDF render failed; falling back to HTML:", renderError);
+    }
+    if (!res) {
+      res = await archiveDocumentPdf(meta.docType, meta.fileStem, html, companyName, meta.period);
+    }
     if (res?.path) {
       toast.success(`تم حفظ الملف: ${res.path}`);
       console.info("[print-archive]", res.format, res.path);

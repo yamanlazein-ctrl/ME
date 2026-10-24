@@ -640,8 +640,10 @@ describe("inventory count — a variance is a document", () => {
       expect(mv!.direction).toBe("out");
       expect(Number(mv!.balanceAfterKg)).toBe(92);
 
-      // A non-cash accounting leg: the loss hits P&L, the drawer does not move.
-      const [leg] = await db
+      // Non-cash accounting legs: the loss hits P&L (expense debit) against the stock value
+      // (inventory_asset credit); the drawer does not move. Both legs are selected by type — the
+      // posting writes two rows, and taking "the first" one depended on the engine's row order.
+      const legs = await db
         .select()
         .from(ledgerEntries)
         .where(
@@ -649,12 +651,14 @@ describe("inventory count — a variance is a document", () => {
             eq(ledgerEntries.tenantId, tenantId),
             eq(ledgerEntries.referenceType, "inventory_count"),
           ),
-        )
-        .limit(1);
+        );
+      const leg = legs.find((l) => l.type === "expense");
+      const asset = legs.find((l) => l.type === "inventory_asset");
       expect(leg).toBeDefined();
       expect(leg!.cashImpact).toBe("none");
       // 8 kg × 500 SYP cost = 4,000 written off.
       expect(Number(leg!.debit)).toBe(4000);
+      expect(Number(asset!.credit)).toBe(4000);
 
       // Re-posting is refused — `status` is the idempotency marker.
       await expect(db.transaction((tx) => postCountVariance(tx, ctx, count!.id))).rejects.toThrow(

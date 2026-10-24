@@ -209,7 +209,7 @@ function SaleInvoicePage() {
         colorCode: col?.code ?? "",
         rollId: l.rollId,
         quantityKg: l.quantityKg,
-        pieces: l.pieces ?? 1,
+        pieces: l.pieces ?? 0,
         pricePerKg: l.pricePerKg,
         discountAmount: l.discountAmount ?? 0,
         note: l.note,
@@ -272,7 +272,7 @@ function SaleInvoicePage() {
   const subtotal = dataLines.reduce((s, l) => s + l.quantityKg * l.pricePerKg, 0);
   const totalQty = dataLines.reduce((s, l) => s + (l.quantityKg || 0), 0);
   // «عدد الأثواب» — stored on the invoice by the server with the same rule (sum of the lines).
-  const totalPieces = dataLines.reduce((s, l) => s + (l.pieces ?? 1), 0);
+  const totalPieces = dataLines.reduce((s, l) => s + (l.pieces ?? 0), 0);
   // FIN-01: preview totals run the shared money authority, so they cannot
   // diverge from the subtotal/total the backend journals.
   const totalAfter = invoiceSubtotal({ lines: mathLines });
@@ -415,12 +415,12 @@ function SaleInvoicePage() {
       if (!edit && roll && l.quantityKg > roll.remainingKg) {
         return setError(`الكمية في الصبغة #${roll.rollNo} تتجاوز المتاح (${roll.remainingKg} كغ).`);
       }
-      if ((l.pieces ?? 1) < 0 || !Number.isInteger(l.pieces ?? 1)) {
+      if ((l.pieces ?? 0) < 0 || !Number.isInteger(l.pieces ?? 0)) {
         return setError("عدد الأثواب يجب أن يكون عدداً صحيحاً ≥ 0.");
       }
-      const rollPiecesAvail = roll ? (roll.remainingPieces ?? roll.pieces ?? 1) : 0;
-      // Default UI pieces=1 must not block remnant stock (remainingPieces === 0).
-      const requestedPieces = l.pieces === 0 ? 0 : (l.pieces ?? 1);
+      const rollPiecesAvail = roll ? (roll.remainingPieces ?? roll.pieces ?? 0) : 0;
+      // Unset pieces (0) must not block remnant stock (remainingPieces === 0).
+      const requestedPieces = l.pieces ?? 0;
       if (!edit && roll && requestedPieces > rollPiecesAvail) {
         return setError(
           `الأثواب في الصبغة #${roll.rollNo} تتجاوز المتاح (${rollPiecesAvail} أثواب).`,

@@ -38,9 +38,22 @@ export async function writeDriveSettings(
   return next;
 }
 
+/**
+ * The tenant this installation belongs to. The desktop holds exactly one (its settings row), and
+ * the archive key embeds it — so two installations sharing one Google account can never produce the
+ * same Drive key for the same document.
+ */
+export async function readDriveTenantId(db: DB): Promise<string | null> {
+  const [row] = await db.select({ tenantId: settings.tenantId }).from(settings).limit(1);
+  return row?.tenantId ?? null;
+}
+
 export type CoordinatorDecision =
-  | { allowed: true }
-  | { allowed: false; reason: "NOT_ENABLED" | "NO_COORDINATOR" | "NOT_COORDINATOR" };
+  | { allowed: true; tenantId: string }
+  | {
+      allowed: false;
+      reason: "NOT_ENABLED" | "NO_COORDINATOR" | "NOT_COORDINATOR" | "NO_TENANT";
+    };
 
 /**
  * The worker's authorization gate. Fail-closed: any ambiguity → no upload.
@@ -53,5 +66,7 @@ export async function authorizeUploadDevice(
   if (!s.archiveEnabled) return { allowed: false, reason: "NOT_ENABLED" };
   if (!s.coordinatorDeviceId) return { allowed: false, reason: "NO_COORDINATOR" };
   if (s.coordinatorDeviceId !== localDeviceId) return { allowed: false, reason: "NOT_COORDINATOR" };
-  return { allowed: true };
+  const tenantId = await readDriveTenantId(db);
+  if (!tenantId) return { allowed: false, reason: "NO_TENANT" };
+  return { allowed: true, tenantId };
 }

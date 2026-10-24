@@ -453,10 +453,12 @@ export function PartyListPage({
                           silently presenting a partial total as if it were
                           everything — mirrors the Balance column below. */}
                       {s.byCurrency.length > 0 ? (
-                        <div className="flex flex-col gap-0.5 items-start">
+                        // All currencies on ONE non-wrapping line, aligned with the
+                        // Balance column below (amount + symbol, no stacked labels).
+                        <div className="flex items-center gap-2 whitespace-nowrap tabular-nums">
                           {s.byCurrency.map(([ccy, b]) => (
-                            <span key={ccy}>
-                              {formatMoney(b.totalAmount)}{" "}
+                            <span key={ccy} className="flex items-center gap-1">
+                              {formatMoney(b.totalAmount)}
                               <span className="text-[10px] text-muted-foreground">
                                 {currencySymbol(ccy as "SYP" | "USD" | "EUR")}
                               </span>
@@ -478,14 +480,15 @@ export function PartyListPage({
                       }`}
                     >
                       {s.byCurrency.length > 0 ? (
+                        // All currencies on ONE non-wrapping line (amount + symbol only;
+                        // no stacked "SYP:"/"USD:" prefix duplicated beside the symbol).
                         <div
-                          className="flex flex-col gap-0.5 items-start"
+                          className="flex items-center gap-2 whitespace-nowrap tabular-nums"
                           data-testid="party-balances"
                         >
                           {s.byCurrency.map(([ccy, b]) => (
-                            <span key={ccy}>
-                              {ccy === "USD" ? "USD: " : ccy === "SYP" ? "SYP: " : `${ccy}: `}
-                              {formatMoney(b.remaining)}{" "}
+                            <span key={ccy} className="flex items-center gap-1">
+                              {formatMoney(b.remaining)}
                               <span className="text-[10px] opacity-70">
                                 {currencySymbol(ccy as "SYP" | "USD" | "EUR")}
                               </span>

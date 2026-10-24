@@ -1,6 +1,6 @@
 [package]
 name = "motard-erp"
-version = "3.0.6"
+version = "3.0.7"
 description = "Motard Fabrics Group ERP — Windows desktop application"
 edition = "2021"
 publish = false
@@ -30,14 +30,29 @@ native-tls = "=0.2.12"
 url = "2"
 
 [target.'cfg(windows)'.dependencies]
-windows = { version = "0.61", features = [
+# Phase 3 (pdf_render.rs): WebView2 PrintToPdf / CapturePreview. Pinned to the version tauri already
+# links (cargo tree: webview2-com 0.39.1), so the build has one copy of it, not two.
+webview2-com = "=0.39.1"
+# windows-core 0.62: the COM types webview2-com hands us live in this crate, and the `#[implement]`
+# macro that writes the COM callbacks expands to `::windows_core::…`, so the crate must be a DIRECT
+# dependency under that exact name. The version matches webview2-com's (0.62).
+windows-core = "0.62"
+# 0.62 (not 0.61): webview2-com 0.39.1 is built against windows-core 0.62, so the COM types it
+# hands us (ICoreWebView2_7, ICoreWebView2PrintSettings, the completion handlers) are windows-core
+# 0.62 types. A 0.61 `windows` crate would be a DIFFERENT type universe and the interop would not
+# compile. Aligning here also removes the duplicate 0.61/0.62 trees.
+windows = { version = "0.62", features = [
   "Win32_Foundation",
+  "Win32_Graphics_Gdi",
   "Win32_Security",
   "Win32_Security_Cryptography",
+  "Win32_System_Com",
   "Win32_System_JobObjects",
-  "Win32_System_Threading",
+  "Win32_System_LibraryLoader",
   "Win32_System_Memory",
   "Win32_System_Registry",
+  "Win32_System_Threading",
+  "Win32_UI_WindowsAndMessaging",
 ] }
 
 [profile.release]

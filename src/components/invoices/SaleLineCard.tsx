@@ -57,10 +57,9 @@ export function SaleLineCard({
   const roll = rollById(line.rollId);
   const exceeds = roll ? line.quantityKg > roll.remainingKg : false;
   // Loose remnant stock (remainingPieces === 0, remainingKg > 0) is sold with
-  // pieces explicitly at 0 — do not fold that into the "1 piece" default used
-  // for a genuinely unset value elsewhere.
+  // pieces explicitly at 0 — an unset value is 0 (no default 1 piece).
   const piecesExceeds = roll
-    ? (line.pieces ?? 1) > (roll.remainingPieces ?? roll.pieces ?? 1)
+    ? (line.pieces ?? 0) > (roll.remainingPieces ?? roll.pieces ?? 0)
     : false;
   // The price THIS roll actually entered stock at — a reference only, never the sale price.
   const entryRef = entryPriceReference(roll, currency, line.pricePerKg);
@@ -231,14 +230,14 @@ export function SaleLineCard({
             <CardField label="الأثواب">
               <FormattedAmountInput
                 maxDecimals={0}
-                value={line.pieces === 0 ? 0 : line.pieces || ""}
+                value={line.pieces || ""}
                 showZero
-                onChange={(v) => onUpdate({ pieces: v === "" ? 1 : Math.max(0, Math.trunc(v)) })}
+                onChange={(v) => onUpdate({ pieces: v === "" ? 0 : Math.max(0, Math.trunc(v)) })}
                 className={cn(
                   "h-9 text-left tabular-nums",
                   !line.pieces && "text-muted-foreground/70",
                 )}
-                placeholder="1"
+                placeholder="-"
                 ariaLabel="عدد الأثواب"
               />
               {/* live stock of the exact selected dye — read from the server, not editable */}

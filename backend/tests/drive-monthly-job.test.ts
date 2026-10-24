@@ -104,6 +104,13 @@ describe("monthly archive job", () => {
         folders.set(`${parentId}|${name}`, id);
         return { id, name, mimeType: "application/vnd.google-apps.folder" };
       },
+      // Phase 2 upsert: no existing file carries an app key here, so uploads create new files.
+      async findByAppKey(_appKey: string, _parentId?: string) {
+        return null;
+      },
+      async updateMedia(fileId: string, _mime: string, _content: Uint8Array) {
+        return { id: fileId, name: "x", mimeType: "text/csv" };
+      },
       async uploadSmall(parentId: string, name: string) {
         uploaded.push({ parentId, name });
         return { id: `f-${uploaded.length}`, name, mimeType: "text/csv" };
@@ -132,6 +139,12 @@ describe("monthly archive job", () => {
         const id = `fld-${folders.size + 1}`;
         folders.set(`${parentId}|${name}`, id);
         return { id, name, mimeType: "folder" };
+      },
+      async findByAppKey(_appKey: string, _parentId?: string) {
+        return null;
+      },
+      async updateMedia(fileId: string, _mime: string, _content: Uint8Array) {
+        return { id: fileId, name: "x", mimeType: "text/csv" };
       },
       async uploadSmall(parentId: string, name: string) {
         uploaded.push({ name });

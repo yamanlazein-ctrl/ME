@@ -28,9 +28,20 @@ import {
   type DriveQueueJob,
 } from "@/lib/drive-archive";
 import { isTauri } from "@/infrastructure/tauri-bridge";
+import { showAdvancedClientForm } from "@/lib/drive-account";
 import { container } from "@/infrastructure/container";
 
 export const Route = createFileRoute("/settings/drive")({ component: DriveSettingsPage });
+
+/** Why the backend did not start an archive run (`skipped`), in the operator's language. */
+const DRIVE_SKIP_MESSAGES: Record<string, string> = {
+  NOT_CONNECTED: "حساب Google Drive غير مرتبط",
+  NO_DEVICE_IDENTITY: "لا توجد هوية جهاز على هذا التثبيت",
+  NOT_ENABLED: "الأرشفة غير مفعّلة",
+  NO_COORDINATOR: "لم يُحدَّد جهاز الأرشفة الأساسي",
+  NOT_COORDINATOR: "هذا الجهاز ليس جهاز الأرشفة الأساسي",
+  NO_TENANT: "تعذّر تحديد الشركة",
+};
 
 const DRIVE_KEY = ["drive", "status"] as const;
 
@@ -121,7 +132,22 @@ function DriveSettingsPage() {
 
   const syncNow = useMutation({
     mutationFn: driveApi_.syncNow,
-    onSuccess: (r) => toast.success(`تمت جدولة ${r.queued} ملفًا${r.started ? " وبدأ الرفع" : ""}`),
+    // The run continues in the BACKGROUND: the answer carries its id, and the reason it did not
+    // start (busy, not connected, not the coordinator, nothing to do) instead of a silent no-op.
+    onSuccess: (r) => {
+      if (r.skipped === "BUSY" || r.skipped === "NOTHING_TO_DO") {
+        // Not failures: an archive is already running, or everything is already up to date.
+        toast.info(
+          r.skipped === "BUSY" ? "توجد عملية أرشفة قيد التنفيذ بالفعل" : "كل الأشهر مؤرشفة بالفعل",
+        );
+        return;
+      }
+      if (r.skipped) {
+        toast.error(DRIVE_SKIP_MESSAGES[r.skipped] ?? "تعذّر بدء الأرشفة");
+        return;
+      }
+      toast.success(r.runId ? "بدأت الأرشفة" : "تمت جدولة الأرشفة");
+    },
     onError: (e: Error) => toast.error(e.message),
     onSettled: invalidate,
   });
@@ -170,52 +196,36 @@ function DriveSettingsPage() {
       <div className="space-y-6 p-4" dir="rtl">
         {/* Connection card */}
         <section className="space-y-3">
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <CloudCog className="size-5" />
-            <h3 className="font-semibold">حساب Google</h3>
+            <h3 className="font-semibold">حساب Google Drive</h3>
             {shellData?.connected ? (
-              <span className="flex items-center gap-1 text-sm text-emerald-600">
-                <CheckCircle2 className="size-4" /> {shellData.email || "متصل"}
+              <span className="flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-sm text-emerald-700">
+                <CheckCircle2 className="size-4" /> متصل
               </span>
             ) : (
-              <span className="text-sm text-muted-foreground">غير مرتبط</span>
+              <span className="rounded-full bg-muted px-2 py-0.5 text-sm text-muted-foreground">
+                غير مرتبط
+              </span>
             )}
           </div>
 
-          {!shellData?.configured && (
-            <div className="space-y-2 rounded-md border p-3">
-              <p className="text-sm text-muted-foreground">
-                أدخل بيانات عميل OAuth من نوع «Desktop app» من Google Cloud Console. تُخزَّن على هذا
-                الجهاز مشفّرة ولا تُعرض مرة أخرى.
-              </p>
-              <div className="grid gap-2 sm:grid-cols-[1fr_1fr_auto] sm:items-end">
-                <FormField label="معرّف العميل (Client ID)">
-                  <Input
-                    value={clientId}
-                    onChange={(e) => setClientId(e.target.value)}
-                    placeholder="1234567890-abc.apps.googleusercontent.com"
-                    dir="ltr"
-                    autoComplete="off"
-                  />
-                </FormField>
-                <FormField label="سر العميل (Client secret) — إن وُجد">
-                  <Input
-                    type="password"
-                    value={clientSecret}
-                    onChange={(e) => setClientSecret(e.target.value)}
-                    placeholder="GOCSPX-…"
-                    dir="ltr"
-                    autoComplete="off"
-                  />
-                </FormField>
-                <Button
-                  onClick={() => configure.mutate()}
-                  disabled={!clientId.trim() || configure.isPending}
-                >
-                  {configure.isPending ? <Loader2 className="size-4 animate-spin" /> : "حفظ"}
-                </Button>
-              </div>
-            </div>
+          {shellData?.connected && shellData.email && (
+            <p className="text-sm" dir="ltr">
+              تم ربط حساب: <span className="font-medium">{shellData.email}</span>
+            </p>
+          )}
+          {shellData?.connected && st?.lastUpload?.uploadedAt && (
+            <p className="text-sm text-muted-foreground">
+              آخر نسخة احتياطية: {fmtDate(st.lastUpload.uploadedAt)}
+            </p>
+          )}
+
+          {!shellData?.connected && !shellData?.configured && (
+            <p className="text-sm text-muted-foreground">
+              ربط Google Drive غير مُعدّ في هذه النسخة. تواصل مع الدعم، أو افتح الإعدادات المتقدمة
+              أدناه لإدخال معرّف العميل يدويًا.
+            </p>
           )}
 
           <div className="flex flex-wrap gap-2">
@@ -230,7 +240,7 @@ function DriveSettingsPage() {
                   اختبار الاتصال
                 </Button>
                 <Button variant="destructive" onClick={() => setConfirmDisconnect(true)}>
-                  <Unplug className="size-4" /> فصل الحساب
+                  <Unplug className="size-4" /> إلغاء الربط / تغيير الحساب
                 </Button>
               </>
             ) : (
@@ -243,7 +253,7 @@ function DriveSettingsPage() {
                 ) : (
                   <ExternalLink className="size-4" />
                 )}
-                {connecting ? "بانتظار إتمام التفويض في المتصفح…" : "ربط حساب Google"}
+                {connecting ? "بانتظار إتمام التفويض في المتصفح…" : "ربط حساب Google Drive"}
               </Button>
             )}
           </div>
@@ -252,6 +262,54 @@ function DriveSettingsPage() {
               أكمل التفويض في نافذة المتصفح التي فُتحت. تُحفظ بيانات الاعتماد مشفّرة على هذا الجهاز
               فقط، ولا نطلب كلمة مرور Google أبدًا.
             </p>
+          )}
+
+          {/* Advanced: an OAuth client override for administrators. Hidden from regular users. */}
+          {showAdvancedClientForm(shellData) && (
+            <details className="rounded-md border p-3 text-sm">
+              <summary className="cursor-pointer font-medium">
+                إعدادات متقدمة (للمسؤول الفني)
+              </summary>
+              <div className="mt-3 space-y-2">
+                <p className="text-muted-foreground">
+                  استخدم هذا الحقل فقط إذا كانت لشركتك مشروع Google Cloud خاص. أدخل بيانات عميل
+                  OAuth من نوع «Desktop app». تُخزَّن على هذا الجهاز مشفّرة ولا تُعرض مرة أخرى،
+                  وتغييرها يلغي الربط الحالي.
+                </p>
+                <div className="grid gap-2 sm:grid-cols-[1fr_1fr_auto] sm:items-end">
+                  <FormField label="معرّف العميل (Client ID)">
+                    <Input
+                      value={clientId}
+                      onChange={(e) => setClientId(e.target.value)}
+                      placeholder="1234567890-abc.apps.googleusercontent.com"
+                      dir="ltr"
+                      autoComplete="off"
+                    />
+                  </FormField>
+                  <FormField label="سر العميل (Client secret) — إن وُجد">
+                    <Input
+                      type="password"
+                      value={clientSecret}
+                      onChange={(e) => setClientSecret(e.target.value)}
+                      placeholder="GOCSPX-…"
+                      dir="ltr"
+                      autoComplete="off"
+                    />
+                  </FormField>
+                  <Button
+                    onClick={() => configure.mutate()}
+                    disabled={!clientId.trim() || configure.isPending}
+                  >
+                    {configure.isPending ? <Loader2 className="size-4 animate-spin" /> : "حفظ"}
+                  </Button>
+                </div>
+                {shellData?.source === "override" && (
+                  <p className="text-xs text-muted-foreground">
+                    تُستخدم حاليًا بيانات عميل مخصّصة لهذه الشركة.
+                  </p>
+                )}
+              </div>
+            </details>
           )}
         </section>
 

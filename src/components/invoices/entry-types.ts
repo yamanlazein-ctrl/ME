@@ -52,7 +52,8 @@ export const emptyLine = (): EntryLine => ({
   kromaj: "",
   gsm: "",
   sahb: "",
-  pieces: 1,
+  // ISSUE 3: rolls count is left unset (0) by default — the operator types it manually.
+  pieces: 0,
 });
 
 /** Sticky fields for a new entry row: fabric + pricing + production meta only.

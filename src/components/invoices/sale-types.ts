@@ -27,7 +27,8 @@ export const emptyLine = (): SaleLine => ({
   quantityKg: 0,
   pricePerKg: 0,
   discountAmount: 0,
-  pieces: 1,
+  // ISSUE 3: rolls count is left unset (0) by default — the operator types it manually.
+  pieces: 0,
 });
 
 export const cloneStickyFields = (prev: SaleLine): Partial<SaleLine> => ({

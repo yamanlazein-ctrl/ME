@@ -1,4 +1,4 @@
-// PORTED-FROM: src/infrastructure/repositories/PostgresReturnRepository.ts sha256=4bde880d6fe2dc6cdc2079151ca5733412dd71bb172e52427c04eda7206ea26f
+// PORTED-FROM: src/infrastructure/repositories/PostgresReturnRepository.ts sha256=4540d0a409d5efe58bc6c79f5f4f88cd1c985fb8bbf4d259ee7f36b22ec021c4
 // SQLite twin (specs/001-desktop-sqlite-engine S4). Keep behavior identical to the PG source.
 import { desc } from "./helpers/pgOrder.js";
 import { scaledNumber } from "./helpers/likeContains.js";
@@ -541,6 +541,18 @@ export class SqliteReturnRepository implements IReturnRepository {
               `الأثواب المرتجعة (${requested}) تتجاوز الأثواب المباعة (${sold}) بعد خصم المرتجعات السابقة`,
             );
         }
+      }
+      // The same rule for a return TO THE SUPPLIER: a roll that holds no whole pieces — a remnant, or
+      // a roll entered without a piece count (the entry screen leaves it unset, 0) — goes back by
+      // weight only. Requesting a piece it does not have refused the whole return.
+      if (input.kind === "entry") {
+        const held = await tx
+          .select({ id: rolls.id, pieces: rolls.remainingPieces })
+          .from(rolls)
+          .where(
+            and(eq(rolls.tenantId, ctx.tenantId), inArray(rolls.id, [...piecesByRoll.keys()])),
+          );
+        for (const r of held) if (Number(r.pieces) === 0) piecesByRoll.set(r.id, 0);
       }
       await tx.insert(returnLines).values(
         Array.from(inputByRoll.entries()).map(([rollId, totalQty]) => {

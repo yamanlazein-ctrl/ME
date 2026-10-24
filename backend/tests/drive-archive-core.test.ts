@@ -5,6 +5,7 @@
 import { describe, it, expect } from "vitest";
 import {
   DRIVE_ROOT_NAME,
+  driveRootName,
   monthFolderName,
   periodKeyOf,
   yearOf,
@@ -136,13 +137,26 @@ describe("stableKey idempotency", () => {
 });
 
 describe("section registry", () => {
-  it("contains only ERP-supported sections, all with unique labels", () => {
+  it("contains the seven fixed Phase 2 categories, all with unique labels", () => {
     const labels = SECTION_LIST.map((s) => s.label);
     expect(new Set(labels).size).toBe(labels.length);
-    expect(SECTION_LIST.length).toBe(12);
+    expect(SECTION_LIST.length).toBe(7);
+    expect(labels).toEqual([
+      "فواتير الدخول",
+      "فواتير الخروج",
+      "المرتجعات",
+      "إرساليات واستلامات الطباعة",
+      "كشوف الحسابات",
+      "الصندوق والتقارير",
+      "نسخ النظام الاحتياطية",
+    ]);
   });
 
-  it("keeps the Drive root name exactly as specified", () => {
+  it("keeps the fallback root name for a company with no name", () => {
     expect(DRIVE_ROOT_NAME).toBe("Motard ERP - أرشيف النظام");
+  });
+
+  it("names the root after the company", () => {
+    expect(driveRootName("شركة الأنسجة")).toBe("شركة الأنسجة - أرشيف النظام");
   });
 });
