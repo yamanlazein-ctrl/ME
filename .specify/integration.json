@@ -1,7 +1,9 @@
 {
-  "version": "1.0.13",
+  "version": "1.2.3",
   "integration_state_schema": 1,
-  "installed_integrations": ["claude"],
+  "installed_integrations": [
+    "claude"
+  ],
   "integration_settings": {
     "claude": {
       "script": "ps",
