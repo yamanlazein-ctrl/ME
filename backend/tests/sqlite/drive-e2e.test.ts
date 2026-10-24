@@ -37,6 +37,7 @@ const TOKEN = "ya29.e2e-access-token-0123456789";
 /** Fake Google Drive v3: folders by (parent, name), multipart uploads captured byte for byte. */
 type Upload = { name: string; parents: string[]; bytes: Buffer; auth: string | undefined };
 const drive = {
+  sessions: new Map<string, { name: string; parents: string[]; auth?: string }>(),
   folders: new Map<string, string>(),
   files: new Map<string, Upload>(),
   uploads: [] as Upload[],
@@ -54,7 +55,10 @@ function startFakeDrive(): Promise<void> {
         res.writeHead(status, { "Content-Type": "application/json" });
         res.end(JSON.stringify(body));
       };
-      if (req.headers.authorization !== `Bearer ${TOKEN}`)
+      // A resumable session URL (`/upload/session/<id>`) authorises its own PUT, as on Google; every other
+      // request must carry the bearer token.
+      const isSessionPut = req.method === "PUT" && /^\/upload\/session\//.test(req.url ?? "");
+      if (!isSessionPut && req.headers.authorization !== `Bearer ${TOKEN}`)
         return json(401, { error: { message: "bad token" } });
       const body = Buffer.concat(chunks);
       if (req.method === "GET" && url.pathname === "/drive/v3/files") {
@@ -71,6 +75,36 @@ function startFakeDrive(): Promise<void> {
         const id = `fld-${drive.folders.size + 1}`;
         drive.folders.set(`${meta.parents?.[0] ?? "root"}|${meta.name}`, id);
         return json(200, { id, name: meta.name, mimeType: "application/vnd.google-apps.folder" });
+      }
+      // Phase 4: resumable protocol (init → session URL → PUT the bytes). The init carries the metadata.
+      if (
+        req.method === "POST" &&
+        url.pathname === "/upload/drive/v3/files" &&
+        url.searchParams.get("uploadType") === "resumable"
+      ) {
+        const meta = JSON.parse(body.toString("utf8") || "{}") as {
+          name: string;
+          parents: string[];
+        };
+        const sessionId = `sess-${drive.uploads.length + 1}-${Date.now()}`;
+        // The session-creating request is the authorised one; remember its token for the uploaded file.
+        drive.sessions.set(sessionId, { ...meta, auth: req.headers.authorization });
+        res.writeHead(200, {
+          Location: `${driveBase}/upload/session/${sessionId}`,
+          "Content-Type": "application/json",
+        });
+        res.end("{}");
+        return;
+      }
+      const sessionId = /^\/upload\/session\/([^/]+)$/.exec(url.pathname)?.[1];
+      if (req.method === "PUT" && sessionId && drive.sessions.has(sessionId)) {
+        const meta = drive.sessions.get(sessionId)!;
+        drive.sessions.delete(sessionId);
+        const up: Upload = { name: meta.name, parents: meta.parents, bytes: body, auth: meta.auth };
+        const id = `file-${drive.files.size + 1}`;
+        drive.files.set(id, up);
+        drive.uploads.push(up);
+        return json(200, { id, name: meta.name, size: String(body.length), md5Checksum: "x" });
       }
       if (req.method === "POST" && url.pathname === "/upload/drive/v3/files") {
         const boundary = /boundary=([^;]+)/.exec(String(req.headers["content-type"]))![1];
@@ -204,6 +238,17 @@ const pushToken = (
     headers,
   );
 
+/** The archive run continues in the background; wait until it has finished. */
+async function waitForRunToFinish(runId: string, timeoutMs = 20_000): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    const p = (await call("GET", `/api/drive/archive/runs/${runId}`)).body as { state?: string };
+    if (p.state && p.state !== "running") return;
+    if (Date.now() > deadline) throw new Error(`the archive run ${runId} did not finish in time`);
+    await new Promise((r) => setTimeout(r, 50));
+  }
+}
+
 describe("Drive archive end to end", () => {
   it("without a token from the shell nothing is connected and nothing uploads", async () => {
     const st = await call("GET", "/api/drive/status");
@@ -227,8 +272,23 @@ describe("Drive archive end to end", () => {
     expect((await pushToken(TOKEN)).body).toMatchObject({ ok: true, connected: true });
     const r = await call("POST", "/api/drive/sync-now");
     expect(r.status).toBe(200);
+    // The run continues in the BACKGROUND: the answer carries its id straight away, and the client
+    // polls it. The route must not wait for the upload (it can take minutes).
+    const started = r.body as { runId?: string | null; skipped?: string | null };
+    expect(started.runId).toBeTruthy();
+    await waitForRunToFinish(String(started.runId));
     const backup = drive.uploads.find((u) => u.name.endsWith(".zip"));
-    expect(backup, `uploads: ${drive.uploads.map((u) => u.name).join(", ")}`).toBeDefined();
+    // On failure, show the queue's recorded error for the backup job (the upload error is stored there).
+    const q = (await call("GET", "/api/drive/queue")).body as {
+      jobs?: Array<{ fileName: string; status: string; lastError: string | null }>;
+    };
+    const jobs = (q.jobs ?? [])
+      .map((j) => `${j.fileName}:${j.status}:${j.lastError ?? "-"}`)
+      .join(" | ");
+    expect(
+      backup,
+      `uploads: ${drive.uploads.map((u) => u.name).join(", ")} | queue: ${jobs}`,
+    ).toBeDefined();
     const onDisk = readFileSync(backupPath);
     expect(backup!.bytes.length).toBe(onDisk.length);
     expect(backup!.bytes.length).toBeGreaterThan(1000);
@@ -237,12 +297,19 @@ describe("Drive archive end to end", () => {
     expect(backup!.parents[0]).toMatch(/^fld-/); // filed inside the archive folder chain
     const st = await call("GET", "/api/drive/status");
     expect(st.body.connected).toBe(true);
-    expect(st.body.lastUpload).toMatchObject({ section: "dbBackups" });
+    expect(st.body.lastUpload).toMatchObject({ section: "system_backups" });
     // A second sync does not upload the same backup again (deduped by content hash).
     const before = drive.uploads.length;
     await call("POST", "/api/drive/sync-now");
     expect(drive.uploads.filter((u) => u.name === backup!.name)).toHaveLength(1);
     expect(drive.uploads.length).toBe(before);
+  });
+
+  it("the run route rejects an unknown trigger or period instead of coercing it", async () => {
+    const bogus = await call("POST", "/api/drive/archive/runs", { trigger: "bogus" });
+    expect(bogus.status).toBe(400);
+    const badPeriod = await call("POST", "/api/drive/archive/runs", { periodKey: "2026-13x" });
+    expect(badPeriod.status).toBe(400);
   });
 
   it("the drive routes are the admin's (real tenantContext role)", async () => {

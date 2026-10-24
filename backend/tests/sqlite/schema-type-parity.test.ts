@@ -50,7 +50,9 @@ describe("SQLite schema mirrors the PG Drizzle schema (T034)", () => {
         .filter((v) => is(v, SQLiteTable))
         .map((v) => getTableName(v as SQLiteTable)),
     );
-    expect(sqTables.size).toBe(59); // 53 live + motard_meta + motard_sequences + motard_tx_state + 3 drive tables (0005_drive_archive)
+    // 53 live + motard_meta + motard_sequences + motard_tx_state + motard_sync_restore
+    // + 4 drive tables (0005_drive_archive) + motard_drive_renders (0009).
+    expect(sqTables.size).toBe(60);
     expect(sqTables.has("party_balances")).toBe(false);
   });
 });

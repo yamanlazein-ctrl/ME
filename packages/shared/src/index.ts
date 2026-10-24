@@ -3,6 +3,12 @@ export * from "./fx.js";
 export * from "./settlementAllocation.js";
 export * from "./settlementAmounts.js";
 export * from "./documentFilename.js";
+export * from "./archivePaths.js";
+// The archive document builders: ONE implementation, used by the local print path (frontend) and
+// by the Drive archive (backend). They are pure string builders over plain data, so both engines
+// can use them.
+export * from "./archivePageCss.js";
+export * from "./archiveDocuments.js";
 export * from "./schemas/invoice.schema.js";
 export * from "./schemas/return.schema.js";
 export * from "./schemas/voucher.schema.js";

@@ -139,10 +139,13 @@ export interface ArchiveDocumentResult {
  * omitted/empty the Rust side falls back to a fixed brand name so this never
  * fails just because settings haven't loaded yet.
  */
-export async function ensureDocumentFolders(companyName?: string): Promise<string | null> {
+export async function ensureDocumentFolders(
+  companyName?: string,
+  period?: string,
+): Promise<string | null> {
   if (!isTauri()) return null;
   const invoke = await getInvoke();
-  return (await invoke("ensure_document_folders", { companyName })) as string;
+  return (await invoke("ensure_document_folders", { companyName, period })) as string;
 }
 
 export async function requestFactoryReset(confirm: string): Promise<void> {
@@ -172,6 +175,7 @@ export async function archiveDocumentPdf(
   fileStem: string,
   html: string,
   companyName?: string,
+  period?: string,
 ): Promise<ArchiveDocumentResult | null> {
   if (!isTauri()) return null;
   const invoke = await getInvoke();
@@ -179,8 +183,35 @@ export async function archiveDocumentPdf(
     docType,
     fileStem,
     html,
+    period,
     companyName,
   })) as ArchiveDocumentResult;
+}
+
+/**
+ * Phase 3: render a document to a REAL PDF and file it in the local archive tree.
+ *
+ * The rendering happens in the shell's WebView2 worker, so the print portal never blocks on the
+ * browser and the local archive holds PDFs rather than HTML.
+ */
+export async function archiveWritePdf(opts: {
+  docType: string;
+  fileStem: string;
+  html: string;
+  companyName?: string | null;
+  period?: string | null;
+  paper?: "A4" | "A5";
+}): Promise<{ path: string; format: string; sha256?: string; sizeBytes?: number } | null> {
+  if (!isTauri()) return null;
+  const invoke = await getInvoke();
+  return (await invoke("archive_write_pdf", {
+    docType: opts.docType,
+    fileStem: opts.fileStem,
+    html: opts.html,
+    companyName: opts.companyName ?? null,
+    period: opts.period ?? null,
+    paper: opts.paper ?? "A4",
+  })) as { path: string; format: string; sha256?: string; sizeBytes?: number };
 }
 
 /** Desktop shell semver (`CARGO_PKG_VERSION`). Falls back for web builds. */

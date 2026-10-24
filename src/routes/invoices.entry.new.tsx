@@ -261,7 +261,7 @@ function EntryInvoicePage() {
         colorCode: col?.code ?? "",
         colorHex: col?.hex ?? undefined,
         quantity: l.quantityKg,
-        pieces: l.pieces ?? 1,
+        pieces: l.pieces ?? 0,
         pricePerKg: l.pricePerKg,
         discountAmount: l.discountAmount ?? 0,
       };
@@ -766,7 +766,7 @@ function EntryInvoicePage() {
               rollNo: `R-${Date.now().toString().slice(-5)}-${l.id.slice(-2)}`,
               dyeBatch: l.dyeBatch,
               initialKg: l.quantity,
-              pieces: l.pieces || 1,
+              pieces: l.pieces || 0,
               // The entry invoice transaction increments remainingKg from 0 to
               // quantity — passing 0 here keeps the stock count accurate without
               // double-counting against the invoice's stock increment.
@@ -1243,14 +1243,15 @@ function EntryInvoicePage() {
                             value={l.pieces || ""}
                             onChange={(v) =>
                               updateLine(l.id, {
-                                pieces: v === "" ? 1 : Math.max(1, Math.trunc(v)),
+                                // ISSUE 3: empty by default; operator types the roll count manually.
+                                pieces: v === "" ? 0 : Math.max(0, Math.trunc(v)),
                               })
                             }
                             className={cn(
                               "h-9 text-left tabular-nums",
                               !l.pieces && "text-muted-foreground/70",
                             )}
-                            placeholder="1"
+                            placeholder="-"
                             ariaLabel="عدد الأثواب"
                           />
                           <p className="mt-0.5 text-[10px] leading-tight text-muted-foreground">

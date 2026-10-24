@@ -116,7 +116,9 @@ function CashBoxPage() {
   // Optimistic local override so the tab responds INSTANTLY on click; the URL
   // remains the persisted source of truth once navigation settles.
   const patchSearch = (patch: Partial<CashboxPeriodFilter & { tab?: string }>) =>
-    navigate({ search: (prev) => ({ ...prev, ...patch }) });
+    navigate({
+      search: (prev: CashboxPeriodFilter & { tab?: string }) => ({ ...prev, ...patch }),
+    });
   const changeTab = (t: string) => {
     setTabOverride(t);
     patchSearch({ tab: t });

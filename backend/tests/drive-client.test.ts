@@ -139,7 +139,7 @@ describe("DriveClient", () => {
     expect(attempts).toBe(1);
   });
 
-  it("surfaces 401 as DriveAuthError immediately", async () => {
+  it("retries a 401 once with a freshly read token, then surfaces DriveAuthError", async () => {
     let attempts = 0;
     const { impl } = mockFetch(() => {
       attempts++;
@@ -147,7 +147,22 @@ describe("DriveClient", () => {
     });
     const client = new DriveClient({ token: TOKEN, fetchImpl: impl, maxRetries: 4 });
     await expect(client.findChild("p", "x")).rejects.toBeInstanceOf(DriveAuthError);
-    expect(attempts).toBe(1);
+    // The shell pushes a fresh access token every 20 seconds, so a 401 usually means the token was
+    // rotated underneath us. The client re-reads it and retries ONCE; a second 401 is a real
+    // refusal (a revoked token) and is surfaced.
+    expect(attempts).toBe(2);
+  });
+
+  it("succeeds on the retry when the token was rotated", async () => {
+    let attempts = 0;
+    const { impl } = mockFetch(() => {
+      attempts++;
+      if (attempts === 1) return new Response("invalid credentials", { status: 401 });
+      return ok({ files: [{ id: "f1", name: "n", mimeType: "x" }] });
+    });
+    const client = new DriveClient({ token: TOKEN, fetchImpl: impl, maxRetries: 4 });
+    expect((await client.findByAppKey("k"))?.id).toBe("f1");
+    expect(attempts).toBe(2);
   });
 
   it("getFile returns null on 404 without throwing", async () => {
@@ -163,6 +178,70 @@ describe("DriveClient", () => {
     const client = new DriveClient({ token: TOKEN, fetchImpl: impl });
     const p = await client.ping();
     expect(p).toEqual({ ok: true, email: "archive@example.com" });
+  });
+
+  it("escapes a backslash and a quote in a child name", async () => {
+    const { impl, calls } = mockFetch(() => ok({ files: [] }));
+    const client = new DriveClient({ token: TOKEN, fetchImpl: impl });
+    await client.findChild("root", "a\\b'c");
+    const q = decodeURIComponent(calls[0].url.split("q=")[1].split("&")[0]);
+    expect(q).toContain("name = 'a\\\\b\\'c'");
+  });
+});
+
+/** A fetch that answers after `delayMs`, unless the request's abort signal fires first. */
+function slowFetch(delayMs: number, response: () => Response): typeof fetch {
+  return (async (_url: string | URL | Request, init?: RequestInit) =>
+    new Promise<Response>((resolve, reject) => {
+      const t = setTimeout(() => resolve(response()), delayMs);
+      init?.signal?.addEventListener("abort", () => {
+        clearTimeout(t);
+        reject(init.signal?.reason);
+      });
+    })) as typeof fetch;
+}
+
+describe("DriveClient transfer timeout", () => {
+  // The abort signal bounds the WHOLE transfer. A flat request timeout aborted every upload slower
+  // than it, so a large backup on a slow line never reached Drive. A body gets time proportional to
+  // its size (floor 32 KiB/s): 1 MiB may take ~32 s, far longer than the 150 ms used here.
+  const MiB = new Uint8Array(1024 * 1024);
+
+  it("lets a large multipart upload outlast the base request timeout", async () => {
+    const client = new DriveClient({
+      token: TOKEN,
+      fetchImpl: slowFetch(150, () => ok({ id: "big-1", name: "b.zip" })),
+      timeoutMs: 50,
+      maxRetries: 0,
+    });
+    const meta = await client.uploadSmall("p", "b.zip", "application/zip", MiB);
+    expect(meta.id).toBe("big-1");
+  });
+
+  it("lets a large resumable PUT outlast the base request timeout", async () => {
+    const slowPut = slowFetch(150, () => ok({ id: "res-big", name: "b.zip" }));
+    const impl = (async (url: string | URL | Request, init?: RequestInit) => {
+      if (init?.method === "POST") {
+        return new Response(null, {
+          status: 200,
+          headers: { Location: "https://session.example/upload/2" },
+        });
+      }
+      return slowPut(url, init);
+    }) as typeof fetch;
+    const client = new DriveClient({ token: TOKEN, fetchImpl: impl, timeoutMs: 50, maxRetries: 0 });
+    const meta = await client.uploadResumable("p", "b.zip", "application/zip", MiB);
+    expect(meta.id).toBe("res-big");
+  });
+
+  it("still times out a request without a body at the base timeout", async () => {
+    const client = new DriveClient({
+      token: TOKEN,
+      fetchImpl: slowFetch(150, () => ok({ files: [] })),
+      timeoutMs: 50,
+      maxRetries: 0,
+    });
+    await expect(client.findChild("p", "x")).rejects.toMatchObject({ code: "NETWORK" });
   });
 });
 

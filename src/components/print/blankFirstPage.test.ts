@@ -15,6 +15,7 @@ import { join, dirname } from "node:path";
 import { tmpdir } from "node:os";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import { pageRuleCss } from "@/components/print/archivePageCss";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const PRINT_CSS = readFileSync(join(HERE, "print.css"), "utf8");
@@ -69,7 +70,12 @@ describe("DFP-002 blank-first-page contract", () => {
 
   it("printPortal injects unnamed @page size via #me-print-page-size", () => {
     expect(PORTAL_TS).toContain("me-print-page-size");
-    expect(PORTAL_TS).toContain("@page { size: ${paperSizeCss");
+    expect(PORTAL_TS).toContain('from "@/components/print/archivePageCss"');
+    expect(PORTAL_TS).toMatch(/styleEl\.textContent\s*=\s*pageRuleCss\(/);
+    // The rule itself now lives in @erp/shared — ONE copy, used by the print path and by the
+    // Drive archive alike, so the two cannot drift. Assert the BEHAVIOUR, not the file layout:
+    // the rule must name the page size and clear every margin box.
+    expect(pageRuleCss("A4", "portrait")).toContain("@page { size: A4 portrait; margin: 0;");
   });
 });
 

@@ -4,8 +4,24 @@
  * No I/O — everything here is unit-testable without Google credentials.
  */
 
-/** The archive root, exactly as specified (Arabic name preserved). */
-export const DRIVE_ROOT_NAME = "Motard ERP - أرشيف النظام";
+import {
+  ARCHIVE_CATEGORIES,
+  ARCHIVE_CATEGORY_KEYS,
+  type ArchiveCategory,
+  companyFolderName,
+} from "@erp/shared";
+
+/**
+ * Phase 2: the archive root is named after the company, `[اسم الشركة] - أرشيف النظام`, via the shared
+ * naming engine. `DRIVE_ROOT_NAME` is kept only for the no-company-name fallback (it equals the shared
+ * fallback), so existing references keep compiling.
+ */
+export const DRIVE_ROOT_NAME = companyFolderName(null);
+
+/** The company-named archive root (use this, with the tenant name, instead of the constant). */
+export function driveRootName(companyName: string | null | undefined): string {
+  return companyFolderName(companyName);
+}
 
 /** Gregorian Arabic month names, indexed 1–12. */
 const ARABIC_MONTHS = [
@@ -24,26 +40,39 @@ const ARABIC_MONTHS = [
 ] as const;
 
 /**
- * Document-category sections, mapped ONLY to modules that exist in the ERP
- * (src/routes/*, backend routes — verified 2026-10). Keep in sync with the
- * exporter registry; a section with no exporter must never be listed.
+ * Phase 2: the six fixed archive categories come from the shared naming engine (single source of
+ * truth for Drive and the local archive). Keys are the category keys, labels are the Arabic folder names.
  */
-export const SECTIONS = {
-  salesInvoices: "فواتير البيع",
-  purchaseInvoices: "فواتير الشراء",
-  returns: "المرتجعات",
-  orders: "الطلبيات",
-  inventory: "المخزون والجرد",
-  payments: "المقبوضات والمدفوعات",
-  cashboxExpenses: "الصندوق والمصروفات",
-  statements: "كشوفات الحسابات",
-  reports: "التقارير",
-  attachments: "المرفقات",
-  monthClose: "إغلاق الشهر",
-  dbBackups: "نسخ احتياطية لقاعدة البيانات",
-} as const;
+export const SECTIONS = ARCHIVE_CATEGORIES;
 
-export type SectionKey = keyof typeof SECTIONS;
+export type SectionKey = ArchiveCategory;
+
+/**
+ * Queue rows written before Phase 2 carry the old 12-section keys. They still exist in installed
+ * databases (the Drive archive shipped in 0005), so they are mapped to the new category instead of
+ * throwing on every pass. Anything else unknown falls back to the statements category, never a crash.
+ */
+const LEGACY_SECTION_MAP: Record<string, ArchiveCategory> = {
+  salesInvoices: "sale_invoices",
+  purchaseInvoices: "entry_invoices",
+  returns: "returns",
+  statements: "statements",
+  cashboxExpenses: "cashbox",
+  reports: "cashbox",
+  payments: "cashbox",
+  monthClose: "cashbox",
+  dbBackups: "system_backups",
+  orders: "statements",
+  inventory: "statements",
+  attachments: "statements",
+};
+
+/** A stored queue section mapped onto the current category set. */
+export function categoryOfSection(section: string): ArchiveCategory {
+  if ((ARCHIVE_CATEGORY_KEYS as readonly string[]).includes(section))
+    return section as ArchiveCategory;
+  return LEGACY_SECTION_MAP[section] ?? "statements";
+}
 
 export type Section = {
   key: SectionKey;

@@ -28,6 +28,60 @@ pub const SCOPE: &str = "https://www.googleapis.com/auth/drive.file openid email
 const REFRESH_MARGIN_SECS: u64 = 300;
 pub const CONSENT_TIMEOUT: Duration = Duration::from_secs(300);
 
+/// The company's OAuth client, injected by the RELEASE BUILD from the environment
+/// (`MOTARD_GOOGLE_CLIENT_ID`, optional `MOTARD_GOOGLE_CLIENT_SECRET`). Nothing is committed to the
+/// repository. A build without them has no bundled client and the advanced override is needed.
+const BUNDLED_CLIENT_ID: Option<&str> = option_env!("MOTARD_GOOGLE_CLIENT_ID");
+const BUNDLED_CLIENT_SECRET: Option<&str> = option_env!("MOTARD_GOOGLE_CLIENT_SECRET");
+
+/// The OAuth client a link is made with. `Clone` only: never `Debug`, so a secret cannot be printed.
+#[derive(Clone)]
+pub struct ClientCreds {
+    pub id: String,
+    pub secret: Option<String>,
+    /// "bundled" (release build) or "override" (advanced, set by the admin).
+    pub source: &'static str,
+}
+
+fn bundled_from(id: Option<&str>, secret: Option<&str>) -> Option<ClientCreds> {
+    let id = id?.trim();
+    if id.is_empty() {
+        return None;
+    }
+    Some(ClientCreds {
+        id: id.to_string(),
+        secret: secret.map(str::trim).filter(|s| !s.is_empty()).map(str::to_string),
+        source: "bundled",
+    })
+}
+
+fn bundled_creds() -> Option<ClientCreds> {
+    bundled_from(BUNDLED_CLIENT_ID, BUNDLED_CLIENT_SECRET)
+}
+
+/// The client to use now: the advanced override when one is stored, otherwise the bundled one.
+fn resolve_client(s: &Store, bundled: Option<ClientCreds>) -> Option<ClientCreds> {
+    if !s.client_id.is_empty() {
+        return Some(ClientCreds {
+            id: s.client_id.clone(),
+            secret: s.client_secret.clone(),
+            source: "override",
+        });
+    }
+    bundled
+}
+
+/// A link is valid only with the client it was made with (its refresh token belongs to that client).
+fn link_matches(s: &Store, client: &ClientCreds) -> bool {
+    match s.linked_client_id.as_deref() {
+        Some(id) => id == client.id,
+        // A link stored by 3.0.6, before `linked_client_id` existed, was made with the stored client
+        // — the only client that version knew. Without this, the first token refresh after the
+        // update unlinked every existing Google Drive connection.
+        None => !s.client_id.is_empty() && s.client_id == client.id,
+    }
+}
+
 #[derive(Clone)]
 pub struct Endpoints {
     pub auth: String,
@@ -55,6 +109,10 @@ struct Store {
     refresh_token: Option<String>,
     #[serde(default)]
     email: Option<String>,
+    /// The client id the refresh token was issued to. Set on connect; a different client means the
+    /// link no longer applies (see `link_matches`).
+    #[serde(default)]
+    linked_client_id: Option<String>,
 }
 
 impl std::fmt::Debug for Store {
@@ -233,17 +291,22 @@ impl Google {
         fsutil::atomic_write(&self.paths.google, &sealed).map_err(|e| format!("حفظ إعداد Google: {e}"))
     }
 
+    /// The status the UI shows. `connected` only when the stored link matches the client in use.
     pub fn status(&self) -> Value {
         let s = self.load();
+        let client = resolve_client(&s, bundled_creds());
+        let linked = s.refresh_token.is_some()
+            && client.as_ref().is_some_and(|c| link_matches(&s, c));
         json!({
-            "connected": s.refresh_token.is_some(),
-            "configured": !s.client_id.is_empty(),
-            "email": s.email,
-            "scopes": if s.refresh_token.is_some() { SCOPE } else { "" },
+            "connected": linked,
+            "configured": client.is_some(),
+            "source": client.as_ref().map(|c| c.source),
+            "email": if linked { s.email.clone() } else { None },
+            "scopes": if linked { SCOPE } else { "" },
         })
     }
 
-    /// Set the OAuth client. A different client invalidates the existing link.
+    /// Advanced: set an OAuth client override. A different client invalidates the existing link.
     pub fn configure(&self, client_id: &str, client_secret: Option<&str>) -> Result<Value, String> {
         let _g = self.busy.lock().unwrap();
         let id = client_id.trim();
@@ -255,6 +318,7 @@ impl Google {
         if s.client_id != id {
             s.refresh_token = None;
             s.email = None;
+            s.linked_client_id = None;
             *self.cached.lock().unwrap() = None;
         }
         s.client_id = id.to_string();
@@ -266,14 +330,13 @@ impl Google {
     /// Bind the loopback listener, then open Google's consent page in the system browser.
     pub fn connect_start(&self, open: &dyn Fn(&str) -> Result<(), String>) -> Result<Value, String> {
         let s = self.load();
-        if s.client_id.is_empty() {
-            return Err("أدخل معرّف العميل (Client ID) أولاً".into());
-        }
+        let client = resolve_client(&s, bundled_creds())
+            .ok_or("هذه النسخة لا تحتوي على ربط Google مُعدّ — تواصل مع الدعم أو أدخل معرّف العميل في الإعدادات المتقدمة")?;
         let listener = TcpListener::bind("127.0.0.1:0").map_err(|e| format!("تعذّر فتح منفذ الرد المحلي: {e}"))?;
         let port = listener.local_addr().map_err(|e| e.to_string())?.port();
         let state = random_b64url(24)?;
         let verifier = random_b64url(48)?;
-        let url = consent_url(&self.endpoints, &s.client_id, port, &state, &pkce_challenge(&verifier));
+        let url = consent_url(&self.endpoints, &client.id, port, &state, &pkce_challenge(&verifier));
         *self.pending.lock().unwrap() = Some(Pending { listener, port, state: state.clone(), verifier });
         open(&url)?;
         Ok(json!({ "consentUrl": url, "state": state }))
@@ -289,15 +352,16 @@ impl Google {
         let code = wait_for_redirect(&pending, timeout)?;
         let _g = self.busy.lock().unwrap();
         let mut s = self.load();
+        let client = resolve_client(&s, bundled_creds()).ok_or("لا يوجد معرّف عميل لربط Google")?;
         let redirect = redirect_uri(pending.port);
         let mut form = vec![
-            ("client_id", s.client_id.as_str()),
+            ("client_id", client.id.as_str()),
             ("grant_type", "authorization_code"),
             ("code", code.as_str()),
             ("code_verifier", pending.verifier.as_str()),
             ("redirect_uri", redirect.as_str()),
         ];
-        if let Some(secret) = s.client_secret.as_deref() {
+        if let Some(secret) = client.secret.as_deref() {
             form.push(("client_secret", secret));
         }
         let (status, body) = post_form(&self.endpoints.token, &form)?;
@@ -307,6 +371,7 @@ impl Google {
             .ok_or("GOOGLE_NO_REFRESH_TOKEN: لم يُعد Google رمز التحديث — أعد الربط ووافق على الصلاحية")?;
         s.refresh_token = Some(refresh);
         s.email = reply.email;
+        s.linked_client_id = Some(client.id.clone());
         self.save(&s)?;
         *self.cached.lock().unwrap() = Some(Cached { access_token: reply.access_token, expires_at: now() + reply.expires_in });
         *self.pushed_to.lock().unwrap() = None; // push on the next tick
@@ -322,6 +387,7 @@ impl Google {
             let _ = post_form(&self.endpoints.revoke, &[("token", rt.as_str())]);
         }
         s.email = None;
+        s.linked_client_id = None;
         self.save(&s)?;
         *self.cached.lock().unwrap() = None;
         *self.pushed_to.lock().unwrap() = None;
@@ -335,17 +401,28 @@ impl Google {
         let _g = self.busy.lock().unwrap();
         let mut s = self.load();
         let Some(refresh) = s.refresh_token.clone() else { return Ok(None) };
+        // A link made with a client that is no longer the one in use cannot be refreshed: unlink it.
+        let client = resolve_client(&s, bundled_creds()).filter(|c| link_matches(&s, c));
+        let Some(client) = client else {
+            logger::warn("google link belongs to another OAuth client: link removed");
+            s.refresh_token = None;
+            s.email = None;
+            s.linked_client_id = None;
+            self.save(&s)?;
+            *self.cached.lock().unwrap() = None;
+            return Ok(None);
+        };
         if let Some(c) = self.cached.lock().unwrap().clone() {
             if c.expires_at > now() + REFRESH_MARGIN_SECS {
                 return Ok(Some((c.access_token, c.expires_at)));
             }
         }
         let mut form = vec![
-            ("client_id", s.client_id.as_str()),
+            ("client_id", client.id.as_str()),
             ("grant_type", "refresh_token"),
             ("refresh_token", refresh.as_str()),
         ];
-        if let Some(secret) = s.client_secret.as_deref() {
+        if let Some(secret) = client.secret.as_deref() {
             form.push(("client_secret", secret));
         }
         let (status, body) = post_form(&self.endpoints.token, &form)?;
@@ -359,6 +436,7 @@ impl Google {
                 logger::warn("google refresh token refused (revoked or expired): link removed");
                 s.refresh_token = None;
                 s.email = None;
+                s.linked_client_id = None;
                 self.save(&s)?;
                 *self.cached.lock().unwrap() = None;
                 Ok(None)
@@ -503,6 +581,48 @@ mod tests {
         let e = parse_token_reply(400, r#"{"error":"invalid_grant","error_description":"Token ya29.LEAK"}"#).err().unwrap();
         assert_eq!(e, "GOOGLE_TOKEN_INVALID_GRANT");
         assert!(parse_token_reply(200, "not json").is_err());
+    }
+
+    #[test]
+    fn the_bundled_client_is_used_unless_an_override_is_stored() {
+        let bundled = bundled_from(Some("123-rel.apps.googleusercontent.com"), Some("  GOCSPX-rel ")).unwrap();
+        assert_eq!(bundled.source, "bundled");
+        assert_eq!(bundled.secret.as_deref(), Some("GOCSPX-rel"), "secret is trimmed");
+        assert!(bundled_from(Some("   "), None).is_none(), "a blank build value is no client");
+        assert!(bundled_from(None, None).is_none(), "a build without the variable has no client");
+
+        let none = Store::default();
+        assert_eq!(resolve_client(&none, Some(bundled.clone())).unwrap().source, "bundled");
+        let over = Store { client_id: "9-ovr.apps.googleusercontent.com".into(), ..Store::default() };
+        let got = resolve_client(&over, Some(bundled)).unwrap();
+        assert_eq!((got.source, got.id.as_str()), ("override", "9-ovr.apps.googleusercontent.com"));
+        assert!(resolve_client(&none, None).is_none());
+    }
+
+    #[test]
+    fn a_link_made_with_another_client_does_not_count() {
+        let client = ClientCreds { id: "1-a.apps.googleusercontent.com".into(), secret: None, source: "bundled" };
+        let linked = Store { linked_client_id: Some("1-a.apps.googleusercontent.com".into()), ..Store::default() };
+        assert!(link_matches(&linked, &client));
+        let other = Store { linked_client_id: Some("2-b.apps.googleusercontent.com".into()), ..Store::default() };
+        assert!(!link_matches(&other, &client));
+        assert!(!link_matches(&Store::default(), &client), "no link recorded means no match");
+    }
+
+    /// An installation linked under 3.0.6 stored no `linked_client_id`. Its link was made with the
+    /// stored (override) client and must survive the update, not be removed on the first refresh.
+    #[test]
+    fn a_link_stored_before_the_update_still_counts() {
+        let legacy = Store {
+            client_id: "7-old.apps.googleusercontent.com".into(),
+            refresh_token: Some("1//refresh".into()),
+            ..Store::default()
+        };
+        let client = resolve_client(&legacy, None).expect("the stored client is the override");
+        assert!(link_matches(&legacy, &client));
+        // …but it is not a link to some OTHER client.
+        let bundled = ClientCreds { id: "1-rel.apps.googleusercontent.com".into(), secret: None, source: "bundled" };
+        assert!(!link_matches(&legacy, &bundled));
     }
 
     #[test]

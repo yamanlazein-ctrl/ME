@@ -502,6 +502,18 @@ export class PostgresReturnRepository implements IReturnRepository {
             );
         }
       }
+      // The same rule for a return TO THE SUPPLIER: a roll that holds no whole pieces — a remnant, or
+      // a roll entered without a piece count (the entry screen leaves it unset, 0) — goes back by
+      // weight only. Requesting a piece it does not have refused the whole return.
+      if (input.kind === "entry") {
+        const held = await tx
+          .select({ id: rolls.id, pieces: rolls.remainingPieces })
+          .from(rolls)
+          .where(
+            and(eq(rolls.tenantId, ctx.tenantId), inArray(rolls.id, [...piecesByRoll.keys()])),
+          );
+        for (const r of held) if (Number(r.pieces) === 0) piecesByRoll.set(r.id, 0);
+      }
       await tx.insert(returnLines).values(
         Array.from(inputByRoll.entries()).map(([rollId, totalQty]) => {
           const entry = invoiceLineQtys.get(rollId)!;

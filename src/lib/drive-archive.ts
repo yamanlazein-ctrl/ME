@@ -56,11 +56,54 @@ export type DriveQueueJob = {
   createdAt: string;
 };
 
+/** The progress of one archive run. */
+export type DriveRunProgress = {
+  state: "running" | "done" | "failed" | "partial" | "cancelled";
+  progressDone: number;
+  progressTotal: number;
+  percent: number;
+  currentFile: string | null;
+  errors: string[];
+  /** The period this run archives (`YYYY-MM`), when the run has finished. */
+  periodKey?: string | null;
+  trigger?: string | null;
+  startedAt?: string;
+  finishedAt?: string | null;
+};
+
+/**
+ * The answer to "start an archive run". The run continues in the BACKGROUND — the client polls
+ * `runProgress(runId)` and can cancel it. `skipped` says why nothing was started (busy, not
+ * connected, not the coordinator, nothing to do) instead of the client guessing.
+ */
+export type DriveRunStarted = {
+  ok: boolean;
+  runId: string | null;
+  skipped: string | null;
+};
+
 export const driveApi_ = {
   status: () => driveApi<DriveStatus>("/drive/status"),
   test: () => driveApi<{ ok: boolean; email: string | null }>("/drive/test", { method: "POST" }),
+  /** Start a run in the background; the answer carries the run id to poll. */
+  startRun: (
+    opts: { trigger?: "monthly" | "catchup" | "manual" | "connect"; periodKey?: string } = {},
+  ) =>
+    driveApi<DriveRunStarted>("/drive/archive/runs", {
+      method: "POST",
+      body: JSON.stringify(opts),
+    }),
+  /** The legacy alias of `startRun`. */
   syncNow: () =>
-    driveApi<{ ok: boolean; queued: number; started: boolean }>("/drive/sync-now", {
+    driveApi<DriveRunStarted>("/drive/sync-now", {
+      method: "POST",
+    }),
+  /** The progress of one run. */
+  runProgress: (runId: string) =>
+    driveApi<DriveRunProgress>(`/drive/archive/runs/${encodeURIComponent(runId)}`),
+  /** Ask a running run to stop after its current file. */
+  cancelRun: (runId: string) =>
+    driveApi<{ ok: boolean }>(`/drive/archive/runs/${encodeURIComponent(runId)}/cancel`, {
       method: "POST",
     }),
   queue: (status?: string) =>
@@ -75,7 +118,10 @@ export const driveApi_ = {
 
 export type GoogleShellStatus = {
   connected: boolean;
+  /** An OAuth client is available: bundled into the release build, or an advanced override. */
   configured: boolean;
+  /** Where the client comes from. `null` when no client is available at all. */
+  source: "bundled" | "override" | null;
   email: string | null;
   scopes: string;
 };

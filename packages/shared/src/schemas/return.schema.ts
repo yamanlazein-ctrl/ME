@@ -4,7 +4,9 @@ import { is2dp, MAX_2DP_MESSAGE } from "../precision.js";
 const returnLineSchema = z.object({
   rollId: z.string().uuid(),
   quantityKg: z.number().positive().max(100000).refine(is2dp, { message: MAX_2DP_MESSAGE }),
-  pieces: z.coerce.number().int().positive().max(100000).optional().default(1),
+  // 0 is valid, as on invoice lines: a remnant, or a roll entered without a piece count, is returned
+  // by weight only. Callers that omit `pieces` keep returning 1 whole piece (default unchanged).
+  pieces: z.coerce.number().int().min(0).max(100000).optional().default(1),
   pricePerKg: z.number().positive().refine(is2dp, { message: MAX_2DP_MESSAGE }),
 });
 

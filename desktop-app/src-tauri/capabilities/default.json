@@ -13,6 +13,7 @@
     "allow-get-fingerprint",
     "allow-ensure-document-folders",
     "allow-archive-document-pdf",
+    "allow-archive-write-pdf",
     "allow-request-factory-reset",
     "allow-apply-factory-reset-now",
     "allow-save-backup-file",

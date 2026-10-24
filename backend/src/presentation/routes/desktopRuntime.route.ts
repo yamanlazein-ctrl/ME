@@ -11,6 +11,8 @@
  *                                                   close, exit — so the update replaces nothing in use
  *   POST /api/desktop/runtime/drive-token        → the shell's Google access token for the Drive archive
  *                                                   (memory only; `null` clears it on disconnect)
+ *   GET  /api/desktop/runtime/archive-render-requests → the documents the backend wants rendered
+ *   POST /api/desktop/runtime/archive-artifact   → the rendered file the shell staged
  */
 import type { Router, Request, Response } from "express";
 import { createHash, timingSafeEqual } from "node:crypto";
@@ -79,6 +81,62 @@ export function registerDesktopRuntimeRoutes(router: Router): void {
     }
     setLiveDriveToken(accessToken, expiresAt);
     return res.json({ ok: true, connected: true });
+  });
+
+  // ── The render channel (Stage 3, E-14) ────────────────────────────────────────────────────────────
+  // The backend owns the documents; the shell owns the renderer. The shell PULLS the work from
+  // here and posts the rendered file back, because it is the shell that has a channel to the
+  // backend — not the other way round.
+  router.get(
+    "/api/desktop/runtime/archive-render-requests",
+    async (req: Request, res: Response) => {
+      if (!runtimeAuthorized(req)) {
+        return res.status(404).json({ code: "NOT_FOUND", message: "المسار غير موجود" });
+      }
+      try {
+        const { sqliteDb } = await import("../../infrastructure/orm/sqlite/transaction.js");
+        const { pendingRenders } = await import("../../infrastructure/googledrive/renderBridge.js");
+        const requests = await pendingRenders(sqliteDb());
+        return res.json({ ok: true, requests });
+      } catch (err) {
+        logger.error({ err }, "runtime/archive-render-requests failed");
+        return res
+          .status(500)
+          .json({ code: "RENDER_REQUESTS_FAILED", message: "تعذر جلب طلبات التصيير" });
+      }
+    },
+  );
+
+  router.post("/api/desktop/runtime/archive-artifact", async (req: Request, res: Response) => {
+    if (!runtimeAuthorized(req)) {
+      return res.status(404).json({ code: "NOT_FOUND", message: "المسار غير موجود" });
+    }
+    const body = (req.body ?? {}) as {
+      requestId?: unknown;
+      path?: unknown;
+      sha256?: unknown;
+      sizeBytes?: unknown;
+      error?: unknown;
+    };
+    if (typeof body.requestId !== "string" || !body.requestId) {
+      return res.status(400).json({ code: "VALIDATION", message: "معرّف الطلب غير صالح" });
+    }
+    try {
+      const { sqliteDb } = await import("../../infrastructure/orm/sqlite/transaction.js");
+      const { completeRender } = await import("../../infrastructure/googledrive/renderBridge.js");
+      const rendered = await completeRender(sqliteDb(), body.requestId, {
+        path: typeof body.path === "string" ? body.path : undefined,
+        sha256: typeof body.sha256 === "string" ? body.sha256 : undefined,
+        sizeBytes: typeof body.sizeBytes === "number" ? body.sizeBytes : undefined,
+        error: typeof body.error === "string" ? body.error : undefined,
+      });
+      return res.json({ ok: true, rendered });
+    } catch (err) {
+      logger.error({ err }, "runtime/archive-artifact failed");
+      return res
+        .status(500)
+        .json({ code: "RENDER_ARTIFACT_FAILED", message: "تعذر تسجيل الملف المُنتج" });
+    }
   });
 
   router.post("/api/desktop/runtime/shutdown", async (req: Request, res: Response) => {

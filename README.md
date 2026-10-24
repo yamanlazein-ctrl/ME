@@ -20,7 +20,7 @@ engines (PostgreSQL for the sync hub, SQLite for the Windows desktop app), a Tau
 ## Features
 
 - **Inventory** — fabrics, colors, rolls (kg), stock movements, `costPerKg` snapshot
-- **Invoices** — sale/entry, `subtotal - discount + tax + shipping` with per-line `Math.round`, partial `paid`, cancellation
+- **Invoices** — sale/entry, `subtotal - discount + tax + shipping`, every line and total through `round2dp` (exact decimal, half away from zero — the same as PostgreSQL `ROUND`), partial `paid`, cancellation
 - **Returns** — sale/entry returns with `rollId` aggregation, `pricePerKg` server-derived, `cost` split, currency check
 - **Vouchers** — receipts/payments, `cash` leg correctly `debit`/`credit`, `invoices.paid` maintained transactionally
 - **Ledger** — double-entry, 20 `type` values, append-only trigger, `FORCE RLS`

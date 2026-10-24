@@ -57,6 +57,30 @@
       "tag": "0006_day_closes_per_currency",
       "breakpoints": false,
       "pgReferenceJournalIdx": 103
+    },
+    {
+      "idx": 7,
+      "version": 7,
+      "when": 1791643046824,
+      "tag": "0007_drive_archive_runs",
+      "breakpoints": false,
+      "pgReferenceJournalIdx": 103
+    },
+    {
+      "idx": 8,
+      "version": 7,
+      "when": 1791643046825,
+      "tag": "0008_drive_upload_document_identity",
+      "breakpoints": false,
+      "pgReferenceJournalIdx": 103
+    },
+    {
+      "idx": 9,
+      "version": 7,
+      "when": 1791643046826,
+      "tag": "0009_drive_render_requests",
+      "breakpoints": false,
+      "pgReferenceJournalIdx": 103
     }
   ]
 }

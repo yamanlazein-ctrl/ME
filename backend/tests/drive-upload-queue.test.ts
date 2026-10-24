@@ -52,6 +52,13 @@ function makeFakeDrive() {
       const id = folders.get(`${parentId}|${name}`);
       return id ? { id, name, mimeType: "folder" } : null;
     },
+    // Phase 2 upsert: no file carries an app key in this fake, so every upload creates a new file.
+    async findByAppKey(_appKey: string, _parentId?: string) {
+      return null;
+    },
+    async updateMedia(fileId: string, _mime: string, _content: Uint8Array) {
+      return { id: fileId, name: "updated", mimeType: "text/csv" };
+    },
     async createFolder(parentId: string | null, name: string) {
       const id = `fld-${folders.size + 1}`;
       folders.set(`${parentId}|${name}`, id);
@@ -321,5 +328,63 @@ describe("upload queue", () => {
       .filter((r: { entityId: string }) => ["inv-7", "inv-8"].includes(r.entityId))
       .map((r: { periodKey: string }) => r.periodKey);
     expect(periods).toEqual(["2026-12", "2027-01"]);
+  });
+});
+
+/**
+ * Phase 2 upsert contract. The Drive key of a document must NOT change when its content changes,
+ * otherwise an edited invoice would be uploaded as a second file. The key includes the document
+ * identity, never the content hash.
+ */
+describe("Phase 2 upsert key", async () => {
+  const { documentKey } = await import("../src/infrastructure/googledrive/uploadQueue.js");
+
+  it("is identical across two revisions of the same document (content is not part of the key)", () => {
+    const first = documentKey({
+      entityType: "invoice",
+      entityId: "2026-10-05_INV-1_party",
+      periodKey: "2026-10",
+      section: "sale_invoices",
+    });
+    const second = documentKey({
+      entityType: "invoice",
+      entityId: "2026-10-05_INV-1_party",
+      periodKey: "2026-10",
+      section: "sale_invoices",
+    });
+    expect(second).toBe(first);
+  });
+
+  it("separates different documents, months and categories", () => {
+    const base = documentKey({
+      entityType: "invoice",
+      entityId: "a",
+      periodKey: "2026-10",
+      section: "sale_invoices",
+    });
+    expect(
+      documentKey({
+        entityType: "invoice",
+        entityId: "b",
+        periodKey: "2026-10",
+        section: "sale_invoices",
+      }),
+    ).not.toBe(base);
+    expect(
+      documentKey({
+        entityType: "invoice",
+        entityId: "a",
+        periodKey: "2026-11",
+        section: "sale_invoices",
+      }),
+    ).not.toBe(base);
+    expect(
+      documentKey({
+        entityType: "invoice",
+        entityId: "a",
+        periodKey: "2026-10",
+        section: "entry_invoices",
+      }),
+    ).not.toBe(base);
   });
 });

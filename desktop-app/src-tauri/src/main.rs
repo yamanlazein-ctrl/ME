@@ -1,6 +1,11 @@
 // No console window in the shipped build.
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+// The archive schedule lives in the BACKEND (googledrive/archiveSchedule.ts + the 6-hour worker):
+// one owner only. A second scheduler in the shell would race the backend's worker, and the
+// backend's run guard would silently swallow one of them — the month would then "not archive"
+// without any error. (The Rust scheduler that used to live here was never started; it is gone.)
+mod archive_render_loop;
 mod backend;
 mod boot;
 mod commands;
@@ -9,8 +14,10 @@ mod google;
 mod keys;
 mod logger;
 mod paths;
+mod pdf_render;
 mod pipe;
 mod state;
+mod webview2_render;
 
 use std::path::PathBuf;
 use tauri::{Manager, WebviewUrl, WebviewWindowBuilder, WindowEvent};
@@ -45,6 +52,7 @@ fn main() {
             commands::get_fingerprint,
             commands::ensure_document_folders,
             commands::archive_document_pdf,
+            commands::archive_write_pdf,
             commands::request_factory_reset,
             commands::apply_factory_reset_now,
             commands::save_backup_file,
@@ -63,6 +71,9 @@ fn main() {
             let shared = boot::Shared::new(paths, resources, lock.ok());
             app.manage(shared.clone());
             boot::start_drive_token_loop(shared.clone());
+            // The archive render loop: the shell pulls the documents the backend wants rendered and
+            // posts the rendered files back. This is the channel the PDF engine is reached through.
+            archive_render_loop::start_archive_render_loop(shared.clone());
             WebviewWindowBuilder::new(app, "main", WebviewUrl::App("boot.html".into()))
                 .title("موتارد للأقمشة — Motard ERP")
                 .inner_size(1366.0, 820.0)

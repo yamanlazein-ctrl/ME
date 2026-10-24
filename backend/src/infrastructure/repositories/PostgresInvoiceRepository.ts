@@ -901,7 +901,7 @@ export class PostgresInvoiceRepository implements IInvoiceRepository {
       }
       const newByRoll = new Map<
         string,
-        { kg: number; pieces: number; fabricId: string; colorId: string }
+        { kg: number; pieces: number; fabricId: string; colorId: string; pricePerKg: number }
       >();
       for (const l of lines) {
         const e = newByRoll.get(l.rollId) ?? {
@@ -909,6 +909,8 @@ export class PostgresInvoiceRepository implements IInvoiceRepository {
           pieces: 0,
           fabricId: l.fabricId,
           colorId: l.colorId,
+          // First line's price wins when a roll appears on multiple lines (mirrors create path).
+          pricePerKg: l.pricePerKg,
         };
         e.kg += l.quantityKg;
         e.pieces += l.pieces;
@@ -1030,6 +1032,19 @@ export class PostgresInvoiceRepository implements IInvoiceRepository {
             remainingKg: String(newKg),
             remainingPieces: newPieces,
             status: newKg <= 0 ? "exhausted" : "in_stock",
+            // ISSUE 1: when editing an entry/purchase invoice, refresh the roll's stored cost
+            // reference so a later sale invoice shows the NEW edited entry price (not stale).
+            // Only for a roll still ON the invoice: a roll taken off it is in this loop too (its
+            // stock is reversed) but has no line — and so no price — any more.
+            ...(!isSale && newByRoll.has(rollId)
+              ? {
+                  entryPricePerKg: String(newByRoll.get(rollId)!.pricePerKg),
+                  entryCurrency: inv.currency,
+                  entrySource: "purchase",
+                  entryReference: inv.number,
+                  entryDate: input.date,
+                }
+              : {}),
             version: sql`${rolls.version} + 1`,
             updatedAt: new Date(),
           })

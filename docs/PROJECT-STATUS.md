@@ -2,6 +2,11 @@
 
 آخر تحقق: 2026-09-23 (فرع `clean-desktop-release`).
 
+> **ملاحظة 2026-10-21:** هذا الملف لقطة من 2026-09-23. أقسامه عن سطح المكتب (PostgreSQL مضمَّن، `pgdata`،
+> `%LOCALAPPDATA%\motard-erp`) تاريخية: سطح المكتب اليوم SQLite في `%LOCALAPPDATA%\MotardERP` (انظر
+> `desktop-app/ADR.md`). صُحِّح فيه بندا التقريب (§2) والبناء (§5) فقط. حالة الإصدار 3.0.7 في
+> `docs/REMEDIATION_AND_CORRECTION_PLAN.md` §9.
+
 يحل هذا الملف محل ثمانية ملفات خطط وتقارير كتبها وكلاء مختلفون، وقد حُذفت من الجذر:
 `COMPREHENSIVE-IMPROVEMENT-PLAN.md`، `IMPLEMENTATION-REPORT.md`، `OLD-PLAN-REMEDIATION-STATUS.md`،
 `OLD-VERIFICATION-REPORT.md`، `old.md`، `PROJECT-IMPROVEMENT-PLAN.md`، `REPAIR-PLAN.md`،
@@ -78,7 +83,9 @@
   (migration `20261011`)، مع بقاء المبالغ والتاريخ والنوع والحالة كما هي.
 - التحقق من توازن الدفتر يكون **بالعملة الأساسية لكل مستند**. قيود فروقات الصرف في التسوية بين عملتين
   تجعل «مدين = دائن لكل عملة» خاطئاً بطبيعته.
-- `round2dp` = `Math.round(n*100)/100` (أُعيد إلى سلوكه الأصلي، ولا يُغيَّر دون قرار).
+- `round2dp`: تقريب عشري دقيق، النصف بعيدًا عن الصفر — مطابق لـ `ROUND` في PostgreSQL ولـ `roundDiv` في
+  توأم SQLite (قرار المالك F-008، `packages/shared/src/precision.ts`). _(تصحيح 2026-10-21: هذا البند كان
+  يقول `Math.round(n*100)/100`، وهو السلوك القديم قبل F-008.)_
 
 ---
 
@@ -179,22 +186,20 @@
 
 ## 5. بناء نسخة سطح المكتب
 
-القالب يُبنى بلا مستخدم إداري (`SKIP_ADMIN_SEED` + `users=0`). الزبون يعيّن اسمه ورقمه السري في معالج الإعداد الأول.
+> **تحديث 2026-10-21:** هذا القسم كان يصف الغلاف القديم `desktop/` (PostgreSQL مضمَّن). الغلاف الحالي هو
+> `desktop-app/` (Tauri 2 + SQLite) — التصميم في `desktop-app/ADR.md`.
 
 ```powershell
-cd desktop
-# LICENSE_SIGNING_KEY / LICENSE_SIGNING_PUBLIC_KEY من backend/.env أو البيئة
-# اختياري: DESKTOP_LICENSE_KEY ، BAKED_LICENSE_DEVICES
-npx tauri build
+cd desktop-app
+# ارفع الإصدار في src-tauri/Cargo.toml و src-tauri/tauri.conf.json أولاً، ولا تغيّر release-identity.json
+npm run build:installer   # = scripts/stage.mjs ثم tauri build (لا تشغّل tauri build وحده)
 ```
 
-الخطوات: `before-build.cmd`، ثم stage-node-runtime، ثم prune-postgres، ثم build-frontend، ثم bundle-server،
-ثم بناء قالب pgdata والتحقق منه، ثم `server-bundle.test.mjs`، ثم `validate-resource-manifest`.
-الناتج: `desktop/src-tauri/target/release/bundle/nsis/*-setup.exe`.
+الناتج: `desktop-app/src-tauri/target/release/bundle/nsis/*-setup.exe`.
 
-قبل تسليم أي نسخة لعميل: جرّب المثبِّت على **نسخة من بيانات موجودة** (`%LOCALAPPDATA%\motard-erp`)، لا على
-بيانات نظيفة فقط. أول عطل ظهر في الميدان كان ترقية فوق بيانات قديمة. لاختبار تثبيت نظيف احذف
-`%LOCALAPPDATA%\motard-erp` ومجلد Programs للتطبيق أولاً.
+بيانات الزبون في `%LOCALAPPDATA%\MotardERP\` ولا يمسّها التثبيت ولا التحديث ولا إلغاء التثبيت.
+**لا تحذف هذا المجلد أبدًا ولا تشغّل الاختبارات عليه.** لاختبار تثبيت نظيف أو ترقية فوق بيانات موجودة، شغّل
+البرنامج على جذر بيانات مؤقت عبر `MOTARD_DATA_ROOT=<مجلد مؤقت>` (وانسخ إليه نسخة من بيانات اختبار للترقية).
 
 ---
 

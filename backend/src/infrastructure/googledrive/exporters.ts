@@ -46,11 +46,24 @@ export type ExportRow = {
   content: Uint8Array;
   /** Emitted data rows (for total verification against source). */
   rowCount: number;
+  /**
+   * The business document's IMMUTABLE id (the invoice UUID). The Drive upsert key is derived from
+   * it, so the file is found and updated in place when the invoice is renamed, cancelled or
+   * renumbered. The FILE NAME is for humans and changes with those edits; this id does not.
+   */
+  documentId: string;
+  /**
+   * The file-name prefix this document had before the upgrade (`${date}_${number}_`). Used ONCE to
+   * recognise the queue row written before migration 0008 and adopt it in place — which keeps that
+   * row's Drive file, so the upgrade does not duplicate every archived document. Null when the
+   * document has no legacy name.
+   */
+  legacyNamePrefix?: string | null;
 };
 
 const INV_TYPE_SECTION: Record<string, { section: string; label: string }> = {
-  sale: { section: "salesInvoices", label: "فواتير البيع" },
-  entry: { section: "purchaseInvoices", label: "فواتير الشراء" },
+  sale: { section: "sale_invoices", label: "فواتير الخروج" },
+  entry: { section: "entry_invoices", label: "فواتير الدخول" },
 };
 
 export class Exporters {
@@ -103,6 +116,13 @@ export class Exporters {
         mimeType: "text/csv;charset=utf-8",
         content: csv,
         rowCount: 1,
+        // The invoice UUID: immutable, so the Drive file is updated in place across renames,
+        // cancellations and renumbering. Two invoices that happened to share date+number+party
+        // produced the SAME file name before; they now have distinct identities.
+        documentId: r.id,
+        // `${date}_${number}_` — the prefix the pre-upgrade file name also started with, so the
+        // queue can recognise (and adopt) the row that row was written into.
+        legacyNamePrefix: `${r.date}_${r.number}_`,
       };
     });
   }
@@ -141,6 +161,10 @@ export class Exporters {
         mimeType: "text/csv;charset=utf-8",
         content: csv,
         rowCount: rows.length,
+        // One file per period: the period key is this document's immutable identity (the expenses
+        // of a month are a single statement, not a row-per-document export).
+        documentId: `expenses:${periodKey}`,
+        legacyNamePrefix: null,
       },
     ];
   }

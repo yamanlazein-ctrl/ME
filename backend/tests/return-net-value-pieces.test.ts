@@ -128,4 +128,59 @@ describe("sale returns: net value and piece conservation", () => {
     await ret(inv.id, rollId, 3, 1);
     expect(await rollState(rollId)).toEqual({ kg: 20, pieces: 2 });
   });
+
+  it("a roll entered without a piece count is returned to the supplier by weight only", async () => {
+    // The entry screen leaves the piece count unset (0). A return to the supplier used to demand a
+    // whole piece the roll never had, and the whole return was refused.
+    const supplierId = randomUUID();
+    await db.insert(parties).values({
+      id: supplierId,
+      tenantId,
+      name: "S",
+      code: "RNET-S",
+      kind: "supplier",
+      currency: "USD",
+    });
+    const rollId = (
+      await rollRepo.create(
+        {
+          colorId,
+          rollNo: `R-${randomUUID().slice(0, 8)}`,
+          initialKg: 30,
+          remainingKg: 0,
+          pieces: 0,
+          pricePerKg: 4,
+          currency: "USD",
+          entryDate: "2026-09-01",
+        },
+        ctx,
+      )
+    ).id;
+    const entry = await invoiceRepo.create(
+      {
+        type: "entry",
+        date: "2026-09-05",
+        partyId: supplierId,
+        partyType: "supplier",
+        currency: "USD",
+        lines: [{ fabricId, colorId, rollId, quantityKg: 30, pieces: 0, pricePerKg: 4 }],
+      } as never,
+      ctx,
+    );
+    expect(await rollState(rollId)).toEqual({ kg: 30, pieces: 0 });
+
+    await returnRepo.create(
+      {
+        kind: "entry",
+        date: "2026-09-06",
+        partyId: supplierId,
+        originalInvoiceId: entry.id,
+        reason: "defect",
+        currency: "USD",
+        lines: [{ rollId, quantityKg: 10, pieces: 1, pricePerKg: 4 }],
+      },
+      ctx,
+    );
+    expect(await rollState(rollId)).toEqual({ kg: 20, pieces: 0 });
+  });
 });

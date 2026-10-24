@@ -60,6 +60,19 @@ function fakeDrive() {
     },
     uploadSmall: upload,
     uploadResumable: upload,
+    // Phase 4: the streamed path reads the file from disk; the fake records the same bytes the buffered
+    // path would, so the assertions about uploaded content are unchanged.
+    async uploadResumableFromFile(parent: string, name: string, mime: string, filePath: string) {
+      const { readFileSync } = await import("node:fs");
+      return upload(parent, name, mime, new Uint8Array(readFileSync(filePath)));
+    },
+    // Phase 2 upsert: no existing file carries an app key in this fake, so uploads create new files.
+    async findByAppKey(_appKey: string, _parentId?: string) {
+      return null;
+    },
+    async updateMedia(fileId: string, _mime: string, _content: Uint8Array) {
+      return { id: fileId, name: "x", mimeType: "x" };
+    },
     async getFile(id: string) {
       return { id, name: "x", mimeType: "x" };
     },

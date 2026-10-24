@@ -40,5 +40,7 @@ export function archiveMeta(
       date: opts.date,
       typeLabel: opts.typeLabel,
     }),
+    // Filed under the document's business month (YYYY-MM from its date), not the print date.
+    period: /^\d{4}-\d{2}/.test(opts.date) ? opts.date.slice(0, 7) : undefined,
   };
 }
