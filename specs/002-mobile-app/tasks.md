@@ -220,7 +220,7 @@ APP_MASTER_KEY=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa=`, then
 
   UX-04, NFR-07, NFR-10. Check: `cd mobile && npx tsc --noEmit` exit 0, and `grep -c minSdkVersion mobile/app.json` prints 1.
 
-- [ ] T020 Create `mobile/metro.config.js` from `expo/metro-config`:
+- [x] T020 Create `mobile/metro.config.js` from `expo/metro-config`:
   - `watchFolders`: `../backend/src`, `../packages/shared/src`
   - `resolver.extraNodeModules`: `@erp/shared` → `../packages/shared/src`
   - `resolver.resolveRequest`:
@@ -239,16 +239,16 @@ APP_MASTER_KEY=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa=`, then
   Create empty placeholder modules for the five mapped files exporting nothing yet.
   Check: `cd mobile && node -e "require('./metro.config.js')"` exit 0.
 
-- [ ] T021 Create `mobile/eslint.config.js` (flat config, typescript-eslint). Its `no-restricted-imports`
+- [x] T021 Create `mobile/eslint.config.js` (flat config, typescript-eslint). Its `no-restricted-imports`
       `paths` and `patterns` ban the same list as T020, with a message pointing to contracts/mobile-ports.md.
       Add `"lint": "eslint . --max-warnings 0"`, `"typecheck": "tsc --noEmit"`, `"test": "vitest run"` to
       `mobile/package.json`. Check: `cd mobile && npm run lint` exit 0.
-- [ ] T022 Create `mobile/test/unit/boundary.test.ts` (Vitest). It programmatically lints a temp file
+- [x] T022 Create `mobile/test/unit/boundary.test.ts` (Vitest). It programmatically lints a temp file
       containing `import fs from "node:fs";` with the mobile ESLint config, asserts 1 error, and asserts
       that calling the T020 `resolveRequest` with `"pg"` throws.
       Add `mobile/vitest.config.ts` (environment node, aliases matching tsconfig paths).
       Check: `cd mobile && npx vitest run test/unit/boundary.test.ts` → passed.
-- [ ] T023 [P] Implement `mobile/src/platform/nodeCrypto.ts` per contracts/mobile-ports.md: `randomUUID`,
+- [x] T023 [P] Implement `mobile/src/platform/nodeCrypto.ts` per contracts/mobile-ports.md: `randomUUID`,
       `createHash("sha256")` with `update` and `digest("hex"|"base64")`, `randomBytes`, and constant-time
       `timingSafeEqual`. Also export `setUuidSequenceForSpike(prefix: string)`: after it is called,
       `randomUUID` returns deterministic v4-shaped ids derived from the prefix and a counter. It is used
@@ -257,7 +257,7 @@ APP_MASTER_KEY=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa=`, then
       `mobile/test/unit/nodeCrypto.test.ts`, comparing the sha256 of "motard" and of the empty string with
       Node's `crypto`, and checking the UUID v4 format.
       Check: that test file passes.
-- [ ] T024 [P] Implement `mobile/src/platform/asyncContext.ts` (class `AsyncLocalStorage` with `run`,
+- [x] T024 [P] Implement `mobile/src/platform/asyncContext.ts` (class `AsyncLocalStorage` with `run`,
       `getStore` and `enterWith`, using a module-level stack) and `mobile/src/core/serialExecutor.ts`
       (`runSerial<T>(fn: () => Promise<T>): Promise<T>`, a FIFO queue, one job at a time). Research R3.
       Add `mobile/test/unit/serialExecutor.test.ts`:
@@ -267,16 +267,16 @@ APP_MASTER_KEY=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa=`, then
 
   Check: passes.
 
-- [ ] T025 Define the shim interface `mobile/src/platform/sqlite/types.ts`: the better-sqlite3 subset
+- [x] T025 Define the shim interface `mobile/src/platform/sqlite/types.ts`: the better-sqlite3 subset
       listed in contracts/mobile-ports.md (`prepare` → `run/get/all/iterate/raw/safeIntegers`, `pragma`,
       `exec`, `function`, `aggregate`, `transaction`, `close`). Check: `cd mobile && npx tsc --noEmit` exit 0.
-- [ ] T026 Create `mobile/scripts/bundle-migrations.mjs`. It reads every `.sql` file listed in
+- [x] T026 Create `mobile/scripts/bundle-migrations.mjs`. It reads every `.sql` file listed in
       `backend/src/infrastructure/orm/sqlite/migrations/meta/_journal.json`, in journal order, and writes
       `mobile/src/core/generated/migrations.ts`, exporting `MIGRATIONS: { tag: string; sql: string }[]` and
       the journal index. Add `"prebuild:migrations": "node scripts/bundle-migrations.mjs"` to
       `mobile/package.json`. Add `mobile/test/unit/migrations-bundle.test.ts`, asserting that the count and
       tags equal the journal. Check: passes.
-- [ ] T027 Implement `mobile/src/core/runtime.ts`: `openRuntime(conn: ShimDatabase)`.
+- [x] T027 Implement `mobile/src/core/runtime.ts`: `openRuntime(conn: ShimDatabase)`.
   - It asserts the pragmas `connection.ts` asserts (WAL, foreign_keys ON, synchronous not OFF).
   - It applies the `MIGRATIONS` not yet applied, using the same bookkeeping
     `backend/src/infrastructure/orm/sqlite/runtime.ts` uses, without importing that file (it uses fs).
@@ -290,19 +290,19 @@ APP_MASTER_KEY=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa=`, then
 
   NFR-06, FR-01. Check: `cd mobile && npx tsc --noEmit` exit 0.
 
-- [ ] T028 Create `mobile/test/unit/runtime-node.test.ts`. Under Node, open a temp file with the real
+- [x] T028 Create `mobile/test/unit/runtime-node.test.ts`. Under Node, open a temp file with the real
       `better-sqlite3` (from `backend/node_modules`; tests only, through a test helper
       `mobile/test/helpers/nodeSqlite.ts` excluded from the app bundle by path). Run `openRuntime`, then
       compute the schema fingerprint with the same function `backend/src/infrastructure/orm/sqlite/schemaFingerprint.ts`
       exports, and compare it to `backend/src/infrastructure/orm/sqlite/migrations/meta/schema-fingerprint.json`.
       Also run the cases of `backend/tests/sqlite/pg-numeric-div.test.ts` against `motard_pgdiv` through the
       shim. Also assert atomicity: a use-case transaction that throws after inserting an invoice header leaves 0 rows in `invoices`, `invoice_lines` and `ledger_entries` (E6, NFR-06). Check: passes. This proves R2 criteria 2 and 4 on Node; the device run is T041.
-- [ ] T029 Run GATE-M. Check: GATE-M rule.
-- [ ] T030 CHECKPOINT "feat(mobile): Expo skeleton, import boundary, platform adapters, runtime".
+- [x] T029 Run GATE-M. Check: GATE-M rule.
+- [x] T030 CHECKPOINT "feat(mobile): Expo skeleton, import boundary, platform adapters, runtime".
 
 ## Phase 5: Device build pipeline and M0 spike code [R2, R3, R8, R9, R14, R15]
 
-- [ ] T031 Create `.github/workflows/mobile-android.yml` (name `mobile-android`).
+- [x] T031 Create `.github/workflows/mobile-android.yml` (name `mobile-android`).
   - Triggers: `workflow_dispatch`, and `push` on branch `feat/mobile` with paths `mobile/**`,
     `backend/src/**`, `packages/shared/src/**`.
   - Job `checks` (ubuntu-latest, Node 22): `npm ci` at root, `cd backend && npm ci`,
@@ -319,7 +319,7 @@ APP_MASTER_KEY=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa=`, then
   R15. Check: `npx prettier --check .github/workflows/mobile-android.yml` exit 0, and
   `node -e "require('yaml')"` parse of the file succeeds (install `yaml` temporarily with `npx -y`).
 
-- [ ] T032 Add the native modules:
+- [x] T032 Add the native modules:
   - `npx expo install expo-secure-store expo-local-authentication expo-print expo-sharing expo-notifications expo-background-task expo-crypto expo-file-system expo-camera expo-splash-screen expo-font @react-native-community/netinfo`
   - `npm install --save-dev @testing-library/react-native` (exact version)
   - `npm install @op-engineering/op-sqlite react-native-argon2` (exact versions)
@@ -329,7 +329,7 @@ APP_MASTER_KEY=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa=`, then
   Pin all versions. Check: `cd mobile && npx tsc --noEmit` exit 0 and
   `npx expo prebuild --platform android --no-install` exit 0 (Linux has no SDK need for prebuild).
 
-- [ ] T033 Implement `mobile/src/platform/sqlite/BetterSqliteShim.ts` over op-sqlite (R2):
+- [x] T033 Implement `mobile/src/platform/sqlite/BetterSqliteShim.ts` over op-sqlite (R2):
   - `open({ name: "motard.db", encryptionKey })`
   - synchronous `prepare().run/get/all` via `executeSync`
   - `pragma`, `exec`, and `transaction(fn)` with `BEGIN IMMEDIATE` / `COMMIT` / `ROLLBACK`
@@ -339,18 +339,18 @@ APP_MASTER_KEY=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa=`, then
 
   Check: `cd mobile && npx tsc --noEmit` exit 0 (device behavior is proven by T041).
 
-- [ ] T034 Implement `mobile/src/platform/secureStore.ts` (`getSecret`, `setSecret`, `deleteSecret`, and
+- [x] T034 Implement `mobile/src/platform/secureStore.ts` (`getSecret`, `setSecret`, `deleteSecret`, and
       `getOrCreateDbKey()` creating 32 random bytes hex on first call) over `expo-secure-store` with
       `requireAuthentication: false` and the keychain key prefix `motard.`. FR-39, R2.
       Check: `cd mobile && npx tsc --noEmit` exit 0; unit test `mobile/test/unit/secureStore.test.ts`
       with a mocked `expo-secure-store` passes.
-- [ ] T035 Implement `mobile/src/platform/pinVerifier.ts`: `hashPin(pin)` and `verifyPin(pin, stored)` with
+- [x] T035 Implement `mobile/src/platform/pinVerifier.ts`: `hashPin(pin)` and `verifyPin(pin, stored)` with
       `react-native-argon2`, Argon2id, memory 65536 KiB, iterations 3, parallelism 4, matching
       `backend/src/infrastructure/auth/PasswordHasher.ts` (read it and copy its exact parameters and
       output encoding). Its output must verify with the backend's verifier. FR-05, R9.
       Check: `mobile/test/unit/pinVerifier.test.ts` (mocks the native module, asserts the parameters
       passed) passes.
-- [ ] T036 Implement `mobile/src/print/renderHtml.ts`, `renderInvoiceHtml(data)` and
+- [x] T036 Implement `mobile/src/print/renderHtml.ts`, `renderInvoiceHtml(data)` and
       `renderStatementHtml(data)`.
   - `react-dom/server` `renderToStaticMarkup` of `src/components/print/InvoicePrintDocument.tsx` and
     `src/components/print/PartyStatementDocument.tsx`, imported in place (add `@web/*` →
@@ -363,7 +363,7 @@ APP_MASTER_KEY=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa=`, then
   invoice fixture and asserts that the HTML contains each formatted amount, the currency labels "USD"
   or "SYP" exactly as the desktop prints them, and `dir="rtl"`.
 
-- [ ] T037 Create `mobile/app/spikes.tsx`, a test-only screen, reachable only when `process.env.EXPO_PUBLIC_SPIKES === "1"` at build time (set by the workflow in T031; the M5 release build leaves it unset, so the screen is absent). It has buttons:
+- [x] T037 Create `mobile/app/spikes.tsx`, a test-only screen, reachable only when `process.env.EXPO_PUBLIC_SPIKES === "1"` at build time (set by the workflow in T031; the M5 release build leaves it unset, so the screen is absent). It has buttons:
   - **S1 SQLite:** runs the six R2 criteria and prints PASS or FAIL with values; prints the
     `verifyPin` duration in milliseconds.
   - **S2 Use-cases:** in this task, a disabled button labelled "متاح بعد المرحلة 6" (available after
@@ -380,13 +380,13 @@ APP_MASTER_KEY=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa=`, then
 
   Check: GATE-M.
 
-- [ ] T038 Create `mobile/scripts/compare-db.mjs <a.db> <b.db>`. It opens both files with better-sqlite3
+- [x] T038 Create `mobile/scripts/compare-db.mjs <a.db> <b.db>`. It opens both files with better-sqlite3
       from `backend/node_modules` and compares every business table (all tables except
       `motard_*`, `sync_*`, `idempotency_keys` and `audit_log`). Rows are matched by primary key and
       compared on every column except `created_at` and `updated_at`. It prints `0 differences` or each
       difference. Check: `mobile/test/unit/compare-db.test.ts`: two identical temp databases print
       `0 differences`, and one changed amount prints 1 difference.
-- [ ] T039 Create `scripts/parity/seed-sync-volume.mjs`, modelled on `scripts/parity/seed-volume.mjs`.
+- [x] T039 Create `scripts/parity/seed-sync-volume.mjs`, modelled on `scripts/parity/seed-volume.mjs`.
   - Flags: `--hub http://127.0.0.1:18080`, `--invoices N`, `--parties N`, `--out <file>`.
   - Data shape: 80% customers and 20% suppliers, one deep customer with 20% of invoices, dates over
     four years, one receipt per invoice.
