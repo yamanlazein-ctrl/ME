@@ -1,0 +1,23 @@
+appId: com.motard.erp
+name: 50 payment
+---
+- launchApp
+- runFlow: unlock.yaml
+- tapOn: "إضافة"
+- tapOn: "سند دفع"
+- tapOn:
+    id: "picker-search"
+- inputText: "مورد 11"
+- tapOn:
+    id: "party-option"
+- tapOn:
+    id: "voucher-amount"
+- inputText: "1"
+- hideKeyboard
+- takeScreenshot: 12-payment
+- tapOn: "حفظ سند الدفع"
+- assertNotVisible:
+    id: "voucher-error"
+- extendedWaitUntil:
+    visible: "بيع جديد"
+    timeout: 30000

@@ -1,24 +1,26 @@
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { router, useLocalSearchParams } from "expo-router";
 import { useQuery } from "@tanstack/react-query";
+import { logError } from "../../../../src/core/devlog";
 import { getApp } from "../../../../src/core/appRuntime";
 import { balancesByCurrency, recentInvoices } from "../../../../src/core/partyQueries";
 import { useRememberParty } from "../../../../src/hooks/useParties";
 import { queryKeys } from "../../../../src/hooks/queryKeys";
 import { useRole } from "../../../../src/hooks/useRole";
+import { describeError } from "../../../../src/core/devlog";
+import { Text } from "../../../../src/ui/Text";
+import { colors } from "../../../../src/ui/theme";
 import { PartyDetailView, type PartyDetail } from "../../../../src/ui/PartyViews";
 
 export default function PartyScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const role = useRole();
   const remember = useRememberParty();
-  const [ready, setReady] = useState(false);
   useEffect(() => {
-    void remember(id).then(() => setReady(true));
+    remember(id).catch((e) => logError("remember-party", e));
   }, [id]);
-  const { data } = useQuery({
+  const { data, error } = useQuery({
     queryKey: queryKeys.party(id),
-    enabled: ready,
     queryFn: async (): Promise<PartyDetail | null> => {
       const app = await getApp();
       if (!app.phone) return null;
@@ -41,6 +43,13 @@ export default function PartyScreen() {
       };
     },
   });
+  if (error) {
+    return (
+      <Text testID="party-error" style={{ color: colors.negative, padding: 16 }}>
+        {`تعذّر تحميل الطرف: ${describeError(error)}`}
+      </Text>
+    );
+  }
   if (!data) return null;
   return (
     <PartyDetailView

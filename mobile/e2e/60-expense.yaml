@@ -1,0 +1,21 @@
+appId: com.motard.erp
+name: 60 expense
+---
+- launchApp
+- runFlow: unlock.yaml
+- tapOn: "إضافة"
+- tapOn: "مصروف"
+- tapOn:
+    id: "expense-name"
+- inputText: "إيجار"
+- tapOn:
+    id: "expense-amount"
+- inputText: "2"
+- hideKeyboard
+- takeScreenshot: 13-expense
+- tapOn: "حفظ المصروف"
+- assertNotVisible:
+    id: "expense-error"
+- extendedWaitUntil:
+    visible: "بيع جديد"
+    timeout: 30000

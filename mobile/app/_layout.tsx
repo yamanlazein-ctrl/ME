@@ -7,7 +7,7 @@ import logo from "../assets/logo.png";
 import { Stack, router, useSegments } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import * as LocalAuthentication from "expo-local-authentication";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryCache, QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { StatusBar } from "expo-status-bar";
 import { getApp } from "../src/core/appRuntime";
 import { authenticateWithBiometrics, coverVisible, shouldLock } from "../src/core/appLock";
@@ -25,7 +25,7 @@ import { SyncChip } from "../src/ui/SyncChip";
 import { ToastProvider } from "../src/ui/Toast";
 import { UpdateBanner } from "../src/ui/UpdateBanner";
 import { assertRtl } from "../src/ui/rtl";
-import { logError } from "../src/core/devlog";
+import { installGlobalErrorLogging, logError } from "../src/core/devlog";
 import { useAppFonts } from "../src/ui/fonts";
 import { colors } from "../src/ui/theme";
 import { ThemeProvider, useTheme } from "../src/ui/ThemeContext";
@@ -35,7 +35,15 @@ import { getSecret } from "../src/platform/secureStore";
 
 void SplashScreen.preventAutoHideAsync().catch(() => undefined);
 
-const queryClient = new QueryClient({ defaultOptions: { queries: { staleTime: 5_000 } } });
+installGlobalErrorLogging();
+
+const queryClient = new QueryClient({
+  defaultOptions: { queries: { staleTime: 5_000 } },
+  // A failed query is never silent: it goes to the device log with its key.
+  queryCache: new QueryCache({
+    onError: (error, query) => logError(`query ${JSON.stringify(query.queryKey)}`, error),
+  }),
+});
 const UPDATE_URL =
   process.env.EXPO_PUBLIC_UPDATE_URL ?? "https://github.com/yamanlazein-ctrl/me/actions";
 
@@ -172,6 +180,17 @@ function RootContent() {
     return true;
   }, []);
   const needsLock = locked && boot.ready && boot.signedIn;
+  // Cold start / resume lock: ask for the fingerprint straight away (FR-04); the PIN field stays as the fallback.
+  const prompted = useRef(false);
+  useEffect(() => {
+    if (!needsLock) {
+      prompted.current = false;
+      return;
+    }
+    if (prompted.current) return;
+    prompted.current = true;
+    void unlock();
+  }, [needsLock, unlock]);
 
   if (!fonts.loaded && !fonts.error)
     return <View style={{ flex: 1, backgroundColor: colors.background }} />;

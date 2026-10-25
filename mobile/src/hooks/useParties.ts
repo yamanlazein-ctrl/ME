@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { getApp } from "../core/appRuntime";
+import { logError } from "../core/devlog";
 import { readAppState, updateAppState, withRecentParty } from "../core/appState";
 import { searchParties, sortByRecent, type PartyRow } from "../core/partyQueries";
 import { queryKeys } from "./queryKeys";
@@ -8,7 +9,9 @@ import { queryKeys } from "./queryKeys";
 export function useParties(q: string, kind: "customer" | "supplier" | "") {
   const [recent, setRecent] = useState<string[]>([]);
   useEffect(() => {
-    void readAppState().then((s) => setRecent(s.recentPartyIds));
+    readAppState()
+      .then((s) => setRecent(s.recentPartyIds))
+      .catch((e) => logError("recent-parties", e));
   }, []);
   const query = useQuery({
     queryKey: [...queryKeys.parties, q, kind],

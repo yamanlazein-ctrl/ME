@@ -6,14 +6,25 @@ APK="$1"; INFO="$2"; OUT="$3"
 mkdir -p "$OUT"
 field() { node -p "JSON.parse(require('fs').readFileSync('$INFO','utf8')).$1"; }
 HUB=$(field hubForEmulator); CODE=$(field code); PIN=$(field pin)
-FLOW_FILE="$(pwd)/mobile/e2e/full.yaml"
 OUT="$(pwd)/$OUT"; mkdir -p "$OUT"
 adb install -r "$APK"
 adb logcat -c
 set +e
-# takeScreenshot writes into the working directory, so run from $OUT.
-(cd "$OUT" && maestro test --format junit --output "$OUT/junit.xml" --debug-output "$OUT/debug" -e HUB="$HUB" -e CODE="$CODE" -e PIN="$PIN" "$FLOW_FILE") 2>&1 | tee "$OUT/maestro.log"
-FLOW=${PIPESTATUS[0]}
+# Each flow is its own Maestro run, so one broken screen does not hide the others. 00 must pass first (it enrols the phone);
+# the rest start from a cold launch and the app-lock PIN.
+FAILED=""
+for FLOW_FILE in "$(pwd)"/mobile/e2e/[0-9][0-9]-*.yaml; do
+  NAME=$(basename "$FLOW_FILE" .yaml)
+  echo "##### $NAME"
+  (cd "$OUT" && maestro test --format junit --output "$OUT/$NAME.xml" --debug-output "$OUT/debug-$NAME" -e HUB="$HUB" -e CODE="$CODE" -e PIN="$PIN" "$FLOW_FILE") 2>&1 | tee "$OUT/$NAME.log"
+  if [ "${PIPESTATUS[0]}" -ne 0 ]; then
+    FAILED="$FAILED $NAME"
+    adb exec-out screencap -p > "$OUT/FAILED-$NAME.png" 2>/dev/null
+  fi
+  if [ "$NAME" = "00-enroll-login-home" ] && [ -n "$FAILED" ]; then echo "enrolment failed: later flows cannot run"; break; fi
+done
+FLOW=0; [ -n "$FAILED" ] && FLOW=1
+echo "=== failed flows:${FAILED:- none} ==="
 set -e
 adb logcat -d -v time > "$OUT/logcat.txt"
 echo "=== MOTARD_ERR lines ==="; grep -E "MOTARD_ERR" "$OUT/logcat.txt" | head -50 || true

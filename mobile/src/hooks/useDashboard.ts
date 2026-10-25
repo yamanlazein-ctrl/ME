@@ -44,7 +44,7 @@ export function useDashboard() {
     queryFn: async () => {
       try {
         const app = await getApp();
-        if (!app.phone) throw new Error("الجهاز غير مسجّل");
+        if (!app.phone) return null; // not enrolled yet: nothing to show, not an error
         return await loadDashboard(app.phone);
       } catch (error) {
         logError("home", error);

@@ -1,0 +1,43 @@
+# Enrolment, the first download, PIN sign-in and Home. Everything later depends on the state this flow leaves behind.
+appId: com.motard.erp
+name: 00 enroll, first download, sign in, Home
+---
+- launchApp:
+    clearState: true
+    permissions: { all: allow }
+- extendedWaitUntil:
+    visible: "ربط الهاتف بالمركز"
+    timeout: 90000
+- takeScreenshot: 01-enroll
+- tapOn:
+    id: "hub"
+- inputText: ${HUB}
+- tapOn:
+    id: "code"
+- inputText: ${CODE}
+- hideKeyboard
+- tapOn: "تسجيل"
+- extendedWaitUntil:
+    visible: "تسجيل الدخول"
+    timeout: 300000
+- assertNotVisible: ".*تعذّر.*"
+- takeScreenshot: 02-login
+- tapOn: "AC-8 Admin"
+- tapOn: "1"
+- tapOn: "2"
+- tapOn: "3"
+- tapOn: "4"
+- tapOn: "✓"
+- extendedWaitUntil:
+    visible: "مبيعات اليوم"
+    timeout: 90000
+- assertNotVisible: ".*تعذّر.*"
+- assertNotVisible:
+    id: "home-error"
+- assertNotVisible:
+    id: "boot-error"
+- assertVisible: "الرئيسية"
+- takeScreenshot: 03-home
+- extendedWaitUntil:
+    visible: "تمت المزامنة"
+    timeout: 180000

@@ -5,7 +5,7 @@
  * (scripts/parity/seed-sync-volume.mjs) and a fresh enrolment code. Writes the connection facts to HUB_INFO and stays
  * alive until killed.
  *
- *   CERT_PG_URL=postgresql://postgres:postgres@localhost:5432/postgres HUB_INFO=hub-info.json node scripts/emulator/start-test-hub.mjs
+ *   CERT_PG_URL=<admin connection url of a throw-away PostgreSQL> HUB_INFO=hub-info.json node scripts/emulator/start-test-hub.mjs
  */
 import { spawn } from "node:child_process";
 import { createRequire } from "node:module";

@@ -1,0 +1,40 @@
+appId: com.motard.erp
+name: 70 sale and invoice detail
+---
+- launchApp
+- runFlow: unlock.yaml
+- tapOn: "إضافة"
+- tapOn: "بيع جديد"
+- tapOn:
+    id: "picker-search"
+- inputText: "عميل 3"
+- tapOn:
+    id: "party-option"
+- tapOn:
+    id: "sale-rate"
+- inputText: "1"
+- hideKeyboard
+- takeScreenshot: 14-sale-customer
+- tapOn: "التالي: البنود"
+- tapOn: "إضافة بند"
+- tapOn: "قطن تجريبي"
+- tapOn: "أبيض"
+- takeScreenshot: 15-roll-picker
+- tapOn: "SEED-.*"
+- assertVisible: "حذف البند"
+- takeScreenshot: 16-sale-lines
+- tapOn: "التالي: المراجعة"
+- assertVisible:
+    id: "sale-total"
+- takeScreenshot: 17-sale-review
+- tapOn: "حفظ الفاتورة"
+- extendedWaitUntil:
+    visible: "تم حفظ الفاتورة.*"
+    timeout: 60000
+- assertNotVisible:
+    id: "sale-error"
+- takeScreenshot: 18-sale-done
+- tapOn: "عرض الفاتورة"
+- assertVisible: "مشاركة PDF"
+- assertVisible: "إلغاء الفاتورة"
+- takeScreenshot: 19-invoice

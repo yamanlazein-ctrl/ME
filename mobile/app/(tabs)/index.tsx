@@ -29,7 +29,7 @@ export default function Home() {
       if (session) setRole(session.role);
     });
   }, []);
-  if (isLoading) return <ActivityIndicator style={{ flex: 1 }} />;
+  if (isLoading || (!error && !data)) return <ActivityIndicator style={{ flex: 1 }} />;
   if (error || !data) {
     return (
       <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>

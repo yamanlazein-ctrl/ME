@@ -21,3 +21,19 @@ export function logError(scope: string, error: unknown): string {
 export function recentErrors(): readonly string[] {
   return recent;
 }
+
+type GlobalErrorUtils = {
+  getGlobalHandler(): (error: unknown, isFatal?: boolean) => void;
+  setGlobalHandler(handler: (error: unknown, isFatal?: boolean) => void): void;
+};
+
+/** Logs every uncaught JavaScript error (fatal or not) before React Native's own handler runs. */
+export function installGlobalErrorLogging(): void {
+  const utils = (globalThis as unknown as { ErrorUtils?: GlobalErrorUtils }).ErrorUtils;
+  if (!utils) return;
+  const previous = utils.getGlobalHandler();
+  utils.setGlobalHandler((error, isFatal) => {
+    logError(isFatal ? "fatal" : "uncaught", error);
+    previous(error, isFatal);
+  });
+}
