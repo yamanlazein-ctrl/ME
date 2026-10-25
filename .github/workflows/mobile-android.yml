@@ -52,6 +52,28 @@ jobs:
       - name: Build the release APK (JavaScript bundled inside)
         working-directory: mobile/android
         run: ./gradlew assembleRelease
+      - name: Enable KVM for the emulator
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Launch the APK on an emulator and print the crash log
+        continue-on-error: true
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          arch: x86_64
+          target: google_apis
+          script: |
+            adb install -r mobile/android/app/build/outputs/apk/release/app-release.apk
+            adb logcat -c
+            adb shell monkey -p com.motard.erp -c android.intent.category.LAUNCHER 1
+            sleep 40
+            adb logcat -d -v time > logcat.txt
+            echo "=== FATAL / JS / native errors ==="
+            grep -E "FATAL EXCEPTION|AndroidRuntime|ReactNativeJS|Unhandled|SoLoader|UnsatisfiedLink|Process: com.motard|signal [0-9]+|Fatal signal|E/ReactNative|Hermes" logcat.txt | head -200
+            echo "=== process alive? ==="
+            adb shell pidof com.motard.erp || echo "NOT RUNNING"
       - uses: actions/upload-artifact@v4
         with:
           name: motard-mobile-test-apk
