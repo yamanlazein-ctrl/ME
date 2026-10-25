@@ -1,9 +1,10 @@
 // Runs the sync loop for the enrolled phone and keeps what the UI shows about it: status, rejected documents, notifications.
 // App-lifecycle events feed the loop (foreground/background via AppState, network regain via NetInfo), hub answers arrive as
 // signals from the fetch wrapper (hubHttp.ts), and a revoked device wipes itself (FR-40).
-import { AppState } from "react-native";
+import { Alert, AppState } from "react-native";
 import NetInfo from "@react-native-community/netinfo";
 import { onHubSignal, type App } from "./appRuntime";
+import { claimLossAlerts } from "./claimLoss";
 import { planNotifications, sendNotices } from "./notify";
 import { createSyncLoop, type SyncLoop, type SyncLoopEvent } from "./syncLoop";
 import { listLowStockFabrics, listRejectedDocuments, type RejectedDocument } from "./syncQueries";
@@ -67,6 +68,8 @@ export function startSyncRunner(app: App): { loop: SyncLoop; stop(): void } {
       const rejected = await listRejectedDocuments(phone);
       const fresh = rejected.filter((r) => !announcedRejected.has(r.opId));
       fresh.forEach((r) => announcedRejected.add(r.opId));
+      for (const alert of await claimLossAlerts(phone, fresh))
+        Alert.alert(alert.title, alert.message);
       const lowNow = await listLowStockFabrics(phone);
       await sendNotices(
         planNotifications({

@@ -4,6 +4,8 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { randomUUID } from "node:crypto";
 import { parityAvailable, startParity, type Parity } from "./harness";
 import { cashboxBalanceAt } from "../../src/core/cashbox";
+import { claimLossAlerts } from "../../src/core/claimLoss";
+import { listRejectedDocuments } from "../../src/core/syncQueries";
 
 const DATE = "2026-03-01";
 
@@ -207,6 +209,24 @@ describe.skipIf(!parityAvailable())("sync parity scenarios (T052)", () => {
     }
   }, 300_000);
 
+  it("(l) the phone cancels its own sale (reversal entries) and everything converges", async () => {
+    const sale = await p.phone.documents.createInvoice(
+      saleInput(customers[2] as string, rolls[3] as string, [{ kg: 4, price: 3.5 }], 5),
+    );
+    expect(sale.ok, JSON.stringify(sale)).toBe(true);
+    if (!sale.ok) return;
+    const cancelled = await p.phone.documents.cancelInvoice(sale.data.id, sale.data.version);
+    expect(cancelled.ok, JSON.stringify(cancelled)).toBe(true);
+    expect(await p.compareAll()).toEqual([]);
+    const onDesktop = await p.ac8.must(
+      p.desktop.call,
+      "read cancelled",
+      "GET",
+      `/api/invoices/${sale.data.id}`,
+    );
+    expect((onDesktop as { status?: string }).status).toBe("cancelled");
+  }, 300_000);
+
   it("(f) phone block exhaustion: the 101st offline invoice is refused (no overlapping numbers), a refill fixes it", async () => {
     // Evidence (specs/002-mobile-app/evidence/T052.md): the shared allocator does NOT fall back to the shared sequence when a
     // device block runs out - it refuses with "نفدت كتلة الترقيم…" (allowGlobalFallback is not set by the invoice repository).
@@ -279,6 +299,12 @@ describe.skipIf(!parityAvailable())("sync parity scenarios (T052)", () => {
     if (phoneSale.ok) {
       const loser = await p.phone.repos.invoiceRepo.findById(phoneSale.data.id, p.phone.context());
       expect(loser?.status).toBe("cancelled");
+      // The owner is told which invoice and which roll (FR-34).
+      const alerts = await claimLossAlerts(p.phone, await listRejectedDocuments(p.phone));
+      expect(alerts.length).toBeGreaterThanOrEqual(1);
+      const message = alerts.map((a) => a.message).join("\n");
+      expect(message).toContain(phoneSale.data.number);
+      expect(message).toContain("PAR-RS");
     }
     // Balances, cashbox and stock agree on all three even though the phone keeps its cancelled document.
     const diffs = (await p.compareAll()).filter(

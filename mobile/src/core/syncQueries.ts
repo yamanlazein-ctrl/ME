@@ -7,6 +7,8 @@ export interface RejectedDocument {
   entityType: string;
   number: string | null;
   reason: string | null;
+  /** The rolls of a rejected invoice (a lost claim names them, FR-34). */
+  rollIds: string[];
 }
 
 interface Executor {
@@ -38,6 +40,19 @@ function numberOf(payload: unknown): string | null {
   return null;
 }
 
+function rollIdsOf(payload: unknown): string[] {
+  try {
+    const p = (typeof payload === "string" ? JSON.parse(payload) : payload) as {
+      rollIds?: unknown;
+    };
+    return Array.isArray(p.rollIds)
+      ? p.rollIds.filter((x): x is string => typeof x === "string")
+      : [];
+  } catch {
+    return [];
+  }
+}
+
 /** Units the hub refused (claim lost, validation...): their local documents were rolled back, and nothing requeues them. */
 export async function listRejectedDocuments(phone: Phone): Promise<RejectedDocument[]> {
   const { rows } = await executor(phone).execute<{
@@ -53,6 +68,7 @@ export async function listRejectedDocuments(phone: Phone): Promise<RejectedDocum
     entityType: r.entity_type,
     number: numberOf(r.payload),
     reason: r.error_detail,
+    rollIds: rollIdsOf(r.payload),
   }));
 }
 

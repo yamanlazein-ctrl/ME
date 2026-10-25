@@ -10,7 +10,9 @@ const status: SyncStatus = {
   lastError: null,
   halted: null,
   clockSkewMs: null,
-  rejected: [{ opId: "op1", entityType: "invoice", number: "INV-7", reason: "claim lost" }],
+  rejected: [
+    { opId: "op1", entityType: "invoice", number: "INV-7", reason: "claim lost", rollIds: [] },
+  ],
   hubDeadOps: ["op9"],
 };
 

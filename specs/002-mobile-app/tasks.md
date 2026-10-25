@@ -799,31 +799,31 @@ CUT LINE A — Tier A ends here. Everything above must be done with the $100 cre
 
 ### Sale invoice creation (T099–T102)
 
-- [ ] T099 [US6] Create `mobile/src/ui/RollPicker.tsx`, a bottom sheet fabric → colour → roll that shows
+- [x] T099 [US6] Create `mobile/src/ui/RollPicker.tsx`, a bottom sheet fabric → colour → roll that shows
       the remaining kg. Rolls with 0 kg are not selectable. Check: render test.
-- [ ] T100 [US6] Create `mobile/app/(tabs)/add/sale/` (FR-15, FR-19: the rate is pre-filled exactly as in T093) with three steps: `customer.tsx`, `lines.tsx`
+- [x] T100 [US6] Create `mobile/app/(tabs)/add/sale/` (FR-15, FR-19: the rate is pre-filled exactly as in T093) with three steps: `customer.tsx`, `lines.tsx`
       (add, edit and remove lines: kg, pieces with 0 allowed, price, fixed line discount) and `review.tsx`
       (fixed header discount, tax, shipping, optional payment, rate). Draft state lives in
       `mobile/src/hooks/useSaleDraft.ts` (memory only). Totals shown are computed by calling the shared
       calculation from `packages/shared` used by the invoice use-case, never by new code.
       Check: a unit test feeds 10 cases from `money-vectors.json` (op `invoiceTotal`) through the draft's
       displayed total.
-- [ ] T101 [US6] Save: call the sale invoice use-case once (number + header + lines + ledger + voucher +
+- [x] T101 [US6] Save: call the sale invoice use-case once (number + header + lines + ledger + voucher +
       cashbox + stock in one transaction). The done screen offers Share PDF (T036), Send to customer
       (placeholder until US13) and New. Check: parity scenario (b) passes, and a render test of the done
       screen.
-- [ ] T102 [US6] Create the invoice detail `mobile/app/invoices/[id].tsx` with a cancel action for
+- [x] T102 [US6] Create the invoice detail `mobile/app/invoices/[id].tsx` with a cancel action for
       admin and accountant. Cancel calls the cancel use-case (reversal entries). FR-17. Check: parity
       scenario (c) adapted to cancel on the phone passes.
 
 ### Claim-loss handling (T103)
 
-- [ ] T103 [US6] Claim loss UX: when sync marks the phone's invoice rejected with a claim conflict, show
+- [x] T103 [US6] Claim loss UX: when sync marks the phone's invoice rejected with a claim conflict, show
       an Arabic alert naming the invoice number and the roll, and fire the T074 notification. FR-34.
       Check: parity scenario (e) asserts that the local document is cancelled, and a unit test asserts the
       alert text contains both identifiers.
-- [ ] T104 [US6] Run GATE-M, GATE-P and GATE-D steps 6–7.
-- [ ] T105 [US6] CHECKPOINT "feat(mobile): sale invoice with claim-loss handling (US6)".
+- [x] T104 [US6] Run GATE-M, GATE-P and GATE-D steps 6–7.
+- [x] T105 [US6] CHECKPOINT "feat(mobile): sale invoice with claim-loss handling (US6)".
 - [ ] T106 OWNER-LOCAL (FR-15, FR-20, SC-001) Tier B acceptance:
   1. Install the newest APK.
   2. Put the phone in airplane mode.
