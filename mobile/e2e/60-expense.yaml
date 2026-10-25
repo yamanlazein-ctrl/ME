@@ -8,6 +8,7 @@ name: 60 expense
 - tapOn:
     id: "expense-name"
 - inputText: "Rent"
+- hideKeyboard
 - tapOn:
     id: "expense-amount"
 - inputText: "2"

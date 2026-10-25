@@ -18,11 +18,12 @@ name: 70 sale and invoice detail
 - tapOn: "أبيض"
 - takeScreenshot: 15-roll-picker
 - tapOn: "SEED-.*"
-- assertVisible: "حذف البند"
+- assertVisible: "قطن تجريبي.*"
 - takeScreenshot: 16-sale-lines
 - tapOn: "التالي: المراجعة"
-- assertVisible:
-    id: "sale-total"
+- scrollUntilVisible:
+    element:
+      id: "sale-total"
 - takeScreenshot: 17-sale-review
 - tapOn: "حفظ الفاتورة"
 - extendedWaitUntil:
@@ -33,5 +34,6 @@ name: 70 sale and invoice detail
 - takeScreenshot: 18-sale-done
 - tapOn: "عرض الفاتورة"
 - assertVisible: "مشاركة PDF"
-- assertVisible: "إلغاء الفاتورة"
+- scrollUntilVisible:
+    element: "إلغاء الفاتورة"
 - takeScreenshot: 19-invoice
