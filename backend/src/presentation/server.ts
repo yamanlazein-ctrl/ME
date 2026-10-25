@@ -55,6 +55,7 @@ import { registerDocumentTrackRoutes } from "./routes/documentTrack.route.js";
 import { createIntegrityRouter } from "./routes/integrity.route.js";
 import { dataSafeModeGuard } from "../infrastructure/http/middleware/dataSafeMode.middleware.js";
 import { hubWriteFreezeGuard } from "../infrastructure/http/middleware/hubWriteFreeze.middleware.js";
+import { syncVersionGuard } from "../infrastructure/http/middleware/syncVersionGuard.middleware.js";
 import { registerFxRoutes } from "./routes/fx.route.js";
 import { registerSyncRoutes } from "./routes/sync.route.js";
 import { registerSearchRoutes } from "./routes/search.route.js";
@@ -545,6 +546,7 @@ const syncRuntime = registerSyncRoutes(
   {
     readGuard: rbac(["admin", "accountant", "warehouse", "viewer"]),
     transportGuard: rbac(["admin", "accountant"]),
+    syncVersionGuard,
     numberingGuard: rbac(["admin", "accountant", "warehouse"]),
     conflictGuard: rbac(["admin", "accountant", "warehouse"]),
     operatorGuard: rbac(["admin"]),

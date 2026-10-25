@@ -135,16 +135,16 @@ APP_MASTER_KEY=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa=`, then
 
 ## Phase 3: Backend changes BC-2, BC-3, BC-1 [contracts/backend-changes.md]
 
-- [ ] T009 S4 proof first: create `backend/tests/sync-version-gate.test.ts` with three cases against
+- [x] T009 S4 proof first: create `backend/tests/sync-version-gate.test.ts` with three cases against
       `/api/sync/push` and `/api/sync/pull`: matching `X-Motard-Money-Version` → 200; a different value →
       426 with `code: "SYNC_VERSION_MISMATCH"`; header absent → 200. Copy the app setup used by an existing
       sync route test (`backend/tests/sync-behavioral-idempotency.test.ts`). Run it before T010.
       Check: `cd backend && npx vitest run tests/sync-version-gate.test.ts` shows the "different value →
       426" case FAILING (this proves the gate is absent, research R6). Record that in evidence.
-- [ ] T010 Add `export const MONEY_RULES_VERSION = 1;` to `packages/shared/src/precision.ts` and export it
+- [x] T010 Add `export const MONEY_RULES_VERSION = 1;` to `packages/shared/src/precision.ts` and export it
       from `packages/shared/src/index.ts` if precision exports are re-exported there.
       Check: `npx tsc --noEmit` exit 0.
-- [ ] T011 Create `backend/src/infrastructure/http/middleware/syncVersionGuard.middleware.ts`, exporting
+- [x] T011 Create `backend/src/infrastructure/http/middleware/syncVersionGuard.middleware.ts`, exporting
       `syncVersionGuard: RequestHandler`.
   - The header is present and `Number(header) !== MONEY_RULES_VERSION` → respond
     `426 { code: "SYNC_VERSION_MISMATCH", message: "تحديث مطلوب", hubVersion, clientVersion }`.
@@ -154,7 +154,7 @@ APP_MASTER_KEY=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa=`, then
 
   Check: `cd backend && npx tsc --noEmit` exit 0.
 
-- [ ] T012 Wire the guard:
+- [x] T012 Wire the guard:
   - add `syncVersionGuard: RequestHandler` to the guards type in
     `backend/src/presentation/routes/sync.route.ts` (around line 178)
   - add it after `guards.transportGuard` on `/sync/push` (around line 1165) and on `/sync/pull`
@@ -163,13 +163,13 @@ APP_MASTER_KEY=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa=`, then
   BC-2, FR-38. Check: `cd backend && npx vitest run tests/sync-version-gate.test.ts` → 3 passed, on
   both `DB_ENGINE=sqlite` and PostgreSQL.
 
-- [ ] T013 BC-3 verification: create `backend/tests/sync-revoked-device-codes.test.ts`. Register a device,
+- [x] T013 BC-3 verification: create `backend/tests/sync-revoked-device-codes.test.ts`. Register a device,
       revoke it with `POST /api/sync/devices/:deviceId/revoke` as admin, then assert
       `403 code SYNC_DEVICE_REVOKED` on `/api/sync/push`, on `/api/sync/pull` and on
       `POST /api/sync/device-token`. FR-40.
       Check: the test passes on both engines. If a path does not return that code, fix only that path's route
       file (`sync.route.ts` or `syncEnrollment.route.ts`) and record the change in evidence.
-- [ ] T014 BC-1: in `backend/src/application/use-cases/sync/numberBlockUseCases.ts`, add an optional
+- [x] T014 BC-1: in `backend/src/application/use-cases/sync/numberBlockUseCases.ts`, add an optional
       `deviceKind?: "desktop" | "phone"` to the block-ensure input. When it is `"phone"`:
   - the size is 100 for `invoice` and 50 for every other entity type
   - the refill threshold at line 135 (`Math.ceil(size * 0.25)`) uses that size
@@ -180,7 +180,7 @@ APP_MASTER_KEY=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa=`, then
   `backend/src/infrastructure/utils/documentNumbers.ts` line 244). FR-35.
   Check: `cd backend && npx tsc --noEmit` exit 0.
 
-- [ ] T015 Create `backend/tests/number-blocks-phone-size.test.ts`, asserting:
+- [x] T015 Create `backend/tests/number-blocks-phone-size.test.ts`, asserting:
   - phone invoice block = 100
   - phone voucher block = 50
   - the phone refill triggers at 25 remaining invoices
@@ -188,12 +188,12 @@ APP_MASTER_KEY=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa=`, then
 
   Check: passes on both engines.
 
-- [ ] T016 Run GATE-D in full. Check: GATE-D rule. On FAIL, stop here (constitution V).
-- [ ] T017 CHECKPOINT "feat(sync): money-version gate, phone block sizes, revoked-code test (BC-1, BC-2, BC-3)".
+- [x] T016 Run GATE-D in full. Check: GATE-D rule. On FAIL, stop here (constitution V).
+- [x] T017 CHECKPOINT "feat(sync): money-version gate, phone block sizes, revoked-code test (BC-1, BC-2, BC-3)".
 
 ## Phase 4: Mobile project skeleton and import boundary [R1, contracts/mobile-ports.md]
 
-- [ ] T018 Create the Expo app: run `npx create-expo-app@latest mobile --template blank-typescript --no-install`.
+- [x] T018 Create the Expo app: run `npx create-expo-app@latest mobile --template blank-typescript --no-install`.
   - In `mobile/package.json` replace every `^`/`~` range with the exact installed version.
   - Add `"drizzle-orm": "0.45.2"`, the same version as `backend/package.json`.
   - Add Expo Router per its install guide (`npx expo install expo-router react-native-safe-area-context react-native-screens expo-linking expo-constants expo-status-bar`).
@@ -202,7 +202,7 @@ APP_MASTER_KEY=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa=`, then
   Check: `cd mobile && npx expo --version` prints a version; `npx tsc --noEmit` exit 0. Record the Expo
   SDK version in `specs/002-mobile-app/evidence/T018.md`.
 
-- [ ] T019 Configure the app:
+- [x] T019 Configure the app:
   - `mobile/app.json`:
     - `name` "Motard ERP"
     - `slug` "motard-erp-mobile"

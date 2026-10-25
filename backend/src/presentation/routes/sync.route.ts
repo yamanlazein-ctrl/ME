@@ -176,6 +176,8 @@ export type SyncRouteGuards = {
   readGuard: RequestHandler;
   /** Device transport: writers only on hub ingest; local run uses this too. */
   transportGuard: RequestHandler;
+  /** BC-2: refuses a push/pull whose X-Motard-Money-Version differs from the hub's. */
+  syncVersionGuard: RequestHandler;
   /** Number-block minting/ensuring: operational roles, viewer excluded. */
   numberingGuard: RequestHandler;
   /** Conflict resolution + device management decisions. */
@@ -1165,6 +1167,7 @@ export function registerSyncRoutes(
     "/sync/push",
     auth,
     guards.transportGuard,
+    guards.syncVersionGuard,
     gate.attributed,
     validateBody(PushUnitSchema),
     async (req: Request, res: Response) => {
@@ -1256,6 +1259,7 @@ export function registerSyncRoutes(
     "/sync/pull",
     auth,
     guards.readGuard,
+    guards.syncVersionGuard,
     gate.pull,
     async (req: Request, res: Response) => {
       const ctx = req.tenantContext!;
