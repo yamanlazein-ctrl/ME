@@ -9,26 +9,8 @@ const repoRoot = path.resolve(mobileRoot, "..");
 const backendSrc = path.join(repoRoot, "backend", "src");
 const sharedSrc = path.join(repoRoot, "packages", "shared", "src");
 const webSrc = path.join(repoRoot, "src");
-const platformDir = path.join(mobileRoot, "src", "platform");
 
-// Allowed built-ins: bare module name -> phone adapter.
-const ADAPTERS = {
-  "node:async_hooks": path.join(platformDir, "asyncContext.ts"),
-  "node:crypto": path.join(platformDir, "nodeCrypto.ts"),
-  "better-sqlite3": path.join(platformDir, "sqlite", "BetterSqliteShim.ts"),
-};
-
-// Resolved desktop files that the phone replaces (they use node:path, node:url, pino or dotenv).
-const FILE_ADAPTERS = {
-  [path.join(backendSrc, "infrastructure", "config", "logger.ts")]: path.join(
-    platformDir,
-    "logger.ts",
-  ),
-  [path.join(backendSrc, "infrastructure", "config", "env.ts")]: path.join(
-    platformDir,
-    "envConfig.ts",
-  ),
-};
+const { ADAPTERS, FILE_ADAPTERS, IMPORTER_ADAPTERS } = require("./adapters.config.js");
 
 const BANNED = [
   "node:fs",
@@ -93,13 +75,10 @@ config.resolver.resolveRequest = (context, moduleName, platform) => {
   } else if (moduleName.startsWith("@web/")) {
     moduleName = path.join(webSrc, moduleName.slice("@web/".length));
   }
-  // `node:net` is allowed for exactly one importer: the SQLite column types use `isIP` (inet validation).
-  if (
-    moduleName === "node:net" &&
-    context.originModulePath ===
-      path.join(backendSrc, "infrastructure", "orm", "sqlite", "types.ts")
-  ) {
-    return { type: "sourceFile", filePath: path.join(platformDir, "netIsIp.ts") };
+  for (const [importer, name, file] of IMPORTER_ADAPTERS) {
+    if (moduleName === name && context.originModulePath === importer) {
+      return { type: "sourceFile", filePath: file };
+    }
   }
   const adapter = ADAPTERS[moduleName];
   if (adapter) return { type: "sourceFile", filePath: adapter };

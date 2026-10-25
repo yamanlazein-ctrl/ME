@@ -5,6 +5,7 @@ import { Pressable, ScrollView, Text, View } from "react-native";
 import { Redirect } from "expo-router";
 import { runMoneyVectorsHere } from "../src/spikes/moneyVectors";
 import { measureArgon2, runS1 } from "../src/spikes/s1";
+import { runS2OnDevice, shareS2Export } from "../src/spikes/s2";
 import { runS3 } from "../src/spikes/s3";
 
 const ENABLED = process.env.EXPO_PUBLIC_SPIKES === "1";
@@ -33,6 +34,7 @@ function Button(props: { label: string; onPress?: () => void; disabled?: boolean
 export default function Spikes() {
   const [log, setLog] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
+  const [s2Export, setS2Export] = useState<string | null>(null);
   if (!ENABLED) return <Redirect href="/" />;
 
   const append = (lines: string[]) => setLog((prev) => [...lines, ...prev]);
@@ -62,7 +64,24 @@ export default function Spikes() {
           })
         }
       />
-      <Button label="متاح بعد المرحلة 6" disabled />
+      <Button
+        label="S2 Use-cases"
+        disabled={busy}
+        onPress={() =>
+          run(async () => {
+            const out = await runS2OnDevice();
+            setS2Export(out.exportUri);
+            return out.lines;
+          })
+        }
+      />
+      {s2Export ? (
+        <Button
+          label="Export for comparison"
+          disabled={busy}
+          onPress={() => run(async () => (await shareS2Export(s2Export), ["S2: exported"]))}
+        />
+      ) : null}
       <Button
         label="S3 PDF"
         disabled={busy}

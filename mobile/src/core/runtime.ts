@@ -117,11 +117,14 @@ export function openRuntime(conn: ShimDatabase, options: OpenRuntimeOptions = {}
     readerDb: db,
   };
   initSqliteTransactions(conns);
-  return { conns, appliedMigrations: applied, journalIdx: JOURNAL_LAST_IDX };
+  const runtime: PhoneRuntime = { conns, appliedMigrations: applied, journalIdx: JOURNAL_LAST_IDX };
+  setActiveRuntime(runtime);
+  return runtime;
 }
 
 export function closeRuntime(runtime: PhoneRuntime): void {
   resetSqliteTransactionsForTests();
+  setActiveRuntime(null);
   runtime.conns.writer.close();
 }
 
@@ -149,4 +152,15 @@ export function ensureMeta(
       ids.appVersion ?? null,
       formatMicrosUtc(nextMonotonicMicros()),
     );
+}
+
+// ── the one open runtime of this process (what the adapter for orm/sqlite/runtime.ts hands out) ──
+let active: PhoneRuntime | null = null;
+
+export function getActiveRuntime(): PhoneRuntime | null {
+  return active;
+}
+
+export function setActiveRuntime(runtime: PhoneRuntime | null): void {
+  active = runtime;
 }
