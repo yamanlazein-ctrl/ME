@@ -1,5 +1,6 @@
 // Root layout: providers, RTL check, splash (max 1.5 s), route guard, sync runner, app lock cover, and the status strip
 // (sync chip + update banner) above every screen (FR-01, FR-04, FR-06, FR-07, FR-37, FR-41, UX-06).
+import "../src/platform/bufferPolyfill";
 import "../src/core";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AppState, Image, View } from "react-native";
