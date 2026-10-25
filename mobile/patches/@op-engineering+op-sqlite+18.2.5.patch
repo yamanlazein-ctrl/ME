@@ -316,3 +316,31 @@ index f62f7e1..b9bfa86 100644
    } else if (value.isString()) {
      std::string strVal = value.asString(rt).utf8(rt);
      return JSVariant(std::move(strVal));
+diff --git a/node_modules/@op-engineering/op-sqlite/lib/module/functions.js b/node_modules/@op-engineering/op-sqlite/lib/module/functions.js
+index c336976..4405918 100644
+--- a/node_modules/@op-engineering/op-sqlite/lib/module/functions.js
++++ b/node_modules/@op-engineering/op-sqlite/lib/module/functions.js
+@@ -52,6 +52,9 @@ function enhanceDB(db, options) {
+     commitHook: db.commitHook,
+     rollbackHook: db.rollbackHook,
+     loadExtension: db.loadExtension,
++    // Motard patch: JavaScript SQL functions (native side in cpp/OPDatabase.cpp)
++    createFunction: db.createFunction,
++    createAggregate: db.createAggregate,
+     getDbPath: db.getDbPath,
+     reactiveExecute: db.reactiveExecute,
+     sync: db.sync,
+diff --git a/node_modules/@op-engineering/op-sqlite/src/functions.ts b/node_modules/@op-engineering/op-sqlite/src/functions.ts
+index f712b94..1362d02 100644
+--- a/node_modules/@op-engineering/op-sqlite/src/functions.ts
++++ b/node_modules/@op-engineering/op-sqlite/src/functions.ts
+@@ -78,6 +78,9 @@ function enhanceDB(db: _InternalDB, options: DBParams): DB {
+     commitHook: db.commitHook,
+     rollbackHook: db.rollbackHook,
+     loadExtension: db.loadExtension,
++    // Motard patch: JavaScript SQL functions (native side in cpp/OPDatabase.cpp)
++    createFunction: db.createFunction,
++    createAggregate: db.createAggregate,
+     getDbPath: db.getDbPath,
+     reactiveExecute: db.reactiveExecute,
+     sync: db.sync,
