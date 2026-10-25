@@ -7,12 +7,12 @@ import { useDashboard } from "../../src/hooks/useDashboard";
 import { useSyncStatus } from "../../src/hooks/useSyncStatus";
 import { HomeView, type HomeAction } from "../../src/ui/HomeView";
 
-// Targets of the quick actions; screens that are not built yet land on their "قريباً" placeholder.
+// Targets of the quick actions.
 const TARGET: Record<HomeAction, string> = {
-  sale: "/(tabs)/add",
-  receipt: "/(tabs)/add",
-  payment: "/(tabs)/add",
-  expense: "/(tabs)/add",
+  sale: "/(tabs)/add/sale/customer",
+  receipt: "/(tabs)/add/receipt",
+  payment: "/(tabs)/add/payment",
+  expense: "/(tabs)/add/expense",
   findParty: "/(tabs)/parties",
 };
 

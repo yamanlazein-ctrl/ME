@@ -7,11 +7,22 @@ import { randomUUID } from "node:crypto";
 import { withTenantTx } from "@backend/infrastructure/orm/engine";
 import * as invoiceUc from "@backend/application/use-cases/invoices/invoiceUseCases";
 import * as voucherUc from "@backend/application/use-cases/vouchers/voucherUseCases";
+import * as expenseUc from "@backend/application/use-cases/expenses/expenseUseCases";
+import * as partyUc from "@backend/application/use-cases/parties/partyUseCases";
+import * as cashboxUc from "@backend/application/use-cases/cashbox/cashboxUseCases";
 import {
+  changedFields,
+  enqueueCashboxMovement,
+  enqueueExpenseCancel,
+  enqueueExpenseCreate,
   enqueueInvoiceCancel,
+  enqueueMasterCreate,
+  enqueueMasterUpdate,
   enqueueVoucherCancel,
   enqueueVoucherCreate,
 } from "@backend/application/use-cases/sync/syncEnqueue";
+import { localDateISO } from "@backend/infrastructure/utils/localDate";
+import type { CreateExpenseInput, ExpenseData } from "@backend/domain/entities/Expense";
 import { enqueueInvoiceCreate } from "@backend/application/use-cases/sync/syncUseCases";
 import {
   captureInvoiceSyncDependencies,
@@ -19,6 +30,7 @@ import {
 } from "@backend/application/use-cases/sync/syncDependencySnapshots";
 import type { CreateInvoiceInput, InvoiceData } from "@backend/domain/entities/Invoice";
 import type { CreateVoucherInput, VoucherData } from "@backend/domain/entities/Voucher";
+import type { PartyData } from "@backend/domain/entities/Party";
 import type { TenantContext } from "@backend/domain/types/index";
 import type { PhoneRepositories } from "./container";
 import { runSerial } from "./serialExecutor";
@@ -250,7 +262,200 @@ export function createDocuments(services: DocumentServices) {
       }
     });
 
-  return { createInvoice, cancelInvoice, createVoucher, cancelVoucher, replaceVoucher };
+  /** Same orchestration as `POST /expenses` (F-07): the expense and its sync unit commit together. */
+  const createExpense = (input: CreateExpenseInput, options: WriteOptions = {}) =>
+    runSerial<Outcome<ExpenseData>>(async () => {
+      const ctx = services.context();
+      try {
+        return await withTenantTx(ctx.tenantId, async () => {
+          const created = await expenseUc.createExpenseUseCase(
+            repos.expenseRepo,
+            repos.auditRepo,
+            input,
+            undefined,
+            ctx,
+          );
+          if (!created.ok) return created;
+          await enqueueExpenseCreate(
+            repos.syncOutboxRepo,
+            { id: created.data.id, number: created.data.number },
+            input,
+            ctx,
+            ctx.syncDeviceId ?? null,
+            options.opId ?? randomUUID(),
+          );
+          return created;
+        });
+      } catch (error) {
+        return failure(error);
+      }
+    });
+
+  const cancelExpense = (id: string, expectedVersion: number, options: WriteOptions = {}) =>
+    runSerial<Outcome<ExpenseData>>(async () => {
+      const ctx = services.context();
+      try {
+        return await withTenantTx(ctx.tenantId, async () => {
+          const cancelled = await expenseUc.cancelExpenseUseCase(
+            repos.expenseRepo,
+            repos.auditRepo,
+            id,
+            ctx.userId,
+            ctx,
+            expectedVersion,
+          );
+          if (!cancelled.ok) return cancelled;
+          await enqueueExpenseCancel(
+            repos.syncOutboxRepo,
+            { id: cancelled.data.id, number: cancelled.data.number },
+            ctx,
+            ctx.syncDeviceId ?? null,
+            options.opId ?? randomUUID(),
+            expectedVersion,
+          );
+          return cancelled;
+        });
+      } catch (error) {
+        return failure(error);
+      }
+    });
+
+  /** Same as the customer/supplier create routes: party, opening journal and sync unit in one transaction. */
+  const createParty = (
+    kind: "customer" | "supplier",
+    body: Record<string, unknown>,
+    options: WriteOptions = {},
+  ) =>
+    runSerial<Outcome<PartyData>>(async () => {
+      const ctx = services.context();
+      const input = { ...body, kind } as Parameters<typeof partyUc.createPartyUseCase>[1];
+      try {
+        return await withTenantTx(ctx.tenantId, async () => {
+          const result = await partyUc.createPartyUseCase(repos.partyRepo, input, ctx);
+          if (!result.ok) return result;
+          const p = result.data;
+          await enqueueMasterCreate(
+            repos.syncOutboxRepo,
+            "party",
+            p.id,
+            {
+              id: p.id,
+              kind: p.kind,
+              code: p.code ?? null,
+              name: p.name,
+              companyName: p.companyName ?? null,
+              commercialReg: p.commercialReg ?? null,
+              category: p.category ?? null,
+              salesRep: p.salesRep ?? null,
+              phone: p.phone ?? null,
+              mobile: p.mobile ?? null,
+              whatsapp: p.whatsapp ?? null,
+              altPhone: p.altPhone ?? null,
+              email: p.email ?? null,
+              website: p.website ?? null,
+              address: p.address ?? null,
+              city: p.city ?? null,
+              country: p.country ?? null,
+              taxNumber: p.taxNumber ?? null,
+              currency: p.currency,
+              paymentTerms: p.paymentTerms ?? null,
+              paymentMethod: p.paymentMethod ?? null,
+              defaultDiscount: p.defaultDiscount,
+              vat: p.vat,
+              status: p.status,
+              notes: p.notes ?? null,
+              openingBalance: p.openingBalance ?? 0,
+              openingDate: p.openingDate ?? localDateISO(new Date(p.createdAt ?? Date.now())),
+              openingCurrency: p.openingCurrency ?? null,
+              openingNote: p.openingNote ?? null,
+            },
+            ctx,
+            ctx.syncDeviceId ?? null,
+            options.opId ?? randomUUID(),
+          );
+          return result;
+        });
+      } catch (error) {
+        return failure(error);
+      }
+    });
+
+  const updateParty = (
+    id: string,
+    body: Record<string, unknown>,
+    expectedVersion: number,
+    options: WriteOptions = {},
+  ) =>
+    runSerial<Outcome<PartyData>>(async () => {
+      const ctx = services.context();
+      try {
+        return await withTenantTx(ctx.tenantId, async () => {
+          const before = await repos.partyRepo.findById(id, ctx);
+          const result = await partyUc.updatePartyUseCase(
+            repos.partyRepo,
+            id,
+            body,
+            ctx,
+            expectedVersion,
+          );
+          if (!result.ok) return result;
+          await enqueueMasterUpdate(
+            repos.syncOutboxRepo,
+            "party",
+            id,
+            changedFields(body, before as unknown as Record<string, unknown> | null),
+            ctx,
+            ctx.syncDeviceId ?? null,
+            options.opId ?? randomUUID(),
+            { version: (before as { version?: number } | null)?.version ?? null },
+          );
+          return result;
+        });
+      } catch (error) {
+        return failure(error);
+      }
+    });
+
+  /** Manual cashbox movement: id pre-allocated so a replay on the hub converges (SYNC-12). */
+  const addCashboxMovement = (input: Record<string, unknown>, options: WriteOptions = {}) =>
+    runSerial<Outcome<{ id?: string }>>(async () => {
+      const ctx = services.context();
+      try {
+        return await withTenantTx(ctx.tenantId, async () => {
+          const id = randomUUID();
+          const added = await cashboxUc.addManualMovementUseCase(
+            repos.cashboxRepo,
+            { ...input, id } as never,
+            ctx,
+          );
+          if (!added.ok) return added;
+          await enqueueCashboxMovement(
+            repos.syncOutboxRepo,
+            { id: added.data.id ?? id },
+            input,
+            ctx,
+            ctx.syncDeviceId ?? null,
+            options.opId ?? randomUUID(),
+          );
+          return added as Outcome<{ id?: string }>;
+        });
+      } catch (error) {
+        return failure(error);
+      }
+    });
+
+  return {
+    createInvoice,
+    cancelInvoice,
+    createVoucher,
+    cancelVoucher,
+    replaceVoucher,
+    createExpense,
+    cancelExpense,
+    createParty,
+    updateParty,
+    addCashboxMovement,
+  };
 }
 
 export type Documents = ReturnType<typeof createDocuments>;

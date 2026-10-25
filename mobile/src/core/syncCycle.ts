@@ -55,10 +55,8 @@ export interface SyncCycleDeps {
   onProgress?: (progress: { pushed: number; pulled: number }) => void;
 }
 
-export async function runPhoneSyncCycle(deps: SyncCycleDeps): Promise<SyncCycleResult> {
-  const { repos } = deps;
-  const ctx = deps.context();
-  const budget = deps.budgetMs ?? 30_000;
+/** One pull page, as its own serial job; the first download (firstDownloadDeps.ts) runs exactly this. */
+export function pullOnePage(repos: PhoneRepositories, ctx: TenantContext): Promise<PullResult> {
   const materializeRepos = {
     invoiceRepo: repos.invoiceRepo,
     voucherRepo: repos.voucherRepo,
@@ -78,6 +76,38 @@ export async function runPhoneSyncCycle(deps: SyncCycleDeps): Promise<SyncCycleR
     companyRepo: repos.companyRepo,
   };
   const deviceId = ctx.syncDeviceId ?? null;
+  return runSerial(() =>
+    syncUc.runLocalSyncPull(
+      repos.db as never,
+      materializeRepos,
+      ctx,
+      undefined,
+      deviceId,
+      repos.syncInboxRepo,
+      async (unit) => {
+        const n = describePulledUnit(unit);
+        if (n) await repos.notificationRepo.create(n, ctx);
+      },
+      undefined,
+      {
+        requeueSynced: (tenantId) => repos.syncOutboxRepo.requeueSyncedForNewHub(tenantId),
+        reassertNumberTips: async () => {
+          if (!deviceId) return;
+          await numberBlocksUc.reassertNumberTipsOnHub({
+            tenantId: ctx.tenantId,
+            syncDeviceId: deviceId,
+            authHeader: undefined,
+          });
+        },
+      },
+    ),
+  );
+}
+
+export async function runPhoneSyncCycle(deps: SyncCycleDeps): Promise<SyncCycleResult> {
+  const { repos } = deps;
+  const ctx = deps.context();
+  const budget = deps.budgetMs ?? 30_000;
 
   const pushOnce = () =>
     runSerial(() =>
@@ -116,33 +146,7 @@ export async function runPhoneSyncCycle(deps: SyncCycleDeps): Promise<SyncCycleR
     deps.onProgress?.({ pushed: push.pushed, pulled: 0 });
   }
 
-  const pullOnce = () =>
-    runSerial(() =>
-      syncUc.runLocalSyncPull(
-        repos.db as never,
-        materializeRepos,
-        ctx,
-        undefined,
-        deviceId,
-        repos.syncInboxRepo,
-        async (unit) => {
-          const n = describePulledUnit(unit);
-          if (n) await repos.notificationRepo.create(n, ctx);
-        },
-        undefined,
-        {
-          requeueSynced: (tenantId) => repos.syncOutboxRepo.requeueSyncedForNewHub(tenantId),
-          reassertNumberTips: async () => {
-            if (!deviceId) return;
-            await numberBlocksUc.reassertNumberTipsOnHub({
-              tenantId: ctx.tenantId,
-              syncDeviceId: deviceId,
-              authHeader: undefined,
-            });
-          },
-        },
-      ),
-    );
+  const pullOnce = () => pullOnePage(repos, ctx);
 
   let pull: PullResult = { pulled: 0, applied: 0, skipped: 0, failed: 0, deviceTrust: null };
   let pullError: string | null = null;
@@ -178,6 +182,7 @@ export async function runPhoneSyncCycle(deps: SyncCycleDeps): Promise<SyncCycleR
     pullError = err instanceof Error ? err.message : "pull failed";
   }
 
+  const deviceId = ctx.syncDeviceId ?? null;
   let blocksError: string | null = null;
   if (deviceId) {
     try {

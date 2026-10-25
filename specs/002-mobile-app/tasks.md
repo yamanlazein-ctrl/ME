@@ -600,20 +600,20 @@ SESSION-2 START — the second cloud session begins here, and follows these rule
 **Independent test**: on the cert hub seeded with 1,000 invoices (T039), enroll a fresh phone and
 compare counts and balances with the hub (automated under Node by T066; on device by T086 step 9).
 
-- [ ] T062 [US1] Implement `mobile/src/core/enrollment.ts`: `enroll(hubUrl, code)` calls
+- [x] T062 [US1] Implement `mobile/src/core/enrollment.ts`: `enroll(hubUrl, code)` calls
       `POST /api/sync/enroll`, then `POST /api/sync/device-token`. It stores the device credential and
       tokens with `secureStore`, creates the installation id, writes `motard_meta` through the same
       function the desktop runtime uses to create it (found in T045), and fixes the tenant (FR-08).
       Invalid or expired code → throw `EnrollmentRefusedError` with the hub's Arabic message.
       Check: `mobile/test/unit/enrollment.test.ts` (mocked hub) passes.
-- [ ] T063 [US1] Implement `mobile/src/core/firstDownload.ts`: it loops the shared pull from `afterSeq`
+- [x] T063 [US1] Implement `mobile/src/core/firstDownload.ts`: it loops the shared pull from `afterSeq`
       = the stored cursor (0 the first time), `limit=100`, and materializes each page. It persists the
       cursor after each page, so it resumes (FR-07). Progress is reported as
       `{ percent: cursor / headSeq, applied }`. Before starting it estimates the size (headSeq × 2 KB)
       against `FileSystem.getFreeDiskStorageAsync()` and refuses with both numbers when space is short
       (E15). Also enable the "S5 First download" button in `mobile/app/spikes.tsx` (T037) with this
       function. Check: unit test with a mocked pull of 3 pages, plus a kill-after-page-2 resume case.
-- [ ] T064 [US1] Create `mobile/app/enroll.tsx`.
+- [x] T064 [US1] Create `mobile/app/enroll.tsx`.
   - Steps: QR scan (`expo-camera` barcode scanner, accepting the JSON `{hub, code}` from BC-4) or typed
     hub URL and code → progress screen (percent and count) → done.
   - Arabic copy throughout.
@@ -622,21 +622,21 @@ compare counts and balances with the hub (automated under Node by T066; on devic
 
   Check: GATE-M; `mobile/test/unit/enroll-screen.test.tsx` renders the three error states.
 
-- [ ] T065 [US1] Route guard in `mobile/app/_layout.tsx`: not enrolled → `/enroll`; enrolled with an
+- [x] T065 [US1] Route guard in `mobile/app/_layout.tsx`: not enrolled → `/enroll`; enrolled with an
       unfinished first download → the progress screen. Check: unit test of the guard function
       `mobile/src/core/routeGuard.ts`.
-- [ ] T066 [US1] Add a parity scenario (h) in `mobile/test/parity/scenarios.test.ts`. Seed the hub with
+- [x] T066 [US1] Add a parity scenario (h) in `mobile/test/parity/scenarios.test.ts`. Seed the hub with
       `seed-sync-volume.mjs --invoices 1000 --parties 100`, enroll a fresh phone, run `firstDownload`,
       then compare the phone with the generator's out file (counts and every party balance). Also kill
       and resume at 40%. SC-001. Check: GATE-P.
-- [ ] T067 [US1] CHECKPOINT "feat(mobile): enrollment and resumable first download (US1)".
+- [x] T067 [US1] CHECKPOINT "feat(mobile): enrollment and resumable first download (US1)".
 
 ## Phase 8: US2 — Sign in once, stay signed in, unlock with fingerprint (Must, P1) [FR-01–FR-05, FR-41]
 
 **Independent test**: sign in, go offline, background the app for 61 s, unlock, and still be signed
 in.
 
-- [ ] T068 [US2] Implement `mobile/src/core/session.ts`.
+- [x] T068 [US2] Implement `mobile/src/core/session.ts`.
   - `pinLogin(userId, pin)` calls `POST /api/auth/pin-login` and stores the tokens.
   - On success it stores the offline verifier `hashPin(pin)` for that user (T035).
   - `refresh()`: only a 401 or 403 from `/api/auth/refresh` ends the session. Any other 403 does not
@@ -647,10 +647,10 @@ in.
   Check: `mobile/test/unit/session.test.ts` covers refresh-401 ends the session, other-403 keeps it,
   offline login success and failure, a one-year token, and the pending-units confirmation (E8).
 
-- [ ] T069 [US2] Create `mobile/app/login.tsx`: a PIN picker listing the users from
+- [x] T069 [US2] Create `mobile/app/login.tsx`: a PIN picker listing the users from
       `GET /api/auth/device-roster` (cached locally after first fetch, so it works offline). It has a
       numeric PIN pad and an Arabic password fallback link (FR-02). Check: GATE-M + render test.
-- [ ] T070 [US2] Implement `mobile/src/core/appLock.ts` and an overlay in `_layout.tsx`.
+- [x] T070 [US2] Implement `mobile/src/core/appLock.ts` and an overlay in `_layout.tsx`.
   - On cold start, and when returning after ≥ 60 s in the background (`lastForegroundAt`), cover the
     app and require `expo-local-authentication`, with PIN fallback through `verifyPin` (FR-04).
   - Hide the content in the Android recent-apps view by rendering the cover whenever `AppState`
@@ -658,19 +658,19 @@ in.
 
   Check: unit test with fake timers: 59 s → no lock; 60 s → lock.
 
-- [ ] T071 [US2] Implement role rules: `mobile/src/core/roles.ts` exports `canWriteOffline(role)` (admin
+- [x] T071 [US2] Implement role rules: `mobile/src/core/roles.ts` exports `canWriteOffline(role)` (admin
       and accountant true; warehouse and viewer false) and `isAdminLike(role)` (admin or accountant,
       matching `hasAdminPrivileges`), plus a strict `isAdmin(role)` used only for device revoke. The role is read from the local users table on every check, never cached in memory, so a role change pulled from the hub applies at once (E18). FR-05,
       constitution VI. Check: unit test over the 4 roles.
-- [ ] T072 [US2] CHECKPOINT "feat(mobile): PIN sign-in, permanent session, app lock (US2)".
+- [x] T072 [US2] CHECKPOINT "feat(mobile): PIN sign-in, permanent session, app lock (US2)".
 
 ## Phase 9: US14 — Sync state, notifications, update required (Must, P1) [FR-37, FR-38, E5, E9]
 
-- [ ] T073 [US14] Create `mobile/app/(tabs)/more/sync.tsx`: a read-only screen showing the pending count,
+- [x] T073 [US14] Create `mobile/app/(tabs)/more/sync.tsx`: a read-only screen showing the pending count,
       last run, last error, and the rejected and dead documents (from the local outbox statuses), each with
       the text "يجب الحل من الديسكتوب" ("must be resolved on the desktop"). There is no requeue button
       (FR-37, E5). Check: render test asserts the text and the absence of any requeue control.
-- [ ] T074 [US14] Implement `mobile/src/core/notify.ts` with `expo-notifications`, local notifications
+- [x] T074 [US14] Implement `mobile/src/core/notify.ts` with `expo-notifications`, local notifications
       only. After each sync run it fires:
   - one notification per newly rejected document, naming its number
   - one when sync stops (version mismatch, revoked, unknown device)
@@ -678,17 +678,17 @@ in.
 
   It asks permission on first use. Check: unit test with the mocked module asserts the three triggers.
 
-- [ ] T075 [US14] Create `mobile/src/ui/UpdateBanner.tsx`, shown on every screen while
+- [x] T075 [US14] Create `mobile/src/ui/UpdateBanner.tsx`, shown on every screen while
       `versionMismatch` is set: "تحديث مطلوب" ("update required"), with a button opening the Play Store
       listing or the APK URL. Local work continues (E9). Check: render test.
-- [ ] T076 [US14] CHECKPOINT "feat(mobile): sync status, local notifications, update banner (US14)".
+- [x] T076 [US14] CHECKPOINT "feat(mobile): sync status, local notifications, update banner (US14)".
 
 ## Phase 10: US3 — See today's money at a glance (Must, P1) [FR-09, FR-10]
 
-- [ ] T077 [US3] Create `mobile/src/hooks/useDashboard.ts`, calling the dashboard use-case through the
+- [x] T077 [US3] Create `mobile/src/hooks/useDashboard.ts`, calling the dashboard use-case through the
       container (`backend/src/application/use-cases/dashboard/`). Check: unit test with a seeded temp
       database returns separate USD and SYP figures.
-- [ ] T078 [US3] Create `mobile/app/(tabs)/index.tsx` (Home) with:
+- [x] T078 [US3] Create `mobile/app/(tabs)/index.tsx` (Home) with:
   - one cashbox card per currency (never combined)
   - today's sales
   - receivables and payables
@@ -700,25 +700,25 @@ in.
   - a viewer sees no write actions
   - 1,250.50 USD and 3,400,000 SYP render as two cards
 
-- [ ] T079 [US3] Run GATE-M and GATE-P.
-- [ ] T080 [US3] CHECKPOINT "feat(mobile): home summary (US3)".
+- [x] T079 [US3] Run GATE-M and GATE-P.
+- [x] T080 [US3] CHECKPOINT "feat(mobile): home summary (US3)".
 
 ## Phase 11: US15 — Lock out a lost phone (Must, P2, part of M1) [FR-39, FR-40, G5]
 
-- [ ] T081 [US15] Implement `mobile/src/core/wipe.ts`: `wipeDevice()` closes the database, deletes the
+- [x] T081 [US15] Implement `mobile/src/core/wipe.ts`: `wipeDevice()` closes the database, deletes the
       database file, every secure-store key with the prefix `motard.`, `app-state.json`, and the cached
       PDFs folder, then navigates to `/enroll`. It is called when `syncLoop` emits `revoked` (T053), even when unsynced units exist (lost-device policy, E7).
       Check: unit test with mocked FileSystem and secure store asserts every deletion, in that order.
-- [ ] T082 [US15] Add a parity scenario (i): an admin revokes the phone's device on the cert hub, the next
+- [x] T082 [US15] Add a parity scenario (i): an admin revokes the phone's device on the cert hub, the next
       `syncAll` raises `DeviceRevokedError`, and `wipeDevice` removes the temp database file.
       Check: GATE-P.
-- [ ] T083 [US15] CHECKPOINT "feat(mobile): remote revoke and local wipe (US15)".
+- [x] T083 [US15] CHECKPOINT "feat(mobile): remote revoke and local wipe (US15)".
 
 ## Tier A closing
 
-- [ ] T084 Run GATE-D in full (backend files changed in Phase 3), GATE-M and GATE-P. Write the three
+- [x] T084 Run GATE-D in full (backend files changed in Phase 3), GATE-M and GATE-P. Write the three
       summaries to `specs/002-mobile-app/evidence/tierA.md`.
-- [ ] T085 CHECKPOINT "chore(mobile): Tier A complete". Then confirm that the `mobile-android` workflow
+- [x] T085 CHECKPOINT "chore(mobile): Tier A complete". Then confirm that the `mobile-android` workflow
       run for this commit succeeded (`gh run list --workflow mobile-android.yml --limit 1`), or note that
       the owner must check.
 - [ ] T086 OWNER-LOCAL Tier A acceptance on the phone (G1, NFR-04, R3 S2, R5 S5):
@@ -751,30 +751,30 @@ CUT LINE A — Tier A ends here. Everything above must be done with the $100 cre
 
 ## Phase 12: US4 — Find a party and read their statement (Must, P1) [FR-11–FR-14, E12]
 
-- [ ] T087 [US4] Create `mobile/src/hooks/useParties.ts`: search through the shared party search
+- [x] T087 [US4] Create `mobile/src/hooks/useParties.ts`: search through the shared party search
       use-case (the same matching as `/parties/search`), sorted by a local most-recently-used list stored in
       `app-state.json` (add the field `recentPartyIds: string[]`, max 50). FR-11.
       Check: unit test, three letters on 2,000 seeded parties returns within 150 ms under Node (NFR-02
       proxy).
-- [ ] T088 [US4] Create `mobile/app/(tabs)/parties/index.tsx`: a search field and a card list (UX-01),
+- [x] T088 [US4] Create `mobile/app/(tabs)/parties/index.tsx`: a search field and a card list (UX-01),
       with a customers/suppliers segmented filter. Check: render test.
-- [ ] T089 [US4] Create `mobile/app/(tabs)/parties/[id].tsx`: the balance per currency (MoneyText),
+- [x] T089 [US4] Create `mobile/app/(tabs)/parties/[id].tsx`: the balance per currency (MoneyText),
       phone number, recent documents, and a "كشف الحساب" (statement) button. FR-12. Check: render test.
-- [ ] T090 [US4] Create `mobile/src/hooks/useStatement.ts` and
+- [x] T090 [US4] Create `mobile/src/hooks/useStatement.ts` and
       `mobile/app/(tabs)/parties/[id]/statement.tsx`. The statement use-case is paged with `nextCursor`,
       200 per page, followed to the end. The list is virtualized with `FlatList`. The order and running
       balance come from the use-case (FR-13). Check: unit test, a 650-row seeded statement loads all 650
       rows, and the last running balance equals the use-case's closing balance. Invoice-before-payment
       order holds for a same-transaction pair.
-- [ ] T091 [US4] Create `mobile/app/(tabs)/parties/form.tsx`, for create and edit (admin and accountant
+- [x] T091 [US4] Create `mobile/app/(tabs)/parties/form.tsx`, for create and edit (admin and accountant
       only). Name uniqueness errors come back from the use-case and are shown with the desktop's Arabic
       message plus the hint "استخدم صيغة: الاسم — المدينة" ("use the format: name — city"). FR-14, E12.
       Check: render test of the duplicate error.
-- [ ] T092 [US4] CHECKPOINT "feat(mobile): parties, party detail and full statement (US4)".
+- [x] T092 [US4] CHECKPOINT "feat(mobile): parties, party detail and full statement (US4)".
 
 ## Phase 13: US5 — Receipts, payments and expenses offline (Must, P1) [FR-20–FR-23, E10, E11]
 
-- [ ] T093 [US5] Create `mobile/app/(tabs)/add/receipt.tsx` and `payment.tsx`, sharing the component
+- [x] T093 [US5] Create `mobile/app/(tabs)/add/receipt.tsx` and `payment.tsx`, sharing the component
       `mobile/src/ui/VoucherForm.tsx`.
   - Steps: party (bottom-sheet search) → amount (MoneyInput) + currency + rate (pre-filled from
     `GET /api/fx/reference-rate` when online, cached for offline; FR-19) + optional write-off + optional
@@ -784,16 +784,16 @@ CUT LINE A — Tier A ends here. Everything above must be done with the $100 cre
 
   Check: render tests for the warning and the locked-day message.
 
-- [ ] T094 [US5] Voucher amend: the "تعديل" (amend) action calls the replace use-case (the one behind
+- [x] T094 [US5] Voucher amend: the "تعديل" (amend) action calls the replace use-case (the one behind
       `POST /receipts/:id/replace`) in one call. FR-21. Check: parity scenario (d) from T052 still passes,
       and a unit test asserts that a single use-case call is made.
-- [ ] T095 [US5] Create `mobile/app/(tabs)/add/expense.tsx`: the name autocomplete uses the expense-names
+- [x] T095 [US5] Create `mobile/app/(tabs)/add/expense.tsx`: the name autocomplete uses the expense-names
       use-case; amount; currency; save; cancel from the detail view. FR-22. Check: render test.
-- [ ] T096 [US5] Create `mobile/app/(tabs)/more/cashbox.tsx`: cashbox state, movements by day with a date
+- [x] T096 [US5] Create `mobile/app/(tabs)/more/cashbox.tsx`: cashbox state, movements by day with a date
       picker, the balance at a date, and an add-manual-movement form. FR-23.
       Check: unit test, a manual movement dated yesterday changes yesterday's and today's balances.
-- [ ] T097 [US5] Run GATE-M and GATE-P.
-- [ ] T098 [US5] CHECKPOINT "feat(mobile): receipts, payments, expenses, cashbox (US5)".
+- [x] T097 [US5] Run GATE-M and GATE-P.
+- [x] T098 [US5] CHECKPOINT "feat(mobile): receipts, payments, expenses, cashbox (US5)".
 
 ## Phase 14: US6 — Sell from the phone offline (Must, P1) [FR-15, FR-17, FR-19, FR-34, E1]
 

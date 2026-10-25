@@ -3,6 +3,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { randomUUID } from "node:crypto";
 import { parityAvailable, startParity, type Parity } from "./harness";
+import { cashboxBalanceAt } from "../../src/core/cashbox";
 
 const DATE = "2026-03-01";
 
@@ -153,6 +154,57 @@ describe.skipIf(!parityAvailable())("sync parity scenarios (T052)", () => {
     );
     expect(replaced.ok, JSON.stringify(replaced)).toBe(true);
     expect(await p.compareAll()).toEqual([]);
+  }, 300_000);
+
+  it("(j) an expense, a new party with a receipt, and a manual cashbox movement made on the phone converge", async () => {
+    const expense = await p.phone.documents.createExpense({
+      category: "إيجار",
+      description: "إيجار المحل",
+      amount: 75,
+      currency: "USD",
+      date: DATE,
+      method: "cash",
+      paidFromCashbox: false,
+    });
+    expect(expense.ok, JSON.stringify(expense)).toBe(true);
+    const party = await p.phone.documents.createParty("customer", {
+      name: "Phone Made Customer",
+      currency: "USD",
+    });
+    expect(party.ok, JSON.stringify(party)).toBe(true);
+    if (!party.ok) return;
+    const receipt = await p.phone.documents.createVoucher("receipt", {
+      date: DATE,
+      partyId: party.data.id,
+      partyKind: "customer",
+      amount: 40,
+      currency: "USD",
+      exchangeRate: 1,
+      method: "cash",
+    });
+    expect(receipt.ok, JSON.stringify(receipt)).toBe(true);
+    const movement = await p.phone.documents.addCashboxMovement({
+      date: DATE,
+      type: "capital",
+      direction: "in",
+      amount: 300,
+      currency: "USD",
+      description: "parity",
+    });
+    expect(movement.ok, JSON.stringify(movement)).toBe(true);
+    expect(await p.compareAll()).toEqual([]);
+  }, 300_000);
+
+  it("(k) the phone's cashbox balance at a date equals the desktop's, per currency", async () => {
+    await p.syncAll();
+    for (const currency of ["USD", "SYP"]) {
+      const desktop = await p.desktop.call(
+        "GET",
+        `/api/cashbox/balance/${DATE}?currency=${currency}`,
+      );
+      const phone = await cashboxBalanceAt(p.phone, DATE, currency);
+      expect(phone, currency).toBe(Number(desktop.text));
+    }
   }, 300_000);
 
   it("(f) phone block exhaustion: the 101st offline invoice is refused (no overlapping numbers), a refill fixes it", async () => {

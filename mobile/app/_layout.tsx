@@ -12,6 +12,7 @@ import { getApp } from "../src/core/appRuntime";
 import { authenticateWithBiometrics, coverVisible, shouldLock } from "../src/core/appLock";
 import { readAppState, updateAppState } from "../src/core/appState";
 import { isAllowedHere, routeFor } from "../src/core/routeGuard";
+import { registerBackgroundSync } from "../src/core/backgroundSync";
 import { startSyncRunner } from "../src/core/syncRunner";
 import { getSessionService } from "../src/core/sessionService";
 import { useBoot } from "../src/hooks/useBoot";
@@ -81,6 +82,7 @@ export default function RootLayout() {
           role: boot.session.role,
         });
         stop = startSyncRunner(app).stop;
+        void registerBackgroundSync().catch(() => undefined);
       }
     });
     return () => stop?.();

@@ -40,6 +40,7 @@ export default function More() {
   return (
     <View style={{ padding: spacing.lg, paddingTop: spacing.xl }}>
       <Row label="حالة المزامنة" onPress={() => router.push("/(tabs)/more/sync" as never)} />
+      <Row label="الصندوق" onPress={() => router.push("/(tabs)/more/cashbox" as never)} />
       <Row label="تسجيل الخروج" onPress={() => void logout(false)} />
     </View>
   );
