@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from "react";
-import { Text, View } from "react-native";
+import { View } from "react-native";
+import { Text } from "./Text";
 import { colors, fontSize, radius, spacing } from "./theme";
 
 export const TOAST_VARIANTS = ["success", "error"] as const;
@@ -18,7 +19,7 @@ export function ToastView({ variant, message }: { variant: ToastVariant; message
         margin: spacing.lg,
       }}
     >
-      <Text style={{ color: "#ffffff", fontSize: fontSize.body }}>{message}</Text>
+      <Text style={{ color: colors.primaryForeground, fontSize: fontSize.body }}>{message}</Text>
     </View>
   );
 }

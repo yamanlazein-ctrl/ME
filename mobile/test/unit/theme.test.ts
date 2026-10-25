@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { colors, fontSize, spacing, TOUCH_TARGET } from "../../src/ui/theme";
+import { fontSize, spacing, themeColors, TOUCH_TARGET } from "../../src/ui/theme";
+
+const light = themeColors("light");
+const dark = themeColors("dark");
 
 function luminance(hex: string): number {
   const n = parseInt(hex.slice(1), 16);
@@ -28,22 +31,39 @@ describe("theme tokens", () => {
     );
   });
 
-  it("copies the desktop's light-theme tokens", () => {
-    expect(colors.background).toBe("#f7f8fa");
-    expect(colors.primary).toBe("#c89100");
-    expect(colors.foreground).toBe("#1e293b");
+  it("copies the desktop's tokens: dark is the default theme, light the soft theme", () => {
+    expect(dark.background).toBe("#0a0a0a");
+    expect(dark.primary).toBe("#ffd740");
+    expect(dark.foreground).toBe("#fafafa");
+    expect(light.background).toBe("#f7f8fa");
+    expect(light.primary).toBe("#c89100");
+    expect(light.foreground).toBe("#1e293b");
   });
 
   it("text colours meet WCAG AA (4.5:1) on the light surfaces", () => {
     for (const [fg, bg] of [
-      [colors.foreground, colors.background],
-      [colors.foreground, colors.card],
-      [colors.mutedForeground, colors.background],
-      [colors.negative, colors.card],
-      [colors.positive, colors.card],
-      [colors.currencySyp, colors.card],
-      [colors.currencyUsd, colors.card],
-      [colors.primaryForeground, "#8a6200"],
+      [light.foreground, light.background],
+      [light.foreground, light.card],
+      [light.mutedForeground, light.background],
+      [light.negative, light.card],
+      [light.positive, light.card],
+      [light.currencySyp, light.card],
+      [light.currencyUsd, light.card],
+      [light.primaryForeground, "#7a5700"],
+    ] as const) {
+      expect(contrast(fg, bg), `${fg} on ${bg}`).toBeGreaterThanOrEqual(4.5);
+    }
+  });
+
+  it("text colours meet WCAG AA (4.5:1) on the dark surfaces", () => {
+    for (const [fg, bg] of [
+      [dark.foreground, dark.background],
+      [dark.foreground, dark.card],
+      [dark.mutedForeground, dark.background],
+      [dark.negative, dark.card],
+      [dark.positive, dark.card],
+      [dark.primary, dark.background],
+      [dark.primaryForeground, dark.primary],
     ] as const) {
       expect(contrast(fg, bg), `${fg} on ${bg}`).toBeGreaterThanOrEqual(4.5);
     }

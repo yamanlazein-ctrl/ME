@@ -1,4 +1,6 @@
-import { Text, TextInput, View, type TextInputProps } from "react-native";
+import { TextInput, View, type TextInputProps } from "react-native";
+import { Text } from "./Text";
+import { fontFamilyFor } from "./fontFamilies";
 import { colors, fontSize, radius, spacing, TOUCH_TARGET } from "./theme";
 
 export interface FieldProps extends Omit<TextInputProps, "style"> {
@@ -22,6 +24,7 @@ export function Field({ label, fieldId, error, ...input }: FieldProps) {
       <TextInput
         {...input}
         nativeID={fieldId}
+        testID={fieldId}
         accessibilityLabel={label}
         accessibilityLabelledBy={labelId}
         style={{
@@ -34,6 +37,7 @@ export function Field({ label, fieldId, error, ...input }: FieldProps) {
           borderRadius: radius.md,
           paddingHorizontal: spacing.md,
           textAlign: "right",
+          fontFamily: fontFamilyFor("400"),
         }}
       />
       {error ? (

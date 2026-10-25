@@ -1,3 +1,4 @@
+import { flat } from "../helpers/style";
 import { describe, expect, it, vi } from "vitest";
 import { act, fireEvent, render, screen } from "@testing-library/react-native";
 import { Field } from "../../src/ui/Field";
@@ -17,7 +18,7 @@ describe("Field", () => {
 
   it("shows an error under the field in the negative colour", async () => {
     await render(<Field label="الاسم" fieldId="n" error="الاسم مطلوب" />);
-    expect(screen.getByText("الاسم مطلوب").props.style.color).toBe(colors.negative);
+    expect(flat(screen.getByText("الاسم مطلوب").props.style).color).toBe(colors.negative);
   });
 });
 

@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+# Runs inside the emulator (reactivecircus/android-emulator-runner): install the APK, run the Maestro flow against the
+# test hub, then fail on crashes or MOTARD_ERR lines in the device log. Screenshots land in $OUT.
+set -uo pipefail
+APK="$1"; INFO="$2"; OUT="$3"
+mkdir -p "$OUT"
+HUB=$(node -p "require('$INFO').hubForEmulator"); CODE=$(node -p "require('$INFO').code"); PIN=$(node -p "require('$INFO').pin")
+adb install -r "$APK"
+adb logcat -c
+set +e
+(cd mobile/e2e && maestro test --format junit --output "$OUT/junit.xml" --test-output-dir "$OUT" -e HUB="$HUB" -e CODE="$CODE" -e PIN="$PIN" full.yaml) 2>&1 | tee "$OUT/maestro.log"
+FLOW=${PIPESTATUS[0]}
+set -e
+adb logcat -d -v time > "$OUT/logcat.txt"
+echo "=== MOTARD_ERR lines ==="; grep -E "MOTARD_ERR" "$OUT/logcat.txt" | head -50 || true
+echo "=== crashes ==="; grep -E "FATAL EXCEPTION|Process: com.motard.erp|Fatal signal" "$OUT/logcat.txt" | head -20 || true
+echo "=== fonts ==="; grep -E "is not a system font and has not been loaded" "$OUT/logcat.txt" | head -5 || true
+BAD=0
+if grep -qE "FATAL EXCEPTION|Fatal signal" "$OUT/logcat.txt"; then BAD=1; fi
+if grep -q "MOTARD_ERR" "$OUT/logcat.txt"; then BAD=1; fi
+if grep -q "is not a system font and has not been loaded" "$OUT/logcat.txt"; then BAD=1; fi
+if [ "$FLOW" -ne 0 ] || [ "$BAD" -ne 0 ]; then echo "EMULATOR VERIFICATION FAILED (flow=$FLOW bad=$BAD)"; exit 1; fi
+echo "EMULATOR VERIFICATION PASSED"

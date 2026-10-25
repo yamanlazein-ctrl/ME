@@ -1,4 +1,5 @@
-import { Pressable, ScrollView, Text, View } from "react-native";
+import { Pressable, ScrollView, View } from "react-native";
+import { Text } from "./Text";
 import { isAdminLike, type Role } from "../core/roles";
 import type { InvoiceView } from "../core/invoiceView";
 import { MoneyText } from "./MoneyText";
@@ -54,7 +55,7 @@ export function InvoiceDetailView({
           marginTop: spacing.lg,
         }}
       >
-        <Text style={{ color: "#fff" }}>مشاركة PDF</Text>
+        <Text style={{ color: colors.primaryForeground }}>مشاركة PDF</Text>
       </Pressable>
       {isAdminLike(role) && !cancelled ? (
         <Pressable

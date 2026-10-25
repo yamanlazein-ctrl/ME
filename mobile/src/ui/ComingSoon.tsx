@@ -1,4 +1,5 @@
-import { Text, View } from "react-native";
+import { View } from "react-native";
+import { Text } from "./Text";
 import { fontSize, spacing } from "./theme";
 
 export const COMING_SOON_TEXT = "قريباً";

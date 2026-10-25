@@ -2,6 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { registerNumericFunctions } from "@backend/infrastructure/orm/sqlite/numericFunctions";
 import { openShimDatabase, splitStatements } from "../../src/platform/sqlite/BetterSqliteShim";
 import type { ShimDatabase } from "../../src/platform/sqlite/types";
 import { fakeOpConnection } from "../helpers/fakeOpSqlite";
@@ -101,8 +102,28 @@ describe("BetterSqliteShim", () => {
     expect(db.inTransaction).toBe(false);
   });
 
-  it("user-defined functions are reported as UDF_UNSUPPORTED (S1-4 / fallback F1-a)", () => {
-    expect(() => db.function("f", () => 1)).toThrow("UDF_UNSUPPORTED");
-    expect(() => db.aggregate("g", { step: (t) => t })).toThrow("UDF_UNSUPPORTED");
+  it("a connection without the native patch reports UDF_UNSUPPORTED (S1-4)", () => {
+    const bare = fakeOpConnection(path.join(dir, "bare.db"));
+    delete (bare as { createFunction?: unknown }).createFunction;
+    delete (bare as { createAggregate?: unknown }).createAggregate;
+    const plain = openShimDatabase({ name: "bare.db", connection: bare });
+    expect(() => plain.function("f", () => 1)).toThrow("UDF_UNSUPPORTED");
+    expect(() => plain.aggregate("g", { step: (t) => t })).toThrow("UDF_UNSUPPORTED");
+    plain.close();
+  });
+
+  it("registers the motard_* functions through the native hooks and gets the desktop's answers", () => {
+    registerNumericFunctions(db as never);
+    const one = (sql: string) => Object.values(db.prepare(sql).get() as Record<string, unknown>)[0];
+    expect(one("SELECT motard_dectext(123456, 4) AS v")).toBe("12.3456");
+    expect(one("SELECT motard_pgdiv(1, 0, 3, 0) AS v")).toBe("0.33333333333333333333");
+    expect(one("SELECT motard_pgdiv(5, 0, 0, 0) AS v")).toBeNull();
+    expect(one("SELECT motard_re_match('SET-2026-17', 'SET-[0-9]{4}-[0-9]+', 'i') AS v")).toBe(1);
+    expect(
+      one("SELECT motard_re_substr('batch SET-2026-17 x', 'SET-[0-9]{4}-[0-9]+', 'i') AS v"),
+    ).toBe("SET-2026-17");
+    db.exec("CREATE TEMP TABLE d (t TEXT); INSERT INTO d VALUES ('1.10'),('2.205'),(NULL)");
+    expect(one("SELECT motard_decsum(t) AS v FROM d")).toBe("3.305");
+    expect(one("SELECT motard_decsum(t) AS v FROM d WHERE 0")).toBeNull();
   });
 });

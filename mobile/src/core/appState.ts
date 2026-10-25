@@ -4,6 +4,8 @@ import * as FileSystem from "expo-file-system/legacy";
 
 export interface AppState {
   appLockEnabled: boolean;
+  /** The desktop's default is the dark theme. */
+  theme: "dark" | "light";
   /** ISO timestamp of the last time the app was in the foreground, or null. */
   lastForegroundAt: string | null;
   updateChannel: "play" | "apk";
@@ -17,6 +19,7 @@ export const MAX_RECENT_PARTIES = 50;
 
 export const DEFAULT_APP_STATE: AppState = {
   appLockEnabled: true,
+  theme: "dark",
   lastForegroundAt: null,
   updateChannel: "apk",
   lastVersionCheckAt: null,
@@ -33,6 +36,7 @@ function normalize(value: unknown): AppState {
   const v = (value ?? {}) as Partial<AppState>;
   return {
     appLockEnabled: typeof v.appLockEnabled === "boolean" ? v.appLockEnabled : true,
+    theme: v.theme === "light" ? "light" : "dark",
     lastForegroundAt: typeof v.lastForegroundAt === "string" ? v.lastForegroundAt : null,
     updateChannel: v.updateChannel === "play" ? "play" : "apk",
     lastVersionCheckAt: typeof v.lastVersionCheckAt === "string" ? v.lastVersionCheckAt : null,

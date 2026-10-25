@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { Keyboard, Pressable, Text, View } from "react-native";
+import { Keyboard, Pressable, View } from "react-native";
+import { Text } from "./Text";
 import { colors, fontSize, radius, spacing, TOUCH_TARGET } from "./theme";
 
 export interface PrimaryActionBarProps {

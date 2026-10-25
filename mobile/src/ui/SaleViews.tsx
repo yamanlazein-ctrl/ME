@@ -1,5 +1,6 @@
 // The three sale steps (customer → lines → review) and the done screen (FR-15, FR-17, FR-19).
-import { Pressable, ScrollView, Text, View } from "react-native";
+import { Pressable, ScrollView, View } from "react-native";
+import { Text } from "./Text";
 import {
   draftProblems,
   draftTotals,
@@ -32,7 +33,9 @@ function CurrencyToggle({ value, onChange }: { value: string; onChange(c: string
             backgroundColor: value === c ? colors.primary : colors.muted,
           }}
         >
-          <Text style={{ color: value === c ? "#fff" : colors.foreground }}>{c}</Text>
+          <Text style={{ color: value === c ? colors.primaryForeground : colors.foreground }}>
+            {c}
+          </Text>
         </Pressable>
       ))}
     </View>
@@ -276,7 +279,9 @@ export function SaleDoneView({
             borderRadius: radius.md,
           }}
         >
-          <Text style={{ color: a.disabled ? colors.mutedForeground : "#fff" }}>{a.label}</Text>
+          <Text style={{ color: a.disabled ? colors.mutedForeground : colors.primaryForeground }}>
+            {a.label}
+          </Text>
         </Pressable>
       ))}
     </View>

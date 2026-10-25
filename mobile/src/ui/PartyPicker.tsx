@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { Pressable, Text, View } from "react-native";
+import { Pressable, View } from "react-native";
+import { Text } from "./Text";
 import { useParties } from "../hooks/useParties";
 import { Field } from "./Field";
 import { colors, radius, spacing, TOUCH_TARGET } from "./theme";
@@ -57,6 +58,7 @@ export function PartyPickerView({
       {rows.slice(0, 8).map((r) => (
         <Pressable
           key={r.id}
+          testID="party-option"
           accessibilityRole="button"
           onPress={() => onPick({ id: r.id, name: r.name })}
           style={{

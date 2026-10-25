@@ -1,4 +1,5 @@
-import { Pressable, ScrollView, Text, View } from "react-native";
+import { Pressable, ScrollView, View } from "react-native";
+import { Text } from "./Text";
 import { canWriteOffline, type Role } from "../core/roles";
 import { Field } from "./Field";
 import { MoneyInput } from "./MoneyInput";
@@ -79,7 +80,11 @@ export function CashboxView(p: CashboxViewProps) {
                     backgroundColor: p.form.direction === d ? colors.primary : colors.muted,
                   }}
                 >
-                  <Text style={{ color: p.form.direction === d ? "#fff" : colors.foreground }}>
+                  <Text
+                    style={{
+                      color: p.form.direction === d ? colors.primaryForeground : colors.foreground,
+                    }}
+                  >
                     {d === "in" ? "وارد" : "صادر"}
                   </Text>
                 </Pressable>
@@ -98,7 +103,11 @@ export function CashboxView(p: CashboxViewProps) {
                     backgroundColor: p.form.currency === c ? colors.primary : colors.muted,
                   }}
                 >
-                  <Text style={{ color: p.form.currency === c ? "#fff" : colors.foreground }}>
+                  <Text
+                    style={{
+                      color: p.form.currency === c ? colors.primaryForeground : colors.foreground,
+                    }}
+                  >
                     {c}
                   </Text>
                 </Pressable>

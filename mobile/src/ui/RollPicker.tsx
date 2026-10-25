@@ -1,6 +1,7 @@
 // Bottom-sheet style picker: fabric → colour → roll, showing the kg left. A roll with 0 kg is shown but not selectable.
 import { useState } from "react";
-import { Pressable, ScrollView, Text, View } from "react-native";
+import { Pressable, ScrollView, View } from "react-native";
+import { Text } from "./Text";
 import type { PickRoll, PickRow } from "../core/inventoryPicker";
 import { colors, fontSize, radius, spacing, TOUCH_TARGET } from "./theme";
 

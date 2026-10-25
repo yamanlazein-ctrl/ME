@@ -1,4 +1,5 @@
-import { Pressable, Text, View } from "react-native";
+import { Pressable, View } from "react-native";
+import { Text } from "./Text";
 import { ENROLL_ERROR_TEXT, type EnrollError } from "../core/enrollFlow";
 import { Field } from "./Field";
 import { PrimaryActionBar } from "./PrimaryActionBar";

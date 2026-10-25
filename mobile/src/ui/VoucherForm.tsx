@@ -1,7 +1,8 @@
 // Receipt / payment form (FR-20, FR-21): party → amount + currency + rate (typed by the user, never pre-filled from the
 // reference rate: fx.route.ts) + optional discount → save. Refusals from the use-case (insufficient cash, locked day or
 // closed year) are shown as the use-case wrote them (E10, E11).
-import { Pressable, ScrollView, Text, View } from "react-native";
+import { Pressable, ScrollView, View } from "react-native";
+import { Text } from "./Text";
 import { Field } from "./Field";
 import { MoneyInput } from "./MoneyInput";
 import { PartyPicker, type PickedParty } from "./PartyPicker";
@@ -78,7 +79,13 @@ export function VoucherForm({
                 backgroundColor: values.currency === c ? colors.primary : colors.muted,
               }}
             >
-              <Text style={{ color: values.currency === c ? "#fff" : colors.foreground }}>{c}</Text>
+              <Text
+                style={{
+                  color: values.currency === c ? colors.primaryForeground : colors.foreground,
+                }}
+              >
+                {c}
+              </Text>
             </Pressable>
           ))}
         </View>

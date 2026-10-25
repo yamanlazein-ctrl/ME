@@ -1,5 +1,6 @@
 // PIN sign-in (FR-02): the roster as a picker, a numeric pad, and a link to the password form.
-import { Pressable, Text, View } from "react-native";
+import { Pressable, View } from "react-native";
+import { Text } from "./Text";
 import type { RosterUser } from "../core/session";
 import { Field } from "./Field";
 import { colors, fontSize, radius, spacing, TOUCH_TARGET } from "./theme";
@@ -120,7 +121,7 @@ export function LoginView(p: LoginViewProps) {
               marginTop: spacing.md,
             }}
           >
-            <Text style={{ color: "#fff" }}>دخول</Text>
+            <Text style={{ color: colors.primaryForeground }}>دخول</Text>
           </Pressable>
         </>
       )}

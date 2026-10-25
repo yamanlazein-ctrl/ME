@@ -1,5 +1,9 @@
-import { Alert, Pressable, Text, View } from "react-native";
+import { Alert, Pressable, View } from "react-native";
+import { Text } from "../../../src/ui/Text";
 import { router } from "expo-router";
+import * as Font from "expo-font";
+import { FONT_BY_WEIGHT } from "../../../src/ui/fontFamilies";
+import { useTheme } from "../../../src/ui/ThemeContext";
 import { getSessionService } from "../../../src/core/sessionService";
 import { pendingLogoutMessage } from "../../../src/core/session";
 import { notifyBootChanged } from "../../../src/hooks/useBoot";
@@ -24,7 +28,14 @@ function Row({ label, onPress }: { label: string; onPress: () => void }) {
   );
 }
 
+function fontsStatus(): string {
+  const names = ["ionicons", ...Object.values(FONT_BY_WEIGHT)];
+  const missing = names.filter((n) => !Font.isLoaded(n));
+  return missing.length === 0 ? "الخطوط والأيقونات: محمّلة" : `خطوط ناقصة: ${missing.join(", ")}`;
+}
+
 export default function More() {
+  const { theme, setTheme } = useTheme();
   const logout = async (confirmed: boolean) => {
     const service = await getSessionService();
     const result = await service.logout({ confirmed });
@@ -41,6 +52,13 @@ export default function More() {
     <View style={{ padding: spacing.lg, paddingTop: spacing.xl }}>
       <Row label="حالة المزامنة" onPress={() => router.push("/(tabs)/more/sync" as never)} />
       <Row label="الصندوق" onPress={() => router.push("/(tabs)/more/cashbox" as never)} />
+      <Row
+        label={theme === "dark" ? "المظهر: داكن (اضغط للفاتح)" : "المظهر: فاتح (اضغط للداكن)"}
+        onPress={() => setTheme(theme === "dark" ? "light" : "dark")}
+      />
+      <Text testID="fonts-status" style={{ color: colors.mutedForeground, padding: spacing.sm }}>
+        {fontsStatus()}
+      </Text>
       <Row label="تسجيل الخروج" onPress={() => void logout(false)} />
     </View>
   );

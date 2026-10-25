@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { Pressable, Text, TextInput, View } from "react-native";
+import { Pressable, TextInput, View } from "react-native";
+import { Text } from "./Text";
 import { colors, fontSize, radius, spacing, TOUCH_TARGET } from "./theme";
 
 export interface AppLockOverlayProps {
@@ -42,7 +43,9 @@ export function AppLockOverlay({ visible, onPin, onBiometric }: AppLockOverlayPr
           marginBottom: spacing.lg,
         }}
       >
-        <Text style={{ color: "#fff", fontSize: fontSize.body }}>بصمة الإصبع</Text>
+        <Text style={{ color: colors.primaryForeground, fontSize: fontSize.body }}>
+          بصمة الإصبع
+        </Text>
       </Pressable>
       <TextInput
         testID="lock-pin"

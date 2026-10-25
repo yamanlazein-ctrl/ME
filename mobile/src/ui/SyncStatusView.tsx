@@ -1,6 +1,7 @@
 // Read-only sync screen (FR-37, E5): rejected and dead documents are listed with the instruction to resolve them on the
 // desktop. There is deliberately no requeue/retry control for them.
-import { ScrollView, Text, View } from "react-native";
+import { ScrollView, View } from "react-native";
+import { Text } from "./Text";
 import type { SyncStatus } from "../core/syncRunner";
 import { colors, fontSize, spacing } from "./theme";
 

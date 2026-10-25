@@ -1,7 +1,8 @@
 // Test-only screen (tasks T037). Present in the test APK only: the release build leaves EXPO_PUBLIC_SPIKES
 // unset and this route redirects to Home.
 import { useState } from "react";
-import { Pressable, ScrollView, Switch, Text, TextInput, View } from "react-native";
+import { Pressable, ScrollView, Switch, TextInput, View } from "react-native";
+import { Text } from "../src/ui/Text";
 import { Redirect } from "expo-router";
 import { runMoneyVectorsHere } from "../src/spikes/moneyVectors";
 import { measureArgon2, runS1 } from "../src/spikes/s1";

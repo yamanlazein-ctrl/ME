@@ -6,7 +6,7 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
-    "userInterfaceStyle": "light",
+    "userInterfaceStyle": "dark",
     "ios": {
       "supportsTablet": true
     },
@@ -14,8 +14,8 @@
       "package": "com.motard.erp",
       "softwareKeyboardLayoutMode": "resize",
       "adaptiveIcon": {
-        "backgroundColor": "#f7f8fa",
-        "foregroundImage": "./assets/logo.png"
+        "backgroundColor": "#0a0a0a",
+        "foregroundImage": "./assets/android-icon-foreground.png"
       },
       "predictiveBackGestureEnabled": false
     },
@@ -39,6 +39,7 @@
         {
           "android": {
             "minSdkVersion": 26,
+            "usesCleartextTraffic": true,
             "enableMinifyInReleaseBuilds": false,
             "enableShrinkResourcesInReleaseBuilds": false,
             "extraProguardRules": "-keep class androidx.work.** { *; }\n-keep class * extends androidx.room.RoomDatabase { *; }\n-keep class **_Impl { *; }"
@@ -58,8 +59,8 @@
       [
         "expo-splash-screen",
         {
-          "image": "./assets/logo.png",
-          "backgroundColor": "#f7f8fa",
+          "image": "./assets/splash-icon.png",
+          "backgroundColor": "#0a0a0a",
           "imageWidth": 160
         }
       ]

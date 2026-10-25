@@ -1,38 +1,41 @@
-// Design tokens copied from the desktop's src/styles.css (LIGHT theme only, clarification Q5). Colour values are the
-// `.light` block; the semantic colours that the desktop writes in oklch are given as hex here (React Native has no oklch):
-// destructive = Tailwind red-500, success = green-500, warning = amber-500. Text uses the darker `negative` / `positive`
-// variants, which keep contrast ≥ 4.5:1 on the light surfaces (WCAG AA).
-export const colors = {
-  background: "#f7f8fa",
-  foreground: "#1e293b",
-  surface: "#f2f4f7",
-  card: "#fafbfc",
-  cardForeground: "#1e293b",
-  popover: "#fcfcfd",
-  primary: "#c89100",
-  primaryForeground: "#ffffff",
-  primaryGlow: "#e0a800",
-  accentSoft: "#7d6000",
-  secondary: "#edf0f4",
-  secondaryForeground: "#1e293b",
-  muted: "#edf0f4",
-  mutedForeground: "#56657a",
-  accent: "#e9edf2",
-  accentForeground: "#1e293b",
-  border: "#e2e8f0",
-  input: "#d5dce5",
-  ring: "#c89100",
-  currencySyp: "#7d6000",
-  currencyUsd: "#4b5563",
-  destructive: "#ef4444",
-  destructiveForeground: "#ffffff",
-  success: "#22c55e",
-  warning: "#f59e0b",
-  /** Negative amounts and error text. */
-  negative: "#b91c1c",
-  /** Success text. */
-  positive: "#15803d",
-} as const;
+// Design tokens: GENERATED from the desktop's src/styles.css (scripts/gen-tokens.mjs → tokens.generated.ts). The desktop's
+// default is the DARK theme (near-black surfaces + warm yellow accent), with a soft LIGHT theme; the phone follows the same
+// default and offers the same two themes. `colors` is one mutable object so every component reads the active theme at render.
+import { darkTokens, lightTokens } from "./tokens.generated";
+
+export type ThemeName = "dark" | "light";
+
+function build(name: ThemeName) {
+  const t = name === "dark" ? darkTokens : lightTokens;
+  return {
+    ...t,
+    /** Negative amounts and error text: the desktop's destructive colour (a darker red on the light theme for contrast). */
+    negative: name === "dark" ? t.destructive : "#b91c1c",
+    /** Success text. */
+    positive: name === "dark" ? t.success : "#15803d",
+    /** Muted fills for chips (selected = primary). */
+    chip: t.muted,
+  };
+}
+
+export type Colors = ReturnType<typeof build>;
+
+export const colors: Colors = { ...build("dark") };
+let current: ThemeName = "dark";
+
+export function themeColors(name: ThemeName): Colors {
+  return build(name);
+}
+
+export function getTheme(): ThemeName {
+  return current;
+}
+
+/** Switches the active theme in place; the root layout re-renders the tree afterwards. */
+export function applyTheme(name: ThemeName): void {
+  current = name;
+  Object.assign(colors, build(name));
+}
 
 /** Corner radius in dp: the desktop's --radius 0.625rem and its sm/md/lg/xl steps. */
 export const radius = { sm: 6, md: 8, lg: 10, xl: 14 } as const;
@@ -54,5 +57,5 @@ export const fontSize = {
 /** Minimum touch target in dp. */
 export const TOUCH_TARGET = 48;
 
-/** The desktop font (IBM Plex Sans Arabic) is not bundled; the phone uses the system Arabic font. */
-export const fontFamily = undefined;
+/** The desktop font family (src/styles.css --font-sans): IBM Plex Sans Arabic, bundled in the APK (see ui/fonts.ts). */
+export const fontFamily = "IBMPlexSansArabic_400Regular";

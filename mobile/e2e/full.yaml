@@ -1,0 +1,188 @@
+# Emulator verification (FIX-05). Drives every built screen against a seeded test hub and FAILS on any error text, a
+# missing font/icon, or a crash. Run by .github/workflows/mobile-android.yml; the hub facts arrive as -e HUB -e CODE -e PIN.
+appId: com.motard.erp
+name: Every built screen
+---
+- launchApp:
+    clearState: true
+    clearKeychain: true
+    permissions: { all: allow }
+
+# ── 1. Enrolment and the first download ───────────────────────────────────────────────
+- extendedWaitUntil:
+    visible: "ربط الهاتف بالمركز"
+    timeout: 90000
+- takeScreenshot: 01-enroll
+- tapOn:
+    id: "hub"
+- inputText: ${HUB}
+- tapOn:
+    id: "code"
+- inputText: ${CODE}
+- hideKeyboard
+- tapOn: "تسجيل"
+- extendedWaitUntil:
+    visible: "تسجيل الدخول"
+    timeout: 300000
+- assertNotVisible: ".*تعذّر.*"
+- takeScreenshot: 02-login
+
+# ── 2. PIN sign-in ────────────────────────────────────────────────────────────────────
+- tapOn: "AC-8 Admin"
+- tapOn: "1"
+- tapOn: "2"
+- tapOn: "3"
+- tapOn: "4"
+- tapOn: "✓"
+
+# ── 3. Home ───────────────────────────────────────────────────────────────────────────
+- extendedWaitUntil:
+    visible: "مبيعات اليوم"
+    timeout: 90000
+- assertNotVisible: ".*تعذّر.*"
+- assertNotVisible:
+    id: "home-error"
+- assertNotVisible:
+    id: "boot-error"
+- assertVisible: "الرئيسية"
+- takeScreenshot: 03-home
+- extendedWaitUntil:
+    visible: "تمت المزامنة"
+    timeout: 120000
+
+# ── 4. Sync status ────────────────────────────────────────────────────────────────────
+- tapOn: "المزيد"
+- assertVisible: "حالة المزامنة"
+- assertVisible:
+    id: "fonts-status"
+- assertVisible: "الخطوط والأيقونات: محمّلة"
+- takeScreenshot: 04-more
+- tapOn: "حالة المزامنة"
+- assertVisible: "بانتظار الإرسال.*"
+- assertNotVisible: "آخر تشغيل: —"
+- assertNotVisible:
+    id: "last-error"
+- takeScreenshot: 05-sync-status
+- pressKey: back
+
+# ── 5. Cashbox ────────────────────────────────────────────────────────────────────────
+- tapOn: "الصندوق"
+- assertVisible: "حركة يدوية"
+- assertNotVisible: ".*تعذّر.*"
+- takeScreenshot: 06-cashbox
+- pressKey: back
+
+# ── 6. Customers, party, statement ────────────────────────────────────────────────────
+- tapOn: "العملاء والموردون"
+- assertVisible: "عميل 1"
+- assertNotVisible: ".*تعذّر.*"
+- takeScreenshot: 07-parties
+- tapOn: "عميل 1"
+- assertVisible: "كشف الحساب"
+- takeScreenshot: 08-party
+- tapOn: "كشف الحساب"
+- assertVisible: "[0-9]+ حركة"
+- assertVisible: "الرصيد الختامي.*"
+- takeScreenshot: 09-statement
+- pressKey: back
+- pressKey: back
+
+# ── 7. Receipt ────────────────────────────────────────────────────────────────────────
+- tapOn: "إضافة"
+- assertVisible: "سند قبض"
+- takeScreenshot: 10-add-menu
+- tapOn: "سند قبض"
+- tapOn:
+    id: "picker-search"
+- inputText: "عميل 2"
+- tapOn:
+    id: "party-option"
+- tapOn:
+    id: "voucher-amount"
+- inputText: "10"
+- hideKeyboard
+- takeScreenshot: 11-receipt
+- tapOn: "حفظ سند القبض"
+- assertNotVisible:
+    id: "voucher-error"
+- extendedWaitUntil:
+    visible: "بيع جديد"
+    timeout: 30000
+
+# ── 8. Payment ────────────────────────────────────────────────────────────────────────
+- tapOn: "سند دفع"
+- tapOn:
+    id: "picker-search"
+- inputText: "مورد 11"
+- tapOn:
+    id: "party-option"
+- tapOn:
+    id: "voucher-amount"
+- inputText: "1"
+- hideKeyboard
+- takeScreenshot: 12-payment
+- tapOn: "حفظ سند الدفع"
+- assertNotVisible:
+    id: "voucher-error"
+- extendedWaitUntil:
+    visible: "بيع جديد"
+    timeout: 30000
+
+# ── 9. Expense ────────────────────────────────────────────────────────────────────────
+- tapOn: "مصروف"
+- tapOn:
+    id: "expense-name"
+- inputText: "إيجار"
+- tapOn:
+    id: "expense-amount"
+- inputText: "2"
+- hideKeyboard
+- takeScreenshot: 13-expense
+- tapOn: "حفظ المصروف"
+- assertNotVisible:
+    id: "expense-error"
+- extendedWaitUntil:
+    visible: "بيع جديد"
+    timeout: 30000
+
+# ── 10. Sale ──────────────────────────────────────────────────────────────────────────
+- tapOn: "بيع جديد"
+- tapOn:
+    id: "picker-search"
+- inputText: "عميل 3"
+- tapOn:
+    id: "party-option"
+- tapOn:
+    id: "sale-rate"
+- inputText: "1"
+- hideKeyboard
+- takeScreenshot: 14-sale-customer
+- tapOn: "التالي: البنود"
+- tapOn: "إضافة بند"
+- tapOn: "قطن تجريبي"
+- tapOn: "أبيض"
+- takeScreenshot: 15-roll-picker
+- tapOn: "SEED-.*"
+- assertVisible: "حذف البند"
+- takeScreenshot: 16-sale-lines
+- tapOn: "التالي: المراجعة"
+- assertVisible:
+    id: "sale-total"
+- takeScreenshot: 17-sale-review
+- tapOn: "حفظ الفاتورة"
+- extendedWaitUntil:
+    visible: "تم حفظ الفاتورة.*"
+    timeout: 60000
+- assertNotVisible:
+    id: "sale-error"
+- takeScreenshot: 18-sale-done
+- tapOn: "عرض الفاتورة"
+- assertVisible: "مشاركة PDF"
+- assertVisible: "إلغاء الفاتورة"
+- takeScreenshot: 19-invoice
+
+# ── 11. Back to Home: figures include what was just written ───────────────────────────
+- tapOn: "الرئيسية"
+- assertVisible: "مبيعات اليوم"
+- assertNotVisible: ".*تعذّر.*"
+- takeScreenshot: 20-home-after

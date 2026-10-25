@@ -5,6 +5,7 @@ import { round2dp } from "@erp/shared";
 import { getDashboardUseCase } from "@backend/application/use-cases/dashboard/dashboardUseCases";
 import type { DashboardData } from "@backend/domain/entities/Dashboard";
 import { getApp } from "../core/appRuntime";
+import { logError } from "../core/devlog";
 import type { Phone } from "../core/phone";
 import { queryKeys } from "./queryKeys";
 
@@ -41,9 +42,14 @@ export function useDashboard() {
   return useQuery({
     queryKey: queryKeys.dashboard,
     queryFn: async () => {
-      const app = await getApp();
-      if (!app.phone) throw new Error("الجهاز غير مسجّل");
-      return loadDashboard(app.phone);
+      try {
+        const app = await getApp();
+        if (!app.phone) throw new Error("الجهاز غير مسجّل");
+        return await loadDashboard(app.phone);
+      } catch (error) {
+        logError("home", error);
+        throw error;
+      }
     },
   });
 }

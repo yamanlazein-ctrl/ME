@@ -2,7 +2,8 @@
 // (sync chip + update banner) above every screen (FR-01, FR-04, FR-06, FR-07, FR-37, FR-41, UX-06).
 import "../src/core";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { AppState, View } from "react-native";
+import { AppState, Image, View } from "react-native";
+import logo from "../assets/logo.png";
 import { Stack, router, useSegments } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import * as LocalAuthentication from "expo-local-authentication";
@@ -11,6 +12,7 @@ import { StatusBar } from "expo-status-bar";
 import { getApp } from "../src/core/appRuntime";
 import { authenticateWithBiometrics, coverVisible, shouldLock } from "../src/core/appLock";
 import { readAppState, updateAppState } from "../src/core/appState";
+import { onUnlockedByLogin } from "../src/core/lockSignal";
 import { isAllowedHere, routeFor } from "../src/core/routeGuard";
 import { registerBackgroundSync } from "../src/core/backgroundSync";
 import { startSyncRunner } from "../src/core/syncRunner";
@@ -23,6 +25,11 @@ import { SyncChip } from "../src/ui/SyncChip";
 import { ToastProvider } from "../src/ui/Toast";
 import { UpdateBanner } from "../src/ui/UpdateBanner";
 import { assertRtl } from "../src/ui/rtl";
+import { logError } from "../src/core/devlog";
+import { useAppFonts } from "../src/ui/fonts";
+import { colors } from "../src/ui/theme";
+import { ThemeProvider, useTheme } from "../src/ui/ThemeContext";
+import { Text } from "../src/ui/Text";
 import { verifyPin } from "../src/platform/pinVerifier";
 import { getSecret } from "../src/platform/secureStore";
 
@@ -36,8 +43,28 @@ function StatusStrip() {
   const chip = useSyncState();
   const status = useSyncStatus();
   return (
-    <View style={{ paddingTop: 36 }}>
-      <View style={{ flexDirection: "row", justifyContent: "space-between", padding: 8 }}>
+    <View
+      style={{
+        paddingTop: 36,
+        backgroundColor: colors.card,
+        borderBottomWidth: 1,
+        borderBottomColor: colors.border,
+      }}
+    >
+      <View
+        style={{
+          flexDirection: "row",
+          justifyContent: "space-between",
+          alignItems: "center",
+          padding: 8,
+        }}
+      >
+        <Image
+          source={logo}
+          style={{ width: 56, height: 28 }}
+          resizeMode="contain"
+          accessibilityLabel="Motard"
+        />
         <SyncChip state={chip} />
       </View>
       <UpdateBanner visible={status.halted === "versionMismatch"} url={UPDATE_URL} />
@@ -45,7 +72,9 @@ function StatusStrip() {
   );
 }
 
-export default function RootLayout() {
+function RootContent() {
+  const fonts = useAppFonts();
+  const { theme } = useTheme();
   const boot = useBoot();
   const segments = useSegments();
   const [locked, setLocked] = useState(true);
@@ -58,8 +87,13 @@ export default function RootLayout() {
     return () => clearTimeout(timer);
   }, []);
   useEffect(() => {
-    if (boot.ready) void SplashScreen.hideAsync().catch(() => undefined);
-  }, [boot.ready]);
+    if (fonts.error) logError("fonts", fonts.error);
+  }, [fonts.error]);
+  useEffect(() => {
+    if (boot.ready && (fonts.loaded || fonts.error)) {
+      void SplashScreen.hideAsync().catch(() => undefined);
+    }
+  }, [boot.ready, fonts.loaded, fonts.error]);
 
   // Route guard (FR-06, FR-07, FR-01).
   useEffect(() => {
@@ -114,6 +148,15 @@ export default function RootLayout() {
     return () => sub.remove();
   }, [evaluateLock]);
 
+  useEffect(
+    () =>
+      onUnlockedByLogin(() => {
+        void updateAppState({ lastForegroundAt: new Date().toISOString() });
+        setLocked(false);
+      }),
+    [],
+  );
+
   const unlock = useCallback(async () => {
     if (await authenticateWithBiometrics(LocalAuthentication)) {
       await updateAppState({ lastForegroundAt: new Date().toISOString() });
@@ -130,18 +173,73 @@ export default function RootLayout() {
   }, []);
   const needsLock = locked && boot.ready && boot.signedIn;
 
+  if (!fonts.loaded && !fonts.error)
+    return <View style={{ flex: 1, backgroundColor: colors.background }} />;
+  if (fonts.error) {
+    return (
+      <View
+        style={{
+          flex: 1,
+          backgroundColor: colors.background,
+          padding: 24,
+          justifyContent: "center",
+        }}
+      >
+        <Text testID="fonts-error" style={{ fontSize: 20, marginBottom: 12 }}>
+          تعذّر تحميل الخطوط والأيقونات
+        </Text>
+        <Text style={{ color: colors.negative }}>{fonts.error.message}</Text>
+      </View>
+    );
+  }
+  if (boot.bootError) {
+    return (
+      <View
+        style={{
+          flex: 1,
+          backgroundColor: colors.background,
+          padding: 24,
+          justifyContent: "center",
+        }}
+      >
+        <Text testID="boot-error" style={{ fontSize: 20, marginBottom: 12 }}>
+          تعذّر تشغيل التطبيق
+        </Text>
+        <Text testID="boot-error-detail" style={{ color: colors.negative }}>
+          {boot.bootError}
+        </Text>
+      </View>
+    );
+  }
+
   return (
     <QueryClientProvider client={queryClient}>
       <ToastProvider>
-        <StatusBar style="dark" />
-        {active ? <StatusStrip /> : null}
-        <Stack screenOptions={{ headerShown: false }} />
-        <AppLockOverlay
-          visible={coverVisible(appStateName ?? "active", needsLock)}
-          onBiometric={unlock}
-          onPin={unlockWithPin}
-        />
+        <View style={{ flex: 1, backgroundColor: colors.background }}>
+          <StatusBar style={theme === "dark" ? "light" : "dark"} />
+          {active ? <StatusStrip /> : null}
+          <Stack
+            key={theme}
+            screenOptions={{
+              headerShown: false,
+              contentStyle: { backgroundColor: colors.background },
+            }}
+          />
+          <AppLockOverlay
+            visible={coverVisible(appStateName ?? "active", needsLock)}
+            onBiometric={unlock}
+            onPin={unlockWithPin}
+          />
+        </View>
       </ToastProvider>
     </QueryClientProvider>
+  );
+}
+
+export default function RootLayout() {
+  return (
+    <ThemeProvider>
+      <RootContent />
+    </ThemeProvider>
   );
 }

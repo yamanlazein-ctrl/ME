@@ -1,4 +1,5 @@
-import { Linking, Pressable, Text, View } from "react-native";
+import { Linking, Pressable, View } from "react-native";
+import { Text } from "./Text";
 import { colors, fontSize, radius, spacing, TOUCH_TARGET } from "./theme";
 
 export const UPDATE_REQUIRED_TEXT = "تحديث مطلوب";
@@ -21,7 +22,9 @@ export function UpdateBanner({
     <View
       testID="update-banner"
       style={{
-        backgroundColor: "#fef3c7",
+        backgroundColor: colors.card,
+        borderWidth: 1,
+        borderColor: colors.warning,
         padding: spacing.md,
         borderRadius: radius.md,
         margin: spacing.sm,
@@ -30,7 +33,7 @@ export function UpdateBanner({
         justifyContent: "space-between",
       }}
     >
-      <Text style={{ color: "#92400e", fontSize: fontSize.body }}>
+      <Text style={{ color: colors.warning, fontSize: fontSize.body }}>
         {UPDATE_REQUIRED_TEXT} — المزامنة متوقفة
       </Text>
       <Pressable
@@ -46,7 +49,7 @@ export function UpdateBanner({
           borderRadius: radius.md,
         }}
       >
-        <Text style={{ color: "#fff", fontSize: fontSize.body }}>تحديث</Text>
+        <Text style={{ color: colors.primaryForeground, fontSize: fontSize.body }}>تحديث</Text>
       </Pressable>
     </View>
   );

@@ -50,7 +50,7 @@ export default function SaleLines() {
         animationType="slide"
         onRequestClose={() => setPicking(false)}
       >
-        <View style={{ flex: 1, justifyContent: "flex-end", backgroundColor: "rgba(0,0,0,0.3)" }}>
+        <View style={{ flex: 1, justifyContent: "flex-end", backgroundColor: "rgba(0,0,0,0.5)" }}>
           <RollPicker
             fabrics={fabrics}
             loadColors={async (id) => pickColors(await phone(), id)}

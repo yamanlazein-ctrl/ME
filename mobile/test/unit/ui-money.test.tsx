@@ -1,3 +1,4 @@
+import { flat } from "../helpers/style";
 import { describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react-native";
 import { MoneyText } from "../../src/ui/MoneyText";
@@ -16,9 +17,9 @@ describe("MoneyText (UX-05)", () => {
   it("shows a minus sign AND the negative colour for a negative amount", async () => {
     await render(<MoneyText amount={-75.25} currency="USD" />);
     const node = screen.getByText("−75.25 USD");
-    expect(node.props.style.color).toBe(colors.negative);
+    expect(flat(node.props.style).color).toBe(colors.negative);
     await render(<MoneyText amount={75.25} currency="USD" />);
-    expect(screen.getByText("75.25 USD").props.style.color).toBe(colors.foreground);
+    expect(flat(screen.getByText("75.25 USD").props.style).color).toBe(colors.foreground);
   });
 
   it("formats exactly like round2dp, half away from zero", () => {

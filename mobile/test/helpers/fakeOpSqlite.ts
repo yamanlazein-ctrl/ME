@@ -12,6 +12,8 @@ const BetterSqlite3 = requireFromBackend("better-sqlite3") as new (file: string)
     raw(): { all(...p: unknown[]): unknown[]; columns?: never };
     columns(): Array<{ name: string }>;
   };
+  function(name: string, options: object, fn: (...args: unknown[]) => unknown): void;
+  aggregate(name: string, options: object): void;
   close(): void;
 };
 
@@ -43,6 +45,19 @@ export function fakeOpConnection(file: string): OpConnection {
         rowsAffected: r.changes,
         insertId: Number(r.lastInsertRowid),
       };
+    },
+    createFunction(name, deterministic, fn) {
+      db.function(name, { deterministic, safeIntegers: true, varargs: true }, fn);
+    },
+    createAggregate(name, spec) {
+      db.aggregate(name, {
+        start: spec.start,
+        step: (acc: unknown, ...args: unknown[]) => spec.step(acc, ...args),
+        result: spec.result,
+        safeIntegers: true,
+        deterministic: true,
+        varargs: true,
+      });
     },
     close: () => db.close(),
   };

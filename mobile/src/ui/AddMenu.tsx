@@ -1,4 +1,5 @@
-import { Pressable, Text, View } from "react-native";
+import { Pressable, View } from "react-native";
+import { Text } from "./Text";
 import { colors, fontSize, radius, spacing, TOUCH_TARGET } from "./theme";
 
 export const ADD_ENTRIES = [

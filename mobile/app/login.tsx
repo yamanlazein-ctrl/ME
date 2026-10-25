@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { PinLoginError, type RosterUser } from "../src/core/session";
 import { getSessionService } from "../src/core/sessionService";
+import { signalUnlocked } from "../src/core/lockSignal";
 import { notifyBootChanged } from "../src/hooks/useBoot";
 import { LoginView, PIN_LENGTH_MAX } from "../src/ui/LoginView";
 
@@ -25,6 +26,7 @@ export default function Login() {
   const finish = async (run: () => Promise<unknown>) => {
     try {
       await run();
+      signalUnlocked();
       notifyBootChanged();
     } catch (e) {
       setError(e instanceof PinLoginError ? e.message : "تعذّر تسجيل الدخول");

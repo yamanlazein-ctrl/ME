@@ -2,11 +2,17 @@
 // name `better-sqlite3` to this file. Only the subset in types.ts exists.
 //
 // Known limits, reported by the S1 screen rather than hidden:
-//  - op-sqlite 18 has no JavaScript user-defined SQL functions: `function` / `aggregate` throw
-//    "UDF_UNSUPPORTED" (fallback F1-a, tasks T044).
-//  - op-sqlite returns INTEGER as a JS number: values beyond ±2^53 cannot round-trip (S1 criterion 5 reports it).
+//  - op-sqlite 18 has no JavaScript user-defined SQL functions; patches/@op-engineering+op-sqlite+18.2.5.patch adds
+//    `createFunction` / `createAggregate` (JSI callbacks, synchronous calls only) and 64-bit integers beyond ±2^53 come
+//    back as BigInt (tasks T044 / FIX-02). Without the patch `function` / `aggregate` throw "UDF_UNSUPPORTED".
 import { open } from "@op-engineering/op-sqlite";
-import type { RunResult, ShimDatabase, ShimStatement } from "./types";
+import type {
+  AggregateOptions,
+  FunctionOptions,
+  RunResult,
+  ShimDatabase,
+  ShimStatement,
+} from "./types";
 
 type Scalar = string | number | boolean | null | ArrayBuffer | ArrayBufferView;
 
@@ -20,6 +26,19 @@ export interface OpConnection {
     query: string,
     params?: Scalar[],
   ): { rawRows: Scalar[][]; columnNames: string[]; rowsAffected: number; insertId?: number };
+  /**
+   * Motard patch of op-sqlite (patches/@op-engineering+op-sqlite+18.2.5.patch): JavaScript SQL functions. They run only
+   * inside the synchronous execute calls, which is all the shim uses.
+   */
+  createFunction?(name: string, deterministic: boolean, fn: (...args: unknown[]) => unknown): void;
+  createAggregate?(
+    name: string,
+    spec: {
+      start: () => unknown;
+      step: (acc: unknown, ...args: unknown[]) => unknown;
+      result: (acc: unknown) => unknown;
+    },
+  ): void;
   close(): void;
   /** op-sqlite: closes and deletes the database file. */
   delete?(): void;
@@ -224,12 +243,30 @@ class ShimDatabaseImpl implements ShimDatabase {
       : [];
   }
 
-  function(): this {
-    throw new Error("UDF_UNSUPPORTED");
+  function(
+    name: string,
+    optionsOrFn: FunctionOptions | ((...args: unknown[]) => unknown),
+    maybeFn?: (...args: unknown[]) => unknown,
+  ): this {
+    const fn = typeof optionsOrFn === "function" ? optionsOrFn : maybeFn;
+    const options = typeof optionsOrFn === "function" ? {} : optionsOrFn;
+    if (!fn || !this.conn.createFunction) throw new Error("UDF_UNSUPPORTED");
+    this.conn.createFunction(name, Boolean(options.deterministic), fn);
+    return this;
   }
 
-  aggregate(): this {
-    throw new Error("UDF_UNSUPPORTED");
+  aggregate<T = unknown>(name: string, options: AggregateOptions<T>): this {
+    if (!this.conn.createAggregate) throw new Error("UDF_UNSUPPORTED");
+    const { start, step, result } = options;
+    this.conn.createAggregate(name, {
+      start: () => (typeof start === "function" ? (start as () => T)() : (start as T)),
+      step: (acc, ...args) => {
+        const next = step(acc as T, ...args);
+        return next === undefined ? acc : next;
+      },
+      result: (acc) => (result ? result(acc as T) : acc),
+    });
+    return this;
   }
 
   transaction<A extends unknown[], R>(fn: (...args: A) => R): (...args: A) => R {

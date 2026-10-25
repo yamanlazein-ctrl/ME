@@ -1,5 +1,6 @@
 // The Home summary (FR-09, FR-10): one card per currency, never combined; quick actions follow the role.
-import { Pressable, ScrollView, Text, View } from "react-native";
+import { Pressable, ScrollView, View } from "react-native";
+import { Text } from "./Text";
 import { canWriteOffline, type Role } from "../core/roles";
 import type { HomeData } from "../hooks/useDashboard";
 import { MoneyText } from "./MoneyText";
@@ -106,7 +107,9 @@ export function HomeView({
               borderRadius: radius.md,
             }}
           >
-            <Text style={{ color: "#fff", fontSize: fontSize.body }}>{a.label}</Text>
+            <Text style={{ color: colors.primaryForeground, fontSize: fontSize.body }}>
+              {a.label}
+            </Text>
           </Pressable>
         ))}
       </View>

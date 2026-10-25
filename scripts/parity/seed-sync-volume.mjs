@@ -30,7 +30,9 @@ const OUT = arg("out", "seed-sync-volume.json");
 const CONCURRENCY = Number(arg("concurrency", "4"));
 const EMAIL = process.env.E2E_ADMIN_EMAIL ?? "admin@erp.local";
 const PASSWORD = process.env.E2E_ADMIN_PASSWORD;
-if (!PASSWORD) throw new Error("E2E_ADMIN_PASSWORD is required");
+// Test hubs whose admin has no known password (the emulator job) pass a minted admin token instead.
+const ADMIN_TOKEN = process.env.ADMIN_TOKEN;
+if (!PASSWORD && !ADMIN_TOKEN) throw new Error("E2E_ADMIN_PASSWORD or ADMIN_TOKEN is required");
 if (!(INVOICES > 0 && PARTIES > 1))
   throw new Error("--invoices > 0 and --parties > 1 are required");
 
@@ -65,9 +67,13 @@ async function http(method, path, body, headers = {}) {
   return { status: res.status, json };
 }
 
-const adminLogin = await http("POST", "/api/auth/login", { email: EMAIL, password: PASSWORD });
-if (adminLogin.status !== 200) throw new Error(`admin login failed: ${adminLogin.status}`);
-const adminAuth = { authorization: `Bearer ${adminLogin.json.accessToken}` };
+let adminAccessToken = ADMIN_TOKEN;
+if (!adminAccessToken) {
+  const adminLogin = await http("POST", "/api/auth/login", { email: EMAIL, password: PASSWORD });
+  if (adminLogin.status !== 200) throw new Error(`admin login failed: ${adminLogin.status}`);
+  adminAccessToken = adminLogin.json.accessToken;
+}
+const adminAuth = { authorization: `Bearer ${adminAccessToken}` };
 
 const codeRes = await http("POST", "/api/sync/enrollment-code", { maxUses: 5 }, adminAuth);
 if (codeRes.status !== 201) throw new Error(`enrollment code failed: ${codeRes.status}`);
@@ -398,8 +404,11 @@ const result = {
 writeFileSync(OUT, JSON.stringify(result, null, 2));
 
 // ── check against the hub: nothing pending, every party balance equal ──────────────────────
-const adminAgain = await http("POST", "/api/auth/login", { email: EMAIL, password: PASSWORD });
-const adminHeaders = { authorization: `Bearer ${adminAgain.json.accessToken}` };
+const adminHeaders = ADMIN_TOKEN
+  ? adminAuth
+  : {
+      authorization: `Bearer ${(await http("POST", "/api/auth/login", { email: EMAIL, password: PASSWORD })).json.accessToken}`,
+    };
 const status = await http("GET", "/api/sync/status", undefined, adminHeaders);
 const report = await http("GET", "/api/reports/party-balances", undefined, adminHeaders);
 const hubRows = report.json?.data ?? [];

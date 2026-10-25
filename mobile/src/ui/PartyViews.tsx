@@ -1,5 +1,6 @@
 // Party screens' views (UX-01 card lists): list with search + kind filter, detail with balances, full statement, form.
-import { FlatList, Pressable, ScrollView, Text, View } from "react-native";
+import { FlatList, Pressable, ScrollView, View } from "react-native";
+import { Text } from "./Text";
 import type { StatementEntryData } from "@backend/domain/entities/Statement";
 import { canWriteOffline, type Role } from "../core/roles";
 import type { PartyRow } from "../core/partyQueries";
@@ -59,7 +60,9 @@ export function PartyListView({
               backgroundColor: kind === k ? colors.primary : colors.muted,
             }}
           >
-            <Text style={{ color: kind === k ? "#fff" : colors.foreground }}>{KIND_LABEL[k]}</Text>
+            <Text style={{ color: kind === k ? colors.primaryForeground : colors.foreground }}>
+              {KIND_LABEL[k]}
+            </Text>
           </Pressable>
         ))}
       </View>
@@ -150,7 +153,7 @@ export function PartyDetailView({
           marginTop: spacing.lg,
         }}
       >
-        <Text style={{ color: "#fff" }}>كشف الحساب</Text>
+        <Text style={{ color: colors.primaryForeground }}>كشف الحساب</Text>
       </Pressable>
       {canWriteOffline(role) ? (
         <Pressable

@@ -1,4 +1,5 @@
-import { Text, View } from "react-native";
+import { View } from "react-native";
+import { Text } from "./Text";
 import {
   deriveSyncState,
   syncLabel,
@@ -7,29 +8,39 @@ import {
 } from "../hooks/syncState";
 import { colors, fontSize, radius, spacing } from "./theme";
 
-const TONE: Record<SyncChipState["kind"], { background: string; foreground: string }> = {
-  synced: { background: "#dcfce7", foreground: colors.positive },
-  pending: { background: "#fef3c7", foreground: "#92400e" },
-  offline: { background: colors.muted, foreground: colors.mutedForeground },
-  attention: { background: "#fee2e2", foreground: colors.negative },
-};
+function tone(kind: SyncChipState["kind"]): { background: string; foreground: string } {
+  switch (kind) {
+    case "synced":
+      return { background: colors.card, foreground: colors.positive };
+    case "pending":
+      return { background: colors.card, foreground: colors.warning };
+    case "offline":
+      return { background: colors.muted, foreground: colors.mutedForeground };
+    default:
+      return { background: colors.card, foreground: colors.negative };
+  }
+}
 
 export function SyncChip({ state }: { state: SyncChipState }) {
-  const tone = TONE[state.kind];
+  const palette = tone(state.kind);
   return (
     <View
       testID={`sync-chip-${state.kind}`}
       accessibilityLabel={syncLabel(state)}
       style={{
-        backgroundColor: tone.background,
+        backgroundColor: palette.background,
         borderRadius: radius.xl,
+        borderWidth: 1,
+        borderColor: palette.foreground,
         paddingHorizontal: spacing.md,
         paddingVertical: spacing.xs,
         minHeight: 32,
         justifyContent: "center",
       }}
     >
-      <Text style={{ color: tone.foreground, fontSize: fontSize.caption }}>{syncLabel(state)}</Text>
+      <Text style={{ color: palette.foreground, fontSize: fontSize.caption }}>
+        {syncLabel(state)}
+      </Text>
     </View>
   );
 }
