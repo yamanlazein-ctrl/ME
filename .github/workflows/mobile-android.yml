@@ -2,6 +2,11 @@ name: mobile-android
 
 on:
   workflow_dispatch:
+    inputs:
+      apk_run_id:
+        description: "Optional: reuse the APK artifact of this earlier run and only re-run the emulator verification"
+        required: false
+        default: ""
   push:
     branches: [feat/mobile]
     paths:
@@ -48,16 +53,27 @@ jobs:
       - run: npm ci
         working-directory: mobile
       - name: Prebuild the Android project
+        if: inputs.apk_run_id == ''
         working-directory: mobile
         run: npm run prebuild:migrations && npx expo prebuild --platform android --no-install
       - name: Build the release APK (JavaScript bundled inside)
+        if: inputs.apk_run_id == ''
         working-directory: mobile/android
         run: ./gradlew assembleRelease
       - uses: actions/upload-artifact@v4
+        if: inputs.apk_run_id == ''
         with:
           name: motard-mobile-test-apk
           path: mobile/android/app/build/outputs/apk/release/*.apk
           retention-days: 14
+      - name: Reuse the APK of an earlier run
+        if: inputs.apk_run_id != ''
+        uses: actions/download-artifact@v4
+        with:
+          name: motard-mobile-test-apk
+          run-id: ${{ inputs.apk_run_id }}
+          github-token: ${{ github.token }}
+          path: mobile/android/app/build/outputs/apk/release
       # ── FIX-05: real verification. The unchanged backend runs as a test hub on this runner, the APK runs in an emulator,
       # and a Maestro flow opens every built screen; any error text, missing font/icon, crash or MOTARD_ERR fails the job.
       - name: Start PostgreSQL without fsync (throw-away test database)
