@@ -31,15 +31,6 @@ jobs:
   apk:
     needs: checks
     runs-on: ubuntu-latest
-    services:
-      postgres:
-        image: postgres:16
-        env:
-          POSTGRES_PASSWORD: postgres
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10
     env:
       EXPO_PUBLIC_SPIKES: "1"
     steps:
@@ -68,6 +59,11 @@ jobs:
           retention-days: 14
       # ── FIX-05: real verification. The unchanged backend runs as a test hub on this runner, the APK runs in an emulator,
       # and a Maestro flow opens every built screen; any error text, missing font/icon, crash or MOTARD_ERR fails the job.
+      - name: Start PostgreSQL without fsync (throw-away test database)
+        run: |
+          docker run -d --name pg -e POSTGRES_PASSWORD=postgres -p 5432:5432 postgres:16 \
+            -c fsync=off -c synchronous_commit=off -c full_page_writes=off -c max_connections=200
+          for i in $(seq 1 40); do docker exec pg pg_isready -U postgres && break; sleep 2; done
       - name: Start the test hub (PostgreSQL + backend + generated data)
         env:
           CERT_PG_URL: postgresql://postgres:postgres@localhost:5432/postgres
@@ -75,8 +71,8 @@ jobs:
           HUB_INFO: ${{ github.workspace }}/hub-info.json
         run: |
           nohup node scripts/emulator/start-test-hub.mjs > hub.out 2>&1 &
-          for i in $(seq 1 150); do grep -q HUB_READY hub.out && break; sleep 4; done
-          tail -20 hub.out
+          for i in $(seq 1 300); do grep -q HUB_READY hub.out && break; sleep 5; done
+          echo "=== hub.out ==="; tail -40 hub.out
           grep -q HUB_READY hub.out
       - name: Install Maestro
         run: |
