@@ -195,6 +195,12 @@ export function SaleReviewView({
       >
         <Text style={{ fontSize: fontSize.title, marginBottom: spacing.md }}>٣ — المراجعة</Text>
         <Text>{draft.party?.name ?? ""}</Text>
+        <View testID="sale-total" style={{ marginVertical: spacing.md }}>
+          <Text>الإجمالي</Text>
+          <MoneyText amount={totals.total} currency={draft.currency} />
+          <Text>المتبقي على العميل</Text>
+          <MoneyText amount={totals.due} currency={draft.currency} />
+        </View>
         <MoneyInput
           label="خصم الفاتورة (مبلغ ثابت)"
           fieldId="sale-discount"
@@ -215,12 +221,6 @@ export function SaleReviewView({
           fieldId="sale-paid"
           onChangeAmount={(v) => onPatch({ paid: v ?? 0 })}
         />
-        <View testID="sale-total" style={{ marginTop: spacing.lg }}>
-          <Text>الإجمالي</Text>
-          <MoneyText amount={totals.total} currency={draft.currency} />
-          <Text>المتبقي على العميل</Text>
-          <MoneyText amount={totals.due} currency={draft.currency} />
-        </View>
         {problems.map((p) => (
           <Text key={p} style={{ color: colors.negative }}>
             {DRAFT_PROBLEM_TEXT[p]}
