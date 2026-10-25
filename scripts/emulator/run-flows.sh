@@ -4,11 +4,15 @@
 set -uo pipefail
 APK="$1"; INFO="$2"; OUT="$3"
 mkdir -p "$OUT"
-HUB=$(node -p "require('$INFO').hubForEmulator"); CODE=$(node -p "require('$INFO').code"); PIN=$(node -p "require('$INFO').pin")
+field() { node -p "JSON.parse(require('fs').readFileSync('$INFO','utf8')).$1"; }
+HUB=$(field hubForEmulator); CODE=$(field code); PIN=$(field pin)
+FLOW_FILE="$(pwd)/mobile/e2e/full.yaml"
+OUT="$(pwd)/$OUT"; mkdir -p "$OUT"
 adb install -r "$APK"
 adb logcat -c
 set +e
-(cd mobile/e2e && maestro test --format junit --output "$OUT/junit.xml" --test-output-dir "$OUT" -e HUB="$HUB" -e CODE="$CODE" -e PIN="$PIN" full.yaml) 2>&1 | tee "$OUT/maestro.log"
+# takeScreenshot writes into the working directory, so run from $OUT.
+(cd "$OUT" && maestro test --format junit --output "$OUT/junit.xml" --debug-output "$OUT/debug" -e HUB="$HUB" -e CODE="$CODE" -e PIN="$PIN" "$FLOW_FILE") 2>&1 | tee "$OUT/maestro.log"
 FLOW=${PIPESTATUS[0]}
 set -e
 adb logcat -d -v time > "$OUT/logcat.txt"
