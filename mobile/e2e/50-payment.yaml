@@ -6,9 +6,6 @@ name: 50 payment
 - tapOn: "إضافة"
 - tapOn: "سند دفع"
 - tapOn:
-    id: "picker-search"
-- inputText: "مورد 11"
-- tapOn:
     id: "party-option"
 - tapOn:
     id: "voucher-amount"

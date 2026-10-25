@@ -6,9 +6,6 @@ name: 70 sale and invoice detail
 - tapOn: "إضافة"
 - tapOn: "بيع جديد"
 - tapOn:
-    id: "picker-search"
-- inputText: "عميل 3"
-- tapOn:
     id: "party-option"
 - tapOn:
     id: "sale-rate"

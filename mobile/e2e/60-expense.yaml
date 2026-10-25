@@ -7,7 +7,7 @@ name: 60 expense
 - tapOn: "مصروف"
 - tapOn:
     id: "expense-name"
-- inputText: "إيجار"
+- inputText: "Rent"
 - tapOn:
     id: "expense-amount"
 - inputText: "2"

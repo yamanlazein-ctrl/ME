@@ -8,9 +8,6 @@ name: 40 receipt
 - takeScreenshot: 10-add-menu
 - tapOn: "سند قبض"
 - tapOn:
-    id: "picker-search"
-- inputText: "عميل 2"
-- tapOn:
     id: "party-option"
 - tapOn:
     id: "voucher-amount"
