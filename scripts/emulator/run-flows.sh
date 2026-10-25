@@ -25,6 +25,8 @@ for FLOW_FILE in "$(pwd)"/mobile/e2e/[0-9][0-9]-*.yaml; do
     if [ "${PIPESTATUS[0]}" -eq 0 ]; then PASSED=1; break; fi
     echo "--- attempt $ATTEMPT of $NAME failed (junit) ---"; grep -E -A6 "<failure|<error" "$OUT/$NAME.xml" 2>/dev/null | head -20
     adb exec-out screencap -p > "$OUT/FAILED-$NAME-$ATTEMPT.png" 2>/dev/null
+    # What the phone was showing when the flow failed (the screenshot is only in the artifact).
+    adb shell uiautomator dump /sdcard/ui.xml >/dev/null 2>&1 && adb shell cat /sdcard/ui.xml | grep -o 'text="[^"]\+"' | head -40 | sed 's/^/   screen: /' 
     [ "$NAME" = "00-enroll-login-home" ] && adb shell pm clear com.motard.erp >/dev/null 2>&1
   done
   if [ "$PASSED" -ne 1 ]; then FAILED="$FAILED $NAME"; fi
