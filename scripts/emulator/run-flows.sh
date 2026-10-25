@@ -19,6 +19,7 @@ for FLOW_FILE in "$(pwd)"/mobile/e2e/[0-9][0-9]-*.yaml; do
   (cd "$OUT" && maestro test --format junit --output "$OUT/$NAME.xml" --debug-output "$OUT/debug-$NAME" -e HUB="$HUB" -e CODE="$CODE" -e PIN="$PIN" "$FLOW_FILE") 2>&1 | tee "$OUT/$NAME.log"
   if [ "${PIPESTATUS[0]}" -ne 0 ]; then
     FAILED="$FAILED $NAME"
+    echo "--- why $NAME failed (junit) ---"; grep -E -A6 "<failure|<error" "$OUT/$NAME.xml" 2>/dev/null | head -20
     adb exec-out screencap -p > "$OUT/FAILED-$NAME.png" 2>/dev/null
   fi
   if [ "$NAME" = "00-enroll-login-home" ] && [ -n "$FAILED" ]; then echo "enrolment failed: later flows cannot run"; break; fi

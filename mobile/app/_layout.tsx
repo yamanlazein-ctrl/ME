@@ -133,14 +133,15 @@ function RootContent() {
   // App lock (FR-04, FR-41).
   const evaluateLock = useCallback(async (coldStart: boolean) => {
     const state = await readAppState();
-    setLocked(
-      shouldLock({
-        enabled: state.appLockEnabled,
-        lastForegroundAt: state.lastForegroundAt,
-        now: Date.now(),
-        coldStart,
-      }),
-    );
+    const mustLock = shouldLock({
+      enabled: state.appLockEnabled,
+      lastForegroundAt: state.lastForegroundAt,
+      now: Date.now(),
+      coldStart,
+    });
+    // Only authentication lifts the lock: a later "active" event (Android sends one right after a cold start) must never
+    // clear a lock that the cold start raised.
+    setLocked((already) => already || mustLock);
   }, []);
   useEffect(() => {
     void evaluateLock(true);
