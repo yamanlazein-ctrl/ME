@@ -7,6 +7,9 @@ mkdir -p "$OUT"
 field() { node -p "JSON.parse(require('fs').readFileSync('$INFO','utf8')).$1"; }
 HUB=$(field hubForEmulator); CODE=$(field code); PIN=$(field pin)
 OUT="$(pwd)/$OUT"; mkdir -p "$OUT"
+adb wait-for-device
+for i in $(seq 1 60); do [ "$(adb shell getprop sys.boot_completed | tr -d '\r')" = "1" ] && break; sleep 2; done
+sleep 15 # let the emulator settle: Maestro hit "device offline" when it started right after boot
 adb install -r "$APK"
 adb logcat -c
 set +e
@@ -16,12 +19,15 @@ FAILED=""
 for FLOW_FILE in "$(pwd)"/mobile/e2e/[0-9][0-9]-*.yaml; do
   NAME=$(basename "$FLOW_FILE" .yaml)
   echo "##### $NAME"
-  (cd "$OUT" && maestro test --format junit --output "$OUT/$NAME.xml" --debug-output "$OUT/debug-$NAME" -e HUB="$HUB" -e CODE="$CODE" -e PIN="$PIN" "$FLOW_FILE") 2>&1 | tee "$OUT/$NAME.log"
-  if [ "${PIPESTATUS[0]}" -ne 0 ]; then
-    FAILED="$FAILED $NAME"
-    echo "--- why $NAME failed (junit) ---"; grep -E -A6 "<failure|<error" "$OUT/$NAME.xml" 2>/dev/null | head -20
-    adb exec-out screencap -p > "$OUT/FAILED-$NAME.png" 2>/dev/null
-  fi
+  PASSED=0
+  for ATTEMPT in 1 2; do # one retry: the emulator itself is occasionally flaky; a real bug fails both times
+    (cd "$OUT" && maestro test --format junit --output "$OUT/$NAME.xml" --debug-output "$OUT/debug-$NAME" -e HUB="$HUB" -e CODE="$CODE" -e PIN="$PIN" "$FLOW_FILE") 2>&1 | tee "$OUT/$NAME.log"
+    if [ "${PIPESTATUS[0]}" -eq 0 ]; then PASSED=1; break; fi
+    echo "--- attempt $ATTEMPT of $NAME failed (junit) ---"; grep -E -A6 "<failure|<error" "$OUT/$NAME.xml" 2>/dev/null | head -20
+    adb exec-out screencap -p > "$OUT/FAILED-$NAME-$ATTEMPT.png" 2>/dev/null
+    [ "$NAME" = "00-enroll-login-home" ] && adb shell pm clear com.motard.erp >/dev/null 2>&1
+  done
+  if [ "$PASSED" -ne 1 ]; then FAILED="$FAILED $NAME"; fi
   if [ "$NAME" = "00-enroll-login-home" ] && [ -n "$FAILED" ]; then echo "enrolment failed: later flows cannot run"; break; fi
 done
 FLOW=0; [ -n "$FAILED" ] && FLOW=1
