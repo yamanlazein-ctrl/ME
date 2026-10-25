@@ -1,12 +1,13 @@
 // Test-only screen (tasks T037). Present in the test APK only: the release build leaves EXPO_PUBLIC_SPIKES
 // unset and this route redirects to Home.
 import { useState } from "react";
-import { Pressable, ScrollView, Text, View } from "react-native";
+import { Pressable, ScrollView, Switch, Text, TextInput, View } from "react-native";
 import { Redirect } from "expo-router";
 import { runMoneyVectorsHere } from "../src/spikes/moneyVectors";
 import { measureArgon2, runS1 } from "../src/spikes/s1";
 import { runS2OnDevice, shareS2Export } from "../src/spikes/s2";
 import { runS3 } from "../src/spikes/s3";
+import { runS5 } from "../src/spikes/s5";
 
 const ENABLED = process.env.EXPO_PUBLIC_SPIKES === "1";
 
@@ -35,6 +36,9 @@ export default function Spikes() {
   const [log, setLog] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [s2Export, setS2Export] = useState<string | null>(null);
+  const [hub, setHub] = useState("");
+  const [code, setCode] = useState("");
+  const [kill, setKill] = useState(true);
   if (!ENABLED) return <Redirect href="/" />;
 
   const append = (lines: string[]) => setLog((prev) => [...lines, ...prev]);
@@ -94,7 +98,29 @@ export default function Spikes() {
           })
         }
       />
-      <Button label="متاح بعد المرحلة 7" disabled />
+      <TextInput
+        placeholder="hub URL"
+        value={hub}
+        onChangeText={setHub}
+        autoCapitalize="none"
+        style={{ borderWidth: 1, padding: 8, marginBottom: 8 }}
+      />
+      <TextInput
+        placeholder="enrollment code"
+        value={code}
+        onChangeText={setCode}
+        autoCapitalize="none"
+        style={{ borderWidth: 1, padding: 8, marginBottom: 8 }}
+      />
+      <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 8 }}>
+        <Switch value={kill} onValueChange={setKill} />
+        <Text>kill at 40%</Text>
+      </View>
+      <Button
+        label="S5 First download"
+        disabled={busy}
+        onPress={() => run(() => runS5({ hubUrl: hub, code, killAt40: kill }))}
+      />
       <Button
         label="Money vectors (Hermes)"
         disabled={busy}

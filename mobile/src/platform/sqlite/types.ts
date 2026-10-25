@@ -51,4 +51,6 @@ export interface ShimDatabase {
   aggregate<T = unknown>(name: string, options: AggregateOptions<T>): this;
   transaction<A extends unknown[], R>(fn: (...args: A) => R): (...args: A) => R;
   close(): this;
+  /** Closes the connection and deletes the database file (wipe). */
+  destroy(): void;
 }

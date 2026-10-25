@@ -127,6 +127,39 @@ export function createSessionService(deps: SessionDeps) {
     return session;
   }
 
+  /** Online sign-in with e-mail and password (FR-02 fallback); no offline verifier is stored for it. */
+  async function passwordLogin(email: string, password: string): Promise<StoredSession> {
+    let res: Response;
+    try {
+      res = await deps.fetch(`${deps.hubUrl()}/api/auth/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password, tenantId: deps.tenantId() }),
+      });
+    } catch {
+      throw new PinLoginError("تعذّر الاتصال بالمركز", "network");
+    }
+    if (!res.ok) {
+      const body = (await res.json().catch(() => ({}))) as { message?: string };
+      throw new PinLoginError(body.message ?? "البريد أو كلمة المرور غير صحيحة", "invalid");
+    }
+    const body = (await res.json()) as {
+      accessToken: string;
+      refreshToken: string;
+      user: { id: string; name: string; role: Role };
+    };
+    const session: StoredSession = {
+      userId: body.user.id,
+      name: body.user.name,
+      role: body.user.role,
+      accessToken: body.accessToken,
+      refreshToken: body.refreshToken,
+      signedInAt: deps.now().toISOString(),
+    };
+    await writeSession(session);
+    return session;
+  }
+
   /** Offline sign-in: the PIN is checked against the verifier stored by the last online sign-in (FR-05). */
   async function offlineLogin(
     userId: string,
@@ -218,7 +251,16 @@ export function createSessionService(deps: SessionDeps) {
     return { needsConfirm: false };
   }
 
-  return { roster, pinLogin, offlineLogin, refresh, logout, current: readSession, endSession };
+  return {
+    roster,
+    pinLogin,
+    passwordLogin,
+    offlineLogin,
+    refresh,
+    logout,
+    current: readSession,
+    endSession,
+  };
 }
 
 export type SessionService = ReturnType<typeof createSessionService>;

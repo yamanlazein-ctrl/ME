@@ -400,7 +400,7 @@ APP_MASTER_KEY=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa=`, then
   run `--invoices 1000 --parties 100`. Then `GET /api/sync/status` reports `pendingCount` 0, and the
   hub's party balances from `/api/reports/party-balances` equal the out file.
 
-- [ ] T040 CHECKPOINT "feat(mobile): APK workflow, native adapters, spike screen, test data generator".
+- [x] T040 CHECKPOINT "feat(mobile): APK workflow, native adapters, spike screen, test data generator".
       After the push, check the run: `gh run list --workflow mobile-android.yml --limit 1` (if `gh` is
       available) shows `completed success`. Otherwise write "APK run to be checked by owner" in
       evidence/T040.md.
@@ -477,7 +477,7 @@ SESSION-2 START — the second cloud session begins here, and follows these rule
 
 ## Phase 6: Foundational core (blocks every story) [M1]
 
-- [ ] T045 (R1) Read `backend/src/infrastructure/di/sqliteContainer.ts` and list every port and repository it
+- [x] T045 (R1) Read `backend/src/infrastructure/di/sqliteContainer.ts` and list every port and repository it
       wires that is needed by these use-case folders: `backend/src/application/use-cases/{cashbox,dashboard,expenses,inventory,invoices,ledger,orders,parties,profit,returns,settings,statements,sync,vouchers}`.
       Write the list, with each item's source file, to `specs/002-mobile-app/evidence/T045-ports.md`.
       Mark which ports need phone adapters (secrets, logger, config, fingerprint, licence). Also list
@@ -485,27 +485,27 @@ SESSION-2 START — the second cloud session begins here, and follows these rule
       import `config/env`), and every named export of `backend/src/infrastructure/config/logger.ts`
       they import.
       Check: the file exists and names every constructor argument used by those use-cases.
-- [ ] T046 [P] Implement `mobile/src/platform/logger.ts`: an object with `info`, `warn`, `error`, `debug`
+- [x] T046 [P] Implement `mobile/src/platform/logger.ts`: an object with `info`, `warn`, `error`, `debug`
       and `child()` writing to `console` only (NFR-12). It provides every named export of `backend/src/infrastructure/config/logger.ts` listed in T045, with the same shape (T020 maps that file here). `pino` stays banned.
       Check: `mobile/test/unit/logger.test.ts` asserts every export listed in T045 exists, and passes.
-- [ ] T047 [P] (FR-04, FR-43) Implement `mobile/src/core/appState.ts`: it reads and writes `app-state.json` in
+- [x] T047 [P] (FR-04, FR-43) Implement `mobile/src/core/appState.ts`: it reads and writes `app-state.json` in
       `FileSystem.documentDirectory`, with fields `appLockEnabled` (boolean, default true),
       `lastForegroundAt` (ISO string or null), `updateChannel` ("play" | "apk"), and
       `lastVersionCheckAt` (ISO string or null). Writes are atomic: write a temp file, then move it.
       data-model.md. Check: `mobile/test/unit/appState.test.ts` (mocked FileSystem) passes.
-- [ ] T048 Implement `mobile/src/core/config.ts`: `buildConfig(enrollment)` returns a frozen object with
+- [x] T048 Implement `mobile/src/core/config.ts`: `buildConfig(enrollment)` returns a frozen object with
       `hubUrl`, `tenantId`, `syncDeviceId`, `deviceKind: "phone"` and `appVersion` (from
       `expo-constants`). It has no `process.env` reads. Also implement `mobile/src/platform/envConfig.ts`
       (mapped by T020 in place of `backend/src/infrastructure/config/env.ts`): it exports `config`
       with every field listed in T045, holding the phone values (hub URL and identity from
       `buildConfig`, fixed values for the rest copied from the desktop SQLite defaults in `env.ts`).
       FR-08, R1. Check: unit test asserts every T045 field exists.
-- [ ] T049 Implement `mobile/src/core/hubHttp.ts`: wraps `fetch` so that every request to `/api/sync/push`
+- [x] T049 Implement `mobile/src/core/hubHttp.ts`: wraps `fetch` so that every request to `/api/sync/push`
       and `/api/sync/pull` carries `X-Motard-Money-Version: MONEY_RULES_VERSION`. It maps
       `426 SYNC_VERSION_MISMATCH` to the typed error `VersionMismatchError`, `403 SYNC_DEVICE_REVOKED` to
       `DeviceRevokedError`, and `403 SYNC_UNKNOWN_DEVICE` to `UnknownDeviceError`. FR-38, FR-40.
       Check: `mobile/test/unit/hubHttp.test.ts` (mocked fetch) asserts the header and the three mappings.
-- [ ] T050 Implement `mobile/src/core/container.ts`: it builds the repositories and use-cases from T045
+- [x] T050 Implement `mobile/src/core/container.ts`: it builds the repositories and use-cases from T045
       with the phone adapters and `deviceKind: "phone"` passed to the number-block path (BC-1). Every
       exported use-case function is wrapped in `runSerial` (T024). It must not import
       `backend/src/infrastructure/di/sqliteContainer.ts`. R1, R3.
@@ -518,7 +518,7 @@ SESSION-2 START — the second cloud session begins here, and follows these rule
     container over better-sqlite3, and writes `specs/002-mobile-app/evidence/s2-reference.db`.
     Commit that file.
     Check: GATE-M (lint proves there are no banned imports).
-- [ ] T051 Create the parity harness `mobile/test/parity/harness.ts`.
+- [x] T051 Create the parity harness `mobile/test/parity/harness.ts`.
   - Start the cert stack (`tests/e2e/cert-stack.mjs`).
   - Create a "phone": the mobile container over a temp better-sqlite3 database via the Node shim,
     enrolled as a device of kind phone.
@@ -531,7 +531,7 @@ SESSION-2 START — the second cloud session begins here, and follows these rule
   Check: `mobile/test/parity/smoke.test.ts` (start, enroll both, syncAll, compareAll → 0 differences
   on empty data) passes under GATE-P.
 
-- [ ] T052 Add parity scenarios in `mobile/test/parity/scenarios.test.ts` (G2). They call use-cases directly,
+- [x] T052 Add parity scenarios in `mobile/test/parity/scenarios.test.ts` (G2). They call use-cases directly,
       with no UI:
   - (a) a receipt on the phone
   - (b) a 3-line sale on the phone
@@ -545,7 +545,7 @@ SESSION-2 START — the second cloud session begins here, and follows these rule
 
   SC-001, SC-002. Check: GATE-P, all 7 scenarios with 0 differences.
 
-- [ ] T053 Implement `mobile/src/core/syncLoop.ts` per FR-32. It runs on start, on foreground (AppState),
+- [x] T053 Implement `mobile/src/core/syncLoop.ts` per FR-32. It runs on start, on foreground (AppState),
       on network regain (`@react-native-community/netinfo`, installed via `npx expo install`), 2 seconds
       after the last write, and every 20 s in the foreground. Retries come at 30 s and 120 s. Pull pages use
       `limit=100`; pushes drain the outbox in batches of 50 with progress (E3). It reads the hub's HTTP `Date` header on each response and emits `clockSkew` when it differs from the phone clock by more than 5 minutes (E16). It calls the shared sync client functions from
@@ -553,10 +553,10 @@ SESSION-2 START — the second cloud session begins here, and follows these rule
       FR-33). On `VersionMismatchError` it stops and emits `versionMismatch`; on `DeviceRevokedError` it
       emits `revoked`. Check: `mobile/test/unit/syncLoop.test.ts` with fake timers asserts the schedule,
       the retries, the 50-unit push batches, and the `versionMismatch`, `revoked` and `clockSkew` events.
-- [ ] T054 Register background sync in `mobile/src/core/backgroundSync.ts` with `expo-background-task`
+- [x] T054 Register background sync in `mobile/src/core/backgroundSync.ts` with `expo-background-task`
       (minimum interval 15 minutes), calling one `syncLoop` run inside `runSerial`. NFR-13.
       Check: GATE-M.
-- [ ] T055 UI foundation, part 1:
+- [x] T055 UI foundation, part 1:
   - `mobile/src/ui/theme.ts`: copy the color, radius and font tokens from `src/styles.css` (light
     theme only, Clarification Q5).
   - Spacing scale 4/8/12/16/24/32. Body text 16 sp minimum. Touch target constant 48 dp.
@@ -566,7 +566,7 @@ SESSION-2 START — the second cloud session begins here, and follows these rule
 
   UX-06, NFR-09, NFR-10. Check: `mobile/test/unit/theme.test.ts` asserts body ≥ 16 and touch ≥ 48.
 
-- [ ] T056 [P] UI foundation, part 2. Create these in `mobile/src/ui/`:
+- [x] T056 [P] UI foundation, part 2. Create these in `mobile/src/ui/`:
   - `Field.tsx`: a label tied to its input through `accessibilityLabelledBy` (the desktop `FormField`
     rule)
   - `MoneyText.tsx`: always renders the currency code next to the amount, and for a negative amount
@@ -579,21 +579,21 @@ SESSION-2 START — the second cloud session begins here, and follows these rule
   Check: `mobile/test/unit/ui-*.test.tsx` with `@testing-library/react-native` assert currency
   presence, the negative sign and color, the decimal limit, and the toast variant names.
 
-- [ ] T057 [P] Create `mobile/src/ui/SyncChip.tsx`. It shows four states: synced, pending N, offline,
+- [x] T057 [P] Create `mobile/src/ui/SyncChip.tsx`. It shows four states: synced, pending N, offline,
       attention. The state comes from a hook `mobile/src/hooks/useSyncState.ts` that reads the outbox
       counts through the container and the netinfo state. UX-03.
       Check: the unit test covers all four states.
-- [ ] T058 Create `mobile/app/_layout.tsx`: providers (React Query `QueryClient`, theme), RTL init, the
+- [x] T058 Create `mobile/app/_layout.tsx`: providers (React Query `QueryClient`, theme), RTL init, the
       SyncChip in the header of every screen, and `expo-splash-screen` with the animated logo for at most
       1.5 s while `openRuntime` runs (FR-01). Use the company logo asset from `desktop-app/` or `public/`
       (search with `git ls-files | grep -i logo`). Create `mobile/app/(tabs)/_layout.tsx`: bottom tabs in
       RTL order Home, Customers & suppliers, Add, Inventory, More, filtered by role (UX-04). Screens not
       built yet show an Arabic "قريباً" (coming soon) placeholder. Check: GATE-M.
-- [ ] T059 (FR-09, FR-13) Create `mobile/src/hooks/queryKeys.ts` and `mobile/src/hooks/invalidate.ts`.
+- [x] T059 (FR-09, FR-13) Create `mobile/src/hooks/queryKeys.ts` and `mobile/src/hooks/invalidate.ts`.
       `invalidateFinancialViews(qc)` invalidates the dashboard, parties, statements, cashbox and sync
       keys, the phone counterpart of the frontend rule. Check: unit test.
-- [ ] T060 Run GATE-M and GATE-P. Check: both rules.
-- [ ] T061 CHECKPOINT "feat(mobile): core container, sync loop, parity suite, UI foundation".
+- [x] T060 Run GATE-M and GATE-P. Check: both rules.
+- [x] T061 CHECKPOINT "feat(mobile): core container, sync loop, parity suite, UI foundation".
 
 ## Phase 7: US1 — Enroll a phone and download the company data (Must, P1) [FR-06, FR-07, FR-08, E15]
 

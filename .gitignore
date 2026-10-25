@@ -181,3 +181,6 @@ tools/postgres-test/
 
 # graphify knowledge-graph output (generated, local)
 graphify-out/
+
+specs/002-mobile-app/evidence/*.db-shm
+specs/002-mobile-app/evidence/*.db-wal

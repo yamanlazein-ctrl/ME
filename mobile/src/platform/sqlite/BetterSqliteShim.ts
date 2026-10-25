@@ -21,6 +21,8 @@ export interface OpConnection {
     params?: Scalar[],
   ): { rawRows: Scalar[][]; columnNames: string[]; rowsAffected: number; insertId?: number };
   close(): void;
+  /** op-sqlite: closes and deletes the database file. */
+  delete?(): void;
 }
 
 export interface ShimOpenOptions {
@@ -250,6 +252,15 @@ class ShimDatabaseImpl implements ShimDatabase {
       this.open = false;
     }
     return this;
+  }
+
+  destroy(): void {
+    if (this.conn.delete) {
+      this.conn.delete();
+      this.open = false;
+    } else {
+      this.close();
+    }
   }
 }
 
