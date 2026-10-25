@@ -43,6 +43,7 @@ jobs:
           distribution: temurin
           java-version: "17"
       - run: npm ci
+      - run: npm ci
         working-directory: backend
       - run: npm ci
         working-directory: mobile
@@ -71,7 +72,12 @@ jobs:
           HUB_INFO: ${{ github.workspace }}/hub-info.json
         run: |
           nohup node scripts/emulator/start-test-hub.mjs > hub.out 2>&1 &
-          for i in $(seq 1 300); do grep -q HUB_READY hub.out && break; sleep 5; done
+          HUB_PID=$!
+          for i in $(seq 1 300); do
+            grep -q HUB_READY hub.out && break
+            kill -0 "$HUB_PID" 2>/dev/null || break
+            sleep 5
+          done
           echo "=== hub.out ==="; tail -40 hub.out
           grep -q HUB_READY hub.out
       - name: Install Maestro
