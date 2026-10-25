@@ -22,8 +22,7 @@ name: 70 sale and invoice detail
 - takeScreenshot: 16-sale-lines
 - tapOn: "التالي: المراجعة"
 - scrollUntilVisible:
-    element:
-      id: "sale-total"
+    element: "المتبقي على العميل"
 - takeScreenshot: 17-sale-review
 - tapOn: "حفظ الفاتورة"
 - extendedWaitUntil:
