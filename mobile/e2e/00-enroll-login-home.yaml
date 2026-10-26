@@ -9,11 +9,50 @@ name: 00 enroll, first download, sign in, Home
     visible: "ربط الهاتف بالمركز"
     timeout: 90000
 - takeScreenshot: 01-enroll
+# QR scanner: opens, shows the frame and hint, and cancel returns to the form.
+- tapOn: "مسح رمز QR"
+- extendedWaitUntil:
+    visible:
+      id: "scan-cancel"
+    timeout: 30000
+- assertVisible:
+    id: "scan-frame"
+- takeScreenshot: 01b-scanner
+- tapOn:
+    id: "scan-cancel"
+- assertVisible: "ربط الهاتف بالمركز"
+# Wrong code on the real hub: refused with the invalid-code text.
 - tapOn:
     id: "hub"
 - inputText: ${HUB}
 - tapOn:
     id: "code"
+- inputText: WRONG-CODE-0000
+- hideKeyboard
+- tapOn: "تسجيل"
+- extendedWaitUntil:
+    visible: "رمز التسجيل غير صالح"
+    timeout: 60000
+- takeScreenshot: 01c-wrong-code
+# Unreachable hub: the network text.
+- tapOn:
+    id: "hub"
+- eraseText: 200
+- inputText: http://10.0.2.2:9
+- hideKeyboard
+- tapOn: "تسجيل"
+- extendedWaitUntil:
+    visible: "سيتابع عند عودة الاتصال"
+    timeout: 60000
+- takeScreenshot: 01d-unreachable-hub
+# The right hub and code.
+- tapOn:
+    id: "hub"
+- eraseText: 200
+- inputText: ${HUB}
+- tapOn:
+    id: "code"
+- eraseText: 200
 - inputText: ${CODE}
 - hideKeyboard
 - tapOn: "تسجيل"

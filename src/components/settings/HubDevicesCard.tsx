@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Ban, Copy, KeyRound, Loader2, RotateCcw } from "lucide-react";
+import { QRCodeSVG } from "qrcode.react";
 import { toast } from "sonner";
 import { PageCard } from "@/components/layout/PageCard";
 import { Button } from "@/components/ui/button";
@@ -31,6 +32,7 @@ export function HubDevicesCard() {
 
   const devices = useQuery({ queryKey: [...KEY, "list"], queryFn: () => hubSync.devices() });
   const code = useQuery({ queryKey: [...KEY, "code"], queryFn: () => hubSync.enrollmentCode() });
+  const hub = useQuery({ queryKey: [...KEY, "hub-url"], queryFn: () => hubSync.state() });
   const refresh = () => qc.invalidateQueries({ queryKey: KEY });
 
   const newCode = useMutation({
@@ -87,6 +89,16 @@ export function HubDevicesCard() {
             >
               <Copy className="ml-1 h-4 w-4" /> نسخ
             </Button>
+            {hub.data?.url ? (
+              <div className="flex flex-col items-center gap-1 rounded-md bg-white p-2">
+                <QRCodeSVG
+                  value={JSON.stringify({ hub: hub.data.url, code: current.code })}
+                  size={140}
+                  data-testid="enroll-qr"
+                />
+                <span className="text-[11px] text-black">امسحه من تطبيق الهاتف</span>
+              </div>
+            ) : null}
             <span className="text-xs text-muted-foreground">
               صالح حتى {fmt(current.expiresAt)} · استُخدم {current.uses} من {current.maxUses}
             </span>

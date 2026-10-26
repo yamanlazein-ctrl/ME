@@ -47,6 +47,15 @@ describe("enroll screen (US1, E15)", () => {
       code: "ABC",
     });
     expect(parseEnrollQr("nope")).toBeNull();
+    expect(parseEnrollQr("motard://enroll?hub=https%3A%2F%2Fh.example&code=AB-12")).toEqual({
+      hub: "https://h.example",
+      code: "AB-12",
+    });
+    expect(parseEnrollQr(" https://h.example | AB-12 ")).toEqual({
+      hub: "https://h.example",
+      code: "AB-12",
+    });
+    expect(parseEnrollQr("https://h.example")).toBeNull();
   });
 });
 
@@ -72,5 +81,17 @@ describe("login screen (US2, FR-02)", () => {
     await fireEvent.press(screen.getByLabelText("7"));
     expect(onKey).toHaveBeenCalledWith("7");
     expect(screen.getByTestId("pin-dots").props.children).toBe("●●");
+  });
+});
+
+describe("scan overlay", () => {
+  it("shows the hint, a cancel button that works, and the rejected text", async () => {
+    const { ScanOverlay } = await import("../../src/ui/ScanView");
+    const onCancel = vi.fn();
+    await render(<ScanOverlay message="ملاحظة" rejected={false} onCancel={onCancel} />);
+    expect(screen.getByText("ملاحظة")).toBeTruthy();
+    expect(screen.getByTestId("scan-frame")).toBeTruthy();
+    fireEvent.press(screen.getByTestId("scan-cancel"));
+    expect(onCancel).toHaveBeenCalledOnce();
   });
 });

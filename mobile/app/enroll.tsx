@@ -9,6 +9,7 @@ import { runFirstDownload } from "../src/core/firstDownload";
 import { deviceFirstDownloadDeps } from "../src/core/firstDownloadDeps";
 import { notifyBootChanged } from "../src/hooks/useBoot";
 import { EnrollView, type EnrollViewState } from "../src/ui/EnrollView";
+import { ScanDenied, ScanOverlay } from "../src/ui/ScanView";
 
 const RETRY_MS = 15_000;
 
@@ -21,6 +22,7 @@ export default function Enroll() {
     error: null,
   });
   const [scanning, setScanning] = useState(false);
+  const [rejected, setRejected] = useState(false);
   const [permission, requestPermission] = useCameraPermissions();
   const retry = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -80,6 +82,9 @@ export default function Enroll() {
     }
   };
 
+  if (scanning && permission && !permission.granted && !permission.canAskAgain) {
+    return <ScanDenied onCancel={() => setScanning(false)} />;
+  }
   if (scanning) {
     return (
       <View style={{ flex: 1 }}>
@@ -90,8 +95,23 @@ export default function Enroll() {
             const parsed = parseEnrollQr(data);
             if (parsed) {
               setScanning(false);
-              setState((s) => ({ ...s, hub: parsed.hub, code: parsed.code }));
+              setRejected(false);
+              setState((s) => ({ ...s, hub: parsed.hub, code: parsed.code, error: null }));
+            } else {
+              setRejected(true);
             }
+          }}
+        />
+        <ScanOverlay
+          rejected={rejected}
+          message={
+            rejected
+              ? "هذا الرمز ليس رمز تسجيل. اعرض رمز «أجهزة الشركة» من إعدادات المزامنة في برنامج الحاسوب"
+              : "وجّه الكاميرا نحو رمز QR المعروض في برنامج الحاسوب (الإعدادات ← المزامنة السحابية ← أجهزة الشركة)"
+          }
+          onCancel={() => {
+            setScanning(false);
+            setRejected(false);
           }}
         />
       </View>
@@ -104,6 +124,7 @@ export default function Enroll() {
       onSubmit={() => void submit()}
       onScan={() => {
         void (async () => {
+          setRejected(false);
           if (!permission?.granted) await requestPermission();
           setScanning(true);
         })();
