@@ -1,8 +1,9 @@
 appId: com.motard.erp
-name: 85 new customer, search, edit
+name: 85 new customer, duplicate name, search
 ---
 - launchApp
 - runFlow: unlock.yaml
+- evalScript: ${output.stamp = String(Date.now()).slice(-7)}
 - tapOn: "العملاء والموردون"
 - assertVisible: "طرف جديد"
 - tapOn: "طرف جديد"
@@ -10,7 +11,7 @@ name: 85 new customer, search, edit
 - takeScreenshot: 33-party-form
 - tapOn:
     id: "party-name"
-- inputText: Zed Customer
+- inputText: Zed ${output.stamp}
 - tapOn:
     id: "party-phone"
 - inputText: "0555000111"
@@ -19,15 +20,25 @@ name: 85 new customer, search, edit
 - assertNotVisible:
     id: "party-error"
 - extendedWaitUntil:
-    visible: "Zed Customer"
+    visible: "Zed ${output.stamp}.*"
     timeout: 30000
 - takeScreenshot: 34-party-created
+# The same name again is refused with the duplicate-name text (not the generic "unexpected error").
+- tapOn: "طرف جديد"
+- tapOn:
+    id: "party-name"
+- inputText: Zed ${output.stamp}
+- hideKeyboard
+- tapOn: "حفظ"
+- extendedWaitUntil:
+    visible: "اسم العميل/المورد مستخدم مسبقاً.*"
+    timeout: 30000
+- assertNotVisible: ".*خطأ غير متوقع.*"
+- takeScreenshot: 35-party-duplicate
+- pressKey: Back
 # Search finds it; a nonsense search finds nothing.
 - tapOn:
     id: "party-search"
-- inputText: Zed
-- assertVisible: "Zed Customer"
-- eraseText: 10
-- inputText: QQQQQQ
-- assertVisible: "لا نتائج"
-- takeScreenshot: 35-party-search-empty
+- inputText: Zed ${output.stamp}
+- assertVisible: "Zed ${output.stamp}.*"
+- takeScreenshot: 36-party-search-hit

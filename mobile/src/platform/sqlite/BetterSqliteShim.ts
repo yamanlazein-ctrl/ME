@@ -51,6 +51,30 @@ export interface ShimOpenOptions {
   connection?: OpConnection;
 }
 
+const CODE_BY_MESSAGE: Array<[RegExp, string]> = [
+  [/UNIQUE constraint failed/i, "SQLITE_CONSTRAINT_UNIQUE"],
+  [/NOT NULL constraint failed/i, "SQLITE_CONSTRAINT_NOTNULL"],
+  [/FOREIGN KEY constraint failed/i, "SQLITE_CONSTRAINT_FOREIGNKEY"],
+  [/CHECK constraint failed/i, "SQLITE_CONSTRAINT_CHECK"],
+  [/datatype mismatch/i, "SQLITE_MISMATCH"],
+  [/database is locked/i, "SQLITE_BUSY"],
+  [/database or disk is full/i, "SQLITE_FULL"],
+];
+
+/**
+ * better-sqlite3 errors carry `code: "SQLITE_CONSTRAINT_UNIQUE"`; op-sqlite errors only carry the message. The desktop's
+ * error mapper (backend .../sqlite/errors.ts) keys on the code, so a duplicate name on the phone would otherwise show
+ * the generic "unexpected error" text instead of "اسم مستخدم مسبقاً". Adds the code derived from SQLite's own message.
+ */
+export function withSqliteCode(error: unknown): unknown {
+  if (!(error instanceof Error)) return error;
+  const existing = (error as { code?: unknown }).code;
+  if (typeof existing === "string" && existing.startsWith("SQLITE_")) return error;
+  const hit = CODE_BY_MESSAGE.find(([re]) => re.test(error.message));
+  if (hit) (error as { code?: string }).code = hit[1];
+  return error;
+}
+
 const MAX_SAFE = BigInt(Number.MAX_SAFE_INTEGER);
 const MIN_SAFE = BigInt(Number.MIN_SAFE_INTEGER);
 
@@ -213,15 +237,23 @@ class ShimDatabaseImpl implements ShimDatabase {
   }
 
   execute(sql: string, params: Scalar[]) {
-    const result = this.conn.executeSync(sql, params);
-    this.track(sql);
-    return result;
+    try {
+      const result = this.conn.executeSync(sql, params);
+      this.track(sql);
+      return result;
+    } catch (e) {
+      throw withSqliteCode(e);
+    }
   }
 
   executeRaw(sql: string, params: Scalar[]) {
-    const result = this.conn.executeRawSync(sql, params);
-    this.track(sql);
-    return result;
+    try {
+      const result = this.conn.executeRawSync(sql, params);
+      this.track(sql);
+      return result;
+    } catch (e) {
+      throw withSqliteCode(e);
+    }
   }
 
   prepare(sql: string): ShimStatement {

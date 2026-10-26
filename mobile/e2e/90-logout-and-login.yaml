@@ -14,7 +14,7 @@ name: 90 sign out returns to the login screen, sign in again
 - extendedWaitUntil:
     visible: "تسجيل الدخول"
     timeout: 60000
-- takeScreenshot: 36-login-after-logout
+- takeScreenshot: 38-login-after-logout
 - tapOn: "AC-8 Admin"
 - tapOn: "1"
 - tapOn: "2"
@@ -25,4 +25,4 @@ name: 90 sign out returns to the login screen, sign in again
     visible: "مبيعات اليوم"
     timeout: 60000
 - assertNotVisible: ".*تعذّر.*"
-- takeScreenshot: 37-home-after-relogin
+- takeScreenshot: 39-home-after-relogin

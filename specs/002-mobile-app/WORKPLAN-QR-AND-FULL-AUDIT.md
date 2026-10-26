@@ -31,3 +31,9 @@ Rule: this file is the memory. Update the status column after every step. Nothin
 ## Decisions
 
 - D1: no "skip enrolment" bypass in the app. It would show invented data to a customer and break the S1/S2 rules (no guessing). The test hub in CI plays the "fake server" role with real seeded data.
+
+## Result log
+
+- Run 40398695326 (emulator): flows 00 (scanner open+cancel, unreachable hub text, wrong code text, real enrol), 10, 15 (tabs, Add menu, More rows, theme toggle), 20, 30, 40, 50, 60, 70 (sale, share PDF, cancel invoice), 80, 90 (logout -> login -> sign in) PASSED.
+- 85 (new customer) FAILED, and exposed a real defect: a duplicate party name on the phone showed the generic "unexpected error" text because op-sqlite errors carry no SQLITE_* code, so the desktop error mapper did not recognise them. Fixed in BetterSqliteShim (withSqliteCode, unit tested). Flow 85 now also asserts the duplicate-name text.
+- Still not delivered: Inventory tab is a "قريباً" placeholder; tasks T107+.

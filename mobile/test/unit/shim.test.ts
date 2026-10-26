@@ -3,7 +3,11 @@ import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { registerNumericFunctions } from "@backend/infrastructure/orm/sqlite/numericFunctions";
-import { openShimDatabase, splitStatements } from "../../src/platform/sqlite/BetterSqliteShim";
+import {
+  openShimDatabase,
+  splitStatements,
+  withSqliteCode,
+} from "../../src/platform/sqlite/BetterSqliteShim";
 import type { ShimDatabase } from "../../src/platform/sqlite/types";
 import { fakeOpConnection } from "../helpers/fakeOpSqlite";
 import { MIGRATIONS } from "../../src/core/generated/migrations";
@@ -125,5 +129,27 @@ describe("BetterSqliteShim", () => {
     db.exec("CREATE TEMP TABLE d (t TEXT); INSERT INTO d VALUES ('1.10'),('2.205'),(NULL)");
     expect(one("SELECT motard_decsum(t) AS v FROM d")).toBe("3.305");
     expect(one("SELECT motard_decsum(t) AS v FROM d WHERE 0")).toBeNull();
+  });
+
+  it("op-sqlite constraint errors get the SQLITE_* code the desktop error mapper keys on", () => {
+    const cases: Array<[string, string]> = [
+      ["UNIQUE constraint failed: parties.tenant_id, parties.name", "SQLITE_CONSTRAINT_UNIQUE"],
+      ["NOT NULL constraint failed: parties.name", "SQLITE_CONSTRAINT_NOTNULL"],
+      ["FOREIGN KEY constraint failed", "SQLITE_CONSTRAINT_FOREIGNKEY"],
+      ["CHECK constraint failed: ck", "SQLITE_CONSTRAINT_CHECK"],
+      ["database is locked", "SQLITE_BUSY"],
+    ];
+    for (const [message, code] of cases) {
+      expect((withSqliteCode(new Error(`[op-sqlite] ${message}`)) as { code?: string }).code).toBe(
+        code,
+      );
+    }
+    const kept = Object.assign(new Error("UNIQUE constraint failed: x.y"), {
+      code: "SQLITE_CONSTRAINT_PRIMARYKEY",
+    });
+    expect(withSqliteCode(kept)).toBe(kept);
+    expect((kept as { code?: string }).code).toBe("SQLITE_CONSTRAINT_PRIMARYKEY");
+    expect(withSqliteCode(new Error("something else"))).not.toHaveProperty("code");
+    expect(withSqliteCode("not an error")).toBe("not an error");
   });
 });
