@@ -38,3 +38,10 @@ Rule: this file is the memory. Update the status column after every step. Nothin
 - 85 (new customer) FAILED, and exposed a real defect: a duplicate party name on the phone showed the generic "unexpected error" text because op-sqlite errors carry no SQLITE_* code, so the desktop error mapper did not recognise them. Fixed in BetterSqliteShim (withSqliteCode, unit tested). Flow 85 now also asserts the duplicate-name text.
 - Still not delivered: Inventory tab is a "قريباً" placeholder; tasks T107+.
 - Run 40406104578: only 85 failed. Cause is the flow, not the app: after typing the name the phone field did not get focus, so the phone digits were typed INTO the name field ("Zed 24750230555000111"); the second save was then a different name, so no duplicate. Fix: hideKeyboard between fields (same as flow 60). Added unit test test/unit/partyDuplicate.test.ts (duplicate name -> friendly text).
+
+## GREEN: run 40412336509
+
+Every emulator flow passed (00 scanner/wrong code/bad hub/enrol, 10, 15, 20, 30, 40, 50, 60, 70 incl. share PDF + cancel invoice, 80, 85 new customer + duplicate-name text + search, 90 logout/login). No crash, no MOTARD_ERR, no font errors.
+Screenshots: https://github.com/yamanlazein-ctrl/ME/actions/runs/40412336509/artifacts/12694933210
+APK: https://github.com/yamanlazein-ctrl/ME/actions/runs/40412336509/artifacts/12695096385
+Not covered: Inventory is a "coming soon" placeholder; reports, purchase, returns, orders, PDF/WhatsApp (T107+) not built; real camera scan of the desktop QR not tested on the emulator (needs a real phone).
