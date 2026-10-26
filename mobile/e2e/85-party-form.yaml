@@ -12,6 +12,7 @@ name: 85 new customer, duplicate name, search
 - tapOn:
     id: "party-name"
 - inputText: Zed ${output.stamp}
+- hideKeyboard
 - tapOn:
     id: "party-phone"
 - inputText: "0555000111"
