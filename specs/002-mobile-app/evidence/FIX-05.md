@@ -14,3 +14,10 @@ Job `apk`, after the Gradle build:
    The workflow can also be started with `apk_run_id` to re-run only this verification on an earlier APK.
 
 Result history is in the final report; a screen is only reported as working when its flow passed in this job.
+
+## Result: run 40247683297 (green)
+
+All emulator flows passed (enroll, sync status, cashbox, parties, statement, receipt, payment, expense, sale, home after writes). No error text, no crash, no font failure.
+Screenshots: https://github.com/yamanlazein-ctrl/ME/actions/runs/40247683297/artifacts/12619244479
+APK: https://github.com/yamanlazein-ctrl/ME/actions/runs/40247683297/artifacts/12619743234
+Not yet verified on the emulator: invoice detail (cancel, share PDF). Deferred tasks T107+ not started.
