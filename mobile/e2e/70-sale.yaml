@@ -36,3 +36,29 @@ name: 70 sale and invoice detail
 - scrollUntilVisible:
     element: "إلغاء الفاتورة"
 - takeScreenshot: 19-invoice
+# Share the PDF: the system share sheet opens (no in-app error), then back to the invoice.
+- scrollUntilVisible:
+    element: "مشاركة PDF"
+- tapOn: "مشاركة PDF"
+- extendedWaitUntil:
+    notVisible: "مشاركة PDF"
+    timeout: 60000
+- takeScreenshot: 20-share-sheet
+- pressKey: Back
+- assertVisible: "مشاركة PDF"
+- assertNotVisible:
+    id: "invoice-error"
+# Cancel the invoice: the confirmation dialog, then the cancelled mark.
+- scrollUntilVisible:
+    element: "إلغاء الفاتورة"
+- tapOn: "إلغاء الفاتورة"
+- takeScreenshot: 21-cancel-dialog
+- tapOn:
+    text: "إلغاء الفاتورة"
+    index: 1
+- extendedWaitUntil:
+    visible: "ملغاة"
+    timeout: 60000
+- assertNotVisible:
+    id: "invoice-error"
+- takeScreenshot: 22-invoice-cancelled

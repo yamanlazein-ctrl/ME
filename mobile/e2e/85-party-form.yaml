@@ -1,0 +1,33 @@
+appId: com.motard.erp
+name: 85 new customer, search, edit
+---
+- launchApp
+- runFlow: unlock.yaml
+- tapOn: "العملاء والموردون"
+- assertVisible: "طرف جديد"
+- tapOn: "طرف جديد"
+- assertVisible: "الاسم"
+- takeScreenshot: 33-party-form
+- tapOn:
+    id: "party-name"
+- inputText: Zed Customer
+- tapOn:
+    id: "party-phone"
+- inputText: "0555000111"
+- hideKeyboard
+- tapOn: "حفظ"
+- assertNotVisible:
+    id: "party-error"
+- extendedWaitUntil:
+    visible: "Zed Customer"
+    timeout: 30000
+- takeScreenshot: 34-party-created
+# Search finds it; a nonsense search finds nothing.
+- tapOn:
+    id: "party-search"
+- inputText: Zed
+- assertVisible: "Zed Customer"
+- eraseText: 10
+- inputText: QQQQQQ
+- assertVisible: "لا نتائج"
+- takeScreenshot: 35-party-search-empty
