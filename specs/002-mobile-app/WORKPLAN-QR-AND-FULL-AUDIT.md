@@ -1,0 +1,29 @@
+# Work plan: QR enrolment fix + full screen audit (owner request, 2026-10-26)
+
+Rule: this file is the memory. Update the status column after every step. Nothing is marked done without a passing emulator run or a test.
+
+## Owner request
+1. The QR scan screen does not behave like a normal QR app (no frame, no cancel, no feedback).
+2. Walk through EVERY screen / button / link on a test server and prove it works 100%.
+3. Return to the login/enrol interface and verify it too.
+4. Deliverable to the customer: nothing guessed, nothing faked.
+
+## Findings (facts, verified in code)
+- F1: the desktop (HubDevicesCard.tsx) shows only a TEXT code. No QR is ever generated, so the phone's scanner has nothing to scan. The phone expects JSON {"hub","code"} (enrollFlow.parseEnrollQr).
+- F2: the phone scan view (app/enroll.tsx) is a bare camera: no frame, no hint, no cancel button, no permission-denied message, ignores unreadable codes silently.
+- F3: hub address is available on desktop as hubSync.state().url.
+
+## Steps
+| # | Step | Status |
+|---|------|--------|
+| 1 | Desktop: show QR of {hub, code} next to the text code (additive, desktop behaviour unchanged) | todo |
+| 2 | Phone: scan overlay (frame, hint, cancel), permission-denied text, accepts JSON and motard://enroll?hub=&code= and plain "hub|code"; bad code -> message | todo |
+| 3 | Test hub reachable from CI only. Real-phone demo cannot reach it, so NO fake in-app bypass in the customer build. Instead: emulator flows cover every screen | decision |
+| 4 | Emulator: add flows for scanner screen (cancel works, permission text), enrol typed, wrong code error, wrong hub error, back to login after wipe | todo |
+| 5 | Emulator: invoice detail (cancel, share PDF), every tab, every button on Home/More/Parties/Add/Inventory | todo |
+| 6 | Screen checklist file with each screen + button + result | todo |
+| 7 | GATE-M / GATE-D / GATE-P, commit+push each step | todo |
+| 8 | Final Arabic report, honest list of what is not covered | todo |
+
+## Decisions
+- D1: no "skip enrolment" bypass in the app. It would show invented data to a customer and break the S1/S2 rules (no guessing). The test hub in CI plays the "fake server" role with real seeded data.
