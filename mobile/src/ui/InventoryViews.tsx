@@ -16,6 +16,9 @@ import { MoneyInput } from "./MoneyInput";
 import { PrimaryActionBar } from "./PrimaryActionBar";
 import { colors, fontSize, radius, spacing, TOUCH_TARGET } from "./theme";
 
+/** Pre-filled and editable: a correction always needs a reason, and most are manual corrections. */
+export const DEFAULT_ADJUST_REASON = "تعديل يدوي";
+
 export const LOW_STOCK_TEXT = "مخزون منخفض";
 
 export const kg = (n: number): string => `${n.toFixed(2)} كغ`;
@@ -198,7 +201,7 @@ export function RollDetailView({
   onAdjust(values: { newKg: number; reason: string }): void;
 }) {
   const [newKg, setNewKg] = useState<number | null>(null);
-  const [reason, setReason] = useState("");
+  const [reason, setReason] = useState(DEFAULT_ADJUST_REASON);
   const r = detail.roll;
   const can = isAdminLike(role);
   return (

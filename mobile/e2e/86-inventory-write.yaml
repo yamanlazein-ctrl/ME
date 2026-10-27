@@ -18,13 +18,6 @@ name: 86 roll adjust and stock count
 - tapOn:
     id: "adjust-kg"
 - inputText: "1"
-- scrollUntilVisible:
-    element:
-      id: "adjust-reason"
-    centerElement: true
-- tapOn:
-    id: "adjust-reason"
-- inputText: "emulator check"
 - takeScreenshot: 44a-roll-adjust-filled
 - tapOn: "حفظ التعديل"
 - extendedWaitUntil:
@@ -36,7 +29,6 @@ name: 86 roll adjust and stock count
 - scrollUntilVisible:
     element:
       id: "movement-row"
-- pressKey: Back
 - pressKey: Back
 - pressKey: Back
 # Stock count.
