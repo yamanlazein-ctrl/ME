@@ -27,8 +27,8 @@ name: 86 roll adjust and stock count
     id: "roll-error"
 - takeScreenshot: 44-roll-adjusted
 # The movement row sits under the fixed save bar on this short screen; the unit test checks it.
-- pressKey: Back
-- pressKey: Back
+# Back to the inventory list: pressing the active tab pops its stack to the top.
+- tapOn: "المخزون"
 # Stock count.
 - tapOn: "جرد المخزون"
 - assertNotVisible: ".*تعذّر.*"
