@@ -4,6 +4,8 @@ name: 90 sign out returns to the login screen, sign in again
 - launchApp
 - runFlow: unlock.yaml
 - tapOn: "المزيد"
+- scrollUntilVisible:
+    element: "تسجيل الخروج"
 - tapOn: "تسجيل الخروج"
 # A phone with unsent work asks first.
 - runFlow:

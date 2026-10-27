@@ -1,4 +1,4 @@
-import { Alert, Pressable, View } from "react-native";
+import { Alert, Pressable, ScrollView } from "react-native";
 import { Text } from "../../../src/ui/Text";
 import { router } from "expo-router";
 import * as Font from "expo-font";
@@ -49,9 +49,10 @@ export default function More() {
     notifyBootChanged();
   };
   return (
-    <View style={{ padding: spacing.lg, paddingTop: spacing.xl }}>
+    <ScrollView contentContainerStyle={{ padding: spacing.lg, paddingTop: spacing.xl }}>
       <Row label="حالة المزامنة" onPress={() => router.push("/(tabs)/more/sync" as never)} />
       <Row label="الصندوق" onPress={() => router.push("/(tabs)/more/cashbox" as never)} />
+      <Row label="التقارير" onPress={() => router.push("/(tabs)/more/reports" as never)} />
       <Row
         label={theme === "dark" ? "المظهر: داكن (اضغط للفاتح)" : "المظهر: فاتح (اضغط للداكن)"}
         onPress={() => setTheme(theme === "dark" ? "light" : "dark")}
@@ -60,6 +61,6 @@ export default function More() {
         {fontsStatus()}
       </Text>
       <Row label="تسجيل الخروج" onPress={() => void logout(false)} />
-    </View>
+    </ScrollView>
   );
 }
