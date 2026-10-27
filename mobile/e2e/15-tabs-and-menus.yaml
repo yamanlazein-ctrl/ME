@@ -4,8 +4,10 @@ name: 15 every tab, the Add menu and the More rows
 - launchApp
 - runFlow: unlock.yaml
 - tapOn: "المخزون"
-- assertVisible: "قريباً"
-- takeScreenshot: 30-inventory-placeholder
+- assertNotVisible: "قريباً"
+- assertNotVisible: ".*تعذّر.*"
+- assertVisible: "بحث"
+- takeScreenshot: 30-inventory-tab
 - tapOn: "إضافة"
 - assertVisible: "بيع جديد"
 - assertVisible: "سند قبض"

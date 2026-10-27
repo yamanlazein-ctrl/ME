@@ -1,0 +1,24 @@
+appId: com.motard.erp
+name: 25 inventory fabrics, colours, rolls, roll detail
+---
+- launchApp
+- runFlow: unlock.yaml
+- tapOn: "المخزون"
+- assertNotVisible: ".*تعذّر.*"
+- assertVisible: "قطن تجريبي.*"
+- takeScreenshot: 40-inventory
+- tapOn: "قطن تجريبي.*"
+- assertVisible:
+    id: "color-row"
+- takeScreenshot: 41-fabric-colors
+- tapOn:
+    id: "color-row"
+- assertVisible:
+    id: "roll-row"
+- takeScreenshot: 42-color-rolls
+- tapOn:
+    id: "roll-row"
+- assertVisible:
+    id: "roll-remaining"
+- assertNotVisible: ".*تعذّر.*"
+- takeScreenshot: 43-roll-detail

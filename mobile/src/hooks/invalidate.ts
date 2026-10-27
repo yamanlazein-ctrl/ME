@@ -11,6 +11,7 @@ export function invalidateFinancialViews(
     qc.invalidateQueries({ queryKey: ["statements"] }),
     qc.invalidateQueries({ queryKey: queryKeys.cashbox }),
     qc.invalidateQueries({ queryKey: queryKeys.invoices }),
+    qc.invalidateQueries({ queryKey: queryKeys.inventory }),
     qc.invalidateQueries({ queryKey: queryKeys.sync }),
   ]);
 }

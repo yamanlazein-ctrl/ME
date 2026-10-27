@@ -8,6 +8,7 @@ import { withTenantTx } from "@backend/infrastructure/orm/engine";
 import * as invoiceUc from "@backend/application/use-cases/invoices/invoiceUseCases";
 import * as voucherUc from "@backend/application/use-cases/vouchers/voucherUseCases";
 import * as expenseUc from "@backend/application/use-cases/expenses/expenseUseCases";
+import * as rollUc from "@backend/application/use-cases/inventory/rollUseCases";
 import * as partyUc from "@backend/application/use-cases/parties/partyUseCases";
 import * as cashboxUc from "@backend/application/use-cases/cashbox/cashboxUseCases";
 import {
@@ -18,10 +19,14 @@ import {
   enqueueInvoiceCancel,
   enqueueMasterCreate,
   enqueueMasterUpdate,
+  enqueueRollAdjustment,
   enqueueVoucherCancel,
   enqueueVoucherCreate,
 } from "@backend/application/use-cases/sync/syncEnqueue";
-import { localDateISO } from "@backend/infrastructure/utils/localDate";
+import { localDateISO, localToday } from "@backend/infrastructure/utils/localDate";
+import { round2dp } from "@erp/shared";
+import { BusinessRuleError } from "@backend/domain/errors/index";
+import { inventoryCountHelpers } from "@backend/infrastructure/repositories/engineHelpers";
 import type { CreateExpenseInput, ExpenseData } from "@backend/domain/entities/Expense";
 import { enqueueInvoiceCreate } from "@backend/application/use-cases/sync/syncUseCases";
 import {
@@ -43,12 +48,22 @@ export interface DocumentServices {
   context(): TenantContext;
 }
 
+/** The two request headers the shared enqueue functions read (`Idempotency-Key`, the device id), without an HTTP request. */
+function syntheticRequest(opId: string, ctx: TenantContext) {
+  return {
+    headers: { "idempotency-key": opId } as Record<string, string>,
+    tenantContext: { syncDeviceId: ctx.syncDeviceId ?? null },
+  };
+}
+
 export interface WriteOptions {
   /** Durable operation id for the sync unit; re-sending the same id never duplicates (constitution III). */
   opId?: string;
 }
 
 class Refused extends Error {}
+
+const isAdminLikeRole = (role: string | undefined) => role === "admin" || role === "accountant";
 
 function failure(error: unknown): { ok: false; error: string } {
   return { ok: false, error: error instanceof Error ? error.message : String(error) };
@@ -444,7 +459,154 @@ export function createDocuments(services: DocumentServices) {
       }
     });
 
+  /**
+   * Manual quantity correction of one roll (desktop route POST /inventory/rolls/:id/adjust): an adjustment stock movement,
+   * the P&L leg at cost and an audit row in one transaction, plus one roll/adjust sync unit. The remaining kg never goes
+   * below zero.
+   */
+  const adjustRoll = (
+    rollId: string,
+    input: { newKg?: number; newPieces?: number; reason: string; expectedVersion?: number },
+    options: WriteOptions = {},
+  ) =>
+    runSerial<Outcome<{ rollId: string; beforeKg: number; afterKg: number }>>(async () => {
+      const ctx = services.context();
+      try {
+        return await withTenantTx(ctx.tenantId, async (tx) => {
+          if (input.newKg === undefined && input.newPieces === undefined) {
+            throw new BusinessRuleError("أدخل الكمية أو عدد الأثواب الجديد");
+          }
+          if ((input.newKg ?? 0) < 0 || (input.newPieces ?? 0) < 0) {
+            throw new BusinessRuleError("لا يمكن أن تكون الكمية أقل من صفر");
+          }
+          if (input.reason.trim().length < 2) throw new BusinessRuleError("اكتب سبب التعديل");
+          const roll = await repos.rollRepo.findById(rollId, ctx);
+          if (!roll) throw new BusinessRuleError("اللفة غير موجودة.");
+          const refId = randomUUID();
+          const adjustment = {
+            rollId,
+            deltaKg:
+              input.newKg === undefined ? 0 : round2dp(input.newKg - Number(roll.remainingKg ?? 0)),
+            deltaPieces:
+              input.newPieces === undefined ? 0 : input.newPieces - (roll.remainingPieces ?? 0),
+            reason: input.reason.trim(),
+            date: localToday(),
+            referenceType: "inventory_adjustment" as const,
+            referenceId: refId,
+            referenceNumber: `ADJ-${refId.slice(0, 8).toUpperCase()}`,
+            expectedVersion: input.expectedVersion ?? null,
+          };
+          const applied = await (
+            await inventoryCountHelpers()
+          ).applyRollAdjustment(tx as never, ctx, adjustment);
+          await enqueueRollAdjustment(
+            repos.syncOutboxRepo,
+            ctx,
+            adjustment,
+            syntheticRequest(options.opId ?? randomUUID(), ctx),
+          );
+          return { ok: true as const, data: applied };
+        });
+      } catch (error) {
+        return failure(error);
+      }
+    });
+
+  /** Price (or note) edit of a roll through the same use-case as the desktop; refused after the first sale (frozen cost). */
+  const updateRoll = (rollId: string, input: Record<string, unknown>, options: WriteOptions = {}) =>
+    runSerial<Outcome<{ id: string }>>(async () => {
+      const ctx = services.context();
+      try {
+        return await withTenantTx(ctx.tenantId, async () => {
+          const before = await repos.rollRepo.findById(rollId, ctx);
+          const updated = await rollUc.updateRollUseCase(
+            repos.rollRepo,
+            rollId,
+            input as never,
+            ctx,
+          );
+          if (!updated.ok) return updated;
+          await enqueueMasterUpdate(
+            repos.syncOutboxRepo,
+            "roll",
+            rollId,
+            changedFields(input, before as unknown as Record<string, unknown> | null),
+            ctx,
+            ctx.syncDeviceId ?? null,
+            options.opId ?? randomUUID(),
+            { version: (before as unknown as { version?: number } | null)?.version ?? null },
+          );
+          return updated as Outcome<{ id: string }>;
+        });
+      } catch (error) {
+        return failure(error);
+      }
+    });
+
+  /** Writes the physical count of one roll (local working line; nothing leaves the phone until it is posted). */
+  const recordCount = (input: {
+    year: number;
+    rollId: string;
+    countedKg: number | null;
+    countedPieces?: number | null;
+    reason?: string;
+  }) =>
+    runSerial<Outcome<{ rollId: string; diffKg: number | null }>>(async () => {
+      const ctx = services.context();
+      try {
+        if (!isAdminLikeRole(ctx.userRole)) {
+          throw new BusinessRuleError("الجرد متاح للمدير والمحاسب فقط");
+        }
+        const data = await withTenantTx(ctx.tenantId, async (tx) =>
+          (await inventoryCountHelpers()).recordCount(
+            tx as never,
+            ctx,
+            input.year,
+            input.rollId,
+            input.countedKg,
+            input.countedPieces ?? null,
+            input.reason,
+          ),
+        );
+        return { ok: true as const, data };
+      } catch (error) {
+        return failure(error);
+      }
+    });
+
+  /** Posts a count variance: a real stock movement + P&L leg, and one roll/adjust sync unit (desktop POST counts/post). */
+  const postCount = (countId: string, options: WriteOptions = {}) =>
+    runSerial<Outcome<{ rollId: string; diffKg: number }>>(async () => {
+      const ctx = services.context();
+      try {
+        if (!isAdminLikeRole(ctx.userRole)) {
+          throw new BusinessRuleError("الجرد متاح للمدير والمحاسب فقط");
+        }
+        const data = await withTenantTx(ctx.tenantId, async (tx) => {
+          const posted = await (
+            await inventoryCountHelpers()
+          ).postCountVariance(tx as never, ctx, countId);
+          if (posted.adjustment) {
+            await enqueueRollAdjustment(
+              repos.syncOutboxRepo,
+              ctx,
+              posted.adjustment,
+              syntheticRequest(options.opId ?? randomUUID(), ctx),
+            );
+          }
+          return { rollId: posted.rollId, diffKg: posted.diffKg };
+        });
+        return { ok: true as const, data };
+      } catch (error) {
+        return failure(error);
+      }
+    });
+
   return {
+    adjustRoll,
+    updateRoll,
+    recordCount,
+    postCount,
     createInvoice,
     cancelInvoice,
     createVoucher,
