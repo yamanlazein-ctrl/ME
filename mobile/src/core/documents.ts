@@ -11,16 +11,24 @@ import * as expenseUc from "@backend/application/use-cases/expenses/expenseUseCa
 import * as fabricUc from "@backend/application/use-cases/inventory/fabricUseCases";
 import * as colorUc from "@backend/application/use-cases/inventory/colorUseCases";
 import * as rollUc from "@backend/application/use-cases/inventory/rollUseCases";
+import * as returnUc from "@backend/application/use-cases/returns/returnUseCases";
+import * as orderUc from "@backend/application/use-cases/orders/orderUseCases";
 import * as partyUc from "@backend/application/use-cases/parties/partyUseCases";
 import * as cashboxUc from "@backend/application/use-cases/cashbox/cashboxUseCases";
 import {
   changedFields,
+  enqueueCashboxClose,
   enqueueCashboxMovement,
   enqueueExpenseCancel,
   enqueueExpenseCreate,
   enqueueInvoiceCancel,
   enqueueMasterCreate,
   enqueueMasterUpdate,
+  enqueueOrderCancel,
+  enqueueOrderCreate,
+  enqueueOrderUpdate,
+  enqueueReturnCancel,
+  enqueueReturnCreate,
   enqueueRollAdjustment,
   enqueueVoucherCancel,
   enqueueVoucherCreate,
@@ -34,9 +42,12 @@ import { enqueueInvoiceCreate } from "@backend/application/use-cases/sync/syncUs
 import {
   captureInvoiceSyncDependencies,
   capturePartySyncDependencies,
+  captureReturnSyncDependencies,
 } from "@backend/application/use-cases/sync/syncDependencySnapshots";
 import type { CreateInvoiceInput, InvoiceData } from "@backend/domain/entities/Invoice";
+import type { CreateReturnInput, ReturnData } from "@backend/domain/entities/Return";
 import type { CreateVoucherInput, VoucherData } from "@backend/domain/entities/Voucher";
+import type { CreateOrderInput, OrderData } from "@backend/domain/entities/Order";
 import type { PartyData } from "@backend/domain/entities/Party";
 import type { TenantContext } from "@backend/domain/types/index";
 import type { PhoneRepositories } from "./container";
@@ -832,7 +843,191 @@ export function createDocuments(services: DocumentServices) {
       }
     });
 
+  /** Sale or entry return against a source invoice (desktop POST /returns): the use-case values it and writes the reversals. */
+  const createReturn = (input: CreateReturnInput, options: WriteOptions = {}) =>
+    runSerial<Outcome<ReturnData>>(async () => {
+      const ctx = services.context();
+      try {
+        if (!isAdminLikeRole(ctx.userRole)) {
+          throw new BusinessRuleError("المرتجعات متاحة للمدير والمحاسب فقط");
+        }
+        return await withTenantTx(ctx.tenantId, async () => {
+          const created = await returnUc.createReturnUseCase(
+            repos.returnRepo,
+            repos.auditRepo,
+            input,
+            ctx,
+          );
+          if (!created.ok) return created;
+          const dependencies = await captureReturnSyncDependencies(repos, input, ctx);
+          await enqueueReturnCreate(
+            repos.syncOutboxRepo,
+            {
+              id: created.data.id,
+              number: created.data.number,
+              kind: created.data.kind,
+              partyId: created.data.partyId,
+            },
+            input,
+            ctx,
+            ctx.syncDeviceId ?? null,
+            options.opId ?? randomUUID(),
+            dependencies,
+          );
+          return created;
+        });
+      } catch (error) {
+        return failure(error);
+      }
+    });
+
+  const cancelReturn = (id: string, expectedVersion: number, options: WriteOptions = {}) =>
+    runSerial<Outcome<ReturnData>>(async () => {
+      const ctx = services.context();
+      try {
+        if (!isAdminLikeRole(ctx.userRole)) {
+          throw new BusinessRuleError("المرتجعات متاحة للمدير والمحاسب فقط");
+        }
+        return await withTenantTx(ctx.tenantId, async () => {
+          const cancelled = await returnUc.cancelReturnUseCase(
+            repos.returnRepo,
+            repos.auditRepo,
+            id,
+            ctx.userId,
+            ctx,
+            expectedVersion,
+          );
+          if (!cancelled.ok) return cancelled;
+          await enqueueReturnCancel(
+            repos.syncOutboxRepo,
+            { id: cancelled.data.id, number: cancelled.data.number },
+            ctx,
+            ctx.syncDeviceId ?? null,
+            options.opId ?? randomUUID(),
+            expectedVersion,
+          );
+          return cancelled;
+        });
+      } catch (error) {
+        return failure(error);
+      }
+    });
+
+  /** A customer order (desktop POST /orders): the code comes from this device's number block inside the same transaction. */
+  const createOrder = (input: CreateOrderInput, options: WriteOptions = {}) =>
+    runSerial<Outcome<OrderData>>(async () => {
+      const ctx = services.context();
+      try {
+        return await withTenantTx(ctx.tenantId, async () => {
+          const created = await orderUc.createOrderUseCase(repos.orderRepo, input, undefined, ctx);
+          if (!created.ok) return created;
+          await enqueueOrderCreate(
+            repos.syncOutboxRepo,
+            { id: created.data.id, code: created.data.code },
+            input,
+            ctx,
+            ctx.syncDeviceId ?? null,
+            options.opId ?? randomUUID(),
+            input.customerId ? await partyDeps(input.customerId, ctx) : null,
+          );
+          return created;
+        });
+      } catch (error) {
+        return failure(error);
+      }
+    });
+
+  const cancelOrder = (id: string, expectedVersion: number, options: WriteOptions = {}) =>
+    runSerial<Outcome<OrderData>>(async () => {
+      const ctx = services.context();
+      try {
+        return await withTenantTx(ctx.tenantId, async () => {
+          const cancelled = await orderUc.cancelOrderUseCase(
+            repos.orderRepo,
+            id,
+            ctx,
+            expectedVersion,
+          );
+          if (!cancelled.ok) return cancelled;
+          await enqueueOrderCancel(
+            repos.syncOutboxRepo,
+            { id: cancelled.data.id, code: cancelled.data.code },
+            ctx,
+            ctx.syncDeviceId ?? null,
+            options.opId ?? randomUUID(),
+            expectedVersion,
+          );
+          return cancelled;
+        });
+      } catch (error) {
+        return failure(error);
+      }
+    });
+
+  /** Marks an open order fulfilled by an existing invoice (desktop POST /orders/:id/fulfill). */
+  const fulfillOrder = (id: string, invoiceId: string, options: WriteOptions = {}) =>
+    runSerial<Outcome<OrderData>>(async () => {
+      const ctx = services.context();
+      try {
+        return await withTenantTx(ctx.tenantId, async () => {
+          const before = await repos.orderRepo.findById(id, ctx);
+          const done = await orderUc.fulfillOrderUseCase(repos.orderRepo, id, invoiceId, ctx);
+          if (!done.ok) return done;
+          await enqueueOrderUpdate(
+            repos.syncOutboxRepo,
+            { id: done.data.id, code: done.data.code },
+            {},
+            invoiceId,
+            ctx,
+            ctx.syncDeviceId ?? null,
+            options.opId ?? randomUUID(),
+            { version: before?.version ?? null },
+          );
+          return done;
+        });
+      } catch (error) {
+        return failure(error);
+      }
+    });
+
+  /** Closes a day's cashbox (desktop POST /cashbox/close-day). Only the date, the counted amount and the currency are sent. */
+  const closeCashboxDay = (
+    input: { date: string; counted: number; currency: string },
+    options: WriteOptions = {},
+  ) =>
+    runSerial<Outcome<{ date: string }>>(async () => {
+      const ctx = services.context();
+      try {
+        if (!isAdminLikeRole(ctx.userRole)) {
+          throw new BusinessRuleError("إقفال اليوم متاح للمدير والمحاسب فقط");
+        }
+        if (!(input.counted >= 0)) throw new BusinessRuleError("اكتب المبلغ المعدود");
+        const payload = { date: input.date, counted: input.counted, currency: input.currency };
+        return await withTenantTx(ctx.tenantId, async () => {
+          const closed = await cashboxUc.closeDayUseCase(repos.cashboxRepo, payload as never, ctx);
+          if (!closed.ok) return closed as Outcome<{ date: string }>;
+          await enqueueCashboxClose(
+            repos.syncOutboxRepo,
+            input.date,
+            payload,
+            ctx,
+            ctx.syncDeviceId ?? null,
+            options.opId ?? randomUUID(),
+          );
+          return { ok: true as const, data: { date: input.date } };
+        });
+      } catch (error) {
+        return failure(error);
+      }
+    });
+
   return {
+    closeCashboxDay,
+    createOrder,
+    cancelOrder,
+    fulfillOrder,
+    createReturn,
+    cancelReturn,
     createEntryInvoice,
     adjustRoll,
     updateRoll,

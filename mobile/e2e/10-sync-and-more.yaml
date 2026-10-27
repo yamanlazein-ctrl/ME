@@ -5,10 +5,14 @@ name: 10 sync status and fonts
 - runFlow: unlock.yaml
 - tapOn: "المزيد"
 - assertVisible: "حالة المزامنة"
-- assertVisible:
-    id: "fonts-status"
+- scrollUntilVisible:
+    element:
+      id: "fonts-status"
 - assertVisible: "الخطوط والأيقونات: محمّلة"
 - takeScreenshot: 04-more
+- scrollUntilVisible:
+    element: "حالة المزامنة"
+    direction: UP
 - tapOn: "حالة المزامنة"
 - assertVisible: "بانتظار الإرسال.*"
 - assertNotVisible: "آخر تشغيل: —"

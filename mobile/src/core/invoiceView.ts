@@ -6,6 +6,7 @@ import type { Phone } from "./phone";
 
 export interface InvoiceLineView {
   id: string;
+  rollId: string;
   fabric: string;
   color: string;
   rollNo: string;
@@ -40,6 +41,7 @@ export async function loadInvoiceView(phone: Phone, id: string): Promise<Invoice
     const color = await phone.repos.colorRepo.findById(l.colorId, ctx);
     lines.push({
       id: l.id,
+      rollId: l.rollId,
       fabric: fabric?.name ?? "",
       color: color?.name ?? "",
       rollNo: rollNo.get(l.rollId) ?? "",

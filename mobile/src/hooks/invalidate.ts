@@ -13,6 +13,8 @@ export function invalidateFinancialViews(
     qc.invalidateQueries({ queryKey: queryKeys.invoices }),
     qc.invalidateQueries({ queryKey: queryKeys.inventory }),
     qc.invalidateQueries({ queryKey: ["reports"] }),
+    qc.invalidateQueries({ queryKey: ["returns"] }),
+    qc.invalidateQueries({ queryKey: ["orders"] }),
     qc.invalidateQueries({ queryKey: queryKeys.sync }),
   ]);
 }

@@ -52,6 +52,9 @@ export default function More() {
     <ScrollView contentContainerStyle={{ padding: spacing.lg, paddingTop: spacing.xl }}>
       <Row label="حالة المزامنة" onPress={() => router.push("/(tabs)/more/sync" as never)} />
       <Row label="الصندوق" onPress={() => router.push("/(tabs)/more/cashbox" as never)} />
+      <Row label="الطلبيات" onPress={() => router.push("/(tabs)/more/orders" as never)} />
+      <Row label="إقفال اليوم" onPress={() => router.push("/(tabs)/more/close-day" as never)} />
+      <Row label="المرتجعات" onPress={() => router.push("/(tabs)/more/returns" as never)} />
       <Row label="التقارير" onPress={() => router.push("/(tabs)/more/reports" as never)} />
       <Row
         label={theme === "dark" ? "المظهر: داكن (اضغط للفاتح)" : "المظهر: فاتح (اضغط للداكن)"}

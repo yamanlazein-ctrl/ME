@@ -38,6 +38,8 @@ name: 15 every tab, the Add menu and the More rows
 - assertNotVisible: ".*تعذّر.*"
 - pressKey: Back
 # Theme toggle: dark to light and back.
+- scrollUntilVisible:
+    element: "المظهر: داكن.*"
 - tapOn: "المظهر: داكن.*"
 - assertVisible: "المظهر: فاتح.*"
 - takeScreenshot: 32-light-theme

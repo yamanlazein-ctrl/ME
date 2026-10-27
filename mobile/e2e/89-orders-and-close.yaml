@@ -1,0 +1,62 @@
+appId: com.motard.erp
+name: 89 customer order, cancel, and the close-day screen
+---
+- launchApp
+- runFlow: unlock.yaml
+- tapOn: "المزيد"
+- tapOn: "الطلبيات"
+- assertNotVisible: ".*تعذّر.*"
+- takeScreenshot: 90-orders
+- tapOn: "طلبية جديدة"
+- tapOn:
+    id: "party-option"
+- tapOn:
+    id: "order-fabric"
+- inputText: Ordfab
+- hideKeyboard
+- tapOn:
+    id: "order-color"
+- inputText: Ordcolor
+- hideKeyboard
+- tapOn:
+    id: "order-kg"
+- inputText: "25"
+- hideKeyboard
+- tapOn: "إضافة البند"
+- assertVisible: "Ordfab · Ordcolor · 25 كغ"
+- takeScreenshot: 91-order-form
+- tapOn: "حفظ الطلبية"
+- extendedWaitUntil:
+    visible:
+      id: "order-row"
+    timeout: 60000
+- assertNotVisible:
+    id: "order-error"
+- takeScreenshot: 92-order-saved
+- tapOn:
+    id: "order-row"
+- extendedWaitUntil:
+    visible:
+      id: "order-status"
+    timeout: 30000
+- takeScreenshot: 93-order-detail
+- scrollUntilVisible:
+    element: "إلغاء الطلبية"
+- tapOn: "إلغاء الطلبية"
+- tapOn:
+    text: "إلغاء الطلبية"
+    index: 1
+- extendedWaitUntil:
+    visible:
+      id: "order-row"
+    timeout: 60000
+- takeScreenshot: 94-order-cancelled
+# Close-day screen (admin): the screen loads with the balances and the confirmation dialog opens.
+- tapOn: "المزيد"
+- scrollUntilVisible:
+    element: "إقفال اليوم"
+- tapOn: "إقفال اليوم"
+- assertNotVisible:
+    id: "close-day-denied"
+- assertNotVisible: ".*تعذّر.*"
+- takeScreenshot: 95-close-day
