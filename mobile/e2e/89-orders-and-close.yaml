@@ -22,6 +22,9 @@ name: 89 customer order, cancel, and the close-day screen
     id: "order-kg"
 - inputText: "25"
 - hideKeyboard
+- scrollUntilVisible:
+    element: "إضافة البند"
+    centerElement: true
 - tapOn: "إضافة البند"
 - assertVisible: "Ordfab · Ordcolor · 25 كغ"
 - takeScreenshot: 91-order-form

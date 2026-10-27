@@ -18,6 +18,10 @@ name: 86 roll adjust and stock count
 - tapOn:
     id: "adjust-kg"
 - inputText: "1"
+- scrollUntilVisible:
+    element:
+      id: "adjust-reason"
+    centerElement: true
 - tapOn:
     id: "adjust-reason"
 - inputText: "emulator check"

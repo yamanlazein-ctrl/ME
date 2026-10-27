@@ -72,6 +72,7 @@ export function PartyListView({
         keyExtractor={(r) => r.id}
         renderItem={({ item }) => (
           <Pressable
+            testID="party-row"
             accessibilityRole="button"
             onPress={() => onOpen(item.id)}
             style={{

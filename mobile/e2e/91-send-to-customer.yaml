@@ -17,8 +17,7 @@ name: 91 send to customer asks for a phone when the party has none
     id: "party-search"
 - inputText: Nophone ${output.stamp}
 - tapOn:
-    text: "Nophone ${output.stamp}.*"
-    index: 1
+    id: "party-row"
 - tapOn: "كشف الحساب"
 - extendedWaitUntil:
     visible: "إرسال الكشف للعميل"

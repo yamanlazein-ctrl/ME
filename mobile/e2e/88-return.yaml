@@ -17,6 +17,10 @@ name: 88 sale return against a source invoice, then cancel it
 - scrollUntilVisible:
     element:
       id: "return-line"
+- scrollUntilVisible:
+    element:
+      id: "ret-kg-.*"
+    centerElement: true
 - tapOn:
     id: "ret-kg-.*"
 - inputText: "0.1"
