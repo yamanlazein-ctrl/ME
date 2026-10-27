@@ -6,7 +6,7 @@ export default function EntryDone() {
   return (
     <EntryDoneView
       number={number}
-      onOpen={() => router.replace(`/invoices/${id}` as never)}
+      onOpen={() => router.push(`/invoices/${id}` as never)}
       onNew={() => router.replace("/(tabs)/add/entry" as never)}
     />
   );

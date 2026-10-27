@@ -130,6 +130,18 @@ export function OrderFormView({
       >
         <Text style={{ fontSize: fontSize.title, marginBottom: spacing.md }}>طلبية جديدة</Text>
         <PartyPicker kind="customer" value={customer} onPick={onCustomer} />
+        <Field label="القماش" fieldId="order-fabric" value={fabric} onChangeText={setFabric} />
+        <Field label="اللون" fieldId="order-color" value={color} onChangeText={setColor} />
+        <MoneyInput label="الكمية المطلوبة (كغ)" fieldId="order-kg" onChangeAmount={setKg} />
+        <Btn
+          label="إضافة البند"
+          onPress={() => {
+            if (!canAdd) return;
+            onAddItem({ fabricName: fabric.trim(), colorName: color.trim(), requestedKg: kg ?? 0 });
+            setFabric("");
+            setColor("");
+          }}
+        />
         {items.map((i) => (
           <View
             key={i.key}
@@ -145,18 +157,6 @@ export function OrderFormView({
             <Btn label="حذف البند" danger onPress={() => onRemoveItem(i.key)} />
           </View>
         ))}
-        <Field label="القماش" fieldId="order-fabric" value={fabric} onChangeText={setFabric} />
-        <Field label="اللون" fieldId="order-color" value={color} onChangeText={setColor} />
-        <MoneyInput label="الكمية المطلوبة (كغ)" fieldId="order-kg" onChangeAmount={setKg} />
-        <Btn
-          label="إضافة البند"
-          onPress={() => {
-            if (!canAdd) return;
-            onAddItem({ fabricName: fabric.trim(), colorName: color.trim(), requestedKg: kg ?? 0 });
-            setFabric("");
-            setColor("");
-          }}
-        />
         {error ? (
           <Text testID="order-error" style={{ color: colors.negative, marginTop: spacing.md }}>
             {error}

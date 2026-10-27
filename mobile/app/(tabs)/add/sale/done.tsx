@@ -9,7 +9,7 @@ export default function SaleDone() {
     <SaleDoneView
       number={number}
       onSharePdf={() => void shareInvoicePdf(id)}
-      onOpen={() => router.replace(`/invoices/${id}` as never)}
+      onOpen={() => router.push(`/invoices/${id}` as never)}
       sendSlot={<SendToCustomer docRef={{ type: "invoice", id }} />}
       onNew={() => router.replace("/(tabs)/add/sale/customer" as never)}
     />

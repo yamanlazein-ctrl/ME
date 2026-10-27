@@ -212,13 +212,6 @@ export function RollDetailView({
         <Text>{`سعر الكيلو: ${r.pricePerKg} ${r.currency}`}</Text>
         <Text>{`تاريخ الإدخال: ${r.entryDate}`}</Text>
         {r.dyeBatch ? <Text>{`دفعة الصباغة: ${r.dyeBatch}`}</Text> : null}
-        <Text style={{ marginTop: spacing.lg, color: colors.mutedForeground }}>حركات المخزون</Text>
-        {detail.movements.length === 0 ? <Text>لا حركات</Text> : null}
-        {detail.movements.map((m) => (
-          <Text key={m.id} testID="movement-row">
-            {`${m.date} · ${m.reference} · ${m.deltaKg > 0 ? "+" : ""}${m.deltaKg.toFixed(2)} كغ`}
-          </Text>
-        ))}
         {can ? (
           <View style={{ marginTop: spacing.xl }}>
             <Text style={{ fontSize: fontSize.body, marginBottom: spacing.sm }}>تعديل الكمية</Text>
@@ -231,6 +224,13 @@ export function RollDetailView({
             />
           </View>
         ) : null}
+        <Text style={{ marginTop: spacing.lg, color: colors.mutedForeground }}>حركات المخزون</Text>
+        {detail.movements.length === 0 ? <Text>لا حركات</Text> : null}
+        {detail.movements.map((m) => (
+          <Text key={m.id} testID="movement-row">
+            {`${m.date} · ${m.reference} · ${m.deltaKg > 0 ? "+" : ""}${m.deltaKg.toFixed(2)} كغ`}
+          </Text>
+        ))}
         {error ? (
           <Text testID="roll-error" style={{ color: colors.negative, marginTop: spacing.md }}>
             {error}

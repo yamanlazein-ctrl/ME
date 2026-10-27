@@ -14,10 +14,9 @@ name: 88 sale return against a source invoice, then cancel it
 - takeScreenshot: 80-return-invoices
 - tapOn:
     id: "source-invoice"
-- extendedWaitUntil:
-    visible:
+- scrollUntilVisible:
+    element:
       id: "return-line"
-    timeout: 30000
 - tapOn:
     id: "ret-kg-.*"
 - inputText: "0.1"
