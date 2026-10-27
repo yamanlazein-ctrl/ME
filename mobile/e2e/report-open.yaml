@@ -6,7 +6,7 @@ appId: com.motard.erp
 - tapOn: ${TITLE}
 - extendedWaitUntil:
     visible:
-      id: "report-figures"
+      id: "report-title"
     timeout: 30000
 - assertNotVisible:
     id: "report-error"

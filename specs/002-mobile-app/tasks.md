@@ -841,53 +841,53 @@ CUT LINE B — Tier B ends here. Everything below is deferred to the next credit
 
 ## Phase 15: US10 — Inventory, roll adjust, stock count (Must, P2) [FR-24–FR-26]
 
-- [ ] T107 [US10] (FR-24, FR-25) Create `mobile/app/(tabs)/inventory/index.tsx`, `[fabricId].tsx` and `roll/[rollId].tsx`:
+- [x] T107 [US10] (FR-24, FR-25) Create `mobile/app/(tabs)/inventory/index.tsx`, `[fabricId].tsx` and `roll/[rollId].tsx`:
       browse and search, remaining kg, a low-stock badge when remaining < `minStockKg`, and roll movements.
       Check: render test of the badge (50 kg minimum, 32 kg remaining).
-- [ ] T108 [US10] (FR-25) Roll adjust form (allowed roles) calling the adjust use-case. A price edit is refused
+- [x] T108 [US10] (FR-25) Roll adjust form (allowed roles) calling the adjust use-case. A price edit is refused
       after the first sale with the use-case message. Remaining kg must not go below 0. Check: unit tests
       for the refusal and the negative guard.
-- [ ] T109 [US10] Stock count screen `mobile/app/(tabs)/inventory/count.tsx`, using the count-sheet and
+- [x] T109 [US10] Stock count screen `mobile/app/(tabs)/inventory/count.tsx`, using the count-sheet and
       count-post use-cases. Admin and accountant may count offline; warehouse and viewer cannot while
       offline (Clarification Q2). Check: unit test, a count of 18.0 for a 20.0 kg roll posts a −2.0
       adjustment, and the role rule holds offline.
-- [ ] T110 [US10] CHECKPOINT "feat(mobile): inventory and stock count (US10)".
+- [x] T110 [US10] CHECKPOINT "feat(mobile): inventory and stock count (US10)".
 
 ## Phase 16: US12 — Reports and profit (Must, P3) [FR-28]
 
-- [ ] T111 [US12] Create `mobile/app/(tabs)/more/reports/index.tsx` and `[slug].tsx`: summary, party
+- [x] T111 [US12] Create `mobile/app/(tabs)/more/reports/index.tsx` and `[slug].tsx`: summary, party
       balances, detail reports and profit summary/details for a date range, figures per currency. Check:
       unit test, profit revenue = subtotal − discount, and cost uses `cost_per_kg`, equal to the
       use-case output.
-- [ ] T112 [US12] CHECKPOINT "feat(mobile): reports and profit (US12)".
+- [x] T112 [US12] CHECKPOINT "feat(mobile): reports and profit (US12)".
 
 ## Phase 17: US7 — Purchase (entry) invoice (Must, P2) [FR-16]
 
-- [ ] T113 [US7] Create `mobile/app/(tabs)/add/entry/` steps (supplier → lines that may introduce new
+- [x] T113 [US7] Create `mobile/app/(tabs)/add/entry/` steps (supplier → lines that may introduce new
       colours and rolls → review). Save calls the entry invoice use-case once, so new colours and rolls are
       created in the same transaction. The client never creates them first. Check: a parity scenario with a
       forced failure after the colour insert leaves no colour, roll or ledger row.
-- [ ] T114 [US7] CHECKPOINT "feat(mobile): entry invoice (US7)".
+- [x] T114 [US7] CHECKPOINT "feat(mobile): entry invoice (US7)".
 
 ## Phase 18: US8 — Returns (Must, P2) [FR-18]
 
-- [ ] T115 [US8] Create `mobile/app/(tabs)/add/return.tsx`: pick the source invoice, then its lines,
+- [x] T115 [US8] Create `mobile/app/(tabs)/add/return.tsx`: pick the source invoice, then its lines,
       allowing weight-only (0 pieces). Valuation comes from the use-case. Cancel writes reversals. Check: a
       parity scenario returning 2 lines at rate 14,500 equals the desktop.
-- [ ] T116 [US8] CHECKPOINT "feat(mobile): returns (US8)".
+- [x] T116 [US8] CHECKPOINT "feat(mobile): returns (US8)".
 
 ## Phase 19: US9 / US11 — Cashbox close and orders [FR-23, FR-27]
 
-- [ ] T117 [US11] Create `mobile/app/(tabs)/more/orders/` (list, create, detail with cancel and fulfil;
+- [x] T117 [US11] Create `mobile/app/(tabs)/more/orders/` (list, create, detail with cancel and fulfil;
       pending conflicts read-only with "يجب الحل من الديسكتوب", "must be resolved on the desktop").
       Check: render tests.
-- [ ] T118 [US9] Cashbox close-day (Should): send only date, counted amount and currency to the close-day
+- [x] T118 [US9] Cashbox close-day (Should): send only date, counted amount and currency to the close-day
       use-case, admin and accountant only. Check: unit test of the payload shape.
-- [ ] T119 CHECKPOINT "feat(mobile): orders and cashbox close (US9, US11)".
+- [x] T119 CHECKPOINT "feat(mobile): orders and cashbox close (US9, US11)".
 
 ## Phase 20: US13 — Share PDF and send to customer (Must, P2) [FR-29, FR-30, E13, E14]
 
-- [ ] T120 [US13] Create `mobile/src/core/share.ts`: `sharePdf(uri)` via `expo-sharing`, and
+- [x] T120 [US13] Create `mobile/src/core/share.ts`: `sharePdf(uri)` via `expo-sharing`, and
       `sendToCustomer(phone, note, pdfUri)`.
   - Use an Android intent to package `com.whatsapp` with `jid=<digits>@s.whatsapp.net` and the PDF
     stream, via `expo-intent-launcher`.
@@ -897,30 +897,30 @@ CUT LINE B — Tier B ends here. Everything below is deferred to the next credit
 
   Check: unit tests for the fallback order.
 
-- [ ] T121 [US13] Wire "Send to customer" on the invoice, voucher, return and statement screens. With no
+- [x] T121 [US13] Wire "Send to customer" on the invoice, voucher, return and statement screens. With no
       saved phone number, prompt for one and offer to save it to the party (E13). Check: render test of the
       prompt.
-- [ ] T122 [US13] CHECKPOINT "feat(mobile): PDF share and send to customer (US13)".
+- [x] T122 [US13] CHECKPOINT "feat(mobile): PDF share and send to customer (US13)".
 
 ## Phase 21: BC-5 and in-app update check [FR-43, FR-42]
 
-- [ ] T123 Create `backend/src/presentation/routes/mobileVersion.route.ts`, registered in
+- [x] T123 Create `backend/src/presentation/routes/mobileVersion.route.ts`, registered in
       `backend/src/presentation/server.ts` beside the health routes, per contracts/backend-changes.md
       BC-5, plus `backend/tests/mobile-version-route.test.ts`. Check: the test passes, then GATE-D in full.
-- [ ] T124 (FR-43) Create `mobile/src/core/updateCheck.ts`: on the APK channel, at most once a day, call
+- [x] T124 (FR-43) Create `mobile/src/core/updateCheck.ts`: on the APK channel, at most once a day, call
       `GET /api/mobile/version` and offer the download when `latestVersionCode` is greater than the app's.
       Check: unit test.
-- [ ] T125 CHECKPOINT "feat: mobile version manifest and update check (BC-5, FR-43)".
+- [x] T125 CHECKPOINT "feat: mobile version manifest and update check (BC-5, FR-43)".
 
 ## Phase 22: Should and Could [US16, US17, BC-4]
 
-- [ ] T126 [US16] BC-4: create `src/components/sync/EnrollmentQr.tsx` and render it in
+- [x] T126 [US16] BC-4: create `src/components/sync/EnrollmentQr.tsx` and render it in
       `src/components/settings/HubDevicesCard.tsx` next to the text code. The QR payload is the JSON
       `{ "hub": <url>, "code": <code> }`. Add one QR library to the root `package.json`, then create
       `src/components/sync/__tests__/EnrollmentQr.test.tsx`. Check: GATE-D steps 6–7.
-- [ ] T127 [US16] Party opening balance form (admin and accountant) calling the opening use-case.
+- [x] T127 [US16] Party opening balance form (admin and accountant) calling the opening use-case.
       Check: a parity scenario with a supplier opening of −1,000 USD equals the desktop statement start.
-- [ ] T128 [US16] Desktop revoke screen shows the phone's unsynced count. It is read from
+- [x] T128 [US16] Desktop revoke screen shows the phone's unsynced count. It is read from
       `GET /api/sync/devices` when that endpoint exposes per-device pending; otherwise record "not
       available" in evidence and skip. Check: GATE-D steps 6–7.
 - [ ] T129 [US17] Could: today's-cash home widget, saved note templates, and a tablet two-pane parties
@@ -928,17 +928,17 @@ CUT LINE B — Tier B ends here. Everything below is deferred to the next credit
 
 ## Phase 23: Polish, performance and release [NFR-01–NFR-13, SC-003–SC-008, M5]
 
-- [ ] T130 (NFR-02, NFR-03) Performance under Node: `mobile/test/perf/volume.test.ts` seeds 100,000 invoices into a temp
+- [x] T130 (NFR-02, NFR-03) Performance under Node: `mobile/test/perf/volume.test.ts` seeds 100,000 invoices into a temp
       database (with `scripts/parity/seed-volume.mjs` logic adapted to SQLite), then measures party search,
       the first statement page and an invoice save. It records the numbers in `evidence/T130.md` against
       NFR-02. Check: the file exists with the three numbers.
 - [ ] T131 OWNER-LOCAL (NFR-01, NFR-03, NFR-08, NFR-13, SC-005) Performance on the reference phone with 100,000 documents: cold start (NFR-01),
       search, statement and save (NFR-02), APK size (NFR-08), battery after one day (NFR-13). Write the
       numbers into `evidence/T131.md`.
-- [ ] T132 (NFR-09, G4) Accessibility pass: every touchable in `mobile/app/**` has an accessibility label and
+- [x] T132 (NFR-09, G4) Accessibility pass: every touchable in `mobile/app/**` has an accessibility label and
       ≥ 48 dp. Add an automated test walking the rendered screens and asserting the `minHeight` style.
       NFR-09. Check: the test passes.
-- [ ] T133 Release workflow: extend `.github/workflows/mobile-android.yml` with a manual job `release`
+- [x] T133 Release workflow: extend `.github/workflows/mobile-android.yml` with a manual job `release`
       that decodes the keystore from the secret `MOTARD_UPLOAD_KEYSTORE_B64` using
       `MOTARD_UPLOAD_KEYSTORE_PASSWORD`, `MOTARD_UPLOAD_KEY_ALIAS` and `MOTARD_UPLOAD_KEY_PASSWORD`, then
       runs `./gradlew bundleRelease assembleRelease` and uploads the AAB and APK plus a `SHA256SUMS`

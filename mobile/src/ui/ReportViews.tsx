@@ -99,7 +99,9 @@ export function ReportPageView({
 }) {
   return (
     <View style={{ flex: 1, padding: spacing.lg }}>
-      <Text style={{ fontSize: fontSize.title, marginBottom: spacing.md }}>{page.title}</Text>
+      <Text testID="report-title" style={{ fontSize: fontSize.title, marginBottom: spacing.md }}>
+        {page.title}
+      </Text>
       <PeriodChips period={period} onChange={onPeriod} />
       {error ? (
         <Text testID="report-error" style={{ color: colors.negative }}>

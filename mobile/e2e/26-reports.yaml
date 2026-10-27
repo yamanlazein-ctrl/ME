@@ -72,7 +72,7 @@ name: 26 every report
 - tapOn: "نظرة عامة"
 - extendedWaitUntil:
     visible:
-      id: "report-figures"
+      id: "report-title"
     timeout: 30000
 - tapOn: "هذا الشهر"
 - assertNotVisible:
