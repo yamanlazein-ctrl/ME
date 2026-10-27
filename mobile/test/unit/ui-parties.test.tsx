@@ -3,6 +3,7 @@ import { fireEvent, render, screen } from "@testing-library/react-native";
 import {
   NAME_HINT,
   PartyDetailView,
+  emptyPartyForm,
   PartyFormView,
   PartyListView,
   StatementView,
@@ -99,7 +100,7 @@ describe("party screens (US4)", () => {
     const message = "اسم العميل/المورد مستخدم مسبقاً — اختر اسماً مختلفاً أو افتح السجل الموجود.";
     await render(
       <PartyFormView
-        values={{ name: "زينب", phone: "", city: "" }}
+        values={{ ...emptyPartyForm(), name: "زينب" }}
         error={message}
         busy={false}
         onChange={() => undefined}

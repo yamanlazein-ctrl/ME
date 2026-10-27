@@ -5,6 +5,7 @@ import type { StatementEntryData } from "@backend/domain/entities/Statement";
 import { canWriteOffline, type Role } from "../core/roles";
 import type { PartyRow } from "../core/partyQueries";
 import { Field } from "./Field";
+import { MoneyInput } from "./MoneyInput";
 import { MoneyText } from "./MoneyText";
 import { PrimaryActionBar } from "./PrimaryActionBar";
 import { colors, fontSize, radius, spacing, TOUCH_TARGET } from "./theme";
@@ -239,19 +240,37 @@ export function withNameHint(error: string): string {
   return /مستخدم مسبقاً|مكرر/.test(error) ? `${error}\n${NAME_HINT}` : error;
 }
 
+export type OpeningDirection = "they_owe_us" | "we_owe_them";
+
 export interface PartyFormValues {
   name: string;
   phone: string;
   city: string;
+  /** Opening balance (a new party only): amount, who owes whom, and the currency. */
+  openingAmount: number | null;
+  openingDirection: OpeningDirection;
+  openingCurrency: string;
 }
+
+export const emptyPartyForm = (): PartyFormValues => ({
+  name: "",
+  phone: "",
+  city: "",
+  openingAmount: null,
+  openingDirection: "they_owe_us",
+  openingCurrency: "USD",
+});
 
 export function PartyFormView({
   values,
   error,
   busy,
+  showOpening = false,
   onChange,
   onSave,
 }: {
+  /** The opening-balance fields: a new party saved by admin or accountant. */
+  showOpening?: boolean;
   values: PartyFormValues;
   error: string | null;
   busy: boolean;
@@ -279,6 +298,74 @@ export function PartyFormView({
         value={values.city}
         onChangeText={(city) => onChange({ city })}
       />
+      {showOpening ? (
+        <View testID="opening-section">
+          <MoneyInput
+            label="الرصيد الافتتاحي (اختياري)"
+            fieldId="party-opening"
+            onChangeAmount={(openingAmount) => onChange({ openingAmount })}
+          />
+          <View style={{ flexDirection: "row", gap: spacing.sm, marginBottom: spacing.md }}>
+            {(
+              [
+                ["they_owe_us", "عليه لنا"],
+                ["we_owe_them", "له علينا"],
+              ] as const
+            ).map(([dir, label]) => (
+              <Pressable
+                key={dir}
+                accessibilityRole="button"
+                accessibilityLabel={label}
+                accessibilityState={{ selected: values.openingDirection === dir }}
+                onPress={() => onChange({ openingDirection: dir })}
+                style={{
+                  minHeight: TOUCH_TARGET,
+                  justifyContent: "center",
+                  paddingHorizontal: spacing.lg,
+                  borderRadius: radius.md,
+                  backgroundColor: values.openingDirection === dir ? colors.primary : colors.muted,
+                }}
+              >
+                <Text
+                  style={{
+                    color:
+                      values.openingDirection === dir
+                        ? colors.primaryForeground
+                        : colors.foreground,
+                  }}
+                >
+                  {label}
+                </Text>
+              </Pressable>
+            ))}
+            {(["USD", "SYP"] as const).map((c) => (
+              <Pressable
+                key={c}
+                accessibilityRole="button"
+                accessibilityLabel={`عملة ${c}`}
+                accessibilityState={{ selected: values.openingCurrency === c }}
+                onPress={() => onChange({ openingCurrency: c })}
+                style={{
+                  minHeight: TOUCH_TARGET,
+                  justifyContent: "center",
+                  paddingHorizontal: spacing.lg,
+                  borderRadius: radius.md,
+                  backgroundColor: values.openingCurrency === c ? colors.primary : colors.muted,
+                }}
+              >
+                <Text
+                  style={{
+                    color:
+                      values.openingCurrency === c ? colors.primaryForeground : colors.foreground,
+                  }}
+                >
+                  {c}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
+        </View>
+      ) : null}
       {error ? (
         <Text testID="party-form-error" style={{ color: colors.negative }}>
           {withNameHint(error)}

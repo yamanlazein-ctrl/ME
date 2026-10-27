@@ -102,7 +102,7 @@ export async function balancesByCurrency(
   kind: "customer" | "supplier",
 ): Promise<Record<string, number>> {
   const data = await phone.repos.statementRepo.getStatement(
-    { partyId, kind, limit: 1 } as never,
+    { partyId, kind, currency: "ALL", limit: 1 } as never,
     phone.context(),
   );
   const out: Record<string, number> = {};

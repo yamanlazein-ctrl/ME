@@ -1,15 +1,16 @@
 import { useEffect, useState } from "react";
 import { router, useLocalSearchParams } from "expo-router";
 import { useQueryClient } from "@tanstack/react-query";
+import { localDateISO } from "@backend/infrastructure/utils/localDate";
 import { getApp } from "../../../src/core/appRuntime";
 import { notifyLocalWrite } from "../../../src/core/syncRunner";
 import { invalidateFinancialViews } from "../../../src/hooks/invalidate";
-import { PartyFormView, type PartyFormValues } from "../../../src/ui/PartyViews";
+import { emptyPartyForm, PartyFormView, type PartyFormValues } from "../../../src/ui/PartyViews";
 
 export default function PartyForm() {
   const { id, kind } = useLocalSearchParams<{ id?: string; kind?: string }>();
   const qc = useQueryClient();
-  const [values, setValues] = useState<PartyFormValues>({ name: "", phone: "", city: "" });
+  const [values, setValues] = useState<PartyFormValues>(emptyPartyForm());
   const [version, setVersion] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -22,7 +23,12 @@ export default function PartyForm() {
         : null;
       if (party) {
         setVersion(party.version ?? 0);
-        setValues({ name: party.name, phone: party.phone ?? "", city: party.city ?? "" });
+        setValues({
+          ...emptyPartyForm(),
+          name: party.name,
+          phone: party.phone ?? "",
+          city: party.city ?? "",
+        });
       }
     });
   }, [id]);
@@ -37,6 +43,15 @@ export default function PartyForm() {
         name: values.name.trim(),
         phone: values.phone || null,
         city: values.city || null,
+        // Opening balance only on a NEW party (the desktop edits it through its own opening use-case).
+        ...(!id && values.openingAmount
+          ? {
+              openingAmount: values.openingAmount,
+              openingDirection: values.openingDirection,
+              openingCurrency: values.openingCurrency,
+              openingDate: localDateISO(new Date()),
+            }
+          : {}),
       };
       const result = id
         ? await app.phone.documents.updateParty(id, body, version)
@@ -61,6 +76,7 @@ export default function PartyForm() {
   return (
     <PartyFormView
       values={values}
+      showOpening={!id}
       error={error}
       busy={busy}
       onChange={(patch) => setValues((v) => ({ ...v, ...patch }))}
