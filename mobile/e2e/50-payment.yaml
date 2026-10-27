@@ -16,5 +16,13 @@ name: 50 payment
 - assertNotVisible:
     id: "voucher-error"
 - extendedWaitUntil:
+    visible:
+      id: "voucher-done"
+    timeout: 30000
+- assertVisible:
+    id: "send-to-customer"
+- takeScreenshot: 13-payment-done
+- tapOn: "تم"
+- extendedWaitUntil:
     visible: "بيع جديد"
     timeout: 30000

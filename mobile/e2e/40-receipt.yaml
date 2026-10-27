@@ -18,5 +18,13 @@ name: 40 receipt
 - assertNotVisible:
     id: "voucher-error"
 - extendedWaitUntil:
+    visible:
+      id: "voucher-done"
+    timeout: 30000
+- assertVisible:
+    id: "send-to-customer"
+- takeScreenshot: 13-receipt-done
+- tapOn: "تم"
+- extendedWaitUntil:
     visible: "بيع جديد"
     timeout: 30000

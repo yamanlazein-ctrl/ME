@@ -1,10 +1,11 @@
-import { ActivityIndicator } from "react-native";
+import { ActivityIndicator, View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { useQuery } from "@tanstack/react-query";
 import { getApp } from "../../../../src/core/appRuntime";
 import { canWriteOffline } from "../../../../src/core/roles";
 import { useRole } from "../../../../src/hooks/useRole";
 import { useStatement } from "../../../../src/hooks/useStatement";
+import { SendToCustomer } from "../../../../src/ui/SendToCustomer";
 import { StatementView } from "../../../../src/ui/PartyViews";
 
 export default function StatementScreen() {
@@ -23,19 +24,27 @@ export default function StatementScreen() {
   const statement = useStatement(id, kindQuery.data ?? "customer");
   if (!kindQuery.data || !statement.data) return <ActivityIndicator style={{ flex: 1 }} />;
   return (
-    <StatementView
-      entries={statement.data.entries}
-      closing={statement.data.header.finalBalance}
-      {...(canWriteOffline(role)
-        ? {
-            onAmend: (entry) =>
-              router.push({
-                pathname:
-                  entry.type === "receipt_in" ? "/(tabs)/add/receipt" : "/(tabs)/add/payment",
-                params: { amendId: entry.referenceId },
-              } as never),
-          }
-        : {})}
-    />
+    <View style={{ flex: 1 }}>
+      <View style={{ paddingHorizontal: 16 }}>
+        <SendToCustomer
+          docRef={{ type: "statement", partyId: id, kind: kindQuery.data }}
+          label="إرسال الكشف للعميل"
+        />
+      </View>
+      <StatementView
+        entries={statement.data.entries}
+        closing={statement.data.header.finalBalance}
+        {...(canWriteOffline(role)
+          ? {
+              onAmend: (entry) =>
+                router.push({
+                  pathname:
+                    entry.type === "receipt_in" ? "/(tabs)/add/receipt" : "/(tabs)/add/payment",
+                  params: { amendId: entry.referenceId },
+                } as never),
+            }
+          : {})}
+      />
+    </View>
   );
 }

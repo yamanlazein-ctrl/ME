@@ -2,6 +2,10 @@ import { useEffect, useState } from "react";
 import { router } from "expo-router";
 import { getApp } from "../core/appRuntime";
 import { useFinishWrite } from "../hooks/useFinishWrite";
+import { Pressable, View } from "react-native";
+import { SendToCustomer } from "./SendToCustomer";
+import { Text } from "./Text";
+import { colors, fontSize, radius, spacing, TOUCH_TARGET } from "./theme";
 import { emptyVoucher, VoucherForm, type VoucherFormValues } from "./VoucherForm";
 import { localDateISO } from "@backend/infrastructure/utils/localDate";
 
@@ -18,6 +22,7 @@ export function VoucherScreen({
   const [original, setOriginal] = useState<{ version: number; amount: number } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [done, setDone] = useState<{ id: string; number: string } | null>(null);
 
   useEffect(() => {
     if (!amendId) return;
@@ -65,13 +70,39 @@ export function VoucherScreen({
         return;
       }
       await finish();
-      router.back();
+      setDone({ id: result.data.id, number: result.data.number });
     } catch (e) {
       setError(e instanceof Error ? e.message : "تعذّر الحفظ");
     } finally {
       setBusy(false);
     }
   };
+
+  if (done) {
+    return (
+      <View style={{ flex: 1, padding: spacing.xl, paddingTop: 64, gap: spacing.md }}>
+        <Text testID="voucher-done" style={{ fontSize: fontSize.title }}>
+          {`تم حفظ السند ${done.number}`}
+        </Text>
+        <SendToCustomer docRef={{ type: "voucher", id: done.id }} />
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="تم"
+          onPress={() => router.back()}
+          style={{
+            minHeight: TOUCH_TARGET,
+            justifyContent: "center",
+            alignItems: "center",
+            borderRadius: radius.md,
+            borderWidth: 1,
+            borderColor: colors.border,
+          }}
+        >
+          <Text>تم</Text>
+        </Pressable>
+      </View>
+    );
+  }
 
   return (
     <VoucherForm

@@ -246,11 +246,14 @@ export function SaleDoneView({
   onSharePdf,
   onNew,
   onOpen,
+  sendSlot,
 }: {
   number: string;
   onSharePdf(): void;
   onNew(): void;
   onOpen(): void;
+  /** The "send to customer" control (it needs the device APIs, so the screen provides it). */
+  sendSlot?: React.ReactNode;
 }) {
   return (
     <View style={{ flex: 1, padding: spacing.xl, paddingTop: 64, gap: spacing.md }}>
@@ -260,7 +263,6 @@ export function SaleDoneView({
       >{`تم حفظ الفاتورة ${number}`}</Text>
       {[
         { label: "مشاركة PDF", onPress: onSharePdf },
-        { label: "إرسال للعميل (قريباً)", onPress: () => undefined, disabled: true },
         { label: "عرض الفاتورة", onPress: onOpen },
         { label: "فاتورة جديدة", onPress: onNew },
       ].map((a) => (
@@ -268,22 +270,19 @@ export function SaleDoneView({
           key={a.label}
           accessibilityRole="button"
           accessibilityLabel={a.label}
-          accessibilityState={{ disabled: Boolean(a.disabled) }}
-          disabled={a.disabled ?? false}
           onPress={a.onPress}
           style={{
             minHeight: TOUCH_TARGET,
             justifyContent: "center",
             paddingHorizontal: spacing.xl,
-            backgroundColor: a.disabled ? colors.muted : colors.primary,
+            backgroundColor: colors.primary,
             borderRadius: radius.md,
           }}
         >
-          <Text style={{ color: a.disabled ? colors.mutedForeground : colors.primaryForeground }}>
-            {a.label}
-          </Text>
+          <Text style={{ color: colors.primaryForeground }}>{a.label}</Text>
         </Pressable>
       ))}
+      {sendSlot}
     </View>
   );
 }

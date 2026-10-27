@@ -57,7 +57,7 @@ describe("sale review and done screens (T100, T101)", () => {
     expect(screen.getByText("أضف بنداً واحداً على الأقل")).toBeTruthy();
   });
 
-  it("done screen offers share PDF, a placeholder for send-to-customer, and a new invoice", async () => {
+  it("done screen offers share PDF and a new invoice (send-to-customer is the screen's slot)", async () => {
     const onSharePdf = vi.fn();
     const onNew = vi.fn();
     await render(
@@ -75,9 +75,7 @@ describe("sale review and done screens (T100, T101)", () => {
     await fireEvent.press(screen.getByLabelText("فاتورة جديدة"));
     expect(onSharePdf).toHaveBeenCalled();
     expect(onNew).toHaveBeenCalled();
-    expect(screen.getByLabelText("إرسال للعميل (قريباً)").props.accessibilityState.disabled).toBe(
-      true,
-    );
+    expect(screen.queryByLabelText("إرسال للعميل (قريباً)")).toBeNull(); // the screen supplies the real control
   });
 });
 

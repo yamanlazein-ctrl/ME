@@ -6,6 +6,7 @@ import { isAdminLike } from "../../../../src/core/roles";
 import { listReturns, type ReturnListRow } from "../../../../src/core/returns";
 import { useFinishWrite } from "../../../../src/hooks/useFinishWrite";
 import { useRole } from "../../../../src/hooks/useRole";
+import { SendToCustomer } from "../../../../src/ui/SendToCustomer";
 import { ReturnListView } from "../../../../src/ui/ReturnViews";
 
 export default function Returns() {
@@ -33,6 +34,7 @@ export default function Returns() {
       rows={data ?? []}
       canCancel={isAdminLike(role)}
       error={error}
+      sendSlot={(row) => <SendToCustomer docRef={{ type: "return", id: row.id }} />}
       onCancel={(row) =>
         Alert.alert("إلغاء المرتجع", `هل تريد إلغاء المرتجع ${row.number}؟`, [
           { text: "رجوع", style: "cancel" },

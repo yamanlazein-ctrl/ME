@@ -191,11 +191,13 @@ export function ReturnListView({
   canCancel,
   error,
   onCancel,
+  sendSlot,
 }: {
   rows: ReturnListRow[];
   canCancel: boolean;
   error: string | null;
   onCancel(row: ReturnListRow): void;
+  sendSlot?(row: ReturnListRow): React.ReactNode;
 }) {
   return (
     <ScrollView contentContainerStyle={{ padding: spacing.lg }}>
@@ -219,6 +221,7 @@ export function ReturnListView({
         >
           <Text>{`${r.number} · ${r.kind === "sale" ? "بيع" : "شراء"} · ${r.date}`}</Text>
           <MoneyText amount={r.total} currency={r.currency} />
+          {sendSlot ? sendSlot(r) : null}
           {r.status === "cancelled" ? (
             <Text style={{ color: colors.negative }}>ملغى</Text>
           ) : canCancel ? (

@@ -11,12 +11,14 @@ export function InvoiceDetailView({
   error,
   onCancel,
   onShare,
+  sendSlot,
 }: {
   view: InvoiceView;
   role: Role;
   error: string | null;
   onCancel(): void;
   onShare(): void;
+  sendSlot?: React.ReactNode;
 }) {
   const i = view.invoice;
   const cancelled = i.status === "cancelled";
@@ -57,6 +59,7 @@ export function InvoiceDetailView({
       >
         <Text style={{ color: colors.primaryForeground }}>مشاركة PDF</Text>
       </Pressable>
+      {sendSlot}
       {isAdminLike(role) && !cancelled ? (
         <Pressable
           accessibilityRole="button"
