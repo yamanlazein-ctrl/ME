@@ -18,11 +18,10 @@ name: 86 roll adjust and stock count
 - tapOn:
     id: "adjust-kg"
 - inputText: "1"
-- hideKeyboard
 - tapOn:
     id: "adjust-reason"
 - inputText: "emulator check"
-- hideKeyboard
+- takeScreenshot: 44a-roll-adjust-filled
 - tapOn: "حفظ التعديل"
 - extendedWaitUntil:
     visible: "المتبقي: 1.00 كغ.*"
