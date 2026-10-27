@@ -101,6 +101,35 @@ const screens: Array<[string, () => ReactElement]> = [
     ),
   ],
   [
+    "roll detail",
+    () => (
+      <RollDetailView
+        detail={{
+          roll: {
+            id: "r",
+            rollNo: "R1",
+            remainingKg: 5,
+            remainingPieces: 1,
+            pricePerKg: 2,
+            currency: "USD",
+            status: "in_stock",
+            version: 1,
+            initialKg: 5,
+            entryDate: "2026-01-01",
+            dyeBatch: null,
+          },
+          fabricName: "ق",
+          colorName: "ل",
+          movements: [],
+        }}
+        role="admin"
+        error={null}
+        busy={false}
+        onAdjust={noop}
+      />
+    ),
+  ],
+  [
     "count sheet",
     () => (
       <CountSheetView
