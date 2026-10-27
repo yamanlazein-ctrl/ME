@@ -8,6 +8,8 @@ import { withTenantTx } from "@backend/infrastructure/orm/engine";
 import * as invoiceUc from "@backend/application/use-cases/invoices/invoiceUseCases";
 import * as voucherUc from "@backend/application/use-cases/vouchers/voucherUseCases";
 import * as expenseUc from "@backend/application/use-cases/expenses/expenseUseCases";
+import * as fabricUc from "@backend/application/use-cases/inventory/fabricUseCases";
+import * as colorUc from "@backend/application/use-cases/inventory/colorUseCases";
 import * as rollUc from "@backend/application/use-cases/inventory/rollUseCases";
 import * as partyUc from "@backend/application/use-cases/parties/partyUseCases";
 import * as cashboxUc from "@backend/application/use-cases/cashbox/cashboxUseCases";
@@ -47,6 +49,34 @@ export interface DocumentServices {
   /** The signed-in user on this phone, with the phone's sync device id. */
   context(): TenantContext;
 }
+
+export interface EntryLineInput {
+  /** Existing fabric / colour ids win; otherwise the name is matched exactly or created inside the same save. */
+  fabricId?: string;
+  fabricName: string;
+  colorId?: string;
+  colorName: string;
+  dyeBatch?: string;
+  quantityKg: number;
+  pieces: number;
+  pricePerKg: number;
+}
+
+export interface EntryInvoiceInput {
+  date: string;
+  supplierId: string;
+  currency: string;
+  exchangeRate: number;
+  lines: EntryLineInput[];
+  discount?: number;
+  tax?: number;
+  shipping?: number;
+  paid?: number;
+  notes?: string;
+}
+
+const cleanName = (name: string): string => name.trim().replace(/\s+/g, " ");
+const normName = (name: string): string => cleanName(name).toLowerCase();
 
 /** The two request headers the shared enqueue functions read (`Idempotency-Key`, the device id), without an HTTP request. */
 function syntheticRequest(opId: string, ctx: TenantContext) {
@@ -602,7 +632,208 @@ export function createDocuments(services: DocumentServices) {
       }
     });
 
+  /**
+   * Purchase (entry) invoice (FR-16). Any new fabric, colour and roll is created INSIDE the same transaction as the invoice,
+   * each with its own master-create sync unit queued before the invoice unit (the order the desktop produces by creating them
+   * first). A refusal anywhere throws, so nothing of the save survives: no fabric, colour, roll, ledger entry or movement.
+   */
+  const createEntryInvoice = (input: EntryInvoiceInput, options: WriteOptions = {}) =>
+    runSerial<Outcome<InvoiceData>>(async () => {
+      const ctx = services.context();
+      const device = ctx.syncDeviceId ?? null;
+      try {
+        return await withTenantTx(ctx.tenantId, async () => {
+          if (input.lines.length === 0) throw new BusinessRuleError("أضف بنداً واحداً على الأقل");
+          const fabricByName = new Map<string, string>();
+          const colorByName = new Map<string, string>();
+          const lines: CreateInvoiceInput["lines"] = [];
+          for (const l of input.lines) {
+            if (!(l.quantityKg > 0)) throw new BusinessRuleError("الكمية يجب أن تكون أكبر من صفر");
+            if (!(l.pricePerKg >= 0)) throw new BusinessRuleError("السعر غير صحيح");
+            if (!l.fabricName.trim() || !l.colorName.trim()) {
+              throw new BusinessRuleError("اكتب اسم القماش واللون");
+            }
+            let fabricId = l.fabricId ?? fabricByName.get(normName(l.fabricName));
+            if (!fabricId) {
+              const found = await repos.fabricRepo.list(
+                { search: cleanName(l.fabricName), limit: 50 },
+                ctx,
+              );
+              fabricId = found.data.find((f) => normName(f.name) === normName(l.fabricName))?.id;
+            }
+            if (!fabricId) {
+              const made = await fabricUc.createFabricUseCase(
+                repos.fabricRepo,
+                { name: cleanName(l.fabricName), minStockKg: 0 },
+                ctx,
+              );
+              if (!made.ok) throw new BusinessRuleError(made.error);
+              const f = made.data;
+              await enqueueMasterCreate(
+                repos.syncOutboxRepo,
+                "fabric",
+                f.id,
+                {
+                  id: f.id,
+                  name: f.name,
+                  category: f.category ?? null,
+                  minStockKg: f.minStockKg,
+                  unit: f.unit ?? null,
+                  notes: f.notes ?? null,
+                  imageUrl: f.imageUrl ?? null,
+                },
+                ctx,
+                device,
+                randomUUID(),
+              );
+              fabricId = f.id;
+            }
+            fabricByName.set(normName(l.fabricName), fabricId);
+
+            const colorKey = `${fabricId}|${normName(l.colorName)}`;
+            let colorId = l.colorId ?? colorByName.get(colorKey);
+            if (!colorId) {
+              const found = await repos.colorRepo.list(
+                { fabricId, search: cleanName(l.colorName), limit: 50 },
+                ctx,
+              );
+              colorId = found.data.find((c) => normName(c.name) === normName(l.colorName))?.id;
+            }
+            if (!colorId) {
+              const made = await colorUc.createColorUseCase(
+                repos.colorRepo,
+                { fabricId, name: cleanName(l.colorName) },
+                ctx,
+              );
+              if (!made.ok) throw new BusinessRuleError(made.error);
+              const c = made.data;
+              await enqueueMasterCreate(
+                repos.syncOutboxRepo,
+                "color",
+                c.id,
+                {
+                  id: c.id,
+                  fabricId: c.fabricId,
+                  name: c.name,
+                  code: c.code ?? null,
+                  hex: c.hex ?? null,
+                  imageUrl: c.imageUrl ?? null,
+                },
+                ctx,
+                device,
+                randomUUID(),
+              );
+              colorId = c.id;
+            }
+            colorByName.set(colorKey, colorId);
+
+            // The roll is born empty; the entry invoice raises its remaining kg (the desktop's own sequence).
+            const madeRoll = await rollUc.createRollUseCase(
+              repos.rollRepo,
+              {
+                colorId,
+                rollNo: `R-${randomUUID().slice(0, 8).toUpperCase()}`,
+                ...(l.dyeBatch?.trim() ? { dyeBatch: l.dyeBatch.trim() } : {}),
+                initialKg: l.quantityKg,
+                remainingKg: 0,
+                pieces: l.pieces,
+                pricePerKg: l.pricePerKg,
+                currency: input.currency,
+                supplierId: input.supplierId,
+                entryDate: input.date,
+              },
+              ctx,
+            );
+            if (!madeRoll.ok) throw new BusinessRuleError(madeRoll.error);
+            const roll = madeRoll.data;
+            await enqueueMasterCreate(
+              repos.syncOutboxRepo,
+              "roll",
+              roll.id,
+              {
+                id: roll.id,
+                colorId: roll.colorId,
+                rollNo: roll.rollNo,
+                dyeBatch: roll.dyeBatch ?? null,
+                initialKg: roll.initialKg,
+                remainingKg: roll.remainingKg,
+                pieces: roll.pieces,
+                remainingPieces: roll.remainingPieces,
+                pricePerKg: roll.pricePerKg,
+                salePricePerKg: roll.salePricePerKg ?? null,
+                currency: roll.currency,
+                supplierId: roll.supplierId ?? null,
+                entryDate: roll.entryDate,
+                widthCm: roll.widthCm ?? null,
+                weightGsm: roll.weightGsm ?? null,
+                status: roll.status,
+              },
+              ctx,
+              device,
+              randomUUID(),
+            );
+            lines.push({
+              fabricId,
+              colorId,
+              rollId: roll.id,
+              quantityKg: l.quantityKg,
+              pieces: l.pieces,
+              pricePerKg: l.pricePerKg,
+            } as CreateInvoiceInput["lines"][number]);
+          }
+
+          const createInput = {
+            type: "entry",
+            date: input.date,
+            partyId: input.supplierId,
+            partyType: "supplier",
+            currency: input.currency,
+            exchangeRate: input.exchangeRate,
+            lines,
+            discount: input.discount ?? 0,
+            tax: input.tax ?? 0,
+            shipping: input.shipping ?? 0,
+            paid: input.paid ?? 0,
+            ...(input.notes ? { notes: input.notes } : {}),
+          } as CreateInvoiceInput;
+          const created = await invoiceUc.createInvoiceUseCase(
+            repos.invoiceRepo,
+            repos.auditRepo,
+            createInput,
+            ctx,
+          );
+          if (!created.ok) throw new BusinessRuleError(created.error);
+          const dependencies = await captureInvoiceSyncDependencies(repos, createInput, ctx);
+          await enqueueInvoiceCreate(
+            repos.syncOutboxRepo,
+            {
+              id: created.data.id,
+              type: created.data.type,
+              number: created.data.number,
+              partyId: created.data.partyId,
+              linkedVoucherId: created.data.linkedVoucherId ?? null,
+              lines: created.data.lines.map((l) => ({
+                rollId: l.rollId,
+                quantityKg: l.quantityKg,
+                pieces: l.pieces ?? 0,
+                costPerKg: l.costPerKg ?? null,
+              })),
+            },
+            createInput,
+            ctx,
+            device,
+            options.opId ?? randomUUID(),
+            dependencies,
+          );
+          return created;
+        });
+      } catch (error) {
+        return failure(error);
+      }
+    });
+
   return {
+    createEntryInvoice,
     adjustRoll,
     updateRoll,
     recordCount,

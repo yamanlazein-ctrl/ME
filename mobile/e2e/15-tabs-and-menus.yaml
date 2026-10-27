@@ -10,6 +10,7 @@ name: 15 every tab, the Add menu and the More rows
 - takeScreenshot: 30-inventory-tab
 - tapOn: "إضافة"
 - assertVisible: "بيع جديد"
+- assertVisible: "فاتورة شراء"
 - assertVisible: "سند قبض"
 - assertVisible: "سند دفع"
 - assertVisible: "مصروف"
@@ -24,6 +25,9 @@ name: 15 every tab, the Add menu and the More rows
 - assertNotVisible: ".*تعذّر.*"
 - pressKey: Back
 - tapOn: "بيع جديد"
+- assertNotVisible: ".*تعذّر.*"
+- pressKey: Back
+- tapOn: "فاتورة شراء"
 - assertNotVisible: ".*تعذّر.*"
 - pressKey: Back
 - tapOn: "المزيد"

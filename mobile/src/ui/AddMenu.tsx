@@ -4,6 +4,7 @@ import { colors, fontSize, radius, spacing, TOUCH_TARGET } from "./theme";
 
 export const ADD_ENTRIES = [
   { id: "sale", label: "بيع جديد", href: "/(tabs)/add/sale/customer" },
+  { id: "entry", label: "فاتورة شراء", href: "/(tabs)/add/entry" },
   { id: "receipt", label: "سند قبض", href: "/(tabs)/add/receipt" },
   { id: "payment", label: "سند دفع", href: "/(tabs)/add/payment" },
   { id: "expense", label: "مصروف", href: "/(tabs)/add/expense" },
