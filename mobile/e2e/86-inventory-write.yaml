@@ -26,8 +26,7 @@ name: 86 roll adjust and stock count
 - assertNotVisible:
     id: "roll-error"
 - takeScreenshot: 44-roll-adjusted
-- scrollUntilVisible:
-    element: ".*ADJ-.*"
+- assertVisible: ".*ADJ-.*"
 - pressKey: Back
 - pressKey: Back
 # Stock count.
