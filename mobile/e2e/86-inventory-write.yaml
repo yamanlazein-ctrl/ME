@@ -27,8 +27,7 @@ name: 86 roll adjust and stock count
     id: "roll-error"
 - takeScreenshot: 44-roll-adjusted
 - scrollUntilVisible:
-    element:
-      id: "movement-row"
+    element: ".*ADJ-.*"
 - pressKey: Back
 - pressKey: Back
 # Stock count.

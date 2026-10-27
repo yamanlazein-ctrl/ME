@@ -11,9 +11,8 @@ name: 91 send to customer asks for a phone when the party has none
     timeout: 30000
 - tapOn:
     id: "party-row"
-- extendedWaitUntil:
-    visible: "كشف الحساب"
-    timeout: 30000
+- scrollUntilVisible:
+    element: "كشف الحساب"
 - tapOn: "كشف الحساب"
 - extendedWaitUntil:
     visible: "إرسال الكشف للعميل"
