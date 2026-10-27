@@ -54,3 +54,51 @@ export function UpdateBanner({
     </View>
   );
 }
+
+export const UPDATE_AVAILABLE_TEXT = "تحديث متوفر";
+
+/** The direct-APK channel's own offer (FR-43): a newer version exists on the hub. */
+export function UpdateOfferBanner({
+  offer,
+  onOpen = (u) => void Linking.openURL(u),
+}: {
+  offer: { versionName: string; apkUrl: string; required: boolean } | null;
+  onOpen?: (url: string) => void;
+}) {
+  if (!offer) return null;
+  return (
+    <View
+      testID="update-offer"
+      style={{
+        backgroundColor: colors.card,
+        borderWidth: 1,
+        borderColor: offer.required ? colors.warning : colors.border,
+        padding: spacing.md,
+        borderRadius: radius.md,
+        margin: spacing.sm,
+        flexDirection: "row",
+        alignItems: "center",
+        justifyContent: "space-between",
+      }}
+    >
+      <Text style={{ fontSize: fontSize.body }}>
+        {`${offer.required ? UPDATE_REQUIRED_TEXT : UPDATE_AVAILABLE_TEXT} — ${offer.versionName}`}
+      </Text>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="تنزيل التحديث"
+        onPress={() => onOpen(offer.apkUrl)}
+        style={{
+          minHeight: TOUCH_TARGET,
+          minWidth: TOUCH_TARGET,
+          justifyContent: "center",
+          paddingHorizontal: spacing.md,
+          backgroundColor: colors.primary,
+          borderRadius: radius.md,
+        }}
+      >
+        <Text style={{ color: colors.primaryForeground }}>تنزيل</Text>
+      </Pressable>
+    </View>
+  );
+}

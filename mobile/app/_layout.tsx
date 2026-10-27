@@ -24,7 +24,8 @@ import { useSyncStatus } from "../src/hooks/useSyncStatus";
 import { AppLockOverlay } from "../src/ui/AppLockOverlay";
 import { SyncChip } from "../src/ui/SyncChip";
 import { ToastProvider } from "../src/ui/Toast";
-import { UpdateBanner } from "../src/ui/UpdateBanner";
+import { UpdateBanner, UpdateOfferBanner } from "../src/ui/UpdateBanner";
+import { useUpdateOffer } from "../src/hooks/useUpdateOffer";
 import { assertRtl } from "../src/ui/rtl";
 import { installGlobalErrorLogging, logError } from "../src/core/devlog";
 import { useAppFonts } from "../src/ui/fonts";
@@ -51,6 +52,7 @@ const UPDATE_URL =
 function StatusStrip() {
   const chip = useSyncState();
   const status = useSyncStatus();
+  const offer = useUpdateOffer();
   return (
     <View
       style={{
@@ -77,6 +79,7 @@ function StatusStrip() {
         <SyncChip state={chip} />
       </View>
       <UpdateBanner visible={status.halted === "versionMismatch"} url={UPDATE_URL} />
+      <UpdateOfferBanner offer={offer} />
     </View>
   );
 }
