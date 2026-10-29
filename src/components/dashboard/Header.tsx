@@ -69,7 +69,7 @@ export function Header() {
       data-od-id="top-bar"
       className="sticky top-0 z-30 border-b border-border bg-background/95 backdrop-blur-md"
     >
-      <div className="mx-auto flex h-[3.75rem] items-center gap-6 px-5 md:gap-10 md:px-8">
+      <div className="mx-auto flex h-14 items-center gap-2 px-3 sm:gap-4 sm:px-5 md:gap-8 md:px-8">
         {/* Zone 1 — Brand */}
         <div className="flex shrink-0 items-center gap-2.5">
           <img
@@ -89,7 +89,7 @@ export function Header() {
         </div>
 
         {/* Zone 3 — Tools */}
-        <div className="flex shrink-0 items-center gap-5">
+        <div className="flex shrink-0 items-center gap-1.5 sm:gap-3">
           <div className="hidden xl:block">
             <FxReferenceRate />
           </div>

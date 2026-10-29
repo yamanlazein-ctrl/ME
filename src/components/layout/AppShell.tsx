@@ -412,10 +412,17 @@ export function AppShell({
     );
   };
 
+  const mobilePrimaryNav: NavItem[] = [
+    { to: "/", label: "الرئيسية", icon: LayoutDashboard, exact: true },
+    { to: "/inventory", label: "المخزون", icon: Boxes, exact: true },
+    { to: "/invoices/sale/new", label: "فاتورة بيع", icon: ShoppingCart },
+    { to: "/customers", label: "العملاء", icon: Users },
+  ];
+
   return (
     <div className="min-h-screen overflow-x-clip bg-background text-foreground" dir="rtl">
       <Header />
-      <div className="flex w-full gap-3 px-2 py-2 sm:px-3 sm:py-2.5">
+      <div className="flex w-full gap-3 px-2 py-2 pb-24 sm:px-3 sm:py-2.5 lg:pb-2.5">
         <aside
           className={cn(
             "hidden shrink-0 transition-[width] duration-300 ease-out lg:block",
@@ -486,6 +493,33 @@ export function AppShell({
           {children}
         </main>
       </div>
+
+      <nav
+        aria-label="التنقل السريع"
+        className="fixed inset-x-2 bottom-2 z-30 grid grid-cols-4 rounded-2xl border border-border/80 bg-card/95 p-1.5 shadow-elevated backdrop-blur-xl lg:hidden"
+      >
+        {mobilePrimaryNav.map((item) => {
+          const active = item.exact
+            ? pathname === item.to
+            : pathname === item.to || pathname.startsWith(`${item.to}/`);
+          return (
+            <Link
+              key={item.to}
+              to={item.to}
+              aria-current={active ? "page" : undefined}
+              className={cn(
+                "flex min-h-14 flex-col items-center justify-center gap-1 rounded-xl px-1 text-[10px] font-semibold transition-colors",
+                active
+                  ? "bg-primary text-primary-foreground shadow-sm"
+                  : "text-muted-foreground hover:bg-secondary hover:text-foreground",
+              )}
+            >
+              <item.icon className="size-5" strokeWidth={active ? 2.4 : 2} />
+              <span>{item.label}</span>
+            </Link>
+          );
+        })}
+      </nav>
     </div>
   );
 }
