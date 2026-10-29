@@ -477,7 +477,9 @@ function SyncSettingsAdmin() {
         </form>
       </PageCard>
 
-      {state?.url && hasAdminPrivileges(session?.hubUserRole) && <HubDevicesCard />}
+      {state?.url && hasAdminPrivileges(session?.hubUserRole) && (
+        <HubDevicesCard hubUrl={state.url} />
+      )}
 
       {isTauri() && <FactoryResetCard />}
 
