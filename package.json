@@ -1,6 +1,6 @@
 {
   "name": "fabric-erp",
-  "version": "3.0.7",
+  "version": "3.0.8",
   "private": true,
   "engines": {
     "node": ">=22 <23"
