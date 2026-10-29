@@ -151,7 +151,11 @@ describe("first PIN and sign-in errors (users without a PIN could never sign in)
   it("setPin posts to /api/auth/set-pin with the device's proof and surfaces the hub's refusal", async () => {
     const { svc, calls } = setup({}, (url) =>
       url.endsWith("/api/auth/set-pin")
-        ? json(400, { code: "VALIDATION", message: "هذا الرقم السري ضعيف جداً" })
+        ? json(422, {
+            code: "VALIDATION_ERROR",
+            message: "البيانات المدخلة غير صحيحة",
+            details: { pin: ["هذا الرقم السري ضعيف جداً"] },
+          })
         : json(200, {}),
     );
     await expect(svc.setPin("u2", "1234")).rejects.toMatchObject({

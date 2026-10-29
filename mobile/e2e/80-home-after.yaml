@@ -4,5 +4,8 @@ name: 80 Home after the writes
 - launchApp
 - runFlow: unlock.yaml
 - assertVisible: "مبيعات اليوم"
-- assertNotVisible: ".*تعذّر.*"
+- assertVisible: "الصندوق"
+- assertVisible: "الذمم"
+- assertNotVisible:
+    id: "state-error"
 - takeScreenshot: 20-home-after

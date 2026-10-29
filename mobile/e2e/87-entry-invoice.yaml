@@ -3,21 +3,22 @@ name: 87 purchase invoice with a new fabric and colour
 ---
 - launchApp
 - runFlow: unlock.yaml
-- tapOn: "إضافة"
-- tapOn: "فاتورة شراء"
+- tapOn:
+    id: "tab-add"
+- tapOn:
+    id: "add-entry"
+- tapOn:
+    id: "party-picker"
 - tapOn:
     id: "party-option"
-- tapOn:
-    id: "entry-rate"
-- inputText: "1"
-- hideKeyboard
 - takeScreenshot: 70-entry-supplier
-- tapOn: "التالي: البنود"
-- tapOn: "إضافة بند"
+- tapOn:
+    id: "entry-add-line"
 - tapOn:
     id: "entry-fabric"
 - inputText: Newfab
 - hideKeyboard
+- assertVisible: "قماش جديد — يُنشأ مع الفاتورة"
 - tapOn:
     id: "entry-color"
 - inputText: Newcolor
@@ -25,6 +26,7 @@ name: 87 purchase invoice with a new fabric and colour
 - scrollUntilVisible:
     element:
       id: "entry-kg"
+    centerElement: true
 - tapOn:
     id: "entry-kg"
 - inputText: "12"
@@ -32,6 +34,7 @@ name: 87 purchase invoice with a new fabric and colour
 - scrollUntilVisible:
     element:
       id: "entry-pieces"
+    centerElement: true
 - tapOn:
     id: "entry-pieces"
 - inputText: "2"
@@ -39,31 +42,39 @@ name: 87 purchase invoice with a new fabric and colour
 - scrollUntilVisible:
     element:
       id: "entry-price"
+    centerElement: true
 - tapOn:
     id: "entry-price"
 - inputText: "3"
 - hideKeyboard
 - takeScreenshot: 71-entry-line-form
-- tapOn: "حفظ البند"
+- tapOn:
+    id: "entry-line-save"
 - assertVisible: "Newfab · Newcolor"
-- takeScreenshot: 72-entry-lines
-- tapOn: "التالي: المراجعة"
 - assertVisible:
     id: "entry-total"
-- takeScreenshot: 73-entry-review
-- tapOn: "حفظ فاتورة الشراء"
+- takeScreenshot: 72-entry-form
+- tapOn:
+    id: "entry-save"
 - extendedWaitUntil:
-    visible: "تم حفظ فاتورة الشراء.*"
+    visible:
+      id: "doc-done"
     timeout: 60000
 - assertNotVisible:
     id: "entry-error"
 - takeScreenshot: 74-entry-done
-- tapOn: "عرض الفاتورة"
-- assertNotVisible: ".*تعذّر.*"
+- tapOn: "عرض المستند"
+- extendedWaitUntil:
+    visible: "البنود.*"
+    timeout: 30000
 - takeScreenshot: 75-entry-invoice
 # The new fabric is in the inventory with its 12 kg.
-- pressKey: Back
-- tapOn: "المخزون"
+- tapOn:
+    id: "tab-inventory"
+- tapOn:
+    id: "stock-search"
+- inputText: Newfab
+- hideKeyboard
 - assertVisible: "Newfab"
-- assertVisible: "12.00 كغ · 1 لفة"
+- assertVisible: "12.00 كغ"
 - takeScreenshot: 76-entry-stock

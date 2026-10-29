@@ -1,40 +1,59 @@
 appId: com.motard.erp
-name: 86 roll adjust and stock count
+name: 86 dye-lot adjust and stock count
 ---
 - launchApp
 - runFlow: unlock.yaml
-- tapOn: "المخزون"
-- tapOn: "قطن تجريبي.*"
+- tapOn:
+    id: "tab-inventory"
+- tapOn: "قطن تجريبي"
 - tapOn:
     id: "color-row"
-- tapOn:
-    id: "roll-row"
+- tapOn: "صبغة SEED-.*"
 - assertVisible:
-    id: "roll-remaining"
+    id: "lot-remaining"
 # A valid adjust saves and the remaining kg changes.
 - scrollUntilVisible:
     element:
+      id: "adjust-open"
+- tapOn:
+    id: "adjust-open"
+- scrollUntilVisible:
+    element:
       id: "adjust-kg"
+    centerElement: true
 - tapOn:
     id: "adjust-kg"
 - inputText: "1"
 - hideKeyboard
 - takeScreenshot: 44a-roll-adjust-filled
-- tapOn: "حفظ التعديل"
+- scrollUntilVisible:
+    element:
+      id: "adjust-save"
+    centerElement: true
+- tapOn:
+    id: "adjust-save"
 - extendedWaitUntil:
-    visible: "المتبقي: 1.00 كغ.*"
+    visible: "حُفظ التعديل.*"
     timeout: 30000
 - assertNotVisible:
     id: "roll-error"
+- scrollUntilVisible:
+    element:
+      id: "lot-remaining"
+    direction: UP
+- assertVisible: "1.00 كغ"
 - takeScreenshot: 44-roll-adjusted
-# The movement row sits under the fixed save bar on this short screen; the unit test checks it.
-# Back to the inventory list: pressing the active tab pops its stack to the top.
-- tapOn: "المخزون"
-# Stock count.
-- tapOn: "جرد المخزون"
-- assertNotVisible: ".*تعذّر.*"
-- assertVisible:
-    id: "count-line"
+# Stock count from the inventory tab's header.
+- tapOn:
+    id: "tab-inventory"
+- tapOn:
+    id: "open-count"
+- assertNotVisible:
+    id: "state-error"
+- extendedWaitUntil:
+    visible:
+      id: "count-line"
+    timeout: 30000
 - takeScreenshot: 45-count-sheet
 - tapOn:
     id: "count-SEED-.*"

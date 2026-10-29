@@ -3,8 +3,12 @@ name: 88 sale return against a source invoice, then cancel it
 ---
 - launchApp
 - runFlow: unlock.yaml
-- tapOn: "إضافة"
-- tapOn: "مرتجع"
+- tapOn:
+    id: "tab-add"
+- tapOn:
+    id: "add-return"
+- tapOn:
+    id: "party-picker"
 - tapOn:
     id: "party-option"
 - extendedWaitUntil:
@@ -16,9 +20,6 @@ name: 88 sale return against a source invoice, then cancel it
     id: "source-invoice"
 - scrollUntilVisible:
     element:
-      id: "return-line"
-- scrollUntilVisible:
-    element:
       id: "ret-kg-.*"
     centerElement: true
 - tapOn:
@@ -26,19 +27,20 @@ name: 88 sale return against a source invoice, then cancel it
 - inputText: "0.1"
 - hideKeyboard
 - takeScreenshot: 81-return-line
-- tapOn: "حفظ المرتجع"
+- tapOn:
+    id: "return-save"
 - extendedWaitUntil:
-    visible: "المرتجعات"
+    visible:
+      id: "return-row"
     timeout: 60000
 - assertNotVisible:
     id: "return-error"
-- assertVisible:
-    id: "return-row"
 - takeScreenshot: 82-return-list
-- tapOn: "إلغاء المرتجع"
 - tapOn:
-    text: "إلغاء المرتجع"
-    index: 1
+    id: "return-row"
+- tapOn: "إلغاء المرتجع .*"
+- tapOn:
+    id: "confirm-yes"
 - extendedWaitUntil:
     visible: "ملغى"
     timeout: 60000

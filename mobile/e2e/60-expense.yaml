@@ -3,8 +3,10 @@ name: 60 expense
 ---
 - launchApp
 - runFlow: unlock.yaml
-- tapOn: "إضافة"
-- tapOn: "مصروف"
+- tapOn:
+    id: "tab-add"
+- tapOn:
+    id: "add-expense"
 - tapOn:
     id: "expense-name"
 - inputText: "Rent"
@@ -14,9 +16,10 @@ name: 60 expense
 - inputText: "2"
 - hideKeyboard
 - takeScreenshot: 13-expense
-- tapOn: "حفظ المصروف"
+- tapOn:
+    id: "expense-save"
 - assertNotVisible:
     id: "expense-error"
 - extendedWaitUntil:
-    visible: "بيع جديد"
+    visible: "فاتورة بيع"
     timeout: 30000

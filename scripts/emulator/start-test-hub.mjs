@@ -21,6 +21,7 @@ const requireBackend = createRequire(join(repo, "backend/package.json"));
 const PORT = Number(process.env.HUB_PORT ?? 18080);
 const INFO = process.env.HUB_INFO ?? "hub-info.json";
 const PIN = process.env.TEST_PIN ?? "1234";
+const NO_PIN_USER_ID = "33333333-3333-4333-8333-333333333333";
 const admin = process.env.CERT_PG_URL;
 if (!admin) throw new Error("CERT_PG_URL is required");
 
@@ -48,6 +49,12 @@ await ac8.withClient(dbUrl, async (c) => {
     ac8.TENANT_ID,
   ]);
   await c.query("UPDATE users SET pin_hash = $1 WHERE id = $2", [pinHash, ac8.USER_ID]);
+  // A second user WITHOUT a PIN, as every real customer's staff starts: the phone must let them choose one.
+  await c.query(
+    `INSERT INTO users (id, tenant_id, name, email, password_hash, role, active)
+     VALUES ($1, $2, $3, $4, $5, 'accountant', true) ON CONFLICT (id) DO NOTHING`,
+    [NO_PIN_USER_ID, ac8.TENANT_ID, "ليلى المحاسبة", "leila@example.com", await hash("Leila-pass-2026")],
+  );
 });
 
 const hub = ac8.startNode(

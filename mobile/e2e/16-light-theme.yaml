@@ -1,0 +1,69 @@
+# The light theme on every main screen (the screenshots are the evidence), then back to dark. Switching keeps the screen.
+appId: com.motard.erp
+name: 16 light theme across the main screens
+---
+- launchApp
+- runFlow: unlock.yaml
+- tapOn:
+    id: "tab-more"
+- scrollUntilVisible:
+    element:
+      id: "theme-light"
+- tapOn:
+    id: "theme-light"
+# Still on the More tab after the switch (no remount back to Home).
+- assertVisible: "المزيد"
+- takeScreenshot: L01-more-light
+- tapOn:
+    id: "tab-index"
+- assertVisible: "مبيعات اليوم"
+- takeScreenshot: L02-home-light
+- tapOn:
+    id: "tab-inventory"
+- assertVisible:
+    id: "stock-search"
+- takeScreenshot: L03-inventory-light
+- tapOn:
+    id: "fabric-row"
+- assertVisible:
+    id: "fabric-summary"
+- takeScreenshot: L04-fabric-light
+- tapOn:
+    id: "color-row"
+- takeScreenshot: L05-lots-light
+- tapOn:
+    id: "tab-parties"
+- assertVisible:
+    id: "party-search"
+- takeScreenshot: L06-parties-light
+- tapOn:
+    id: "party-row"
+- assertVisible:
+    id: "party-balances"
+- takeScreenshot: L07-party-light
+- tapOn:
+    id: "tab-add"
+- tapOn:
+    id: "add-sale"
+- tapOn:
+    id: "party-picker"
+- takeScreenshot: L08-party-sheet-light
+- tapOn:
+    id: "sheet-close"
+- takeScreenshot: L09-sale-light
+- tapOn:
+    id: "screen-back"
+- tapOn:
+    id: "add-receipt"
+- takeScreenshot: L10-receipt-light
+- tapOn:
+    id: "screen-back"
+- tapOn:
+    id: "tab-more"
+- scrollUntilVisible:
+    element:
+      id: "theme-dark"
+- tapOn:
+    id: "theme-dark"
+- assertVisible: "المزيد"
+- takeScreenshot: L11-back-to-dark

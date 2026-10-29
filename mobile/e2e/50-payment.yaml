@@ -1,28 +1,30 @@
 appId: com.motard.erp
-name: 50 payment
+name: 50 payment to a supplier
 ---
 - launchApp
 - runFlow: unlock.yaml
-- tapOn: "إضافة"
-- tapOn: "سند دفع"
+- tapOn:
+    id: "tab-add"
+- tapOn:
+    id: "add-payment"
+- assertVisible: "دفع مال إلى مورد"
+- tapOn:
+    id: "party-picker"
 - tapOn:
     id: "party-option"
 - tapOn:
     id: "voucher-amount"
 - inputText: "1"
 - hideKeyboard
+- tapOn:
+    id: "voucher-method-transfer"
 - takeScreenshot: 12-payment
-- tapOn: "حفظ سند الدفع"
-- assertNotVisible:
-    id: "voucher-error"
+- tapOn:
+    id: "voucher-save"
 - extendedWaitUntil:
     visible:
-      id: "voucher-done"
+      id: "doc-done"
     timeout: 30000
-- assertVisible:
-    id: "send-to-customer"
+- assertNotVisible:
+    id: "voucher-error"
 - takeScreenshot: 13-payment-done
-- tapOn: "تم"
-- extendedWaitUntil:
-    visible: "بيع جديد"
-    timeout: 30000

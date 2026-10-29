@@ -1,18 +1,65 @@
 appId: com.motard.erp
-name: 30 customers, party, statement
+name: 30 customers and suppliers, party page, statement by period
 ---
 - launchApp
 - runFlow: unlock.yaml
-- tapOn: "العملاء والموردون"
+- tapOn:
+    id: "tab-parties"
 - assertVisible: "عميل 1"
-- assertNotVisible: ".*تعذّر.*"
-- takeScreenshot: 07-parties
-- tapOn: "عميل 1"
 - assertNotVisible:
-    id: "party-error"
-- assertVisible: "كشف الحساب"
+    id: "state-error"
+# Balances per currency with the desktop's side words.
+- assertVisible: "مدين \\(على العميل\\)"
+- takeScreenshot: 07-parties
+- tapOn:
+    id: "party-kind-supplier"
+- assertNotVisible: "عميل 1"
+- tapOn:
+    id: "party-kind-"
+- tapOn: "عميل 1"
+- assertVisible:
+    id: "party-balances"
+- assertVisible: "بيع جديد"
+- assertVisible: "سند قبض"
 - takeScreenshot: 08-party
-- tapOn: "كشف الحساب"
-- assertVisible: "[0-9]+ حركة"
-- assertVisible: "الرصيد الختامي.*"
+- scrollUntilVisible:
+    element:
+      id: "party-doc"
+- takeScreenshot: 08b-party-documents
+- tapOn:
+    id: "party-docs-vouchers"
+- assertNotVisible:
+    id: "state-error"
+- scrollUntilVisible:
+    element:
+      id: "party-statement"
+    direction: UP
+- tapOn:
+    id: "party-statement"
+- extendedWaitUntil:
+    visible:
+      id: "statement-closing"
+    timeout: 30000
+- assertVisible: "الحركات \\([0-9]+\\)"
+- assertVisible: "فاتورة بيع .*"
 - takeScreenshot: 09-statement
+# A period with no movements is said plainly; back to all periods.
+- tapOn:
+    id: "statement-period-lastMonth"
+- assertNotVisible:
+    id: "state-error"
+- takeScreenshot: 09b-statement-period
+- tapOn:
+    id: "statement-period-all"
+- extendedWaitUntil:
+    visible:
+      id: "statement-closing"
+    timeout: 30000
+# A statement line opens its invoice.
+- scrollUntilVisible:
+    element: "فاتورة بيع .*"
+- tapOn: "فاتورة بيع .*"
+- extendedWaitUntil:
+    visible: "البنود.*"
+    timeout: 30000
+- takeScreenshot: 09c-statement-opens-invoice

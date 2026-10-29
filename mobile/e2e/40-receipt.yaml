@@ -1,30 +1,37 @@
 appId: com.motard.erp
-name: 40 receipt
+name: 40 receipt with the balance before and after
 ---
 - launchApp
 - runFlow: unlock.yaml
-- tapOn: "إضافة"
-- assertVisible: "سند قبض"
-- takeScreenshot: 10-add-menu
-- tapOn: "سند قبض"
+- tapOn:
+    id: "tab-add"
+- tapOn:
+    id: "add-receipt"
+# Saving without a party or amount names what is missing.
+- tapOn:
+    id: "voucher-save"
+- assertVisible:
+    id: "voucher-problems"
+- tapOn:
+    id: "party-picker"
 - tapOn:
     id: "party-option"
 - tapOn:
     id: "voucher-amount"
 - inputText: "10"
 - hideKeyboard
+- scrollUntilVisible:
+    element:
+      id: "voucher-balance-after"
 - takeScreenshot: 11-receipt
-- tapOn: "حفظ سند القبض"
-- assertNotVisible:
-    id: "voucher-error"
+- tapOn:
+    id: "voucher-save"
 - extendedWaitUntil:
     visible:
-      id: "voucher-done"
+      id: "doc-done"
     timeout: 30000
+- assertNotVisible:
+    id: "voucher-error"
 - assertVisible:
-    id: "send-to-customer"
+    id: "share-pdf"
 - takeScreenshot: 13-receipt-done
-- tapOn: "تم"
-- extendedWaitUntil:
-    visible: "بيع جديد"
-    timeout: 30000

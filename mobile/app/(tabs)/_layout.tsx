@@ -44,6 +44,7 @@ export default function TabsLayout() {
           name={t.name}
           options={{
             title: t.title,
+            tabBarButtonTestID: `tab-${t.name}`,
             tabBarIcon: ({ color, size }) => (
               <Ionicons name={ICONS[t.name] ?? "ellipse"} size={size} color={color as string} />
             ),

@@ -1,63 +1,101 @@
 appId: com.motard.erp
-name: 70 sale and invoice detail
+name: 70 sale on one screen, invoice page, share PDF, cancel
 ---
 - launchApp
 - runFlow: unlock.yaml
-- tapOn: "إضافة"
-- tapOn: "بيع جديد"
+- tapOn:
+    id: "tab-add"
+- tapOn:
+    id: "add-sale"
+# An empty sale names its problems and saves nothing.
+- tapOn:
+    id: "sale-save"
+- assertVisible:
+    id: "sale-problems"
+- tapOn:
+    id: "party-picker"
+- takeScreenshot: 14-sale-customer-sheet
 - tapOn:
     id: "party-option"
 - tapOn:
-    id: "sale-rate"
-- inputText: "1"
-- hideKeyboard
-- takeScreenshot: 14-sale-customer
-- tapOn: "التالي: البنود"
-- tapOn: "إضافة بند"
-- tapOn: "قطن تجريبي"
-- tapOn: "أبيض"
-- takeScreenshot: 15-roll-picker
-- tapOn: "SEED-.*"
-- assertVisible: "قطن تجريبي.*"
-- takeScreenshot: 16-sale-lines
-- tapOn: "التالي: المراجعة"
-- scrollUntilVisible:
-    element: "المتبقي على العميل"
-- takeScreenshot: 17-sale-review
-- tapOn: "حفظ الفاتورة"
+    id: "add-line"
 - extendedWaitUntil:
-    visible: "تم حفظ الفاتورة.*"
+    visible:
+      id: "lot-option"
+    timeout: 30000
+- takeScreenshot: 15-lot-picker
+- tapOn:
+    id: "lot-option"
+- assertVisible: "قطن تجريبي · أبيض"
+# Edit the line: 2 kg.
+- tapOn: "بند SEED-.*"
+- tapOn:
+    id: "line-kg"
+- eraseText: 6
+- inputText: "2"
+- hideKeyboard
+- takeScreenshot: 16-line-editor
+- tapOn:
+    id: "line-done"
+- assertVisible: "صبغة SEED-.* · 2.00 كغ × .*"
+# A rate is asked only if the customer pays in SYP.
+- runFlow:
+    when:
+      visible:
+        id: "sale-rate"
+    commands:
+      - tapOn:
+          id: "sale-rate"
+      - inputText: "14500"
+      - hideKeyboard
+- scrollUntilVisible:
+    element:
+      id: "sale-due"
+- takeScreenshot: 17-sale-totals
+- tapOn:
+    id: "sale-save"
+- extendedWaitUntil:
+    visible:
+      id: "doc-done"
     timeout: 60000
 - assertNotVisible:
     id: "sale-error"
 - takeScreenshot: 18-sale-done
-- tapOn: "عرض الفاتورة"
-- assertVisible: "مشاركة PDF"
-- scrollUntilVisible:
-    element: "إلغاء الفاتورة"
+- tapOn: "عرض المستند"
+- extendedWaitUntil:
+    visible: "البنود.*"
+    timeout: 30000
 - takeScreenshot: 19-invoice
 # Share the PDF: the system share sheet opens (no in-app error), then back to the invoice.
 - scrollUntilVisible:
-    element: "مشاركة PDF"
-- tapOn: "مشاركة PDF"
+    element:
+      id: "share-pdf"
+- tapOn:
+    id: "share-pdf"
 - extendedWaitUntil:
-    notVisible: "مشاركة PDF"
+    notVisible:
+      id: "share-pdf"
     timeout: 60000
 - takeScreenshot: 20-share-sheet
 - pressKey: Back
-- assertVisible: "مشاركة PDF"
-- assertNotVisible:
-    id: "invoice-error"
-# Cancel the invoice: the confirmation dialog, then the cancelled mark.
+- extendedWaitUntil:
+    visible:
+      id: "share-result"
+    timeout: 30000
+- assertVisible: "فُتحت نافذة المشاركة.*"
+- takeScreenshot: 20b-share-result
+# Cancel the invoice: the themed confirmation, then the cancelled mark.
 - scrollUntilVisible:
     element: "إلغاء الفاتورة"
 - tapOn: "إلغاء الفاتورة"
+- assertVisible:
+    id: "confirm-sheet"
 - takeScreenshot: 21-cancel-dialog
 - tapOn:
-    text: "إلغاء الفاتورة"
-    index: 1
+    id: "confirm-yes"
 - extendedWaitUntil:
-    visible: "ملغاة"
+    visible:
+      id: "invoice-cancelled"
     timeout: 60000
 - assertNotVisible:
     id: "invoice-error"

@@ -56,13 +56,17 @@ export class PinLoginError extends Error {
 /** The hub's answer to a refused sign-in, in words the user can act on (never a raw status or stack). */
 export function signInErrorMessage(
   status: number,
-  body: { message?: string; code?: string },
+  body: { message?: string; code?: string; details?: Record<string, unknown> },
 ): string {
   if (status === 429) return "محاولات كثيرة متتالية. انتظر دقيقة ثم حاول مجدداً";
   if (status >= 500) return "خطأ في المركز. حاول بعد قليل، وإن تكرر فأبلغ مسؤول النظام";
   if (body.code === "DEVICE_PROOF_REQUIRED")
     return "هذا الهاتف غير معروف للمركز. أعد ربط الهاتف برمز دعوة جديد";
-  return body.message ?? "تعذّر تسجيل الدخول";
+  // A validation refusal carries the real reason per field («هذا الرقم السري ضعيف جداً…»); the top message is generic.
+  const fieldReason = Object.values(body.details ?? {})
+    .flat()
+    .find((v): v is string => typeof v === "string" && v.trim() !== "");
+  return fieldReason ?? body.message ?? "تعذّر تسجيل الدخول";
 }
 
 export function createSessionService(deps: SessionDeps) {
@@ -121,7 +125,11 @@ export function createSessionService(deps: SessionDeps) {
       throw new PinLoginError("تعذّر الاتصال بالمركز", "network");
     }
     if (!res.ok) {
-      const body = (await res.json().catch(() => ({}))) as { message?: string; code?: string };
+      const body = (await res.json().catch(() => ({}))) as {
+        message?: string;
+        code?: string;
+        details?: Record<string, unknown>;
+      };
       throw new PinLoginError(
         res.status === 401 ? "الرقم السري غير صحيح" : signInErrorMessage(res.status, body),
         "invalid",
@@ -158,7 +166,11 @@ export function createSessionService(deps: SessionDeps) {
       throw new PinLoginError("تعذّر الاتصال بالمركز", "network");
     }
     if (!res.ok) {
-      const body = (await res.json().catch(() => ({}))) as { message?: string; code?: string };
+      const body = (await res.json().catch(() => ({}))) as {
+        message?: string;
+        code?: string;
+        details?: Record<string, unknown>;
+      };
       throw new PinLoginError(
         res.status === 401
           ? "البريد أو كلمة المرور غير صحيحة"
@@ -200,7 +212,11 @@ export function createSessionService(deps: SessionDeps) {
       throw new PinLoginError("تعذّر الاتصال بالمركز. تعيين الرقم السري يحتاج اتصالاً", "network");
     }
     if (!res.ok) {
-      const body = (await res.json().catch(() => ({}))) as { message?: string; code?: string };
+      const body = (await res.json().catch(() => ({}))) as {
+        message?: string;
+        code?: string;
+        details?: Record<string, unknown>;
+      };
       throw new PinLoginError(signInErrorMessage(res.status, body), "invalid");
     }
   }
