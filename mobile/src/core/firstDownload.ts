@@ -50,7 +50,9 @@ export interface FirstDownloadResult {
   stoppedBy?: "deviceTrust" | "failed" | "stalled";
 }
 
-const MAX_STALLED_PAGES = 3;
+// The shared pull parks a unit that cannot apply after 5 attempts (one per page) and only then lets the stream pass,
+// so the first download must outlast that budget instead of giving up first.
+const MAX_STALLED_PAGES = 7;
 
 export async function runFirstDownload(deps: FirstDownloadDeps): Promise<FirstDownloadResult> {
   const headSeq = await deps.headSeq();

@@ -2,12 +2,14 @@
 import { EnrollmentRefusedError } from "./enrollment";
 import { InsufficientStorageError } from "./firstDownload";
 
-export type EnrollError = "invalidCode" | "network" | "lowStorage" | "other";
+export type EnrollError = "invalidCode" | "network" | "lowStorage" | "stuck" | "other";
 
 export const ENROLL_ERROR_TEXT: Record<EnrollError, string> = {
   invalidCode: "رمز التسجيل غير صالح",
   network: "سيتابع عند عودة الاتصال",
   lowStorage: "المساحة المتاحة على الهاتف لا تكفي للتحميل الأول",
+  stuck:
+    "تعذّر تطبيق بعض العمليات القادمة من المركز. اضغط «إعادة المحاولة»، وإن تكرر ذلك فأبلغ الدعم",
   other: "تعذّر إكمال التسجيل",
 };
 

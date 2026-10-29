@@ -13,6 +13,26 @@ import { ScanDenied, ScanOverlay } from "../src/ui/ScanView";
 
 const RETRY_MS = 15_000;
 
+/** The first hub unit this phone could not apply, as "type: reason" (for the support call). */
+async function describeStuckUnit(phone: NonNullable<Awaited<ReturnType<typeof getApp>>["phone"]>) {
+  try {
+    const rows = await phone.repos.syncInboxRepo.listByStatus(
+      phone.context().tenantId,
+      ["received", "dead"],
+      1,
+    );
+    const row = rows[0];
+    if (!row) return null;
+    const err = (row.materializeError as { materializeError?: unknown } | null)?.materializeError;
+    return `${row.entityType} ${row.operation}: ${typeof err === "string" ? err : "—"}`.slice(
+      0,
+      240,
+    );
+  } catch {
+    return null;
+  }
+}
+
 export default function Enroll() {
   const [state, setState] = useState<EnrollViewState>({
     hub: "",
@@ -43,7 +63,9 @@ export default function Enroll() {
         app.enrollment = { ...app.enrollment, firstDownloadDone: true };
         notifyBootChanged();
       } else {
-        setState((s) => ({ ...s, error: "other" }));
+        const stuck = result.stoppedBy === "failed" || result.stoppedBy === "stalled";
+        const detail = stuck ? await describeStuckUnit(app.phone) : null;
+        setState((s) => ({ ...s, error: stuck ? "stuck" : "other", detail }));
       }
     } catch (e) {
       const kind = classifyEnrollError(e);
@@ -122,6 +144,10 @@ export default function Enroll() {
       state={state}
       onChange={(patch) => setState((s) => ({ ...s, ...patch }))}
       onSubmit={() => void submit()}
+      onRetry={() => {
+        setState((s) => ({ ...s, error: null, detail: null }));
+        void download();
+      }}
       onScan={() => {
         void (async () => {
           setRejected(false);

@@ -11,6 +11,8 @@ export interface EnrollViewState {
   busy: boolean;
   progress: { percent: number; applied: number; headSeq: number } | null;
   error: EnrollError | null;
+  /** What the hub unit that could not apply says (entity type + reason), shown under the error. */
+  detail?: string | null;
 }
 
 export function EnrollView({
@@ -18,11 +20,13 @@ export function EnrollView({
   onChange,
   onSubmit,
   onScan,
+  onRetry,
 }: {
   state: EnrollViewState;
   onChange(patch: Partial<Pick<EnrollViewState, "hub" | "code">>): void;
   onSubmit(): void;
   onScan(): void;
+  onRetry?(): void;
 }) {
   const { progress } = state;
   return (
@@ -31,7 +35,11 @@ export function EnrollView({
       {progress ? (
         <View testID="enroll-progress">
           <Text>{`جارٍ التحميل: ${Math.round(progress.percent * 100)}%`}</Text>
-          <Text>{`${progress.applied} من ${progress.headSeq} عملية`}</Text>
+          <Text>
+            {progress.headSeq > 0
+              ? `${progress.applied} من ${progress.headSeq} عملية`
+              : `${progress.applied} عملية`}
+          </Text>
         </View>
       ) : (
         <>
@@ -70,6 +78,29 @@ export function EnrollView({
         <Text testID="enroll-error" style={{ color: colors.negative, marginTop: spacing.md }}>
           {ENROLL_ERROR_TEXT[state.error]}
         </Text>
+      ) : null}
+      {state.error && state.detail ? (
+        <Text testID="enroll-detail" style={{ marginTop: spacing.sm }}>
+          {state.detail}
+        </Text>
+      ) : null}
+      {progress && state.error && state.error !== "invalidCode" && onRetry ? (
+        <Pressable
+          accessibilityRole="button"
+          testID="enroll-retry"
+          onPress={onRetry}
+          style={{
+            minHeight: TOUCH_TARGET,
+            justifyContent: "center",
+            alignItems: "center",
+            borderWidth: 1,
+            borderColor: colors.border,
+            borderRadius: radius.md,
+            marginTop: spacing.md,
+          }}
+        >
+          <Text>إعادة المحاولة</Text>
+        </Pressable>
       ) : null}
       {progress ? null : (
         <PrimaryActionBar

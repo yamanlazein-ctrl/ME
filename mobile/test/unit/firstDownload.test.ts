@@ -71,4 +71,19 @@ describe("firstDownload (FR-07)", () => {
     failing.pullPage = async () => ({ pulled: 50, applied: 0, failed: 5 });
     expect(await runFirstDownload(failing)).toMatchObject({ done: false, stoppedBy: "failed" });
   });
+
+  it("outlasts the pull's 5-attempt park budget: a unit that fails 5 times then parks does not end the download", async () => {
+    const dev = fakeDevice(10);
+    let calls = 0;
+    dev.pullPage = async () => {
+      calls += 1;
+      if (calls <= 5) return { pulled: 1, applied: 0, failed: 1 }; // held, cursor does not move
+      if (calls === 6) {
+        dev.state.cursor = 10; // parked as dead: the stream passes it
+        return { pulled: 1, applied: 0, failed: 0 };
+      }
+      return { pulled: 0, applied: 0, failed: 0 };
+    };
+    expect(await runFirstDownload(dev)).toMatchObject({ done: true, cursor: 10 });
+  });
 });
