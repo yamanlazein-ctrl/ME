@@ -49,7 +49,7 @@ describe("theme tokens", () => {
       [light.positive, light.card],
       [light.currencySyp, light.card],
       [light.currencyUsd, light.card],
-      [light.primaryForeground, "#7a5700"],
+      [light.primaryForeground, light.primary],
     ] as const) {
       expect(contrast(fg, bg), `${fg} on ${bg}`).toBeGreaterThanOrEqual(4.5);
     }
