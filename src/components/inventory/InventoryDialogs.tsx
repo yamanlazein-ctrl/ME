@@ -796,6 +796,10 @@ function RollFormDialog({ state, onClose }: { state: RollFormState; onClose: () 
     editing?.pricePerKg != null ? String(editing.pricePerKg) : "",
   );
   const [currency, setCurrency] = useState<Currency>(editing?.currency ?? "SYP");
+  // Grammage is stored on the roll but entry invoices cannot always carry it; it is edited here.
+  const [gsm, setGsm] = useState<string>(
+    editing?.weightGsm != null ? String(editing.weightGsm) : "",
+  );
   // F12 (Phase 1 audit, "stale supplier picker"): a NEW roll used to default
   // its supplier to `suppliers[0]` — whichever supplier happened to sort
   // first — instead of requiring an explicit choice. A user who didn't
@@ -807,10 +811,12 @@ function RollFormDialog({ state, onClose }: { state: RollFormState; onClose: () 
   const [rollErr, setRollErr] = useState<string | null>(null);
   const [dyeErr, setDyeErr] = useState<string | null>(null);
   const [qtyErr, setQtyErr] = useState<string | null>(null);
+  const [gsmErr, setGsmErr] = useState<string | null>(null);
 
   useEffect(() => {
     if (state.open) {
       const e = state.editing;
+      setGsmErr(null);
       setRollNo(e?.rollNo ?? "");
       setDyeBatch(e?.dyeBatch ?? "");
       setQty(e?.initialKg != null ? String(e.initialKg) : "");
@@ -824,6 +830,7 @@ function RollFormDialog({ state, onClose }: { state: RollFormState; onClose: () 
       );
       setPrice(e?.pricePerKg != null ? String(e.pricePerKg) : "");
       setCurrency(e?.currency ?? "SYP");
+      setGsm(e?.weightGsm != null ? String(e.weightGsm) : "");
       setSupplierId(e?.supplierId ?? "");
       setDate(e?.entryDate ?? localToday());
     }
@@ -867,7 +874,18 @@ function RollFormDialog({ state, onClose }: { state: RollFormState; onClose: () 
       setQtyErr("أدخل عدد أثواب صحيحاً (1 أو أكثر).");
       valid = false;
     }
+    // Grammage is optional, but a typed value must be a positive number, and a stored value cannot
+    // be cleared (the API only accepts a positive number) — say so instead of silently keeping it.
+    const gsmNum = parseDecimalInput(gsm);
+    if (gsm.trim() !== "" && (gsmNum == null || gsmNum <= 0)) {
+      setGsmErr("أدخل كراماج صحيحاً أكبر من صفر.");
+      valid = false;
+    } else if (gsm.trim() === "" && editing?.weightGsm != null) {
+      setGsmErr("لا يمكن مسح الكراماج المسجَّل — عدّله إلى قيمة صحيحة.");
+      valid = false;
+    }
     if (!valid || qtyNum == null || priceNum == null) return;
+    const gsmPatch = gsmNum != null && gsmNum > 0 ? { weightGsm: gsmNum } : {};
     try {
       if (editing) {
         await updateRoll(editing.id, {
@@ -879,6 +897,7 @@ function RollFormDialog({ state, onClose }: { state: RollFormState; onClose: () 
           currency,
           supplierId,
           entryDate: date,
+          ...gsmPatch,
         });
       } else {
         await addRoll({
@@ -891,6 +910,7 @@ function RollFormDialog({ state, onClose }: { state: RollFormState; onClose: () 
           currency,
           supplierId,
           entryDate: date,
+          ...gsmPatch,
         });
       }
       onClose();
@@ -996,6 +1016,20 @@ function RollFormDialog({ state, onClose }: { state: RollFormState; onClose: () 
                 value={price}
                 onChange={(e) => setPrice(e.target.value)}
               />
+            </div>
+            <div>
+              <Label>الكراماج (غ/م²)</Label>
+              <DecimalInput
+                inputMode="decimal"
+                step="0.01"
+                min="0"
+                value={gsm}
+                onChange={(e) => {
+                  setGsm(e.target.value);
+                  setGsmErr(null);
+                }}
+              />
+              {gsmErr && <p className="mt-1 text-xs text-destructive">{gsmErr}</p>}
             </div>
             <div>
               <Label>العملة</Label>

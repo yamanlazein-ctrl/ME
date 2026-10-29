@@ -41,7 +41,7 @@ function StatusChip({ r, minKg }: { r: Roll; minKg: number }) {
 
 /** Shared column template for desktop roll rows + their header (keeps both aligned). */
 const ROLL_COLS =
-  "grid grid-cols-[minmax(4.5rem,auto)_minmax(7rem,1.1fr)_4.5rem_minmax(6rem,0.9fr)_minmax(7rem,1.4fr)_minmax(6.5rem,0.9fr)_6.5rem_auto] items-center gap-x-3";
+  "grid grid-cols-[minmax(4.5rem,auto)_minmax(7rem,1.1fr)_4.5rem_4.5rem_minmax(6rem,0.9fr)_minmax(7rem,1.4fr)_minmax(6.5rem,0.9fr)_6.5rem_auto] items-center gap-x-3";
 
 /** One column-header row rendered above the rolls of an expanded color. */
 function RollsHeader() {
@@ -53,6 +53,7 @@ function RollsHeader() {
       <span>الصبغة</span>
       <span>المتبقي / الأصلي</span>
       <span>الأثواب</span>
+      <span>الكراماج</span>
       <span>رقم الصبغة</span>
       <span>المورد</span>
       <span>تاريخ الدخول</span>
@@ -273,6 +274,12 @@ function RollRow({
             <dd className="text-foreground tabular-nums truncate">{roll.dyeBatch}</dd>
           </div>
           <div className="flex justify-between gap-2">
+            <dt className="text-muted-foreground">الكراماج</dt>
+            <dd className="text-foreground tabular-nums">
+              {roll.weightGsm != null ? `${roll.weightGsm} غ/م²` : "—"}
+            </dd>
+          </div>
+          <div className="flex justify-between gap-2">
             <dt className="text-muted-foreground shrink-0">المورد</dt>
             <dd className="text-foreground truncate text-left">{supplier?.name ?? "—"}</dd>
           </div>
@@ -340,6 +347,13 @@ function RollRow({
             title={`من ${roll.pieces ?? 1}`}
           >
             {roll.remainingPieces ?? 0}
+          </div>
+          <div
+            className="whitespace-nowrap text-sm text-foreground tabular-nums"
+            data-testid="roll-grammage"
+            title="الكراماج (غ/م²) — يُعدَّل من زر التعديل"
+          >
+            {roll.weightGsm ?? "—"}
           </div>
           <div className="truncate text-sm text-foreground tabular-nums">{roll.dyeBatch}</div>
           <div className="truncate text-sm text-foreground">{supplier?.name ?? "—"}</div>

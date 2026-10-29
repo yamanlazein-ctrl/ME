@@ -33,8 +33,13 @@ export default function TabsLayout() {
         headerShown: false,
         tabBarActiveTintColor: colors.primary,
         tabBarInactiveTintColor: colors.mutedForeground,
-        tabBarStyle: { backgroundColor: colors.card, borderTopColor: colors.border, height: 64 },
-        tabBarLabelStyle: { fontFamily: fontFamilyFor("500"), fontSize: 12 },
+        tabBarStyle: {
+          backgroundColor: colors.card,
+          borderTopColor: colors.border,
+          // No fixed height: the navigator adds the phone's gesture/navigation-bar inset itself.
+          paddingTop: 6,
+        },
+        tabBarLabelStyle: { fontFamily: fontFamilyFor("500"), fontSize: 12, lineHeight: 18 },
         sceneStyle: { backgroundColor: colors.background },
       }}
     >

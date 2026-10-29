@@ -55,7 +55,11 @@ export class ForbiddenError extends DomainError {
 }
 
 export class ConflictError extends DomainError {
-  constructor(message: string) {
+  /** The server's machine-readable reason (e.g. `SYNC_DEVICES_ENROLLED`), when the 409 body had one. */
+  constructor(
+    message: string,
+    public readonly serverCode?: string,
+  ) {
     super("CONFLICT", message, 409);
     this.name = "ConflictError";
   }
@@ -91,8 +95,13 @@ export function mapHttpStatusToDomainError(
       return new ForbiddenError(message);
     case 404:
       return new NotFoundError(message ?? "الموارد غير موجودة");
-    case 409:
-      return new ConflictError(message ?? "تعارض في البيانات");
+    case 409: {
+      const code = (body as { code?: unknown } | null | undefined)?.code;
+      return new ConflictError(
+        message ?? "تعارض في البيانات",
+        typeof code === "string" ? code : undefined,
+      );
+    }
     case 422: {
       const b = (body ?? {}) as { details?: Record<string, string[]> };
       return new ValidationError(message ?? "بيانات غير صالحة", b.details);

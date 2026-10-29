@@ -11,7 +11,13 @@ export function Text({ style, ...props }: TextProps) {
     <RNText
       {...props}
       style={[
-        { color: colors.foreground, fontFamily: fontFamilyFor(flat.fontWeight) },
+        {
+          color: colors.foreground,
+          fontFamily: fontFamilyFor(flat.fontWeight),
+          fontSize: 16,
+          // Arabic needs room above and below: 1.5 × the size actually used (a fixed value clipped the titles).
+          lineHeight: Math.round((typeof flat.fontSize === "number" ? flat.fontSize : 16) * 1.5),
+        },
         style,
         // Android picks the weight from the family; a numeric weight on a custom family would be synthesised twice.
         flat.fontWeight ? { fontWeight: "normal" } : null,

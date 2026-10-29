@@ -1,9 +1,11 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
-import { refreshInventory } from "@/presentation/hooks/useInventory";
+import { useEffect, useState } from "react";
+import { Link } from "@tanstack/react-router";
+import { deleteFabric, refreshInventory } from "@/presentation/hooks/useInventory";
 import {
   fetchDyeImpact,
   purgeDye,
+  isHubOnlyPurgeError,
   CONFIRM_WORD,
   type DyeImpact,
   type DyePurgeResult,
@@ -56,6 +58,14 @@ export function DyePurgeDialog({
 }) {
   const qc = useQueryClient();
   const [typed, setTyped] = useState("");
+  const [hubOnly, setHubOnly] = useState(false);
+  const [plainBusy, setPlainBusy] = useState(false);
+
+  // A banner/typed text from one dye must not leak into the next one the dialog opens for.
+  useEffect(() => {
+    setHubOnly(false);
+    setTyped("");
+  }, [fabricId, open]);
 
   const impact = useQuery({
     queryKey: ["dye-deletion-impact", fabricId],
@@ -87,6 +97,10 @@ export function DyePurgeDialog({
       onOpenChange(false);
     },
     onError: (err) => {
+      if (isHubOnlyPurgeError(err)) {
+        setHubOnly(true);
+        return;
+      }
       toast.error(err instanceof Error ? err.message : "تعذّر إتمام الحذف التصحيحي.");
     },
   });
@@ -97,15 +111,40 @@ export function DyePurgeDialog({
     (data?.rollsCount ?? 0) > 0 ||
     (data?.ledgerEntriesCount ?? 0) > 0;
 
+  // No invoices, vouchers or ledger entries: nothing financial to unwind, so use the ordinary
+  // fabric delete. It is queued for sync like any master edit and works on an enrolled device.
+  const noDocuments =
+    !!data &&
+    data.affectedInvoices.length === 0 &&
+    data.vouchersCount === 0 &&
+    data.ledgerEntriesCount === 0;
+  const plainDelete = async () => {
+    setPlainBusy(true);
+    try {
+      // deleteFabric toasts its own failure and returns false: keep the dialog (and the typed
+      // confirmation) open then, so the operator sees the error instead of a silent "done".
+      if (await deleteFabric(fabricId!)) {
+        setTyped("");
+        onOpenChange(false);
+      }
+    } finally {
+      setPlainBusy(false);
+    }
+  };
+
   const expected = CONFIRM_WORD;
   const confirmationOk = typed.trim() === expected || typed.trim() === (data?.fabricName ?? "");
-  const canPurge = Boolean(data) && confirmationOk && !purge.isPending && !impact.isPending;
+  const canPurge =
+    Boolean(data) && confirmationOk && !purge.isPending && !plainBusy && !impact.isPending;
 
   return (
     <Dialog
       open={open}
       onOpenChange={(next) => {
-        if (!next) setTyped("");
+        if (!next) {
+          setTyped("");
+          setHubOnly(false);
+        }
         onOpenChange(next);
       }}
     >
@@ -205,12 +244,38 @@ export function DyePurgeDialog({
           </div>
         )}
 
+        {hubOnly && (
+          <div
+            role="alert"
+            data-testid="purge-hub-only"
+            className="space-y-2 rounded-md border border-amber-500/50 bg-amber-500/10 p-3 text-sm"
+          >
+            <p className="font-semibold text-amber-600">الحذف التصحيحي يُنفَّذ من المركز فقط</p>
+            <p className="text-muted-foreground">
+              هذا الحذف يمسح فواتير وقيوداً مالية ولا يُزامَن، لذلك يُرفض على جهاز مسجّل للمزامنة.
+              افتح نسخة المركز (الجهاز الرئيسي) وأعد تنفيذ الحذف منها، ثم دع بقية الأجهزة تُزامِن.
+              أو ألغِ تسجيل الأجهزة من إعدادات المزامنة إن كنت تريد الحذف هنا.
+            </p>
+            <Button asChild size="sm" variant="outline">
+              <Link to="/settings/sync">فتح إعدادات المزامنة</Link>
+            </Button>
+          </div>
+        )}
+
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={purge.isPending}>
             إلغاء
           </Button>
-          <Button variant="destructive" onClick={() => purge.mutate()} disabled={!canPurge}>
-            {purge.isPending ? "جارٍ الحذف…" : "نعم، احذف كل شيء واضبط الحسابات"}
+          <Button
+            variant="destructive"
+            onClick={() => (noDocuments ? void plainDelete() : purge.mutate())}
+            disabled={!canPurge}
+          >
+            {purge.isPending || plainBusy
+              ? "جارٍ الحذف…"
+              : noDocuments
+                ? "نعم، احذف الصبغة"
+                : "نعم، احذف كل شيء واضبط الحسابات"}
           </Button>
         </DialogFooter>
       </DialogContent>

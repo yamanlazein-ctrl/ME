@@ -1,7 +1,7 @@
 {
   "name": "motard-erp-desktop",
   "private": true,
-  "version": "3.0.7",
+  "version": "3.0.8",
   "description": "Motard ERP Windows desktop shell (Tauri 2). See ADR.md.",
   "type": "module",
   "scripts": {
