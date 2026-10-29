@@ -3,7 +3,8 @@ import { Text } from "./Text";
 import { ENROLL_ERROR_TEXT, type EnrollError } from "../core/enrollFlow";
 import { Field } from "./Field";
 import { PrimaryActionBar } from "./PrimaryActionBar";
-import { colors, fontSize, radius, spacing, TOUCH_TARGET } from "./theme";
+import { fontSize, radius, spacing, TOUCH_TARGET } from "./theme";
+import { useColors } from "./themeContext-core";
 
 export interface EnrollViewState {
   hub: string;
@@ -28,6 +29,7 @@ export function EnrollView({
   onScan(): void;
   onRetry?(): void;
 }) {
+  const colors = useColors();
   const { progress } = state;
   return (
     <View style={{ flex: 1, padding: spacing.lg, paddingTop: 64 }}>

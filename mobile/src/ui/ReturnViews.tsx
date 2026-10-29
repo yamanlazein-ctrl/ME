@@ -16,7 +16,8 @@ import { MoneyInput } from "./MoneyInput";
 import { MoneyText } from "./MoneyText";
 import { PartyPicker, type PickedParty } from "./PartyPicker";
 import { PrimaryActionBar } from "./PrimaryActionBar";
-import { colors, fontSize, radius, spacing, TOUCH_TARGET } from "./theme";
+import { fontSize, radius, spacing, TOUCH_TARGET } from "./theme";
+import { useColors } from "./themeContext-core";
 
 function Chip({
   label,
@@ -27,6 +28,7 @@ function Chip({
   selected?: boolean;
   onPress(): void;
 }) {
+  const colors = useColors();
   return (
     <Pressable
       accessibilityRole="button"
@@ -71,6 +73,7 @@ export function ReturnFormView({
   onReason(r: ReturnReason): void;
   onSave(): void;
 }) {
+  const colors = useColors();
   const problems = returnProblems(draft);
   return (
     <View style={{ flex: 1 }}>
@@ -199,6 +202,7 @@ export function ReturnListView({
   onCancel(row: ReturnListRow): void;
   sendSlot?(row: ReturnListRow): React.ReactNode;
 }) {
+  const colors = useColors();
   return (
     <ScrollView contentContainerStyle={{ padding: spacing.lg }}>
       <Text style={{ fontSize: fontSize.title, marginBottom: spacing.md }}>المرتجعات</Text>

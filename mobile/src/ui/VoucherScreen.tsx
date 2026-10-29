@@ -5,9 +5,10 @@ import { useFinishWrite } from "../hooks/useFinishWrite";
 import { Pressable, View } from "react-native";
 import { SendToCustomer } from "./SendToCustomer";
 import { Text } from "./Text";
-import { colors, fontSize, radius, spacing, TOUCH_TARGET } from "./theme";
+import { fontSize, radius, spacing, TOUCH_TARGET } from "./theme";
 import { emptyVoucher, VoucherForm, type VoucherFormValues } from "./VoucherForm";
 import { localDateISO } from "@backend/infrastructure/utils/localDate";
+import { useColors } from "./themeContext-core";
 
 /** Receipt/payment screen. With `amendId` it loads the voucher and saves through the replace use-case in one call (FR-21). */
 export function VoucherScreen({
@@ -17,6 +18,7 @@ export function VoucherScreen({
   kind: "receipt" | "payment";
   amendId?: string;
 }) {
+  const colors = useColors();
   const finish = useFinishWrite();
   const [values, setValues] = useState<VoucherFormValues>(emptyVoucher());
   const [original, setOriginal] = useState<{ version: number; amount: number } | null>(null);

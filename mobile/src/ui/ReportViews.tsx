@@ -10,9 +10,11 @@ import {
   type ReportPeriod,
 } from "../core/reports";
 import { MoneyText } from "./MoneyText";
-import { colors, fontSize, radius, spacing, TOUCH_TARGET } from "./theme";
+import { fontSize, radius, spacing, TOUCH_TARGET } from "./theme";
+import { useColors } from "./themeContext-core";
 
 export function ReportMenuView({ onOpen }: { onOpen(slug: string): void }) {
+  const colors = useColors();
   return (
     <View style={{ flex: 1, padding: spacing.lg }}>
       <Text style={{ fontSize: fontSize.title, marginBottom: spacing.lg }}>التقارير</Text>
@@ -42,6 +44,7 @@ export function ReportMenuView({ onOpen }: { onOpen(slug: string): void }) {
 }
 
 function Amounts({ amounts }: { amounts: ReportAmount[] }) {
+  const colors = useColors();
   if (amounts.length === 0) return <Text style={{ color: colors.mutedForeground }}>—</Text>;
   return (
     <View>
@@ -59,6 +62,7 @@ export function PeriodChips({
   period: ReportPeriod;
   onChange(p: ReportPeriod): void;
 }) {
+  const colors = useColors();
   return (
     <View
       style={{ flexDirection: "row", flexWrap: "wrap", gap: spacing.sm, marginBottom: spacing.md }}
@@ -97,6 +101,7 @@ export function ReportPageView({
   error: string | null;
   onPeriod(p: ReportPeriod): void;
 }) {
+  const colors = useColors();
   return (
     <View style={{ flex: 1, padding: spacing.lg }}>
       <Text testID="report-title" style={{ fontSize: fontSize.title, marginBottom: spacing.md }}>

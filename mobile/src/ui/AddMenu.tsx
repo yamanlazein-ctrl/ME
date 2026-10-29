@@ -1,6 +1,7 @@
 import { Pressable, ScrollView } from "react-native";
 import { Text } from "./Text";
-import { colors, fontSize, radius, spacing, TOUCH_TARGET } from "./theme";
+import { fontSize, radius, spacing, TOUCH_TARGET } from "./theme";
+import { useColors } from "./themeContext-core";
 
 export const ADD_ENTRIES = [
   { id: "sale", label: "بيع جديد", href: "/(tabs)/add/sale/customer" },
@@ -12,6 +13,7 @@ export const ADD_ENTRIES = [
 ] as const;
 
 export function AddMenu({ onOpen }: { onOpen(href: string): void }) {
+  const colors = useColors();
   return (
     <ScrollView
       contentContainerStyle={{ padding: spacing.lg, paddingTop: spacing.xl, gap: spacing.md }}

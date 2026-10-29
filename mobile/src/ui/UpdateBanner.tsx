@@ -1,6 +1,7 @@
 import { Linking, Pressable, View } from "react-native";
 import { Text } from "./Text";
-import { colors, fontSize, radius, spacing, TOUCH_TARGET } from "./theme";
+import { fontSize, radius, spacing, TOUCH_TARGET } from "./theme";
+import { useColors } from "./themeContext-core";
 
 export const UPDATE_REQUIRED_TEXT = "تحديث مطلوب";
 
@@ -17,6 +18,7 @@ export function UpdateBanner({
   url,
   onOpen = (u) => void Linking.openURL(u),
 }: UpdateBannerProps) {
+  const colors = useColors();
   if (!visible) return null;
   return (
     <View
@@ -65,6 +67,7 @@ export function UpdateOfferBanner({
   offer: { versionName: string; apkUrl: string; required: boolean } | null;
   onOpen?: (url: string) => void;
 }) {
+  const colors = useColors();
   if (!offer) return null;
   return (
     <View

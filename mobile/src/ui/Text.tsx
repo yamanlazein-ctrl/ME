@@ -1,9 +1,11 @@
 import { StyleSheet, Text as RNText, type TextProps } from "react-native";
-import { colors } from "./theme";
+
 import { fontFamilyFor } from "./fontFamilies";
+import { useColors } from "./themeContext-core";
 
 /** `Text` with the desktop font and the active theme's foreground colour as defaults. */
 export function Text({ style, ...props }: TextProps) {
+  const colors = useColors();
   const flat = StyleSheet.flatten(style) ?? {};
   return (
     <RNText

@@ -3,7 +3,8 @@ import { Text } from "./Text";
 import { isAdminLike, type Role } from "../core/roles";
 import type { InvoiceView } from "../core/invoiceView";
 import { MoneyText } from "./MoneyText";
-import { colors, fontSize, radius, spacing, TOUCH_TARGET } from "./theme";
+import { fontSize, radius, spacing, TOUCH_TARGET } from "./theme";
+import { useColors } from "./themeContext-core";
 
 export function InvoiceDetailView({
   view,
@@ -20,6 +21,7 @@ export function InvoiceDetailView({
   onShare(): void;
   sendSlot?: React.ReactNode;
 }) {
+  const colors = useColors();
   const i = view.invoice;
   const cancelled = i.status === "cancelled";
   return (

@@ -6,8 +6,8 @@ import type { Role } from "../../src/core/roles";
 import { getSessionService } from "../../src/core/sessionService";
 import { visibleTabs } from "../../src/core/tabs";
 import { fontFamilyFor } from "../../src/ui/fontFamilies";
-import { colors } from "../../src/ui/theme";
-import { useTheme } from "../../src/ui/ThemeContext";
+
+import { useColors } from "../../src/ui/themeContext-core";
 
 const ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
   index: "home",
@@ -18,7 +18,7 @@ const ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
 };
 
 export default function TabsLayout() {
-  const { theme } = useTheme();
+  const colors = useColors();
   const [role, setRole] = useState<Role>("viewer");
   useEffect(() => {
     void getSessionService().then(async (s) => {
@@ -29,7 +29,6 @@ export default function TabsLayout() {
   const shown = new Set(visibleTabs(role).map((t) => t.name));
   return (
     <Tabs
-      key={theme}
       screenOptions={{
         headerShown: false,
         tabBarActiveTintColor: colors.primary,

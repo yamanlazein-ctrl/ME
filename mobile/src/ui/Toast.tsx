@@ -1,12 +1,14 @@
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from "react";
 import { View } from "react-native";
 import { Text } from "./Text";
-import { colors, fontSize, radius, spacing } from "./theme";
+import { fontSize, radius, spacing } from "./theme";
+import { useColors } from "./themeContext-core";
 
 export const TOAST_VARIANTS = ["success", "error"] as const;
 export type ToastVariant = (typeof TOAST_VARIANTS)[number];
 
 export function ToastView({ variant, message }: { variant: ToastVariant; message: string }) {
+  const colors = useColors();
   return (
     <View
       accessibilityRole="alert"

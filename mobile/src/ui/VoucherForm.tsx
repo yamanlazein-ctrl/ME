@@ -7,7 +7,8 @@ import { Field } from "./Field";
 import { MoneyInput } from "./MoneyInput";
 import { PartyPicker, type PickedParty } from "./PartyPicker";
 import { PrimaryActionBar } from "./PrimaryActionBar";
-import { colors, radius, spacing, TOUCH_TARGET } from "./theme";
+import { radius, spacing, TOUCH_TARGET } from "./theme";
+import { useColors } from "./themeContext-core";
 
 export const CURRENCIES = ["USD", "SYP"] as const;
 
@@ -43,6 +44,7 @@ export function VoucherForm({
   onChange(patch: Partial<VoucherFormValues>): void;
   onSave(): void;
 }) {
+  const colors = useColors();
   const partyKind = kind === "receipt" ? "customer" : "supplier";
   const ready = Boolean(
     values.party && values.amount && values.amount > 0 && values.rate && values.rate > 0,

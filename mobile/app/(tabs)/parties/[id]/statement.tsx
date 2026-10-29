@@ -9,10 +9,12 @@ import { useRole } from "../../../../src/hooks/useRole";
 import { useStatement } from "../../../../src/hooks/useStatement";
 import { SendToCustomer } from "../../../../src/ui/SendToCustomer";
 import { Text } from "../../../../src/ui/Text";
-import { colors } from "../../../../src/ui/theme";
+
 import { StatementView } from "../../../../src/ui/PartyViews";
+import { useColors } from "../../../../src/ui/themeContext-core";
 
 export default function StatementScreen() {
+  const colors = useColors();
   const { id } = useLocalSearchParams<{ id: string }>();
   const role = useRole();
   const kindQuery = useQuery({

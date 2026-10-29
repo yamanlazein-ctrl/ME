@@ -16,7 +16,8 @@ import { MoneyInput } from "./MoneyInput";
 import { MoneyText } from "./MoneyText";
 import { PartyPicker, type PickedParty } from "./PartyPicker";
 import { PrimaryActionBar } from "./PrimaryActionBar";
-import { colors, fontSize, radius, spacing, TOUCH_TARGET } from "./theme";
+import { fontSize, radius, spacing, TOUCH_TARGET } from "./theme";
+import { useColors } from "./themeContext-core";
 
 function Chip({
   label,
@@ -27,6 +28,7 @@ function Chip({
   onPress(): void;
   selected?: boolean;
 }) {
+  const colors = useColors();
   return (
     <Pressable
       accessibilityRole="button"
@@ -115,6 +117,7 @@ export function EntryLineForm({
   onSave(line: LineFormValue): void;
   onCancel(): void;
 }) {
+  const colors = useColors();
   const [fabricName, setFabricName] = useState("");
   const [fabricId, setFabricId] = useState<string | undefined>();
   const [colorName, setColorName] = useState("");
@@ -263,6 +266,7 @@ export function EntryLinesView({
   onRemove(key: string): void;
   onNext(): void;
 }) {
+  const colors = useColors();
   const totals = entryTotals(draft);
   return (
     <View style={{ flex: 1 }}>
@@ -342,6 +346,7 @@ export function EntryReviewView({
   onPatch(patch: Partial<EntryDraft>): void;
   onSave(): void;
 }) {
+  const colors = useColors();
   const totals = entryTotals(draft);
   const problems = entryProblems(draft);
   return (

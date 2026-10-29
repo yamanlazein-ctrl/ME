@@ -4,7 +4,8 @@ import { Text } from "./Text";
 import { canWriteOffline, type Role } from "../core/roles";
 import type { HomeData } from "../hooks/useDashboard";
 import { MoneyText } from "./MoneyText";
-import { colors, fontSize, radius, spacing, TOUCH_TARGET } from "./theme";
+import { fontSize, radius, spacing, TOUCH_TARGET } from "./theme";
+import { useColors } from "./themeContext-core";
 
 export type HomeAction = "sale" | "receipt" | "payment" | "expense" | "findParty";
 
@@ -25,6 +26,7 @@ function Card({
   children: React.ReactNode;
   testID?: string;
 }) {
+  const colors = useColors();
   return (
     <View
       {...(testID ? { testID } : {})}
@@ -58,6 +60,7 @@ export function HomeView({
   lastSyncAt: string | null;
   onAction(action: HomeAction): void;
 }) {
+  const colors = useColors();
   const d = data.dashboard;
   const cashCurrencies = currenciesOf(d.cashbox.balanceByCurrency);
   const salesCurrencies = currenciesOf(d.todaySales.byCurrency);

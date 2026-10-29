@@ -5,7 +5,8 @@ import { Field } from "./Field";
 import { MoneyInput } from "./MoneyInput";
 import { MoneyText } from "./MoneyText";
 import { PrimaryActionBar } from "./PrimaryActionBar";
-import { colors, radius, spacing, TOUCH_TARGET } from "./theme";
+import { radius, spacing, TOUCH_TARGET } from "./theme";
+import { useColors } from "./themeContext-core";
 
 export interface CashboxViewProps {
   date: string;
@@ -21,6 +22,7 @@ export interface CashboxViewProps {
 }
 
 export function CashboxView(p: CashboxViewProps) {
+  const colors = useColors();
   const currencies = Object.keys(p.balances).sort();
   return (
     <View style={{ flex: 1 }}>

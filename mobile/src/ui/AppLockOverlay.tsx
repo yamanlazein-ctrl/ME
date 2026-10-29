@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { Pressable, TextInput, View } from "react-native";
 import { Text } from "./Text";
-import { colors, fontSize, radius, spacing, TOUCH_TARGET } from "./theme";
+import { fontSize, radius, spacing, TOUCH_TARGET } from "./theme";
+import { useColors } from "./themeContext-core";
 
 export interface AppLockOverlayProps {
   visible: boolean;
@@ -12,6 +13,7 @@ export interface AppLockOverlayProps {
 
 /** Opaque cover: blank in the recent-apps view (FR-41) and the lock screen when authentication is required (FR-04). */
 export function AppLockOverlay({ visible, onPin, onBiometric }: AppLockOverlayProps) {
+  const colors = useColors();
   const [pin, setPin] = useState("");
   const [error, setError] = useState(false);
   if (!visible) return null;

@@ -3,7 +3,8 @@ import { Pressable, View } from "react-native";
 import { Text } from "./Text";
 import { useParties } from "../hooks/useParties";
 import { Field } from "./Field";
-import { colors, radius, spacing, TOUCH_TARGET } from "./theme";
+import { radius, spacing, TOUCH_TARGET } from "./theme";
+import { useColors } from "./themeContext-core";
 
 export interface PickedParty {
   id: string;
@@ -20,6 +21,7 @@ export function PartyPicker({
   value: PickedParty | null;
   onPick(party: PickedParty): void;
 }) {
+  const colors = useColors();
   const [q, setQ] = useState("");
   const { data } = useParties(q, kind);
   if (value) {
@@ -46,6 +48,7 @@ export function PartyPickerView({
   rows: Array<{ id: string; name: string }>;
   onPick(party: PickedParty): void;
 }) {
+  const colors = useColors();
   return (
     <View>
       <Field

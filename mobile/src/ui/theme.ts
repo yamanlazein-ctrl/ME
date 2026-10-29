@@ -5,8 +5,28 @@ import { darkTokens, lightTokens } from "./tokens.generated";
 
 export type ThemeName = "dark" | "light";
 
+/**
+ * Light-theme corrections for a phone in daylight (checked by test/unit/theme-contrast.test.ts): the desktop's white text
+ * on the gold button is 2.6:1, and its borders/cards vanish against the background.
+ */
+const LIGHT_FIXES = {
+  primaryForeground: "#1a1a1a",
+  card: "#ffffff",
+  border: "#d5dce5",
+  input: "#b8c2cf",
+  muted: "#e6eaf0",
+  chipBorder: "#b8c2cf",
+} as const;
+
+/** Dark-theme corrections: input outlines and dividers the eye can actually find on a phone (#242424 on #131313 is 1.2:1). */
+const DARK_FIXES = {
+  border: "#2c2c2c",
+  input: "#4a4a4a",
+  chipBorder: "#4a4a4a",
+} as const;
+
 function build(name: ThemeName) {
-  const t = name === "dark" ? darkTokens : lightTokens;
+  const t = name === "dark" ? { ...darkTokens, ...DARK_FIXES } : { ...lightTokens, ...LIGHT_FIXES };
   return {
     ...t,
     /** Negative amounts and error text: the desktop's destructive colour (a darker red on the light theme for contrast). */

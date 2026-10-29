@@ -8,7 +8,8 @@ import { Field } from "./Field";
 import { MoneyInput } from "./MoneyInput";
 import { MoneyText } from "./MoneyText";
 import { PrimaryActionBar } from "./PrimaryActionBar";
-import { colors, fontSize, radius, spacing, TOUCH_TARGET } from "./theme";
+import { fontSize, radius, spacing, TOUCH_TARGET } from "./theme";
+import { useColors } from "./themeContext-core";
 
 export type KindFilter = "" | "customer" | "supplier";
 
@@ -37,6 +38,7 @@ export function PartyListView({
   onOpen(id: string): void;
   onNew(): void;
 }) {
+  const colors = useColors();
   return (
     <View style={{ flex: 1, padding: spacing.lg }}>
       <Field
@@ -121,6 +123,7 @@ export function PartyDetailView({
   onEdit(): void;
   onInvoice(id: string): void;
 }) {
+  const colors = useColors();
   const currencies = Object.keys(party.balances).sort();
   return (
     <ScrollView contentContainerStyle={{ padding: spacing.lg }}>
@@ -181,6 +184,7 @@ export function StatementView({
   /** Given only to roles that may write: lets a voucher row be amended (FR-21). */
   onAmend?: (entry: StatementEntryData) => void;
 }) {
+  const colors = useColors();
   return (
     <View style={{ flex: 1 }}>
       <Text
@@ -278,6 +282,7 @@ export function PartyFormView({
   onChange(patch: Partial<PartyFormValues>): void;
   onSave(): void;
 }) {
+  const colors = useColors();
   return (
     <View style={{ flex: 1, padding: spacing.lg, paddingTop: spacing.xl }}>
       <Field

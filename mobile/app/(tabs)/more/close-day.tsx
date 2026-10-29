@@ -12,9 +12,11 @@ import { Field } from "../../../src/ui/Field";
 import { MoneyInput } from "../../../src/ui/MoneyInput";
 import { MoneyText } from "../../../src/ui/MoneyText";
 import { Text } from "../../../src/ui/Text";
-import { colors, fontSize, radius, spacing, TOUCH_TARGET } from "../../../src/ui/theme";
+import { fontSize, radius, spacing, TOUCH_TARGET } from "../../../src/ui/theme";
+import { useColors } from "../../../src/ui/themeContext-core";
 
 export default function CloseDay() {
+  const colors = useColors();
   const role = useRole();
   const finish = useFinishWrite();
   const [date, setDate] = useState(localDateISO(new Date()));

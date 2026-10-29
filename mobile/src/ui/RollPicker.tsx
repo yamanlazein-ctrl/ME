@@ -3,7 +3,8 @@ import { useState } from "react";
 import { Pressable, ScrollView, View } from "react-native";
 import { Text } from "./Text";
 import type { PickRoll, PickRow } from "../core/inventoryPicker";
-import { colors, fontSize, radius, spacing, TOUCH_TARGET } from "./theme";
+import { fontSize, radius, spacing, TOUCH_TARGET } from "./theme";
+import { useColors } from "./themeContext-core";
 
 export interface RollPickerProps {
   fabrics: PickRow[];
@@ -26,6 +27,7 @@ function Row({
   onPress(): void;
   testID?: string;
 }) {
+  const colors = useColors();
   return (
     <Pressable
       {...(testID ? { testID } : {})}
@@ -50,6 +52,7 @@ function Row({
 }
 
 export function RollPicker({ fabrics, loadColors, loadRolls, onPick, onClose }: RollPickerProps) {
+  const colors = useColors();
   const [fabric, setFabric] = useState<PickRow | null>(null);
   const [color, setColor] = useState<PickRow | null>(null);
   const [colorRows, setColorRows] = useState<PickRow[]>([]);

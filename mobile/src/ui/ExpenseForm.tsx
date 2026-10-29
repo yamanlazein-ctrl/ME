@@ -4,7 +4,8 @@ import { Field } from "./Field";
 import { MoneyInput } from "./MoneyInput";
 import { PrimaryActionBar } from "./PrimaryActionBar";
 import { CURRENCIES } from "./VoucherForm";
-import { colors, radius, spacing, TOUCH_TARGET } from "./theme";
+import { radius, spacing, TOUCH_TARGET } from "./theme";
+import { useColors } from "./themeContext-core";
 
 export interface ExpenseFormValues {
   name: string;
@@ -27,6 +28,7 @@ export function ExpenseForm({
   onChange(patch: Partial<ExpenseFormValues>): void;
   onSave(): void;
 }) {
+  const colors = useColors();
   return (
     <View style={{ flex: 1 }}>
       <ScrollView

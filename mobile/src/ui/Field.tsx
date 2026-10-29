@@ -1,7 +1,8 @@
 import { TextInput, View, type TextInputProps } from "react-native";
 import { Text } from "./Text";
 import { fontFamilyFor } from "./fontFamilies";
-import { colors, fontSize, radius, spacing, TOUCH_TARGET } from "./theme";
+import { fontSize, radius, spacing, TOUCH_TARGET } from "./theme";
+import { useColors } from "./themeContext-core";
 
 export interface FieldProps extends Omit<TextInputProps, "style"> {
   label: string;
@@ -12,6 +13,7 @@ export interface FieldProps extends Omit<TextInputProps, "style"> {
 
 /** A label tied to its input: the input is labelled by the label's nativeID, and also carries the text itself. */
 export function Field({ label, fieldId, error, ...input }: FieldProps) {
+  const colors = useColors();
   const labelId = `${fieldId}-label`;
   return (
     <View style={{ marginBottom: spacing.lg }}>

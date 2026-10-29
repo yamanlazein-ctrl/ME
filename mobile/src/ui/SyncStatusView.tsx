@@ -3,11 +3,13 @@
 import { ScrollView, View } from "react-native";
 import { Text } from "./Text";
 import type { SyncStatus } from "../core/syncRunner";
-import { colors, fontSize, spacing } from "./theme";
+import { fontSize, spacing } from "./theme";
+import { useColors } from "./themeContext-core";
 
 export const DESKTOP_ONLY_TEXT = "يجب الحل من الديسكتوب";
 
 export function SyncStatusView({ status, pending }: { status: SyncStatus; pending: number }) {
+  const colors = useColors();
   return (
     <ScrollView contentContainerStyle={{ padding: spacing.lg }}>
       <Text style={{ fontSize: fontSize.title, marginBottom: spacing.md }}>حالة المزامنة</Text>

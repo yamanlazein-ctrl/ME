@@ -13,9 +13,11 @@ import { MoneyInput } from "./MoneyInput";
 import { MoneyText } from "./MoneyText";
 import { PartyPicker, type PickedParty } from "./PartyPicker";
 import { PrimaryActionBar } from "./PrimaryActionBar";
-import { colors, fontSize, radius, spacing, TOUCH_TARGET } from "./theme";
+import { fontSize, radius, spacing, TOUCH_TARGET } from "./theme";
+import { useColors } from "./themeContext-core";
 
 function CurrencyToggle({ value, onChange }: { value: string; onChange(c: string): void }) {
+  const colors = useColors();
   return (
     <View style={{ flexDirection: "row", gap: spacing.sm, marginBottom: spacing.lg }}>
       {CURRENCIES.map((c) => (
@@ -91,6 +93,7 @@ export function SaleLinesView({
   onEdit(key: string, patch: Partial<DraftLine>): void;
   onNext(): void;
 }) {
+  const colors = useColors();
   const totals = draftTotals(draft);
   return (
     <View style={{ flex: 1 }}>
@@ -186,6 +189,7 @@ export function SaleReviewView({
   onPatch(patch: Partial<SaleDraft>): void;
   onSave(): void;
 }) {
+  const colors = useColors();
   const totals = draftTotals(draft);
   const problems = draftProblems(draft);
   return (
@@ -255,6 +259,7 @@ export function SaleDoneView({
   /** The "send to customer" control (it needs the device APIs, so the screen provides it). */
   sendSlot?: React.ReactNode;
 }) {
+  const colors = useColors();
   return (
     <View style={{ flex: 1, padding: spacing.xl, paddingTop: 64, gap: spacing.md }}>
       <Text

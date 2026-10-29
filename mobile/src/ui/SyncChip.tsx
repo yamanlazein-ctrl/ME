@@ -6,9 +6,13 @@ import {
   type SyncChipState,
   type SyncInputs,
 } from "../hooks/syncState";
-import { colors, fontSize, radius, spacing } from "./theme";
+import { fontSize, radius, spacing, type Colors } from "./theme";
+import { useColors } from "./themeContext-core";
 
-function tone(kind: SyncChipState["kind"]): { background: string; foreground: string } {
+function tone(
+  kind: SyncChipState["kind"],
+  colors: Colors,
+): { background: string; foreground: string } {
   switch (kind) {
     case "synced":
       return { background: colors.card, foreground: colors.positive };
@@ -22,7 +26,7 @@ function tone(kind: SyncChipState["kind"]): { background: string; foreground: st
 }
 
 export function SyncChip({ state }: { state: SyncChipState }) {
-  const palette = tone(state.kind);
+  const palette = tone(state.kind, useColors());
   return (
     <View
       testID={`sync-chip-${state.kind}`}

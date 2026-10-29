@@ -11,7 +11,8 @@ import {
   type PreparedSend,
 } from "../print/sendToCustomer";
 import { PhonePrompt } from "./PhonePrompt";
-import { colors, radius, spacing, TOUCH_TARGET } from "./theme";
+import { radius, spacing, TOUCH_TARGET } from "./theme";
+import { useColors } from "./themeContext-core";
 
 export function SendToCustomer({
   docRef,
@@ -20,6 +21,7 @@ export function SendToCustomer({
   docRef: DocRef;
   label?: string;
 }) {
+  const colors = useColors();
   const [busy, setBusy] = useState(false);
   const [prepared, setPrepared] = useState<PreparedSend | null>(null);
   const [asking, setAsking] = useState(false);

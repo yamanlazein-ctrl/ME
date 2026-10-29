@@ -14,7 +14,8 @@ import type {
 import { Field } from "./Field";
 import { MoneyInput } from "./MoneyInput";
 import { PrimaryActionBar } from "./PrimaryActionBar";
-import { colors, fontSize, radius, spacing, TOUCH_TARGET } from "./theme";
+import { fontSize, radius, spacing, TOUCH_TARGET } from "./theme";
+import { useColors } from "./themeContext-core";
 
 /** Pre-filled and editable: a correction always needs a reason, and most are manual corrections. */
 export const DEFAULT_ADJUST_REASON = "تعديل يدوي";
@@ -34,6 +35,7 @@ function Card({
   testID?: string;
   label?: string;
 }) {
+  const colors = useColors();
   return (
     <Pressable
       accessibilityRole="button"
@@ -56,6 +58,7 @@ function Card({
 }
 
 export function LowStockBadge() {
+  const colors = useColors();
   return (
     <View
       testID="low-stock-badge"
@@ -90,6 +93,7 @@ export function FabricListView({
   onOpen(id: string): void;
   onCount(): void;
 }) {
+  const colors = useColors();
   return (
     <View style={{ flex: 1, padding: spacing.lg }}>
       <Field
@@ -120,6 +124,7 @@ export function FabricListView({
 }
 
 export function RollRows({ rolls, onOpen }: { rolls: RollRow[]; onOpen(id: string): void }) {
+  const colors = useColors();
   if (rolls.length === 0) return <Text style={{ color: colors.mutedForeground }}>لا لفات</Text>;
   return (
     <View>
@@ -155,6 +160,7 @@ export function FabricDetailView({
   rollsOf(colorId: string): React.ReactNode;
   onOpenRoll(id: string): void;
 }) {
+  const colors = useColors();
   const [open, setOpen] = useState<string | null>(null);
   void onOpenRoll;
   return (
@@ -200,6 +206,7 @@ export function RollDetailView({
   busy: boolean;
   onAdjust(values: { newKg: number; reason: string }): void;
 }) {
+  const colors = useColors();
   const [newKg, setNewKg] = useState<number | null>(null);
   const [reason, setReason] = useState(DEFAULT_ADJUST_REASON);
   const r = detail.roll;
@@ -270,6 +277,7 @@ export function CountSheetView({
   onRecord(line: CountLineRow, countedKg: number): void;
   onPost(line: CountLineRow): void;
 }) {
+  const colors = useColors();
   return (
     <View style={{ flex: 1, padding: spacing.lg }}>
       <Text style={{ fontSize: fontSize.title }}>جرد المخزون</Text>
@@ -301,6 +309,7 @@ function CountLine({
   onRecord(line: CountLineRow, countedKg: number): void;
   onPost(line: CountLineRow): void;
 }) {
+  const colors = useColors();
   const [counted, setCounted] = useState<number | null>(null);
   const hasVariance =
     line.countId !== null && line.status === "counted" && (line.diffKg ?? 0) !== 0;

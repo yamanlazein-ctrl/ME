@@ -2,7 +2,8 @@
 import { Pressable, View } from "react-native";
 import { Text } from "./Text";
 import { Field } from "./Field";
-import { colors, radius, spacing, TOUCH_TARGET } from "./theme";
+import { radius, spacing, TOUCH_TARGET } from "./theme";
+import { useColors } from "./themeContext-core";
 
 export function PhonePrompt({
   partyName,
@@ -25,6 +26,7 @@ export function PhonePrompt({
   onSend(): void;
   onCancel(): void;
 }) {
+  const colors = useColors();
   return (
     <View
       testID="phone-prompt"

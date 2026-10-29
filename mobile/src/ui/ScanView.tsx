@@ -1,7 +1,8 @@
 import type { ReactNode } from "react";
 import { Pressable, View } from "react-native";
 import { Text } from "./Text";
-import { colors, fontSize, radius, spacing, TOUCH_TARGET } from "./theme";
+import { fontSize, radius, spacing, TOUCH_TARGET } from "./theme";
+import { useColors } from "./themeContext-core";
 
 const FRAME = 240;
 
@@ -14,6 +15,7 @@ export interface ScanOverlayProps {
 
 /** Drawn over the camera: a square frame, a one-line hint and a cancel button. */
 export function ScanOverlay({ message, rejected, onCancel }: ScanOverlayProps) {
+  const colors = useColors();
   return (
     <View
       pointerEvents="box-none"
@@ -75,6 +77,7 @@ export function ScanOverlay({ message, rejected, onCancel }: ScanOverlayProps) {
 
 /** Shown instead of the camera when the camera permission was refused. */
 export function ScanDenied({ onCancel, children }: { onCancel(): void; children?: ReactNode }) {
+  const colors = useColors();
   return (
     <View style={{ flex: 1, padding: spacing.lg, paddingTop: 64 }}>
       <Text testID="scan-denied" style={{ fontSize: fontSize.title, marginBottom: spacing.md }}>

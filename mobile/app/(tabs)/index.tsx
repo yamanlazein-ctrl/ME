@@ -3,12 +3,13 @@ import { ActivityIndicator, View } from "react-native";
 import { Text } from "../../src/ui/Text";
 import { router } from "expo-router";
 import { describeError } from "../../src/core/devlog";
-import { colors } from "../../src/ui/theme";
+
 import { getSessionService } from "../../src/core/sessionService";
 import type { Role } from "../../src/core/roles";
 import { useDashboard } from "../../src/hooks/useDashboard";
 import { useSyncStatus } from "../../src/hooks/useSyncStatus";
 import { HomeView, type HomeAction } from "../../src/ui/HomeView";
+import { useColors } from "../../src/ui/themeContext-core";
 
 // Targets of the quick actions.
 const TARGET: Record<HomeAction, string> = {
@@ -20,6 +21,7 @@ const TARGET: Record<HomeAction, string> = {
 };
 
 export default function Home() {
+  const colors = useColors();
   const { data, error, isLoading } = useDashboard();
   const status = useSyncStatus();
   const [role, setRole] = useState<Role>("viewer");

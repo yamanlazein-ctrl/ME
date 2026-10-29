@@ -3,7 +3,8 @@ import { Pressable, View } from "react-native";
 import { Text } from "./Text";
 import type { RosterUser } from "../core/session";
 import { Field } from "./Field";
-import { colors, fontSize, radius, spacing, TOUCH_TARGET } from "./theme";
+import { fontSize, radius, spacing, TOUCH_TARGET } from "./theme";
+import { useColors } from "./themeContext-core";
 
 export const PIN_LENGTH_MAX = 8;
 const KEYS = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "⌫", "0", "✓"];
@@ -24,6 +25,7 @@ export interface LoginViewProps {
 }
 
 export function LoginView(p: LoginViewProps) {
+  const colors = useColors();
   return (
     <View style={{ flex: 1, padding: spacing.lg, paddingTop: 64 }}>
       <Text style={{ fontSize: fontSize.title, marginBottom: spacing.lg }}>تسجيل الدخول</Text>

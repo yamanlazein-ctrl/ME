@@ -13,7 +13,8 @@ import { Field } from "./Field";
 import { MoneyInput } from "./MoneyInput";
 import { PartyPicker, type PickedParty } from "./PartyPicker";
 import { PrimaryActionBar } from "./PrimaryActionBar";
-import { colors, fontSize, radius, spacing, TOUCH_TARGET } from "./theme";
+import { fontSize, radius, spacing, TOUCH_TARGET } from "./theme";
+import { useColors } from "./themeContext-core";
 
 function Btn({
   label,
@@ -26,6 +27,7 @@ function Btn({
   danger?: boolean;
   testID?: string;
 }) {
+  const colors = useColors();
   return (
     <Pressable
       {...(testID ? { testID } : {})}
@@ -58,6 +60,7 @@ export function OrderListView({
   onOpen(id: string): void;
   onNew(): void;
 }) {
+  const colors = useColors();
   return (
     <View style={{ flex: 1 }}>
       <ScrollView contentContainerStyle={{ padding: spacing.lg, paddingBottom: 120 }}>
@@ -118,6 +121,7 @@ export function OrderFormView({
   onRemoveItem(key: string): void;
   onSave(): void;
 }) {
+  const colors = useColors();
   const [fabric, setFabric] = useState("");
   const [color, setColor] = useState("");
   const [kg, setKg] = useState<number | null>(null);
@@ -187,6 +191,7 @@ export function OrderDetailView({
   onCancel(): void;
   onFulfil(invoiceId: string): void;
 }) {
+  const colors = useColors();
   const o = detail.order;
   const active = isOrderActive(o.status);
   return (

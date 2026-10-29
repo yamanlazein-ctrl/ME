@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import { Keyboard, Pressable, View } from "react-native";
 import { Text } from "./Text";
-import { colors, fontSize, radius, spacing, TOUCH_TARGET } from "./theme";
+import { fontSize, radius, spacing, TOUCH_TARGET } from "./theme";
+import { useColors } from "./themeContext-core";
 
 export interface PrimaryActionBarProps {
   label: string;
@@ -11,6 +12,7 @@ export interface PrimaryActionBarProps {
 
 /** The screen's main action: fixed at the bottom within thumb reach and lifted above the keyboard (UX-02). */
 export function PrimaryActionBar({ label, onPress, disabled = false }: PrimaryActionBarProps) {
+  const colors = useColors();
   const [keyboardHeight, setKeyboardHeight] = useState(0);
   useEffect(() => {
     const show = Keyboard.addListener(

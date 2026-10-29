@@ -3,13 +3,14 @@ import { Text } from "../../../src/ui/Text";
 import { router } from "expo-router";
 import * as Font from "expo-font";
 import { FONT_BY_WEIGHT } from "../../../src/ui/fontFamilies";
-import { useTheme } from "../../../src/ui/ThemeContext";
+import { useTheme, useColors } from "../../../src/ui/ThemeContext";
 import { getSessionService } from "../../../src/core/sessionService";
 import { pendingLogoutMessage } from "../../../src/core/session";
 import { notifyBootChanged } from "../../../src/hooks/useBoot";
-import { colors, fontSize, radius, spacing, TOUCH_TARGET } from "../../../src/ui/theme";
+import { fontSize, radius, spacing, TOUCH_TARGET } from "../../../src/ui/theme";
 
 function Row({ label, onPress }: { label: string; onPress: () => void }) {
+  const colors = useColors();
   return (
     <Pressable
       accessibilityRole="button"
@@ -35,6 +36,7 @@ function fontsStatus(): string {
 }
 
 export default function More() {
+  const colors = useColors();
   const { theme, setTheme } = useTheme();
   const logout = async (confirmed: boolean) => {
     const service = await getSessionService();

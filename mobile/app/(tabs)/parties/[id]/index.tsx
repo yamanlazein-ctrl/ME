@@ -9,10 +9,12 @@ import { queryKeys } from "../../../../src/hooks/queryKeys";
 import { useRole } from "../../../../src/hooks/useRole";
 import { describeError } from "../../../../src/core/devlog";
 import { Text } from "../../../../src/ui/Text";
-import { colors } from "../../../../src/ui/theme";
+
 import { PartyDetailView, type PartyDetail } from "../../../../src/ui/PartyViews";
+import { useColors } from "../../../../src/ui/themeContext-core";
 
 export default function PartyScreen() {
+  const colors = useColors();
   const { id } = useLocalSearchParams<{ id: string }>();
   const role = useRole();
   const remember = useRememberParty();
