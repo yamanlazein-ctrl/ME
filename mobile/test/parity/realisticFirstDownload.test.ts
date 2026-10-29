@@ -14,6 +14,8 @@ vi.mock("expo-file-system/legacy", () => ({
 
 describe.skipIf(!parityAvailable())("first download of a company-shaped hub", () => {
   let p: Parity;
+  let customerId = "";
+  let supplierId = "";
 
   beforeAll(async () => {
     p = await startParity(18500);
@@ -38,14 +40,14 @@ describe.skipIf(!parityAvailable())("first download of a company-shaped hub", ()
       phone: "0944000000",
       address: "دمشق",
     });
-    const c1 = (
+    const c1: string = (
       await must(D, "customer", "POST", "/api/customers", {
         name: "عميل أ",
         phone: "0944111222",
         openingBalance: 120.5,
       })
     ).id as string;
-    const s1 = (
+    const s1: string = (
       await must(D, "supplier", "POST", "/api/suppliers", {
         kind: "supplier",
         name: "مورد أ",
@@ -166,6 +168,8 @@ describe.skipIf(!parityAvailable())("first download of a company-shaped hub", ()
     const cur = await must(D, "get entry", "GET", `/api/invoices/${entry}`);
     void cur;
     await p.ac8.syncUntilDrained(D, 10);
+    customerId = c1;
+    supplierId = s1;
   }, 900_000);
 
   afterAll(async () => {
@@ -186,5 +190,73 @@ describe.skipIf(!parityAvailable())("first download of a company-shaped hub", ()
     // Business rows exist on the phone (ids of derived singletons differ by design, so no row-by-row diff here).
     const inv = await p.phone.repos.invoiceRepo.list({ limit: 100 } as never, p.phone.context());
     expect(inv.data.length).toBe(2);
+  }, 900_000);
+
+  it("the phone's statements equal the desktop's for the same customer and supplier (all currencies, and a period)", async () => {
+    const { loadStatement } = await import("../../src/core/parties");
+    const cases = [
+      { id: customerId, kind: "customer" as const, base: "customers" },
+      { id: supplierId, kind: "supplier" as const, base: "suppliers" },
+    ];
+    for (const c of cases) {
+      for (const period of [
+        { from: null, to: null },
+        { from: "2026-02-11", to: "2026-02-28" },
+      ]) {
+        const qs = new URLSearchParams({ currency: "ALL", limit: "500" });
+        if (period.from) qs.set("from", period.from);
+        if (period.to) qs.set("to", period.to);
+        const desktop = await p.ac8.must(
+          p.desktop.call,
+          `desktop statement ${c.kind}`,
+          "GET",
+          `/api/${c.base}/${c.id}/statement?${qs.toString()}`,
+        );
+        const phone = await loadStatement(p.phone, {
+          partyId: c.id,
+          kind: c.kind,
+          currency: "ALL",
+          from: period.from,
+          to: period.to,
+        });
+        const desktopTotals = Object.entries(
+          (desktop as { totalsByCurrency: Record<string, Record<string, number>> })
+            .totalsByCurrency,
+        )
+          .map(([currency, t]) => ({
+            currency,
+            previous: t.previousBalance,
+            debit: t.totalDebit,
+            credit: t.totalCredit,
+            closing: t.finalBalance,
+          }))
+          .sort((a, b) => a.currency.localeCompare(b.currency));
+        expect(
+          phone.totals.map(({ side, ...rest }) => {
+            void side;
+            return rest;
+          }),
+          `${c.kind} ${period.from ?? "all"}`,
+        ).toEqual(desktopTotals);
+        const desktopRows = (desktop as { entries: Array<Record<string, unknown>> }).entries.map(
+          (e) => [
+            e.type,
+            e.referenceNumber,
+            Number(e.debit),
+            Number(e.credit),
+            Number(e.runningBalance),
+          ],
+        );
+        expect(
+          phone.entries.map((e) => [
+            e.type,
+            e.referenceNumber,
+            Number(e.debit),
+            Number(e.credit),
+            Number(e.runningBalance),
+          ]),
+        ).toEqual(desktopRows);
+      }
+    }
   }, 900_000);
 });
