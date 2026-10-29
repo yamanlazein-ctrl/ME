@@ -8,10 +8,11 @@ import { emptyEntryDraft } from "../../src/core/entryDraft";
 import { emptyReturnDraft } from "../../src/core/returns";
 import { emptyPartyForm } from "../../src/ui/PartyViews";
 import {
+  ColorLotsView,
   CountSheetView,
-  FabricDetailView,
-  FabricListView,
-  RollDetailView,
+  FabricView,
+  LotView,
+  StockListView,
 } from "../../src/ui/InventoryViews";
 import { ReportMenuView, ReportPageView } from "../../src/ui/ReportViews";
 import { OrderDetailView, OrderFormView, OrderListView } from "../../src/ui/OrderViews";
@@ -77,55 +78,168 @@ const screens: Array<[string, () => ReactElement]> = [
     ),
   ],
   [
-    "fabric list",
+    "stock list",
     () => (
-      <FabricListView
-        rows={[{ id: "f", name: "قطن", minStockKg: 50, remainingKg: 32, rollCount: 1, low: true }]}
-        q=""
-        role="admin"
+      <StockListView
+        q="DL"
+        filter="all"
+        category={null}
+        categories={["قمصان"]}
+        rows={[
+          {
+            id: "f",
+            name: "قطن",
+            category: null,
+            unit: "kg",
+            minStockKg: 50,
+            remainingKg: 32,
+            pieces: 1,
+            activeLots: 1,
+            colorCount: 1,
+            low: true,
+          },
+        ]}
+        lots={[
+          {
+            id: "r",
+            rollNo: "DL-1",
+            fabricId: "f",
+            fabricName: "قطن",
+            colorName: "ل",
+            remainingKg: 1,
+            remainingPieces: 1,
+          },
+        ]}
+        loading={false}
+        error={null}
+        refreshing={false}
+        canCount
         onQuery={noop}
-        onOpen={noop}
+        onFilter={noop}
+        onCategory={noop}
+        onRefresh={noop}
+        onRetry={noop}
+        onOpenFabric={noop}
+        onOpenLot={noop}
         onCount={noop}
       />
     ),
   ],
   [
-    "fabric detail",
+    "fabric",
     () => (
-      <FabricDetailView
-        name="قطن"
-        rows={[{ id: "c", name: "أحمر", code: null, remainingKg: 5, rollCount: 1 }]}
-        rollsOf={() => null}
-        onOpenRoll={noop}
+      <FabricView
+        detail={{
+          fabric: {
+            id: "f",
+            name: "قطن",
+            category: null,
+            unit: "kg",
+            minStockKg: 0,
+            remainingKg: 5,
+            pieces: 1,
+            activeLots: 1,
+            colorCount: 1,
+            low: false,
+            notes: null,
+          },
+          colors: [
+            {
+              id: "c",
+              name: "أحمر",
+              code: null,
+              hex: null,
+              remainingKg: 5,
+              pieces: 1,
+              activeLots: 1,
+              totalLots: 1,
+            },
+          ],
+        }}
+        onOpenColor={noop}
       />
     ),
   ],
   [
-    "roll detail",
+    "colour lots",
     () => (
-      <RollDetailView
-        detail={{
-          roll: {
-            id: "r",
-            rollNo: "R1",
-            remainingKg: 5,
-            remainingPieces: 1,
-            pricePerKg: 2,
-            currency: "USD",
-            status: "in_stock",
-            version: 1,
-            initialKg: 5,
-            entryDate: "2026-01-01",
-            dyeBatch: null,
-          },
+      <ColorLotsView
+        data={{
+          fabricId: "f",
           fabricName: "ق",
+          fabricMinKg: 0,
           colorName: "ل",
-          movements: [],
+          colorCode: null,
+          hex: null,
+          lots: [
+            {
+              id: "r",
+              rollNo: "R1",
+              dyeBatch: null,
+              initialKg: 5,
+              remainingKg: 5,
+              remainingPieces: 1,
+              pieces: 1,
+              supplierName: null,
+              entryDate: null,
+              state: "active",
+            },
+          ],
+        }}
+        onOpenLot={noop}
+      />
+    ),
+  ],
+  [
+    "lot",
+    () => (
+      <LotView
+        lot={{
+          id: "r",
+          rollNo: "R1",
+          version: 1,
+          fabricId: "f",
+          fabricName: "ق",
+          colorId: "c",
+          colorName: "ل",
+          colorCode: null,
+          dyeBatch: null,
+          initialKg: 5,
+          remainingKg: 5,
+          outKg: 0,
+          pieces: 1,
+          remainingPieces: 1,
+          widthCm: null,
+          weightGsm: null,
+          salePricePerKg: null,
+          costPerKg: 2,
+          currency: "USD",
+          entryPricePerKg: null,
+          entryCurrency: null,
+          supplierName: null,
+          entryDate: null,
+          entryReference: null,
+          state: "active",
+          movements: [
+            {
+              id: "m",
+              label: "فاتورة بيع",
+              direction: "out",
+              quantityKg: 1,
+              balanceAfterKg: 5,
+              date: "2026-01-01",
+              reference: "INV-1",
+              referenceType: "invoice",
+              referenceId: "i",
+              cancelled: false,
+            },
+          ],
         }}
         role="admin"
         error={null}
-        busy={false}
-        onAdjust={noop}
+        notice={null}
+        onAdjust={async () => undefined}
+        onOpenReference={noop}
       />
     ),
   ],

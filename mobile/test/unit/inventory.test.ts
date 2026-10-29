@@ -4,15 +4,14 @@ import { createPartyUseCase } from "@backend/application/use-cases/parties/party
 import { createFabricUseCase } from "@backend/application/use-cases/inventory/fabricUseCases";
 import { createColorUseCase } from "@backend/application/use-cases/inventory/colorUseCases";
 import { createRollUseCase } from "@backend/application/use-cases/inventory/rollUseCases";
-import {
-  isLowStock,
-  listColorStock,
-  listFabricStock,
-  listRollsOfColor,
-  loadCountSheet,
-  loadRollDetail,
-} from "../../src/core/inventory";
+import { loadCountSheet } from "../../src/core/inventory";
+import { isLowStock, listFabrics, loadColorLots, loadFabric, loadLot } from "../../src/core/stock";
 import { makeTestPhone, type TestPhone } from "../helpers/testPhone";
+
+const colorsOf = async (phone: Parameters<typeof loadFabric>[0], fabricId: string) =>
+  (await loadFabric(phone, fabricId))?.colors ?? [];
+const lotsOf = async (phone: Parameters<typeof loadColorLots>[0], colorId: string) =>
+  (await loadColorLots(phone, colorId))?.lots ?? [];
 
 const must = <T>(r: { ok: true; data: T } | { ok: false; error: string }) => {
   if (!r.ok) throw new Error(r.error);
@@ -79,20 +78,20 @@ describe("inventory reads and writes", () => {
   });
 
   it("lists the fabric with its remaining kg and the low flag, its colour and its roll", async () => {
-    const fabrics = await listFabricStock(t.phone, "");
+    const fabrics = await listFabrics(t.phone, "");
     const f = fabrics.find((x) => x.id === fabricId);
     expect(f).toMatchObject({
       name: "قطن مخزون",
       minStockKg: 50,
       remainingKg: 20,
-      rollCount: 1,
+      activeLots: 1,
       low: true,
     });
-    expect(await listFabricStock(t.phone, "قطن")).toHaveLength(1);
-    expect(await listFabricStock(t.phone, "zzz")).toHaveLength(0);
-    const colors = await listColorStock(t.phone, fabricId);
+    expect(await listFabrics(t.phone, "قطن")).toHaveLength(1);
+    expect(await listFabrics(t.phone, "zzz")).toHaveLength(0);
+    const colors = await colorsOf(t.phone, fabricId);
     expect(colors[0]).toMatchObject({ name: "أزرق", remainingKg: 20 });
-    const rolls = await listRollsOfColor(t.phone, colorId);
+    const rolls = await lotsOf(t.phone, colorId);
     expect(rolls[0]).toMatchObject({ rollNo: "INV-R1", remainingKg: 20 });
   });
 
@@ -107,9 +106,13 @@ describe("inventory reads and writes", () => {
     const ok = await t.phone.documents.adjustRoll(rollId, { newKg: 18, reason: "تلف" });
     if (!ok.ok) throw new Error(ok.error);
     expect(ok.data).toMatchObject({ beforeKg: 20, afterKg: 18 });
-    const detail = await loadRollDetail(t.phone, rollId);
-    expect(detail?.roll.remainingKg).toBe(18);
-    expect(detail?.movements.some((m) => m.type === "adjustment" && m.deltaKg === -2)).toBe(true);
+    const detail = await loadLot(t.phone, rollId);
+    expect(detail?.remainingKg).toBe(18);
+    expect(
+      detail?.movements.some(
+        (m) => m.label === "تعديل يدوي" && m.direction === "out" && m.quantityKg === 2,
+      ),
+    ).toBe(true);
     const after = await t.phone.repos.syncOutboxRepo.countOutstanding(
       t.phone.identity.tenantId as never,
     );
@@ -135,8 +138,8 @@ describe("inventory reads and writes", () => {
   });
 
   it("a count of 12.0 for a 15 kg roll posts a -3.0 adjustment and is idempotent", async () => {
-    const detail = await loadRollDetail(t.phone, rollId);
-    const book = detail!.roll.remainingKg;
+    const detail = await loadLot(t.phone, rollId);
+    const book = detail!.remainingKg;
     const rec = await t.phone.documents.recordCount({
       year,
       rollId,
@@ -151,7 +154,7 @@ describe("inventory reads and writes", () => {
     const posted = await t.phone.documents.postCount(line!.countId!);
     if (!posted.ok) throw new Error(posted.error);
     expect(posted.data.diffKg).toBe(-3);
-    expect((await loadRollDetail(t.phone, rollId))?.roll.remainingKg).toBe(book - 3);
+    expect((await loadLot(t.phone, rollId))?.remainingKg).toBe(book - 3);
     const again = await t.phone.documents.postCount(line!.countId!);
     expect(again.ok).toBe(false);
   });

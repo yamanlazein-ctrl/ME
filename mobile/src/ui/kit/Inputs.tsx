@@ -54,7 +54,12 @@ export function SearchBar({
           accessibilityRole="button"
           accessibilityLabel="مسح البحث"
           onPress={() => onChange("")}
-          hitSlop={10}
+          style={{
+            minHeight: TOUCH_TARGET,
+            minWidth: TOUCH_TARGET,
+            alignItems: "center",
+            justifyContent: "center",
+          }}
         >
           <Ionicons name="close-circle" size={20} color={colors.mutedForeground} />
         </Pressable>
@@ -98,7 +103,7 @@ export function Chips<T extends string>({
             testID={`${testIDPrefix}-${o.value}`}
             onPress={() => onChange(o.value)}
             style={{
-              minHeight: 40,
+              minHeight: TOUCH_TARGET,
               paddingHorizontal: spacing.md,
               borderRadius: radius.xl,
               borderWidth: 1,

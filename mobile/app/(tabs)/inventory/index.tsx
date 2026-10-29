@@ -1,20 +1,38 @@
 import { useState } from "react";
 import { router } from "expo-router";
-import { useFabricStock } from "../../../src/hooks/useInventory";
+import { canWriteOffline } from "../../../src/core/roles";
+import type { StockFilter } from "../../../src/core/stock";
+import { useCategories, useFabrics, useLotSearch } from "../../../src/hooks/useStock";
 import { useRole } from "../../../src/hooks/useRole";
-import { FabricListView } from "../../../src/ui/InventoryViews";
+import { StockListView } from "../../../src/ui/InventoryViews";
 
 export default function Inventory() {
   const [q, setQ] = useState("");
-  const { data } = useFabricStock(q);
+  const [filter, setFilter] = useState<StockFilter>("all");
+  const [category, setCategory] = useState<string | null>(null);
+  const fabrics = useFabrics(q, filter, category);
+  const categories = useCategories();
+  const lots = useLotSearch(q);
   const role = useRole();
   return (
-    <FabricListView
-      rows={data ?? []}
+    <StockListView
       q={q}
-      role={role}
+      filter={filter}
+      category={category}
+      categories={categories.data ?? []}
+      rows={fabrics.data}
+      lots={q.trim().length >= 2 ? (lots.data ?? []) : []}
+      loading={fabrics.isLoading}
+      error={fabrics.error}
+      refreshing={fabrics.isRefetching}
+      canCount={canWriteOffline(role)}
       onQuery={setQ}
-      onOpen={(id) => router.push(`/(tabs)/inventory/${id}` as never)}
+      onFilter={setFilter}
+      onCategory={setCategory}
+      onRefresh={() => void fabrics.refetch()}
+      onRetry={() => void fabrics.refetch()}
+      onOpenFabric={(id) => router.push(`/(tabs)/inventory/${id}` as never)}
+      onOpenLot={(id) => router.push(`/(tabs)/inventory/roll/${id}` as never)}
       onCount={() => router.push("/(tabs)/inventory/count" as never)}
     />
   );

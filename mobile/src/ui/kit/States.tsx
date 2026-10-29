@@ -106,3 +106,9 @@ export function Notice({
     </View>
   );
 }
+
+/** What a failed read says to the user: the use-case's own Arabic message, else a plain sentence (never SQL or a stack). */
+export function readErrorText(error: unknown): string {
+  const m = error instanceof Error ? error.message : "";
+  return m && /[؀-ۿ]/.test(m) ? m : "تعذّر تحميل البيانات من قاعدة الهاتف.";
+}

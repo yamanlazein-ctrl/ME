@@ -26,7 +26,7 @@ export default function Count() {
         if (!app.phone) return;
         const r = await app.phone.documents.recordCount({ year, rollId: line.rollId, countedKg });
         if (!r.ok) return setError(r.error);
-        setNotice(`تم تسجيل العدّ للفة ${line.rollNo}`);
+        setNotice(`تم تسجيل العدّ للصبغة ${line.rollNo}`);
         await finish();
       }}
       onPost={async (line) => {
@@ -37,7 +37,7 @@ export default function Count() {
         if (!app.phone) return;
         const r = await app.phone.documents.postCount(line.countId);
         if (!r.ok) return setError(r.error);
-        setNotice(`تم ترحيل فرق اللفة ${line.rollNo}`);
+        setNotice(`تم ترحيل فرق الصبغة ${line.rollNo}`);
         await finish();
       }}
     />
