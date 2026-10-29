@@ -19,6 +19,11 @@ export interface ScreenProps {
   children: ReactNode;
   /** The screen's main actions: a bar BELOW the content (never over it) that the keyboard pushes up (adjustResize). */
   footer?: ReactNode;
+  /**
+   * What the last press of the footer's action said (missing fields, the use-case's refusal): shown right above the
+   * action, so it is on screen even when the form is longer than the phone.
+   */
+  footerNotice?: ReactNode;
   /** false for screens that render their own FlatList. */
   scroll?: boolean;
   refreshing?: boolean;
@@ -35,6 +40,7 @@ export function Screen({
   headerActions,
   children,
   footer,
+  footerNotice,
   scroll = true,
   refreshing = false,
   onRefresh,
@@ -134,6 +140,7 @@ export function Screen({
             backgroundColor: colors.card,
           }}
         >
+          {footerNotice}
           {footer}
         </View>
       ) : null}

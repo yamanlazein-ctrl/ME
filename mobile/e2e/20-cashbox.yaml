@@ -7,9 +7,10 @@ name: 20 cashbox and a manual movement
     id: "tab-more"
 - tapOn:
     id: "more-cashbox"
-- assertVisible: "حركة يدوية"
 - assertNotVisible: ".*تعذّر.*"
 - takeScreenshot: 06-cashbox
+- scrollUntilVisible:
+    element: "حركة يدوية"
 - scrollUntilVisible:
     element:
       id: "cashbox-amount"

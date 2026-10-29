@@ -48,9 +48,9 @@ name: 85 new customer, duplicate name, search by name and phone
 - inputText: Zed ${output.stamp}
 - assertVisible: "Zed ${output.stamp}"
 - takeScreenshot: 36-party-search-hit
+- tapOn: "مسح البحث"
 - tapOn:
     id: "party-search"
-- eraseText: 20
 - inputText: "933${output.stamp}"
 - hideKeyboard
 - assertVisible: "Zed ${output.stamp}"

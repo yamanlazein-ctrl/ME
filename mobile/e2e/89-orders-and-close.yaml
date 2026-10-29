@@ -36,7 +36,8 @@ name: 89 customer order, cancel, and closing the day
     element: "إضافة البند"
     centerElement: true
 - tapOn: "إضافة البند"
-- assertVisible: "Ordfab · Ordcolor"
+- scrollUntilVisible:
+    element: "Ordfab · Ordcolor"
 - takeScreenshot: 91-order-form
 - tapOn:
     id: "order-save"

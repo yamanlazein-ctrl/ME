@@ -135,6 +135,7 @@ export function StockListView(p: StockListProps) {
           value={p.category ?? ""}
           onChange={(c) => p.onCategory(c || null)}
           testIDPrefix="stock-category"
+          scroll
         />
       ) : null}
       {p.lots.length > 0 ? (
@@ -332,7 +333,6 @@ export function LotView({ lot, role, error, notice, onAdjust, onOpenReference }:
   const can = isAdminLike(role);
   return (
     <Screen title={`صبغة ${lot.rollNo}`} subtitle={`${lot.fabricName} · ${lot.colorName}`}>
-      {notice ? <Notice kind="success" text={notice} testID="lot-notice" /> : null}
       <Section title="الكمية" testID="lot-quantity">
         <KeyValue label="المتبقي" value={kg(lot.remainingKg)} strong testID="lot-remaining" />
         <KeyValue label="الكمية الأصلية" value={kg(lot.initialKg)} />
@@ -416,6 +416,7 @@ export function LotView({ lot, role, error, notice, onAdjust, onOpenReference }:
               onChangeText={setReason}
             />
             {error ? <Notice kind="error" text={error} testID="roll-error" /> : null}
+            {notice ? <Notice kind="success" text={notice} testID="lot-notice" /> : null}
             <Button
               label="حفظ التعديل"
               busyLabel="جارٍ الحفظ…"

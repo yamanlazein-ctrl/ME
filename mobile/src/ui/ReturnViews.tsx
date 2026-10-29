@@ -63,6 +63,18 @@ export function ReturnFormView({
     <Screen
       title="مرتجع جديد"
       subtitle={RETURN_KIND_LABEL[draft.kind]}
+      footerNotice={
+        <>
+          {attempted && problems.length > 0 ? (
+            <Notice
+              kind="error"
+              text={problems.map((p) => RETURN_PROBLEM_TEXT[p]).join("\n")}
+              testID="return-problems"
+            />
+          ) : null}
+          {error ? <Notice kind="error" text={error} testID="return-error" /> : null}
+        </>
+      }
       footer={
         <Button
           label="حفظ المرتجع"
@@ -151,14 +163,6 @@ export function ReturnFormView({
           testIDPrefix="return-reason"
         />
       </Section>
-      {attempted && problems.length > 0 ? (
-        <Notice
-          kind="error"
-          text={problems.map((p) => RETURN_PROBLEM_TEXT[p]).join("\n")}
-          testID="return-problems"
-        />
-      ) : null}
-      {error ? <Notice kind="error" text={error} testID="return-error" /> : null}
     </Screen>
   );
 }

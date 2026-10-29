@@ -24,19 +24,16 @@ name: 25 inventory search, filters, fabric, colour, dye lot, movements
     id: "screen-back"
 - assertVisible: "WHT"
 - assertVisible: "قطن تجريبي"
+- tapOn: "مسح البحث"
 - tapOn:
     id: "stock-search"
-- eraseText: 10
 - inputText: "SEED"
 - hideKeyboard
 - extendedWaitUntil:
     visible: "صبغات مطابقة"
     timeout: 20000
 - takeScreenshot: 40c-search-lot
-- tapOn:
-    id: "stock-search"
-- eraseText: 10
-- hideKeyboard
+- tapOn: "مسح البحث"
 # Filters.
 - tapOn:
     id: "stock-filter-inStock"

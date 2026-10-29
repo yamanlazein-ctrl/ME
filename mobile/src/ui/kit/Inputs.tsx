@@ -79,49 +79,53 @@ export function Chips<T extends string>({
   value,
   onChange,
   testIDPrefix = "chip",
+  scroll = false,
 }: {
   options: ChipOption<T>[];
   value: T;
   onChange(v: T): void;
   testIDPrefix?: string;
+  /** One scrolling line for long, open-ended lists (categories); fixed sets wrap so no choice hides off-screen. */
+  scroll?: boolean;
 }) {
   const colors = useColors();
-  return (
+  const items = options.map((o) => {
+    const on = o.value === value;
+    return (
+      <Pressable
+        key={o.value}
+        accessibilityRole="button"
+        accessibilityState={{ selected: on }}
+        accessibilityLabel={o.label}
+        testID={`${testIDPrefix}-${o.value}`}
+        onPress={() => onChange(o.value)}
+        style={{
+          minHeight: TOUCH_TARGET,
+          paddingHorizontal: spacing.md,
+          borderRadius: radius.xl,
+          borderWidth: 1,
+          borderColor: on ? colors.primary : colors.input,
+          backgroundColor: on ? colors.primary : colors.card,
+          flexDirection: "row",
+          alignItems: "center",
+          gap: 4,
+        }}
+      >
+        {on ? <Ionicons name="checkmark" size={16} color={colors.primaryForeground} /> : null}
+        <Text style={{ color: on ? colors.primaryForeground : colors.foreground }}>{o.label}</Text>
+      </Pressable>
+    );
+  });
+  return scroll ? (
     <ScrollView
       horizontal
       showsHorizontalScrollIndicator={false}
       contentContainerStyle={{ gap: spacing.sm }}
     >
-      {options.map((o) => {
-        const on = o.value === value;
-        return (
-          <Pressable
-            key={o.value}
-            accessibilityRole="button"
-            accessibilityState={{ selected: on }}
-            accessibilityLabel={o.label}
-            testID={`${testIDPrefix}-${o.value}`}
-            onPress={() => onChange(o.value)}
-            style={{
-              minHeight: TOUCH_TARGET,
-              paddingHorizontal: spacing.md,
-              borderRadius: radius.xl,
-              borderWidth: 1,
-              borderColor: on ? colors.primary : colors.input,
-              backgroundColor: on ? colors.primary : colors.card,
-              flexDirection: "row",
-              alignItems: "center",
-              gap: 4,
-            }}
-          >
-            {on ? <Ionicons name="checkmark" size={16} color={colors.primaryForeground} /> : null}
-            <Text style={{ color: on ? colors.primaryForeground : colors.foreground }}>
-              {o.label}
-            </Text>
-          </Pressable>
-        );
-      })}
+      {items}
     </ScrollView>
+  ) : (
+    <View style={{ flexDirection: "row", flexWrap: "wrap", gap: spacing.sm }}>{items}</View>
   );
 }
 

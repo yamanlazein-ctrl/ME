@@ -123,6 +123,7 @@ export function OrderFormView({
   return (
     <Screen
       title="طلبية جديدة"
+      footerNotice={<>{error ? <Notice kind="error" text={error} testID="order-error" /> : null}</>}
       footer={
         <Button
           label="حفظ الطلبية"
@@ -174,7 +175,6 @@ export function OrderFormView({
           ))}
         </Section>
       ) : null}
-      {error ? <Notice kind="error" text={error} testID="order-error" /> : null}
     </Screen>
   );
 }

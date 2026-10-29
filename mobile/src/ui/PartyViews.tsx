@@ -513,6 +513,13 @@ export function PartyFormView({
   return (
     <Screen
       title={title}
+      footerNotice={
+        <>
+          {error ? (
+            <Notice kind="error" text={withNameHint(error)} testID="party-form-error" />
+          ) : null}
+        </>
+      }
       footer={
         <Button
           label="حفظ"
@@ -572,7 +579,6 @@ export function PartyFormView({
           />
         </Section>
       ) : null}
-      {error ? <Notice kind="error" text={withNameHint(error)} testID="party-form-error" /> : null}
     </Screen>
   );
 }

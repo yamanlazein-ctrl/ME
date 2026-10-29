@@ -183,22 +183,29 @@ export function EntryLineSheet({
           tone={colorId ? "positive" : "warning"}
         />
       ) : null}
+      {/* Weight and pieces side by side: the required fields fit a small screen above the keyboard. */}
+      <View style={{ flexDirection: "row", gap: spacing.sm }}>
+        <View style={{ flex: 1 }}>
+          <MoneyInput label="الوزن الصافي (كغ)" fieldId="entry-kg" onChangeAmount={setQty} />
+        </View>
+        <View style={{ flex: 1 }}>
+          <MoneyInput
+            label="عدد الأثواب"
+            fieldId="entry-pieces"
+            onChangeAmount={(v) => setPieces(v === null ? null : Math.round(v))}
+          />
+        </View>
+      </View>
+      <MoneyInput
+        label={`سعر الكيلو (${currency})`}
+        fieldId="entry-price"
+        onChangeAmount={setPrice}
+      />
       <Field
         label="رقم الصبغة (اختياري)"
         fieldId="entry-dye"
         value={dyeBatch}
         onChangeText={setDyeBatch}
-      />
-      <MoneyInput label="الوزن الصافي (كغ)" fieldId="entry-kg" onChangeAmount={setQty} />
-      <MoneyInput
-        label="عدد الأثواب"
-        fieldId="entry-pieces"
-        onChangeAmount={(v) => setPieces(v === null ? null : Math.round(v))}
-      />
-      <MoneyInput
-        label={`سعر الكيلو (${currency})`}
-        fieldId="entry-price"
-        onChangeAmount={setPrice}
       />
       {qty && price !== null ? (
         <Text
@@ -237,6 +244,18 @@ export function EntryFormView(p: EntryFormProps) {
     <Screen
       title="فاتورة دخول"
       subtitle={draft.supplier?.name ?? "شراء من مورد"}
+      footerNotice={
+        <>
+          {attempted && problems.length > 0 ? (
+            <Notice
+              kind="error"
+              text={problems.map((k) => ENTRY_PROBLEM_TEXT[k]).join("\n")}
+              testID="entry-problems"
+            />
+          ) : null}
+          {p.error ? <Notice kind="error" text={p.error} testID="entry-error" /> : null}
+        </>
+      }
       footer={
         <>
           <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
@@ -382,14 +401,6 @@ export function EntryFormView(p: EntryFormProps) {
         />
       </Section>
 
-      {attempted && problems.length > 0 ? (
-        <Notice
-          kind="error"
-          text={problems.map((k) => ENTRY_PROBLEM_TEXT[k]).join("\n")}
-          testID="entry-problems"
-        />
-      ) : null}
-      {p.error ? <Notice kind="error" text={p.error} testID="entry-error" /> : null}
       {draft.supplier || draft.lines.length > 0 ? (
         <Button label="مسح المسودة" variant="ghost" onPress={p.onDiscard} />
       ) : null}

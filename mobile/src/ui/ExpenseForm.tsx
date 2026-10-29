@@ -27,6 +27,9 @@ export function ExpenseForm({
     <Screen
       title="مصروف"
       subtitle="يُدفع من الصندوق"
+      footerNotice={
+        <>{error ? <Notice kind="error" text={error} testID="expense-error" /> : null}</>
+      }
       footer={
         <Button
           label="حفظ المصروف"
@@ -65,7 +68,6 @@ export function ExpenseForm({
           testIDPrefix="expense-currency"
         />
       </Section>
-      {error ? <Notice kind="error" text={error} testID="expense-error" /> : null}
     </Screen>
   );
 }

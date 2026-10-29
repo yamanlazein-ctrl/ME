@@ -120,6 +120,18 @@ export function VoucherForm({
     <Screen
       title={title}
       subtitle={receipt ? "استلام مال من عميل" : "دفع مال إلى مورد"}
+      footerNotice={
+        <>
+          {attempted && problems.length > 0 ? (
+            <Notice
+              kind="error"
+              text={problems.map((p) => VOUCHER_PROBLEM_TEXT[p]).join("\n")}
+              testID="voucher-problems"
+            />
+          ) : null}
+          {error ? <Notice kind="error" text={error} testID="voucher-error" /> : null}
+        </>
+      }
       footer={
         <Button
           label={amend ? "حفظ التعديل" : receipt ? "حفظ سند القبض" : "حفظ سند الصرف"}
@@ -225,14 +237,6 @@ export function VoucherForm({
           )}
         </Section>
       ) : null}
-      {attempted && problems.length > 0 ? (
-        <Notice
-          kind="error"
-          text={problems.map((p) => VOUCHER_PROBLEM_TEXT[p]).join("\n")}
-          testID="voucher-problems"
-        />
-      ) : null}
-      {error ? <Notice kind="error" text={error} testID="voucher-error" /> : null}
     </Screen>
   );
 }

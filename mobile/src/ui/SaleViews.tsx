@@ -153,6 +153,18 @@ export function SaleFormView(p: SaleFormProps) {
     <Screen
       title="فاتورة بيع"
       subtitle={draft.party?.name ?? "جديدة"}
+      footerNotice={
+        <>
+          {attempted && problems.length > 0 ? (
+            <Notice
+              kind="error"
+              text={problems.map((k) => DRAFT_PROBLEM_TEXT[k]).join("\n")}
+              testID="sale-problems"
+            />
+          ) : null}
+          {p.error ? <Notice kind="error" text={p.error} testID="sale-error" /> : null}
+        </>
+      }
       footer={
         <>
           <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
@@ -299,14 +311,6 @@ export function SaleFormView(p: SaleFormProps) {
         ) : null}
       </Section>
 
-      {attempted && problems.length > 0 ? (
-        <Notice
-          kind="error"
-          text={problems.map((k) => DRAFT_PROBLEM_TEXT[k]).join("\n")}
-          testID="sale-problems"
-        />
-      ) : null}
-      {p.error ? <Notice kind="error" text={p.error} testID="sale-error" /> : null}
       {draft.party || draft.lines.length > 0 ? (
         <Button label="مسح المسودة" variant="ghost" onPress={p.onDiscard} testID="sale-discard" />
       ) : null}

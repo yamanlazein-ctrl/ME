@@ -94,3 +94,48 @@ describe("Button and Screen footer (UX-02: the main action stays reachable, neve
     expect(screen.getByTestId("screen-title").props.children).toBe("ش");
   });
 });
+
+describe("small-screen layout rules (emulator 320×640)", () => {
+  it("a form's error sits in the footer, right above its save button, not at the end of a long form", async () => {
+    const { Notice } = await import("../../src/ui/kit");
+    await render(
+      <Screen
+        title="ش"
+        back={false}
+        footerNotice={<Notice kind="error" text="اختر الطرف" testID="form-error" />}
+        footer={<Button label="حفظ" onPress={() => undefined} />}
+      >
+        <Button label="محتوى" onPress={() => undefined} />
+      </Screen>,
+    );
+    const footer = screen.getByTestId("screen-footer");
+    const inFooter = (node: { props?: { testID?: string }; parent?: unknown } | null): boolean => {
+      let n = node as { props?: { testID?: string }; parent?: unknown } | null;
+      while (n) {
+        if (n.props?.testID === "screen-footer") return true;
+        n = (n.parent as typeof n) ?? null;
+      }
+      return false;
+    };
+    expect(footer).toBeTruthy();
+    expect(inFooter(screen.getByTestId("form-error") as never)).toBe(true);
+  });
+
+  it("a fixed set of chips wraps (every choice on screen); a long list may scroll", async () => {
+    const { Chips } = await import("../../src/ui/kit");
+    const opts = [
+      { value: "a", label: "كل الفترات" },
+      { value: "b", label: "هذا الشهر" },
+      { value: "c", label: "آخر 30 يوماً" },
+      { value: "d", label: "هذه السنة" },
+    ];
+    const { toJSON } = await render(<Chips options={opts} value="a" onChange={() => undefined} />);
+    const root = toJSON() as unknown as { type: string; props: { style: { flexWrap?: string } } };
+    expect(root.type).toBe("View");
+    expect(root.props.style.flexWrap).toBe("wrap");
+    const scrolling = await render(
+      <Chips options={opts} value="a" onChange={() => undefined} scroll />,
+    );
+    expect((scrolling.toJSON() as { type: string }).type).toBe("ScrollView");
+  });
+});
