@@ -45,6 +45,17 @@ const PRIMARY_ENTITY_TYPES = [
   "print_roll",
 ] as const;
 
+export type DeviceKind = "desktop" | "phone";
+
+/**
+ * BC-1 (specs/002-mobile-app): a phone reserves smaller blocks than a desktop — 100 invoice numbers and
+ * 50 of every other type. Without a device kind the size is exactly today's `defaultBlockSize`.
+ */
+export function blockSizeFor(entityType: string, deviceKind?: DeviceKind): number {
+  if (deviceKind === "phone") return entityType === "invoice" ? 100 : 50;
+  return defaultBlockSize(entityType);
+}
+
 export async function claimNumberBlock(input: {
   tenantId: UUID;
   syncDeviceId: UUID;
@@ -92,6 +103,8 @@ export async function ensureDeviceNumberBlocks(
     userId: UUID;
     authHeader?: string;
     entityTypes?: string[];
+    /** Absent = desktop behaviour (default block sizes). */
+    deviceKind?: DeviceKind;
   },
 ): Promise<{
   ensured: Array<{
@@ -125,6 +138,7 @@ export async function ensureDeviceNumberBlocks(
   let hubDeviceId: string | null = null;
 
   for (const entityType of types) {
+    const size = blockSizeFor(entityType, input.deviceKind);
     const existing = await blocks.findActive(input.tenantId, input.syncDeviceId, entityType, year);
     // Refill EARLY (below 25% of a block left across all active blocks), not
     // at exhaustion: a device that runs out while offline cannot save a
@@ -132,7 +146,7 @@ export async function ensureDeviceNumberBlocks(
     const remaining = await (
       await getNumberBlockStore()
     ).remainingInActiveBlocks(input.tenantId, input.syncDeviceId, entityType, year);
-    if (existing && remaining >= Math.ceil(defaultBlockSize(entityType) * 0.25)) {
+    if (existing && remaining >= Math.ceil(size * 0.25)) {
       ensured.push({
         entityType,
         startNumber: existing.startNumber,
@@ -160,7 +174,7 @@ export async function ensureDeviceNumberBlocks(
         const claimed = await claimBlockFromHub(hub, {
           entityType,
           syncDeviceId: hubDeviceId,
-          size: defaultBlockSize(entityType),
+          size,
           authHeader,
           knownUsed,
         });
@@ -201,6 +215,7 @@ export async function ensureDeviceNumberBlocks(
       tenantId: input.tenantId,
       syncDeviceId: input.syncDeviceId,
       entityType,
+      ...(input.deviceKind === "phone" ? { size } : {}),
     });
     ensured.push({
       entityType: local.entityType,

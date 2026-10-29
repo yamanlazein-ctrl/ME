@@ -1,0 +1,15 @@
+# Cold start of a signed-in phone: the app lock covers everything until the PIN is typed (FR-04). The fingerprint prompt
+# cannot succeed on the emulator, so the PIN fallback is used.
+appId: com.motard.erp
+---
+- extendedWaitUntil:
+    visible:
+      id: "lock-pin"
+    timeout: 60000
+- tapOn:
+    id: "lock-pin"
+- inputText: ${PIN}
+- pressKey: Enter
+- extendedWaitUntil:
+    visible: "مبيعات اليوم"
+    timeout: 60000

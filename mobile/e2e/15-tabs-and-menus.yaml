@@ -1,0 +1,49 @@
+appId: com.motard.erp
+name: 15 every tab, the Add menu and the More rows
+---
+- launchApp
+- runFlow: unlock.yaml
+- tapOn: "المخزون"
+- assertNotVisible: "قريباً"
+- assertNotVisible: ".*تعذّر.*"
+- assertVisible: "بحث"
+- takeScreenshot: 30-inventory-tab
+- tapOn: "إضافة"
+- assertVisible: "بيع جديد"
+- assertVisible: "فاتورة شراء"
+- assertVisible: "سند قبض"
+- assertVisible: "سند دفع"
+- assertVisible: "مصروف"
+- takeScreenshot: 31-add-menu
+- tapOn: "سند قبض"
+- assertNotVisible: ".*تعذّر.*"
+- pressKey: Back
+- tapOn: "سند دفع"
+- assertNotVisible: ".*تعذّر.*"
+- pressKey: Back
+- tapOn: "مصروف"
+- assertNotVisible: ".*تعذّر.*"
+- pressKey: Back
+- tapOn: "بيع جديد"
+- assertNotVisible: ".*تعذّر.*"
+- pressKey: Back
+- tapOn: "فاتورة شراء"
+- assertNotVisible: ".*تعذّر.*"
+- pressKey: Back
+- tapOn: "المزيد"
+- tapOn: "الصندوق"
+- assertNotVisible: ".*تعذّر.*"
+- pressKey: Back
+- tapOn: "حالة المزامنة"
+- assertNotVisible: ".*تعذّر.*"
+- pressKey: Back
+# Theme toggle: dark to light and back.
+- scrollUntilVisible:
+    element: "المظهر: داكن.*"
+- tapOn: "المظهر: داكن.*"
+- assertVisible: "المظهر: فاتح.*"
+- takeScreenshot: 32-light-theme
+- tapOn: "المظهر: فاتح.*"
+- assertVisible: "المظهر: داكن.*"
+- tapOn: "الرئيسية"
+- assertVisible: "مبيعات اليوم"

@@ -1,0 +1,49 @@
+appId: com.motard.erp
+name: 86 roll adjust and stock count
+---
+- launchApp
+- runFlow: unlock.yaml
+- tapOn: "المخزون"
+- tapOn: "قطن تجريبي.*"
+- tapOn:
+    id: "color-row"
+- tapOn:
+    id: "roll-row"
+- assertVisible:
+    id: "roll-remaining"
+# A valid adjust saves and the remaining kg changes.
+- scrollUntilVisible:
+    element:
+      id: "adjust-kg"
+- tapOn:
+    id: "adjust-kg"
+- inputText: "1"
+- hideKeyboard
+- takeScreenshot: 44a-roll-adjust-filled
+- tapOn: "حفظ التعديل"
+- extendedWaitUntil:
+    visible: "المتبقي: 1.00 كغ.*"
+    timeout: 30000
+- assertNotVisible:
+    id: "roll-error"
+- takeScreenshot: 44-roll-adjusted
+# The movement row sits under the fixed save bar on this short screen; the unit test checks it.
+# Back to the inventory list: pressing the active tab pops its stack to the top.
+- tapOn: "المخزون"
+# Stock count.
+- tapOn: "جرد المخزون"
+- assertNotVisible: ".*تعذّر.*"
+- assertVisible:
+    id: "count-line"
+- takeScreenshot: 45-count-sheet
+- tapOn:
+    id: "count-SEED-.*"
+- inputText: "1"
+- hideKeyboard
+- tapOn: "تسجيل العدّ SEED-.*"
+- extendedWaitUntil:
+    visible: "تم تسجيل العدّ.*"
+    timeout: 30000
+- assertNotVisible:
+    id: "count-error"
+- takeScreenshot: 46-count-recorded

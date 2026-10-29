@@ -1,0 +1,10 @@
+appId: com.motard.erp
+name: 20 cashbox
+---
+- launchApp
+- runFlow: unlock.yaml
+- tapOn: "المزيد"
+- tapOn: "الصندوق"
+- assertVisible: "حركة يدوية"
+- assertNotVisible: ".*تعذّر.*"
+- takeScreenshot: 06-cashbox

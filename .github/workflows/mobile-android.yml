@@ -1,0 +1,188 @@
+name: mobile-android
+
+on:
+  workflow_dispatch:
+    inputs:
+      apk_run_id:
+        description: "Optional: reuse the APK artifact of this earlier run and only re-run the emulator verification"
+        required: false
+        default: ""
+      release:
+        description: "true = build the SIGNED release (AAB + APK + SHA256SUMS) instead of the emulator verification; needs the MOTARD_UPLOAD_* secrets"
+        required: false
+        default: "false"
+  push:
+    branches: [feat/mobile]
+    paths:
+      - "mobile/**"
+      - "backend/src/**"
+      - "packages/shared/src/**"
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - run: npm ci
+      - run: npm ci
+        working-directory: backend
+      - run: npm ci
+        working-directory: mobile
+      - name: Typecheck, lint and unit tests (GATE-M)
+        working-directory: mobile
+        run: npx tsc --noEmit && npx eslint . --max-warnings 0 && npx vitest run
+      - name: Prettier
+        run: npx prettier --check mobile specs/002-mobile-app
+
+  apk:
+    needs: checks
+    if: ${{ inputs.release != 'true' }}
+    runs-on: ubuntu-latest
+    env:
+      EXPO_PUBLIC_SPIKES: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - run: npm ci
+      - run: npm ci
+        working-directory: backend
+      - run: npm ci
+        working-directory: mobile
+      - name: Prebuild the Android project
+        if: inputs.apk_run_id == ''
+        working-directory: mobile
+        run: npm run prebuild:migrations && npx expo prebuild --platform android --no-install
+      - name: Build the release APK (JavaScript bundled inside)
+        if: inputs.apk_run_id == ''
+        working-directory: mobile/android
+        run: ./gradlew assembleRelease
+      - uses: actions/upload-artifact@v4
+        if: inputs.apk_run_id == ''
+        with:
+          name: motard-mobile-test-apk
+          path: mobile/android/app/build/outputs/apk/release/*.apk
+          retention-days: 14
+      - name: Reuse the APK of an earlier run
+        if: inputs.apk_run_id != ''
+        uses: actions/download-artifact@v4
+        with:
+          name: motard-mobile-test-apk
+          run-id: ${{ inputs.apk_run_id }}
+          github-token: ${{ github.token }}
+          path: mobile/android/app/build/outputs/apk/release
+      # ── FIX-05: real verification. The unchanged backend runs as a test hub on this runner, the APK runs in an emulator,
+      # and a Maestro flow opens every built screen; any error text, missing font/icon, crash or MOTARD_ERR fails the job.
+      - name: Start PostgreSQL without fsync (throw-away test database)
+        run: |
+          docker run -d --name pg -e POSTGRES_PASSWORD=postgres -p 5432:5432 postgres:16 \
+            -c fsync=off -c synchronous_commit=off -c full_page_writes=off -c max_connections=200
+          for i in $(seq 1 40); do docker exec pg pg_isready -U postgres && break; sleep 2; done
+      - name: Start the test hub (PostgreSQL + backend + generated data)
+        env:
+          CERT_PG_URL: postgresql://postgres:postgres@localhost:5432/postgres
+          APP_MASTER_KEY: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa=
+          HUB_INFO: ${{ github.workspace }}/hub-info.json
+        run: |
+          nohup node scripts/emulator/start-test-hub.mjs > hub.out 2>&1 &
+          HUB_PID=$!
+          for i in $(seq 1 300); do
+            grep -q HUB_READY hub.out && break
+            kill -0 "$HUB_PID" 2>/dev/null || break
+            sleep 5
+          done
+          echo "=== hub.out ==="; tail -40 hub.out
+          grep -q HUB_READY hub.out
+      - name: Install Maestro
+        run: |
+          curl -Ls "https://get.maestro.mobile.dev" | MAESTRO_VERSION=1.41.0 bash
+          echo "$HOME/.maestro/bin" >> "$GITHUB_PATH"
+      - name: Enable KVM for the emulator
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Run every screen on an emulator (screenshots, error scan, crash scan)
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          arch: x86_64
+          target: google_apis
+          ram-size: 3072M
+          disk-size: 8192M
+          script: bash scripts/emulator/run-flows.sh mobile/android/app/build/outputs/apk/release/app-release.apk hub-info.json emulator-out
+      - name: Upload screenshots, log and junit
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: emulator-screenshots
+          path: |
+            emulator-out
+            hub.out
+          retention-days: 14
+
+  # ── T133 (FR-42): the signed release, built only on request. The same owner-held key signs the Play bundle and the
+  # direct APK, so a user can switch channels without uninstalling. The test-only settings of the verification build
+  # (spike screens, cleartext traffic to the emulator's test hub) are removed first.
+  release:
+    needs: checks
+    if: ${{ inputs.release == 'true' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - run: npm ci
+      - run: npm ci
+        working-directory: backend
+      - run: npm ci
+        working-directory: mobile
+      - name: Remove the test-only cleartext setting
+        working-directory: mobile
+        run: |
+          node -e "const fs=require('fs');const a=JSON.parse(fs.readFileSync('app.json','utf8'));const p=a.expo.plugins.find(x=>Array.isArray(x)&&x[0]==='expo-build-properties');delete p[1].android.usesCleartextTraffic;fs.writeFileSync('app.json',JSON.stringify(a,null,2));"
+      - name: Prebuild the Android project
+        working-directory: mobile
+        run: npm run prebuild:migrations && npx expo prebuild --platform android --no-install
+      - name: Decode the keystore and add the release signing
+        env:
+          MOTARD_UPLOAD_KEYSTORE_B64: ${{ secrets.MOTARD_UPLOAD_KEYSTORE_B64 }}
+          MOTARD_UPLOAD_KEYSTORE_PASSWORD: ${{ secrets.MOTARD_UPLOAD_KEYSTORE_PASSWORD }}
+          MOTARD_UPLOAD_KEY_ALIAS: ${{ secrets.MOTARD_UPLOAD_KEY_ALIAS }}
+          MOTARD_UPLOAD_KEY_PASSWORD: ${{ secrets.MOTARD_UPLOAD_KEY_PASSWORD }}
+        run: |
+          test -n "$MOTARD_UPLOAD_KEYSTORE_B64" || { echo "secret MOTARD_UPLOAD_KEYSTORE_B64 is not set"; exit 1; }
+          echo "$MOTARD_UPLOAD_KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/upload.keystore"
+          MOTARD_KEYSTORE_PATH="$RUNNER_TEMP/upload.keystore" node scripts/android/add-release-signing.mjs mobile/android/app/build.gradle
+      - name: Build the signed AAB and APK
+        working-directory: mobile/android
+        env:
+          MOTARD_KEYSTORE_PATH: ${{ runner.temp }}/upload.keystore
+          MOTARD_UPLOAD_KEYSTORE_PASSWORD: ${{ secrets.MOTARD_UPLOAD_KEYSTORE_PASSWORD }}
+          MOTARD_UPLOAD_KEY_ALIAS: ${{ secrets.MOTARD_UPLOAD_KEY_ALIAS }}
+          MOTARD_UPLOAD_KEY_PASSWORD: ${{ secrets.MOTARD_UPLOAD_KEY_PASSWORD }}
+        run: ./gradlew bundleRelease assembleRelease
+      - name: Checksums
+        run: |
+          mkdir -p release-out
+          cp mobile/android/app/build/outputs/bundle/release/*.aab release-out/
+          cp mobile/android/app/build/outputs/apk/release/*.apk release-out/
+          (cd release-out && sha256sum *.aab *.apk > SHA256SUMS && cat SHA256SUMS)
+      - uses: actions/upload-artifact@v4
+        with:
+          name: motard-mobile-release
+          path: release-out
+          retention-days: 30

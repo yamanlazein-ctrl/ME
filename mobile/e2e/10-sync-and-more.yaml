@@ -1,0 +1,21 @@
+appId: com.motard.erp
+name: 10 sync status and fonts
+---
+- launchApp
+- runFlow: unlock.yaml
+- tapOn: "المزيد"
+- assertVisible: "حالة المزامنة"
+- scrollUntilVisible:
+    element:
+      id: "fonts-status"
+- assertVisible: "الخطوط والأيقونات: محمّلة"
+- takeScreenshot: 04-more
+- scrollUntilVisible:
+    element: "حالة المزامنة"
+    direction: UP
+- tapOn: "حالة المزامنة"
+- assertVisible: "بانتظار الإرسال.*"
+- assertNotVisible: "آخر تشغيل: —"
+- assertNotVisible:
+    id: "last-error"
+- takeScreenshot: 05-sync-status

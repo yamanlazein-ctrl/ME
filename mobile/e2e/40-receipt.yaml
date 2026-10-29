@@ -1,0 +1,30 @@
+appId: com.motard.erp
+name: 40 receipt
+---
+- launchApp
+- runFlow: unlock.yaml
+- tapOn: "إضافة"
+- assertVisible: "سند قبض"
+- takeScreenshot: 10-add-menu
+- tapOn: "سند قبض"
+- tapOn:
+    id: "party-option"
+- tapOn:
+    id: "voucher-amount"
+- inputText: "10"
+- hideKeyboard
+- takeScreenshot: 11-receipt
+- tapOn: "حفظ سند القبض"
+- assertNotVisible:
+    id: "voucher-error"
+- extendedWaitUntil:
+    visible:
+      id: "voucher-done"
+    timeout: 30000
+- assertVisible:
+    id: "send-to-customer"
+- takeScreenshot: 13-receipt-done
+- tapOn: "تم"
+- extendedWaitUntil:
+    visible: "بيع جديد"
+    timeout: 30000

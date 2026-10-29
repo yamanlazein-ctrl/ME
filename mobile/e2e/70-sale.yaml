@@ -1,0 +1,64 @@
+appId: com.motard.erp
+name: 70 sale and invoice detail
+---
+- launchApp
+- runFlow: unlock.yaml
+- tapOn: "إضافة"
+- tapOn: "بيع جديد"
+- tapOn:
+    id: "party-option"
+- tapOn:
+    id: "sale-rate"
+- inputText: "1"
+- hideKeyboard
+- takeScreenshot: 14-sale-customer
+- tapOn: "التالي: البنود"
+- tapOn: "إضافة بند"
+- tapOn: "قطن تجريبي"
+- tapOn: "أبيض"
+- takeScreenshot: 15-roll-picker
+- tapOn: "SEED-.*"
+- assertVisible: "قطن تجريبي.*"
+- takeScreenshot: 16-sale-lines
+- tapOn: "التالي: المراجعة"
+- scrollUntilVisible:
+    element: "المتبقي على العميل"
+- takeScreenshot: 17-sale-review
+- tapOn: "حفظ الفاتورة"
+- extendedWaitUntil:
+    visible: "تم حفظ الفاتورة.*"
+    timeout: 60000
+- assertNotVisible:
+    id: "sale-error"
+- takeScreenshot: 18-sale-done
+- tapOn: "عرض الفاتورة"
+- assertVisible: "مشاركة PDF"
+- scrollUntilVisible:
+    element: "إلغاء الفاتورة"
+- takeScreenshot: 19-invoice
+# Share the PDF: the system share sheet opens (no in-app error), then back to the invoice.
+- scrollUntilVisible:
+    element: "مشاركة PDF"
+- tapOn: "مشاركة PDF"
+- extendedWaitUntil:
+    notVisible: "مشاركة PDF"
+    timeout: 60000
+- takeScreenshot: 20-share-sheet
+- pressKey: Back
+- assertVisible: "مشاركة PDF"
+- assertNotVisible:
+    id: "invoice-error"
+# Cancel the invoice: the confirmation dialog, then the cancelled mark.
+- scrollUntilVisible:
+    element: "إلغاء الفاتورة"
+- tapOn: "إلغاء الفاتورة"
+- takeScreenshot: 21-cancel-dialog
+- tapOn:
+    text: "إلغاء الفاتورة"
+    index: 1
+- extendedWaitUntil:
+    visible: "ملغاة"
+    timeout: 60000
+- assertNotVisible:
+    id: "invoice-error"
+- takeScreenshot: 22-invoice-cancelled

@@ -1,0 +1,18 @@
+appId: com.motard.erp
+name: 30 customers, party, statement
+---
+- launchApp
+- runFlow: unlock.yaml
+- tapOn: "العملاء والموردون"
+- assertVisible: "عميل 1"
+- assertNotVisible: ".*تعذّر.*"
+- takeScreenshot: 07-parties
+- tapOn: "عميل 1"
+- assertNotVisible:
+    id: "party-error"
+- assertVisible: "كشف الحساب"
+- takeScreenshot: 08-party
+- tapOn: "كشف الحساب"
+- assertVisible: "[0-9]+ حركة"
+- assertVisible: "الرصيد الختامي.*"
+- takeScreenshot: 09-statement

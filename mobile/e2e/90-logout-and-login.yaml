@@ -1,0 +1,30 @@
+appId: com.motard.erp
+name: 90 sign out returns to the login screen, sign in again
+---
+- launchApp
+- runFlow: unlock.yaml
+- tapOn: "المزيد"
+- scrollUntilVisible:
+    element: "تسجيل الخروج"
+- tapOn: "تسجيل الخروج"
+# A phone with unsent work asks first.
+- runFlow:
+    when:
+      visible: "هل تريد الخروج؟"
+    commands:
+      - tapOn: "خروج"
+- extendedWaitUntil:
+    visible: "تسجيل الدخول"
+    timeout: 60000
+- takeScreenshot: 38-login-after-logout
+- tapOn: "AC-8 Admin"
+- tapOn: "1"
+- tapOn: "2"
+- tapOn: "3"
+- tapOn: "4"
+- tapOn: "✓"
+- extendedWaitUntil:
+    visible: "مبيعات اليوم"
+    timeout: 60000
+- assertNotVisible: ".*تعذّر.*"
+- takeScreenshot: 39-home-after-relogin

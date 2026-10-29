@@ -1,0 +1,14 @@
+{
+  "extends": "expo/tsconfig.base",
+  "compilerOptions": {
+    "strict": true,
+    "paths": {
+      "drizzle-orm": ["../backend/node_modules/drizzle-orm"],
+      "drizzle-orm/*": ["../backend/node_modules/drizzle-orm/*"],
+      "@backend/*": ["../backend/src/*"],
+      "@erp/shared": ["../packages/shared/src/index.ts"],
+      "@erp/shared/*": ["../packages/shared/src/*"]
+    }
+  },
+  "include": ["**/*.ts", "**/*.tsx", ".expo/types/**/*.ts", "expo-env.d.ts"]
+}

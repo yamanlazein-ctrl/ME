@@ -16,6 +16,7 @@ import { createErrorHandler } from "../infrastructure/http/middleware/error-hand
 import { registerAuthRoutes } from "./routes/auth.route.js";
 import { registerUserRoutes } from "./routes/user.route.js";
 import { registerHealthRoutes } from "./routes/health.route.js";
+import { registerMobileVersionRoute } from "./routes/mobileVersion.route.js";
 import { registerDesktopRuntimeRoutes } from "./routes/desktopRuntime.route.js";
 import { checkDatabase, getEngine } from "../infrastructure/orm/engine.js";
 import { checkRedis } from "../infrastructure/auth/TokenDenylist.js";
@@ -55,6 +56,7 @@ import { registerDocumentTrackRoutes } from "./routes/documentTrack.route.js";
 import { createIntegrityRouter } from "./routes/integrity.route.js";
 import { dataSafeModeGuard } from "../infrastructure/http/middleware/dataSafeMode.middleware.js";
 import { hubWriteFreezeGuard } from "../infrastructure/http/middleware/hubWriteFreeze.middleware.js";
+import { syncVersionGuard } from "../infrastructure/http/middleware/syncVersionGuard.middleware.js";
 import { registerFxRoutes } from "./routes/fx.route.js";
 import { registerSyncRoutes } from "./routes/sync.route.js";
 import { registerSearchRoutes } from "./routes/search.route.js";
@@ -251,6 +253,8 @@ app.use(hubWriteFreezeGuard());
 // health + auth already hard-code the `/api` prefix internally → mount at root.
 const router = express.Router();
 registerHealthRoutes(router, checkDatabase, checkRedis, rbac, authMiddleware, container.healthRepo);
+// BC-5: the mobile app's version manifest (public, next to the health routes).
+registerMobileVersionRoute(router);
 // Desktop runtime only (Rust shell over the named pipe; 404 for anyone else) — T083.
 registerDesktopRuntimeRoutes(router);
 registerAuthRoutes(router, container);
@@ -545,6 +549,7 @@ const syncRuntime = registerSyncRoutes(
   {
     readGuard: rbac(["admin", "accountant", "warehouse", "viewer"]),
     transportGuard: rbac(["admin", "accountant"]),
+    syncVersionGuard,
     numberingGuard: rbac(["admin", "accountant", "warehouse"]),
     conflictGuard: rbac(["admin", "accountant", "warehouse"]),
     operatorGuard: rbac(["admin"]),
