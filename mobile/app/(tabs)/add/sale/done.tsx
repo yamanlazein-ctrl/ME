@@ -1,6 +1,6 @@
 import { router, useLocalSearchParams } from "expo-router";
 import { shareInvoicePdf } from "../../../../src/print/shareInvoice";
-import { SendToCustomer } from "../../../../src/ui/SendToCustomer";
+import { SharePdfButton } from "../../../../src/ui/SendToCustomer";
 import { SaleDoneView } from "../../../../src/ui/SaleViews";
 
 export default function SaleDone() {
@@ -10,7 +10,7 @@ export default function SaleDone() {
       number={number}
       onSharePdf={() => void shareInvoicePdf(id)}
       onOpen={() => router.push(`/invoices/${id}` as never)}
-      sendSlot={<SendToCustomer docRef={{ type: "invoice", id }} />}
+      sendSlot={<SharePdfButton docRef={{ type: "invoice", id }} />}
       onNew={() => router.replace("/(tabs)/add/sale/customer" as never)}
     />
   );

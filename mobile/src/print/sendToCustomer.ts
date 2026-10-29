@@ -1,10 +1,10 @@
-// "Send to customer" (FR-30, E13): builds the PDF of an invoice, voucher, return or statement, finds the party's phone, and
-// hands both to src/core/share.ts. A missing phone is reported to the caller, which asks for one.
+// Document PDFs (FR-29, FR-30): builds the PDF of an invoice, voucher, return or statement with the shared print builders,
+// names the file after the document, and opens the share sheet (src/core/share.ts).
 import { getApp } from "../core/appRuntime";
 import { loadInvoiceView, toPrintData } from "../core/invoiceView";
 import { loadFullStatement } from "../core/partyQueries";
 import type { Phone } from "../core/phone";
-import { sendToCustomer, type SendResult } from "../core/share";
+import { sharePdf, type ShareOutcome } from "../core/share";
 import { deviceShareDeps } from "../platform/shareDeps";
 import {
   renderInvoiceHtml,
@@ -12,7 +12,7 @@ import {
   renderStatementHtml,
   renderVoucherHtml,
 } from "./renderHtml";
-import { htmlToPdf } from "./toPdf";
+import { htmlToPdf, pdfFileName } from "./toPdf";
 
 export type DocRef =
   | { type: "invoice"; id: string }
@@ -20,12 +20,10 @@ export type DocRef =
   | { type: "return"; id: string }
   | { type: "statement"; partyId: string; kind: "customer" | "supplier" };
 
-export interface PreparedSend {
-  partyId: string;
+export interface PreparedPdf {
   partyName: string;
-  partyVersion: number;
-  phone: string | null;
-  note: string;
+  /** "فاتورة INV-000012" — the share sheet's title. */
+  title: string;
   pdfUri: string;
 }
 
@@ -35,19 +33,21 @@ async function phoneOrThrow(): Promise<Phone> {
   return app.phone;
 }
 
-/** Renders the document to a PDF and reads the party's saved phone. Nothing leaves the phone yet. */
-export async function prepareSend(ref: DocRef): Promise<PreparedSend> {
+/** Renders the document to a named PDF in the app cache. Nothing leaves the phone yet. */
+export async function preparePdf(ref: DocRef): Promise<PreparedPdf> {
   const phone = await phoneOrThrow();
   const ctx = phone.context();
   let html: string;
   let partyId: string;
   let note: string;
+  let file: string;
   if (ref.type === "invoice") {
     const view = await loadInvoiceView(phone, ref.id);
     if (!view) throw new Error("الفاتورة غير موجودة");
     html = renderInvoiceHtml(toPrintData(view));
     partyId = view.invoice.partyId;
     note = `فاتورة ${view.invoice.number}`;
+    file = pdfFileName("Invoice", view.invoice.number);
   } else if (ref.type === "voucher") {
     const v = await phone.repos.voucherRepo.findById(ref.id, ctx);
     if (!v) throw new Error("السند غير موجود");
@@ -65,6 +65,7 @@ export async function prepareSend(ref: DocRef): Promise<PreparedSend> {
     });
     partyId = v.partyId;
     note = `سند ${v.number}`;
+    file = pdfFileName(v.kind === "payment" ? "Payment" : "Receipt", v.number);
   } else if (ref.type === "return") {
     const r = await phone.repos.returnRepo.findById(ref.id, ctx);
     if (!r) throw new Error("المرتجع غير موجود");
@@ -89,6 +90,7 @@ export async function prepareSend(ref: DocRef): Promise<PreparedSend> {
     });
     partyId = r.partyId;
     note = `مرتجع ${r.number}`;
+    file = pdfFileName("Return", r.number);
   } else {
     const party = await phone.repos.partyRepo.findById(ref.partyId, ctx);
     if (!party) throw new Error("الطرف غير موجود");
@@ -116,32 +118,14 @@ export async function prepareSend(ref: DocRef): Promise<PreparedSend> {
     });
     partyId = ref.partyId;
     note = `كشف حساب ${party.name}`;
+    file = pdfFileName("Statement", rows[rows.length - 1]?.date ?? "");
   }
   const party = await phone.repos.partyRepo.findById(partyId, ctx);
-  return {
-    partyId,
-    partyName: party?.name ?? "",
-    partyVersion: party?.version ?? 0,
-    phone: party?.mobile || party?.whatsapp || party?.phone || null,
-    note,
-    pdfUri: await htmlToPdf(html),
-  };
+  return { partyName: party?.name ?? "", title: note, pdfUri: await htmlToPdf(html, file) };
 }
 
-/** Saves a phone number typed by the user on the party (E13); the party's own update use-case and sync unit. */
-export async function savePartyPhone(prepared: PreparedSend, phoneNumber: string): Promise<void> {
-  const phone = await phoneOrThrow();
-  const r = await phone.documents.updateParty(
-    prepared.partyId,
-    { phone: phoneNumber },
-    prepared.partyVersion,
-  );
-  if (!r.ok) throw new Error(r.error);
-}
-
-export function send(prepared: PreparedSend, phoneNumber: string): Promise<SendResult> {
-  return sendToCustomer(
-    { phone: phoneNumber, note: prepared.note, pdfUri: prepared.pdfUri },
-    deviceShareDeps,
-  );
+/** Builds the PDF and opens the share sheet. */
+export async function shareDocument(ref: DocRef): Promise<ShareOutcome> {
+  const prepared = await preparePdf(ref);
+  return sharePdf(prepared.pdfUri, prepared.title, deviceShareDeps);
 }

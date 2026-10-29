@@ -23,7 +23,7 @@ import {
   EntrySupplierView,
 } from "../../src/ui/EntryViews";
 import { AddMenu } from "../../src/ui/AddMenu";
-import { PhonePrompt } from "../../src/ui/PhonePrompt";
+import { LoginView } from "../../src/ui/LoginView";
 import { PartyFormView, PartyListView } from "../../src/ui/PartyViews";
 import { ScanDenied, ScanOverlay } from "../../src/ui/ScanView";
 import { UpdateOfferBanner } from "../../src/ui/UpdateBanner";
@@ -304,18 +304,23 @@ const screens: Array<[string, () => ReactElement]> = [
   ],
   ["entry done", () => <EntryDoneView number="ENT-1" onOpen={noop} onNew={noop} />],
   [
-    "phone prompt",
+    "login",
     () => (
-      <PhonePrompt
-        partyName="ع"
-        value=""
-        save
-        busy={false}
+      <LoginView
+        users={[{ id: "u1", name: "أ", role: "admin", hasPin: false }]}
+        selectedId={null}
+        pin=""
+        pinStep="enter"
         error={null}
-        onChange={noop}
-        onToggleSave={noop}
-        onSend={noop}
-        onCancel={noop}
+        busy={false}
+        mode="pin"
+        email=""
+        password=""
+        onSelect={noop}
+        onKey={noop}
+        onToggleMode={noop}
+        onChangeCredentials={noop}
+        onSubmit={noop}
       />
     ),
   ],

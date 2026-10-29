@@ -85,7 +85,10 @@ export function ListRow({
       accessibilityLabel={accessibilityLabel ?? title}
       {...(testID ? { testID } : {})}
       onPress={onPress}
-      style={({ pressed }) => ({ backgroundColor: pressed ? colors.muted : "transparent" })}
+      style={({ pressed }) => ({
+        minHeight: TOUCH_TARGET,
+        backgroundColor: pressed ? colors.muted : "transparent",
+      })}
     >
       {content}
     </Pressable>

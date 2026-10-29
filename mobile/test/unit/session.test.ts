@@ -133,3 +133,63 @@ describe("session service (T068)", () => {
     void vi;
   });
 });
+
+describe("first PIN and sign-in errors (users without a PIN could never sign in)", () => {
+  it("the roster keeps hasPin=false for a user without a PIN", async () => {
+    const { svc } = setup({}, () =>
+      json(200, {
+        users: [
+          { id: "u1", name: "أ", role: "admin", hasPin: true },
+          { id: "u2", name: "ب", role: "accountant", hasPin: false },
+        ],
+      }),
+    );
+    const users = await svc.roster();
+    expect(users.map((u) => u.hasPin)).toEqual([true, false]);
+  });
+
+  it("setPin posts to /api/auth/set-pin with the device's proof and surfaces the hub's refusal", async () => {
+    const { svc, calls } = setup({}, (url) =>
+      url.endsWith("/api/auth/set-pin")
+        ? json(400, { code: "VALIDATION", message: "هذا الرقم السري ضعيف جداً" })
+        : json(200, {}),
+    );
+    await expect(svc.setPin("u2", "1234")).rejects.toMatchObject({
+      message: "هذا الرقم السري ضعيف جداً",
+      kind: "invalid",
+    });
+    const call = calls.at(-1)!;
+    expect(call.url).toBe("https://hub.example/api/auth/set-pin");
+    expect((call.init?.headers as Record<string, string>).Authorization).toBe("Bearer device");
+    expect(JSON.parse(String(call.init?.body))).toEqual({
+      userId: "u2",
+      pin: "1234",
+      tenantId: "tenant-1",
+    });
+  });
+
+  it("names each refusal: wrong PIN, too many tries, server error, unknown device", async () => {
+    let answer = json(401, { code: "INVALID_PIN", message: "x" });
+    const { svc } = setup({}, () => answer);
+    await expect(svc.pinLogin("u1", "4821")).rejects.toMatchObject({
+      message: "الرقم السري غير صحيح",
+    });
+    answer = json(429, {});
+    await expect(svc.pinLogin("u1", "4821")).rejects.toMatchObject({
+      message: expect.stringContaining("محاولات كثيرة"),
+    });
+    answer = json(503, {});
+    await expect(svc.pinLogin("u1", "4821")).rejects.toMatchObject({
+      message: expect.stringContaining("خطأ في المركز"),
+    });
+    answer = json(401, { code: "DEVICE_PROOF_REQUIRED" });
+    await expect(svc.setPin("u1", "4821")).rejects.toMatchObject({
+      message: expect.stringContaining("أعد ربط الهاتف"),
+    });
+  });
+
+  it("setPin without a network says it needs a connection", async () => {
+    const { svc } = setup();
+    await expect(svc.setPin("u1", "4821")).rejects.toMatchObject({ kind: "network" });
+  });
+});

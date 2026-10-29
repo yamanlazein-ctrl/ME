@@ -29,6 +29,7 @@ export function Field({ label, fieldId, error, ...input }: FieldProps) {
         testID={fieldId}
         accessibilityLabel={label}
         accessibilityLabelledBy={labelId}
+        placeholderTextColor={colors.mutedForeground}
         style={{
           minHeight: TOUCH_TARGET,
           fontSize: fontSize.input,

@@ -3,7 +3,7 @@ import { router } from "expo-router";
 import { getApp } from "../core/appRuntime";
 import { useFinishWrite } from "../hooks/useFinishWrite";
 import { Pressable, View } from "react-native";
-import { SendToCustomer } from "./SendToCustomer";
+import { SharePdfButton } from "./SendToCustomer";
 import { Text } from "./Text";
 import { fontSize, radius, spacing, TOUCH_TARGET } from "./theme";
 import { emptyVoucher, VoucherForm, type VoucherFormValues } from "./VoucherForm";
@@ -86,7 +86,7 @@ export function VoucherScreen({
         <Text testID="voucher-done" style={{ fontSize: fontSize.title }}>
           {`تم حفظ السند ${done.number}`}
         </Text>
-        <SendToCustomer docRef={{ type: "voucher", id: done.id }} />
+        <SharePdfButton docRef={{ type: "voucher", id: done.id }} />
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="تم"

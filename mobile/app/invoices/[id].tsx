@@ -8,7 +8,7 @@ import { queryKeys } from "../../src/hooks/queryKeys";
 import { useFinishWrite } from "../../src/hooks/useFinishWrite";
 import { useRole } from "../../src/hooks/useRole";
 import { shareInvoicePdf } from "../../src/print/shareInvoice";
-import { SendToCustomer } from "../../src/ui/SendToCustomer";
+import { SharePdfButton } from "../../src/ui/SendToCustomer";
 import { InvoiceDetailView } from "../../src/ui/InvoiceDetailView";
 
 export default function InvoiceScreen() {
@@ -41,7 +41,7 @@ export default function InvoiceScreen() {
       view={data}
       role={role}
       error={error}
-      sendSlot={<SendToCustomer docRef={{ type: "invoice", id }} />}
+      sendSlot={<SharePdfButton docRef={{ type: "invoice", id }} />}
       onShare={() => void shareInvoicePdf(id).catch((e: unknown) => setError(String(e)))}
       onCancel={() =>
         Alert.alert("إلغاء الفاتورة", `هل تريد إلغاء الفاتورة ${data.invoice.number}؟`, [

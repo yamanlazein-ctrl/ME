@@ -7,7 +7,7 @@ import { balancesByCurrency } from "../../../../src/core/partyQueries";
 import { canWriteOffline } from "../../../../src/core/roles";
 import { useRole } from "../../../../src/hooks/useRole";
 import { useStatement } from "../../../../src/hooks/useStatement";
-import { SendToCustomer } from "../../../../src/ui/SendToCustomer";
+import { SharePdfButton } from "../../../../src/ui/SendToCustomer";
 import { Text } from "../../../../src/ui/Text";
 
 import { StatementView } from "../../../../src/ui/PartyViews";
@@ -73,9 +73,9 @@ export default function StatementScreen() {
             ))}
           </View>
         ) : null}
-        <SendToCustomer
+        <SharePdfButton
           docRef={{ type: "statement", partyId: id, kind: kindQuery.data }}
-          label="إرسال الكشف للعميل"
+          label="مشاركة الكشف PDF"
         />
       </View>
       <StatementView
