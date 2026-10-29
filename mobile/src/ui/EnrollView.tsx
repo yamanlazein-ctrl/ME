@@ -1,6 +1,7 @@
 // Linking the phone to the company hub (FR-07, FR-08): hub address + enrolment code (typed or scanned), then the first
 // download with its progress. Every refusal says what to do next.
-import { View } from "react-native";
+import { useRef, type ComponentRef } from "react";
+import { View, type TextInput } from "react-native";
 import { Text } from "./Text";
 import { ENROLL_ERROR_TEXT, type EnrollError } from "../core/enrollFlow";
 import { Field } from "./Field";
@@ -65,6 +66,7 @@ export function EnrollView({
   onRetry?(): void;
 }) {
   const colors = useColors();
+  const codeRef = useRef<ComponentRef<typeof TextInput>>(null);
   const { progress } = state;
   const errorText = state.error ? (state.hubMessage ?? ENROLL_ERROR_TEXT[state.error]) : null;
   const errorBlock = errorText ? (
@@ -124,11 +126,7 @@ export function EnrollView({
         />
       }
     >
-      <Notice
-        kind="info"
-        text="تجد عنوان المركز ورمز التسجيل في برنامج الحاسوب: الإعدادات ← المزامنة السحابية ← أجهزة الشركة. يمكنك مسح رمز QR بدل الكتابة."
-      />
-      <Button label="مسح رمز QR" variant="secondary" icon="qr-code-outline" onPress={onScan} />
+      {/* The two fields come first: on a small phone the keyboard must not cover the second one. */}
       <Section>
         <Field
           label="عنوان المركز"
@@ -139,16 +137,29 @@ export function EnrollView({
           autoCorrect={false}
           keyboardType="url"
           placeholder="https://…"
+          returnKeyType="next"
+          submitBehavior="submit"
+          onSubmitEditing={() => codeRef.current?.focus()}
         />
         <Field
           label="رمز التسجيل"
           fieldId="code"
+          inputRef={codeRef}
           value={state.code}
           onChangeText={(code) => onChange({ code })}
           autoCapitalize="characters"
           autoCorrect={false}
+          returnKeyType="done"
+          onSubmitEditing={() => {
+            if (state.hub.trim() && state.code.trim() && !state.busy) onSubmit();
+          }}
         />
       </Section>
+      <Button label="مسح رمز QR" variant="secondary" icon="qr-code-outline" onPress={onScan} />
+      <Notice
+        kind="info"
+        text="تجد عنوان المركز ورمز التسجيل في برنامج الحاسوب: الإعدادات ← المزامنة السحابية ← أجهزة الشركة. يمكنك مسح رمز QR بدل الكتابة."
+      />
       {errorBlock}
     </Screen>
   );

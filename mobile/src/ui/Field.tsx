@@ -1,3 +1,4 @@
+import type { ComponentRef, Ref } from "react";
 import { TextInput, View, type TextInputProps } from "react-native";
 import { Text } from "./Text";
 import { fontFamilyFor } from "./fontFamilies";
@@ -9,10 +10,12 @@ export interface FieldProps extends Omit<TextInputProps, "style"> {
   /** Stable id of the label; the input points at it with accessibilityLabelledBy (the desktop `FormField` rule). */
   fieldId: string;
   error?: string | null;
+  /** To move focus here from the previous field («التالي» on the keyboard). */
+  inputRef?: Ref<ComponentRef<typeof TextInput>>;
 }
 
 /** A label tied to its input: the input is labelled by the label's nativeID, and also carries the text itself. */
-export function Field({ label, fieldId, error, ...input }: FieldProps) {
+export function Field({ label, fieldId, error, inputRef, ...input }: FieldProps) {
   const colors = useColors();
   const labelId = `${fieldId}-label`;
   return (
@@ -25,6 +28,7 @@ export function Field({ label, fieldId, error, ...input }: FieldProps) {
       </Text>
       <TextInput
         {...input}
+        ref={inputRef}
         nativeID={fieldId}
         testID={fieldId}
         accessibilityLabel={label}

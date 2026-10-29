@@ -38,6 +38,13 @@ name: 70 sale on one screen, invoice page, share PDF, cancel
 - tapOn:
     id: "line-done"
 - assertVisible: "صبغة SEED-.* · 2.00 كغ × .*"
+# Leave the sale and come back: the draft (customer and line) is still there.
+- tapOn:
+    id: "screen-back"
+- tapOn:
+    id: "add-sale"
+- assertVisible: "صبغة SEED-.* · 2.00 كغ × .*"
+- takeScreenshot: 16b-draft-kept
 # A rate is asked only if the customer pays in SYP.
 - runFlow:
     when:
@@ -52,8 +59,11 @@ name: 70 sale on one screen, invoice page, share PDF, cancel
     element:
       id: "sale-due"
 - takeScreenshot: 17-sale-totals
+# A double tap saves once (the button is locked while saving; one done screen, one number).
 - tapOn:
     id: "sale-save"
+    repeat: 2
+    delay: 50
 - extendedWaitUntil:
     visible:
       id: "doc-done"

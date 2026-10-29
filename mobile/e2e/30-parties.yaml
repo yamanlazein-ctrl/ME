@@ -63,3 +63,19 @@ name: 30 customers and suppliers, party page, statement by period
     visible: "البنود.*"
     timeout: 30000
 - takeScreenshot: 09c-statement-opens-invoice
+# Back: the same statement, same period; back again: the party page; the tab returns to the list.
+- tapOn:
+    id: "screen-back"
+- assertVisible:
+    id: "statement-closing"
+- assertVisible:
+    id: "statement-period-all"
+    selected: true
+- tapOn:
+    id: "screen-back"
+- assertVisible:
+    id: "party-balances"
+- tapOn:
+    id: "tab-parties"
+- assertVisible:
+    id: "party-search"

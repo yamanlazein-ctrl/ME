@@ -67,6 +67,7 @@ name: 00 enroll, first download, sign in, Home
 - tapOn:
     id: "hub"
 - inputText: ${HUB}
+- hideKeyboard
 - tapOn:
     id: "code"
 - inputText: WRONG-CODE-0000
@@ -87,6 +88,7 @@ name: 00 enroll, first download, sign in, Home
 - tapOn:
     id: "hub"
 - inputText: ${HUB}
+- hideKeyboard
 - tapOn:
     id: "code"
 - inputText: ${CODE}

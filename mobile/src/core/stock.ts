@@ -323,14 +323,16 @@ export async function loadColorLots(phone: Phone, colorId: string): Promise<Colo
   };
 }
 
+/** Movement names in the desktop's words (lot creation is «إنشاء صبغة» in the roll repositories; documents as in
+ * src/routes/invoices.tracking.tsx and ledgerCalc.ts). */
 export const MOVEMENT_LABEL: Record<string, string> = {
-  initial: "رصيد افتتاحي",
-  invoice_entry: "فاتورة شراء",
+  initial: "إنشاء الصبغة",
+  invoice_entry: "فاتورة دخول",
   invoice_sale: "فاتورة بيع",
   return_sale: "مرتجع بيع",
-  return_entry: "مرتجع شراء",
-  print_send: "إرسال للطباعة",
-  print_receive: "استلام من الطباعة",
+  return_entry: "مرتجع دخول",
+  print_send: "إرسال مطبعة",
+  print_receive: "استلام مطبعة",
   print_waste: "هدر طباعة",
   adjustment: "تعديل يدوي",
 };

@@ -68,6 +68,23 @@ name: 87 purchase invoice with a new fabric and colour
     visible: "البنود.*"
     timeout: 30000
 - takeScreenshot: 75-entry-invoice
+# The supplier's page lists it and its statement has the «فاتورة دخول» line.
+- scrollUntilVisible:
+    element: "المورد"
+    direction: UP
+- tapOn: "المورد"
+- assertVisible:
+    id: "party-balances"
+- assertVisible: "فاتورة دخول .*"
+- tapOn:
+    id: "party-statement"
+- extendedWaitUntil:
+    visible:
+      id: "statement-closing"
+    timeout: 30000
+- scrollUntilVisible:
+    element: "فاتورة دخول .*"
+- takeScreenshot: 75b-supplier-statement
 # The new fabric is in the inventory with its 12 kg.
 - tapOn:
     id: "tab-inventory"

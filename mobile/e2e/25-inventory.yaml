@@ -16,6 +16,14 @@ name: 25 inventory search, filters, fabric, colour, dye lot, movements
 - hideKeyboard
 - assertVisible: "قطن تجريبي"
 - takeScreenshot: 40b-search-colour-code
+# Into the fabric and back: the search is still there (the list kept its context).
+- tapOn: "قطن تجريبي"
+- assertVisible:
+    id: "fabric-summary"
+- tapOn:
+    id: "screen-back"
+- assertVisible: "WHT"
+- assertVisible: "قطن تجريبي"
 - tapOn:
     id: "stock-search"
 - eraseText: 10

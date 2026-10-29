@@ -194,3 +194,57 @@ describe("hub address and wake-up", () => {
     expect(await wakeHub("https://h", never, 10_000)).toBe(false);
   });
 });
+
+describe("enrol form on a small screen", () => {
+  it("puts both fields before the QR button and the hint, so the keyboard never covers the second field", async () => {
+    await render(
+      <EnrollView
+        state={{ hub: "", code: "", busy: false, progress: null, error: null }}
+        onChange={() => undefined}
+        onSubmit={() => undefined}
+        onScan={() => undefined}
+      />,
+    );
+    // Document order of the rendered host nodes: testIDs and texts, depth first.
+    const seen: string[] = [];
+    const walk = (n: unknown): void => {
+      if (n === null || n === undefined) return;
+      if (typeof n === "string") return void seen.push(n);
+      if (Array.isArray(n)) return n.forEach(walk);
+      const node = n as { props?: { testID?: string }; children?: unknown };
+      if (node.props?.testID) seen.push(`#${node.props.testID}`);
+      walk(node.children);
+    };
+    walk(screen.toJSON());
+    const order = seen.join("|");
+    const hub = order.indexOf("#hub");
+    const code = order.indexOf("#code");
+    const qr = order.indexOf("مسح رمز QR");
+    const hint = order.indexOf("تجد عنوان المركز");
+    expect(hub).toBeGreaterThan(-1);
+    expect(hub).toBeLessThan(code);
+    expect(code).toBeLessThan(qr);
+    expect(qr).toBeLessThan(hint);
+    expect(screen.getByTestId("hub").props.returnKeyType).toBe("next");
+  });
+
+  it("«done» on the code field submits a complete form", async () => {
+    const onSubmit = vi.fn();
+    await render(
+      <EnrollView
+        state={{
+          hub: "https://h.example",
+          code: "AB-12",
+          busy: false,
+          progress: null,
+          error: null,
+        }}
+        onChange={() => undefined}
+        onSubmit={onSubmit}
+        onScan={() => undefined}
+      />,
+    );
+    await fireEvent(screen.getByTestId("code"), "submitEditing");
+    expect(onSubmit).toHaveBeenCalledOnce();
+  });
+});

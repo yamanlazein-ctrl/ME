@@ -5,6 +5,7 @@ import { and, asc, eq, or, sql } from "drizzle-orm";
 import { ilikeContains } from "@backend/infrastructure/repositories/sqlite/helpers/likeContains";
 import { parties } from "@backend/infrastructure/orm/sqlite/schemas/party.table";
 import type { StatementEntryData } from "@backend/domain/entities/Statement";
+import { ReturnDoc } from "@backend/domain/entities/Return";
 import type { Phone } from "./phone";
 import { loadFullStatement } from "./partyQueries";
 
@@ -227,7 +228,8 @@ export async function partyDocuments(
     title: RETURN_TITLE[r.kind] ?? "مرتجع",
     number: r.number,
     date: String(r.date).slice(0, 10),
-    amount: Number((r as { total?: number }).total ?? 0),
+    // The return document's own amount (domain ReturnDoc: Σ round2dp(kg × price)), the figure the ledger posts.
+    amount: ReturnDoc.reconstitute(r).amount,
     currency: r.currency,
     note: null,
     cancelled: r.status === "cancelled",
