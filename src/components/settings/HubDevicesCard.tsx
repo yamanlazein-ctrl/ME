@@ -1,6 +1,4 @@
-import { useEffect, useState } from "react";
-import QRCode from "qrcode";
-import { buildEnrollPayload } from "./enrollQr";
+import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Ban, Copy, KeyRound, Loader2, RotateCcw } from "lucide-react";
 import { toast } from "sonner";
@@ -26,7 +24,7 @@ function fmt(iso: string | null | undefined): string {
  * and every registered device with disable / re-enable. Disabling never deletes
  * data — the device just stops syncing until re-enabled.
  */
-export function HubDevicesCard({ hubUrl }: { hubUrl?: string | null }) {
+export function HubDevicesCard() {
   const qc = useQueryClient();
   const self = getRegisteredSyncDeviceId();
   const [confirm, setConfirm] = useState<HubDevice | null>(null);
@@ -60,21 +58,6 @@ export function HubDevicesCard({ hubUrl }: { hubUrl?: string | null }) {
 
   const current = code.data?.current ?? null;
   const expired = current ? Date.parse(current.expiresAt) <= Date.now() : false;
-  const usable = !!current && !expired && current.uses < current.maxUses;
-  const [qr, setQr] = useState<string | null>(null);
-  useEffect(() => {
-    if (!usable || !hubUrl || !current) {
-      setQr(null);
-      return;
-    }
-    let cancelled = false;
-    QRCode.toDataURL(buildEnrollPayload(hubUrl, current.code), { margin: 1, width: 192 })
-      .then((url) => !cancelled && setQr(url))
-      .catch(() => !cancelled && setQr(null));
-    return () => {
-      cancelled = true;
-    };
-  }, [usable, hubUrl, current]);
   const items = devices.data?.items ?? [];
   const live = items.filter((d) => !d.revokedAt).length;
 
@@ -104,14 +87,6 @@ export function HubDevicesCard({ hubUrl }: { hubUrl?: string | null }) {
             >
               <Copy className="ml-1 h-4 w-4" /> نسخ
             </Button>
-            {qr && (
-              <img
-                src={qr}
-                alt="رمز QR لربط الهاتف: يحتوي رابط المركز ورمز التسجيل"
-                data-testid="enroll-qr"
-                className="h-48 w-48 rounded-md border border-border bg-white p-1"
-              />
-            )}
             <span className="text-xs text-muted-foreground">
               صالح حتى {fmt(current.expiresAt)} · استُخدم {current.uses} من {current.maxUses}
             </span>

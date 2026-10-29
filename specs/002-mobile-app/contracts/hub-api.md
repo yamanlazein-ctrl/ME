@@ -24,9 +24,6 @@ Common to every call:
 
 - `POST /api/sync/enroll`: exchanges an enrollment code for device registration
   (`backend/src/presentation/routes/syncEnrollment.route.ts`).
-- Enrollment QR (shown by the desktop in `HubDevicesCard`, parsed by the phone): text
-  `motard-enroll://v1?u=<hub url>&c=<code>`; the phone fills the hub URL and code from it and calls
-  `POST /api/sync/enroll`. Reference parser: `src/components/settings/enrollQr.ts`.
 - `POST /api/sync/device-token`: device credential → tokens (called by `hubConfig.ts` line 272).
 - `POST /api/auth/sync-device`: registers a sync device.
 - `GET /api/auth/device-roster`: the users authorized on this device, for the PIN picker.
