@@ -64,7 +64,13 @@ export function HomeView({
   const owed = currenciesOf(data.receivables, data.payables);
   const actions = HOME_ACTIONS.filter((a) => !a.write || canWriteOffline(role));
   return (
-    <ScrollView contentContainerStyle={{ padding: spacing.lg }}>
+    <ScrollView contentContainerStyle={{ padding: spacing.lg, paddingBottom: spacing.xxl }}>
+      <Text style={{ fontSize: fontSize.headline, color: colors.foreground, marginBottom: spacing.xs }}>
+        الرئيسية
+      </Text>
+      <Text style={{ color: colors.mutedForeground, marginBottom: spacing.lg }}>
+        ملخص العمل اليومي
+      </Text>
       {cashCurrencies.map((c) => (
         <Card key={c} title={`الصندوق — ${c}`} testID={`cashbox-card-${c}`}>
           <MoneyText amount={d.cashbox.balanceByCurrency[c] ?? 0} currency={c} />
@@ -91,6 +97,9 @@ export function HomeView({
       </Card>
       <Text testID="last-sync" style={{ color: colors.mutedForeground, marginBottom: spacing.md }}>
         {lastSyncAt ? `آخر مزامنة: ${lastSyncAt}` : "لم تتم مزامنة بعد"}
+      </Text>
+      <Text style={{ fontSize: fontSize.title, marginBottom: spacing.sm }}>
+        إجراءات سريعة
       </Text>
       <View style={{ flexDirection: "row", flexWrap: "wrap", gap: spacing.sm }}>
         {actions.map((a) => (

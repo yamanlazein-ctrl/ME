@@ -92,6 +92,10 @@ export function FabricListView({
 }) {
   return (
     <View style={{ flex: 1, padding: spacing.lg }}>
+      <Text style={{ fontSize: fontSize.headline, marginBottom: spacing.xs }}>المخزون</Text>
+      <Text style={{ color: colors.mutedForeground, marginBottom: spacing.lg }}>
+        الأقمشة والكميات المتوفرة
+      </Text>
       <Field
         label="بحث"
         fieldId="fabric-search"
@@ -105,9 +109,14 @@ export function FabricListView({
         renderItem={({ item }) => (
           <Card onPress={() => onOpen(item.id)}>
             <Text style={{ fontSize: fontSize.body }}>{item.name}</Text>
-            <Text style={{ color: colors.mutedForeground }}>
-              {`${kg(item.remainingKg)} · ${item.rollCount} لفة`}
-            </Text>
+            <View style={{ flexDirection: "row", justifyContent: "space-between", marginTop: spacing.xs }}>
+              <Text style={{ color: colors.mutedForeground }}>
+                {`${item.rollCount} لفة`}
+              </Text>
+              <Text style={{ color: colors.foreground, fontSize: fontSize.amount }}>
+                {kg(item.remainingKg)}
+              </Text>
+            </View>
             {item.low ? <LowStockBadge /> : null}
           </Card>
         )}
