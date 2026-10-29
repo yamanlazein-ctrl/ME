@@ -20,8 +20,10 @@ import {
   fabricByName,
   refreshInventory,
   rollById,
+  rollsOfColor,
   useInventory,
 } from "@/presentation/hooks/useInventory";
+import { lastEntryPrice } from "@/components/invoices/entryPriceReference";
 import { resolveColorPick } from "@/domain/inventory/colorLookup";
 import { normalizeInventoryName } from "@/domain/inventory/normalizeInventoryName";
 import { supplierById } from "@/presentation/hooks/useParties";
@@ -1392,6 +1394,31 @@ function EntryInvoicePage() {
                             placeholder="0"
                             ariaLabel="سعر الوحدة"
                           />
+                          {(() => {
+                            // Suggestion only — read from the local inventory cache (works offline);
+                            // the price field is never written or locked by it.
+                            const last = lastEntryPrice(
+                              l.existingColorId
+                                ? rollsOfColor(l.existingColorId)
+                                : l.existingFabricId
+                                  ? colorsOfFabric(l.existingFabricId).flatMap((c) =>
+                                      rollsOfColor(c.id),
+                                    )
+                                  : [],
+                            );
+                            if (!last || last.pricePerKg === l.pricePerKg) return null;
+                            return (
+                              <button
+                                type="button"
+                                data-testid="last-entry-price"
+                                title={`آخر سعر دخول بتاريخ ${last.entryDate} — اضغط للاستخدام`}
+                                onClick={() => updateLine(l.id, { pricePerKg: last.pricePerKg })}
+                                className="mt-1 inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground tabular-nums hover:bg-accent"
+                              >
+                                آخر سعر: {last.pricePerKg} {currencySymbol(last.currency)}
+                              </button>
+                            );
+                          })()}
                         </CardField>
                         <CardField label="الخصم">
                           <FormattedAmountInput

@@ -61,3 +61,11 @@ export async function purgeDye(
   });
   return res.data;
 }
+
+/** The server refuses a purge on an enrolled device (409, hub-only). Matched on the message: the HTTP layer maps 409 to a generic ConflictError. */
+export function isHubOnlyPurgeError(err: unknown): boolean {
+  return (
+    err instanceof Error &&
+    /^(?:الحذف التصحيحي|تعذّر التحقق).*(?:يُزامَن|تُزامَن)/s.test(err.message)
+  );
+}

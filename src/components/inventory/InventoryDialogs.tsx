@@ -796,6 +796,10 @@ function RollFormDialog({ state, onClose }: { state: RollFormState; onClose: () 
     editing?.pricePerKg != null ? String(editing.pricePerKg) : "",
   );
   const [currency, setCurrency] = useState<Currency>(editing?.currency ?? "SYP");
+  // Grammage is stored on the roll but entry invoices cannot always carry it; it is edited here.
+  const [gsm, setGsm] = useState<string>(
+    editing?.weightGsm != null ? String(editing.weightGsm) : "",
+  );
   // F12 (Phase 1 audit, "stale supplier picker"): a NEW roll used to default
   // its supplier to `suppliers[0]` — whichever supplier happened to sort
   // first — instead of requiring an explicit choice. A user who didn't
@@ -824,6 +828,7 @@ function RollFormDialog({ state, onClose }: { state: RollFormState; onClose: () 
       );
       setPrice(e?.pricePerKg != null ? String(e.pricePerKg) : "");
       setCurrency(e?.currency ?? "SYP");
+      setGsm(e?.weightGsm != null ? String(e.weightGsm) : "");
       setSupplierId(e?.supplierId ?? "");
       setDate(e?.entryDate ?? localToday());
     }
@@ -868,6 +873,8 @@ function RollFormDialog({ state, onClose }: { state: RollFormState; onClose: () 
       valid = false;
     }
     if (!valid || qtyNum == null || priceNum == null) return;
+    const gsmNum = parseDecimalInput(gsm);
+    const gsmPatch = gsmNum != null && gsmNum > 0 ? { weightGsm: gsmNum } : {};
     try {
       if (editing) {
         await updateRoll(editing.id, {
@@ -879,6 +886,7 @@ function RollFormDialog({ state, onClose }: { state: RollFormState; onClose: () 
           currency,
           supplierId,
           entryDate: date,
+          ...gsmPatch,
         });
       } else {
         await addRoll({
@@ -891,6 +899,7 @@ function RollFormDialog({ state, onClose }: { state: RollFormState; onClose: () 
           currency,
           supplierId,
           entryDate: date,
+          ...gsmPatch,
         });
       }
       onClose();
@@ -995,6 +1004,16 @@ function RollFormDialog({ state, onClose }: { state: RollFormState; onClose: () 
                 maxDecimals={4}
                 value={price}
                 onChange={(e) => setPrice(e.target.value)}
+              />
+            </div>
+            <div>
+              <Label>الكراماج (غ/م²)</Label>
+              <DecimalInput
+                inputMode="decimal"
+                step="0.01"
+                min="0"
+                value={gsm}
+                onChange={(e) => setGsm(e.target.value)}
               />
             </div>
             <div>

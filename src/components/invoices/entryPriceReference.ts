@@ -49,3 +49,30 @@ export function entryPriceReference(
     otherCurrency,
   };
 }
+
+type PricedRoll = EntryRoll & { createdAt?: string | number | Date };
+
+/**
+ * The most recent real entry price among `rolls` (the rolls of the chosen colour, or of the fabric's
+ * colours when the colour is new). A suggestion only: the caller never writes it into the price field.
+ */
+export function lastEntryPrice(
+  rolls: readonly PricedRoll[],
+): { pricePerKg: number; currency: Currency; entryDate: string } | null {
+  let best: PricedRoll | null = null;
+  for (const r of rolls) {
+    if (!(r.entryPricePerKg != null && r.entryPricePerKg > 0) || !r.entryCurrency) continue;
+    const newer =
+      !best ||
+      r.entryDate > best.entryDate ||
+      (r.entryDate === best.entryDate && String(r.createdAt ?? "") > String(best.createdAt ?? ""));
+    if (newer) best = r;
+  }
+  return best
+    ? {
+        pricePerKg: best.entryPricePerKg!,
+        currency: best.entryCurrency!,
+        entryDate: best.entryDate,
+      }
+    : null;
+}
