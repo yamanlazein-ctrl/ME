@@ -52,6 +52,12 @@ export function entryPriceReference(
 
 type PricedRoll = EntryRoll & { createdAt?: string | number | Date };
 
+/** Chronological tie-break: ISO string, epoch number and Date all compare by time, never as text. */
+function createdMs(v: PricedRoll["createdAt"]): number {
+  const t = v == null ? NaN : new Date(v).getTime();
+  return Number.isFinite(t) ? t : 0;
+}
+
 /**
  * The most recent real entry price among `rolls` (the rolls of the chosen colour, or of the fabric's
  * colours when the colour is new). A suggestion only: the caller never writes it into the price field.
@@ -65,7 +71,7 @@ export function lastEntryPrice(
     const newer =
       !best ||
       r.entryDate > best.entryDate ||
-      (r.entryDate === best.entryDate && String(r.createdAt ?? "") > String(best.createdAt ?? ""));
+      (r.entryDate === best.entryDate && createdMs(r.createdAt) > createdMs(best.createdAt));
     if (newer) best = r;
   }
   return best

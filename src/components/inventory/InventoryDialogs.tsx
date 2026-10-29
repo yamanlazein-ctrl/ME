@@ -811,10 +811,12 @@ function RollFormDialog({ state, onClose }: { state: RollFormState; onClose: () 
   const [rollErr, setRollErr] = useState<string | null>(null);
   const [dyeErr, setDyeErr] = useState<string | null>(null);
   const [qtyErr, setQtyErr] = useState<string | null>(null);
+  const [gsmErr, setGsmErr] = useState<string | null>(null);
 
   useEffect(() => {
     if (state.open) {
       const e = state.editing;
+      setGsmErr(null);
       setRollNo(e?.rollNo ?? "");
       setDyeBatch(e?.dyeBatch ?? "");
       setQty(e?.initialKg != null ? String(e.initialKg) : "");
@@ -872,8 +874,17 @@ function RollFormDialog({ state, onClose }: { state: RollFormState; onClose: () 
       setQtyErr("أدخل عدد أثواب صحيحاً (1 أو أكثر).");
       valid = false;
     }
-    if (!valid || qtyNum == null || priceNum == null) return;
+    // Grammage is optional, but a typed value must be a positive number, and a stored value cannot
+    // be cleared (the API only accepts a positive number) — say so instead of silently keeping it.
     const gsmNum = parseDecimalInput(gsm);
+    if (gsm.trim() !== "" && (gsmNum == null || gsmNum <= 0)) {
+      setGsmErr("أدخل كراماج صحيحاً أكبر من صفر.");
+      valid = false;
+    } else if (gsm.trim() === "" && editing?.weightGsm != null) {
+      setGsmErr("لا يمكن مسح الكراماج المسجَّل — عدّله إلى قيمة صحيحة.");
+      valid = false;
+    }
+    if (!valid || qtyNum == null || priceNum == null) return;
     const gsmPatch = gsmNum != null && gsmNum > 0 ? { weightGsm: gsmNum } : {};
     try {
       if (editing) {
@@ -1013,8 +1024,12 @@ function RollFormDialog({ state, onClose }: { state: RollFormState; onClose: () 
                 step="0.01"
                 min="0"
                 value={gsm}
-                onChange={(e) => setGsm(e.target.value)}
+                onChange={(e) => {
+                  setGsm(e.target.value);
+                  setGsmErr(null);
+                }}
               />
+              {gsmErr && <p className="mt-1 text-xs text-destructive">{gsmErr}</p>}
             </div>
             <div>
               <Label>العملة</Label>

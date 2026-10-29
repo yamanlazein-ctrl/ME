@@ -1,4 +1,5 @@
 import { container } from "@/infrastructure/container";
+import { ConflictError } from "@/core/errors/DomainError";
 
 /**
  * Client for the corrective dye (fabric) cascade endpoints.
@@ -62,10 +63,7 @@ export async function purgeDye(
   return res.data;
 }
 
-/** The server refuses a purge on an enrolled device (409, hub-only). Matched on the message: the HTTP layer maps 409 to a generic ConflictError. */
+/** The server refuses a purge on an enrolled device (409 `SYNC_DEVICES_ENROLLED`, hub-only). */
 export function isHubOnlyPurgeError(err: unknown): boolean {
-  return (
-    err instanceof Error &&
-    /^(?:الحذف التصحيحي|تعذّر التحقق).*(?:يُزامَن|تُزامَن)/s.test(err.message)
-  );
+  return err instanceof ConflictError && err.serverCode === "SYNC_DEVICES_ENROLLED";
 }

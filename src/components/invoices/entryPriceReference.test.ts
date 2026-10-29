@@ -70,4 +70,13 @@ describe("lastEntryPrice", () => {
     ).toBeNull();
     expect(lastEntryPrice([])).toBeNull();
   });
+  it("breaks same-day ties chronologically, not as text, across mixed createdAt types", () => {
+    const older = { ...r("2026-03-01", 4), createdAt: 999 };
+    const newer = { ...r("2026-03-01", 6), createdAt: "2026-03-01T10:00:00Z" };
+    expect(lastEntryPrice([older, newer])?.pricePerKg).toBe(6);
+    expect(lastEntryPrice([newer, older])?.pricePerKg).toBe(6);
+    const a = { ...r("2026-03-01", 4), createdAt: new Date("2026-03-01T09:00:00Z") };
+    const b = { ...r("2026-03-01", 7), createdAt: 1772359200000 + 3600_000 * 24 };
+    expect(lastEntryPrice([b, a])?.pricePerKg).toBe(7);
+  });
 });

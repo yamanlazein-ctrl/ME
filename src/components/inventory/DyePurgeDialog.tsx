@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { deleteFabric, refreshInventory } from "@/presentation/hooks/useInventory";
 import {
@@ -61,6 +61,12 @@ export function DyePurgeDialog({
   const [hubOnly, setHubOnly] = useState(false);
   const [plainBusy, setPlainBusy] = useState(false);
 
+  // A banner/typed text from one dye must not leak into the next one the dialog opens for.
+  useEffect(() => {
+    setHubOnly(false);
+    setTyped("");
+  }, [fabricId, open]);
+
   const impact = useQuery({
     queryKey: ["dye-deletion-impact", fabricId],
     queryFn: () => fetchDyeImpact(fabricId!),
@@ -115,9 +121,12 @@ export function DyePurgeDialog({
   const plainDelete = async () => {
     setPlainBusy(true);
     try {
-      await deleteFabric(fabricId!);
-      setTyped("");
-      onOpenChange(false);
+      // deleteFabric toasts its own failure and returns false: keep the dialog (and the typed
+      // confirmation) open then, so the operator sees the error instead of a silent "done".
+      if (await deleteFabric(fabricId!)) {
+        setTyped("");
+        onOpenChange(false);
+      }
     } finally {
       setPlainBusy(false);
     }
@@ -247,7 +256,7 @@ export function DyePurgeDialog({
               افتح نسخة المركز (الجهاز الرئيسي) وأعد تنفيذ الحذف منها، ثم دع بقية الأجهزة تُزامِن.
               أو ألغِ تسجيل الأجهزة من إعدادات المزامنة إن كنت تريد الحذف هنا.
             </p>
-            <Button asChild size="sm" variant="outline" onClick={() => onOpenChange(false)}>
+            <Button asChild size="sm" variant="outline">
               <Link to="/settings/sync">فتح إعدادات المزامنة</Link>
             </Button>
           </div>
@@ -262,7 +271,11 @@ export function DyePurgeDialog({
             onClick={() => (noDocuments ? void plainDelete() : purge.mutate())}
             disabled={!canPurge}
           >
-            {purge.isPending ? "جارٍ الحذف…" : "نعم، احذف كل شيء واضبط الحسابات"}
+            {purge.isPending || plainBusy
+              ? "جارٍ الحذف…"
+              : noDocuments
+                ? "نعم، احذف الصبغة"
+                : "نعم، احذف كل شيء واضبط الحسابات"}
           </Button>
         </DialogFooter>
       </DialogContent>

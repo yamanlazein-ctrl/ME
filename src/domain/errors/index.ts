@@ -35,8 +35,8 @@ export class AuthorizationError extends DomainError {
 }
 
 export class ConflictError extends CoreConflictError {
-  constructor(message: string) {
-    super(message);
+  constructor(message: string, serverCode?: string) {
+    super(message, serverCode);
   }
 }
 

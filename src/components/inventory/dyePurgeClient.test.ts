@@ -1,21 +1,23 @@
 import { describe, it, expect } from "vitest";
 import { isHubOnlyPurgeError } from "./dyePurgeClient";
+import { ConflictError, mapHttpStatusToDomainError } from "@/core/errors/DomainError";
 
 describe("isHubOnlyPurgeError", () => {
-  it("matches the server's hub-only refusals", () => {
-    expect(
-      isHubOnlyPurgeError(
-        new Error("الحذف التصحيحي يمسح فواتير وقيوداً مالية ولا يُزامَن، فيُبقي الأجهزة"),
-      ),
-    ).toBe(true);
-    expect(
-      isHubOnlyPurgeError(
-        new Error("تعذّر التحقق من حالة تسجيل أجهزة المزامنة، والعملية لا تُزامَن"),
-      ),
-    ).toBe(true);
+  it("matches the SYNC_DEVICES_ENROLLED 409, whatever the message wording", () => {
+    const err = mapHttpStatusToDomainError(
+      409,
+      { code: "SYNC_DEVICES_ENROLLED", message: "x" },
+      "any wording",
+    );
+    expect(err).toBeInstanceOf(ConflictError);
+    expect(isHubOnlyPurgeError(err)).toBe(true);
   });
-  it("ignores other errors", () => {
-    expect(isHubOnlyPurgeError(new Error("تعذّر إتمام الحذف التصحيحي"))).toBe(false);
+  it("ignores other conflicts and plain errors", () => {
+    expect(
+      isHubOnlyPurgeError(mapHttpStatusToDomainError(409, { code: "PURGE_FAILED" }, "m")),
+    ).toBe(false);
+    expect(isHubOnlyPurgeError(mapHttpStatusToDomainError(409, null, "m"))).toBe(false);
+    expect(isHubOnlyPurgeError(new Error("الحذف التصحيحي لا يُزامَن"))).toBe(false);
     expect(isHubOnlyPurgeError("x")).toBe(false);
   });
 });
