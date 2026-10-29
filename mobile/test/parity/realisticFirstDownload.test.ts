@@ -16,6 +16,7 @@ describe.skipIf(!parityAvailable())("first download of a company-shaped hub", ()
   let p: Parity;
   let customerId = "";
   let supplierId = "";
+  let fabricId = "";
 
   beforeAll(async () => {
     p = await startParity(18500);
@@ -167,6 +168,16 @@ describe.skipIf(!parityAvailable())("first download of a company-shaped hub", ()
     });
     const cur = await must(D, "get entry", "GET", `/api/invoices/${entry}`);
     void cur;
+    // A desktop stock adjustment: 900 → 850.5 kg on R1's sibling lot R2 is sold from, so movements carry all kinds.
+    const r2now = (await must(D, "roll R2", "GET", `/api/inventory/rolls/${r2}`)) as {
+      version: number;
+    };
+    await must(D, "adjust R2", "POST", `/api/inventory/rolls/${r2}/adjust`, {
+      newKg: 850.5,
+      reason: "جرد فعلي",
+      expectedVersion: r2now.version,
+    });
+    fabricId = fabric;
     await p.ac8.syncUntilDrained(D, 10);
     customerId = c1;
     supplierId = s1;
@@ -258,5 +269,79 @@ describe.skipIf(!parityAvailable())("first download of a company-shaped hub", ()
         ).toEqual(desktopRows);
       }
     }
+  }, 900_000);
+
+  it("stock on the phone equals the desktop's: every lot's kg and pieces, every movement, the fabric totals", async () => {
+    const { listFabrics, loadColorLots, loadFabric, loadLot, MOVEMENT_LABEL } =
+      await import("../../src/core/stock");
+    const D = p.desktop.call;
+    const rolls = (
+      (await p.ac8.must(D, "desktop rolls", "GET", "/api/inventory/rolls?limit=200")) as {
+        data: Array<{
+          id: string;
+          rollNo: string;
+          remainingKg: number;
+          remainingPieces: number;
+          initialKg: number;
+          pieces: number;
+          colorId: string;
+        }>;
+      }
+    ).data;
+    expect(rolls.length).toBeGreaterThanOrEqual(2);
+    for (const r of rolls) {
+      const lot = await loadLot(p.phone, r.id);
+      expect(lot, r.rollNo).not.toBeNull();
+      expect(
+        [lot!.remainingKg, lot!.remainingPieces, lot!.initialKg, lot!.pieces],
+        r.rollNo,
+      ).toEqual([
+        Number(r.remainingKg),
+        Number(r.remainingPieces),
+        Number(r.initialKg),
+        Number(r.pieces),
+      ]);
+      const desktopMoves = (
+        (await p.ac8.must(
+          D,
+          `movements ${r.rollNo}`,
+          "GET",
+          `/api/inventory/rolls/${r.id}/movements`,
+        )) as {
+          data: Array<{
+            id: string;
+            direction: string;
+            quantityKg: number;
+            balanceAfterKg: number;
+            movementType: string;
+          }>;
+        }
+      ).data;
+      // Movement rows are derived on each device by replaying the documents, so their ids differ by design; their
+      // content must not.
+      const phoneKeys = lot!.movements.map(
+        (m) => `${m.label}|${m.direction}|${m.quantityKg}|${m.balanceAfterKg}`,
+      );
+      const desktopKeys = desktopMoves.map(
+        (m) =>
+          `${MOVEMENT_LABEL[m.movementType] ?? m.movementType}|${m.direction}|${Number(m.quantityKg)}|${Number(m.balanceAfterKg)}`,
+      );
+      expect(phoneKeys.sort(), `movements ${r.rollNo}`).toEqual(desktopKeys.sort());
+    }
+    // The adjustment, the sale and the return all reached the phone's movement list of R2.
+    const r2 = rolls.find((r) => r.rollNo === "R2")!;
+    const labels = (await loadLot(p.phone, r2.id))!.movements.map((m) => m.label).sort();
+    expect(labels).toEqual(expect.arrayContaining(["تعديل يدوي", "فاتورة بيع", "مرتجع بيع"]));
+    // Fabric and colour totals are the sums of the desktop's lots.
+    const sumKg = rolls.reduce((s, r) => s + Number(r.remainingKg), 0);
+    const sumPieces = rolls.reduce((s, r) => s + Number(r.remainingPieces), 0);
+    const f = (await listFabrics(p.phone, "")).find((x) => x.id === fabricId)!;
+    expect([Math.round(f.remainingKg * 100) / 100, f.pieces]).toEqual([
+      Math.round(sumKg * 100) / 100,
+      sumPieces,
+    ]);
+    const colors = (await loadFabric(p.phone, fabricId))!.colors;
+    const lots = (await loadColorLots(p.phone, colors[0]!.id))!.lots;
+    expect(lots.map((l) => l.rollNo).sort()).toEqual(rolls.map((r) => r.rollNo).sort());
   }, 900_000);
 });
