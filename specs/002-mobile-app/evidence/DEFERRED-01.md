@@ -25,5 +25,6 @@ GATE-D after the one backend change (BC-5): backend suite 1,196 passed; root sui
 sandbox has no Playwright browser (`invoiceWeightRecalculation`, `VoucherPartyBalance`), unrelated to this change.
 
 ## Final green run
+
 Run 41 (https://github.com/yamanlazein-ctrl/ME/actions/runs/40529584722), commit 58692f7: checks + apk jobs green; all 19 emulator flows (00–91) passed.
 Artifacts: motard-mobile-test-apk (test APK), emulator-screenshots. The signed release job was never executed (needs owner keystore secrets).
