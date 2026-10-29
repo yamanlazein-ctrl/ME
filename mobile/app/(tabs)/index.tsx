@@ -13,7 +13,7 @@ import { useColors } from "../../src/ui/themeContext-core";
 
 // Targets of the quick actions.
 const TARGET: Record<HomeAction, string> = {
-  sale: "/(tabs)/add/sale/customer",
+  sale: "/(tabs)/add/sale",
   receipt: "/(tabs)/add/receipt",
   payment: "/(tabs)/add/payment",
   expense: "/(tabs)/add/expense",

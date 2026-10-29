@@ -1,81 +1,128 @@
 import { describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react-native";
 
-vi.mock("../../src/hooks/useParties", () => ({ useParties: () => ({ data: [] }) }));
+vi.mock("../../src/hooks/useParties", () => ({ usePartyList: () => ({ data: [] }) }));
 
-import { RollPicker } from "../../src/ui/RollPicker";
-import { SaleDoneView, SaleReviewView } from "../../src/ui/SaleViews";
+import {
+  DocumentDoneView,
+  LineEditorSheet,
+  lineFromLot,
+  SaleFormView,
+} from "../../src/ui/SaleViews";
+import { LotPickerView } from "../../src/ui/LotPicker";
 import { InvoiceDetailView } from "../../src/ui/InvoiceDetailView";
-import { emptyDraft } from "../../src/core/saleDraft";
+import { emptyDraft, type SaleDraft } from "../../src/core/saleDraft";
+import { withQuery } from "../helpers/withQuery";
 
-const rolls = [
-  {
-    id: "r1",
-    rollNo: "R-1",
-    remainingKg: 120.5,
-    remainingPieces: 3,
-    pricePerKg: 4,
-    currency: "USD",
-  },
-  { id: "r2", rollNo: "R-0", remainingKg: 0, remainingPieces: 0, pricePerKg: 4, currency: "USD" },
-];
+const lot = {
+  id: "r1",
+  rollNo: "DL-1",
+  fabricId: "f1",
+  fabricName: "قطن",
+  colorId: "c1",
+  colorName: "أبيض",
+  colorCode: null,
+  remainingKg: 120.5,
+  remainingPieces: 3,
+  defaultPricePerKg: 4.5,
+  currency: "USD",
+};
 
-describe("roll picker (T099)", () => {
-  it("walks fabric → colour → roll, shows the remaining kg and blocks a 0 kg roll", async () => {
+const noop = () => undefined;
+const formProps = (draft: SaleDraft) => ({
+  draft,
+  error: null,
+  onParty: noop,
+  onCurrency: noop,
+  onRate: noop,
+  onAddLot: noop,
+  onEditLine: noop,
+  onRemoveLine: noop,
+  onPatch: noop,
+  onDiscard: noop,
+  onSave: vi.fn(async () => undefined),
+});
+
+describe("lot picker", () => {
+  it("lists available lots with fabric, colour, kg and the sale price, and picks one", async () => {
     const onPick = vi.fn();
-    await render(
-      <RollPicker
-        fabrics={[{ id: "f1", name: "قطن" }]}
-        loadColors={async () => [{ id: "c1", name: "أبيض" }]}
-        loadRolls={async () => rolls}
-        onPick={onPick}
-        onClose={() => undefined}
-      />,
-    );
-    await fireEvent.press(screen.getByText("قطن"));
-    await fireEvent.press(await screen.findByText("أبيض"));
-    expect(await screen.findByText("المتبقي: 120.5 كغ")).toBeTruthy();
-    await fireEvent.press(screen.getByTestId("roll-R-0"));
-    expect(onPick).not.toHaveBeenCalled();
-    await fireEvent.press(screen.getByTestId("roll-R-1"));
-    expect(onPick).toHaveBeenCalledOnce();
+    await render(<LotPickerView q="" onQuery={noop} lots={[lot]} onPick={onPick} />);
+    expect(screen.getByText("قطن · أبيض")).toBeTruthy();
+    expect(screen.getByText("120.50 كغ")).toBeTruthy();
+    expect(screen.getByText("سعر البيع 4.50 USD")).toBeTruthy();
+    await fireEvent.press(screen.getByLabelText("صبغة DL-1"));
+    expect(onPick).toHaveBeenCalledWith(lot);
+  });
+
+  it("a picked lot starts at 1 kg at its sale price", () => {
+    expect(lineFromLot(lot, "k")).toMatchObject({
+      quantityKg: 1,
+      pricePerKg: 4.5,
+      rollCurrency: "USD",
+    });
+    expect(lineFromLot({ ...lot, remainingKg: 0.4 }, "k").quantityKg).toBe(0.4);
   });
 });
 
-describe("sale review and done screens (T100, T101)", () => {
-  it("review blocks saving until the draft is complete and shows what is missing", async () => {
-    await render(
-      <SaleReviewView
-        draft={emptyDraft()}
-        busy={false}
-        error={null}
-        onPatch={() => undefined}
-        onSave={() => undefined}
-      />,
-    );
-    expect(screen.getByText("اختر العميل")).toBeTruthy();
-    expect(screen.getByText("أضف بنداً واحداً على الأقل")).toBeTruthy();
+describe("sale form", () => {
+  it("says what is missing only after a save attempt, and does not save", async () => {
+    const props = formProps(emptyDraft());
+    await render(withQuery(<SaleFormView {...props} />));
+    expect(screen.queryByTestId("sale-problems")).toBeNull();
+    await fireEvent.press(screen.getByLabelText("حفظ الفاتورة"));
+    expect(screen.getByTestId("sale-problems")).toBeTruthy();
+    expect(props.onSave).not.toHaveBeenCalled();
   });
 
-  it("done screen offers share PDF and a new invoice (send-to-customer is the screen's slot)", async () => {
-    const onSharePdf = vi.fn();
-    const onNew = vi.fn();
+  it("a USD sale of USD lots needs no rate; lines show kg × price and the total", async () => {
+    const draft: SaleDraft = {
+      ...emptyDraft(),
+      party: { id: "p", name: "محل النور" },
+      lines: [{ ...lineFromLot(lot, "k1"), quantityKg: 10 }],
+      paid: 20,
+    };
+    const props = formProps(draft);
+    await render(withQuery(<SaleFormView {...props} />));
+    expect(screen.queryByLabelText("سعر الصرف (ليرة لكل 1 دولار)")).toBeNull();
+    expect(screen.getByText("صبغة DL-1 · 10.00 كغ × 4.50 USD")).toBeTruthy();
+    expect(screen.getAllByText("45.00 USD").length).toBeGreaterThan(0);
+    expect(screen.getByText("25.00 USD")).toBeTruthy(); // due
+    await fireEvent.press(screen.getByLabelText("حفظ الفاتورة"));
+    expect(props.onSave).toHaveBeenCalledOnce();
+  });
+
+  it("an SYP sale asks for the rate", async () => {
+    await render(withQuery(<SaleFormView {...formProps({ ...emptyDraft(), currency: "SYP" })} />));
+    expect(screen.getByLabelText("سعر الصرف (ليرة لكل 1 دولار)")).toBeTruthy();
+  });
+
+  it("the line editor refuses more kg than the lot holds", async () => {
     await render(
-      <SaleDoneView
-        number="INV-2026-0007"
-        onSharePdf={onSharePdf}
-        onNew={onNew}
-        onOpen={() => undefined}
+      <LineEditorSheet
+        line={{ ...lineFromLot(lot, "k1"), quantityKg: 200 }}
+        currency="USD"
+        onChange={noop}
+        onRemove={noop}
+        onClose={noop}
       />,
     );
-    expect(screen.getByTestId("sale-done-number").props.children).toBe(
-      "تم حفظ الفاتورة INV-2026-0007",
+    expect(screen.getByText("أكبر من المتوفر في الصبغة")).toBeTruthy();
+    expect(screen.getByLabelText("تم").props.accessibilityState.disabled).toBe(true);
+  });
+
+  it("done screen: number, share slot and a new invoice", async () => {
+    const onNew = vi.fn();
+    await render(
+      <DocumentDoneView
+        title="فاتورة البيع"
+        number="INV-7"
+        onNew={onNew}
+        newLabel="فاتورة بيع جديدة"
+      />,
     );
-    await fireEvent.press(screen.getByLabelText("مشاركة PDF"));
-    await fireEvent.press(screen.getByLabelText("فاتورة جديدة"));
-    expect(onSharePdf).toHaveBeenCalled();
+    expect(screen.getByTestId("sale-done-number").props.children).toBe("INV-7");
+    await fireEvent.press(screen.getByLabelText("فاتورة بيع جديدة"));
     expect(onNew).toHaveBeenCalled();
-    expect(screen.queryByLabelText("إرسال للعميل (قريباً)")).toBeNull(); // the screen supplies the real control
   });
 });
 

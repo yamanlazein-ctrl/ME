@@ -50,7 +50,7 @@ export default function PartyScreen() {
       onOpenDoc={(d) => d.kind === "invoice" && router.push(`/invoices/${d.id}` as never)}
       onNewInvoice={() =>
         router.push({
-          pathname: customer ? "/(tabs)/add/sale/customer" : "/(tabs)/add/entry",
+          pathname: customer ? "/(tabs)/add/sale" : "/(tabs)/add/entry",
           params: { partyId: id },
         } as never)
       }

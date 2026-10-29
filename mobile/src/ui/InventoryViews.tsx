@@ -296,7 +296,7 @@ export function ColorLotsView({
               testID={`lot-${l.rollNo}`}
               title={`صبغة ${l.rollNo}`}
               subtitle={[l.supplierName, l.entryDate].filter(Boolean).join(" · ") || null}
-              meta={l.dyeBatch ? `دفعة الصباغة ${l.dyeBatch}` : null}
+              meta={l.dyeBatch ? `رقم الصبغة ${l.dyeBatch}` : null}
               value={
                 <View style={{ alignItems: "flex-end", gap: 4 }}>
                   <Text style={{ fontWeight: "700" }}>{kg(l.remainingKg)}</Text>
@@ -342,7 +342,7 @@ export function LotView({ lot, role, error, notice, onAdjust, onOpenReference }:
       </Section>
       <Section title="المواصفات والمصدر">
         {lot.colorCode ? <KeyValue label="رقم اللون" value={lot.colorCode} /> : null}
-        {lot.dyeBatch ? <KeyValue label="دفعة الصباغة" value={lot.dyeBatch} /> : null}
+        {lot.dyeBatch ? <KeyValue label="رقم الصبغة" value={lot.dyeBatch} /> : null}
         {lot.widthCm !== null ? <KeyValue label="العرض" value={`${lot.widthCm} سم`} /> : null}
         {lot.weightGsm !== null ? <KeyValue label="الوزن" value={`${lot.weightGsm} غ/م²`} /> : null}
         <KeyValue label="المورد" value={lot.supplierName ?? "—"} />

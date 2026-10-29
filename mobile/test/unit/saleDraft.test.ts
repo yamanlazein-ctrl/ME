@@ -29,6 +29,7 @@ const line = (over: Partial<DraftLine> = {}): DraftLine => ({
   colorName: "أبيض",
   rollId: "r",
   rollNo: "R-1",
+  rollCurrency: "USD",
   remainingKg: 1000,
   quantityKg: 10,
   pieces: 0,
@@ -73,7 +74,7 @@ describe("sale draft totals (FR-15)", () => {
   });
 
   it("reports what is missing and refuses more kg than the roll holds", () => {
-    expect(draftProblems(emptyDraft())).toEqual(["no-party", "no-rate", "no-lines"]);
+    expect(draftProblems(emptyDraft())).toEqual(["no-party", "no-lines"]);
     const ready: SaleDraft = {
       ...emptyDraft(),
       party: { id: "p", name: "عميل" },
@@ -82,6 +83,16 @@ describe("sale draft totals (FR-15)", () => {
     };
     expect(draftProblems(ready)).toEqual(["over-stock"]);
     expect(draftProblems({ ...ready, lines: [line()] })).toEqual([]);
+  });
+
+  it("asks for a rate like the desktop: not for USD lots in a USD sale; yes for SYP or a lot in another currency", () => {
+    const usd: SaleDraft = { ...emptyDraft(), party: { id: "p", name: "ع" }, lines: [line()] };
+    expect(draftProblems(usd)).toEqual([]);
+    expect(toCreateInput(usd, "2026-03-01")).not.toHaveProperty("exchangeRate");
+    expect(draftProblems({ ...usd, currency: "SYP" })).toEqual(["no-rate"]);
+    expect(draftProblems({ ...usd, lines: [line({ rollCurrency: "SYP" })] })).toEqual(["no-rate"]);
+    expect(draftProblems({ ...usd, currency: "SYP", exchangeRate: 127 })).toEqual(["bad-rate"]);
+    expect(draftProblems({ ...usd, currency: "SYP", exchangeRate: 12700 })).toEqual([]);
   });
 
   it("maps a complete draft to the use-case input", () => {

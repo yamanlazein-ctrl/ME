@@ -1,11 +1,11 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
 // The screens only need the party picker's list; the hook itself pulls in native modules.
-vi.mock("../../src/hooks/useParties", () => ({ useParties: () => ({ data: [] }) }));
+vi.mock("../../src/hooks/useParties", () => ({ usePartyList: () => ({ data: [] }) }));
 import { render, screen } from "@testing-library/react-native";
 import { withTenantTx } from "@backend/infrastructure/orm/engine";
 import { createPartyUseCase } from "@backend/application/use-cases/parties/partyUseCases";
-import { emptyVoucher, VoucherForm } from "../../src/ui/VoucherForm";
+import { balanceAfter, emptyVoucher, VoucherForm, voucherProblems } from "../../src/ui/VoucherForm";
 import { ExpenseForm } from "../../src/ui/ExpenseForm";
 import { CashboxView } from "../../src/ui/CashboxView";
 import { makeTestPhone, type TestPhone } from "../helpers/testPhone";
@@ -17,28 +17,50 @@ describe("voucher / expense / cashbox screens (US5)", () => {
       <VoucherForm
         kind="payment"
         values={emptyVoucher()}
+        balances={undefined}
         error={locked}
-        busy={false}
+        attempted={false}
         onChange={() => undefined}
-        onSave={() => undefined}
+        onSave={async () => undefined}
       />,
     );
-    expect(screen.getByTestId("voucher-error").props.children).toBe(locked);
+    expect(screen.getByText(locked)).toBeTruthy();
+    expect(screen.getByText("دفع مال إلى مورد")).toBeTruthy();
+    expect(screen.getByText("حفظ سند الصرف")).toBeTruthy();
   });
 
-  it("the save button waits for party, amount and rate", async () => {
+  it("receipt: rate only for SYP, method chips, balance before and after", async () => {
     await render(
       <VoucherForm
         kind="receipt"
-        values={emptyVoucher()}
+        values={{ ...emptyVoucher(), party: { id: "c", name: "محل النور" }, amount: 20 }}
+        balances={[{ currency: "USD", balance: 50, side: "debit", totalDebit: 50, totalCredit: 0 }]}
         error={null}
-        busy={false}
+        attempted={false}
         onChange={() => undefined}
-        onSave={() => undefined}
+        onSave={async () => undefined}
       />,
     );
-    expect(screen.getByLabelText("المبلغ")).toBeTruthy();
-    expect(screen.getByText("حفظ سند القبض")).toBeTruthy();
+    expect(screen.queryByLabelText("سعر الصرف (ليرة لكل 1 دولار)")).toBeNull();
+    expect(screen.getByLabelText("تحويل بنكي")).toBeTruthy();
+    expect(screen.getByText("50.00 USD مدين (على العميل)")).toBeTruthy();
+    expect(screen.getByText("30.00 USD مدين (على العميل)")).toBeTruthy();
+  });
+
+  it("rules: party, amount, a sane rate for SYP; a payment lowers what we owe", () => {
+    expect(voucherProblems(emptyVoucher())).toEqual(["no-party", "no-amount"]);
+    const v = { ...emptyVoucher(), party: { id: "s", name: "م" }, amount: 10 };
+    expect(voucherProblems({ ...v, currency: "SYP" })).toEqual(["no-rate"]);
+    expect(voucherProblems({ ...v, currency: "SYP", rate: 130 })).toEqual(["bad-rate"]);
+    expect(voucherProblems(v)).toEqual([]);
+    expect(
+      balanceAfter(
+        { currency: "USD", balance: 100, side: "credit", totalDebit: 0, totalCredit: 100 },
+        30,
+        0,
+        "payment",
+      ),
+    ).toBe(70);
   });
 
   it("expense form lists name suggestions and the error", async () => {

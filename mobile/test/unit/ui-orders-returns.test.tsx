@@ -5,7 +5,7 @@ import { emptyReturnDraft, RETURN_REASON_LABEL } from "../../src/core/returns";
 import { OrderDetailView, OrderListView } from "../../src/ui/OrderViews";
 import { ReturnFormView, ReturnListView } from "../../src/ui/ReturnViews";
 
-vi.mock("../../src/hooks/useParties", () => ({ useParties: () => ({ data: [] }) }));
+vi.mock("../../src/hooks/useParties", () => ({ usePartyList: () => ({ data: [] }) }));
 
 const order = (status: string) =>
   ({

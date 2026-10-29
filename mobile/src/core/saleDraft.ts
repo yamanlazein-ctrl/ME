@@ -1,6 +1,12 @@
 // The sale draft (memory only) and its numbers. Totals are never computed here: they come from the shared `invoiceTotal`,
 // the same function the invoice domain entity uses, so the screen can never differ from what the use-case saves.
-import { computeSubtotal, invoiceTotal, round2dp, type InvoiceLineData } from "@erp/shared";
+import {
+  computeSubtotal,
+  invoiceTotal,
+  round2dp,
+  saneSypRateError,
+  type InvoiceLineData,
+} from "@erp/shared";
 import type { CreateInvoiceInput } from "@backend/domain/entities/Invoice";
 
 export interface DraftLine {
@@ -11,6 +17,8 @@ export interface DraftLine {
   colorName: string;
   rollId: string;
   rollNo: string;
+  /** The lot's own currency: a line in another currency than the invoice needs a rate (the desktop's rule). */
+  rollCurrency: string;
   /** Kg left on the roll when the line was added (a sale may not take more). */
   remainingKg: number;
   quantityKg: number;
@@ -75,21 +83,28 @@ export function draftTotals(draft: SaleDraft): { subtotal: number; total: number
 }
 
 export type DraftProblem =
-  "no-party" | "no-rate" | "no-lines" | "bad-quantity" | "over-stock" | "bad-price";
+  "no-party" | "no-rate" | "bad-rate" | "no-lines" | "bad-quantity" | "over-stock" | "bad-price";
 
 export const DRAFT_PROBLEM_TEXT: Record<DraftProblem, string> = {
   "no-party": "اختر العميل",
-  "no-rate": "اكتب سعر الصرف",
+  "no-rate": "اكتب سعر الصرف: الفاتورة ليست بالدولار أو إحدى الصبغات بعملة أخرى",
+  "bad-rate": "سعر الصرف غير منطقي لليرة السورية (أقل من 1,000) — تأكد من الأصفار",
   "no-lines": "أضف بنداً واحداً على الأقل",
   "bad-quantity": "الكمية يجب أن تكون أكبر من صفر",
-  "over-stock": "الكمية أكبر من المتبقي في الرول",
+  "over-stock": "الكمية أكبر من المتبقي في الصبغة",
   "bad-price": "السعر غير صحيح",
 };
+
+/** The desktop's rule: a rate is required when the invoice is not in USD or a lot is priced in another currency. */
+export function needsRate(draft: Pick<SaleDraft, "currency" | "lines">): boolean {
+  return draft.currency !== "USD" || draft.lines.some((l) => l.rollCurrency !== draft.currency);
+}
 
 export function draftProblems(draft: SaleDraft): DraftProblem[] {
   const out: DraftProblem[] = [];
   if (!draft.party) out.push("no-party");
-  if (!draft.exchangeRate || draft.exchangeRate <= 0) out.push("no-rate");
+  if (needsRate(draft) && !(draft.exchangeRate && draft.exchangeRate > 0)) out.push("no-rate");
+  if (saneSypRateError(draft.currency, draft.exchangeRate)) out.push("bad-rate");
   if (draft.lines.length === 0) out.push("no-lines");
   if (draft.lines.some((l) => !(l.quantityKg > 0))) out.push("bad-quantity");
   if (draft.lines.some((l) => l.quantityKg > l.remainingKg)) out.push("over-stock");
@@ -99,14 +114,14 @@ export function draftProblems(draft: SaleDraft): DraftProblem[] {
 
 /** The input of the invoice use-case. Throws when the draft is incomplete (callers check `draftProblems` first). */
 export function toCreateInput(draft: SaleDraft, date: string): CreateInvoiceInput {
-  if (!draft.party || !draft.exchangeRate) throw new Error("incomplete sale draft");
+  if (!draft.party) throw new Error("incomplete sale draft");
   return {
     type: "sale",
     date,
     partyId: draft.party.id,
     partyType: "customer",
     currency: draft.currency,
-    exchangeRate: draft.exchangeRate,
+    ...(draft.exchangeRate && draft.exchangeRate > 0 ? { exchangeRate: draft.exchangeRate } : {}),
     lines: draft.lines.map((l) => ({
       fabricId: l.fabricId,
       colorId: l.colorId,

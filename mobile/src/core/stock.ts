@@ -440,3 +440,72 @@ export async function loadLot(phone: Phone, rollId: string): Promise<LotDetail |
     })),
   };
 }
+
+export interface PickableLot {
+  id: string;
+  rollNo: string;
+  fabricId: string;
+  fabricName: string;
+  colorId: string;
+  colorName: string;
+  colorCode: string | null;
+  remainingKg: number;
+  remainingPieces: number;
+  /** What a sale line starts at: the lot's sale price, else its cost (the desktop's default). */
+  defaultPricePerKg: number;
+  currency: string;
+}
+
+/** Lots with stock for a sale line, searched by fabric, colour, colour code or lot number (largest first). */
+export async function pickLots(phone: Phone, q: string, limit = 60): Promise<PickableLot[]> {
+  const tenantId = phone.identity.tenantId;
+  const t = term(q);
+  const rows = await phone.repos.db
+    .select({
+      id: rolls.id,
+      rollNo: rolls.rollNo,
+      fabricId: fabrics.id,
+      fabricName: fabrics.name,
+      colorId: colors.id,
+      colorName: colors.name,
+      colorCode: colors.code,
+      remainingKg: rolls.remainingKg,
+      remainingPieces: rolls.remainingPieces,
+      salePricePerKg: rolls.salePricePerKg,
+      pricePerKg: rolls.pricePerKg,
+      currency: rolls.currency,
+    })
+    .from(rolls)
+    .innerJoin(colors, eq(colors.id, rolls.colorId))
+    .innerJoin(fabrics, eq(fabrics.id, colors.fabricId))
+    .where(
+      and(
+        eq(rolls.tenantId, tenantId),
+        sql`${rolls.remainingKg} > 0`,
+        t
+          ? or(
+              ilikeContains(fabrics.name, t),
+              ilikeContains(colors.name, t),
+              ilikeContains(sql`COALESCE(${colors.code}, '')`, t),
+              ilikeContains(rolls.rollNo, t),
+              ilikeContains(sql`COALESCE(${rolls.dyeBatch}, '')`, t),
+            )
+          : undefined,
+      ),
+    )
+    .orderBy(asc(fabrics.name), asc(colors.name), desc(rolls.remainingKg))
+    .limit(limit);
+  return rows.map((r) => ({
+    id: r.id,
+    rollNo: r.rollNo,
+    fabricId: r.fabricId,
+    fabricName: r.fabricName,
+    colorId: r.colorId,
+    colorName: r.colorName,
+    colorCode: r.colorCode ?? null,
+    remainingKg: Number(r.remainingKg),
+    remainingPieces: Number(r.remainingPieces ?? 0),
+    defaultPricePerKg: Number(r.salePricePerKg ?? r.pricePerKg ?? 0),
+    currency: String(r.currency ?? "USD"),
+  }));
+}

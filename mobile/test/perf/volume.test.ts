@@ -7,7 +7,7 @@ import { writeFileSync } from "node:fs";
 import { createFabricUseCase } from "@backend/application/use-cases/inventory/fabricUseCases";
 import { createColorUseCase } from "@backend/application/use-cases/inventory/colorUseCases";
 import { createRollUseCase } from "@backend/application/use-cases/inventory/rollUseCases";
-import { searchParties } from "../../src/core/partyQueries";
+import { listParties } from "../../src/core/parties";
 import { makeTestPhone, type TestPhone } from "../helpers/testPhone";
 
 const ON = process.env.MOTARD_PERF === "1";
@@ -82,7 +82,9 @@ describe.skipIf(!ON)("volume: 100,000 invoices (T130)", () => {
   });
 
   it("party search answers in under a second", async () => {
-    const rows = await time("partySearchMs", () => searchParties(t.phone, { q: "عميل 15" }));
+    const rows = await time("partySearchMs", () =>
+      listParties(t.phone, { q: "عميل 15", kind: "" }),
+    );
     expect(rows.length).toBeGreaterThan(0);
     expect(results.partySearchMs as number).toBeLessThan(1000);
   });

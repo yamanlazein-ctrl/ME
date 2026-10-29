@@ -1,40 +1,59 @@
+// Choosing a customer or supplier inside a form: a field that shows the choice (and can change it) and a sheet that
+// searches by name, code or phone.
 import { useState } from "react";
-import { Pressable, View } from "react-native";
-import { Text } from "./Text";
-import { useParties } from "../hooks/useParties";
-import { Field } from "./Field";
-import { radius, spacing, TOUCH_TARGET } from "./theme";
-import { useColors } from "./themeContext-core";
+import { usePartyList } from "../hooks/useParties";
+import { EmptyState, ListRow, LoadingState, PickerField, SearchBar, Section, Sheet } from "./kit";
 
 export interface PickedParty {
   id: string;
   name: string;
 }
 
-/** Search-and-choose party field used by vouchers and the sale flow. */
 export function PartyPicker({
   kind,
   value,
   onPick,
+  label,
+  error,
 }: {
   kind: "customer" | "supplier";
   value: PickedParty | null;
   onPick(party: PickedParty): void;
+  label?: string;
+  error?: boolean;
 }) {
-  const colors = useColors();
+  const [open, setOpen] = useState(false);
   const [q, setQ] = useState("");
-  const { data } = useParties(q, kind);
-  if (value) {
-    return (
-      <View style={{ marginBottom: spacing.lg }}>
-        <Text style={{ color: colors.mutedForeground }}>
-          {kind === "customer" ? "العميل" : "المورد"}
-        </Text>
-        <Text testID="picked-party">{value.name}</Text>
-      </View>
-    );
-  }
-  return <PartyPickerView q={q} onQuery={setQ} rows={data} onPick={onPick} />;
+  const list = usePartyList(q, kind);
+  const who = kind === "customer" ? "العميل" : "المورد";
+  return (
+    <>
+      <PickerField
+        label={label ?? who}
+        value={value?.name ?? null}
+        placeholder={`اختر ${who}`}
+        onPress={() => setOpen(true)}
+        testID="party-picker"
+        {...(error !== undefined ? { error } : {})}
+      />
+      <Sheet
+        visible={open}
+        title={`اختر ${who}`}
+        onClose={() => setOpen(false)}
+        testID="party-sheet"
+      >
+        <PartyPickerView
+          q={q}
+          onQuery={setQ}
+          rows={list.data}
+          onPick={(p) => {
+            onPick(p);
+            setOpen(false);
+          }}
+        />
+      </Sheet>
+    </>
+  );
 }
 
 export function PartyPickerView({
@@ -45,37 +64,36 @@ export function PartyPickerView({
 }: {
   q: string;
   onQuery(q: string): void;
-  rows: Array<{ id: string; name: string }>;
+  rows:
+    Array<{ id: string; name: string; code?: string | null; phone?: string | null }> | undefined;
   onPick(party: PickedParty): void;
 }) {
-  const colors = useColors();
   return (
-    <View>
-      <Field
-        label="الطرف"
-        fieldId="picker-search"
+    <>
+      <SearchBar
         value={q}
-        onChangeText={onQuery}
-        placeholder="ابحث بالاسم أو الرمز"
+        onChange={onQuery}
+        placeholder="الاسم أو الرمز أو الهاتف"
+        testID="picker-search"
       />
-      {rows.slice(0, 8).map((r) => (
-        <Pressable
-          key={r.id}
-          testID="party-option"
-          accessibilityRole="button"
-          onPress={() => onPick({ id: r.id, name: r.name })}
-          style={{
-            minHeight: TOUCH_TARGET,
-            justifyContent: "center",
-            padding: spacing.md,
-            backgroundColor: colors.card,
-            borderRadius: radius.md,
-            marginBottom: spacing.xs,
-          }}
-        >
-          <Text>{r.name}</Text>
-        </Pressable>
-      ))}
-    </View>
+      {!rows ? (
+        <LoadingState />
+      ) : rows.length === 0 ? (
+        <EmptyState title="لا نتائج" hint="يمكن إضافة طرف جديد من تبويب العملاء والموردين." />
+      ) : (
+        <Section padded={false}>
+          {rows.slice(0, 50).map((r, i) => (
+            <ListRow
+              key={r.id}
+              testID="party-option"
+              title={r.name}
+              subtitle={[r.code, r.phone].filter(Boolean).join(" · ") || null}
+              onPress={() => onPick({ id: r.id, name: r.name })}
+              last={i === Math.min(rows.length, 50) - 1}
+            />
+          ))}
+        </Section>
+      )}
+    </>
   );
 }

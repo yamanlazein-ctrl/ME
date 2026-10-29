@@ -5,6 +5,7 @@ import type { ReactElement } from "react";
 import { flat } from "../helpers/style";
 import { MIN_TOUCH } from "../../src/ui/theme-const";
 import { emptyEntryDraft } from "../../src/core/entryDraft";
+import { emptyDraft } from "../../src/core/saleDraft";
 import { emptyReturnDraft } from "../../src/core/returns";
 import { emptyPartyForm } from "../../src/ui/PartyViews";
 import {
@@ -17,19 +18,17 @@ import {
 import { ReportMenuView, ReportPageView } from "../../src/ui/ReportViews";
 import { OrderDetailView, OrderFormView, OrderListView } from "../../src/ui/OrderViews";
 import { ReturnFormView, ReturnListView } from "../../src/ui/ReturnViews";
-import {
-  EntryDoneView,
-  EntryLinesView,
-  EntryReviewView,
-  EntrySupplierView,
-} from "../../src/ui/EntryViews";
+import { EntryFormView } from "../../src/ui/EntryViews";
+import { DocumentDoneView, SaleFormView } from "../../src/ui/SaleViews";
+import { VoucherForm, emptyVoucher } from "../../src/ui/VoucherForm";
+import { withQuery } from "../helpers/withQuery";
 import { AddMenu } from "../../src/ui/AddMenu";
 import { LoginView } from "../../src/ui/LoginView";
 import { PartyDetailView, PartyFormView, PartyListView } from "../../src/ui/PartyViews";
 import { ScanDenied, ScanOverlay } from "../../src/ui/ScanView";
 import { UpdateOfferBanner } from "../../src/ui/UpdateBanner";
 
-vi.mock("../../src/hooks/useParties", () => ({ useParties: () => ({ data: [] }) }));
+vi.mock("../../src/hooks/useParties", () => ({ usePartyList: () => ({ data: [] }) }));
 
 type Node = {
   type?: string;
@@ -375,48 +374,95 @@ const screens: Array<[string, () => ReactElement]> = [
     ),
   ],
   [
-    "entry supplier",
-    () => (
-      <EntrySupplierView
-        draft={{ ...emptyEntryDraft(), supplier: { id: "s", name: "مورد" } }}
-        onSupplier={noop}
-        onCurrency={noop}
-        onRate={noop}
-        onNext={noop}
-      />
-    ),
+    "sale form",
+    () =>
+      withQuery(
+        <SaleFormView
+          draft={{
+            ...emptyDraft(),
+            party: { id: "p", name: "ع" },
+            lines: [
+              {
+                key: "k",
+                fabricId: "f",
+                fabricName: "ق",
+                colorId: "c",
+                colorName: "ل",
+                rollId: "r",
+                rollNo: "R1",
+                rollCurrency: "USD",
+                remainingKg: 5,
+                quantityKg: 1,
+                pieces: 0,
+                pricePerKg: 2,
+                discountAmount: 0,
+              },
+            ],
+          }}
+          error={null}
+          onParty={noop}
+          onCurrency={noop}
+          onRate={noop}
+          onAddLot={noop}
+          onEditLine={noop}
+          onRemoveLine={noop}
+          onPatch={noop}
+          onDiscard={noop}
+          onSave={async () => undefined}
+        />,
+      ),
   ],
   [
-    "entry lines",
-    () => (
-      <EntryLinesView
-        draft={{
-          ...emptyEntryDraft(),
-          lines: [
-            { key: "k", fabricName: "ق", colorName: "ل", quantityKg: 1, pieces: 1, pricePerKg: 1 },
-          ],
-        }}
-        adding={false}
-        form={null}
-        onAdd={noop}
-        onRemove={noop}
-        onNext={noop}
-      />
-    ),
+    "entry form",
+    () =>
+      withQuery(
+        <EntryFormView
+          draft={{
+            ...emptyEntryDraft(),
+            supplier: { id: "s", name: "م" },
+            lines: [
+              {
+                key: "k",
+                fabricName: "ق",
+                colorName: "ل",
+                quantityKg: 1,
+                pieces: 1,
+                pricePerKg: 2,
+              },
+            ],
+          }}
+          error={null}
+          onSupplier={noop}
+          onCurrency={noop}
+          onRate={noop}
+          onAddLine={noop}
+          onRemoveLine={noop}
+          onPatch={noop}
+          onDiscard={noop}
+          onSave={async () => undefined}
+        />,
+      ),
   ],
   [
-    "entry review",
+    "voucher form",
     () => (
-      <EntryReviewView
-        draft={emptyEntryDraft()}
-        busy={false}
+      <VoucherForm
+        kind="receipt"
+        values={{ ...emptyVoucher(), party: { id: "p", name: "ع" } }}
+        balances={[]}
         error={null}
-        onPatch={noop}
-        onSave={noop}
+        attempted={false}
+        onChange={noop}
+        onSave={async () => undefined}
       />
     ),
   ],
-  ["entry done", () => <EntryDoneView number="ENT-1" onOpen={noop} onNew={noop} />],
+  [
+    "document done",
+    () => (
+      <DocumentDoneView title="فاتورة" number="INV-1" onOpen={noop} onNew={noop} newLabel="جديدة" />
+    ),
+  ],
   [
     "login",
     () => (

@@ -7,9 +7,10 @@ import {
   toEntryInput,
   type EntryDraft,
 } from "../../src/core/entryDraft";
-import { EntryReviewView } from "../../src/ui/EntryViews";
+import { EntryFormView } from "../../src/ui/EntryViews";
+import { withQuery } from "../helpers/withQuery";
 
-vi.mock("../../src/hooks/useParties", () => ({ useParties: () => ({ data: [] }) }));
+vi.mock("../../src/hooks/useParties", () => ({ usePartyList: () => ({ data: [] }) }));
 
 const draft = (patch: Partial<EntryDraft> = {}): EntryDraft => ({
   ...emptyEntryDraft(),
@@ -29,7 +30,9 @@ describe("entry draft", () => {
 
   it("names every problem that blocks saving", () => {
     expect(entryProblems(draft())).toEqual([]);
-    expect(entryProblems(emptyEntryDraft())).toEqual(["no-supplier", "no-rate", "no-lines"]);
+    expect(entryProblems(emptyEntryDraft())).toEqual(["no-supplier", "no-lines"]);
+    expect(entryProblems(draft({ currency: "SYP", exchangeRate: null }))).toEqual(["no-rate"]);
+    expect(entryProblems(draft({ currency: "SYP", exchangeRate: 150 }))).toEqual(["bad-rate"]);
     expect(
       entryProblems(
         draft({
@@ -49,31 +52,37 @@ describe("entry draft", () => {
   });
 });
 
-describe("entry review view", () => {
-  it("shows the totals, blocks saving with problems and saves when complete", async () => {
-    const onSave = vi.fn();
-    const { rerender } = await render(
-      <EntryReviewView
-        draft={emptyEntryDraft()}
-        busy={false}
-        error={null}
-        onPatch={() => undefined}
-        onSave={onSave}
-      />,
-    );
-    expect(screen.getByText("اختر المورد")).toBeTruthy();
-    await rerender(
-      <EntryReviewView
-        draft={draft()}
-        busy={false}
-        error="خطأ"
-        onPatch={() => undefined}
-        onSave={onSave}
-      />,
-    );
+describe("entry form", () => {
+  const props = (d: EntryDraft) => ({
+    draft: d,
+    error: null as string | null,
+    onSupplier: () => undefined,
+    onCurrency: () => undefined,
+    onRate: () => undefined,
+    onAddLine: () => undefined,
+    onRemoveLine: () => undefined,
+    onPatch: () => undefined,
+    onDiscard: () => undefined,
+    onSave: vi.fn(async () => undefined),
+  });
+
+  it("shows lines with new-fabric marks and the amount due; saves when complete", async () => {
+    const p = { ...props(draft({ paid: 5 })), error: "خطأ" };
+    await render(withQuery(<EntryFormView {...p} />));
+    expect(screen.getByText("قطن · أحمر")).toBeTruthy();
+    expect(screen.getByText("قماش جديد")).toBeTruthy();
     expect(screen.getByText("المتبقي للمورد")).toBeTruthy();
+    expect(screen.getByText("20.00 USD")).toBeTruthy();
     expect(screen.getByText("خطأ")).toBeTruthy();
-    fireEvent.press(screen.getByText("حفظ فاتورة الشراء"));
-    expect(onSave).toHaveBeenCalledOnce();
+    await fireEvent.press(screen.getByLabelText("حفظ الفاتورة"));
+    expect(p.onSave).toHaveBeenCalledOnce();
+  });
+
+  it("an empty draft names its problems and does not save", async () => {
+    const p = props(emptyEntryDraft());
+    await render(withQuery(<EntryFormView {...p} />));
+    await fireEvent.press(screen.getByLabelText("حفظ الفاتورة"));
+    expect(screen.getByTestId("entry-problems")).toBeTruthy();
+    expect(p.onSave).not.toHaveBeenCalled();
   });
 });

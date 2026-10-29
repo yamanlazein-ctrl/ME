@@ -1,7 +1,8 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { withTenantTx } from "@backend/infrastructure/orm/engine";
 import { createPartyUseCase } from "@backend/application/use-cases/parties/partyUseCases";
-import { loadFullStatement, searchParties, sortByRecent } from "../../src/core/partyQueries";
+import { loadFullStatement, sortByRecent } from "../../src/core/partyQueries";
+import { listParties } from "../../src/core/parties";
 import { makeTestPhone, type TestPhone } from "../helpers/testPhone";
 
 describe("party search and statement (FR-11, FR-13)", () => {
@@ -32,16 +33,16 @@ describe("party search and statement (FR-11, FR-13)", () => {
   afterAll(() => t?.close());
 
   it("three letters on 2,000 parties return within 150 ms (NFR-02 proxy)", async () => {
-    await searchParties(t.phone, { q: "zei" }); // warm the statement cache
+    await listParties(t.phone, { q: "zei", kind: "" }); // warm the statement cache
     const started = performance.now();
-    const rows = await searchParties(t.phone, { q: "zei" });
+    const rows = await listParties(t.phone, { q: "zei", kind: "" });
     const elapsed = performance.now() - started;
     expect(rows.map((r) => r.name)).toEqual(["Zeinab Fabrics"]);
     expect(elapsed).toBeLessThan(150);
   });
 
   it("filters by kind and caps the page at the limit", async () => {
-    const customers = await searchParties(t.phone, { q: "Party", kind: "customer", limit: 20 });
+    const customers = await listParties(t.phone, { q: "Party", kind: "customer", limit: 20 });
     expect(customers).toHaveLength(20);
     expect(customers.every((r) => r.kind === "customer")).toBe(true);
   });
