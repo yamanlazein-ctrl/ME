@@ -32,6 +32,10 @@ name: 92 statement PDF through the share sheet
     notVisible:
       id: "share-pdf"
     timeout: 60000
+# The Android chooser shows the shared file itself: its name and the PDF type.
+- extendedWaitUntil:
+    visible: ".*Statement-.*\\.pdf.*"
+    timeout: 20000
 - takeScreenshot: 97-statement-share-sheet
 - pressKey: Back
 - extendedWaitUntil:

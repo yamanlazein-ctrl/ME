@@ -76,6 +76,10 @@ name: 70 sale on one screen, invoice page, share PDF, cancel
     notVisible:
       id: "share-pdf"
     timeout: 60000
+# The Android chooser shows the shared file itself: its name and the PDF type.
+- extendedWaitUntil:
+    visible: ".*Invoice-.*\\.pdf.*"
+    timeout: 20000
 - takeScreenshot: 20-share-sheet
 - pressKey: Back
 - extendedWaitUntil:
