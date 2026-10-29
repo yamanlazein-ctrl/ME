@@ -105,6 +105,8 @@ export function SaleLinesView({
             style={{
               backgroundColor: colors.card,
               borderRadius: radius.lg,
+              borderWidth: 1,
+              borderColor: colors.border,
               padding: spacing.lg,
               marginBottom: spacing.md,
             }}

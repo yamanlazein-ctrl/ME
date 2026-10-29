@@ -9,7 +9,12 @@ export function Text({ style, ...props }: TextProps) {
     <RNText
       {...props}
       style={[
-        { color: colors.foreground, fontFamily: fontFamilyFor(flat.fontWeight) },
+        {
+          color: colors.foreground,
+          fontFamily: fontFamilyFor(flat.fontWeight),
+          fontSize: 16,
+          lineHeight: 25,
+        },
         style,
         // Android picks the weight from the family; a numeric weight on a custom family would be synthesised twice.
         flat.fontWeight ? { fontWeight: "normal" } : null,

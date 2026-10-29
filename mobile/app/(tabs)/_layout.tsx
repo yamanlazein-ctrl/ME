@@ -34,8 +34,14 @@ export default function TabsLayout() {
         headerShown: false,
         tabBarActiveTintColor: colors.primary,
         tabBarInactiveTintColor: colors.mutedForeground,
-        tabBarStyle: { backgroundColor: colors.card, borderTopColor: colors.border, height: 64 },
-        tabBarLabelStyle: { fontFamily: fontFamilyFor("500"), fontSize: 12 },
+        tabBarStyle: {
+          backgroundColor: colors.card,
+          borderTopColor: colors.border,
+          height: 72,
+          paddingTop: 6,
+          paddingBottom: 8,
+        },
+        tabBarLabelStyle: { fontFamily: fontFamilyFor("500"), fontSize: 12, lineHeight: 18 },
         sceneStyle: { backgroundColor: colors.background },
       }}
     >

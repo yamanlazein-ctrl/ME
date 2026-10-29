@@ -46,7 +46,11 @@ export function PartyListView({
         onChangeText={onQuery}
         placeholder="الاسم أو الرمز أو الهاتف"
       />
-      <View style={{ flexDirection: "row", gap: spacing.sm, marginBottom: spacing.md }}>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={{ gap: spacing.sm, marginBottom: spacing.md }}
+      >
         {(["", "customer", "supplier"] as KindFilter[]).map((k) => (
           <Pressable
             key={k || "all"}
@@ -66,7 +70,7 @@ export function PartyListView({
             </Text>
           </Pressable>
         ))}
-      </View>
+      </ScrollView>
       <FlatList
         data={rows}
         keyExtractor={(r) => r.id}

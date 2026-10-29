@@ -30,7 +30,9 @@ export function ReportMenuView({ onOpen }: { onOpen(slug: string): void }) {
               padding: spacing.lg,
               marginBottom: spacing.sm,
               backgroundColor: colors.card,
-              borderRadius: radius.md,
+              borderRadius: radius.lg,
+              borderWidth: 1,
+              borderColor: colors.border,
             }}
           >
             <Text style={{ fontSize: fontSize.body }}>{item.title}</Text>
@@ -108,7 +110,7 @@ export function ReportPageView({
           {error}
         </Text>
       ) : null}
-      <ScrollView>
+      <ScrollView contentContainerStyle={{ paddingBottom: spacing.xxl }}>
         <View testID="report-figures">
           {page.figures.map((f) => (
             <View

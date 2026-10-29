@@ -110,8 +110,11 @@ export function HomeView({
             onPress={() => onAction(a.id)}
             style={{
               minHeight: TOUCH_TARGET,
+              flexGrow: 1,
+              flexBasis: "45%",
               justifyContent: "center",
-              paddingHorizontal: spacing.lg,
+              alignItems: "center",
+              paddingHorizontal: spacing.md,
               backgroundColor: colors.primary,
               borderRadius: radius.md,
             }}

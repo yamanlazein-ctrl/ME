@@ -35,7 +35,8 @@ export function Field({ label, fieldId, error, ...input }: FieldProps) {
           borderColor: error ? colors.negative : colors.input,
           borderWidth: 1,
           borderRadius: radius.md,
-          paddingHorizontal: spacing.md,
+          paddingHorizontal: spacing.lg,
+          paddingVertical: spacing.sm,
           textAlign: "right",
           fontFamily: fontFamilyFor("400"),
         }}
