@@ -1,65 +1,65 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { router, useLocalSearchParams } from "expo-router";
-import { useQuery } from "@tanstack/react-query";
 import { logError } from "../../../../src/core/devlog";
-import { getApp } from "../../../../src/core/appRuntime";
-import { balancesByCurrency, recentInvoices } from "../../../../src/core/partyQueries";
-import { useRememberParty } from "../../../../src/hooks/useParties";
-import { queryKeys } from "../../../../src/hooks/queryKeys";
+import type { PartyDocKind } from "../../../../src/core/parties";
+import {
+  usePartyDocuments,
+  usePartyProfile,
+  useRememberParty,
+} from "../../../../src/hooks/useParties";
 import { useRole } from "../../../../src/hooks/useRole";
-import { describeError } from "../../../../src/core/devlog";
-import { Text } from "../../../../src/ui/Text";
-
-import { PartyDetailView, type PartyDetail } from "../../../../src/ui/PartyViews";
-import { useColors } from "../../../../src/ui/themeContext-core";
+import { PartyDetailView } from "../../../../src/ui/PartyViews";
+import { ErrorState, LoadingState, readErrorText, Screen } from "../../../../src/ui/kit";
 
 export default function PartyScreen() {
-  const colors = useColors();
   const { id } = useLocalSearchParams<{ id: string }>();
   const role = useRole();
   const remember = useRememberParty();
+  const [tab, setTab] = useState<PartyDocKind>("invoices");
+  const profile = usePartyProfile(id);
+  const docs = usePartyDocuments(id, tab);
   useEffect(() => {
     remember(id).catch((e) => logError("remember-party", e));
   }, [id]);
-  const { data, error } = useQuery({
-    queryKey: queryKeys.party(id),
-    queryFn: async (): Promise<PartyDetail | null> => {
-      const app = await getApp();
-      if (!app.phone) return null;
-      const party = await app.phone.repos.partyRepo.findById(id, app.phone.context());
-      if (!party) return null;
-      const kind = party.kind === "supplier" ? "supplier" : "customer";
-      return {
-        id,
-        name: party.name,
-        kind,
-        phone: party.phone ?? party.mobile ?? null,
-        balances: await balancesByCurrency(app.phone, id, kind),
-        invoices: (await recentInvoices(app.phone, id)).map((i) => ({
-          id: i.id,
-          number: i.number,
-          date: i.date,
-          total: i.total,
-          currency: i.currency,
-        })),
-      };
-    },
-  });
-  if (error) {
+  const party = profile.data;
+  if (!party)
     return (
-      <Text testID="party-error" style={{ color: colors.negative, padding: 16 }}>
-        {`تعذّر تحميل الطرف: ${describeError(error)}`}
-      </Text>
+      <Screen title="الطرف">
+        {profile.isLoading ? (
+          <LoadingState />
+        ) : (
+          <ErrorState
+            message={
+              profile.error ? readErrorText(profile.error) : "هذا الطرف غير موجود على الهاتف."
+            }
+            onRetry={() => void profile.refetch()}
+          />
+        )}
+      </Screen>
     );
-  }
-  if (!data) return null;
+  const customer = party.kind === "customer";
   return (
     <PartyDetailView
-      party={data}
+      party={party}
       role={role}
+      tab={tab}
+      docs={docs.data}
+      onTab={setTab}
       onStatement={() => router.push(`/(tabs)/parties/${id}/statement` as never)}
       onEdit={() => router.push({ pathname: "/(tabs)/parties/form", params: { id } } as never)}
-      onInvoice={(invoiceId) => router.push(`/invoices/${invoiceId}` as never)}
+      onOpenDoc={(d) => d.kind === "invoice" && router.push(`/invoices/${d.id}` as never)}
+      onNewInvoice={() =>
+        router.push({
+          pathname: customer ? "/(tabs)/add/sale/customer" : "/(tabs)/add/entry",
+          params: { partyId: id },
+        } as never)
+      }
+      onNewVoucher={() =>
+        router.push({
+          pathname: customer ? "/(tabs)/add/receipt" : "/(tabs)/add/payment",
+          params: { partyId: id },
+        } as never)
+      }
     />
   );
 }

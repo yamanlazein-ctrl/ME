@@ -88,26 +88,3 @@ export async function loadFullStatement(
   if (!header) throw new Error("لا يوجد كشف حساب");
   return { header, entries };
 }
-
-/** The recent documents of a party: its last invoices (number, date, total, currency). */
-export async function recentInvoices(phone: Phone, partyId: string, limit = 5) {
-  const page = await phone.repos.invoiceRepo.list({ partyId, limit }, phone.context());
-  return page.data;
-}
-
-/** Closing balance per currency, from the same statement totals the desktop shows. */
-export async function balancesByCurrency(
-  phone: Phone,
-  partyId: string,
-  kind: "customer" | "supplier",
-): Promise<Record<string, number>> {
-  const data = await phone.repos.statementRepo.getStatement(
-    { partyId, kind, currency: "ALL", limit: 1 } as never,
-    phone.context(),
-  );
-  const out: Record<string, number> = {};
-  for (const [currency, totals] of Object.entries(data.totalsByCurrency ?? {})) {
-    out[currency] = totals.finalBalance;
-  }
-  return out;
-}

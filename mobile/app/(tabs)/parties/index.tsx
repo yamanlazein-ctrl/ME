@@ -1,20 +1,25 @@
 import { useState } from "react";
 import { router } from "expo-router";
-import { useParties } from "../../../src/hooks/useParties";
+import { usePartyList, usePartyListBalances } from "../../../src/hooks/useParties";
 import { useRole } from "../../../src/hooks/useRole";
 import { PartyListView, type KindFilter } from "../../../src/ui/PartyViews";
 
 export default function Parties() {
   const [q, setQ] = useState("");
   const [kind, setKind] = useState<KindFilter>("");
-  const { data } = useParties(q, kind);
+  const list = usePartyList(q, kind);
+  const balances = usePartyListBalances(list.data);
   const role = useRole();
   return (
     <PartyListView
-      rows={data}
+      rows={list.data}
+      balances={balances.data ?? {}}
       q={q}
       kind={kind}
       role={role}
+      loading={list.isLoading}
+      error={list.error}
+      refreshing={list.isRefetching}
       onQuery={setQ}
       onKind={setKind}
       onOpen={(id) => router.push(`/(tabs)/parties/${id}` as never)}
@@ -24,6 +29,8 @@ export default function Parties() {
           params: { kind: kind === "supplier" ? "supplier" : "customer" },
         } as never)
       }
+      onRefresh={() => void list.refetch()}
+      onRetry={() => void list.refetch()}
     />
   );
 }

@@ -25,7 +25,7 @@ import {
 } from "../../src/ui/EntryViews";
 import { AddMenu } from "../../src/ui/AddMenu";
 import { LoginView } from "../../src/ui/LoginView";
-import { PartyFormView, PartyListView } from "../../src/ui/PartyViews";
+import { PartyDetailView, PartyFormView, PartyListView } from "../../src/ui/PartyViews";
 import { ScanDenied, ScanOverlay } from "../../src/ui/ScanView";
 import { UpdateOfferBanner } from "../../src/ui/UpdateBanner";
 
@@ -442,14 +442,76 @@ const screens: Array<[string, () => ReactElement]> = [
     "party list",
     () => (
       <PartyListView
-        rows={[{ id: "p", name: "ع", kind: "customer", code: "C1" }]}
+        rows={[
+          {
+            id: "p",
+            name: "ع",
+            kind: "customer",
+            code: "C1",
+            phone: null,
+            city: null,
+            currency: "USD",
+          },
+        ]}
+        balances={{
+          p: [{ currency: "USD", balance: 5, side: "debit", totalDebit: 5, totalCredit: 0 }],
+        }}
         q=""
         kind=""
         role="admin"
+        loading={false}
+        error={null}
+        refreshing={false}
         onQuery={noop}
         onKind={noop}
         onOpen={noop}
         onNew={noop}
+        onRefresh={noop}
+        onRetry={noop}
+      />
+    ),
+  ],
+  [
+    "party detail",
+    () => (
+      <PartyDetailView
+        party={{
+          id: "p",
+          version: 1,
+          name: "ع",
+          kind: "customer",
+          code: "C1",
+          companyName: null,
+          phones: ["0933"],
+          email: null,
+          city: null,
+          address: null,
+          currency: "USD",
+          creditLimit: null,
+          notes: null,
+          balances: [{ currency: "USD", balance: 5, side: "debit", totalDebit: 5, totalCredit: 0 }],
+        }}
+        role="admin"
+        tab="invoices"
+        docs={[
+          {
+            id: "i",
+            kind: "invoice",
+            title: "فاتورة بيع",
+            number: "INV-1",
+            date: "2026-01-01",
+            amount: 5,
+            currency: "USD",
+            note: null,
+            cancelled: false,
+          },
+        ]}
+        onTab={noop}
+        onStatement={noop}
+        onEdit={noop}
+        onOpenDoc={noop}
+        onNewInvoice={noop}
+        onNewVoucher={noop}
       />
     ),
   ],
@@ -457,12 +519,12 @@ const screens: Array<[string, () => ReactElement]> = [
     "party form with opening balance",
     () => (
       <PartyFormView
+        title="عميل جديد"
         values={emptyPartyForm()}
         showOpening
         error={null}
-        busy={false}
         onChange={noop}
-        onSave={noop}
+        onSave={async () => undefined}
       />
     ),
   ],

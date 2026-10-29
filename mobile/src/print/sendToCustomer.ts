@@ -2,7 +2,7 @@
 // names the file after the document, and opens the share sheet (src/core/share.ts).
 import { getApp } from "../core/appRuntime";
 import { loadInvoiceView, toPrintData } from "../core/invoiceView";
-import { loadFullStatement } from "../core/partyQueries";
+import { loadStatement } from "../core/parties";
 import type { Phone } from "../core/phone";
 import { sharePdf, type ShareOutcome } from "../core/share";
 import { deviceShareDeps } from "../platform/shareDeps";
@@ -18,7 +18,15 @@ export type DocRef =
   | { type: "invoice"; id: string }
   | { type: "voucher"; id: string }
   | { type: "return"; id: string }
-  | { type: "statement"; partyId: string; kind: "customer" | "supplier" };
+  | {
+      type: "statement";
+      partyId: string;
+      kind: "customer" | "supplier";
+      /** One currency per PDF; the period is optional (null = from the start / to today). */
+      currency: string;
+      from?: string | null;
+      to?: string | null;
+    };
 
 export interface PreparedPdf {
   partyName: string;
@@ -94,15 +102,21 @@ export async function preparePdf(ref: DocRef): Promise<PreparedPdf> {
   } else {
     const party = await phone.repos.partyRepo.findById(ref.partyId, ctx);
     if (!party) throw new Error("الطرف غير موجود");
-    const full = await loadFullStatement(phone, { partyId: ref.partyId, kind: ref.kind });
-    const rows = full.entries.filter((e) => e.status === "active");
+    const st = await loadStatement(phone, {
+      partyId: ref.partyId,
+      kind: ref.kind,
+      currency: ref.currency,
+      from: ref.from ?? null,
+      to: ref.to ?? null,
+    });
+    const rows = st.entries.filter((e) => e.status === "active");
     html = renderStatementHtml({
       partyName: party.name,
       partyKind: ref.kind,
-      currency: party.currency ?? "USD",
-      periodFrom: rows[0]?.date ?? "",
-      periodTo: rows[rows.length - 1]?.date ?? "",
-      opening: Number((full.header as { openingBalance?: number }).openingBalance ?? 0),
+      currency: ref.currency,
+      periodFrom: ref.from ?? rows[0]?.date ?? "",
+      periodTo: ref.to ?? rows[rows.length - 1]?.date ?? "",
+      opening: st.totals.find((t) => t.currency === ref.currency)?.previous ?? 0,
       legs: rows.map((e, i) => ({
         date: e.date,
         createdAt: `${e.date}T00:00:00.${String(i).padStart(6, "0")}Z`,
@@ -116,9 +130,12 @@ export async function preparePdf(ref: DocRef): Promise<PreparedPdf> {
         status: e.status,
       })),
     });
-    partyId = ref.partyId;
     note = `كشف حساب ${party.name}`;
-    file = pdfFileName("Statement", rows[rows.length - 1]?.date ?? "");
+    file = pdfFileName(
+      "Statement",
+      `${ref.currency}-${ref.to ?? rows[rows.length - 1]?.date ?? ""}`,
+    );
+    partyId = ref.partyId;
   }
   const party = await phone.repos.partyRepo.findById(partyId, ctx);
   return { partyName: party?.name ?? "", title: note, pdfUri: await htmlToPdf(html, file) };

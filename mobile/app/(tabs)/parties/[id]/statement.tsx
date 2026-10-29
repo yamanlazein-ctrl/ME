@@ -1,97 +1,89 @@
-import { useState } from "react";
-import { ActivityIndicator, Pressable, View } from "react-native";
+import { useMemo, useState } from "react";
 import { router, useLocalSearchParams } from "expo-router";
-import { useQuery } from "@tanstack/react-query";
-import { getApp } from "../../../../src/core/appRuntime";
-import { balancesByCurrency } from "../../../../src/core/partyQueries";
 import { canWriteOffline } from "../../../../src/core/roles";
 import { useRole } from "../../../../src/hooks/useRole";
-import { useStatement } from "../../../../src/hooks/useStatement";
+import { usePartyProfile, usePartyStatement } from "../../../../src/hooks/useParties";
 import { SharePdfButton } from "../../../../src/ui/SendToCustomer";
-import { Text } from "../../../../src/ui/Text";
-
-import { StatementView } from "../../../../src/ui/PartyViews";
-import { useColors } from "../../../../src/ui/themeContext-core";
+import {
+  DATE_RE,
+  periodRange,
+  StatementView,
+  type PeriodPreset,
+} from "../../../../src/ui/PartyViews";
+import { LoadingState, Notice, Screen } from "../../../../src/ui/kit";
 
 export default function StatementScreen() {
-  const colors = useColors();
   const { id } = useLocalSearchParams<{ id: string }>();
   const role = useRole();
-  const kindQuery = useQuery({
-    queryKey: ["party-kind", id],
-    queryFn: async () => {
-      const app = await getApp();
-      const party = app.phone
-        ? await app.phone.repos.partyRepo.findById(id, app.phone.context())
-        : null;
-      return party?.kind === "supplier" ? ("supplier" as const) : ("customer" as const);
-    },
-  });
-  const balances = useQuery({
-    queryKey: ["party-balances", id, kindQuery.data],
-    enabled: Boolean(kindQuery.data),
-    queryFn: async () => {
-      const app = await getApp();
-      return app.phone && kindQuery.data
-        ? balancesByCurrency(app.phone, id, kindQuery.data)
-        : ({} as Record<string, number>);
-    },
-  });
-  const currencies = Object.keys(balances.data ?? {}).sort();
-  const [chosen, setChosen] = useState<string | null>(null);
-  const currency =
-    chosen ?? currencies.find((c) => (balances.data?.[c] ?? 0) !== 0) ?? currencies[0];
-  const statement = useStatement(id, kindQuery.data ?? "customer", currency);
-  if (!kindQuery.data || !balances.data || !statement.data)
-    return <ActivityIndicator style={{ flex: 1 }} />;
+  const profile = usePartyProfile(id);
+  const [currency, setCurrency] = useState("ALL");
+  const [period, setPeriod] = useState<PeriodPreset>("all");
+  const [dates, setDates] = useState({ from: "", to: "" });
+  const party = profile.data;
+  const range = useMemo(() => {
+    if (period !== "custom") return periodRange(period, new Date());
+    return {
+      from: DATE_RE.test(dates.from) ? dates.from : null,
+      to: DATE_RE.test(dates.to) ? dates.to : null,
+    };
+  }, [period, dates]);
+  const statement = usePartyStatement(
+    party ? { partyId: id, kind: party.kind, currency, from: range.from, to: range.to } : null,
+  );
+  if (!party)
+    return (
+      <Screen title="كشف الحساب">
+        <LoadingState />
+      </Screen>
+    );
+  const currencies = party.balances.map((b) => b.currency);
+  // A PDF is one currency: the chosen one, or the only one the party uses.
+  const pdfCurrency =
+    currency !== "ALL" ? currency : currencies.length === 1 ? currencies[0] : null;
   return (
-    <View style={{ flex: 1 }}>
-      <View style={{ paddingHorizontal: 16 }}>
-        {currencies.length > 1 ? (
-          <View style={{ flexDirection: "row", gap: 8, marginTop: 8 }}>
-            {currencies.map((c) => (
-              <Pressable
-                key={c}
-                accessibilityRole="button"
-                accessibilityLabel={`كشف ${c}`}
-                accessibilityState={{ selected: currency === c }}
-                onPress={() => setChosen(c)}
-                style={{
-                  minHeight: 48,
-                  justifyContent: "center",
-                  paddingHorizontal: 16,
-                  borderRadius: 8,
-                  backgroundColor: currency === c ? colors.primary : colors.muted,
-                }}
-              >
-                <Text
-                  style={{ color: currency === c ? colors.primaryForeground : colors.foreground }}
-                >
-                  {c}
-                </Text>
-              </Pressable>
-            ))}
-          </View>
-        ) : null}
-        <SharePdfButton
-          docRef={{ type: "statement", partyId: id, kind: kindQuery.data }}
-          label="مشاركة الكشف PDF"
-        />
-      </View>
-      <StatementView
-        entries={statement.data.entries}
-        closing={statement.data.header.finalBalance}
-        {...(canWriteOffline(role)
-          ? {
-              onAmend: (entry) =>
-                router.push({
-                  pathname:
-                    entry.type === "receipt_in" ? "/(tabs)/add/receipt" : "/(tabs)/add/payment",
-                  params: { amendId: entry.referenceId },
-                } as never),
-            }
-          : {})}
-      />
-    </View>
+    <StatementView
+      partyName={party.name}
+      kind={party.kind}
+      currencies={currencies}
+      currency={currency}
+      period={period}
+      from={dates.from}
+      to={dates.to}
+      data={statement.data}
+      loading={statement.isLoading}
+      error={statement.error}
+      share={
+        pdfCurrency ? (
+          <SharePdfButton
+            docRef={{
+              type: "statement",
+              partyId: id,
+              kind: party.kind,
+              currency: pdfCurrency,
+              from: range.from,
+              to: range.to,
+            }}
+            label="مشاركة الكشف PDF"
+          />
+        ) : (
+          <Notice kind="info" text="لمشاركة الكشف PDF اختر عملة واحدة أولاً." />
+        )
+      }
+      onCurrency={setCurrency}
+      onPeriod={setPeriod}
+      onDates={(patch) => setDates((d) => ({ ...d, ...patch }))}
+      onRetry={() => void statement.refetch()}
+      onOpenEntry={(e) => {
+        if (!e.referenceId) return;
+        if (e.type === "sales_invoice" || e.type === "purchase_invoice") {
+          router.push(`/invoices/${e.referenceId}` as never);
+        } else if ((e.type === "receipt_in" || e.type === "payment_out") && canWriteOffline(role)) {
+          router.push({
+            pathname: e.type === "receipt_in" ? "/(tabs)/add/receipt" : "/(tabs)/add/payment",
+            params: { amendId: e.referenceId },
+          } as never);
+        }
+      }}
+    />
   );
 }
