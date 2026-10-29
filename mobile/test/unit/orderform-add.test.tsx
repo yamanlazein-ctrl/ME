@@ -11,7 +11,6 @@ describe("order form add item", () => {
       <OrderFormView
         customer={{ id: "p", name: "عميل" }}
         items={[]}
-        busy={false}
         error={null}
         onCustomer={() => undefined}
         onAddItem={onAddItem}

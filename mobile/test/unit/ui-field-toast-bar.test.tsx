@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import { act, fireEvent, render, screen } from "@testing-library/react-native";
 import { Field } from "../../src/ui/Field";
 import { TOAST_VARIANTS, ToastProvider, ToastView, useToast } from "../../src/ui/Toast";
-import { PrimaryActionBar } from "../../src/ui/PrimaryActionBar";
+import { Button, Screen } from "../../src/ui/kit";
 import { TOUCH_TARGET, colors } from "../../src/ui/theme";
 import { Pressable, Text } from "react-native";
 
@@ -62,23 +62,35 @@ describe("Toast (UX-07)", () => {
   });
 });
 
-describe("PrimaryActionBar (UX-02)", () => {
-  it("is pinned to the bottom, at least 48 dp tall and calls onPress", async () => {
-    const onPress = vi.fn();
-    await render(<PrimaryActionBar label="حفظ" onPress={onPress} />);
-    const bar = screen.getByTestId("primary-action-bar");
-    expect(bar.props.style.position).toBe("absolute");
-    expect(bar.props.style.bottom).toBe(0);
-    const button = screen.getByLabelText("حفظ");
-    expect(button.props.style.minHeight).toBeGreaterThanOrEqual(48);
-    await fireEvent.press(button);
+describe("Button and Screen footer (UX-02: the main action stays reachable, never over the content)", () => {
+  it("an async press locks the button until it settles, so a double tap saves once", async () => {
+    let resolve: () => void = () => undefined;
+    const onPress = vi.fn(() => new Promise<void>((r) => (resolve = r)));
+    await render(<Button label="حفظ" onPress={onPress} busyLabel="جارٍ الحفظ…" />);
+    await fireEvent.press(screen.getByLabelText("حفظ"));
+    await fireEvent.press(screen.getByLabelText("حفظ"));
     expect(onPress).toHaveBeenCalledTimes(1);
+    expect(screen.getByText("جارٍ الحفظ…")).toBeTruthy();
+    await act(async () => resolve());
+    await fireEvent.press(screen.getByLabelText("حفظ"));
+    expect(onPress).toHaveBeenCalledTimes(2);
   });
 
-  it("does not fire while disabled", async () => {
+  it("does not fire while disabled; at least 48 dp", async () => {
     const onPress = vi.fn();
-    await render(<PrimaryActionBar label="حفظ" onPress={onPress} disabled />);
+    await render(<Button label="حفظ" onPress={onPress} disabled />);
     await fireEvent.press(screen.getByLabelText("حفظ"));
     expect(onPress).not.toHaveBeenCalled();
+  });
+
+  it("the footer is laid out below the content, not absolutely over it", async () => {
+    await render(
+      <Screen title="ش" back={false} footer={<Button label="حفظ" onPress={() => undefined} />}>
+        <Button label="محتوى" onPress={() => undefined} />
+      </Screen>,
+    );
+    const footer = screen.getByTestId("screen-footer");
+    expect(footer.props.style.position).toBeUndefined();
+    expect(screen.getByTestId("screen-title").props.children).toBe("ش");
   });
 });

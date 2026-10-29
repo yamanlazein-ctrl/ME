@@ -17,7 +17,7 @@ export default function Orders() {
   });
   return (
     <OrderListView
-      rows={data ?? []}
+      rows={data}
       canWrite={canWriteOffline(role)}
       onOpen={(id) => router.push(`/(tabs)/more/orders/${id}` as never)}
       onNew={() => router.push("/(tabs)/more/orders/new" as never)}

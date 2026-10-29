@@ -1,31 +1,23 @@
 import { useState } from "react";
-import { ActivityIndicator } from "react-native";
 import { useLocalSearchParams } from "expo-router";
-import type { ReportPeriod } from "../../../../src/core/reports";
+import { MENU, type ReportPeriod } from "../../../../src/core/reports";
 import { useReport } from "../../../../src/hooks/useReport";
+import { readErrorText } from "../../../../src/ui/kit";
 import { ReportPageView } from "../../../../src/ui/ReportViews";
 
 export default function ReportScreen() {
   const { slug } = useLocalSearchParams<{ slug: string }>();
   const [period, setPeriod] = useState<ReportPeriod>("all");
-  const { data, error, isLoading } = useReport(slug, period);
-  if (isLoading) return <ActivityIndicator style={{ flex: 1 }} />;
-  if (!data) {
-    return (
-      <ReportPageView
-        page={{ slug, title: "تقرير", figures: [], lines: [], total: 0 }}
-        period={period}
-        error={error ? String(error) : "التقرير غير موجود"}
-        onPeriod={setPeriod}
-      />
-    );
-  }
+  const report = useReport(slug, period);
   return (
     <ReportPageView
-      page={data}
+      page={report.data}
+      title={MENU.find((m) => m.slug === slug)?.title ?? "تقرير"}
       period={period}
-      error={error ? String(error) : null}
+      loading={report.isLoading}
+      error={report.error ? readErrorText(report.error) : null}
       onPeriod={setPeriod}
+      onRetry={() => void report.refetch()}
     />
   );
 }

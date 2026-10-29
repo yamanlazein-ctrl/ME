@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { Alert, Pressable, ScrollView } from "react-native";
 import { useQuery } from "@tanstack/react-query";
 import { localDateISO } from "@backend/infrastructure/utils/localDate";
 import { getApp } from "../../../src/core/appRuntime";
@@ -9,14 +8,20 @@ import { queryKeys } from "../../../src/hooks/queryKeys";
 import { useFinishWrite } from "../../../src/hooks/useFinishWrite";
 import { useRole } from "../../../src/hooks/useRole";
 import { Field } from "../../../src/ui/Field";
+import { money } from "../../../src/ui/format";
 import { MoneyInput } from "../../../src/ui/MoneyInput";
-import { MoneyText } from "../../../src/ui/MoneyText";
-import { Text } from "../../../src/ui/Text";
-import { fontSize, radius, spacing, TOUCH_TARGET } from "../../../src/ui/theme";
-import { useColors } from "../../../src/ui/themeContext-core";
+import { CURRENCY_OPTIONS } from "../../../src/ui/SaleViews";
+import {
+  Button,
+  Chips,
+  ConfirmSheet,
+  KeyValue,
+  Notice,
+  Screen,
+  Section,
+} from "../../../src/ui/kit";
 
 export default function CloseDay() {
-  const colors = useColors();
   const role = useRole();
   const finish = useFinishWrite();
   const [date, setDate] = useState(localDateISO(new Date()));
@@ -24,6 +29,7 @@ export default function CloseDay() {
   const [counted, setCounted] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [confirming, setConfirming] = useState(false);
   const { data } = useQuery({
     queryKey: [...queryKeys.cashbox, "close", date],
     queryFn: async () => {
@@ -32,8 +38,18 @@ export default function CloseDay() {
     },
   });
   if (!isAdminLike(role)) {
-    return <Text testID="close-day-denied">إقفال اليوم متاح للمدير والمحاسب فقط</Text>;
+    return (
+      <Screen title="إقفال اليوم">
+        <Notice
+          kind="info"
+          text="إقفال اليوم متاح للمدير والمحاسب فقط."
+          testID="close-day-denied"
+        />
+      </Screen>
+    );
   }
+  const system = data?.[currency] ?? 0;
+  const difference = counted === null ? null : Math.round((counted - system) * 100) / 100;
   const close = async () => {
     if (counted === null) return;
     setError(null);
@@ -43,66 +59,63 @@ export default function CloseDay() {
     const r = await app.phone.documents.closeCashboxDay({ date, counted, currency });
     if (!r.ok) return setError(r.error);
     await finish();
-    setNotice(`تم إقفال يوم ${date}`);
+    setNotice(`تم إقفال يوم ${date} (${currency})`);
   };
   return (
-    <ScrollView contentContainerStyle={{ padding: spacing.lg }}>
-      <Text style={{ fontSize: fontSize.title, marginBottom: spacing.md }}>إقفال اليوم</Text>
-      <Field label="التاريخ" fieldId="close-date" value={date} onChangeText={setDate} />
-      {(["USD", "SYP"] as const).map((c) => (
-        <Pressable
-          key={c}
-          accessibilityRole="button"
-          accessibilityLabel={`العملة ${c}`}
-          accessibilityState={{ selected: currency === c }}
-          onPress={() => setCurrency(c)}
-          style={{
-            minHeight: TOUCH_TARGET,
-            justifyContent: "center",
-            paddingHorizontal: spacing.lg,
-            marginBottom: spacing.sm,
-            borderRadius: radius.md,
-            backgroundColor: currency === c ? colors.primary : colors.muted,
-          }}
-        >
-          <Text style={{ color: currency === c ? colors.primaryForeground : colors.foreground }}>
-            {`${c} — رصيد النظام`}
-          </Text>
-          <MoneyText amount={data?.[c] ?? 0} currency={c} />
-        </Pressable>
-      ))}
-      <MoneyInput label="المبلغ المعدود" fieldId="close-counted" onChangeAmount={setCounted} />
-      {error ? (
-        <Text testID="close-error" style={{ color: colors.negative }}>
-          {error}
-        </Text>
-      ) : null}
-      {notice ? <Text testID="close-notice">{notice}</Text> : null}
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel="إقفال اليوم"
-        disabled={counted === null}
-        onPress={() =>
-          Alert.alert("إقفال اليوم", `هل تريد إقفال يوم ${date}؟ لا يمكن التراجع.`, [
-            { text: "رجوع", style: "cancel" },
-            { text: "إقفال", style: "destructive", onPress: () => void close() },
-          ])
-        }
-        style={{
-          minHeight: TOUCH_TARGET,
-          justifyContent: "center",
-          alignItems: "center",
-          marginTop: spacing.md,
-          borderRadius: radius.md,
-          backgroundColor: counted === null ? colors.muted : colors.primary,
+    <Screen
+      title="إقفال اليوم"
+      subtitle="مطابقة النقد الفعلي مع رصيد النظام"
+      footer={
+        <Button
+          label="إقفال اليوم"
+          disabled={counted === null}
+          onPress={() => setConfirming(true)}
+          testID="close-day"
+        />
+      }
+    >
+      <Section>
+        <Field
+          label="التاريخ (سنة-شهر-يوم)"
+          fieldId="close-date"
+          value={date}
+          onChangeText={setDate}
+        />
+        <Chips
+          options={CURRENCY_OPTIONS}
+          value={currency}
+          onChange={setCurrency}
+          testIDPrefix="close-currency"
+        />
+        <KeyValue label="رصيد النظام" value={money(system, currency)} strong />
+        <MoneyInput
+          label="المبلغ المعدود فعلياً"
+          fieldId="close-counted"
+          onChangeAmount={setCounted}
+        />
+        {difference !== null ? (
+          <KeyValue
+            label={
+              difference === 0 ? "لا فرق" : difference > 0 ? "زيادة في الصندوق" : "نقص في الصندوق"
+            }
+            value={money(Math.abs(difference), currency)}
+            tone={difference === 0 ? "positive" : "warning"}
+          />
+        ) : null}
+      </Section>
+      {error ? <Notice kind="error" text={error} testID="close-error" /> : null}
+      {notice ? <Notice kind="success" text={notice} testID="close-notice" /> : null}
+      <ConfirmSheet
+        visible={confirming}
+        title="إقفال اليوم"
+        message={`سيُقفل يوم ${date} لعملة ${currency}: لا تُقبل بعده حركات صندوق بهذا التاريخ. لا يمكن التراجع.`}
+        confirmLabel="إقفال"
+        onCancel={() => setConfirming(false)}
+        onConfirm={async () => {
+          await close();
+          setConfirming(false);
         }}
-      >
-        <Text
-          style={{ color: counted === null ? colors.mutedForeground : colors.primaryForeground }}
-        >
-          إقفال اليوم
-        </Text>
-      </Pressable>
-    </ScrollView>
+      />
+    </Screen>
   );
 }

@@ -25,6 +25,8 @@ export default function CashboxScreen() {
     description: "",
   });
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [formKey, setFormKey] = useState(0);
   const { data } = useQuery({
     queryKey: [...queryKeys.cashbox, date],
     queryFn: async () => {
@@ -40,6 +42,7 @@ export default function CashboxScreen() {
   const add = async () => {
     if (!form.amount) return;
     setError(null);
+    setNotice(null);
     const app = await getApp();
     if (!app.phone) return;
     const r = await app.phone.documents.addCashboxMovement({
@@ -52,7 +55,11 @@ export default function CashboxScreen() {
     });
     if (!r.ok) return setError(r.error);
     await finish();
+    setNotice(
+      `أُضيفت الحركة: ${form.direction === "in" ? "وارد" : "صادر"} ${form.amount} ${form.currency}`,
+    );
     setForm({ ...form, amount: null, description: "" });
+    setFormKey((k) => k + 1);
   };
   return (
     <CashboxView
@@ -62,10 +69,12 @@ export default function CashboxScreen() {
       movements={data?.movements ?? {}}
       form={form}
       error={error}
+      notice={notice}
+      formKey={formKey}
       onDate={setDate}
       onShiftDay={(d) => setDate((cur) => shift(cur, d))}
       onForm={(patch) => setForm((f) => ({ ...f, ...patch }))}
-      onAdd={() => void add()}
+      onAdd={add}
     />
   );
 }

@@ -18,7 +18,6 @@ export default function ReturnScreen() {
   const finish = useFinishWrite();
   const [draft, setDraft] = useState<ReturnDraft>(emptyReturnDraft("sale"));
   const [invoices, setInvoices] = useState<SourceInvoiceRow[]>([]);
-  const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const phone = async () => {
     const app = await getApp();
@@ -27,7 +26,6 @@ export default function ReturnScreen() {
   };
   const save = async () => {
     if (returnProblems(draft).length > 0) return;
-    setBusy(true);
     setError(null);
     try {
       const result = await (
@@ -38,15 +36,12 @@ export default function ReturnScreen() {
       router.replace("/(tabs)/more/returns" as never);
     } catch (e) {
       setError(e instanceof Error ? e.message : "تعذّر الحفظ");
-    } finally {
-      setBusy(false);
     }
   };
   return (
     <ReturnFormView
       draft={draft}
       invoices={invoices}
-      busy={busy}
       error={error}
       onKind={(kind) => {
         setInvoices([]);
@@ -77,7 +72,7 @@ export default function ReturnScreen() {
         }))
       }
       onReason={(reason) => setDraft((d) => ({ ...d, reason }))}
-      onSave={() => void save()}
+      onSave={save}
     />
   );
 }

@@ -1,33 +1,21 @@
-import { Alert, Pressable, ScrollView } from "react-native";
-import { Text } from "../../../src/ui/Text";
+import { useEffect, useState } from "react";
 import { router } from "expo-router";
 import * as Font from "expo-font";
 import { FONT_BY_WEIGHT } from "../../../src/ui/fontFamilies";
-import { useTheme, useColors } from "../../../src/ui/ThemeContext";
+import { useTheme } from "../../../src/ui/ThemeContext";
 import { getSessionService } from "../../../src/core/sessionService";
-import { pendingLogoutMessage } from "../../../src/core/session";
 import { notifyBootChanged } from "../../../src/hooks/useBoot";
-import { fontSize, radius, spacing, TOUCH_TARGET } from "../../../src/ui/theme";
+import { ROLE_LABEL } from "../../../src/ui/LoginView";
+import { MoreMenuView, type MoreTarget } from "../../../src/ui/MoreMenu";
 
-function Row({ label, onPress }: { label: string; onPress: () => void }) {
-  const colors = useColors();
-  return (
-    <Pressable
-      accessibilityRole="button"
-      onPress={onPress}
-      style={{
-        minHeight: TOUCH_TARGET,
-        justifyContent: "center",
-        padding: spacing.lg,
-        backgroundColor: colors.card,
-        borderRadius: radius.md,
-        marginBottom: spacing.sm,
-      }}
-    >
-      <Text style={{ fontSize: fontSize.body }}>{label}</Text>
-    </Pressable>
-  );
-}
+const ROUTE: Record<MoreTarget, string> = {
+  returns: "/(tabs)/more/returns",
+  orders: "/(tabs)/more/orders",
+  cashbox: "/(tabs)/more/cashbox",
+  closeDay: "/(tabs)/more/close-day",
+  reports: "/(tabs)/more/reports",
+  sync: "/(tabs)/more/sync",
+};
 
 function fontsStatus(): string {
   const names = ["ionicons", ...Object.values(FONT_BY_WEIGHT)];
@@ -36,36 +24,32 @@ function fontsStatus(): string {
 }
 
 export default function More() {
-  const colors = useColors();
   const { theme, setTheme } = useTheme();
-  const logout = async (confirmed: boolean) => {
-    const service = await getSessionService();
-    const result = await service.logout({ confirmed });
-    if (result.needsConfirm) {
-      Alert.alert("تسجيل الخروج", `${pendingLogoutMessage(result.pending)}. هل تريد الخروج؟`, [
-        { text: "إلغاء", style: "cancel" },
-        { text: "خروج", style: "destructive", onPress: () => void logout(true) },
-      ]);
-      return;
-    }
-    notifyBootChanged();
-  };
+  const [user, setUser] = useState<{ name: string; role: keyof typeof ROLE_LABEL } | null>(null);
+  const [pending, setPending] = useState<number | null>(null);
+  useEffect(() => {
+    void getSessionService().then(async (s) => {
+      const session = await s.current();
+      if (session) setUser({ name: session.name, role: session.role });
+    });
+  }, []);
   return (
-    <ScrollView contentContainerStyle={{ padding: spacing.lg, paddingTop: spacing.xl }}>
-      <Row label="حالة المزامنة" onPress={() => router.push("/(tabs)/more/sync" as never)} />
-      <Row label="الصندوق" onPress={() => router.push("/(tabs)/more/cashbox" as never)} />
-      <Row label="الطلبيات" onPress={() => router.push("/(tabs)/more/orders" as never)} />
-      <Row label="إقفال اليوم" onPress={() => router.push("/(tabs)/more/close-day" as never)} />
-      <Row label="المرتجعات" onPress={() => router.push("/(tabs)/more/returns" as never)} />
-      <Row label="التقارير" onPress={() => router.push("/(tabs)/more/reports" as never)} />
-      <Row
-        label={theme === "dark" ? "المظهر: داكن (اضغط للفاتح)" : "المظهر: فاتح (اضغط للداكن)"}
-        onPress={() => setTheme(theme === "dark" ? "light" : "dark")}
-      />
-      <Text testID="fonts-status" style={{ color: colors.mutedForeground, padding: spacing.sm }}>
-        {fontsStatus()}
-      </Text>
-      <Row label="تسجيل الخروج" onPress={() => void logout(false)} />
-    </ScrollView>
+    <MoreMenuView
+      userName={user?.name ?? null}
+      roleLabel={user ? ROLE_LABEL[user.role] : null}
+      theme={theme}
+      pendingLogout={pending}
+      fontsStatus={fontsStatus()}
+      onOpen={(t) => router.push(ROUTE[t] as never)}
+      onTheme={setTheme}
+      onCancelLogout={() => setPending(null)}
+      onLogout={async (confirmed) => {
+        const service = await getSessionService();
+        const result = await service.logout({ confirmed });
+        if (result.needsConfirm) return setPending(result.pending);
+        setPending(null);
+        notifyBootChanged();
+      }}
+    />
   );
 }

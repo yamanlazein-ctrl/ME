@@ -1,6 +1,6 @@
-// Report screens' views (FR-28): the report list, and one page for any report: a period filter, the full-period figures per
-// currency and the rows. Currencies are never combined: every amount carries its own currency.
-import { FlatList, Pressable, ScrollView, View } from "react-native";
+// Report screens (FR-28): the report list, and one page for any report: a period filter, the period's figures per currency
+// and the rows. Currencies are never combined: every amount carries its own currency.
+import { View } from "react-native";
 import { Text } from "./Text";
 import {
   MENU,
@@ -9,150 +9,125 @@ import {
   type ReportPage,
   type ReportPeriod,
 } from "../core/reports";
-import { MoneyText } from "./MoneyText";
-import { fontSize, radius, spacing, TOUCH_TARGET } from "./theme";
+import { money } from "./format";
 import { useColors } from "./themeContext-core";
+import { Chips, EmptyState, ErrorState, ListRow, LoadingState, Screen, Section } from "./kit";
 
 export function ReportMenuView({ onOpen }: { onOpen(slug: string): void }) {
-  const colors = useColors();
   return (
-    <View style={{ flex: 1, padding: spacing.lg }}>
-      <Text style={{ fontSize: fontSize.title, marginBottom: spacing.lg }}>التقارير</Text>
-      <FlatList
-        data={MENU}
-        keyExtractor={(m) => m.slug}
-        renderItem={({ item }) => (
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={item.title}
-            onPress={() => onOpen(item.slug)}
-            style={{
-              minHeight: TOUCH_TARGET,
-              justifyContent: "center",
-              padding: spacing.lg,
-              marginBottom: spacing.sm,
-              backgroundColor: colors.card,
-              borderRadius: radius.md,
-            }}
-          >
-            <Text style={{ fontSize: fontSize.body }}>{item.title}</Text>
-          </Pressable>
-        )}
-      />
-    </View>
+    <Screen title="التقارير" subtitle={`${MENU.length} تقريراً`}>
+      <Section padded={false}>
+        {MENU.map((m, i) => (
+          <ListRow
+            key={m.slug}
+            testID={`report-${m.slug}`}
+            title={m.title}
+            onPress={() => onOpen(m.slug)}
+            last={i === MENU.length - 1}
+          />
+        ))}
+      </Section>
+    </Screen>
   );
 }
 
-function Amounts({ amounts }: { amounts: ReportAmount[] }) {
+function Amounts({ amounts, strong = false }: { amounts: ReportAmount[]; strong?: boolean }) {
   const colors = useColors();
   if (amounts.length === 0) return <Text style={{ color: colors.mutedForeground }}>—</Text>;
   return (
-    <View>
+    <View style={{ alignItems: "flex-end" }}>
       {amounts.map((a) => (
-        <MoneyText key={a.currency} amount={a.amount} currency={a.currency} />
+        <Text
+          key={a.currency}
+          style={{
+            fontWeight: strong ? "700" : "600",
+            writingDirection: "ltr",
+            color: a.amount < 0 ? colors.negative : colors.foreground,
+          }}
+        >
+          {money(a.amount, a.currency)}
+        </Text>
       ))}
     </View>
   );
 }
 
-export function PeriodChips({
-  period,
-  onChange,
-}: {
-  period: ReportPeriod;
-  onChange(p: ReportPeriod): void;
-}) {
-  const colors = useColors();
-  return (
-    <View
-      style={{ flexDirection: "row", flexWrap: "wrap", gap: spacing.sm, marginBottom: spacing.md }}
-    >
-      {(Object.keys(PERIOD_LABEL) as ReportPeriod[]).map((p) => (
-        <Pressable
-          key={p}
-          accessibilityRole="button"
-          accessibilityState={{ selected: period === p }}
-          onPress={() => onChange(p)}
-          style={{
-            minHeight: TOUCH_TARGET,
-            justifyContent: "center",
-            paddingHorizontal: spacing.lg,
-            borderRadius: radius.xl,
-            backgroundColor: period === p ? colors.primary : colors.muted,
-          }}
-        >
-          <Text style={{ color: period === p ? colors.primaryForeground : colors.foreground }}>
-            {PERIOD_LABEL[p]}
-          </Text>
-        </Pressable>
-      ))}
-    </View>
-  );
-}
+export const PERIOD_OPTIONS = (Object.keys(PERIOD_LABEL) as ReportPeriod[]).map((p) => ({
+  value: p,
+  label: PERIOD_LABEL[p],
+}));
 
 export function ReportPageView({
   page,
+  title,
   period,
+  loading,
   error,
   onPeriod,
+  onRetry,
 }: {
-  page: ReportPage;
+  page: ReportPage | null | undefined;
+  title: string;
   period: ReportPeriod;
+  loading: boolean;
   error: string | null;
   onPeriod(p: ReportPeriod): void;
+  onRetry(): void;
 }) {
   const colors = useColors();
   return (
-    <View style={{ flex: 1, padding: spacing.lg }}>
-      <Text testID="report-title" style={{ fontSize: fontSize.title, marginBottom: spacing.md }}>
-        {page.title}
-      </Text>
-      <PeriodChips period={period} onChange={onPeriod} />
-      {error ? (
-        <Text testID="report-error" style={{ color: colors.negative }}>
-          {error}
-        </Text>
-      ) : null}
-      <ScrollView>
-        <View testID="report-figures">
-          {page.figures.map((f) => (
-            <View
-              key={f.label}
-              style={{
-                padding: spacing.md,
-                marginBottom: spacing.sm,
-                backgroundColor: colors.card,
-                borderRadius: radius.md,
-                borderWidth: 1,
-                borderColor: colors.border,
-              }}
-            >
-              <Text style={{ color: colors.mutedForeground }}>{f.label}</Text>
-              {f.plain ? <Text>{f.plain}</Text> : <Amounts amounts={f.amounts} />}
+    <Screen title={page?.title ?? title} subtitle={PERIOD_LABEL[period]}>
+      <Chips<ReportPeriod>
+        options={PERIOD_OPTIONS}
+        value={period}
+        onChange={onPeriod}
+        testIDPrefix="period"
+      />
+      {error && !page ? (
+        <ErrorState message={error} onRetry={onRetry} />
+      ) : loading && !page ? (
+        <LoadingState />
+      ) : page ? (
+        <>
+          {page.figures.length > 0 ? (
+            <Section title="الملخص" testID="report-figures">
+              {page.figures.map((f) => (
+                <View
+                  key={f.label}
+                  style={{ flexDirection: "row", justifyContent: "space-between", gap: 12 }}
+                >
+                  <Text style={{ color: colors.mutedForeground, flexShrink: 1 }}>{f.label}</Text>
+                  {f.plain ? (
+                    <Text style={{ fontWeight: "700" }}>{f.plain}</Text>
+                  ) : (
+                    <Amounts amounts={f.amounts} strong />
+                  )}
+                </View>
+              ))}
+            </Section>
+          ) : null}
+          {page.lines.length === 0 ? (
+            <View testID="report-empty">
+              <EmptyState title="لا بيانات في هذه الفترة" icon="bar-chart-outline" />
             </View>
-          ))}
-        </View>
-        {page.lines.length === 0 ? (
-          <Text testID="report-empty">لا بيانات في هذه الفترة</Text>
-        ) : null}
-        {page.lines.map((item, i) => (
-          <View
-            key={`${item.id}-${i}`}
-            testID="report-line"
-            style={{
-              paddingVertical: spacing.sm,
-              borderBottomWidth: 1,
-              borderColor: colors.border,
-            }}
-          >
-            <Text>{item.title}</Text>
-            {item.subtitle ? (
-              <Text style={{ color: colors.mutedForeground }}>{item.subtitle}</Text>
-            ) : null}
-            <Amounts amounts={item.amounts} />
-          </View>
-        ))}
-      </ScrollView>
-    </View>
+          ) : (
+            <Section title={`التفاصيل (${page.lines.length})`} padded={false}>
+              {page.lines.map((item, i) => (
+                <ListRow
+                  key={`${item.id}-${i}`}
+                  testID="report-line"
+                  title={item.title}
+                  subtitle={item.subtitle ?? null}
+                  value={<Amounts amounts={item.amounts} />}
+                  last={i === page.lines.length - 1}
+                />
+              ))}
+            </Section>
+          )}
+        </>
+      ) : (
+        <EmptyState title="التقرير غير موجود" />
+      )}
+    </Screen>
   );
 }

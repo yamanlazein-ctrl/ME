@@ -1,8 +1,8 @@
 import { useState } from "react";
-import { Alert } from "react-native";
 import { useQuery } from "@tanstack/react-query";
+import { router } from "expo-router";
 import { getApp } from "../../../../src/core/appRuntime";
-import { isAdminLike } from "../../../../src/core/roles";
+import { canWriteOffline, isAdminLike } from "../../../../src/core/roles";
 import { listReturns, type ReturnListRow } from "../../../../src/core/returns";
 import { useFinishWrite } from "../../../../src/hooks/useFinishWrite";
 import { useRole } from "../../../../src/hooks/useRole";
@@ -31,16 +31,14 @@ export default function Returns() {
   };
   return (
     <ReturnListView
-      rows={data ?? []}
+      rows={data}
       canCancel={isAdminLike(role)}
       error={error}
       sendSlot={(row) => <SharePdfButton docRef={{ type: "return", id: row.id }} />}
-      onCancel={(row) =>
-        Alert.alert("إلغاء المرتجع", `هل تريد إلغاء المرتجع ${row.number}؟`, [
-          { text: "رجوع", style: "cancel" },
-          { text: "إلغاء المرتجع", style: "destructive", onPress: () => void cancel(row) },
-        ])
-      }
+      onCancel={cancel}
+      {...(canWriteOffline(role)
+        ? { onNew: () => router.push("/(tabs)/add/return" as never) }
+        : {})}
     />
   );
 }

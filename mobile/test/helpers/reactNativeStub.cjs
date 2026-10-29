@@ -47,7 +47,8 @@ module.exports = {
     { displayName: "Pressable" },
   ),
   ActivityIndicator: host("ActivityIndicator"),
-  Modal: host("Modal"),
+  // Like the real Modal: nothing is on screen while `visible` is false.
+  Modal: (props) => (props.visible === false ? null : createElement("Modal", props)),
   KeyboardAvoidingView: host("KeyboardAvoidingView"),
   SafeAreaView: host("SafeAreaView"),
   StyleSheet,

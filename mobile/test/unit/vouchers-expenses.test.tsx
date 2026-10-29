@@ -69,7 +69,6 @@ describe("voucher / expense / cashbox screens (US5)", () => {
         values={{ name: "إي", amount: null, currency: "USD" }}
         suggestions={["إيجار"]}
         error="خطأ"
-        busy={false}
         onChange={() => undefined}
         onSave={() => undefined}
       />,
@@ -84,11 +83,13 @@ describe("voucher / expense / cashbox screens (US5)", () => {
       balances: { USD: 5 },
       movements: { USD: { in: 5, out: 0 } },
       form: { direction: "in" as const, currency: "USD", amount: null, description: "" },
+      formKey: 0,
+      notice: null,
       error: null,
       onDate: () => undefined,
       onShiftDay: () => undefined,
       onForm: () => undefined,
-      onAdd: () => undefined,
+      onAdd: async () => undefined,
     };
     await render(<CashboxView {...props} role="viewer" />);
     expect(screen.getByTestId("cashbox-USD")).toBeTruthy();

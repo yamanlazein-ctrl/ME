@@ -5,6 +5,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { Text } from "../Text";
 import { fontSize, radius, spacing, TOUCH_TARGET } from "../theme";
 import { useColors } from "../themeContext-core";
+import { Button } from "./Button";
 
 /**
  * A bottom sheet for a choice or a small form (pick a party, a dye lot, edit a line). The back button and the dimmed area
@@ -165,5 +166,40 @@ export function PickerField({
         <Ionicons name="chevron-down" size={18} color={colors.mutedForeground} />
       </Pressable>
     </View>
+  );
+}
+
+/** A themed confirmation (the native Alert ignores the app's theme): the question, a destructive confirm, and back. */
+export function ConfirmSheet({
+  visible,
+  title,
+  message,
+  confirmLabel,
+  onConfirm,
+  onCancel,
+}: {
+  visible: boolean;
+  title: string;
+  message: string;
+  confirmLabel: string;
+  onConfirm(): Promise<void> | void;
+  onCancel(): void;
+}) {
+  return (
+    <Sheet
+      visible={visible}
+      title={title}
+      onClose={onCancel}
+      scroll={false}
+      testID="confirm-sheet"
+      footer={
+        <>
+          <Button label={confirmLabel} variant="danger" onPress={onConfirm} testID="confirm-yes" />
+          <Button label="رجوع" variant="ghost" onPress={onCancel} testID="confirm-no" />
+        </>
+      }
+    >
+      <Text>{message}</Text>
+    </Sheet>
   );
 }

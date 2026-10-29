@@ -69,6 +69,9 @@ const screens: Array<[string, () => ReactElement]> = [
     "report page",
     () => (
       <ReportPageView
+        title="ت"
+        loading={false}
+        onRetry={noop}
         page={{ slug: "x", title: "t", figures: [], lines: [], total: 0 }}
         period="all"
         error={null}
@@ -296,7 +299,6 @@ const screens: Array<[string, () => ReactElement]> = [
       <OrderFormView
         customer={{ id: "p", name: "عميل" }}
         items={[{ key: "k", fabricName: "ق", colorName: "ل", requestedKg: 1 }]}
-        busy={false}
         error={null}
         onCustomer={noop}
         onAddItem={noop}
@@ -340,7 +342,6 @@ const screens: Array<[string, () => ReactElement]> = [
           lines: [{ rollId: "r", label: "ق · ل · R1", soldKg: 5, pieces: 1, pricePerKg: 2 }],
         }}
         invoices={[{ id: "i", number: "INV-1", date: "d", total: 1, currency: "USD" }]}
-        busy={false}
         error={null}
         onKind={noop}
         onParty={noop}

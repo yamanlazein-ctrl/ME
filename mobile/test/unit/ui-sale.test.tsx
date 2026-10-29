@@ -158,25 +158,12 @@ describe("invoice detail (T102)", () => {
   it("admin and accountant can cancel, warehouse and viewer cannot", async () => {
     const onCancel = vi.fn();
     await render(
-      <InvoiceDetailView
-        view={view}
-        role="accountant"
-        error={null}
-        onCancel={onCancel}
-        onShare={() => undefined}
-      />,
+      <InvoiceDetailView view={view} role="accountant" error={null} onCancel={onCancel} />,
     );
     await fireEvent.press(screen.getByLabelText("إلغاء الفاتورة"));
+    await fireEvent.press(screen.getByTestId("confirm-yes"));
     expect(onCancel).toHaveBeenCalled();
-    await render(
-      <InvoiceDetailView
-        view={view}
-        role="viewer"
-        error={null}
-        onCancel={onCancel}
-        onShare={() => undefined}
-      />,
-    );
+    await render(<InvoiceDetailView view={view} role="viewer" error={null} onCancel={onCancel} />);
     expect(screen.queryAllByLabelText("إلغاء الفاتورة")).toHaveLength(0);
   });
 });

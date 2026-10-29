@@ -14,7 +14,6 @@ export default function ExpenseScreen() {
   });
   const [names, setNames] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
 
   // Names typed before (the category is the name on the desktop too).
   useEffect(() => {
@@ -31,7 +30,6 @@ export default function ExpenseScreen() {
 
   const save = async () => {
     if (!values.amount) return;
-    setBusy(true);
     setError(null);
     try {
       const app = await getApp();
@@ -54,8 +52,6 @@ export default function ExpenseScreen() {
       router.back();
     } catch (e) {
       setError(e instanceof Error ? e.message : "تعذّر الحفظ");
-    } finally {
-      setBusy(false);
     }
   };
 
@@ -64,9 +60,8 @@ export default function ExpenseScreen() {
       values={values}
       suggestions={suggestions}
       error={error}
-      busy={busy}
       onChange={(patch) => setValues((v) => ({ ...v, ...patch }))}
-      onSave={() => void save()}
+      onSave={save}
     />
   );
 }

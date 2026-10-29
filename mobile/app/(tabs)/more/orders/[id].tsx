@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { ActivityIndicator, Alert } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { useQuery } from "@tanstack/react-query";
 import { getApp } from "../../../../src/core/appRuntime";
@@ -8,6 +7,7 @@ import { canWriteOffline } from "../../../../src/core/roles";
 import { useFinishWrite } from "../../../../src/hooks/useFinishWrite";
 import { useRole } from "../../../../src/hooks/useRole";
 import { OrderDetailView } from "../../../../src/ui/OrderViews";
+import { LoadingState, Screen } from "../../../../src/ui/kit";
 
 export default function OrderScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -26,7 +26,12 @@ export default function OrderScreen() {
       return detail ? { detail, candidates } : null;
     },
   });
-  if (!data) return <ActivityIndicator style={{ flex: 1 }} />;
+  if (!data)
+    return (
+      <Screen title="الطلبية">
+        <LoadingState />
+      </Screen>
+    );
   const run = async (
     action: (
       p: NonNullable<Awaited<ReturnType<typeof getApp>>["phone"]>,
@@ -46,17 +51,8 @@ export default function OrderScreen() {
       canWrite={canWriteOffline(role)}
       candidates={data.candidates}
       error={error}
-      onCancel={() =>
-        Alert.alert("إلغاء الطلبية", `هل تريد إلغاء الطلبية ${data.detail.order.code}؟`, [
-          { text: "رجوع", style: "cancel" },
-          {
-            text: "إلغاء الطلبية",
-            style: "destructive",
-            onPress: () => void run((p) => p.documents.cancelOrder(id, data.detail.order.version)),
-          },
-        ])
-      }
-      onFulfil={(invoiceId) => void run((p) => p.documents.fulfillOrder(id, invoiceId))}
+      onCancel={() => run((p) => p.documents.cancelOrder(id, data.detail.order.version))}
+      onFulfil={(invoiceId) => run((p) => p.documents.fulfillOrder(id, invoiceId))}
     />
   );
 }
