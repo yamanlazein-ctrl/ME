@@ -16,6 +16,11 @@ name: 50 payment to a supplier
     id: "voucher-amount"
 - inputText: "1"
 - hideKeyboard
+# The method chips are below the fold on a small phone (the footer shows the balance after the voucher).
+- scrollUntilVisible:
+    element:
+      id: "voucher-method-transfer"
+    visibilityPercentage: 50
 - tapOn:
     id: "voucher-method-transfer"
 - takeScreenshot: 12-payment
