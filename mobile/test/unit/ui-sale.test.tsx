@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { ScrollView } from "react-native";
 import { fireEvent, render, screen } from "@testing-library/react-native";
 
 vi.mock("../../src/hooks/useParties", () => ({ usePartyList: () => ({ data: [] }) }));
@@ -165,5 +166,21 @@ describe("invoice detail (T102)", () => {
     expect(onCancel).toHaveBeenCalled();
     await render(<InvoiceDetailView view={view} role="viewer" error={null} onCancel={onCancel} />);
     expect(screen.queryAllByLabelText("إلغاء الفاتورة")).toHaveLength(0);
+  });
+
+  it("after a cancel the page scrolls back to the top, where it now says the invoice is cancelled", async () => {
+    const calls = (ScrollView as unknown as { scrollCalls: Array<{ y: number }> }).scrollCalls;
+    const before = calls.length;
+    const v = view as { invoice: Record<string, unknown> };
+    const { rerender } = await render(
+      <InvoiceDetailView view={view} role="admin" error={null} onCancel={vi.fn()} />,
+    );
+    expect(calls.length).toBe(before); // not on first render
+    const cancelled = { ...v, invoice: { ...v.invoice, status: "cancelled" } } as never;
+    await rerender(
+      <InvoiceDetailView view={cancelled} role="admin" error={null} onCancel={vi.fn()} />,
+    );
+    expect(calls.slice(before)).toEqual([{ y: 0, animated: true }]);
+    expect(screen.getByTestId("invoice-cancelled")).toBeTruthy();
   });
 });

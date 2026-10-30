@@ -199,7 +199,7 @@ export function OrderDetailView({
   const o = detail.order;
   const active = isOrderActive(o.status);
   return (
-    <Screen title={`طلبية ${o.code}`} subtitle={o.customerNameSnapshot}>
+    <Screen title={`طلبية ${o.code}`} subtitle={o.customerNameSnapshot} scrollToTopKey={o.status}>
       <Section>
         <KeyValue
           label="الحالة"

@@ -32,6 +32,7 @@ export function InvoiceDetailView({
     <Screen
       title={`${title} ${i.number}`}
       subtitle={`${view.partyName} · ${String(i.date).slice(0, 10)}`}
+      scrollToTopKey={i.status}
     >
       {cancelled ? (
         <Notice kind="warning" text="هذه الفاتورة ملغاة." testID="invoice-cancelled" />

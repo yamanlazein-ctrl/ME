@@ -355,7 +355,12 @@ export function StatementView(p: StatementViewProps) {
     p.period === "custom" &&
     ((p.from !== "" && !DATE_RE.test(p.from)) || (p.to !== "" && !DATE_RE.test(p.to)));
   return (
-    <Screen title="كشف الحساب" subtitle={`${p.partyName} · ${KIND_LABEL[p.kind]}`}>
+    <Screen
+      title="كشف الحساب"
+      subtitle={`${p.partyName} · ${KIND_LABEL[p.kind]}`}
+      // Sharing is the page's action: always in reach, not between the summary and a long list of movements.
+      {...(p.data ? { footer: p.share } : {})}
+    >
       {p.currencies.length > 1 ? (
         <Chips
           options={currencyOptions}
@@ -418,7 +423,6 @@ export function StatementView(p: StatementViewProps) {
               </Section>
             ))
           )}
-          {p.share}
           <Section
             title={`الحركات (${p.data.entries.length})`}
             padded={false}

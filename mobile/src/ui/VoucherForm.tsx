@@ -109,6 +109,12 @@ export function VoucherForm({
     values.party && values.amount
       ? balanceAfter(before, values.amount, values.discount ?? 0, kind)
       : null;
+  const afterText = (v: number) =>
+    `${money(Math.abs(v), values.currency)} ${
+      Math.abs(v) < 0.01
+        ? "متوازن"
+        : balanceSideLabel(v > 0 === (partyKind === "customer") ? "debit" : "credit", partyKind)
+    }`;
   const title = amend
     ? receipt
       ? "تعديل سند قبض"
@@ -130,6 +136,15 @@ export function VoucherForm({
             />
           ) : null}
           {error ? <Notice kind="error" text={error} testID="voucher-error" /> : null}
+          {/* The figure to check before saving: right above the button, never below the fold. */}
+          {values.party && balances && after !== null ? (
+            <KeyValue
+              label="الرصيد بعد السند"
+              strong
+              value={afterText(after)}
+              testID="voucher-balance-after"
+            />
+          ) : null}
         </>
       }
       footer={
@@ -214,21 +229,6 @@ export function VoucherForm({
                 label="قبل السند"
                 value={`${money(Math.abs(before?.balance ?? 0), values.currency)} ${before ? balanceSideLabel(before.side, partyKind) : ""}`.trim()}
               />
-              {after !== null ? (
-                <KeyValue
-                  label="بعد السند"
-                  strong
-                  value={`${money(Math.abs(after), values.currency)} ${
-                    Math.abs(after) < 0.01
-                      ? "متوازن"
-                      : balanceSideLabel(
-                          after > 0 === (partyKind === "customer") ? "debit" : "credit",
-                          partyKind,
-                        )
-                  }`}
-                  testID="voucher-balance-after"
-                />
-              ) : null}
             </>
           ) : (
             <View>

@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
 // The screens only need the party picker's list; the hook itself pulls in native modules.
 vi.mock("../../src/hooks/useParties", () => ({ usePartyList: () => ({ data: [] }) }));
-import { render, screen } from "@testing-library/react-native";
+import { render, screen, within } from "@testing-library/react-native";
 import { withTenantTx } from "@backend/infrastructure/orm/engine";
 import { createPartyUseCase } from "@backend/application/use-cases/parties/partyUseCases";
 import { balanceAfter, emptyVoucher, VoucherForm, voucherProblems } from "../../src/ui/VoucherForm";
@@ -44,6 +44,10 @@ describe("voucher / expense / cashbox screens (US5)", () => {
     expect(screen.queryByLabelText("سعر الصرف (ليرة لكل 1 دولار)")).toBeNull();
     expect(screen.getByLabelText("تحويل بنكي")).toBeTruthy();
     expect(screen.getByText("50.00 USD مدين (على العميل)")).toBeTruthy();
+    // The balance after the voucher sits in the footer, right above the save button (never below the fold).
+    expect(
+      within(screen.getByTestId("screen-footer")).getByTestId("voucher-balance-after"),
+    ).toBeTruthy();
     expect(screen.getByText("30.00 USD مدين (على العميل)")).toBeTruthy();
   });
 

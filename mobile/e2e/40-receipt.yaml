@@ -20,10 +20,9 @@ name: 40 receipt with the balance before and after
     id: "voucher-amount"
 - inputText: "10"
 - hideKeyboard
-- scrollUntilVisible:
-    element:
-      id: "voucher-balance-after"
-    visibilityPercentage: 50
+# The balance after the voucher is in the footer, right above the save button.
+- assertVisible:
+    id: "voucher-balance-after"
 - takeScreenshot: 11-receipt
 - tapOn:
     id: "voucher-save"

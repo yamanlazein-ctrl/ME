@@ -1,7 +1,8 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen } from "@testing-library/react-native";
+import { View } from "react-native";
+import { fireEvent, render, screen, within } from "@testing-library/react-native";
 import {
   STATEMENT_TYPE_LABEL,
   type PartyProfile,
@@ -216,6 +217,11 @@ describe("statement", () => {
     expect(screen.getByText("مرتجع بيع RET-1")).toBeTruthy();
     expect(screen.getByText("دائن 20.00")).toBeTruthy();
     expect(screen.getByText("الرصيد 20.00 USD")).toBeTruthy();
+  });
+
+  it("sharing the statement is in the footer, always in reach (not between the summary and the movements)", async () => {
+    await render(<StatementView {...props} share={<View testID="share-slot" />} />);
+    expect(within(screen.getByTestId("screen-footer")).getByTestId("share-slot")).toBeTruthy();
   });
 
   it("custom dates are checked", async () => {

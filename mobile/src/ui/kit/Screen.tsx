@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { useEffect, useRef, type ComponentRef, type ReactNode } from "react";
 import { Pressable, RefreshControl, ScrollView, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -26,6 +26,11 @@ export interface ScreenProps {
   footerNotice?: ReactNode;
   /** false for screens that render their own FlatList. */
   scroll?: boolean;
+  /**
+   * When this value changes (not on first render) the content scrolls back to the top: after an action at the bottom
+   * of a long page (cancel an invoice) changes what the top says, the user sees it.
+   */
+  scrollToTopKey?: unknown;
   refreshing?: boolean;
   onRefresh?: () => void;
   testID?: string;
@@ -42,6 +47,7 @@ export function Screen({
   footer,
   footerNotice,
   scroll = true,
+  scrollToTopKey,
   refreshing = false,
   onRefresh,
   testID,
@@ -50,8 +56,16 @@ export function Screen({
   const insets = useSafeAreaInsets();
   const slot = useHeaderSlot();
   const showBack = back ?? router.canGoBack();
+  const scrollRef = useRef<ComponentRef<typeof ScrollView>>(null);
+  const lastKey = useRef(scrollToTopKey);
+  useEffect(() => {
+    if (Object.is(lastKey.current, scrollToTopKey)) return;
+    lastKey.current = scrollToTopKey;
+    scrollRef.current?.scrollTo({ y: 0, animated: true });
+  }, [scrollToTopKey]);
   const body = scroll ? (
     <ScrollView
+      ref={scrollRef}
       style={{ flex: 1 }}
       contentContainerStyle={{ padding: spacing.lg, paddingBottom: spacing.xxl, gap: spacing.md }}
       keyboardShouldPersistTaps="handled"
