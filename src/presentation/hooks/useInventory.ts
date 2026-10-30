@@ -488,13 +488,14 @@ export async function updateFabric(
   }
 }
 
-export async function deleteFabric(id: string) {
+/** Resolves true only when the fabric was really deleted (failures are toasted and return false). */
+export async function deleteFabric(id: string): Promise<boolean> {
   try {
     const ok = await container.inventory.repository.deleteFabric(id, ctx);
     if (!ok) {
       // Repository returns false only for a confirmed 404 (fabric missing).
       toast.error("فشل حذف القماش: العنصر غير موجود");
-      return;
+      return false;
     }
     const idx = fabricsCache.findIndex((f) => f.id === id);
     if (idx >= 0) fabricsCache.splice(idx, 1);
@@ -509,17 +510,19 @@ export async function deleteFabric(id: string) {
     }
     notifyInventoryChange();
     toast.success("تم حذف القماش");
+    return true;
   } catch (e) {
     // Keep masters in cache on linked/validation failures — they are still live.
     if (e instanceof ValidationError) {
       toast.error(`فشل حذف القماش: ${e.message}`);
-      return;
+      return false;
     }
     if (e instanceof NotFoundError) {
       toast.error("فشل حذف القماش: العنصر غير موجود");
-      return;
+      return false;
     }
     toast.error(`فشل حذف القماش: ${e instanceof Error ? e.message : "خطأ غير معروف"}`);
+    return false;
   }
 }
 

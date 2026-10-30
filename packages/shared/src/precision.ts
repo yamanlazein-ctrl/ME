@@ -99,3 +99,10 @@ export function normalizeMoney2dp<T extends Record<string, unknown>>(input: T): 
   }
   return out as T;
 }
+
+/**
+ * Money/rounding rules version (BC-2, specs/002-mobile-app R6). Bumped whenever rounding or money
+ * storage rules change. A sync client sends it as `X-Motard-Money-Version`; the hub refuses (426) a
+ * different value so devices with different rounding rules never sync.
+ */
+export const MONEY_RULES_VERSION = 1;

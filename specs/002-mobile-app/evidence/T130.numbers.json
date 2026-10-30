@@ -1,0 +1,9 @@
+{
+  "seedMs": 24547,
+  "partySearchMs": 3,
+  "firstStatementPageMs": 155,
+  "normalStatementMs": 2,
+  "invoiceSaveMs": 51,
+  "invoices": 100000,
+  "parties": 2000
+}

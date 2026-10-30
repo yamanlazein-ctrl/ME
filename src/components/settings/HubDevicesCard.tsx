@@ -4,6 +4,7 @@ import { Ban, Copy, KeyRound, Loader2, RotateCcw } from "lucide-react";
 import { toast } from "sonner";
 import { PageCard } from "@/components/layout/PageCard";
 import { Button } from "@/components/ui/button";
+import { EnrollmentQr } from "@/components/sync/EnrollmentQr";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { hubSync, type HubDevice } from "@/lib/sync-engine";
 import { getRegisteredSyncDeviceId } from "@/lib/sync-device";
@@ -31,6 +32,7 @@ export function HubDevicesCard() {
 
   const devices = useQuery({ queryKey: [...KEY, "list"], queryFn: () => hubSync.devices() });
   const code = useQuery({ queryKey: [...KEY, "code"], queryFn: () => hubSync.enrollmentCode() });
+  const hub = useQuery({ queryKey: [...KEY, "hub-url"], queryFn: () => hubSync.state() });
   const refresh = () => qc.invalidateQueries({ queryKey: KEY });
 
   const newCode = useMutation({
@@ -87,6 +89,7 @@ export function HubDevicesCard() {
             >
               <Copy className="ml-1 h-4 w-4" /> نسخ
             </Button>
+            {hub.data?.url ? <EnrollmentQr hub={hub.data.url} code={current.code} /> : null}
             <span className="text-xs text-muted-foreground">
               صالح حتى {fmt(current.expiresAt)} · استُخدم {current.uses} من {current.maxUses}
             </span>

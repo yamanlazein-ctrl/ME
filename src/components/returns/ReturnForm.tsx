@@ -29,6 +29,8 @@ import { CURRENCIES, formatAmount } from "@/presentation/hooks/useCurrency";
 import {
   useCreateReturn,
   RETURN_REASONS,
+  returnAmount,
+  returnLineAmount,
   type ReturnKind,
   type ReturnReason,
 } from "@/presentation/hooks/useReturns";
@@ -137,7 +139,7 @@ export function ReturnForm({ kind }: { kind: ReturnKind }) {
     return pool;
   };
 
-  const totalAmount = lines.reduce((s, l) => s + l.quantityKg * l.pricePerKg, 0);
+  const totalAmount = returnAmount({ lines });
   const createReturnMut = useCreateReturn();
 
   const save = async () => {
@@ -286,7 +288,7 @@ export function ReturnForm({ kind }: { kind: ReturnKind }) {
                 const r = rollById(l.rollId);
                 const c = r && colorById(r.colorId);
                 const f = c && fabricById(c.fabricId);
-                const lineTotal = l.quantityKg * l.pricePerKg;
+                const lineTotal = returnLineAmount(l);
                 return (
                   <div key={l.id} className="px-3 py-2.5">
                     <div className={LINE_GRID}>

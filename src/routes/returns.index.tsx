@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Link, createFileRoute } from "@tanstack/react-router";
 import { Plus, Printer } from "lucide-react";
 import { useState } from "react";
-import { RETURN_REASONS } from "@/presentation/hooks/useReturns";
+import { RETURN_REASONS, returnAmount } from "@/presentation/hooks/useReturns";
 import { useReturnsList, useCancelReturn } from "@/presentation/hooks/useReturns";
 import { customerById, supplierById } from "@/presentation/hooks/useParties";
 import { formatAmount } from "@/presentation/hooks/useCurrency";
@@ -106,7 +106,7 @@ function ReturnsList() {
                 const party =
                   r.kind === "entry" ? supplierById(r.partyId) : customerById(r.partyId);
                 const totalKg = r.lines.reduce((s, l) => s + l.quantityKg, 0);
-                const totalVal = r.lines.reduce((s, l) => s + l.quantityKg * l.pricePerKg, 0);
+                const totalVal = returnAmount(r);
                 const reason = RETURN_REASONS.find((x) => x.code === r.reason)?.label ?? "—";
                 return (
                   <tr

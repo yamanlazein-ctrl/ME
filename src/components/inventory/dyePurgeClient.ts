@@ -1,4 +1,5 @@
 import { container } from "@/infrastructure/container";
+import { ConflictError } from "@/core/errors/DomainError";
 
 /**
  * Client for the corrective dye (fabric) cascade endpoints.
@@ -60,4 +61,9 @@ export async function purgeDye(
     body: { confirmation: confirmation.trim(), ...(reason ? { reason } : {}) },
   });
   return res.data;
+}
+
+/** The server refuses a purge on an enrolled device (409 `SYNC_DEVICES_ENROLLED`, hub-only). */
+export function isHubOnlyPurgeError(err: unknown): boolean {
+  return err instanceof ConflictError && err.serverCode === "SYNC_DEVICES_ENROLLED";
 }

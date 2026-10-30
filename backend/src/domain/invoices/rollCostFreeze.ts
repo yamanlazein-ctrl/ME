@@ -1,3 +1,4 @@
+import { round4dp } from "@erp/shared";
 import { BusinessRuleError } from "../errors/index.js";
 
 /**
@@ -28,8 +29,8 @@ export function assertRollPriceEditAllowed(params: {
 }): void {
   const { rollNo, initialKg, remainingKg, currentPricePerKg, newPricePerKg } = params;
   const hasSoldStock = remainingKg < initialKg;
-  const priceActuallyChanges =
-    Math.round(currentPricePerKg * 100) !== Math.round(newPricePerKg * 100);
+  // rolls.price_per_kg carries 4 decimals, so compare at 4 (a 2-decimal compare let 4.5 → 4.504 through).
+  const priceActuallyChanges = round4dp(currentPricePerKg) !== round4dp(newPricePerKg);
   if (hasSoldStock && priceActuallyChanges) {
     throw new BusinessRuleError(
       `لا يمكن تعديل سعر تكلفة اللفافة ${rollNo} بعد بيع جزء من مخزونها — التكلفة التاريخية مجمّدة في الفواتير والدفاتر المحاسبية بالفعل. أنشئ لفافة جديدة بالسعر الصحيح بدلاً من ذلك.`,

@@ -1,0 +1,19 @@
+# Sub-flow: opens one report from the Reports menu, checks it shows no error, and goes back.
+appId: com.motard.erp
+---
+- scrollUntilVisible:
+    element: ${TITLE}
+- tapOn: ${TITLE}
+- extendedWaitUntil:
+    visible:
+      id: "screen-title"
+    timeout: 30000
+- extendedWaitUntil:
+    notVisible:
+      id: "state-loading"
+    timeout: 60000
+- assertNotVisible:
+    id: "state-error"
+- takeScreenshot: ${SHOT}
+- tapOn:
+    id: "screen-back"

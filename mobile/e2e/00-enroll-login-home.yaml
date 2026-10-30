@@ -1,0 +1,132 @@
+# Enrolment, the first download, PIN sign-in and Home. Everything later depends on the state this flow leaves behind.
+appId: com.motard.erp
+name: 00 enroll, first download, sign in, Home
+---
+- launchApp:
+    clearState: true
+    permissions: { all: allow }
+- extendedWaitUntil:
+    visible: "ربط الهاتف بالمركز"
+    timeout: 90000
+- takeScreenshot: 01-enroll
+# QR scanner: opens, shows the frame and hint, and cancel returns to the form.
+- tapOn: "مسح رمز QR"
+- extendedWaitUntil:
+    visible:
+      id: "scan-cancel"
+    timeout: 30000
+- assertVisible:
+    id: "scan-frame"
+- takeScreenshot: 01b-scanner
+- tapOn:
+    id: "scan-cancel"
+- assertVisible: "ربط الهاتف بالمركز"
+# An address that is not a server address is refused before any network call.
+- tapOn:
+    id: "hub"
+- inputText: "hello"
+- hideKeyboard
+- tapOn:
+    id: "code"
+- inputText: SOME-CODE-0000
+- hideKeyboard
+- tapOn:
+    id: "enroll-submit"
+- extendedWaitUntil:
+    visible: "عنوان المركز غير صالح.*"
+    timeout: 20000
+- takeScreenshot: 01e-invalid-url
+# Unreachable hub: the phone keeps trying to wake it (a sleeping cloud server), then says it cannot reach it.
+- launchApp:
+    clearState: true
+    permissions: { all: allow }
+- extendedWaitUntil:
+    visible: "ربط الهاتف بالمركز"
+    timeout: 90000
+- tapOn:
+    id: "hub"
+- inputText: http://10.0.2.2:9
+- hideKeyboard
+- tapOn:
+    id: "code"
+- inputText: SOME-CODE-0000
+- hideKeyboard
+- tapOn:
+    id: "enroll-submit"
+- extendedWaitUntil:
+    visible: "تعذّر الوصول إلى المركز.*"
+    timeout: 150000
+- takeScreenshot: 01d-unreachable-hub
+# Wrong code on the real hub: the hub's own refusal text.
+- launchApp:
+    clearState: true
+    permissions: { all: allow }
+- extendedWaitUntil:
+    visible: "ربط الهاتف بالمركز"
+    timeout: 90000
+- tapOn:
+    id: "hub"
+- inputText: ${HUB}
+- hideKeyboard
+- tapOn:
+    id: "code"
+- inputText: WRONG-CODE-0000
+- hideKeyboard
+- tapOn:
+    id: "enroll-submit"
+- extendedWaitUntil:
+    visible: "رمز التسجيل غير صحيح.*"
+    timeout: 90000
+- takeScreenshot: 01c-wrong-code
+# The right hub and code.
+- launchApp:
+    clearState: true
+    permissions: { all: allow }
+- extendedWaitUntil:
+    visible: "ربط الهاتف بالمركز"
+    timeout: 90000
+- tapOn:
+    id: "hub"
+- inputText: ${HUB}
+- hideKeyboard
+- tapOn:
+    id: "code"
+- inputText: ${CODE}
+- hideKeyboard
+- tapOn:
+    id: "enroll-submit"
+- extendedWaitUntil:
+    visible: "اختر اسمك"
+    timeout: 300000
+- assertNotVisible:
+    id: "enroll-error"
+- takeScreenshot: 02-login-users
+# Both users are listed; the one without a PIN is marked.
+- assertVisible: "ليلى المحاسبة"
+- assertVisible: "يحتاج رقماً سرياً"
+- tapOn: "AC-8 Admin"
+- assertVisible: "أدخل رقمك السري.*"
+# A wrong PIN is named as such.
+- tapOn: "9"
+- tapOn: "9"
+- tapOn: "9"
+- tapOn: "8"
+- tapOn: "✓"
+- extendedWaitUntil:
+    visible: "الرقم السري غير صحيح"
+    timeout: 60000
+- takeScreenshot: 02b-wrong-pin
+- tapOn: "1"
+- tapOn: "2"
+- tapOn: "3"
+- tapOn: "4"
+- takeScreenshot: 02c-login-pin
+- tapOn: "✓"
+- extendedWaitUntil:
+    visible: "مبيعات اليوم"
+    timeout: 60000
+- assertNotVisible:
+    id: "state-error"
+- assertNotVisible:
+    id: "boot-error"
+- takeScreenshot: 03-home

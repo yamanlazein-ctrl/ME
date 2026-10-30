@@ -36,7 +36,7 @@ import {
 } from "@/components/inventory/ConfirmDelete";
 import { DyePurgeDialog } from "@/components/inventory/DyePurgeDialog";
 import { ColorDeleteDialog } from "@/components/inventory/ColorDeleteDialog";
-import { purgeDye, CONFIRM_WORD } from "@/components/inventory/dyePurgeClient";
+import { planBulkDelete } from "@/components/inventory/bulkDelete";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { DataPagination } from "@/components/common/DataPagination";
@@ -57,7 +57,14 @@ function InventoryPage() {
   // vouchers and the cashbox), so it gets its own corrective-purge dialog with a
   // dry-run impact sheet instead of the generic one-tap confirm used for colors
   // and rolls.
-  const [purgeTarget, setPurgeTarget] = useState<{ id: string; name: string } | null>(null);
+  // Fabrics waiting for the corrective-delete dialog; the first one is the one on screen.
+  const [purgeQueue, setPurgeQueue] = useState<{ id: string; name: string }[]>([]);
+  const [purgeTotal, setPurgeTotal] = useState(0);
+  const purgeTarget = purgeQueue[0] ?? null;
+  const setPurgeTarget = (t: { id: string; name: string } | null) => {
+    setPurgeQueue(t ? [t] : []);
+    setPurgeTotal(t ? 1 : 0);
+  };
   const [colorDeleteTarget, setColorDeleteTarget] = useState<{ id: string; name: string } | null>(
     null,
   );
@@ -147,33 +154,6 @@ function InventoryPage() {
     });
   };
 
-  /**
-   * Bulk delete of fabrics must run the same corrective purge as the single-item
-   * path, one fabric at a time and sequentially: each purge is its own server
-   * transaction (they cannot be batched, and batching would hide a partial
-   * failure), and running them in parallel would interleave the cashbox rebuilds
-   * for the same currencies. Sequentially, a failure stops the run and reports
-   * which fabric stopped it, rather than silently skipping the rest.
-   */
-  const purgeFabricsSequentially = async (
-    ids: string[],
-    nameOf: (id: string) => string,
-  ): Promise<void> => {
-    for (const id of ids) {
-      try {
-        await purgeDye(id, CONFIRM_WORD, "حذف متعدد من صفحة المخزون");
-      } catch (e) {
-        toast.error(
-          `تعذّر الحذف التصحيحي لـ«${nameOf(id)}»، وتم التراجع عنه. ${
-            e instanceof Error ? e.message : "خطأ غير معروف"
-          }`,
-        );
-        return;
-      }
-    }
-    toast.success(`تم حذف ${ids.length} صبغة وتصحيح تبعاتها المالية.`);
-  };
-
   const requestBulkDelete = () => {
     if (selectionCount === 0) return;
     setToDelete({ kind: "bulk", items: selectedItems });
@@ -182,43 +162,18 @@ function InventoryPage() {
   const handleDelete = () => {
     if (!toDelete) return;
     if (toDelete.kind === "bulk") {
-      const items = toDelete.items;
-      const fabricIds = items.filter((i) => i.kind === "fabric").map((i) => i.id);
-      const fabricSet = new Set(fabricIds);
-
-      // Skip colors already covered by a selected fabric (the fabric delete cascades).
-      const colorIds = items
-        .filter((i) => i.kind === "color")
-        .map((i) => {
-          const c = colorById(i.id);
-          return c && fabricSet.has(c.fabricId) ? null : i.id;
-        })
-        .filter((x): x is string => x !== null);
-      const colorSet = new Set(colorIds);
-
-      // Skip rolls already covered by a selected fabric or color (cascade).
-      const rollIds = items
-        .filter((i) => i.kind === "roll")
-        .map((i) => {
-          const r = rollById(i.id);
-          if (!r) return i.id;
-          const c = colorById(r.colorId);
-          if (c && fabricSet.has(c.fabricId)) return null;
-          if (c && colorSet.has(c.id)) return null;
-          return i.id;
-        })
-        .filter((x): x is string => x !== null);
-
-      // Fabrics go through the corrective purge (financial cascade), NOT the
-      // plain delete — the same path the single-row button uses.
-      if (fabricIds.length > 0) {
-        void purgeFabricsSequentially(
-          fabricIds,
-          (id) => items.find((i) => i.id === id)?.name ?? id,
-        ).then(() => refreshInventory());
+      const plan = planBulkDelete(toDelete.items, {
+        colorFabricId: (id) => colorById(id)?.fabricId,
+        rollColorId: (id) => rollById(id)?.colorId,
+      });
+      // Fabrics are never purged from here: each goes through DyePurgeDialog (impact sheet, typed
+      // confirmation, hub-only guidance), one after the other.
+      if (plan.fabrics.length > 0) {
+        setPurgeQueue(plan.fabrics);
+        setPurgeTotal(plan.fabrics.length);
       }
-      if (colorIds.length > 0) void deleteColors(colorIds);
-      if (rollIds.length > 0) void deleteRolls(rollIds);
+      if (plan.colorIds.length > 0) void deleteColors(plan.colorIds);
+      if (plan.rollIds.length > 0) void deleteRolls(plan.rollIds);
       setToDelete(null);
       exitSelectMode();
       return;
@@ -443,10 +398,20 @@ function InventoryPage() {
       />
       <DyePurgeDialog
         fabricId={purgeTarget?.id ?? null}
-        fabricName={purgeTarget?.name ?? null}
+        fabricName={
+          purgeTarget
+            ? purgeTotal > 1
+              ? `${purgeTarget.name} (${purgeTotal - purgeQueue.length + 1} من ${purgeTotal})`
+              : purgeTarget.name
+            : null
+        }
         open={purgeTarget !== null}
         onOpenChange={(open) => {
-          if (!open) setPurgeTarget(null);
+          // Closing (done or cancelled) moves on to the next queued fabric, if any.
+          if (!open) {
+            setPurgeQueue((q) => q.slice(1));
+            void refreshInventory();
+          }
         }}
       />
       <ColorDeleteDialog

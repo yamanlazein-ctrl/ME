@@ -1,0 +1,12 @@
+appId: com.motard.erp
+name: 80 Home after the writes
+---
+- launchApp
+- runFlow: unlock.yaml
+- assertVisible: "مبيعات اليوم"
+- assertVisible: "الصندوق"
+- scrollUntilVisible:
+    element: "الذمم"
+- assertNotVisible:
+    id: "state-error"
+- takeScreenshot: 20-home-after

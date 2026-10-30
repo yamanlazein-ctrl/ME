@@ -1,0 +1,31 @@
+appId: com.motard.erp
+name: 20 cashbox and a manual movement
+---
+- launchApp
+- runFlow: unlock.yaml
+- tapOn:
+    id: "tab-more"
+- tapOn:
+    id: "more-cashbox"
+- assertNotVisible: ".*تعذّر.*"
+- takeScreenshot: 06-cashbox
+- scrollUntilVisible:
+    element: "حركة يدوية"
+- scrollUntilVisible:
+    element:
+      id: "cashbox-amount"
+    centerElement: true
+- tapOn:
+    id: "cashbox-amount"
+- inputText: "5"
+- hideKeyboard
+- scrollUntilVisible:
+    element: "إضافة الحركة"
+    visibilityPercentage: 50
+- tapOn: "إضافة الحركة"
+- extendedWaitUntil:
+    visible: "أُضيفت الحركة.*"
+    timeout: 30000
+- assertNotVisible:
+    id: "cashbox-error"
+- takeScreenshot: 06b-cashbox-movement

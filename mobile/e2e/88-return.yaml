@@ -1,0 +1,49 @@
+appId: com.motard.erp
+name: 88 sale return against a source invoice, then cancel it
+---
+- launchApp
+- runFlow: unlock.yaml
+- tapOn:
+    id: "tab-add"
+- tapOn:
+    id: "add-return"
+- tapOn:
+    id: "party-picker"
+- tapOn:
+    id: "party-option"
+- extendedWaitUntil:
+    visible:
+      id: "source-invoice"
+    timeout: 30000
+- takeScreenshot: 80-return-invoices
+- tapOn:
+    id: "source-invoice"
+- scrollUntilVisible:
+    element:
+      id: "ret-kg-.*"
+    centerElement: true
+- tapOn:
+    id: "ret-kg-.*"
+- inputText: "0.1"
+- hideKeyboard
+- takeScreenshot: 81-return-line
+- tapOn:
+    id: "return-save"
+- extendedWaitUntil:
+    visible:
+      id: "return-row"
+    timeout: 60000
+- assertNotVisible:
+    id: "return-error"
+- takeScreenshot: 82-return-list
+- tapOn:
+    id: "return-row"
+- tapOn: "إلغاء المرتجع .*"
+- tapOn:
+    id: "confirm-yes"
+- extendedWaitUntil:
+    visible: "ملغى"
+    timeout: 60000
+- assertNotVisible:
+    id: "returns-error"
+- takeScreenshot: 83-return-cancelled

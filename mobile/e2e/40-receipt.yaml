@@ -1,0 +1,37 @@
+appId: com.motard.erp
+name: 40 receipt with the balance before and after
+---
+- launchApp
+- runFlow: unlock.yaml
+- tapOn:
+    id: "tab-add"
+- tapOn:
+    id: "add-receipt"
+# Saving without a party or amount names what is missing.
+- tapOn:
+    id: "voucher-save"
+- assertVisible:
+    id: "voucher-problems"
+- tapOn:
+    id: "party-picker"
+- tapOn:
+    id: "party-option"
+- tapOn:
+    id: "voucher-amount"
+- inputText: "10"
+- hideKeyboard
+# The balance after the voucher is in the footer, right above the save button.
+- assertVisible:
+    id: "voucher-balance-after"
+- takeScreenshot: 11-receipt
+- tapOn:
+    id: "voucher-save"
+- extendedWaitUntil:
+    visible:
+      id: "doc-done"
+    timeout: 30000
+- assertNotVisible:
+    id: "voucher-error"
+- assertVisible:
+    id: "share-pdf"
+- takeScreenshot: 13-receipt-done

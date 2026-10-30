@@ -1,0 +1,62 @@
+appId: com.motard.erp
+name: 15 every tab and every entry of the Add menu opens without an error
+---
+- launchApp
+- runFlow: unlock.yaml
+- tapOn:
+    id: "tab-inventory"
+- assertVisible:
+    id: "stock-search"
+- assertNotVisible:
+    id: "state-error"
+- takeScreenshot: 30-inventory-tab
+- tapOn:
+    id: "tab-parties"
+- assertVisible:
+    id: "party-search"
+- takeScreenshot: 30b-parties-tab
+- tapOn:
+    id: "tab-add"
+- assertVisible: "فاتورة بيع"
+- assertVisible: "فاتورة دخول"
+- assertVisible: "مرتجع"
+- assertVisible: "سند قبض"
+- assertVisible: "سند صرف"
+- assertVisible: "مصروف"
+- takeScreenshot: 31-add-menu
+- tapOn:
+    id: "add-receipt"
+- assertVisible: "استلام مال من عميل"
+- tapOn:
+    id: "screen-back"
+- tapOn:
+    id: "add-payment"
+- assertVisible: "دفع مال إلى مورد"
+- tapOn:
+    id: "screen-back"
+- tapOn:
+    id: "add-expense"
+- assertVisible: "يُدفع من الصندوق"
+- tapOn:
+    id: "screen-back"
+- tapOn:
+    id: "add-sale"
+- assertVisible:
+    id: "sale-save"
+- tapOn:
+    id: "screen-back"
+- tapOn:
+    id: "add-entry"
+- assertVisible:
+    id: "entry-save"
+- tapOn:
+    id: "screen-back"
+- tapOn:
+    id: "add-return"
+- assertVisible:
+    id: "return-save"
+- tapOn:
+    id: "screen-back"
+- tapOn:
+    id: "tab-index"
+- assertVisible: "مبيعات اليوم"

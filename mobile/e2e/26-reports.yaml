@@ -1,0 +1,87 @@
+appId: com.motard.erp
+name: 26 every report
+---
+- launchApp
+- runFlow: unlock.yaml
+- tapOn:
+    id: "tab-more"
+- tapOn:
+    id: "more-reports"
+- runFlow:
+    file: report-open.yaml
+    env:
+      TITLE: "نظرة عامة"
+      SHOT: 50-report-summary
+- runFlow:
+    file: report-open.yaml
+    env:
+      TITLE: "الأرباح"
+      SHOT: 51-report-profit
+- runFlow:
+    file: report-open.yaml
+    env:
+      TITLE: "أرصدة العملاء"
+      SHOT: 52-report-customers
+- runFlow:
+    file: report-open.yaml
+    env:
+      TITLE: "أرصدة الموردين"
+      SHOT: 53-report-suppliers
+- runFlow:
+    file: report-open.yaml
+    env:
+      TITLE: "المبيعات"
+      SHOT: 54-report-sales
+- runFlow:
+    file: report-open.yaml
+    env:
+      TITLE: "المشتريات"
+      SHOT: 55-report-purchases
+- runFlow:
+    file: report-open.yaml
+    env:
+      TITLE: "مرتجعات المبيعات"
+      SHOT: 56-report-returns
+- runFlow:
+    file: report-open.yaml
+    env:
+      TITLE: "المصروفات"
+      SHOT: 57-report-expenses
+- runFlow:
+    file: report-open.yaml
+    env:
+      TITLE: "دفتر القيود"
+      SHOT: 58-report-ledger
+- runFlow:
+    file: report-open.yaml
+    env:
+      TITLE: "قيمة المخزون"
+      SHOT: 59-report-inventory
+- runFlow:
+    file: report-open.yaml
+    env:
+      TITLE: "أكثر الأقمشة مبيعاً"
+      SHOT: 60-report-top-fabrics
+- runFlow:
+    file: report-open.yaml
+    env:
+      TITLE: "أفضل العملاء"
+      SHOT: 61-report-top-customers
+# Period chips change the figures without an error.
+- scrollUntilVisible:
+    element: "نظرة عامة"
+    direction: UP
+- tapOn: "نظرة عامة"
+- extendedWaitUntil:
+    visible:
+      id: "screen-title"
+    timeout: 30000
+- tapOn:
+    id: "period-month"
+- assertNotVisible:
+    id: "state-error"
+- tapOn:
+    id: "period-year"
+- assertNotVisible:
+    id: "state-error"
+- takeScreenshot: 62-report-period

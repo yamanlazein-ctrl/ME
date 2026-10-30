@@ -1,0 +1,97 @@
+appId: com.motard.erp
+name: 87 purchase invoice with a new fabric and colour
+---
+- launchApp
+- runFlow: unlock.yaml
+- tapOn:
+    id: "tab-add"
+- tapOn:
+    id: "add-entry"
+- tapOn:
+    id: "party-picker"
+- tapOn:
+    id: "party-option"
+- takeScreenshot: 70-entry-supplier
+- tapOn:
+    id: "entry-add-line"
+- tapOn:
+    id: "entry-fabric"
+- inputText: Newfab
+- hideKeyboard
+- assertVisible: "قماش جديد — يُنشأ مع الفاتورة"
+- tapOn:
+    id: "entry-color"
+- inputText: Newcolor
+- hideKeyboard
+- scrollUntilVisible:
+    element:
+      id: "entry-kg"
+    visibilityPercentage: 50
+- tapOn:
+    id: "entry-kg"
+- inputText: "12"
+- hideKeyboard
+- scrollUntilVisible:
+    element:
+      id: "entry-pieces"
+    visibilityPercentage: 50
+- tapOn:
+    id: "entry-pieces"
+- inputText: "2"
+- hideKeyboard
+- scrollUntilVisible:
+    element:
+      id: "entry-price"
+    visibilityPercentage: 50
+- tapOn:
+    id: "entry-price"
+- inputText: "3"
+- hideKeyboard
+- takeScreenshot: 71-entry-line-form
+- tapOn:
+    id: "entry-line-save"
+- assertVisible: "Newfab · Newcolor"
+- assertVisible:
+    id: "entry-total"
+- takeScreenshot: 72-entry-form
+- tapOn:
+    id: "entry-save"
+- extendedWaitUntil:
+    visible:
+      id: "doc-done"
+    timeout: 60000
+- assertNotVisible:
+    id: "entry-error"
+- takeScreenshot: 74-entry-done
+- tapOn: "عرض المستند"
+- extendedWaitUntil:
+    visible: "البنود.*"
+    timeout: 30000
+- takeScreenshot: 75-entry-invoice
+# The supplier's page lists it and its statement has the «فاتورة دخول» line.
+- scrollUntilVisible:
+    element: "المورد"
+    direction: UP
+- tapOn: "المورد"
+- assertVisible:
+    id: "party-balances"
+- assertVisible: "فاتورة دخول .*"
+- tapOn:
+    id: "party-statement"
+- extendedWaitUntil:
+    visible:
+      id: "statement-closing"
+    timeout: 30000
+- scrollUntilVisible:
+    element: "فاتورة دخول .*"
+- takeScreenshot: 75b-supplier-statement
+# The new fabric is in the inventory with its 12 kg.
+- tapOn:
+    id: "tab-inventory"
+- tapOn:
+    id: "stock-search"
+- inputText: Newfab
+- hideKeyboard
+- assertVisible: "Newfab"
+- assertVisible: "12.00 كغ"
+- takeScreenshot: 76-entry-stock

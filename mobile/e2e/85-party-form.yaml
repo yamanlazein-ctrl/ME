@@ -1,0 +1,57 @@
+appId: com.motard.erp
+name: 85 new customer, duplicate name, search by name and phone
+---
+- launchApp
+- runFlow: unlock.yaml
+- evalScript: ${output.stamp = String(Date.now()).slice(-7)}
+- tapOn:
+    id: "tab-parties"
+- tapOn:
+    id: "party-new"
+- assertVisible: "عميل جديد"
+- takeScreenshot: 33-party-form
+- tapOn:
+    id: "party-name"
+- inputText: Zed ${output.stamp}
+- hideKeyboard
+- tapOn:
+    id: "party-phone"
+- inputText: "0933${output.stamp}"
+- hideKeyboard
+- tapOn:
+    id: "party-save"
+- assertNotVisible:
+    id: "party-form-error"
+- extendedWaitUntil:
+    visible: "Zed ${output.stamp}"
+    timeout: 30000
+- takeScreenshot: 34-party-created
+# The same name again is refused with the duplicate-name text (not the generic "unexpected error").
+- tapOn:
+    id: "party-new"
+- tapOn:
+    id: "party-name"
+- inputText: Zed ${output.stamp}
+- hideKeyboard
+- tapOn:
+    id: "party-save"
+- extendedWaitUntil:
+    visible: "اسم العميل/المورد مستخدم مسبقاً.*"
+    timeout: 30000
+- assertNotVisible: ".*خطأ غير متوقع.*"
+- takeScreenshot: 35-party-duplicate
+- tapOn:
+    id: "screen-back"
+# Search by name, then by phone digits.
+- tapOn:
+    id: "party-search"
+- inputText: Zed ${output.stamp}
+- assertVisible: "Zed ${output.stamp}"
+- takeScreenshot: 36-party-search-hit
+- tapOn: "مسح البحث"
+- tapOn:
+    id: "party-search"
+- inputText: "933${output.stamp}"
+- hideKeyboard
+- assertVisible: "Zed ${output.stamp}"
+- takeScreenshot: 36b-party-search-phone

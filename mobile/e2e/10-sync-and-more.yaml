@@ -1,0 +1,28 @@
+appId: com.motard.erp
+name: 10 the More tab and the sync status
+---
+- launchApp
+- runFlow: unlock.yaml
+- tapOn:
+    id: "tab-more"
+- assertVisible: "المرتجعات"
+- assertVisible: "الطلبيات"
+- assertVisible: "الصندوق"
+- assertVisible: "إقفال اليوم"
+- assertVisible: "التقارير"
+- takeScreenshot: 04-more
+- scrollUntilVisible:
+    element:
+      id: "fonts-status"
+- assertVisible: "الخطوط والأيقونات: محمّلة"
+- tapOn:
+    id: "more-sync"
+- assertVisible: "حالة المزامنة"
+- assertVisible: "بانتظار الإرسال.*"
+- assertNotVisible: "آخر تشغيل: —"
+- assertNotVisible:
+    id: "last-error"
+- takeScreenshot: 05-sync-status
+- tapOn:
+    id: "screen-back"
+- assertVisible: "المزيد"

@@ -89,6 +89,7 @@ beforeAll(async () => {
     {
       readGuard: pass,
       transportGuard: pass,
+      syncVersionGuard: pass,
       numberingGuard: pass,
       conflictGuard: pass,
       operatorGuard: pass,

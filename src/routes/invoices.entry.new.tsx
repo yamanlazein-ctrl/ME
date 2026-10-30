@@ -22,6 +22,8 @@ import {
   rollById,
   useInventory,
 } from "@/presentation/hooks/useInventory";
+import type { Roll } from "@/domain/entities/Roll";
+import { lastEntryPrice } from "@/components/invoices/entryPriceReference";
 import { resolveColorPick } from "@/domain/inventory/colorLookup";
 import { normalizeInventoryName } from "@/domain/inventory/normalizeInventoryName";
 import { supplierById } from "@/presentation/hooks/useParties";
@@ -125,6 +127,29 @@ function EntryInvoicePage() {
   // the edit-prefill repair effect below can re-resolve names when the cache
   // arrives AFTER the invoice data (the async-load race).
   const inventory = useInventory();
+  // Last entry price per colour / fabric, computed once per inventory change (not per keystroke).
+  const lastPriceFor = useMemo(() => {
+    const byColor = new Map<string, Roll[]>();
+    for (const r of inventory.rolls) {
+      const list = byColor.get(r.colorId);
+      if (list) list.push(r);
+      else byColor.set(r.colorId, [r]);
+    }
+    const memo = new Map<string, ReturnType<typeof lastEntryPrice>>();
+    return (colorId?: string, fabricId?: string) => {
+      const key = colorId ? `c:${colorId}` : fabricId ? `f:${fabricId}` : "";
+      if (!key) return null;
+      if (!memo.has(key)) {
+        const rolls = colorId
+          ? (byColor.get(colorId) ?? [])
+          : inventory.colors
+              .filter((c) => c.fabricId === fabricId)
+              .flatMap((c) => byColor.get(c.id) ?? []);
+        memo.set(key, lastEntryPrice(rolls));
+      }
+      return memo.get(key) ?? null;
+    };
+  }, [inventory]);
   const navigate = useNavigate();
   const create = useCreateInvoice();
   const update = useUpdateInvoice({ silent: true });
@@ -1392,6 +1417,37 @@ function EntryInvoicePage() {
                             placeholder="0"
                             ariaLabel="سعر الوحدة"
                           />
+                          {(() => {
+                            // Suggestion only — read from the local inventory cache (works offline);
+                            // the price field is never written or locked by it.
+                            const last = lastPriceFor(l.existingColorId, l.existingFabricId);
+                            if (!last) return null;
+                            // A price in another currency is shown for reference only: filling it
+                            // would put e.g. 4.75 $ into an SYP price field (no FX guess).
+                            if (last.currency !== currency) {
+                              return (
+                                <span
+                                  data-testid="last-entry-price-other-currency"
+                                  className="mt-1 inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground tabular-nums"
+                                  title={`آخر سعر دخول بتاريخ ${last.entryDate} بعملة مختلفة عن عملة الفاتورة`}
+                                >
+                                  آخر سعر: {last.pricePerKg} {currencySymbol(last.currency)}
+                                </span>
+                              );
+                            }
+                            if (last.pricePerKg === l.pricePerKg) return null;
+                            return (
+                              <button
+                                type="button"
+                                data-testid="last-entry-price"
+                                title={`آخر سعر دخول بتاريخ ${last.entryDate} — اضغط للاستخدام`}
+                                onClick={() => updateLine(l.id, { pricePerKg: last.pricePerKg })}
+                                className="mt-1 inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground tabular-nums hover:bg-accent"
+                              >
+                                آخر سعر: {last.pricePerKg} {currencySymbol(last.currency)}
+                              </button>
+                            );
+                          })()}
                         </CardField>
                         <CardField label="الخصم">
                           <FormattedAmountInput

@@ -1,0 +1,67 @@
+appId: com.motard.erp
+name: 25 inventory search, filters, fabric, colour, dye lot, movements
+---
+- launchApp
+- runFlow: unlock.yaml
+- tapOn:
+    id: "tab-inventory"
+- assertVisible: "قطن تجريبي"
+- assertNotVisible:
+    id: "state-error"
+- takeScreenshot: 40-inventory
+# Search by colour code finds the fabric; by lot number shows the lot directly.
+- tapOn:
+    id: "stock-search"
+- inputText: "WHT"
+- hideKeyboard
+- assertVisible: "قطن تجريبي"
+- takeScreenshot: 40b-search-colour-code
+# Into the fabric and back: the search is still there (the list kept its context).
+- tapOn: "قطن تجريبي"
+- assertVisible:
+    id: "fabric-summary"
+- tapOn:
+    id: "screen-back"
+- assertVisible: "WHT"
+- assertVisible: "قطن تجريبي"
+- tapOn: "مسح البحث"
+- tapOn:
+    id: "stock-search"
+- inputText: "SEED"
+- hideKeyboard
+- extendedWaitUntil:
+    visible: "صبغات مطابقة"
+    timeout: 20000
+- takeScreenshot: 40c-search-lot
+- tapOn: "مسح البحث"
+# Filters.
+- tapOn:
+    id: "stock-filter-inStock"
+- assertVisible: "قطن تجريبي"
+- tapOn:
+    id: "stock-filter-out"
+- assertNotVisible: "قطن تجريبي"
+- takeScreenshot: 40d-filter-out
+- tapOn:
+    id: "stock-filter-all"
+- tapOn: "قطن تجريبي"
+- assertVisible:
+    id: "fabric-summary"
+- assertVisible: "الكمية المتبقية"
+- takeScreenshot: 41-fabric
+- tapOn:
+    id: "color-row"
+- assertVisible: "صبغة SEED-.*"
+- takeScreenshot: 42-color-lots
+- tapOn: "صبغة SEED-.*"
+- assertVisible:
+    id: "lot-remaining"
+- assertVisible: "الكمية الأصلية"
+- assertVisible: "الخارج من الصبغة"
+- scrollUntilVisible:
+    element:
+      id: "lot-movements"
+- assertVisible: "حركات المخزون.*"
+- assertNotVisible:
+    id: "state-error"
+- takeScreenshot: 43-lot-detail
