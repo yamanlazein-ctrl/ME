@@ -21,7 +21,7 @@ name: 20 cashbox and a manual movement
 - hideKeyboard
 - scrollUntilVisible:
     element: "إضافة الحركة"
-    centerElement: true
+    visibilityPercentage: 50
 - tapOn: "إضافة الحركة"
 - extendedWaitUntil:
     visible: "أُضيفت الحركة.*"

@@ -40,10 +40,18 @@ name: 30 customers and suppliers, party page, statement by period
     visible:
       id: "statement-closing"
     timeout: 30000
+# The movements follow the period chips and the summary: below the fold on a small phone.
+- scrollUntilVisible:
+    element: "الحركات \\([0-9]+\\)"
+    visibilityPercentage: 50
 - assertVisible: "الحركات \\([0-9]+\\)"
 - assertVisible: "فاتورة بيع .*"
 - takeScreenshot: 09-statement
 # A period with no movements is said plainly; back to all periods.
+- scrollUntilVisible:
+    element:
+      id: "statement-period-lastMonth"
+    direction: UP
 - tapOn:
     id: "statement-period-lastMonth"
 - assertNotVisible:
@@ -66,11 +74,20 @@ name: 30 customers and suppliers, party page, statement by period
 # Back: the same statement, same period; back again: the party page; the tab returns to the list.
 - tapOn:
     id: "screen-back"
-- assertVisible:
-    id: "statement-closing"
+# Back on the statement where the user left it (scrolled down to the line); up to the period and closing.
+- scrollUntilVisible:
+    element:
+      id: "statement-period-all"
+    direction: UP
 - assertVisible:
     id: "statement-period-all"
     selected: true
+- scrollUntilVisible:
+    element:
+      id: "statement-closing"
+    visibilityPercentage: 50
+- assertVisible:
+    id: "statement-closing"
 - tapOn:
     id: "screen-back"
 - assertVisible:

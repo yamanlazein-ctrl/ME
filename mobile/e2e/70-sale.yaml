@@ -80,6 +80,7 @@ name: 70 sale on one screen, invoice page, share PDF, cancel
 - scrollUntilVisible:
     element:
       id: "share-pdf"
+    visibilityPercentage: 50
 - tapOn:
     id: "share-pdf"
 - extendedWaitUntil:
@@ -92,9 +93,11 @@ name: 70 sale on one screen, invoice page, share PDF, cancel
     timeout: 20000
 - takeScreenshot: 20-share-sheet
 - pressKey: Back
-- extendedWaitUntil:
-    visible:
+# The result line sits under the share button, below the fold on a small phone.
+- scrollUntilVisible:
+    element:
       id: "share-result"
+    visibilityPercentage: 50
     timeout: 30000
 - assertVisible: "فُتحت نافذة المشاركة.*"
 - takeScreenshot: 20b-share-result

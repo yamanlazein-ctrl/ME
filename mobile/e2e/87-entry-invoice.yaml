@@ -26,7 +26,7 @@ name: 87 purchase invoice with a new fabric and colour
 - scrollUntilVisible:
     element:
       id: "entry-kg"
-    centerElement: true
+    visibilityPercentage: 50
 - tapOn:
     id: "entry-kg"
 - inputText: "12"
@@ -34,7 +34,7 @@ name: 87 purchase invoice with a new fabric and colour
 - scrollUntilVisible:
     element:
       id: "entry-pieces"
-    centerElement: true
+    visibilityPercentage: 50
 - tapOn:
     id: "entry-pieces"
 - inputText: "2"
@@ -42,7 +42,7 @@ name: 87 purchase invoice with a new fabric and colour
 - scrollUntilVisible:
     element:
       id: "entry-price"
-    centerElement: true
+    visibilityPercentage: 50
 - tapOn:
     id: "entry-price"
 - inputText: "3"

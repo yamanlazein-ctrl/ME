@@ -53,7 +53,13 @@ await ac8.withClient(dbUrl, async (c) => {
   await c.query(
     `INSERT INTO users (id, tenant_id, name, email, password_hash, role, active)
      VALUES ($1, $2, $3, $4, $5, 'accountant', true) ON CONFLICT (id) DO NOTHING`,
-    [NO_PIN_USER_ID, ac8.TENANT_ID, "ليلى المحاسبة", "leila@example.com", await hash("Leila-pass-2026")],
+    [
+      NO_PIN_USER_ID,
+      ac8.TENANT_ID,
+      "ليلى المحاسبة",
+      "leila@example.com",
+      await hash("Leila-pass-2026"),
+    ],
   );
 });
 

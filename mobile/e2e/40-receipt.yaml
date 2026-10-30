@@ -23,6 +23,7 @@ name: 40 receipt with the balance before and after
 - scrollUntilVisible:
     element:
       id: "voucher-balance-after"
+    visibilityPercentage: 50
 - takeScreenshot: 11-receipt
 - tapOn:
     id: "voucher-save"

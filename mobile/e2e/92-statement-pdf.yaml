@@ -26,6 +26,7 @@ name: 92 statement PDF through the share sheet
 - scrollUntilVisible:
     element:
       id: "share-pdf"
+    visibilityPercentage: 50
 - tapOn:
     id: "share-pdf"
 - extendedWaitUntil:
@@ -38,7 +39,8 @@ name: 92 statement PDF through the share sheet
     timeout: 20000
 - takeScreenshot: 97-statement-share-sheet
 - pressKey: Back
-- extendedWaitUntil:
-    visible: "فُتحت نافذة المشاركة.*"
+- scrollUntilVisible:
+    element: "فُتحت نافذة المشاركة.*"
+    visibilityPercentage: 50
     timeout: 30000
 - takeScreenshot: 98-statement-share-result
