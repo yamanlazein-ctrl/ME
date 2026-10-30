@@ -1,6 +1,6 @@
 [package]
 name = "motard-erp"
-version = "3.0.8"
+version = "3.0.9"
 description = "Motard Fabrics Group ERP — Windows desktop application"
 edition = "2021"
 publish = false
