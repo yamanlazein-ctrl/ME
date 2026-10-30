@@ -88,6 +88,9 @@ export default defineConfig({
       "expo-secure-store": path.resolve(here, "test/helpers/expoSecureStoreMemory.ts"),
       "expo-crypto": path.resolve(here, "test/helpers/expoCryptoNode.ts"),
       "@web": path.resolve(here, "../src"),
+      "@expo/vector-icons": path.resolve(here, "test/helpers/vectorIconsStub.tsx"),
+      "react-native-safe-area-context": path.resolve(here, "test/helpers/safeAreaStub.ts"),
+      "expo-router": path.resolve(here, "test/helpers/expoRouterStub.ts"),
     },
   },
 });

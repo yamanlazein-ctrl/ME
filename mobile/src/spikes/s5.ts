@@ -7,7 +7,7 @@ import { enroll, saveEnrollment } from "../core/enrollment";
 import { runFirstDownload } from "../core/firstDownload";
 import { deviceFirstDownloadDeps } from "../core/firstDownloadDeps";
 import { getSecret, setSecret } from "../platform/secureStore";
-import { loadDashboard } from "../hooks/useDashboard";
+import { loadDashboard } from "../core/dashboard";
 
 const STARTED_KEY = "s5.startedAt";
 const KILLED_KEY = "s5.killed";

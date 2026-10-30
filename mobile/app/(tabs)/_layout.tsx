@@ -6,8 +6,8 @@ import type { Role } from "../../src/core/roles";
 import { getSessionService } from "../../src/core/sessionService";
 import { visibleTabs } from "../../src/core/tabs";
 import { fontFamilyFor } from "../../src/ui/fontFamilies";
-import { colors } from "../../src/ui/theme";
-import { useTheme } from "../../src/ui/ThemeContext";
+
+import { useColors } from "../../src/ui/themeContext-core";
 
 const ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
   index: "home",
@@ -18,7 +18,7 @@ const ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
 };
 
 export default function TabsLayout() {
-  const { theme } = useTheme();
+  const colors = useColors();
   const [role, setRole] = useState<Role>("viewer");
   useEffect(() => {
     void getSessionService().then(async (s) => {
@@ -29,13 +29,17 @@ export default function TabsLayout() {
   const shown = new Set(visibleTabs(role).map((t) => t.name));
   return (
     <Tabs
-      key={theme}
       screenOptions={{
         headerShown: false,
         tabBarActiveTintColor: colors.primary,
         tabBarInactiveTintColor: colors.mutedForeground,
-        tabBarStyle: { backgroundColor: colors.card, borderTopColor: colors.border, height: 64 },
-        tabBarLabelStyle: { fontFamily: fontFamilyFor("500"), fontSize: 12 },
+        tabBarStyle: {
+          backgroundColor: colors.card,
+          borderTopColor: colors.border,
+          // No fixed height: the navigator adds the phone's gesture/navigation-bar inset itself.
+          paddingTop: 6,
+        },
+        tabBarLabelStyle: { fontFamily: fontFamilyFor("500"), fontSize: 12, lineHeight: 18 },
         sceneStyle: { backgroundColor: colors.background },
       }}
     >
@@ -45,6 +49,7 @@ export default function TabsLayout() {
           name={t.name}
           options={{
             title: t.title,
+            tabBarButtonTestID: `tab-${t.name}`,
             tabBarIcon: ({ color, size }) => (
               <Ionicons name={ICONS[t.name] ?? "ellipse"} size={size} color={color as string} />
             ),

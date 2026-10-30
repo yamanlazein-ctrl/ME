@@ -1,17 +1,18 @@
 import { router, useLocalSearchParams } from "expo-router";
-import { shareInvoicePdf } from "../../../../src/print/shareInvoice";
-import { SendToCustomer } from "../../../../src/ui/SendToCustomer";
-import { SaleDoneView } from "../../../../src/ui/SaleViews";
+import { SharePdfButton } from "../../../../src/ui/SendToCustomer";
+import { DocumentDoneView, SAVED_LOCALLY_NOTE } from "../../../../src/ui/SaleViews";
 
 export default function SaleDone() {
   const { id, number } = useLocalSearchParams<{ id: string; number: string }>();
   return (
-    <SaleDoneView
+    <DocumentDoneView
+      title="فاتورة البيع"
       number={number}
-      onSharePdf={() => void shareInvoicePdf(id)}
+      note={SAVED_LOCALLY_NOTE}
+      shareSlot={<SharePdfButton docRef={{ type: "invoice", id }} variant="primary" />}
       onOpen={() => router.push(`/invoices/${id}` as never)}
-      sendSlot={<SendToCustomer docRef={{ type: "invoice", id }} />}
-      onNew={() => router.replace("/(tabs)/add/sale/customer" as never)}
+      onNew={() => router.replace("/(tabs)/add/sale" as never)}
+      newLabel="فاتورة بيع جديدة"
     />
   );
 }

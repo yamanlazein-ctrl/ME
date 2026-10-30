@@ -1,5 +1,5 @@
-// Party search and statements for the phone (FR-11..FR-14). Search is the same repository query behind `/parties/search`;
-// the statement pages through `nextCursor` (200 rows per page) and follows it to the end, so a long statement is complete.
+// Party helpers for the phone (FR-11..FR-14): the LIKE pattern, recent-first ordering, and the full statement, which
+// pages through `nextCursor` (200 rows per page) to the end, so a long statement is complete.
 import type { PartyStatementData, StatementEntryData } from "@backend/domain/entities/Statement";
 import type { Phone } from "./phone";
 
@@ -9,30 +9,6 @@ export const MAX_STATEMENT_PAGES = 500;
 /** `%` and `_` typed by the user match themselves (same escaping as the desktop's `likeContains`). */
 export function likePattern(q: string): string {
   return `%${q.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
-}
-
-export interface PartySearchQuery {
-  q: string;
-  kind?: "customer" | "supplier" | "";
-  limit?: number;
-  status?: string;
-}
-
-export type PartyRow = Record<string, unknown> & { id: string; name: string };
-
-export async function searchParties(phone: Phone, query: PartySearchQuery): Promise<PartyRow[]> {
-  const limit = Math.min(50, Math.max(1, query.limit ?? 20));
-  const q = query.q.trim();
-  const rows = await phone.repos.searchRepo.searchParties({
-    tenantId: phone.identity.tenantId,
-    q,
-    kind: query.kind ?? "",
-    status: query.status ?? "active",
-    limit,
-    pattern: q ? likePattern(q) : "%",
-    cursor: null,
-  });
-  return (rows as PartyRow[]).slice(0, limit);
 }
 
 /** Most recently used parties first (from app-state.json), the others keep the search order (FR-11). */
@@ -87,27 +63,4 @@ export async function loadFullStatement(
   }
   if (!header) throw new Error("لا يوجد كشف حساب");
   return { header, entries };
-}
-
-/** The recent documents of a party: its last invoices (number, date, total, currency). */
-export async function recentInvoices(phone: Phone, partyId: string, limit = 5) {
-  const page = await phone.repos.invoiceRepo.list({ partyId, limit }, phone.context());
-  return page.data;
-}
-
-/** Closing balance per currency, from the same statement totals the desktop shows. */
-export async function balancesByCurrency(
-  phone: Phone,
-  partyId: string,
-  kind: "customer" | "supplier",
-): Promise<Record<string, number>> {
-  const data = await phone.repos.statementRepo.getStatement(
-    { partyId, kind, currency: "ALL", limit: 1 } as never,
-    phone.context(),
-  );
-  const out: Record<string, number> = {};
-  for (const [currency, totals] of Object.entries(data.totalsByCurrency ?? {})) {
-    out[currency] = totals.finalBalance;
-  }
-  return out;
 }

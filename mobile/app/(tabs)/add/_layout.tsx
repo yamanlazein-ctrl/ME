@@ -1,5 +1,5 @@
-import { Stack } from "expo-router";
+import { ThemedStack } from "../../../src/ui/kit/ThemedStack";
 
 export default function AddLayout() {
-  return <Stack screenOptions={{ headerShown: false }} />;
+  return <ThemedStack />;
 }

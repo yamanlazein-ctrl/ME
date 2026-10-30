@@ -1,63 +1,24 @@
-// Share a PDF and send it to a customer on WhatsApp (FR-29, FR-30, E13, E14). Nothing is ever sent automatically: WhatsApp
-// opens on the customer's chat with the PDF attached and the user presses send. The system calls are injected, so the
-// fallback order is unit tested.
-
-/** Local numbers start with one 0 (0933 123 456); WhatsApp needs the country code. Syria is the company's market. */
-export const DEFAULT_COUNTRY_CODE = "963";
-
-/** The digits WhatsApp expects (country code first, no + or 00), or null when the text is not a usable number. */
-export function whatsappDigits(raw: string | null | undefined): string | null {
-  if (!raw) return null;
-  let digits = raw.replace(/[^\d]/g, "");
-  if (digits.startsWith("00")) digits = digits.slice(2);
-  else if (digits.startsWith("0")) digits = DEFAULT_COUNTRY_CODE + digits.slice(1);
-  return digits.length >= 8 && digits.length <= 15 ? digits : null;
-}
-
-export type SendRoute = "whatsapp" | "wa.me" | "share";
+// Sharing a document PDF (FR-29, FR-30, E14). The system share sheet hands the file to WhatsApp or any other app with a
+// read grant on the file; the user picks the app and the contact. Nothing is ever sent automatically, and the app cannot
+// know whether the receiver got it, so it only ever says the sheet opened.
 
 export interface ShareDeps {
-  /** Opens the system share sheet on the PDF. */
-  sharePdf(uri: string): Promise<void>;
-  /** Android intent to com.whatsapp with `jid` and the PDF stream. Throws when WhatsApp is missing or refuses. */
-  openWhatsApp(args: { jid: string; note: string; contentUri: string }): Promise<void>;
-  openUrl(url: string): Promise<void>;
-  /** A content:// URI another app may read for a file in the app cache. */
-  contentUri(fileUri: string): Promise<string>;
+  isAvailable(): Promise<boolean>;
+  /** Opens the share sheet; resolves when it closes (whether or not something was sent). */
+  open(uri: string, title: string): Promise<void>;
 }
 
-export async function sharePdf(uri: string, deps: Pick<ShareDeps, "sharePdf">): Promise<void> {
-  await deps.sharePdf(uri);
-}
+export type ShareOutcome = { ok: true; message: string } | { ok: false; message: string };
 
-export interface SendResult {
-  /** Which route opened: the WhatsApp intent, else the wa.me link followed by the share sheet. */
-  route: SendRoute;
-  /** The routes tried, in order. */
-  tried: SendRoute[];
-}
+export const SHARE_OPENED = "فُتحت نافذة المشاركة: اختر واتساب (أو أي تطبيق) ثم جهة الاتصال.";
+export const SHARE_UNAVAILABLE = "لا يوجد على هذا الهاتف تطبيق يستقبل الملفات للمشاركة.";
 
-export async function sendToCustomer(
-  args: { phone: string; note: string; pdfUri: string },
-  deps: ShareDeps,
-): Promise<SendResult> {
-  const digits = whatsappDigits(args.phone);
-  if (!digits) throw new Error("رقم الهاتف غير صالح");
+export async function sharePdf(uri: string, title: string, deps: ShareDeps): Promise<ShareOutcome> {
+  if (!(await deps.isAvailable())) return { ok: false, message: SHARE_UNAVAILABLE };
   try {
-    const contentUri = await deps.contentUri(args.pdfUri);
-    await deps.openWhatsApp({ jid: `${digits}@s.whatsapp.net`, note: args.note, contentUri });
-    return { route: "whatsapp", tried: ["whatsapp"] };
+    await deps.open(uri, title);
+    return { ok: true, message: SHARE_OPENED };
   } catch {
-    // WhatsApp is missing or the intent failed: the chat link, then the share sheet for the PDF.
+    return { ok: false, message: "تعذّر فتح نافذة المشاركة. حاول مجدداً." };
   }
-  const tried: SendRoute[] = [];
-  try {
-    await deps.openUrl(`https://wa.me/${digits}?text=${encodeURIComponent(args.note)}`);
-    tried.push("wa.me");
-  } catch {
-    // no browser either: the share sheet below still lets the user send the file
-  }
-  await deps.sharePdf(args.pdfUri);
-  tried.push("share");
-  return { route: "share", tried };
 }

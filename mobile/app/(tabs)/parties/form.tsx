@@ -13,7 +13,6 @@ export default function PartyForm() {
   const [values, setValues] = useState<PartyFormValues>(emptyPartyForm());
   const [version, setVersion] = useState(0);
   const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
 
   useEffect(() => {
     if (!id) return;
@@ -34,7 +33,6 @@ export default function PartyForm() {
   }, [id]);
 
   const save = async () => {
-    setBusy(true);
     setError(null);
     try {
       const app = await getApp();
@@ -68,19 +66,17 @@ export default function PartyForm() {
       router.back();
     } catch (e) {
       setError(e instanceof Error ? e.message : "تعذّر الحفظ");
-    } finally {
-      setBusy(false);
     }
   };
 
   return (
     <PartyFormView
+      title={id ? "تعديل الطرف" : kind === "supplier" ? "مورد جديد" : "عميل جديد"}
       values={values}
       showOpening={!id}
       error={error}
-      busy={busy}
       onChange={(patch) => setValues((v) => ({ ...v, ...patch }))}
-      onSave={() => void save()}
+      onSave={save}
     />
   );
 }

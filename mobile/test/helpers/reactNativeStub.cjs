@@ -1,7 +1,7 @@
 // Test-only stand-in for `react-native` under Node (CommonJS so that libraries which `require("react-native")` get it too:
 // see test/setup.ts). Host components are plain elements named like the real ones, which is what
 // @testing-library/react-native queries by. Only the pieces the phone UI uses exist.
-const { createElement } = require("react");
+const { createElement, useImperativeHandle } = require("react");
 
 const host = (name) => {
   const component = (props) => createElement(name, props);
@@ -19,6 +19,16 @@ const StyleSheet = {
   absoluteFill: { position: "absolute", left: 0, right: 0, top: 0, bottom: 0 },
 };
 
+// Like the real ScrollView, a ref can scroll it; the calls are recorded for tests (ScrollView.scrollCalls).
+const scrollCalls = [];
+const ScrollView = Object.assign(
+  ({ ref, ...props }) => {
+    useImperativeHandle(ref, () => ({ scrollTo: (o) => scrollCalls.push(o) }), []);
+    return createElement("ScrollView", props);
+  },
+  { displayName: "ScrollView", scrollCalls },
+);
+
 const FlatList = (props) =>
   createElement(
     "FlatList",
@@ -32,7 +42,7 @@ module.exports = {
   View: host("View"),
   Text: host("Text"),
   TextInput: host("TextInput"),
-  ScrollView: host("ScrollView"),
+  ScrollView,
   FlatList,
   // A disabled Pressable does not react to presses (the real one ignores them too).
   Pressable: Object.assign(
@@ -47,7 +57,8 @@ module.exports = {
     { displayName: "Pressable" },
   ),
   ActivityIndicator: host("ActivityIndicator"),
-  Modal: host("Modal"),
+  // Like the real Modal: nothing is on screen while `visible` is false.
+  Modal: (props) => (props.visible === false ? null : createElement("Modal", props)),
   KeyboardAvoidingView: host("KeyboardAvoidingView"),
   SafeAreaView: host("SafeAreaView"),
   StyleSheet,

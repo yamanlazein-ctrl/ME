@@ -1,22 +1,81 @@
 appId: com.motard.erp
-name: 90 sign out returns to the login screen, sign in again
+name: 90 sign out; a user without a PIN chooses one; sign in again as admin
 ---
 - launchApp
 - runFlow: unlock.yaml
-- tapOn: "المزيد"
+- tapOn:
+    id: "tab-more"
 - scrollUntilVisible:
-    element: "تسجيل الخروج"
-- tapOn: "تسجيل الخروج"
-# A phone with unsent work asks first.
+    element:
+      id: "logout"
+- tapOn:
+    id: "logout"
+- takeScreenshot: 37-logout-confirm
+- tapOn:
+    id: "logout-confirm"
+# A phone with unsent work warns and asks again.
 - runFlow:
     when:
-      visible: "هل تريد الخروج؟"
+      visible: ".*عمليات لم تُرسل بعد.*"
     commands:
-      - tapOn: "خروج"
+      - takeScreenshot: 37b-logout-unsent
+      - tapOn:
+          id: "logout-confirm"
 - extendedWaitUntil:
-    visible: "تسجيل الدخول"
+    visible: "اختر اسمك"
     timeout: 60000
 - takeScreenshot: 38-login-after-logout
+# Leila has no PIN: she is asked to choose one, a weak one is refused with the hub's reason, a good one twice signs in.
+- tapOn: "ليلى المحاسبة"
+- assertVisible: "أول دخول لك من هذا الهاتف.*"
+- tapOn: "1"
+- tapOn: "2"
+- tapOn: "3"
+- tapOn: "4"
+- tapOn: "✓"
+- assertVisible: "أعد إدخال الرقم السري.*"
+- tapOn: "1"
+- tapOn: "2"
+- tapOn: "3"
+- tapOn: "4"
+- tapOn: "✓"
+- extendedWaitUntil:
+    visible: "هذا الرقم السري ضعيف جداً.*"
+    timeout: 60000
+- takeScreenshot: 38b-weak-pin-refused
+- tapOn: "4"
+- tapOn: "8"
+- tapOn: "2"
+- tapOn: "6"
+- tapOn: "✓"
+- tapOn: "4"
+- tapOn: "8"
+- tapOn: "2"
+- tapOn: "6"
+- tapOn: "✓"
+- extendedWaitUntil:
+    visible: "مبيعات اليوم"
+    timeout: 60000
+- takeScreenshot: 38c-first-pin-signed-in
+# Back to the admin for the next flows.
+- tapOn:
+    id: "tab-more"
+- scrollUntilVisible:
+    element:
+      id: "logout"
+- tapOn:
+    id: "logout"
+- tapOn:
+    id: "logout-confirm"
+- runFlow:
+    when:
+      visible: ".*عمليات لم تُرسل بعد.*"
+    commands:
+      - tapOn:
+          id: "logout-confirm"
+- extendedWaitUntil:
+    visible: "اختر اسمك"
+    timeout: 60000
 - tapOn: "AC-8 Admin"
 - tapOn: "1"
 - tapOn: "2"

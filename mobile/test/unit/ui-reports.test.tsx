@@ -32,15 +32,35 @@ describe("report views", () => {
           ],
           lines: [],
         }}
+        title="الأرباح"
         period="all"
+        loading={false}
         error={null}
         onPeriod={onPeriod}
+        onRetry={() => undefined}
       />,
     );
     expect(screen.getByText("1,000.00 SYP")).toBeTruthy();
     expect(screen.getByText("10.00 USD")).toBeTruthy();
     expect(screen.getByTestId("report-empty")).toBeTruthy();
-    fireEvent.press(screen.getByText("هذا الشهر"));
+    await fireEvent.press(screen.getByLabelText("هذا الشهر"));
     expect(onPeriod).toHaveBeenCalledWith("month");
+  });
+
+  it("a failed report says so and retries", async () => {
+    const onRetry = vi.fn();
+    await render(
+      <ReportPageView
+        page={undefined}
+        title="الأرباح"
+        period="all"
+        loading={false}
+        error="تعذّر تحميل البيانات من قاعدة الهاتف."
+        onPeriod={() => undefined}
+        onRetry={onRetry}
+      />,
+    );
+    await fireEvent.press(screen.getByLabelText("إعادة المحاولة"));
+    expect(onRetry).toHaveBeenCalled();
   });
 });

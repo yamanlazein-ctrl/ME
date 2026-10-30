@@ -1,5 +1,11 @@
 // The purchase (entry) draft, memory only like the sale draft. Totals come from the shared `invoiceTotal`.
-import { computeSubtotal, invoiceTotal, round2dp, type InvoiceLineData } from "@erp/shared";
+import {
+  computeSubtotal,
+  invoiceTotal,
+  round2dp,
+  saneSypRateError,
+  type InvoiceLineData,
+} from "@erp/shared";
 import type { EntryInvoiceInput, EntryLineInput } from "./documents";
 
 export interface EntryDraftLine extends EntryLineInput {
@@ -57,11 +63,12 @@ export function entryTotals(draft: EntryDraft): { subtotal: number; total: numbe
   };
 }
 
-export type EntryProblem = "no-supplier" | "no-rate" | "no-lines" | "bad-line";
+export type EntryProblem = "no-supplier" | "no-rate" | "bad-rate" | "no-lines" | "bad-line";
 
 export const ENTRY_PROBLEM_TEXT: Record<EntryProblem, string> = {
   "no-supplier": "اختر المورد",
-  "no-rate": "اكتب سعر الصرف",
+  "no-rate": "اكتب سعر الصرف: الفاتورة ليست بالدولار",
+  "bad-rate": "سعر الصرف غير منطقي لليرة السورية (أقل من 1,000) — تأكد من الأصفار",
   "no-lines": "أضف بنداً واحداً على الأقل",
   "bad-line": "في أحد البنود الكمية أو السعر أو الاسم غير صحيح",
 };
@@ -69,7 +76,9 @@ export const ENTRY_PROBLEM_TEXT: Record<EntryProblem, string> = {
 export function entryProblems(draft: EntryDraft): EntryProblem[] {
   const out: EntryProblem[] = [];
   if (!draft.supplier) out.push("no-supplier");
-  if (!draft.exchangeRate || draft.exchangeRate <= 0) out.push("no-rate");
+  if (draft.currency !== "USD" && !(draft.exchangeRate && draft.exchangeRate > 0))
+    out.push("no-rate");
+  if (saneSypRateError(draft.currency, draft.exchangeRate)) out.push("bad-rate");
   if (draft.lines.length === 0) out.push("no-lines");
   if (
     draft.lines.some(
@@ -83,12 +92,13 @@ export function entryProblems(draft: EntryDraft): EntryProblem[] {
 }
 
 export function toEntryInput(draft: EntryDraft, date: string): EntryInvoiceInput {
-  if (!draft.supplier || !draft.exchangeRate) throw new Error("incomplete entry draft");
+  if (!draft.supplier) throw new Error("incomplete entry draft");
   return {
     date,
     supplierId: draft.supplier.id,
     currency: draft.currency,
-    exchangeRate: draft.exchangeRate,
+    // A USD purchase is at rate 1 (the base currency); other currencies carry the typed rate.
+    exchangeRate: draft.currency === "USD" ? 1 : (draft.exchangeRate ?? 0),
     lines: draft.lines.map(({ key, ...line }) => {
       void key;
       return line;

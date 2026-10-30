@@ -1,37 +1,56 @@
-// Read-only sync screen (FR-37, E5): rejected and dead documents are listed with the instruction to resolve them on the
-// desktop. There is deliberately no requeue/retry control for them.
-import { ScrollView, View } from "react-native";
-import { Text } from "./Text";
+// Read-only sync screen (FR-37, E5): what waits to be sent, the last run and its error, and rejected or stopped documents
+// with the instruction to resolve them on the desktop. There is deliberately no requeue/retry control for them.
 import type { SyncStatus } from "../core/syncRunner";
-import { colors, fontSize, spacing } from "./theme";
+import { KeyValue, ListRow, Notice, Screen, Section } from "./kit";
 
 export const DESKTOP_ONLY_TEXT = "يجب الحل من الديسكتوب";
 
 export function SyncStatusView({ status, pending }: { status: SyncStatus; pending: number }) {
   return (
-    <ScrollView contentContainerStyle={{ padding: spacing.lg }}>
-      <Text style={{ fontSize: fontSize.title, marginBottom: spacing.md }}>حالة المزامنة</Text>
-      <Text testID="pending-count">{`بانتظار الإرسال: ${pending}`}</Text>
-      <Text testID="last-run">{`آخر تشغيل: ${status.lastRunAt ?? "—"}`}</Text>
-      {status.lastError ? (
-        <Text
-          testID="last-error"
-          style={{ color: colors.negative }}
-        >{`آخر خطأ: ${status.lastError}`}</Text>
+    <Screen title="حالة المزامنة" subtitle="ما أُرسل إلى المركز وما ينتظر">
+      <Section>
+        <KeyValue
+          label="بانتظار الإرسال"
+          value={`بانتظار الإرسال: ${pending}`}
+          testID="pending-count"
+        />
+        <KeyValue
+          label="آخر تشغيل"
+          value={`آخر تشغيل: ${status.lastRunAt ?? "—"}`}
+          testID="last-run"
+        />
+      </Section>
+      {pending === 0 &&
+      !status.lastError &&
+      status.rejected.length === 0 &&
+      status.hubDeadOps.length === 0 ? (
+        <Notice kind="success" text="كل ما على الهاتف أُرسل إلى المركز." />
       ) : null}
-      {status.rejected.map((r) => (
-        <View key={r.opId} testID="rejected-doc" style={{ marginTop: spacing.md }}>
-          <Text>{`مستند مرفوض: ${r.number ?? r.entityType}`}</Text>
-          {r.reason ? <Text>{r.reason}</Text> : null}
-          <Text style={{ color: colors.negative }}>{DESKTOP_ONLY_TEXT}</Text>
-        </View>
-      ))}
-      {status.hubDeadOps.map((id) => (
-        <View key={id} testID="dead-doc" style={{ marginTop: spacing.md }}>
-          <Text>{`عملية متوقفة: ${id}`}</Text>
-          <Text style={{ color: colors.negative }}>{DESKTOP_ONLY_TEXT}</Text>
-        </View>
-      ))}
-    </ScrollView>
+      {status.lastError ? (
+        <Notice kind="error" text={`آخر خطأ: ${status.lastError}`} testID="last-error" />
+      ) : null}
+      {status.rejected.length > 0 || status.hubDeadOps.length > 0 ? (
+        <Section title="مستندات تحتاج حلاً من الحاسوب" padded={false}>
+          {status.rejected.map((r) => (
+            <ListRow
+              key={r.opId}
+              testID="rejected-doc"
+              title={`مستند مرفوض: ${r.number ?? r.entityType}`}
+              subtitle={r.reason ?? null}
+              meta={DESKTOP_ONLY_TEXT}
+            />
+          ))}
+          {status.hubDeadOps.map((id, i) => (
+            <ListRow
+              key={id}
+              testID="dead-doc"
+              title={`عملية متوقفة: ${id}`}
+              meta={DESKTOP_ONLY_TEXT}
+              last={i === status.hubDeadOps.length - 1}
+            />
+          ))}
+        </Section>
+      ) : null}
+    </Screen>
   );
 }

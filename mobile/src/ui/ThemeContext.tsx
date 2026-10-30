@@ -1,22 +1,8 @@
-import {
-  createContext,
-  useCallback,
-  useContext,
-  useEffect,
-  useMemo,
-  useState,
-  type ReactNode,
-} from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { readAppState, updateAppState } from "../core/appState";
 import { logError } from "../core/devlog";
 import { applyTheme, getTheme, type ThemeName } from "./theme";
-
-interface ThemeApi {
-  theme: ThemeName;
-  setTheme(name: ThemeName): void;
-}
-
-const Ctx = createContext<ThemeApi>({ theme: "dark", setTheme: () => undefined });
+import { ThemeCtx } from "./themeContext-core";
 
 /** Applies the saved theme (dark by default, like the desktop) and re-renders the tree when it changes. */
 export function ThemeProvider({ children }: { children: ReactNode }) {
@@ -35,9 +21,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     updateAppState({ theme: name }).catch((e) => logError("theme", e));
   }, []);
   const value = useMemo(() => ({ theme, setTheme }), [theme, setTheme]);
-  return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
+  return <ThemeCtx.Provider value={value}>{children}</ThemeCtx.Provider>;
 }
 
-export function useTheme(): ThemeApi {
-  return useContext(Ctx);
-}
+export { useColors, useTheme } from "./themeContext-core";

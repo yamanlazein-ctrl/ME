@@ -1,53 +1,35 @@
-import { useEffect, useState } from "react";
-import { ActivityIndicator, View } from "react-native";
-import { Text } from "../../src/ui/Text";
 import { router } from "expo-router";
-import { describeError } from "../../src/core/devlog";
-import { colors } from "../../src/ui/theme";
-import { getSessionService } from "../../src/core/sessionService";
-import type { Role } from "../../src/core/roles";
 import { useDashboard } from "../../src/hooks/useDashboard";
+import { useRole } from "../../src/hooks/useRole";
 import { useSyncStatus } from "../../src/hooks/useSyncStatus";
 import { HomeView, type HomeAction } from "../../src/ui/HomeView";
 
-// Targets of the quick actions.
+// Targets of the quick actions and the follow-up rows.
 const TARGET: Record<HomeAction, string> = {
-  sale: "/(tabs)/add/sale/customer",
+  sale: "/(tabs)/add/sale",
+  entry: "/(tabs)/add/entry",
   receipt: "/(tabs)/add/receipt",
   payment: "/(tabs)/add/payment",
   expense: "/(tabs)/add/expense",
   findParty: "/(tabs)/parties",
+  inventory: "/(tabs)/inventory",
+  orders: "/(tabs)/more/orders",
+  sync: "/(tabs)/more/sync",
 };
 
 export default function Home() {
-  const { data, error, isLoading } = useDashboard();
+  const dashboard = useDashboard();
   const status = useSyncStatus();
-  const [role, setRole] = useState<Role>("viewer");
-  useEffect(() => {
-    void getSessionService().then(async (s) => {
-      const session = await s.current();
-      if (session) setRole(session.role);
-    });
-  }, []);
-  if (isLoading || (!error && !data)) return <ActivityIndicator style={{ flex: 1 }} />;
-  if (error || !data) {
-    return (
-      <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
-        <Text>تعذّر تحميل البيانات</Text>
-        <Text
-          testID="home-error"
-          style={{ color: colors.negative, marginTop: 8, textAlign: "center" }}
-        >
-          {error ? describeError(error) : ""}
-        </Text>
-      </View>
-    );
-  }
+  const role = useRole();
   return (
     <HomeView
-      data={data}
+      data={dashboard.data}
+      loading={dashboard.isLoading}
+      error={dashboard.error}
       role={role}
       lastSyncAt={status.lastRunAt}
+      refreshing={dashboard.isRefetching}
+      onRefresh={() => void dashboard.refetch()}
       onAction={(a) => router.push(TARGET[a] as never)}
     />
   );

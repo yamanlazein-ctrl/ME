@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react-native";
 import { OrderFormView } from "../../src/ui/OrderViews";
 
-vi.mock("../../src/hooks/useParties", () => ({ useParties: () => ({ data: [] }) }));
+vi.mock("../../src/hooks/useParties", () => ({ usePartyList: () => ({ data: [] }) }));
 
 describe("order form add item", () => {
   it("adds an item after typing fabric, colour and kg", async () => {
@@ -11,7 +11,6 @@ describe("order form add item", () => {
       <OrderFormView
         customer={{ id: "p", name: "عميل" }}
         items={[]}
-        busy={false}
         error={null}
         onCustomer={() => undefined}
         onAddItem={onAddItem}

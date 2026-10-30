@@ -4,7 +4,7 @@ import { createPartyUseCase } from "@backend/application/use-cases/parties/party
 import { createFabricUseCase } from "@backend/application/use-cases/inventory/fabricUseCases";
 import { createColorUseCase } from "@backend/application/use-cases/inventory/colorUseCases";
 import { createRollUseCase } from "@backend/application/use-cases/inventory/rollUseCases";
-import { listRollsOfColor } from "../../src/core/inventory";
+import { loadColorLots } from "../../src/core/stock";
 import { loadPartyBalances } from "../../src/core/reports";
 import {
   emptyReturnDraft,
@@ -111,7 +111,7 @@ describe("sale return against a source invoice", () => {
 
   const stock = async () =>
     Object.fromEntries(
-      (await listRollsOfColor(t.phone, colorId)).map((r) => [r.rollNo, r.remainingKg]),
+      ((await loadColorLots(t.phone, colorId))?.lots ?? []).map((r) => [r.rollNo, r.remainingKg]),
     );
 
   it("lists the party's active sale invoices and their returnable lines", async () => {

@@ -3,7 +3,13 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { View } from "react-native";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import { getApp } from "../src/core/appRuntime";
-import { classifyEnrollError, parseEnrollQr } from "../src/core/enrollFlow";
+import {
+  classifyEnrollError,
+  hubRefusalText,
+  normalizeHubUrl,
+  parseEnrollQr,
+  wakeHub,
+} from "../src/core/enrollFlow";
 import { enroll, saveEnrollment } from "../src/core/enrollment";
 import { runFirstDownload } from "../src/core/firstDownload";
 import { deviceFirstDownloadDeps } from "../src/core/firstDownloadDeps";
@@ -89,18 +95,48 @@ export default function Enroll() {
   }, [download]);
 
   const submit = async () => {
-    setState((s) => ({ ...s, busy: true, error: null }));
+    const hubUrl = normalizeHubUrl(state.hub);
+    if (!hubUrl) {
+      setState((s) => ({ ...s, error: "invalidUrl", hubMessage: null }));
+      return;
+    }
+    setState((s) => ({
+      ...s,
+      hub: hubUrl,
+      busy: true,
+      phase: "waking",
+      error: null,
+      hubMessage: null,
+    }));
     try {
-      const app = await getApp();
-      const enrollment = await enroll(app.runtime, app.conn, {
-        hubUrl: state.hub.trim(),
-        code: state.code,
+      const awake = await wakeHub(hubUrl, {
+        fetch: (...a) => fetch(...a),
+        now: () => Date.now(),
+        sleep: (ms) => new Promise((r) => setTimeout(r, ms)),
       });
+      if (!awake) {
+        setState((s) => ({ ...s, busy: false, phase: null, error: "network" }));
+        return;
+      }
+      setState((s) => ({ ...s, phase: "enrolling" }));
+      const app = await getApp();
+      const enrollment = await enroll(app.runtime, app.conn, { hubUrl, code: state.code });
       app.attach(enrollment);
-      setState((s) => ({ ...s, busy: false, progress: { percent: 0, applied: 0, headSeq: 0 } }));
+      setState((s) => ({
+        ...s,
+        busy: false,
+        phase: null,
+        progress: { percent: 0, applied: 0, headSeq: 0 },
+      }));
       await download();
     } catch (e) {
-      setState((s) => ({ ...s, busy: false, error: classifyEnrollError(e) }));
+      setState((s) => ({
+        ...s,
+        busy: false,
+        phase: null,
+        error: classifyEnrollError(e),
+        hubMessage: hubRefusalText(e),
+      }));
     }
   };
 

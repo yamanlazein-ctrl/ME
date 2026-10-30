@@ -5,30 +5,30 @@ import type { ReactElement } from "react";
 import { flat } from "../helpers/style";
 import { MIN_TOUCH } from "../../src/ui/theme-const";
 import { emptyEntryDraft } from "../../src/core/entryDraft";
+import { emptyDraft } from "../../src/core/saleDraft";
 import { emptyReturnDraft } from "../../src/core/returns";
 import { emptyPartyForm } from "../../src/ui/PartyViews";
 import {
+  ColorLotsView,
   CountSheetView,
-  FabricDetailView,
-  FabricListView,
-  RollDetailView,
+  FabricView,
+  LotView,
+  StockListView,
 } from "../../src/ui/InventoryViews";
 import { ReportMenuView, ReportPageView } from "../../src/ui/ReportViews";
 import { OrderDetailView, OrderFormView, OrderListView } from "../../src/ui/OrderViews";
 import { ReturnFormView, ReturnListView } from "../../src/ui/ReturnViews";
-import {
-  EntryDoneView,
-  EntryLinesView,
-  EntryReviewView,
-  EntrySupplierView,
-} from "../../src/ui/EntryViews";
+import { EntryFormView } from "../../src/ui/EntryViews";
+import { DocumentDoneView, SaleFormView } from "../../src/ui/SaleViews";
+import { VoucherForm, emptyVoucher } from "../../src/ui/VoucherForm";
+import { withQuery } from "../helpers/withQuery";
 import { AddMenu } from "../../src/ui/AddMenu";
-import { PhonePrompt } from "../../src/ui/PhonePrompt";
-import { PartyFormView, PartyListView } from "../../src/ui/PartyViews";
+import { LoginView } from "../../src/ui/LoginView";
+import { PartyDetailView, PartyFormView, PartyListView } from "../../src/ui/PartyViews";
 import { ScanDenied, ScanOverlay } from "../../src/ui/ScanView";
 import { UpdateOfferBanner } from "../../src/ui/UpdateBanner";
 
-vi.mock("../../src/hooks/useParties", () => ({ useParties: () => ({ data: [] }) }));
+vi.mock("../../src/hooks/useParties", () => ({ usePartyList: () => ({ data: [] }) }));
 
 type Node = {
   type?: string;
@@ -69,6 +69,9 @@ const screens: Array<[string, () => ReactElement]> = [
     "report page",
     () => (
       <ReportPageView
+        title="ت"
+        loading={false}
+        onRetry={noop}
         page={{ slug: "x", title: "t", figures: [], lines: [], total: 0 }}
         period="all"
         error={null}
@@ -77,55 +80,168 @@ const screens: Array<[string, () => ReactElement]> = [
     ),
   ],
   [
-    "fabric list",
+    "stock list",
     () => (
-      <FabricListView
-        rows={[{ id: "f", name: "قطن", minStockKg: 50, remainingKg: 32, rollCount: 1, low: true }]}
-        q=""
-        role="admin"
+      <StockListView
+        q="DL"
+        filter="all"
+        category={null}
+        categories={["قمصان"]}
+        rows={[
+          {
+            id: "f",
+            name: "قطن",
+            category: null,
+            unit: "kg",
+            minStockKg: 50,
+            remainingKg: 32,
+            pieces: 1,
+            activeLots: 1,
+            colorCount: 1,
+            low: true,
+          },
+        ]}
+        lots={[
+          {
+            id: "r",
+            rollNo: "DL-1",
+            fabricId: "f",
+            fabricName: "قطن",
+            colorName: "ل",
+            remainingKg: 1,
+            remainingPieces: 1,
+          },
+        ]}
+        loading={false}
+        error={null}
+        refreshing={false}
+        canCount
         onQuery={noop}
-        onOpen={noop}
+        onFilter={noop}
+        onCategory={noop}
+        onRefresh={noop}
+        onRetry={noop}
+        onOpenFabric={noop}
+        onOpenLot={noop}
         onCount={noop}
       />
     ),
   ],
   [
-    "fabric detail",
+    "fabric",
     () => (
-      <FabricDetailView
-        name="قطن"
-        rows={[{ id: "c", name: "أحمر", code: null, remainingKg: 5, rollCount: 1 }]}
-        rollsOf={() => null}
-        onOpenRoll={noop}
+      <FabricView
+        detail={{
+          fabric: {
+            id: "f",
+            name: "قطن",
+            category: null,
+            unit: "kg",
+            minStockKg: 0,
+            remainingKg: 5,
+            pieces: 1,
+            activeLots: 1,
+            colorCount: 1,
+            low: false,
+            notes: null,
+          },
+          colors: [
+            {
+              id: "c",
+              name: "أحمر",
+              code: null,
+              hex: null,
+              remainingKg: 5,
+              pieces: 1,
+              activeLots: 1,
+              totalLots: 1,
+            },
+          ],
+        }}
+        onOpenColor={noop}
       />
     ),
   ],
   [
-    "roll detail",
+    "colour lots",
     () => (
-      <RollDetailView
-        detail={{
-          roll: {
-            id: "r",
-            rollNo: "R1",
-            remainingKg: 5,
-            remainingPieces: 1,
-            pricePerKg: 2,
-            currency: "USD",
-            status: "in_stock",
-            version: 1,
-            initialKg: 5,
-            entryDate: "2026-01-01",
-            dyeBatch: null,
-          },
+      <ColorLotsView
+        data={{
+          fabricId: "f",
           fabricName: "ق",
+          fabricMinKg: 0,
           colorName: "ل",
-          movements: [],
+          colorCode: null,
+          hex: null,
+          lots: [
+            {
+              id: "r",
+              rollNo: "R1",
+              dyeBatch: null,
+              initialKg: 5,
+              remainingKg: 5,
+              remainingPieces: 1,
+              pieces: 1,
+              supplierName: null,
+              entryDate: null,
+              state: "active",
+            },
+          ],
+        }}
+        onOpenLot={noop}
+      />
+    ),
+  ],
+  [
+    "lot",
+    () => (
+      <LotView
+        lot={{
+          id: "r",
+          rollNo: "R1",
+          version: 1,
+          fabricId: "f",
+          fabricName: "ق",
+          colorId: "c",
+          colorName: "ل",
+          colorCode: null,
+          dyeBatch: null,
+          initialKg: 5,
+          remainingKg: 5,
+          outKg: 0,
+          pieces: 1,
+          remainingPieces: 1,
+          widthCm: null,
+          weightGsm: null,
+          salePricePerKg: null,
+          costPerKg: 2,
+          currency: "USD",
+          entryPricePerKg: null,
+          entryCurrency: null,
+          supplierName: null,
+          entryDate: null,
+          entryReference: null,
+          state: "active",
+          movements: [
+            {
+              id: "m",
+              label: "فاتورة بيع",
+              direction: "out",
+              quantityKg: 1,
+              balanceAfterKg: 5,
+              date: "2026-01-01",
+              reference: "INV-1",
+              referenceType: "invoice",
+              referenceId: "i",
+              cancelled: false,
+            },
+          ],
         }}
         role="admin"
         error={null}
-        busy={false}
-        onAdjust={noop}
+        notice={null}
+        onAdjust={async () => undefined}
+        onOpenReference={noop}
       />
     ),
   ],
@@ -183,7 +299,6 @@ const screens: Array<[string, () => ReactElement]> = [
       <OrderFormView
         customer={{ id: "p", name: "عميل" }}
         items={[{ key: "k", fabricName: "ق", colorName: "ل", requestedKg: 1 }]}
-        busy={false}
         error={null}
         onCustomer={noop}
         onAddItem={noop}
@@ -227,7 +342,6 @@ const screens: Array<[string, () => ReactElement]> = [
           lines: [{ rollId: "r", label: "ق · ل · R1", soldKg: 5, pieces: 1, pricePerKg: 2 }],
         }}
         invoices={[{ id: "i", number: "INV-1", date: "d", total: 1, currency: "USD" }]}
-        busy={false}
         error={null}
         onKind={noop}
         onParty={noop}
@@ -261,61 +375,113 @@ const screens: Array<[string, () => ReactElement]> = [
     ),
   ],
   [
-    "entry supplier",
-    () => (
-      <EntrySupplierView
-        draft={{ ...emptyEntryDraft(), supplier: { id: "s", name: "مورد" } }}
-        onSupplier={noop}
-        onCurrency={noop}
-        onRate={noop}
-        onNext={noop}
-      />
-    ),
+    "sale form",
+    () =>
+      withQuery(
+        <SaleFormView
+          draft={{
+            ...emptyDraft(),
+            party: { id: "p", name: "ع" },
+            lines: [
+              {
+                key: "k",
+                fabricId: "f",
+                fabricName: "ق",
+                colorId: "c",
+                colorName: "ل",
+                rollId: "r",
+                rollNo: "R1",
+                rollCurrency: "USD",
+                remainingKg: 5,
+                quantityKg: 1,
+                pieces: 0,
+                pricePerKg: 2,
+                discountAmount: 0,
+              },
+            ],
+          }}
+          error={null}
+          onParty={noop}
+          onCurrency={noop}
+          onRate={noop}
+          onAddLot={noop}
+          onEditLine={noop}
+          onRemoveLine={noop}
+          onPatch={noop}
+          onDiscard={noop}
+          onSave={async () => undefined}
+        />,
+      ),
   ],
   [
-    "entry lines",
-    () => (
-      <EntryLinesView
-        draft={{
-          ...emptyEntryDraft(),
-          lines: [
-            { key: "k", fabricName: "ق", colorName: "ل", quantityKg: 1, pieces: 1, pricePerKg: 1 },
-          ],
-        }}
-        adding={false}
-        form={null}
-        onAdd={noop}
-        onRemove={noop}
-        onNext={noop}
-      />
-    ),
+    "entry form",
+    () =>
+      withQuery(
+        <EntryFormView
+          draft={{
+            ...emptyEntryDraft(),
+            supplier: { id: "s", name: "م" },
+            lines: [
+              {
+                key: "k",
+                fabricName: "ق",
+                colorName: "ل",
+                quantityKg: 1,
+                pieces: 1,
+                pricePerKg: 2,
+              },
+            ],
+          }}
+          error={null}
+          onSupplier={noop}
+          onCurrency={noop}
+          onRate={noop}
+          onAddLine={noop}
+          onRemoveLine={noop}
+          onPatch={noop}
+          onDiscard={noop}
+          onSave={async () => undefined}
+        />,
+      ),
   ],
   [
-    "entry review",
+    "voucher form",
     () => (
-      <EntryReviewView
-        draft={emptyEntryDraft()}
-        busy={false}
+      <VoucherForm
+        kind="receipt"
+        values={{ ...emptyVoucher(), party: { id: "p", name: "ع" } }}
+        balances={[]}
         error={null}
-        onPatch={noop}
-        onSave={noop}
-      />
-    ),
-  ],
-  ["entry done", () => <EntryDoneView number="ENT-1" onOpen={noop} onNew={noop} />],
-  [
-    "phone prompt",
-    () => (
-      <PhonePrompt
-        partyName="ع"
-        value=""
-        save
-        busy={false}
-        error={null}
+        attempted={false}
         onChange={noop}
-        onToggleSave={noop}
-        onSend={noop}
-        onCancel={noop}
+        onSave={async () => undefined}
+      />
+    ),
+  ],
+  [
+    "document done",
+    () => (
+      <DocumentDoneView title="فاتورة" number="INV-1" onOpen={noop} onNew={noop} newLabel="جديدة" />
+    ),
+  ],
+  [
+    "login",
+    () => (
+      <LoginView
+        users={[{ id: "u1", name: "أ", role: "admin", hasPin: false }]}
+        selectedId={null}
+        pin=""
+        pinStep="enter"
+        error={null}
+        busy={false}
+        mode="pin"
+        email=""
+        password=""
+        onSelect={noop}
+        onKey={noop}
+        onToggleMode={noop}
+        onChangeCredentials={noop}
+        onSubmit={noop}
       />
     ),
   ],
@@ -323,14 +489,76 @@ const screens: Array<[string, () => ReactElement]> = [
     "party list",
     () => (
       <PartyListView
-        rows={[{ id: "p", name: "ع", kind: "customer", code: "C1" }]}
+        rows={[
+          {
+            id: "p",
+            name: "ع",
+            kind: "customer",
+            code: "C1",
+            phone: null,
+            city: null,
+            currency: "USD",
+          },
+        ]}
+        balances={{
+          p: [{ currency: "USD", balance: 5, side: "debit", totalDebit: 5, totalCredit: 0 }],
+        }}
         q=""
         kind=""
         role="admin"
+        loading={false}
+        error={null}
+        refreshing={false}
         onQuery={noop}
         onKind={noop}
         onOpen={noop}
         onNew={noop}
+        onRefresh={noop}
+        onRetry={noop}
+      />
+    ),
+  ],
+  [
+    "party detail",
+    () => (
+      <PartyDetailView
+        party={{
+          id: "p",
+          version: 1,
+          name: "ع",
+          kind: "customer",
+          code: "C1",
+          companyName: null,
+          phones: ["0933"],
+          email: null,
+          city: null,
+          address: null,
+          currency: "USD",
+          creditLimit: null,
+          notes: null,
+          balances: [{ currency: "USD", balance: 5, side: "debit", totalDebit: 5, totalCredit: 0 }],
+        }}
+        role="admin"
+        tab="invoices"
+        docs={[
+          {
+            id: "i",
+            kind: "invoice",
+            title: "فاتورة بيع",
+            number: "INV-1",
+            date: "2026-01-01",
+            amount: 5,
+            currency: "USD",
+            note: null,
+            cancelled: false,
+          },
+        ]}
+        onTab={noop}
+        onStatement={noop}
+        onEdit={noop}
+        onOpenDoc={noop}
+        onNewInvoice={noop}
+        onNewVoucher={noop}
       />
     ),
   ],
@@ -338,12 +566,12 @@ const screens: Array<[string, () => ReactElement]> = [
     "party form with opening balance",
     () => (
       <PartyFormView
+        title="عميل جديد"
         values={emptyPartyForm()}
         showOpening
         error={null}
-        busy={false}
         onChange={noop}
-        onSave={noop}
+        onSave={async () => undefined}
       />
     ),
   ],

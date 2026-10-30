@@ -11,11 +11,9 @@ export default function NewOrder() {
   const finish = useFinishWrite();
   const [customer, setCustomer] = useState<PickedParty | null>(null);
   const [items, setItems] = useState<OrderDraftItem[]>([]);
-  const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const save = async () => {
     if (!customer || items.length === 0) return;
-    setBusy(true);
     setError(null);
     try {
       const app = await getApp();
@@ -36,20 +34,17 @@ export default function NewOrder() {
       router.replace("/(tabs)/more/orders" as never);
     } catch (e) {
       setError(e instanceof Error ? e.message : "تعذّر الحفظ");
-    } finally {
-      setBusy(false);
     }
   };
   return (
     <OrderFormView
       customer={customer}
       items={items}
-      busy={busy}
       error={error}
       onCustomer={setCustomer}
       onAddItem={(item) => setItems((cur) => [...cur, { key: randomUUID(), ...item }])}
       onRemoveItem={(key) => setItems((cur) => cur.filter((i) => i.key !== key))}
-      onSave={() => void save()}
+      onSave={save}
     />
   );
 }

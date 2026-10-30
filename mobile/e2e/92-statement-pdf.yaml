@@ -1,0 +1,46 @@
+appId: com.motard.erp
+name: 92 statement PDF through the share sheet
+---
+- launchApp
+- runFlow: unlock.yaml
+- tapOn:
+    id: "tab-parties"
+- tapOn: "عميل 1"
+- tapOn:
+    id: "party-statement"
+- extendedWaitUntil:
+    visible:
+      id: "statement-closing"
+    timeout: 30000
+# A party with more than one currency shares one currency per PDF.
+- runFlow:
+    when:
+      visible: "لمشاركة الكشف PDF اختر عملة واحدة أولاً."
+    commands:
+      - tapOn:
+          id: "statement-currency-USD"
+      - extendedWaitUntil:
+          visible:
+            id: "statement-closing"
+          timeout: 30000
+- scrollUntilVisible:
+    element:
+      id: "share-pdf"
+    visibilityPercentage: 50
+- tapOn:
+    id: "share-pdf"
+- extendedWaitUntil:
+    notVisible:
+      id: "share-pdf"
+    timeout: 60000
+# The Android chooser shows the shared file itself: its name and the PDF type.
+- extendedWaitUntil:
+    visible: ".*Statement-.*\\.pdf.*"
+    timeout: 20000
+- takeScreenshot: 97-statement-share-sheet
+- pressKey: Back
+- scrollUntilVisible:
+    element: "فُتحت نافذة المشاركة.*"
+    visibilityPercentage: 50
+    timeout: 30000
+- takeScreenshot: 98-statement-share-result

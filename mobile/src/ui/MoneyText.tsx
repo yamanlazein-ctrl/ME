@@ -1,7 +1,8 @@
 import { type TextStyle } from "react-native";
 import { Text } from "./Text";
 import { formatAmount } from "./money";
-import { colors, fontSize } from "./theme";
+import { fontSize } from "./theme";
+import { useColors } from "./themeContext-core";
 
 export interface MoneyTextProps {
   amount: number;
@@ -12,6 +13,7 @@ export interface MoneyTextProps {
 
 /** An amount with its currency. A negative amount shows a minus sign AND the `negative` colour (UX-05). */
 export function MoneyText({ amount, currency, style }: MoneyTextProps) {
+  const colors = useColors();
   const negative = amount < 0;
   return (
     <Text

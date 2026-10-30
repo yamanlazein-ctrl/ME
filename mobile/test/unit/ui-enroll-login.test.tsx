@@ -2,7 +2,14 @@ import { describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react-native";
 import { EnrollView, type EnrollViewState } from "../../src/ui/EnrollView";
 import { LoginView } from "../../src/ui/LoginView";
-import { classifyEnrollError, ENROLL_ERROR_TEXT, parseEnrollQr } from "../../src/core/enrollFlow";
+import {
+  classifyEnrollError,
+  ENROLL_ERROR_TEXT,
+  hubRefusalText,
+  normalizeHubUrl,
+  parseEnrollQr,
+  wakeHub,
+} from "../../src/core/enrollFlow";
 import { EnrollmentRefusedError } from "../../src/core/enrollment";
 import { InsufficientStorageError } from "../../src/core/firstDownload";
 
@@ -23,8 +30,32 @@ describe("enroll screen (US1, E15)", () => {
       expect(screen.getByText(ENROLL_ERROR_TEXT[error])).toBeTruthy();
     },
   );
-  it("network text says it will continue when the connection returns", () => {
-    expect(ENROLL_ERROR_TEXT.network).toBe("سيتابع عند عودة الاتصال");
+  it("shows the hub's own refusal text instead of the generic line", async () => {
+    await render(
+      <EnrollView
+        state={{ ...base, error: "invalidCode", hubMessage: "انتهت صلاحية رمز التسجيل" }}
+        onChange={() => undefined}
+        onSubmit={() => undefined}
+        onScan={() => undefined}
+      />,
+    );
+    expect(screen.getByText("انتهت صلاحية رمز التسجيل")).toBeTruthy();
+    expect(screen.queryByText(ENROLL_ERROR_TEXT.invalidCode)).toBeNull();
+  });
+  it("offers a retry when the download stopped", async () => {
+    const onRetry = vi.fn();
+    await render(
+      <EnrollView
+        state={{ ...base, error: "stuck", progress: { percent: 1, applied: 40, headSeq: 0 } }}
+        onChange={() => undefined}
+        onSubmit={() => undefined}
+        onScan={() => undefined}
+        onRetry={onRetry}
+      />,
+    );
+    expect(screen.getByText("40 عملية")).toBeTruthy();
+    await fireEvent.press(screen.getByTestId("enroll-retry"));
+    expect(onRetry).toHaveBeenCalledOnce();
   });
   it("shows percent and count while downloading", async () => {
     await render(
@@ -41,6 +72,11 @@ describe("enroll screen (US1, E15)", () => {
     expect(classifyEnrollError(new InsufficientStorageError(10, 1))).toBe("lowStorage");
     expect(classifyEnrollError(new EnrollmentRefusedError("x", "login"))).toBe("invalidCode");
     expect(classifyEnrollError(new EnrollmentRefusedError("x", "reach"))).toBe("network");
+    expect(classifyEnrollError(new EnrollmentRefusedError("x", "url"))).toBe("invalidUrl");
+    expect(hubRefusalText(new EnrollmentRefusedError("رمز التسجيل غير صحيح", "login"))).toBe(
+      "رمز التسجيل غير صحيح",
+    );
+    expect(hubRefusalText(new EnrollmentRefusedError("x", "reach"))).toBeNull();
     expect(classifyEnrollError(new TypeError("Network request failed"))).toBe("network");
     expect(parseEnrollQr('{"hub":"https://h","code":"ABC"}')).toEqual({
       hub: "https://h",
@@ -61,26 +97,52 @@ describe("enroll screen (US1, E15)", () => {
 
 describe("login screen (US2, FR-02)", () => {
   const props = {
-    users: [{ id: "u1", name: "سامر", role: "admin" as const }],
-    selectedId: "u1",
-    pin: "12",
+    users: [
+      { id: "u1", name: "سامر", role: "admin" as const, hasPin: true },
+      { id: "u2", name: "ليلى", role: "accountant" as const, hasPin: false },
+    ],
+    selectedId: null as string | null,
+    pin: "",
+    pinStep: "enter" as const,
     error: null,
+    busy: false,
     mode: "pin" as const,
     email: "",
     password: "",
     onSelect: () => undefined,
+    onKey: () => undefined,
     onToggleMode: () => undefined,
     onChangeCredentials: () => undefined,
     onSubmit: () => undefined,
   };
-  it("lists users, shows the pad and the password link", async () => {
+
+  it("lists the users with their role and marks the one who still needs a PIN", async () => {
+    const onSelect = vi.fn();
+    await render(<LoginView {...props} onSelect={onSelect} />);
+    expect(screen.getByText("مدير")).toBeTruthy();
+    expect(screen.getByText("يحتاج رقماً سرياً")).toBeTruthy();
+    await fireEvent.press(screen.getByLabelText("ليلى"));
+    expect(onSelect).toHaveBeenCalledWith("u2");
+  });
+
+  it("the pad types, shows 4 dots and names the step", async () => {
     const onKey = vi.fn();
-    await render(<LoginView {...props} onKey={onKey} />);
-    expect(screen.getByText("سامر")).toBeTruthy();
-    expect(screen.getByText("الدخول بكلمة المرور")).toBeTruthy();
+    await render(<LoginView {...props} selectedId="u1" pin="12" onKey={onKey} />);
     await fireEvent.press(screen.getByLabelText("7"));
     expect(onKey).toHaveBeenCalledWith("7");
-    expect(screen.getByTestId("pin-dots").props.children).toBe("●●");
+    expect(screen.getByTestId("pin-dots").props.accessibilityLabel).toBe("2 من 4");
+    expect(screen.getByTestId("pin-step").props.children).toContain("أدخل رقمك السري");
+  });
+
+  it("a user without a PIN is asked to choose one, then to confirm it", async () => {
+    await render(<LoginView {...props} selectedId="u2" pinStep="choose" />);
+    expect(screen.getByTestId("pin-step").props.children).toContain("اختر رقماً سرياً");
+  });
+
+  it("shows the hub's reason as an alert", async () => {
+    await render(<LoginView {...props} selectedId="u1" error="الرقم السري غير صحيح" />);
+    expect(screen.getByTestId("login-error")).toBeTruthy();
+    expect(screen.getByText("الرقم السري غير صحيح")).toBeTruthy();
   });
 });
 
@@ -93,5 +155,96 @@ describe("scan overlay", () => {
     expect(screen.getByTestId("scan-frame")).toBeTruthy();
     fireEvent.press(screen.getByTestId("scan-cancel"));
     expect(onCancel).toHaveBeenCalledOnce();
+  });
+});
+
+describe("hub address and wake-up", () => {
+  it("normalises what people type", () => {
+    expect(normalizeHubUrl("me-sh6t.onrender.com")).toBe("https://me-sh6t.onrender.com");
+    expect(normalizeHubUrl("  https://me-sh6t.onrender.com/ ")).toBe(
+      "https://me-sh6t.onrender.com",
+    );
+    expect(normalizeHubUrl("http://10.0.2.2:9")).toBe("http://10.0.2.2:9");
+    expect(normalizeHubUrl("ftp://x.com")).toBeNull();
+    expect(normalizeHubUrl("hello")).toBeNull();
+    expect(normalizeHubUrl("")).toBeNull();
+  });
+
+  it("waits for a sleeping server, and gives up after the budget", async () => {
+    let t = 0;
+    let calls = 0;
+    const deps = {
+      fetch: (async () => {
+        calls += 1;
+        if (calls < 3) throw new TypeError("Network request failed");
+        return new Response("ok", { status: 200 });
+      }) as unknown as typeof fetch,
+      now: () => t,
+      sleep: async (ms: number) => {
+        t += ms;
+      },
+    };
+    expect(await wakeHub("https://h", deps)).toBe(true);
+    expect(calls).toBe(3);
+    const never = {
+      ...deps,
+      fetch: (async () => new Response("", { status: 502 })) as unknown as typeof fetch,
+    };
+    t = 0;
+    expect(await wakeHub("https://h", never, 10_000)).toBe(false);
+  });
+});
+
+describe("enrol form on a small screen", () => {
+  it("puts both fields before the QR button and the hint, so the keyboard never covers the second field", async () => {
+    await render(
+      <EnrollView
+        state={{ hub: "", code: "", busy: false, progress: null, error: null }}
+        onChange={() => undefined}
+        onSubmit={() => undefined}
+        onScan={() => undefined}
+      />,
+    );
+    // Document order of the rendered host nodes: testIDs and texts, depth first.
+    const seen: string[] = [];
+    const walk = (n: unknown): void => {
+      if (n === null || n === undefined) return;
+      if (typeof n === "string") return void seen.push(n);
+      if (Array.isArray(n)) return n.forEach(walk);
+      const node = n as { props?: { testID?: string }; children?: unknown };
+      if (node.props?.testID) seen.push(`#${node.props.testID}`);
+      walk(node.children);
+    };
+    walk(screen.toJSON());
+    const order = seen.join("|");
+    const hub = order.indexOf("#hub");
+    const code = order.indexOf("#code");
+    const qr = order.indexOf("مسح رمز QR");
+    const hint = order.indexOf("تجد عنوان المركز");
+    expect(hub).toBeGreaterThan(-1);
+    expect(hub).toBeLessThan(code);
+    expect(code).toBeLessThan(qr);
+    expect(qr).toBeLessThan(hint);
+    expect(screen.getByTestId("hub").props.returnKeyType).toBe("next");
+  });
+
+  it("«done» on the code field submits a complete form", async () => {
+    const onSubmit = vi.fn();
+    await render(
+      <EnrollView
+        state={{
+          hub: "https://h.example",
+          code: "AB-12",
+          busy: false,
+          progress: null,
+          error: null,
+        }}
+        onChange={() => undefined}
+        onSubmit={onSubmit}
+        onScan={() => undefined}
+      />,
+    );
+    await fireEvent(screen.getByTestId("code"), "submitEditing");
+    expect(onSubmit).toHaveBeenCalledOnce();
   });
 });

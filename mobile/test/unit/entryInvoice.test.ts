@@ -1,9 +1,14 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { withTenantTx } from "@backend/infrastructure/orm/engine";
 import { createPartyUseCase } from "@backend/application/use-cases/parties/partyUseCases";
-import { listColorStock, listFabricStock, listRollsOfColor } from "../../src/core/inventory";
+import { listFabrics, loadColorLots, loadFabric } from "../../src/core/stock";
 import { loadPartyBalances } from "../../src/core/reports";
 import { makeTestPhone, type TestPhone } from "../helpers/testPhone";
+
+const colorsOf = async (phone: Parameters<typeof loadFabric>[0], fabricId: string) =>
+  (await loadFabric(phone, fabricId))?.colors ?? [];
+const lotsOf = async (phone: Parameters<typeof loadColorLots>[0], colorId: string) =>
+  (await loadColorLots(phone, colorId))?.lots ?? [];
 
 describe("purchase (entry) invoice: new colours and rolls in the same save", () => {
   let t: TestPhone;
@@ -52,7 +57,7 @@ describe("purchase (entry) invoice: new colours and rolls in the same save", () 
       supplierId: "00000000-0000-4000-8000-000000000000", // the invoice use-case refuses an unknown supplier
     });
     expect(r.ok).toBe(false);
-    expect(await listFabricStock(t.phone, "قماش جديد")).toHaveLength(0);
+    expect(await listFabrics(t.phone, "قماش جديد")).toHaveLength(0);
     expect(await outstanding()).toBe(before);
     expect(await loadPartyBalances(t.phone, "supplier")).toEqual([]);
   });
@@ -66,7 +71,7 @@ describe("purchase (entry) invoice: new colours and rolls in the same save", () 
       ]),
     );
     expect(r.ok).toBe(false);
-    expect(await listFabricStock(t.phone, "قماش أ")).toHaveLength(0);
+    expect(await listFabrics(t.phone, "قماش أ")).toHaveLength(0);
     expect(await outstanding()).toBe(before);
   });
 
@@ -82,15 +87,15 @@ describe("purchase (entry) invoice: new colours and rolls in the same save", () 
     if (!r.ok) throw new Error(r.error);
     expect(r.data.type).toBe("entry");
     expect(r.data.total).toBe(40 * 2.5 + 30 * 3 + 20 * 2.5);
-    const fabrics = await listFabricStock(t.phone, "قطن شراء");
+    const fabrics = await listFabrics(t.phone, "قطن شراء");
     expect(fabrics).toHaveLength(1);
-    expect(fabrics[0]).toMatchObject({ remainingKg: 90, rollCount: 3 });
-    const colors = await listColorStock(t.phone, fabrics[0]!.id);
+    expect(fabrics[0]).toMatchObject({ remainingKg: 90, activeLots: 3 });
+    const colors = await colorsOf(t.phone, fabrics[0]!.id);
     expect(colors.map((c) => [c.name, c.remainingKg])).toEqual([
       ["أحمر", 60],
       ["أزرق", 30],
     ]);
-    const rolls = await listRollsOfColor(t.phone, colors[0]!.id);
+    const rolls = await lotsOf(t.phone, colors[0]!.id);
     expect(rolls.map((x) => x.remainingKg).sort()).toEqual([20, 40]);
     const bal = await loadPartyBalances(t.phone, "supplier");
     expect(bal[0]).toMatchObject({ name: "مورد الشراء", currency: "USD", remaining: 240 });
@@ -105,10 +110,10 @@ describe("purchase (entry) invoice: new colours and rolls in the same save", () 
       ]),
     );
     if (!r.ok) throw new Error(r.error);
-    const fabrics = await listFabricStock(t.phone, "قطن شراء");
+    const fabrics = await listFabrics(t.phone, "قطن شراء");
     expect(fabrics).toHaveLength(1);
-    expect(fabrics[0]).toMatchObject({ remainingKg: 95, rollCount: 4 });
-    expect(await listColorStock(t.phone, fabrics[0]!.id)).toHaveLength(2);
+    expect(fabrics[0]).toMatchObject({ remainingKg: 95, activeLots: 4 });
+    expect(await colorsOf(t.phone, fabrics[0]!.id)).toHaveLength(2);
   });
 
   it("cancelling a purchase reverses its stock", async () => {
@@ -119,7 +124,7 @@ describe("purchase (entry) invoice: new colours and rolls in the same save", () 
     const newest = list.data[0]!;
     const c = await t.phone.documents.cancelInvoice(newest.id, newest.version);
     if (!c.ok) throw new Error(c.error);
-    const fabrics = await listFabricStock(t.phone, "قطن شراء");
+    const fabrics = await listFabrics(t.phone, "قطن شراء");
     expect(fabrics[0]!.remainingKg).toBe(90);
   });
 });

@@ -1,17 +1,22 @@
+import type { ComponentRef, Ref } from "react";
 import { TextInput, View, type TextInputProps } from "react-native";
 import { Text } from "./Text";
 import { fontFamilyFor } from "./fontFamilies";
-import { colors, fontSize, radius, spacing, TOUCH_TARGET } from "./theme";
+import { fontSize, radius, spacing, TOUCH_TARGET } from "./theme";
+import { useColors } from "./themeContext-core";
 
 export interface FieldProps extends Omit<TextInputProps, "style"> {
   label: string;
   /** Stable id of the label; the input points at it with accessibilityLabelledBy (the desktop `FormField` rule). */
   fieldId: string;
   error?: string | null;
+  /** To move focus here from the previous field («التالي» on the keyboard). */
+  inputRef?: Ref<ComponentRef<typeof TextInput>>;
 }
 
 /** A label tied to its input: the input is labelled by the label's nativeID, and also carries the text itself. */
-export function Field({ label, fieldId, error, ...input }: FieldProps) {
+export function Field({ label, fieldId, error, inputRef, ...input }: FieldProps) {
+  const colors = useColors();
   const labelId = `${fieldId}-label`;
   return (
     <View style={{ marginBottom: spacing.lg }}>
@@ -23,10 +28,12 @@ export function Field({ label, fieldId, error, ...input }: FieldProps) {
       </Text>
       <TextInput
         {...input}
+        ref={inputRef}
         nativeID={fieldId}
         testID={fieldId}
         accessibilityLabel={label}
         accessibilityLabelledBy={labelId}
+        placeholderTextColor={colors.mutedForeground}
         style={{
           minHeight: TOUCH_TARGET,
           fontSize: fontSize.input,
@@ -35,7 +42,8 @@ export function Field({ label, fieldId, error, ...input }: FieldProps) {
           borderColor: error ? colors.negative : colors.input,
           borderWidth: 1,
           borderRadius: radius.md,
-          paddingHorizontal: spacing.md,
+          paddingHorizontal: spacing.lg,
+          paddingVertical: spacing.sm,
           textAlign: "right",
           fontFamily: fontFamilyFor("400"),
         }}

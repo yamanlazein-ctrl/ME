@@ -1,13 +1,19 @@
 appId: com.motard.erp
-name: 89 customer order, cancel, and the close-day screen
+name: 89 customer order, cancel, and closing the day
 ---
 - launchApp
 - runFlow: unlock.yaml
-- tapOn: "المزيد"
-- tapOn: "الطلبيات"
-- assertNotVisible: ".*تعذّر.*"
+- tapOn:
+    id: "tab-more"
+- tapOn:
+    id: "more-orders"
+- assertNotVisible:
+    id: "state-error"
 - takeScreenshot: 90-orders
-- tapOn: "طلبية جديدة"
+- tapOn:
+    id: "order-new"
+- tapOn:
+    id: "party-picker"
 - tapOn:
     id: "party-option"
 - tapOn:
@@ -18,6 +24,10 @@ name: 89 customer order, cancel, and the close-day screen
     id: "order-color"
 - inputText: Ordcolor
 - hideKeyboard
+- scrollUntilVisible:
+    element:
+      id: "order-kg"
+    centerElement: true
 - tapOn:
     id: "order-kg"
 - inputText: "25"
@@ -26,9 +36,11 @@ name: 89 customer order, cancel, and the close-day screen
     element: "إضافة البند"
     centerElement: true
 - tapOn: "إضافة البند"
-- assertVisible: "Ordfab · Ordcolor · 25 كغ"
+- scrollUntilVisible:
+    element: "Ordfab · Ordcolor"
 - takeScreenshot: 91-order-form
-- tapOn: "حفظ الطلبية"
+- tapOn:
+    id: "order-save"
 - extendedWaitUntil:
     visible:
       id: "order-row"
@@ -47,19 +59,29 @@ name: 89 customer order, cancel, and the close-day screen
     element: "إلغاء الطلبية"
 - tapOn: "إلغاء الطلبية"
 - tapOn:
-    text: "إلغاء الطلبية"
-    index: 1
+    id: "confirm-yes"
 - extendedWaitUntil:
     visible:
       id: "order-row"
     timeout: 60000
 - takeScreenshot: 94-order-cancelled
-# Close-day screen (admin): the screen loads with the balances and the confirmation dialog opens.
-- tapOn: "المزيد"
-- scrollUntilVisible:
-    element: "إقفال اليوم"
-- tapOn: "إقفال اليوم"
+# Closing the day: system balance, counted cash, the difference, confirmation.
+- tapOn:
+    id: "tab-more"
+- tapOn:
+    id: "more-closeDay"
 - assertNotVisible:
     id: "close-day-denied"
-- assertNotVisible: ".*تعذّر.*"
+- tapOn:
+    id: "close-counted"
+- inputText: "1"
+- hideKeyboard
+- assertVisible: "(زيادة|نقص) في الصندوق|لا فرق"
 - takeScreenshot: 95-close-day
+- tapOn:
+    id: "close-day"
+- assertVisible:
+    id: "confirm-sheet"
+- takeScreenshot: 95b-close-day-confirm
+- tapOn:
+    id: "confirm-no"

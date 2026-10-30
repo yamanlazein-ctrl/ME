@@ -5,7 +5,7 @@ import { emptyReturnDraft, RETURN_REASON_LABEL } from "../../src/core/returns";
 import { OrderDetailView, OrderListView } from "../../src/ui/OrderViews";
 import { ReturnFormView, ReturnListView } from "../../src/ui/ReturnViews";
 
-vi.mock("../../src/hooks/useParties", () => ({ useParties: () => ({ data: [] }) }));
+vi.mock("../../src/hooks/useParties", () => ({ usePartyList: () => ({ data: [] }) }));
 
 const order = (status: string) =>
   ({
@@ -58,7 +58,9 @@ describe("order views", () => {
     );
     expect(screen.getByText(CONFLICT_NOTE)).toBeTruthy();
     expect(screen.getByText("تنفيذ بالفاتورة INV-1")).toBeTruthy();
-    fireEvent.press(screen.getByText("إلغاء الطلبية"));
+    await fireEvent.press(screen.getByLabelText("إلغاء الطلبية"));
+    expect(onCancel).not.toHaveBeenCalled(); // asks first
+    await fireEvent.press(screen.getByTestId("confirm-yes"));
     expect(onCancel).toHaveBeenCalledOnce();
   });
 
@@ -73,7 +75,7 @@ describe("order views", () => {
         onFulfil={() => undefined}
       />,
     );
-    expect(screen.queryByText("إلغاء الطلبية")).toBeNull();
+    expect(screen.queryByLabelText("إلغاء الطلبية")).toBeNull();
   });
 });
 
@@ -83,7 +85,6 @@ describe("return views", () => {
       <ReturnFormView
         draft={emptyReturnDraft("sale")}
         invoices={[]}
-        busy={false}
         error={null}
         onKind={() => undefined}
         onParty={() => undefined}
@@ -93,8 +94,9 @@ describe("return views", () => {
         onSave={() => undefined}
       />,
     );
-    expect(screen.getByText("اختر الطرف")).toBeTruthy();
     expect(screen.getByText(RETURN_REASON_LABEL.defect)).toBeTruthy();
+    await fireEvent.press(screen.getByLabelText("حفظ المرتجع"));
+    expect(screen.getByText(/اختر الطرف/)).toBeTruthy();
   });
 
   it("the list offers cancel on an active return to allowed roles", async () => {
@@ -122,7 +124,9 @@ describe("return views", () => {
     ];
     const onCancel = vi.fn();
     await render(<ReturnListView rows={rows} canCancel error={null} onCancel={onCancel} />);
-    fireEvent.press(screen.getByLabelText("إلغاء المرتجع RET-1"));
+    await fireEvent.press(screen.getByLabelText("مرتجع بيع RET-1"));
+    await fireEvent.press(screen.getByLabelText("إلغاء المرتجع RET-1"));
+    await fireEvent.press(screen.getByTestId("confirm-yes"));
     expect(onCancel).toHaveBeenCalledWith(rows[0]);
     expect(screen.getByText("ملغى")).toBeTruthy();
   });
@@ -143,6 +147,7 @@ describe("return views", () => {
     await render(
       <ReturnListView rows={rows} canCancel={false} error={null} onCancel={() => undefined} />,
     );
+    await fireEvent.press(screen.getByLabelText("مرتجع بيع RET-1"));
     expect(screen.queryByLabelText("إلغاء المرتجع RET-1")).toBeNull();
   });
 });

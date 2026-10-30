@@ -2,10 +2,9 @@
 // (sync chip + update banner) above every screen (FR-01, FR-04, FR-06, FR-07, FR-37, FR-41, UX-06).
 import "../src/platform/bufferPolyfill";
 import "../src/core";
-import { useCallback, useEffect, useRef, useState } from "react";
-import { AppState, Image, View } from "react-native";
-import logo from "../assets/logo.png";
-import { Stack, router, useSegments } from "expo-router";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { AppState, View } from "react-native";
+import { ThemeProvider as NavThemeProvider, router, useSegments } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import * as LocalAuthentication from "expo-local-authentication";
 import { QueryCache, QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -29,9 +28,12 @@ import { useUpdateOffer } from "../src/hooks/useUpdateOffer";
 import { assertRtl } from "../src/ui/rtl";
 import { installGlobalErrorLogging, logError } from "../src/core/devlog";
 import { useAppFonts } from "../src/ui/fonts";
-import { colors } from "../src/ui/theme";
-import { ThemeProvider, useTheme } from "../src/ui/ThemeContext";
+
+import { ThemeProvider, useTheme, useColors } from "../src/ui/ThemeContext";
 import { Text } from "../src/ui/Text";
+import { navTheme } from "../src/ui/kit/navTheme";
+import { ThemedStack } from "../src/ui/kit/ThemedStack";
+import { HeaderSlotCtx } from "../src/ui/kit/headerSlot";
 import { verifyPin } from "../src/platform/pinVerifier";
 import { getSecret } from "../src/platform/secureStore";
 
@@ -49,42 +51,28 @@ const queryClient = new QueryClient({
 const UPDATE_URL =
   process.env.EXPO_PUBLIC_UPDATE_URL ?? "https://github.com/yamanlazein-ctrl/me/actions";
 
-function StatusStrip() {
+/** The shell's part of every screen header: the sync chip and the update banners. */
+function ShellSlot({ children }: { children: React.ReactNode }) {
   const chip = useSyncState();
   const status = useSyncStatus();
   const offer = useUpdateOffer();
-  return (
-    <View
-      style={{
-        paddingTop: 36,
-        backgroundColor: colors.card,
-        borderBottomWidth: 1,
-        borderBottomColor: colors.border,
-      }}
-    >
-      <View
-        style={{
-          flexDirection: "row",
-          justifyContent: "space-between",
-          alignItems: "center",
-          padding: 8,
-        }}
-      >
-        <Image
-          source={logo}
-          style={{ width: 56, height: 28 }}
-          resizeMode="contain"
-          accessibilityLabel="Motard"
-        />
-        <SyncChip state={chip} />
-      </View>
-      <UpdateBanner visible={status.halted === "versionMismatch"} url={UPDATE_URL} />
-      <UpdateOfferBanner offer={offer} />
-    </View>
+  const value = useMemo(
+    () => ({
+      accessory: <SyncChip state={chip} />,
+      banner: (
+        <>
+          <UpdateBanner visible={status.halted === "versionMismatch"} url={UPDATE_URL} />
+          <UpdateOfferBanner offer={offer} />
+        </>
+      ),
+    }),
+    [chip, status.halted, offer],
   );
+  return <HeaderSlotCtx.Provider value={value}>{children}</HeaderSlotCtx.Provider>;
 }
 
 function RootContent() {
+  const colors = useColors();
   const fonts = useAppFonts();
   const { theme } = useTheme();
   const boot = useBoot();
@@ -241,14 +229,15 @@ function RootContent() {
       <ToastProvider>
         <View style={{ flex: 1, backgroundColor: colors.background }}>
           <StatusBar style={theme === "dark" ? "light" : "dark"} />
-          {active ? <StatusStrip /> : null}
-          <Stack
-            key={theme}
-            screenOptions={{
-              headerShown: false,
-              contentStyle: { backgroundColor: colors.background },
-            }}
-          />
+          <NavThemeProvider value={navTheme(theme, colors)}>
+            {active ? (
+              <ShellSlot>
+                <ThemedStack />
+              </ShellSlot>
+            ) : (
+              <ThemedStack />
+            )}
+          </NavThemeProvider>
           <AppLockOverlay
             visible={coverVisible(appStateName ?? "active", needsLock)}
             onBiometric={unlock}

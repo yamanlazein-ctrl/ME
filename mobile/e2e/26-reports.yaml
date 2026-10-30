@@ -3,8 +3,10 @@ name: 26 every report
 ---
 - launchApp
 - runFlow: unlock.yaml
-- tapOn: "المزيد"
-- tapOn: "التقارير"
+- tapOn:
+    id: "tab-more"
+- tapOn:
+    id: "more-reports"
 - runFlow:
     file: report-open.yaml
     env:
@@ -72,12 +74,14 @@ name: 26 every report
 - tapOn: "نظرة عامة"
 - extendedWaitUntil:
     visible:
-      id: "report-title"
+      id: "screen-title"
     timeout: 30000
-- tapOn: "هذا الشهر"
+- tapOn:
+    id: "period-month"
 - assertNotVisible:
-    id: "report-error"
-- tapOn: "هذه السنة"
+    id: "state-error"
+- tapOn:
+    id: "period-year"
 - assertNotVisible:
-    id: "report-error"
+    id: "state-error"
 - takeScreenshot: 62-report-period

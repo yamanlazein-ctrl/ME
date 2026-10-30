@@ -10,6 +10,8 @@ export interface RosterUser {
   name: string;
   role: Role;
   email?: string | null;
+  /** False until the user chooses a PIN (on the desktop or here); such a user must set one before signing in with it. */
+  hasPin?: boolean;
 }
 
 export interface StoredSession {
@@ -51,6 +53,22 @@ export class PinLoginError extends Error {
   }
 }
 
+/** The hub's answer to a refused sign-in, in words the user can act on (never a raw status or stack). */
+export function signInErrorMessage(
+  status: number,
+  body: { message?: string; code?: string; details?: Record<string, unknown> },
+): string {
+  if (status === 429) return "محاولات كثيرة متتالية. انتظر دقيقة ثم حاول مجدداً";
+  if (status >= 500) return "خطأ في المركز. حاول بعد قليل، وإن تكرر فأبلغ مسؤول النظام";
+  if (body.code === "DEVICE_PROOF_REQUIRED")
+    return "هذا الهاتف غير معروف للمركز. أعد ربط الهاتف برمز دعوة جديد";
+  // A validation refusal carries the real reason per field («هذا الرقم السري ضعيف جداً…»); the top message is generic.
+  const fieldReason = Object.values(body.details ?? {})
+    .flat()
+    .find((v): v is string => typeof v === "string" && v.trim() !== "");
+  return fieldReason ?? body.message ?? "تعذّر تسجيل الدخول";
+}
+
 export function createSessionService(deps: SessionDeps) {
   const readSession = async (): Promise<StoredSession | null> => {
     const raw = await deps.getSecret(SESSION_KEY);
@@ -82,6 +100,7 @@ export function createSessionService(deps: SessionDeps) {
           name: u.name,
           role: u.role,
           email: u.email ?? null,
+          hasPin: u.hasPin !== false,
         }));
         await deps.setSecret(ROSTER_KEY, JSON.stringify(users));
         return users;
@@ -106,8 +125,15 @@ export function createSessionService(deps: SessionDeps) {
       throw new PinLoginError("تعذّر الاتصال بالمركز", "network");
     }
     if (!res.ok) {
-      const body = (await res.json().catch(() => ({}))) as { message?: string };
-      throw new PinLoginError(body.message ?? "الرمز السري غير صحيح", "invalid");
+      const body = (await res.json().catch(() => ({}))) as {
+        message?: string;
+        code?: string;
+        details?: Record<string, unknown>;
+      };
+      throw new PinLoginError(
+        res.status === 401 ? "الرقم السري غير صحيح" : signInErrorMessage(res.status, body),
+        "invalid",
+      );
     }
     const body = (await res.json()) as {
       accessToken: string;
@@ -140,8 +166,17 @@ export function createSessionService(deps: SessionDeps) {
       throw new PinLoginError("تعذّر الاتصال بالمركز", "network");
     }
     if (!res.ok) {
-      const body = (await res.json().catch(() => ({}))) as { message?: string };
-      throw new PinLoginError(body.message ?? "البريد أو كلمة المرور غير صحيحة", "invalid");
+      const body = (await res.json().catch(() => ({}))) as {
+        message?: string;
+        code?: string;
+        details?: Record<string, unknown>;
+      };
+      throw new PinLoginError(
+        res.status === 401
+          ? "البريد أو كلمة المرور غير صحيحة"
+          : signInErrorMessage(res.status, body),
+        "invalid",
+      );
     }
     const body = (await res.json()) as {
       accessToken: string;
@@ -158,6 +193,32 @@ export function createSessionService(deps: SessionDeps) {
     };
     await writeSession(session);
     return session;
+  }
+
+  /**
+   * First PIN of a user who has none yet (or a forgotten one): the hub accepts it on this enrolled device's proof, the
+   * same rule the desktop's user picker uses. Weak PINs (0000, 1234…) are refused by the hub with its own message.
+   */
+  async function setPin(userId: string, pin: string): Promise<void> {
+    let res: Response;
+    try {
+      const auth = await deps.deviceAuthHeader();
+      res = await deps.fetch(`${deps.hubUrl()}/api/auth/set-pin`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...(auth ? { Authorization: auth } : {}) },
+        body: JSON.stringify({ userId, pin, tenantId: deps.tenantId() }),
+      });
+    } catch {
+      throw new PinLoginError("تعذّر الاتصال بالمركز. تعيين الرقم السري يحتاج اتصالاً", "network");
+    }
+    if (!res.ok) {
+      const body = (await res.json().catch(() => ({}))) as {
+        message?: string;
+        code?: string;
+        details?: Record<string, unknown>;
+      };
+      throw new PinLoginError(signInErrorMessage(res.status, body), "invalid");
+    }
   }
 
   /** Offline sign-in: the PIN is checked against the verifier stored by the last online sign-in (FR-05). */
@@ -254,6 +315,7 @@ export function createSessionService(deps: SessionDeps) {
   return {
     roster,
     pinLogin,
+    setPin,
     passwordLogin,
     offlineLogin,
     refresh,

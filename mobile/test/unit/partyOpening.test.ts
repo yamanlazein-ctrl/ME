@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { balancesByCurrency, loadFullStatement } from "../../src/core/partyQueries";
+import { loadFullStatement } from "../../src/core/partyQueries";
+import { partyBalances } from "../../src/core/parties";
 import { loadPartyBalances } from "../../src/core/reports";
 import { makeTestPhone, type TestPhone } from "../helpers/testPhone";
 
@@ -50,7 +51,9 @@ describe("party opening balance on a new party (T127)", () => {
 
   it("balances list every currency of the party, not only the party's own (the desktop's ALL)", async () => {
     const supplier = await open("supplier", "مورد دولار", "we_owe_them", 250);
-    expect(await balancesByCurrency(t.phone, supplier.id, "supplier")).toMatchObject({ USD: 250 });
+    expect(await partyBalances(t.phone, supplier.id, "supplier")).toEqual([
+      expect.objectContaining({ currency: "USD", balance: 250, side: "credit" }),
+    ]);
   });
 
   it("a customer who owes us 500 shows in the customer balances", async () => {

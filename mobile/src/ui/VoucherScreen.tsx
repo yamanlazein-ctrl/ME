@@ -1,51 +1,80 @@
 import { useEffect, useState } from "react";
 import { router } from "expo-router";
-import { getApp } from "../core/appRuntime";
-import { useFinishWrite } from "../hooks/useFinishWrite";
-import { Pressable, View } from "react-native";
-import { SendToCustomer } from "./SendToCustomer";
-import { Text } from "./Text";
-import { colors, fontSize, radius, spacing, TOUCH_TARGET } from "./theme";
-import { emptyVoucher, VoucherForm, type VoucherFormValues } from "./VoucherForm";
+import { useQuery } from "@tanstack/react-query";
 import { localDateISO } from "@backend/infrastructure/utils/localDate";
+import { getApp } from "../core/appRuntime";
+import { partyBalances } from "../core/parties";
+import { queryKeys } from "../hooks/queryKeys";
+import { useFinishWrite } from "../hooks/useFinishWrite";
+import { SharePdfButton } from "./SendToCustomer";
+import { DocumentDoneView, SAVED_LOCALLY_NOTE } from "./SaleViews";
+import {
+  emptyVoucher,
+  VoucherForm,
+  voucherProblems,
+  type VoucherFormValues,
+  type VoucherMethod,
+} from "./VoucherForm";
 
-/** Receipt/payment screen. With `amendId` it loads the voucher and saves through the replace use-case in one call (FR-21). */
+/**
+ * Receipt/payment screen. `partyId` preselects the party (from its page); with `amendId` it loads the voucher and saves
+ * through the replace use-case in one call (FR-21).
+ */
 export function VoucherScreen({
   kind,
   amendId,
+  partyId,
 }: {
   kind: "receipt" | "payment";
   amendId?: string;
+  partyId?: string;
 }) {
   const finish = useFinishWrite();
   const [values, setValues] = useState<VoucherFormValues>(emptyVoucher());
   const [original, setOriginal] = useState<{ version: number; amount: number } | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
+  const [attempted, setAttempted] = useState(false);
   const [done, setDone] = useState<{ id: string; number: string } | null>(null);
+  const partyKind: "customer" | "supplier" = kind === "receipt" ? "customer" : "supplier";
+
+  const balances = useQuery({
+    queryKey: [...queryKeys.party(values.party?.id ?? ""), "balances"],
+    enabled: Boolean(values.party),
+    queryFn: async () => {
+      const app = await getApp();
+      if (!app.phone || !values.party) return [];
+      return partyBalances(app.phone, values.party.id, partyKind);
+    },
+  });
 
   useEffect(() => {
-    if (!amendId) return;
     void getApp().then(async (app) => {
       if (!app.phone) return;
-      const v = await app.phone.repos.voucherRepo.findById(amendId, app.phone.context());
-      if (!v) return;
-      const party = await app.phone.repos.partyRepo.findById(v.partyId, app.phone.context());
-      setOriginal({ version: v.version, amount: v.amount });
-      setValues({
-        party: { id: v.partyId, name: party?.name ?? "" },
-        amount: v.amount,
-        currency: v.currency ?? "USD",
-        rate: v.exchangeRate ?? 1,
-        discount: v.discount ?? null,
-        note: v.notesInternal ?? "",
-      });
+      const ctx = app.phone.context();
+      if (amendId) {
+        const v = await app.phone.repos.voucherRepo.findById(amendId, ctx);
+        if (!v) return;
+        const party = await app.phone.repos.partyRepo.findById(v.partyId, ctx);
+        setOriginal({ version: v.version, amount: v.amount });
+        setValues({
+          party: { id: v.partyId, name: party?.name ?? "" },
+          amount: v.amount,
+          currency: v.currency ?? "USD",
+          rate: v.currency === "USD" ? null : (v.exchangeRate ?? null),
+          discount: v.discount ?? null,
+          method: ((v.method as VoucherMethod | undefined) ?? "cash") as VoucherMethod,
+          note: v.notesInternal ?? "",
+        });
+      } else if (partyId) {
+        const party = await app.phone.repos.partyRepo.findById(partyId, ctx);
+        if (party) setValues((x) => ({ ...x, party: { id: party.id, name: party.name } }));
+      }
     });
-  }, [amendId]);
+  }, [amendId, partyId]);
 
   const save = async () => {
-    if (!values.party || !values.amount || !values.rate) return;
-    setBusy(true);
+    setAttempted(true);
+    if (voucherProblems(values).length > 0 || !values.party || !values.amount) return;
     setError(null);
     try {
       const app = await getApp();
@@ -53,11 +82,11 @@ export function VoucherScreen({
       const body = {
         date: localDateISO(new Date()),
         partyId: values.party.id,
-        partyKind: kind === "receipt" ? ("customer" as const) : ("supplier" as const),
+        partyKind,
         amount: values.amount,
         currency: values.currency,
-        exchangeRate: values.rate,
-        method: "cash" as const,
+        exchangeRate: values.currency === "USD" ? 1 : (values.rate ?? 0),
+        method: values.method,
         ...(values.discount ? { discount: values.discount } : {}),
         ...(values.note.trim() ? { notesInternal: values.note.trim() } : {}),
       };
@@ -65,55 +94,44 @@ export function VoucherScreen({
         amendId && original
           ? await app.phone.documents.replaceVoucher(amendId, kind, original.version, body)
           : await app.phone.documents.createVoucher(kind, body);
-      if (!result.ok) {
-        setError(result.error);
-        return;
-      }
+      if (!result.ok) return setError(result.error);
       await finish();
       setDone({ id: result.data.id, number: result.data.number });
     } catch (e) {
       setError(e instanceof Error ? e.message : "تعذّر الحفظ");
-    } finally {
-      setBusy(false);
     }
   };
 
   if (done) {
     return (
-      <View style={{ flex: 1, padding: spacing.xl, paddingTop: 64, gap: spacing.md }}>
-        <Text testID="voucher-done" style={{ fontSize: fontSize.title }}>
-          {`تم حفظ السند ${done.number}`}
-        </Text>
-        <SendToCustomer docRef={{ type: "voucher", id: done.id }} />
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="تم"
-          onPress={() => router.back()}
-          style={{
-            minHeight: TOUCH_TARGET,
-            justifyContent: "center",
-            alignItems: "center",
-            borderRadius: radius.md,
-            borderWidth: 1,
-            borderColor: colors.border,
-          }}
-        >
-          <Text>تم</Text>
-        </Pressable>
-      </View>
+      <DocumentDoneView
+        title={kind === "receipt" ? "سند القبض" : "سند الصرف"}
+        number={done.number}
+        note={SAVED_LOCALLY_NOTE}
+        shareSlot={<SharePdfButton docRef={{ type: "voucher", id: done.id }} variant="primary" />}
+        onNew={() => {
+          setDone(null);
+          setAttempted(false);
+          setValues(emptyVoucher());
+          router.replace(`/(tabs)/add/${kind}` as never);
+        }}
+        newLabel={kind === "receipt" ? "سند قبض جديد" : "سند صرف جديد"}
+      />
     );
   }
 
   return (
     <VoucherForm
+      key={original ? `amend-${original.version}` : "new"}
       kind={kind}
       {...(amendId ? { amend: true } : {})}
       {...(original ? { initialAmount: String(original.amount) } : {})}
       values={values}
+      balances={balances.data}
       error={error}
-      busy={busy}
+      attempted={attempted}
       onChange={(patch) => setValues((v) => ({ ...v, ...patch }))}
-      onSave={() => void save()}
+      onSave={save}
     />
   );
 }

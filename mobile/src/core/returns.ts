@@ -1,6 +1,6 @@
 // Returns (FR-18): pick the source invoice, then its lines. The valuation, the frozen exchange rate and the reversals come
 // from the shared return use-case; the phone only collects which lines and how many kg come back.
-import type { CreateReturnInput } from "@backend/domain/entities/Return";
+import { ReturnDoc, type CreateReturnInput } from "@backend/domain/entities/Return";
 import { loadInvoiceView } from "./invoiceView";
 import type { Phone } from "./phone";
 
@@ -148,7 +148,7 @@ export async function listReturns(phone: Phone): Promise<ReturnListRow[]> {
     date: r.date,
     status: r.status,
     version: r.version,
-    total: r.lines.reduce((s, l) => s + l.quantityKg * l.pricePerKg, 0),
+    total: ReturnDoc.reconstitute(r).amount,
     currency: r.currency,
   }));
 }
