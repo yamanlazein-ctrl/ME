@@ -19,6 +19,7 @@
  * All fields default to visible. Users can hide via /settings/invoice.
  */
 import { useMemo, type ReactNode } from "react";
+import { returnAmount, returnLineAmount } from "@/presentation/hooks/useReturns";
 import {
   PrintDocument,
   PrintTable,
@@ -101,7 +102,7 @@ export function ReturnInvoicePrint({
     [allVouchers, r.partyId],
   );
   const paymentMethod = linkedVouchers[0]?.method;
-  const total = r.lines.reduce((s, l) => s + l.quantityKg * l.pricePerKg, 0);
+  const total = returnAmount(r);
   const isCancelled = r.status === "cancelled";
   const statusLabel = isCancelled ? "ملغى" : "نشط";
   // ── Meta grid (visibility-aware) ──
@@ -186,7 +187,7 @@ export function ReturnInvoicePrint({
     const roll = rollById(l.rollId);
     const col = roll ? colorById(roll.colorId) : null;
     const fab = col ? fabricById(col.fabricId) : null;
-    const sub = l.quantityKg * l.pricePerKg;
+    const sub = returnLineAmount(l);
     const cell: Record<string, string | number | React.ReactNode> = {
       idx: i + 1,
       roll: roll ? roll.rollNo : "—",

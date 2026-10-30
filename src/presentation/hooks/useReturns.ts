@@ -4,6 +4,7 @@ import { fetchAllPaged } from "@/lib/fetchAllPaged";
 import { buildTenantContext } from "@/infrastructure/di/auth-context";
 import { isOk } from "@/core/result";
 import { toast } from "sonner";
+import { round2dp } from "@erp/shared";
 import type { ReturnFilter, ReturnDTO } from "@/application/ports/IReturnRepository";
 import { refreshInventory } from "./useInventory";
 import { invalidateFinancialViews } from "./invalidateFinancialViews";
@@ -117,9 +118,15 @@ export const RETURN_REASONS: { code: ReturnReason; label: string }[] = [
  * rounded to 2 decimals, then summed (audit F-004: the UI used raw products,
  * so outstanding balances could differ from the server by fractions).
  */
+/** One return line, rounded the way the server posts it (see `returnAmount`). */
+export function returnLineAmount(l: { quantityKg: number; pricePerKg: number }): number {
+  return round2dp(l.quantityKg * l.pricePerKg);
+}
+
 export function returnAmount(r: { lines: { quantityKg: number; pricePerKg: number }[] }): number {
-  const cents = r.lines.reduce((s, l) => s + Math.round(l.quantityKg * l.pricePerKg * 100), 0);
-  return cents / 100;
+  // `round2dp` is the server's rule (exact decimal, half away from zero). `Math.round(q * p * 100)`
+  // rounds the float product, which lands on the wrong cent for e.g. 1.5 × 1.13 (1.695 → 1.69).
+  return round2dp(r.lines.reduce((s, l) => s + returnLineAmount(l), 0));
 }
 
 export type { ReturnDTO };

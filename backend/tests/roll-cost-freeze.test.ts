@@ -63,4 +63,41 @@ describe("assertRollPriceEditAllowed (F05 regression)", () => {
       expect((e as Error).message).toContain("R-1001");
     }
   });
+
+  // BUG-002: rolls.price_per_kg is stored with 4 decimals, so a change below one cent is still a change.
+  it("blocks a sub-cent price change on a partly-sold roll (4-decimal cost precision)", () => {
+    expect(() =>
+      assertRollPriceEditAllowed({
+        ...base,
+        remainingKg: 40,
+        currentPricePerKg: 4.5,
+        newPricePerKg: 4.504,
+      }),
+    ).toThrow(BusinessRuleError);
+    expect(() =>
+      assertRollPriceEditAllowed({
+        ...base,
+        remainingKg: 40,
+        currentPricePerKg: 4.5,
+        newPricePerKg: 4.5001,
+      }),
+    ).toThrow(BusinessRuleError);
+  });
+
+  it("allows re-saving an unchanged 4-decimal price on a partly-sold roll", () => {
+    expect(() =>
+      assertRollPriceEditAllowed({
+        ...base,
+        remainingKg: 40,
+        currentPricePerKg: 4.5055,
+        newPricePerKg: 4.5055,
+      }),
+    ).not.toThrow();
+  });
+
+  it("allows a sub-cent price change while no stock has been sold", () => {
+    expect(() =>
+      assertRollPriceEditAllowed({ ...base, currentPricePerKg: 4.5, newPricePerKg: 4.504 }),
+    ).not.toThrow();
+  });
 });
