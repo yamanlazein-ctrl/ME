@@ -127,4 +127,43 @@ describe("purchase (entry) invoice: new colours and rolls in the same save", () 
     const fabrics = await listFabrics(t.phone, "قطن شراء");
     expect(fabrics[0]!.remainingKg).toBe(90);
   });
+
+  it("keeps every desktop field: line note (gross, كراماج…), discount, lot width/grammage/sale price, colour code, supplier's number", async () => {
+    const r = await t.phone.documents.createEntryInvoice({
+      ...input([
+        {
+          fabricName: "قماش التفاصيل",
+          colorName: "كحلي",
+          colorCode: "NV-3",
+          dyeBatch: "DB-77",
+          quantityKg: 20,
+          pieces: 4,
+          pricePerKg: 3,
+          discountAmount: 5,
+          details: { machineNo: "12", kromaj: "180", draw: "3", grossKg: 21.5 },
+          widthCm: 180,
+          weightGsm: 210,
+          salePricePerKg: 4.25,
+        },
+      ]),
+      reference: "F-501",
+      paymentMethod: "transfer",
+      paid: 10,
+    });
+    if (!r.ok) throw new Error(r.error);
+    const inv = r.data;
+    expect(inv.lines[0]).toMatchObject({ quantityKg: 20, discountAmount: 5 });
+    expect(inv.lines[0]!.note).toBe("رقم الماكينة: 12 • كراماج: 180 • السحب: 3 • وزن قائم: 21.5");
+    expect(Number(inv.total)).toBe(55);
+    expect(inv).toMatchObject({ reference: "F-501", paymentMethod: "transfer" });
+    expect(inv.notes).toBe("المرجع: F-501 • طريقة الدفع: تحويل بنكي");
+    const ctx = t.phone.context();
+    const roll = await t.phone.repos.rollRepo.findById(inv.lines[0]!.rollId, ctx);
+    expect(roll).toMatchObject({ dyeBatch: "DB-77", pieces: 4 });
+    expect(Number(roll!.widthCm)).toBe(180);
+    expect(Number(roll!.weightGsm)).toBe(210);
+    expect(Number(roll!.salePricePerKg)).toBe(4.25);
+    const color = await t.phone.repos.colorRepo.findById(roll!.colorId, ctx);
+    expect(color).toMatchObject({ name: "كحلي", code: "NV-3" });
+  });
 });

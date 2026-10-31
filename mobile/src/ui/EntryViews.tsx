@@ -1,19 +1,27 @@
-// The purchase (entry) invoice (FR-16) on one screen: supplier, currency, lines, totals and payment. A line takes an
-// existing fabric and colour or names new ones; new fabrics, colours and the dye lots are created with the invoice in one
-// save (documents.createEntryInvoice).
+// The purchase (entry) invoice (FR-16), with the desktop purchase form's fields and order: the invoice page (supplier,
+// the supplier's invoice number, date, currency, rate, lines, totals, payment) and a full-page line editor whose
+// sections follow the desktop's line card (القماش، الإنتاج، اللون، الوزن، الصباغة، الشراء) plus the lot's width,
+// grammage and sale price. New fabrics, colours and the dye lots are created with the invoice in one save
+// (documents.createEntryInvoice); the production details go into the line note the desktop's way (core/lineNote.ts).
 import { useState } from "react";
 import { View } from "react-native";
 import { useQuery } from "@tanstack/react-query";
 import { Text } from "./Text";
 import { getApp } from "../core/appRuntime";
 import { pickColors, pickFabrics } from "../core/inventoryPicker";
+import { lastEntryPrice } from "../core/stock";
 import {
   ENTRY_PROBLEM_TEXT,
+  LINE_PROBLEM_TEXT,
+  entryLineTotal,
   entryProblems,
   entryTotals,
+  lineProblems,
   type EntryDraft,
   type EntryDraftLine,
 } from "../core/entryDraft";
+import type { EntryLineInput } from "../core/documents";
+import { PAYMENT_METHOD_LABEL, type PaymentMethod } from "../core/lineNote";
 import { queryKeys } from "../hooks/queryKeys";
 import { Field } from "./Field";
 import { kg, money } from "./format";
@@ -35,16 +43,10 @@ import {
   Sheet,
 } from "./kit";
 
-export interface LineFormValue {
-  fabricId?: string;
-  fabricName: string;
-  colorId?: string;
-  colorName: string;
-  dyeBatch: string;
-  quantityKg: number;
-  pieces: number;
-  pricePerKg: number;
-}
+export const PAYMENT_OPTIONS = (Object.keys(PAYMENT_METHOD_LABEL) as PaymentMethod[]).map((m) => ({
+  value: m,
+  label: PAYMENT_METHOD_LABEL[m],
+}));
 
 async function phone() {
   const app = await getApp();
@@ -74,155 +76,385 @@ function Suggestions({
   );
 }
 
-export function EntryLineSheet({
-  visible,
+/** Two inputs side by side (short numbers), so a section fits the screen above the keyboard. */
+function Pair({ children }: { children: React.ReactNode }) {
+  return <View style={{ flexDirection: "row", gap: spacing.sm }}>{children}</View>;
+}
+function Half({ children }: { children: React.ReactNode }) {
+  return <View style={{ flex: 1 }}>{children}</View>;
+}
+
+const num = (v: number | null | undefined): string => (v ? String(v) : "");
+
+/** One purchase line, a full page with the desktop's sections. `initial` pre-fills it (edit, or copy the last line). */
+export function EntryLineView({
   currency,
+  initial,
+  editing,
   onSave,
-  onClose,
+  onCancel,
 }: {
-  visible: boolean;
   currency: string;
-  onSave(line: LineFormValue): void;
-  onClose(): void;
+  initial?: Partial<EntryLineInput>;
+  editing: boolean;
+  /** `next`: keep the page open for another line of the same fabric and colour. */
+  onSave(line: EntryLineInput, next: boolean): void;
+  onCancel(): void;
 }) {
   const colors = useColors();
-  const [fabricName, setFabricName] = useState("");
-  const [fabricId, setFabricId] = useState<string | undefined>();
-  const [colorName, setColorName] = useState("");
-  const [colorId, setColorId] = useState<string | undefined>();
-  const [dyeBatch, setDyeBatch] = useState("");
-  const [qty, setQty] = useState<number | null>(null);
-  const [pieces, setPieces] = useState<number | null>(null);
-  const [price, setPrice] = useState<number | null>(null);
+  const d = initial?.details ?? {};
+  const [fabricName, setFabricName] = useState(initial?.fabricName ?? "");
+  const [fabricId, setFabricId] = useState<string | undefined>(initial?.fabricId);
+  const [reference, setReference] = useState(d.reference ?? "");
+  const [source, setSource] = useState(d.source ?? "");
+  const [pieces, setPieces] = useState<number | null>(initial?.pieces || null);
+  const [machineNo, setMachineNo] = useState(d.machineNo ?? "");
+  const [kromaj, setKromaj] = useState(d.kromaj ?? "");
+  const [draw, setDraw] = useState(d.draw ?? "");
+  const [colorName, setColorName] = useState(initial?.colorName ?? "");
+  const [colorId, setColorId] = useState<string | undefined>(initial?.colorId);
+  const [colorCode, setColorCode] = useState(initial?.colorCode ?? "");
+  const [grossKg, setGrossKg] = useState<number | null>(d.grossKg ?? null);
+  const [qty, setQty] = useState<number | null>(initial?.quantityKg || null);
+  const [dyeBatch, setDyeBatch] = useState(initial?.dyeBatch ?? "");
+  const [price, setPrice] = useState<number | null>(initial?.pricePerKg || null);
+  const [priceKey, setPriceKey] = useState(0);
+  const [discount, setDiscount] = useState<number | null>(initial?.discountAmount || null);
+  const [widthCm, setWidthCm] = useState<number | null>(initial?.widthCm ?? null);
+  const [weightGsm, setWeightGsm] = useState<number | null>(initial?.weightGsm ?? null);
+  const [salePrice, setSalePrice] = useState<number | null>(initial?.salePricePerKg ?? null);
+  const [specs, setSpecs] = useState(Boolean(initial?.widthCm || initial?.weightGsm));
+  const [attempted, setAttempted] = useState(false);
+
   const fabrics = useQuery({
     queryKey: [...queryKeys.inventory, "entry-fabrics", fabricName.trim()],
-    enabled: visible && fabricName.trim().length > 0 && !fabricId,
+    enabled: fabricName.trim().length > 0 && !fabricId,
     queryFn: async () => pickFabrics(await phone(), fabricName.trim()),
   });
   const colorsOf = useQuery({
     queryKey: [...queryKeys.inventory, "entry-colors", fabricId ?? ""],
-    enabled: visible && Boolean(fabricId),
+    enabled: Boolean(fabricId),
     queryFn: async () => pickColors(await phone(), fabricId!),
   });
+  const last = useQuery({
+    queryKey: [...queryKeys.inventory, "entry-last-price", fabricId ?? "", colorId ?? "", currency],
+    enabled: Boolean(fabricId),
+    queryFn: async () =>
+      lastEntryPrice(await phone(), colorId ? { colorId } : { fabricId: fabricId! }, currency),
+  });
   const colorMatches = (colorsOf.data ?? []).filter((c) => c.name.includes(colorName.trim()));
-  const valid =
-    fabricName.trim() !== "" && colorName.trim() !== "" && (qty ?? 0) > 0 && price !== null;
+
+  const line: EntryLineInput = {
+    ...(fabricId ? { fabricId } : {}),
+    fabricName: fabricName.trim(),
+    ...(colorId ? { colorId } : {}),
+    colorName: colorName.trim(),
+    ...(!colorId && colorCode.trim() ? { colorCode: colorCode.trim() } : {}),
+    ...(dyeBatch.trim() ? { dyeBatch: dyeBatch.trim() } : {}),
+    quantityKg: qty ?? 0,
+    pieces: pieces ?? 0,
+    pricePerKg: price ?? 0,
+    ...(discount ? { discountAmount: discount } : {}),
+    details: {
+      reference,
+      source,
+      machineNo,
+      kromaj,
+      draw,
+      grossKg,
+    },
+    ...(widthCm ? { widthCm } : {}),
+    ...(weightGsm ? { weightGsm } : {}),
+    ...(salePrice ? { salePricePerKg: salePrice } : {}),
+  };
+  const problems = lineProblems(line);
+  const save = (next: boolean) => {
+    setAttempted(true);
+    if (problems.length === 0) onSave(line, next);
+  };
+
   return (
-    <Sheet
-      visible={visible}
-      title="بند جديد"
-      onClose={onClose}
+    <Screen
+      title={editing ? "تعديل البند" : "بند جديد"}
+      subtitle={fabricName.trim() ? `${fabricName.trim()} · ${colorName.trim()}` : "فاتورة دخول"}
+      onBack={onCancel}
       testID="entry-line-form"
+      footerNotice={
+        <>
+          {attempted && problems.length > 0 ? (
+            <Notice
+              kind="error"
+              text={problems.map((p) => LINE_PROBLEM_TEXT[p]).join("\n")}
+              testID="entry-line-problems"
+            />
+          ) : null}
+          <KeyValue
+            label="الإجمالي"
+            strong
+            value={money(entryLineTotal(line), currency)}
+            testID="entry-line-total"
+          />
+        </>
+      }
       footer={
-        <Button
-          label="حفظ البند"
-          disabled={!valid}
-          testID="entry-line-save"
-          onPress={() =>
-            onSave({
-              ...(fabricId ? { fabricId } : {}),
-              fabricName: fabricName.trim(),
-              ...(colorId ? { colorId } : {}),
-              colorName: colorName.trim(),
-              dyeBatch: dyeBatch.trim(),
-              quantityKg: qty ?? 0,
-              pieces: pieces ?? 0,
-              pricePerKg: price ?? 0,
-            })
-          }
-        />
+        <Pair>
+          {editing ? null : (
+            <Half>
+              <Button
+                label="حفظ وبند جديد"
+                variant="secondary"
+                testID="entry-line-save-next"
+                onPress={() => save(true)}
+              />
+            </Half>
+          )}
+          <Half>
+            <Button label="حفظ البند" testID="entry-line-save" onPress={() => save(false)} />
+          </Half>
+        </Pair>
       }
     >
-      <Field
-        label="نوع القماش"
-        fieldId="entry-fabric"
-        value={fabricName}
-        placeholder="اكتب الاسم لتظهر الأقمشة الموجودة"
-        onChangeText={(t) => {
-          setFabricName(t);
-          setFabricId(undefined);
-          setColorId(undefined);
-        }}
-      />
-      {!fabricId ? (
-        <Suggestions
-          rows={fabrics.data ?? []}
-          onChoose={(f) => {
-            setFabricName(f.name);
-            setFabricId(f.id);
+      <Section title="بيانات القماش">
+        <Field
+          label="نوع القماش *"
+          fieldId="entry-fabric"
+          value={fabricName}
+          placeholder="اكتب الاسم لتظهر الأقمشة الموجودة"
+          onChangeText={(t) => {
+            setFabricName(t);
+            setFabricId(undefined);
+            setColorId(undefined);
           }}
         />
-      ) : null}
-      {fabricName.trim() ? (
-        <Badge
-          label={fabricId ? "قماش موجود" : "قماش جديد — يُنشأ مع الفاتورة"}
-          tone={fabricId ? "positive" : "warning"}
-        />
-      ) : null}
-      <Field
-        label="اللون"
-        fieldId="entry-color"
-        value={colorName}
-        onChangeText={(t) => {
-          setColorName(t);
-          setColorId(undefined);
-        }}
-      />
-      {fabricId && !colorId ? (
-        <Suggestions
-          rows={colorMatches}
-          onChoose={(c) => {
-            setColorName(c.name);
-            setColorId(c.id);
-          }}
-        />
-      ) : null}
-      {colorName.trim() ? (
-        <Badge
-          label={colorId ? "لون موجود" : "لون جديد — يُنشأ مع الفاتورة"}
-          tone={colorId ? "positive" : "warning"}
-        />
-      ) : null}
-      {/* Weight and pieces side by side: the required fields fit a small screen above the keyboard. */}
-      <View style={{ flexDirection: "row", gap: spacing.sm }}>
-        <View style={{ flex: 1 }}>
-          <MoneyInput label="الوزن الصافي (كغ)" fieldId="entry-kg" onChangeAmount={setQty} />
-        </View>
-        <View style={{ flex: 1 }}>
-          <MoneyInput
-            label="عدد الأثواب"
-            fieldId="entry-pieces"
-            onChangeAmount={(v) => setPieces(v === null ? null : Math.round(v))}
+        {!fabricId ? (
+          <Suggestions
+            rows={fabrics.data ?? []}
+            onChoose={(f) => {
+              setFabricName(f.name);
+              setFabricId(f.id);
+            }}
           />
-        </View>
-      </View>
-      <MoneyInput
-        label={`سعر الكيلو (${currency})`}
-        fieldId="entry-price"
-        onChangeAmount={setPrice}
-      />
-      <Field
-        label="رقم الصبغة (اختياري)"
-        fieldId="entry-dye"
-        value={dyeBatch}
-        onChangeText={setDyeBatch}
-      />
-      {qty && price !== null ? (
-        <Text
-          style={{ color: colors.mutedForeground }}
-        >{`قيمة البند ${money(qty * price, currency)}`}</Text>
-      ) : null}
-    </Sheet>
+        ) : null}
+        {fabricName.trim() ? (
+          <Badge
+            label={fabricId ? "قماش موجود" : "قماش جديد — يُنشأ مع الفاتورة"}
+            tone={fabricId ? "positive" : "warning"}
+          />
+        ) : null}
+        <Pair>
+          <Half>
+            <Field
+              label="المرجعية"
+              fieldId="entry-reference"
+              value={reference}
+              onChangeText={setReference}
+            />
+          </Half>
+          <Half>
+            <Field label="المصدر" fieldId="entry-source" value={source} onChangeText={setSource} />
+          </Half>
+        </Pair>
+      </Section>
+
+      <Section title="بيانات الإنتاج">
+        <Pair>
+          <Half>
+            <MoneyInput
+              label="الأثواب"
+              fieldId="entry-pieces"
+              initialText={num(initial?.pieces)}
+              onChangeAmount={(v) => setPieces(v === null ? null : Math.round(v))}
+            />
+          </Half>
+          <Half>
+            <Field
+              label="رقم الماكينة"
+              fieldId="entry-machine"
+              value={machineNo}
+              onChangeText={setMachineNo}
+            />
+          </Half>
+        </Pair>
+        <Pair>
+          <Half>
+            <Field
+              label="كراماج"
+              fieldId="entry-kromaj"
+              value={kromaj}
+              keyboardType="numbers-and-punctuation"
+              onChangeText={setKromaj}
+            />
+          </Half>
+          <Half>
+            <Field label="السحب" fieldId="entry-draw" value={draw} onChangeText={setDraw} />
+          </Half>
+        </Pair>
+      </Section>
+
+      <Section title="بيانات اللون">
+        <Field
+          label="اسم اللون *"
+          fieldId="entry-color"
+          value={colorName}
+          onChangeText={(t) => {
+            setColorName(t);
+            setColorId(undefined);
+          }}
+        />
+        {fabricId && !colorId ? (
+          <Suggestions
+            rows={colorMatches}
+            onChoose={(c) => {
+              setColorName(c.name);
+              setColorId(c.id);
+            }}
+          />
+        ) : null}
+        {colorName.trim() ? (
+          <Badge
+            label={colorId ? "لون موجود" : "لون جديد — يُنشأ مع الفاتورة"}
+            tone={colorId ? "positive" : "warning"}
+          />
+        ) : null}
+        {!colorId ? (
+          <Field
+            label="رقم اللون"
+            fieldId="entry-color-code"
+            value={colorCode}
+            onChangeText={setColorCode}
+          />
+        ) : null}
+      </Section>
+
+      <Section title="بيانات الوزن">
+        <Pair>
+          <Half>
+            <MoneyInput
+              label="الوزن القائم (كغ)"
+              fieldId="entry-gross"
+              initialText={num(d.grossKg)}
+              onChangeAmount={setGrossKg}
+            />
+          </Half>
+          <Half>
+            <MoneyInput
+              label="الوزن الصافي (كغ) *"
+              fieldId="entry-kg"
+              initialText={num(initial?.quantityKg)}
+              error={attempted && problems.includes("no-kg") ? LINE_PROBLEM_TEXT["no-kg"] : null}
+              onChangeAmount={setQty}
+            />
+          </Half>
+        </Pair>
+        <Text style={{ color: colors.mutedForeground, fontSize: 13 }}>
+          إجمالي البند = الوزن الصافي × سعر الكيلو
+        </Text>
+      </Section>
+
+      <Section title="بيانات الصباغة">
+        <Field label="رقم الصبغة" fieldId="entry-dye" value={dyeBatch} onChangeText={setDyeBatch} />
+      </Section>
+
+      <Section title="بيانات الشراء">
+        <MoneyInput
+          key={priceKey}
+          label={`السعر / كغ (${currency}) *`}
+          fieldId="entry-price"
+          initialText={num(price)}
+          error={attempted && problems.includes("no-price") ? LINE_PROBLEM_TEXT["no-price"] : null}
+          onChangeAmount={setPrice}
+        />
+        {last.data ? (
+          <Button
+            label={`آخر سعر: ${money(last.data.pricePerKg, currency)} (${last.data.date})`}
+            variant="ghost"
+            block={false}
+            testID="entry-last-price"
+            onPress={() => {
+              setPrice(last.data!.pricePerKg);
+              setPriceKey((k) => k + 1);
+            }}
+          />
+        ) : null}
+        <MoneyInput
+          label="الخصم (مبلغ)"
+          fieldId="entry-line-discount"
+          initialText={num(initial?.discountAmount)}
+          onChangeAmount={setDiscount}
+        />
+      </Section>
+
+      {specs ? (
+        <Section title="مواصفات الصبغة">
+          <Pair>
+            <Half>
+              <MoneyInput
+                label="العرض (سم)"
+                fieldId="entry-width"
+                initialText={num(initial?.widthCm)}
+                onChangeAmount={setWidthCm}
+              />
+            </Half>
+            <Half>
+              <MoneyInput
+                label="الغراماج (غ/م²)"
+                fieldId="entry-gsm"
+                initialText={num(initial?.weightGsm)}
+                onChangeAmount={setWeightGsm}
+              />
+            </Half>
+          </Pair>
+          <MoneyInput
+            label={`سعر البيع / كغ (${currency})`}
+            fieldId="entry-sale-price"
+            initialText={num(initial?.salePricePerKg)}
+            onChangeAmount={setSalePrice}
+          />
+        </Section>
+      ) : (
+        <Button
+          label="العرض والغراماج وسعر البيع"
+          variant="ghost"
+          icon="add"
+          block={false}
+          testID="entry-specs"
+          onPress={() => setSpecs(true)}
+        />
+      )}
+    </Screen>
+  );
+}
+
+/** What a line shows in the list: the desktop's columns in one row. */
+function lineSubtitle(l: EntryDraftLine, currency: string): string {
+  const gross = l.details?.grossKg ? ` (قائم ${kg(l.details.grossKg)})` : "";
+  return `${kg(l.quantityKg)}${gross} · ${l.pieces} ثوب × ${money(l.pricePerKg, currency)}`;
+}
+
+function lineMeta(l: EntryDraftLine): string | null {
+  return (
+    [
+      l.dyeBatch ? `رقم الصبغة ${l.dyeBatch}` : null,
+      l.details?.kromaj ? `كراماج ${l.details.kromaj}` : null,
+      l.details?.machineNo ? `ماكينة ${l.details.machineNo}` : null,
+      !l.fabricId ? "قماش جديد" : !l.colorId ? "لون جديد" : null,
+    ]
+      .filter(Boolean)
+      .join(" · ") || null
   );
 }
 
 export interface EntryFormProps {
   draft: EntryDraft;
   error: string | null;
+  today: string;
   onSupplier(p: PickedParty): void;
   onCurrency(c: string): void;
   onRate(rate: number | null): void;
-  onAddLine(line: LineFormValue): void;
+  /** Open the line page: a new line, a copy of the last one, or an existing line to edit. */
+  onAddLine(): void;
+  onCopyLine(key: string): void;
+  onEditLine(key: string): void;
   onRemoveLine(key: string): void;
   onPatch(patch: Partial<EntryDraft>): void;
   onSave(): Promise<void>;
@@ -233,9 +465,7 @@ export function EntryFormView(p: EntryFormProps) {
   const colors = useColors();
   const { draft } = p;
   const [attempted, setAttempted] = useState(false);
-  const [adding, setAdding] = useState(false);
-  const [sheetKey, setSheetKey] = useState(0);
-  const [removing, setRemoving] = useState<EntryDraftLine | null>(null);
+  const [chosen, setChosen] = useState<EntryDraftLine | null>(null);
   const [extras, setExtras] = useState(draft.discount > 0 || draft.tax > 0 || draft.shipping > 0);
   const totals = entryTotals(draft);
   const problems = entryProblems(draft);
@@ -258,8 +488,10 @@ export function EntryFormView(p: EntryFormProps) {
       }
       footer={
         <>
-          <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
-            <Text style={{ color: colors.mutedForeground }}>الإجمالي</Text>
+          <View style={{ flexDirection: "row", justifyContent: "space-between", gap: spacing.sm }}>
+            <Text style={{ color: colors.mutedForeground }} testID="entry-footer-qty">
+              {`${kg(totals.kg)} · ${totals.pieces} ثوب`}
+            </Text>
             <Text testID="entry-total" style={{ fontWeight: "700", writingDirection: "ltr" }}>
               {money(totals.total, draft.currency)}
             </Text>
@@ -276,13 +508,35 @@ export function EntryFormView(p: EntryFormProps) {
         </>
       }
     >
-      <Section title="المورد والعملة">
+      <Section title="بيانات الفاتورة">
         <PartyPicker
           kind="supplier"
           value={draft.supplier}
           onPick={p.onSupplier}
           error={show("no-supplier")}
         />
+        <View style={{ flexDirection: "row", gap: spacing.sm }}>
+          <View style={{ flex: 1 }}>
+            <Field
+              label="رقم الفاتورة"
+              fieldId="entry-invoice-ref"
+              value={draft.reference}
+              placeholder="رقم فاتورة المورد"
+              onChangeText={(reference) => p.onPatch({ reference })}
+            />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Field
+              label="التاريخ"
+              fieldId="entry-date"
+              value={draft.date}
+              placeholder={p.today}
+              keyboardType="numbers-and-punctuation"
+              error={show("bad-date") ? ENTRY_PROBLEM_TEXT["bad-date"] : null}
+              onChangeText={(date) => p.onPatch({ date: date.trim() })}
+            />
+          </View>
+        </View>
         <Chips
           options={CURRENCY_OPTIONS}
           value={draft.currency}
@@ -291,7 +545,7 @@ export function EntryFormView(p: EntryFormProps) {
         />
         {draft.currency !== "USD" ? (
           <MoneyInput
-            label="سعر الصرف (ليرة لكل 1 دولار)"
+            label="سعر الصرف (ل.س / $)"
             fieldId="entry-rate"
             initialText={draft.exchangeRate ? String(draft.exchangeRate) : ""}
             error={
@@ -316,10 +570,7 @@ export function EntryFormView(p: EntryFormProps) {
             icon="add"
             block={false}
             testID="entry-add-line"
-            onPress={() => {
-              setSheetKey((k) => k + 1);
-              setAdding(true);
-            }}
+            onPress={p.onAddLine}
           />
         }
       >
@@ -336,17 +587,10 @@ export function EntryFormView(p: EntryFormProps) {
               testID="entry-line"
               accessibilityLabel={`بند ${l.fabricName} ${l.colorName}`}
               title={`${l.fabricName} · ${l.colorName}`}
-              subtitle={`${kg(l.quantityKg)} · ${l.pieces} ثوب × ${money(l.pricePerKg, draft.currency)}`}
-              meta={
-                [
-                  l.dyeBatch ? `رقم الصبغة ${l.dyeBatch}` : null,
-                  !l.fabricId ? "قماش جديد" : !l.colorId ? "لون جديد" : null,
-                ]
-                  .filter(Boolean)
-                  .join(" · ") || null
-              }
-              value={money(Math.round(l.quantityKg * l.pricePerKg * 100) / 100, draft.currency)}
-              onPress={() => setRemoving(l)}
+              subtitle={lineSubtitle(l, draft.currency)}
+              meta={lineMeta(l)}
+              value={money(entryLineTotal(l), draft.currency)}
+              onPress={() => setChosen(l)}
               last={i === draft.lines.length - 1}
             />
           ))
@@ -354,12 +598,14 @@ export function EntryFormView(p: EntryFormProps) {
       </Section>
       {show("no-lines") ? <Notice kind="error" text={ENTRY_PROBLEM_TEXT["no-lines"]} /> : null}
 
-      <Section title="الإجمالي والدفع" testID="entry-totals">
-        <KeyValue label="مجموع البنود" value={money(totals.subtotal, draft.currency)} />
+      <Section title="المجاميع" testID="entry-totals">
+        <KeyValue label="الكمية" value={kg(totals.kg)} />
+        <KeyValue label="عدد الأثواب" value={String(totals.pieces)} />
+        <KeyValue label="المجموع" value={money(totals.subtotal, draft.currency)} />
         {extras ? (
           <>
             <MoneyInput
-              label="خصم على الفاتورة (مبلغ)"
+              label="الخصم (مبلغ)"
               fieldId="entry-discount"
               initialText={draft.discount ? String(draft.discount) : ""}
               onChangeAmount={(v) => p.onPatch({ discount: v ?? 0 })}
@@ -386,18 +632,34 @@ export function EntryFormView(p: EntryFormProps) {
             onPress={() => setExtras(true)}
           />
         )}
-        <KeyValue label="الإجمالي" value={money(totals.total, draft.currency)} strong />
+        <KeyValue label="الإجمالي الكلي" value={money(totals.total, draft.currency)} strong />
         <MoneyInput
           label="المدفوع للمورد الآن"
           fieldId="entry-paid"
           initialText={draft.paid ? String(draft.paid) : ""}
+          error={show("paid-over-total") ? ENTRY_PROBLEM_TEXT["paid-over-total"] : null}
           onChangeAmount={(v) => p.onPatch({ paid: v ?? 0 })}
         />
+        {draft.paid > 0 ? (
+          <Chips
+            options={PAYMENT_OPTIONS}
+            value={draft.paymentMethod}
+            onChange={(paymentMethod) => p.onPatch({ paymentMethod })}
+            testIDPrefix="entry-method"
+          />
+        ) : null}
         <KeyValue
           label="المتبقي للمورد"
           value={money(totals.due, draft.currency)}
           strong
           tone={totals.due > 0 ? "warning" : "positive"}
+        />
+        <Field
+          label="ملاحظات (اختياري)"
+          fieldId="entry-notes"
+          value={draft.notes}
+          multiline
+          onChangeText={(notes) => p.onPatch({ notes })}
         />
       </Section>
 
@@ -405,37 +667,57 @@ export function EntryFormView(p: EntryFormProps) {
         <Button label="مسح المسودة" variant="ghost" onPress={p.onDiscard} />
       ) : null}
 
-      <EntryLineSheet
-        key={sheetKey}
-        visible={adding}
-        currency={draft.currency}
-        onClose={() => setAdding(false)}
-        onSave={(line) => {
-          setAdding(false);
-          p.onAddLine(line);
-        }}
-      />
       <Sheet
-        visible={removing !== null}
-        title={removing ? `${removing.fabricName} · ${removing.colorName}` : ""}
-        onClose={() => setRemoving(null)}
+        visible={chosen !== null}
+        title={chosen ? `${chosen.fabricName} · ${chosen.colorName}` : ""}
+        onClose={() => setChosen(null)}
+        testID="entry-line-actions"
         footer={
-          <Button
-            label="حذف البند"
-            variant="danger"
-            onPress={() => {
-              if (removing) p.onRemoveLine(removing.key);
-              setRemoving(null);
-            }}
-          />
+          <View style={{ gap: spacing.sm }}>
+            <Button
+              label="تعديل البند"
+              testID="entry-line-edit"
+              onPress={() => {
+                if (chosen) p.onEditLine(chosen.key);
+                setChosen(null);
+              }}
+            />
+            <Button
+              label="بند جديد بنفس القماش واللون"
+              variant="secondary"
+              testID="entry-line-copy"
+              onPress={() => {
+                if (chosen) p.onCopyLine(chosen.key);
+                setChosen(null);
+              }}
+            />
+            <Button
+              label="حذف البند"
+              variant="danger"
+              testID="entry-line-remove"
+              onPress={() => {
+                if (chosen) p.onRemoveLine(chosen.key);
+                setChosen(null);
+              }}
+            />
+          </View>
         }
       >
-        {removing ? (
-          <View style={{ gap: spacing.sm }}>
-            <KeyValue label="الوزن" value={kg(removing.quantityKg)} />
-            <KeyValue label="الأثواب" value={String(removing.pieces)} />
-            <KeyValue label="سعر الكيلو" value={money(removing.pricePerKg, draft.currency)} />
-            {removing.dyeBatch ? <KeyValue label="رقم الصبغة" value={removing.dyeBatch} /> : null}
+        {chosen ? (
+          <View style={{ gap: spacing.xs }}>
+            <KeyValue label="الوزن الصافي" value={kg(chosen.quantityKg)} />
+            {chosen.details?.grossKg ? (
+              <KeyValue label="الوزن القائم" value={kg(chosen.details.grossKg)} />
+            ) : null}
+            <KeyValue label="الأثواب" value={String(chosen.pieces)} />
+            <KeyValue label="السعر / كغ" value={money(chosen.pricePerKg, draft.currency)} />
+            {chosen.discountAmount ? (
+              <KeyValue label="الخصم" value={money(chosen.discountAmount, draft.currency)} />
+            ) : null}
+            {chosen.dyeBatch ? <KeyValue label="رقم الصبغة" value={chosen.dyeBatch} /> : null}
+            {chosen.details?.kromaj ? (
+              <KeyValue label="كراماج" value={chosen.details.kromaj} />
+            ) : null}
           </View>
         ) : null}
       </Sheet>

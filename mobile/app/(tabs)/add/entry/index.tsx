@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
 import { router, useLocalSearchParams } from "expo-router";
-import { randomUUID } from "node:crypto";
 import { localDateISO } from "@backend/infrastructure/utils/localDate";
 import { getApp } from "../../../../src/core/appRuntime";
 import { entryProblems, toEntryInput } from "../../../../src/core/entryDraft";
@@ -29,26 +28,16 @@ export default function EntryForm() {
     <EntryFormView
       draft={draft}
       error={error}
+      today={localDateISO(new Date())}
       onSupplier={(supplier) => entryDraftStore.update({ supplier })}
       onCurrency={(currency) => entryDraftStore.update({ currency })}
       onRate={(exchangeRate) => entryDraftStore.update({ exchangeRate })}
-      onAddLine={(line) =>
-        entryDraftStore.update({
-          lines: [
-            ...entryDraftStore.get().lines,
-            {
-              key: randomUUID(),
-              ...(line.fabricId ? { fabricId: line.fabricId } : {}),
-              fabricName: line.fabricName,
-              ...(line.colorId ? { colorId: line.colorId } : {}),
-              colorName: line.colorName,
-              ...(line.dyeBatch ? { dyeBatch: line.dyeBatch } : {}),
-              quantityKg: line.quantityKg,
-              pieces: line.pieces,
-              pricePerKg: line.pricePerKg,
-            },
-          ],
-        })
+      onAddLine={() => router.push("/(tabs)/add/entry/line" as never)}
+      onCopyLine={(key) =>
+        router.push({ pathname: "/(tabs)/add/entry/line", params: { copy: key } } as never)
+      }
+      onEditLine={(key) =>
+        router.push({ pathname: "/(tabs)/add/entry/line", params: { edit: key } } as never)
       }
       onRemoveLine={(key) =>
         entryDraftStore.update({ lines: entryDraftStore.get().lines.filter((l) => l.key !== key) })

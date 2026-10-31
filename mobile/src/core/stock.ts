@@ -511,3 +511,33 @@ export async function pickLots(phone: Phone, q: string, limit = 60): Promise<Pic
     currency: String(r.currency ?? "USD"),
   }));
 }
+
+/**
+ * The last purchase price of a colour (or of any colour of a fabric) in this currency, for the «آخر سعر» shortcut of
+ * the purchase line (the desktop's same chip). Null when nothing was bought in this currency yet.
+ */
+export async function lastEntryPrice(
+  phone: Phone,
+  where: { colorId?: string; fabricId?: string },
+  currency: string,
+): Promise<{ pricePerKg: number; date: string } | null> {
+  if (!where.colorId && !where.fabricId) return null;
+  const tenantId = phone.identity.tenantId;
+  const price = sql<string>`COALESCE(${rolls.entryPricePerKg}, ${rolls.pricePerKg})`;
+  const rows = await phone.repos.db
+    .select({ price, date: rolls.entryDate })
+    .from(rolls)
+    .innerJoin(colors, eq(colors.id, rolls.colorId))
+    .where(
+      and(
+        eq(rolls.tenantId, tenantId),
+        where.colorId ? eq(rolls.colorId, where.colorId) : eq(colors.fabricId, where.fabricId!),
+        eq(sql`COALESCE(${rolls.entryCurrency}, ${rolls.currency})`, currency),
+      ),
+    )
+    .orderBy(desc(rolls.entryDate), desc(rolls.createdAt))
+    .limit(1);
+  const r = rows[0];
+  if (!r || !(Number(r.price) > 0)) return null;
+  return { pricePerKg: Number(r.price), date: String(r.date) };
+}

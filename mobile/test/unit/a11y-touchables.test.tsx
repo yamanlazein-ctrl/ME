@@ -18,7 +18,7 @@ import {
 import { ReportMenuView, ReportPageView } from "../../src/ui/ReportViews";
 import { OrderDetailView, OrderFormView, OrderListView } from "../../src/ui/OrderViews";
 import { ReturnFormView, ReturnListView } from "../../src/ui/ReturnViews";
-import { EntryFormView } from "../../src/ui/EntryViews";
+import { EntryFormView, EntryLineView } from "../../src/ui/EntryViews";
 import { DocumentDoneView, SaleFormView } from "../../src/ui/SaleViews";
 import { VoucherForm, emptyVoucher } from "../../src/ui/VoucherForm";
 import { withQuery } from "../helpers/withQuery";
@@ -433,16 +433,23 @@ const screens: Array<[string, () => ReactElement]> = [
             ],
           }}
           error={null}
+          today="2026-03-01"
           onSupplier={noop}
           onCurrency={noop}
           onRate={noop}
           onAddLine={noop}
+          onCopyLine={noop}
+          onEditLine={noop}
           onRemoveLine={noop}
           onPatch={noop}
           onDiscard={noop}
           onSave={async () => undefined}
         />,
       ),
+  ],
+  [
+    "purchase line page",
+    () => withQuery(<EntryLineView currency="USD" editing={false} onSave={noop} onCancel={noop} />),
   ],
   [
     "voucher form",

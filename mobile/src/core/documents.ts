@@ -52,6 +52,12 @@ import type { PartyData } from "@backend/domain/entities/Party";
 import type { TenantContext } from "@backend/domain/types/index";
 import type { PhoneRepositories } from "./container";
 import { runSerial } from "./serialExecutor";
+import {
+  buildEntryLineNote,
+  buildInvoiceNotes,
+  type EntryLineDetails,
+  type PaymentMethod,
+} from "./lineNote";
 
 export type Outcome<T> = { ok: true; data: T } | { ok: false; error: string; code?: string };
 
@@ -67,10 +73,21 @@ export interface EntryLineInput {
   fabricName: string;
   colorId?: string;
   colorName: string;
+  /** رقم اللون, given to a new colour. */
+  colorCode?: string;
   dyeBatch?: string;
+  /** الوزن الصافي: what enters the stock and what the price applies to. */
   quantityKg: number;
   pieces: number;
   pricePerKg: number;
+  /** Line discount (an amount, like the desktop). */
+  discountAmount?: number;
+  /** Production details written into the line note the desktop's way (see lineNote.ts). */
+  details?: EntryLineDetails;
+  /** Kept on the dye lot, as the desktop's ⓘ dialog does. */
+  widthCm?: number | null;
+  weightGsm?: number | null;
+  salePricePerKg?: number | null;
 }
 
 export interface EntryInvoiceInput {
@@ -83,6 +100,9 @@ export interface EntryInvoiceInput {
   tax?: number;
   shipping?: number;
   paid?: number;
+  /** The supplier's own invoice number (رقم الفاتورة). */
+  reference?: string;
+  paymentMethod?: PaymentMethod;
   notes?: string;
 }
 
@@ -713,7 +733,11 @@ export function createDocuments(services: DocumentServices) {
             if (!colorId) {
               const made = await colorUc.createColorUseCase(
                 repos.colorRepo,
-                { fabricId, name: cleanName(l.colorName) },
+                {
+                  fabricId,
+                  name: cleanName(l.colorName),
+                  ...(l.colorCode?.trim() ? { code: l.colorCode.trim() } : {}),
+                },
                 ctx,
               );
               if (!made.ok) throw new BusinessRuleError(made.error);
@@ -749,9 +773,14 @@ export function createDocuments(services: DocumentServices) {
                 remainingKg: 0,
                 pieces: l.pieces,
                 pricePerKg: l.pricePerKg,
+                ...(l.salePricePerKg && l.salePricePerKg > 0
+                  ? { salePricePerKg: l.salePricePerKg }
+                  : {}),
                 currency: input.currency,
                 supplierId: input.supplierId,
                 entryDate: input.date,
+                ...(l.widthCm && l.widthCm > 0 ? { widthCm: l.widthCm } : {}),
+                ...(l.weightGsm && l.weightGsm > 0 ? { weightGsm: l.weightGsm } : {}),
               },
               ctx,
             );
@@ -783,6 +812,7 @@ export function createDocuments(services: DocumentServices) {
               device,
               randomUUID(),
             );
+            const note = l.details ? buildEntryLineNote(l.details) : undefined;
             lines.push({
               fabricId,
               colorId,
@@ -790,9 +820,18 @@ export function createDocuments(services: DocumentServices) {
               quantityKg: l.quantityKg,
               pieces: l.pieces,
               pricePerKg: l.pricePerKg,
+              ...(l.discountAmount && l.discountAmount > 0
+                ? { discountAmount: l.discountAmount }
+                : {}),
+              ...(note ? { note } : {}),
             } as CreateInvoiceInput["lines"][number]);
           }
 
+          const notes = buildInvoiceNotes({
+            ...(input.reference ? { reference: input.reference } : {}),
+            ...(input.paymentMethod ? { paymentMethod: input.paymentMethod } : {}),
+            ...(input.notes ? { notes: input.notes } : {}),
+          });
           const createInput = {
             type: "entry",
             date: input.date,
@@ -805,7 +844,12 @@ export function createDocuments(services: DocumentServices) {
             tax: input.tax ?? 0,
             shipping: input.shipping ?? 0,
             paid: input.paid ?? 0,
-            ...(input.notes ? { notes: input.notes } : {}),
+            ...(input.reference?.trim() ? { reference: input.reference.trim() } : {}),
+            // The desktop records the method only when something is paid now.
+            ...((input.paid ?? 0) > 0 && input.paymentMethod
+              ? { paymentMethod: input.paymentMethod }
+              : {}),
+            ...(notes ? { notes } : {}),
           } as CreateInvoiceInput;
           const created = await invoiceUc.createInvoiceUseCase(
             repos.invoiceRepo,

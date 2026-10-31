@@ -14,14 +14,52 @@ name: 87 purchase invoice with a new fabric and colour
 - takeScreenshot: 70-entry-supplier
 - tapOn:
     id: "entry-add-line"
+# The line is a full page with the desktop line card's sections.
+- assertVisible: "بيانات القماش"
 - tapOn:
     id: "entry-fabric"
 - inputText: Newfab
 - hideKeyboard
 - assertVisible: "قماش جديد — يُنشأ مع الفاتورة"
+- scrollUntilVisible:
+    element:
+      id: "entry-pieces"
+    visibilityPercentage: 50
+- tapOn:
+    id: "entry-pieces"
+- inputText: "2"
+- hideKeyboard
+- scrollUntilVisible:
+    element:
+      id: "entry-machine"
+    visibilityPercentage: 50
+- tapOn:
+    id: "entry-machine"
+- inputText: "7"
+- hideKeyboard
+- scrollUntilVisible:
+    element:
+      id: "entry-kromaj"
+    visibilityPercentage: 50
+- tapOn:
+    id: "entry-kromaj"
+- inputText: "180"
+- hideKeyboard
+- scrollUntilVisible:
+    element:
+      id: "entry-color"
+    visibilityPercentage: 50
 - tapOn:
     id: "entry-color"
-- inputText: Newcolor
+- inputText: "Newcolor"
+- hideKeyboard
+- scrollUntilVisible:
+    element:
+      id: "entry-gross"
+    visibilityPercentage: 50
+- tapOn:
+    id: "entry-gross"
+- inputText: "13"
 - hideKeyboard
 - scrollUntilVisible:
     element:
@@ -33,11 +71,11 @@ name: 87 purchase invoice with a new fabric and colour
 - hideKeyboard
 - scrollUntilVisible:
     element:
-      id: "entry-pieces"
+      id: "entry-dye"
     visibilityPercentage: 50
 - tapOn:
-    id: "entry-pieces"
-- inputText: "2"
+    id: "entry-dye"
+- inputText: "D-87"
 - hideKeyboard
 - scrollUntilVisible:
     element:
