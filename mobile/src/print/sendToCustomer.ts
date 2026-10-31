@@ -1,17 +1,13 @@
 // Document PDFs (FR-29, FR-30): builds the PDF of an invoice, voucher, return or statement with the shared print builders,
 // names the file after the document, and opens the share sheet (src/core/share.ts).
 import { getApp } from "../core/appRuntime";
-import { loadInvoiceView, toPrintData } from "../core/invoiceView";
+import { loadInvoiceView, toDesktopPrint } from "../core/invoiceView";
+import { renderDesktopInvoiceHtml } from "./desktopInvoiceHtml";
 import { loadStatement } from "../core/parties";
 import type { Phone } from "../core/phone";
 import { sharePdf, type ShareOutcome } from "../core/share";
 import { deviceShareDeps } from "../platform/shareDeps";
-import {
-  renderInvoiceHtml,
-  renderReturnHtml,
-  renderStatementHtml,
-  renderVoucherHtml,
-} from "./renderHtml";
+import { renderReturnHtml, renderStatementHtml, renderVoucherHtml } from "./renderHtml";
 import { htmlToPdf, pdfFileName } from "./toPdf";
 
 export type DocRef =
@@ -52,7 +48,8 @@ export async function preparePdf(ref: DocRef): Promise<PreparedPdf> {
   if (ref.type === "invoice") {
     const view = await loadInvoiceView(phone, ref.id);
     if (!view) throw new Error("الفاتورة غير موجودة");
-    html = renderInvoiceHtml(toPrintData(view));
+    // The desktop's printed invoice design (same layout, columns, details and stylesheet).
+    html = renderDesktopInvoiceHtml(toDesktopPrint(view));
     partyId = view.invoice.partyId;
     note = `فاتورة ${view.invoice.number}`;
     file = pdfFileName("Invoice", view.invoice.number);

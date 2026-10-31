@@ -106,11 +106,17 @@ name: 87 purchase invoice with a new fabric and colour
     visible: "البنود.*"
     timeout: 30000
 - takeScreenshot: 75-entry-invoice
+# The production details typed on the line are on the invoice page, like on the desktop.
+- scrollUntilVisible:
+    element: ".*كراماج 180.*"
+    visibilityPercentage: 50
+- assertVisible: ".*ماكينة 7.*قائم 13.00 كغ.*"
+- assertVisible: ".*رقم الصبغة D-87.*"
 # The supplier's page lists it and its statement has the «فاتورة دخول» line.
 - scrollUntilVisible:
-    element: "المورد"
+    element: "المورد.*"
     direction: UP
-- tapOn: "المورد"
+- tapOn: "المورد.*"
 - assertVisible:
     id: "party-balances"
 - assertVisible: "فاتورة دخول .*"

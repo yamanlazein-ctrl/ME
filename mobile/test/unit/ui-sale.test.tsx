@@ -139,22 +139,72 @@ describe("invoice detail (T102)", () => {
       amountDue: 30,
       status: "active",
       version: 1,
+      type: "entry",
+      reference: "F-501",
+      subtotal: 50,
+      discount: 0,
+      tax: 0,
+      shipping: 0,
+      paymentMethod: "transfer",
+      notes: "المرجع: F-501 • طريقة الدفع: تحويل بنكي • تسليم المستودع الثاني",
     },
     partyName: "عميل",
+    party: { name: "عميل", phone: "0933", address: null, city: null, code: null },
+    vouchers: [
+      {
+        id: "v1",
+        kind: "payment",
+        number: "PAY-3",
+        date: "2026-03-02",
+        amount: 20,
+        currency: "USD",
+        method: "cash",
+      },
+    ],
     lines: [
       {
         id: "l1",
         fabric: "قطن",
         color: "أبيض",
+        colorCode: "W-1",
         rollNo: "R-1",
+        dyeBatch: "D-4",
         quantityKg: 10,
         pieces: 0,
         pricePerKg: 5,
         discountAmount: 0,
         lineTotal: 50,
+        widthCm: 180,
+        weightGsm: null,
+        note: "رقم الماكينة: 12 • كراماج: 180 • السحب: 3 • وزن قائم: 10.6",
       },
     ],
   } as never;
+
+  it("shows what the desktop invoice page shows: reference, pieces, line details, linked vouchers, notes", async () => {
+    const onNewVoucher = vi.fn();
+    await render(
+      <InvoiceDetailView
+        view={view}
+        role="accountant"
+        error={null}
+        onCancel={vi.fn()}
+        onNewVoucher={onNewVoucher}
+      />,
+    );
+    expect(screen.getByTestId("invoice-reference")).toBeTruthy();
+    expect(screen.getByText("قطن · أبيض (W-1)")).toBeTruthy();
+    expect(screen.getByText(/رقم الصبغة D-4/)).toBeTruthy();
+    expect(
+      screen.getByText("ماكينة 12 · كراماج 180 · سحب 3 · قائم 10.60 كغ · عرض 180 سم"),
+    ).toBeTruthy();
+    expect(screen.getByText(/سند صرف PAY-3/)).toBeTruthy();
+    expect(screen.getByText("تحويل بنكي")).toBeTruthy();
+    // The notes card shows only the free text (number and method are already above).
+    expect(screen.getByText("تسليم المستودع الثاني")).toBeTruthy();
+    await fireEvent.press(screen.getByTestId("invoice-new-voucher"));
+    expect(onNewVoucher).toHaveBeenCalled();
+  });
 
   it("admin and accountant can cancel, warehouse and viewer cannot", async () => {
     const onCancel = vi.fn();

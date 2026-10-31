@@ -4,9 +4,9 @@ import { createPartyUseCase } from "@backend/application/use-cases/parties/party
 import { createFabricUseCase } from "@backend/application/use-cases/inventory/fabricUseCases";
 import { createColorUseCase } from "@backend/application/use-cases/inventory/colorUseCases";
 import { createRollUseCase } from "@backend/application/use-cases/inventory/rollUseCases";
-import { loadInvoiceView, toPrintData } from "../../src/core/invoiceView";
+import { loadInvoiceView, toDesktopPrint } from "../../src/core/invoiceView";
 import { pickColors, pickFabrics, pickRolls } from "../../src/core/inventoryPicker";
-import { renderInvoiceHtml } from "../../src/print/renderHtml";
+import { renderDesktopInvoiceHtml } from "../../src/print/desktopInvoiceHtml";
 import { makeTestPhone, type TestPhone } from "../helpers/testPhone";
 
 describe("invoice detail data, roll picker lookups and PDF html", () => {
@@ -74,7 +74,7 @@ describe("invoice detail data, roll picker lookups and PDF html", () => {
   });
   afterAll(() => t?.close());
 
-  it("loads names and roll numbers, and builds the same html the archive prints", async () => {
+  it("loads names, roll numbers and party details, and builds the desktop's printed invoice", async () => {
     const view = await loadInvoiceView(t.phone, invoiceId);
     expect(view?.partyName).toBe("عميل الفاتورة");
     expect(view?.lines[0]).toMatchObject({
@@ -83,9 +83,11 @@ describe("invoice detail data, roll picker lookups and PDF html", () => {
       rollNo: "R-77",
       lineTotal: 50,
     });
-    const html = renderInvoiceHtml(toPrintData(view!));
-    expect(html).toContain(view!.invoice.number);
+    expect(view?.party).toMatchObject({ name: "عميل الفاتورة", code: "C-9" });
+    const html = renderDesktopInvoiceHtml(toDesktopPrint(view!));
+    expect(html).toContain("فاتورة بيع");
     expect(html).toContain("عميل الفاتورة");
+    expect(html).toContain("#R-77");
   });
 
   it("the picker walks fabric → colour → roll with the remaining kg", async () => {

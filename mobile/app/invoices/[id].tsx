@@ -45,6 +45,12 @@ export default function InvoiceScreen() {
       error={error}
       shareSlot={<SharePdfButton docRef={{ type: "invoice", id }} variant="primary" />}
       onOpenParty={() => router.push(`/(tabs)/parties/${data.invoice.partyId}` as never)}
+      onNewVoucher={() =>
+        router.push({
+          pathname: data.invoice.type === "sale" ? "/(tabs)/add/receipt" : "/(tabs)/add/payment",
+          params: { partyId: data.invoice.partyId, invoiceId: id },
+        } as never)
+      }
       onCancel={async () => {
         setError(null);
         const app = await getApp();
