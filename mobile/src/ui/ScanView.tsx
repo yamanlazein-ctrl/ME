@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { Pressable, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Text } from "./Text";
 import { fontSize, radius, spacing, TOUCH_TARGET } from "./theme";
 import { useColors } from "./themeContext-core";
@@ -16,6 +17,8 @@ export interface ScanOverlayProps {
 /** Drawn over the camera: a square frame, a one-line hint and a cancel button. */
 export function ScanOverlay({ message, rejected, onCancel }: ScanOverlayProps) {
   const colors = useColors();
+  // The camera fills the screen edge to edge: the cancel button sits above the phone's navigation bar.
+  const insets = useSafeAreaInsets();
   return (
     <View
       pointerEvents="box-none"
@@ -58,7 +61,7 @@ export function ScanOverlay({ message, rejected, onCancel }: ScanOverlayProps) {
         onPress={onCancel}
         style={{
           position: "absolute",
-          bottom: spacing.xl,
+          bottom: spacing.xl + insets.bottom,
           minHeight: TOUCH_TARGET,
           minWidth: 160,
           alignItems: "center",
@@ -78,8 +81,16 @@ export function ScanOverlay({ message, rejected, onCancel }: ScanOverlayProps) {
 /** Shown instead of the camera when the camera permission was refused. */
 export function ScanDenied({ onCancel, children }: { onCancel(): void; children?: ReactNode }) {
   const colors = useColors();
+  const insets = useSafeAreaInsets();
   return (
-    <View style={{ flex: 1, padding: spacing.lg, paddingTop: 64 }}>
+    <View
+      style={{
+        flex: 1,
+        padding: spacing.lg,
+        paddingTop: insets.top + spacing.xxl,
+        paddingBottom: insets.bottom + spacing.lg,
+      }}
+    >
       <Text testID="scan-denied" style={{ fontSize: fontSize.title, marginBottom: spacing.md }}>
         لا يوجد إذن للكاميرا
       </Text>

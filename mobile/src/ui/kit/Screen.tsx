@@ -58,6 +58,8 @@ export function Screen({
   const slot = useHeaderSlot();
   const inTabs = useInTabs();
   const showBack = back ?? router.canGoBack();
+  // Without a footer and outside the tabs nothing else clears the phone's navigation bar: the content's end does.
+  const endInset = !footer && !inTabs ? insets.bottom : 0;
   const scrollRef = useRef<ComponentRef<typeof ScrollView>>(null);
   const lastKey = useRef(scrollToTopKey);
   useEffect(() => {
@@ -68,8 +70,13 @@ export function Screen({
   const body = scroll ? (
     <ScrollView
       ref={scrollRef}
+      testID="screen-scroll"
       style={{ flex: 1 }}
-      contentContainerStyle={{ padding: spacing.lg, paddingBottom: spacing.xxl, gap: spacing.md }}
+      contentContainerStyle={{
+        padding: spacing.lg,
+        paddingBottom: spacing.xxl + endInset,
+        gap: spacing.md,
+      }}
       keyboardShouldPersistTaps="handled"
       refreshControl={
         onRefresh ? (
@@ -85,7 +92,7 @@ export function Screen({
       {children}
     </ScrollView>
   ) : (
-    <View style={{ flex: 1 }}>{children}</View>
+    <View style={{ flex: 1, paddingBottom: endInset }}>{children}</View>
   );
   return (
     <View {...(testID ? { testID } : {})} style={{ flex: 1, backgroundColor: colors.background }}>

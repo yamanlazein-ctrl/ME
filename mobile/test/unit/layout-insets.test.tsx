@@ -9,6 +9,7 @@ import { flat } from "../helpers/style";
 import { Button, Screen } from "../../src/ui/kit";
 import { TabScope } from "../../src/ui/kit/tabScope";
 import { ToastView } from "../../src/ui/Toast";
+import { ScanOverlay } from "../../src/ui/ScanView";
 import { TAB_BAR_HEIGHT } from "../../src/ui/theme";
 
 vi.mock("../../src/core/sessionService", () => ({
@@ -68,5 +69,26 @@ describe("bottom of the app clears the phone's navigation bar", () => {
     expect(style.position).toBe("absolute");
     expect(style.top).toBeGreaterThanOrEqual(24);
     expect(style.bottom).toBeUndefined();
+  });
+
+  it("the QR scanner's cancel button sits above the navigation bar (it was half under it on a Pixel 6)", async () => {
+    stubInsets.bottom = NAV_BAR;
+    await render(
+      <ScanOverlay message="وجّه الكاميرا" rejected={false} onCancel={() => undefined} />,
+    );
+    expect(flat(screen.getByTestId("scan-cancel").props.style).bottom).toBeGreaterThanOrEqual(
+      NAV_BAR,
+    );
+  });
+
+  it("a page without a footer outside the tabs ends above the navigation bar", async () => {
+    stubInsets.bottom = NAV_BAR;
+    await render(
+      <Screen title="تسجيل الدخول">
+        <Text>محتوى</Text>
+      </Screen>,
+    );
+    const scroll = screen.getByTestId("screen-scroll");
+    expect(flat(scroll.props.contentContainerStyle).paddingBottom).toBeGreaterThan(NAV_BAR);
   });
 });
