@@ -354,6 +354,12 @@ describe("a write is reflected in every related screen", () => {
     );
     const open = await loadOpenInvoices(t.phone, customer, "receipt");
     expect(open.find((o) => o.id === sale.id)).toMatchObject({ remaining: 10, currency: "USD" });
+    // The first sale (50, paid 15, a 2 kg × 5 return): what is left counts the active return, as the voucher
+    // repository does (total − paid − returns).
+    const first = await t.phone.repos.invoiceRepo.findById(saleId, t.phone.context());
+    expect(open.find((o) => o.id === saleId)?.remaining).toBe(
+      Math.round((Number(first!.total) - Number(first!.paid) - 10) * 100) / 100,
+    );
     must(
       await t.phone.documents.createVoucher("receipt", {
         date: today,

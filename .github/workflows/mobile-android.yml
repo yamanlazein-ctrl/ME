@@ -41,20 +41,6 @@ jobs:
     needs: checks
     if: ${{ inputs.release != 'true' }}
     runs-on: ubuntu-latest
-    # Two phones: the small 320×640 one (no on-screen navigation bar) catches crowded layouts; a Pixel 6 with the
-    # 3-button navigation bar and the system font at 130 % catches anything drawn under the phone's own buttons.
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - device: small
-            profile: ""
-            nav: ""
-            font: "1.0"
-          - device: pixel6-3button-bigfont
-            profile: pixel_6
-            nav: threebutton
-            font: "1.3"
     env:
       EXPO_PUBLIC_SPIKES: "1"
     steps:
@@ -79,12 +65,6 @@ jobs:
         if: inputs.apk_run_id == ''
         working-directory: mobile/android
         run: ./gradlew assembleRelease
-      - uses: actions/upload-artifact@v4
-        if: inputs.apk_run_id == '' && matrix.device == 'small'
-        with:
-          name: motard-mobile-test-apk
-          path: mobile/android/app/build/outputs/apk/release/*.apk
-          retention-days: 14
       - name: Reuse the APK of an earlier run
         if: inputs.apk_run_id != ''
         uses: actions/download-artifact@v4
@@ -92,6 +72,51 @@ jobs:
           name: motard-mobile-test-apk
           run-id: ${{ inputs.apk_run_id }}
           github-token: ${{ github.token }}
+          path: mobile/android/app/build/outputs/apk/release
+      # Built once; every emulator device below installs this same file.
+      - uses: actions/upload-artifact@v4
+        with:
+          name: motard-mobile-test-apk
+          path: mobile/android/app/build/outputs/apk/release/*.apk
+          retention-days: 14
+
+  emulator:
+    needs: apk
+    if: ${{ inputs.release != 'true' }}
+    runs-on: ubuntu-latest
+    # Two phones: the small 320×640 one (no on-screen navigation bar) catches crowded layouts; a Pixel 6 with the
+    # 3-button navigation bar and the system font at 130 % catches anything drawn under the phone's own buttons.
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - device: small
+            profile: ""
+            nav: ""
+            font: "1.0"
+          - device: pixel6-3button-bigfont
+            profile: pixel_6
+            nav: threebutton
+            font: "1.3"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      # avdmanager (creating the emulator) runs on Java.
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - run: npm ci
+      - run: npm ci
+        working-directory: backend
+      - run: npm ci
+        working-directory: mobile
+      - name: The APK built above
+        uses: actions/download-artifact@v4
+        with:
+          name: motard-mobile-test-apk
           path: mobile/android/app/build/outputs/apk/release
       # ── FIX-05: real verification. The unchanged backend runs as a test hub on this runner, the APK runs in an emulator,
       # and a Maestro flow opens every built screen; any error text, missing font/icon, crash or MOTARD_ERR fails the job.
@@ -148,7 +173,7 @@ jobs:
   # above passed. The test-only settings are removed (no spike screens, no cleartext HTTP). Without the owner's
   # keystore secrets it is signed with the Expo template's debug key: installable by sideloading, not for the Play Store.
   phone-apk:
-    needs: apk
+    needs: emulator
     if: ${{ inputs.release != 'true' }}
     runs-on: ubuntu-latest
     steps:

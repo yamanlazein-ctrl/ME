@@ -77,8 +77,12 @@ export function LineEditorSheet({
   if (!line) return null;
   const over = line.quantityKg > line.remainingKg;
   const overPieces = line.remainingPieces !== undefined && line.pieces > line.remainingPieces;
+  // The cost is in the lot's currency: compared only when the invoice is in the same one.
   const belowCost =
-    line.costPerKg !== undefined && line.costPerKg > 0 && line.pricePerKg < line.costPerKg;
+    line.rollCurrency === currency &&
+    line.costPerKg !== undefined &&
+    line.costPerKg > 0 &&
+    line.pricePerKg < line.costPerKg;
   return (
     <Sheet
       visible

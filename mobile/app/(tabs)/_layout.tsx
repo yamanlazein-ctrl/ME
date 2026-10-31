@@ -9,6 +9,7 @@ import { getSessionService } from "../../src/core/sessionService";
 import { visibleTabs } from "../../src/core/tabs";
 import { fontFamilyFor } from "../../src/ui/fontFamilies";
 import { TAB_BAR_HEIGHT } from "../../src/ui/theme";
+import { TabScope } from "../../src/ui/kit/tabScope";
 
 import { useColors } from "../../src/ui/themeContext-core";
 
@@ -31,47 +32,50 @@ export default function TabsLayout() {
     });
   }, []);
   const shown = new Set(visibleTabs(role).map((t) => t.name));
+  // Every tab's pages sit above the tab bar, which already clears the phone's navigation bar.
   return (
-    <Tabs
-      screenOptions={{
-        headerShown: false,
-        tabBarActiveTintColor: colors.primary,
-        tabBarInactiveTintColor: colors.mutedForeground,
-        // Room for the icon and a one-line label, then the phone's navigation bar (3 buttons or gesture line) below
-        // it: nothing of the bar may sit under the system buttons, on any phone or font size.
-        tabBarStyle: {
-          backgroundColor: colors.card,
-          borderTopColor: colors.border,
-          height: TAB_BAR_HEIGHT + insets.bottom,
-          paddingTop: 4,
-          paddingBottom: insets.bottom + 4,
-        },
-        tabBarLabel: ({ color, children }) => (
-          <RNText
-            numberOfLines={1}
-            maxFontSizeMultiplier={1.2}
-            style={{ color, fontFamily: fontFamilyFor("500"), fontSize: 12 }}
-          >
-            {children}
-          </RNText>
-        ),
-        sceneStyle: { backgroundColor: colors.background },
-      }}
-    >
-      {visibleTabs("admin").map((t) => (
-        <Tabs.Screen
-          key={t.name}
-          name={t.name}
-          options={{
-            title: t.title,
-            tabBarButtonTestID: `tab-${t.name}`,
-            tabBarIcon: ({ color, size }) => (
-              <Ionicons name={ICONS[t.name] ?? "ellipse"} size={size} color={color as string} />
-            ),
-            href: shown.has(t.name) ? undefined : null,
-          }}
-        />
-      ))}
-    </Tabs>
+    <TabScope>
+      <Tabs
+        screenOptions={{
+          headerShown: false,
+          tabBarActiveTintColor: colors.primary,
+          tabBarInactiveTintColor: colors.mutedForeground,
+          // Room for the icon and a one-line label, then the phone's navigation bar (3 buttons or gesture line) below
+          // it: nothing of the bar may sit under the system buttons, on any phone or font size.
+          tabBarStyle: {
+            backgroundColor: colors.card,
+            borderTopColor: colors.border,
+            height: TAB_BAR_HEIGHT + insets.bottom,
+            paddingTop: 4,
+            paddingBottom: insets.bottom + 4,
+          },
+          tabBarLabel: ({ color, children }) => (
+            <RNText
+              numberOfLines={1}
+              maxFontSizeMultiplier={1.2}
+              style={{ color, fontFamily: fontFamilyFor("500"), fontSize: 12 }}
+            >
+              {children}
+            </RNText>
+          ),
+          sceneStyle: { backgroundColor: colors.background },
+        }}
+      >
+        {visibleTabs("admin").map((t) => (
+          <Tabs.Screen
+            key={t.name}
+            name={t.name}
+            options={{
+              title: t.title,
+              tabBarButtonTestID: `tab-${t.name}`,
+              tabBarIcon: ({ color, size }) => (
+                <Ionicons name={ICONS[t.name] ?? "ellipse"} size={size} color={color as string} />
+              ),
+              href: shown.has(t.name) ? undefined : null,
+            }}
+          />
+        ))}
+      </Tabs>
+    </TabScope>
   );
 }

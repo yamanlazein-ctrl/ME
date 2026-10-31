@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { withTenantTx } from "@backend/infrastructure/orm/engine";
 import { createPartyUseCase } from "@backend/application/use-cases/parties/partyUseCases";
-import { listFabrics, loadColorLots, loadFabric } from "../../src/core/stock";
+import { lastEntryPrice, listFabrics, loadColorLots, loadFabric } from "../../src/core/stock";
 import { loadPartyBalances } from "../../src/core/reports";
 import { makeTestPhone, type TestPhone } from "../helpers/testPhone";
 
@@ -165,5 +165,35 @@ describe("purchase (entry) invoice: new colours and rolls in the same save", () 
     expect(Number(roll!.salePricePerKg)).toBe(4.25);
     const color = await t.phone.repos.colorRepo.findById(roll!.colorId, ctx);
     expect(color).toMatchObject({ name: "كحلي", code: "NV-3" });
+  });
+
+  it("«آخر سعر» is the newest purchase price of the colour in that currency, not a cancelled one", async () => {
+    const buy = async (price: number) => {
+      const r = await t.phone.documents.createEntryInvoice({
+        ...input([
+          {
+            fabricName: "قماش السعر",
+            colorName: "رمادي",
+            quantityKg: 5,
+            pieces: 1,
+            pricePerKg: price,
+          },
+        ]),
+      });
+      if (!r.ok) throw new Error(r.error);
+      return r.data;
+    };
+    await buy(3);
+    const second = await buy(4);
+    const fabric = (await listFabrics(t.phone, "قماش السعر"))[0]!;
+    const colorId = (await colorsOf(t.phone, fabric.id))[0]!.id;
+    expect(await lastEntryPrice(t.phone, { colorId }, "USD")).toMatchObject({
+      pricePerKg: 4,
+      date: today,
+    });
+    expect(await lastEntryPrice(t.phone, { colorId }, "SYP")).toBeNull();
+    const c = await t.phone.documents.cancelInvoice(second.id, second.version);
+    if (!c.ok) throw new Error(c.error);
+    expect((await lastEntryPrice(t.phone, { colorId }, "USD"))?.pricePerKg).toBe(3);
   });
 });

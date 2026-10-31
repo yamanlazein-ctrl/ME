@@ -331,5 +331,19 @@ describe("sale like the desktop's form", () => {
     );
     expect(screen.getByTestId("line-below-cost")).toBeTruthy();
     expect(screen.getByLabelText("ملاحظة (اختياري)")).toBeTruthy();
+    // A lot priced in another currency is not compared (5 USD is not "below" a cost of 45,000 SYP).
+    await render(
+      <LineEditorSheet
+        line={{
+          ...lineFromLot({ ...lot, currency: "SYP", costPerKg: 45_000 }, "k"),
+          pricePerKg: 5,
+        }}
+        currency="USD"
+        onChange={noop}
+        onRemove={noop}
+        onClose={noop}
+      />,
+    );
+    expect(screen.queryByTestId("line-below-cost")).toBeNull();
   });
 });

@@ -49,8 +49,9 @@ export default function SaleForm() {
       today={localDateISO(new Date())}
       availableCredit={partyKey ? (credit.data ?? null) : null}
       showCost={isAdminLike(role)}
-      onParty={(party) => saleDraftStore.update({ party })}
-      onCurrency={(currency) => saleDraftStore.update({ currency })}
+      // Using a customer's credit is chosen per customer and currency: a change asks again.
+      onParty={(party) => saleDraftStore.update({ party, useCredit: false })}
+      onCurrency={(currency) => saleDraftStore.update({ currency, useCredit: false })}
       onRate={(exchangeRate) => saleDraftStore.update({ exchangeRate })}
       onAddLot={(lot) =>
         saleDraftStore.update({

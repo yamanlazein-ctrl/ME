@@ -9,6 +9,7 @@ import {
   balanceAfter,
   emptyVoucher,
   VoucherForm,
+  settledOnInvoice,
   voucherNeedsRate,
   voucherProblems,
 } from "../../src/ui/VoucherForm";
@@ -84,6 +85,19 @@ describe("voucher / expense / cashbox screens (US5)", () => {
       "no-rate",
     ]);
     expect(voucherProblems({ ...base, date: "1-3-2026" })).toEqual(["bad-date"]);
+    // Cash and concession both settle the invoice (the voucher repository's gross amount).
+    expect(voucherProblems({ ...base, amount: 40, discount: 20, invoice: inv }, "payment")).toEqual(
+      ["over-invoice"],
+    );
+    // Another currency: converted at the voucher's rate before comparing.
+    const syp = { ...inv, currency: "SYP", remaining: 1_000_000 };
+    expect(settledOnInvoice({ ...base, amount: 100, rate: 12_000, invoice: syp })).toBe(1_200_000);
+    expect(
+      voucherProblems({ ...base, amount: 100, rate: 12_000, invoice: syp }, "payment"),
+    ).toEqual(["over-invoice"]);
+    expect(voucherProblems({ ...base, amount: 80, rate: 12_000, invoice: syp }, "payment")).toEqual(
+      [],
+    );
   });
 
   it("the voucher form offers the party's unpaid invoices and printed / internal notes", async () => {

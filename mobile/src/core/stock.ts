@@ -11,6 +11,8 @@ import { fabrics } from "@backend/infrastructure/orm/sqlite/schemas/fabric.table
 import { colors } from "@backend/infrastructure/orm/sqlite/schemas/color.table";
 import { rolls } from "@backend/infrastructure/orm/sqlite/schemas/roll.table";
 import { parties } from "@backend/infrastructure/orm/sqlite/schemas/party.table";
+import { invoices } from "@backend/infrastructure/orm/sqlite/schemas/invoice.table";
+import { invoiceLines } from "@backend/infrastructure/orm/sqlite/schemas/invoice-line.table";
 import type { Phone } from "./phone";
 
 export type LotState = "active" | "low" | "out";
@@ -559,7 +561,8 @@ export async function lastEntryPrice(
 ): Promise<{ pricePerKg: number; date: string } | null> {
   if (!where.colorId && !where.fabricId) return null;
   const tenantId = phone.identity.tenantId;
-  const price = sql<string>`COALESCE(${rolls.entryPricePerKg}, ${rolls.pricePerKg})`;
+  // Both are scaled decimals (4 places) in the phone's SQLite: decoded like the repositories do.
+  const price = scaledNumber(sql`COALESCE(${rolls.entryPricePerKg}, ${rolls.pricePerKg})`, 4);
   const rows = await phone.repos.db
     .select({ price, date: rolls.entryDate })
     .from(rolls)
@@ -569,11 +572,15 @@ export async function lastEntryPrice(
         eq(rolls.tenantId, tenantId),
         where.colorId ? eq(rolls.colorId, where.colorId) : eq(colors.fabricId, where.fabricId!),
         eq(sql`COALESCE(${rolls.entryCurrency}, ${rolls.currency})`, currency),
+        // Not a lot whose purchase invoice was cancelled (the cancel leaves the lot «exhausted», not deleted).
+        sql`NOT EXISTS (SELECT 1 FROM ${invoiceLines} JOIN ${invoices} ON ${invoices.id} = ${invoiceLines.invoiceId}
+          WHERE ${invoiceLines.rollId} = ${rolls.id} AND ${invoices.type} = 'entry' AND ${invoices.status} = 'cancelled')`,
+        sql`${rolls.entryDate} IS NOT NULL`,
       ),
     )
     .orderBy(desc(rolls.entryDate), desc(rolls.createdAt))
     .limit(1);
   const r = rows[0];
   if (!r || !(Number(r.price) > 0)) return null;
-  return { pricePerKg: Number(r.price), date: String(r.date) };
+  return { pricePerKg: Number(r.price), date: String(r.date).slice(0, 10) };
 }

@@ -86,6 +86,21 @@ export function voucherNeedsRate(v: Pick<VoucherFormValues, "currency" | "invoic
   return v.currency !== "USD" || (v.invoice !== null && v.invoice.currency !== v.currency);
 }
 
+/**
+ * What the voucher settles on its linked invoice, in the invoice's currency: (cash + concession), converted at the
+ * voucher's rate when the currencies differ (USD ↔ SYP). Null without an invoice or a needed rate.
+ */
+export function settledOnInvoice(
+  v: Pick<VoucherFormValues, "amount" | "discount" | "currency" | "rate" | "invoice">,
+): number | null {
+  if (!v.invoice) return null;
+  const gross = (v.amount ?? 0) + (v.discount ?? 0);
+  if (v.invoice.currency === v.currency) return gross;
+  if (!(v.rate && v.rate > 0)) return null;
+  const converted = v.currency === "USD" ? gross * v.rate : gross / v.rate;
+  return Math.round(converted * 100) / 100;
+}
+
 export function voucherProblems(
   v: VoucherFormValues,
   kind: "receipt" | "payment" = "receipt",
@@ -95,14 +110,10 @@ export function voucherProblems(
   if (!(v.amount && v.amount > 0)) out.push("no-amount");
   if (voucherNeedsRate(v) && !(v.rate && v.rate > 0)) out.push("no-rate");
   if (saneSypRateError(v.currency, v.rate)) out.push("bad-rate");
-  // A supplier payment may not exceed what is left on its invoice (the desktop refuses it); a customer's overpayment
-  // becomes credit.
-  if (
-    kind === "payment" &&
-    v.invoice &&
-    v.invoice.currency === v.currency &&
-    (v.amount ?? 0) > v.invoice.remaining + 1e-9
-  ) {
+  // A supplier payment may not exceed what is left on its invoice (the desktop and the voucher repository refuse it);
+  // a customer's overpayment becomes credit. Cash and concession count, in the invoice's currency.
+  const settles = settledOnInvoice(v);
+  if (kind === "payment" && settles !== null && settles > v.invoice!.remaining + 0.01) {
     out.push("over-invoice");
   }
   if (v.date && !/^\d{4}-\d{2}-\d{2}$/.test(v.date)) out.push("bad-date");

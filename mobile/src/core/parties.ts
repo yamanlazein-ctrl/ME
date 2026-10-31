@@ -1,9 +1,15 @@
 // Customers and suppliers on the phone, as the desktop's party page shows them: search by name, code or phone, the balance
 // per currency from the same statement totals (never summed across currencies), the side in the desktop's words, the
 // party's documents, and its statement for a period.
-import { and, asc, eq, or, sql } from "drizzle-orm";
-import { ilikeContains } from "@backend/infrastructure/repositories/sqlite/helpers/likeContains";
+import { and, asc, eq, inArray, or, sql } from "drizzle-orm";
+import {
+  ilikeContains,
+  mulRound,
+  scaledNumber,
+} from "@backend/infrastructure/repositories/sqlite/helpers/likeContains";
 import { parties } from "@backend/infrastructure/orm/sqlite/schemas/party.table";
+import { returns } from "@backend/infrastructure/orm/sqlite/schemas/return.table";
+import { returnLines } from "@backend/infrastructure/orm/sqlite/schemas/return-line.table";
 import type { StatementEntryData } from "@backend/domain/entities/Statement";
 import { ReturnDoc } from "@backend/domain/entities/Return";
 import type { Phone } from "./phone";
@@ -316,17 +322,48 @@ export async function loadOpenInvoices(
   kind: "receipt" | "payment",
   includePaid = false,
 ): Promise<OpenInvoice[]> {
+  const ctx = phone.context();
   const page = await phone.repos.invoiceRepo.list(
-    { partyId, type: kind === "receipt" ? "sale" : "entry", status: "active", limit: 200 },
-    phone.context(),
+    { partyId, type: kind === "receipt" ? "sale" : "entry", status: "active", limit: 1000 },
+    ctx,
   );
+  // What is left on an invoice is what the voucher repository settles against: total − paid − active returns.
+  const ids = page.data.map((i) => i.id);
+  const returned = new Map<string, number>();
+  if (ids.length > 0) {
+    const rows = await phone.repos.db
+      .select({
+        invoiceId: returns.originalInvoiceId,
+        // Scaled decimals: the voucher repository's own exact product and sum.
+        total: scaledNumber(
+          sql`COALESCE(SUM(${mulRound(returnLines.quantityKg, 2, returnLines.pricePerKg, 4, 2)}), 0)`,
+          2,
+        ),
+      })
+      .from(returnLines)
+      .innerJoin(returns, eq(returnLines.returnId, returns.id))
+      .where(
+        and(
+          eq(returns.tenantId, ctx.tenantId),
+          eq(returns.status, "active"),
+          inArray(returns.originalInvoiceId, ids),
+        ),
+      )
+      .groupBy(returns.originalInvoiceId);
+    for (const r of rows) {
+      if (r.invoiceId) returned.set(r.invoiceId, Math.round(Number(r.total) * 100) / 100);
+    }
+  }
   return page.data
-    .filter((i) => includePaid || Number(i.amountDue) > 0.004)
     .map((i) => ({
       id: i.id,
       number: i.number,
       date: String(i.date).slice(0, 10),
-      remaining: Number(i.amountDue),
+      remaining: Math.max(
+        0,
+        Math.round((Number(i.total) - Number(i.paid) - (returned.get(i.id) ?? 0)) * 100) / 100,
+      ),
       currency: i.currency,
-    }));
+    }))
+    .filter((i) => includePaid || i.remaining > 0.004);
 }

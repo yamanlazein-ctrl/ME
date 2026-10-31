@@ -3,6 +3,7 @@ import { router } from "expo-router";
 import { useQuery } from "@tanstack/react-query";
 import { localDateISO } from "@backend/infrastructure/utils/localDate";
 import { getApp } from "../core/appRuntime";
+import type { Phone } from "../core/phone";
 import { loadOpenInvoices, partyBalances } from "../core/parties";
 import { queryKeys } from "../hooks/queryKeys";
 import { useFinishWrite } from "../hooks/useFinishWrite";
@@ -76,17 +77,14 @@ export function VoucherScreen({
           party: { id: v.partyId, name: party?.name ?? "" },
           amount: v.amount,
           currency: v.currency ?? "USD",
-          rate: v.currency === "USD" ? null : (v.exchangeRate ?? null),
+          // Kept whenever one was stored (a USD voucher on a SYP invoice has one too).
+          rate: v.exchangeRate && Number(v.exchangeRate) !== 1 ? Number(v.exchangeRate) : null,
           discount: v.discount ?? null,
           method: ((v.method as VoucherMethod | undefined) ?? "cash") as VoucherMethod,
           note: v.notesInternal ?? "",
           notePrint: v.notesPrint ?? "",
           date: String(v.date).slice(0, 10),
-          invoice: v.invoiceId
-            ? ((await loadOpenInvoices(app.phone, v.partyId, kind, true)).find(
-                (i) => i.id === v.invoiceId,
-              ) ?? null)
-            : null,
+          invoice: await amendedInvoice(app.phone, v, kind),
         });
       } else if (partyId) {
         const party = await app.phone.repos.partyRepo.findById(partyId, ctx);
@@ -171,4 +169,24 @@ export function VoucherScreen({
       onSave={save}
     />
   );
+}
+
+/**
+ * The invoice an amended voucher is tied to, with that voucher's own settlement added back to what is left: the amend
+ * replaces it, so it must not count against itself (the desktop's credit-back).
+ */
+async function amendedInvoice(
+  phone: Phone,
+  v: { invoiceId?: string | null; partyId: string; appliedAmount?: number | string | null },
+  kind: "receipt" | "payment",
+): Promise<OpenInvoice | null> {
+  if (!v.invoiceId) return null;
+  const inv = (await loadOpenInvoices(phone, v.partyId, kind, true)).find(
+    (i) => i.id === v.invoiceId,
+  );
+  if (!inv) return null;
+  return {
+    ...inv,
+    remaining: Math.round((inv.remaining + (Number(v.appliedAmount) || 0)) * 100) / 100,
+  };
 }
