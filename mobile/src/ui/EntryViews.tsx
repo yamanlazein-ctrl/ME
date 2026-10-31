@@ -21,13 +21,12 @@ import {
   type EntryDraftLine,
 } from "../core/entryDraft";
 import type { EntryLineInput } from "../core/documents";
-import { PAYMENT_METHOD_LABEL, type PaymentMethod } from "../core/lineNote";
 import { queryKeys } from "../hooks/queryKeys";
 import { Field } from "./Field";
 import { kg, money } from "./format";
 import { MoneyInput } from "./MoneyInput";
 import { PartyPicker, type PickedParty } from "./PartyPicker";
-import { CURRENCY_OPTIONS } from "./SaleViews";
+import { CURRENCY_OPTIONS, PAYMENT_OPTIONS } from "./options";
 import { spacing } from "./theme";
 import { useColors } from "./themeContext-core";
 import {
@@ -43,10 +42,7 @@ import {
   Sheet,
 } from "./kit";
 
-export const PAYMENT_OPTIONS = (Object.keys(PAYMENT_METHOD_LABEL) as PaymentMethod[]).map((m) => ({
-  value: m,
-  label: PAYMENT_METHOD_LABEL[m],
-}));
+export { PAYMENT_OPTIONS };
 
 async function phone() {
   const app = await getApp();

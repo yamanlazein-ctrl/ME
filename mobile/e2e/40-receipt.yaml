@@ -16,6 +16,10 @@ name: 40 receipt with the balance before and after
     id: "party-picker"
 - tapOn:
     id: "party-option"
+- scrollUntilVisible:
+    element:
+      id: "voucher-amount"
+    visibilityPercentage: 50
 - tapOn:
     id: "voucher-amount"
 - inputText: "10"

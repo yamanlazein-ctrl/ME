@@ -12,12 +12,15 @@ export function LotPickerSheet({
   onClose,
   onPick,
   exclude = [],
+  showCost = false,
 }: {
   visible: boolean;
   onClose(): void;
   onPick(lot: PickableLot): void;
   /** Lots already on the invoice. */
   exclude?: string[];
+  /** Admin / accountant also see the lot's cost (the desktop shows the entry price on the sale line). */
+  showCost?: boolean;
 }) {
   const [q, setQ] = useState("");
   const lots = useQuery({
@@ -37,6 +40,7 @@ export function LotPickerSheet({
         onQuery={setQ}
         lots={lots.data?.filter((l) => !exclude.includes(l.id))}
         onPick={onPick}
+        showCost={showCost}
       />
     </Sheet>
   );
@@ -47,11 +51,13 @@ export function LotPickerView({
   onQuery,
   lots,
   onPick,
+  showCost = false,
 }: {
   q: string;
   onQuery(q: string): void;
   lots: PickableLot[] | undefined;
   onPick(lot: PickableLot): void;
+  showCost?: boolean;
 }) {
   return (
     <>
@@ -74,7 +80,7 @@ export function LotPickerView({
               accessibilityLabel={`صبغة ${l.rollNo}`}
               title={`${l.fabricName} · ${l.colorName}`}
               subtitle={`صبغة ${l.rollNo}${l.colorCode ? ` · رقم اللون ${l.colorCode}` : ""}`}
-              meta={`سعر البيع ${money(l.defaultPricePerKg, l.currency)}`}
+              meta={lotFacts(l, showCost)}
               value={kg(l.remainingKg)}
               valueCaption={piecesText(l.remainingPieces)}
               onPress={() => onPick(l)}
@@ -85,4 +91,17 @@ export function LotPickerView({
       )}
     </>
   );
+}
+
+/** What tells two lots of the same colour apart: dye number, grammage, width, then the prices. */
+export function lotFacts(l: PickableLot, showCost: boolean): string {
+  return [
+    l.dyeBatch ? `رقم الصبغة ${l.dyeBatch}` : "",
+    l.weightGsm ? `كراماج ${l.weightGsm}` : "",
+    l.widthCm ? `عرض ${l.widthCm} سم` : "",
+    `سعر البيع ${money(l.defaultPricePerKg, l.currency)}`,
+    showCost ? `التكلفة ${money(l.costPerKg, l.currency)}` : "",
+  ]
+    .filter(Boolean)
+    .join(" · ");
 }

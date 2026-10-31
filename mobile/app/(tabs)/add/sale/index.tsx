@@ -1,10 +1,15 @@
 import { useEffect, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { router, useLocalSearchParams } from "expo-router";
 import { randomUUID } from "node:crypto";
 import { localDateISO } from "@backend/infrastructure/utils/localDate";
 import { getApp } from "../../../../src/core/appRuntime";
 import { draftProblems, toCreateInput } from "../../../../src/core/saleDraft";
 import { saleDraftStore, useSaleDraft } from "../../../../src/hooks/useSaleDraft";
+import { customerCredit } from "../../../../src/core/stock";
+import { isAdminLike } from "../../../../src/core/roles";
+import { queryKeys } from "../../../../src/hooks/queryKeys";
+import { useRole } from "../../../../src/hooks/useRole";
 import { useFinishWrite } from "../../../../src/hooks/useFinishWrite";
 import { lineFromLot, SaleFormView } from "../../../../src/ui/SaleViews";
 
@@ -13,6 +18,17 @@ export default function SaleForm() {
   const finish = useFinishWrite();
   const { partyId } = useLocalSearchParams<{ partyId?: string }>();
   const [error, setError] = useState<string | null>(null);
+  const role = useRole();
+  const partyKey = draft.party?.id ?? "";
+  // The customer's credit in the invoice currency: offered as «خصم من رصيد العميل الدائن» like on the desktop.
+  const credit = useQuery({
+    queryKey: [...queryKeys.parties, "credit", partyKey, draft.currency],
+    enabled: Boolean(partyKey),
+    queryFn: async () => {
+      const app = await getApp();
+      return app.phone ? customerCredit(app.phone, partyKey, draft.currency) : 0;
+    },
+  });
 
   // Opened from a customer's page: that customer, unless a draft for another one is in progress.
   useEffect(() => {
@@ -30,6 +46,9 @@ export default function SaleForm() {
     <SaleFormView
       draft={draft}
       error={error}
+      today={localDateISO(new Date())}
+      availableCredit={partyKey ? (credit.data ?? null) : null}
+      showCost={isAdminLike(role)}
       onParty={(party) => saleDraftStore.update({ party })}
       onCurrency={(currency) => saleDraftStore.update({ currency })}
       onRate={(exchangeRate) => saleDraftStore.update({ exchangeRate })}
@@ -60,7 +79,7 @@ export default function SaleForm() {
           if (!app.phone) throw new Error("الجهاز غير مسجّل");
           // One call: number + header + lines + ledger + voucher + cashbox + stock in one transaction (FR-15).
           const result = await app.phone.documents.createInvoice(
-            toCreateInput(current, localDateISO(new Date())),
+            toCreateInput(current, localDateISO(new Date()), credit.data ?? 0),
           );
           if (!result.ok) return setError(result.error);
           await finish();

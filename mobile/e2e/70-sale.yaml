@@ -17,6 +17,10 @@ name: 70 sale on one screen, invoice page, share PDF, cancel
 - takeScreenshot: 14-sale-customer-sheet
 - tapOn:
     id: "party-option"
+- scrollUntilVisible:
+    element:
+      id: "add-line"
+    visibilityPercentage: 50
 - tapOn:
     id: "add-line"
 - extendedWaitUntil:

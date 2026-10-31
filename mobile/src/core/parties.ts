@@ -299,3 +299,34 @@ export async function loadStatement(phone: Phone, q: StatementQuery): Promise<St
     .sort((a, b) => a.currency.localeCompare(b.currency));
   return { partyName: h.partyName, totals, entries: full.entries };
 }
+
+/** An unpaid invoice of the party a voucher can settle («الفاتورة المرتبطة»). */
+export interface OpenInvoice {
+  id: string;
+  number: string;
+  date: string;
+  remaining: number;
+  currency: string;
+}
+
+/** Active invoices of the party with something left to pay (a receipt settles sales, a payment purchases). */
+export async function loadOpenInvoices(
+  phone: Phone,
+  partyId: string,
+  kind: "receipt" | "payment",
+  includePaid = false,
+): Promise<OpenInvoice[]> {
+  const page = await phone.repos.invoiceRepo.list(
+    { partyId, type: kind === "receipt" ? "sale" : "entry", status: "active", limit: 200 },
+    phone.context(),
+  );
+  return page.data
+    .filter((i) => includePaid || Number(i.amountDue) > 0.004)
+    .map((i) => ({
+      id: i.id,
+      number: i.number,
+      date: String(i.date).slice(0, 10),
+      remaining: Number(i.amountDue),
+      currency: i.currency,
+    }));
+}

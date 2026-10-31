@@ -456,6 +456,11 @@ export interface PickableLot {
   /** What a sale line starts at: the lot's sale price, else its cost (the desktop's default). */
   defaultPricePerKg: number;
   currency: string;
+  dyeBatch: string | null;
+  widthCm: number | null;
+  weightGsm: number | null;
+  /** The lot's cost per kg (shown to admin/accountant: the desktop warns when selling below it). */
+  costPerKg: number;
 }
 
 /** Lots with stock for a sale line, searched by fabric, colour, colour code or lot number (largest first). */
@@ -476,6 +481,9 @@ export async function pickLots(phone: Phone, q: string, limit = 60): Promise<Pic
       salePricePerKg: rolls.salePricePerKg,
       pricePerKg: rolls.pricePerKg,
       currency: rolls.currency,
+      dyeBatch: rolls.dyeBatch,
+      widthCm: rolls.widthCm,
+      weightGsm: rolls.weightGsm,
     })
     .from(rolls)
     .innerJoin(colors, eq(colors.id, rolls.colorId))
@@ -509,7 +517,28 @@ export async function pickLots(phone: Phone, q: string, limit = 60): Promise<Pic
     remainingPieces: Number(r.remainingPieces ?? 0),
     defaultPricePerKg: Number(r.salePricePerKg ?? r.pricePerKg ?? 0),
     currency: String(r.currency ?? "USD"),
+    dyeBatch: r.dyeBatch ?? null,
+    widthCm: Number(r.widthCm) > 0 ? Number(r.widthCm) : null,
+    weightGsm: Number(r.weightGsm) > 0 ? Number(r.weightGsm) : null,
+    costPerKg: Number(r.pricePerKg ?? 0),
   }));
+}
+
+/**
+ * The customer's available credit in a currency (advance payments / overpaid excess not yet attached to an invoice):
+ * the same statement-repository read behind the desktop's GET /api/customers/:id/credit.
+ */
+export async function customerCredit(
+  phone: Phone,
+  customerId: string,
+  currency: string,
+): Promise<number> {
+  const position = await phone.repos.statementRepo.creditPosition(
+    customerId,
+    currency,
+    phone.context(),
+  );
+  return Math.max(0, Number(position.availableCredit) || 0);
 }
 
 /**

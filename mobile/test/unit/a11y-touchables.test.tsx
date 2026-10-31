@@ -379,6 +379,9 @@ const screens: Array<[string, () => ReactElement]> = [
     () =>
       withQuery(
         <SaleFormView
+          today="2026-03-01"
+          availableCredit={null}
+          showCost={false}
           draft={{
             ...emptyDraft(),
             party: { id: "p", name: "ع" },

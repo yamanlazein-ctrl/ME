@@ -12,6 +12,10 @@ name: 50 payment to a supplier
     id: "party-picker"
 - tapOn:
     id: "party-option"
+- scrollUntilVisible:
+    element:
+      id: "voucher-amount"
+    visibilityPercentage: 50
 - tapOn:
     id: "voucher-amount"
 - inputText: "1"

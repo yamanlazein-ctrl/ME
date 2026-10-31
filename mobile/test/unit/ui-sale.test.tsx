@@ -12,7 +12,13 @@ import {
 } from "../../src/ui/SaleViews";
 import { LotPickerView } from "../../src/ui/LotPicker";
 import { InvoiceDetailView } from "../../src/ui/InvoiceDetailView";
-import { emptyDraft, type SaleDraft } from "../../src/core/saleDraft";
+import {
+  draftProblems,
+  emptyDraft,
+  saleSettlement,
+  toCreateInput,
+  type SaleDraft,
+} from "../../src/core/saleDraft";
 import { withQuery } from "../helpers/withQuery";
 
 const lot = {
@@ -27,12 +33,19 @@ const lot = {
   remainingPieces: 3,
   defaultPricePerKg: 4.5,
   currency: "USD",
+  dyeBatch: "D-12",
+  widthCm: 180,
+  weightGsm: 210,
+  costPerKg: 3.1,
 };
 
 const noop = () => undefined;
 const formProps = (draft: SaleDraft) => ({
   draft,
   error: null,
+  today: "2026-03-01",
+  availableCredit: null as number | null,
+  showCost: false,
   onParty: noop,
   onCurrency: noop,
   onRate: noop,
@@ -50,7 +63,9 @@ describe("lot picker", () => {
     await render(<LotPickerView q="" onQuery={noop} lots={[lot]} onPick={onPick} />);
     expect(screen.getByText("قطن · أبيض")).toBeTruthy();
     expect(screen.getByText("120.50 كغ")).toBeTruthy();
-    expect(screen.getByText("سعر البيع 4.50 USD")).toBeTruthy();
+    expect(
+      screen.getByText("رقم الصبغة D-12 · كراماج 210 · عرض 180 سم · سعر البيع 4.50 USD"),
+    ).toBeTruthy();
     await fireEvent.press(screen.getByLabelText("صبغة DL-1"));
     expect(onPick).toHaveBeenCalledWith(lot);
   });
@@ -232,5 +247,89 @@ describe("invoice detail (T102)", () => {
     );
     expect(calls.slice(before)).toEqual([{ y: 0, animated: true }]);
     expect(screen.getByTestId("invoice-cancelled")).toBeTruthy();
+  });
+});
+
+describe("sale like the desktop's form", () => {
+  it("settlement: the desktop's planSaleSettlement cases (src/presentation/hooks/useCustomerCredit.test.ts)", () => {
+    expect(
+      saleSettlement({ total: 10_000, cashPaid: 20_000, availableCredit: 0, useCredit: true }),
+    ).toEqual({ cashApplied: 10_000, creditApplied: 0, excessCash: 10_000, debt: 0 });
+    expect(
+      saleSettlement({ total: 12_000, cashPaid: 0, availableCredit: 15_000, useCredit: true }),
+    ).toEqual({ cashApplied: 0, creditApplied: 12_000, excessCash: 0, debt: 0 });
+    expect(
+      saleSettlement({ total: 8_000, cashPaid: 1_000, availableCredit: 3_000, useCredit: true }),
+    ).toEqual({ cashApplied: 1_000, creditApplied: 3_000, excessCash: 0, debt: 4_000 });
+    expect(
+      saleSettlement({ total: 8_000, cashPaid: 0, availableCredit: 3_000, useCredit: false }),
+    ).toEqual({ cashApplied: 0, creditApplied: 0, excessCash: 0, debt: 8_000 });
+  });
+
+  const withLine = (patch: Partial<SaleDraft> = {}): SaleDraft => ({
+    ...emptyDraft(),
+    party: { id: "p1", name: "عميل" },
+    lines: [{ ...lineFromLot(lot, "k1"), quantityKg: 10, pieces: 2, note: " طي خاص " }],
+    ...patch,
+  });
+
+  it("refuses more pieces than the lot has and a discount above the line, like the desktop", () => {
+    expect(draftProblems(withLine())).toEqual([]);
+    expect(
+      draftProblems(withLine({ lines: [{ ...lineFromLot(lot, "k"), quantityKg: 1, pieces: 4 }] })),
+    ).toEqual(["over-pieces"]);
+    expect(
+      draftProblems(
+        withLine({ lines: [{ ...lineFromLot(lot, "k"), quantityKg: 1, discountAmount: 5 }] }),
+      ),
+    ).toEqual(["discount-over"]);
+  });
+
+  it("sends reference, date, payment method, notes, line note and the credit used", () => {
+    const input = toCreateInput(
+      withLine({
+        reference: "PO-3",
+        date: "2026-02-27",
+        paymentMethod: "check",
+        notes: "تسليم غداً",
+        useCredit: true,
+      }),
+      "2026-03-01",
+      20,
+    );
+    expect(input).toMatchObject({
+      date: "2026-02-27",
+      reference: "PO-3",
+      paymentMethod: "check",
+      creditApplied: 20,
+      notes: "المرجع: PO-3 • طريقة الدفع: شيك • تسليم غداً",
+    });
+    expect(input.lines[0]).toMatchObject({ note: "طي خاص", pieces: 2 });
+    expect(toCreateInput(withLine(), "2026-03-01", 20)).not.toHaveProperty("creditApplied");
+  });
+
+  it("offers the customer's credit, shows what it covers, kg and pieces in the footer", async () => {
+    const props = { ...formProps(withLine({ useCredit: true })), availableCredit: 30 };
+    await render(withQuery(<SaleFormView {...props} />));
+    expect(screen.getByTestId("sale-credit-yes")).toBeTruthy();
+    expect(screen.getByTestId("sale-credit-applied")).toBeTruthy();
+    expect(screen.getByText("30.00 USD")).toBeTruthy();
+    expect(screen.getByTestId("sale-footer-qty").props.children).toBe("10.00 كغ · 2 ثوب");
+    expect(screen.getByLabelText("رقم المرجعية")).toBeTruthy();
+    expect(screen.getByLabelText("التاريخ").props.placeholder).toBe("2026-03-01");
+  });
+
+  it("the line sheet warns below the lot's cost and has a note", async () => {
+    await render(
+      <LineEditorSheet
+        line={{ ...lineFromLot(lot, "k"), pricePerKg: 3 }}
+        currency="USD"
+        onChange={noop}
+        onRemove={noop}
+        onClose={noop}
+      />,
+    );
+    expect(screen.getByTestId("line-below-cost")).toBeTruthy();
+    expect(screen.getByLabelText("ملاحظة (اختياري)")).toBeTruthy();
   });
 });

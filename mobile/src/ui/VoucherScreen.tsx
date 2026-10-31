@@ -3,7 +3,7 @@ import { router } from "expo-router";
 import { useQuery } from "@tanstack/react-query";
 import { localDateISO } from "@backend/infrastructure/utils/localDate";
 import { getApp } from "../core/appRuntime";
-import { partyBalances } from "../core/parties";
+import { loadOpenInvoices, partyBalances } from "../core/parties";
 import { queryKeys } from "../hooks/queryKeys";
 import { useFinishWrite } from "../hooks/useFinishWrite";
 import { SharePdfButton } from "./SendToCustomer";
@@ -11,7 +11,9 @@ import { DocumentDoneView, SAVED_LOCALLY_NOTE } from "./SaleViews";
 import {
   emptyVoucher,
   VoucherForm,
+  voucherNeedsRate,
   voucherProblems,
+  type OpenInvoice,
   type VoucherFormValues,
   type VoucherMethod,
 } from "./VoucherForm";
@@ -24,10 +26,13 @@ export function VoucherScreen({
   kind,
   amendId,
   partyId,
+  invoiceId,
 }: {
   kind: "receipt" | "payment";
   amendId?: string;
   partyId?: string;
+  /** Opened from an invoice: that invoice is the linked one. */
+  invoiceId?: string;
 }) {
   const finish = useFinishWrite();
   const [values, setValues] = useState<VoucherFormValues>(emptyVoucher());
@@ -44,6 +49,17 @@ export function VoucherScreen({
       const app = await getApp();
       if (!app.phone || !values.party) return [];
       return partyBalances(app.phone, values.party.id, partyKind);
+    },
+  });
+
+  // The party's unpaid invoices of this direction (sale for a receipt, purchase for a payment).
+  const openInvoices = useQuery({
+    queryKey: [...queryKeys.party(values.party?.id ?? ""), "open-invoices", kind],
+    enabled: Boolean(values.party),
+    queryFn: async (): Promise<OpenInvoice[]> => {
+      const app = await getApp();
+      if (!app.phone || !values.party) return [];
+      return loadOpenInvoices(app.phone, values.party.id, kind);
     },
   });
 
@@ -64,31 +80,50 @@ export function VoucherScreen({
           discount: v.discount ?? null,
           method: ((v.method as VoucherMethod | undefined) ?? "cash") as VoucherMethod,
           note: v.notesInternal ?? "",
+          notePrint: v.notesPrint ?? "",
+          date: String(v.date).slice(0, 10),
+          invoice: v.invoiceId
+            ? ((await loadOpenInvoices(app.phone, v.partyId, kind, true)).find(
+                (i) => i.id === v.invoiceId,
+              ) ?? null)
+            : null,
         });
       } else if (partyId) {
         const party = await app.phone.repos.partyRepo.findById(partyId, ctx);
-        if (party) setValues((x) => ({ ...x, party: { id: party.id, name: party.name } }));
+        if (!party) return;
+        const linked = invoiceId
+          ? ((await loadOpenInvoices(app.phone, party.id, kind)).find((i) => i.id === invoiceId) ??
+            null)
+          : null;
+        setValues((x) => ({
+          ...x,
+          party: { id: party.id, name: party.name },
+          ...(linked ? { invoice: linked, currency: linked.currency } : {}),
+        }));
       }
     });
-  }, [amendId, partyId]);
+  }, [amendId, partyId, invoiceId, kind]);
 
   const save = async () => {
     setAttempted(true);
-    if (voucherProblems(values).length > 0 || !values.party || !values.amount) return;
+    if (voucherProblems(values, kind).length > 0 || !values.party || !values.amount) return;
     setError(null);
     try {
       const app = await getApp();
       if (!app.phone) throw new Error("الجهاز غير مسجّل");
       const body = {
-        date: localDateISO(new Date()),
+        date: values.date || localDateISO(new Date()),
         partyId: values.party.id,
+        ...(values.invoice ? { invoiceId: values.invoice.id } : {}),
         partyKind,
         amount: values.amount,
         currency: values.currency,
-        exchangeRate: values.currency === "USD" ? 1 : (values.rate ?? 0),
+        // Only a voucher that needs a rate carries one (a rate typed before switching back to USD is dropped).
+        exchangeRate: voucherNeedsRate(values) ? (values.rate ?? 0) : 1,
         method: values.method,
         ...(values.discount ? { discount: values.discount } : {}),
         ...(values.note.trim() ? { notesInternal: values.note.trim() } : {}),
+        ...(values.notePrint.trim() ? { notesPrint: values.notePrint.trim() } : {}),
       };
       const result =
         amendId && original
@@ -128,6 +163,8 @@ export function VoucherScreen({
       {...(original ? { initialAmount: String(original.amount) } : {})}
       values={values}
       balances={balances.data}
+      {...(openInvoices.data ? { openInvoices: openInvoices.data } : {})}
+      today={localDateISO(new Date())}
       error={error}
       attempted={attempted}
       onChange={(patch) => setValues((v) => ({ ...v, ...patch }))}

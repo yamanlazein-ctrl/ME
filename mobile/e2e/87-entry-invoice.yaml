@@ -12,6 +12,10 @@ name: 87 purchase invoice with a new fabric and colour
 - tapOn:
     id: "party-option"
 - takeScreenshot: 70-entry-supplier
+- scrollUntilVisible:
+    element:
+      id: "entry-add-line"
+    visibilityPercentage: 50
 - tapOn:
     id: "entry-add-line"
 # The line is a full page with the desktop line card's sections.

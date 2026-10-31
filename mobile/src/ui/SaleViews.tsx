@@ -9,9 +9,12 @@ import {
   draftTotals,
   DRAFT_PROBLEM_TEXT,
   needsRate,
+  saleSettlement,
   type DraftLine,
   type SaleDraft,
 } from "../core/saleDraft";
+import { Field } from "./Field";
+import { CURRENCY_OPTIONS, PAYMENT_OPTIONS } from "./options";
 import type { PickableLot } from "../core/stock";
 import { kg, money } from "./format";
 import { MoneyInput } from "./MoneyInput";
@@ -30,10 +33,7 @@ import {
   Sheet,
 } from "./kit";
 
-export const CURRENCY_OPTIONS = [
-  { value: "USD", label: "دولار USD" },
-  { value: "SYP", label: "ليرة SYP" },
-];
+export { CURRENCY_OPTIONS };
 
 /** The line a picked lot starts as: 1 kg (or what is left) at the lot's sale price. */
 export function lineFromLot(lot: PickableLot, key: string): DraftLine {
@@ -47,6 +47,8 @@ export function lineFromLot(lot: PickableLot, key: string): DraftLine {
     rollNo: lot.rollNo,
     rollCurrency: lot.currency,
     remainingKg: lot.remainingKg,
+    remainingPieces: lot.remainingPieces,
+    costPerKg: lot.costPerKg,
     quantityKg: Math.min(1, lot.remainingKg),
     pieces: 0,
     pricePerKg: lot.defaultPricePerKg,
@@ -74,6 +76,9 @@ export function LineEditorSheet({
 }) {
   if (!line) return null;
   const over = line.quantityKg > line.remainingKg;
+  const overPieces = line.remainingPieces !== undefined && line.pieces > line.remainingPieces;
+  const belowCost =
+    line.costPerKg !== undefined && line.costPerKg > 0 && line.pricePerKg < line.costPerKg;
   return (
     <Sheet
       visible
@@ -85,7 +90,7 @@ export function LineEditorSheet({
           <Button
             label="تم"
             onPress={onClose}
-            disabled={over || !(line.quantityKg > 0)}
+            disabled={over || overPieces || !(line.quantityKg > 0)}
             testID="line-done"
           />
           <Button label="حذف البند" variant="danger" onPress={onRemove} testID="line-remove" />
@@ -93,7 +98,10 @@ export function LineEditorSheet({
       }
     >
       <Text>{`${line.fabricName} · ${line.colorName}`}</Text>
-      <KeyValue label="المتوفر في الصبغة" value={kg(line.remainingKg)} />
+      <KeyValue
+        label="المتوفر في الصبغة"
+        value={`${kg(line.remainingKg)}${line.remainingPieces !== undefined ? ` · ${line.remainingPieces} ثوب` : ""}`}
+      />
       <MoneyInput
         label="الكمية (كغ)"
         fieldId="line-kg"
@@ -105,6 +113,7 @@ export function LineEditorSheet({
         label="عدد الأثواب"
         fieldId="line-pieces"
         initialText={String(line.pieces)}
+        error={overPieces ? "أكبر من الأثواب المتبقية في الصبغة" : null}
         onChangeAmount={(v) => onChange({ pieces: Math.max(0, Math.round(v ?? 0)) })}
       />
       <MoneyInput
@@ -113,11 +122,24 @@ export function LineEditorSheet({
         initialText={String(line.pricePerKg)}
         onChangeAmount={(v) => onChange({ pricePerKg: v ?? 0 })}
       />
+      {belowCost ? (
+        <Notice
+          kind="warning"
+          text={`السعر أقل من تكلفة الصبغة (${money(line.costPerKg!, currency)})`}
+          testID="line-below-cost"
+        />
+      ) : null}
       <MoneyInput
         label="خصم على البند (مبلغ)"
         fieldId="line-discount"
         initialText={line.discountAmount ? String(line.discountAmount) : ""}
         onChangeAmount={(v) => onChange({ discountAmount: v ?? 0 })}
+      />
+      <Field
+        label="ملاحظة (اختياري)"
+        fieldId="line-note"
+        value={line.note ?? ""}
+        onChangeText={(note) => onChange({ note })}
       />
       <KeyValue label="قيمة البند" value={money(lineAmount(line), currency)} strong />
     </Sheet>
@@ -127,6 +149,11 @@ export function LineEditorSheet({
 export interface SaleFormProps {
   draft: SaleDraft;
   error: string | null;
+  today: string;
+  /** The customer's available credit in the invoice currency (null while unknown / no customer). */
+  availableCredit: number | null;
+  /** Admin / accountant see lot costs. */
+  showCost: boolean;
   onParty(p: PickedParty): void;
   onCurrency(c: string): void;
   onRate(rate: number | null): void;
@@ -146,6 +173,12 @@ export function SaleFormView(p: SaleFormProps) {
   const [editing, setEditing] = useState<string | null>(null);
   const [extras, setExtras] = useState(draft.discount > 0 || draft.tax > 0 || draft.shipping > 0);
   const totals = draftTotals(draft);
+  const settlement = saleSettlement({
+    total: totals.total,
+    cashPaid: draft.paid,
+    availableCredit: p.availableCredit ?? 0,
+    useCredit: draft.useCredit,
+  });
   const problems = draftProblems(draft);
   const show = (k: (typeof problems)[number]) => attempted && problems.includes(k);
   const editingLine = draft.lines.find((l) => l.key === editing) ?? null;
@@ -167,8 +200,10 @@ export function SaleFormView(p: SaleFormProps) {
       }
       footer={
         <>
-          <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
-            <Text style={{ color: colors.mutedForeground }}>الإجمالي</Text>
+          <View style={{ flexDirection: "row", justifyContent: "space-between", gap: 8 }}>
+            <Text style={{ color: colors.mutedForeground }} testID="sale-footer-qty">
+              {`${kg(totals.kg)} · ${totals.pieces} ثوب`}
+            </Text>
             <Text testID="sale-total" style={{ fontWeight: "700", writingDirection: "ltr" }}>
               {money(totals.total, draft.currency)}
             </Text>
@@ -185,13 +220,34 @@ export function SaleFormView(p: SaleFormProps) {
         </>
       }
     >
-      <Section title="العميل والعملة">
+      <Section title="بيانات الفاتورة">
         <PartyPicker
           kind="customer"
           value={draft.party}
           onPick={p.onParty}
           error={show("no-party")}
         />
+        <View style={{ flexDirection: "row", gap: 8 }}>
+          <View style={{ flex: 1 }}>
+            <Field
+              label="رقم المرجعية"
+              fieldId="sale-reference"
+              value={draft.reference}
+              onChangeText={(reference) => p.onPatch({ reference })}
+            />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Field
+              label="التاريخ"
+              fieldId="sale-date"
+              value={draft.date}
+              placeholder={p.today}
+              keyboardType="numbers-and-punctuation"
+              error={show("bad-date") ? DRAFT_PROBLEM_TEXT["bad-date"] : null}
+              onChangeText={(date) => p.onPatch({ date: date.trim() })}
+            />
+          </View>
+        </View>
         <Chips
           options={CURRENCY_OPTIONS}
           value={draft.currency}
@@ -243,13 +299,18 @@ export function SaleFormView(p: SaleFormProps) {
               testID={`line-${l.rollNo}`}
               accessibilityLabel={`بند ${l.rollNo}`}
               title={`${l.fabricName} · ${l.colorName}`}
-              subtitle={`صبغة ${l.rollNo} · ${kg(l.quantityKg)} × ${money(l.pricePerKg, draft.currency)}`}
+              subtitle={`صبغة ${l.rollNo} · ${kg(l.quantityKg)} × ${money(l.pricePerKg, draft.currency)}${l.pieces ? ` · ${l.pieces} ثوب` : ""}`}
               meta={
                 l.quantityKg > l.remainingKg
                   ? `أكبر من المتوفر (${kg(l.remainingKg)})`
-                  : l.discountAmount
-                    ? `خصم ${money(l.discountAmount, draft.currency)}`
-                    : null
+                  : l.remainingPieces !== undefined && l.pieces > l.remainingPieces
+                    ? `أثواب أكثر من المتبقي (${l.remainingPieces})`
+                    : [
+                        l.discountAmount ? `خصم ${money(l.discountAmount, draft.currency)}` : "",
+                        l.note?.trim() ?? "",
+                      ]
+                        .filter(Boolean)
+                        .join(" · ") || null
               }
               value={money(lineAmount(l), draft.currency)}
               onPress={() => setEditing(l.key)}
@@ -260,7 +321,9 @@ export function SaleFormView(p: SaleFormProps) {
       </Section>
       {show("no-lines") ? <Notice kind="error" text={DRAFT_PROBLEM_TEXT["no-lines"]} /> : null}
 
-      <Section title="الإجمالي والدفع" testID="sale-totals">
+      <Section title="المجاميع والدفع" testID="sale-totals">
+        <KeyValue label="الكمية" value={kg(totals.kg)} />
+        <KeyValue label="عدد الأثواب" value={String(totals.pieces)} />
         <KeyValue label="مجموع البنود" value={money(totals.subtotal, draft.currency)} />
         {extras ? (
           <>
@@ -294,21 +357,55 @@ export function SaleFormView(p: SaleFormProps) {
         )}
         <KeyValue label="الإجمالي" value={money(totals.total, draft.currency)} strong />
         <MoneyInput
-          label="المدفوع الآن (نقداً)"
+          label="المدفوع الآن"
           fieldId="sale-paid"
           initialText={draft.paid ? String(draft.paid) : ""}
           onChangeAmount={(v) => p.onPatch({ paid: v ?? 0 })}
         />
+        <Chips
+          options={PAYMENT_OPTIONS}
+          value={draft.paymentMethod}
+          onChange={(paymentMethod) => p.onPatch({ paymentMethod })}
+          testIDPrefix="sale-method"
+        />
+        {p.availableCredit && p.availableCredit > 0 ? (
+          <Chips
+            options={[
+              { value: "no", label: "بدون رصيد العميل" },
+              {
+                value: "yes",
+                label: `خصم من رصيد العميل الدائن (${money(p.availableCredit, draft.currency)})`,
+              },
+            ]}
+            value={draft.useCredit ? "yes" : "no"}
+            onChange={(v) => p.onPatch({ useCredit: v === "yes" })}
+            testIDPrefix="sale-credit"
+          />
+        ) : null}
+        {settlement.creditApplied > 0 ? (
+          <KeyValue
+            label="من رصيد العميل"
+            value={money(settlement.creditApplied, draft.currency)}
+            testID="sale-credit-applied"
+          />
+        ) : null}
         <KeyValue
           label="المتبقي على العميل"
-          value={money(totals.due, draft.currency)}
+          value={money(settlement.debt, draft.currency)}
           strong
-          tone={totals.due > 0 ? "warning" : "positive"}
+          tone={settlement.debt > 0 ? "warning" : "positive"}
           testID="sale-due"
         />
         {draft.paid > totals.total && totals.total > 0 ? (
           <Notice kind="info" text="الزائد عن الإجمالي يُسجَّل رصيداً لصالح العميل." />
         ) : null}
+        <Field
+          label="ملاحظات الفاتورة (اختياري)"
+          fieldId="sale-notes"
+          value={draft.notes}
+          multiline
+          onChangeText={(notes) => p.onPatch({ notes })}
+        />
       </Section>
 
       {draft.party || draft.lines.length > 0 ? (
@@ -317,6 +414,7 @@ export function SaleFormView(p: SaleFormProps) {
 
       <LotPickerSheet
         visible={picking}
+        showCost={p.showCost}
         exclude={draft.lines.map((l) => l.rollId)}
         onClose={() => setPicking(false)}
         onPick={(lot) => {

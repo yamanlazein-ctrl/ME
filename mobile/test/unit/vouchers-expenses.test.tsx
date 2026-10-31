@@ -2,10 +2,16 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
 // The screens only need the party picker's list; the hook itself pulls in native modules.
 vi.mock("../../src/hooks/useParties", () => ({ usePartyList: () => ({ data: [] }) }));
-import { render, screen, within } from "@testing-library/react-native";
+import { fireEvent, render, screen, within } from "@testing-library/react-native";
 import { withTenantTx } from "@backend/infrastructure/orm/engine";
 import { createPartyUseCase } from "@backend/application/use-cases/parties/partyUseCases";
-import { balanceAfter, emptyVoucher, VoucherForm, voucherProblems } from "../../src/ui/VoucherForm";
+import {
+  balanceAfter,
+  emptyVoucher,
+  VoucherForm,
+  voucherNeedsRate,
+  voucherProblems,
+} from "../../src/ui/VoucherForm";
 import { ExpenseForm } from "../../src/ui/ExpenseForm";
 import { CashboxView } from "../../src/ui/CashboxView";
 import { makeTestPhone, type TestPhone } from "../helpers/testPhone";
@@ -65,6 +71,44 @@ describe("voucher / expense / cashbox screens (US5)", () => {
         "payment",
       ),
     ).toBe(70);
+  });
+
+  it("linked invoice (the desktop's «الفاتورة المرتبطة»): rate when currencies differ; a payment not above it", () => {
+    const base = { ...emptyVoucher(), party: { id: "s", name: "مورد" }, amount: 60 };
+    const inv = { id: "i1", number: "ENT-1", date: "2026-03-01", remaining: 50, currency: "USD" };
+    expect(voucherProblems({ ...base, invoice: inv }, "payment")).toEqual(["over-invoice"]);
+    expect(voucherProblems({ ...base, invoice: inv }, "receipt")).toEqual([]);
+    expect(voucherProblems({ ...base, amount: 50, invoice: inv }, "payment")).toEqual([]);
+    expect(voucherNeedsRate({ currency: "USD", invoice: { ...inv, currency: "SYP" } })).toBe(true);
+    expect(voucherProblems({ ...base, invoice: { ...inv, currency: "SYP" } }, "payment")).toEqual([
+      "no-rate",
+    ]);
+    expect(voucherProblems({ ...base, date: "1-3-2026" })).toEqual(["bad-date"]);
+  });
+
+  it("the voucher form offers the party's unpaid invoices and printed / internal notes", async () => {
+    const onChange = vi.fn();
+    await render(
+      <VoucherForm
+        kind="receipt"
+        values={{ ...emptyVoucher(), party: { id: "c", name: "عميل" } }}
+        balances={[]}
+        error={null}
+        attempted={false}
+        openInvoices={[
+          { id: "i1", number: "INV-4", date: "2026-03-01", remaining: 30, currency: "SYP" },
+        ]}
+        onChange={onChange}
+        onSave={async () => undefined}
+      />,
+    );
+    expect(screen.getByLabelText("ملاحظات السند (تُطبع)")).toBeTruthy();
+    expect(screen.getByLabelText("ملاحظات داخلية (لا تُطبع)")).toBeTruthy();
+    await fireEvent.press(screen.getByTestId("voucher-invoice"));
+    await fireEvent.press(screen.getByLabelText("فاتورة INV-4"));
+    expect(onChange).toHaveBeenCalledWith(
+      expect.objectContaining({ invoice: expect.objectContaining({ id: "i1" }), currency: "SYP" }),
+    );
   });
 
   it("expense form lists name suggestions and the error", async () => {

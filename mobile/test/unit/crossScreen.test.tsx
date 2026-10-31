@@ -15,6 +15,7 @@ import {
   loadStatement,
   partyBalances,
   partyDocuments,
+  loadOpenInvoices,
 } from "../../src/core/parties";
 import {
   emptyReturnDraft,
@@ -23,7 +24,15 @@ import {
   toReturnInput,
 } from "../../src/core/returns";
 import { emptyDraft, toCreateInput } from "../../src/core/saleDraft";
-import { listFabrics, loadColorLots, loadFabric, loadLot, pickLots } from "../../src/core/stock";
+import { loadInvoiceView } from "../../src/core/invoiceView";
+import {
+  customerCredit,
+  listFabrics,
+  loadColorLots,
+  loadFabric,
+  loadLot,
+  pickLots,
+} from "../../src/core/stock";
 import { lineFromLot, SaleFormView } from "../../src/ui/SaleViews";
 import { makeTestPhone, type TestPhone } from "../helpers/testPhone";
 import { withQuery } from "../helpers/withQuery";
@@ -228,6 +237,9 @@ describe("a write is reflected in every related screen", () => {
         <SaleFormView
           draft={draft}
           error={null}
+          today="2026-03-01"
+          availableCredit={null}
+          showCost={false}
           onParty={noop}
           onCurrency={noop}
           onRate={noop}
@@ -249,5 +261,118 @@ describe("a write is reflected in every related screen", () => {
     await new Promise((r) => setTimeout(r, 300));
     expect((await partyDocuments(t.phone, customer, "invoices")).length).toBe(before + 1);
     expect(saleId).not.toBe("");
+  });
+
+  it("a sale settled from the customer's credit (an advance receipt), like the desktop's «خصم من رصيد العميل»", async () => {
+    const ctx = t.phone.context();
+    const advance = await withTenantTx(
+      ctx.tenantId,
+      async () =>
+        must(
+          await createPartyUseCase(
+            t.phone.repos.partyRepo,
+            { kind: "customer", code: "C-Y", name: "عميل الرصيد", currency: "USD" },
+            ctx,
+          ),
+        ).id,
+    );
+    must(
+      await t.phone.documents.createVoucher("receipt", {
+        date: today,
+        partyId: advance,
+        partyKind: "customer",
+        amount: 40,
+        currency: "USD",
+        exchangeRate: 1,
+        method: "cash",
+        preAllocatedNumber: t.nextNumber("VOC"),
+      }),
+    );
+    expect(await customerCredit(t.phone, advance, "USD")).toBe(40);
+    const lot = (await loadLot(t.phone, lotId))!;
+    const draft = {
+      ...emptyDraft(),
+      party: { id: advance, name: "عميل الرصيد" },
+      useCredit: true,
+      lines: [
+        {
+          key: "c1",
+          fabricId: lot.fabricId,
+          fabricName: lot.fabricName,
+          colorId: lot.colorId,
+          colorName: lot.colorName,
+          rollId: lotId,
+          rollNo: lot.rollNo,
+          rollCurrency: "USD",
+          remainingKg: lot.remainingKg,
+          quantityKg: 2,
+          pieces: 0,
+          pricePerKg: 5,
+          discountAmount: 0,
+        },
+      ],
+    };
+    const sale = must(
+      await t.phone.documents.createInvoice({
+        ...toCreateInput(draft, today, 40),
+        preAllocatedNumber: t.nextNumber("INV"),
+      } as never),
+    );
+    expect(Number(sale.creditApplied)).toBe(10);
+    expect(Number(sale.amountDue)).toBe(0);
+    expect(await customerCredit(t.phone, advance, "USD")).toBe(30);
+  });
+
+  it("a receipt tied to its invoice («الفاتورة المرتبطة») lowers what is left on that invoice", async () => {
+    const lot = (await loadLot(t.phone, lotId))!;
+    const draft = {
+      ...emptyDraft(),
+      party: { id: customer, name: "عميل المتابعة" },
+      lines: [
+        {
+          key: "o1",
+          fabricId: lot.fabricId,
+          fabricName: lot.fabricName,
+          colorId: lot.colorId,
+          colorName: lot.colorName,
+          rollId: lotId,
+          rollNo: lot.rollNo,
+          rollCurrency: "USD",
+          remainingKg: lot.remainingKg,
+          quantityKg: 2,
+          pieces: 0,
+          pricePerKg: 5,
+          discountAmount: 0,
+        },
+      ],
+    };
+    const sale = must(
+      await t.phone.documents.createInvoice({
+        ...toCreateInput(draft, today),
+        preAllocatedNumber: t.nextNumber("INV"),
+      } as never),
+    );
+    const open = await loadOpenInvoices(t.phone, customer, "receipt");
+    expect(open.find((o) => o.id === sale.id)).toMatchObject({ remaining: 10, currency: "USD" });
+    must(
+      await t.phone.documents.createVoucher("receipt", {
+        date: today,
+        partyId: customer,
+        partyKind: "customer",
+        invoiceId: sale.id,
+        amount: 4,
+        currency: "USD",
+        exchangeRate: 1,
+        method: "transfer",
+        notesPrint: "دفعة أولى",
+        preAllocatedNumber: t.nextNumber("VOC"),
+      }),
+    );
+    const after = await t.phone.repos.invoiceRepo.findById(sale.id, t.phone.context());
+    expect(Number(after!.amountDue)).toBe(6);
+    const view = (await loadInvoiceView(t.phone, sale.id))!;
+    expect(view.vouchers).toEqual([
+      expect.objectContaining({ kind: "receipt", amount: 4, method: "transfer" }),
+    ]);
   });
 });

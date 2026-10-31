@@ -69,7 +69,7 @@ describe("sale draft totals (FR-15)", () => {
 
   it("payment reduces the amount due, never below zero", () => {
     const draft = { ...emptyDraft(), lines: [line()], paid: 20 };
-    expect(draftTotals(draft)).toEqual({ subtotal: 50, total: 50, due: 30 });
+    expect(draftTotals(draft)).toEqual({ subtotal: 50, total: 50, due: 30, kg: 10, pieces: 0 });
     expect(draftTotals({ ...draft, paid: 500 }).due).toBe(0);
   });
 

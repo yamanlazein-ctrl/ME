@@ -5,14 +5,27 @@
 import { saneSypRateError } from "@erp/shared";
 import { View } from "react-native";
 import { Text } from "./Text";
-import { balanceSideLabel, type CurrencyBalance } from "../core/parties";
+import { balanceSideLabel, type CurrencyBalance, type OpenInvoice } from "../core/parties";
+
+export type { OpenInvoice };
 import { Field } from "./Field";
 import { money } from "./format";
 import { MoneyInput } from "./MoneyInput";
 import { PartyPicker, type PickedParty } from "./PartyPicker";
 import { CURRENCY_OPTIONS } from "./SaleViews";
+import { useState } from "react";
 import { useColors } from "./themeContext-core";
-import { Button, Chips, KeyValue, Notice, Screen, Section } from "./kit";
+import {
+  Button,
+  Chips,
+  KeyValue,
+  ListRow,
+  Notice,
+  PickerField,
+  Screen,
+  Section,
+  Sheet,
+} from "./kit";
 
 export const CURRENCIES = ["USD", "SYP"] as const;
 
@@ -31,7 +44,14 @@ export interface VoucherFormValues {
   rate: number | null;
   discount: number | null;
   method: VoucherMethod;
+  /** Internal note (not printed). */
   note: string;
+  /** «ملاحظات (تُطبع)»: printed on the voucher. */
+  notePrint: string;
+  /** Null = «دفعة على الحساب». */
+  invoice: OpenInvoice | null;
+  /** YYYY-MM-DD; empty means today. */
+  date: string;
 }
 
 export function emptyVoucher(): VoucherFormValues {
@@ -43,24 +63,49 @@ export function emptyVoucher(): VoucherFormValues {
     discount: null,
     method: "cash",
     note: "",
+    notePrint: "",
+    invoice: null,
+    date: "",
   };
 }
 
-export type VoucherProblem = "no-party" | "no-amount" | "no-rate" | "bad-rate";
+export type VoucherProblem =
+  "no-party" | "no-amount" | "no-rate" | "bad-rate" | "over-invoice" | "bad-date";
 
 export const VOUCHER_PROBLEM_TEXT: Record<VoucherProblem, string> = {
   "no-party": "اختر الطرف",
   "no-amount": "اكتب المبلغ",
   "no-rate": "سعر الصرف مطلوب لكل سند ليس بالدولار",
   "bad-rate": "سعر الصرف غير منطقي لليرة السورية (أقل من 1,000) — تأكد من الأصفار",
+  "over-invoice": "المبلغ أكبر من المتبقي على الفاتورة المرتبطة",
+  "bad-date": "اكتب التاريخ بالشكل 2026-03-31",
 };
 
-export function voucherProblems(v: VoucherFormValues): VoucherProblem[] {
+/** A rate is asked for a non-USD voucher, or one in another currency than its invoice (the desktop's rule). */
+export function voucherNeedsRate(v: Pick<VoucherFormValues, "currency" | "invoice">): boolean {
+  return v.currency !== "USD" || (v.invoice !== null && v.invoice.currency !== v.currency);
+}
+
+export function voucherProblems(
+  v: VoucherFormValues,
+  kind: "receipt" | "payment" = "receipt",
+): VoucherProblem[] {
   const out: VoucherProblem[] = [];
   if (!v.party) out.push("no-party");
   if (!(v.amount && v.amount > 0)) out.push("no-amount");
-  if (v.currency !== "USD" && !(v.rate && v.rate > 0)) out.push("no-rate");
+  if (voucherNeedsRate(v) && !(v.rate && v.rate > 0)) out.push("no-rate");
   if (saneSypRateError(v.currency, v.rate)) out.push("bad-rate");
+  // A supplier payment may not exceed what is left on its invoice (the desktop refuses it); a customer's overpayment
+  // becomes credit.
+  if (
+    kind === "payment" &&
+    v.invoice &&
+    v.invoice.currency === v.currency &&
+    (v.amount ?? 0) > v.invoice.remaining + 1e-9
+  ) {
+    out.push("over-invoice");
+  }
+  if (v.date && !/^\d{4}-\d{2}-\d{2}$/.test(v.date)) out.push("bad-date");
   return out;
 }
 
@@ -85,6 +130,8 @@ export function VoucherForm({
   error,
   attempted,
   initialAmount,
+  openInvoices,
+  today,
   onChange,
   onSave,
 }: {
@@ -96,13 +143,17 @@ export function VoucherForm({
   error: string | null;
   attempted: boolean;
   initialAmount?: string;
+  /** The party's unpaid invoices (undefined before a party is chosen). */
+  openInvoices?: OpenInvoice[];
+  today?: string;
   onChange(patch: Partial<VoucherFormValues>): void;
   onSave(): Promise<void>;
 }) {
   const colors = useColors();
+  const [pickingInvoice, setPickingInvoice] = useState(false);
   const receipt = kind === "receipt";
   const partyKind = receipt ? "customer" : "supplier";
-  const problems = voucherProblems(values);
+  const problems = voucherProblems(values, kind);
   const show = (k: VoucherProblem) => attempted && problems.includes(k);
   const before = balances?.find((b) => b.currency === values.currency);
   const after =
@@ -169,8 +220,34 @@ export function VoucherForm({
           kind={partyKind}
           label={receipt ? "استلمنا من" : "دفعنا إلى"}
           value={values.party}
-          onPick={(party) => onChange({ party })}
+          onPick={(party) => onChange({ party, invoice: null })}
           error={show("no-party")}
+        />
+        {values.party ? (
+          <PickerField
+            label="الفاتورة المرتبطة (اختياري)"
+            value={
+              values.invoice
+                ? `${values.invoice.number} — متبقٍ ${money(values.invoice.remaining, values.invoice.currency)}`
+                : null
+            }
+            placeholder="دفعة على الحساب"
+            testID="voucher-invoice"
+            error={show("over-invoice")}
+            onPress={() => setPickingInvoice(true)}
+          />
+        ) : null}
+        {show("over-invoice") ? (
+          <Notice kind="error" text={VOUCHER_PROBLEM_TEXT["over-invoice"]} />
+        ) : null}
+        <Field
+          label="التاريخ"
+          fieldId="voucher-date"
+          value={values.date}
+          {...(today ? { placeholder: today } : {})}
+          keyboardType="numbers-and-punctuation"
+          error={show("bad-date") ? VOUCHER_PROBLEM_TEXT["bad-date"] : null}
+          onChangeText={(date) => onChange({ date: date.trim() })}
         />
         <MoneyInput
           label="المبلغ"
@@ -185,9 +262,9 @@ export function VoucherForm({
           onChange={(currency) => onChange({ currency })}
           testIDPrefix="voucher-currency"
         />
-        {values.currency !== "USD" ? (
+        {voucherNeedsRate(values) ? (
           <MoneyInput
-            label="سعر الصرف (ليرة لكل 1 دولار)"
+            label="سعر الصرف (ل.س / $)"
             fieldId="voucher-rate"
             initialText={values.rate ? String(values.rate) : ""}
             error={
@@ -215,12 +292,53 @@ export function VoucherForm({
           onChangeAmount={(discount) => onChange({ discount })}
         />
         <Field
-          label="ملاحظة (اختياري)"
+          label="ملاحظات السند (تُطبع)"
+          fieldId="voucher-note-print"
+          value={values.notePrint}
+          onChangeText={(notePrint) => onChange({ notePrint })}
+        />
+        <Field
+          label="ملاحظات داخلية (لا تُطبع)"
           fieldId="voucher-note"
           value={values.note}
           onChangeText={(note) => onChange({ note })}
         />
       </Section>
+      <Sheet
+        visible={pickingInvoice}
+        title="الفاتورة المرتبطة"
+        onClose={() => setPickingInvoice(false)}
+        testID="voucher-invoice-sheet"
+      >
+        <ListRow
+          title="دفعة على الحساب"
+          subtitle="بدون فاتورة"
+          testID="voucher-invoice-none"
+          onPress={() => {
+            onChange({ invoice: null });
+            setPickingInvoice(false);
+          }}
+        />
+        {(openInvoices ?? []).length === 0 ? (
+          <Text style={{ color: colors.mutedForeground }}>لا فواتير غير مسددة لهذا الطرف</Text>
+        ) : (
+          (openInvoices ?? []).map((inv, i, all) => (
+            <ListRow
+              key={inv.id}
+              testID="voucher-invoice-option"
+              accessibilityLabel={`فاتورة ${inv.number}`}
+              title={`${inv.number} — متبقٍ ${money(inv.remaining, inv.currency)}`}
+              subtitle={inv.date}
+              onPress={() => {
+                // The voucher follows its invoice's currency (the rate is then not needed).
+                onChange({ invoice: inv, currency: inv.currency });
+                setPickingInvoice(false);
+              }}
+              last={i === all.length - 1}
+            />
+          ))
+        )}
+      </Sheet>
       {values.party ? (
         <Section title={`رصيد ${values.party.name} — ${values.currency}`} testID="voucher-balance">
           {balances ? (
