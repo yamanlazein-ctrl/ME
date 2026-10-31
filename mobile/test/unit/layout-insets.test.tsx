@@ -30,7 +30,10 @@ describe("bottom of the app clears the phone's navigation bar", () => {
     const options = tabsProps.last?.screenOptions as {
       tabBarStyle: { height: number; paddingBottom: number };
       tabBarLabelStyle?: { lineHeight?: number };
-      tabBarLabel: (p: { color: string; children: string }) => React.ReactElement;
+      tabBarLabel: (p: {
+        color: string;
+        children: string;
+      }) => React.ReactElement<{ numberOfLines: number; maxFontSizeMultiplier: number }>;
     };
     expect(options.tabBarStyle.height).toBe(TAB_BAR_HEIGHT + NAV_BAR);
     expect(options.tabBarStyle.paddingBottom).toBeGreaterThanOrEqual(NAV_BAR);
