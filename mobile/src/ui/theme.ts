@@ -61,6 +61,9 @@ export function applyTheme(name: ThemeName): void {
 export const radius = { sm: 6, md: 8, lg: 10, xl: 14 } as const;
 
 /** Spacing scale in dp (UX: more air than the desktop). */
+/** Height of the tab bar above the phone's own navigation bar (icon 24 + one-line label + padding). */
+export const TAB_BAR_HEIGHT = 60;
+
 export const spacing = { xs: 4, sm: 8, md: 12, lg: 16, xl: 24, xxl: 32 } as const;
 
 /** Font sizes in sp. Body text is never below 16 sp (constitution VIII). */

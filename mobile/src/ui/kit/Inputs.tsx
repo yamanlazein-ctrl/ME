@@ -33,6 +33,7 @@ export function SearchBar({
     >
       <Ionicons name="search" size={20} color={colors.mutedForeground} />
       <TextInput
+        maxFontSizeMultiplier={1.4}
         testID={testID}
         accessibilityLabel={placeholder}
         value={value}

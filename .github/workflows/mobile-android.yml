@@ -41,6 +41,20 @@ jobs:
     needs: checks
     if: ${{ inputs.release != 'true' }}
     runs-on: ubuntu-latest
+    # Two phones: the small 320×640 one (no on-screen navigation bar) catches crowded layouts; a Pixel 6 with the
+    # 3-button navigation bar and the system font at 130 % catches anything drawn under the phone's own buttons.
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - device: small
+            profile: ""
+            nav: ""
+            font: "1.0"
+          - device: pixel6-3button-bigfont
+            profile: pixel_6
+            nav: threebutton
+            font: "1.3"
     env:
       EXPO_PUBLIC_SPIKES: "1"
     steps:
@@ -66,7 +80,7 @@ jobs:
         working-directory: mobile/android
         run: ./gradlew assembleRelease
       - uses: actions/upload-artifact@v4
-        if: inputs.apk_run_id == ''
+        if: inputs.apk_run_id == '' && matrix.device == 'small'
         with:
           name: motard-mobile-test-apk
           path: mobile/android/app/build/outputs/apk/release/*.apk
@@ -116,14 +130,15 @@ jobs:
           api-level: 34
           arch: x86_64
           target: google_apis
+          profile: ${{ matrix.profile }}
           ram-size: 3072M
           disk-size: 8192M
-          script: bash scripts/emulator/run-flows.sh mobile/android/app/build/outputs/apk/release/app-release.apk hub-info.json emulator-out
+          script: NAV_MODE=${{ matrix.nav }} FONT_SCALE=${{ matrix.font }} bash scripts/emulator/run-flows.sh mobile/android/app/build/outputs/apk/release/app-release.apk hub-info.json emulator-out
       - name: Upload screenshots, log and junit
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: emulator-screenshots
+          name: emulator-screenshots-${{ matrix.device }}
           path: |
             emulator-out
             hub.out

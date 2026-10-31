@@ -1,5 +1,5 @@
 import { useEffect, useRef, type ComponentRef, type ReactNode } from "react";
-import { Pressable, RefreshControl, ScrollView, View } from "react-native";
+import { KeyboardAvoidingView, Pressable, RefreshControl, ScrollView, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
@@ -7,6 +7,7 @@ import { Text } from "../Text";
 import { fontSize, spacing, TOUCH_TARGET } from "../theme";
 import { useColors } from "../themeContext-core";
 import { useHeaderSlot } from "./headerSlot";
+import { useInTabs } from "./tabScope";
 
 export interface ScreenProps {
   title: string;
@@ -55,6 +56,7 @@ export function Screen({
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const slot = useHeaderSlot();
+  const inTabs = useInTabs();
   const showBack = back ?? router.canGoBack();
   const scrollRef = useRef<ComponentRef<typeof ScrollView>>(null);
   const lastKey = useRef(scrollToTopKey);
@@ -141,23 +143,28 @@ export function Screen({
         {slot.accessory ? <View style={{ marginStart: spacing.xs }}>{slot.accessory}</View> : null}
       </View>
       {slot.banner}
-      {body}
-      {footer ? (
-        <View
-          testID="screen-footer"
-          style={{
-            padding: spacing.md,
-            paddingBottom: spacing.md + insets.bottom,
-            gap: spacing.sm,
-            borderTopWidth: 1,
-            borderTopColor: colors.border,
-            backgroundColor: colors.card,
-          }}
-        >
-          {footerNotice}
-          {footer}
-        </View>
-      ) : null}
+      {/* The phone draws the app under the keyboard (edge-to-edge): the content and the footer move up above it, so
+          the field being typed in and the save button stay visible. */}
+      <KeyboardAvoidingView behavior="padding" style={{ flex: 1 }}>
+        {body}
+        {footer ? (
+          <View
+            testID="screen-footer"
+            style={{
+              padding: spacing.md,
+              // Inside the tabs the tab bar is below and already clears the phone's navigation bar.
+              paddingBottom: spacing.md + (inTabs ? 0 : insets.bottom),
+              gap: spacing.sm,
+              borderTopWidth: 1,
+              borderTopColor: colors.border,
+              backgroundColor: colors.card,
+            }}
+          >
+            {footerNotice}
+            {footer}
+          </View>
+        ) : null}
+      </KeyboardAvoidingView>
     </View>
   );
 }

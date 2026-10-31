@@ -27,6 +27,7 @@ export function Field({ label, fieldId, error, inputRef, ...input }: FieldProps)
         {label}
       </Text>
       <TextInput
+        maxFontSizeMultiplier={1.4}
         {...input}
         ref={inputRef}
         nativeID={fieldId}

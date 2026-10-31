@@ -9,6 +9,8 @@ export function Text({ style, ...props }: TextProps) {
   const flat = StyleSheet.flatten(style) ?? {};
   return (
     <RNText
+      // Follows the phone's font size, up to 1.4×: larger would break rows and buttons on small screens.
+      maxFontSizeMultiplier={1.4}
       {...props}
       style={[
         {

@@ -11,4 +11,12 @@ export const useRouter = () => router;
 export const useLocalSearchParams = () => ({});
 export const useFocusEffect = () => undefined;
 export const Stack = () => null;
-export const Tabs = () => null;
+/** The options the tab layout passed last (the stub renders nothing). */
+export const tabsProps: { last: Record<string, unknown> | null } = { last: null };
+export const Tabs = Object.assign(
+  (props: Record<string, unknown>) => {
+    tabsProps.last = props;
+    return null;
+  },
+  { Screen: () => null },
+);
