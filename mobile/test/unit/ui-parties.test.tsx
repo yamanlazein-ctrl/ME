@@ -224,6 +224,12 @@ describe("statement", () => {
     expect(within(screen.getByTestId("screen-footer")).getByTestId("share-slot")).toBeTruthy();
   });
 
+  it("the movements are a virtualised list (thousands of lines scroll smoothly)", async () => {
+    await render(<StatementView {...props} />);
+    expect(screen.getByTestId("statement-list").type).toBe("FlatList");
+    expect(screen.getAllByTestId("statement-row").length).toBeGreaterThan(0);
+  });
+
   it("custom dates are checked", async () => {
     await render(<StatementView {...props} period="custom" from="2026-3-1" />);
     expect(screen.getByText("اكتب التاريخ بالشكل 2026-03-31")).toBeTruthy();

@@ -185,6 +185,8 @@ const screens: Array<[string, () => ReactElement]> = [
               supplierName: null,
               entryDate: null,
               state: "active",
+              weightGsm: null,
+              widthCm: null,
             },
           ],
         }}

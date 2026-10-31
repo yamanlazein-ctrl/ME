@@ -146,7 +146,7 @@ describe("fabric, colour and lot", () => {
       {
         id: "r1",
         rollNo: "DL-1",
-        dyeBatch: null,
+        dyeBatch: "D-9",
         initialKg: 50,
         remainingKg: 30,
         remainingPieces: 2,
@@ -154,6 +154,8 @@ describe("fabric, colour and lot", () => {
         supplierName: "معمل",
         entryDate: "2026-02-01",
         state: "active" as const,
+        weightGsm: 210,
+        widthCm: 180,
       },
       {
         id: "r2",
@@ -166,6 +168,8 @@ describe("fabric, colour and lot", () => {
         supplierName: null,
         entryDate: null,
         state: "out" as const,
+        weightGsm: null,
+        widthCm: null,
       },
     ];
     await render(
@@ -185,6 +189,8 @@ describe("fabric, colour and lot", () => {
     expect(screen.getByText("صبغة DL-1")).toBeTruthy();
     expect(screen.queryByText("صبغة DL-2")).toBeNull();
     expect(screen.getByText("معمل · 2026-02-01")).toBeTruthy();
+    // The desktop's inventory lot row: dye number, grammage, width.
+    expect(screen.getByText("رقم الصبغة D-9 · الكراماج 210 غ/م² · العرض 180 سم")).toBeTruthy();
     await fireEvent.press(screen.getByLabelText("الكل (2)"));
     expect(screen.getByText("صبغة DL-2")).toBeTruthy();
     expect(screen.getByText("منتهية")).toBeTruthy();

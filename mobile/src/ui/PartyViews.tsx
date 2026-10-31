@@ -25,12 +25,14 @@ import { useColors } from "./themeContext-core";
 import {
   Badge,
   Button,
+  CardList,
   Chips,
   EmptyState,
   ErrorState,
   HeaderIcon,
   KeyValue,
   ListRow,
+  ListTitle,
   LoadingState,
   Notice,
   Screen,
@@ -89,6 +91,7 @@ export interface PartyListProps {
 export function PartyListView(p: PartyListProps) {
   const rows = p.rows ?? [];
   const canWrite = canWriteOffline(p.role);
+  const ready = Boolean(p.rows) && rows.length > 0;
   return (
     <Screen
       title="العملاء والموردون"
@@ -104,56 +107,69 @@ export function PartyListView(p: PartyListProps) {
           />
         ) : null
       }
-      refreshing={p.refreshing}
-      onRefresh={p.onRefresh}
+      scroll={false}
     >
-      <SearchBar
-        value={p.q}
-        onChange={p.onQuery}
-        placeholder="الاسم أو الرمز أو رقم الهاتف"
-        testID="party-search"
+      {/* Virtualised: hundreds of customers and suppliers scroll smoothly. */}
+      <CardList
+        data={ready ? rows : []}
+        keyOf={(r) => r.id}
+        refreshing={p.refreshing}
+        onRefresh={p.onRefresh}
+        header={
+          <>
+            <SearchBar
+              value={p.q}
+              onChange={p.onQuery}
+              placeholder="الاسم أو الرمز أو رقم الهاتف"
+              testID="party-search"
+            />
+            <Chips
+              options={KIND_OPTIONS}
+              value={p.kind}
+              onChange={p.onKind}
+              testIDPrefix="party-kind"
+            />
+          </>
+        }
+        empty={
+          p.error && !p.rows ? (
+            <ErrorState message="تعذّر تحميل الأطراف من قاعدة الهاتف." onRetry={p.onRetry} />
+          ) : p.loading && !p.rows ? (
+            <LoadingState />
+          ) : (
+            <EmptyState
+              icon="people-outline"
+              title={p.q ? "لا نتائج مطابقة" : "لا أطراف بعد"}
+              {...(canWrite && !p.q ? { action: { label: "طرف جديد", onPress: p.onNew } } : {})}
+            />
+          )
+        }
+        renderRow={(r, last) => {
+          const balances = (p.balances[r.id] ?? []).filter((b) => b.side !== "zero");
+          return (
+            <ListRow
+              testID="party-row"
+              accessibilityLabel={r.name}
+              title={r.name}
+              subtitle={[KIND_LABEL[r.kind], r.code, r.city].filter(Boolean).join(" · ")}
+              meta={r.phone}
+              value={
+                balances.length > 0 ? (
+                  <View style={{ gap: 4 }}>
+                    {balances.map((b) => (
+                      <BalanceText key={b.currency} b={b} kind={r.kind} />
+                    ))}
+                  </View>
+                ) : p.balances[r.id] ? (
+                  <Badge label="متوازن" />
+                ) : undefined
+              }
+              onPress={() => p.onOpen(r.id)}
+              last={last}
+            />
+          );
+        }}
       />
-      <Chips options={KIND_OPTIONS} value={p.kind} onChange={p.onKind} testIDPrefix="party-kind" />
-      {p.error && !p.rows ? (
-        <ErrorState message="تعذّر تحميل الأطراف من قاعدة الهاتف." onRetry={p.onRetry} />
-      ) : p.loading && !p.rows ? (
-        <LoadingState />
-      ) : rows.length === 0 ? (
-        <EmptyState
-          icon="people-outline"
-          title={p.q ? "لا نتائج مطابقة" : "لا أطراف بعد"}
-          {...(canWrite && !p.q ? { action: { label: "طرف جديد", onPress: p.onNew } } : {})}
-        />
-      ) : (
-        <Section padded={false}>
-          {rows.map((r, i) => {
-            const balances = (p.balances[r.id] ?? []).filter((b) => b.side !== "zero");
-            return (
-              <ListRow
-                key={r.id}
-                testID="party-row"
-                accessibilityLabel={r.name}
-                title={r.name}
-                subtitle={[KIND_LABEL[r.kind], r.code, r.city].filter(Boolean).join(" · ")}
-                meta={r.phone}
-                value={
-                  balances.length > 0 ? (
-                    <View style={{ gap: 4 }}>
-                      {balances.map((b) => (
-                        <BalanceText key={b.currency} b={b} kind={r.kind} />
-                      ))}
-                    </View>
-                  ) : p.balances[r.id] ? (
-                    <Badge label="متوازن" />
-                  ) : undefined
-                }
-                onPress={() => p.onOpen(r.id)}
-                last={i === rows.length - 1}
-              />
-            );
-          })}
-        </Section>
-      )}
     </Screen>
   );
 }
@@ -354,13 +370,8 @@ export function StatementView(p: StatementViewProps) {
   const badDates =
     p.period === "custom" &&
     ((p.from !== "" && !DATE_RE.test(p.from)) || (p.to !== "" && !DATE_RE.test(p.to)));
-  return (
-    <Screen
-      title="كشف الحساب"
-      subtitle={`${p.partyName} · ${KIND_LABEL[p.kind]}`}
-      // Sharing is the page's action: always in reach, not between the summary and a long list of movements.
-      {...(p.data ? { footer: p.share } : {})}
-    >
+  const head = (
+    <>
       {p.currencies.length > 1 ? (
         <Chips
           options={currencyOptions}
@@ -423,49 +434,63 @@ export function StatementView(p: StatementViewProps) {
               </Section>
             ))
           )}
-          <Section
-            title={`الحركات (${p.data.entries.length})`}
-            padded={false}
-            testID="statement-list"
-          >
-            {p.data.entries.length === 0 ? (
-              <View style={{ padding: spacing.lg }}>
-                <Text style={{ color: colors.mutedForeground }}>لا حركات</Text>
-              </View>
-            ) : (
-              p.data.entries.map((e, i) => {
-                const debit = Number(e.debit);
-                const credit = Number(e.credit);
-                const label = STATEMENT_TYPE_LABEL[e.type] ?? e.type;
-                return (
-                  <ListRow
-                    key={e.id}
-                    testID="statement-row"
-                    accessibilityLabel={`${label} ${e.referenceNumber ?? ""}`.trim()}
-                    title={`${label}${e.referenceNumber ? ` ${e.referenceNumber}` : ""}`}
-                    subtitle={[e.date, e.description].filter(Boolean).join(" · ")}
-                    meta={e.status === "cancelled" ? "ملغاة" : null}
-                    value={
-                      <Text
-                        style={{
-                          fontWeight: "700",
-                          writingDirection: "ltr",
-                          color: debit > 0 ? colors.foreground : colors.positive,
-                        }}
-                      >
-                        {debit > 0 ? `مدين ${formatAmount(debit)}` : `دائن ${formatAmount(credit)}`}
-                      </Text>
-                    }
-                    valueCaption={`الرصيد ${money(e.runningBalance, e.currency)}`}
-                    {...(entryOpens(e) ? { onPress: () => p.onOpenEntry(e) } : {})}
-                    last={i === p.data!.entries.length - 1}
-                  />
-                );
-              })
-            )}
-          </Section>
         </>
       )}
+    </>
+  );
+  const entries = p.data?.entries ?? [];
+  return (
+    <Screen
+      title="كشف الحساب"
+      subtitle={`${p.partyName} · ${KIND_LABEL[p.kind]}`}
+      // Sharing is the page's action: always in reach, not between the summary and a long list of movements.
+      {...(p.data ? { footer: p.share } : {})}
+      scroll={false}
+    >
+      {/* Virtualised: a long statement (thousands of lines) scrolls smoothly. */}
+      <CardList
+        testID="statement-list"
+        data={p.data ? entries : []}
+        keyOf={(e) => e.id}
+        header={head}
+        title={p.data ? <ListTitle>{`الحركات (${entries.length})`}</ListTitle> : null}
+        empty={
+          p.data ? (
+            <View style={{ padding: spacing.lg }}>
+              <Text style={{ color: colors.mutedForeground }}>لا حركات</Text>
+            </View>
+          ) : null
+        }
+        renderRow={(e, last) => {
+          const debit = Number(e.debit);
+          const credit = Number(e.credit);
+          const label = STATEMENT_TYPE_LABEL[e.type] ?? e.type;
+          return (
+            <ListRow
+              key={e.id}
+              testID="statement-row"
+              accessibilityLabel={`${label} ${e.referenceNumber ?? ""}`.trim()}
+              title={`${label}${e.referenceNumber ? ` ${e.referenceNumber}` : ""}`}
+              subtitle={[e.date, e.description].filter(Boolean).join(" · ")}
+              meta={e.status === "cancelled" ? "ملغاة" : null}
+              value={
+                <Text
+                  style={{
+                    fontWeight: "700",
+                    writingDirection: "ltr",
+                    color: debit > 0 ? colors.foreground : colors.positive,
+                  }}
+                >
+                  {debit > 0 ? `مدين ${formatAmount(debit)}` : `دائن ${formatAmount(credit)}`}
+                </Text>
+              }
+              valueCaption={`الرصيد ${money(e.runningBalance, e.currency)}`}
+              {...(entryOpens(e) ? { onPress: () => p.onOpenEntry(e) } : {})}
+              last={last}
+            />
+          );
+        }}
+      />
     </Screen>
   );
 }

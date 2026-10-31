@@ -58,3 +58,21 @@ export function Section({
     </View>
   );
 }
+
+/** A Section's title on its own (above a CardList). */
+export function ListTitle({ children }: { children: ReactNode }) {
+  const colors = useColors();
+  return (
+    <Text
+      accessibilityRole="header"
+      style={{
+        fontSize: 15,
+        fontWeight: "600",
+        color: colors.mutedForeground,
+        paddingHorizontal: spacing.xs,
+      }}
+    >
+      {children}
+    </Text>
+  );
+}

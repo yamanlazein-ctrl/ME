@@ -251,6 +251,9 @@ export interface LotRow {
   supplierName: string | null;
   entryDate: string | null;
   state: LotState;
+  /** الكراماج (غ/م²) and العرض, as the desktop's inventory lot row shows them. */
+  weightGsm: number | null;
+  widthCm: number | null;
 }
 
 export interface ColorLots {
@@ -291,6 +294,8 @@ export async function loadColorLots(phone: Phone, colorId: string): Promise<Colo
       pieces: rolls.pieces,
       supplierName: parties.name,
       entryDate: rolls.entryDate,
+      weightGsm: rolls.weightGsm,
+      widthCm: rolls.widthCm,
     })
     .from(rolls)
     .leftJoin(parties, and(eq(parties.id, rolls.supplierId), eq(parties.tenantId, tenantId)))
@@ -318,6 +323,8 @@ export async function loadColorLots(phone: Phone, colorId: string): Promise<Colo
         supplierName: r.supplierName ?? null,
         entryDate: r.entryDate ? String(r.entryDate).slice(0, 10) : null,
         state: lotState(remainingKg, min),
+        weightGsm: Number(r.weightGsm) > 0 ? Number(r.weightGsm) : null,
+        widthCm: Number(r.widthCm) > 0 ? Number(r.widthCm) : null,
       };
     }),
   };

@@ -29,14 +29,33 @@ const ScrollView = Object.assign(
   { displayName: "ScrollView", scrollCalls },
 );
 
-const FlatList = (props) =>
-  createElement(
+// Like the real FlatList: header, rows (or the empty component), footer — every row rendered (no virtualisation).
+const slot = (c) => (c == null ? null : typeof c === "function" ? createElement(c) : c);
+const FlatList = (props) => {
+  const data = props.data ?? [];
+  return createElement(
     "FlatList",
-    { ...props, data: undefined, renderItem: undefined },
-    (props.data ?? []).map((item, index) =>
-      createElement("Item", { key: index }, props.renderItem?.({ item, index })),
-    ),
+    {
+      ...props,
+      data: undefined,
+      renderItem: undefined,
+      ListHeaderComponent: undefined,
+      ListEmptyComponent: undefined,
+      ListFooterComponent: undefined,
+    },
+    slot(props.ListHeaderComponent),
+    data.length === 0
+      ? slot(props.ListEmptyComponent)
+      : data.map((item, index) =>
+          createElement(
+            "Item",
+            { key: props.keyExtractor ? props.keyExtractor(item, index) : index },
+            props.renderItem?.({ item, index }),
+          ),
+        ),
+    slot(props.ListFooterComponent),
   );
+};
 
 module.exports = {
   View: host("View"),

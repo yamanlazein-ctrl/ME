@@ -24,12 +24,14 @@ import { useColors } from "./themeContext-core";
 import {
   Badge,
   Button,
+  CardList,
   Chips,
   EmptyState,
   ErrorState,
   HeaderIcon,
   KeyValue,
   ListRow,
+  ListTitle,
   LoadingState,
   Notice,
   Screen,
@@ -101,6 +103,7 @@ export function StockListView(p: StockListProps) {
   const colors = useColors();
   const rows = p.rows ?? [];
   const total = rows.reduce((s, r) => s + r.remainingKg, 0);
+  const ready = Boolean(p.rows) && rows.length > 0;
   return (
     <Screen
       title="المخزون"
@@ -116,93 +119,108 @@ export function StockListView(p: StockListProps) {
           />
         ) : null
       }
-      refreshing={p.refreshing}
-      onRefresh={p.onRefresh}
+      scroll={false}
     >
-      <SearchBar
-        value={p.q}
-        onChange={p.onQuery}
-        placeholder="ابحث بالقماش، اللون، رقم اللون أو رقم الصبغة"
-        testID="stock-search"
-      />
-      <Chips options={FILTERS} value={p.filter} onChange={p.onFilter} testIDPrefix="stock-filter" />
-      {p.categories.length > 0 ? (
-        <Chips
-          options={[
-            { value: "", label: "كل الفئات" },
-            ...p.categories.map((c) => ({ value: c, label: c })),
-          ]}
-          value={p.category ?? ""}
-          onChange={(c) => p.onCategory(c || null)}
-          testIDPrefix="stock-category"
-          scroll
-        />
-      ) : null}
-      {p.lots.length > 0 ? (
-        <Section title="صبغات مطابقة" padded={false}>
-          {p.lots.map((l, i) => (
-            <ListRow
-              key={l.id}
-              testID={`lot-match-${l.rollNo}`}
-              title={`صبغة ${l.rollNo}`}
-              subtitle={`${l.fabricName} · ${l.colorName}`}
-              value={kg(l.remainingKg)}
-              valueCaption={piecesText(l.remainingPieces)}
-              onPress={() => p.onOpenLot(l.id)}
-              last={i === p.lots.length - 1}
+      {/* Virtualised: a long fabric list scrolls smoothly. */}
+      <CardList
+        testID="fabric-list"
+        data={ready ? rows : []}
+        keyOf={(f) => f.id}
+        refreshing={p.refreshing}
+        onRefresh={p.onRefresh}
+        header={
+          <>
+            <SearchBar
+              value={p.q}
+              onChange={p.onQuery}
+              placeholder="ابحث بالقماش، اللون، رقم اللون أو رقم الصبغة"
+              testID="stock-search"
             />
-          ))}
-        </Section>
-      ) : null}
-      {p.error && !p.rows ? (
-        <ErrorState message="تعذّر تحميل المخزون من قاعدة الهاتف." onRetry={p.onRetry} />
-      ) : p.loading && !p.rows ? (
-        <LoadingState />
-      ) : rows.length === 0 ? (
-        <EmptyState
-          icon="cube-outline"
-          title={p.q || p.filter !== "all" || p.category ? "لا نتائج مطابقة" : "لا أقمشة بعد"}
-          hint={
-            p.q || p.filter !== "all" || p.category
-              ? "غيّر البحث أو الفلتر."
-              : "تُضاف الأقمشة من فاتورة شراء أو من برنامج الحاسوب."
-          }
-        />
-      ) : (
-        <Section title="الأقمشة" padded={false} testID="fabric-list">
-          {rows.map((f, i) => (
-            <ListRow
-              key={f.id}
-              testID="fabric-row"
-              accessibilityLabel={f.name}
-              title={f.name}
-              subtitle={[f.category, `${f.colorCount} لون`, `${f.activeLots} صبغة متوفرة`]
-                .filter(Boolean)
-                .join(" · ")}
-              value={
-                <View style={{ alignItems: "flex-end", gap: 4 }}>
-                  <Text
-                    style={{
-                      fontWeight: "700",
-                      color: f.remainingKg <= 0 ? colors.negative : colors.foreground,
-                    }}
-                  >
-                    {kg(f.remainingKg)}
-                  </Text>
-                  {f.remainingKg <= 0 ? (
-                    <Badge label="نفد" tone="negative" />
-                  ) : f.low ? (
-                    <Badge label={LOW_STOCK_TEXT} tone="warning" />
-                  ) : null}
-                </View>
+            <Chips
+              options={FILTERS}
+              value={p.filter}
+              onChange={p.onFilter}
+              testIDPrefix="stock-filter"
+            />
+            {p.categories.length > 0 ? (
+              <Chips
+                options={[
+                  { value: "", label: "كل الفئات" },
+                  ...p.categories.map((c) => ({ value: c, label: c })),
+                ]}
+                value={p.category ?? ""}
+                onChange={(c) => p.onCategory(c || null)}
+                testIDPrefix="stock-category"
+                scroll
+              />
+            ) : null}
+            {p.lots.length > 0 ? (
+              <Section title="صبغات مطابقة" padded={false}>
+                {p.lots.map((l, i) => (
+                  <ListRow
+                    key={l.id}
+                    testID={`lot-match-${l.rollNo}`}
+                    title={`صبغة ${l.rollNo}`}
+                    subtitle={`${l.fabricName} · ${l.colorName}`}
+                    value={kg(l.remainingKg)}
+                    valueCaption={piecesText(l.remainingPieces)}
+                    onPress={() => p.onOpenLot(l.id)}
+                    last={i === p.lots.length - 1}
+                  />
+                ))}
+              </Section>
+            ) : null}
+          </>
+        }
+        title={ready ? <ListTitle>الأقمشة</ListTitle> : null}
+        empty={
+          p.error && !p.rows ? (
+            <ErrorState message="تعذّر تحميل المخزون من قاعدة الهاتف." onRetry={p.onRetry} />
+          ) : p.loading && !p.rows ? (
+            <LoadingState />
+          ) : (
+            <EmptyState
+              icon="cube-outline"
+              title={p.q || p.filter !== "all" || p.category ? "لا نتائج مطابقة" : "لا أقمشة بعد"}
+              hint={
+                p.q || p.filter !== "all" || p.category
+                  ? "غيّر البحث أو الفلتر."
+                  : "تُضاف الأقمشة من فاتورة شراء أو من برنامج الحاسوب."
               }
-              valueCaption={piecesText(f.pieces)}
-              onPress={() => p.onOpenFabric(f.id)}
-              last={i === rows.length - 1}
             />
-          ))}
-        </Section>
-      )}
+          )
+        }
+        renderRow={(f, last) => (
+          <ListRow
+            testID="fabric-row"
+            accessibilityLabel={f.name}
+            title={f.name}
+            subtitle={[f.category, `${f.colorCount} لون`, `${f.activeLots} صبغة متوفرة`]
+              .filter(Boolean)
+              .join(" · ")}
+            value={
+              <View style={{ alignItems: "flex-end", gap: 4 }}>
+                <Text
+                  style={{
+                    fontWeight: "700",
+                    color: f.remainingKg <= 0 ? colors.negative : colors.foreground,
+                  }}
+                >
+                  {kg(f.remainingKg)}
+                </Text>
+                {f.remainingKg <= 0 ? (
+                  <Badge label="نفد" tone="negative" />
+                ) : f.low ? (
+                  <Badge label={LOW_STOCK_TEXT} tone="warning" />
+                ) : null}
+              </View>
+            }
+            valueCaption={piecesText(f.pieces)}
+            onPress={() => p.onOpenFabric(f.id)}
+            last={last}
+          />
+        )}
+      />
     </Screen>
   );
 }
@@ -297,7 +315,15 @@ export function ColorLotsView({
               testID={`lot-${l.rollNo}`}
               title={`صبغة ${l.rollNo}`}
               subtitle={[l.supplierName, l.entryDate].filter(Boolean).join(" · ") || null}
-              meta={l.dyeBatch ? `رقم الصبغة ${l.dyeBatch}` : null}
+              meta={
+                [
+                  l.dyeBatch ? `رقم الصبغة ${l.dyeBatch}` : "",
+                  l.weightGsm ? `الكراماج ${l.weightGsm} غ/م²` : "",
+                  l.widthCm ? `العرض ${l.widthCm} سم` : "",
+                ]
+                  .filter(Boolean)
+                  .join(" · ") || null
+              }
               value={
                 <View style={{ alignItems: "flex-end", gap: 4 }}>
                   <Text style={{ fontWeight: "700" }}>{kg(l.remainingKg)}</Text>
