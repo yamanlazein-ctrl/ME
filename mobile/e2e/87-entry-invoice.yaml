@@ -92,7 +92,9 @@ name: 87 purchase invoice with a new fabric and colour
 - takeScreenshot: 71-entry-line-form
 - tapOn:
     id: "entry-line-save"
-- assertVisible: "Newfab · Newcolor"
+- scrollUntilVisible:
+    element: "Newfab · Newcolor"
+    visibilityPercentage: 50
 - assertVisible:
     id: "entry-total"
 - takeScreenshot: 72-entry-form
@@ -106,9 +108,14 @@ name: 87 purchase invoice with a new fabric and colour
     id: "entry-error"
 - takeScreenshot: 74-entry-done
 - tapOn: "عرض المستند"
+# The invoice page opens at its «بيانات الفاتورة»; the lines follow below it.
 - extendedWaitUntil:
-    visible: "البنود.*"
+    visible:
+      id: "invoice-info"
     timeout: 30000
+- scrollUntilVisible:
+    element: "البنود.*"
+    visibilityPercentage: 50
 - takeScreenshot: 75-entry-invoice
 # The production details typed on the line are on the invoice page, like on the desktop.
 - scrollUntilVisible:

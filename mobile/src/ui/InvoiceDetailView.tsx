@@ -81,9 +81,8 @@ export function InvoiceDetailView({
             />
           }
         />
-        <KeyValue label="النوع" value={title} />
-        <KeyValue label="الرقم" value={i.number} />
-        {i.reference ? (
+        {/* Type and number are the page title; the reference only when it is a different number. */}
+        {i.reference && i.reference !== i.number ? (
           <KeyValue label="الرقم المرجعي" value={i.reference} testID="invoice-reference" />
         ) : null}
         <KeyValue label="التاريخ" value={String(i.date).slice(0, 10)} />

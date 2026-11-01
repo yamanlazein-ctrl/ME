@@ -67,9 +67,14 @@ name: 30 customers and suppliers, party page, statement by period
 - scrollUntilVisible:
     element: "فاتورة بيع .*"
 - tapOn: "فاتورة بيع .*"
+# The invoice page opens at its «بيانات الفاتورة»; the lines follow below it.
 - extendedWaitUntil:
-    visible: "البنود.*"
+    visible:
+      id: "invoice-info"
     timeout: 30000
+- scrollUntilVisible:
+    element: "البنود.*"
+    visibilityPercentage: 50
 - takeScreenshot: 09c-statement-opens-invoice
 # Back: the same statement, same period; back again: the party page; the tab returns to the list.
 - tapOn:

@@ -16,6 +16,16 @@ describe("Field", () => {
     expect(input.props.style.minHeight).toBeGreaterThanOrEqual(TOUCH_TARGET);
   });
 
+  it("a swipe that starts on a field scrolls the page: the unfocused input takes no touches; focused it does", async () => {
+    await render(<Field label="الاسم" fieldId="name" value="" onChangeText={() => undefined} />);
+    const holder = () => screen.getByTestId("name").parent as { props: { pointerEvents?: string } };
+    expect(holder().props.pointerEvents).toBe("none");
+    await fireEvent(screen.getByTestId("name"), "focus");
+    expect(holder().props.pointerEvents).toBe("auto");
+    await fireEvent(screen.getByTestId("name"), "blur");
+    expect(holder().props.pointerEvents).toBe("none");
+  });
+
   it("shows an error under the field in the negative colour", async () => {
     await render(<Field label="الاسم" fieldId="n" error="الاسم مطلوب" />);
     expect(flat(screen.getByText("الاسم مطلوب").props.style).color).toBe(colors.negative);

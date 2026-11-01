@@ -4,6 +4,7 @@ import { Text } from "../Text";
 import { fontFamilyFor } from "../fontFamilies";
 import { fontSize, radius, spacing, TOUCH_TARGET } from "../theme";
 import { useColors } from "../themeContext-core";
+import { useTouchSafeInput } from "../Field";
 
 export function SearchBar({
   value,
@@ -17,6 +18,8 @@ export function SearchBar({
   testID?: string;
 }) {
   const colors = useColors();
+  // Like Field: a swipe that starts on the search box scrolls the page; a tap types.
+  const touch = useTouchSafeInput(undefined, {});
   return (
     <View
       style={{
@@ -32,24 +35,34 @@ export function SearchBar({
       }}
     >
       <Ionicons name="search" size={20} color={colors.mutedForeground} />
-      <TextInput
-        maxFontSizeMultiplier={1.4}
-        testID={testID}
-        accessibilityLabel={placeholder}
-        value={value}
-        onChangeText={onChange}
-        placeholder={placeholder}
-        placeholderTextColor={colors.mutedForeground}
-        autoCorrect={false}
-        style={{
-          flex: 1,
-          color: colors.foreground,
-          fontSize: fontSize.input,
-          fontFamily: fontFamilyFor("400"),
-          textAlign: "right",
-          paddingVertical: spacing.sm,
-        }}
-      />
+      <Pressable
+        accessible={false}
+        onPress={touch.focus}
+        style={{ flex: 1, minHeight: TOUCH_TARGET, justifyContent: "center" }}
+      >
+        <View pointerEvents={touch.focused ? "auto" : "none"}>
+          <TextInput
+            ref={touch.ref}
+            onFocus={touch.onFocus}
+            onBlur={touch.onBlur}
+            maxFontSizeMultiplier={1.4}
+            testID={testID}
+            accessibilityLabel={placeholder}
+            value={value}
+            onChangeText={onChange}
+            placeholder={placeholder}
+            placeholderTextColor={colors.mutedForeground}
+            autoCorrect={false}
+            style={{
+              color: colors.foreground,
+              fontSize: fontSize.input,
+              fontFamily: fontFamilyFor("400"),
+              textAlign: "right",
+              paddingVertical: spacing.sm,
+            }}
+          />
+        </View>
+      </Pressable>
       {value ? (
         <Pressable
           accessibilityRole="button"

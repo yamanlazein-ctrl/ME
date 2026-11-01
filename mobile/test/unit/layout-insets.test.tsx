@@ -62,12 +62,13 @@ describe("bottom of the app clears the phone's navigation bar", () => {
     );
   });
 
-  it("a message (toast) floats at the top, under the status bar, never at the bottom", async () => {
+  it("a message (toast) floats under the page header (not over its buttons), never at the bottom", async () => {
     stubInsets.top = 24;
     await render(<ToastView variant="success" message="تم الحفظ" />);
     const style = flat(screen.getByTestId("toast-success").props.style);
     expect(style.position).toBe("absolute");
-    expect(style.top).toBeGreaterThanOrEqual(24);
+    // Status bar + the header's 48 dp buttons.
+    expect(style.top).toBeGreaterThanOrEqual(24 + 48);
     expect(style.bottom).toBeUndefined();
   });
 

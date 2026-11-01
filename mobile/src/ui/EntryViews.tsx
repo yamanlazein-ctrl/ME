@@ -3,8 +3,8 @@
 // sections follow the desktop's line card (القماش، الإنتاج، اللون، الوزن، الصباغة، الشراء) plus the lot's width,
 // grammage and sale price. New fabrics, colours and the dye lots are created with the invoice in one save
 // (documents.createEntryInvoice); the production details go into the line note the desktop's way (core/lineNote.ts).
-import { useState } from "react";
-import { View } from "react-native";
+import { useRef, useState, type ComponentRef } from "react";
+import { TextInput, View } from "react-native";
 import { useQuery } from "@tanstack/react-query";
 import { Text } from "./Text";
 import { getApp } from "../core/appRuntime";
@@ -82,6 +82,27 @@ function Half({ children }: { children: React.ReactNode }) {
 
 const num = (v: number | null | undefined): string => (v ? String(v) : "");
 
+/** The purchase line's fields in the desktop line card's order. */
+export const LINE_FIELD_ORDER = [
+  "entry-fabric",
+  "entry-reference",
+  "entry-source",
+  "entry-pieces",
+  "entry-machine",
+  "entry-kromaj",
+  "entry-draw",
+  "entry-color",
+  "entry-color-code",
+  "entry-gross",
+  "entry-kg",
+  "entry-dye",
+  "entry-price",
+  "entry-line-discount",
+  "entry-width",
+  "entry-gsm",
+  "entry-sale-price",
+];
+
 /** One purchase line, a full page with the desktop's sections. `initial` pre-fills it (edit, or copy the last line). */
 export function EntryLineView({
   currency,
@@ -121,6 +142,24 @@ export function EntryLineView({
   const [salePrice, setSalePrice] = useState<number | null>(initial?.salePricePerKg ?? null);
   const [specs, setSpecs] = useState(Boolean(initial?.widthCm || initial?.weightGsm));
   const [attempted, setAttempted] = useState(false);
+  // «التالي» on the keyboard moves to the next field in the desktop's order (fast entry without scrolling); hidden
+  // fields (the colour code of an existing colour, the collapsed specs) are skipped.
+  const inputs = useRef<Record<string, ComponentRef<typeof TextInput> | null>>({});
+  const chain = (id: string) => {
+    const at = LINE_FIELD_ORDER.indexOf(id);
+    const next = () =>
+      LINE_FIELD_ORDER.slice(at + 1)
+        .map((n) => inputs.current[n])
+        .find((input) => input != null);
+    return {
+      inputRef: (node: ComponentRef<typeof TextInput> | null) => {
+        inputs.current[id] = node;
+      },
+      returnKeyType: "next" as const,
+      submitBehavior: "submit" as const,
+      onSubmitEditing: () => next()?.focus(),
+    };
+  };
 
   const fabrics = useQuery({
     queryKey: [...queryKeys.inventory, "entry-fabrics", fabricName.trim()],
@@ -214,6 +253,7 @@ export function EntryLineView({
         <Field
           label="نوع القماش *"
           fieldId="entry-fabric"
+          {...chain("entry-fabric")}
           value={fabricName}
           placeholder="اكتب الاسم لتظهر الأقمشة الموجودة"
           onChangeText={(t) => {
@@ -242,12 +282,19 @@ export function EntryLineView({
             <Field
               label="المرجعية"
               fieldId="entry-reference"
+              {...chain("entry-reference")}
               value={reference}
               onChangeText={setReference}
             />
           </Half>
           <Half>
-            <Field label="المصدر" fieldId="entry-source" value={source} onChangeText={setSource} />
+            <Field
+              label="المصدر"
+              fieldId="entry-source"
+              {...chain("entry-source")}
+              value={source}
+              onChangeText={setSource}
+            />
           </Half>
         </Pair>
       </Section>
@@ -258,6 +305,7 @@ export function EntryLineView({
             <MoneyInput
               label="الأثواب"
               fieldId="entry-pieces"
+              {...chain("entry-pieces")}
               initialText={num(initial?.pieces)}
               onChangeAmount={(v) => setPieces(v === null ? null : Math.round(v))}
             />
@@ -266,6 +314,7 @@ export function EntryLineView({
             <Field
               label="رقم الماكينة"
               fieldId="entry-machine"
+              {...chain("entry-machine")}
               value={machineNo}
               onChangeText={setMachineNo}
             />
@@ -276,13 +325,20 @@ export function EntryLineView({
             <Field
               label="كراماج"
               fieldId="entry-kromaj"
+              {...chain("entry-kromaj")}
               value={kromaj}
               keyboardType="numbers-and-punctuation"
               onChangeText={setKromaj}
             />
           </Half>
           <Half>
-            <Field label="السحب" fieldId="entry-draw" value={draw} onChangeText={setDraw} />
+            <Field
+              label="السحب"
+              fieldId="entry-draw"
+              {...chain("entry-draw")}
+              value={draw}
+              onChangeText={setDraw}
+            />
           </Half>
         </Pair>
       </Section>
@@ -291,6 +347,7 @@ export function EntryLineView({
         <Field
           label="اسم اللون *"
           fieldId="entry-color"
+          {...chain("entry-color")}
           value={colorName}
           onChangeText={(t) => {
             setColorName(t);
@@ -316,6 +373,7 @@ export function EntryLineView({
           <Field
             label="رقم اللون"
             fieldId="entry-color-code"
+            {...chain("entry-color-code")}
             value={colorCode}
             onChangeText={setColorCode}
           />
@@ -328,6 +386,7 @@ export function EntryLineView({
             <MoneyInput
               label="الوزن القائم (كغ)"
               fieldId="entry-gross"
+              {...chain("entry-gross")}
               initialText={num(d.grossKg)}
               onChangeAmount={setGrossKg}
             />
@@ -336,6 +395,7 @@ export function EntryLineView({
             <MoneyInput
               label="الوزن الصافي (كغ) *"
               fieldId="entry-kg"
+              {...chain("entry-kg")}
               initialText={num(initial?.quantityKg)}
               error={attempted && problems.includes("no-kg") ? LINE_PROBLEM_TEXT["no-kg"] : null}
               onChangeAmount={setQty}
@@ -348,7 +408,13 @@ export function EntryLineView({
       </Section>
 
       <Section title="بيانات الصباغة">
-        <Field label="رقم الصبغة" fieldId="entry-dye" value={dyeBatch} onChangeText={setDyeBatch} />
+        <Field
+          label="رقم الصبغة"
+          fieldId="entry-dye"
+          {...chain("entry-dye")}
+          value={dyeBatch}
+          onChangeText={setDyeBatch}
+        />
       </Section>
 
       <Section title="بيانات الشراء">
@@ -356,6 +422,7 @@ export function EntryLineView({
           key={priceKey}
           label={`السعر / كغ (${currency}) *`}
           fieldId="entry-price"
+          {...chain("entry-price")}
           initialText={num(price)}
           error={attempted && problems.includes("no-price") ? LINE_PROBLEM_TEXT["no-price"] : null}
           onChangeAmount={setPrice}
@@ -375,6 +442,7 @@ export function EntryLineView({
         <MoneyInput
           label="الخصم (مبلغ)"
           fieldId="entry-line-discount"
+          {...chain("entry-line-discount")}
           initialText={num(initial?.discountAmount)}
           onChangeAmount={setDiscount}
         />
@@ -387,6 +455,7 @@ export function EntryLineView({
               <MoneyInput
                 label="العرض (سم)"
                 fieldId="entry-width"
+                {...chain("entry-width")}
                 initialText={num(initial?.widthCm)}
                 onChangeAmount={setWidthCm}
               />
@@ -395,6 +464,7 @@ export function EntryLineView({
               <MoneyInput
                 label="الغراماج (غ/م²)"
                 fieldId="entry-gsm"
+                {...chain("entry-gsm")}
                 initialText={num(initial?.weightGsm)}
                 onChangeAmount={setWeightGsm}
               />
@@ -403,6 +473,7 @@ export function EntryLineView({
           <MoneyInput
             label={`سعر البيع / كغ (${currency})`}
             fieldId="entry-sale-price"
+            {...chain("entry-sale-price")}
             initialText={num(initial?.salePricePerKg)}
             onChangeAmount={setSalePrice}
           />

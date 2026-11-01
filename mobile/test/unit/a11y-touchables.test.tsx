@@ -49,7 +49,12 @@ function touchables(
 ) {
   if (!node || typeof node === "string") return out;
   const props = node.props ?? {};
-  if (typeof props.onPress === "function" || node.type === "Pressable") {
+  // A wrapper hidden from screen readers (accessible={false}) only forwards a tap to the labelled field inside it;
+  // the field is what TalkBack and the user's finger target, and it is checked as an input elsewhere.
+  if (
+    (typeof props.onPress === "function" || node.type === "Pressable") &&
+    props.accessible !== false
+  ) {
     const style = flat(props.style);
     out.push({
       label: String(props.accessibilityLabel ?? textOf(node)),

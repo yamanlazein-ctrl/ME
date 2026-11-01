@@ -2,15 +2,15 @@ import { createContext, useCallback, useContext, useMemo, useState, type ReactNo
 import { View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Text } from "./Text";
-import { fontSize, radius, spacing } from "./theme";
+import { fontSize, radius, spacing, TOUCH_TARGET } from "./theme";
 import { useColors } from "./themeContext-core";
 
 export const TOAST_VARIANTS = ["success", "error"] as const;
 export type ToastVariant = (typeof TOAST_VARIANTS)[number];
 
 /**
- * Shown over the app just under the status bar: never behind the phone's navigation buttons, never under the
- * keyboard, and it does not push the screen around.
+ * Shown over the app just under the page header: never behind the phone's navigation buttons, never under the
+ * keyboard, never over the header's buttons, and it does not push the screen around.
  */
 export function ToastView({ variant, message }: { variant: ToastVariant; message: string }) {
   const colors = useColors();
@@ -24,7 +24,8 @@ export function ToastView({ variant, message }: { variant: ToastVariant; message
       pointerEvents="none"
       style={{
         position: "absolute",
-        top: insets.top + spacing.sm,
+        // Just under the page header, so the header's back button and actions stay visible and reachable.
+        top: insets.top + spacing.xs + TOUCH_TARGET + spacing.md + spacing.sm,
         left: spacing.lg,
         right: spacing.lg,
         zIndex: 1000,

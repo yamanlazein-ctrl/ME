@@ -36,13 +36,19 @@ LAYOUT_BAD=""
 layout_check() {
   [ -z "$NAVTOP" ] && return 0
   adb shell uiautomator dump /sdcard/l.xml >/dev/null 2>&1 || return 0
-  local HIT
+  local HIT TOP BG
+  TOP="$NAVTOP"
+  # The bar the app paints behind the system buttons can start higher than the system's own frame (2274 vs 2337 on
+  # a Pixel 6): the higher edge counts.
+  BG=$(adb shell cat /sdcard/l.xml | grep -o '<node [^>]*navigationBarBackground[^>]*>' | head -1 |
+    sed -E 's/.* bounds="\[[0-9]+,([0-9]+)\].*/\1/')
+  if [ -n "$BG" ] && [ "$BG" -lt "$TOP" ]; then TOP="$BG"; fi
   HIT=$(adb shell cat /sdcard/l.xml | grep -o '<node [^>]*>' | grep 'package="com.motard.erp"' |
     grep -E ' text="[^"]+"' |
     sed -E 's/.* text="([^"]*)".* bounds="\[[0-9]+,([0-9]+)\]\[[0-9]+,([0-9]+)\]".*/\2 \3 \1/' |
-    awk -v n="$NAVTOP" '$2 > n + 1 {print}')
+    awk -v n="$TOP" '$2 > n + 1 {print}')
   if [ -n "$HIT" ]; then
-    echo "--- $1: app text under the navigation bar (top=$NAVTOP) ---"; echo "$HIT" | head -10
+    echo "--- $1: app text under the navigation bar (top=$TOP) ---"; echo "$HIT" | head -10
     adb exec-out screencap -p > "$OUT/LAYOUT-$1.png" 2>/dev/null
     LAYOUT_BAD="$LAYOUT_BAD $1"
   fi

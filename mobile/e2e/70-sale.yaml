@@ -41,13 +41,17 @@ name: 70 sale on one screen, invoice page, share PDF, cancel
 - takeScreenshot: 16-line-editor
 - tapOn:
     id: "line-done"
-- assertVisible: "صبغة SEED-.* · 2.00 كغ × .*"
+- scrollUntilVisible:
+    element: "صبغة SEED-.* · 2.00 كغ × .*"
+    visibilityPercentage: 50
 # Leave the sale and come back: the draft (customer and line) is still there.
 - tapOn:
     id: "screen-back"
 - tapOn:
     id: "add-sale"
-- assertVisible: "صبغة SEED-.* · 2.00 كغ × .*"
+- scrollUntilVisible:
+    element: "صبغة SEED-.* · 2.00 كغ × .*"
+    visibilityPercentage: 50
 - takeScreenshot: 16b-draft-kept
 # A rate is asked only if the customer pays in SYP.
 - runFlow:
@@ -76,9 +80,14 @@ name: 70 sale on one screen, invoice page, share PDF, cancel
     id: "sale-error"
 - takeScreenshot: 18-sale-done
 - tapOn: "عرض المستند"
+# The invoice page opens at its «بيانات الفاتورة»; the lines follow below it.
 - extendedWaitUntil:
-    visible: "البنود.*"
+    visible:
+      id: "invoice-info"
     timeout: 30000
+- scrollUntilVisible:
+    element: "البنود.*"
+    visibilityPercentage: 50
 - takeScreenshot: 19-invoice
 # Share the PDF: the system share sheet opens (no in-app error), then back to the invoice.
 - scrollUntilVisible:

@@ -12,7 +12,7 @@ import {
 } from "../../src/core/entryDraft";
 import { buildEntryLineNote, buildInvoiceNotes } from "../../src/core/lineNote";
 import type { EntryLineInput } from "../../src/core/documents";
-import { EntryFormView, EntryLineView } from "../../src/ui/EntryViews";
+import { EntryFormView, EntryLineView, LINE_FIELD_ORDER } from "../../src/ui/EntryViews";
 import { withQuery } from "../helpers/withQuery";
 
 vi.mock("../../src/hooks/useParties", () => ({ usePartyList: () => ({ data: [] }) }));
@@ -296,6 +296,25 @@ describe("purchase line page", () => {
     expect(screen.getByLabelText("العرض (سم)")).toBeTruthy();
     expect(screen.getByLabelText("الغراماج (غ/م²)")).toBeTruthy();
     expect(screen.getByLabelText("سعر البيع / كغ (USD)")).toBeTruthy();
+  });
+
+  it("«التالي» on the keyboard walks the fields in the desktop's order", async () => {
+    await render(
+      withQuery(
+        <EntryLineView currency="USD" editing={false} onSave={vi.fn()} onCancel={vi.fn()} />,
+      ),
+    );
+    expect(LINE_FIELD_ORDER.slice(0, 4)).toEqual([
+      "entry-fabric",
+      "entry-reference",
+      "entry-source",
+      "entry-pieces",
+    ]);
+    for (const id of ["entry-fabric", "entry-kromaj", "entry-gross", "entry-kg", "entry-price"]) {
+      const input = screen.getByTestId(id);
+      expect(input.props.returnKeyType, id).toBe("next");
+      expect(typeof input.props.onSubmitEditing, id).toBe("function");
+    }
   });
 
   it("saves the line with its details; «حفظ وبند جديد» asks for the next one", async () => {
