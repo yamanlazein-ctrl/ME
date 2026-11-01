@@ -16,14 +16,19 @@ describe("Field", () => {
     expect(input.props.style.minHeight).toBeGreaterThanOrEqual(TOUCH_TARGET);
   });
 
-  it("a swipe that starts on a field scrolls the page: the unfocused input takes no touches; focused it does", async () => {
+  it("a swipe starting on a one-line field scrolls the page: the input does not scroll sideways, Enter submits", async () => {
     await render(<Field label="الاسم" fieldId="name" value="" onChangeText={() => undefined} />);
-    const holder = () => screen.getByTestId("name").parent as { props: { pointerEvents?: string } };
-    expect(holder().props.pointerEvents).toBe("none");
-    await fireEvent(screen.getByTestId("name"), "focus");
-    expect(holder().props.pointerEvents).toBe("auto");
-    await fireEvent(screen.getByTestId("name"), "blur");
-    expect(holder().props.pointerEvents).toBe("none");
+    const input = screen.getByTestId("name");
+    expect(input.props.multiline).toBe(true);
+    expect(input.props.numberOfLines).toBe(1);
+    expect(input.props.submitBehavior).toBe("blurAndSubmit");
+    // A «التالي» chain keeps its own submit behaviour; passwords and real notes stay as they are.
+    await render(<Field label="أ" fieldId="a" submitBehavior="submit" />);
+    expect(screen.getByTestId("a").props.submitBehavior).toBe("submit");
+    await render(<Field label="كلمة المرور" fieldId="p" secureTextEntry />);
+    expect(screen.getByTestId("p").props.multiline).toBeUndefined();
+    await render(<Field label="ملاحظات" fieldId="n" multiline />);
+    expect(screen.getByTestId("n").props.numberOfLines).toBeUndefined();
   });
 
   it("shows an error under the field in the negative colour", async () => {
