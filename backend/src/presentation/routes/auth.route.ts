@@ -41,6 +41,7 @@ import {
 } from "../../application/use-cases/sync/hubConfig.js";
 import { hostname } from "node:os";
 import { isDesktopLocalCaller, isLoopbackAddress } from "../../infrastructure/http/localAccess.js";
+import { mayReplaceExistingPin } from "./pinResetPolicy.js";
 
 // Login-specific rate limiter: 5 attempts per IP per 15 minutes
 const loginRateLimiter = rateLimit({
@@ -572,14 +573,37 @@ export function registerAuthRoutes(router: Router, container: Container) {
             });
           }
         } else {
-          // Lost-PIN recovery must not ask for the lost current secret. Require
-          // device provisioning proof instead, just as first-time PIN setup.
-          const proof = await hasDeviceProvisioningProof(req, container, tenantId, authRepo);
-          if (!proof) {
-            return res.status(401).json({
-              code: "DEVICE_PROOF_REQUIRED",
-              message: "تعذّر التحقق من تفعيل هذا الجهاز — أعد تفعيل الجهاز ثم حاول مجدداً",
-              statusCode: 401,
+          // Replacing an existing PIN: device proof alone let any session of the tenant (a viewer, any enrolled
+          // device) set an admin's PIN and sign in as them. Lost-PIN recovery stays possible for the user
+          // themselves, an admin, or the operator at the desktop (pinResetPolicy.ts).
+          const tid = tenantId;
+          const allowed = await mayReplaceExistingPin(
+            { id: user.id, pinHash: user.pinHash, passwordHash: user.passwordHash },
+            currentSecret,
+            {
+              verifySecret: (hash, secret) => container.passwordHasher.verify(hash, secret),
+              isLocalDesktopOperator: () =>
+                Boolean(config.DESKTOP_DEPLOY && isDesktopLocalCaller(req)),
+              sessionCaller: async () => {
+                const header = req.headers.authorization;
+                if (!header?.startsWith("Bearer ")) return null;
+                const payload = await container.jwtSigner.verifyAccessToken(header.slice(7));
+                if (payload.tenantId !== tid || payload.type === "refresh") return null;
+                if (await container.tokenDenylist.has(payload.jti)) return null;
+                const caller = await withJwtTenantContext(tid, () =>
+                  authRepo.findUserById(payload.sub),
+                );
+                if (!caller || caller.tenantId !== tid) return null;
+                return { userId: caller.id, role: caller.role, active: caller.active };
+              },
+            },
+          );
+          if (!allowed) {
+            return res.status(403).json({
+              code: "PIN_RESET_FORBIDDEN",
+              message:
+                "لا يمكن تغيير الرقم السري لهذا المستخدم من هنا — يغيّره المستخدم نفسه أو مدير النظام",
+              statusCode: 403,
             });
           }
         }
