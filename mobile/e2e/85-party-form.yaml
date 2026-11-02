@@ -27,8 +27,16 @@ name: 85 new customer, duplicate name, search by name and phone
     timeout: 30000
 - takeScreenshot: 34-party-created
 # The same name again is refused with the duplicate-name text (not the generic "unexpected error").
-- tapOn:
-    id: "party-new"
+# The list shows the new name while the form is still sliding away; on a slow emulator a tap then lands on the
+# leaving screen and is lost (run 66, Pixel 6). Wait for the transition, and tap again only if the form did not open.
+- waitForAnimationToEnd
+- retry:
+    maxRetries: 2
+    commands:
+      - tapOn:
+          id: "party-new"
+      - assertVisible:
+          id: "party-name"
 - tapOn:
     id: "party-name"
 - inputText: Zed ${output.stamp}
