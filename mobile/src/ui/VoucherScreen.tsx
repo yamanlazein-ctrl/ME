@@ -65,46 +65,54 @@ export function VoucherScreen({
   });
 
   useEffect(() => {
-    void getApp().then(async (app) => {
-      if (!app.phone) return;
-      const ctx = app.phone.context();
-      if (amendId) {
-        const v = await app.phone.repos.voucherRepo.findById(amendId, ctx);
-        if (!v) return;
-        const party = await app.phone.repos.partyRepo.findById(v.partyId, ctx);
-        setOriginal({ version: v.version, amount: v.amount });
-        setValues({
-          party: { id: v.partyId, name: party?.name ?? "" },
-          amount: v.amount,
-          currency: v.currency ?? "USD",
-          // Kept whenever one was stored (a USD voucher on a SYP invoice has one too).
-          rate: v.exchangeRate && Number(v.exchangeRate) !== 1 ? Number(v.exchangeRate) : null,
-          discount: v.discount ?? null,
-          method: ((v.method as VoucherMethod | undefined) ?? "cash") as VoucherMethod,
-          note: v.notesInternal ?? "",
-          notePrint: v.notesPrint ?? "",
-          date: String(v.date).slice(0, 10),
-          invoice: await amendedInvoice(app.phone, v, kind),
-        });
-      } else if (partyId) {
-        const party = await app.phone.repos.partyRepo.findById(partyId, ctx);
-        if (!party) return;
-        const linked = invoiceId
-          ? ((await loadOpenInvoices(app.phone, party.id, kind)).find((i) => i.id === invoiceId) ??
-            null)
-          : null;
-        setValues((x) => ({
-          ...x,
-          party: { id: party.id, name: party.name },
-          ...(linked ? { invoice: linked, currency: linked.currency } : {}),
-        }));
-      }
-    });
+    void getApp()
+      .then(async (app) => {
+        if (!app.phone) return;
+        const ctx = app.phone.context();
+        if (amendId) {
+          const v = await app.phone.repos.voucherRepo.findById(amendId, ctx);
+          if (!v) {
+            setError("هذا السند غير موجود على الهاتف، فلا يمكن تعديله.");
+            return;
+          }
+          const party = await app.phone.repos.partyRepo.findById(v.partyId, ctx);
+          setOriginal({ version: v.version, amount: v.amount });
+          setValues({
+            party: { id: v.partyId, name: party?.name ?? "" },
+            amount: v.amount,
+            currency: v.currency ?? "USD",
+            // Kept whenever one was stored (a USD voucher on a SYP invoice has one too).
+            rate: v.exchangeRate && Number(v.exchangeRate) !== 1 ? Number(v.exchangeRate) : null,
+            discount: v.discount ?? null,
+            method: ((v.method as VoucherMethod | undefined) ?? "cash") as VoucherMethod,
+            note: v.notesInternal ?? "",
+            notePrint: v.notesPrint ?? "",
+            date: String(v.date).slice(0, 10),
+            invoice: await amendedInvoice(app.phone, v, kind),
+          });
+        } else if (partyId) {
+          const party = await app.phone.repos.partyRepo.findById(partyId, ctx);
+          if (!party) return;
+          const linked = invoiceId
+            ? ((await loadOpenInvoices(app.phone, party.id, kind)).find(
+                (i) => i.id === invoiceId,
+              ) ?? null)
+            : null;
+          setValues((x) => ({
+            ...x,
+            party: { id: party.id, name: party.name },
+            ...(linked ? { invoice: linked, currency: linked.currency } : {}),
+          }));
+        }
+      })
+      .catch((e: unknown) => setError(e instanceof Error ? e.message : "تعذّر تحميل السند"));
   }, [amendId, partyId, invoiceId, kind]);
 
   const save = async () => {
     setAttempted(true);
     if (voucherProblems(values, kind).length > 0 || !values.party || !values.amount) return;
+    // Amending a voucher that never loaded must not silently create a new one (UI audit P11).
+    if (amendId && !original) return setError("هذا السند غير موجود على الهاتف، فلا يمكن تعديله.");
     setError(null);
     try {
       const app = await getApp();

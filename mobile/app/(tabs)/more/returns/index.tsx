@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { router } from "expo-router";
 import { getApp } from "../../../../src/core/appRuntime";
+import { runPhoneAction } from "../../../../src/core/phoneAction";
 import { canWriteOffline, isAdminLike } from "../../../../src/core/roles";
 import { listReturns, type ReturnListRow } from "../../../../src/core/returns";
 import { useFinishWrite } from "../../../../src/hooks/useFinishWrite";
@@ -22,9 +23,12 @@ export default function Returns() {
   });
   const cancel = async (row: ReturnListRow) => {
     setError(null);
-    const app = await getApp();
-    if (!app.phone) return;
-    const r = await app.phone.documents.cancelReturn(row.id, row.version);
+    const r = await runPhoneAction(
+      "return-cancel",
+      (phone) => phone.documents.cancelReturn(row.id, row.version),
+      setError,
+    );
+    if (!r) return;
     if (!r.ok) return setError(r.error);
     await finish();
     await refetch();

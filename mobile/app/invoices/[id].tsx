@@ -2,6 +2,7 @@ import { useState } from "react";
 import { router, useLocalSearchParams } from "expo-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { getApp } from "../../src/core/appRuntime";
+import { runPhoneAction } from "../../src/core/phoneAction";
 import { loadInvoiceView } from "../../src/core/invoiceView";
 import { queryKeys } from "../../src/hooks/queryKeys";
 import { useFinishWrite } from "../../src/hooks/useFinishWrite";
@@ -53,9 +54,12 @@ export default function InvoiceScreen() {
       }
       onCancel={async () => {
         setError(null);
-        const app = await getApp();
-        if (!app.phone) return;
-        const result = await app.phone.documents.cancelInvoice(id, data.invoice.version);
+        const result = await runPhoneAction(
+          "invoice-cancel",
+          (phone) => phone.documents.cancelInvoice(id, data.invoice.version),
+          setError,
+        );
+        if (!result) return;
         if (!result.ok) return setError(result.error);
         await finish();
         await qc.invalidateQueries({ queryKey: queryKeys.invoice(id) });

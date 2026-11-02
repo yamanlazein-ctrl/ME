@@ -134,7 +134,9 @@ export function ReturnFormView({
       ) : null}
       {draft.invoice
         ? draft.lines.map((l) => (
-            <Section key={l.rollId} testID="return-line">
+            // Keyed by invoice too: the inputs keep their own text, so a lot shared by two invoices showed the old
+            // numbers after switching while the draft had been reset (UI audit P4).
+            <Section key={`${draft.invoice!.id}-${l.rollId}`} testID="return-line">
               <Text style={{ fontWeight: "700" }}>{l.label}</Text>
               <Text style={{ color: colors.mutedForeground }}>
                 {`المباع ${kg(l.soldKg)} · السعر ${money(l.pricePerKg, draft.currency)}`}

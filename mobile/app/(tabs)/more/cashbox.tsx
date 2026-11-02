@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { localDateISO } from "@backend/infrastructure/utils/localDate";
 import { getApp } from "../../../src/core/appRuntime";
+import { runPhoneAction } from "../../../src/core/phoneAction";
 import { cashboxBalances, cashboxMovementsOn } from "../../../src/core/cashbox";
 import { queryKeys } from "../../../src/hooks/queryKeys";
 import { useFinishWrite } from "../../../src/hooks/useFinishWrite";
@@ -43,16 +44,20 @@ export default function CashboxScreen() {
     if (!form.amount) return;
     setError(null);
     setNotice(null);
-    const app = await getApp();
-    if (!app.phone) return;
-    const r = await app.phone.documents.addCashboxMovement({
-      date,
-      type: form.direction === "in" ? "capital" : "withdrawal",
-      direction: form.direction,
-      amount: form.amount,
-      currency: form.currency,
-      ...(form.description.trim() ? { description: form.description.trim() } : {}),
-    });
+    const r = await runPhoneAction(
+      "cashbox-add",
+      (phone) =>
+        phone.documents.addCashboxMovement({
+          date,
+          type: form.direction === "in" ? "capital" : "withdrawal",
+          direction: form.direction,
+          amount: form.amount,
+          currency: form.currency,
+          ...(form.description.trim() ? { description: form.description.trim() } : {}),
+        }),
+      setError,
+    );
+    if (!r) return;
     if (!r.ok) return setError(r.error);
     await finish();
     setNotice(

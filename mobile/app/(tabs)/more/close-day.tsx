@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { localDateISO } from "@backend/infrastructure/utils/localDate";
 import { getApp } from "../../../src/core/appRuntime";
+import { runPhoneAction } from "../../../src/core/phoneAction";
 import { cashboxBalances } from "../../../src/core/cashbox";
 import { isAdminLike } from "../../../src/core/roles";
 import { queryKeys } from "../../../src/hooks/queryKeys";
@@ -54,9 +55,22 @@ export default function CloseDay() {
     if (counted === null) return;
     setError(null);
     setNotice(null);
-    const app = await getApp();
-    if (!app.phone) return;
-    const r = await app.phone.documents.closeCashboxDay({ date, counted, currency });
+    // A typed date that is not a real day, or a day still to come, would lock the wrong day.
+    const parsed = new Date(`${date}T00:00:00`);
+    if (
+      !/^\d{4}-\d{2}-\d{2}$/.test(date) ||
+      Number.isNaN(parsed.getTime()) ||
+      localDateISO(parsed) !== date
+    ) {
+      return setError("اكتب التاريخ بالشكل سنة-شهر-يوم، مثل 2026-11-02");
+    }
+    if (date > localDateISO(new Date())) return setError("لا يمكن إقفال يوم لم يأتِ بعد");
+    const r = await runPhoneAction(
+      "close-day",
+      (phone) => phone.documents.closeCashboxDay({ date, counted, currency }),
+      setError,
+    );
+    if (!r) return;
     if (!r.ok) return setError(r.error);
     await finish();
     setNotice(`تم إقفال يوم ${date} (${currency})`);

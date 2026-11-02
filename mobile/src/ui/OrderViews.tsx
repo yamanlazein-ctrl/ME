@@ -1,6 +1,6 @@
 // Orders (FR-27): list, new order, and detail with fulfil (by one of the customer's sale invoices) or cancel. Pending
 // conflicts on the same item are shown read-only with the desktop's note.
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { View } from "react-native";
 import { Text } from "./Text";
 import {
@@ -196,6 +196,15 @@ export function OrderDetailView({
 }) {
   const colors = useColors();
   const [confirming, setConfirming] = useState(false);
+  // One fulfil at a time: a double tap on the row fulfilled the order twice (UI audit P2).
+  const fulfilling = useRef(false);
+  const fulfil = (invoiceId: string) => {
+    if (fulfilling.current) return;
+    fulfilling.current = true;
+    void Promise.resolve(onFulfil(invoiceId)).finally(() => {
+      fulfilling.current = false;
+    });
+  };
   const o = detail.order;
   const active = isOrderActive(o.status);
   return (
@@ -245,7 +254,7 @@ export function OrderDetailView({
                   accessibilityLabel={`تنفيذ بالفاتورة ${c.number}`}
                   title={`تنفيذ بالفاتورة ${c.number}`}
                   subtitle={c.date}
-                  onPress={() => void onFulfil(c.id)}
+                  onPress={() => fulfil(c.id)}
                   last={idx === candidates.length - 1}
                 />
               ))

@@ -7,14 +7,15 @@ import { canWriteOffline } from "../../../../src/core/roles";
 import { useFinishWrite } from "../../../../src/hooks/useFinishWrite";
 import { useRole } from "../../../../src/hooks/useRole";
 import { OrderDetailView } from "../../../../src/ui/OrderViews";
-import { LoadingState, Screen } from "../../../../src/ui/kit";
+import { ErrorState, LoadingState, readErrorText, Screen } from "../../../../src/ui/kit";
+import { runPhoneAction } from "../../../../src/core/phoneAction";
 
 export default function OrderScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const role = useRole();
   const finish = useFinishWrite();
   const [error, setError] = useState<string | null>(null);
-  const { data } = useQuery({
+  const q = useQuery({
     queryKey: ["orders", id],
     queryFn: async () => {
       const app = await getApp();
@@ -26,10 +27,18 @@ export default function OrderScreen() {
       return detail ? { detail, candidates } : null;
     },
   });
+  const data = q.data;
   if (!data)
     return (
       <Screen title="الطلبية">
-        <LoadingState />
+        {q.isLoading ? (
+          <LoadingState />
+        ) : (
+          <ErrorState
+            message={q.error ? readErrorText(q.error) : "هذه الطلبية غير موجودة على الهاتف."}
+            onRetry={() => void q.refetch()}
+          />
+        )}
       </Screen>
     );
   const run = async (
@@ -37,10 +46,8 @@ export default function OrderScreen() {
       p: NonNullable<Awaited<ReturnType<typeof getApp>>["phone"]>,
     ) => Promise<{ ok: true } | { ok: false; error: string }>,
   ) => {
-    setError(null);
-    const app = await getApp();
-    if (!app.phone) return;
-    const r = await action(app.phone);
+    const r = await runPhoneAction("order-action", action, setError);
+    if (!r) return;
     if (!r.ok) return setError(r.error);
     await finish();
     router.back();

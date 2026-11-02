@@ -136,6 +136,21 @@ describe("sale return against a source invoice", () => {
       qty: { [lines.lines[0]!.rollId]: { kg: 6, pieces: 0 } },
     };
     expect(returnProblems(over)).toEqual(["over"]);
+    // Pieces are checked too: more than sold, or pieces with no weight (they used to be dropped silently).
+    const sold = lines.lines[0]!.pieces;
+    const id0 = lines.lines[0]!.rollId;
+    if (sold > 0) {
+      expect(returnProblems({ ...over, qty: { [id0]: { kg: 1, pieces: sold + 1 } } })).toEqual([
+        "over-pieces",
+      ]);
+    }
+    expect(returnProblems({ ...over, qty: { [id0]: { kg: 1, pieces: 1 } } })).toEqual([]);
+    expect(
+      returnProblems({
+        ...over,
+        qty: { [id0]: { kg: 1, pieces: 0 }, [lines.lines[1]!.rollId]: { kg: 0, pieces: 1 } },
+      }),
+    ).toEqual(["pieces-without-kg"]);
     const r = await t.phone.documents.createReturn(
       toReturnInput({ ...over, currency: "SYP" }, today),
     );

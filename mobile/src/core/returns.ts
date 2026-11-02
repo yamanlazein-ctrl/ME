@@ -89,13 +89,16 @@ export function emptyReturnDraft(kind: ReturnKind = "sale"): ReturnDraft {
   };
 }
 
-export type ReturnProblem = "no-party" | "no-invoice" | "no-lines" | "over";
+export type ReturnProblem =
+  "no-party" | "no-invoice" | "no-lines" | "over" | "over-pieces" | "pieces-without-kg";
 
 export const RETURN_PROBLEM_TEXT: Record<ReturnProblem, string> = {
   "no-party": "اختر الطرف",
   "no-invoice": "اختر الفاتورة الأصلية",
   "no-lines": "اكتب كمية مرتجعة لبند واحد على الأقل",
   over: "الكمية المرتجعة أكبر من المباعة في أحد البنود",
+  "over-pieces": "عدد الأثواب المرتجعة أكبر من المباعة في أحد البنود",
+  "pieces-without-kg": "اكتب وزن الأثواب المرتجعة (كغ) في البند نفسه",
 };
 
 export function returnProblems(d: ReturnDraft): ReturnProblem[] {
@@ -105,6 +108,11 @@ export function returnProblems(d: ReturnDraft): ReturnProblem[] {
   const chosen = d.lines.filter((l) => (d.qty[l.rollId]?.kg ?? 0) > 0);
   if (chosen.length === 0) out.push("no-lines");
   if (chosen.some((l) => (d.qty[l.rollId]?.kg ?? 0) > l.soldKg)) out.push("over");
+  // Pieces were never checked: more pieces than sold passed, and pieces typed with 0 kg were dropped silently.
+  if (d.lines.some((l) => (d.qty[l.rollId]?.pieces ?? 0) > (l.pieces ?? 0) && (l.pieces ?? 0) > 0))
+    out.push("over-pieces");
+  if (d.lines.some((l) => (d.qty[l.rollId]?.pieces ?? 0) > 0 && (d.qty[l.rollId]?.kg ?? 0) <= 0))
+    out.push("pieces-without-kg");
   return out;
 }
 

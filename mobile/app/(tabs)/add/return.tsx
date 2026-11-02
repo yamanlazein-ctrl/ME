@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { router } from "expo-router";
 import { localDateISO } from "@backend/infrastructure/utils/localDate";
 import { getApp } from "../../../src/core/appRuntime";
@@ -13,12 +13,14 @@ import {
 } from "../../../src/core/returns";
 import { useFinishWrite } from "../../../src/hooks/useFinishWrite";
 import { ReturnFormView } from "../../../src/ui/ReturnViews";
+import { readErrorText } from "../../../src/ui/kit";
 
 export default function ReturnScreen() {
   const finish = useFinishWrite();
   const [draft, setDraft] = useState<ReturnDraft>(emptyReturnDraft("sale"));
   const [invoices, setInvoices] = useState<SourceInvoiceRow[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const latest = useRef(0);
   const phone = async () => {
     const app = await getApp();
     if (!app.phone) throw new Error("الجهاز غير مسجّل");
@@ -49,21 +51,30 @@ export default function ReturnScreen() {
       }}
       onParty={(party) => {
         setDraft((d) => ({ ...d, party, invoice: null, lines: [], qty: {} }));
-        void phone().then(async (p) =>
-          setInvoices(await listSourceInvoices(p, draft.kind, party.id)),
-        );
+        const ask = ++latest.current;
+        void phone()
+          .then(async (p) => {
+            const rows = await listSourceInvoices(p, draft.kind, party.id);
+            if (ask === latest.current) setInvoices(rows);
+          })
+          .catch((e: unknown) => setError(readErrorText(e)));
       }}
       onInvoice={(invoice) => {
-        void phone().then(async (p) => {
-          const loaded = await loadReturnableLines(p, invoice.id);
-          setDraft((d) => ({
-            ...d,
-            invoice,
-            currency: loaded?.currency ?? d.currency,
-            lines: loaded?.lines ?? [],
-            qty: {},
-          }));
-        });
+        // Only the last tapped invoice is applied (a slower earlier load must not win), and a failed load says so.
+        const ask = ++latest.current;
+        void phone()
+          .then(async (p) => {
+            const loaded = await loadReturnableLines(p, invoice.id);
+            if (ask !== latest.current) return;
+            setDraft((d) => ({
+              ...d,
+              invoice,
+              currency: loaded?.currency ?? d.currency,
+              lines: loaded?.lines ?? [],
+              qty: {},
+            }));
+          })
+          .catch((e: unknown) => setError(readErrorText(e)));
       }}
       onQty={(rollId, patch) =>
         setDraft((d) => ({

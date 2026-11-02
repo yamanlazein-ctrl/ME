@@ -73,6 +73,7 @@ export default function StatementScreen() {
       onPeriod={setPeriod}
       onDates={(patch) => setDates((d) => ({ ...d, ...patch }))}
       onRetry={() => void statement.refetch()}
+      canWrite={canWriteOffline(role)}
       onOpenEntry={(e) => {
         if (!e.referenceId) return;
         if (e.type === "sales_invoice" || e.type === "purchase_invoice") {

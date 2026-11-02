@@ -354,11 +354,19 @@ export interface StatementViewProps {
   onPeriod(p: PeriodPreset): void;
   onDates(patch: { from?: string; to?: string }): void;
   onOpenEntry(e: StatementEntryData): void;
+  /** Receipts and payments open for writers only. */
+  canWrite?: boolean;
   onRetry(): void;
 }
 
-function entryOpens(e: StatementEntryData): boolean {
-  return Boolean(e.referenceId) && e.status === "active" && e.type !== "opening";
+/**
+ * Whether a statement row opens something for this user: invoices for everyone, receipts and payments for writers.
+ * Returns, expenses and the rest have no page on the phone, so they must not look tappable (UI audit P10).
+ */
+export function entryOpens(e: StatementEntryData, canWrite = false): boolean {
+  if (!e.referenceId || e.status !== "active") return false;
+  if (e.type === "sales_invoice" || e.type === "purchase_invoice") return true;
+  return canWrite && (e.type === "receipt_in" || e.type === "payment_out");
 }
 
 export function StatementView(p: StatementViewProps) {
@@ -485,7 +493,7 @@ export function StatementView(p: StatementViewProps) {
                 </Text>
               }
               valueCaption={`الرصيد ${money(e.runningBalance, e.currency)}`}
-              {...(entryOpens(e) ? { onPress: () => p.onOpenEntry(e) } : {})}
+              {...(entryOpens(e, p.canWrite) ? { onPress: () => p.onOpenEntry(e) } : {})}
               last={last}
             />
           );

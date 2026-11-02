@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
 import { router } from "expo-router";
+import { Alert } from "react-native";
+import { logError } from "../../../src/core/devlog";
 import * as Font from "expo-font";
 import { FONT_BY_WEIGHT } from "../../../src/ui/fontFamilies";
 import { useTheme } from "../../../src/ui/ThemeContext";
@@ -46,11 +48,18 @@ export default function More() {
       onTheme={setTheme}
       onCancelLogout={() => setPending(null)}
       onLogout={async (confirmed) => {
-        const service = await getSessionService();
-        const result = await service.logout({ confirmed });
-        if (result.needsConfirm) return setPending(result.pending);
-        setPending(null);
-        notifyBootChanged();
+        try {
+          const service = await getSessionService();
+          const result = await service.logout({ confirmed });
+          if (result.needsConfirm) return setPending(result.pending);
+          setPending(null);
+          notifyBootChanged();
+        } catch (e) {
+          // A failed logout used to be an unhandled rejection with the sheet left open (UI audit P9).
+          setPending(null);
+          logError("logout", e);
+          Alert.alert("تعذّر تسجيل الخروج", "حاول مرة أخرى.");
+        }
       }}
     />
   );
