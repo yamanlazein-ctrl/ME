@@ -310,9 +310,9 @@ function InvoicesIndexPage() {
                               variant="ghost"
                               className="text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
                               onClick={() => setToDelete(inv)}
-                              aria-label="حذف"
+                              aria-label="إلغاء الفاتورة"
                             >
-                              <Trash2 className="ml-1 h-4 w-4" /> حذف
+                              <Trash2 className="ml-1 h-4 w-4" /> إلغاء
                             </Button>
                           )}
                         </div>
@@ -348,9 +348,10 @@ function InvoicesIndexPage() {
       <AlertDialog open={!!toDelete} onOpenChange={(o) => !o && setToDelete(null)}>
         <AlertDialogContent dir="rtl">
           <AlertDialogHeader>
-            <AlertDialogTitle>تأكيد الحذف</AlertDialogTitle>
+            <AlertDialogTitle>تأكيد إلغاء الفاتورة</AlertDialogTitle>
             <AlertDialogDescription>
-              هل أنت متأكد من حذف الفاتورة "{toDelete?.number}"؟ لا يمكن التراجع عن هذا الإجراء.
+              هل تريد إلغاء الفاتورة "{toDelete?.number}"؟ تبقى في القائمة بحالة «ملغاة» ويُعكس
+              أثرها على المخزون والحساب. لا يمكن التراجع عن الإلغاء.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter className="flex-row-reverse gap-2">
@@ -361,9 +362,9 @@ function InvoicesIndexPage() {
               }}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
-              حذف نهائي
+              إلغاء الفاتورة
             </AlertDialogAction>
-            <AlertDialogCancel>إلغاء</AlertDialogCancel>
+            <AlertDialogCancel>رجوع</AlertDialogCancel>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

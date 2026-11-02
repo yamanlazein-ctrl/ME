@@ -73,7 +73,11 @@ import {
   lineTotal,
 } from "@/components/invoices/sale-types";
 import { formatNumber, formatMoney, formatQuantity } from "@/shared/utils/formatNumber";
-import { parseInvoiceNotes, warehouseToRestore } from "@/components/print/noteParser";
+import {
+  parseInvoiceNotes,
+  warehouseNoteFragment,
+  warehouseToRestore,
+} from "@/components/print/noteParser";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { planSaleSettlement, useCustomerCredit } from "@/presentation/hooks/useCustomerCredit";
 
@@ -371,7 +375,24 @@ function SaleInvoicePage() {
     setTimeout(() => fabricRefs.current[newLine.id]?.focus(), 0);
   };
 
+  // One save at a time: the pending-orders check runs before the mutation starts, so isPending was still
+  // false and a fast double-click created two invoices (UI audit D6).
+  const savingRef = useRef(false);
   const save = async (
+    thenPrint: boolean,
+    thenNew = false,
+    skipConflictCheck = false,
+    debtConfirmed = false,
+  ) => {
+    if (savingRef.current) return;
+    savingRef.current = true;
+    try {
+      await saveOnce(thenPrint, thenNew, skipConflictCheck, debtConfirmed);
+    } finally {
+      savingRef.current = false;
+    }
+  };
+  const saveOnce = async (
     thenPrint: boolean,
     thenNew = false,
     skipConflictCheck = false,
@@ -432,7 +453,7 @@ function SaleInvoicePage() {
     const notesIncludeWarehouse = /المستودع\s*:/.test(notes);
     const combinedNotes = [
       reference && `المرجع: ${reference}`,
-      warehouse && warehouse !== "main" && !notesIncludeWarehouse && `المستودع: ${warehouse}`,
+      !notesIncludeWarehouse && warehouseNoteFragment(warehouse, warehousesList),
       paymentMethod && `طريقة الدفع: ${paymentMethod}`,
       notes,
     ]

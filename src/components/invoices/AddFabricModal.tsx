@@ -76,6 +76,8 @@ export function AddFabricModal({
 
   const [notes, setNotes] = useState("");
   const [imageUrl, setImageUrl] = useState<string | undefined>(undefined);
+  const [saving, setSaving] = useState(false);
+  const [createdFabric, setCreatedFabric] = useState<{ id: string; name: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const reset = () => {
@@ -114,15 +116,23 @@ export function AddFabricModal({
     if (!quantity || Number(quantity) <= 0) return setError("الكمية يجب أن تكون أكبر من صفر.");
     if (!purchasePrice || Number(purchasePrice) <= 0) return setError("سعر الشراء مطلوب.");
 
+    if (saving) return;
+    setSaving(true);
     try {
-      const fab = await addFabric({
-        name: name.trim(),
-        category: category.trim(),
-        minStockKg: 10,
-        notes: notes.trim() || undefined,
-        unit,
-        imageUrl,
-      });
+      // A retry after addColor failed reuses the fabric already created (it used to create a duplicate) —
+      // UI audit D5.
+      const fab =
+        createdFabric && createdFabric.name === name.trim()
+          ? createdFabric
+          : await addFabric({
+              name: name.trim(),
+              category: category.trim(),
+              minStockKg: 10,
+              notes: notes.trim() || undefined,
+              unit,
+              imageUrl,
+            });
+      setCreatedFabric(fab);
       const col = await addColor({
         fabricId: fab.id,
         name: colorName.trim(),
@@ -146,10 +156,13 @@ export function AddFabricModal({
         pricePerKg: Number(purchasePrice),
         salePricePerKg: salePrice === "" ? undefined : Number(salePrice),
       });
+      setCreatedFabric(null);
       reset();
       onOpenChange(false);
     } catch (e) {
       setError(e instanceof Error ? e.message : "تعذر حفظ القماش.");
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -379,6 +392,7 @@ export function AddFabricModal({
           </Button>
           <Button
             onClick={save}
+            disabled={saving}
             className="h-10 gap-2 bg-primary text-primary-foreground hover:bg-primary/90"
           >
             <Plus className="h-4 w-4" /> حفظ القماش

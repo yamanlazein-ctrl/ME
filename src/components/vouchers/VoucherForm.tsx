@@ -706,12 +706,14 @@ export function VoucherForm({
         open={addPartyOpen}
         onClose={() => setAddPartyOpen(false)}
         onSubmit={(patch) => {
-          setAddPartyOpen(false);
           const created = isReceipt
             ? addCustomer(patch as Parameters<typeof addCustomer>[0])
             : addSupplier(patch as Parameters<typeof addSupplier>[0]);
+          // Close only once the party is saved: a failure (already shown as a toast) keeps what was typed —
+          // UI audit D14.
           created
             .then((p) => {
+              setAddPartyOpen(false);
               if (p?.id) {
                 setPartyId(p.id);
                 setInvoiceId("");

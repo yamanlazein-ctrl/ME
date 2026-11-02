@@ -21,3 +21,20 @@ describe("warehouseToRestore", () => {
     expect(warehouseToRestore(null, [{ id: "w1" }])).toBeNull();
   });
 });
+
+describe("the warehouse in sale notes is a name, never an internal id (UI audit D1)", () => {
+  const list = [
+    { id: "w1", name: "المستودع الرئيسي", isDefault: true },
+    { id: "w2", name: "مستودع المدينة" },
+  ];
+  it("writes the name, and nothing for the default warehouse", async () => {
+    const { warehouseNoteFragment } = await import("./noteParser");
+    expect(warehouseNoteFragment("w2", list)).toBe("المستودع: مستودع المدينة");
+    expect(warehouseNoteFragment("w1", list)).toBeNull();
+    expect(warehouseNoteFragment("gone", list)).toBeNull();
+  });
+  it("an edit restores by name, and still by id for invoices saved before", () => {
+    expect(warehouseToRestore("المستودع: مستودع المدينة • ملاحظة", list)).toBe("w2");
+    expect(warehouseToRestore("المستودع: w2", list)).toBe("w2");
+  });
+});

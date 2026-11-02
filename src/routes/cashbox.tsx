@@ -2,7 +2,7 @@ import { DecimalInput } from "@/components/common/DecimalInput";
 import { AppShell } from "@/components/layout/AppShell";
 import { PageCard } from "@/components/layout/PageCard";
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -299,13 +299,22 @@ function OpeningDialog({ open, onClose }: { open: boolean; onClose: () => void }
   const [balErr, setBalErr] = useState<string | null>(null);
   const setOpening = useSetOpeningBalance();
   const today = localToday();
+  // The dialog stays mounted: re-read the current balance each time it opens (it used to keep the
+  // value from page load, often 0/SYP before the data arrived) — UI audit D4.
+  useEffect(() => {
+    if (!open) return;
+    setV(cs.openingBalance);
+    setCurrency(cs.currency === "USD" ? "USD" : "SYP");
+    setBalErr(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
   const save = () => {
     if (!v || Number(v) <= 0) {
       setBalErr("أدخل رصيداً صحيحاً أكبر من صفر.");
       return;
     }
-    setOpening.mutate({ balance: v, date: today, currency });
-    onClose();
+    // Close only once it is saved: a failure keeps what was typed.
+    setOpening.mutate({ balance: v, date: today, currency }, { onSuccess: onClose });
   };
 
   return (
@@ -344,7 +353,9 @@ function OpeningDialog({ open, onClose }: { open: boolean; onClose: () => void }
           <Button variant="outline" onClick={onClose}>
             إلغاء
           </Button>
-          <Button onClick={save}>حفظ</Button>
+          <Button onClick={save} disabled={setOpening.isPending}>
+            حفظ
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -477,7 +488,9 @@ function ManualDialog({ open, onClose }: { open: boolean; onClose: () => void })
           <Button variant="outline" onClick={onClose}>
             إلغاء
           </Button>
-          <Button onClick={save}>حفظ</Button>
+          <Button onClick={save} disabled={addMovement.isPending}>
+            حفظ
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -550,7 +563,9 @@ function ClosingDialog({
           <Button variant="outline" onClick={onClose}>
             إلغاء
           </Button>
-          <Button onClick={save}>تأكيد الإقفال</Button>
+          <Button onClick={save} disabled={closeDayMut.isPending}>
+            تأكيد الإقفال
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

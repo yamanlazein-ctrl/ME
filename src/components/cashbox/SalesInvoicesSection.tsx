@@ -203,12 +203,16 @@ export function SalesInvoicesTable({ query }: { query: ProfitQueryParams }) {
                         <DropdownMenuItem
                           className="text-destructive focus:text-destructive"
                           onClick={() => {
-                            if (confirm(`حذف الفاتورة ${inv.number}؟`)) {
+                            if (
+                              confirm(
+                                `إلغاء الفاتورة ${inv.number}؟ تبقى بحالة «ملغاة» ويُعكس أثرها.`,
+                              )
+                            ) {
                               void cancelInvoice.mutateAsync(inv.id);
                             }
                           }}
                         >
-                          <Trash2 className="h-4 w-4" /> حذف
+                          <Trash2 className="h-4 w-4" /> إلغاء الفاتورة
                         </DropdownMenuItem>
                       )}
                     </DropdownMenuContent>

@@ -144,8 +144,25 @@ export function parseInvoiceNotes(raw: string | null | undefined): ParsedInvoice
  */
 export function warehouseToRestore(
   notes: string | null | undefined,
-  warehouses: ReadonlyArray<{ id: string }>,
+  warehouses: ReadonlyArray<{ id: string; name?: string }>,
 ): string | null {
-  const stored = parseInvoiceNotes(notes).warehouse;
-  return stored && warehouses.some((w) => w.id === stored) ? stored : null;
+  const stored = parseInvoiceNotes(notes).warehouse?.trim();
+  if (!stored) return null;
+  // Notes carry the warehouse NAME (what the invoice page and print show); older invoices carry the id.
+  const match =
+    warehouses.find((w) => w.id === stored) ?? warehouses.find((w) => w.name === stored);
+  return match ? match.id : null;
+}
+
+/**
+ * The «المستودع: …» fragment of a sale invoice's notes: the warehouse's name (its internal id, e.g. "w1", was
+ * printed on invoices), and nothing for the default warehouse.
+ */
+export function warehouseNoteFragment(
+  warehouseId: string,
+  warehouses: ReadonlyArray<{ id: string; name: string; isDefault?: boolean }>,
+): string | null {
+  const w = warehouses.find((x) => x.id === warehouseId);
+  if (!w || w.isDefault) return null;
+  return `المستودع: ${w.name}`;
 }
