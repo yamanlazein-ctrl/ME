@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react";
-import Constants from "expo-constants";
 import { getApp } from "../core/appRuntime";
 import { readAppState, updateAppState } from "../core/appState";
 import { logError } from "../core/devlog";
 import { checkForUpdate, type UpdateOffer } from "../core/updateCheck";
+import { appVersionInfo } from "../core/config";
 
 /** Runs the once-a-day manifest check on the direct-APK channel when the phone is enrolled. */
 export function useUpdateOffer(): UpdateOffer | null {
@@ -14,7 +14,7 @@ export function useUpdateOffer(): UpdateOffer | null {
       try {
         const app = await getApp();
         const state = await readAppState();
-        const code = Number(Constants.expoConfig?.android?.versionCode ?? 1);
+        const code = appVersionInfo().versionCode;
         const result = await checkForUpdate(
           {
             channel: state.updateChannel,

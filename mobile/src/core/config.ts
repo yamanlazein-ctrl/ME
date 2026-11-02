@@ -15,12 +15,21 @@ export interface PhoneConfig {
   readonly appVersion: string;
 }
 
+/** This build's version, as built (scripts/build-version.cjs): shown in «المزيد», sent at enrolment, compared by the
+ * update check. */
+export function appVersionInfo(): { version: string; versionCode: number } {
+  return {
+    version: Constants.expoConfig?.version ?? "0.0.0",
+    versionCode: Number(Constants.expoConfig?.android?.versionCode ?? 1),
+  };
+}
+
 export function buildConfig(enrollment: Enrollment, appVersion?: string): PhoneConfig {
   return Object.freeze({
     hubUrl: enrollment.hubUrl.replace(/\/+$/, ""),
     tenantId: enrollment.tenantId,
     syncDeviceId: enrollment.syncDeviceId,
     deviceKind: "phone" as const,
-    appVersion: appVersion ?? Constants.expoConfig?.version ?? "0.0.0",
+    appVersion: appVersion ?? appVersionInfo().version,
   });
 }

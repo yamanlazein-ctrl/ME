@@ -1,4 +1,3 @@
-import Constants from "expo-constants";
 import { useEffect, useState } from "react";
 import { router } from "expo-router";
 import * as Font from "expo-font";
@@ -7,6 +6,7 @@ import { useTheme } from "../../../src/ui/ThemeContext";
 import { getSessionService } from "../../../src/core/sessionService";
 import { notifyBootChanged } from "../../../src/hooks/useBoot";
 import { ROLE_LABEL } from "../../../src/ui/LoginView";
+import { appVersionInfo } from "../../../src/core/config";
 import { MoreMenuView, type MoreTarget } from "../../../src/ui/MoreMenu";
 
 const ROUTE: Record<MoreTarget, string> = {
@@ -41,7 +41,7 @@ export default function More() {
       theme={theme}
       pendingLogout={pending}
       fontsStatus={fontsStatus()}
-      appVersion={`${Constants.expoConfig?.version ?? "?"} (${Constants.expoConfig?.android?.versionCode ?? "?"})`}
+      appVersion={`${appVersionInfo().version} (${appVersionInfo().versionCode})`}
       onOpen={(t) => router.push(ROUTE[t] as never)}
       onTheme={setTheme}
       onCancelLogout={() => setPending(null)}
