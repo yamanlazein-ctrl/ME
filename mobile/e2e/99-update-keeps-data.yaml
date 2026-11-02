@@ -17,6 +17,11 @@ name: 99 installing over the installed app keeps the enrolment and the data
 - takeScreenshot: 99-after-update-parties
 - tapOn:
     id: "tab-more"
+# The sync entry and the version are below the fold on a small phone (same steps as flow 10).
+- scrollUntilVisible:
+    element:
+      id: "fonts-status"
+- assertVisible: "إصدار التطبيق [0-9.]+ \\([0-9]+\\)"
 - tapOn:
     id: "more-sync"
 - assertVisible: "حالة المزامنة"
