@@ -204,14 +204,22 @@ jobs:
         run: npm run prebuild:migrations && npx expo prebuild --platform android --no-install
       # Signed with the owner's private key from the repository secrets (the same secrets as the release job), never
       # with the public template key: only the owner can publish an update that installs over the customer's app.
+      # Without the secrets the customer APK is still built, but uploaded only as «to sign» and the job fails: the
+      # owner signs it with their key outside CI (never with the public key, never as the final APK).
       - name: Decode the keystore and add the signing
+        id: key
         env:
           MOTARD_UPLOAD_KEYSTORE_B64: ${{ secrets.MOTARD_UPLOAD_KEYSTORE_B64 }}
           MOTARD_UPLOAD_KEYSTORE_PASSWORD: ${{ secrets.MOTARD_UPLOAD_KEYSTORE_PASSWORD }}
           MOTARD_UPLOAD_KEY_ALIAS: ${{ secrets.MOTARD_UPLOAD_KEY_ALIAS }}
           MOTARD_UPLOAD_KEY_PASSWORD: ${{ secrets.MOTARD_UPLOAD_KEY_PASSWORD }}
         run: |
-          test -n "$MOTARD_UPLOAD_KEYSTORE_B64" || { echo "secret MOTARD_UPLOAD_KEYSTORE_B64 is not set: no phone APK without the owner's key"; exit 1; }
+          if [ -z "$MOTARD_UPLOAD_KEYSTORE_B64" ]; then
+            echo "secret MOTARD_UPLOAD_KEYSTORE_B64 is not set: the APK is built for signing outside CI only"
+            echo "have_key=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "have_key=true" >> "$GITHUB_OUTPUT"
           echo "$MOTARD_UPLOAD_KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/upload.keystore"
           MOTARD_KEYSTORE_PATH="$RUNNER_TEMP/upload.keystore" node scripts/android/add-release-signing.mjs mobile/android/app/build.gradle
       - name: Build the APK
@@ -227,18 +235,21 @@ jobs:
           # The owner's signing certificate (created 2026-11-02). Every phone APK must carry it, or Android refuses to
           # install it over the previous one.
           EXPECTED_CERT_SHA256: 0c187ce2b0421d920725ffd2dcdc8bee14cd639cf808c3236a296b0ca3193ec3
+          HAVE_KEY: ${{ steps.key.outputs.have_key }}
         run: |
           BT=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
           SRC=mobile/android/app/build/outputs/apk/release/app-release.apk
           mkdir -p phone-out
-          NAME="motard-erp-${GITHUB_SHA::7}.apk"
+          if [ "$HAVE_KEY" = "true" ]; then NAME="motard-erp-${GITHUB_SHA::7}.apk"; else NAME="motard-erp-${GITHUB_SHA::7}-TO-SIGN.apk"; fi
           cp "$SRC" "phone-out/$NAME"
           cd phone-out
           unzip -tq "$NAME"
           "$BT/apksigner" verify --print-certs "$NAME" | tee APK-INFO.txt
           # Every phone build must carry the same signing certificate, or Android refuses to install it over the
           # previous one (the user would have to uninstall and lose the phone's data).
-          if ! grep -q "certificate SHA-256 digest: $EXPECTED_CERT_SHA256" APK-INFO.txt; then
+          if [ "$HAVE_KEY" != "true" ]; then
+            echo "NOT FOR CUSTOMERS: signed with the public template key. Sign it with the owner's key (alias motard, certificate SHA-256 $EXPECTED_CERT_SHA256) before giving it out." | tee UNSIGNED-FOR-CUSTOMERS.txt
+          elif ! grep -q "certificate SHA-256 digest: $EXPECTED_CERT_SHA256" APK-INFO.txt; then
             echo "the signing certificate changed: this APK would not install over the previous one"; exit 1
           fi
           # The version inside the APK must be this commit's (100 + commit count), so it installs over every earlier
@@ -256,9 +267,14 @@ jobs:
           sha256sum "$NAME" | tee SHA256SUMS
       - uses: actions/upload-artifact@v4
         with:
-          name: motard-mobile-phone-apk
+          name: ${{ steps.key.outputs.have_key == 'true' && 'motard-mobile-phone-apk' || 'motard-mobile-phone-apk-to-sign' }}
           path: phone-out
           retention-days: 30
+      - name: No owner key in the secrets
+        if: steps.key.outputs.have_key != 'true'
+        run: |
+          echo "The APK above is NOT the final phone APK: add the MOTARD_UPLOAD_* secrets, or sign it with the owner's key."
+          exit 1
 
   # ── T133 (FR-42): the signed release, built only on request. The same owner-held key signs the Play bundle and the
   # direct APK, so a user can switch channels without uninstalling. The test-only settings of the verification build
