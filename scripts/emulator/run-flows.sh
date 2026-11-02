@@ -40,9 +40,16 @@ layout_check() {
   TOP="$NAVTOP"
   # The bar the app paints behind the system buttons can start higher than the system's own frame (2274 vs 2337 on
   # a Pixel 6): the higher edge counts.
+  # Only a real bar counts: a hidden, zero-height background node ([0,0][0,0], seen in run 67) once made the edge 0
+  # and flagged every text on the screen.
   BG=$(adb shell cat /sdcard/l.xml | grep -o '<node [^>]*navigationBarBackground[^>]*>' | head -1 |
-    sed -E 's/.* bounds="\[[0-9]+,([0-9]+)\].*/\1/')
-  if [ -n "$BG" ] && [ "$BG" -lt "$TOP" ]; then TOP="$BG"; fi
+    sed -E 's/.* bounds="\[[0-9]+,([0-9]+)\]\[[0-9]+,([0-9]+)\]".*/\1 \2/')
+  local BG_TOP BG_BOTTOM
+  read -r BG_TOP BG_BOTTOM <<<"$BG"
+  if [ -n "$BG_TOP" ] && [ -n "$BG_BOTTOM" ] && [ "$BG_BOTTOM" -gt "$BG_TOP" ] &&
+    [ "$BG_TOP" -gt $((NAVTOP / 2)) ] && [ "$BG_TOP" -lt "$TOP" ]; then
+    TOP="$BG_TOP"
+  fi
   HIT=$(adb shell cat /sdcard/l.xml | grep -o '<node [^>]*>' | grep 'package="com.motard.erp"' |
     grep -E ' text="[^"]+"' |
     sed -E 's/.* text="([^"]*)".* bounds="\[[0-9]+,([0-9]+)\]\[[0-9]+,([0-9]+)\]".*/\2 \3 \1/' |
