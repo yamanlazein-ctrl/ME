@@ -1,3 +1,4 @@
+import Constants from "expo-constants";
 import { useEffect, useState } from "react";
 import { router } from "expo-router";
 import * as Font from "expo-font";
@@ -40,6 +41,7 @@ export default function More() {
       theme={theme}
       pendingLogout={pending}
       fontsStatus={fontsStatus()}
+      appVersion={`${Constants.expoConfig?.version ?? "?"} (${Constants.expoConfig?.android?.versionCode ?? "?"})`}
       onOpen={(t) => router.push(ROUTE[t] as never)}
       onTheme={setTheme}
       onCancelLogout={() => setPending(null)}

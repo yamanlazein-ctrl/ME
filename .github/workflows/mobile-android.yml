@@ -60,7 +60,10 @@ jobs:
       - name: Prebuild the Android project
         if: inputs.apk_run_id == ''
         working-directory: mobile
-        run: npm run prebuild:migrations && npx expo prebuild --platform android --no-install
+        # A higher version on every build: the new APK installs over the old one and keeps its data.
+        run: |
+          node ../scripts/android/set-version.mjs app.json "$GITHUB_RUN_NUMBER"
+          npm run prebuild:migrations && npx expo prebuild --platform android --no-install
       - name: Build the release APK (JavaScript bundled inside)
         if: inputs.apk_run_id == ''
         working-directory: mobile/android
@@ -196,11 +199,17 @@ jobs:
           node -e "const fs=require('fs');const a=JSON.parse(fs.readFileSync('app.json','utf8'));const p=a.expo.plugins.find(x=>Array.isArray(x)&&x[0]==='expo-build-properties');delete p[1].android.usesCleartextTraffic;fs.writeFileSync('app.json',JSON.stringify(a,null,2));"
       - name: Prebuild the Android project
         working-directory: mobile
-        run: npm run prebuild:migrations && npx expo prebuild --platform android --no-install
+        # A higher version on every build: the new APK installs over the old one and keeps its data.
+        run: |
+          node ../scripts/android/set-version.mjs app.json "$GITHUB_RUN_NUMBER"
+          npm run prebuild:migrations && npx expo prebuild --platform android --no-install
       - name: Build the APK
         working-directory: mobile/android
         run: ./gradlew assembleRelease
       - name: Check the APK and record its size and SHA-256
+        env:
+          # The certificate every phone APK so far was signed with (the Expo/React Native template key).
+          EXPECTED_CERT_SHA256: fac61745dc0903786fb9ede62a962b399f7348f0bb6f899b8332667591033b9c
         run: |
           BT=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
           SRC=mobile/android/app/build/outputs/apk/release/app-release.apk
@@ -210,6 +219,11 @@ jobs:
           cd phone-out
           unzip -tq "$NAME"
           "$BT/apksigner" verify --print-certs "$NAME" | tee APK-INFO.txt
+          # Every phone build must carry the same signing certificate, or Android refuses to install it over the
+          # previous one (the user would have to uninstall and lose the phone's data).
+          if ! grep -q "certificate SHA-256 digest: $EXPECTED_CERT_SHA256" APK-INFO.txt; then
+            echo "the signing certificate changed: this APK would not install over the previous one"; exit 1
+          fi
           "$BT/aapt2" dump badging "$NAME" | grep -E "^package:|^sdkVersion|^targetSdkVersion|^application-label" | tee -a APK-INFO.txt
           if "$BT/aapt2" dump xmltree "$NAME" --file AndroidManifest.xml | grep -iE "usesCleartextTraffic.*(true|0xffffffff)"; then
             echo "cleartext HTTP is still enabled"; exit 1
@@ -250,7 +264,10 @@ jobs:
           node -e "const fs=require('fs');const a=JSON.parse(fs.readFileSync('app.json','utf8'));const p=a.expo.plugins.find(x=>Array.isArray(x)&&x[0]==='expo-build-properties');delete p[1].android.usesCleartextTraffic;fs.writeFileSync('app.json',JSON.stringify(a,null,2));"
       - name: Prebuild the Android project
         working-directory: mobile
-        run: npm run prebuild:migrations && npx expo prebuild --platform android --no-install
+        # A higher version on every build: the new APK installs over the old one and keeps its data.
+        run: |
+          node ../scripts/android/set-version.mjs app.json "$GITHUB_RUN_NUMBER"
+          npm run prebuild:migrations && npx expo prebuild --platform android --no-install
       - name: Decode the keystore and add the release signing
         env:
           MOTARD_UPLOAD_KEYSTORE_B64: ${{ secrets.MOTARD_UPLOAD_KEYSTORE_B64 }}

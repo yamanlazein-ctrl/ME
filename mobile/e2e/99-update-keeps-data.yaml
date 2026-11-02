@@ -1,0 +1,25 @@
+# Run after every other flow: run-flows.sh has just installed the APK again OVER the installed app (an update, as a
+# customer installs a newer APK). The phone must still be enrolled and signed in, with its data: no new enrolment, no
+# lost documents.
+appId: com.motard.erp
+name: 99 installing over the installed app keeps the enrolment and the data
+---
+- launchApp
+- runFlow: unlock.yaml
+- assertNotVisible: "ربط الهاتف بالمركز"
+- tapOn:
+    id: "tab-parties"
+- extendedWaitUntil:
+    visible:
+      id: "party-row"
+    timeout: 30000
+- assertVisible: "عميل 1"
+- takeScreenshot: 99-after-update-parties
+- tapOn:
+    id: "tab-more"
+- tapOn:
+    id: "more-sync"
+- assertVisible: "حالة المزامنة"
+- assertNotVisible:
+    id: "last-error"
+- takeScreenshot: 99b-after-update-sync

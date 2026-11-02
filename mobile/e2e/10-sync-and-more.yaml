@@ -15,6 +15,8 @@ name: 10 the More tab and the sync status
     element:
       id: "fonts-status"
 - assertVisible: "الخطوط والأيقونات: محمّلة"
+# Every CI build carries its own, higher version (1.1.<run>, code 100+run): a newer APK installs over the old one.
+- assertVisible: "إصدار التطبيق 1\\.1\\.[0-9]+ \\([0-9]+\\)"
 - tapOn:
     id: "more-sync"
 - assertVisible: "حالة المزامنة"

@@ -61,6 +61,12 @@ set +e
 FAILED=""
 for FLOW_FILE in "$(pwd)"/mobile/e2e/[0-9][0-9]-*.yaml; do
   NAME=$(basename "$FLOW_FILE" .yaml)
+  # An update as the customer does it: the APK installed again over the installed app (same signature, version not
+  # lower). Flow 99 then checks the enrolment and the data survived.
+  if [ "$NAME" = "99-update-keeps-data" ]; then
+    echo "--- reinstalling the APK over the installed app (update) ---"
+    adb install -r "$APK" || { echo "install over the installed app was refused"; FAILED="$FAILED $NAME"; continue; }
+  fi
   echo "##### $NAME"
   PASSED=0
   for ATTEMPT in 1 2; do # one retry: the emulator itself is occasionally flaky; a real bug fails both times

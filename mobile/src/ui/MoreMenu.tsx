@@ -65,6 +65,7 @@ export function MoreMenuView({
   theme,
   pendingLogout,
   fontsStatus,
+  appVersion,
   onOpen,
   onTheme,
   onLogout,
@@ -76,6 +77,8 @@ export function MoreMenuView({
   /** Unsent operations when the user asked to sign out (asks for confirmation); null when not asking. */
   pendingLogout: number | null;
   fontsStatus: string;
+  /** «1.1.63 (163)»: which build is on this phone — a newer APK installs over it and keeps its data. */
+  appVersion: string;
   onOpen(target: MoreTarget): void;
   onTheme(theme: ThemeName): void;
   onLogout(confirmed: boolean): Promise<void>;
@@ -124,6 +127,9 @@ export function MoreMenuView({
           testID="more-sync"
           last
         />
+        <Text testID="app-version" style={{ color: colors.mutedForeground, fontSize: 13 }}>
+          {`إصدار التطبيق ${appVersion}`}
+        </Text>
         <Text testID="fonts-status" style={{ color: colors.mutedForeground, fontSize: 13 }}>
           {fontsStatus}
         </Text>
