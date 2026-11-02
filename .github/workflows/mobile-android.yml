@@ -172,9 +172,8 @@ jobs:
             hub.out
           retention-days: 14
 
-  # ── The APK to install on a phone and try. Built from the same commit, and only after the emulator verification
-  # above passed. The test-only settings are removed (no spike screens, no cleartext HTTP). Without the owner's
-  # keystore secrets it is signed with the Expo template's debug key: installable by sideloading, not for the Play Store.
+  # ── The APK to install on a phone. Built from the same commit, and only after the emulator verification above
+  # passed. The test-only settings are removed (no spike screens, no cleartext HTTP); signed with the owner's key.
   phone-apk:
     needs: emulator
     if: ${{ inputs.release != 'true' }}
@@ -203,13 +202,31 @@ jobs:
       - name: Prebuild the Android project
         working-directory: mobile
         run: npm run prebuild:migrations && npx expo prebuild --platform android --no-install
+      # Signed with the owner's private key from the repository secrets (the same secrets as the release job), never
+      # with the public template key: only the owner can publish an update that installs over the customer's app.
+      - name: Decode the keystore and add the signing
+        env:
+          MOTARD_UPLOAD_KEYSTORE_B64: ${{ secrets.MOTARD_UPLOAD_KEYSTORE_B64 }}
+          MOTARD_UPLOAD_KEYSTORE_PASSWORD: ${{ secrets.MOTARD_UPLOAD_KEYSTORE_PASSWORD }}
+          MOTARD_UPLOAD_KEY_ALIAS: ${{ secrets.MOTARD_UPLOAD_KEY_ALIAS }}
+          MOTARD_UPLOAD_KEY_PASSWORD: ${{ secrets.MOTARD_UPLOAD_KEY_PASSWORD }}
+        run: |
+          test -n "$MOTARD_UPLOAD_KEYSTORE_B64" || { echo "secret MOTARD_UPLOAD_KEYSTORE_B64 is not set: no phone APK without the owner's key"; exit 1; }
+          echo "$MOTARD_UPLOAD_KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/upload.keystore"
+          MOTARD_KEYSTORE_PATH="$RUNNER_TEMP/upload.keystore" node scripts/android/add-release-signing.mjs mobile/android/app/build.gradle
       - name: Build the APK
         working-directory: mobile/android
+        env:
+          MOTARD_KEYSTORE_PATH: ${{ runner.temp }}/upload.keystore
+          MOTARD_UPLOAD_KEYSTORE_PASSWORD: ${{ secrets.MOTARD_UPLOAD_KEYSTORE_PASSWORD }}
+          MOTARD_UPLOAD_KEY_ALIAS: ${{ secrets.MOTARD_UPLOAD_KEY_ALIAS }}
+          MOTARD_UPLOAD_KEY_PASSWORD: ${{ secrets.MOTARD_UPLOAD_KEY_PASSWORD }}
         run: ./gradlew assembleRelease
       - name: Check the APK and record its size and SHA-256
         env:
-          # The certificate every phone APK so far was signed with (the Expo/React Native template key).
-          EXPECTED_CERT_SHA256: fac61745dc0903786fb9ede62a962b399f7348f0bb6f899b8332667591033b9c
+          # The owner's signing certificate (created 2026-11-02). Every phone APK must carry it, or Android refuses to
+          # install it over the previous one.
+          EXPECTED_CERT_SHA256: 0c187ce2b0421d920725ffd2dcdc8bee14cd639cf808c3236a296b0ca3193ec3
         run: |
           BT=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
           SRC=mobile/android/app/build/outputs/apk/release/app-release.apk
