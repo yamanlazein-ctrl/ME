@@ -109,6 +109,7 @@ export function registerPartyRoutes(
             country: p.country ?? null,
             taxNumber: p.taxNumber ?? null,
             currency: p.currency,
+            creditLimit: p.creditLimit ?? 0,
             paymentTerms: p.paymentTerms ?? null,
             paymentMethod: p.paymentMethod ?? null,
             defaultDiscount: p.defaultDiscount,

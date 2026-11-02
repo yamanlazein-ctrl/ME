@@ -186,7 +186,7 @@ export async function runPhoneSyncCycle(deps: SyncCycleDeps): Promise<SyncCycleR
   let blocksError: string | null = null;
   if (deviceId) {
     try {
-      await runSerial(() =>
+      const blocks = await runSerial(() =>
         numberBlocksUc.ensureDeviceNumberBlocks(
           repos.documentNumberBlockRepo,
           phoneFingerprintProvider,
@@ -198,6 +198,11 @@ export async function runPhoneSyncCycle(deps: SyncCycleDeps): Promise<SyncCycleR
           },
         ),
       );
+      if (blocks.failed?.length) {
+        blocksError = `تعذّر حجز أرقام المستندات من المركز (${blocks.failed
+          .map((f) => f.entityType)
+          .join("، ")}): ${blocks.failed[0]!.error}`;
+      }
     } catch (err) {
       blocksError = err instanceof Error ? err.message : "number-block ensure failed";
     }

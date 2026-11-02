@@ -10,6 +10,7 @@ import { createSyncLoop, type SyncLoop, type SyncLoopEvent } from "./syncLoop";
 import { listLowStockFabrics, listRejectedDocuments, type RejectedDocument } from "./syncQueries";
 import { deviceWipeDeps } from "./wipeDeps";
 import { wipeDevice } from "./wipe";
+import { logError } from "./devlog";
 
 export interface SyncStatus {
   running: boolean;
@@ -115,7 +116,8 @@ export function startSyncRunner(app: App): { loop: SyncLoop; stop(): void } {
       patch({ running: true });
       return phone.syncOnce();
     },
-    emit: (event) => void handle(event),
+    // A failing notification/rejected-list read must not become an unhandled rejection (sync audit #23).
+    emit: (event) => void handle(event).catch((e: unknown) => logError("sync-event", e)),
   });
 
   const unsubscribeSignal = onHubSignal((signal) => loop.signal(signal));

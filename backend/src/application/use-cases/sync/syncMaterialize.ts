@@ -53,6 +53,7 @@ import {
 import { updateSettingsUseCase } from "../settings/settingsUseCases.js";
 import { cancelVoucherUseCase, createVoucherUseCase } from "../vouchers/voucherUseCases.js";
 import { cancelReturnUseCase, createReturnUseCase } from "../returns/returnUseCases.js";
+import { localToday } from "../../../infrastructure/utils/localDate.js";
 import { cancelOrderUseCase, createOrderUseCase } from "../orders/orderUseCases.js";
 import { cancelExpenseUseCase, createExpenseUseCase } from "../expenses/expenseUseCases.js";
 import {
@@ -566,7 +567,9 @@ async function materializeInvoiceUpdate(
   const existing = await repos.invoiceRepo.findById(invoiceId, ctx);
   if (!existing) return { status: "failed", error: "الفاتورة غير موجودة للتعديل" };
   if (existing.status === "cancelled") {
-    return { status: "failed", error: "لا يمكن تعديل فاتورة ملغاة" };
+    // A final verdict, not a transient failure: retrying burnt 5 attempts and held the unit's stock
+    // claims meanwhile (sync audit #19).
+    return { status: "conflict", error: "لا يمكن تعديل فاتورة ملغاة" };
   }
 
   const updateInput = payload.updateInput;
@@ -1690,7 +1693,7 @@ async function materializeRollAdjust(
         deltaKg: Number(payload.deltaKg ?? 0),
         deltaPieces: Number(payload.deltaPieces ?? 0),
         reason: String(payload.reason ?? "تعديل مخزون"),
-        date: String(payload.date ?? new Date().toISOString().slice(0, 10)),
+        date: String(payload.date ?? localToday()),
         referenceType:
           payload.referenceType === "inventory_count" ? "inventory_count" : "inventory_adjustment",
         referenceId: String(payload.referenceId ?? rollId),

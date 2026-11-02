@@ -42,6 +42,8 @@ export type SyncPartySnapshot = {
   city?: string | null;
   country?: string | null;
   taxNumber?: string | null;
+  /** Absent from units of older devices: the receiver keeps 0, as before. */
+  creditLimit?: number;
   currency: string;
   paymentTerms?: string | null;
   paymentMethod?: string | null;
@@ -138,6 +140,7 @@ export function toPartySnapshot(p: PartyData): SyncPartySnapshot {
     country: p.country ?? null,
     taxNumber: p.taxNumber ?? null,
     currency: p.currency,
+    creditLimit: p.creditLimit ?? 0,
     paymentTerms: p.paymentTerms ?? null,
     paymentMethod: p.paymentMethod ?? null,
     defaultDiscount: p.defaultDiscount,

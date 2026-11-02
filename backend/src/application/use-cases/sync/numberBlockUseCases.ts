@@ -113,6 +113,8 @@ export async function ensureDeviceNumberBlocks(
     endNumber: number;
     source: "local" | "hub" | "existing";
   }>;
+  /** Entity types whose hub claim failed this time (the device keeps its current block, if any). */
+  failed?: Array<{ entityType: string; error: string }>;
   skipped: boolean;
   reason?: string;
 }> {
@@ -126,6 +128,7 @@ export async function ensureDeviceNumberBlocks(
   await assertDeviceBelongsToTenant(input.tenantId, input.syncDeviceId);
   const year = new Date().getFullYear();
   const types = input.entityTypes?.length ? input.entityTypes : [...PRIMARY_ENTITY_TYPES];
+  const failed: Array<{ entityType: string; error: string }> = [];
   const ensured: Array<{
     entityType: string;
     startNumber: number;
@@ -199,6 +202,12 @@ export async function ensureDeviceNumberBlocks(
           { err, entityType },
           "hub number-block claim failed; not carving a local overlapping range",
         );
+        // Returned, not only logged: a device that keeps failing here runs out of offline document numbers
+        // with no warning (sync audit #17).
+        failed.push({
+          entityType,
+          error: err instanceof Error ? err.message : "hub number-block claim failed",
+        });
         continue;
       }
     }
@@ -225,7 +234,7 @@ export async function ensureDeviceNumberBlocks(
     });
   }
 
-  return { ensured, skipped: false };
+  return { ensured, failed, skipped: false };
 }
 
 async function mirrorClaimedBlock(

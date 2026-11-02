@@ -130,7 +130,7 @@ export const postgresSyncDependencyStore: ISyncDependencyStore = {
             taxNumber: p.taxNumber ?? null,
             // Opening balance is not re-journaled here — invoice ledger legs carry AR/AP.
             openingBalance: 0,
-            creditLimit: 0,
+            creditLimit: Number(p.creditLimit ?? 0) || 0,
             currency: p.currency || "SYP",
             paymentTerms: p.paymentTerms ?? null,
             paymentMethod: p.paymentMethod ?? null,

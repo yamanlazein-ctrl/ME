@@ -719,14 +719,22 @@ export async function runLocalSyncPush(
 /**
  * HTTP statuses that mean "try again later", never "this operation is invalid".
  * Everything else in the 4xx range is a genuine, permanent rejection.
+ *
+ * A permanent rejection rolls the local document back, so a status that says nothing about the unit's
+ * content must never be one: 426 (this app's money rules differ from the hub's — after a hub upgrade,
+ * until the app is updated), 404 (wrong hub address or a proxy page) and 413 (body too large for a
+ * proxy) used to cancel every unsynced document in the batch.
  */
-function isRetryablePushStatus(status: number): boolean {
+export function isRetryablePushStatus(status: number): boolean {
   if (status >= 500) return true;
   return (
     status === 401 || // expired / not-yet-valid access token
     status === 403 || // permission refresh in flight
+    status === 404 || // wrong hub URL / proxy: the unit was never judged
     status === 408 || // request timeout
+    status === 413 || // a proxy's body limit, not the hub's verdict on the unit
     status === 425 || // too early
+    status === 426 || // app version / money rules differ from the hub: update the app, keep the data
     status === 429 // rate limited
   );
 }
@@ -1289,6 +1297,17 @@ export async function receiveSyncPush(
         accepted: true,
         created: false,
         materialized: true,
+        terminal: true,
+        row: existing.row,
+      };
+    }
+    if (existing.row.status === "dead") {
+      // A parked unit stays parked when it is pushed again (e.g. from a restored backup's outbox): its stock
+      // claims were released when it died, so applying it now would bypass the oversell guard (sync audit #18).
+      return {
+        accepted: true,
+        created: false,
+        materialized: false,
         terminal: true,
         row: existing.row,
       };
