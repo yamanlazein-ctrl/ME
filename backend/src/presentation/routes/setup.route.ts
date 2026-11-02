@@ -1,3 +1,4 @@
+import { timingSafeEqual } from "node:crypto";
 import { Router, type Request } from "express";
 import { z } from "zod";
 import { config } from "../../infrastructure/config/env.js";
@@ -53,7 +54,10 @@ function checkSetupToken(req: { headers: Record<string, unknown> }): boolean {
     return config.NODE_ENV !== "production";
   }
   const provided = (req.headers["x-setup-token"] as string | undefined) ?? "";
-  return provided === config.SETUP_TOKEN;
+  // Constant-time compare (security audit S15).
+  const a = Buffer.from(provided);
+  const b = Buffer.from(config.SETUP_TOKEN);
+  return a.length === b.length && timingSafeEqual(a, b);
 }
 
 /**

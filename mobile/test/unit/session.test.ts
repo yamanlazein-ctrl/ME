@@ -63,6 +63,35 @@ describe("session service (T068)", () => {
     );
   });
 
+  it("offline PIN guessing is slowed after 5 wrong tries and stopped after 10 (security S13)", async () => {
+    let now = new Date("2026-10-25T10:00:00Z");
+    const { svc, secrets } = setup({ now: () => now }, () => json(200, loginAnswer));
+    await svc.pinLogin("u1", "4821");
+    const user = { id: "u1", name: "محمد", role: "accountant" as const };
+    for (let i = 0; i < 4; i++) {
+      await expect(svc.offlineLogin("u1", "0000", user)).rejects.toThrow("الرمز السري غير صحيح");
+    }
+    // 5th wrong → locked for a minute: even the right PIN waits.
+    await expect(svc.offlineLogin("u1", "0000", user)).rejects.toThrow("الرمز السري غير صحيح");
+    await expect(svc.offlineLogin("u1", "4821", user)).rejects.toThrow(/حاول بعد 1 دقيقة/);
+    now = new Date(now.getTime() + 61_000);
+    // After the wait the right PIN works and resets the count.
+    expect((await svc.offlineLogin("u1", "4821", user)).userId).toBe("u1");
+    expect(secrets.has("pinfail.u1")).toBe(false);
+    // Ten wrong tries in a row (waiting out each lock) drop the offline verifier: online sign-in only.
+    for (let i = 0; i < 9; i++) {
+      await expect(svc.offlineLogin("u1", "1111", user)).rejects.toThrow("الرمز السري غير صحيح");
+      now = new Date(now.getTime() + 61 * 60_000);
+    }
+    await expect(svc.offlineLogin("u1", "1111", user)).rejects.toMatchObject({
+      kind: "offline-unavailable",
+    });
+    expect(secrets.has("pin.u1")).toBe(false);
+    await expect(svc.offlineLogin("u1", "4821", user)).rejects.toMatchObject({
+      kind: "offline-unavailable",
+    });
+  });
+
   it("a refused refresh (401) ends the session; another 403 elsewhere does not", async () => {
     let status = 401;
     const { svc } = setup({}, (url) =>

@@ -1,6 +1,14 @@
+import { timingSafeEqual } from "node:crypto";
 import type { Request, Response, NextFunction } from "express";
 import type { JwtSigner } from "../../auth/JwtSigner.js";
 import type { TokenDenylist } from "../../auth/TokenDenylist.js";
+
+/** Constant-time token compare (security audit S15). */
+function sameToken(a: string, b: string): boolean {
+  const x = Buffer.from(a);
+  const y = Buffer.from(b);
+  return x.length === y.length && timingSafeEqual(x, y);
+}
 
 /**
  * Phase 4 — Super Admin auth middleware (frozen spec §2.1).
@@ -69,7 +77,7 @@ export function createSuperAdminAuthMiddleware(
     const provided = header.slice(7);
 
     // Backward-compatible static token fallback.
-    if (opts?.fallbackToken && provided === opts.fallbackToken) {
+    if (opts?.fallbackToken && sameToken(provided, opts.fallbackToken)) {
       req.systemAdmin = { id: "static", email: "admin@system", role: "super_admin" };
       next();
       return;

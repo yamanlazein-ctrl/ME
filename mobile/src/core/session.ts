@@ -42,6 +42,15 @@ export interface SessionDeps {
 const SESSION_KEY = "session";
 const ROSTER_KEY = "roster";
 const pinKey = (userId: string) => `pin.${userId}`;
+const pinFailKey = (userId: string) => `pinfail.${userId}`;
+
+/** Offline PIN attempts (security audit S13): a held phone must not try all 10,000 PINs. */
+export const OFFLINE_PIN_MAX_FAILURES = 10;
+/** Wait after the n-th consecutive wrong PIN (n ≥ 5): 1, 5, 15, then 60 minutes. */
+export function offlinePinLockMinutes(failures: number): number {
+  if (failures < 5) return 0;
+  return [1, 5, 15][failures - 5] ?? 60;
+}
 
 export class PinLoginError extends Error {
   constructor(
@@ -141,6 +150,7 @@ export function createSessionService(deps: SessionDeps) {
       user: { id: string; name: string; role: Role };
     };
     await deps.setSecret(pinKey(userId), await deps.hashPin(pin));
+    await deps.deleteSecret(pinFailKey(userId));
     const session: StoredSession = {
       userId: body.user.id,
       name: body.user.name,
@@ -231,9 +241,43 @@ export function createSessionService(deps: SessionDeps) {
     if (!verifier) {
       throw new PinLoginError("سجّل الدخول مرة واحدة بالاتصال أولاً", "offline-unavailable");
     }
+    const failRaw = await deps.getSecret(pinFailKey(userId));
+    const fail = failRaw
+      ? (JSON.parse(failRaw) as { count: number; until: string | null })
+      : { count: 0, until: null };
+    const now = deps.now();
+    if (fail.until && new Date(fail.until) > now) {
+      const minutes = Math.max(
+        1,
+        Math.ceil((new Date(fail.until).getTime() - now.getTime()) / 60000),
+      );
+      throw new PinLoginError(
+        `محاولات خاطئة كثيرة. حاول بعد ${minutes} دقيقة، أو سجّل الدخول بالاتصال بالمركز`,
+        "invalid",
+      );
+    }
     if (!(await deps.verifyPin(pin, verifier))) {
+      const count = fail.count + 1;
+      if (count >= OFFLINE_PIN_MAX_FAILURES) {
+        // Too many: the offline verifier is dropped; only an online sign-in (checked by the hub) restores it.
+        await deps.deleteSecret(pinKey(userId));
+        await deps.deleteSecret(pinFailKey(userId));
+        throw new PinLoginError(
+          "محاولات خاطئة كثيرة. سجّل الدخول بالاتصال بالمركز",
+          "offline-unavailable",
+        );
+      }
+      const lock = offlinePinLockMinutes(count);
+      await deps.setSecret(
+        pinFailKey(userId),
+        JSON.stringify({
+          count,
+          until: lock ? new Date(now.getTime() + lock * 60000).toISOString() : null,
+        }),
+      );
       throw new PinLoginError("الرمز السري غير صحيح", "invalid");
     }
+    await deps.deleteSecret(pinFailKey(userId));
     const previous = await readSession();
     const session: StoredSession = {
       userId,

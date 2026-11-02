@@ -231,8 +231,8 @@ async function main(): Promise<void> {
       "License Server listening",
     );
     if (!process.env.LICENSE_ADMIN_TOKEN) {
+      // The generated token is never written to the log (security audit S10): logs are shipped and kept.
       logger.warn(
-        { ephemeralAdminToken: LICENSE_ADMIN_TOKEN },
         "LICENSE_ADMIN_TOKEN not set; ephemeral token generated for this boot (sessions will not survive restarts)",
       );
     }
