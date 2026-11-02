@@ -178,6 +178,8 @@ jobs:
     needs: emulator
     if: ${{ inputs.release != 'true' }}
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
         # Full history: the build number is the commit count (mobile/scripts/build-version.cjs).
@@ -270,6 +272,17 @@ jobs:
           name: ${{ steps.key.outputs.have_key == 'true' && 'motard-mobile-phone-apk' || 'motard-mobile-phone-apk-to-sign' }}
           path: phone-out
           retention-days: 30
+      # A pre-release the owner's machine can fetch to sign (the artifact store is not reachable from every machine).
+      - name: Publish the APK to sign (pre-release, not for customers)
+        if: steps.key.outputs.have_key != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="phone-apk-to-sign-${GITHUB_SHA::7}"
+          gh release delete "$TAG" --repo "$GITHUB_REPOSITORY" --yes --cleanup-tag 2>/dev/null || true
+          gh release create "$TAG" phone-out/* --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --prerelease \
+            --title "Phone APK to sign ${GITHUB_SHA::7} (NOT for customers)" \
+            --notes "Built without the owner's key. Not for customers: it must be signed with the owner's key (certificate SHA-256 0c187ce2b0421d920725ffd2dcdc8bee14cd639cf808c3236a296b0ca3193ec3) before it is installed."
       - name: No owner key in the secrets
         if: steps.key.outputs.have_key != 'true'
         run: |
